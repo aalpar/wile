@@ -337,11 +337,13 @@ applyComposableContinuation(cc, args)
   ├─ copy args off the eval stack (Restore recycles the backing array)
   │
   └─ ReinstallSegment(cc, boundary = p.cont, p.windingStack, vals, p.isolatedMarks)
-       ├─ install captured marks, bump resumeGeneration
+       ├─ install captured marks; select the escalator arms this resume revives
+       │    (segment carries them, the live chain does not)
        ├─ segment = cc.AcquireSegment()
        │    first invocation: original frames, chain marked shared
        │    re-invocation:    deep copy, so resumes are independent
        ├─ RestoreWithWindingFrom(nil, srcWinding, cc.WindingStack())
+       ├─ mark the selected arms revived   // only once the reconcile succeeded
        ├─ GraftContinuation(segment, boundary)   // p.cont = EXTEND (compose)
        ├─ Restore(segment)
        └─ SetValues(vals...)
@@ -432,11 +434,11 @@ it loops):
 6. `boundary, _ = FindPrompt(DefaultPromptTag)` → nil (context-level boundary),
    so the reinstalled segment *replaces* the live chain
 7. `ReinstallSegment(segment, nil, [], [42], isolate = true)`:
-   a. install the captured mark snapshot, bump `resumeGeneration`
+   a. install the captured mark snapshot; select the escalator arms to revive
    b. `AcquireSegment()`: original frames on first invoke, deep copy after
    c. `RestoreWithWindingFrom(nil, [], [D1])`:
       `FindCommonWindingPrefix([], [D1])` = 0; no unwinding (source is empty);
-      rewind D1 → before thunk prints "before"
+      rewind D1 → before thunk prints "before"; then mark the selected arms
    d. `GraftContinuation(segment, nil)`, `Restore(segment)`, `SetValues(42)`
 8. The driver loops; the resumed chain runs on its own `Run()` loop, O(1) Go frames
 9. The dynamic-wind body returns 42; its after thunk prints "after"

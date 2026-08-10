@@ -531,6 +531,10 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 //     (first invoke) so a later normal return through a reinstalled frame takes
 //     RestoreAndRelease's copy-don't-pool branch (shared-bit safety; the
 //     tail-frame-recycling-unsound failure class hides here).
+//  3. the escalator-arm revival set is COMPUTED before RestoreWithWindingFrom
+//     (which runs arbitrary Scheme and can re-point the chain) but APPLIED only
+//     after it succeeds — a failed reinstatement never re-entered the frame, so
+//     it must contribute no revival.
 //
 // isolate is written unconditionally as a per-resume reset on the (now long-lived)
 // driver context: a stale isolatedMarks from a prior resume must not leak into a
@@ -547,10 +551,10 @@ func (p *MachineContext) ReinstallSegment(
 ) (bool, error) {
 	p.capturedMarks = comp.capturedMarks
 	p.isolatedMarks = isolate
-	// Bump the per-driver resume generation: every reinstatement (call/cc or
-	// composable) flows through here, so a non-continuable handler's escalator frame
-	// can detect a resume THROUGH it by comparing this against its arm-time snapshot.
-	p.resumeGeneration++
+	// Read the LIVE chain here, before RestoreWithWindingFrom: that call runs
+	// dynamic-wind thunks (arbitrary Scheme) which can re-point p.cont, and the
+	// question being asked is about the chain as it stood at the resume.
+	revived := pendingEscalatorRevivals(comp, p.cont)
 
 	// Acquire the segment: first invocation avoids DeepCopy by marking
 	// the segment shared; re-invocations deep-copy from preserved frames.
@@ -563,6 +567,9 @@ func (p *MachineContext) ReinstallSegment(
 	err := p.RestoreWithWindingFrom(nil, srcWinding, comp.WindingStack())
 	if err != nil {
 		return false, err
+	}
+	for _, arm := range revived {
+		arm.revived = true
 	}
 
 	if segment == nil {
@@ -633,4 +640,43 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 		return p.returnImmediate(), nil
 	}
 	return p, nil
+}
+
+// pendingEscalatorRevivals selects the escalator arms this reinstatement would
+// REVIVE: those carried by the captured segment but absent from the live chain.
+//
+// The discrimination is the whole mechanism. An arm the live chain still carries
+// means the resume never left that finalizer frame's dynamic extent — an ordinary
+// call/cc jump taken inside the handler — and the R7RS §6.11 secondary must still
+// fire on the handler's return. An arm only in the segment means the frame had
+// been discarded (guard-k's call-with-exit abort) and reinstating the segment
+// re-enters its extent from outside, which is the one path allowed to forward the
+// handler's value.
+//
+// Returns nil for the overwhelmingly common capture that carries no arm at all,
+// so the resume path pays one length test.
+func pendingEscalatorRevivals(comp *ComposableContinuation, live *MachineContinuation) []*escalatorArm {
+	if len(comp.escalatorArms) == 0 {
+		return nil
+	}
+	var q []*escalatorArm
+	for _, arm := range comp.escalatorArms {
+		if chainCarriesEscalatorArm(live, arm) {
+			continue
+		}
+		q = append(q, arm)
+	}
+	return q
+}
+
+// chainCarriesEscalatorArm reports whether any frame reachable from head holds
+// arm. Identity, not equality: every copy of a finalizer frame shares the one arm
+// pointer its escalator closure captured.
+func chainCarriesEscalatorArm(head *MachineContinuation, arm *escalatorArm) bool {
+	for current := head; current != nil; current = current.parent {
+		if current.escalatorArm == arm {
+			return true
+		}
+	}
+	return false
 }

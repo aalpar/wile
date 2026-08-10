@@ -294,7 +294,7 @@ var contDescriptor = map[contOp]siteSpec{
 			// relies on acquireContinuation() returning a zeroed frame. The RESET
 			// check here is observationally a SKIP off a zeroed-pool frame.
 			always(verbReset, "windingStack", "promptTag", "promptHandler",
-				"shared", "inlineEvals", "inlineEvalsLen"),
+				"shared", "inlineEvals", "inlineEvalsLen", "escalatorArm"),
 		),
 	},
 
@@ -320,7 +320,8 @@ var contDescriptor = map[contOp]siteSpec{
 			always(verbSkip, "singleValue", "multiValues", "windingStack",
 				"promptTag", "threadID",
 				// continuation-only fields have no mc destination slot: SKIP.
-				"parent", "promptHandler", "shared", "inlineEvals", "inlineEvalsLen"),
+				"parent", "promptHandler", "shared", "inlineEvals", "inlineEvalsLen",
+				"escalatorArm"),
 			guarded(guard{condInline}, verbInline, "evals"),
 			guarded(guard{condHeap}, verbClone, "evals"),
 		),
@@ -336,7 +337,8 @@ var contDescriptor = map[contOp]siteSpec{
 			always(verbShare, "env", "template", "pc", "callDepth", "barrierValid"),
 			always(verbSkip, "singleValue", "multiValues", "windingStack",
 				"promptTag", "threadID",
-				"parent", "promptHandler", "shared", "inlineEvals", "inlineEvalsLen"),
+				"parent", "promptHandler", "shared", "inlineEvals", "inlineEvalsLen",
+				"escalatorArm"),
 			guarded(guard{condShared}, verbReset, "envPooled"),
 			guarded(guard{condUnshared}, verbShare, "envPooled"),
 			guarded(guard{condShared}, verbClone, "marks"),
@@ -363,7 +365,7 @@ var contDescriptor = map[contOp]siteSpec{
 		fields: cat(
 			always(verbShare, "env", "template", "singleValue", "pc", "promptTag",
 				"threadID", "callDepth", "barrierValid", "parent", "promptHandler",
-				"inlineEvals", "inlineEvalsLen"),
+				"inlineEvals", "inlineEvalsLen", "escalatorArm"),
 			always(verbClone, "multiValues", "marks"),
 			guarded(guard{condPresent}, verbClone, "windingStack"),
 			guarded(guard{condAbsent}, verbSkip, "windingStack"), // src empty → cp.windingStack stays zero
@@ -519,6 +521,10 @@ var contFieldProbes = map[string]contFieldProbe{
 	"inlineEvals": {
 		ref:    func(c *MachineContinuation) any { return c.inlineEvals },
 		isZero: func(c *MachineContinuation) bool { return c.inlineEvals == [inlineEvalsCap]values.Value{} },
+	},
+	"escalatorArm": {
+		ref:    func(c *MachineContinuation) any { return c.escalatorArm },
+		isZero: func(c *MachineContinuation) bool { return c.escalatorArm == nil },
 	},
 }
 

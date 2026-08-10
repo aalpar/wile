@@ -224,10 +224,10 @@ see the full picture. This is the "deeper-sub after-thunk" case, and it's why th
 old double-reconcile design was *also* wrong in the other direction — it ran some
 after-thunks twice and others not at all.
 
-### `resumeGeneration`: telling "resumed through" from "returned normally"
+### `escalatorArm`: telling "resumed through" from "returned normally"
 
 This is the trickiest interaction in the whole subsystem, and a green test suite
-hid the bug for a while.
+hid the bug for a while — twice, with two different wrong answers.
 
 When an exception handler is installed for a *non-continuable* `raise`, Wile arms
 a finalizer frame: if the handler returns normally (instead of escaping), that's
@@ -239,33 +239,54 @@ value arrived by a resume, not a normal return — and must be forwarded, not
 escalated.
 
 How do you tell those two apart? They look identical at the frame: a value shows
-up. The answer is a counter. `ReinstallSegment` bumps
-`p.resumeGeneration` on *every* reinstatement (`ReinstallSegment`,
-`pkg/machine/machine_context_apply.go`). The finalizer snapshots the counter
-when it arms (`armGen`), and compares at fire time (`pkg/machine/exception_raise.go`):
+up. The answer is a per-arm object, `escalatorArm`, minted when the escalator is
+armed and stored *both* on the finalizer frame and in the escalator closure
+(`pkg/machine/exception_raise.go`). `Copy` shares the pointer, so every copy the
+capture machinery makes of that frame reports to the same flag:
 
 ```go
-armGen := mc.resumeGeneration
+arm := &escalatorArm{}
 escalateFn := func(finCC CallContext) error {
     ...
-    if finMC.resumeGeneration != armGen {
-        // a segment was reinstated between arm and fire:
+    if arm.revived {
+        // a reinstatement re-entered this frame's extent FROM OUTSIDE:
         // the value came THROUGH a resume — forward it
         finMC.SetValues(vals...)
         return nil
     }
-    // unchanged: handler returned naturally — escalate the secondary
+    // unrevived: handler returned naturally — escalate the secondary
     return finMC.raiseToHandlers(secondary, false, parent)
 }
 ```
 
-> The original fix tried a context-global `isolatedMarks` flag here. It was
-> wrong: that flag *stays true* after any prior resume on the driver, so once
-> the program had resumed *any* continuation, every later non-continuable
-> handler return silently swallowed its mandatory secondary exception. The
-> generation counter is path-precise — it detects a resume *between two specific
-> points*, not "has a resume ever happened". A full green suite, `-race`, and the
-> escape-past oracle all missed this; only an adversarial cross-check caught it.
+`ReinstallSegment` sets the flag, and *which* arms it sets is the whole trick.
+The measured fact that makes it non-obvious: in both the legitimate `guard`
+forward and the illegitimate escape-inside-the-handler, the captured segment
+**contains** the finalizer frame. Segment membership discriminates nothing. The
+two differ only in the **live chain** at the moment of reinstatement:
+
+| | segment carries the frame | live chain carries it | verdict |
+|---|---|---|---|
+| `guard` miss re-raise | yes | **no** — guard-k's `call-with-exit` abort discarded it | revive → forward |
+| `call/cc` escape inside the handler | yes | **yes** — the jump never left the extent | leave unrevived → escalate |
+
+So `pendingEscalatorRevivals` (`machine_context_apply.go`) marks exactly the arms
+the segment carries and the live chain does not. "Resumed through" means
+"re-entered from outside", not "appears in the segment". The set is computed
+*before* `RestoreWithWindingFrom` (which runs `dynamic-wind` thunks that can
+re-point the chain) and applied only *after* it succeeds — a failed reinstatement
+never re-entered the frame, so it contributes no revival.
+
+> Two earlier answers were wrong, in opposite directions. A context-global
+> `isolatedMarks` flag *stays true* after any prior resume on the driver, so once
+> the program had resumed *any* continuation, every later non-continuable handler
+> return silently swallowed its mandatory secondary exception. A per-driver
+> `resumeGeneration` counter fixed that but was still too coarse in the other
+> axis: it answers "did any resume happen in this window", so an ordinary
+> `call/cc` escape *inside* the handler — which never leaves the finalizer's
+> extent — also cleared the gate and converted the illegal return into a value.
+> Attribution has to be per-arm and directional. A full green suite, `-race`, and
+> the escape-past oracle missed both; only adversarial cross-checks caught them.
 
 ### One-shot vs. multi-shot
 
@@ -324,11 +345,14 @@ Reconcile winding in two places instead of one, and escaping a `dynamic-wind`
 fires its after-thunk twice (`(before body after after)`), corrupting any
 cleanup that isn't idempotent.
 
-Replace the `resumeGeneration` counter with the context-global flag, and the
-secondary-exception test passes *in isolation* but the mandatory R7RS §6.11
-exception is swallowed for every non-continuable handler that returns after any
-earlier resume — a silent correctness hole that only surfaces in programs that
-both resume continuations and misuse exception handlers.
+Replace the per-arm `escalatorArm` with anything coarser — the context-global
+`isolatedMarks` flag, or a per-driver resume counter — and the
+secondary-exception test passes *in isolation* while the mandatory R7RS §6.11
+exception is swallowed: by the flag for every non-continuable handler that
+returns after any earlier resume, by the counter for every handler that takes a
+`call/cc` escape inside its own body. Both are silent correctness holes that only
+surface in programs which both resume continuations and misuse exception
+handlers.
 
 The lesson the Wile memory records bluntly: for continuations, *a green suite is
 not evidence of correctness*. The trampoline shipped only after an A/B

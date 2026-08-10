@@ -187,7 +187,7 @@ When a `ComposableContinuation` is called as a procedure (dispatched by `ApplyCa
 1. Thread check: reject if invoked from a different SRFI-18 thread. Barrier check: reject if the barrier token differs.
 2. Copy the argument values off the eval stack, whose backing array `Restore` recycles.
 3. Delegate to `ReinstallSegment` with `boundary = p.cont`, which:
-   a. installs the captured marks and bumps `resumeGeneration`;
+   a. installs the captured marks and computes the escalator arms this resume revives;
    b. calls `AcquireSegment()`: the original frames on first invocation (marking the chain shared), a deep copy on re-invocation;
    c. reconciles dynamic-wind: `RestoreWithWindingFrom(nil, current, captured)` unwinds extents not in the captured stack and rewinds captured extents not in the current stack;
    d. grafts the segment's bottom frame onto `boundary`, restores from the segment's top frame, and delivers the values.

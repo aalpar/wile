@@ -52,6 +52,19 @@ func ExceptionHandlerParam() values.Value {
 	return exceptionHandlerParam
 }
 
+// escalatorArm is the per-arm revival flag for one non-continuable handler
+// invocation. One is minted each time raiseToHandlers arms an escalator; the
+// pointer lives BOTH on the finalizer frame and in the escalator closure, so it
+// survives the frame copies SliceContinuationAt / Copy / DeepCopy make — the
+// closure and any copy of the frame all observe the same flag.
+//
+// revived means a reinstatement re-entered this frame's extent FROM OUTSIDE: the
+// reinstated segment carried the frame while the live chain did not. That is the
+// guard miss-path, and only that path may forward the handler's value.
+type escalatorArm struct {
+	revived bool
+}
+
 // RaiseInPlace invokes the current exception handler on cond, in the dynamic
 // extent of the raise (R7RS §6.11), with the parent handler installed as current.
 // It is the single implementation shared by raise, raise-continuable, error, and
@@ -133,23 +146,27 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 	// RESUMES this handler's captured handler-k continuation — and that continuation
 	// now spans this finalizer frame (the handler runs inline so handler-k captures
 	// the live chain, which is what makes nested guard work). So the continuable
-	// re-raise's result flows back THROUGH this frame. Detect that path-precisely by
-	// snapshotting the driver's resume generation when arming the escalator (armGen
-	// below) and comparing it in escalateFn: a bump means a continuation segment was
-	// reinstated (handler-k resumed) between arm and escalate, so the value arrived via
-	// a resume THROUGH this frame — FORWARD it instead of escalating. An unchanged
-	// generation means the handler returned naturally — escalate the secondary.
+	// re-raise's result flows back THROUGH this frame; FORWARD it instead of escalating.
+	//
+	// The discriminator is per-arm REVIVAL, not "did any resume happen". Both the guard
+	// miss-path and an ordinary call/cc escape taken inside the handler capture a
+	// segment CONTAINING this finalizer frame, so segment membership alone is vacuous.
+	// They differ in the LIVE chain at reinstatement: guard-k's call-with-exit abort had
+	// already discarded the frame, so reinstating handler-k re-enters this frame's extent
+	// FROM OUTSIDE and ReinstallSegment sets arm.revived. A jump that never left the
+	// extent finds the frame still live, leaves the arm unrevived, and the §6.11
+	// secondary still fires — which is the whole point of the arm.
 	//
 	// (A context-global isolatedMarks gate was WRONG here: it stays true after ANY prior
 	// resume on the driver, so it swallowed the mandatory secondary exception for every
 	// later non-continuable handler return — see TestNonContinuableHandlerReturnErrors.)
-	armGen := mc.resumeGeneration
+	arm := &escalatorArm{}
 	escalateFn := func(finCC CallContext) error {
 		finMC, err := RequireMachineContext(finCC, "raise")
 		if err != nil {
 			return err
 		}
-		if finMC.resumeGeneration != armGen {
+		if arm.revived {
 			var vals []values.Value
 			current := finMC.Arg(0)
 			for !values.IsEmptyList(current) {
@@ -184,6 +201,7 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 		literals: MultipleValues{escalator},
 	}
 	frame := NewMachineContinuation(mc.cont, escalateTpl, mc.env)
+	frame.escalatorArm = arm
 	_, err := mc.RunBodyUnderFrame(frame, handler, cond)
 	return err
 }
