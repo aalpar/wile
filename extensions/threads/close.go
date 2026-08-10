@@ -1,0 +1,104 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package threads
+
+import (
+	"errors"
+	"sync"
+	"time"
+
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
+)
+
+// threadCloseGrace bounds how long Engine.Close waits for one terminated
+// thread's goroutine to actually exit. A thread parked in a Go-level operation
+// that does not observe context cancellation (sync.Cond.Wait) can outlive its
+// Terminate, and Close must not block the host forever on it.
+const threadCloseGrace = 5 * time.Second
+
+// errThreadCloseTimeout reports a thread whose goroutine was still running when
+// its grace period expired.
+var errThreadCloseTimeout = werr.NewStaticError("threads: thread did not exit before Close deadline")
+
+// liveThreads tracks the threads one engine started, so Engine.Close can
+// terminate them. One instance per engine: addThreads mints it and closes the
+// thread-start! Impl over it, and addThreads runs once per engine.
+type liveThreads struct {
+	mu      sync.Mutex
+	threads []*values.Thread
+}
+
+func newLiveThreads() *liveThreads {
+	return &liveThreads{}
+}
+
+// track records a started thread, dropping already-terminated entries first so
+// a long-lived engine running many short threads does not grow this slice
+// without bound.
+func (p *liveThreads) track(th *values.Thread) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	live := p.threads[:0]
+	for _, t := range p.threads {
+		if t.State() == values.ThreadTerminated {
+			continue
+		}
+		live = append(live, t)
+	}
+	p.threads = append(live, th)
+}
+
+// primThreadStart is the engine-scoped thread-start!: PrimThreadStart followed
+// by tracking the thread it started. It runs only on success, so a thread that
+// failed to start is never tracked.
+func (p *liveThreads) primThreadStart(mc machine.CallContext) error {
+	err := PrimThreadStart(mc)
+	if err != nil {
+		return err
+	}
+	th, ok := mc.Arg(0).(*values.Thread)
+	if ok {
+		p.track(th)
+	}
+	return nil
+}
+
+// Close terminates every thread this engine started and waits, bounded, for
+// each one's goroutine to exit. Terminate records the terminal outcome
+// synchronously; the wait on Done() is what makes "Close returned" mean "the
+// goroutine is gone" rather than "cancellation was requested".
+func (p *liveThreads) Close() error {
+	p.mu.Lock()
+	threads := p.threads
+	p.threads = nil
+	p.mu.Unlock()
+
+	var errs []error
+	for _, th := range threads {
+		if th.State() == values.ThreadTerminated {
+			continue
+		}
+		th.Terminate()
+		select {
+		case <-th.Done():
+		case <-time.After(threadCloseGrace):
+			errs = append(errs, werr.WrapForeignErrorf(errThreadCloseTimeout,
+				"threads: Close: thread %q did not exit within %s", th.Name(), threadCloseGrace))
+		}
+	}
+	return errors.Join(errs...)
+}
