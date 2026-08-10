@@ -329,13 +329,15 @@ func TestBindingModelMatrix(t *testing.T) {
 			units:   []string{`(define-for-syntax fv 1)`, `fv`},
 			wantErr: werr.ErrNoSuchBinding},
 		// M7: define-for-syntax over the expand-phase registry copy of car
-		// SUPERSEDES it (scope-set-equal slot reuse) — and phase 0's car is a
-		// different binding, untouched. Three rows pin this end to end: this
-		// one observes phase 0 untouched; the next observes the new value BY
-		// NAME (which alone can't distinguish supersede from shadow); the
-		// third observes supersede specifically, through a reference resolved
-		// before the mutation.
-		{name: "define-for-syntax supersedes expand copy, phase 0 intact",
+		// SHADOWS it — the registry copy is at (1, sealed) and the
+		// define-for-syntax lands at (1, mutable), different coordinates, so
+		// CreateGlobalBindingAt mints a new slot. Phase 0's car is a third
+		// binding again, untouched. Three rows pin this end to end: this one
+		// observes phase 0 untouched (a PRESERVATION assertion — it reads "9"
+		// under supersede and under shadow alike, so it discriminates nothing
+		// on its own); the next observes the new value BY NAME (which equally
+		// can't distinguish the two); the third is the discriminator.
+		{name: "define-for-syntax over expand copy leaves phase 0 intact",
 			units: []string{`(define-for-syntax car 42) (car '(9 8))`},
 			want:  "9"},
 		// By-name view only: reveal-car reads car back through a phase-1
@@ -354,24 +356,27 @@ func TestBindingModelMatrix(t *testing.T) {
 			},
 			want: "42"},
 		// The actual supersede-vs-shadow discriminator: use-car is a phase-1
-		// closure compiled BEFORE the define-for-syntax mutation (same
-		// technique as the get-fv row above and the h/car pair in
+		// closure compiled BEFORE the define-for-syntax (same technique as the
+		// get-fv row above and the h/car pair in
 		// TestBindingModelMatrixMutableTopLevel), so its reference to car
-		// resolves at COMPILE time to the ORIGINAL (1, mutable) binding.
-		// Under supersede-in-place, that same binding now holds 42, so
-		// applying it through use-car fails; under a fresh phase-1 shadow,
-		// use-car's already-resolved reference is untouched and the call
-		// still succeeds with 1. Measured against matrixEngine's config:
-		// applying 42 fails with ErrNotAProcedure — SUPERSEDE, confirming
-		// plan §0 M7's design, now actually observed rather than asserted by
-		// a by-name row alone.
-		{name: "define-for-syntax supersedes expand copy in place, not a shadow",
+		// resolves at COMPILE time to the registry's (1, sealed) copy. Under
+		// supersede-in-place that same binding would now hold 42 and applying
+		// it would fail with ErrNotAProcedure; under a shadow the pre-resolved
+		// reference is untouched and the call still reaches the primitive.
+		// Measured against matrixEngine's config: 1 — SHADOW. This is the
+		// phase-1 twin of "define shadows sealed primitive" (P1, above): the
+		// registry's expand-phase copies moved to the sealed tier, so a
+		// define-for-syntax lands at (1, mutable) beside them rather than
+		// through them. Before that move this row read ErrNotAProcedure, and
+		// that supersede is what made the Stable stamp registerPhasePrimitive
+		// puts on those copies an assertion over an OPEN writer set.
+		{name: "define-for-syntax shadows expand copy, pre-resolved reference intact",
 			units: []string{
 				`(define-for-syntax use-car (lambda (l) (car l)))`,
 				`(define-for-syntax car 42)`,
 				`(define-syntax reveal (er-macro-transformer (lambda (form rename compare) (use-car (list 1 2))))) (reveal)`,
 			},
-			wantErr: werr.ErrNotAProcedure},
+			want: "1"},
 		// R2: a library body keeps cross-form define/set! mutable.
 		{name: "library body set! own define",
 			units: []string{`(import (lib-r2)) (f)`},

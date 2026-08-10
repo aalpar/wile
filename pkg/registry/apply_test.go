@@ -127,6 +127,16 @@ func TestApply_ExpandTimePrimitive(t *testing.T) {
 	binding := expandEnv.GetBinding(sym, values.AllScopes())
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Value(), qt.IsNotNil)
+
+	// ...at (1, SEALED), not (1, mutable). The GetBinding above is a RANKED read
+	// and answers the same under either placement, so it pins nothing here;
+	// OwnGlobalIndex asks each view for a slot at that view's OWN coordinates with
+	// no tier fallback, which is the discriminating probe. The seal is what makes a
+	// top-level (define-for-syntax expand-prim …) a SHADOW at (1, mutable) instead
+	// of a write through this slot — the phase-1 twin of the phase-0 carve.
+	sealedExpand := env.SealedWriteViewAt(environment.PhaseExpand)
+	c.Assert(expandEnv.OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNil)
+	c.Assert(sealedExpand.OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNotNil)
 }
 
 // Apply with compile-time bindings
@@ -215,6 +225,13 @@ func TestApply_MultiPhasePrimitive(t *testing.T) {
 	expandSym := values.NewSymbol("multi-phase")
 	expandBinding := expandEnv.GetBinding(expandSym, values.AllScopes())
 	c.Assert(expandBinding, qt.IsNotNil)
+
+	// A dual-phase name is the case where the two coordinates could most easily
+	// be conflated, so pin the expand copy's tier here too (see
+	// TestApply_ExpandTimePrimitive for why the ranked GetBinding above cannot).
+	sealedExpand := env.SealedWriteViewAt(environment.PhaseExpand)
+	c.Assert(expandEnv.OwnGlobalIndex(expandSym, values.EmptyScopes()), qt.IsNil)
+	c.Assert(sealedExpand.OwnGlobalIndex(expandSym, values.EmptyScopes()), qt.IsNotNil)
 }
 
 // Apply on empty registry
