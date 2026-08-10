@@ -154,9 +154,11 @@ For ad-hoc disassembly of an expression rather than a named procedure, use the
 
 ### Debugger Commands
 
-The debugger is built into the REPL. Setting a breakpoint, stepping, or
-hitting an error suspends execution and returns control to the prompt, where
-the following commands are available.
+The debugger is built into the REPL. Reaching a breakpoint, or completing a
+step, suspends execution and drops into a `(dbg)` prompt. Errors do not suspend:
+there are no error breakpoints, and an exception unwinds to the REPL as usual.
+
+The commands below are available at the ordinary prompt.
 
 | Command                | Aliases | Description |
 |------------------------|---------|-------------|
@@ -175,6 +177,33 @@ the following commands are available.
 Breakpoints survive across continuation resumes — they are attached to source
 locations, not to particular VM states. A breakpoint set inside a procedure
 will fire on every call.
+
+#### At the `(dbg)` prompt
+
+While execution is suspended only six of the commands above do anything:
+`,continue`, `,step`, `,next` and `,finish` each resume with a different
+stepping mode, and `,backtrace` and `,where` report the suspended state and
+leave you at the prompt. Anything else — including a Scheme expression — is
+refused, because evaluating it would re-enter the VM the break is holding
+still. `Ctrl-D` abandons the suspended computation; its `dynamic-wind`
+after-thunks still run.
+
+A breakpoint names a source LINE, so one entry to that line is one stop even
+though the line compiles to several instructions. A loop whose entire body is
+one source line therefore stops once, not once per iteration.
+
+`,finish` is keyed on call DEPTH: it resumes and stops as soon as execution
+reaches a strictly shallower frame. Its predecessor compared frame pointers,
+which cannot survive a suspension (the captured frames are copies), and a
+consequence of the depth key is that `,finish` also stops on a sibling frame
+entered at the same-or-shallower depth, not only on the caller.
+
+Two limits worth knowing. A breakpoint inside code reached through `load` or
+`eval` reports its stop but does not suspend: that code runs on a sub-context
+that does not carry the break boundary. And the first suspension of a run
+permanently disables environment-frame pooling for the rest of that
+evaluation, so a stepped run is not comparable with a benchmark — measure with
+no breakpoint armed.
 
 ## See Also
 

@@ -76,6 +76,111 @@ func TestDebuggerReachesLoadedCode(t *testing.T) {
 		qt.Commentf("four calls under load must break as often as four calls at top level"))
 }
 
+// TestDebuggerReachesLoadedCodeWithSuspensionArmed is a REGRESSION PIN, not a
+// gate: it is green on both sides of item 13a. It records the delivered scope.
+//
+// Suspension does not reach load and eval. The break boundary is installed once
+// per run on the TOP-LEVEL chain; a sub-context built by
+// NewSubContextWithTemplate inherits the debugger but not the boundary, so a
+// breakpoint inside a loaded file still takes the render-only fallback. This
+// re-runs 70b's count with a suspension handler installed and pins that the
+// count is unchanged — i.e. the two features compose by falling back, not by
+// suspending.
+func TestDebuggerReachesLoadedCodeWithSuspensionArmed(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "bp.scm")
+	src := "(define (bp-target x)\n" +
+		"  (+ x 1))\n" +
+		"(bp-target 1)\n" +
+		"(bp-target 2)\n" +
+		"(bp-target 3)\n" +
+		"(bp-target 4)\n"
+	err := os.WriteFile(path, []byte(src), 0o600)
+	qt.Assert(t, err, qt.IsNil)
+
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	qt.Assert(t, err, qt.IsNil)
+
+	renderHits := 0
+	suspendHits := 0
+	dbg := wile.NewDebugger()
+	dbg.SetBreakpoint(path, 2, 0)
+	dbg.OnBreak(func(_ values.DebugState, _ *wile.BreakpointInfo) {
+		renderHits++
+	})
+	dbg.OnBreakSuspend(func(_ values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+		suspendHits++
+		return wile.BreakContinue
+	})
+	eng.SetDebugger(dbg)
+
+	_, err = eng.EvalMultiple(ctx, `(load "`+path+`")`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, renderHits, qt.Equals, 4,
+		qt.Commentf("four calls inside the loaded file, all through the fallback"))
+	qt.Assert(t, suspendHits, qt.Equals, 0,
+		qt.Commentf("a load sub-context carries no break boundary, so it cannot suspend"))
+}
+
+// TestBreakStateOutlivesTheEvaluation is a REGRESSION PIN, not a gate. The
+// debugger used to hand back the live *MachineContext, which
+// ReleaseTopLevelContext returns to the pool and zeroes, so every inspection
+// made after the run read a blank context. The recorded state is now a snapshot
+// and must still answer once the evaluation that produced it is over.
+func TestBreakStateOutlivesTheEvaluation(t *testing.T) {
+	ctx := context.Background()
+	eng, path, dbg := newDebuggedEngine(t, oneLineBodySource)
+	dbg.OnBreak(func(_ values.DebugState, _ *wile.BreakpointInfo) {
+	})
+	dbg.SetBreakpoint(path, 2, 0)
+
+	_, err := eng.EvalMultiple(ctx, `(foo 21)`)
+	qt.Assert(t, err, qt.IsNil)
+
+	state := dbg.CurrentState()
+	qt.Assert(t, state, qt.IsNotNil)
+	loc := state.CurrentLocation()
+	qt.Assert(t, loc, qt.IsNotNil,
+		qt.Commentf(",where reported 'No source location available' at dfd8e230"))
+	qt.Assert(t, loc.Line, qt.Equals, 2)
+	qt.Assert(t, state.FormatStackTrace(20), qt.Not(qt.Equals), "",
+		qt.Commentf(",backtrace reported 'Empty stack trace' at dfd8e230"))
+}
+
+// TestStepOverSurvivesTheRoundTrip is a REGRESSION PIN, not a gate: step-over
+// was already depth-keyed before item 13a, and the point is that the
+// capture/resume round trip does not break it the way it broke step-out.
+func TestStepOverSurvivesTheRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	src := "(define (inner x)\n" +
+		"  (+ x 1))\n" +
+		"(define (outer x)\n" +
+		"  (inner x)\n" +
+		"  (+ x 100))\n"
+	eng, path, dbg := newDebuggedEngine(t, src)
+
+	var lines []int
+	dbg.OnBreakSuspend(func(state values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+		loc := state.CurrentLocation()
+		if loc != nil {
+			lines = append(lines, loc.Line)
+		}
+		if len(lines) == 1 {
+			return wile.BreakNext
+		}
+		return wile.BreakContinue
+	})
+	dbg.SetBreakpoint(path, 4, 0)
+
+	val, err := eng.EvalMultiple(ctx, `(outer 5)`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, val.SchemeString(), qt.Equals, "105")
+	qt.Assert(t, len(lines) >= 2, qt.IsTrue,
+		qt.Commentf("step-over must produce a second stop, got stops %v", lines))
+	qt.Assert(t, lines[1], qt.Equals, 5,
+		qt.Commentf("step-over must run (inner x) to completion and stop on line 5"))
+}
+
 // oneLineBodySource defines a procedure whose entire body is one source line,
 // so a breakpoint on line 2 sits on several instructions of the same line.
 const oneLineBodySource = "(define (foo x)\n" +
