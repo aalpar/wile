@@ -75,3 +75,58 @@ func TestDebuggerReachesLoadedCode(t *testing.T) {
 	qt.Assert(t, hits, qt.Equals, loadHits,
 		qt.Commentf("four calls under load must break as often as four calls at top level"))
 }
+
+// oneLineBodySource defines a procedure whose entire body is one source line,
+// so a breakpoint on line 2 sits on several instructions of the same line.
+const oneLineBodySource = "(define (foo x)\n" +
+	"  (+ x x))\n"
+
+// newDebuggedEngine builds a KitchenSink engine, writes src to a file in a
+// fresh temp dir, loads it, and returns the engine, the file path, and a
+// debugger already attached. Breakpoints are set by the caller AFTER the load
+// so that defining the procedure cannot itself fire them.
+func newDebuggedEngine(t *testing.T, src string) (*wile.Engine, string, *wile.Debugger) {
+	t.Helper()
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "bp.scm")
+	err := os.WriteFile(path, []byte(src), 0o600)
+	qt.Assert(t, err, qt.IsNil)
+
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	qt.Assert(t, err, qt.IsNil)
+
+	dbg := wile.NewDebugger()
+	eng.SetDebugger(dbg)
+
+	_, err = eng.EvalMultiple(ctx, `(load "`+path+`")`)
+	qt.Assert(t, err, qt.IsNil)
+	return eng, path, dbg
+}
+
+// TestBreakpointFiresOncePerSourceLine is GATE (2) for Wave 3 item 13a: it must
+// fail before the CheckBreakpoint de-duplication lands and pass after.
+//
+// A breakpoint names a source LINE, so one entry to that line is one stop. At
+// dfd8e230 CheckBreakpoint fired per INSTRUCTION carrying the line: one call to
+// the one-line body below produced three stops (columns 5, 7 and 3) and drove
+// HitCount to 3, which is also what ,list reported to the user.
+func TestBreakpointFiresOncePerSourceLine(t *testing.T) {
+	ctx := context.Background()
+	eng, path, dbg := newDebuggedEngine(t, oneLineBodySource)
+
+	fires := 0
+	dbg.OnBreak(func(_ values.DebugState, _ *wile.BreakpointInfo) {
+		fires++
+	})
+	dbg.SetBreakpoint(path, 2, 0)
+
+	_, err := eng.EvalMultiple(ctx, `(foo 21)`)
+	qt.Assert(t, err, qt.IsNil)
+
+	qt.Assert(t, fires, qt.Equals, 1,
+		qt.Commentf("one call entering line 2 once must stop once (3 at dfd8e230)"))
+	bps := dbg.Breakpoints()
+	qt.Assert(t, len(bps), qt.Equals, 1)
+	qt.Assert(t, bps[0].HitCount, qt.Equals, 1,
+		qt.Commentf("HitCount is what ,list prints (3 at dfd8e230)"))
+}
