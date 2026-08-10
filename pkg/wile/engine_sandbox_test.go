@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/extensions/system"
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/extensions/envvars"
 	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/security"
@@ -782,6 +783,104 @@ func TestAuthorizer_DenyBlocksImport(t *testing.T) {
 	_, err = engine.EvalMultiple(ctx, `(import (testlib))`)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+// TestLibraryCacheReauthorizedOnHit pins the cache hit against the authorizer.
+//
+// LoadLibrary returns a cached library before it ever reaches the file
+// resolver, and the resolver is the only thing that consults the authorizer. So
+// an import that succeeded under a permissive policy kept succeeding after the
+// policy was tightened, while an uncached import from the SAME directory was
+// refused — the hit and the miss disagreed about what the sandbox allows.
+func TestLibraryCacheReauthorizedOnHit(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	err := writeTestFile(filepath.Join(dir, "alpha.sld"), `(define-library (alpha)
+  (export alpha-secret)
+  (begin (define (alpha-secret) 42)))`)
+	c.Assert(err, qt.IsNil)
+	err = writeTestFile(filepath.Join(dir, "beta.sld"), `(define-library (beta)
+  (export beta-val)
+  (begin (define beta-val 7)))`)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := NewEngine(ctx, WithLibraryPaths(dir))
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	_, err = engine.EvalMultiple(ctx, `(import (alpha))`)
+	c.Assert(err, qt.IsNil, qt.Commentf("the warm import must succeed before the tightening"))
+
+	engine.Namespace().SetAuthorizer(security.DenyAll())
+
+	_, err = engine.EvalMultiple(ctx, `(import (alpha))`)
+	c.Assert(err, qt.IsNotNil, qt.Commentf("the cached import must be re-authorized"))
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+	var ce *CompilationError
+	c.Assert(errors.As(err, &ce), qt.IsTrue,
+		qt.Commentf("an import denial is a compile-time refusal, not a runtime condition"))
+
+	// The differential arm: the uncached twin in the same directory is what made
+	// the hit/miss disagreement visible in the first place.
+	_, err = engine.EvalMultiple(ctx, `(import (beta))`)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+// TestLibraryLoadUsesCallerAuthorizerOnMiss pins the other escape. The
+// resolvers read their authorizer off the root env captured once at engine
+// construction, so a caller namespace with a STRICTER policy was never
+// consulted: the effective policy for a library load was whatever the root
+// happened to hold.
+func TestLibraryLoadUsesCallerAuthorizerOnMiss(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	err := writeTestFile(filepath.Join(dir, "gamma.sld"), `(define-library (gamma)
+  (export gamma-val)
+  (begin (define gamma-val 5)))`)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := NewEngine(ctx, WithLibraryPaths(dir))
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	child := engine.Namespace().NewChildNamespace(
+		environment.WithChildAuthorizer(security.DenyAll()))
+
+	// (gamma) has never been imported in this engine, so this is a MISS and the
+	// load goes all the way to the resolver.
+	_, err = engine.EvalIn(ctx, engine.MustParse(ctx, `(import (gamma))`), child)
+	c.Assert(err, qt.IsNotNil, qt.Commentf("the child's DenyAll must govern its own import"))
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+// TestSyntheticLibraryImportSkipsPathGate is the anti-over-denial ratchet for
+// the cache-hit gate, not a must-fail-first test: it passes with the whole fix
+// reverted. It fails AS A DENIAL if the empty-SourceFile skip is dropped —
+// extension libraries are registered with no source path at all, and every
+// path-containment authorizer refuses a code:load whose Target is "".
+//
+// WithLibraryPaths is load-bearing: without a library registry the import fails
+// for an unrelated reason.
+func TestSyntheticLibraryImportSkipsPathGate(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx,
+		WithLibraryPaths(t.TempDir()),
+		WithExtension(math.Extension),
+		WithAuthorizer(security.ReadOnly()),
+	)
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	v, err := engine.EvalMultiple(ctx, `(import (wile math)) (floor 3.7)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(v.SchemeString(), qt.Equals, "3.0")
 }
 
 func TestAuthorizer_FilesystemRootAllowsInside(t *testing.T) {

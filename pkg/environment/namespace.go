@@ -632,6 +632,38 @@ func (p *Namespace) SetEnvMap(m map[string]string) {
 	maps.Copy(p.envMap, m)
 }
 
+// EffectiveAuthorizer returns the policy that governs an operation initiated
+// from this namespace: the intersection of the ROOT namespace's authorizer and
+// this namespace's own, most-restrictive-wins, which is the project's recorded
+// composition rule and ships as security.All.
+//
+// Authorizer() deliberately stays an own-field read. Making that getter
+// root-delegate would silently answer "the root's" at every gate site, which is
+// the opposite of what a child with a stricter policy is asking for.
+//
+// A composite is never built over a nil member: compositeAuthorizer.Authorize
+// calls every member unconditionally and would nil-deref, and a default engine
+// has no authorizer anywhere.
+//
+// When a child merely copied its parent's authorizer — the norm, since every
+// production NewChildNamespace call site passes no options — the composite calls
+// the same authorizer twice. That is a redundant call, not a semantic change,
+// and it is why a recording authorizer must not be asserted against an exact
+// call count.
+func (p *Namespace) EffectiveAuthorizer() security.Authorizer {
+	r := p.root()
+	if r == p {
+		return p.authorizer
+	}
+	if r.authorizer == nil {
+		return p.authorizer
+	}
+	if p.authorizer == nil {
+		return r.authorizer
+	}
+	return security.All(r.authorizer, p.authorizer)
+}
+
 // SetAuthorizer sets the security authorizer for this namespace.
 func (p *Namespace) SetAuthorizer(auth security.Authorizer) {
 	p.authorizer = auth

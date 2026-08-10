@@ -54,7 +54,7 @@ func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "resolve: empty filename")
 	}
 	if filepath.IsAbs(path) {
-		return openAuthorized(p.env.Namespace().Authorizer(), path)
+		return openAuthorized(SelectAuthorizer(ctx, p.env), path)
 	}
 	return p.resolveRelative(ctx, path)
 }
@@ -86,7 +86,7 @@ func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 // there, so reporting not-found would both lie and let the search fall through
 // to a lower-priority directory.
 func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.File, string, error) {
-	auth := p.env.Namespace().Authorizer()
+	auth := SelectAuthorizer(ctx, p.env)
 	searchDirs := p.osAbsSearchDirs(ctx)
 
 	candidates := make([]string, 0, len(searchDirs))

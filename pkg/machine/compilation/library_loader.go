@@ -31,6 +31,7 @@ import (
 	"io"
 
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/security"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
@@ -69,6 +70,12 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 			"circular dependency detected while loading %s", name.SchemeString())
 	}
 
+	// LoadLibrary is the only frame that holds both the CALLER's env and the
+	// load, so the effective policy is computed once here and used twice: on the
+	// cache hit below, and on the ctx installed for the miss. Computing it in one
+	// place is what stops a hit and a miss from disagreeing about what is allowed.
+	loadAuth := env.Namespace().EffectiveAuthorizer()
+
 	// Claim the loading slot, or wait for a concurrent loader of the SAME library.
 	// LookupClaimOrWait collapses lookup → claim into one locked decision so two
 	// threads cannot both see "not loaded" and proceed to load+Register the same
@@ -76,6 +83,27 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	for {
 		cached, wait := reg.LookupClaimOrWait(name)
 		if cached != nil {
+			// A cache hit reaches neither the file resolver nor, therefore, the
+			// authorizer, so an import that succeeded under a permissive policy
+			// kept succeeding after the policy was tightened. Re-authorize the
+			// recorded source path.
+			//
+			// An empty SourceFile is a SYNTHETIC library: extension libraries are
+			// registered via NewCompiledLibrary and have no file. Handing "" to a
+			// path-containment authorizer denies, so they are skipped rather than
+			// refused for having no path. This arm sits inside the retry loop, so
+			// it covers the first-lookup hit and the post-latch-wait hit alike.
+			if cached.SourceFile == "" {
+				return cached, nil
+			}
+			authErr := security.CheckWithAuthorizer(loadAuth, security.AccessRequest{
+				Resource: security.ResourceCode,
+				Action:   security.ActionLoad,
+				Target:   cached.SourceFile,
+			})
+			if authErr != nil {
+				return nil, werr.WrapForeignErrorf(authErr, "load-library: %s", name.SchemeString())
+			}
 			return cached, nil
 		}
 		if wait == nil {
@@ -108,6 +136,14 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	// as a cycle above. The augmented context flows down the synchronous import
 	// resolution; the parent frame retains its own shorter context.
 	ctx = withLoadChain(ctx, name)
+
+	// The resolvers read their authorizer off the env they captured at engine
+	// construction — the ROOT env — and FileResolver.ResolveAndOpen takes no
+	// authorizer parameter, so ctx is the only channel by which a caller with a
+	// stricter policy reaches them. Same idiom as the load chain above.
+	if loadAuth != nil {
+		ctx = security.WithAuthorizer(ctx, loadAuth)
+	}
 	var lib *CompiledLibrary
 
 	// Resolve and open via FileResolver (supports both OS and virtual FS).

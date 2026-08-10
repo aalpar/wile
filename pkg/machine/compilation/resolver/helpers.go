@@ -51,6 +51,24 @@ func SelectLoadStack(ctx context.Context) *sourceload.LoadStack {
 	return sourceload.LoadStackFromContext(ctx)
 }
 
+// SelectAuthorizer returns the Authorizer that governs this resolution. It is
+// the resolver-side selection point for the security policy, and it exists for
+// the same reason SelectLoadStack does: the env a resolver holds is the ROOT env
+// captured once at engine construction, not the caller's. A caller with a
+// stricter policy — a child Namespace, or a root whose authorizer was tightened
+// after construction — can only reach the resolver through ctx.
+//
+// The two-branch shape here is deliberate and is NOT SelectLoadStack's (whose
+// env fallback was deleted): LoadLibrary is the only installer, so every other
+// caller leaves ctx bare and gets the captured env's authorizer, unchanged.
+func SelectAuthorizer(ctx context.Context, env *environment.EnvironmentFrame) security.Authorizer {
+	auth := security.FromContext(ctx)
+	if auth != nil {
+		return auth
+	}
+	return env.Namespace().Authorizer()
+}
+
 // SchemeIncludePathEnv is the environment variable name for the Scheme include path.
 const SchemeIncludePathEnv = "SCHEME_INCLUDE_PATH"
 

@@ -103,7 +103,7 @@ func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 		q, _, openErr := finder.OpenCandidate(candidate)
 		return q, openErr
 	}
-	auth := p.env.Namespace().Authorizer()
+	auth := SelectAuthorizer(ctx, p.env)
 	f, resolved, err := authorizeCandidates(auth, security.SourceVirtualFS, finder.Candidates(path), opener)
 	if err == nil {
 		return f, resolved, nil
