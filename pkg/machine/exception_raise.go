@@ -203,7 +203,8 @@ func enrichNativeError(cond values.Value, source *syntax.SourceContext, trace St
 
 // StackTraceToSchemeList converts a StackTrace to a Scheme list of alists, one per
 // frame. Each alist always carries name; file, line, and column are present only
-// when source information is available. Lives here (not in the registry) because it
+// when the frame has a source LOCATION, and file is #f when that location has a
+// position but no filename. Lives here (not in the registry) because it
 // converts machine types and is needed by both RaiseInPlace and the error-context
 // primitives.
 func StackTraceToSchemeList(st StackTrace) values.Tuple {
@@ -226,18 +227,37 @@ func stackFrameToAlist(frame StackFrame) values.Tuple {
 		name = "<anonymous>"
 	}
 
-	// Prefer CurrentLoc over CallSite for source info.
+	// Prefer CurrentLoc over CallSite, and ask each one the same question
+	// StackFrame.String asks: does it have a LOCATION, not merely is it
+	// non-nil. A nil test admits a context that exists and carries no
+	// position, which is common — a datum built at runtime and handed to
+	// eval has one, and so does every foreign-call boundary frame.
+	//
+	// The two renderings used to disagree about the same frame. The textual
+	// trace printed a bare "at <anonymous>"; the alist fabricated
+	// (file . "") (line . 0) (column . 0), which is a plausible-looking
+	// line 0 indistinguishable from a real one. Worse, HEAD already emitted
+	// the correct bare ((name . "<anonymous>")) form for frames whose two
+	// contexts were both nil, so a single result list interleaved both
+	// shapes. Location() is nil-safe, so it subsumes the nil check.
 	src := frame.CurrentLoc
-	if src == nil {
+	if src.Location() == "" {
 		src = frame.CallSite
 	}
 
 	nameEntry := values.NewCons(values.NewSymbol("name"), values.NewString(name))
-	if src == nil {
+	if src.Location() == "" {
 		return values.List(nameEntry)
 	}
 
-	fileEntry := values.NewCons(values.NewSymbol("file"), values.NewString(src.File))
+	// StringOrFalse, not NewString: a located but unnamed program — the
+	// stdin CLI mode, and any embedder calling EvalMultiple without a name —
+	// has a real line and column and an empty File. Four sibling accessors
+	// already encode that absence as #f (error-object-source,
+	// error-context-source, syntax-source twice); "" is not a filename, and
+	// per the project's own rule an unknown value gets a named absence
+	// rather than a zero value that reads as data.
+	fileEntry := values.NewCons(values.NewSymbol("file"), values.StringOrFalse(src.File))
 	lineEntry := values.NewCons(values.NewSymbol("line"), values.NewInteger(int64(src.Start.Line())))
 	colEntry := values.NewCons(values.NewSymbol("column"), values.NewInteger(int64(src.Start.Column())))
 
