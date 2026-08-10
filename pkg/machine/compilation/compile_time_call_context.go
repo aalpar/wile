@@ -179,7 +179,7 @@ func (p CompileTimeCallContext) WithFrameReuse(fr frameReuse) CompileTimeCallCon
 // define alone cannot name its own siblings.
 //
 // It must be set wherever internal defines are PREDECLARED (the three
-// predeclareDefineBindingFromValidated / predeclareBodyDefines sites), and reset
+// predeclareDefineFromValidatedRecursive / predeclareBodyDefines sites), and reset
 // rather than inherited on the way into a nested body: a lambda body starts a
 // fresh context, and a let body overrides with its own. Inheriting a stale body
 // would be a correctness bug, not just imprecision, which is why the predicate

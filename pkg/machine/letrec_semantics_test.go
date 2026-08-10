@@ -67,3 +67,44 @@ func TestLetrecSemantics(t *testing.T) {
 		})
 	}
 }
+
+// TestInternalDefineThroughBegin pins that a lambda body's forward reference
+// reaches a define nested inside a begin — the shape define-values expands to.
+//
+// R7RS §5.3.2 makes a body's internal definitions a letrec* group, so g may
+// name a and b before their defines run. The compiler's pre-declare pass for
+// the CLOSURE path type-asserted *validate.ValidatedDefine only, missing the
+// begin, so a and b were never predeclared and g failed to compile with
+// `no such binding "a" with compatible scopes`. The let () twin already worked
+// (compile_let.go's pass recurses), which is the control below.
+func TestInternalDefineThroughBegin(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		expected values.Value
+	}{
+		{
+			name:     "lambda body: begin-wrapped defines are predeclared",
+			code:     "(define (f) (define (g) (+ a b)) (begin (define a 1) (define b 2)) (g)) (f)",
+			expected: values.NewInteger(3),
+		},
+		{
+			name:     "lambda body: define-values expands to the same begin",
+			code:     "(define (f) (define (g) (+ a b)) (define-values (a b) (values 1 2)) (g)) (f)",
+			expected: values.NewInteger(3),
+		},
+		{
+			// Control: the let path already recursed, so this passed before the
+			// closure path was taught the same recursion.
+			name:     "let body: the control that already worked",
+			code:     "(let () (define (g) (+ a b)) (begin (define a 1) (define b 2)) (g))",
+			expected: values.NewInteger(3),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := evalScheme(t, tc.code)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+		})
+	}
+}

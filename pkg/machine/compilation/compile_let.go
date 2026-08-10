@@ -288,7 +288,14 @@ func (p *CompileTimeContinuation) predeclareBodyDefines(
 
 // predeclareDefineFromValidatedRecursive pre-creates bindings for defines,
 // recursing into begin blocks to find defines from macro expansions
-// (e.g., define-values expands to (begin (define ...) ...)).
+// (e.g., define-values expands to (begin (define ...) ...)). This is what makes
+// forward references inside a body work, per R7RS §5.3.2 / §4.2.3 Rationale.
+// See letrec_semantics.go for the shared pattern documentation.
+//
+// It is the ONLY pre-declare pass: the closure path (compile_closure.go) and
+// CompileValidatedBegin used to carry a non-recursing twin, so a define reached
+// only through a begin was never predeclared and a lambda body's forward
+// reference to it failed to compile.
 func (p *CompileTimeContinuation) predeclareDefineFromValidatedRecursive(
 	expr validate.ValidatedExpr,
 ) {
