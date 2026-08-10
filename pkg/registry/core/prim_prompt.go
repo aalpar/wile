@@ -114,6 +114,10 @@ func PrimCallWithContinuationPrompt(cc machine.CallContext) error {
 // Returns an ErrPromptAbort that propagates up through Run() to the
 // enclosing call-with-continuation-prompt or RunWithEscapeHandling.
 func PrimAbortCurrentContinuation(mc machine.CallContext) error {
+	realMC, err := machine.RequireMachineContext(mc, "abort-current-continuation")
+	if err != nil {
+		return err
+	}
 	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, werr.ErrNotAPromptTag, "abort-current-continuation")
 	if err != nil {
 		return err
@@ -133,9 +137,16 @@ func PrimAbortCurrentContinuation(mc machine.CallContext) error {
 		}
 	}
 
+	// SourceWinding is the winding live HERE at the abort origin, which may be a
+	// deeper sub-context than the driver holding the prompt frame — an abort
+	// raised inside (eval ...) is the reproducing case. Without it the driver
+	// reconciles from its OWN winding and the after-thunks pushed inside the
+	// sub-context never run. call-with-exit (prim_exit.go) and the value-delivery
+	// abort already stamp it; this was the one emitter that did not.
 	return &machine.ErrPromptAbort{
-		Tag:    tag,
-		Values: abortValues,
+		Tag:           tag,
+		Values:        abortValues,
+		SourceWinding: realMC.WindingStack().Copy(),
 	}
 }
 

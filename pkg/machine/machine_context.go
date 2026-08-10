@@ -1511,8 +1511,21 @@ func (p *MachineContext) RunResumable() (rerr error) {
 		rerr = p.WrapError(err, "RunResumable: recovered panic: "+err.Error())
 	}()
 
+	// pending carries a control signal raised by the resolution of a PREVIOUS
+	// signal — an after-thunk fired during a winding reconcile can itself escape
+	// — back to the top of this loop, so it is dispatched by the same arms that
+	// would have handled it had Run() produced it. Returning such an error
+	// instead is the leak defect 27 names: the reconcile paths are the only two
+	// sites in the driver that did not route their error, and a raw
+	// "abort to prompt #<continuation-prompt-tag:exit>" reached the embedder.
+	var pending error
+
 	for {
-		err := p.Run()
+		err := pending
+		pending = nil
+		if err == nil {
+			err = p.Run()
+		}
 
 		// Check for successful completion
 		if err == nil {
@@ -1541,6 +1554,13 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			// deliver the abort values — the shared abort arm (see resolveAbort).
 			done, abErr := p.resolveAbort(abortErr, prompt)
 			if abErr != nil {
+				if isControlSignal(abErr) {
+					// resolveAbort runs after-thunks on the way to the prompt; one of
+					// them transferred control of its own accord. Dispatch it here
+					// rather than returning it (defect 27's second site).
+					pending = abErr
+					continue
+				}
 				return abErr
 			}
 			if done {
@@ -1572,6 +1592,15 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			wasEmpty, reErr := p.ReinstallSegment(
 				resumeErr.Segment, boundary, resumeErr.SourceWinding, resumeErr.Values, true)
 			if reErr != nil {
+				if isControlSignal(reErr) {
+					// The winding reconcile ran an after-thunk that escaped — a raise
+					// caught by an enclosing guard (whose own escape is
+					// call-with-exit), or a bare call-with-exit with no exception
+					// anywhere. Both are Scheme control flow addressed to a prompt on
+					// this chain, so re-enter dispatch (defect 27's first site).
+					pending = reErr
+					continue
+				}
 				return reErr
 			}
 			if wasEmpty {

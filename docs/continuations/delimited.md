@@ -163,7 +163,7 @@ Reifying the prompt on the chain is what lets a continuation captured inside the
 (abort-current-continuation tag v ...)
 ```
 
-Simply returns `&ErrPromptAbort{Tag: tag, Values: vs}`. The signal propagates up through the VM until a driver's `FindPrompt` matches it. (The `call-with-exit` exit closure and `shift`/`control` emit the same signal, the first with a private per-invocation tag and a `SourceWinding` copy.)
+Returns `&ErrPromptAbort{Tag: tag, Values: vs, SourceWinding: …}`. The signal propagates up through the VM until a driver's `FindPrompt` matches it. (The `call-with-exit` exit closure and `shift`/`control` emit the same signal, `call-with-exit` with a private per-invocation tag. All three carry a `SourceWinding` copy: the winding live at the abort origin, which may be a deeper sub-context than the driver holding the prompt — without it a `(dynamic-wind …)` established inside an `(eval …)` loses its after-thunk.)
 
 ### call-with-composable-continuation
 
