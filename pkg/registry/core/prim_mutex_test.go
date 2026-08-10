@@ -120,12 +120,32 @@ func TestMutexSpecificSetError(t *testing.T) {
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
+// TestMutexState pins the distinction between SRFI-18's two "unowned"
+// answers, which this test used to erase: it asserted that a FRESH mutex is
+// 'not-owned, and it is not — 'not-owned means the mutex IS HELD by a caller
+// with no Thread object.
 func TestMutexState(t *testing.T) {
-	// New mutex should be not-owned
-	code := "(mutex-state (make-mutex))"
-	result, err := testhelpers.RunSchemeCode(t, code)
+	// Not held at all.
+	result, err := testhelpers.RunSchemeCode(t, "(mutex-state (make-mutex))")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("not-abandoned"))
+
+	// HELD, with no owner — the primordial case. mutex-lock!'s default owner
+	// is the calling thread, and at the top level there is no Thread object
+	// (MachineContext.SetThread is called only by NewThreadSubContext), so a
+	// top-level lock holds the mutex unowned. THIS is 'not-owned.
+	result, err = testhelpers.RunSchemeCode(t,
+		`(let ((m (make-mutex))) (mutex-lock! m) (mutex-state m))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("not-owned"))
+
+	// Released again: back to not-held. The pair above and this line are the
+	// discrimination — one symbol for both states is exactly the defect, and
+	// it is invisible to a test that checks only one of them.
+	result, err = testhelpers.RunSchemeCode(t,
+		`(let ((m (make-mutex))) (mutex-lock! m) (mutex-unlock! m) (mutex-state m))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("not-abandoned"))
 }
 
 func TestMutexStateError(t *testing.T) {

@@ -479,8 +479,10 @@ var PrimMutexSpecificSet = helpers.MakeBinarySetter(werr.ErrNotAMutex, "mutex-sp
 //
 // SRFI-18's four answers, all reachable:
 //   - the owner thread — held, and a thread owns it
-//   - 'not-owned       — HELD, with no owning thread (mutex-lock! takes an
-//     optional owner and #f is legal)
+//   - 'not-owned       — HELD, by a caller with no Thread object. Two ways in,
+//     both ordinary: PRIMORDIAL ownership (a top-level lock, because
+//     mutex-lock!'s default owner is mc.Thread() and the primordial context
+//     has none), or an explicit #f owner argument
 //   - 'abandoned       — the owner terminated while holding it
 //   - 'not-abandoned   — not held, and not abandoned
 var PrimMutexState = helpers.MakeUnaryAccessor(werr.ErrNotAMutex, "mutex-state", func(mutex *values.Mutex) values.Value {
@@ -500,6 +502,13 @@ func PrimMutexLock(mc machine.CallContext) error {
 	restVal := mc.Arg(1)
 
 	var timeout *time.Duration
+	// The default owner is the CALLING thread — and at the top level there
+	// isn't one. MachineContext.SetThread is called from exactly one site
+	// (NewThreadSubContext), so the primordial context's thread field is nil
+	// and a top-level (mutex-lock! m) holds the mutex with NO owner. That is
+	// not a defect: SRFI-18 names it, and mutex-state answers 'not-owned for
+	// it. The same form inside a thread answers that thread. An explicit #f
+	// third argument reaches the same state on purpose.
 	owner := mc.Thread()
 
 	// Parse optional arguments from rest list

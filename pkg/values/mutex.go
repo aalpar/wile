@@ -22,7 +22,28 @@ import (
 	"time"
 )
 
-// Mutex state symbol singletons.
+// Mutex state symbol singletons — three of SRFI-18's four mutex-state
+// answers; the fourth is the owning *Thread itself.
+//
+// The two "unowned" names are NOT synonyms, and confusing them is the defect
+// StateValue used to have:
+//
+//	'not-owned      the mutex IS HELD, by a caller with no Thread object.
+//	                Two ways to get there, and both are ordinary:
+//	                  - PRIMORDIAL OWNERSHIP. MachineContext.SetThread is
+//	                    called from exactly one place, NewThreadSubContext, so
+//	                    the top-level context's thread field is never set and
+//	                    mutex-lock!'s default owner (mc.Thread()) is nil.
+//	                    (mutex-lock! m) at the REPL or in a script therefore
+//	                    holds the mutex with no owner, and mutex-state answers
+//	                    'not-owned. The same form inside a thread answers that
+//	                    thread.
+//	                  - An explicit #f owner: (mutex-lock! m timeout #f).
+//	'not-abandoned  the mutex is NOT HELD, and was not abandoned. The ordinary
+//	                state of a fresh or released mutex.
+//	'abandoned      the owner terminated while holding it. Consumed by the
+//	                next acquirer, which gets the mutex AND an
+//	                AbandonedMutexException.
 //
 // StateValue returns these instead of allocating fresh symbols on each call.
 // The singletons avoid re-allocating the symbol; eq? on symbols is by name
@@ -50,9 +71,12 @@ var (
 //
 // Invariants enforced by Lock/Unlock/MarkAbandoned:
 //
-//	state == MutexUnlocked   ⇒ owner == nil
-//	state == MutexLocked     — owner is the identity (nil ⇒ "not-owned")
-//	state == MutexAbandoned  ⇒ owner == nil
+//	state == MutexUnlocked   ⇒ owner == nil          (renders 'not-abandoned)
+//	state == MutexLocked     — owner is the identity  (nil ⇒ 'not-owned: held
+//	                           by a caller with no Thread object, which is the
+//	                           PRIMORDIAL thread or an explicit #f owner —
+//	                           see the symbol block above)
+//	state == MutexAbandoned  ⇒ owner == nil          (renders 'abandoned)
 type MutexState int
 
 // MutexState constants. See the invariant block above for state↔owner relations.
@@ -84,7 +108,10 @@ type Mutex struct {
 	mu    sync.Mutex
 	cond  *sync.Cond
 	state MutexState
-	owner *Thread // nil if not owned
+	// owner is nil in three distinct situations, which the state field
+	// disambiguates: not held at all; held by the primordial thread or an
+	// explicit #f owner ('not-owned); or abandoned. See the invariant block.
+	owner *Thread
 }
 
 // NewMutex creates a new unlocked mutex
@@ -160,9 +187,13 @@ func (p *Mutex) StateValue() Value {
 		if p.owner != nil {
 			return p.owner
 		}
-		// Held, but acquired without an owning thread — mutex-lock! takes an
-		// optional owner and #f is legal, and the primordial thread has no
-		// Thread object at all. This is SRFI-18's 'not-owned.
+		// Held, with no owning thread. This is SRFI-18's 'not-owned, and it
+		// is the ORDINARY answer for a top-level lock: mutex-lock!'s default
+		// owner is mc.Thread(), and MachineContext.SetThread is called from
+		// exactly one site (NewThreadSubContext), so the primordial context
+		// has none. Measured: (mutex-lock! m) then (mutex-state m) answers
+		// 'not-owned at the top level and the thread itself inside a thread.
+		// An explicit #f owner reaches the same state deliberately.
 		return SymbolMutexNotOwned
 	case MutexAbandoned:
 		return SymbolMutexAbandoned
