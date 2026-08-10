@@ -62,15 +62,15 @@
 //
 // It was false twice. `expand` and `expand-once` reach their sink through
 // pkg/machine/compilation (ExpanderTimeContinuation.ExpandExpression /
-// ExpandOnce) and then pkg/machine (invokeTransformerClosure); the registry's
-// 455 primitives resolve to 16 impl packages and neither of those two is among
-// them, so the analyzer parsed neither and discovered neither. `expand` carried
-// a hand-placed annotation; `expand-once` carried none, which is what the
-// selectors below now catch (review-wave-4 item 10).
+// ExpandOnce) and then pkg/machine (invokeTransformerClosure); no registered
+// primitive Impl lives in either package, so the analyzer parses neither and
+// discovered neither. `expand` carried a hand-placed annotation; `expand-once`
+// carried none, which is what the selectors below now catch (review-wave-4
+// item 10).
 //
-// Both instances are closed. The hole is structural and is not: every sink
-// reachable only under a name not in the two selector sets above is still
-// invisible, and nothing here detects that.
+// Both instances are closed; the structural hole is not. Every sink reachable
+// only under a name not in the two selector sets above is still invisible, and
+// nothing here detects that.
 // TestInvokesProcedureCompleteness remains the behavioral backstop, and
 // TestProcedureInvokersMatchesInvokesProcedure (capture_safety_test.go) now
 // keeps its list derived from the annotations rather than curated.

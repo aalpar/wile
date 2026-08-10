@@ -908,8 +908,8 @@ func TestAuthorizer_DenyBlocksCommandLine(t *testing.T) {
 // charter this sweep would never have grown a row for them, and a regression
 // that dropped their gate would have passed. They are two rows and not one used
 // as a proxy for the other because they are two primitives with two independent
-// security.Check call sites (prim_eval.go, PrimExpand and PrimExpandOnce); a
-// regression that drops either one leaves the other's row green.
+// security.Check call sites (PrimExpand and PrimExpandOnce, extensions/eval/
+// prim_eval.go); a regression that drops either leaves the other's row green.
 //
 // The sweep also does NOT cover stream:{read,write}. That gate runs once per
 // engine, when io.NewState builds the port parameters, so a denial surfaces as a
