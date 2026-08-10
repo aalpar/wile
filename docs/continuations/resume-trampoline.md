@@ -259,23 +259,34 @@ escalateFn := func(finCC CallContext) error {
 }
 ```
 
-`ReinstallSegment` sets the flag, and *which* arms it sets is the whole trick.
-The measured fact that makes it non-obvious: in both the legitimate `guard`
-forward and the illegitimate escape-inside-the-handler, the captured segment
-**contains** the finalizer frame. Segment membership discriminates nothing. The
-two differ only in the **live chain** at the moment of reinstatement:
+*Which* arms get the flag is the whole trick. The measured fact that makes it
+non-obvious: in both the legitimate `guard` forward and the illegitimate
+escape-inside-the-handler, the captured segment **contains** the finalizer frame.
+Segment membership discriminates nothing. The two differ only in the **live
+chain** at the `(k v)` site:
 
 | | segment carries the frame | live chain carries it | verdict |
 |---|---|---|---|
 | `guard` miss re-raise | yes | **no** — guard-k's `call-with-exit` abort discarded it | revive → forward |
 | `call/cc` escape inside the handler | yes | **yes** — the jump never left the extent | leave unrevived → escalate |
 
-So `pendingEscalatorRevivals` (`machine_context_apply.go`) marks exactly the arms
-the segment carries and the live chain does not. "Resumed through" means
-"re-entered from outside", not "appears in the segment". The set is computed
-*before* `RestoreWithWindingFrom` (which runs `dynamic-wind` thunks that can
-re-point the chain) and applied only *after* it succeeds — a failed reinstatement
-never re-entered the frame, so it contributes no revival.
+So `pendingEscalatorRevivals` (`machine_context_apply.go`) selects exactly the
+arms the segment carries and the live chain does not. "Resumed through" means
+"re-entered from outside", not "appears in the segment".
+
+The set is decided **by the invoker**, alongside `SourceWinding` and for the same
+reason: the resume trampolines to the nearest `DefaultPromptTag` driver, which is
+not the context the continuation was invoked on. A raise handled inside a
+sub-context — every `dynamic-wind` before/after thunk is one, and `RunWithinBoundary`
+re-raises `ErrResumeContinuation` rather than resolving it — arms its finalizer
+frame on the *sub's* chain, and the top driver's chain never held it. Asking the
+driver reads "absent", i.e. a revival, for a jump that never left the extent, and
+swallows the secondary exactly as the two earlier answers did. So
+`applyCapturedContinuation` computes the set and carries it on
+`ErrResumeContinuation.EscalatorRevivals`; `applyComposableContinuation`, which
+resumes in place, computes it directly. `ReinstallSegment` only *applies* it, and
+only *after* `RestoreWithWindingFrom` succeeds — a failed reinstatement never
+re-entered the frame, so it contributes no revival.
 
 > Two earlier answers were wrong, in opposite directions. A context-global
 > `isolatedMarks` flag *stays true* after any prior resume on the driver, so once
@@ -350,9 +361,11 @@ Replace the per-arm `escalatorArm` with anything coarser — the context-global
 secondary-exception test passes *in isolation* while the mandatory R7RS §6.11
 exception is swallowed: by the flag for every non-continuable handler that
 returns after any earlier resume, by the counter for every handler that takes a
-`call/cc` escape inside its own body. Both are silent correctness holes that only
-surface in programs which both resume continuations and misuse exception
-handlers.
+`call/cc` escape inside its own body. Move the arm decision from the `(k v)` site
+to the driver and the same hole reopens, narrower: only for a raise handled in a
+sub-context, which is every `dynamic-wind` thunk. All three are silent
+correctness holes that only surface in programs which both resume continuations
+and misuse exception handlers.
 
 The lesson the Wile memory records bluntly: for continuations, *a green suite is
 not evidence of correctness*. The trampoline shipped only after an A/B

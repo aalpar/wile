@@ -336,9 +336,11 @@ applyComposableContinuation(cc, args)
   │
   ├─ copy args off the eval stack (Restore recycles the backing array)
   │
-  └─ ReinstallSegment(cc, boundary = p.cont, p.windingStack, vals, p.isolatedMarks)
-       ├─ install captured marks; select the escalator arms this resume revives
-       │    (segment carries them, the live chain does not)
+  ├─ select the escalator arms this resume revives, against p.cont
+  │    (segment carries them, the invoker's live chain does not)
+  │
+  └─ ReinstallSegment(cc, boundary = p.cont, p.windingStack, vals, p.isolatedMarks, revived)
+       ├─ install captured marks
        ├─ segment = cc.AcquireSegment()
        │    first invocation: original frames, chain marked shared
        │    re-invocation:    deep copy, so resumes are independent
@@ -427,14 +429,16 @@ it loops):
 
 1. `applyCapturedContinuation` invoked with value 42
 2. Thread check and barrier check pass
-3. It returns `ErrResumeContinuation{DefaultPromptTag, segment, [42], SourceWinding: []}`.
-   The segment is **not** run here.
+3. It selects the escalator arms to revive against **its own** `p.cont`, then returns
+   `ErrResumeContinuation{DefaultPromptTag, segment, [42], SourceWinding: [], EscalatorRevivals: …}`.
+   The segment is **not** run here. Both site-local fields are frozen now for the
+   same reason: step 5 may hand the signal to a driver several sub-contexts out.
 4. `applyCallableError` passes the signal through unchanged
 5. `Run()` returns it to `RunResumable`
 6. `boundary, _ = FindPrompt(DefaultPromptTag)` → nil (context-level boundary),
    so the reinstalled segment *replaces* the live chain
-7. `ReinstallSegment(segment, nil, [], [42], isolate = true)`:
-   a. install the captured mark snapshot; select the escalator arms to revive
+7. `ReinstallSegment(segment, nil, [], [42], isolate = true, revivals)`:
+   a. install the captured mark snapshot
    b. `AcquireSegment()`: original frames on first invoke, deep copy after
    c. `RestoreWithWindingFrom(nil, [], [D1])`:
       `FindCommonWindingPrefix([], [D1])` = 0; no unwinding (source is empty);

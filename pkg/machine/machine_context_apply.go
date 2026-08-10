@@ -531,10 +531,16 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 //     (first invoke) so a later normal return through a reinstalled frame takes
 //     RestoreAndRelease's copy-don't-pool branch (shared-bit safety; the
 //     tail-frame-recycling-unsound failure class hides here).
-//  3. the escalator-arm revival set is COMPUTED before RestoreWithWindingFrom
-//     (which runs arbitrary Scheme and can re-point the chain) but APPLIED only
-//     after it succeeds — a failed reinstatement never re-entered the frame, so
-//     it must contribute no revival.
+//  3. the escalator-arm revival set is decided by the CALLER, at the invocation
+//     site, and APPLIED here only after RestoreWithWindingFrom succeeds — a failed
+//     reinstatement never re-entered the frame, so it must contribute no revival.
+//
+// revived carries that set (see pendingEscalatorRevivals). It is a caller argument
+// rather than something computed here because this context is not always the one
+// the continuation was invoked on: the call/cc trampoline re-raises out of any
+// enclosing sub-context to the top driver, so p.cont here can be a chain that never
+// held the arms' frames. nil for every resume that crosses no escalator, which is
+// essentially all of them.
 //
 // isolate is written unconditionally as a per-resume reset on the (now long-lived)
 // driver context: a stale isolatedMarks from a prior resume must not leak into a
@@ -548,13 +554,10 @@ func (p *MachineContext) ReinstallSegment(
 	srcWinding WindingStack,
 	vals []values.Value,
 	isolate bool,
+	revived []*escalatorArm,
 ) (bool, error) {
 	p.capturedMarks = comp.capturedMarks
 	p.isolatedMarks = isolate
-	// Read the LIVE chain here, before RestoreWithWindingFrom: that call runs
-	// dynamic-wind thunks (arbitrary Scheme) which can re-point p.cont, and the
-	// question being asked is about the chain as it stood at the resume.
-	revived := pendingEscalatorRevivals(comp, p.cont)
 
 	// Acquire the segment: first invocation avoids DeepCopy by marking
 	// the segment shared; re-invocations deep-copy from preserved frames.
@@ -632,7 +635,11 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	// p.isolatedMarks is the driver's current value. Composable resume composes
 	// the invoker's marks; see call-with-composable-continuation, which does not
 	// snapshot.
-	wasEmpty, err := p.ReinstallSegment(cc, p.cont, p.windingStack, vals, p.isolatedMarks)
+	// Composable resume runs directly on the invoking context, so p.cont IS the live
+	// chain the arms must be judged against; read it before ReinstallSegment, whose
+	// winding reconcile runs dynamic-wind thunks that can re-point it.
+	revived := pendingEscalatorRevivals(cc, p.cont)
+	wasEmpty, err := p.ReinstallSegment(cc, p.cont, p.windingStack, vals, p.isolatedMarks, revived)
 	if err != nil {
 		return p, err
 	}
@@ -642,8 +649,8 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	return p, nil
 }
 
-// pendingEscalatorRevivals selects the escalator arms this reinstatement would
-// REVIVE: those carried by the captured segment but absent from the live chain.
+// pendingEscalatorRevivals selects the escalator arms this resume would REVIVE:
+// those carried by the captured segment but absent from live.
 //
 // The discrimination is the whole mechanism. An arm the live chain still carries
 // means the resume never left that finalizer frame's dynamic extent — an ordinary
@@ -652,6 +659,15 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 // been discarded (guard-k's call-with-exit abort) and reinstating the segment
 // re-enters its extent from outside, which is the one path allowed to forward the
 // handler's value.
+//
+// live MUST be the chain of the context the continuation was INVOKED on, which is
+// not always the context that reinstates the segment: the call/cc trampoline
+// re-raises past every enclosing sub-context to the top DefaultPromptTag driver, so
+// an escalator armed inside a dynamic-wind thunk's sub-context is absent from the
+// driver's chain even though the jump never left its extent. Both call sites
+// therefore read the live chain before handing the result on — the (k v) site in
+// applyCapturedContinuation, and applyComposableContinuation, which resumes in
+// place.
 //
 // Returns nil for the overwhelmingly common capture that carries no arm at all,
 // so the resume path pays one length test.

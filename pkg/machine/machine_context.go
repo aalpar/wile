@@ -1579,8 +1579,13 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			// isolate=true: this signal is emitted only for call/cc resume, which restores
 			// the captured mark snapshot (composable resume composes marks and bypasses
 			// this signal — it calls ReinstallSegment directly).
+			//
+			// The escalator revivals ride the signal rather than being computed here:
+			// p.cont is THIS driver's chain, and the (k v) site may have been a
+			// sub-context whose frames this chain never held (see EscalatorRevivals).
 			wasEmpty, reErr := p.ReinstallSegment(
-				resumeErr.Segment, boundary, resumeErr.SourceWinding, resumeErr.Values, true)
+				resumeErr.Segment, boundary, resumeErr.SourceWinding, resumeErr.Values, true,
+				resumeErr.EscalatorRevivals)
 			if reErr != nil {
 				if isControlSignal(reErr) {
 					// The winding reconcile ran an after-thunk that escaped — a raise

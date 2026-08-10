@@ -58,9 +58,11 @@ func ExceptionHandlerParam() values.Value {
 // survives the frame copies SliceContinuationAt / Copy / DeepCopy make — the
 // closure and any copy of the frame all observe the same flag.
 //
-// revived means a reinstatement re-entered this frame's extent FROM OUTSIDE: the
-// reinstated segment carried the frame while the live chain did not. That is the
-// guard miss-path, and only that path may forward the handler's value.
+// revived means a resume re-entered this frame's extent FROM OUTSIDE: the resumed
+// segment carried the frame while the chain live AT THE (k v) SITE did not. That is
+// the guard miss-path, and only that path may forward the handler's value. The
+// invoking context is the one that answers, because this frame may sit on a
+// sub-context's chain the reinstating driver never held.
 type escalatorArm struct {
 	revived bool
 }
@@ -151,11 +153,18 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 	// The discriminator is per-arm REVIVAL, not "did any resume happen". Both the guard
 	// miss-path and an ordinary call/cc escape taken inside the handler capture a
 	// segment CONTAINING this finalizer frame, so segment membership alone is vacuous.
-	// They differ in the LIVE chain at reinstatement: guard-k's call-with-exit abort had
+	// They differ in the LIVE chain AT THE (k v) SITE: guard-k's call-with-exit abort had
 	// already discarded the frame, so reinstating handler-k re-enters this frame's extent
-	// FROM OUTSIDE and ReinstallSegment sets arm.revived. A jump that never left the
-	// extent finds the frame still live, leaves the arm unrevived, and the §6.11
-	// secondary still fires — which is the whole point of the arm.
+	// FROM OUTSIDE and the resume sets arm.revived. A jump that never left the extent
+	// finds the frame still live, leaves the arm unrevived, and the §6.11 secondary still
+	// fires — which is the whole point of the arm.
+	//
+	// "At the (k v) site", not "at reinstatement": this frame lands on whatever chain the
+	// raise was handled on, and a raise inside a dynamic-wind thunk (or any other
+	// sub-context) is handled on the SUB's chain while the call/cc trampoline reinstates
+	// on the top driver's. Judging there reads the frame as absent — a revival — for a
+	// jump that never left it, which swallows the secondary again. pendingEscalatorRevivals
+	// is therefore called by the invoker, not by ReinstallSegment.
 	//
 	// (A context-global isolatedMarks gate was WRONG here: it stays true after ANY prior
 	// resume on the driver, so it swallowed the mandatory secondary exception for every

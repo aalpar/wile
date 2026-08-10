@@ -23,7 +23,7 @@ import (
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 )
 
-// REGRESSION (crosscheck 2026-06-28, exception_raise.go:133): the non-continuable
+// REGRESSION (crosscheck 2026-06-28, machine.raiseToHandlers): the non-continuable
 // escalation in raiseToHandlers gated the R7RS §6.11 secondary exception on the
 // CONTEXT-GLOBAL, sticky `isolatedMarks` flag. Once ANY call/cc continuation had
 // been resumed on the driver, isolatedMarks stayed true, so a later non-continuable
@@ -39,6 +39,12 @@ import (
 // The signal must be per-arm and directional: forward ONLY when a reinstatement
 // REVIVED this escalator frame (the segment carried it, the live chain did not),
 // which is the guard re-raise-continuable case.
+//
+// And "the live chain" must be read at the (k v) site. A raise handled inside a
+// sub-context — every dynamic-wind before/after thunk is one — arms its finalizer
+// frame on the SUB's chain, while the call/cc trampoline reinstates on the top
+// driver's; judging there scored every such jump as a revival. The last two rows
+// pin that third failure.
 
 // TestNonContinuableHandlerReturnErrors: a handler that RETURNS from a
 // non-continuable raise must always raise the §6.11 secondary exception —
@@ -90,6 +96,40 @@ func TestNonContinuableHandlerReturnErrors(t *testing.T) {
 			Code: `(with-exception-handler
                      (lambda (e) (call/cc (lambda (k) (k 1))) 42)
                      (lambda () (car 5)))`,
+		},
+		{
+			// The raise is handled inside a dynamic-wind AFTER thunk, i.e. on a
+			// sub-context's chain, and the (k 1) trampolines out of that sub-context
+			// to the top driver. Judging live-chain membership on the DRIVER scores
+			// the jump as a revival and forwards 42; the arms are decided at the
+			// (k v) site precisely so this stays a within-extent jump.
+			Name: "call/cc INSIDE a handler running in a dynamic-wind after thunk",
+			Code: `(call/cc
+                     (lambda (esc)
+                       (dynamic-wind
+                         (lambda () #f)
+                         (lambda () (esc 'ok))
+                         (lambda ()
+                           (with-exception-handler
+                             (lambda (e) (call/cc (lambda (k) (k 1))) 42)
+                             (lambda () (error "boom")))))))`,
+		},
+		{
+			// The other winding sub-context: a BEFORE thunk, run by the rewind half
+			// of the reconcile when a continuation re-enters the extent from outside.
+			Name: "call/cc INSIDE a handler running in a dynamic-wind before thunk",
+			Code: `(let ((saved #f) (n 0))
+                     (dynamic-wind
+                       (lambda ()
+                         (set! n (+ n 1))
+                         (if (> n 1)
+                             (with-exception-handler
+                               (lambda (e) (call/cc (lambda (k) (k 1))) 42)
+                               (lambda () (error "boom")))))
+                       (lambda () (call/cc (lambda (k) (set! saved k))) 'inside)
+                       (lambda () #f))
+                     (if (< n 2) (saved #f))
+                     'done)`,
 		},
 	}
 	for _, tc := range tcs {
