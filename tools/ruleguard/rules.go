@@ -148,9 +148,10 @@ func noDirectValueRegisterAccess(m dsl.Matcher) { //nolint:unused // loaded by g
 // Only the single-value forms are matched. The comma-ok form
 // (`x, ok := mc.Arg(0).(*values.Integer)`) is a distinct two-LHS AST shape and
 // is the safe, idiomatic pattern — it is intentionally NOT flagged. The
-// call-argument form (`f(mc.Arg(0).(*values.T))`) is not matched; the
-// assignment, selector-chain, and return forms below cover the realistic
-// authoring mistakes, so this is a backstop, not a proof.
+// patterns below cover the four expression positions in which this tree
+// actually writes a single-value assertion: assignment, selector chain,
+// return, and call argument. Positions no call site uses (composite literal,
+// index, binary operand) are deliberately absent rather than enumerated.
 //
 // Scoped to `*values.$t` (concrete pointer asserts) — the panic-prone shape the
 // finding targets; interface asserts (values.Number, values.Tuple) are almost
@@ -161,6 +162,7 @@ func noDirectValueRegisterAccess(m dsl.Matcher) { //nolint:unused // loaded by g
 //	// Wrong (panics on wrong type → process crash):
 //	n := mc.Arg(0).(*values.Integer)
 //	v := mc.Arg(0).(*values.Vector).Get(i)
+//	use(mc.Arg(0).(*values.Integer))
 //
 //	// Right:
 //	n, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "name")
@@ -171,6 +173,7 @@ func noUncheckedArgCast(m dsl.Matcher) { //nolint:unused // loaded by gocritic r
 		`$lhs = $mc.Arg($n).(*values.$t)`,
 		`$mc.Arg($n).(*values.$t).$sel`,
 		`return $mc.Arg($n).(*values.$t)`,
+		`$f($*_, $mc.Arg($n).(*values.$t), $*_)`,
 	).
 		Where(!m.File().Name.Matches(`_test\.go$`)).
 		Report(`unchecked type assertion on Arg(): a wrong-type argument panics (runtime.Error) and crashes the VM — the boundary recover catches only *werr.ForeignError. Use helpers.RequireArg[T](mc, n, sentinel, name) or the comma-ok form`)
