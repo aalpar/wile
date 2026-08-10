@@ -163,6 +163,48 @@ func TestDebuggerSuspendsAndTheVerdictControlsExecution(t *testing.T) {
 	})
 }
 
+// TestStepOutDoesNotDegenerateIntoStepInto is GATE (3) for Wave 3 item 13a: it
+// must fail before ShouldStep's step-out arm is re-keyed onto call depth and
+// pass after.
+//
+// Step-out was keyed on the frame POINTER stashed at the stop. Suspension made
+// that key worthless: SliceContinuationAt deep-copies every frame, so resuming
+// hands the VM a chain of Copy()s and `mc.cont != stepFrame` is already true at
+// the first opcode after the resume. The stop lands back on line 2, inside the
+// procedure the user asked to finish, which is step-INTO behaviour.
+func TestStepOutDoesNotDegenerateIntoStepInto(t *testing.T) {
+	ctx := context.Background()
+	src := "(define (inner x)\n" +
+		"  (+ x 1))\n" +
+		"(define (outer x)\n" +
+		"  (+ (inner x) 100))\n"
+	eng, path, dbg := newDebuggedEngine(t, src)
+
+	var lines []int
+	dbg.OnBreakSuspend(func(state values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+		line := 0
+		loc := state.CurrentLocation()
+		if loc != nil {
+			line = loc.Line
+		}
+		lines = append(lines, line)
+		if len(lines) == 1 {
+			return wile.BreakFinish
+		}
+		return wile.BreakContinue
+	})
+	dbg.SetBreakpoint(path, 2, 0)
+
+	val, err := eng.EvalMultiple(ctx, `(outer 5)`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, val.SchemeString(), qt.Equals, "106")
+
+	qt.Assert(t, len(lines) >= 2, qt.IsTrue,
+		qt.Commentf("finishing inner must produce a second stop, got stops %v", lines))
+	qt.Assert(t, lines[1], qt.Equals, 4,
+		qt.Commentf("finish must land back in outer on line 4, not on line 2 in inner"))
+}
+
 // TestBreakpointFiresOncePerSourceLine is GATE (2) for Wave 3 item 13a: it must
 // fail before the CheckBreakpoint de-duplication lands and pass after.
 //
