@@ -553,6 +553,9 @@ func (p *Tokenizer) term() {
 // Sets p.cur to utf8.RuneError and p.err appropriately on EOF or encoding error.
 func (p *Tokenizer) readNextRune() {
 	n := 0
+	// The rune being replaced, kept only to recognise the '\n' of a CRLF pair,
+	// which its '\r' has already counted as the line ending.
+	prev := p.cur
 	p.cur, n, p.err = p.rdr.ReadRune()
 	p.runeStart = p.runeEnd
 	if n == 0 {
@@ -573,7 +576,16 @@ func (p *Tokenizer) readNextRune() {
 	// Line and tab-stop adjustments belong here, not in next(): the constructor
 	// reads the first rune through this path, and a source starting with a tab
 	// or newline must be tracked like any other.
-	if isNewLine(p.cur) {
+	//
+	// All three spellings end a line, and CRLF ends exactly one.
+	if isLineEnding(p.cur) {
+		if isNewLine(p.cur) && isReturn(prev) {
+			// The '\r' of a CRLF already advanced the line; its '\n' only
+			// holds the column at the new line's origin. That pairing is the
+			// only reason prev exists.
+			p.runeEnd = syntax.NewSourceIndexes(p.runeEnd.Index(), 0, p.runeEnd.Line())
+			return
+		}
 		p.runeEnd.NewLine()
 		return
 	}

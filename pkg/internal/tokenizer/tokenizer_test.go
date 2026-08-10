@@ -21,6 +21,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/aalpar/wile/pkg/werr"
+
 	qt "github.com/frankban/quicktest"
 )
 
@@ -2546,6 +2548,73 @@ func TestPeculiarIdentifierSpace(t *testing.T) {
 			c := qt.New(t)
 			ext := tc.src + "x"
 			checkFirstToken(c, ext, TokenizerStateSymbol, ext, ext, io.EOF)
+		})
+	}
+}
+
+// TestCharacterXPeekPreservesError pins the `#\x` lookahead against the
+// package's former sole error-clearing site. Deciding that `#\x` is the graphic
+// character 'x' requires peeking one rune past it, and that peek can fail; the
+// old code cleared p.err unconditionally, which (a) erased the io.EOF that ends
+// a source of exactly `#\x`, letting the scanner run on into a phantom failed
+// token, and (b) replaced the specific rune-error diagnostic for a following
+// invalid byte with a generic "expecting token". The sibling letter branch
+// (`#\a`) never cleared and is the control: both spellings must agree.
+func TestCharacterXPeekPreservesError(t *testing.T) {
+	tcs := []struct {
+		name string
+		src  string
+		// want is the message the tokenizer must report once the single
+		// character token has been produced; wantEOF selects a clean io.EOF
+		// instead.
+		want    string
+		wantEOF bool
+	}{
+		{name: "x at end of input", src: "#\\x", wantEOF: true},
+		{name: "letter at end of input (control)", src: "#\\a", wantEOF: true},
+		{name: "x then undecodable byte", src: "#\\x\xff", want: MessageRuneError},
+		{name: "letter then undecodable byte (control)", src: "#\\a\xff", want: MessageRuneError},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			toks, err := Tokenize(tc.src, false)
+			c.Assert(len(toks), qt.Equals, 1)
+			c.Check(toks[0].Type(), qt.Equals, TokenizerStateCharGraphic)
+			c.Check(toks[0].Value(), qt.Equals, tc.src[2:3])
+			if tc.wantEOF {
+				c.Check(err, qt.ErrorIs, io.EOF)
+				return
+			}
+			c.Check(err, qt.ErrorIs, NewTokenizerError(tc.want))
+		})
+	}
+}
+
+// TestUnterminatedDelimitedIsIncompleteInput pins readDelimited's plain-EOF arm
+// against its own backslash-EOF sibling fourteen lines above. Both mean "the
+// literal is a valid prefix that needs more input"; only the backslash arm said
+// so, so a REPL line ending inside `|…|` or `"…"` was a hard syntax error while
+// the same line ending on a backslash continued. The block-comment arm and the
+// backslash arm are the controls.
+func TestUnterminatedDelimitedIsIncompleteInput(t *testing.T) {
+	tcs := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{name: "extended symbol", src: "(quote |abc", want: MessageUnterminatedExtendedSymbol},
+		{name: "string", src: "(display \"abc", want: MessageUnterminatedString},
+		{name: "extended symbol on a continuation (control)", src: "(quote |abc\\", want: MessageUnterminatedExtendedSymbol},
+		{name: "string on a continuation (control)", src: "(display \"abc\\", want: MessageUnterminatedString},
+		{name: "block comment (control)", src: "(quote #|abc", want: MessageUnterminatedBlockComment},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			_, err := Tokenize(tc.src, false)
+			c.Check(err, qt.ErrorIs, werr.ErrIncompleteInput)
+			c.Check(err, qt.ErrorIs, NewTokenizerError(tc.want))
 		})
 	}
 }
