@@ -70,6 +70,11 @@ func extractIntegerArg(v values.Value, name string) (int64, bool, error) {
 		if n.Value != math.Trunc(n.Value) {
 			return 0, false, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, n.Value)
 		}
+		if floatExceedsInt64(n.Value) {
+			// Promote rather than saturate, the same signal the BigInteger
+			// arm above raises for a value that does not fit an int64.
+			return 0, false, errNeedsBigInt
+		}
 		return int64(n.Value), true, nil
 	default:
 		return 0, false, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %T", name, v)
@@ -78,6 +83,33 @@ func extractIntegerArg(v values.Value, name string) (int64, bool, error) {
 
 // errNeedsBigInt is a sentinel error indicating we need to use the big.Int path.
 var errNeedsBigInt = werr.NewStaticError("needs big int")
+
+// floatExceedsInt64 reports whether an integral float64 lies outside the int64
+// range, so that a direct int64(f) conversion would saturate rather than
+// convert. Go leaves out-of-range float-to-integer conversion
+// implementation-defined; on the platforms this builds for it saturates, which
+// turns an unchecked cast into a silently wrong answer.
+//
+// The upper bound is the power of two, not math.MaxInt64: 2^63-1 is not
+// representable as a float64, so the untyped constant rounds UP to 2^63 in a
+// float comparison and `f <= math.MaxInt64` admits exactly one value it must
+// reject. -2^63 IS representable and converts exactly, so the lower bound is
+// the strict one. Same guard, same reason, as integerToFloat64WithAccuracy in
+// pkg/values/integer.go.
+func floatExceedsInt64(f float64) bool {
+	const twoPow63 = 9223372036854775808.0 // 2^63 = MaxInt64 + 1
+	return f >= twoPow63 || f < -twoPow63
+}
+
+// bigIntFromIntegralFloat converts a finite, integral float64 to a big.Int
+// without the saturation an int64 cast would introduce.
+//
+// Precondition: f is finite. Every caller validates NaN and infinity before
+// reaching here; big.Float.SetFloat64 panics on NaN.
+func bigIntFromIntegralFloat(f float64) *big.Int {
+	q, _ := new(big.Float).SetFloat64(f).Int(nil)
+	return q
+}
 
 // IntegerFold is a helper for integer fold operations (gcd, lcm).
 // Takes rest args at index 0, applies absolute value, then folds with combiner.
@@ -131,6 +163,14 @@ func IntegerFold(
 			if v.Value != math.Trunc(v.Value) {
 				return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, v.Value)
 			}
+			// This pass is the gate that chooses the int64 or the big.Int
+			// fold. An integral float above the int64 range has to open the
+			// big gate here; otherwise every later conversion saturates and
+			// the fold answers on MaxInt64 instead of the argument. Twin of
+			// the MinInt64 case just above.
+			if floatExceedsInt64(v.Value) {
+				hasBigInt = true
+			}
 			hasInexact = true
 		default:
 			return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %T", name, current.Car())
@@ -152,6 +192,12 @@ func IntegerFold(
 
 	// All integers are small, use int64 path
 	firstVal, inexact, err := extractIntegerArg(pr.Car(), name)
+	if errors.Is(err, errNeedsBigInt) {
+		// Unreachable while the first pass above classifies correctly; kept
+		// so the two callers of extractIntegerArg agree on what the sentinel
+		// means, rather than one of them leaking it to the user as an error.
+		return integerFoldBig(mc, op, identity, pr, hasInexact)
+	}
 	if err != nil {
 		return err
 	}
@@ -217,8 +263,10 @@ func integerFoldBig(
 	case *values.BigInteger:
 		result = new(big.Int).Set(v.BigInt())
 	case *values.Float:
-		// Float should have been validated as integer in caller
-		result = big.NewInt(int64(v.Value))
+		// Float was validated finite and integral by the caller's first pass.
+		// It may still exceed int64, which is one of the reasons this path
+		// was taken at all, so convert through big.Float rather than casting.
+		result = bigIntFromIntegralFloat(v.Value)
 	default:
 		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %T", name, pr.Car())
 	}
@@ -243,8 +291,9 @@ func integerFoldBig(
 		case *values.BigInteger:
 			val = new(big.Int).Set(n.BigInt())
 		case *values.Float:
-			// Float should have been validated as integer in caller
-			val = big.NewInt(int64(n.Value))
+			// Same as the first element above: validated finite and integral,
+			// not validated in-range.
+			val = bigIntFromIntegralFloat(n.Value)
 		default:
 			return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %T", name, next)
 		}
@@ -299,13 +348,11 @@ func ExtractInteger(v values.Value, name string) (int64, *big.Int, bool, error) 
 			return 0, nil, false, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, n.Value)
 		}
 		// Check if it fits in int64
-		if n.Value >= -9223372036854775808 && n.Value <= 9223372036854775807 {
+		if !floatExceedsInt64(n.Value) {
 			return int64(n.Value), nil, true, nil
 		}
 		// Large float needs BigInt
-		bf := new(big.Float).SetFloat64(n.Value)
-		bi, _ := bf.Int(nil)
-		return 0, bi, true, nil
+		return 0, bigIntFromIntegralFloat(n.Value), true, nil
 	default:
 		return 0, nil, false, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %T", name, v)
 	}
