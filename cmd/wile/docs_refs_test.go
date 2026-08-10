@@ -131,9 +131,9 @@ var uncleanedDocs = map[string]bool{
 // cited repo path resolves" check would cover more and is not available as this
 // gate — tracked .md carries well over a hundred backticked path spans that do
 // not resolve today (historical CHANGELOG entries, docs written before the
-// pkg/ move), so it would need an allowlist larger than the fix. Re-measure that
-// with docPathRef and looksLikeRepoPath over `git ls-files -- '*.md'` rather
-// than trusting the figure; it was taken 2026-08-10.
+// pkg/ move), so it would need an allowlist larger than the fix. That figure was
+// measured 2026-08-10; re-measure with docPathRef and looksLikeRepoPath over
+// `git ls-files -- '*.md'` rather than trusting it.
 func TestCorrectedDocClaimsStayCorrected(t *testing.T) {
 	root := gitOutput(t, ".", "rev-parse", "--show-toplevel")
 
@@ -155,9 +155,9 @@ func TestCorrectedDocClaimsStayCorrected(t *testing.T) {
 // was measured false, together with the measurement that condemned it.
 //
 // stale carries its own backticks wherever the claim is a code span. Without
-// them a corrected spelling that extends the stale one — `pkg/stdlib/lib/chibi/
-// test.sld` over `stdlib/lib/chibi/test.sld` — would keep its row red forever
-// and the row would say nothing.
+// them, a correction that only PREFIXES the stale spelling (the chibi test.sld
+// row, whose fix adds a leading pkg/) leaves the stale text still present as a
+// substring, so the row would stay red forever and say nothing.
 type correctedDocClaim struct {
 	name  string
 	doc   string

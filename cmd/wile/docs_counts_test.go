@@ -206,10 +206,10 @@ func sumScopeSectionCounts(t *testing.T, source string) int {
 }
 
 // summaryItemHead matches the head of one numbered item in r7rs-differences.md's
-// ## Summary list. Anchoring at column zero is what separates a list head from a
-// continuation line: an item's later lines are indented four spaces, so an
-// unanchored match would count a wrapped sentence beginning "16. " as a
-// seventeenth deviation.
+// ## Summary list. It is applied per line, so the anchor means column zero, and
+// that is what makes it a list-HEAD matcher: an item's continuation lines are
+// indented four spaces, and without the anchor any numeral followed by a period
+// and a space inside an item's prose would add a deviation that is not there.
 var summaryItemHead = regexp.MustCompile(`^\d+\. `)
 
 // countSummaryDeviations recomputes r7rs-differences.md's deviation count from
