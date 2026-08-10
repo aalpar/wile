@@ -74,7 +74,12 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		// expand-once returns multiple values — ReturnType annotates only the
 		// primary value.
-		{Name: "expand-once", ParamCount: 1, Impl: PrimExpandOnce,
+		//
+		// InvokesProcedure: a user-supplied procedural transformer runs through
+		// ExpanderTimeContinuation.ExpandOnce → MacroEvaluator.InvokeTransformer →
+		// invokeTransformerClosure, which is an Apply+Run on a sub-context. Exactly
+		// what expand does above; it was annotated and this was not.
+		{Name: "expand-once", InvokesProcedure: true, ParamCount: 1, Impl: PrimExpandOnce,
 			Doc: "Expands one level of macros. Returns two values: the expanded form and a boolean indicating whether expansion occurred.\n\nExamples:\n  (expand-once '(and a b))  ; => (values <one-step expansion> #t)", ParamNames: []string{"stx"}, Category: "eval",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "compile", InvokesProcedure: true, ParamCount: 1, Impl: PrimCompile,
