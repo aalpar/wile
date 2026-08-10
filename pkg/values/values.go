@@ -26,8 +26,16 @@ const (
 	PrefixBlockComment = `#|`
 	PrefixLineComment  = `;`
 
-	SpecialEOF  = PrefixDirective + `eof`
-	SpecialVoid = PrefixDirective + `void`
+	// SpecialEOF and SpecialVoid deliberately do NOT use PrefixDirective.
+	// docs/reference/scheme.md: there is no #!void or #!eof read syntax, and
+	// every unrecognized #!name is read as a directive and discarded — so
+	// rendering these as #!void / #!eof made the writer manufacture input the
+	// reader silently deletes. (write (vector 1 (if #f #f) 2)) printed
+	// "#(1 #!void 2)", which read back as a two-element vector. "#<...>" is the
+	// bracket the rest of the tree already uses for a value with no read syntax
+	// (record, char-set, process, a nil vector slot), and the reader rejects it.
+	SpecialEOF  = `#<eof>`
+	SpecialVoid = `#<void>`
 )
 
 // ---------------------------------------------------------------------------
