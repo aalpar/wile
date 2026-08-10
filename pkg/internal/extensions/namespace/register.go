@@ -63,7 +63,7 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol},
 			ReturnType: values.TypeBoolean},
 		{Name: "namespace-undefine!", ParamCount: 2, Impl: PrimNamespaceUndefine,
-			Doc: "Removes the user-level binding for SYM from NS. A sealed binding (a primitive or bootstrap procedure, which lives in the immutable engine-shared base) cannot be undefined and raises an error.\n\nExamples:\n  (let ((ns (make-namespace))) (namespace-define! ns 'x 1) (namespace-undefine! ns 'x) (namespace-bound? ns 'x))  => #f", ParamNames: []string{"ns", "sym"}, Category: "namespace",
+			Doc: "Removes SYM's binding from NS: a user-level definition, or an imported binding. A sealed binding (a primitive or bootstrap procedure, which lives in the immutable engine-shared base) cannot be undefined and raises an error.\n\nExamples:\n  (let ((ns (make-namespace))) (namespace-define! ns 'x 1) (namespace-undefine! ns 'x) (namespace-bound? ns 'x))  => #f", ParamNames: []string{"ns", "sym"}, Category: "namespace",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol},
 			ReturnType: values.TypeVoid},
 		{Name: "namespace-bound-names", ParamCount: 1, Impl: PrimNamespaceBoundNames,

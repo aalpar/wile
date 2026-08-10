@@ -253,9 +253,11 @@ accumulates across evaluations. Mutation and introspection are `namespace?`,
 a library's bindings into an existing namespace after the fact.
 
 The two constructor shapes are not interchangeable. An import-spec form,
-`(environment '(scheme base))`, copies the imported bindings into the new
-namespace's *mutable* frame, so they behave like user definitions and
-`namespace-undefine!` can remove them. A profile form,
+`(environment '(scheme base))`, installs the imported bindings at the T2
+coordinate `(ExactPhase(0), sealed)`, below the mutable tier a `define` writes:
+a definition of the same name **shadows** the import rather than overwriting it,
+and `namespace-undefine!` can still remove the import, which it recognises by
+import provenance rather than by rank. A profile form,
 `(environment '(wile <profile> [<strictness>]))`, applies a curated primitive
 registry into the new namespace's own *sealed* base, so the same names are
 immutable there. `(environment)` with no specs is Racket's

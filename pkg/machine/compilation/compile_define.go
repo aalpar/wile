@@ -74,16 +74,25 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// later redefine of an already-stable binding is rejected. When disabled,
 	// behavior is identical to before (the fast path below still fires).
 	//
-	// Q3 (layered-environment): enforce through the namespace's own ROOT VIEWS — the
-	// mutable one (the per-Engine user top-level) and its sealed-write twin, through
-	// which bootstrap registers immutable primitives and procedures (the optimizer's
-	// Stable anchors; capture-safe procedures like zero?/not must stay Stable or the
-	// frame-reclaim classifier stops trusting them). EXEMPT user-loaded libraries: a
-	// library body compiles against a NewChildRuntime view that shares its parent's
-	// namespace but is neither of that namespace's root views, keeping a library's
-	// cross-form (define x)/(set! x) mutable (R2).
+	// Q3 (layered-environment): enforce over the namespace's own ROOT STORE — the
+	// mutable user top-level and its sealed-write twin, through which bootstrap
+	// registers immutable primitives and procedures (the optimizer's Stable
+	// anchors; capture-safe procedures like zero?/not must stay Stable or the
+	// frame-reclaim classifier stops trusting them). EXEMPT user-loaded libraries:
+	// a library body compiles against a NewChildRuntime view, which SHARES the
+	// namespace but mints its own store, keeping a library's cross-form
+	// (define x)/(set! x) mutable (R2).
+	//
+	// WritesOwnerRootCoordinates, not IsOwnerRoot: the gate must ask the question
+	// the WRITE asks. IsOwnerRoot is a frame-IDENTITY test, so a lexical child (a
+	// lambda body, or the sub-frame (compile '(define …)) compiles against) failed
+	// it while writing the owner root's slot anyway — the guard never armed and the
+	// thunk silently rebound an already-stable binding, where eval and load refused
+	// the identical program (finding 34a). Store identity is what keeps R2 out, and
+	// it is a strictly better discriminator than frame identity here: the library
+	// case is a different store, not merely a different frame.
 	ns := p.env.Namespace()
-	immTop := ns != nil && ns.ImmutableTopLevel() && p.env.IsOwnerRoot()
+	immTop := ns != nil && ns.ImmutableTopLevel() && p.env.WritesOwnerRootCoordinates()
 
 	if created && len(symbolScopes) == 0 && symbolSource == nil && !immTop {
 		return sym, nil

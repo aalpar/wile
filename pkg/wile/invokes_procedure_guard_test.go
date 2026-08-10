@@ -49,12 +49,20 @@
 // ErrExceptionEscape that the VM dispatches outside PrimRaise's static call graph)
 // is harmless over-annotation and is NOT asserted.
 //
-// Scope. Discovery analyzes exactly the packages that host registered primitive
-// Impls (derived from the live registry), and resolves call edges within each such
-// package. A sink reached only through a helper in a non-primitive package would be
-// missed; no such case exists today (every ApplyCallable / sub-context Run call
-// site is co-located with the primitive package that needs it — see the grep in
-// the plan). TestInvokesProcedureCompleteness remains the behavioral backstop.
+// Scope, and its known hole. Discovery analyzes exactly the packages that host
+// registered primitive Impls (derived from the live registry), and resolves call
+// edges within each such package. A sink reached only through a helper in a
+// non-primitive package is therefore MISSED unless that helper is itself named in
+// procInvokingDriverSelectors.
+//
+// This paragraph used to claim "no such case exists today". It was false, and it
+// was false about the most consequential primitive in the tree: `error` reached
+// ApplyCallable through machine.RaiseInPlace, a helper in pkg/machine, and went
+// unannotated for the whole life of this guard (review-wave-1 item 5). The
+// selector is listed now, so the instance is closed — but the hole is structural.
+// Every sink reachable only under a name not in the two selector sets above is
+// still invisible, and nothing here detects that.
+// TestInvokesProcedureCompleteness remains the behavioral backstop.
 
 package wile
 
@@ -100,7 +108,7 @@ var subContextFactories = map[string]bool{
 	"NewSubContextWithTemplate": true,
 }
 
-// procInvokingDriverSelectors are *MachineContext methods that ALWAYS run a Scheme
+// procInvokingDriverSelectors are machine-package drivers that ALWAYS run a Scheme
 // procedure on the live chain, so a primitive that calls one is a procedure-invoker.
 // They are sinks regardless of receiver — like ApplyCallable, and unlike Run (a sink
 // only on a sub-context; exec.Cmd.Run is not Scheme). RunBodyUnder* push a
@@ -110,12 +118,27 @@ var subContextFactories = map[string]bool{
 // now lives behind these machine helpers, in a package the analyzer does not parse)
 // would no longer be discovered as invokers — a false-negative that the InvokesProcedure
 // soundness contract treats as corruption.
+//
+// Not all of them are *MachineContext METHODS. machine.RaiseInPlace
+// (machine/exception_raise.go) is a package-level function taking the context as
+// its first argument, and it runs the installed handler INLINE on the live chain
+// — the same sink shape, reached through a different spelling. It is here because
+// matching by method-ness would have kept excluding it, and matching by selector
+// name (see the sinkCall matcher) does not care.
+//
+// This entry is the review-wave-1 item 5 fix. `error` reached RaiseInPlace and
+// carried no InvokesProcedure stamp for as long as this guard has existed,
+// because RaiseInPlace was not a listed sink — the guard was blind to the exact
+// primitive it most needed to catch. Adding the selector closes the INSTANCE. It
+// does not close the selector-keying that makes the guard blind in kind: a sink
+// reached under any name not listed here is still invisible.
 var procInvokingDriverSelectors = map[string]bool{
 	"RunBodyUnderFrame":     true,
 	"RunBodyUnderConsumer":  true,
 	"RunBodyUnderExitFrame": true,
 	"RunBodyUnderPrompt":    true,
 	"RunWithinBoundary":     true,
+	"RaiseInPlace":          true,
 }
 
 // closureSuffix matches the trailing .func1[.func2...] that runtime function names

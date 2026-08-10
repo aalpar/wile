@@ -14,10 +14,13 @@
 
 package wile_test
 
-// The value-level gate for review-wave-1 item 5: `error` lacks InvokesProcedure,
-// so a self-tail loop that calls it is stamped capture-safe and armed for
-// OpSelfTailCall, whose in-place slot rebind corrupts a continuation captured
-// over that activation's parameter frame.
+// The value-level gate for review-wave-1 item 5. `error` USED TO LACK
+// InvokesProcedure, so a self-tail loop that called it was stamped capture-safe
+// and armed for OpSelfTailCall, whose in-place slot rebind corrupted a
+// continuation captured over that activation's parameter frame. The annotation
+// on pkg/registry/core/exceptions.go closed it; everything below is the
+// regression pin, and the reasoning is kept because every sentence of it is a
+// way this gate could be made blind again.
 //
 // WHY IT IS HERE AND NOT IN continuation_escape_past_oracle_test.go. The plan
 // (§5.4/§8 Q7) says to build this on that file, whose capture-and-replay idiom
@@ -63,7 +66,6 @@ package wile_test
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -110,18 +112,17 @@ const errorSelfTailRaisedAtProgram = `
       (list (reverse results) (reverse raised))))
 `
 
-const (
-	// errorSelfTailCorrect is what a capture-safe `error` produces: the two
-	// replays of one continuation continue the loop identically (2 then 1), and
-	// each replay reaches the n=1 raise, so (raised-at 1) appears twice.
-	errorSelfTailCorrect = `(((5 4 3) (2 1) (2 1)) ((raised-at 3) (raised-at 1) (raised-at 1)))`
-	// errorSelfTailCorrupt is master's answer. OpSelfTailCall rebound slot 0 of
-	// the captured activation to 1 during the first replay, so the second replay
-	// of the SAME continuation computes (- 1 1) = 0, terminates immediately, and
-	// never reaches the n=1 raise: the third pass visits nothing and the third
-	// (raised-at 1) is missing.
-	errorSelfTailCorrupt = `(((5 4 3) (2 1) ()) ((raised-at 3) (raised-at 1)))`
-)
+// errorSelfTailCorrect is what a capture-safe `error` produces: the two replays
+// of one continuation continue the loop identically (2 then 1), and each replay
+// reaches the n=1 raise, so (raised-at 1) appears twice.
+//
+// Before the InvokesProcedure annotation this program answered
+// `(((5 4 3) (2 1) ()) ((raised-at 3) (raised-at 1)))`: OpSelfTailCall rebound
+// slot 0 of the CAPTURED activation to 1 during the first replay, so the second
+// replay of the SAME continuation computed (- 1 1) = 0, terminated immediately,
+// and never reached the n=1 raise — the third pass visited nothing and the third
+// (raised-at 1) was missing.
+const errorSelfTailCorrect = `(((5 4 3) (2 1) (2 1)) ((raised-at 3) (raised-at 1) (raised-at 1)))`
 
 // runGateProgram evaluates src on a fresh KitchenSink engine and returns the
 // printed result. KitchenSink (not the testhelpers namespace) is load-bearing:
@@ -141,31 +142,23 @@ func runGateProgram(t *testing.T, src string) string {
 
 // TestErrorSelfTailCaptureGate_Target is the ACCEPTANCE CRITERION for review-wave-1
 // item 5 change 1 (InvokesProcedure: true on the `error` spec,
-// pkg/registry/core/exceptions.go). It asserts the CORRECT value and is RED on
-// master today, so it is gated behind WILE_RUN_RED_CONTINUATION=1 — the idiom
-// continuation_escape_past_oracle_test.go used for its own RED targets. When the
-// annotation lands: drop the gate, and delete the two
-// DocumentsCurrentMasterBug tests below (their failure then signals the fix).
+// pkg/registry/core/exceptions.go), and it is now an ordinary always-on
+// regression test.
+//
+// It shipped RED behind WILE_RUN_RED_CONTINUATION=1 alongside two
+// _DocumentsCurrentMasterBug tripwires asserting the corrupt value and the
+// arming count of 1. The annotation flipped all three at once: this target went
+// green and both tripwires went red, which is what proved the annotation is what
+// fixes it. The tripwires were deleted in the same commit — they assert the bug,
+// so keeping them past the fix makes them blind guards. The arming rows they
+// carried live on in TestSelfTailArmingCountRatchet
+// (selftail_scope_identity_test.go), the one counter this repository keeps.
 func TestErrorSelfTailCaptureGate_Target(t *testing.T) {
-	if os.Getenv("WILE_RUN_RED_CONTINUATION") == "" {
-		t.Skip("RED target: set WILE_RUN_RED_CONTINUATION=1 (acceptance criterion for InvokesProcedure on `error`)")
-	}
 	got := runGateProgram(t, errorSelfTailRaisedAtProgram)
 	qt.Assert(t, got, qt.Equals, errorSelfTailCorrect,
 		qt.Commentf("replaying one continuation twice must continue the loop identically; "+
 			"a differing third pass means OpSelfTailCall rebound the captured activation's "+
 			"parameter frame in place"))
-}
-
-// TestErrorSelfTailCaptureGate_DocumentsCurrentMasterBug is the always-on tripwire
-// proving the defect is real on master right now, so the skipped target above is
-// not mistaken for a hypothetical. It asserts the WRONG value and MUST be deleted
-// when the annotation lands.
-func TestErrorSelfTailCaptureGate_DocumentsCurrentMasterBug(t *testing.T) {
-	got := runGateProgram(t, errorSelfTailRaisedAtProgram)
-	qt.Assert(t, got, qt.Equals, errorSelfTailCorrupt,
-		qt.Commentf("if this FAILS with %s the defect is fixed — delete this test and "+
-			"un-gate TestErrorSelfTailCaptureGate_Target", errorSelfTailCorrect))
 }
 
 // TestErrorSelfTailCaptureGate_HarnessNonBlindness pins the reason this gate is
@@ -174,12 +167,14 @@ func TestErrorSelfTailCaptureGate_DocumentsCurrentMasterBug(t *testing.T) {
 //
 // Hold the program fixed and vary only the top level's mutability. Under
 // WithMutableTopLevel no global is Stable, bodyCalleesAllCaptureSafe refuses,
-// the loop arms ZERO OpSelfTailCall sites, and the program therefore reports the
-// CORRECT value — on the very build where the immutable-top-level run reports
-// the corrupt one. The measured value is "correct" here for the wrong reason:
-// the defect was never executed. Unlike its neighbours this test survives the
-// fix (it is a statement about the harness, not about the defect) and must NOT
-// be deleted with them.
+// and the loop arms ZERO OpSelfTailCall sites, so the program reports the
+// correct value FOR THE WRONG REASON: the opcode was never executed. On the
+// build where this gate was written, that same measurement was "correct" while
+// the immutable-top-level run was corrupt — which is what made a testhelpers
+// harness look green.
+//
+// This test is a statement about the harness, not about the defect, so it
+// survives the fix and outlived the two tripwires it shipped beside.
 func TestErrorSelfTailCaptureGate_HarnessNonBlindness(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMutableTopLevel())
@@ -202,55 +197,4 @@ func TestErrorSelfTailCaptureGate_HarnessNonBlindness(t *testing.T) {
 	qt.Assert(t, got.SchemeString(), qt.Equals, errorSelfTailCorrect,
 		qt.Commentf("unarmed, the same program reports the correct value — which is exactly "+
 			"why a harness with a mutable top level cannot gate this defect"))
-}
-
-// TestErrorSelfTailArming_DocumentsCurrentMasterBug is §5.4's disassembly-level
-// companion, and it is the structural half the value assertion cannot supply: it
-// pins WHY the program above misbehaves rather than that it does. `error` and
-// `raise` are the same shape and differ only in the InvokesProcedure stamp, so
-// the pair is a discriminator — a change that armed or deopted every loop would
-// fail one row. Delete with the two above when the annotation lands.
-func TestErrorSelfTailArming_DocumentsCurrentMasterBug(t *testing.T) {
-	cases := []struct {
-		name  string
-		src   string
-		proc  string
-		sites int
-	}{
-		{
-			name:  "error arms in-place reuse (the defect)",
-			src:   `(define (loope n) (if (= n 0) 'done (begin (error "tick" n) (loope (- n 1)))))`,
-			proc:  "loope",
-			sites: 1,
-		},
-		{
-			name:  "raise deopts to PullApply (the annotated twin)",
-			src:   `(define (loopr n) (if (= n 0) 'done (begin (raise n) (loopr (- n 1)))))`,
-			proc:  "loopr",
-			sites: 0,
-		},
-		{
-			name:  "raise-continuable deopts too",
-			src:   `(define (loopc n) (if (= n 0) 'done (begin (raise-continuable n) (loopc (- n 1)))))`,
-			proc:  "loopc",
-			sites: 0,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
-			eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
-			qt.Assert(t, err, qt.IsNil)
-			t.Cleanup(func() {
-				_ = eng.Close()
-			})
-			_, err = eng.EvalMultiple(ctx, tc.src)
-			qt.Assert(t, err, qt.IsNil)
-			v, ok := eng.Get(tc.proc)
-			qt.Assert(t, ok, qt.IsTrue)
-			closure, ok := v.Internal().(*machine.MachineClosure)
-			qt.Assert(t, ok, qt.IsTrue)
-			qt.Assert(t, selfTailSites(closure.Template()), qt.Equals, tc.sites)
-		})
-	}
 }
