@@ -91,7 +91,12 @@ func validateDefineFunction(ctx context.Context, env *environment.EnvironmentFra
 		return nil
 	}
 
-	body, ok := validateBodySlice(ctx, env, elements, 2, result)
+	// Create a child environment with parameters bound as local variables.
+	// This enables proper shadowing detection: define-function-form parameters
+	// shadow outer bindings including special forms (R7RS §4.2.2).
+	childEnv := createLambdaValidationEnv(env, params)
+
+	body, ok := validateBodySlice(ctx, childEnv, elements, 2, result)
 	if !ok {
 		return nil
 	}
