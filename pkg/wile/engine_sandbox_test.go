@@ -1061,6 +1061,106 @@ func TestAuthorizer_DenyAllSweep(t *testing.T) {
 	}
 }
 
+// TestDenialIsUnswallowable is the guard-wrapped mirror of the sweep above.
+//
+// Every authorizer denial that reached a primitive frame was converted into a
+// Scheme condition by applyCallableError, so any enclosing guard or
+// with-exception-handler absorbed it: all thirteen sweep expressions, plus
+// (load ...), plus a denial inside an SRFI-18 thread joined under guard, all
+// evaluated to 'caught with a nil host error. A sandboxed program could
+// therefore neutralise its own sandbox's refusals.
+//
+// The scope is the RUNTIME gate sites. The three compile-time load gates
+// surface as *CompilationError and were already unswallowable.
+func TestDenialIsUnswallowable(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx,
+		WithProfile(KitchenSink),
+		WithAuthorizer(security.DenyAll()),
+	)
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	loadPath := filepath.Join(t.TempDir(), "x.scm")
+	err = writeTestFile(loadPath, `(define x 1)`)
+	c.Assert(err, qt.IsNil)
+
+	guarded := []struct {
+		name string
+		code string
+	}{
+		{"command-line", `(guard (e (#t 'caught)) (command-line))`},
+		{"exit", `(guard (e (#t 'caught)) (exit))`},
+		{"get-environment-variable", `(guard (e (#t 'caught)) (get-environment-variable "PATH"))`},
+		{"file-exists?", `(guard (e (#t 'caught)) (file-exists? "/tmp/x"))`},
+		{"open-output-file", `(guard (e (#t 'caught)) (open-output-file "/tmp/x"))`},
+		{"delete-file", `(guard (e (#t 'caught)) (delete-file "/tmp/x"))`},
+		{"eval", `(guard (e (#t 'caught)) (eval '(+ 1 2)))`},
+		{"expand", `(guard (e (#t 'caught)) (expand (datum->syntax #f '(+ 1 2))))`},
+		{"expand-once", `(guard (e (#t 'caught)) (expand-once (datum->syntax #f '(+ 1 2))))`},
+		{"system", `(guard (e (#t 'caught)) (system "true"))`},
+		{"process-spawn", `(guard (e (#t 'caught)) (process-spawn "true"))`},
+		{"open-input-file", `(guard (e (#t 'caught)) (open-input-file "/etc/hosts"))`},
+		{"load", fmt.Sprintf(`(guard (e (#t 'caught)) (load %q))`, loadPath)},
+		// Structurally different dispatch paths, both measured swallowed. The
+		// with-exception-handler row fails on the SENTINEL rather than on
+		// non-nil-ness: unfixed it errors with "exception handler returned from
+		// non-continuable exception", which is not an ErrAccessDenied.
+		{"with-exception-handler",
+			`(with-exception-handler (lambda (e) 'h) (lambda () (open-input-file "/etc/hosts")))`},
+		{"dynamic-wind under guard",
+			`(guard (e (#t 'caught))
+			   (dynamic-wind (lambda () #t)
+			                 (lambda () (open-input-file "/etc/hosts"))
+			                 (lambda () #t)))`},
+		// The SRFI-18 join is what pins *SchemeError over *ErrExceptionEscape:
+		// joinConditionFor turns the latter into a catchable UncaughtException in
+		// the joining thread, so the denial would be swallowed again.
+		{"thread-join! under guard",
+			`(guard (e (#t 'caught))
+			   (thread-join! (thread-start! (make-thread (lambda () (open-input-file "/etc/hosts"))))))`},
+	}
+	for _, tc := range guarded {
+		t.Run(tc.name, func(t *testing.T) {
+			// A per-row qt.C, not the enclosing one: quicktest's Assert calls
+			// FailNow, which must run on the subtest's own goroutine, and a shared
+			// C would report only the first of sixteen rows.
+			c := qt.New(t)
+			_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
+			c.Assert(err, qt.IsNotNil, qt.Commentf("guard absorbed the denial for %s", tc.code))
+			c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+				qt.Commentf("expected ErrAccessDenied to escape for %s, got: %v", tc.code, err))
+		})
+	}
+
+	// RATCHETS, not gate rows: both pass with the fix reverted. They exist to
+	// prove the new arm keys on the denial sentinel rather than on the resource,
+	// or on file errors generally. KitchenSink's own authorizer is nil, so this
+	// second engine has no policy at all.
+	open, err := NewEngine(ctx, WithProfile(KitchenSink))
+	c.Assert(err, qt.IsNil)
+	defer open.Close() //nolint:errcheck // test cleanup
+
+	ratchets := []struct {
+		name string
+		code string
+	}{
+		{"file-error? still catchable",
+			`(guard (e ((file-error? e) 'caught)) (open-input-file "/nonexistent-xyz"))`},
+		{"raise still catchable", `(guard (e (#t 'caught)) (raise 42))`},
+	}
+	for _, tc := range ratchets {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			v, err := open.Eval(ctx, open.MustParse(ctx, tc.code))
+			c.Assert(err, qt.IsNil, qt.Commentf("%s must stay catchable", tc.code))
+			c.Assert(v.SchemeString(), qt.Equals, "caught")
+		})
+	}
+}
+
 // TestProfileEnvironmentCannotWidenSandboxedEngine is the end-to-end form of the
 // containment rule: through a real Engine, from Scheme, a sandboxed engine
 // cannot acquire an ungated extension by naming a richer profile.

@@ -183,6 +183,13 @@ one-method `Authorizer` interface.
 > you enable I/O, process, or interop extensions, you **must** also set a
 > restrictive profile or authorizer.
 
+A denial is **not** a Scheme condition. `guard` and `with-exception-handler`
+cannot absorb one; it terminates the evaluation and reaches the host as an error
+satisfying `errors.Is(err, security.ErrAccessDenied)`. An embedder who wants
+Scheme to handle a refusal composes a permissive authorizer for that operation
+and lets the primitive's own `file-error` surface, or catches at the host
+boundary around `Eval`/`EvalMultiple`.
+
 ### Resource limits
 
 To bound runaway or adversarial programs:

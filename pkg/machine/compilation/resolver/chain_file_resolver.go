@@ -24,8 +24,10 @@ import (
 )
 
 // ChainFileResolver tries multiple resolvers in order, falling through
-// to the next on ErrFileNotFound. Non-file-not-found errors (security
-// denials, I/O errors) propagate immediately.
+// to the next only on genuine absence (see IsNotFound). Anything else —
+// a security denial, a permission failure, any other I/O error —
+// propagates immediately, so a higher-priority file that exists but
+// cannot be read is never silently replaced by a lower-priority one.
 type ChainFileResolver struct {
 	resolvers []environment.FileResolver
 }
@@ -42,7 +44,7 @@ func NewChainFileResolver(resolvers []environment.FileResolver) *ChainFileResolv
 }
 
 // ResolveAndOpen tries each resolver in order, returning the first successful
-// result. Falls through on ErrFileNotFound; other errors propagate immediately.
+// result. Falls through on absence; every other error propagates immediately.
 func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error) {
 	var lastErr error
 	for _, r := range p.resolvers {
