@@ -354,7 +354,14 @@ func MakeExactNumber(n values.Number) (values.Number, error) {
 		}
 		reNum := values.NewRationalFromRat(new(big.Rat).SetFloat64(re))
 		imNum := values.NewRationalFromRat(new(big.Rat).SetFloat64(im))
-		return values.NewBigComplex(reNum, imNum), nil
+		// Simplify, as every other construction site does. Without it #e1.0+0.0i
+		// minted an exact *BigComplex with an EXACT zero imaginary part — a
+		// value the rest of the tower says cannot exist. It answered #t to
+		// exact?, real? AND exact-integer? while still rendering as 1+0i, and
+		// it reached an unguarded default arm in make-rectangular that panicked
+		// uncatchably. The zero-imaginary collapse is exactly what Simplify is
+		// for; the *Float and *BigFloat arms above already call it.
+		return values.Simplify(values.NewBigComplex(reNum, imNum)), nil
 	case *values.BigComplex:
 		if v.IsExact() {
 			return v, nil

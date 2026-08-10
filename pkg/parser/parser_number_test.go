@@ -304,6 +304,39 @@ func TestParseNumber_ExactZeroImaginaryCollapsesToReal(t *testing.T) {
 	c.Assert(ok, qt.IsTrue, qt.Commentf("2+0.0i: got %T: %v; expected *Complex (no collapse)", v, v))
 }
 
+// #e over an inexact complex went through a different construction site,
+// MakeExactNumber's *Complex arm, and that one did not Simplify. It minted an
+// exact *BigComplex with an EXACT zero imaginary part — a value the rest of
+// the tower says cannot exist. It answered #t to exact?, real? AND
+// exact-integer? while still rendering as "1+0i", and it reached an unguarded
+// default arm in make-rectangular that panicked uncatchably.
+//
+// The bare literal path above already collapsed; this is the same rule at the
+// other construction site, which is why the collapse belongs in Simplify and
+// not in either caller.
+func TestParseNumber_ExactnessPrefixOverZeroImaginaryCollapses(t *testing.T) {
+	c := qt.New(t)
+
+	v := parseSingle(t, "#e1.0+0.0i")
+	iv, ok := v.(*values.Integer)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("#e1.0+0.0i: got %T: %v; expected *Integer", v, v))
+	c.Assert(iv.Value, qt.Equals, int64(1))
+	c.Assert(v.SchemeString(), qt.Equals, "1")
+
+	// A non-integral real part collapses to an exact Rational, not an Integer.
+	v = parseSingle(t, "#e1.5+0.0i")
+	rv, ok := v.(*values.Rational)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("#e1.5+0.0i: got %T: %v; expected *Rational", v, v))
+	c.Assert(rv.SchemeString(), qt.Equals, "3/2")
+
+	// Control: a non-zero imaginary part is still an exact complex. The fix
+	// must not collapse anything that is genuinely complex.
+	v = parseSingle(t, "#e1.5+2.5i")
+	_, ok = v.(*values.BigComplex)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("#e1.5+2.5i: got %T: %v; expected *BigComplex", v, v))
+	c.Assert(v.SchemeString(), qt.Equals, "3/2+5/2i")
+}
+
 // Pure imaginary numbers
 func TestParseNumber_PureImaginary(t *testing.T) {
 	tcs := []struct {

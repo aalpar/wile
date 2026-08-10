@@ -52,8 +52,14 @@ func PrimMakeRectangular(mc machine.CallContext) error {
 
 	if bothExact {
 		// Create exact BigComplex
-		realPart := toExactBigComplexPart(rNum)
-		imagPart := toExactBigComplexPart(iNum)
+		realPart, err := toExactBigComplexPart(rNum)
+		if err != nil {
+			return err
+		}
+		imagPart, err := toExactBigComplexPart(iNum)
+		if err != nil {
+			return err
+		}
 		if imagPart.IsZero() {
 			mc.SetValue(realPart)
 			return nil
@@ -75,11 +81,15 @@ func PrimMakeRectangular(mc machine.CallContext) error {
 		if err != nil {
 			return err
 		}
-		if imagPart.IsZero() {
-			mc.SetValue(realPart)
-			return nil
-		}
-		mc.SetValue(values.NewBigComplex(realPart, imagPart))
+		// Simplify, not IsZero: on this branch at least one argument is
+		// INEXACT, and only an EXACT zero imaginary part licenses the descent
+		// to a real (values.Simplify, maybeSimplify, BigComplex.IsReal all say
+		// so, and R7RS agrees — (real? -2.5+0.0i) is #f). IsZero asked about
+		// magnitude, so (make-rectangular #m1.0 0.0) answered 1.0l0 while
+		// (make-rectangular 1.0 0.0) answered 1.0+0.0i: the same call, the
+		// same arguments modulo the real part's precision tier, opposite
+		// answers. (make-rectangular #m1.0 0) still collapses, correctly.
+		mc.SetValue(values.Simplify(values.NewBigComplex(realPart, imagPart)))
 		return nil
 	}
 
@@ -92,16 +102,26 @@ func PrimMakeRectangular(mc machine.CallContext) error {
 
 // toExactBigComplexPart converts an exact number to a BigInteger or Rational
 // suitable for use as a BigComplex part.
-func toExactBigComplexPart(n values.Number) values.Number {
+//
+// The default arm returned by raising a panic, and that panic was reachable
+// from Scheme and caught by nothing: an exact *BigComplex whose imaginary part
+// is an exact zero passes both isRealNumber and the bothExact test and then
+// falls through every arm here. Such a value should not exist — the reader
+// used to mint one, see MakeExactNumber's Simplify in pkg/parser — but a
+// wrong-type argument is a domain error either way, and CODING_STYLE's line
+// puts domain errors on the catchable side. Returning the error is what makes
+// it catchable; the panic escaped `guard` entirely.
+func toExactBigComplexPart(n values.Number) (values.Number, error) {
 	switch v := n.(type) {
 	case *values.Integer:
-		return values.NewBigIntegerFromInt64(v.Value)
+		return values.NewBigIntegerFromInt64(v.Value), nil
 	case *values.BigInteger:
-		return v
+		return v, nil
 	case *values.Rational:
-		return v
+		return v, nil
 	default:
-		panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "toExactBigComplexPart: expected exact number but got %T", n))
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAReal,
+			"make-rectangular: expected an exact real number but got %T", n)
 	}
 }
 
