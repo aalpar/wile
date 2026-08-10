@@ -129,9 +129,9 @@ func TestDebuggerReachesLoadedCodeWithSuspensionArmed(t *testing.T) {
 // and must still answer once the evaluation that produced it is over.
 func TestBreakStateOutlivesTheEvaluation(t *testing.T) {
 	ctx := context.Background()
+	// No suspend handler: this is the render-only path, where TriggerBreak
+	// records the snapshot inline.
 	eng, path, dbg := newDebuggedEngine(t, oneLineBodySource)
-	dbg.OnBreak(func(_ values.DebugState, _ *wile.BreakpointInfo) {
-	})
 	dbg.SetBreakpoint(path, 2, 0)
 
 	_, err := eng.EvalMultiple(ctx, `(foo 21)`)
@@ -216,7 +216,7 @@ func newDebuggedEngine(t *testing.T, src string) (*wile.Engine, string, *wile.De
 // program computes. Asserting a non-nil CurrentLocation or a non-empty
 // FormatStackTrace from INSIDE the callback would be vacuous: the render-only
 // callback is invoked inline from the live MachineContext, so both already
-// worked at dfd8e230 (the REPL printed "Breakpoint 0 hit at bp.scm:2:5"). Only
+// worked at dfd8e230 (the REPL printed "Breakpoint 0 hit at <file>:2:5"). Only
 // a callback that can stop the VM can change the result.
 //
 // Arm A additionally pins that BreakAbandon routes through the ABORT path
@@ -315,8 +315,8 @@ func TestStepOutDoesNotDegenerateIntoStepInto(t *testing.T) {
 //
 // A breakpoint names a source LINE, so one entry to that line is one stop. At
 // dfd8e230 CheckBreakpoint fired per INSTRUCTION carrying the line: one call to
-// the one-line body below produced three stops (columns 5, 7 and 3) and drove
-// HitCount to 3, which is also what ,list reported to the user.
+// the one-line body below produced four stops and drove HitCount to 4, which is
+// also what ,list reported to the user.
 func TestBreakpointFiresOncePerSourceLine(t *testing.T) {
 	ctx := context.Background()
 	eng, path, dbg := newDebuggedEngine(t, oneLineBodySource)
@@ -331,9 +331,9 @@ func TestBreakpointFiresOncePerSourceLine(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	qt.Assert(t, fires, qt.Equals, 1,
-		qt.Commentf("one call entering line 2 once must stop once (3 at dfd8e230)"))
+		qt.Commentf("one call entering line 2 once must stop once (4 at dfd8e230)"))
 	bps := dbg.Breakpoints()
 	qt.Assert(t, len(bps), qt.Equals, 1)
 	qt.Assert(t, bps[0].HitCount, qt.Equals, 1,
-		qt.Commentf("HitCount is what ,list prints (3 at dfd8e230)"))
+		qt.Commentf("HitCount is what ,list prints (4 at dfd8e230)"))
 }
