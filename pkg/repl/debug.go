@@ -114,6 +114,18 @@ func (p *DebugContext) DebugCommands() []DebugCommandInfo {
 	return q
 }
 
+// canonicalDebugCommand maps a typed token (comma already stripped) to the
+// canonical debug command name, so alias handling lives in one table and the
+// break prompt cannot drift from ,help.
+func canonicalDebugCommand(token string) (string, bool) {
+	for _, m := range debugCommandMetadata {
+		if token == m.Name || slices.Contains(m.Aliases, token) {
+			return m.Name, true
+		}
+	}
+	return "", false
+}
+
 // HandleDebugCommand processes a debug command starting with ','.
 // Returns true if a command was handled, false otherwise.
 func (p *DebugContext) HandleDebugCommand(line string, out io.Writer) bool {
@@ -270,7 +282,9 @@ func (p *DebugContext) cmdBacktrace(_ []string, out io.Writer) {
 		return
 	}
 
-	fmt.Fprintln(out, "Stack trace:")
+	// No header here: StackTrace.String already emits "Stack trace:". The
+	// duplicate was invisible while this command could only ever read a
+	// pool-zeroed context, whose trace was always empty.
 	fmt.Fprint(out, trace)
 }
 
