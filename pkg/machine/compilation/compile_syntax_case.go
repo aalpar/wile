@@ -265,7 +265,18 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// form's source location.
 	bodyCompiler.pushSource(p.currentSource())
 
-	// Bind pattern variables from the match result
+	// Bind pattern variables from the match result.
+	//
+	// This is emitted UNCONDITIONALLY and must stay that way. The frame it
+	// pushes carries the form's syntax-case state under a reserved key, which is
+	// what (syntax ...) resolves against by a nearest-marked-ancestor walk, so
+	// the frame is load-bearing regardless of how many pattern variables the
+	// clause has. Do NOT add a "skip the frame when patternVars is empty"
+	// shortcut. It is worth naming the shape that will tempt someone: a
+	// whole-clause pattern of () is the first clause form with zero pattern
+	// variables, and CompileSyntaxPattern refuses it today
+	// (internal/match/syntax_adapter.go gates on *syntax.SyntaxPair), so the
+	// temptation arrives with the fix for that.
 	bodyCompiler.AppendOperations(NewOperationBindPatternVars(patternVars))
 
 	// Create expander for the body environment (to expand macros like let)
@@ -298,6 +309,25 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "error compiling body"))
 	}
+
+	// Restore the parent environment on the MATCHED path. There are three exit
+	// edges out of a clause, not two, and each needs its own accounting:
+	//
+	//  1. pattern mismatch — branches from failBranchIdx, which precedes the
+	//     BindPatternVars push entirely, so it is already balanced. Do NOT add a
+	//     pop there.
+	//  2. fender false — popped by the cleanup block below.
+	//  3. match succeeded and the body ran — this pop. Without it the
+	//     pattern-variable frame stays current for everything after the form, so
+	//     trailing code doing a depth-relative LOCAL access reads through a frame
+	//     one level too deep: `(begin (syntax-case stx () ((_ a) 1)) y)` returned
+	//     the pattern variable instead of y, and three trailing locals indexed
+	//     off the end of the pattern-variable frame.
+	//
+	// A clause body ending in a tail CALL never reaches this instruction, which
+	// is harmless: a tail call does not return to this frame, and its
+	// continuation restores the environment on its own.
+	p.AppendOperations(machine.NewOperationPopEnv())
 
 	// Jump to end on success
 	successJumpIdx := p.template.CodeLen()

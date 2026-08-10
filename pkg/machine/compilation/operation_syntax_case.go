@@ -42,43 +42,134 @@ type OperationSyntaxCaseMatch struct {
 	machine.OperationBase
 }
 
-// syntaxCaseState holds per-context state for syntax-case expansion.
-// It is stored via MachineContext.SyntaxCaseState (an any-typed back-channel
-// slot on the clustered expansion sub-record) so that concurrent macro
-// expansions on different MachineContexts do not share state. machine/ cannot
-// import this package (one-direction dependency), so the machine-side slot is
-// any-typed; the constraint that only this concrete type is ever stored
-// there is enforced by the slot's encapsulation rather than by the type
-// system.
+// syntaxCaseState holds the state of one syntax-case form: the input being
+// matched, and the bindings and matcher the winning clause produced.
 //
-// It is NOT reentrant within a single context: the slot holds exactly one
-// form's state, OperationStoreSyntaxCaseInput overwrites it and
-// OperationClearSyntaxCaseInput nils it. Since compileSyntaxCaseClause
-// compiles a clause body into the same template, a syntax-case nested inside a
-// clause body runs on the same context and destroys the enclosing form's
-// state; the enclosing form then fails with "no state on MachineContext".
+// It lives in TWO places, with two different lifetimes, and the split is the
+// whole point:
+//
+//   - The MachineContext slot (MachineContext.SyntaxCaseState, an any-typed
+//     back-channel on the clustered expansion sub-record) holds the PENDING
+//     state, from OperationStoreSyntaxCaseInput until the form ends. It is a
+//     hand-off buffer: the input has to survive from the store op, across each
+//     clause's match attempt, to OperationBindPatternVars, and no environment
+//     frame exists yet at that point. OperationSyntaxCaseMatch overwrites its
+//     bindings and matcher once per clause tried.
+//   - The pattern-variable environment frame that OperationBindPatternVars
+//     pushes holds a SNAPSHOT, under syntaxCaseStateKey. This is the copy
+//     (syntax ...) expands against, and it is what gives the state the same
+//     LEXICAL extent the pattern variables themselves have.
+//
+// Reading the state off the frame rather than off the context is what makes
+// this reentrant. A syntax-case nested in a clause body pushes its own frame,
+// so it shadows rather than clobbers; the enclosing form's snapshot is
+// untouched, and popping the inner frame restores it. It also makes the two
+// (syntax ...) paths agree on extent: the non-ellipsis path compiles to a
+// local load out of this same frame, so an escaping closure that captured the
+// frame kept working while the ellipsis path, reading the context slot, failed
+// as soon as the form's DYNAMIC extent ended. Pattern variables are one
+// lexical binding (R6RS §12.4).
+//
+// machine/ cannot import this package (one-direction dependency), so the
+// machine-side slot is any-typed; the constraint that only this concrete type
+// is ever stored there is enforced by the slot's encapsulation rather than by
+// the type system.
 type syntaxCaseState struct {
 	bindings map[string]syntax.SyntaxValue // pattern variable bindings from last match
 	matcher  *match.SyntaxMatcher          // matcher from last match (needed for ellipsis expansion)
 	input    syntax.SyntaxValue            // input syntax object being matched
 }
 
-// ensureSyntaxCaseState lazily initializes the syntaxCaseState on the context.
-func ensureSyntaxCaseState(mc *machine.MachineContext) *syntaxCaseState {
-	sc, ok := mc.SyntaxCaseState().(*syntaxCaseState)
-	if ok {
-		return sc
-	}
-	sc = &syntaxCaseState{}
-	mc.SetSyntaxCaseState(sc)
-	return sc
+// syntaxCaseStateKey names the reserved slot that carries a form's state on its
+// pattern-variable frame. That frame is already an explicitly NOMINAL namespace
+// — pattern variables are bound scopeless and looked up by bare name under a
+// wildcard scope query (see compileSyntaxTemplateToOps) — so a reserved name is
+// the local convention, not a new one. bindSyntaxCaseState refuses rather than
+// silently sharing a slot if a pattern variable ever collides with it.
+var syntaxCaseStateKey = values.NewSymbol("#%syntax-case-state")
+
+// syntaxCaseState implements values.Value so it can occupy a binding slot. It
+// is not a Scheme value and is unreachable from Scheme: the reserved key is not
+// writable as a plain symbol, and nothing renders a pattern-variable frame's
+// slots. The methods exist for the slot's type, not for a caller.
+func (p *syntaxCaseState) SchemeString() string {
+	return "#<syntax-case-state>"
 }
 
-// loadSyntaxCaseState fetches the *syntaxCaseState payload from
+func (p *syntaxCaseState) IsVoid() bool {
+	return false
+}
+
+func (p *syntaxCaseState) EqualTo(other values.Value) bool {
+	v, ok := other.(*syntaxCaseState)
+	return ok && v == p
+}
+
+// bindSyntaxCaseState attaches sc to frame under the reserved key.
+//
+// The slot is APPENDED after the pattern variables, so pattern-variable slot
+// indices are unchanged and the compile-time mirror frame
+// (createPatternVarEnvironment) does not need a matching slot.
+func bindSyntaxCaseState(mc *machine.MachineContext, frame *environment.EnvironmentFrame, sc *syntaxCaseState) error {
+	li, created := frame.MaybeCreateLocalBinding(syntaxCaseStateKey, environment.BindingTypeVariable, nil, nil)
+	if li == nil {
+		return mc.WrapError(werr.ErrInternal, "syntax-case: pattern-variable frame has no local environment")
+	}
+	if !created {
+		// Only reachable if a pattern variable is spelled exactly like the
+		// reserved key, which needs |...| notation. Refusing beats overwriting
+		// the user's pattern variable with an internal object.
+		return mc.WrapError(werr.ErrInvalidSyntax, fmt.Sprintf(
+			"syntax-case: %q is reserved and cannot be a pattern variable", syntaxCaseStateKey.Key))
+	}
+	err := frame.SetLocalValue(li, sc)
+	if err != nil {
+		return mc.WrapError(err, "syntax-case: failed to attach state to the pattern-variable frame")
+	}
+	return nil
+}
+
+// syntaxCaseStateFromEnv resolves the state by a NEAREST-MARKED-ANCESTOR walk
+// from the current environment frame: GetLocalIndex under a wildcard scope query
+// returns the first match walking innermost-out, and only a pattern-variable
+// frame carries the reserved key.
+//
+// The walk is deliberate, and a compile-time depth immediate is deliberately
+// NOT used. A depth is a lexical fact whose runtime validity depends on
+// push/pop balance — precisely what the frame-leak defect broke. The walk
+// follows the same graph the state's lifetime rests on: the frame is
+// heap-allocated by BindPatternVars and can never enter envFramePool (it clears
+// envPooled, OpReleaseEnvFrame releases only pooled frames, and
+// RestoreAndRelease's shared/captured path returns before releasing), so its
+// lifetime is GC reachability, which subsumes continuation reachability. That
+// is why an escaping closure can still expand a template after its form ended.
+func syntaxCaseStateFromEnv(mc *machine.MachineContext) (*syntaxCaseState, error) {
+	env := mc.EnvironmentFrame()
+	li := env.GetLocalIndex(syntaxCaseStateKey, syntax.AllScopes())
+	if li == nil {
+		return nil, mc.WrapError(werr.ErrInternal, "syntax: no syntax-case pattern-variable frame in scope (no expansion in flight)")
+	}
+	binding := env.GetLocalBinding(li)
+	if binding == nil {
+		return nil, mc.WrapError(werr.ErrInternal, "syntax: syntax-case state slot resolved to no binding")
+	}
+	sc, ok := binding.Value().(*syntaxCaseState)
+	if !ok {
+		return nil, mc.WrapError(werr.ErrInternal, fmt.Sprintf(
+			"syntax: unexpected state type %T in the syntax-case state slot", binding.Value()))
+	}
+	return sc, nil
+}
+
+// loadSyntaxCaseState fetches the PENDING *syntaxCaseState payload from
 // MachineContext.SyntaxCaseState(). Discriminates the two failure modes:
 // nil (no syntax-case expansion in flight) and wrong concrete type
 // (contract violation — the slot is any-typed and the encapsulation
 // argument relies on no other code storing alternatives).
+//
+// Only the ops that run BEFORE the pattern-variable frame exists use this:
+// SyntaxCaseMatch, BindPatternVars and SyntaxCaseNoMatch. Template expansion
+// goes through syntaxCaseStateFromEnv instead.
 func loadSyntaxCaseState(mc *machine.MachineContext) (*syntaxCaseState, error) {
 	raw := mc.SyntaxCaseState()
 	if raw == nil {
@@ -218,9 +309,26 @@ func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.M
 		}
 	}
 
+	// Attach this clause's state to the frame, as a SNAPSHOT rather than the
+	// pending pointer. The pending state is reused across clause attempts —
+	// a false fender pops this frame and lets the next clause's match overwrite
+	// bindings and matcher — so sharing the pointer would let a later clause
+	// rewrite an earlier clause's captured state.
+	snapshot := &syntaxCaseState{
+		bindings: sc.bindings,
+		matcher:  sc.matcher,
+		input:    sc.input,
+	}
+	err = bindSyntaxCaseState(mc, childEnv, snapshot)
+	if err != nil {
+		return nil, err
+	}
+
 	// Switch to the new environment. childEnv was heap-allocated (not from
 	// envFramePool), so clear envPooled to prevent RestoreAndRelease from
-	// recycling it. See vm_state.go envPooled write-site table.
+	// recycling it. See vm_state.go envPooled write-site table. That is also
+	// what makes the frame a sound home for the state: it can never be
+	// recycled under a live clause body or under a closure that escaped one.
 	mc.SetEnvironmentFrame(childEnv)
 	mc.SetEnvPooled(false)
 	mc.IncrPC()
@@ -293,7 +401,11 @@ func NewOperationSyntaxTemplateExpand(freeIds map[string]*FreeIdResolution, patt
 }
 
 func (p *OperationSyntaxTemplateExpand) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
-	sc, err := loadSyntaxCaseState(mc)
+	// Resolve off the environment, not off the MachineContext. This op is
+	// emitted by the clause body's compiler, whose env IS the compile-time
+	// mirror of the frame BindPatternVars pushes, so the handle is the one the
+	// adjacent non-ellipsis branch of CompileSyntax already computes.
+	sc, err := syntaxCaseStateFromEnv(mc)
 	if err != nil {
 		return nil, err
 	}
@@ -339,8 +451,13 @@ func (p *OperationSyntaxTemplateExpand) EqualTo(other values.Value) bool {
 	return machine.SameType(p, v, ok)
 }
 
-// OperationStoreSyntaxCaseInput stores the value register into the per-context
-// syntaxCaseState for use by OperationSyntaxCaseMatch.
+// OperationStoreSyntaxCaseInput opens a syntax-case form by installing a FRESH
+// pending syntaxCaseState holding the value register as the input, for
+// OperationSyntaxCaseMatch to match against.
+//
+// Minting a fresh state rather than reusing whatever is installed is what keeps
+// a nested syntax-case from mutating the enclosing form's snapshot: the
+// enclosing frame holds its own object, not this one.
 type OperationStoreSyntaxCaseInput struct {
 	machine.OperationBase
 }
@@ -352,7 +469,7 @@ func NewOperationStoreSyntaxCaseInput() *OperationStoreSyntaxCaseInput {
 }
 
 func (p *OperationStoreSyntaxCaseInput) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
-	sc := ensureSyntaxCaseState(mc)
+	sc := &syntaxCaseState{}
 	val := mc.GetValue()
 	// Convert to syntax value if needed (handles Pairs, Vectors, etc.)
 	stx, ok := val.(syntax.SyntaxValue)
@@ -361,6 +478,7 @@ func (p *OperationStoreSyntaxCaseInput) Apply(mc *machine.MachineContext) (*mach
 	} else {
 		sc.input = schemeutil.DatumToSyntaxValue(mc.Context(), nil, val)
 	}
+	mc.SetSyntaxCaseState(sc)
 	mc.IncrPC()
 	return mc, nil
 }
@@ -370,8 +488,16 @@ func (p *OperationStoreSyntaxCaseInput) EqualTo(other values.Value) bool {
 	return machine.SameType(p, v, ok)
 }
 
-// OperationClearSyntaxCaseInput clears the per-context syntax-case state.
-// This is called at the end of a syntax-case form.
+// OperationClearSyntaxCaseInput drops the PENDING syntax-case state at the end
+// of a syntax-case form, releasing the input syntax object and the matcher.
+//
+// It is no longer load-bearing for correctness, and that is the point. It used
+// to be the only thing that stopped a later (syntax ...) from expanding against
+// a finished form's matcher, which made it a bug that a clause body ending in a
+// tail CALL never reaches it — the epilogue sits after the body's tail
+// position. Template expansion now resolves through the pattern-variable frame,
+// so skipping this instruction costs a retention, not an answer: the state a
+// tail call leaves installed is read by nothing.
 type OperationClearSyntaxCaseInput struct {
 	machine.OperationBase
 }
