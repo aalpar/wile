@@ -732,7 +732,22 @@ func (p *Engine) Get(name string) (Value, bool) {
 }
 
 // RegisterPrimitive adds a Go function as a Scheme primitive.
+//
+// The spec is validated first ([registry.PrimitiveSpec.Validate]) and an invalid
+// spec is returned as an error, never bound. This is the same contract
+// [registry.PrimitiveRegistry.AddPrimitives] enforces by panicking: an embedder
+// assembling a spec dynamically gets a value it can handle, rather than a
+// binding whose first call takes down the engine. The IsVariadic +
+// ParamCount:0 shape is the one that matters — its panic fires during frame
+// setup, so it wedges every subsequent evaluation on this engine, not just the
+// offending call.
 func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
+	err := spec.Validate()
+	if err != nil {
+		return werr.WrapForeignErrorWithCause(werr.ErrInvalidArgument, err,
+			"RegisterPrimitive: invalid spec %q", spec.Name)
+	}
+
 	sym := values.NewSymbol(spec.Name)
 
 	closure := machine.NewForeignClosure(
@@ -747,7 +762,7 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 		closure.SetValidator(registry.BuildValidator(spec))
 	}
 
-	_, err := p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, closure)
+	_, err = p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, closure)
 	return err
 }
 

@@ -114,6 +114,16 @@ func CollectVectors(rest values.Value, name string) ([]*values.Vector, int, erro
 // MemberLookup is a helper for list membership primitives (memq, memv).
 // Takes obj at index 0, list at index 1. Uses eq predicate to find match.
 // On match, returns the tail of the list starting at the matched element.
+//
+// The walk goes through ForEachList for the two properties a hand-rolled cdr
+// loop cannot have: the amortized context poll, so an embedder deadline and a
+// REPL interrupt are observed, and Brent cycle detection, so a circular list
+// terminates instead of pinning a core. WithMaxCallDepth is inapplicable here —
+// nothing recurses — which left the context as the only lever.
+//
+// ForEachList hands the element, never the cell, so the cell the element came
+// from is tracked in cursor: MemberLookup must return the sublist starting at
+// the match. AssocLookup needs no cursor only because its result IS the element.
 func MemberLookup(
 	mc machine.CallContext,
 	name string,
@@ -121,16 +131,30 @@ func MemberLookup(
 ) error {
 	obj := mc.Arg(0)
 	lst := mc.Arg(1)
-	for !values.IsEmptyList(lst) {
-		pr, ok := lst.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, lst)
+	if values.IsEmptyList(lst) {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	cursor, ok := lst.(values.Tuple)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, lst)
+	}
+	err := ForEachList(mc.Context(), cursor, name, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+		if eq(elem, obj) {
+			mc.SetValue(cursor)
+			return werr.ErrStopIteration
 		}
-		if eq(pr.Car(), obj) {
-			mc.SetValue(pr)
-			return nil
+		next, nextOk := cursor.Cdr().(values.Tuple)
+		if nextOk {
+			cursor = next
 		}
-		lst = pr.Cdr()
+		return nil
+	})
+	if errors.Is(err, werr.ErrStopIteration) {
+		return nil
+	}
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.FalseValue)
 	return nil

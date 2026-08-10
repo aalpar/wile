@@ -123,6 +123,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   error-free `#f`, which is what lets a wrapping `with-timeout` handler run.
   `callForeignCached`'s eager recheck is unchanged.
 
+### Fixed
+
+- **`memq` and `memv` now terminate on a circular list and observe
+  cancellation.** They walked the spine in a flat Go loop that read neither the
+  cycle sentinel nor the context, so a key absent from a circular list spun
+  forever — SIGKILL, exit 137, from the CLI — and an embedder deadline or a REPL
+  interrupt was invisible even on a finite list. Both now route through the
+  canonical proper-list eliminator, as `assq` already did.
+
+  The behaviour change is visible: `(memq 'x <circular>)` returns *immediately*
+  with `expected a proper list` rather than at the deadline, matching `assq` on
+  the same shape. Finding an element that occurs before the back edge is
+  unaffected. `WithMaxCallDepth` never applied here — nothing recurses — so the
+  context was the only lever, and it was not being read.
+
 ## [1.19.1] - 2026-07-29
 
 A compiler release: environment-frame elimination for `or`, frame release for
