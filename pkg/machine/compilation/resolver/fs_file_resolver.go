@@ -86,7 +86,7 @@ func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 
 	registryDirs := p.fsRegistryDirs()
 	var opts []sourceload.FinderOption
-	s := SelectLoadStack(ctx, p.env)
+	s := SelectLoadStack(ctx)
 	if s != nil {
 		opts = append(opts, sourceload.WithStack(s))
 	}
@@ -127,7 +127,7 @@ func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 // registry dirs, then root.
 func (p *FSFileResolver) buildSearchedList(ctx context.Context, registryDirs []string) []string {
 	var searched []string
-	s := SelectLoadStack(ctx, p.env)
+	s := SelectLoadStack(ctx)
 	if s != nil {
 		cur := s.CurrentDir()
 		if cur != "" && cur != "." {

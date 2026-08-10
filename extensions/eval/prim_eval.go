@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/registry/helpers"
 	"github.com/aalpar/wile/pkg/schemeutil"
@@ -125,7 +126,10 @@ func PrimEval(cc machine.CallContext) error {
 // File resolution uses the same FileResolver as include, so load and
 // include share the same search path priority:
 //
-//	LoadPathStack > LibraryRegistry > SCHEME_INCLUDE_PATH > CWD
+//	current load directory > LibraryRegistry > SCHEME_INCLUDE_PATH > CWD
+//
+// The current load directory comes from the per-load-chain stack carried on the
+// context, so concurrent loads on separate threads resolve independently.
 func PrimLoad(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "load")
 	if err != nil {
@@ -153,12 +157,23 @@ func PrimLoad(cc machine.CallContext) error {
 	}
 	defer f.Close() //nolint:errcheck
 
-	// Push to stack after successful open, pop on exit.
-	stack := env.LoadPathStack()
-	if stack != nil {
-		stack.Push(resolvedPath)
-		defer stack.Pop()
+	// Push to stack after successful open, pop on exit. The stack is carried on
+	// ctx and is per load CHAIN: an outer load installs one, a nested load pushes
+	// onto the same object so its own relative resolutions see the inner
+	// directory, and two threads loading concurrently never share one.
+	//
+	// It used to be a single stack hung off the Namespace, shared by every thread
+	// in the engine. Two threads each loading a file that includes the same
+	// basename from different directories interleaved their pushes and one
+	// compiled the other's file — a source substitution, so -race cannot see it.
+	loadCtx := mc.Context()
+	stack := sourceload.LoadStackFromContext(loadCtx)
+	if stack == nil {
+		stack = sourceload.NewLoadStack()
+		loadCtx = sourceload.WithLoadStack(loadCtx, stack)
 	}
+	stack.Push(resolvedPath)
+	defer stack.Pop()
 
 	// Create parser with file tracking for source locations
 	rdr := bufio.NewReader(f)
@@ -167,7 +182,7 @@ func PrimLoad(cc machine.CallContext) error {
 	// Read and evaluate each expression
 	var lastValue = values.Void
 	for {
-		stx, err := p.ReadSyntax(mc.Context())
+		stx, err := p.ReadSyntax(loadCtx)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -175,7 +190,7 @@ func PrimLoad(cc machine.CallContext) error {
 			return werr.WrapForeignErrorf(err, "load: parse error in %s", filename.Value)
 		}
 
-		tpl, err := compilation.ExpandAndCompile(mc.Context(), env, stx, nil, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
+		tpl, err := compilation.ExpandAndCompile(loadCtx, env, stx, nil, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "load: in %s", filename.Value)
 		}
@@ -185,6 +200,11 @@ func PrimLoad(cc machine.CallContext) error {
 		err = func() error {
 			sub := mc.NewSubContextWithTemplate(tpl, env)
 			defer machine.ReleaseSubContext(sub)
+			// The sub-context inherits mc.ctx, which is the ctx BEFORE the stack was
+			// installed, so a nested (load …) inside the loaded file would not see
+			// the chain. Re-derive from sub.Context() and never from a fresh root:
+			// a fresh root would drop cancellation for the whole extent of the load.
+			sub.SetContext(sourceload.WithLoadStack(sub.Context(), stack))
 			err := sub.RunWithinBoundary()
 			if err != nil {
 				return werr.WrapForeignErrorf(err, "load: runtime error in %s", filename.Value)
@@ -205,7 +225,7 @@ func PrimLoad(cc machine.CallContext) error {
 // Returns the path of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
 func PrimCurrentLoadPath(mc machine.CallContext) error {
-	stack := mc.EnvironmentFrame().Namespace().LoadPathStack()
+	stack := sourceload.LoadStackFromContext(mc.Context())
 	if stack == nil {
 		mc.SetValue(values.FalseValue)
 		return nil
@@ -218,7 +238,7 @@ func PrimCurrentLoadPath(mc machine.CallContext) error {
 // Returns the directory of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
 func PrimCurrentLoadDirectory(mc machine.CallContext) error {
-	stack := mc.EnvironmentFrame().Namespace().LoadPathStack()
+	stack := sourceload.LoadStackFromContext(mc.Context())
 	if stack == nil {
 		mc.SetValue(values.FalseValue)
 		return nil
@@ -231,7 +251,7 @@ func PrimCurrentLoadDirectory(mc machine.CallContext) error {
 // Returns the current load stack depth (number of nested loads).
 // Returns 0 when not inside a load call.
 func PrimCurrentLoadDepth(mc machine.CallContext) error {
-	stack := mc.EnvironmentFrame().Namespace().LoadPathStack()
+	stack := sourceload.LoadStackFromContext(mc.Context())
 	if stack == nil {
 		mc.SetValue(values.NewInteger(0))
 		return nil
@@ -318,7 +338,13 @@ func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.
 		return nil, false, nil
 	}
 	spec, ok := first.(values.Tuple)
-	if !ok {
+	if !ok || values.IsEmptyList(spec) {
+		// The empty list SATISFIES values.Tuple, so the assertion above admits it
+		// and spec.Car() then panics — uncatchably, since a primitive's panic
+		// reaches the VM boundary as a *SchemeError rather than a condition.
+		// (environment '()) is an ordinary malformed spec, i.e. a domain error, so
+		// it must fall through to the clean diagnostic (environment '() '())
+		// already produces rather than take the program down.
 		return nil, false, nil
 	}
 	headSym, ok := spec.Car().(*values.Symbol)
@@ -442,6 +468,20 @@ func PrimExpand(cc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	// Gate at ENTRY, before any transformer body runs. expand and expand-once run
+	// user-supplied transformer bodies, which is code the program assembled at
+	// runtime — the capability `eval` names. Reusing code:eval rather than minting
+	// a new action is deliberate: an authorizer that denies code:eval and permits
+	// expand expresses no policy anyone wants, and a new action would silently
+	// widen every existing authorizer's default arm.
+	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionEval,
+		Target:   "<expand>",
+	})
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "expand: code evaluation denied")
+	}
 	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
@@ -480,6 +520,20 @@ func PrimExpandOnce(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "expand-once")
 	if err != nil {
 		return err
+	}
+	// Gate at ENTRY, before any transformer body runs. expand and expand-once run
+	// user-supplied transformer bodies, which is code the program assembled at
+	// runtime — the capability `eval` names. Reusing code:eval rather than minting
+	// a new action is deliberate: an authorizer that denies code:eval and permits
+	// expand expresses no policy anyone wants, and a new action would silently
+	// widen every existing authorizer's default arm.
+	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionEval,
+		Target:   "<expand-once>",
+	})
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "expand-once: code evaluation denied")
 	}
 	stx := mc.Arg(0)
 

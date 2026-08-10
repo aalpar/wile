@@ -43,6 +43,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING (embedders): the load path moved from the engine to the context.**
+  `Engine.WithLoadPath`, `PushLoadPath` and `PopLoadPath` are **removed**, and
+  `CurrentLoadPath` / `CurrentLoadDirectory` now take a `context.Context`. The
+  replacement is one method:
+
+  ```go
+  loadCtx, err := engine.ContextWithLoadPath(ctx, "/app/scripts/main.scm")
+  _, err = engine.EvalMultiple(loadCtx, `(load "helper.scm")`)
+  ```
+
+  This is a correctness fix, not an ergonomics change. The load stack used to
+  hang off the `Namespace`, shared by every SRFI-18 thread in the engine, so two
+  threads each loading a file that includes the same basename from different
+  directories interleaved their pushes and **one thread compiled the other
+  thread's file**. That is a source substitution rather than a data race, so
+  `-race` could not see it. The stack now lives on the context, one per load
+  chain, and two chains cannot observe each other.
+
+  A derived context's reach IS the extent of the push, so the balanced push/pop
+  discipline `WithLoadPath` existed to enforce is gone with it: an early return,
+  an error or a panic can no longer leave the stack dirty.
+  `pkg/environment`'s `PathTracker` interface, `Namespace.LoadPathStack` /
+  `SetLoadPathStack`, and `EnvironmentFrame.LoadPathStack` are removed along with
+  it — nothing in `environment/` holds a stack now, so the indirection had
+  nothing left to buy.
+
+- **`expand` and `expand-once` are gated by `code:eval`.** Both run
+  user-supplied transformer bodies, which is code the program assembled at
+  runtime — the capability `eval` names — and neither was gated. A sandboxed
+  program could reach an authorizer-denied capability by handing `expand` a
+  `let-syntax` form built at runtime with `datum->syntax`. They reuse
+  `code:eval` rather than minting a new action: an authorizer that denies
+  `code:eval` and permits `expand` expresses no policy anyone wants, and a new
+  action would silently widen every existing authorizer's default arm.
+
+- **`(environment '())` raises instead of crashing the process.** The malformed
+  spec reached `Car()` on the empty list, which satisfies `values.Tuple`, so it
+  panicked past `guard`. It now falls through to the same diagnostic
+  `(environment '() '())` already produced.
+
 - **An import no longer overwrites a definition of the same name.** Imported
   bindings used to be installed at the very coordinates a top-level `define`
   writes, so the two shared one slot and whichever ran second won *by

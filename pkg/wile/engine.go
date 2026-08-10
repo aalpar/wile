@@ -180,7 +180,6 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 			"install dialect %q forms", dialect.Name())
 	}
 	ns.SetFormRegistry(fr)
-	ns.SetLoadPathStack(sourceload.NewLoadStack())
 	auth := cfg.resolveAuthorizer()
 	if auth != nil {
 		ns.SetAuthorizer(auth)
@@ -1401,80 +1400,70 @@ func callableDocFromValue(v values.Value) string {
 	return dc.Doc()
 }
 
-// LoadPath Stack API
-// These methods provide access to the load path stack for tracking files
-// currently being loaded. The stack enables relative path resolution during
-// load operations.
+// Load-path API
+//
+// The load path lives on the CONTEXT, not on the engine. A load chain — an
+// outer (load …), the files it includes, the files those load — shares one
+// stack, and two chains never share one. That is what makes concurrent loading
+// correct: before this, a single stack hung off the Namespace was shared by
+// every SRFI-18 thread, so two threads loading files in different directories
+// interleaved their pushes and one compiled the other's file.
+//
+// It also removes the balanced-push/pop problem. There is nothing to pop: a
+// derived context's reach IS the extent of the push, so an early return, an
+// error or a panic cannot leave the stack dirty.
 
-// WithLoadPath executes fn with filePath pushed onto the load path stack.
-// This is the recommended API for embedders — it guarantees balanced push/pop
-// via defer even if fn panics or returns an error.
+// ContextWithLoadPath returns a copy of ctx that names filePath as the file
+// currently being loaded, so a directory-relative (include …) or (load …) in
+// code evaluated under it resolves against filePath's directory, and
+// (current-load-path) reports it.
 //
 // Returns an error if filePath is empty.
 //
 // Example:
 //
-//	err := engine.WithLoadPath("/app/scripts/main.scm", func() error {
-//	    _, err := engine.EvalMultiple(ctx, "(load \"helper.scm\")") // resolves relative to /app/scripts/
+//	loadCtx, err := engine.ContextWithLoadPath(ctx, "/app/scripts/main.scm")
+//	if err != nil {
 //	    return err
-//	})
-func (p *Engine) WithLoadPath(filePath string, fn func() error) error {
-	err := p.PushLoadPath(filePath)
-	if err != nil {
-		return err
+//	}
+//	// (load "helper.scm") resolves relative to /app/scripts/
+//	_, err = engine.EvalMultiple(loadCtx, `(load "helper.scm")`)
+//
+// The returned context carries its OWN stack, seeded from ctx's if there is
+// one, so the caller cannot leak a push into the context it was handed.
+func (p *Engine) ContextWithLoadPath(ctx context.Context, filePath string) (context.Context, error) {
+	if filePath == "" {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidLoadPath, "ContextWithLoadPath: path must not be empty")
 	}
-	defer p.PopLoadPath()
-	return fn()
+	stack := sourceload.NewLoadStack()
+	prev := sourceload.LoadStackFromContext(ctx)
+	if prev != nil {
+		for _, q := range prev.Paths() {
+			stack.Push(q)
+		}
+	}
+	stack.Push(filePath)
+	return sourceload.WithLoadStack(ctx, stack), nil
 }
 
-// CurrentLoadPath returns the path of the file currently being loaded,
-// or empty string if no file is being loaded.
-func (p *Engine) CurrentLoadPath() string {
-	stack := p.namespace.LoadPathStack()
+// CurrentLoadPath returns the path of the file ctx names as currently loading,
+// or "" if ctx is not inside a load.
+func (p *Engine) CurrentLoadPath(ctx context.Context) string {
+	stack := sourceload.LoadStackFromContext(ctx)
 	if stack == nil {
 		return ""
 	}
 	return stack.Current()
 }
 
-// CurrentLoadDirectory returns the directory of the file currently being loaded,
-// or empty string if no file is being loaded.
-func (p *Engine) CurrentLoadDirectory() string {
-	stack := p.namespace.LoadPathStack()
+// CurrentLoadDirectory returns the directory of the file ctx names as currently
+// loading, or "" if ctx is not inside a load.
+func (p *Engine) CurrentLoadDirectory(ctx context.Context) string {
+	stack := sourceload.LoadStackFromContext(ctx)
 	if stack == nil {
 		return ""
 	}
 	return stack.CurrentDir()
-}
-
-// PushLoadPath pushes a path onto the load path stack.
-// Returns an error if the path is empty. Returns nil (no-op) if the stack
-// is not configured — path tracking requires SetLoadPathStack on the Namespace.
-//
-// Advanced embedders who need fine-grained control can use Push/Pop directly,
-// but most should use WithLoadPath for automatic cleanup.
-func (p *Engine) PushLoadPath(filePath string) error {
-	stack := p.namespace.LoadPathStack()
-	if stack == nil {
-		return nil
-	}
-	if filePath == "" {
-		return werr.WrapForeignErrorf(werr.ErrInvalidLoadPath, "path must not be empty")
-	}
-	stack.Push(filePath)
-	return nil
-}
-
-// PopLoadPath removes the top path from the load path stack.
-// Does nothing if the stack is empty.
-//
-// Advanced embedders who need fine-grained control can use Push/Pop directly,
-// but most should use WithLoadPath for automatic cleanup.
-func (p *Engine) PopLoadPath() {
-	stack := p.namespace.LoadPathStack()
-	if stack != nil {
-		stack.Pop()
-	}
 }
 
 // Close releases resources held by closeable extensions.

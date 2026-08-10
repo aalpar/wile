@@ -376,7 +376,7 @@ the default search paths.
 | `Walk` (file enumeration) | `pkg/machine/compilation/sourceload/walk.go` |
 | `ErrNotFound` sentinel | `pkg/machine/compilation/sourceload/doc.go` |
 | `FileResolver` interface | `pkg/environment/file_resolver.go` |
-| `PathTracker` interface | `pkg/environment/file_resolver.go` |
+| `LoadStack` (carried on ctx) | `pkg/machine/compilation/sourceload/load_stack.go` |
 | `OSFileResolver` | `pkg/machine/compilation/resolver/os_file_resolver.go` |
 | `FSFileResolver` | `pkg/machine/compilation/resolver/fs_file_resolver.go` |
 | `EmbedFileResolver` | `pkg/machine/compilation/resolver/embed_file_resolver.go` |

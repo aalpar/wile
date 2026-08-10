@@ -159,13 +159,15 @@ func TestLoadPathStack_DepthReturnsToZero(t *testing.T) {
 
 	engine := newTestEngine(t)
 
-	// Verify stack starts empty
-	c.Assert(engine.CurrentLoadPath(), qt.Equals, "")
+	// A context that has not been through ContextWithLoadPath is not inside a
+	// load, before or after — the load's stack lives on the context PrimLoad
+	// derives, so it cannot outlive it.
+	ctx := context.Background()
+	c.Assert(engine.CurrentLoadPath(ctx), qt.Equals, "")
 
 	evalCode(t, engine, fmt.Sprintf(`(load %q)`, testFile))
 
-	// Verify stack returns to empty after load completes
-	c.Assert(engine.CurrentLoadPath(), qt.Equals, "")
+	c.Assert(engine.CurrentLoadPath(ctx), qt.Equals, "")
 }
 
 func TestLoadPathStack_NestedLoadPaths(t *testing.T) {
@@ -230,7 +232,7 @@ func TestLoadPathStack_ErrorIncludesSearchPaths(t *testing.T) {
 	c.Assert(errMsg, qt.Contains, tmpDir) // Should list the file's directory
 }
 
-func TestLoadPathStack_WithLoadPathAPI(t *testing.T) {
+func TestLoadPathStack_ContextWithLoadPathAPI(t *testing.T) {
 	c := qt.New(t)
 
 	tmpDir, err := os.MkdirTemp("", "load-path-api-")
@@ -246,28 +248,25 @@ func TestLoadPathStack_WithLoadPathAPI(t *testing.T) {
 
 	engine := newTestEngine(t)
 
-	// Use WithLoadPath to evaluate code in a specific file context
-	var result string
-	err = engine.WithLoadPath(helperFile, func() error {
-		// Load the file in this context
-		_, evalErr := engine.Eval(context.Background(), engine.MustParse(context.Background(), `(load "test.scm")`))
-		if evalErr != nil {
-			return evalErr
-		}
-		// Now evaluate x
-		val, evalErr := engine.Eval(context.Background(), engine.MustParse(context.Background(), `x`))
-		if evalErr != nil {
-			return evalErr
-		}
-		result = val.SchemeString()
-		return nil
-	})
-
+	// Name the file the embedder is evaluating "on behalf of", so a relative
+	// (load "test.scm") inside it resolves against that file's directory.
+	loadCtx, err := engine.ContextWithLoadPath(context.Background(), helperFile)
 	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.Equals, "1")
+	c.Assert(engine.CurrentLoadPath(loadCtx), qt.Equals, helperFile)
 
-	// Verify stack is empty after WithLoadPath completes
-	c.Assert(engine.CurrentLoadPath(), qt.Equals, "")
+	_, evalErr := engine.Eval(loadCtx, engine.MustParse(loadCtx, `(load "test.scm")`))
+	c.Assert(evalErr, qt.IsNil)
+	val, evalErr := engine.Eval(loadCtx, engine.MustParse(loadCtx, `x`))
+	c.Assert(evalErr, qt.IsNil)
+	c.Assert(val.SchemeString(), qt.Equals, "1")
+
+	// The push cannot leak: the context it was derived FROM is untouched, so
+	// there is no pop to forget and no way to unbalance the stack.
+	c.Assert(engine.CurrentLoadPath(context.Background()), qt.Equals, "")
+
+	// An empty path is the one error case.
+	_, err = engine.ContextWithLoadPath(context.Background(), "")
+	c.Assert(err, qt.IsNotNil)
 }
 
 // Tests for unified load/include resolution (FileResolver).
