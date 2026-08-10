@@ -18,11 +18,13 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/testutil"
 	"github.com/aalpar/wile/pkg/werr"
 
@@ -1027,6 +1029,10 @@ func TestEval_CancelNestedCalls(t *testing.T) {
 }
 
 // mockCloseableExtension is a test helper that implements both Extension and Closeable.
+// errTestCloser is the sentinel a failing test closer returns, so the assertion
+// can be errors.Is rather than a bare non-nil check.
+var errTestCloser = werr.NewStaticError("wile test: closer failed")
+
 type mockCloseableExtension struct {
 	name     string
 	closed   bool
@@ -1080,6 +1086,62 @@ func TestEngineClose(t *testing.T) {
 		c.Assert(err, qt.IsNotNil)
 		c.Assert(ext1.closed, qt.IsTrue)
 		c.Assert(ext2.closed, qt.IsTrue)
+	})
+
+	t.Run("registry closer called", func(t *testing.T) {
+		// The per-engine seam: the hook is registered from AddToRegistry, which
+		// runs once per engine, so each engine collects its OWN hook. Two engines
+		// over one extension value therefore run two distinct hooks — which a
+		// registry.Closeable on the shared Extension value cannot do.
+		//
+		// The registry is SHARED (WithRegistry), which is what makes this
+		// discriminating: the shared registry accumulates both hooks, so an engine
+		// that took reg.Closers() whole rather than the delta its own extension
+		// loop registered would close the other engine's resources too.
+		var closed []string
+		registrations := 0
+		ext := registry.NewExtension("reg-closer", func(r *registry.PrimitiveRegistry) error {
+			registrations++
+			name := "engine-" + strconv.Itoa(registrations)
+			r.AddCloser(func() error {
+				closed = append(closed, name)
+				return nil
+			})
+			return nil
+		})
+
+		shared := registry.NewRegistry()
+		err := core.AddToRegistry(shared)
+		c.Assert(err, qt.IsNil)
+
+		engine1, err := NewEngine(context.Background(), WithRegistry(shared), WithExtension(ext))
+		c.Assert(err, qt.IsNil)
+		engine2, err := NewEngine(context.Background(), WithRegistry(shared), WithExtension(ext))
+		c.Assert(err, qt.IsNil)
+		c.Assert(shared.Closers(), qt.HasLen, 2)
+		c.Assert(closed, qt.HasLen, 0)
+
+		err = engine1.Close()
+		c.Assert(err, qt.IsNil)
+		c.Assert(closed, qt.DeepEquals, []string{"engine-1"})
+
+		err = engine2.Close()
+		c.Assert(err, qt.IsNil)
+		c.Assert(closed, qt.DeepEquals, []string{"engine-1", "engine-2"})
+	})
+
+	t.Run("registry closer error is joined", func(t *testing.T) {
+		ext := registry.NewExtension("failing-closer", func(r *registry.PrimitiveRegistry) error {
+			r.AddCloser(func() error {
+				return errTestCloser
+			})
+			return nil
+		})
+		engine, err := NewEngine(context.Background(), WithExtension(ext))
+		c.Assert(err, qt.IsNil)
+
+		err = engine.Close()
+		c.Assert(errors.Is(err, errTestCloser), qt.IsTrue)
 	})
 
 	t.Run("double close returns error", func(t *testing.T) {

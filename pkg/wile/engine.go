@@ -66,7 +66,7 @@ type Engine struct {
 	registry                *registry.PrimitiveRegistry
 	debugger                *Debugger
 	lastCounters            machine.VMCounters
-	closers                 []registry.Closeable
+	closers                 []func() error
 	closed                  bool
 	maxCallDepth            int
 	maxParseDepth           int
@@ -130,7 +130,7 @@ func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Names
 // Returns the snapshots and closers from buildRegistry for callers that need them
 // (NewEngine uses snapshots for extension library registration and closers for
 // Engine.Close).
-func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Namespace, []extSnapshot, []registry.Closeable, error) {
+func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Namespace, []extSnapshot, []func() error, error) {
 	// Both strict levels derive the visible surface from a registry this package
 	// mints (coreOnlyRegistry, or an empty one, below), not from cfg.registry. A
 	// caller-supplied registry (WithRegistry/WithoutCore, both of which set
@@ -350,7 +350,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	var ns *environment.Namespace
 	var reg *registry.PrimitiveRegistry
 	var snapshots []extSnapshot
-	var closers []registry.Closeable
+	var closers []func() error
 
 	if cfg.namespace != nil {
 		// A dialect customizes the forms registry during bootstrapNamespace, which
@@ -435,8 +435,16 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 
 // buildRegistry creates and populates the registry from engine configuration.
 // It registers extensions (tracking primitive index ranges for library creation)
-// and collects closeable extensions for Engine.Close().
-func buildRegistry(cfg *engineConfig) (*registry.PrimitiveRegistry, []extSnapshot, []registry.Closeable, error) {
+// and collects this engine's closers for Engine.Close().
+//
+// Closers come from two places. An extension implementing registry.Closeable
+// contributes its Close method, which is process-global — the Extension value is
+// a package-level var shared by every engine. An extension that needs per-engine
+// cleanup instead calls PrimitiveRegistry.AddCloser from its AddToRegistry, and
+// only the hooks THIS loop registered are taken: a registry reused across engines
+// (WithRegistry) still carries the earlier engines' hooks, and handing engine B
+// engine A's closer would let B's Close reap A's resources.
+func buildRegistry(cfg *engineConfig) (*registry.PrimitiveRegistry, []extSnapshot, []func() error, error) {
 	reg := cfg.registry
 	if reg == nil {
 		reg = registry.NewRegistry()
@@ -447,7 +455,8 @@ func buildRegistry(cfg *engineConfig) (*registry.PrimitiveRegistry, []extSnapsho
 	}
 
 	var snapshots []extSnapshot
-	var closers []registry.Closeable
+	var closers []func() error
+	startClosers := len(reg.Closers())
 	for _, ext := range cfg.extensions {
 		startIdx := reg.PrimitiveCount()
 		err := ext.AddToRegistry(reg)
@@ -467,8 +476,11 @@ func buildRegistry(cfg *engineConfig) (*registry.PrimitiveRegistry, []extSnapsho
 		})
 		closer, ok := ext.(registry.Closeable)
 		if ok {
-			closers = append(closers, closer)
+			closers = append(closers, closer.Close)
 		}
+	}
+	for _, fn := range reg.Closers()[startClosers:] {
+		closers = append(closers, fn)
 	}
 
 	return reg, snapshots, closers, nil
@@ -1466,10 +1478,18 @@ func (p *Engine) CurrentLoadDirectory(ctx context.Context) string {
 	return stack.CurrentDir()
 }
 
-// Close releases resources held by closeable extensions.
-// Extensions that implement registry.Closeable have their Close method called.
+// Close releases the resources this engine holds, from two sources: extensions
+// implementing registry.Closeable have their Close method called, and per-engine
+// hooks registered via PrimitiveRegistry.AddCloser are run. The shipped threads
+// and process extensions use the latter — closing an engine terminates the
+// SRFI-18 threads it started and kills the children it spawned.
 // Errors from individual closers are collected and returned via errors.Join.
 // Calling Close on an already-closed engine returns ErrEngineClosed.
+//
+// An engine built with WithNamespace has NO closers: that path reuses a
+// pre-built namespace and never runs buildRegistry, which is where both sources
+// are collected. That is pre-existing — it was already true of registry.Closeable
+// — and unchanged here.
 func (p *Engine) Close() error {
 	if p.closed {
 		return werr.WrapForeignErrorf(ErrEngineClosed, "engine: already closed")
@@ -1478,7 +1498,7 @@ func (p *Engine) Close() error {
 
 	var errs []error
 	for _, c := range p.closers {
-		err := c.Close()
+		err := c()
 		if err != nil {
 			errs = append(errs, err)
 		}
