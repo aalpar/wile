@@ -160,6 +160,44 @@ func TestNoMutation_VectorStringMapWorkMutationFree(t *testing.T) {
 	}
 }
 
+// TestNoMutation_RecordModifierFailsAtDefinition is a RATCHET, not a
+// must-fail-first: both rows are green as shipped, and they pin the N-5
+// consequence of putting record-modifier in mutationPrimitives()
+// (dialect_nomutation.go).
+//
+// bootstrap_macros.scm expands a modifier-declaring field spec to
+// (define modifier (record-modifier type 'field-tag)), so the removal bites at
+// DEFINITION time — the record type does not come into existence at all, and
+// the diagnostic names record-modifier rather than the modifier the user wrote.
+// That is earlier and coarser than "calling the modifier fails", which is what
+// a reader would assume from the primitive's name, so it is worth a test as
+// well as a doc line (docs/reference/r7rs-differences.md).
+//
+// The profile is load-bearing: a bare NewEngine has no make-record-type either,
+// so both rows would fail for a reason that has nothing to do with the dialect.
+func TestNoMutation_RecordModifierFailsAtDefinition(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithDialect(NoMutation))
+	c.Assert(err, qt.IsNil)
+	defer func() {
+		_ = eng.Close()
+	}()
+
+	_, err = eng.EvalMultiple(ctx,
+		"(define-record-type point (make-point x) point? (x point-x set-point-x!))")
+	c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
+		qt.Commentf("a modifier-declaring record type must fail at definition, got %v", err))
+	c.Assert(err.Error(), qt.Contains, "record-modifier",
+		qt.Commentf("the diagnostic must name record-modifier, not the field or the modifier"))
+
+	// The control: without a modifier the same declaration is unaffected, so
+	// the row above pins the modifier specifically and not "records are gone".
+	_, err = eng.EvalMultiple(ctx,
+		"(define-record-type pt2 (make-pt2 x) pt2? (x pt2-x)) (pt2-x (make-pt2 5))")
+	c.Assert(err, qt.IsNil)
+}
+
 // TestNoMutation_ImportReexposes_DocumentsBoundary pins the boundary: removal is at
 // the visible top level only. (import (scheme base)) re-exposes a removed mutator,
 // because the library/import surface is a separate reader the primitive dialect layer

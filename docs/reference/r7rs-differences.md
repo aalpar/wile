@@ -4,13 +4,13 @@ This document catalogs differences between the current implementation and the R7
 
 **Reference:** [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf)
 
-**Last Updated:** 2026-07-14
+**Last Updated:** 2026-08-10
 
 ---
 
 ## Summary
 
-Eleven known differences exist:
+Seventeen known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
@@ -79,6 +79,16 @@ Eleven known differences exist:
     weigh before closing it is that `(srfi 13)` exports a different, bounded
     `string-hash`, so a program importing both libraries would meet the R7RS
     §5.6 conflict — correctly, but newly.
+17. Under `WithDialect(NoMutation)` (opt-in), a `define-record-type` that
+    **declares a modifier** fails at **definition** time, not at the modifier's
+    first use. The dialect removes `record-modifier`, and
+    `bootstrap_macros.scm` expands a modifier-declaring field spec to
+    `(define modifier (record-modifier type 'field-tag))`, so the whole
+    declaration raises `no such binding "record-modifier" with compatible
+    scopes` and the record type never comes into existence — before any
+    instance does. A modifier-free `define-record-type` is unaffected. The
+    diagnostic names `record-modifier` rather than the modifier the program
+    wrote.
 
 ---
 
