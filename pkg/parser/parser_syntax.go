@@ -69,6 +69,8 @@ func (p *Parser) wrapSyntaxBox(v0 syntax.SyntaxValue, t tokenizer.Token) *syntax
 	return syntax.NewSyntaxBox(v0, p.newSourceContext(t))
 }
 
+// wrapSyntaxDatumLabelAssignment wraps a CYCLIC labeled datum. An acyclic one is
+// returned unwrapped — see readLabelAssignment for why the distinction exists.
 func (p *Parser) wrapSyntaxDatumLabelAssignment(v0 int, v1 syntax.SyntaxValue, t tokenizer.Token) *syntax.SyntaxDatumLabelAssignment {
 	return syntax.NewSyntaxDatumLabelAssignment(v0, v1, p.newSourceContext(t))
 }

@@ -354,10 +354,10 @@ func TestCoverage_DatumLabelList(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
-	// Should be a SyntaxDatumLabelAssignment
-	dla, ok := syn.(*syntax.SyntaxDatumLabelAssignment)
+	// #n= yields the labeled datum itself, not a wrapper.
+	_, ok := syn.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn))
-	c.Assert(dla.Label, qt.Equals, 0)
+	c.Assert(syn.UnwrapAll().SchemeString(), qt.Equals, "(1 2 3)")
 }
 
 func TestCoverage_DatumLabelCircular(t *testing.T) {
@@ -370,11 +370,11 @@ func TestCoverage_DatumLabelCircular(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
+	// Cyclic, so the assignment wrapper is retained (it fences the expander off a
+	// self-referential spine); its value is a pair whose cdr is that same pair.
 	dla, ok := syn.(*syntax.SyntaxDatumLabelAssignment)
-	c.Assert(ok, qt.IsTrue)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn))
 	c.Assert(dla.Label, qt.Equals, 0)
-
-	// The value should be a pair whose cdr is the same pair (circular)
 	pair, ok := dla.Value.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", dla.Value))
 	// Car should be a symbol 'a'
@@ -393,9 +393,7 @@ func TestCoverage_DatumLabelEmptyList(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
-	dla, ok := syn.(*syntax.SyntaxDatumLabelAssignment)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(dla.Label, qt.Equals, 0)
+	c.Assert(syn.UnwrapAll().SchemeString(), qt.Equals, "()")
 }
 
 func TestCoverage_DatumLabelSingleElement(t *testing.T) {
@@ -408,9 +406,7 @@ func TestCoverage_DatumLabelSingleElement(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
-	dla, ok := syn.(*syntax.SyntaxDatumLabelAssignment)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(dla.Label, qt.Equals, 0)
+	c.Assert(syn.UnwrapAll().SchemeString(), qt.Equals, "(42)")
 }
 
 func TestCoverage_DatumLabelImproperMulti(t *testing.T) {
@@ -423,9 +419,7 @@ func TestCoverage_DatumLabelImproperMulti(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
-	dla, ok := syn.(*syntax.SyntaxDatumLabelAssignment)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(dla.Label, qt.Equals, 0)
+	c.Assert(syn.UnwrapAll().SchemeString(), qt.Equals, "(a b . c)")
 }
 
 func TestCoverage_DatumLabelAtom(t *testing.T) {
@@ -438,9 +432,7 @@ func TestCoverage_DatumLabelAtom(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
-	dla, ok := syn.(*syntax.SyntaxDatumLabelAssignment)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(dla.Label, qt.Equals, 0)
+	c.Assert(syn.UnwrapAll().SchemeString(), qt.Equals, "42")
 }
 
 func TestCoverage_DatumLabelReference(t *testing.T) {
@@ -475,9 +467,7 @@ func TestCoverage_DatumLabelVector(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn, qt.IsNotNil)
 
-	dla, ok := syn.(*syntax.SyntaxDatumLabelAssignment)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(dla.Label, qt.Equals, 0)
+	c.Assert(syn.UnwrapAll().SchemeString(), qt.Equals, "#(1 2 3)")
 }
 
 // ---------------------------------------------------------------------------

@@ -15,8 +15,6 @@
 package values
 
 import (
-	"cmp"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -35,6 +33,15 @@ var (
 type hashtableEntry struct {
 	key   Value
 	value Value
+	// seq is the entry's insertion ordinal, drawn from the owning table's
+	// counter when the key was FIRST added and preserved when its value is
+	// overwritten. It exists because rendering needs a total order and the
+	// store cannot supply one: sync.Map.Range is a per-process seeded walk, and
+	// the bucket hash is the key's POINTER for an eq table (identityHash), so
+	// neither is stable across processes. Insertion order is the only ordering
+	// information a table holds that is a function of the program rather than
+	// of the run. See SchemeWriter.writeHashtable.
+	seq uint64
 }
 
 // HashtableKind selects which (hash, key-equality) pair a table uses. It is the
@@ -125,6 +132,13 @@ type Hashtable struct {
 	// size is the entry count, maintained lock-free. Exact single-threaded;
 	// best-effort under unsynchronized concurrent mutation.
 	size atomic.Int64
+	// nextSeq issues hashtableEntry.seq values. It only ever increases, so a
+	// delete-then-reinsert files the key at the END of the insertion order
+	// rather than reclaiming its old place — which is what makes the ordinal a
+	// function of the write SEQUENCE and not of the live set. Copy carries it
+	// forward so a copy's later inserts cannot collide with the shared buckets'
+	// existing ordinals.
+	nextSeq atomic.Uint64
 	// kind is WRITE-ONCE at construction and never mutates, so it does not
 	// participate in the copy-on-write dance and the lock-free contract above is
 	// unaffected.
@@ -396,9 +410,11 @@ func (p *Hashtable) schemeStringWithVisited(visited map[Value]bool, depth int) s
 	q := &strings.Builder{}
 	q.WriteString("#hash(")
 	entries := p.snapshot()
-	slices.SortFunc(entries, func(a, b hashtableEntry) int {
-		return cmp.Compare(a.key.SchemeString(), b.key.SchemeString())
-	})
+	// The same order the SchemeWriter uses, for the same reason: rendered key
+	// alone leaves ties to sync.Map.Range's per-process walk. The two renderers
+	// must not disagree — this one is what the writer's default branch falls
+	// through to.
+	sortHashtableEntries(entries)
 	for i, e := range entries {
 		if i > 0 {
 			q.WriteString(" ")
@@ -483,14 +499,17 @@ func (p *Hashtable) Set(key Value, val Value) error {
 		if p.keyEqual(e.key, key) {
 			nb := make([]hashtableEntry, len(old))
 			copy(nb, old)
-			nb[i] = hashtableEntry{key: key, value: val}
+			// Overwriting a value keeps the key's original ordinal: the key was
+			// added when it was added, and re-Setting it must not move it in the
+			// rendered order.
+			nb[i] = hashtableEntry{key: key, value: val, seq: e.seq}
 			p.buckets.Store(h, nb)
 			return nil
 		}
 	}
 	nb := make([]hashtableEntry, len(old), len(old)+1)
 	copy(nb, old)
-	nb = append(nb, hashtableEntry{key: key, value: val})
+	nb = append(nb, hashtableEntry{key: key, value: val, seq: p.nextSeq.Add(1)})
 	p.buckets.Store(h, nb)
 	p.size.Add(1)
 	return nil
@@ -579,6 +598,9 @@ func (p *Hashtable) Copy(mutable bool) *Hashtable {
 		return true
 	})
 	q.size.Store(p.size.Load())
+	// The shared buckets carry the source's ordinals, so the copy's counter has
+	// to resume above them or a later insert would tie with an existing entry.
+	q.nextSeq.Store(p.nextSeq.Load())
 	return q
 }
 

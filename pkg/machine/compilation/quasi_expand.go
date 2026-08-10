@@ -60,6 +60,44 @@ func (p *CompileTimeContinuation) buildQuasiSyntaxList(srcCtx *syntax.SourceCont
 	return result
 }
 
+// quasiHead builds one of the list-construction heads the quasiquote and
+// quasisyntax expansions synthesize — list, cons, append, list->vector — pinned
+// to the startup set's binding for that name.
+//
+// Without the pin these are ordinary free references that resolve at the USE
+// site, so a top-level (define list …) captures every quasiquote in the
+// program: `(1 ,x 3) returned whatever the user's list returned. The reference
+// is the expander's own, not the user's — the user wrote no `list` — so it must
+// carry the meaning it had where quasiquote was defined, which for a Go-side
+// form is the sealed startup set.
+//
+// nil pin means "no sealed binding of that name here" and leaves the reference
+// unpinned, which is the pre-existing behaviour: this can only remove a hijack,
+// never introduce one. The pin is consulted by tryResolvedBinding, which runs
+// AFTER local scope-set resolution, so it does not change the already-correct
+// local-shadow answers (a let/lambda binder carries {lambdaScope} while this
+// reference carries the quasiquote form's own scopes).
+//
+// The synthesized `quote` head is deliberately NOT routed through here: it is a
+// special form, resolves as one, and is not hijackable — the negative control.
+func (p *CompileTimeContinuation) quasiHead(name string, srcCtx *syntax.SourceContext) syntax.SyntaxValue {
+	sym := syntax.NewSyntaxSymbol(name, srcCtx)
+	if p.env == nil {
+		return sym
+	}
+	ns := p.env.Namespace()
+	if ns == nil {
+		return sym
+	}
+	// The env's OWN phase, not PhaseRuntime: a quasiquote inside a transformer
+	// body expands and runs at phase 1, and its list must be phase 1's.
+	gi := ns.Store().SealedGlobalIndexAt(values.NewSymbol(name), values.EmptyScopes(), p.env.PhaseLevel())
+	if gi == nil {
+		return sym
+	}
+	return sym.WithResolvedBinding(gi)
+}
+
 // getSymbolName returns the symbol name if the value is a symbol
 func (p *CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, bool) {
 	s, ok := v.(*syntax.SyntaxSymbol)
@@ -120,7 +158,7 @@ func (p *CompileTimeContinuation) expandQuasi(
 						return nil, err
 					}
 					return p.buildQuasiSyntaxList(srcCtx,
-						syntax.NewSyntaxSymbol("list", srcCtx),
+						p.quasiHead("list", srcCtx),
 						p.buildQuasiSyntaxList(srcCtx,
 							syntax.NewSyntaxSymbol(kw.quoting, srcCtx),
 							syntax.NewSyntaxSymbol(kw.unquote, srcCtx),
@@ -140,7 +178,7 @@ func (p *CompileTimeContinuation) expandQuasi(
 						return nil, err
 					}
 					return p.buildQuasiSyntaxList(srcCtx,
-						syntax.NewSyntaxSymbol("list", srcCtx),
+						p.quasiHead("list", srcCtx),
 						p.buildQuasiSyntaxList(srcCtx,
 							syntax.NewSyntaxSymbol(kw.quoting, srcCtx),
 							syntax.NewSyntaxSymbol(kw.splicing, srcCtx),
@@ -160,7 +198,7 @@ func (p *CompileTimeContinuation) expandQuasi(
 						return nil, err
 					}
 					return p.buildQuasiSyntaxList(srcCtx,
-						syntax.NewSyntaxSymbol("list", srcCtx),
+						p.quasiHead("list", srcCtx),
 						p.buildQuasiSyntaxList(srcCtx,
 							syntax.NewSyntaxSymbol(kw.quoting, srcCtx),
 							syntax.NewSyntaxSymbol(kw.nesting, srcCtx),
@@ -219,7 +257,7 @@ func (p *CompileTimeContinuation) expandQuasiList(
 
 	// No splice path: build (list elem1 elem2 ...)
 	var elems []syntax.SyntaxValue
-	elems = append(elems, syntax.NewSyntaxSymbol("list", srcCtx))
+	elems = append(elems, p.quasiHead("list", srcCtx))
 
 	current := pair
 	for !values.IsEmptyList(current) {
@@ -241,7 +279,7 @@ func (p *CompileTimeContinuation) expandQuasiList(
 					result = tailExpr
 					for i := len(elems) - 1; i >= 1; i-- {
 						result = p.buildQuasiSyntaxList(srcCtx,
-							syntax.NewSyntaxSymbol("cons", srcCtx),
+							p.quasiHead("cons", srcCtx),
 							elems[i],
 							result,
 						)
@@ -275,7 +313,7 @@ func (p *CompileTimeContinuation) expandQuasiList(
 		result := expandedTail
 		for i := len(elems) - 1; i >= 1; i-- {
 			result = p.buildQuasiSyntaxList(srcCtx,
-				syntax.NewSyntaxSymbol("cons", srcCtx),
+				p.quasiHead("cons", srcCtx),
 				elems[i],
 				result,
 			)
@@ -311,11 +349,11 @@ type quasiSegment struct {
 // splice contributes its expression directly. The returned slice begins with
 // the `append` symbol. Shared by the list and vector quasiquote expanders.
 func (p *CompileTimeContinuation) segmentsToAppendArgs(srcCtx *syntax.SourceContext, segments []quasiSegment) []syntax.SyntaxValue {
-	appendArgs := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("append", srcCtx)}
+	appendArgs := []syntax.SyntaxValue{p.quasiHead("append", srcCtx)}
 	for _, seg := range segments {
 		switch seg.kind {
 		case quasiSegNormal:
-			listArgs := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("list", srcCtx)}
+			listArgs := []syntax.SyntaxValue{p.quasiHead("list", srcCtx)}
 			listArgs = append(listArgs, seg.elems...)
 			appendArgs = append(appendArgs, p.buildQuasiSyntaxList(srcCtx, listArgs...))
 		case quasiSegSplice:
