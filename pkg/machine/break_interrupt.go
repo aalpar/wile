@@ -143,6 +143,12 @@ func (p *MachineContext) InstallBreakPrompt(handler values.Callable) *PromptTag 
 	}
 	frame.barrierValid = p.barrierValid
 	p.cont = frame
+	// Pushing a frame lengthens the chain, and p.callDepth caches that length —
+	// SaveContinuation increments it for exactly this reason. Without the
+	// increment, the synthetic frame CaptureInterruptContinuationAt builds (depth
+	// = p.cont.callDepth + 1) is one deeper than p.callDepth, so every resume
+	// inflates the depth by one and the depth-keyed step modes drift.
+	p.callDepth++
 	return tag
 }
 
@@ -153,4 +159,13 @@ func (p *MachineContext) SetBreakHandler(handler values.Callable) {
 		return
 	}
 	p.brk.handler = handler
+}
+
+// BreakResumeValues returns the arguments a suspension handler must apply the
+// resumable continuation to in order to resume unchanged: the value register
+// frozen at the break point. Resuming with no arguments instead clears the
+// register, because ReinstallSegment ends with SetValues(args...) and Restore
+// does not carry a register of its own.
+func (p *MachineContext) BreakResumeValues() []values.Value {
+	return p.breakResumeValues
 }

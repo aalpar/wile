@@ -56,7 +56,6 @@ const (
 // It wraps the internal machine.Debugger to avoid exposing VM types.
 type Debugger struct {
 	inner          *machine.Debugger
-	currentMC      *machine.MachineContext
 	onBreak        func(state values.DebugState, bp *BreakpointInfo)
 	onBreakSuspend func(state values.DebugState, bp *BreakpointInfo) BreakAction
 }
@@ -67,7 +66,6 @@ func NewDebugger() *Debugger {
 		inner: machine.NewDebugger(),
 	}
 	q.inner.OnBreak(func(mc *machine.MachineContext, bp *machine.Breakpoint) {
-		q.currentMC = mc
 		if q.onBreak != nil {
 			q.onBreak(mc, machineBreakpointToInfo(bp))
 		}
@@ -118,18 +116,41 @@ func (p *Debugger) StepInto() {
 	p.inner.StepInto()
 }
 
-// StepOver enables step-over mode using the stored break context.
+// StepOver enables step-over mode relative to the most recent break. It is a
+// no-op when no break has happened, because there is no depth to step over.
 func (p *Debugger) StepOver() {
-	if p.currentMC != nil {
-		p.inner.StepOver(p.currentMC)
+	depth, ok := p.breakDepth()
+	if !ok {
+		return
 	}
+	p.inner.StepOver(depth)
 }
 
-// StepOut enables step-out mode using the stored break context.
+// StepOut enables step-out mode relative to the most recent break. It is a
+// no-op when no break has happened.
 func (p *Debugger) StepOut() {
-	if p.currentMC != nil {
-		p.inner.StepOut(p.currentMC)
+	depth, ok := p.breakDepth()
+	if !ok {
+		return
 	}
+	p.inner.StepOut(depth)
+}
+
+// breakDepth returns the call depth recorded at the most recent break.
+func (p *Debugger) breakDepth() (int, bool) {
+	state, _ := p.inner.BreakState()
+	return breakDepthOf(state)
+}
+
+// breakDepthOf reads the call depth out of a break snapshot. That depth is the
+// break POINT's; the context applying a verdict is suspended at the break
+// boundary and its own depth is a different number.
+func breakDepthOf(state values.DebugState) (int, bool) {
+	snap, ok := state.(*machine.BreakSnapshot)
+	if !ok {
+		return 0, false
+	}
+	return snap.CallDepth(), true
 }
 
 // Continue resumes execution.
@@ -163,13 +184,16 @@ func (p *Debugger) OnBreakSuspend(fn func(state values.DebugState, bp *Breakpoin
 	p.onBreakSuspend = fn
 }
 
-// CurrentState returns the DebugState from the most recent break, or
-// nil if no break has occurred.
+// CurrentState returns the DebugState from the most recent break, or nil if no
+// break has occurred.
+//
+// It is a snapshot taken at the break, not the live VM context. The context is
+// pool-recycled and zeroed when the evaluation ends, so handing it back was how
+// ,where and ,backtrace came to report "No source location available" and
+// "Empty stack trace" on a breakpoint that had just printed its location.
 func (p *Debugger) CurrentState() values.DebugState {
-	if p.currentMC == nil {
-		return nil
-	}
-	return p.currentMC
+	state, _ := p.inner.BreakState()
+	return state
 }
 
 // breakHandler builds the callable the VM applies while suspended at a break.
@@ -185,9 +209,9 @@ func (p *Debugger) breakHandler(env *environment.EnvironmentFrame, tag *machine.
 		if err != nil {
 			return err
 		}
+		state, bp := p.inner.BreakState()
 		action := BreakContinue
 		if p.onBreakSuspend != nil {
-			state, bp := p.inner.BreakState()
 			action = p.onBreakSuspend(state, machineBreakpointToInfo(bp))
 		}
 		if action == BreakAbandon {
@@ -201,24 +225,28 @@ func (p *Debugger) breakHandler(env *environment.EnvironmentFrame, tag *machine.
 				SourceWinding: mc.WindingStack().Copy(),
 			}
 		}
-		p.armStepMode(action, mc)
-		// Resume. applyForeign returns early rather than restoring, because
-		// applying a composable continuation repoints the template.
-		_, aerr := mc.ApplyCallable(mc.Arg(0))
+		depth, _ := breakDepthOf(state)
+		p.armStepMode(action, depth)
+		// Resume, re-delivering the value register frozen at the break — resuming
+		// with no arguments would clear it. applyForeign returns early rather than
+		// restoring, because applying a composable continuation repoints the
+		// template.
+		_, aerr := mc.ApplyCallable(mc.Arg(0), mc.BreakResumeValues()...)
 		return aerr
 	}
 	return machine.NewForeignClosure(env, 1, false, fn)
 }
 
-// armStepMode translates a non-abandon verdict into the debugger's step mode.
-func (p *Debugger) armStepMode(action BreakAction, mc *machine.MachineContext) {
+// armStepMode translates a non-abandon verdict into the debugger's step mode,
+// relative to the call depth at the break point.
+func (p *Debugger) armStepMode(action BreakAction, depth int) {
 	switch action {
 	case BreakStep:
 		p.inner.StepInto()
 	case BreakNext:
-		p.inner.StepOver(mc)
+		p.inner.StepOver(depth)
 	case BreakFinish:
-		p.inner.StepOut(mc)
+		p.inner.StepOut(depth)
 	default:
 		p.inner.Continue()
 	}

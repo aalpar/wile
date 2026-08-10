@@ -136,6 +136,10 @@ type MachineContext struct {
 	// unlike vmState, it describes the executing context and must NOT be saved
 	// into continuations. See InstallBreakPrompt.
 	brk *breakState
+	// breakResumeValues is the value register frozen at the current suspension,
+	// to be handed back as the arguments that resume it. See
+	// resolveBreakInterrupt and BreakResumeValues.
+	breakResumeValues MultipleValues
 
 	// lastBreakFile/lastBreakLine/lastBreakFired are the debugger's per-line
 	// de-duplication cursor, read and written only by CheckBreakpoint. Several
@@ -430,8 +434,14 @@ func (p *MachineContext) Run() error {
 		if mc.debugger != nil {
 			bp := mc.debugger.CheckBreakpoint(mc)
 			stop := bp != nil
-			if !stop {
+			// A step stop obeys the same one-stop-per-source-line cursor
+			// CheckBreakpoint maintains, for two reasons: "step to the next source
+			// location" means the next LINE, and a resumed computation re-executes
+			// the instruction it was suspended on — so a step that stopped again on
+			// the same line would never advance.
+			if !stop && !mc.lastBreakFired {
 				stop = mc.debugger.ShouldStep(mc)
+				mc.lastBreakFired = stop
 			}
 			if stop {
 				// With a break boundary armed, emit the signal and let the driver
@@ -1922,6 +1932,17 @@ func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boun
 // performance-representative; benchmark with no breakpoint armed.
 func (p *MachineContext) resolveBreakInterrupt(breakErr *ErrBreakInterrupt, boundary *MachineContinuation) error {
 	p.debugger.setBreak(newBreakSnapshot(p), breakErr.BP)
+
+	// The value register at an arbitrary instruction boundary is live state, not a
+	// parameter: it holds the operand the suspended instruction is about to consume.
+	// Restore does not carry it (a continuation's values arrive as arguments), and
+	// ReinstallSegment ends with SetValues(args...), so resuming with no arguments
+	// would clear it and the next OpPush would push nothing. Stash it here and hand
+	// it back as the resume arguments.
+	live := p.GetValues()
+	saved := make(MultipleValues, len(live))
+	copy(saved, live)
+	p.breakResumeValues = saved
 
 	segment := p.CaptureInterruptContinuationAt(boundary)
 	windingCopy := p.windingStack.Copy()

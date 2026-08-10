@@ -52,9 +52,11 @@ type Debugger struct {
 	// Stepping state — stepMode == StepNone means not stepping. Guarded by mu:
 	// under SRFI-18 the thread that sets a step mode is not the thread that
 	// evaluates it, and `breakpoints` next to it has always been guarded.
-	stepMode       StepMode
-	stepFrameDepth int                  // For step-over
-	stepFrame      *MachineContinuation // For step-out
+	stepMode StepMode
+	// stepFrameDepth is the call depth at the stop that armed the step, for
+	// both step-over and step-out; the two differ only in the comparison
+	// ShouldStep applies to it.
+	stepFrameDepth int
 
 	// breakSnap/breakBP are the most recent break's frozen state, recorded by
 	// setBreak and read by BreakState. Guarded by mu for the same reason.
@@ -236,8 +238,13 @@ func (p *Debugger) ShouldStep(mc *MachineContext) bool {
 		// Only break if we're in the same or shallower frame
 		return mc.CurrentSource() != nil && mc.CallDepth() <= p.stepFrameDepth
 	case StepOut:
-		// Only break if we've returned from the target frame
-		return mc.cont != p.stepFrame
+		// Only break once we are STRICTLY shallower than the frame that armed
+		// the step — that is what "the current frame returned" means. Keying on
+		// the frame POINTER instead cannot work across a suspension:
+		// SliceContinuationAt deep-copies every frame it captures, so a resumed
+		// computation runs on Copy()s and the pointer differs at the first
+		// opcode after the resume, turning step-out into step-into.
+		return mc.CurrentSource() != nil && mc.CallDepth() < p.stepFrameDepth
 	default:
 		return false
 	}
@@ -249,7 +256,6 @@ func (p *Debugger) Continue() {
 	defer p.mu.Unlock()
 
 	p.stepMode = StepNone
-	p.stepFrame = nil
 	p.stepFrameDepth = 0
 }
 
@@ -259,26 +265,29 @@ func (p *Debugger) StepInto() {
 	defer p.mu.Unlock()
 
 	p.stepMode = StepInto
-	p.stepFrame = nil
 	p.stepFrameDepth = 0
 }
 
-// StepOver enables step-over mode.
-func (p *Debugger) StepOver(mc *MachineContext) {
+// StepOver enables step-over mode, relative to the call depth at the stop that
+// armed it. Callers pass the depth explicitly because the context that applies
+// the verdict is suspended at the break BOUNDARY, whose depth is not the break
+// point's.
+func (p *Debugger) StepOver(depth int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	p.stepMode = StepOver
-	p.stepFrameDepth = mc.CallDepth()
+	p.stepFrameDepth = depth
 }
 
-// StepOut enables step-out mode.
-func (p *Debugger) StepOut(mc *MachineContext) {
+// StepOut enables step-out mode, relative to the call depth at the stop that
+// armed it. See StepOver for why the depth is a parameter.
+func (p *Debugger) StepOut(depth int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	p.stepMode = StepOut
-	p.stepFrame = mc.cont
+	p.stepFrameDepth = depth
 }
 
 // OnBreak sets the callback for when a breakpoint is hit.
@@ -294,7 +303,11 @@ func (p *Debugger) OnBreak(fn func(mc *MachineContext, bp *Breakpoint)) {
 // path does it — mc is pool-recycled and zeroed when the evaluation ends, so a
 // consumer reading it after the run gets a blank context.
 func (p *Debugger) TriggerBreak(mc *MachineContext, bp *Breakpoint) {
-	p.setBreak(newBreakSnapshot(mc), bp)
+	// A nil context is part of this method's contract (see
+	// TestDebugger_TriggerBreak_NoCallback): there is simply nothing to freeze.
+	if mc != nil {
+		p.setBreak(newBreakSnapshot(mc), bp)
+	}
 	if p.onBreak != nil {
 		p.onBreak(mc, bp)
 	}
