@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/security"
@@ -97,9 +98,10 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 				return cached, nil
 			}
 			authErr := security.CheckWithAuthorizer(loadAuth, security.AccessRequest{
-				Resource: security.ResourceCode,
-				Action:   security.ActionLoad,
-				Target:   cached.SourceFile,
+				Resource:     security.ResourceCode,
+				Action:       security.ActionLoad,
+				Target:       cached.SourceFile,
+				TargetSource: sourceOf(cached.SourceFile),
 			})
 			if authErr != nil {
 				return nil, werr.WrapForeignErrorf(authErr, "load-library: %s", name.SchemeString())
@@ -173,6 +175,25 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	}
 
 	return lib, nil
+}
+
+// sourceOf reports the security.AccessRequest.TargetSource for a recorded
+// library path, so a cache hit re-asks the question the resolver asked on the
+// miss rather than a different one.
+//
+// The path's own shape decides it, and that is not a guess about which resolver
+// served the file: OS path containment is only meaningful for an ABSOLUTE path.
+// A relative target handed to a path-confining authorizer is resolved against
+// the PROCESS working directory, so its verdict is a coincidence of where the
+// host happens to run — the defect W2-9 removed from the resolvers. Every
+// host-filesystem resolution records an absolute path (both OSFileResolver arms
+// absolutize before they authorize); a relative recording therefore names a file
+// inside a virtual filesystem, which is exactly what SourceVirtualFS says.
+func sourceOf(path string) string {
+	if filepath.IsAbs(path) {
+		return ""
+	}
+	return security.SourceVirtualFS
 }
 
 // propagateRegistryAcrossNamespace shares caller's library registry into child
