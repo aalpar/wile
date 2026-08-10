@@ -129,15 +129,21 @@ type NamespaceInit func(env *environment.EnvironmentFrame) error
 
 // CloseFunc is a per-engine cleanup hook registered from an extension's
 // AddToRegistry — which buildRegistry runs once per engine — and invoked by
-// Engine.Close().
+// Engine.Close() with the closing engine's runtime environment frame.
+//
+// The frame argument is what makes the seam per-engine, and a hook that ignores
+// it is NOT per-engine however it was registered. On a registry shared across
+// engines (WithRegistry) Apply is first-wins, so every engine binds the FIRST
+// engine's registration of a name; a hook closing over state minted in its own
+// AddToRegistry call would therefore reap a tracker that the running primitive
+// never wrote to, while the first engine's hook reaped everyone's resources. A
+// hook that instead reaches its state through env.Namespace().Root() sees
+// exactly the resources created under the engine now closing, whoever's closure
+// recorded them.
 //
 // Distinct from registry.Closeable/WithClose, which hangs off the
-// process-global Extension value and therefore cannot be per-engine: every
-// engine loading `threads.Extension` stores THAT one pointer, so a WithClose
-// hook on it would let engine A's Close() reap engine B's threads. A hook
-// registered here closes over state minted inside AddToRegistry, so each
-// engine gets its own.
-type CloseFunc func() error
+// process-global Extension value: that one gets no engine handle at all.
+type CloseFunc func(env *environment.EnvironmentFrame) error
 
 // GlobalValue pairs a name with a value to be registered as a global binding.
 type GlobalValue struct {
@@ -497,15 +503,12 @@ func (p *PrimitiveRegistry) AddCloser(fn CloseFunc) {
 // Closers returns a defensive copy of the registered per-engine cleanup hooks.
 //
 // A registry reused across engines (WithRegistry) accumulates one hook per
-// engine that loaded the extension, so an engine must take only the hooks
-// registered by its own extension loop — see buildRegistry's startClosers
-// snapshot.
-//
-// That path is still only partly per-engine, by a property of AddPrimitives
-// rather than of this seam: the FIRST registration of a name is the one Apply
-// binds, so on a shared registry every engine calls the first engine's
-// primitive and its hook is the one that sees the resources. Each engine does
-// run its own hook; the later ones just find nothing tracked.
+// engine that loaded the extension, and those hooks are duplicates of each
+// other, not one-per-engine handles: an engine takes only the hooks registered
+// by its own extension loop (see buildRegistry's startClosers snapshot) purely
+// so a hook is not run N times. Which engine's resources a hook reaps is
+// decided by the environment frame Engine.Close hands it, not by which loop
+// registered it — see CloseFunc.
 func (p *PrimitiveRegistry) Closers() []CloseFunc {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

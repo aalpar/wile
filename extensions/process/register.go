@@ -31,13 +31,13 @@ var Builder = registry.NewRegistryBuilder(addPrimitives)
 var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.PrimitiveRegistry) error {
-	// One tracker per engine: addPrimitives runs once per engine (pkg/wile
-	// buildRegistry's extension loop), and process-spawn closes over it, so
-	// Engine.Close reaps only the children that engine spawned. A
-	// registry.Closeable hook on the Extension var above could not — that var is
-	// package-level and shared by every engine in the process.
-	live := newLiveProcs()
-	r.AddCloser(live.Close)
+	// Engine.Close kills and reaps the children the closing engine spawned. The
+	// hook takes no state from here: it finds the tracker on the namespace of the
+	// engine being closed (close.go), which is what keeps it per-engine even when
+	// this registry is shared and every engine binds the first engine's
+	// process-spawn. A registry.Closeable hook on the Extension var above could
+	// not do this at all — that var is package-level and gets no engine handle.
+	r.AddCloser(closeLiveProcs)
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// TODO(contracts): *values.Process has no ValueType enum entry, so
 		// process-* primitives use TypeAny for the process argument; the
@@ -47,7 +47,7 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 			Keywords:   []string{"shell", "exec", "run command", "subprocess"},
 			ParamTypes: []values.TypeConstraint{values.TypeString},
 			ReturnType: values.TypeInteger},
-		{Name: "process-spawn", ParamCount: 2, IsVariadic: true, Impl: live.processSpawnImpl(),
+		{Name: "process-spawn", ParamCount: 2, IsVariadic: true, Impl: PrimProcessSpawn,
 			Doc: "Starts a child process with piped stdin/stdout/stderr. Returns a process object.", ParamNames: []string{"command", "args"}, Category: "process",
 			Keywords:   []string{"fork", "exec", "launch", "subprocess", "popen"},
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeString}, ReturnType: values.TypeAny},

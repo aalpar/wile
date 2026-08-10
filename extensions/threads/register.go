@@ -31,13 +31,13 @@ var Builder = registry.NewRegistryBuilder(addThreads, addMutexes, addConditionVa
 var AddToRegistry = Builder.AddToRegistry
 
 func addThreads(r *registry.PrimitiveRegistry) error {
-	// One tracker per engine: addThreads runs once per engine (pkg/wile
-	// buildRegistry's extension loop), and thread-start! closes over it, so
-	// Engine.Close reaps only the threads that engine started. A
-	// registry.Closeable hook on the Extension var above could not — that var is
-	// package-level and shared by every engine in the process.
-	live := newLiveThreads()
-	r.AddCloser(live.Close)
+	// Engine.Close terminates the threads the closing engine started. The hook
+	// takes no state from here: it finds the tracker on the namespace of the
+	// engine being closed (close.go), which is what keeps it per-engine even when
+	// this registry is shared and every engine binds the first engine's
+	// thread-start!. A registry.Closeable hook on the Extension var above could
+	// not do this at all — that var is package-level and gets no engine handle.
+	r.AddCloser(closeLiveThreads)
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// TODO(contracts): *values.Thread, *values.Mutex, *values.ConditionVariable,
 		// and *values.Time have no ValueType enum entries. Those argument
@@ -67,7 +67,7 @@ func addThreads(r *registry.PrimitiveRegistry) error {
 			Doc: "Sets the thread-local specific value for THREAD.", ParamNames: []string{"thread", "value"}, Category: "threads",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny},
 			ReturnType: values.TypeVoid},
-		{Name: "thread-start!", InvokesProcedure: true, ParamCount: 1, Impl: live.threadStartImpl(),
+		{Name: "thread-start!", InvokesProcedure: true, ParamCount: 1, Impl: PrimThreadStart,
 			Doc: "Starts execution of THREAD in a new goroutine. Returns THREAD.", ParamNames: []string{"thread"}, Category: "threads",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "thread-yield!", Impl: PrimThreadYield,

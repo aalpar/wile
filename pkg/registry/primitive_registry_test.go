@@ -856,20 +856,26 @@ func TestAddCloserCollectsPerRegistrationHooks(t *testing.T) {
 	c.Assert(r.Closers(), qt.HasLen, 0)
 
 	var order []string
-	r.AddCloser(func() error {
+	var seenEnv []*environment.EnvironmentFrame
+	r.AddCloser(func(env *environment.EnvironmentFrame) error {
 		order = append(order, "first")
+		seenEnv = append(seenEnv, env)
 		return nil
 	})
-	r.AddCloser(func() error {
+	r.AddCloser(func(*environment.EnvironmentFrame) error {
 		order = append(order, "second")
 		return errCloserTest
 	})
 
+	ns := environment.NewNamespace()
 	closers := r.Closers()
 	c.Assert(closers, qt.HasLen, 2)
-	c.Assert(closers[0](), qt.IsNil)
-	c.Assert(errors.Is(closers[1](), errCloserTest), qt.IsTrue)
+	c.Assert(closers[0](ns.Runtime()), qt.IsNil)
+	c.Assert(errors.Is(closers[1](ns.Runtime()), errCloserTest), qt.IsTrue)
 	c.Assert(order, qt.DeepEquals, []string{"first", "second"})
+	// The frame is forwarded, not swallowed: it is how a hook finds the closing
+	// engine's state (registry.CloseFunc).
+	c.Assert(seenEnv[0], qt.Equals, ns.Runtime())
 
 	// Defensive copy: overwriting an element of the returned slice must not
 	// reach the registry's backing array. A length check alone would pass even
@@ -879,7 +885,7 @@ func TestAddCloserCollectsPerRegistrationHooks(t *testing.T) {
 	again := r.Closers()
 	c.Assert(again, qt.HasLen, 2)
 	c.Assert(again[0], qt.IsNotNil)
-	c.Assert(again[0](), qt.IsNil)
+	c.Assert(again[0](ns.Runtime()), qt.IsNil)
 	c.Assert(order, qt.DeepEquals, []string{"first", "second", "first"})
 }
 
