@@ -42,6 +42,96 @@ func captureSafetyEngine(t *testing.T) *wile.Engine {
 	return eng
 }
 
+// The Q-E1 audit set: every Go primitive that runs a Scheme procedure or
+// arbitrary code (ApplyCallable, or sub-context compile/run for eval/load).
+//
+// Package-level so TestProcedureInvokersMatchesInvokesProcedure can derive it
+// from the registry rather than trust it, mirroring nonDestructiveBangs in
+// dialect_nomutation_drift_test.go.
+var procedureInvokers = []string{
+	// core control / continuations / exceptions / parameters
+	"apply", "call/cc", "call-with-current-continuation", "call-with-values",
+	"call-with-continuation-barrier", "call-with-immediate-continuation-mark",
+	"with-exception-handler", "raise", "raise-continuable", "call-with-exit",
+	"make-parameter", "call-with-continuation-prompt",
+	"call-with-composable-continuation", "with-timeout",
+	// eval extension: run / transform arbitrary code
+	"eval", "load", "expand", "expand-once", "compile",
+	// `error` raises through machine.RaiseInPlace exactly as raise does. It was
+	// absent from this list and unannotated for as long as both existed — the
+	// static guard could not see RaiseInPlace as a sink, and this list is
+	// hand-curated. Review-wave-1 item 5.
+	"error",
+	// promises / threads / files
+	"force", "make-thread", "thread-start!",
+	"call-with-input-file", "call-with-output-file",
+	// thread-join!/mutex-lock! signal their SRFI-18 conditions through
+	// RaiseInPlace. Annotated rather than carved out: a carve-out list is the
+	// same exception mechanism that let `error` hide.
+	"thread-join!", "mutex-lock!",
+	// %parameter-convert applies the parameter's user converter via ApplyCallable
+	// (the converter may call/cc) — the crosscheck-found omission this list now pins.
+	"%parameter-convert",
+}
+
+// nonPrimitiveProcedureInvokers are the procedureInvokers entries that no
+// PrimitiveSpec.InvokesProcedure annotation can account for, each with the reason
+// it is out of reach of the derivation.
+//
+// A bare exemption would reinstate exactly the curation
+// TestProcedureInvokersMatchesInvokesProcedure exists to remove, so every entry
+// states why — the same discipline nonDestructiveBangs applies
+// (dialect_nomutation_drift_test.go).
+var nonPrimitiveProcedureInvokers = map[string]string{
+	"with-exception-handler": "a Scheme procedure exported by (scheme base) — it parameterizes " +
+		"%exception-handlers — not a registered Go primitive, so there is no spec to annotate",
+}
+
+// TestProcedureInvokersMatchesInvokesProcedure is the ratchet that derives
+// procedureInvokers from the annotations instead of curating it, in both
+// directions. It is the InvokesProcedure twin of
+// TestMutatesMatchesMutationPrimitives.
+//
+// TestInvokesProcedureCompleteness alone accepts a wrong list silently: a name
+// that is bound in KitchenSink and reports IsCaptureSafe()==false passes its
+// assertions whether or not it invokes anything (measured — adding "map" left it
+// green). That is one direction of the same drift the annotation half suffers, so
+// both directions are pinned here: an annotated primitive absent from the list,
+// and a listed name that no annotation and no documented carve-out derives.
+func TestProcedureInvokersMatchesInvokesProcedure(t *testing.T) {
+	eng := captureSafetyEngine(t)
+
+	listed := map[string]bool{}
+	for _, name := range procedureInvokers {
+		listed[name] = true
+	}
+
+	annotated := map[string]bool{}
+	for _, r := range eng.Registry().Primitives() {
+		if r.Spec.InvokesProcedure {
+			annotated[r.Spec.Name] = true
+		}
+	}
+
+	for name := range annotated {
+		t.Run("annotated-is-listed/"+name, func(t *testing.T) {
+			qt.Assert(t, listed[name], qt.IsTrue,
+				qt.Commentf("%s is annotated InvokesProcedure:true but is absent from "+
+					"procedureInvokers, so nothing pins its binding to IsCaptureSafe()==false", name))
+		})
+	}
+
+	for name := range listed {
+		t.Run("listed-is-derived/"+name, func(t *testing.T) {
+			_, exempt := nonPrimitiveProcedureInvokers[name]
+			qt.Assert(t, annotated[name] || exempt, qt.IsTrue,
+				qt.Commentf("%s is in procedureInvokers but is neither a registered primitive "+
+					"annotated InvokesProcedure:true nor listed in nonPrimitiveProcedureInvokers "+
+					"with a reason", name))
+		})
+	}
+}
+
 // TestInvokesProcedureCompleteness is the safety net for Lever E's flipped default
 // (PrimitiveSpec.InvokesProcedure defaults false = capture-safe). The flipped default
 // is a soundness commitment: a procedure-invoking primitive that is NOT annotated
@@ -55,37 +145,16 @@ func captureSafetyEngine(t *testing.T) *wile.Engine {
 // continuation suite's job. If a continuation test ever regresses, the first fix is
 // to add the missing name here AND annotate the primitive — the incomplete list is
 // the real bug (per the plan's kill criterion).
+//
+// What it also cannot catch is a WRONG list: every assertion below holds for any
+// name that happens to be bound and not capture-safe, so a mistaken entry passes.
+// TestProcedureInvokersMatchesInvokesProcedure closes that half — it refuses a
+// listed name that no annotation (or documented carve-out) derives, and refuses an
+// annotated primitive that is not listed.
 func TestInvokesProcedureCompleteness(t *testing.T) {
 	eng := captureSafetyEngine(t)
 	env := eng.Environment()
 
-	// The Q-E1 audit set: every Go primitive that runs a Scheme procedure or
-	// arbitrary code (ApplyCallable, or sub-context compile/run for eval/load).
-	procedureInvokers := []string{
-		// core control / continuations / exceptions / parameters
-		"apply", "call/cc", "call-with-current-continuation", "call-with-values",
-		"call-with-continuation-barrier", "call-with-immediate-continuation-mark",
-		"with-exception-handler", "raise", "raise-continuable", "call-with-exit",
-		"make-parameter", "call-with-continuation-prompt",
-		"call-with-composable-continuation", "with-timeout",
-		// eval extension: run / transform arbitrary code
-		"eval", "load", "expand", "compile",
-		// `error` raises through machine.RaiseInPlace exactly as raise does. It was
-		// absent from this list and unannotated for as long as both existed — the
-		// static guard could not see RaiseInPlace as a sink, and this list is
-		// hand-curated. Review-wave-1 item 5.
-		"error",
-		// promises / threads / files
-		"force", "make-thread", "thread-start!",
-		"call-with-input-file", "call-with-output-file",
-		// thread-join!/mutex-lock! signal their SRFI-18 conditions through
-		// RaiseInPlace. Annotated rather than carved out: a carve-out list is the
-		// same exception mechanism that let `error` hide.
-		"thread-join!", "mutex-lock!",
-		// %parameter-convert applies the parameter's user converter via ApplyCallable
-		// (the converter may call/cc) — the crosscheck-found omission this list now pins.
-		"%parameter-convert",
-	}
 	for _, name := range procedureInvokers {
 		t.Run("invoker/"+name, func(t *testing.T) {
 			c := qt.New(t)
