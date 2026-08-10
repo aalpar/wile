@@ -258,7 +258,7 @@ string → Tokenizer → Parser → SyntaxValue
 ### Essential Reading
 
 - **`CODING_STYLE.md`** — Style guide
-- **`PRIMITIVES.md`** — Complete primitives reference
+- **`PRIMITIVES.md`** — Primitives reference (deliberately not exhaustive; it says so and states the gap)
 - **`BIBLIOGRAPHY.md`** — Papers and specifications the implementation follows
 - **`docs/`** — Architecture documentation organized by topic (see `docs/INDEX.md`); design documents for major features live here. Working notes kept during development are not part of the repository.
 

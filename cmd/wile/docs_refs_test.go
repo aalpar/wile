@@ -179,6 +179,14 @@ var correctedDocClaims = []correctedDocClaim{
 		why:   "The package is pkg/syntax and has been public since it was promoted out of pkg/internal.",
 	},
 	{
+		name:  "CONTRIBUTING_PRIMITIVES_is_complete",
+		doc:   "CONTRIBUTING.md",
+		stale: "Complete primitives reference",
+		why: "PRIMITIVES.md is not complete and now says so: 73 names bound in the CLI's default " +
+			"top level never appear in it. Two tracked documents disagreeing about the same " +
+			"document is the drift this pass exists to close.",
+	},
+	{
 		name:  "CONTRIBUTING_stdlib_test_dir",
 		doc:   "CONTRIBUTING.md",
 		stale: "`stdlib/lib/srfi/1/test/fold-test.scm`",

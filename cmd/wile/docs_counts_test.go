@@ -235,7 +235,7 @@ func countSummaryDeviations(t *testing.T, source string) int {
 		end = rule
 	}
 	q := 0
-	for _, line := range strings.Split(summary[:end], "\n") {
+	for line := range strings.SplitSeq(summary[:end], "\n") {
 		if summaryItemHead.MatchString(line) {
 			q++
 		}
@@ -262,14 +262,15 @@ var docCodeSpan = regexp.MustCompile("`([^`\n]+)`")
 // no user-facing contract and are excluded on both sides.
 //
 // A name counts as documented when it appears as a whitespace-separated token
-// inside any code span, which over-counts documentation rather than under-counts
-// it: a name mentioned only in passing still suppresses its row. That direction
-// is deliberate — the sentence this feeds claims a floor on what is missing.
+// inside any code span, so the result is exact for "never spelled in a code
+// span" and a lower bound on "has no entry": a name named only in passing, in
+// another primitive's prose, suppresses its own row. The generous direction is
+// deliberate, since the alternative is parsing the document's table shape.
 func countUndocumentedBoundNames(t *testing.T, source string) int {
 	t.Helper()
 	documented := map[string]bool{}
 	for _, m := range docCodeSpan.FindAllStringSubmatch(source, -1) {
-		for _, token := range strings.Fields(m[1]) {
+		for token := range strings.FieldsSeq(m[1]) {
 			documented[token] = true
 		}
 	}
@@ -279,7 +280,7 @@ func countUndocumentedBoundNames(t *testing.T, source string) int {
 		t.Fatalf("listing the bound names exited %d: %s", res.exitCode, res.stderr)
 	}
 	q := 0
-	for _, name := range strings.Split(res.stdout, "\n") {
+	for name := range strings.SplitSeq(res.stdout, "\n") {
 		if name == "" || strings.HasPrefix(name, "%") || documented[name] {
 			continue
 		}
