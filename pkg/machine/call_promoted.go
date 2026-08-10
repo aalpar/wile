@@ -48,6 +48,10 @@
 //  4. registry/core/*.go  — declare Identity: machine.IdentityXxx on the
 //     primitive's spec. Without it the closure carries no token and the op is
 //     never promoted: correct, but a permanent deopt no value assertion sees.
+//     TestPromotedPrimitivesCarryTheirIdentity (pkg/wile) closes its table over
+//     PromotedIdentities(), so it reddens until the new op has a row naming this
+//     token — that red is the only thing standing between a forgotten Identity:
+//     and a silent, permanent loss of inlining.
 //
 // No changes needed in native_template.go or disassemble.go — both use
 // opcodeTable[op].operandKind metadata to handle OperandCachedBinding generically.
@@ -151,6 +155,23 @@ func PromotedMutatorNames() []string {
 		if op.mutates {
 			q = append(q, op.name)
 		}
+	}
+	return q
+}
+
+// PromotedIdentities returns the identity token of every promoted primitive, one
+// per descriptor in promotedOps. Exported for the deopt ratchet, which asserts
+// that each token is stamped on the primitive an Engine actually binds and so
+// lives outside this package.
+//
+// Cardinality is the point. A promoted primitive whose spec loses its Identity:
+// keeps computing the right answer and merely stops being inlined, forever, which
+// no value assertion sees; without a way to enumerate the descriptors the ratchet
+// is a hand-written table with nothing forcing a nineteenth op to appear in it.
+func PromotedIdentities() []*PrimitiveIdentity {
+	q := make([]*PrimitiveIdentity, 0, len(promotedOps))
+	for _, op := range promotedOps {
+		q = append(q, op.identity)
 	}
 	return q
 }

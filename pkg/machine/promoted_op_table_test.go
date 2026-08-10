@@ -182,6 +182,21 @@ func TestPromotedOpsCarryDistinctIdentities(t *testing.T) {
 			t.Errorf("promoted op %q carries identity named %q", op.name, op.identity.Name())
 		}
 	}
+
+	// PromotedIdentities is what the pkg/wile deopt ratchet closes its table
+	// against. An accessor that dropped or duplicated an entry would leave that
+	// ratchet asserting a cardinality nothing holds, which is the failure mode it
+	// exists to prevent.
+	exported := PromotedIdentities()
+	if len(exported) != len(promotedOps) {
+		t.Errorf("PromotedIdentities returned %d tokens, promotedOps holds %d", len(exported), len(promotedOps))
+	}
+	for _, identity := range exported {
+		_, ok := seen[identity]
+		if !ok {
+			t.Errorf("PromotedIdentities returned %v, which no descriptor carries", identity)
+		}
+	}
 }
 
 // TestPromotedOpForIdentityMatchesDescriptors pins that the lookup the peephole
