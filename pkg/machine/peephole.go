@@ -207,9 +207,10 @@ func isPushOp(op OpCode) bool {
 // isolation), replace PullApply with OpCallForeignCached(idx). The runtime
 // restores the continuation after the call to recover the caller's state.
 //
-// Promoted primitives (the 17 names in promotedOpForName: predicates, car/cdr,
-// vector-ref, cons, and 2-arg arithmetic/comparison) delete both SaveCont and
-// PushCachedBinding because they use fixed Pop() counts instead of Drain().
+// Promoted primitives (the promotedOps descriptors, matched by
+// PrimitiveIdentity: predicates, car/cdr, vector-ref, cons, set-cdr!, and 2-arg
+// arithmetic/comparison) delete both SaveCont and PushCachedBinding because they
+// use fixed Pop() counts instead of Drain().
 //
 // Tail pattern (no preceding SaveContinuation):
 //
@@ -302,7 +303,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			// Check for promoted primitive: inline the hot primitive logic
 			// directly, bypassing arity check and indirect function call.
 			argCount := pullIdx - (i + 2)
-			promotedOp, _, promotedArity := promotedOpForName(fcls.name)
+			promotedOp, _, promotedArity := promotedOpForIdentity(fcls.identity)
 			if promotedOp != OpInvalid && argCount == promotedArity {
 				plan.Delete(i, i+2)
 				plan.Replace(pullIdx, pullIdx+1,
@@ -382,7 +383,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 
 			// Check for promoted primitive (tail variant).
 			argCount := pullIdx - (i + 1)
-			_, promotedTailOp, promotedArity := promotedOpForName(fcls.name)
+			_, promotedTailOp, promotedArity := promotedOpForIdentity(fcls.identity)
 			if promotedTailOp != OpInvalid && argCount == promotedArity {
 				plan.Delete(i, i+1)
 				plan.Replace(pullIdx, pullIdx+1,
@@ -614,7 +615,7 @@ func fusePromotedCompoundArgs(tpl *NativeTemplate, plan *EditPlan) {
 		if !ok {
 			continue
 		}
-		_, promotedTailOp, promotedArity := promotedOpForName(fcls.name)
+		_, promotedTailOp, promotedArity := promotedOpForIdentity(fcls.identity)
 		if promotedTailOp == OpInvalid {
 			continue
 		}

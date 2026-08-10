@@ -137,7 +137,7 @@ func TestNewSubContextCarriesEngineState(t *testing.T) {
 
 // TestPromotedOpsCoverPromotedOpcodes pins the promotedOps registry against the
 // opcode range it describes. A descriptor that exists but is left off the list
-// would otherwise be invisible to promotedOpForName, silently disabling
+// would otherwise be invisible to promotedOpForIdentity, silently disabling
 // promotion for that primitive while every other test still passed.
 func TestPromotedOpsCoverPromotedOpcodes(t *testing.T) {
 	covered := make(map[OpCode]string)
@@ -162,20 +162,50 @@ func TestPromotedOpsCoverPromotedOpcodes(t *testing.T) {
 	}
 }
 
-// TestPromotedOpForNameMatchesDescriptors pins that the name lookup the peephole
-// optimizer uses agrees with each descriptor, and that a non-promoted name
-// resolves to OpInvalid.
-func TestPromotedOpForNameMatchesDescriptors(t *testing.T) {
+// TestPromotedOpsCarryDistinctIdentities pins the discriminator itself. A
+// descriptor with no identity would key the lookup map on nil and match every
+// unstamped closure; two descriptors sharing one token would collapse into one
+// entry and silently deopt the other.
+func TestPromotedOpsCarryDistinctIdentities(t *testing.T) {
+	seen := make(map[*PrimitiveIdentity]string, len(promotedOps))
 	for _, op := range promotedOps {
-		nonTail, tail, arity := promotedOpForName(op.name)
+		if op.identity == nil {
+			t.Errorf("promoted op %q has no identity", op.name)
+			continue
+		}
+		prev, dup := seen[op.identity]
+		if dup {
+			t.Errorf("identity %p claimed by both %q and %q", op.identity, prev, op.name)
+		}
+		seen[op.identity] = op.name
+		if op.identity.Name() != op.name {
+			t.Errorf("promoted op %q carries identity named %q", op.name, op.identity.Name())
+		}
+	}
+}
+
+// TestPromotedOpForIdentityMatchesDescriptors pins that the lookup the peephole
+// optimizer uses agrees with each descriptor, and that both flavours of "not a
+// promoted primitive" resolve to OpInvalid: no identity at all, and a token that
+// merely spells the same name.
+func TestPromotedOpForIdentityMatchesDescriptors(t *testing.T) {
+	for _, op := range promotedOps {
+		nonTail, tail, arity := promotedOpForIdentity(op.identity)
 		if nonTail != op.nonTail || tail != op.tail || arity != op.arity {
-			t.Errorf("promotedOpForName(%q) = (%s, %s, %d), want (%s, %s, %d)",
+			t.Errorf("promotedOpForIdentity(%q) = (%s, %s, %d), want (%s, %s, %d)",
 				op.name, nonTail, tail, arity, op.nonTail, op.tail, op.arity)
 		}
 	}
-	nonTail, tail, arity := promotedOpForName("vector-set!")
+	nonTail, tail, arity := promotedOpForIdentity(nil)
 	if nonTail != OpInvalid || tail != OpInvalid || arity != 0 {
-		t.Errorf("promotedOpForName(non-promoted) = (%s, %s, %d), want (OpInvalid, OpInvalid, 0)",
+		t.Errorf("promotedOpForIdentity(nil) = (%s, %s, %d), want (OpInvalid, OpInvalid, 0)",
+			nonTail, tail, arity)
+	}
+	// The compile-time half of the pointer-not-name assertion: a fresh token
+	// named "cons" is a different primitive from the promoted cons.
+	nonTail, tail, arity = promotedOpForIdentity(NewPrimitiveIdentity("cons"))
+	if nonTail != OpInvalid || tail != OpInvalid || arity != 0 {
+		t.Errorf("promotedOpForIdentity(fresh \"cons\") = (%s, %s, %d), want (OpInvalid, OpInvalid, 0)",
 			nonTail, tail, arity)
 	}
 }

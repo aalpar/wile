@@ -15,6 +15,7 @@
 package core
 
 import (
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/values"
 )
@@ -25,38 +26,47 @@ func addArithmetic(r *registry.PrimitiveRegistry) error {
 		{Name: "+", ParamCount: 1, IsVariadic: true, Impl: PrimAdd,
 			Doc: "Returns the sum of its arguments. With no arguments, returns 0 (additive identity).\n\nExamples:\n  (+)          => 0\n  (+ 1 2)      => 3\n  (+ 1 2 3 4)  => 10", ParamNames: []string{"z"}, Category: "arithmetic",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber}, ReturnType: values.TypeNumber,
-			Keywords: []string{"add", "plus", "sum"}},
+			Keywords: []string{"add", "plus", "sum"},
+			Identity: machine.IdentityAdd},
 		{Name: "-", ParamCount: 2, IsVariadic: true, Impl: PrimSub,
 			Doc: "With one argument, returns its negation. With two or more, subtracts all subsequent arguments from the first.\n\nExamples:\n  (- 5)        => -5\n  (- 5 3)      => 2\n  (- 10 3 2)   => 5", ParamNames: []string{"z1", "z2"}, Category: "arithmetic",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber, values.TypeNumber}, ReturnType: values.TypeNumber,
-			Keywords: []string{"subtract", "minus", "negate"}},
+			Keywords: []string{"subtract", "minus", "negate"},
+			Identity: machine.IdentitySub},
 		{Name: "*", ParamCount: 1, IsVariadic: true, Impl: PrimMul,
 			Doc: "Returns the product of its arguments. With no arguments, returns 1 (multiplicative identity).\n\nExamples:\n  (*)          => 1\n  (* 2 3)      => 6\n  (* 2 3 4)    => 24", ParamNames: []string{"z"}, Category: "arithmetic",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber}, ReturnType: values.TypeNumber,
-			Keywords: []string{"multiply", "times", "product"}},
+			Keywords: []string{"multiply", "times", "product"},
+			Identity: machine.IdentityMul},
 		{Name: "/", ParamCount: 2, IsVariadic: true, Impl: PrimDiv,
 			Doc: "With one argument, returns its reciprocal. With two or more, divides the first by each subsequent argument. Raises an error on division by zero.\n\nExamples:\n  (/ 2)        => 1/2\n  (/ 6 3)      => 2\n  (/ 12 3 2)   => 2", ParamNames: []string{"z1", "z2"}, Category: "arithmetic",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber, values.TypeNumber}, ReturnType: values.TypeNumber,
-			Keywords: []string{"divide", "division", "reciprocal"}},
+			Keywords: []string{"divide", "division", "reciprocal"},
+			Identity: machine.IdentityDiv},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// Comparisons
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "=", ParamCount: 2, IsVariadic: true, Impl: PrimNumEq,
 			Doc: "Returns #t if all arguments are numerically equal. Compares across exactness: (= 1 1.0) is #t.\n\nExamples:\n  (= 1 1)        => #t\n  (= 1 1.0)      => #t\n  (= 1 2)        => #f", ParamNames: []string{"z1", "z2", "zs"}, Category: "arithmetic",
-			ParamTypes: []values.TypeConstraint{values.TypeNumber, values.TypeNumber}, ReturnType: values.TypeBoolean},
+			ParamTypes: []values.TypeConstraint{values.TypeNumber, values.TypeNumber}, ReturnType: values.TypeBoolean,
+			Identity: machine.IdentityNumEq},
 		{Name: "<", ParamCount: 2, IsVariadic: true, Impl: PrimNumLt,
 			Doc: "Returns #t if each argument is strictly less than the next. Arguments must be real numbers.\n\nExamples:\n  (< 1 2)        => #t\n  (< 1 2 3)      => #t\n  (< 1 2 2)      => #f", ParamNames: []string{"x1", "x2", "xs"}, Category: "arithmetic",
-			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeBoolean},
+			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeBoolean,
+			Identity: machine.IdentityNumLt},
 		{Name: ">", ParamCount: 2, IsVariadic: true, Impl: PrimNumGt,
 			Doc: "Returns #t if each argument is strictly greater than the next. Arguments must be real numbers.\n\nExamples:\n  (> 3 2)        => #t\n  (> 3 2 1)      => #t\n  (> 3 2 2)      => #f", ParamNames: []string{"x1", "x2", "xs"}, Category: "arithmetic",
-			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeBoolean},
+			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeBoolean,
+			Identity: machine.IdentityNumGt},
 		{Name: "<=", ParamCount: 2, IsVariadic: true, Impl: PrimNumLe,
 			Doc: "Returns #t if each argument is less than or equal to the next. Arguments must be real numbers.\n\nExamples:\n  (<= 1 2)       => #t\n  (<= 1 1)       => #t\n  (<= 2 1)       => #f", ParamNames: []string{"x1", "x2", "xs"}, Category: "arithmetic",
-			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeBoolean},
+			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeBoolean,
+			Identity: machine.IdentityNumLe},
 		{Name: ">=", ParamCount: 2, IsVariadic: true, Impl: PrimNumGe,
 			Doc: "Returns #t if each argument is greater than or equal to the next. Arguments must be real numbers.\n\nExamples:\n  (>= 3 2)       => #t\n  (>= 3 3)       => #t\n  (>= 2 3)       => #f", ParamNames: []string{"x1", "x2", "xs"}, Category: "arithmetic",
-			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeBoolean},
+			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeBoolean,
+			Identity: machine.IdentityNumGe},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// Basic numeric operations

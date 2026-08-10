@@ -431,6 +431,56 @@ func TestPromotedOverrideAgreesWithGenericCall(t *testing.T) {
 	}
 }
 
+// TestPromotedPrimitivesCarryTheirIdentity is the deopt ratchet. Dropping an
+// Identity: from a promoted primitive's spec is invisible to every value
+// assertion in the tree — the primitive keeps computing the right answer, it just
+// stops being inlined, permanently. Restating all eighteen here is the point, the
+// same way expectedPromotedPure restates the mutates partition: revert one spec
+// line and exactly one row goes red.
+func TestPromotedPrimitivesCarryTheirIdentity(t *testing.T) {
+	tests := []struct {
+		name string
+		want *machine.PrimitiveIdentity
+	}{
+		{"eq?", machine.IdentityEqQ},
+		{"vector?", machine.IdentityVectorQ},
+		{"vector-ref", machine.IdentityVectorRef},
+		{"null?", machine.IdentityNullQ},
+		{"pair?", machine.IdentityPairQ},
+		{"car", machine.IdentityCar},
+		{"cdr", machine.IdentityCdr},
+		{"cons", machine.IdentityCons},
+		{"+", machine.IdentityAdd},
+		{"-", machine.IdentitySub},
+		{"*", machine.IdentityMul},
+		{"/", machine.IdentityDiv},
+		{"<", machine.IdentityNumLt},
+		{"<=", machine.IdentityNumLe},
+		{">", machine.IdentityNumGt},
+		{">=", machine.IdentityNumGe},
+		{"=", machine.IdentityNumEq},
+		{"set-cdr!", machine.IdentitySetCdr},
+	}
+
+	ctx := context.Background()
+	engine, err := NewEngine(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v, ok := engine.Get(tt.name)
+			if !ok {
+				t.Fatalf("%s is not bound", tt.name)
+			}
+			got := machine.IdentityOf(v.Internal())
+			if got != tt.want {
+				t.Errorf("IdentityOf(%s) = %v, want %v", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
 // dumpTemplateOpcodes logs all opcodes in a template tree for debugging
 // failed assertions.
 func dumpTemplateOpcodes(t *testing.T, tpl *machine.NativeTemplate, path string) {

@@ -15,6 +15,7 @@
 package core
 
 import (
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/values"
 )
@@ -34,7 +35,8 @@ func addVectors(r *registry.PrimitiveRegistry) error {
 		{Name: "vector-ref", ParamCount: 2, Impl: PrimVectorRef,
 			Doc: "Returns the element at 0-based index K in VECTOR. Raises an error if K is out of range.\n\nExamples:\n  (vector-ref #(a b c) 0)  => a\n  (vector-ref #(a b c) 2)  => c", ParamNames: []string{"vector", "k"}, Category: "vectors",
 			ParamTypes: []values.TypeConstraint{values.TypeVector, values.TypeInteger}, ReturnType: values.TypeAny,
-			Keywords: []string{"index", "get element", "array access", "nth"}},
+			Keywords: []string{"index", "get element", "array access", "nth"},
+			Identity: machine.IdentityVectorRef},
 		{Name: "vector-set!", Mutates: true, ParamCount: 3, Impl: PrimVectorSet,
 			Doc: "Stores OBJ at 0-based index K in VECTOR. Raises an error if K is out of range.\n\nExamples:\n  (let ((v (vector 1 2 3))) (vector-set! v 1 'x) v)  => #(1 x 3)", ParamNames: []string{"vector", "k", "obj"}, Category: "vectors",
 			ParamTypes: []values.TypeConstraint{values.TypeVector, values.TypeInteger, values.TypeAny}, ReturnType: values.TypeVoid},
