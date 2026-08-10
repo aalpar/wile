@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -102,13 +103,22 @@ func (p *Integer) Get() int64 {
 
 	// golangci-lint configuration: only enable gocritic/ruleguard.
 	//
-	// The issues block is load-bearing. Both of golangci-lint's default output
-	// caps hide diagnostics this table asserts on. max-same-issues is 3 and
-	// counts by identical message text, so with it in place only three of the
-	// six same-message noUncheckedArgCast positives are emitted (measured:
-	// 41:2, 46:9 and 51:9 dropped, making live patterns read as dead).
-	// uniq-by-line keeps one issue per line, which would hide a second rule
-	// firing on a line another expectation already pins.
+	// The issues block disables all three of golangci-lint's output caps.
+	// One bites today and is why the block exists: max-same-issues (default
+	// 3) counts by identical message text, so armed it emits only three of
+	// the six same-message noUncheckedArgCast positives (measured: 41:2,
+	// 46:9 and 51:9 dropped, making live patterns read as dead).
+	//
+	// The other two are latent, and the more dangerous of the pair is
+	// max-issues-per-linter (default 50): gocritic is the only enabled
+	// linter, so this whole table shares one budget, and truncation makes
+	// every `present: false` row pass vacuously (measured at 15 of 50 today;
+	// forced to 3, all five negative rows pass while twelve positives fail).
+	// uniq-by-line (default true) would hide a second rule firing on a line
+	// another expectation already pins; no fixture line carries two rules
+	// today, so removing it currently changes nothing (measured: 15
+	// diagnostics on 15 distinct lines, suite green). The output_not_truncated
+	// subtest below is what keeps all three disabled.
 	writeFile(".golangci.yml", `version: "2"
 run:
   timeout: 1m
@@ -131,6 +141,7 @@ linters:
 issues:
   uniq-by-line: false
   max-same-issues: 0
+  max-issues-per-linter: 0
 `)
 
 	// ── Production fixture: positive cases (should trigger) ──────────
@@ -542,6 +553,26 @@ func commaOkGood(mc *argCtx) {
 		},
 	}
 
+	// Truncation guard, and the only thing that keeps the present:false rows
+	// honest. Each present:true row pins exactly one diagnostic, so the
+	// emitted count must equal the number of such rows. If any of the three
+	// output caps in the fixture .golangci.yml is re-armed, the tail of the
+	// output disappears and every present:false row starts passing because
+	// its substring is absent from a truncated output rather than from a
+	// correct one — a failure mode no substring assertion can see.
+	t.Run("output_not_truncated", func(t *testing.T) {
+		want := 0
+		for _, exp := range expectations {
+			if exp.present {
+				want++
+			}
+		}
+		got := len(ruleguardDiagnostic.FindAllString(lintOutput, -1))
+		if got != want {
+			t.Errorf("expected %d ruleguard diagnostics, got %d (a shortfall means an output cap truncated; an excess means a rule fired somewhere the table does not pin)", want, got)
+		}
+	})
+
 	for _, exp := range expectations {
 		t.Run(exp.name, func(t *testing.T) {
 			found := strings.Contains(lintOutput, exp.substr)
@@ -554,6 +585,10 @@ func commaOkGood(mc *argCtx) {
 		})
 	}
 }
+
+// ruleguardDiagnostic matches one golangci-lint diagnostic line attributed to
+// a ruleguard rule: "path/file.go:line:col: ruleguard: <message>".
+var ruleguardDiagnostic = regexp.MustCompile(`(?m)^[^\s:]+\.go:\d+:\d+: ruleguard: `)
 
 // testContext returns a context bounded by either the test deadline (if set)
 // or the given fallback duration, whichever is shorter.

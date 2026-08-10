@@ -148,10 +148,14 @@ func noDirectValueRegisterAccess(m dsl.Matcher) { //nolint:unused // loaded by g
 // Only the single-value forms are matched. The comma-ok form
 // (`x, ok := mc.Arg(0).(*values.Integer)`) is a distinct two-LHS AST shape and
 // is the safe, idiomatic pattern — it is intentionally NOT flagged. The
-// patterns below cover the four expression positions in which this tree
-// actually writes a single-value assertion: assignment, selector chain,
-// return, and call argument. Positions no call site uses (composite literal,
-// index, binary operand) are deliberately absent rather than enumerated.
+// patterns below cover four positions: single-LHS assignment, selector chain,
+// single-result return, and call argument. Each is literal in its LHS/result
+// arity, so three sibling shapes of those same positions stay silent —
+// `var n = mc.Arg(0).(*values.T)` (an ast.ValueSpec, not an ast.AssignStmt), a
+// multi-LHS assignment, and a multi-result return. Those three, plus the
+// composite-literal, index, and binary-operand positions, have zero call sites
+// tree-wide today. So this is a backstop against the realistic authoring
+// mistakes, not a proof that no unchecked Arg() cast can reach the tree.
 //
 // Scoped to `*values.$t` (concrete pointer asserts) — the panic-prone shape the
 // finding targets; interface asserts (values.Number, values.Tuple) are almost
