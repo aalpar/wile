@@ -99,7 +99,7 @@ func TestPickBranchVarMatchesLinearScan(t *testing.T) {
 		return best
 	}
 
-	for trial := 0; trial < 200; trial++ {
+	for trial := range 200 {
 		s := newSolver(context.Background(), nil, numVars, -1)
 		// A mix of ties and distinct activities, and a mix of assigned and
 		// unassigned variables. Deliberately coarse values so ties are common.
