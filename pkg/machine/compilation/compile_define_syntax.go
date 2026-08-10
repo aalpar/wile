@@ -91,11 +91,23 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	symbolScopes := keywordSym.Scopes()
 	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, symbolScopes)
 
-	// Docstring only — the scope set is now the creation key, not a post-stamp.
+	// Provenance and docstring only — the scope set is now the creation key, not
+	// a post-stamp. The metadata write goes through UpdateMeta (copy-on-write
+	// CAS) rather than a write-through pointer, because this binding is a shared
+	// global under concurrent SRFI-18 compiles.
 	binding := expandEnv.GlobalEnvironment().GetOwnGlobalBinding(globalIndex)
-	if binding != nil && docstring != "" {
+	if binding != nil {
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
-			m.Doc = docstring
+			// Top-level define-syntax supersedes an imported binding
+			// (R7RS §5.3.1), mirroring the variable path in compile_define.go:
+			// the transformer written below lands in the SAME slot, so the
+			// import *provenance* goes with it. Without this, IsStable()
+			// (m.Imported || m.Stable) keeps reporting "cannot be rebound"
+			// about a macro the user has just rebound.
+			m.Imported = false
+			if docstring != "" {
+				m.Doc = docstring
+			}
 			return true
 		})
 	}
