@@ -15,6 +15,7 @@
 package core_test
 
 import (
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -22,6 +23,7 @@ import (
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // TestDatumToSyntaxRefusesCircularDatum covers every aggregate arm that
@@ -52,6 +54,10 @@ func TestDatumToSyntaxRefusesCircularDatum(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
+			// WHICH error: any sentinel would satisfy IsNotNil, and the depth
+			// bound below raises a different one on inputs that look similar.
+			qt.Assert(t, errors.Is(err, werr.ErrCircularList), qt.IsTrue,
+				qt.Commentf("want ErrCircularList, got %v", err))
 		})
 	}
 }
@@ -78,4 +84,44 @@ func TestDatumToSyntaxSharedStructureStillConverts(t *testing.T) {
 	qt.Assert(t, result, valuestest.SchemeEquals,
 		values.List(values.List(values.NewInteger(1), values.NewInteger(2)),
 			values.List(values.NewInteger(1), values.NewInteger(2))))
+}
+
+// TestDatumToSyntaxRefusesTooDeeplyNestedDatum is the third leg. The cycle
+// refusal and the iterative spine handle circularity and LENGTH; NESTING is
+// the one that stays recursive, and no reader bound reaches a datum built at
+// runtime — which is exactly where these arrive from.
+//
+// Measured before the bound: 200,000 levels converted, 2,000,000 killed the
+// host process with `fatal error: stack overflow`. It is now refused with a
+// catchable error naming the limit, at any depth.
+func TestDatumToSyntaxRefusesTooDeeplyNestedDatum(t *testing.T) {
+	deep := `(let loop ((i 0) (acc '()))
+	           (if (= i 20000) acc (loop (+ i 1) (list acc))))`
+
+	_, err := testhelpers.RunSchemeCode(t, `(datum->syntax #f `+deep+`)`)
+	qt.Assert(t, err, qt.IsNotNil)
+	// The depth sentinel, NOT the cycle sentinel: this datum is acyclic, and
+	// conflating the two would hide a real cycle-detector regression.
+	qt.Assert(t, errors.Is(err, werr.ErrParseDepthExceeded), qt.IsTrue,
+		qt.Commentf("want ErrParseDepthExceeded, got %v", err))
+	qt.Assert(t, errors.Is(err, werr.ErrCircularList), qt.IsFalse)
+
+	// A domain error, so guard must catch it — the stack overflow it replaced
+	// was catchable by nothing, at any layer.
+	caught, err := testhelpers.RunSchemeCode(t,
+		`(guard (e (#t 'caught)) (datum->syntax #f `+deep+`))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, caught, valuestest.SchemeEquals, values.NewSymbol("caught"))
+
+	// The control: well under the bound still converts, so the limit narrows
+	// rather than forbids. LENGTH is deliberately unbounded — a long list is
+	// not a deep one — and the shared-structure row above covers that the
+	// bound is not accidentally counting spine cells.
+	shallow, err := testhelpers.RunSchemeCode(t, `
+		(let loop ((i 0) (acc '()))
+		  (if (= i 5000)
+		      (begin (datum->syntax #f acc) 'ok)
+		      (loop (+ i 1) (list acc))))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, shallow, valuestest.SchemeEquals, values.NewSymbol("ok"))
 }

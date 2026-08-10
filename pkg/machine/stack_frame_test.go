@@ -173,8 +173,9 @@ func TestStackTrace_String_MultipleFrames(t *testing.T) {
 // emitted when BOTH contexts were nil, so one result list interleaved two
 // renderings of the same state.
 func TestStackTraceToSchemeListOmitsAbsentPositions(t *testing.T) {
+	// NewSourceIndexes takes (index, COLUMN, LINE) in that order — line last.
 	located := syntax.NewSourceContext("(f)", "prog.scm",
-		syntax.NewSourceIndexes(10, 3, 5), syntax.NewSourceIndexes(13, 3, 8))
+		syntax.NewSourceIndexes(10, 5, 3), syntax.NewSourceIndexes(13, 8, 3))
 	// A context that EXISTS and has no position. This is the shape the nil
 	// test admitted: eval mints exactly this for a runtime-built datum.
 	positionless := syntax.NewSourceContext("", "",
@@ -182,13 +183,15 @@ func TestStackTraceToSchemeListOmitsAbsentPositions(t *testing.T) {
 	// Positioned but unnamed: the stdin CLI mode and any embedder calling
 	// EvalMultiple without a name. "" is not a filename.
 	unnamed := syntax.NewSourceContext("(f)", "",
-		syntax.NewSourceIndexes(4, 1, 4), syntax.NewSourceIndexes(7, 1, 7))
+		syntax.NewSourceIndexes(4, 4, 1), syntax.NewSourceIndexes(7, 7, 1))
 
 	tcs := []struct {
 		name      string
 		frame     StackFrame
 		wantKeys  []string
-		wantFalse bool // the file key must be #f rather than a string
+		wantFalse bool   // the file key must be #f rather than a string
+		wantFile  string // when non-empty, the file key must carry exactly this
+		wantLine  int64  // checked only alongside wantFile
 	}{
 		{
 			name:     "located frame keeps all four keys",
@@ -196,9 +199,14 @@ func TestStackTraceToSchemeListOmitsAbsentPositions(t *testing.T) {
 			wantKeys: []string{"name", "file", "line", "column"},
 		},
 		{
+			// The VALUES must come from the CallSite, not merely the key count:
+			// counting keys alone passes with the nil-vs-Location test restored,
+			// because a position-less CurrentLoc is non-nil and would be used.
 			name:     "position-less CurrentLoc falls through to a located CallSite",
 			frame:    StackFrame{FunctionName: "f", CurrentLoc: positionless, CallSite: located},
 			wantKeys: []string{"name", "file", "line", "column"},
+			wantFile: "prog.scm",
+			wantLine: 3,
 		},
 		{
 			name:     "position-less on both sides carries the name alone",
@@ -227,6 +235,7 @@ func TestStackTraceToSchemeListOmitsAbsentPositions(t *testing.T) {
 			}
 			var keys []string
 			var fileVal values.Value
+			var lineVal int64
 			cur := values.Value(alist)
 			for !values.IsEmptyList(cur) {
 				pr, ok := cur.(values.Tuple)
@@ -245,6 +254,13 @@ func TestStackTraceToSchemeListOmitsAbsentPositions(t *testing.T) {
 				if sym.Key == "file" {
 					fileVal = entry.Cdr()
 				}
+				if sym.Key == "line" {
+					num, ok := entry.Cdr().(*values.Integer)
+					if !ok {
+						t.Fatalf("line = %T, want an integer", entry.Cdr())
+					}
+					lineVal = num.Value
+				}
 				cur = pr.Cdr()
 			}
 			if len(keys) != len(tc.wantKeys) {
@@ -258,6 +274,18 @@ func TestStackTraceToSchemeListOmitsAbsentPositions(t *testing.T) {
 			if tc.wantFalse {
 				if fileVal != values.Value(values.FalseValue) {
 					t.Errorf("file = %v, want #f", fileVal)
+				}
+			}
+			if tc.wantFile != "" {
+				str, ok := fileVal.(*values.String)
+				if !ok {
+					t.Fatalf("file = %T, want a string", fileVal)
+				}
+				if str.Value != tc.wantFile {
+					t.Errorf("file = %q, want %q", str.Value, tc.wantFile)
+				}
+				if lineVal != tc.wantLine {
+					t.Errorf("line = %d, want %d", lineVal, tc.wantLine)
 				}
 			}
 		})

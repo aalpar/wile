@@ -351,6 +351,11 @@ func PrimSqrt(mc machine.CallContext) error {
 			// 2^63 is not a perfect square, so excluding it forfeits no exact
 			// answer — the inexact branch below is the right one for it. Same
 			// hazard, same reason, as exptExact's big.Int.Abs guard below.
+			//
+			// Belt and braces: exactIntegerSqrt now enforces its own n >= 0
+			// precondition, so removing this guard would not reintroduce the
+			// hang. It stays because the hazard belongs to the negation, which
+			// is here, not to the callee.
 			root, ok := int64(0), false
 			if v.Value != math.MinInt64 {
 				root, ok = exactIntegerSqrt(-v.Value)

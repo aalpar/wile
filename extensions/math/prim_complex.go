@@ -93,6 +93,20 @@ func PrimMakeRectangular(mc machine.CallContext) error {
 		return nil
 	}
 
+	// An EXACT zero imaginary part collapses here too. The rule is exactness,
+	// not magnitude, and it must not depend on which precision tier the REAL
+	// part happens to sit in — which is the same asymmetry the BigFloat branch
+	// above had, pointing the other way: (make-rectangular #m1.0 0) collapsed
+	// while (make-rectangular 1.0 0) answered 1.0+0.0i with real? => #f.
+	//
+	// Reaching here with an exact zero imaginary implies the real part is
+	// inexact (otherwise bothExact would have been true), so the result is an
+	// inexact real — exactness contagion, R7RS 6.2.2.
+	if values.ExactnessOf(iNum) == values.Exact && iNum.IsZero() {
+		mc.SetValue(values.NewFloat(values.NumberToFloat64(rNum)))
+		return nil
+	}
+
 	// Use regular Complex for inexact numbers
 	mc.SetValue(values.NewComplexFromParts(
 		values.NumberToFloat64(rNum),
@@ -104,13 +118,16 @@ func PrimMakeRectangular(mc machine.CallContext) error {
 // suitable for use as a BigComplex part.
 //
 // The default arm returned by raising a panic, and that panic was reachable
-// from Scheme and caught by nothing: an exact *BigComplex whose imaginary part
-// is an exact zero passes both isRealNumber and the bothExact test and then
-// falls through every arm here. Such a value should not exist — the reader
-// used to mint one, see MakeExactNumber's Simplify in pkg/parser — but a
-// wrong-type argument is a domain error either way, and CODING_STYLE's line
-// puts domain errors on the catchable side. Returning the error is what makes
-// it catchable; the panic escaped `guard` entirely.
+// from Scheme: an exact *BigComplex whose imaginary part is an exact zero
+// passes both isRealNumber and the bothExact test and then falls through every
+// arm here. Such a value should not exist — the reader used to mint one, see
+// MakeExactNumber's Simplify in pkg/parser.
+//
+// The VM boundary's recover did contain the panic, so the process survived;
+// what it escaped was `guard`, surfacing as an uncatchable *SchemeError and
+// exit 1 rather than as a condition. A wrong-type argument is a domain error
+// either way, and CODING_STYLE's line puts domain errors on the catchable
+// side. Returning the error is what puts it there.
 func toExactBigComplexPart(n values.Number) (values.Number, error) {
 	switch v := n.(type) {
 	case *values.Integer:

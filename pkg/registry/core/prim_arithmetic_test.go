@@ -849,6 +849,13 @@ func TestGcd(t *testing.T) {
 		{Name: "gcd of out-of-range inexact integer", Code: `(gcd 1e30 6)`, Expected: values.NewFloat(2.0)},
 		{Name: "gcd of negative out-of-range inexact integer", Code: `(gcd -1e30 6)`, Expected: values.NewFloat(2.0)},
 		{Name: "gcd of lone out-of-range inexact integer", Code: `(gcd 1e19)`, Expected: values.NewFloat(1e19)},
+		// -2^63 converts to int64 EXACTLY, so the range check rightly lets it
+		// through — and then the fold's absolute value is a no-op, because
+		// MinInt64 negates to itself. Answered -2.0: a negative gcd, which
+		// R7RS 6.2.6 forbids outright. A different hazard from the rows above,
+		// at the one boundary the range test must not reject.
+		{Name: "gcd of the inexact MinInt64 boundary", Code: `(gcd -9223372036854775808.0 6)`, Expected: values.NewFloat(2.0)},
+		{Name: "gcd of the lone inexact MinInt64 boundary", Code: `(gcd -9223372036854775808.0)`, Expected: values.NewFloat(9223372036854775808.0)},
 		{Name: "gcd of out-of-range inexact and biginteger", Code: `(gcd 1e30 (expt 2 70))`, Expected: values.NewFloat(281474976710656.0)},
 	}
 	for _, tc := range tcs {

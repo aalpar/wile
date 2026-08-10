@@ -301,3 +301,40 @@ func (p *DatumToSyntaxValueSuite) TestSharedStructureIsNotACycle(c *qt.C) {
 	c.Assert(result, qt.IsNotNil)
 	c.Assert(result.UnwrapAll(), valuestest.SchemeEquals, values.List(shared, shared))
 }
+
+// TestNestingDepthIsBounded is the third leg, beside the cycle refusal and
+// the iterative spine. Cars stay recursive, and no reader bound reaches them:
+// these datums are built at runtime. Measured before the bound, 2,000,000
+// levels killed the host process with `fatal error: stack overflow`.
+func (p *DatumToSyntaxValueSuite) TestNestingDepthIsBounded(c *qt.C) {
+	nest := func(n int) values.Value {
+		v := values.Value(values.NewInteger(1))
+		for range n {
+			v = values.List(v)
+		}
+		return v
+	}
+
+	_, err := DatumToSyntaxValue(context.Background(), p.sctx, nest(DefaultMaxDatumToSyntaxDepth+10))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrParseDepthExceeded), qt.IsTrue)
+
+	// The control: well under the bound converts, so the limit narrows rather
+	// than forbids.
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, nest(100))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, qt.IsNotNil)
+}
+
+// TestLengthIsNotBounded is the discriminating control: a long list is not a
+// deep one. If the depth counter ever advanced along the spine, this would
+// start failing while every nesting test stayed green.
+func (p *DatumToSyntaxValueSuite) TestLengthIsNotBounded(c *qt.C) {
+	acc := values.Value(values.EmptyList)
+	for i := range DefaultMaxDatumToSyntaxDepth * 10 {
+		acc = values.NewCons(values.NewInteger(int64(i)), acc)
+	}
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, acc)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, qt.IsNotNil)
+}

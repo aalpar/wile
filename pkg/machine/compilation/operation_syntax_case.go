@@ -494,7 +494,9 @@ func (p *OperationStoreSyntaxCaseInput) Apply(mc *machine.MachineContext) (*mach
 	} else {
 		converted, err := schemeutil.DatumToSyntaxValue(mc.Context(), nil, val)
 		if err != nil {
-			return nil, err
+			// Name the operation. Bare, the diagnostic reads as an internal Go
+			// helper failing rather than as syntax-case refusing its input.
+			return nil, werr.WrapForeignErrorf(err, "syntax-case: cannot use this value as input")
 		}
 		sc.input = converted
 	}

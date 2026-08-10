@@ -43,6 +43,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **New: `registry.PrimitiveSpec.Mutates`.** Declares that a primitive
+  destructively updates an existing Scheme value. Default `false`; required for
+  any primitive whose `Impl` — or a closure it RETURNS — reaches a
+  values-package mutator. The `NoMutation` dialect's removal list is pinned
+  against it in both directions.
+
+- **New: `schemeutil.DefaultMaxDatumToSyntaxDepth`.** The nesting bound above.
+
 - **BREAKING (embedders): `schemeutil.DatumToSyntaxValue` returns an error.**
   Its signature is now `(ctx, sctx, o) (syntax.SyntaxValue, error)`. It refuses
   a **circular datum** with `werr.ErrCircularList`, and it has to: every caller
@@ -74,7 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   licenses the complex-to-real descent — `(real? -2.5+0.0i)` is `#f`. An
   **exact** zero imaginary part still collapses, on the same path.
 
-- **The `NoMutation` dialect now removes `record-modifier`.** Destructiveness
+- **BREAKING (Scheme, `NoMutation` engines only): the `NoMutation` dialect now removes `record-modifier`.** Destructiveness
   is declared on `registry.PrimitiveSpec.Mutates` rather than read off a `"!"`
   suffix, which was wrong in both directions: `record-modifier` sets a record
   field and has no bang, so a `NoMutation` engine handed out a working field
@@ -83,6 +91,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `define-record-type` expands to `(record-modifier type 'field-tag)`
   unconditionally, so under `NoMutation` a record type that DECLARES a modifier
   now fails at *definition* time. A modifier-free one is unaffected.
+
+- **BREAKING (Scheme): a datum nested deeper than 10,000 levels is refused.**
+  `datum->syntax` and `eval` bound structural NESTING the way the reader and
+  the writer already do (`parser.DefaultMaxParseDepth`,
+  `values.DefaultMaxWriteDepth`), raising `werr.ErrParseDepthExceeded`.
+  Unbounded, a runtime-built deeply nested datum — one no reader ever bounded —
+  killed the **host process** with a runtime stack overflow. Measured: 200,000
+  levels converted, 2,000,000 did not. LENGTH is deliberately not bounded; a
+  long list is not a deep one, and both spine walks are iterative.
 
 - **BREAKING (embedders): stack-frame alists omit absent positions.**
   `error-object-stack-trace` and `error-context-stack-trace` no longer emit

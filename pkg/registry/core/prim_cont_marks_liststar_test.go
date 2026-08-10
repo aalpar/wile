@@ -85,6 +85,9 @@ func TestPrimContinuationMarkSetToListStarErrors(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "not-a-mark-set", Code: `(continuation-mark-set->list* 42 '(a))`},
 		{Name: "not-a-list", Code: `(continuation-mark-set->list* (current-continuation-marks) 42)`},
+		// Control, green in both directions: an improper key list was already
+		// refused, and must stay refused now that the walk changed. Only the
+		// message moved, from "improper key list" to the shared eliminator's.
 		{Name: "improper-key-list", Code: `(continuation-mark-set->list* (current-continuation-marks) '(a . b))`},
 		// The hand-rolled walk this replaced had no cycle detector and no
 		// deadline poll: it grew its key slice at gigabytes per second and

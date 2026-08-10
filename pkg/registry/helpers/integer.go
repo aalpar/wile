@@ -70,9 +70,11 @@ func extractIntegerArg(v values.Value, name string) (int64, bool, error) {
 		if n.Value != math.Trunc(n.Value) {
 			return 0, false, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, n.Value)
 		}
-		if floatExceedsInt64(n.Value) {
+		if floatExceedsInt64(n.Value) || n.Value == math.MinInt64 {
 			// Promote rather than saturate, the same signal the BigInteger
-			// arm above raises for a value that does not fit an int64.
+			// arm above raises for a value that does not fit an int64 — and,
+			// for MinInt64, one that fits but cannot be negated, which the
+			// fold's absolute value requires.
 			return 0, false, errNeedsBigInt
 		}
 		return int64(n.Value), true, nil
@@ -166,9 +168,17 @@ func IntegerFold(
 			// This pass is the gate that chooses the int64 or the big.Int
 			// fold. An integral float above the int64 range has to open the
 			// big gate here; otherwise every later conversion saturates and
-			// the fold answers on MaxInt64 instead of the argument. Twin of
-			// the MinInt64 case just above.
-			if floatExceedsInt64(v.Value) {
+			// the fold answers on MaxInt64 instead of the argument.
+			//
+			// The MinInt64 disjunct is the exact twin of the *values.Integer
+			// case just above, and it is NOT covered by floatExceedsInt64:
+			// -2^63 is exactly representable and converts exactly, so the
+			// range test rightly lets it through. The fold then takes an
+			// absolute value, and MinInt64 negates to ITSELF — which is how
+			// (gcd -9223372036854775808.0 6) answered -2.0, a negative gcd
+			// that R7RS 6.2.6 forbids outright. Two different hazards, one
+			// gate.
+			if floatExceedsInt64(v.Value) || v.Value == math.MinInt64 {
 				hasBigInt = true
 			}
 			hasInexact = true

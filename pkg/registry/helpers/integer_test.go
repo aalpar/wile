@@ -181,7 +181,7 @@ func TestExtractInteger(t *testing.T) {
 			},
 			{
 				// Largest float64 strictly below 2^63. float64 spacing there
-				// is 2048, so this is the last value the int64 path may take.
+				// is 1024, so this is the last value the int64 path may take.
 				"float just below positive int64 boundary",
 				values.NewFloat(9223372036854774784.0),
 				9223372036854774784, true, true,
@@ -682,35 +682,33 @@ func TestExtractIntegerArg(t *testing.T) {
 		c.Assert(errors.Is(err, errNeedsBigInt), qt.IsTrue)
 	})
 
-	// An out-of-range float must raise the same promotion signal the
-	// BigInteger arm raises. Without it the int64 cast saturates and gcd/lcm
-	// answer on MaxInt64: (gcd 1e30 6) was 1.0 where it must be 2.0.
-	t.Run("out of range float needs big path", func(t *testing.T) {
-		outOfRange := []values.Value{
+	// A float that cannot be folded in int64 must raise the same promotion
+	// signal the BigInteger arm raises. TWO hazards, not one: a float outside
+	// the range saturates on conversion — (gcd 1e30 6) was 1.0 where it must
+	// be 2.0 — and -2^63 converts EXACTLY but cannot be negated, so the fold's
+	// absolute value is a no-op and (gcd -9223372036854775808.0 6) was -2.0,
+	// a negative gcd R7RS 6.2.6 forbids outright.
+	t.Run("unfoldable float needs big path", func(t *testing.T) {
+		unfoldable := []values.Value{
 			values.NewFloat(1e30),
 			values.NewFloat(-1e30),
-			values.NewFloat(9223372036854775808.0), // +2^63 exactly
+			values.NewFloat(9223372036854775808.0),  // +2^63 exactly: saturates
+			values.NewFloat(-9223372036854775808.0), // -2^63 exactly: unnegatable
 		}
-		for _, v := range outOfRange {
+		for _, v := range unfoldable {
 			_, _, err := extractIntegerArg(v, "test")
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, errNeedsBigInt), qt.IsTrue)
 		}
 	})
 
-	// Both bounds of floatExceedsInt64, so a future edit cannot quietly make
-	// the negative side strict or the positive side inclusive.
-	t.Run("int64 boundary floats stay on the int64 path", func(t *testing.T) {
-		inRange := map[values.Value]int64{
-			values.NewFloat(-9223372036854775808.0): math.MinInt64,
-			values.NewFloat(9223372036854774784.0):  9223372036854774784,
-		}
-		for v, want := range inRange {
-			val, inexact, err := extractIntegerArg(v, "test")
-			c.Assert(err, qt.IsNil)
-			c.Assert(val, qt.Equals, want)
-			c.Assert(inexact, qt.IsTrue)
-		}
+	// The largest float64 strictly below 2^63, so a future edit cannot quietly
+	// make the positive bound inclusive.
+	t.Run("the largest in-range float stays on the int64 path", func(t *testing.T) {
+		val, inexact, err := extractIntegerArg(values.NewFloat(9223372036854774784.0), "test")
+		c.Assert(err, qt.IsNil)
+		c.Assert(val, qt.Equals, int64(9223372036854774784))
+		c.Assert(inexact, qt.IsTrue)
 	})
 
 	t.Run("error cases", func(t *testing.T) {

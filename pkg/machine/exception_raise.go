@@ -229,9 +229,12 @@ func stackFrameToAlist(frame StackFrame) values.Tuple {
 
 	// Prefer CurrentLoc over CallSite, and ask each one the same question
 	// StackFrame.String asks: does it have a LOCATION, not merely is it
-	// non-nil. A nil test admits a context that exists and carries no
-	// position, which is common — a datum built at runtime and handed to
-	// eval has one, and so does every foreign-call boundary frame.
+	// non-nil. A nil test admits a context that EXISTS and carries no
+	// position — which is what eval hands every frame of a runtime-built
+	// datum, since PrimEval mints a zero-value SourceContext for it. (A
+	// frame with genuinely nil contexts was already rendered correctly; the
+	// zero-value one was not, and the two states are indistinguishable to a
+	// reader of the result.)
 	//
 	// The two renderings used to disagree about the same frame. The textual
 	// trace printed a bare "at <anonymous>"; the alist fabricated

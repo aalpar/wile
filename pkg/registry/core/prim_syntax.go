@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/schemeutil"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -101,21 +102,27 @@ func PrimDatumToSyntax(mc machine.CallContext) error {
 // not contain it and every other engine in the process died with it. So did a
 // car cycle and a self-referential vector. Separately, a long PROPER list did
 // the same, because recursing per cdr turns list length into Go stack depth,
-// which DefaultMaxParseDepth does not bound: it counts nesting, not length.
-// The iterative spine below fixes the second; visited fixes the first.
+// which no reader bound reaches: a datum built at runtime never passed one.
+// The iterative spine below fixes the second, visited fixes the first, and a
+// depth counter fixes the third — NESTING, which stays recursive and which
+// the same runtime-construction argument leaves unbounded.
 //
 // Refusal, rather than a memoized cyclic syntax graph, keeps one rule instead
 // of two: the compiler already refuses circular quoted data
 // (validateQuotedLiteralWithVisited), and a cyclic graph handed to the
 // expander merely relocates the hang — measured.
 func datumToSyntax(datum values.Value, sctx *syntax.SourceContext) (syntax.SyntaxValue, error) {
-	return datumToSyntaxVisited(datum, sctx, map[values.Value]bool{})
+	return datumToSyntaxVisited(datum, sctx, map[values.Value]bool{}, 0)
 }
 
 // datumToSyntaxVisited is datumToSyntax's worker. visited is PATH-scoped —
 // entries are removed on the way back out — so shared structure converts as
 // before and only a true cycle is refused.
-func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visited map[values.Value]bool) (syntax.SyntaxValue, error) {
+func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visited map[values.Value]bool, depth int) (syntax.SyntaxValue, error) {
+	if depth > schemeutil.DefaultMaxDatumToSyntaxDepth {
+		return nil, werr.WrapForeignErrorf(werr.ErrParseDepthExceeded,
+			"datum->syntax: datum nested deeper than %d", schemeutil.DefaultMaxDatumToSyntaxDepth)
+	}
 	switch v := datum.(type) {
 	case *values.Symbol:
 		return syntax.NewSyntaxSymbol(v.Key, sctx), nil
@@ -127,7 +134,7 @@ func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visite
 		if v.IsEmptyList() {
 			return syntax.SyntaxEmptyList, nil
 		}
-		return datumListToSyntax(datum, v, sctx, visited)
+		return datumListToSyntax(datum, v, sctx, visited, depth)
 
 	case *values.Vector:
 		// Void guard is required: *v panics on a nil *Vector. Empty
@@ -143,7 +150,7 @@ func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visite
 		defer delete(visited, datum)
 		elems := make([]syntax.SyntaxValue, len(*v))
 		for i, elem := range *v {
-			e, err := datumToSyntaxVisited(elem, sctx, visited)
+			e, err := datumToSyntaxVisited(elem, sctx, visited, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -160,7 +167,10 @@ func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visite
 // datumListToSyntax converts one cons spine iteratively. Every cell it walks
 // stays in visited for the whole walk, so a cdr pointing back at ANY earlier
 // cell of the same spine is caught, not just one pointing at the head.
-func datumListToSyntax(datum values.Value, v values.Tuple, sctx *syntax.SourceContext, visited map[values.Value]bool) (syntax.SyntaxValue, error) {
+//
+// depth does NOT advance along the spine, only into cars: a long list is not
+// a deep one, and bounding length would refuse legal data.
+func datumListToSyntax(datum values.Value, v values.Tuple, sctx *syntax.SourceContext, visited map[values.Value]bool, depth int) (syntax.SyntaxValue, error) {
 	if visited[datum] {
 		return nil, circularDatumError()
 	}
@@ -175,7 +185,7 @@ func datumListToSyntax(datum values.Value, v values.Tuple, sctx *syntax.SourceCo
 	head := syntax.NewSyntaxCons(nil, nil, sctx)
 	cur, place := v, head
 	for {
-		car, err := datumToSyntaxVisited(cur.Car(), sctx, visited)
+		car, err := datumToSyntaxVisited(cur.Car(), sctx, visited, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -184,7 +194,7 @@ func datumListToSyntax(datum values.Value, v values.Tuple, sctx *syntax.SourceCo
 		cdr := cur.Cdr()
 		next, isTuple := cdr.(values.Tuple)
 		if !isTuple || next.IsEmptyList() {
-			tail, err := datumToSyntaxVisited(cdr, sctx, visited)
+			tail, err := datumToSyntaxVisited(cdr, sctx, visited, depth+1)
 			if err != nil {
 				return nil, err
 			}

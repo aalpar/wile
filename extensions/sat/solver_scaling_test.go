@@ -23,7 +23,8 @@ import (
 
 // TestSolveIsNotQuadraticInVariableCount is the regression gate for the
 // embedder-DoS shape the primitive-surface sweep found: a legal two-element
-// input, well inside the documented maxVars bound, that bought hours of CPU.
+// input, exactly AT the documented maxVars bound and therefore accepted, that
+// bought hours of CPU.
 //
 //	(sat-cnf-flat? (vector 4194304 0) 1)
 //
@@ -38,12 +39,18 @@ import (
 // case extrapolated to about 8.5 hours and now answers in 0.35s.
 //
 // The gate uses 200,000 rather than the headline: it cost about 70 seconds
-// before the fix and about 20 milliseconds after, which is a wide enough
-// margin to survive a loaded CI box, while allocating a few tens of megabytes
-// instead of 251.
+// before the fix and about 20 milliseconds after, while allocating a few tens
+// of megabytes instead of 251.
+//
+// The budget is 5 s, not a minute, and the difference matters. At a minute
+// even a FULL revert only overshoots by ~16%, and reverting either half alone
+// still passes — a gate that cannot see the change it names. At 5 s it catches
+// the full revert (70 s), the heap alone (~59% of the cost, ~41 s) and the
+// persistent cursor alone (~41%, ~29 s), while still leaving a 350x margin
+// over the 14 ms this actually takes.
 func TestSolveIsNotQuadraticInVariableCount(t *testing.T) {
 	const numVars = 200000
-	const budget = time.Minute
+	const budget = 5 * time.Second
 
 	// The pathological shape: one unit clause naming the highest variable.
 	// Every other variable is unmentioned and unconstrained, so the solver

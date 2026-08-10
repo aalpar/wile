@@ -331,7 +331,15 @@ func MakeExactNumber(n values.Number) (values.Number, error) {
 		if math.IsNaN(f) || math.IsInf(f, 0) {
 			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "MakeExactNumber: cannot convert inf or nan to exact")
 		}
-		if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
+		// `< 2^63`, not `<= math.MaxInt64`: 2^63-1 is not representable as a
+		// float64, so the untyped constant rounds UP in a float comparison
+		// and the inclusive form admits exactly one value it must reject,
+		// where int64(f) then saturates. -2^63 IS representable and converts
+		// exactly, so the lower bound stays inclusive. Same guard, same
+		// reason, as helpers.floatExceedsInt64 and
+		// integerToFloat64WithAccuracy.
+		const twoPow63 = 9223372036854775808.0 // 2^63 = MaxInt64 + 1
+		if f == math.Trunc(f) && f >= math.MinInt64 && f < twoPow63 {
 			return values.NewInteger(int64(f)), nil
 		}
 		return values.Simplify(values.NewRationalFromRat(new(big.Rat).SetFloat64(f))), nil
