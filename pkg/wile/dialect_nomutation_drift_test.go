@@ -91,29 +91,87 @@ func TestNoMutationRemovesEveryDestructivePrimitive(t *testing.T) {
 		_ = noMut.Close()
 	}()
 
+	// Arm A, over EVERY registered primitive, not only the bang-suffixed ones:
+	// the annotation decides, so the check no longer depends on spelling. This
+	// is the arm that record-modifier — destructive, no bang — was invisible to.
 	for _, r := range full.Registry().Primitives() {
-		name := r.Spec.Name
-		if !strings.HasSuffix(name, "!") {
+		if !r.Spec.Mutates {
 			continue
 		}
-		t.Run(name, func(t *testing.T) {
-			reason, exempt := nonDestructiveBangs[name]
+		name := r.Spec.Name
+		t.Run("removed/"+name, func(t *testing.T) {
 			_, stillBound := noMut.Get(name)
-
-			if exempt {
-				qt.Assert(t, stillBound, qt.IsTrue,
-					qt.Commentf("%s is exempt (%s), so it must survive NoMutation. If it "+
-						"really does destructively update a Scheme value, delete the exemption "+
-						"and add it to mutationPrimitives() instead.", name, reason))
-				return
-			}
-
 			qt.Assert(t, stillBound, qt.IsFalse,
-				qt.Commentf("%s is bound on a NoMutation engine. Either it destructively "+
-					"updates an existing object — add it to mutationPrimitives() — or it does "+
-					"not, and belongs in nonDestructiveBangs with a reason. An unclassified "+
-					"bang primitive is how read-bytevector! sailed through.", name))
+				qt.Commentf("%s is annotated Mutates:true but is still bound on a "+
+					"NoMutation engine. The annotation and mutationPrimitives() have "+
+					"drifted; TestMutatesMatchesMutationPrimitives says which way.", name))
 		})
+	}
+
+	// Arm B keeps the obligation that caught read-bytevector!, now as a
+	// DOCUMENTATION requirement rather than the decision: a bang-suffixed
+	// primitive that is not annotated destructive must say why, in writing.
+	for _, r := range full.Registry().Primitives() {
+		name := r.Spec.Name
+		if !strings.HasSuffix(name, "!") || r.Spec.Mutates {
+			continue
+		}
+		t.Run("classified/"+name, func(t *testing.T) {
+			reason, exempt := nonDestructiveBangs[name]
+			qt.Assert(t, exempt, qt.IsTrue,
+				qt.Commentf("%s is bang-suffixed and not annotated Mutates:true. Either "+
+					"it destructively updates an existing object — annotate its spec — or "+
+					"it does not, and belongs in nonDestructiveBangs with a reason. An "+
+					"unclassified bang primitive is how read-bytevector! sailed through.", name))
+			_, stillBound := noMut.Get(name)
+			qt.Assert(t, stillBound, qt.IsTrue,
+				qt.Commentf("%s is exempt (%s), so it must survive NoMutation.", name, reason))
+		})
+	}
+}
+
+// TestMutatesMatchesMutationPrimitives is the ratchet that ties the annotation
+// to the removal list, in both directions.
+//
+// It has to exist because PrimitiveRemover.RemovedPrimitives() takes no
+// arguments — the dialect cannot see the registry — so the list stays a
+// literal and something must keep it honest. This is exactly the arrangement
+// InvokesProcedure already uses: an annotation on the spec, a hand-curated
+// list, and a test that refuses to let them diverge.
+func TestMutatesMatchesMutationPrimitives(t *testing.T) {
+	ctx := context.Background()
+	full, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	qt.Assert(t, err, qt.IsNil)
+	defer func() {
+		_ = full.Close()
+	}()
+
+	annotated := map[string]bool{}
+	for _, r := range full.Registry().Primitives() {
+		if r.Spec.Mutates {
+			annotated[r.Spec.Name] = true
+		}
+	}
+
+	remover, ok := wile.NoMutation.(wile.PrimitiveRemover)
+	qt.Assert(t, ok, qt.IsTrue,
+		qt.Commentf("NoMutation must implement PrimitiveRemover; that capability is "+
+			"the whole mechanism by which it narrows the top level"))
+	listed := map[string]bool{}
+	for _, name := range remover.RemovedPrimitives() {
+		listed[name] = true
+	}
+
+	for name := range annotated {
+		qt.Assert(t, listed[name], qt.IsTrue,
+			qt.Commentf("%s is annotated Mutates:true but is not in mutationPrimitives(), "+
+				"so a NoMutation engine still hands it out", name))
+	}
+	for name := range listed {
+		qt.Assert(t, annotated[name], qt.IsTrue,
+			qt.Commentf("mutationPrimitives() removes %s but no registered spec is "+
+				"annotated Mutates:true for it — either the name is stale or the "+
+				"annotation is missing", name))
 	}
 }
 

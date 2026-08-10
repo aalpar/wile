@@ -32,7 +32,7 @@ func addBoxes(r *registry.PrimitiveRegistry) error {
 		{Name: "unbox", ParamCount: 1, Impl: PrimUnbox,
 			Doc: "Returns the current value stored in BOX. Raises an error if the argument is not a box.\n\nExamples:\n  (unbox (box 42))       => 42", ParamNames: []string{"box"}, Category: "boxes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "set-box!", ParamCount: 2, Impl: PrimSetBox,
+		{Name: "set-box!", Mutates: true, ParamCount: 2, Impl: PrimSetBox,
 			Doc: "Replaces the contents of BOX with OBJ.\n\nExamples:\n  (let ((b (box 1))) (set-box! b 2) (unbox b))  => 2", ParamNames: []string{"box", "obj"}, Category: "boxes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeVoid},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)

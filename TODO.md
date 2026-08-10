@@ -1789,15 +1789,16 @@ stay protected inside mutable children. Design:
 
 ### `record-modifier` escapes the `NoMutation` dialect (2026-07-25 review)
 
-- [ ] **`NoMutation` does not remove `record-modifier`** [Correctness, S]: `mutationPrimitives()`
+- [x] **`NoMutation` does not remove `record-modifier`** [Correctness, S, Done — `Mutates` shipped]: `mutationPrimitives()`
   (`pkg/wile/dialect_nomutation.go:117`) is the canonical destructive-primitive list the
   `NoMutation` dialect removes, and `record-modifier` is not on it — so a record field stays
   destructively updatable under a dialect whose documented guarantee (`dialect_nomutation.go:29-31`)
   is that no destructive update survives. **CONFIRMED** by the 2026-07-25 run at
   `reviews/2026-07-25/VERDICTS.md:180` and `reviews/2026-07-25/REVIEW.md:458`, with the review's own
-  scope correction: the one-line name-list fix is right, but the finding's second half ("widen the
-  drift guard to every registered primitive") is far larger than it reads — 452 registered
-  primitives, 42 bang-suffixed, so that guard needs a classification table over 410 more names.
+  scope correction, whose numbers were wrong in both figures: 455 registered primitives, 35
+  bang-suffixed (measured 2026-08-09, not 452/42). Widening the drift guard to every registered
+  primitive does NOT need a classification table over the remainder — the spec annotation supplies
+  the classification, so the widened arm iterates all 455 and consults one bool.
   The drift guard `TestNoMutationRemovesEveryDestructivePrimitive`
   (`dialect_nomutation_drift_test.go`) keys off the `!` spelling and therefore cannot see a
   destructive primitive with no bang in its name; `record-modifier` is exactly that case.
@@ -1808,6 +1809,21 @@ stay protected inside mutable children. Design:
   exists to close. The structural fix behind it is `registry.PrimitiveSpec.Mutates` — declare
   destructiveness on the spec and derive both the removal list and the guard from it, on the
   `PrimitiveSpec.InvokesProcedure` precedent.
+  **SHIPPED 2026-08-09.** `registry.PrimitiveSpec.Mutates` declared next to `InvokesProcedure`,
+  21 specs annotated, `record-modifier` added to `mutationPrimitives()`, and the drift guard
+  re-keyed: arm A now iterates EVERY registered primitive and decides by the annotation (the arm
+  a bangless destructive primitive was invisible to), arm B keeps the read-bytevector! obligation
+  as a documentation requirement — a bang that is not annotated must give a reason in
+  `nonDestructiveBangs`. `TestMutatesMatchesMutationPrimitives` pins the annotated set against
+  `RemovedPrimitives()` in both directions, reading the list through the public `PrimitiveRemover`
+  rather than a test-only export. The list stays a literal because `RemovedPrimitives()` takes no
+  argument and cannot see the registry — the same annotation-plus-curated-list-plus-ratchet
+  arrangement `InvokesProcedure` already uses.
+  **User-visible consequence, recorded here because no plan recorded it (the sequencing plan's
+  N-5):** `bootstrap_macros.scm` expands `define-record-type` to `(record-modifier type
+  'field-tag)` unconditionally, so under `NoMutation` a record type that DECLARES a modifier now
+  fails at DEFINITION time with an unbound-identifier error, before any instance exists. Not "you
+  cannot mutate it" — you cannot define it. A modifier-free `define-record-type` is unaffected.
 
 ---
 ## Tier 2 — Embedding API & Product Value
@@ -2288,7 +2304,7 @@ No demand signal. Speculative or research-only.
 - [ ] **Scribble-style `@` reader notation** [Reader extension]: Racket-style at-expressions for rich documentation markup. `@cmd[datum ...]{text ...}` desugars to S-expressions.
 
 ### Architecture
-- [~] **Dialect system** [In progress]: forms layer SHIPPED (SP1 per-engine codegen fork, `WithDialect`, `DefaultDialect`). Primitive-level control SHIPPED (`PrimitiveRemover` + `BootstrapProcedureRewriter` capabilities; `NoMutation` removes ALL 13 mutators genuinely — mutating `vector-map`/`string-map` swapped for a mutation-free bootstrap fragment; inline-HOF optimizer gated on `requires` so removal deopts cleanly). `NoMutation` is the one shipped leaf dialect; it exercises the forms seam (removes `set!`) plus both cross-ceiling capabilities. NoMutation import-reexpose remains a documented language-surface boundary (dialect ≠ sandbox), not a gap. The demo leaves `R5RSStrict` and `R7RSMinimal` — and the `DisableExpandForm` expander gate that only R5RSStrict used — were pruned once no product consumer wanted restricted-surface engines; the seam + `NoMutation` remain. `plans/ARCHITECTURE.local.md`
+- [~] **Dialect system** [In progress]: forms layer SHIPPED (SP1 per-engine codegen fork, `WithDialect`, `DefaultDialect`). Primitive-level control SHIPPED (`PrimitiveRemover` + `BootstrapProcedureRewriter` capabilities; `NoMutation` removes all 21 destructive primitives genuinely, keyed off `PrimitiveSpec.Mutates` rather than the `!` spelling — mutating `vector-map`/`string-map` swapped for a mutation-free bootstrap fragment; inline-HOF optimizer gated on `requires` so removal deopts cleanly). `NoMutation` is the one shipped leaf dialect; it exercises the forms seam (removes `set!`) plus both cross-ceiling capabilities. NoMutation import-reexpose remains a documented language-surface boundary (dialect ≠ sandbox), not a gap. The demo leaves `R5RSStrict` and `R7RSMinimal` — and the `DisableExpandForm` expander gate that only R5RSStrict used — were pruned once no product consumer wanted restricted-surface engines; the seam + `NoMutation` remain. `plans/ARCHITECTURE.local.md`
 - [~] **`FormSpec.Expand` consolidation** [P1 shipped, rest deferred]: `primitive_expanders_registry.go` and `syntax_compilers_registry.go` look like a phase split and are not — they split by handler *signature*, and phase is a constant column with one value per table. The genuine gap: `forms.FormSpec` carries `Validate`+`Compile` but no `Expand`, so compile dispatch reads the forms registry while expand dispatch reads the environment. **P1 shipped** (`48f6fa25`): `RegisterValidator`/`RegisterCompiler` route through one copy-on-write `update(name, mutate)`, so field preservation stops costing a line per registrar per field. **P2–P5 deferred as marginal** — the motivating `fr.Remove` expander leak was already closed by the `compileTimeHandler` marker (`compile_time_continuation.go:452`), and package layering (`validate` and `machine/compilation` both register into `forms`, which imports neither) caps the outcome at one record populated by three passes, never one table. Wiring expand *dispatch* to the field rebuilds the pruned `DisableExpandForm` gate (see Dialect system above) — do not, absent a named consumer. `plans/2026-08-03-formspec-expand-consolidation-sizing.local.md`
 - [ ] **Plugin shadowing** [Proposed]: Extension primitive shadowing. Depends on public extensions. `plans/ARCHITECTURE.local.md`
 - [ ] **Feature flags (3-tier)** [Runtime]: Compile-time, runtime global, extension-defined.

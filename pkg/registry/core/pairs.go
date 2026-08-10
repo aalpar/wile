@@ -34,10 +34,10 @@ func addPairs(r *registry.PrimitiveRegistry) error {
 			Doc: "Returns the second element (cdr) of PAIR. For a proper list, returns the rest of the list.\n\nExamples:\n  (cdr '(1 2 3))    => (2 3)\n  (cdr '(a . b))    => b", ParamNames: []string{"pair"}, Category: "pairs",
 			ParamTypes: []values.TypeConstraint{values.TypePair}, ReturnType: values.TypeAny,
 			Keywords: []string{"rest", "tail", "right"}},
-		{Name: "set-car!", ParamCount: 2, Impl: PrimSetCar,
+		{Name: "set-car!", Mutates: true, ParamCount: 2, Impl: PrimSetCar,
 			Doc: "Mutates the car field of PAIR to OBJ. PAIR must be mutable.\n\nExamples:\n  (let ((p (cons 1 2))) (set-car! p 3) p)  => (3 . 2)", ParamNames: []string{"pair", "obj"}, Category: "pairs",
 			ParamTypes: []values.TypeConstraint{values.TypePair, values.TypeAny}, ReturnType: values.TypeVoid},
-		{Name: "set-cdr!", ParamCount: 2, Impl: PrimSetCdr,
+		{Name: "set-cdr!", Mutates: true, ParamCount: 2, Impl: PrimSetCdr,
 			Doc: "Mutates the cdr field of PAIR to OBJ. PAIR must be mutable.\n\nExamples:\n  (let ((p (cons 1 2))) (set-cdr! p 3) p)  => (1 . 3)", ParamNames: []string{"pair", "obj"}, Category: "pairs",
 			ParamTypes: []values.TypeConstraint{values.TypePair, values.TypeAny}, ReturnType: values.TypeVoid},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)

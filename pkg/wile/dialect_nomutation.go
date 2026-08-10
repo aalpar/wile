@@ -31,6 +31,20 @@ import (
 // engine keeps the faster mutating fragment — only a no-mutation engine pays the
 // functional cost.
 //
+// Which primitives count as destructive is declared on the spec
+// ([registry.PrimitiveSpec.Mutates]), not read off a "!" suffix. The suffix is
+// a naming convention and it was wrong in both directions: record-modifier
+// destructively sets a record field and has no bang, while thread-start! and
+// mutex-lock! carry one and act on the world rather than on a value a program
+// holds.
+//
+// One consequence is user-visible and worth stating before it is met:
+// define-record-type expands to (record-modifier type 'field-tag)
+// unconditionally, so on a NoMutation engine a record type that DECLARES a
+// modifier fails at DEFINITION time with an unbound-identifier error, before
+// any instance exists. Not "you cannot mutate it" — you cannot define it. A
+// record type that declares no modifier is unaffected.
+//
 // Boundary: removal is at the visible top level only. The full registry still backs
 // library environments, so a program can reach a mutator again via
 // (import (scheme base)). NoMutation is therefore a *language-surface* statement, not
@@ -136,5 +150,15 @@ func mutationPrimitives() []string {
 		"atomic-store!",
 		"atomic-swap!",
 		"atomic-compare-and-swap!",
+		// No bang, and it destructively sets a record field: the closure
+		// (record-modifier rt 'x) returns IS a setter. This is why the list is
+		// derived from PrimitiveSpec.Mutates rather than from the "!" spelling
+		// — see TestMutatesMatchesMutationPrimitives, which pins the two
+		// together. Consequence, and it is user-visible: define-record-type
+		// expands to (record-modifier type 'field-tag) unconditionally, so on a
+		// NoMutation engine a record type that DECLARES a modifier now fails at
+		// DEFINITION time with an unbound-identifier error, before any instance
+		// exists. A modifier-free define-record-type is unaffected.
+		"record-modifier",
 	}
 }

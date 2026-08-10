@@ -108,7 +108,7 @@ func addRecords(r *registry.PrimitiveRegistry) error {
 			Doc: "Returns an accessor procedure that retrieves FIELD-TAG from instances of RTD.\n\nExamples:\n  ; (let ((get-x (record-accessor rt 'x))) (get-x my-point))  => 3", ParamNames: []string{"rtd", "field-tag"}, Category: "records",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol},
 			ReturnType: values.TypeProcedure},
-		{Name: "record-modifier", ParamCount: 2, Impl: PrimRecordModifier,
+		{Name: "record-modifier", Mutates: true, ParamCount: 2, Impl: PrimRecordModifier,
 			Doc: "Returns a modifier procedure that sets FIELD-TAG on instances of RTD.\n\nExamples:\n  ; (let ((set-x! (record-modifier rt 'x))) (set-x! my-point 10))", ParamNames: []string{"rtd", "field-tag"}, Category: "records",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol},
 			ReturnType: values.TypeProcedure},
@@ -139,10 +139,10 @@ func addPromises(r *registry.PrimitiveRegistry) error {
 
 func addMoreStrings(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "string-copy!", ParamCount: 4, IsVariadic: true, Impl: PrimStringCopyTo,
+		{Name: "string-copy!", Mutates: true, ParamCount: 4, IsVariadic: true, Impl: PrimStringCopyTo,
 			Doc: "Copies characters from the from string into TO starting at position AT.\n\nExamples:\n  (let ((s (string-copy \"abcde\"))) (string-copy! s 1 \"xy\") s)  => \"axyde\"", ParamNames: []string{"to", "at", "from", "start"}, Category: "strings",
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger, values.TypeString, values.TypeInteger}, ReturnType: values.TypeVoid},
-		{Name: "string-fill!", ParamCount: 3, IsVariadic: true, Impl: PrimStringFill,
+		{Name: "string-fill!", Mutates: true, ParamCount: 3, IsVariadic: true, Impl: PrimStringFill,
 			Doc: "Fills STRING positions from start to end with CHAR. Start defaults to 0, end to STRING length.\n\nExamples:\n  (let ((s (string-copy \"hello\"))) (string-fill! s #\\x) s)  => \"xxxxx\"", ParamNames: []string{"string", "fill", "start"}, Category: "strings",
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeCharacter, values.TypeInteger}, ReturnType: values.TypeVoid},
 		{Name: "string-upcase", ParamCount: 1, Impl: PrimStringUpcase,

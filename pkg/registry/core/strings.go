@@ -38,7 +38,7 @@ func addStrings(r *registry.PrimitiveRegistry) error {
 		{Name: "string-ref", ParamCount: 2, Impl: PrimStringRef,
 			Doc: "Returns the character at 0-based index K in STRING. Raises an error if K is out of range.\n\nExamples:\n  (string-ref \"hello\" 0)  => #\\h\n  (string-ref \"hello\" 4)  => #\\o", ParamNames: []string{"string", "k"}, Category: "strings",
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger}, ReturnType: values.TypeCharacter},
-		{Name: "string-set!", ParamCount: 3, Impl: PrimStringSet,
+		{Name: "string-set!", Mutates: true, ParamCount: 3, Impl: PrimStringSet,
 			Doc: "Stores CHAR at 0-based index K in STRING. STRING must be mutable.\n\nExamples:\n  (let ((s (string-copy \"hello\"))) (string-set! s 0 #\\H) s)  => \"Hello\"", ParamNames: []string{"string", "k", "char"}, Category: "strings",
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger, values.TypeCharacter}, ReturnType: values.TypeVoid},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)

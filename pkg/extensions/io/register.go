@@ -144,7 +144,7 @@ func addReadWrite(r *registry.PrimitiveRegistry) error {
 			Doc: "Reads up to K bytes from a binary port and returns them as a bytevector. Returns eof-object if no bytes available.\n\nExamples:\n  (read-bytevector 2 (open-input-bytevector #u8(10 20 30)))  => #u8(10 20)", ParamNames: []string{"k", "port"}, Category: "io",
 			Keywords:   []string{"get-bytevector-n"},
 			ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeBinaryInputPort}, ReturnType: values.TypeAny},
-		{Name: "read-bytevector!", ParamCount: 2, IsVariadic: true, Impl: PrimReadBytevectorBang,
+		{Name: "read-bytevector!", Mutates: true, ParamCount: 2, IsVariadic: true, Impl: PrimReadBytevectorBang,
 			Doc: "Reads bytes into BYTEVECTOR from a binary port. Returns the number of bytes read or eof-object.\n\nExamples:\n  (let ((bv (make-bytevector 3 0))) (read-bytevector! bv (open-input-bytevector #u8(1 2))) bv)  => #u8(1 2 0)", ParamNames: []string{"bytevector", "port"}, Category: "io",
 			Keywords: []string{"get-bytevector-n!"},
 			// The rest is (port [start [end]]): a port followed by integers,
