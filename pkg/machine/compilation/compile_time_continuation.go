@@ -693,7 +693,12 @@ func (p *CompileTimeContinuation) CompileSelfEvaluating(_ CompileTimeCallContext
 	if err != nil {
 		return err
 	}
-	li := p.template.MaybeAppendLiteral(val)
+	// A self-evaluating aggregate (#(1 2 3), #u8(1 2 3)) is a compile-time
+	// constant exactly as a quoted one is, and R7RS §4.1.2 makes it immutable.
+	// It reaches the same pool and dedups against quoted twins, so it must be
+	// marked at its own append or the survivor's immutability depends on which
+	// form the compiler saw first.
+	li := p.appendConstantLiteral(val)
 	p.AppendOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(li),
 	)

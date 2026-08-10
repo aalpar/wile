@@ -87,6 +87,13 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	mc.maxStackSize = p.maxStackSize
 	mc.barrierValid = p.barrierValid // inherit barrier context
 	mc.windingStack = p.windingStack
+	// The namespace-derived engine-state snapshot travels with the child. Without
+	// it every eval, load, once-do! and parameter-converter sub-context starts on
+	// a pool-zeroed struct and reproduces the released-frame defect at a new site:
+	// a guard consulting a nil set, and a security check consulting a nil
+	// authorizer, both of which fail open. See MachineContext.snapshotEngineState.
+	mc.immutableLiterals = p.immutableLiterals
+	mc.authorizer = p.authorizer
 	return mc
 }
 
@@ -109,6 +116,12 @@ func (p *MachineContext) NewSubContextWithWinding(windingStack WindingStack) *Ma
 //
 // The template and env override NewSubContext's defaults (nil template, the
 // parent's mutable runtime global). pc starts at 0 (pool zero-value).
+//
+// The debugger is propagated here and NOT in NewSubContext. These two callers
+// (eval and load) are the only ones that run freshly compiled code on a child
+// context, so they are the only ones where a breakpoint could go unnoticed;
+// map, for-each, apply, dynamic-wind bodies and call-with-values consumers all
+// run their closure on the parent context and already break correctly.
 func (p *MachineContext) NewSubContextWithTemplate(
 	tpl *NativeTemplate,
 	env *environment.EnvironmentFrame,
@@ -116,6 +129,7 @@ func (p *MachineContext) NewSubContextWithTemplate(
 	mc := p.NewSubContext()
 	mc.template = tpl
 	mc.env = env
+	mc.debugger = p.debugger
 	return mc
 }
 
