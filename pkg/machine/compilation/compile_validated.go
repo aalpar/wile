@@ -331,7 +331,11 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 	// Use scope-aware binding resolution for validation
 	binding := p.env.GetBinding(sym, syntax.ScopesOf(symbolScopes))
 	if binding == nil {
-		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
+		// The set! half of the same defect: stamp the identifier being
+		// assigned, so the reported location is the offending name rather
+		// than the enclosing top-level form.
+		return wrapSourcedError(v.Name.SourceContext(),
+			werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key))
 	}
 
 	// R7RS §5.2: reject set! on imported bindings. Under WithMutableTopLevel()

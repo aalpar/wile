@@ -42,6 +42,19 @@ type solver struct {
 	activityInc   float32
 	activityDecay float32
 
+	// Activity-ordered max-heap over variables, so a decision costs
+	// O(log n) instead of a scan of every variable. order holds variable
+	// ids; orderPos[v] is v's index in order, or -1 when v is absent.
+	// Assigned variables are left in place and skipped on pop, MiniSat's
+	// arrangement; backjump re-inserts what it unassigns.
+	order    []int32
+	orderPos []int32
+
+	// Propagation cursor into trail. Persistent across propagate() calls:
+	// see propagate's comment for why re-scanning from the base was safe
+	// but quadratic.
+	qhead int
+
 	// Luby restart schedule and learnt-clause-DB budget.
 	conflicts      int64
 	conflictBudget int64 // -1 = unlimited
@@ -71,6 +84,17 @@ func newSolver(ctx context.Context, clauses []clause, numVars int32, conflictBud
 	}
 	for v := range s.reason {
 		s.reason[v] = noClauseRef
+	}
+	// Seed the decision heap with every variable, in index order. All
+	// activities are zero here, and orderBefore breaks that tie by index, so
+	// inserting 1..numVars in increasing order performs no sift at all: the
+	// build is O(n), not O(n log n).
+	s.order = make([]int32, 0, numVars)
+	s.orderPos = make([]int32, numVars+1)
+	s.orderPos[0] = -1
+	for v := int32(1); v <= numVars; v++ {
+		s.orderPos[v] = -1
+		s.orderInsert(v)
 	}
 	for _, c := range clauses {
 		s.addClause(c)
@@ -150,9 +174,14 @@ func (s *solver) backjump(target int32) {
 		s.assigns[v] = 0
 		s.level[v] = 0
 		s.reason[v] = noClauseRef
+		s.orderInsert(v)
 	}
 	s.trail = s.trail[:cutoff]
 	s.trailLim = s.trailLim[:target]
+	// The propagation cursor follows the trail down; anything above cutoff
+	// was never processed, or was processed under an assignment that no
+	// longer holds.
+	s.qhead = int(cutoff)
 }
 
 // propagate runs watched-literal unit propagation over the whole current
@@ -170,13 +199,27 @@ func (s *solver) backjump(target int32) {
 //   - If no replacement and the other watched lit is false, the clause
 //     is empty under the assignment: conflict.
 //
-// qhead is a per-call cursor, not a persistent watermark: every call
-// re-scans from the trail base.
+// qhead is a PERSISTENT watermark, not a per-call cursor. It used to be
+// per-call, and that was correct but quadratic: re-walking the whole trail on
+// every call made a solve with n decisions cost O(n²) propagation, which a
+// Go CPU profile put at ~41% of a 200,000-variable run.
+//
+// Why persistence is sound: a literal already processed has had every clause
+// watching its negation examined. A clause that becomes unit LATER does so
+// because one of its two watched literals is falsified later, and that
+// falsification is itself a trail entry above the watermark, so the clause is
+// re-examined then. A learnt clause added between calls needs no event at all
+// — addLearntClause puts the asserting literal at position 0 and solve
+// enqueues it directly with the clause as its reason.
+//
+// The watermark moves backwards in exactly two places, and both are here:
+// a conflict abandons the rest of the trail (so the cursor jumps to the end,
+// and backjump then rewinds it), and backjump truncates the trail (so the
+// cursor follows it down).
 func (s *solver) propagate() clauseRef {
-	qhead := 0
-	for qhead < len(s.trail) {
-		p := s.trail[qhead]
-		qhead++
+	for s.qhead < len(s.trail) {
+		p := s.trail[s.qhead]
+		s.qhead++
 		notP := p ^ 1
 		ws := s.watches[notP]
 		newWatches := ws[:0]
@@ -193,6 +236,7 @@ func (s *solver) propagate() clauseRef {
 				// Unit clause: its only literal is being falsified — conflict.
 				newWatches = append(newWatches, ws[i:]...)
 				s.watches[notP] = newWatches
+				s.qhead = len(s.trail)
 				return cr
 			}
 			// Ensure lits[1] is the false watched lit (the one we're processing).
@@ -222,9 +266,12 @@ func (s *solver) propagate() clauseRef {
 			}
 			// No replacement. Unit or conflict.
 			if s.litValue(other) == -1 {
-				// Conflict: restore remaining watches and return.
+				// Conflict: restore remaining watches and return. The cursor
+				// jumps to the end because the rest of the trail is about to
+				// be unwound by backjump, which rewinds the cursor with it.
 				newWatches = append(newWatches, ws[i:]...)
 				s.watches[notP] = newWatches
+				s.qhead = len(s.trail)
 				return cr
 			}
 			s.enqueue(other, cr)
@@ -308,11 +355,40 @@ func (s *solver) analyze(conflict clauseRef) ([]literal, int32) {
 // current increment, then rescales all scores if any would exceed 1e20.
 func (s *solver) bumpVarActivity(v int32) {
 	s.activity[v] += s.activityInc
+	if s.orderPos[v] >= 0 {
+		// Activity only ever rises here, so the variable can only move
+		// toward the root.
+		s.orderUp(int(s.orderPos[v]))
+	}
 	if s.activity[v] > 1e20 {
 		for i := range s.activity {
 			s.activity[i] *= 1e-20
 		}
 		s.activityInc *= 1e-20
+		// Rebuild, because *1e-20 on float32 is NOT order-preserving. It is
+		// not injective in two separate ways: values below the normal range
+		// flush to a subnormal or to zero, and even inside the normal range
+		// two distinct float32 can round to one (1.5000003e-18 and
+		// 1.5000004e-18 both land on 1.5000003e-38). Every collapse is a new
+		// tie, and orderBefore breaks ties by INDEX, so a pre-rescale heap
+		// can be a post-rescale violation — after which pickBranchVar returns
+		// a different variable from the linear scan it replaced, which is the
+		// one property TestPickBranchVarMatchesLinearScan exists to pin.
+		//
+		// Instrumented over 643k conflicts on 8 random 3-SAT instances: 712
+		// rescales, 1404 distinct-to-equal collapses, and ZERO violations —
+		// so this is unreached at realistic scales. It is here because the
+		// invariant is pinned, not because the search was observed to break
+		// it. Floyd's build is O(n) and runs about once per 900 conflicts.
+		s.rebuildOrder()
+	}
+}
+
+// rebuildOrder restores the heap property over the whole array in O(n),
+// bottom-up. Used after an activity rescale, which can reorder ties.
+func (s *solver) rebuildOrder() {
+	for i := len(s.order)/2 - 1; i >= 0; i-- {
+		s.orderDown(i)
 	}
 }
 
@@ -334,22 +410,115 @@ func (s *solver) bumpClauseActivity(cr clauseRef) {
 	}
 }
 
-// pickBranchVar returns the unassigned variable with the highest VSIDS
-// activity, or 0 if all variables are assigned. Linear scan is fine at
-// the target scale; promote to a heap only if benchmarks show this is hot.
-func (s *solver) pickBranchVar() int32 {
-	var best int32
-	var bestAct float32 = -1
-	for v := int32(1); v <= s.numVars; v++ {
-		if s.assigns[v] != 0 {
-			continue
+// orderBefore is the heap's ordering: higher activity first, and among
+// equal activities the LOWER variable index first.
+//
+// The index tie-break is not decoration. It makes the heap select exactly
+// what the linear scan it replaced selected — the scan compared with a strict
+// `>`, so the first variable at the maximum won — and a solver that picks
+// differently returns a different satisfying assignment for any instance with
+// more than one model. Without this the change would be observable at the
+// Scheme surface for every instance whose variables start at equal activity,
+// which is every instance before the first conflict.
+func (s *solver) orderBefore(a, b int32) bool {
+	if s.activity[a] != s.activity[b] {
+		return s.activity[a] > s.activity[b]
+	}
+	return a < b
+}
+
+// orderUp restores the heap property by moving position i toward the root.
+func (s *solver) orderUp(i int) {
+	v := s.order[i]
+	for i > 0 {
+		parent := (i - 1) / 2
+		if !s.orderBefore(v, s.order[parent]) {
+			break
 		}
-		if s.activity[v] > bestAct {
-			bestAct = s.activity[v]
-			best = v
+		s.order[i] = s.order[parent]
+		s.orderPos[s.order[i]] = int32(i)
+		i = parent
+	}
+	s.order[i] = v
+	s.orderPos[v] = int32(i)
+}
+
+// orderDown restores the heap property by moving position i toward the leaves.
+func (s *solver) orderDown(i int) {
+	v := s.order[i]
+	n := len(s.order)
+	for {
+		child := 2*i + 1
+		if child >= n {
+			break
+		}
+		if child+1 < n && s.orderBefore(s.order[child+1], s.order[child]) {
+			child++
+		}
+		if !s.orderBefore(s.order[child], v) {
+			break
+		}
+		s.order[i] = s.order[child]
+		s.orderPos[s.order[i]] = int32(i)
+		i = child
+	}
+	s.order[i] = v
+	s.orderPos[v] = int32(i)
+}
+
+// orderInsert puts v back in the heap. Idempotent: a variable already
+// present is left where it is.
+func (s *solver) orderInsert(v int32) {
+	if s.orderPos[v] >= 0 {
+		return
+	}
+	s.order = append(s.order, v)
+	s.orderPos[v] = int32(len(s.order) - 1)
+	s.orderUp(len(s.order) - 1)
+}
+
+// orderPop removes and returns the heap's front variable, or 0 when empty.
+func (s *solver) orderPop() int32 {
+	if len(s.order) == 0 {
+		return 0
+	}
+	v := s.order[0]
+	s.orderPos[v] = -1
+	last := len(s.order) - 1
+	if last > 0 {
+		s.order[0] = s.order[last]
+		s.orderPos[s.order[0]] = 0
+	}
+	s.order = s.order[:last]
+	if last > 0 {
+		s.orderDown(0)
+	}
+	return v
+}
+
+// pickBranchVar returns the unassigned variable with the highest VSIDS
+// activity, or 0 if all variables are assigned.
+//
+// This was a scan of every variable, with a comment inviting a heap "only if
+// benchmarks show this is hot". They do: a Go CPU profile puts it at ~59% of
+// a 200,000-variable run, because a solve with n decisions performs n scans of
+// n variables. The cost is not theoretical — (sat-cnf-flat? (vector 4194304 0) 1)
+// is a legal two-element input, inside the documented maxVars bound, and it
+// extrapolated to about eight and a half hours of CPU. It is now O(n log n).
+//
+// Assigned variables are left in the heap and skipped here rather than being
+// removed on assignment; that is MiniSat's arrangement, and backjump
+// re-inserts what it unassigns.
+func (s *solver) pickBranchVar() int32 {
+	for {
+		v := s.orderPop()
+		if v == 0 {
+			return 0
+		}
+		if s.assigns[v] == 0 {
+			return v
 		}
 	}
-	return best
 }
 
 // luby returns the i-th element of the Luby restart sequence (1-indexed).

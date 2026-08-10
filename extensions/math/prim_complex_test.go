@@ -148,6 +148,35 @@ func TestMakeRectangularExactTypes(t *testing.T) {
 		{"make-rectangular bigint parts", `(> (real-part (make-rectangular (expt 2 100) 1)) 0)`, values.TrueValue},
 		// Rational parts (toExactBigComplexPart Rational case)
 		{"make-rectangular rational parts real", `(< (abs (- (real-part (make-rectangular 3/4 1/2)) 0.75)) 1e-10)`, values.TrueValue},
+
+		// #e1.0+0.0i used to read as an exact BigComplex with an EXACT zero
+		// imaginary part — a value the rest of the tower says cannot exist.
+		// It passed isRealNumber and bothExact, then fell through every arm of
+		// toExactBigComplexPart into an explicit panic that `guard` could not
+		// catch. Fixed upstream, at the reader: it is now the exact integer 1.
+		{"make-rectangular over an exact zero-imag literal", `(= (make-rectangular #e1.0+0.0i 1) 1+1i)`, values.TrueValue},
+		{"make-rectangular over an exact zero-imag literal, arg 1", `(= (make-rectangular 1 #e1.0+0.0i) 1+1i)`, values.TrueValue},
+
+		// EXACTNESS, not magnitude, licenses the complex-to-real descent —
+		// values.Simplify, maybeSimplify and BigComplex.IsReal all say so, and
+		// R7RS agrees: (real? -2.5+0.0i) is #f. The BigFloat branch tested
+		// IsZero, so it collapsed an INEXACT zero and answered 1.0l0 where the
+		// float branch, same call, answered 1.0+0.0i.
+		{"make-rectangular bigfloat keeps an inexact zero imag", `(not (real? (make-rectangular #m1.0 0.0)))`, values.TrueValue},
+		{"make-rectangular float keeps an inexact zero imag", `(not (real? (make-rectangular 1.0 0.0)))`, values.TrueValue},
+		{"make-rectangular bigfloat keeps its real part", `(= (real-part (make-rectangular #m1.0 0.0)) 1)`, values.TrueValue},
+		// The control: an EXACT zero imaginary part still collapses, on the
+		// same branch, so the fix narrowed the rule rather than removing it.
+		{"make-rectangular bigfloat with exact zero imag still collapses", `(real? (make-rectangular #m1.0 0))`, values.TrueValue},
+		// The plain-float branch had the SAME asymmetry pointing the other
+		// way: (make-rectangular #m1.0 0) collapsed while
+		// (make-rectangular 1.0 0) answered 1.0+0.0i with real? => #f. All
+		// three precision tiers now apply one rule.
+		{"make-rectangular float with exact zero imag collapses", `(real? (make-rectangular 1.0 0))`, values.TrueValue},
+		{"make-rectangular float with exact zero imag is its real part", `(= (make-rectangular 1.0 0) 1.0)`, values.TrueValue},
+		{"make-rectangular float with exact zero imag stays inexact", `(inexact? (make-rectangular 1.0 0))`, values.TrueValue},
+		// Control: an INEXACT zero on the same branch must not collapse.
+		{"make-rectangular float with inexact zero imag does not collapse", `(not (real? (make-rectangular 1.0 0.0)))`, values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

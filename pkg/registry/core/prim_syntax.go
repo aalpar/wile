@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/schemeutil"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -85,45 +86,136 @@ func PrimDatumToSyntax(mc machine.CallContext) error {
 	}
 
 	// Convert datum to syntax
-	result := datumToSyntax(datum, sctx)
+	result, err := datumToSyntax(datum, sctx)
+	if err != nil {
+		return err
+	}
 	mc.SetValue(result)
 	return nil
 }
 
-// datumToSyntax recursively converts a datum to a syntax object.
-func datumToSyntax(datum values.Value, sctx *syntax.SourceContext) syntax.SyntaxValue {
+// datumToSyntax converts a datum to a syntax object, refusing a circular one.
+//
+// Two failures live here, and only one of them is the cycle. (set-cdr! x x)
+// followed by (datum->syntax #f x) killed the host process with a runtime
+// stack overflow — a throw, not a panic, so the VM boundary's recover could
+// not contain it and every other engine in the process died with it. So did a
+// car cycle and a self-referential vector. Separately, a long PROPER list did
+// the same, because recursing per cdr turns list length into Go stack depth,
+// which no reader bound reaches: a datum built at runtime never passed one.
+// The iterative spine below fixes the second, visited fixes the first, and a
+// depth counter fixes the third — NESTING, which stays recursive and which
+// the same runtime-construction argument leaves unbounded.
+//
+// Refusal, rather than a memoized cyclic syntax graph, keeps one rule instead
+// of two: the compiler already refuses circular quoted data
+// (validateQuotedLiteralWithVisited), and a cyclic graph handed to the
+// expander merely relocates the hang — measured.
+func datumToSyntax(datum values.Value, sctx *syntax.SourceContext) (syntax.SyntaxValue, error) {
+	return datumToSyntaxVisited(datum, sctx, map[values.Value]bool{}, 0)
+}
+
+// datumToSyntaxVisited is datumToSyntax's worker. visited is PATH-scoped —
+// entries are removed on the way back out — so shared structure converts as
+// before and only a true cycle is refused.
+func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visited map[values.Value]bool, depth int) (syntax.SyntaxValue, error) {
+	if depth > schemeutil.DefaultMaxDatumToSyntaxDepth {
+		return nil, werr.WrapForeignErrorf(werr.ErrParseDepthExceeded,
+			"datum->syntax: datum nested deeper than %d", schemeutil.DefaultMaxDatumToSyntaxDepth)
+	}
 	switch v := datum.(type) {
 	case *values.Symbol:
-		return syntax.NewSyntaxSymbol(v.Key, sctx)
+		return syntax.NewSyntaxSymbol(v.Key, sctx), nil
 
 	case syntax.SyntaxValue:
-		return v
+		return v, nil
 
 	case values.Tuple:
 		if v.IsEmptyList() {
-			return syntax.SyntaxEmptyList
+			return syntax.SyntaxEmptyList, nil
 		}
-		car := datumToSyntax(v.Car(), sctx)
-		cdr := datumToSyntax(v.Cdr(), sctx)
-		return syntax.NewSyntaxCons(car, cdr, sctx)
+		return datumListToSyntax(datum, v, sctx, visited, depth)
 
 	case *values.Vector:
 		// Void guard is required: *v panics on a nil *Vector. Empty
 		// syntax-vector matches the historical Datum()-returns-nil
 		// path. Pinned by TestDatumToSyntax_VoidVector.
 		if v.IsVoid() {
-			return syntax.NewSyntaxVector(sctx)
+			return syntax.NewSyntaxVector(sctx), nil
 		}
+		if visited[datum] {
+			return nil, circularDatumError()
+		}
+		visited[datum] = true
+		defer delete(visited, datum)
 		elems := make([]syntax.SyntaxValue, len(*v))
 		for i, elem := range *v {
-			elems[i] = datumToSyntax(elem, sctx)
+			e, err := datumToSyntaxVisited(elem, sctx, visited, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			elems[i] = e
 		}
-		return syntax.NewSyntaxVector(sctx, elems...)
+		return syntax.NewSyntaxVector(sctx, elems...), nil
 
 	default:
 		// Other values (numbers, strings, booleans, etc.) get wrapped
-		return syntax.NewSyntaxObject(v, sctx)
+		return syntax.NewSyntaxObject(v, sctx), nil
 	}
+}
+
+// datumListToSyntax converts one cons spine iteratively. Every cell it walks
+// stays in visited for the whole walk, so a cdr pointing back at ANY earlier
+// cell of the same spine is caught, not just one pointing at the head.
+//
+// depth does NOT advance along the spine, only into cars: a long list is not
+// a deep one, and bounding length would refuse legal data.
+func datumListToSyntax(datum values.Value, v values.Tuple, sctx *syntax.SourceContext, visited map[values.Value]bool, depth int) (syntax.SyntaxValue, error) {
+	if visited[datum] {
+		return nil, circularDatumError()
+	}
+	spine := []values.Value{datum}
+	visited[datum] = true
+	defer func() {
+		for _, cell := range spine {
+			delete(visited, cell)
+		}
+	}()
+
+	head := syntax.NewSyntaxCons(nil, nil, sctx)
+	cur, place := v, head
+	for {
+		car, err := datumToSyntaxVisited(cur.Car(), sctx, visited, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		place.Values[0] = car
+
+		cdr := cur.Cdr()
+		next, isTuple := cdr.(values.Tuple)
+		if !isTuple || next.IsEmptyList() {
+			tail, err := datumToSyntaxVisited(cdr, sctx, visited, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			place.Values[1] = tail
+			return head, nil
+		}
+		if visited[cdr] {
+			return nil, circularDatumError()
+		}
+		visited[cdr] = true
+		spine = append(spine, cdr)
+
+		cell := syntax.NewSyntaxCons(nil, nil, sctx)
+		place.Values[1] = cell
+		cur, place = next, cell
+	}
+}
+
+// circularDatumError is the one diagnostic all three cyclic shapes produce.
+func circularDatumError() error {
+	return werr.WrapForeignErrorf(werr.ErrCircularList, "datum->syntax: circular datum")
 }
 
 // PrimGenerateTemporaries implements the generate-temporaries procedure (R6RS).

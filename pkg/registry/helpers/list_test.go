@@ -390,6 +390,14 @@ func TestMemberLookup_Errors(t *testing.T) {
 // do not contain the key — from the CLI that is SIGKILL, exit 137 — while assq
 // on the same shape returned in microseconds. Bounded by a goroutine because
 // the pre-fix failure mode is a hang, not a wrong value.
+//
+// The complementary case — the key IS in a circular list — has no row here
+// because it is safe by construction rather than by this suite staying green.
+// In Pair.ForEach the callback fires (pkg/values/pair.go:309) before the
+// checkpoint comparison that raises ErrCircularList (:323), so a match at any
+// reachable index returns its sublist on that element's own step, strictly
+// before Brent can fire. Only a key absent from the cycle reaches the detector,
+// which is exactly the shape below.
 func TestMemberLookup_CircularListTerminates(t *testing.T) {
 	c := qt.New(t)
 

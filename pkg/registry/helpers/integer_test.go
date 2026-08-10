@@ -172,6 +172,20 @@ func TestExtractInteger(t *testing.T) {
 				values.NewFloat(-5.0),
 				-5, true, true,
 			},
+			{
+				// -2^63 is exactly representable and int64(-2^63) is exact,
+				// so the lower bound stays inclusive: this must NOT promote.
+				"float at negative int64 boundary",
+				values.NewFloat(-9223372036854775808.0),
+				math.MinInt64, true, true,
+			},
+			{
+				// Largest float64 strictly below 2^63. float64 spacing there
+				// is 1024, so this is the last value the int64 path may take.
+				"float just below positive int64 boundary",
+				values.NewFloat(9223372036854774784.0),
+				9223372036854774784, true, true,
+			},
 		}
 
 		for _, tc := range tcs {
@@ -220,6 +234,22 @@ func TestExtractInteger(t *testing.T) {
 		c.Assert(inexact, qt.IsTrue)
 		c.Assert(i64, qt.Equals, int64(0))
 		c.Assert(bigVal, qt.IsNotNil)
+	})
+
+	// +2^63 exactly. This is the ONE value the old `<= math.MaxInt64` bound
+	// let through: 2^63-1 is not representable as a float64, so the untyped
+	// constant rounded up to 2^63 and the comparison admitted it, after which
+	// int64(f) saturated back to MaxInt64 and (modulo 2^63 10) answered 7
+	// instead of 8. Assert the exact big value, not merely that it promoted.
+	t.Run("float at positive int64 boundary promotes exactly", func(t *testing.T) {
+		boundary := values.NewFloat(9223372036854775808.0)
+		i64, bigVal, inexact, err := ExtractInteger(boundary, "test")
+		c.Assert(err, qt.IsNil)
+		c.Assert(inexact, qt.IsTrue)
+		c.Assert(i64, qt.Equals, int64(0))
+		c.Assert(bigVal, qt.IsNotNil)
+		want, _ := new(big.Int).SetString("9223372036854775808", 10)
+		c.Assert(bigVal.Cmp(want), qt.Equals, 0)
 	})
 
 	t.Run("error cases", func(t *testing.T) {
@@ -650,6 +680,35 @@ func TestExtractIntegerArg(t *testing.T) {
 		_, _, err := extractIntegerArg(bi, "test")
 		c.Assert(err, qt.IsNotNil)
 		c.Assert(errors.Is(err, errNeedsBigInt), qt.IsTrue)
+	})
+
+	// A float that cannot be folded in int64 must raise the same promotion
+	// signal the BigInteger arm raises. TWO hazards, not one: a float outside
+	// the range saturates on conversion — (gcd 1e30 6) was 1.0 where it must
+	// be 2.0 — and -2^63 converts EXACTLY but cannot be negated, so the fold's
+	// absolute value is a no-op and (gcd -9223372036854775808.0 6) was -2.0,
+	// a negative gcd R7RS 6.2.6 forbids outright.
+	t.Run("unfoldable float needs big path", func(t *testing.T) {
+		unfoldable := []values.Value{
+			values.NewFloat(1e30),
+			values.NewFloat(-1e30),
+			values.NewFloat(9223372036854775808.0),  // +2^63 exactly: saturates
+			values.NewFloat(-9223372036854775808.0), // -2^63 exactly: unnegatable
+		}
+		for _, v := range unfoldable {
+			_, _, err := extractIntegerArg(v, "test")
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, errNeedsBigInt), qt.IsTrue)
+		}
+	})
+
+	// The largest float64 strictly below 2^63, so a future edit cannot quietly
+	// make the positive bound inclusive.
+	t.Run("the largest in-range float stays on the int64 path", func(t *testing.T) {
+		val, inexact, err := extractIntegerArg(values.NewFloat(9223372036854774784.0), "test")
+		c.Assert(err, qt.IsNil)
+		c.Assert(val, qt.Equals, int64(9223372036854774784))
+		c.Assert(inexact, qt.IsTrue)
 	})
 
 	t.Run("error cases", func(t *testing.T) {

@@ -21,12 +21,17 @@ import (
 	"github.com/aalpar/wile/pkg/schemeutil"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
 
 func makeSyntaxFromValue(v values.Value) syntax.SyntaxValue {
-	return schemeutil.DatumToSyntaxValue(context.Background(), syntax.NewZeroValueSourceContext(), v)
+	q, err := schemeutil.DatumToSyntaxValue(context.Background(), syntax.NewZeroValueSourceContext(), v)
+	if err != nil {
+		panic(werr.WrapForeignErrorf(err, "makeSyntaxFromValue: test datum is circular"))
+	}
+	return q
 }
 
 // ValidatedIf getters

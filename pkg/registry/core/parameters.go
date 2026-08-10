@@ -29,7 +29,7 @@ func addParameters(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
 		// Internal primitive: bypasses converter when restoring a parameter in parameterize.
 		// Not part of the public R7RS API.
-		{Name: "%parameter-raw-set!", ParamCount: 2, Impl: PrimParameterRawSet,
+		{Name: "%parameter-raw-set!", Mutates: true, ParamCount: 2, Impl: PrimParameterRawSet,
 			Doc: "Internal: sets a parameter's value directly, bypassing the converter. Used by parameterize restore.", ParamNames: []string{"param", "val"}, Category: "parameters",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeAny}, ReturnType: values.TypeVoid},
 		// Internal primitive: applies converter without setting the parameter value.

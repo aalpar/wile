@@ -52,8 +52,14 @@ func PrimMakeRectangular(mc machine.CallContext) error {
 
 	if bothExact {
 		// Create exact BigComplex
-		realPart := toExactBigComplexPart(rNum)
-		imagPart := toExactBigComplexPart(iNum)
+		realPart, err := toExactBigComplexPart(rNum)
+		if err != nil {
+			return err
+		}
+		imagPart, err := toExactBigComplexPart(iNum)
+		if err != nil {
+			return err
+		}
 		if imagPart.IsZero() {
 			mc.SetValue(realPart)
 			return nil
@@ -75,11 +81,29 @@ func PrimMakeRectangular(mc machine.CallContext) error {
 		if err != nil {
 			return err
 		}
-		if imagPart.IsZero() {
-			mc.SetValue(realPart)
-			return nil
-		}
-		mc.SetValue(values.NewBigComplex(realPart, imagPart))
+		// Simplify, not IsZero: on this branch at least one argument is
+		// INEXACT, and only an EXACT zero imaginary part licenses the descent
+		// to a real (values.Simplify, maybeSimplify, BigComplex.IsReal all say
+		// so, and R7RS agrees — (real? -2.5+0.0i) is #f). IsZero asked about
+		// magnitude, so (make-rectangular #m1.0 0.0) answered 1.0l0 while
+		// (make-rectangular 1.0 0.0) answered 1.0+0.0i: the same call, the
+		// same arguments modulo the real part's precision tier, opposite
+		// answers. (make-rectangular #m1.0 0) still collapses, correctly.
+		mc.SetValue(values.Simplify(values.NewBigComplex(realPart, imagPart)))
+		return nil
+	}
+
+	// An EXACT zero imaginary part collapses here too. The rule is exactness,
+	// not magnitude, and it must not depend on which precision tier the REAL
+	// part happens to sit in — which is the same asymmetry the BigFloat branch
+	// above had, pointing the other way: (make-rectangular #m1.0 0) collapsed
+	// while (make-rectangular 1.0 0) answered 1.0+0.0i with real? => #f.
+	//
+	// Reaching here with an exact zero imaginary implies the real part is
+	// inexact (otherwise bothExact would have been true), so the result is an
+	// inexact real — exactness contagion, R7RS 6.2.2.
+	if values.ExactnessOf(iNum) == values.Exact && iNum.IsZero() {
+		mc.SetValue(values.NewFloat(values.NumberToFloat64(rNum)))
 		return nil
 	}
 
@@ -92,16 +116,29 @@ func PrimMakeRectangular(mc machine.CallContext) error {
 
 // toExactBigComplexPart converts an exact number to a BigInteger or Rational
 // suitable for use as a BigComplex part.
-func toExactBigComplexPart(n values.Number) values.Number {
+//
+// The default arm returned by raising a panic, and that panic was reachable
+// from Scheme: an exact *BigComplex whose imaginary part is an exact zero
+// passes both isRealNumber and the bothExact test and then falls through every
+// arm here. Such a value should not exist — the reader used to mint one, see
+// MakeExactNumber's Simplify in pkg/parser.
+//
+// The VM boundary's recover did contain the panic, so the process survived;
+// what it escaped was `guard`, surfacing as an uncatchable *SchemeError and
+// exit 1 rather than as a condition. A wrong-type argument is a domain error
+// either way, and CODING_STYLE's line puts domain errors on the catchable
+// side. Returning the error is what puts it there.
+func toExactBigComplexPart(n values.Number) (values.Number, error) {
 	switch v := n.(type) {
 	case *values.Integer:
-		return values.NewBigIntegerFromInt64(v.Value)
+		return values.NewBigIntegerFromInt64(v.Value), nil
 	case *values.BigInteger:
-		return v
+		return v, nil
 	case *values.Rational:
-		return v
+		return v, nil
 	default:
-		panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "toExactBigComplexPart: expected exact number but got %T", n))
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAReal,
+			"make-rectangular: expected an exact real number but got %T", n)
 	}
 }
 

@@ -85,6 +85,18 @@ func TestPrimContinuationMarkSetToListStarErrors(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "not-a-mark-set", Code: `(continuation-mark-set->list* 42 '(a))`},
 		{Name: "not-a-list", Code: `(continuation-mark-set->list* (current-continuation-marks) 42)`},
+		// Control, green in both directions: an improper key list was already
+		// refused, and must stay refused now that the walk changed. Only the
+		// message moved, from "improper key list" to the shared eliminator's.
+		{Name: "improper-key-list", Code: `(continuation-mark-set->list* (current-continuation-marks) '(a . b))`},
+		// The hand-rolled walk this replaced had no cycle detector and no
+		// deadline poll: it grew its key slice at gigabytes per second and
+		// never returned. Non-termination plus allocation throws nothing, so
+		// no recover anywhere in the VM could see it — only a timeout could.
+		{Name: "circular-key-list", Code: `
+			(let ((x (list 'a)))
+			  (set-cdr! x x)
+			  (continuation-mark-set->list* (current-continuation-marks) x))`},
 	}
 
 	for _, tc := range tcs {
@@ -93,4 +105,17 @@ func TestPrimContinuationMarkSetToListStarErrors(t *testing.T) {
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
+}
+
+// TestPrimContinuationMarkSetToListStarCircularIsCatchable pins the shape, not
+// just the refusal: a circular key list is a domain error on user data, so it
+// must reach `guard` rather than escaping as an uncatchable fault.
+func TestPrimContinuationMarkSetToListStarCircularIsCatchable(t *testing.T) {
+	result, err := testhelpers.RunSchemeCode(t, `
+		(guard (e (#t 'caught))
+		  (let ((x (list 'a)))
+		    (set-cdr! x x)
+		    (continuation-mark-set->list* (current-continuation-marks) x)))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("caught"))
 }

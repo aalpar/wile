@@ -297,7 +297,17 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		// reach a binder introduced inside one.
 		gi := p.env.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
 		if gi == nil {
-			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such local or global binding %q", sym.Key)
+			// Stamp the IDENTIFIER's own location, not the enclosing form's.
+			// Without a stamp here the error reaches CompileExpression's
+			// wrapCompilationError carrying no SourcedError at all, so the
+			// only location available is the top-level form's — an unbound
+			// reference on line 4 of a loaded file reported line 1, and line
+			// 4 appeared nowhere in the text OR in the errors.As chain.
+			// engine.go's extractor documents the intent this restores:
+			// "the innermost source location ... at the actual error site
+			// (e.g., the undefined variable), not the enclosing form".
+			return wrapSourcedError(expr.SourceContext(),
+				werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such local or global binding %q", sym.Key))
 		}
 
 		bd := p.env.GetGlobalBinding(gi)
@@ -395,8 +405,10 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		return p.emitCachedBindingLoad(sym, globalBinding)
 	}
 
-	// No binding found that matches the scopes
-	return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key)
+	// No binding found that matches the scopes. Same stamp, same reason, as
+	// the empty-scope arm above: this is the scoped half of one defect.
+	return wrapSourcedError(expr.SourceContext(),
+		werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key))
 }
 
 // emitCachedBindingLoad emits a load of an already-resolved global binding,

@@ -35,7 +35,8 @@ func hasPrimitive(reg *registry.PrimitiveRegistry, name string) bool {
 //
 // set-car! is the probe, not set!: set! is a special form, removed via the forms
 // registry, and never appears in the primitive registry at all. NoMutation's
-// RemovedPrimitives list is the 20 mutation *procedures*.
+// RemovedPrimitives list is the 21 destructive *procedures*, the ones whose
+// specs carry Mutates:true.
 func TestEffectiveRegistry_ReportsDialectNarrowing(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()

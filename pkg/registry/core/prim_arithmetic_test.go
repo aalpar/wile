@@ -837,6 +837,26 @@ func TestGcd(t *testing.T) {
 
 		// BigInteger operations
 		{Name: "gcd of bigintegers", Code: `(gcd #z100000000000000000000 #z50000000000000000000)`, Expected: values.NewBigIntegerFromString("50000000000000000000", 10)},
+
+		// Inexact integers beyond the int64 range. Go leaves out-of-range
+		// float-to-int conversion implementation-defined and it saturates
+		// here, so before helpers.floatExceedsInt64 gated the promotion these
+		// answered on MaxInt64 instead of the argument: (gcd 1e30 6) was 1.0,
+		// (gcd 1e19) was 9223372036854776000.0, and (gcd -1e30 6) was -2.0 —
+		// a negative gcd, which R7RS 6.2.6 forbids outright. The last row
+		// covers the big-fold conversion sites, which the first three reach
+		// only through the classification pass.
+		{Name: "gcd of out-of-range inexact integer", Code: `(gcd 1e30 6)`, Expected: values.NewFloat(2.0)},
+		{Name: "gcd of negative out-of-range inexact integer", Code: `(gcd -1e30 6)`, Expected: values.NewFloat(2.0)},
+		{Name: "gcd of lone out-of-range inexact integer", Code: `(gcd 1e19)`, Expected: values.NewFloat(1e19)},
+		// -2^63 converts to int64 EXACTLY, so the range check rightly lets it
+		// through — and then the fold's absolute value is a no-op, because
+		// MinInt64 negates to itself. Answered -2.0: a negative gcd, which
+		// R7RS 6.2.6 forbids outright. A different hazard from the rows above,
+		// at the one boundary the range test must not reject.
+		{Name: "gcd of the inexact MinInt64 boundary", Code: `(gcd -9223372036854775808.0 6)`, Expected: values.NewFloat(2.0)},
+		{Name: "gcd of the lone inexact MinInt64 boundary", Code: `(gcd -9223372036854775808.0)`, Expected: values.NewFloat(9223372036854775808.0)},
+		{Name: "gcd of out-of-range inexact and biginteger", Code: `(gcd 1e30 (expt 2 70))`, Expected: values.NewFloat(281474976710656.0)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -869,6 +889,10 @@ func TestLcm(t *testing.T) {
 
 		// BigInteger operations
 		{Name: "lcm of bigintegers", Code: `(lcm #z10000000000 #z30000000000)`, Expected: values.NewBigIntegerFromString("30000000000", 10)},
+
+		// Same saturation as the gcd rows: this answered
+		// 55340232221128655000.0, the lcm of MaxInt64 and 6.
+		{Name: "lcm of out-of-range inexact integer", Code: `(lcm 1e30 6)`, Expected: values.NewFloat(3.0000000000000003e30)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -900,6 +924,14 @@ func TestQuotient(t *testing.T) {
 		// MinInt64 / -1 overflows int64: true quotient is +2^63, which wraps to
 		// MinInt64 under raw a/b. Must promote to BigInteger equal to +2^63.
 		{Name: "quotient MinInt64/-1 overflow", Code: `(quotient -9223372036854775808 -1)`, Expected: values.NewBigIntegerFromString("9223372036854775808", 10)},
+
+		// +2^63 as an inexact integer is the single float64 that the old
+		// `<= math.MaxInt64` bound admitted to the int64 path, where the cast
+		// saturated it back down to MaxInt64. Answered 1.0. The divisor is
+		// large on purpose: for a small one the off-by-one in the dividend
+		// disappears when the quotient is rounded back to float64, so
+		// (quotient 2^63 2) looks right by accident.
+		{Name: "quotient out-of-range inexact dividend", Code: `(quotient 9223372036854775808.0 4611686018427387904)`, Expected: values.NewFloat(2.0)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -942,6 +974,10 @@ func TestRemainder(t *testing.T) {
 
 		// MinInt64 / -1: quotient overflows but remainder is mathematically 0.
 		{Name: "remainder MinInt64/-1", Code: `(remainder -9223372036854775808 -1)`, Expected: values.NewInteger(0)},
+
+		// Same admitted value as the quotient row: answered 7.0, which is
+		// MaxInt64 mod 10 showing through the saturation.
+		{Name: "remainder out-of-range inexact dividend", Code: `(remainder 9223372036854775808.0 10)`, Expected: values.NewFloat(8.0)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -988,6 +1024,11 @@ func TestModulo(t *testing.T) {
 
 		// MinInt64 / -1: quotient overflows but modulo is mathematically 0.
 		{Name: "modulo MinInt64/-1", Code: `(modulo -9223372036854775808 -1)`, Expected: values.NewInteger(0)},
+
+		// Answered 7.0 (MaxInt64 mod 10). -2^63 IS exactly representable and
+		// converts exactly, so the negative row is a control, not a defect.
+		{Name: "modulo out-of-range inexact dividend", Code: `(modulo 9223372036854775808.0 10)`, Expected: values.NewFloat(8.0)},
+		{Name: "modulo MinInt64 inexact dividend stays exact", Code: `(modulo -9223372036854775808.0 10)`, Expected: values.NewFloat(2.0)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

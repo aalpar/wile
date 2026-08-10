@@ -331,7 +331,15 @@ func MakeExactNumber(n values.Number) (values.Number, error) {
 		if math.IsNaN(f) || math.IsInf(f, 0) {
 			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "MakeExactNumber: cannot convert inf or nan to exact")
 		}
-		if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
+		// `< 2^63`, not `<= math.MaxInt64`: 2^63-1 is not representable as a
+		// float64, so the untyped constant rounds UP in a float comparison
+		// and the inclusive form admits exactly one value it must reject,
+		// where int64(f) then saturates. -2^63 IS representable and converts
+		// exactly, so the lower bound stays inclusive. Same guard, same
+		// reason, as helpers.floatExceedsInt64 and
+		// integerToFloat64WithAccuracy.
+		const twoPow63 = 9223372036854775808.0 // 2^63 = MaxInt64 + 1
+		if f == math.Trunc(f) && f >= math.MinInt64 && f < twoPow63 {
 			return values.NewInteger(int64(f)), nil
 		}
 		return values.Simplify(values.NewRationalFromRat(new(big.Rat).SetFloat64(f))), nil
@@ -354,7 +362,14 @@ func MakeExactNumber(n values.Number) (values.Number, error) {
 		}
 		reNum := values.NewRationalFromRat(new(big.Rat).SetFloat64(re))
 		imNum := values.NewRationalFromRat(new(big.Rat).SetFloat64(im))
-		return values.NewBigComplex(reNum, imNum), nil
+		// Simplify, as every other construction site does. Without it #e1.0+0.0i
+		// minted an exact *BigComplex with an EXACT zero imaginary part — a
+		// value the rest of the tower says cannot exist. It answered #t to
+		// exact?, real? AND exact-integer? while still rendering as 1+0i, and
+		// it reached an unguarded default arm in make-rectangular that panicked
+		// uncatchably. The zero-imaginary collapse is exactly what Simplify is
+		// for; the *Float and *BigFloat arms above already call it.
+		return values.Simplify(values.NewBigComplex(reNum, imNum)), nil
 	case *values.BigComplex:
 		if v.IsExact() {
 			return v, nil

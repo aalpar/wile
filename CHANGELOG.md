@@ -43,6 +43,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **New: `registry.PrimitiveSpec.Mutates`.** Declares that a primitive
+  destructively updates an existing Scheme value. Default `false`; required for
+  any primitive whose `Impl` — or a closure it RETURNS — reaches a
+  values-package mutator. The `NoMutation` dialect's removal list is pinned
+  against it in both directions.
+
+- **New: `schemeutil.DefaultMaxDatumToSyntaxDepth`.** The nesting bound above.
+
+- **BREAKING (embedders): `schemeutil.DatumToSyntaxValue` returns an error.**
+  Its signature is now `(ctx, sctx, o) (syntax.SyntaxValue, error)`. It refuses
+  a **circular datum** with `werr.ErrCircularList`, and it has to: every caller
+  hands the result to the expander or the compiler, and a circular program is
+  not a program. A domain error on user data must be a catchable condition,
+  which needs an error channel.
+
+- **BREAKING (Scheme): a circular datum is refused, not converted.**
+  `(datum->syntax #f x)` and `(eval x env)` on a datum closed into a cycle by
+  `set-car!`, `set-cdr!`, `vector-set!` or `set-box!` now raise a catchable
+  error naming the cycle. Previously they killed the **host process** with a
+  runtime stack overflow — a throw, not a panic, so no `recover` anywhere could
+  contain it and an embedder lost every engine in the process. The `set-cdr!`
+  case failed more quietly: the spine walk detected the cycle and its error was
+  discarded, so the list was silently truncated and the mangled graph surfaced
+  downstream as a diagnostic naming an internal syntax type.
+
+- **`#e` over a complex with a zero imaginary part now collapses to a real.**
+  `#e1.0+0.0i` reads as the exact integer `1`, and `#e1.5+0.0i` as `3/2`. It
+  used to mint an exact complex with an *exact* zero imaginary part — a value
+  the rest of the numeric tower says cannot exist. It answered `#t` to
+  `exact?`, `real?` **and** `exact-integer?` while still rendering as `1+0i`,
+  and it reached an unguarded arm of `make-rectangular` that panicked
+  uncatchably.
+
+- **`make-rectangular` no longer drops an inexact zero imaginary part on the
+  big-float path.** `(make-rectangular #m1.0 0.0)` answered `1.0l0` while
+  `(make-rectangular 1.0 0.0)` answered `1.0+0.0i`. Exactness, not magnitude,
+  licenses the complex-to-real descent — `(real? -2.5+0.0i)` is `#f`. An
+  **exact** zero imaginary part still collapses, on the same path.
+
+- **BREAKING (Scheme, `NoMutation` engines only): the `NoMutation` dialect now removes `record-modifier`.** Destructiveness
+  is declared on `registry.PrimitiveSpec.Mutates` rather than read off a `"!"`
+  suffix, which was wrong in both directions: `record-modifier` sets a record
+  field and has no bang, so a `NoMutation` engine handed out a working field
+  setter, while fifteen bang-suffixed primitives act on the world rather than
+  on a value a program holds. **User-visible consequence:**
+  `define-record-type` expands to `(record-modifier type 'field-tag)`
+  unconditionally, so under `NoMutation` a record type that DECLARES a modifier
+  now fails at *definition* time. A modifier-free one is unaffected.
+
+- **BREAKING (Scheme): a datum nested deeper than 10,000 levels is refused.**
+  `datum->syntax` and `eval` bound structural NESTING the way the reader and
+  the writer already do (`parser.DefaultMaxParseDepth`,
+  `values.DefaultMaxWriteDepth`), raising `werr.ErrParseDepthExceeded`.
+  Unbounded, a runtime-built deeply nested datum — one no reader ever bounded —
+  killed the **host process** with a runtime stack overflow. Measured: 200,000
+  levels converted, 2,000,000 did not. LENGTH is deliberately not bounded; a
+  long list is not a deep one, and both spine walks are iterative.
+
+- **BREAKING (embedders): stack-frame alists omit absent positions.**
+  `error-object-stack-trace` and `error-context-stack-trace` no longer emit
+  `(file . "") (line . 0) (column . 0)` for a frame with no source position;
+  those keys are simply absent, which is what both primitives' docstrings
+  already promised and what the textual trace already did. A frame with a
+  position but no filename reports `(file . #f)`.
+
 - **BREAKING (embedders): the load path moved from the engine to the context.**
   `Engine.WithLoadPath`, `PushLoadPath` and `PopLoadPath` are **removed**, and
   `CurrentLoadPath` / `CurrentLoadDirectory` now take a `context.Context`. The
@@ -195,6 +260,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `callForeignCached`'s eager recheck is unchanged.
 
 ### Fixed
+
+- **`gcd`, `lcm`, `quotient`, `remainder` and `modulo` answered wrongly, and
+  silently, on large inexact integers.** `(gcd 1e30 6)` was `1.0` where it is
+  `2.0`; `(gcd -1e30 6)` was `-2.0`, a negative gcd, which R7RS §6.2.6 forbids;
+  `(modulo 9223372036854775808.0 10)` was `7.0` where it is `8.0`. An
+  out-of-range float-to-int conversion is implementation-defined in Go and
+  saturates here, so an unchecked cast is a wrong answer with no error.
+
+- **`(sqrt n)` and `(exact-integer-sqrt n)` did not terminate near the top of
+  the int64 range.** `(sqrt 9223372036854775807)` and
+  `(sqrt -9223372036854775808)` never returned;
+  `(exact-integer-sqrt 9223372030926249001)` returned a pair satisfying
+  `n = s² + r` only modulo 2^64. Both now compute in `big.Int`, which also
+  recovers exactness: `(sqrt 9223372030926249001)` is the exact `3037000499`.
+
+- **`continuation-mark-set->list*` never returned on a circular key list**,
+  allocating gigabytes per second. It now refuses, like every other list
+  primitive.
+
+- **A compile error on an unbound variable reported the enclosing form's
+  location.** An unbound reference on line 4 of a file reported line 1, and
+  line 4 appeared nowhere — not in the message, and not reachable through
+  `errors.As`. The offending identifier's own position is now stamped at the
+  throw, for a reference and for `set!`.
+
+- **`sat-cnf-flat?` cost hours of CPU on a legal two-element input.**
+  `(sat-cnf-flat? (vector 4194304 0) 1)` extrapolated to ~8.5 hours and now
+  answers in 0.35 s: a decision is O(log n) instead of a scan of every
+  variable, and propagation no longer re-walks the trail from its base on
+  every call. A 200,000-variable solve went from 69.5 s to 0.02 s.
 
 - **`memq` and `memv` now terminate on a circular list and observe
   cancellation.** They walked the spine in a flat Go loop that read neither the

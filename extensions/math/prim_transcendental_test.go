@@ -275,6 +275,26 @@ func TestSqrtExactness(t *testing.T) {
 		{"sqrt -4 real is 0", `(= (real-part (sqrt -4)) 0)`, values.TrueValue},
 		{"sqrt -4 imag is 2", `(= (imag-part (sqrt -4)) 2)`, values.TrueValue},
 		{"sqrt 2 is inexact", `(inexact? (sqrt 2))`, values.TrueValue},
+
+		// The int64 correction loops inside exactIntegerSqrt overflowed at the
+		// top of the range. Two different non-terminations, one function.
+		//
+		// MaxInt64: `(root+1)*(root+1) <= n` compares a WRAPPED product, and
+		// no int64 exceeds MaxInt64, so the guard was true for every value of
+		// root — (sqrt 9223372036854775807) never returned.
+		{"sqrt MaxInt64 terminates", `(< (abs (- (sqrt 9223372036854775807) 3037000499.9760497)) 1e-6)`, values.TrueValue},
+		// MinInt64 negates to ITSELF, so the negative arm handed
+		// exactIntegerSqrt a negative magnitude its loop could never satisfy.
+		{"sqrt MinInt64 terminates", `(< (abs (- (imag-part (sqrt -9223372036854775808)) 3037000499.9760497)) 1e-6)`, values.TrueValue},
+		{"sqrt MinInt64 real part is zero", `(= (real-part (sqrt -9223372036854775808)) 0)`, values.TrueValue},
+		// 3037000499² — the first perfect square above the overflow threshold.
+		// It terminated before the fix but lost exactness, answering the
+		// inexact 3037000499.0 where the square one step lower answered the
+		// exact 3037000498.
+		{"sqrt of the threshold perfect square is exact", `(exact? (sqrt 9223372030926249001))`, values.TrueValue},
+		{"sqrt of the threshold perfect square is its root", `(= (sqrt 9223372030926249001) 3037000499)`, values.TrueValue},
+		{"sqrt of the negative threshold perfect square is exact", `(exact? (sqrt -9223372030926249001))`, values.TrueValue},
+		{"sqrt of the negative threshold perfect square is its root", `(= (imag-part (sqrt -9223372030926249001)) 3037000499)`, values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

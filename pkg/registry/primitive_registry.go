@@ -60,6 +60,48 @@ type PrimitiveSpec struct {
 	// It flows to BindingMeta.CaptureSafe at registration; the classifier reads the
 	// binding flag because pkg/internal/validate must not import pkg/registry.
 	InvokesProcedure bool
+	// Mutates marks a primitive that destructively updates an existing Scheme
+	// value — a pair, vector, string, bytevector, hashtable, box, parameter
+	// slot, atomic cell or record field that the program is already holding.
+	// Default false = "does not destructively update an existing value".
+	//
+	// REQUIRED for any primitive whose Impl — or a closure that Impl RETURNS,
+	// which is how record-modifier escaped for as long as it did — reaches a
+	// values-package mutator. TestMutatesMatchesMutationPrimitives pins the
+	// annotated set against the NoMutation dialect's removal list, and
+	// TestNoMutationRemovesEveryDestructivePrimitive checks the engine
+	// actually drops each one.
+	//
+	// It replaces a "!"-suffix heuristic. The suffix is a naming convention,
+	// not a semantic one, and it was wrong in both directions: record-modifier
+	// destructively sets a record field and has no bang, so a NoMutation
+	// engine handed out a working field setter; and fifteen bang-suffixed
+	// primitives (thread-start!, mutex-lock!, set-current-directory!, …) act
+	// on the world rather than on a value a program holds, so they must NOT be
+	// removed. A property about what a primitive DOES cannot be read off its
+	// spelling.
+	//
+	// Unlike InvokesProcedure this does not flow to BindingMeta: the only
+	// consumer is the dialect's removal list, which is consulted once at
+	// engine construction.
+	//
+	// TWO LIMITS, both known and both deliberate.
+	//
+	// It has no static guard. InvokesProcedure has one — an AST walk of each
+	// Impl's call graph — and this does not, so the ratchet pins the
+	// annotation against the removal list but derives NEITHER from the code.
+	// A new destructive primitive that is neither annotated nor bang-suffixed
+	// is invisible to both, which is exactly how record-modifier survived. See
+	// the TODO.md row for the SSA pass that would close it.
+	//
+	// A mutator reachable only by APPLYING a returned object is out of reach
+	// by construction. make-parameter is the live case: (p v) on a parameter
+	// object destructively sets it, and a NoMutation engine still permits
+	// that. Annotating make-parameter would not fix it — it would remove
+	// parameterize, which is R7RS 4.2.6 dynamic binding, not mutation, and
+	// which works on a NoMutation engine today. That gap belongs to the
+	// dialect's stated language-surface boundary, not to this field.
+	Mutates bool
 	// Identity, when non-nil, is stamped onto every ForeignClosure Apply builds
 	// from this spec, so Go code can ask "is this value the registered X?" of a
 	// procedure it was handed. Declare one only for a primitive some other

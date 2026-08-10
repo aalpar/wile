@@ -49,7 +49,7 @@ func addLists(r *registry.PrimitiveRegistry) error {
 			Doc: "Returns the K-th element of LIST (0-based). Raises an error if K is out of range.\n\nExamples:\n  (list-ref '(a b c) 0)    => a\n  (list-ref '(a b c) 2)    => c", ParamNames: []string{"list", "k"}, Category: "lists",
 			ParamTypes: []values.TypeConstraint{values.TypeList, values.TypeInteger}, ReturnType: values.TypeAny,
 			Keywords: []string{"index", "nth", "get element"}},
-		{Name: "list-set!", ParamCount: 3, Impl: PrimListSet,
+		{Name: "list-set!", Mutates: true, ParamCount: 3, Impl: PrimListSet,
 			Doc: "Stores OBJ as the K-th element of LIST (0-based). The pair at position K must be mutable.\n\nExamples:\n  (let ((ls (list 'a 'b 'c))) (list-set! ls 1 'x) ls)  => (a x c)", ParamNames: []string{"list", "k", "obj"}, Category: "lists",
 			ParamTypes: []values.TypeConstraint{values.TypePair, values.TypeInteger, values.TypeAny}, ReturnType: values.TypeVoid},
 		// list-tail may return any tail, including an improper-list cdr, so
