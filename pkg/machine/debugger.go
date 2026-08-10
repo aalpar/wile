@@ -132,28 +132,54 @@ func (p *Debugger) Breakpoints() []*Breakpoint {
 	return result
 }
 
-// CheckBreakpoint checks if execution should break at current location.
+// CheckBreakpoint reports the breakpoint execution should stop at, or nil.
 //
-// It is not a pure query: a matching breakpoint's HitCount is incremented under
-// the READ lock, so CheckBreakpoint is NOT safe to call from multiple goroutines.
-// The returned *Breakpoint is the live object, not a copy, so callers read fields
-// that Enable/Disable mutate under the write lock.
+// It is not a pure query: a matching breakpoint's HitCount is incremented, and
+// mc's de-duplication cursor is advanced on every call. The increment is a write
+// and is taken under the WRITE lock, so concurrent SRFI-18 threads sharing one
+// Debugger do not race on HitCount. The returned *Breakpoint is the live object,
+// not a copy, so callers read fields that Enable/Disable mutate under the same lock.
+//
+// It fires once per ENTRY to a source line, not once per instruction on it: a
+// single source line compiles to several instructions, and stopping on each of
+// them reported one stop as several (four, for a `(+ x x)` body) and inflated
+// HitCount by the same factor. The cursor advances on every call so that leaving
+// a line and returning to it re-arms — which is what makes a procedure called
+// four times break four times.
+//
+// Known limitation: a loop whose ENTIRE body is one source line never leaves that
+// line, so it breaks once, not once per iteration.
 func (p *Debugger) CheckBreakpoint(mc *MachineContext) *Breakpoint {
 	source := mc.CurrentSource()
 	if source == nil {
 		return nil
 	}
 
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	line := source.Start.Line()
+	if source.File != mc.lastBreakFile || line != mc.lastBreakLine {
+		mc.lastBreakFile = source.File
+		mc.lastBreakLine = line
+		mc.lastBreakFired = false
+	}
+	// Suppression is keyed on having already fired ON this line, not merely on
+	// being on it again: a column-qualified breakpoint (,break f:2:7) sits on an
+	// instruction that is typically not the first one carrying line 2, and a
+	// plain line cursor would swallow it before it ever matched.
+	if mc.lastBreakFired {
+		return nil
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	for _, bp := range p.breakpoints {
 		if !bp.Enabled {
 			continue
 		}
-		if bp.File == source.File && bp.Line == source.Start.Line() {
+		if bp.File == source.File && bp.Line == line {
 			if bp.Column == 0 || bp.Column == source.Start.Column() {
 				bp.HitCount++
+				mc.lastBreakFired = true
 				return bp
 			}
 		}

@@ -130,6 +130,19 @@ type MachineContext struct {
 
 	timer *timerState // nil = no timer active; both handler and cancel set together
 
+	// lastBreakFile/lastBreakLine/lastBreakFired are the debugger's per-line
+	// de-duplication cursor, read and written only by CheckBreakpoint. Several
+	// consecutive instructions carry one source line, and a breakpoint names a
+	// LINE, so the cursor collapses them into a single stop per entry to the
+	// line. They live here rather than on the Debugger because the Debugger is
+	// shared across SRFI-18 threads and sub-contexts while the cursor is a
+	// property of one instruction stream; per-context also means no lock.
+	// Like the fields above and unlike vmState, they describe the executing
+	// context and must NOT be saved into continuations.
+	lastBreakFile  string
+	lastBreakLine  int
+	lastBreakFired bool
+
 	// immutableLiterals and authorizer are the namespace-derived engine state,
 	// snapshotted so a released environment frame cannot blank it. They are a
 	// FALLBACK, never the authority: the accessors still read p.env.Namespace()
