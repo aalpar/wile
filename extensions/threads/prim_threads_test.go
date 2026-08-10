@@ -1399,3 +1399,46 @@ func TestWithTimeoutInterruptsParkedThreadSleep(t *testing.T) {
 		})
 	}
 }
+
+// TestEngineCloseTerminatesLiveThreads pins the closer registered by addThreads:
+// closing an engine must terminate the SRFI-18 threads that engine started, not
+// leave them spinning for the life of the host process.
+//
+// The thread-state assertion is the gate. It is valid immediately after Close
+// returns because the closer calls Terminate (which records the terminal outcome
+// synchronously) and only then waits on Thread.Done(). Without the closer the
+// thread is still ThreadRunnable and its goroutine is still looping.
+//
+// The goroutine count is corroboration only, and it is asserted TIGHT
+// (final <= baseline). The ±2 slack that
+// TestConditionVariable_Wait_NoGoroutineLeak allows would make this arm VACUOUS
+// here: exactly one goroutine leaks, so baseline+2 passes with the fix reverted.
+func TestEngineCloseTerminatesLiveThreads(t *testing.T) {
+	c := qt.New(t)
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(extthreads.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	baseline := testutil.StableGoroutineCount(t, 2*time.Second)
+
+	result := eval(t, engine, `
+		(define spinner
+		  (make-thread (lambda () (let loop () (thread-sleep! 0.05) (loop)))))
+		(thread-start! spinner)`)
+	th, ok := result.Internal().(*values.Thread)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("thread-start! returned %T", result.Internal()))
+	testutil.PollUntil(t, func() bool {
+		return th.State() != values.ThreadNew
+	}, 2*time.Second)
+
+	err = engine.Close()
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(th.State(), qt.Equals, values.ThreadTerminated,
+		qt.Commentf("Engine.Close must terminate the threads the engine started"))
+
+	final := testutil.StableGoroutineCount(t, 2*time.Second)
+	c.Assert(final <= baseline, qt.IsTrue,
+		qt.Commentf("thread goroutine outlived Engine.Close: baseline=%d final=%d", baseline, final))
+}

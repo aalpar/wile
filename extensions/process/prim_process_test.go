@@ -291,3 +291,43 @@ func TestProcessPredicate(t *testing.T) {
 		c.Assert(result.Internal(), qt.Equals, values.FalseValue)
 	})
 }
+
+// TestEngineCloseKillsSpawnedProcesses pins the closer registered by
+// addPrimitives: closing an engine must kill and reap the children that engine
+// spawned, rather than orphaning them onto the host.
+//
+// cmd.ProcessState is the gate. It is nil for a running child and is set only by
+// a completed Wait, so the assertion cannot pass unless the closer both killed
+// and reaped. Without the closer the child stays alive: `ps -axo pid,command`
+// still lists `sleep 97` after Close returns. No watchdog is needed — the closer
+// only waits on a process it has already killed.
+//
+// ExitCode() == -1 (and Exited() == false) is the signalled shape: on Unix a
+// process terminated by a signal did not "exit", so Exited() reports false. That
+// distinguishes the closer's SIGKILL from a child that ran to completion.
+func TestEngineCloseKillsSpawnedProcesses(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix commands")
+	}
+	c := qt.New(t)
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(extio.Extension),
+		wile.WithExtension(extprocess.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	result := eval(t, engine, `(process-spawn "sleep" "97")`)
+	proc, ok := result.Internal().(*values.Process)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("process-spawn returned %T", result.Internal()))
+	cmd := proc.Cmd()
+	c.Assert(cmd, qt.IsNotNil)
+	c.Assert(cmd.ProcessState, qt.IsNil, qt.Commentf("child must still be running before Close"))
+
+	err = engine.Close()
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(cmd.ProcessState, qt.IsNotNil,
+		qt.Commentf("Engine.Close must kill and reap the processes the engine spawned"))
+	c.Assert(cmd.ProcessState.Exited(), qt.IsFalse)
+	c.Assert(cmd.ProcessState.ExitCode(), qt.Equals, -1)
+}
