@@ -47,7 +47,7 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 			Keywords:   []string{"shell", "exec", "run command", "subprocess"},
 			ParamTypes: []values.TypeConstraint{values.TypeString},
 			ReturnType: values.TypeInteger},
-		{Name: "process-spawn", ParamCount: 2, IsVariadic: true, Impl: live.primProcessSpawn,
+		{Name: "process-spawn", ParamCount: 2, IsVariadic: true, Impl: live.processSpawnImpl(),
 			Doc: "Starts a child process with piped stdin/stdout/stderr. Returns a process object.", ParamNames: []string{"command", "args"}, Category: "process",
 			Keywords:   []string{"fork", "exec", "launch", "subprocess", "popen"},
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeString}, ReturnType: values.TypeAny},

@@ -67,7 +67,7 @@ func addThreads(r *registry.PrimitiveRegistry) error {
 			Doc: "Sets the thread-local specific value for THREAD.", ParamNames: []string{"thread", "value"}, Category: "threads",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny},
 			ReturnType: values.TypeVoid},
-		{Name: "thread-start!", InvokesProcedure: true, ParamCount: 1, Impl: live.primThreadStart,
+		{Name: "thread-start!", InvokesProcedure: true, ParamCount: 1, Impl: live.threadStartImpl(),
 			Doc: "Starts execution of THREAD in a new goroutine. Returns THREAD.", ParamNames: []string{"thread"}, Category: "threads",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "thread-yield!", Impl: PrimThreadYield,
