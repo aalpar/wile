@@ -31,13 +31,19 @@ import (
 // mandatory secondary exception was silently swallowed and the illegal handler
 // return was converted into a normal value.
 //
-// The flag must instead be path-precise: forward ONLY when handler-k was resumed
-// THROUGH this escalator frame (the guard re-raise-continuable case), not merely
-// because some unrelated continuation was resumed earlier on the same driver.
+// The replacement, a per-driver `resumeGeneration` counter, fixed that and was
+// still too coarse: it answered "did any resume happen between arm and fire", so
+// a call/cc escape taken INSIDE the handler — which never leaves the escalator
+// frame's extent — cleared the gate too. The rows below pin that second failure.
+//
+// The signal must be per-arm and directional: forward ONLY when a reinstatement
+// REVIVED this escalator frame (the segment carried it, the live chain did not),
+// which is the guard re-raise-continuable case.
 
 // TestNonContinuableHandlerReturnErrors: a handler that RETURNS from a
-// non-continuable raise must always raise the §6.11 secondary exception, with or
-// without an unrelated continuation resume earlier on the same driver.
+// non-continuable raise must always raise the §6.11 secondary exception —
+// whether an unrelated continuation was resumed earlier on the same driver, or
+// the handler itself takes a call/cc jump inside its own body.
 func TestNonContinuableHandlerReturnErrors(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{

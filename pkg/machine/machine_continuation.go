@@ -49,7 +49,8 @@ type MachineContinuation struct {
 	//   releaseContinuation (pool reset) zeros the struct, clearing inline slots.
 	inlineEvalsLen uint8
 	inlineEvals    [inlineEvalsCap]values.Value
-	// non-nil only on a non-continuable handler's finalizer frame; shared by every copy of that frame.
+	// non-nil only on a non-continuable handler's finalizer frame; shared by
+	// every copy of that frame.
 	escalatorArm *escalatorArm
 }
 
