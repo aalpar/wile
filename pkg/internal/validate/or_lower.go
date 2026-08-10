@@ -104,6 +104,58 @@ func bindingOccursIn(expr ValidatedExpr, binder *syntax.SyntaxSymbol) bool {
 			q = true
 		}
 	})
+	if q {
+		return true
+	}
+	return opaqueSubtreeMentions(expr, binder)
+}
+
+// opaqueSubtreeMentions is bindingOccursIn's second half, covering what
+// WalkBindingRefs structurally cannot reach: the subtrees WalkSubExprs reports
+// CHILDLESS. A quasiquote template and a passthrough form (cond-expand,
+// include, let-syntax) hold raw syntax this package never validated, so the
+// reference walk concludes "nothing in there" and the lowering drops a frame
+// whose binder IS referenced. Measured:
+// (let ((c (assq 'z '((a 1))))) (if c c `(missing ,c))) evaluated to
+// (missing 42), reading an OUTER c, where (missing #f) is the meaning.
+//
+// It is not a blanket refusal. The depth walk is forEachRawSymbol's, reused
+// rather than re-derived, so a name that appears only as template DATA costs
+// nothing — refusing every opaque alternative would retire the lowering on
+// exactly the quasiquote-heavy code it was written for. What IS blanket is the
+// nil payload: opaqueRawSyntax's contract makes the boolean the opacity answer
+// and the payload merely what to scan, and a nil one is when we know least.
+func opaqueSubtreeMentions(expr ValidatedExpr, binder *syntax.SyntaxSymbol) bool {
+	if expr == nil {
+		return false
+	}
+	raw, opaque := opaqueRawSyntax(expr)
+	if !opaque {
+		q := false
+		WalkSubExprs(expr, func(child ValidatedExpr, _ ChildRole) {
+			if opaqueSubtreeMentions(child, binder) {
+				q = true
+			}
+		})
+		return q
+	}
+	if raw == nil {
+		return true
+	}
+	// A *ValidatedQuasiquote's Template is the form's argument, so the caller
+	// has already stepped one level in; every other opaque node is ordinary
+	// code. Same split markOpaqueTemplate / markOpaqueCode make.
+	depth := quasiDepthCode
+	_, isQuasi := expr.(*ValidatedQuasiquote)
+	if isQuasi {
+		depth = quasiDepthTemplate
+	}
+	q := false
+	forEachRawSymbol(raw, depth, func(sym *syntax.SyntaxSymbol) {
+		if refMatchesBinder(sym, binder) {
+			q = true
+		}
+	})
 	return q
 }
 
