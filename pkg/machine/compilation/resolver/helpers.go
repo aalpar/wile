@@ -103,9 +103,11 @@ func isAuthorized(auth security.Authorizer, target, source string) bool {
 	}) == nil
 }
 
-// IsNotFound reports whether err means the file is genuinely absent, which is
-// the only condition that licenses continuing a search: falling through to the
-// next resolver in a chain, or from a library's .sld to its .scm.
+// IsNotFound reports whether err means the file is genuinely absent, which
+// always licenses continuing a search: falling through to the next resolver in
+// a chain, or from a library's .sld to its .scm. (A chain continues past a
+// denial too, under the narrower condition ChainFileResolver.continuesPast
+// states; absence is the unconditional half.)
 //
 // It accepts both sentinels because both are minted for absence and neither
 // implies the other: werr.ErrFileNotFound is a bare static sentinel with no
@@ -113,6 +115,21 @@ func isAuthorized(auth security.Authorizer, target, source string) bool {
 // virtual-filesystem side without ever being relabelled.
 func IsNotFound(err error) bool {
 	return errors.Is(err, werr.ErrFileNotFound) || errors.Is(err, fs.ErrNotExist)
+}
+
+// SourceGate is implemented by a FileResolver that authorizes every candidate
+// before opening it, and names the security.AccessRequest.TargetSource it
+// authorizes them under ("" = the host OS filesystem).
+//
+// It exists so ChainFileResolver can tell a refusal it may look past from one
+// it may not: a resolver that implements SourceGate under a different source
+// asks the authorizer a different question, while one that does not implement
+// it asks none at all (EmbedFileResolver) and must never be reached with a
+// denial standing. ChainFileResolver itself deliberately does not implement it:
+// a chain authorizes under as many sources as it has members, so there is no
+// single answer, and the conservative reading of "not gated" is the safe one.
+type SourceGate interface {
+	AuthorizedSource() string
 }
 
 // authorizeCandidates walks candidates in search order, authorizing each one
@@ -130,6 +147,12 @@ func IsNotFound(err error) bool {
 // candidate succeeds, so denied-and-existent and denied-and-absent are
 // indistinguishable. Absence continues the search; any other open failure is
 // propagated with its cause, never relabelled as absence.
+//
+// The helper owns the ORDER; open owns the DIAGNOSIS. An opener's error is
+// returned to the caller unchanged, so whichever operation actually failed is
+// the one the sentinel and the message name — a stat that never reached an open
+// must not surface as werr.ErrFileOpen. What the helper reads off that error is
+// only whether it means absence (IsNotFound), which is what continues the loop.
 //
 // source labels the namespace the candidates are drawn from; see
 // security.AccessRequest.TargetSource. Returns sourceload.ErrNotFound when
@@ -159,10 +182,10 @@ func authorizeCandidates(
 		if openErr == nil {
 			return f, candidate, nil
 		}
-		if errors.Is(openErr, fs.ErrNotExist) {
+		if IsNotFound(openErr) {
 			continue
 		}
-		return nil, "", werr.WrapForeignErrorWithCause(werr.ErrFileOpen, openErr, "open %s", candidate)
+		return nil, "", openErr
 	}
 	if denied != nil {
 		return nil, "", denied

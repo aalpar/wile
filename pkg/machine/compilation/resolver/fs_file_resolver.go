@@ -53,6 +53,12 @@ func NewFSFileResolver(fsys fs.FS, env *environment.EnvironmentFrame) *FSFileRes
 	}
 }
 
+// AuthorizedSource reports the source every candidate is authorized under: the
+// virtual filesystem this resolver serves. See SourceGate.
+func (*FSFileResolver) AuthorizedSource() string {
+	return security.SourceVirtualFS
+}
+
 // fsRegistryDirs returns the registry search paths (non-empty entries only).
 // The load-path-stack current dir is NOT included here — it is injected into
 // the Finder via WithStack so the Finder handles directory-relative resolution.
@@ -99,8 +105,16 @@ func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 	//
 	// FSFileResolver sets no canonicalize function, so the candidate the helper
 	// returns is already the resolved path.
+	//
+	// The opener labels its own failures: authorizeCandidates returns them
+	// unchanged, and an fs.FS reports a hard failure as a bare *fs.PathError with
+	// no sentinel a Wile caller can match.
 	opener := func(candidate string) (fs.File, error) {
 		q, _, openErr := finder.OpenCandidate(candidate)
+		if openErr != nil && !IsNotFound(openErr) {
+			return nil, werr.WrapForeignErrorWithCause(werr.ErrFileOpen, openErr,
+				"open %s in virtual filesystem", candidate)
+		}
 		return q, openErr
 	}
 	auth := SelectAuthorizer(ctx, p.env)

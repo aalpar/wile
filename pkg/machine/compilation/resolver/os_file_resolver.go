@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
@@ -59,6 +60,13 @@ func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 	return p.resolveRelative(ctx, path)
 }
 
+// AuthorizedSource reports the source every candidate is authorized under: the
+// host OS filesystem, which security.AccessRequest spells as the zero value.
+// See SourceGate.
+func (*OSFileResolver) AuthorizedSource() string {
+	return ""
+}
+
 // resolveRelative locates a relative path across the OS search directories.
 //
 // The search list is built as:
@@ -81,10 +89,11 @@ func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 // one request per search directory even for names that do not exist anywhere,
 // so authorizer logs are noisier than the number of files actually opened.
 //
-// A stat failure that is not absence (EACCES on a parent directory) is
-// propagated rather than swallowed: it says nothing about whether the file is
-// there, so reporting not-found would both lie and let the search fall through
-// to a lower-priority directory.
+// A stat failure that leaves existence undecided (EACCES on a parent
+// directory) is propagated rather than swallowed: it says nothing about whether
+// the file is there, so reporting not-found would both lie and let the search
+// fall through to a lower-priority directory. A stat failure that DECIDES
+// existence — see absenceErrnos — is absence and continues the search.
 func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.File, string, error) {
 	auth := SelectAuthorizer(ctx, p.env)
 	searchDirs := p.osAbsSearchDirs(ctx)
@@ -97,7 +106,7 @@ func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.F
 	opener := func(candidate string) (fs.File, error) {
 		fi, statErr := os.Stat(candidate)
 		if statErr != nil {
-			return nil, statErr
+			return nil, classifyStatFailure(candidate, statErr)
 		}
 		if fi.IsDir() {
 			return nil, werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, fs.ErrNotExist,
@@ -121,6 +130,34 @@ func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.F
 	}
 	return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound,
 		"file %q not found; searched: %s", path, strings.Join(searched, ", "))
+}
+
+// absenceErrnos are the stat failures that PROVE the candidate is not there, as
+// opposed to leaving the question open. Each is decided by the name rather than
+// by the file: ENOTDIR means a path component is not a directory, ENAMETOOLONG
+// that no such name is representable, ELOOP that the name cannot be resolved at
+// all. None can become a readable file, so each continues the search exactly as
+// ENOENT does.
+//
+// The distinction is load-bearing because the search is ordered: treating
+// ENOTDIR as a hard error stopped at the first directory whose parent component
+// happened to be a regular file, so the copy sitting in a later search
+// directory — or behind the next resolver in a chain — was never reached.
+var absenceErrnos = []error{fs.ErrNotExist, syscall.ENOTDIR, syscall.ENAMETOOLONG, syscall.ELOOP}
+
+// classifyStatFailure labels a stat failure for authorizeCandidates: absence
+// (which continues the search) or a probe failure (which stops it).
+//
+// The sentinel names the operation that actually failed. Reporting a stat
+// through werr.ErrFileOpen would tell a caller a descriptor was requested and
+// refused, when nothing was opened.
+func classifyStatFailure(candidate string, statErr error) error {
+	for _, absent := range absenceErrnos {
+		if errors.Is(statErr, absent) {
+			return werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, statErr, "stat %s", candidate)
+		}
+	}
+	return werr.WrapForeignErrorWithCause(werr.ErrFileStat, statErr, "stat %s", candidate)
 }
 
 // osAbsSearchDirs returns the ordered, absolute search directories:

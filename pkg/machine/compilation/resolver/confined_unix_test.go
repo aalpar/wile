@@ -128,6 +128,14 @@ func TestOSFileResolver_StatPermissionIsNotNotFound(t *testing.T) {
 		qt.Commentf("EACCES on the parent directory is not an absence"))
 	qt.Assert(t, errors.Is(err, fs.ErrPermission), qt.IsTrue,
 		qt.Commentf("the cause must survive the wrap"))
+	// The sentinel must name the operation that failed. This probe never
+	// requested a descriptor, so a caller telling a failed open from a failed
+	// stat by sentinel would have been told the wrong one.
+	qt.Assert(t, errors.Is(err, werr.ErrFileStat), qt.IsTrue,
+		qt.Commentf("a stat failure is reported as one"))
+	qt.Assert(t, errors.Is(err, werr.ErrFileOpen), qt.IsFalse,
+		qt.Commentf("nothing was opened"))
+	qt.Assert(t, err.Error(), qt.Contains, "stat ")
 }
 
 // TestOSFileResolver_SymlinkEscapeDeniedUnconfined proves the non-confining arm

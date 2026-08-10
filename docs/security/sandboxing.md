@@ -88,6 +88,8 @@ Every enforcement point calls `security.CheckWithAuthorizer(auth, req)`. `securi
 
 `EmbedFileResolver` performs no check: it serves the compiled-in bootstrap sources, which are not attacker-controlled.
 
+In a chain (`WithSourceFS` + `WithSourceOS`), a resolver's refusal is not the chain's answer: the next resolver is tried when it authorizes under a *different* source, because refusing a virtual path says nothing about the host file the OS resolver holds. That fall-through stops at any resolver that authorizes nothing (`EmbedFileResolver`), which would otherwise hand out its copy of the refused file, and the chain still reports a denial when every source refuses. The declaration is `resolver.SourceGate`.
+
 Note that the resolver gate keys on the resolved *target string*. Under `WithSourceFS`, that string is a virtual path meaningful only to the supplied `fs.FS`, so the request carries `TargetSource: security.SourceVirtualFS` to say so. `FilesystemRoot` and `ConsoleWithLoadAuthorizer` refuse such a target outright, on the source rather than by containment — a virtual path handed to `containedInRoot` is resolved against the *process working directory*, which made the verdict depend on where the host happened to be running. To serve an `fs.FS` under one of those policies, use the opt-in variants `FilesystemRootWithVirtualSources(root)` or `ConsoleWithLoadAllowingVirtualSources()`, which apply **no** path confinement to virtual targets: the `fs.FS` itself is then the boundary. `ConsoleAuthorizer` needs no variant — it denies the whole `code` resource already.
 
 ### Profile with library support
@@ -304,7 +306,8 @@ Isolation invariants are verified in `pkg/wile/engine_sandbox_test.go`:
 - `WithoutCore()` produces a bare engine, and `WithoutCore()` + extension gives only that extension (`TestWithoutCore_BareEngine`, `TestWithoutCore_PlusExtension`)
 - Library propagation respects restrictions (`TestConsole_LibraryPropagation`)
 - Every gate action denies under `DenyAll()` (`TestAuthorizer_DenyAllSweep`), which is one row per action and is meant to grow when a gate action is added
-- No denial is catchable from Scheme (`TestDenialIsUnswallowable`), the guard-wrapped mirror of that sweep plus `load`, `with-exception-handler`, `dynamic-wind`, and an SRFI-18 `thread-join!`; its last two rows are ratchets proving the rule keys on the denial sentinel rather than on file errors generally
+- No denial is catchable from Scheme (`TestDenialIsUnswallowable`), the handler-wrapped mirror of that sweep plus `load`, `with-exception-handler`, `dynamic-wind`, and an SRFI-18 `thread-join!`; its last two rows are ratchets proving the rule keys on the denial sentinel rather than on file errors generally
+- A denial still reaches the host with its source location and stack trace as *fields*, not merely flattened into the message (`TestDenialCarriesItsProvenance`), and it unwinds like any other escaping error rather than running an enclosing `dynamic-wind`'s after thunk (`TestUncaughtDenialUnwindsLikeAnyOtherUncaughtError`)
 - A cached library import is re-authorized, and a library load composes the caller namespace's authorizer with the root's (`TestLibraryCacheReauthorizedOnHit`, `TestLibraryLoadUsesCallerAuthorizerOnMiss`, with `TestSyntheticLibraryImportSkipsPathGate` as the anti-over-denial ratchet)
 
 Two companion files carry the rest: `pkg/wile/engine_sandbox_escape_test.go` (symlink escape denied; eval allowed under `ConsoleWithLoad` and denied by a denying authorizer) and `pkg/wile/authorizer_precedence_test.go` (explicit authorizer beats profile, order-independently; sandbox layers accumulate). Path containment itself is tested in `pkg/security/path_containment_test.go` and `pkg/machine/compilation/resolver/confined_test.go`.

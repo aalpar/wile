@@ -99,9 +99,15 @@ var (
 	ErrOpaqueRecord                 = NewStaticError("record type is opaque")
 	ErrFileNotFound                 = NewStaticError("file not found")
 	ErrFileOpen                     = NewStaticError("file open failed")
-	ErrLibraryNotFound              = NewStaticError("library not found")
-	ErrCircularDependency           = NewStaticError("circular library dependency")
-	ErrUnexportedIdentifier         = NewStaticError("identifier not exported")
+	// ErrFileStat marks a failure to PROBE a path — a stat that neither found the
+	// file nor established that it is absent (EACCES on a parent directory, say).
+	// It is deliberately distinct from ErrFileOpen: no descriptor was requested,
+	// so a caller matching ErrFileOpen to tell a failed open from a failed probe
+	// must not see one reported as the other.
+	ErrFileStat             = NewStaticError("file stat failed")
+	ErrLibraryNotFound      = NewStaticError("library not found")
+	ErrCircularDependency   = NewStaticError("circular library dependency")
+	ErrUnexportedIdentifier = NewStaticError("identifier not exported")
 
 	// Threading errors
 
