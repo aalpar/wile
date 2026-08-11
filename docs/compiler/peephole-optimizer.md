@@ -284,19 +284,27 @@ total):
 | Constructor | `cons` |
 | Mutator | `set-cdr!` |
 
-Each is one `promotedOp` descriptor (name, arity, opcode pair, inline Go
-implementation), and the `promotedOps` list of descriptors is what makes
-the optimizer aware of it. `promotedOpForName` indexes that list by
-Scheme name. Passes 2 and 4 check this mapping when fusing foreign call
-sequences.
+Each is one `promotedOp` descriptor (identity, name, arity, opcode pair,
+inline Go implementation), and the `promotedOps` list of descriptors is
+what makes the optimizer aware of it. The identity is a
+`*machine.PrimitiveIdentity` minted beside the descriptors and declared
+on the primitive's `registry.PrimitiveSpec`, so every `*ForeignClosure`
+the registry builds from that spec carries it.
+`promotedOpForIdentity` indexes the list by that token. Passes 2 and 4
+check this mapping when fusing foreign call sequences.
+
+Matching is by identity, not by the closure's name: an embedder's own
+procedure may be named `cons` without being the registered `cons`, and a
+narrowed surface may re-populate `+` with a replacement that must not be
+inlined.
 
 ### Runtime Fallback
 
 Promoted opcodes record the original `cachedBindings` index in their
 `Arg`. At runtime, `execPromoted` verifies that the binding still holds
-the expected `*ForeignClosure` with the expected name. If the binding was
-reassigned via `set!` (e.g., `(set! eq? car)`), `callPromotedFallback`
-takes over:
+the expected `*ForeignClosure` with the expected primitive identity. If
+the binding was reassigned via `set!` (e.g., `(set! eq? car)`),
+`callPromotedFallback` takes over:
 
 1. Pop arguments using `PopN(arity)` (not `Drain()` — the eval stack
    may contain outer arguments from a containing call)
@@ -410,7 +418,7 @@ lambda bodies). Non-template literals are skipped.
 | Promoted arithmetic | `machine/call_promoted_arithmetic.go` |
 | `callForeignCached` (fused runtime) | `machine/call_foreign_cached.go` |
 | `applyForeign` (unfused runtime) | `machine/machine_context_apply.go` |
-| `promotedOpForName` mapping | `machine/call_promoted.go` |
+| `promotedOpForIdentity` mapping | `machine/call_promoted.go` |
 | Peephole tests | `machine/peephole_test.go` |
 | Opcode fusion integration tests | `wile/opcode_fusion_test.go` |
 | call/cc regression tests | `wile/callcc_engine_test.go` |

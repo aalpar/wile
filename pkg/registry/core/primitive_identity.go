@@ -28,14 +28,25 @@ import (
 // whatever the accessors return must be what make-hashtable accepts. Splitting
 // them across hashes.go and equality.go would let one drift.
 //
-// Minted once at package scope. machine.PrimitiveIdentity is identified by
-// POINTER, so a second machine.NewPrimitiveIdentity("equal?") elsewhere is a
-// DIFFERENT primitive as far as recognition is concerned — that is the property
-// that makes an embedder's own equal? fail closed instead of being accepted by
-// name. See that type for why the closure pointer cannot be used instead.
+// Minted once — for three of them, at package scope here. machine.PrimitiveIdentity
+// is identified by POINTER, so a second machine.NewPrimitiveIdentity("equal?")
+// elsewhere is a DIFFERENT primitive as far as recognition is concerned — that is
+// the property that makes an embedder's own equal? fail closed instead of being
+// accepted by name. See that type for why the closure pointer cannot be used instead.
+//
+// eq? is the exception: it is also a promoted-op descriptor's identity, and those
+// descriptors live in pkg/machine, which cannot import this package. So its one
+// token is minted there and ALIASED here.
+//
+// A spec carries exactly ONE Identity, so both consumers must name the same
+// variable, and minting a second token for eq? anywhere breaks whichever one does
+// not own the spec's declaration: leave equality.go pointing here and eq? stops
+// being inlined; point it at machine's and recognizedValue (prim_hashtables.go),
+// which pointer-compares against this variable, stops recognizing eq? in
+// (make-hashtable eq? ...). The alias is what keeps the question single.
 var (
 	identityEqualHash = machine.NewPrimitiveIdentity("equal-hash")
 	identityEqualQ    = machine.NewPrimitiveIdentity("equal?")
-	identityEqQ       = machine.NewPrimitiveIdentity("eq?")
+	identityEqQ       = machine.IdentityEqQ
 	identityEqvQ      = machine.NewPrimitiveIdentity("eqv?")
 )

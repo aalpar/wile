@@ -112,11 +112,21 @@ type PrimitiveSpec struct {
 	Mutates bool
 	// Identity, when non-nil, is stamped onto every ForeignClosure Apply builds
 	// from this spec, so Go code can ask "is this value the registered X?" of a
-	// procedure it was handed. Declare one only for a primitive some other
-	// primitive must RECOGNIZE — make-hashtable's (equal-hash, equal?) pair is the
-	// only such case today. Mint it once at package scope with
+	// procedure it was handed. Mint it once at package scope with
 	// machine.NewPrimitiveIdentity; see that type for why the closure pointer
 	// cannot answer the question.
+	//
+	// Two consumers ask it, for opposite reasons.
+	//
+	// A primitive that must RECOGNIZE another — make-hashtable deciding whether
+	// its (equal-hash, equal?) arguments are the built-in pair.
+	//
+	// Promoted-opcode dispatch (the promotedOps descriptors in pkg/machine).
+	// Both the peephole optimizer and the VM's runtime guard refuse any closure
+	// whose identity is not the descriptor's token, so a promoted primitive that
+	// loses its Identity is still CORRECT — it just stops being inlined, for
+	// good, and no value assertion notices. TestPromotedPrimitivesCarryTheirIdentity
+	// is the ratchet against that.
 	Identity *machine.PrimitiveIdentity
 }
 

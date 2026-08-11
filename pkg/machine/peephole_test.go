@@ -867,14 +867,28 @@ func TestFuseCallForeignCached(t *testing.T) {
 
 // --- FusePromotedCompoundArgs (pass 4) ---
 
-// makePromotedBinding builds a *Binding holding a *ForeignClosure whose name
-// matches a promoted primitive (e.g. "+"), so promotedOpForName resolves it.
+// promotedIdentityForName returns the identity token of the promoted primitive
+// with the given Scheme name, or nil if no promoted op has that name. It is what
+// lets the test factories below stand in for the registry, which stamps the same
+// token onto the closures it mints.
+func promotedIdentityForName(name string) *PrimitiveIdentity {
+	for _, op := range promotedOps {
+		if op.name == name {
+			return op.identity
+		}
+	}
+	return nil
+}
+
+// makePromotedBinding builds a *Binding holding a *ForeignClosure carrying a
+// promoted primitive's identity (e.g. "+"), so promotedOpForIdentity resolves it.
 func makePromotedBinding(name string) *environment.Binding {
 	env := environment.NewNamespace().Runtime()
 	fc := NewForeignClosure(env, 2, false, func(_ CallContext) error {
 		return nil
 	})
 	fc.SetName(name)
+	fc.SetIdentity(promotedIdentityForName(name))
 	return environment.NewBinding(fc, environment.BindingTypeVariable)
 }
 
@@ -1383,14 +1397,17 @@ func TestFuseCallGeneric(t *testing.T) {
 
 // --- Promoted Primitive Fusion ---
 
-// makeNamedForeignBinding creates a *Binding holding a *ForeignClosure with
-// the given name and parameter count.
+// makeNamedForeignBinding creates a *Binding holding a *ForeignClosure with the
+// given name and parameter count, stamped with that name's promoted identity if
+// it has one. A name no promoted op claims (e.g. "length") leaves the closure
+// unstamped, which is the negative case the fusion table exercises.
 func makeNamedForeignBinding(name string, paramCount int) *environment.Binding {
 	env := environment.NewNamespace().Runtime()
 	fc := NewForeignClosure(env, paramCount, false, func(_ CallContext) error {
 		return nil
 	})
 	fc.SetName(name)
+	fc.SetIdentity(promotedIdentityForName(name))
 	return environment.NewBinding(fc, environment.BindingTypeVariable)
 }
 

@@ -33,22 +33,30 @@
 // binary drift ~1.2% geo mean, 14/16 benchmarks in the same direction. Only
 // interleaving the two binaries within each run cancels that drift.
 //
-// Edit sites (3 files):
+// Edit sites (4 places):
 //  1. opcode.go           — add OpXxx + OpXxxTail constants inside the promoted
 //     range (OpEqQ..OpDivTail); add two opcodeTable entries with
 //     operandKind: OperandCachedBinding
 //  2. call_promoted.go    — implement inlineXxx(mc *MachineContext, name string) error;
-//     add a promotedOp descriptor and list it in promotedOps (or
-//     call_promoted_arithmetic.go for numeric ops). The Scheme name, arity, and
-//     both opcodes are stated once, in the descriptor — do not restate the name
-//     in the inline function's diagnostics; it arrives as the name parameter.
+//     mint an IdentityXxx token; add a promotedOp descriptor and list it in
+//     promotedOps (or call_promoted_arithmetic.go for numeric ops). The Scheme
+//     name, arity, identity, and both opcodes are stated once, in the descriptor
+//     — do not restate the name in the inline function's diagnostics; it arrives
+//     as the name parameter.
 //  3. machine_context.go  — add two case branches in Run() (non-tail + tail),
 //     each calling execPromoted(mc, instr, &promotedXxx, tail)
+//  4. registry/core/*.go  — declare Identity: machine.IdentityXxx on the
+//     primitive's spec. Without it the closure carries no token and the op is
+//     never promoted: correct, but a permanent deopt no value assertion sees.
+//     TestPromotedPrimitivesCarryTheirIdentity (pkg/wile) closes its table over
+//     PromotedIdentities(), so it reddens until the new op has a row naming this
+//     token — that red is the only thing standing between a forgotten Identity:
+//     and a silent, permanent loss of inlining.
 //
 // No changes needed in native_template.go or disassemble.go — both use
 // opcodeTable[op].operandKind metadata to handle OperandCachedBinding generically.
 // The peephole optimizer (peephole.go) also needs no changes — it uses
-// promotedOpForName() to discover promoted ops generically.
+// promotedOpForIdentity() to discover promoted ops generically.
 package machine
 
 import (
@@ -57,10 +65,10 @@ import (
 )
 
 // promotedOp describes one promoted primitive. Every fact about the op is
-// stated here exactly once: the Scheme name the cached binding is guarded
-// against (also the RecordCall key and the prefix fn's diagnostics use), the
+// stated here exactly once: the identity the cached binding is guarded against,
+// the Scheme name (the RecordCall key and the prefix fn's diagnostics use), the
 // argument count the fallback path pops, the two opcodes the peephole optimizer
-// emits, and the inline implementation. Run()'s switch and promotedOpForName
+// emits, and the inline implementation. Run()'s switch and promotedOpForIdentity
 // both read the descriptor rather than restating any of it.
 type promotedOp struct {
 	name    string
@@ -68,6 +76,11 @@ type promotedOp struct {
 	nonTail OpCode
 	tail    OpCode
 	fn      func(*MachineContext, string) error
+	// identity is the discriminator, compared by POINTER. name is diagnostics
+	// only and is never compared: two closures can spell the same name without
+	// being the same primitive, and a Go embedder's own procedure named "cons"
+	// must not be dispatched to inlineCons.
+	identity *PrimitiveIdentity
 	// mutates records whether fn can write through to an object the program can
 	// still name. It exists so the immutability ratchet can SELECT the mutators
 	// off this table instead of restating a list that drifts from it; a promoted
@@ -77,27 +90,59 @@ type promotedOp struct {
 	mutates bool
 }
 
-// One descriptor per promoted primitive. Run()'s case branches reference these
-// by address; the shared promotedOps list below drives name lookup.
+// The identity token of each promoted primitive, minted once here. The
+// registry declares one on the matching PrimitiveSpec (registry/core), which
+// stamps it onto every ForeignClosure built from that spec; execPromoted and the
+// peephole optimizer then compare it by pointer against the descriptor's.
+//
+// They are exported only because the specs that declare them live in
+// pkg/registry/core, which imports pkg/machine and not the reverse. A Go
+// embedder naming one of these in a spec of their own therefore opts INTO
+// promoted dispatch deliberately — unlike the accidental name collision this
+// replaces, where any closure spelled "cons" was inlined whether it wanted to be
+// or not.
 var (
-	promotedEqQ       = promotedOp{name: "eq?", arity: 2, nonTail: OpEqQ, tail: OpEqQTail, fn: inlineEq}
-	promotedVectorQ   = promotedOp{name: "vector?", arity: 1, nonTail: OpVectorQ, tail: OpVectorQTail, fn: inlineVectorQ}
-	promotedVectorRef = promotedOp{name: "vector-ref", arity: 2, nonTail: OpVectorRef, tail: OpVectorRefTail, fn: inlineVectorRef}
-	promotedNullQ     = promotedOp{name: "null?", arity: 1, nonTail: OpNullQ, tail: OpNullQTail, fn: inlineNullQ}
-	promotedPairQ     = promotedOp{name: "pair?", arity: 1, nonTail: OpPairQ, tail: OpPairQTail, fn: inlinePairQ}
-	promotedCar       = promotedOp{name: "car", arity: 1, nonTail: OpCar, tail: OpCarTail, fn: inlineCar}
-	promotedCdr       = promotedOp{name: "cdr", arity: 1, nonTail: OpCdr, tail: OpCdrTail, fn: inlineCdr}
-	promotedCons      = promotedOp{name: "cons", arity: 2, nonTail: OpCons, tail: OpConsTail, fn: inlineCons}
-	promotedAdd       = promotedOp{name: "+", arity: 2, nonTail: OpAdd, tail: OpAddTail, fn: inlineAdd}
-	promotedSub       = promotedOp{name: "-", arity: 2, nonTail: OpSub, tail: OpSubTail, fn: inlineSub}
-	promotedMul       = promotedOp{name: "*", arity: 2, nonTail: OpMul, tail: OpMulTail, fn: inlineMul}
-	promotedDiv       = promotedOp{name: "/", arity: 2, nonTail: OpDiv, tail: OpDivTail, fn: inlineDiv}
-	promotedNumLt     = promotedOp{name: "<", arity: 2, nonTail: OpNumLt, tail: OpNumLtTail, fn: inlineNumLt}
-	promotedNumLe     = promotedOp{name: "<=", arity: 2, nonTail: OpNumLe, tail: OpNumLeTail, fn: inlineNumLe}
-	promotedNumGt     = promotedOp{name: ">", arity: 2, nonTail: OpNumGt, tail: OpNumGtTail, fn: inlineNumGt}
-	promotedNumGe     = promotedOp{name: ">=", arity: 2, nonTail: OpNumGe, tail: OpNumGeTail, fn: inlineNumGe}
-	promotedNumEq     = promotedOp{name: "=", arity: 2, nonTail: OpNumEq, tail: OpNumEqTail, fn: inlineNumEq}
-	promotedSetCdr    = promotedOp{name: "set-cdr!", arity: 2, nonTail: OpSetCdr, tail: OpSetCdrTail, fn: inlineSetCdr, mutates: true}
+	IdentityEqQ       = NewPrimitiveIdentity("eq?")
+	IdentityVectorQ   = NewPrimitiveIdentity("vector?")
+	IdentityVectorRef = NewPrimitiveIdentity("vector-ref")
+	IdentityNullQ     = NewPrimitiveIdentity("null?")
+	IdentityPairQ     = NewPrimitiveIdentity("pair?")
+	IdentityCar       = NewPrimitiveIdentity("car")
+	IdentityCdr       = NewPrimitiveIdentity("cdr")
+	IdentityCons      = NewPrimitiveIdentity("cons")
+	IdentityAdd       = NewPrimitiveIdentity("+")
+	IdentitySub       = NewPrimitiveIdentity("-")
+	IdentityMul       = NewPrimitiveIdentity("*")
+	IdentityDiv       = NewPrimitiveIdentity("/")
+	IdentityNumLt     = NewPrimitiveIdentity("<")
+	IdentityNumLe     = NewPrimitiveIdentity("<=")
+	IdentityNumGt     = NewPrimitiveIdentity(">")
+	IdentityNumGe     = NewPrimitiveIdentity(">=")
+	IdentityNumEq     = NewPrimitiveIdentity("=")
+	IdentitySetCdr    = NewPrimitiveIdentity("set-cdr!")
+)
+
+// One descriptor per promoted primitive. Run()'s case branches reference these
+// by address; the shared promotedOps list below drives identity lookup.
+var (
+	promotedEqQ       = promotedOp{name: "eq?", arity: 2, nonTail: OpEqQ, tail: OpEqQTail, fn: inlineEq, identity: IdentityEqQ}
+	promotedVectorQ   = promotedOp{name: "vector?", arity: 1, nonTail: OpVectorQ, tail: OpVectorQTail, fn: inlineVectorQ, identity: IdentityVectorQ}
+	promotedVectorRef = promotedOp{name: "vector-ref", arity: 2, nonTail: OpVectorRef, tail: OpVectorRefTail, fn: inlineVectorRef, identity: IdentityVectorRef}
+	promotedNullQ     = promotedOp{name: "null?", arity: 1, nonTail: OpNullQ, tail: OpNullQTail, fn: inlineNullQ, identity: IdentityNullQ}
+	promotedPairQ     = promotedOp{name: "pair?", arity: 1, nonTail: OpPairQ, tail: OpPairQTail, fn: inlinePairQ, identity: IdentityPairQ}
+	promotedCar       = promotedOp{name: "car", arity: 1, nonTail: OpCar, tail: OpCarTail, fn: inlineCar, identity: IdentityCar}
+	promotedCdr       = promotedOp{name: "cdr", arity: 1, nonTail: OpCdr, tail: OpCdrTail, fn: inlineCdr, identity: IdentityCdr}
+	promotedCons      = promotedOp{name: "cons", arity: 2, nonTail: OpCons, tail: OpConsTail, fn: inlineCons, identity: IdentityCons}
+	promotedAdd       = promotedOp{name: "+", arity: 2, nonTail: OpAdd, tail: OpAddTail, fn: inlineAdd, identity: IdentityAdd}
+	promotedSub       = promotedOp{name: "-", arity: 2, nonTail: OpSub, tail: OpSubTail, fn: inlineSub, identity: IdentitySub}
+	promotedMul       = promotedOp{name: "*", arity: 2, nonTail: OpMul, tail: OpMulTail, fn: inlineMul, identity: IdentityMul}
+	promotedDiv       = promotedOp{name: "/", arity: 2, nonTail: OpDiv, tail: OpDivTail, fn: inlineDiv, identity: IdentityDiv}
+	promotedNumLt     = promotedOp{name: "<", arity: 2, nonTail: OpNumLt, tail: OpNumLtTail, fn: inlineNumLt, identity: IdentityNumLt}
+	promotedNumLe     = promotedOp{name: "<=", arity: 2, nonTail: OpNumLe, tail: OpNumLeTail, fn: inlineNumLe, identity: IdentityNumLe}
+	promotedNumGt     = promotedOp{name: ">", arity: 2, nonTail: OpNumGt, tail: OpNumGtTail, fn: inlineNumGt, identity: IdentityNumGt}
+	promotedNumGe     = promotedOp{name: ">=", arity: 2, nonTail: OpNumGe, tail: OpNumGeTail, fn: inlineNumGe, identity: IdentityNumGe}
+	promotedNumEq     = promotedOp{name: "=", arity: 2, nonTail: OpNumEq, tail: OpNumEqTail, fn: inlineNumEq, identity: IdentityNumEq}
+	promotedSetCdr    = promotedOp{name: "set-cdr!", arity: 2, nonTail: OpSetCdr, tail: OpSetCdrTail, fn: inlineSetCdr, identity: IdentitySetCdr, mutates: true}
 )
 
 // PromotedMutatorNames returns the Scheme names of the promoted primitives that
@@ -114,8 +159,25 @@ func PromotedMutatorNames() []string {
 	return q
 }
 
+// PromotedIdentities returns the identity token of every promoted primitive, one
+// per descriptor in promotedOps. Exported for the deopt ratchet, which asserts
+// that each token is stamped on the primitive an Engine actually binds and so
+// lives outside this package.
+//
+// Cardinality is the point. A promoted primitive whose spec loses its Identity:
+// keeps computing the right answer and merely stops being inlined, forever, which
+// no value assertion sees; without a way to enumerate the descriptors the ratchet
+// is a hand-written table with nothing forcing a nineteenth op to appear in it.
+func PromotedIdentities() []*PrimitiveIdentity {
+	q := make([]*PrimitiveIdentity, 0, len(promotedOps))
+	for _, op := range promotedOps {
+		q = append(q, op.identity)
+	}
+	return q
+}
+
 // promotedOps is the registry of promoted primitives. Listing a descriptor here
-// is what makes the peephole optimizer aware of it (via promotedOpForName);
+// is what makes the peephole optimizer aware of it (via promotedOpForIdentity);
 // TestPromotedOpsCoverPromotedOpcodes pins that the list covers every opcode in
 // the promoted range, so a descriptor left off the list fails the build's tests
 // rather than silently disabling promotion for that primitive.
@@ -127,15 +189,16 @@ var promotedOps = []*promotedOp{
 	&promotedNumEq, &promotedSetCdr,
 }
 
-// promotedByName indexes promotedOps by Scheme name. Built once at init; read
-// only on the compile path (promotedOpForName), never in the VM dispatch loop.
-var promotedByName = buildPromotedByName()
+// promotedByIdentity indexes promotedOps by primitive identity. Built once at
+// init; read only on the compile path (promotedOpForIdentity), never in the VM
+// dispatch loop.
+var promotedByIdentity = buildPromotedByIdentity()
 
-// buildPromotedByName indexes promotedOps by Scheme name.
-func buildPromotedByName() map[string]*promotedOp {
-	q := make(map[string]*promotedOp, len(promotedOps))
+// buildPromotedByIdentity indexes promotedOps by primitive identity.
+func buildPromotedByIdentity() map[*PrimitiveIdentity]*promotedOp {
+	q := make(map[*PrimitiveIdentity]*promotedOp, len(promotedOps))
 	for _, op := range promotedOps {
-		q[op.name] = op
+		q[op.identity] = op
 	}
 	return q
 }
@@ -300,7 +363,7 @@ func inlineSetCdr(mc *MachineContext, name string) error {
 func execPromoted(mc *MachineContext, instr Instruction, op *promotedOp, tail bool) (*MachineContext, error) {
 	callable := mc.template.cachedBindings[instr.Arg].Value()
 	fcls, ok := callable.(*ForeignClosure)
-	if !ok || fcls.name != op.name {
+	if !ok || fcls.identity != op.identity {
 		return callPromotedFallback(mc, callable, tail, op.arity)
 	}
 	err := op.fn(mc, op.name)
@@ -345,11 +408,19 @@ func callPromotedFallback(mc *MachineContext, callable values.Value, tail bool, 
 	return result, nil
 }
 
-// promotedOpForName returns the non-tail and tail opcodes for a promoted
+// promotedOpForIdentity returns the non-tail and tail opcodes for a promoted
 // primitive, or (OpInvalid, OpInvalid) if the primitive is not promoted.
 // Also returns the expected argument count for arity validation.
-func promotedOpForName(name string) (nonTail, tail OpCode, arity int) {
-	op, ok := promotedByName[name]
+//
+// nil means NONE and is refused before the lookup: a Scheme procedure, a
+// primitive whose spec declared no identity, and a non-procedure all arrive as
+// nil, and a nil key would otherwise be a live map entry the moment a descriptor
+// lost its token.
+func promotedOpForIdentity(identity *PrimitiveIdentity) (nonTail, tail OpCode, arity int) {
+	if identity == nil {
+		return OpInvalid, OpInvalid, 0
+	}
+	op, ok := promotedByIdentity[identity]
 	if !ok {
 		return OpInvalid, OpInvalid, 0
 	}

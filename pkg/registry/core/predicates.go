@@ -15,6 +15,7 @@
 package core
 
 import (
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/values"
 )
@@ -27,10 +28,12 @@ func addPredicates(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "null?", ParamCount: 1, Impl: PrimNullQ,
 			Doc: "Returns #t if OBJ is the empty list '(). Does not return #t for other falsy values.\n\nExamples:\n  (null? '())           => #t\n  (null? '(1))          => #f\n  (null? #f)            => #f", ParamNames: []string{"obj"}, Category: "predicates",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean,
+			Identity: machine.IdentityNullQ},
 		{Name: "pair?", ParamCount: 1, Impl: PrimPairQ,
 			Doc: "Returns #t if OBJ is a pair (cons cell). Note: proper and improper lists both start with a pair; the empty list is not a pair.\n\nExamples:\n  (pair? '(1 2))        => #t\n  (pair? '(1 . 2))      => #t\n  (pair? '())           => #f", ParamNames: []string{"obj"}, Category: "predicates",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean,
+			Identity: machine.IdentityPairQ},
 		{Name: "boolean?", ParamCount: 1, Impl: PrimBooleanQ,
 			Doc: "Returns #t if OBJ is #t or #f. No other values are booleans.\n\nExamples:\n  (boolean? #t)         => #t\n  (boolean? #f)         => #t\n  (boolean? 0)          => #f", ParamNames: []string{"obj"}, Category: "predicates",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
@@ -66,7 +69,8 @@ func addPredicates(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "vector?", ParamCount: 1, Impl: PrimVectorQ,
 			Doc: "Returns #t if OBJ is a vector. Vectors are fixed-length arrays with O(1) element access.\n\nExamples:\n  (vector? #(1 2 3))    => #t\n  (vector? '(1 2 3))    => #f", ParamNames: []string{"obj"}, Category: "predicates",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean,
+			Identity: machine.IdentityVectorQ},
 		{Name: "bytevector?", ParamCount: 1, Impl: PrimBytevectorQ,
 			Doc: "Returns #t if OBJ is a bytevector. Bytevectors are fixed-length sequences of bytes (0-255).\n\nExamples:\n  (bytevector? #u8(1 2))  => #t\n  (bytevector? #(1 2))    => #f", ParamNames: []string{"obj"}, Category: "predicates",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},

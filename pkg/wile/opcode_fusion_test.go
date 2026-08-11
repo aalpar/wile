@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // templateTreeHasOpcode recursively searches a NativeTemplate and its
@@ -255,8 +257,11 @@ func TestOpcodeFusion(t *testing.T) {
 
 // TestPromotedPrimitiveFallback verifies that promoted primitives (eq?,
 // vector?, vector-ref) fall back correctly when their bindings are replaced
-// via set! with a different ForeignClosure. Without the name guard, the
-// inline implementation would run incorrectly for the replacement closure.
+// via set! with a different ForeignClosure. Without execPromoted's identity
+// guard, the inline implementation would run incorrectly for the replacement
+// closure. TestPromotedOpRuntimeGuardIsIdentity pins that the guard's
+// discriminator is the identity token rather than the name these rows also
+// happen to differ in.
 func TestPromotedPrimitiveFallback(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -264,8 +269,9 @@ func TestPromotedPrimitiveFallback(t *testing.T) {
 		wantResult string
 	}{
 		{
-			// eq? replaced with car — same type (*ForeignClosure) but different
-			// name/arity. Without the name guard, inlineEq would run on car's args.
+			// eq? replaced with car — same type (*ForeignClosure) but a different
+			// identity (and arity). Without the identity guard, inlineEq would run
+			// on car's args.
 			name:       "set! eq? to car: fallback runs car correctly",
 			code:       `(let ((original-eq? eq?)) (set! eq? car) (let ((result (eq? '(hello world)))) (set! eq? original-eq?) result))`,
 			wantResult: "hello",
@@ -305,6 +311,276 @@ func TestPromotedPrimitiveFallback(t *testing.T) {
 			got := result.SchemeString()
 			if got != tt.wantResult {
 				t.Errorf("result = %s, want %s", got, tt.wantResult)
+			}
+		})
+	}
+}
+
+// TestPromotedOpIdentityGuard pins that promoted-opcode dispatch decides "is this
+// the registered cons?" by primitive identity, not by the ForeignClosure's name.
+//
+// A Go embedder's own primitive is bound with whatever name its closure carries,
+// and nothing stops that name from spelling a promoted primitive. Under a name
+// compare the peephole emits OpCons for it and the runtime guard accepts the
+// substitution, so the embedder's implementation never runs — the fail-OPEN
+// direction, and the one that silently changes program meaning.
+func TestPromotedOpIdentityGuard(t *testing.T) {
+	impostor := func(mc machine.CallContext) error {
+		mc.SetValue(values.NewSymbol("IMPOSTOR-RAN"))
+		return nil
+	}
+
+	tests := []struct {
+		name        string
+		closureName string
+		code        string
+		want        string
+	}{
+		{
+			name:        "closure named cons is not the promoted cons",
+			closureName: "cons",
+			code:        `(my-cons 1 2)`,
+			want:        "IMPOSTOR-RAN",
+		},
+		{
+			// set-cdr! is the mutating promoted op, so a hijack is not merely a
+			// wrong value: pp is destructively rewritten to (1 . 9). The argument
+			// must be a variable reference — a compound argument fails the
+			// all-push precondition and no promoted opcode is emitted at all.
+			name:        "closure named set-cdr! does not mutate its argument",
+			closureName: "set-cdr!",
+			code:        `(define pp (cons 1 2)) (define rr (my-cons pp 9)) (list rr pp)`,
+			want:        "(IMPOSTOR-RAN (1 . 2))",
+		},
+		{
+			// CONTROL, not a gate: a name that matches no promoted primitive
+			// passes with the guard in either form. It is here to show that the
+			// two rows above differ from it only in the closure's name.
+			name:        "control: unpromoted name runs the embedder's impl",
+			closureName: "zzz",
+			code:        `(my-cons 1 2)`,
+			want:        "IMPOSTOR-RAN",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			engine, err := NewEngine(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = engine.RegisterPrimitive(PrimitiveSpec{
+				Name: "my-cons", ParamCount: 2, Impl: impostor,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			v, ok := engine.Get("my-cons")
+			if !ok {
+				t.Fatal("my-cons not bound after RegisterPrimitive")
+			}
+			fc, ok := v.Internal().(*machine.ForeignClosure)
+			if !ok {
+				t.Fatalf("my-cons is %T, want *machine.ForeignClosure", v.Internal())
+			}
+			fc.SetName(tt.closureName)
+
+			result, err := engine.EvalMultiple(ctx, tt.code)
+			if err != nil {
+				t.Fatalf("eval: %v", err)
+			}
+			got := result.SchemeString()
+			if got != tt.want {
+				t.Errorf("result = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestPromotedOpRuntimeGuardIsIdentity pins the RUNTIME half of the same
+// discriminator (execPromoted's guard), which the two tests above cannot reach:
+// there the peephole refuses to emit a promoted opcode at all, so the guard is
+// never consulted. It is consulted only when a call site was compiled against the
+// real promoted primitive and the binding was rebound AFTERWARDS — the cached
+// binding is read on every execution, the opcode is not recompiled.
+//
+// Under a name compare the rebound closure is accepted because it merely spells
+// "cons", so the already-compiled call site keeps running inlineCons while a
+// freshly compiled (cons 1 2) runs the replacement: one program, two answers, no
+// diagnostic. That is the same fail-open symptom this branch exists to remove,
+// surviving at the one site the compile-time gate does not cover.
+func TestPromotedOpRuntimeGuardIsIdentity(t *testing.T) {
+	ctx := context.Background()
+	// WithMutableTopLevel: rebinding a capture-safe primitive is refused under the
+	// immutable-top-level default, and rebinding after compilation is the only way
+	// to hand execPromoted a closure the peephole never saw.
+	engine, err := NewEngine(ctx, WithMutableTopLevel())
+	if err != nil {
+		t.Fatal(err)
+	}
+	impostor := func(mc machine.CallContext) error {
+		mc.SetValue(values.NewSymbol("IMPOSTOR-RAN"))
+		return nil
+	}
+	err = engine.RegisterPrimitive(PrimitiveSpec{
+		Name: "impostor-cons", ParamCount: 2, Impl: impostor,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, ok := engine.Get("impostor-cons")
+	if !ok {
+		t.Fatal("impostor-cons not bound after RegisterPrimitive")
+	}
+	fc, ok := v.Internal().(*machine.ForeignClosure)
+	if !ok {
+		t.Fatalf("impostor-cons is %T, want *machine.ForeignClosure", v.Internal())
+	}
+	fc.SetName("cons")
+
+	// f is compiled against the real cons first. The OpConsTail assertion is what
+	// keeps the test from going vacuous: if the call site were not promoted, the
+	// generic apply path would answer IMPOSTOR-RAN without consulting any guard.
+	compiled, err := engine.Compile(ctx, engine.MustParse(ctx, `(define (f a b) (cons a b))`))
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if !templateTreeHasOpcode(compiled.template, machine.OpConsTail) {
+		dumpTemplateOpcodes(t, compiled.template, "root")
+		t.Fatal("(define (f a b) (cons a b)) did not compile to OpConsTail: execPromoted's guard is unreachable, so this test would assert nothing")
+	}
+	_, err = engine.Run(ctx, compiled)
+	if err != nil {
+		t.Fatalf("run define: %v", err)
+	}
+
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(set! cons impostor-cons)`))
+	if err != nil {
+		t.Fatalf("set! cons: %v", err)
+	}
+
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, `(f 1 2)`))
+	if err != nil {
+		t.Fatalf("eval (f 1 2): %v", err)
+	}
+	got := result.SchemeString()
+	want := "IMPOSTOR-RAN"
+	if got != want {
+		t.Errorf("(f 1 2) after (set! cons impostor-cons) = %s, want %s", got, want)
+	}
+}
+
+// TestPromotedOverrideAgreesWithGenericCall pins the other direction: a surface
+// narrowed with Without("+") and re-populated with the embedder's own + must run
+// that + everywhere. Under a name compare the direct call site is promoted to
+// OpAdd (the name still spells "+") while the indirect one goes through apply, so
+// the same program answers the same question two different ways with no
+// diagnostic — the fail-CLOSED direction of the same defect.
+func TestPromotedOverrideAgreesWithGenericCall(t *testing.T) {
+	ctx := context.Background()
+	full, err := NewEngine(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	override := func(mc machine.CallContext) error {
+		mc.SetValue(values.NewSymbol("OVERRIDE-RAN"))
+		return nil
+	}
+	reg := full.Registry().Without("+")
+	reg.AddPrimitive(registry.PrimitiveSpec{
+		Name: "+", ParamCount: 2, Impl: override,
+	}, registry.PhaseSetRuntime)
+
+	eng, err := NewEngine(ctx, WithRegistry(reg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.EvalMultiple(ctx,
+		`(begin (define (dir a b) (+ a b)) (define (gen f a b) (f a b)) (list (dir 1 2) (gen + 1 2)))`)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	got := result.SchemeString()
+	want := "(OVERRIDE-RAN OVERRIDE-RAN)"
+	if got != want {
+		t.Errorf("result = %s, want %s", got, want)
+	}
+}
+
+// TestPromotedPrimitivesCarryTheirIdentity is the deopt ratchet. Dropping an
+// Identity: from a promoted primitive's spec is invisible to every value
+// assertion in the tree — the primitive keeps computing the right answer, it just
+// stops being inlined, permanently. Restating all eighteen here is the point, the
+// same way expectedPromotedPure restates the mutates partition: revert one spec
+// line and exactly one row goes red.
+//
+// Restating is only half of that precedent. expectedPromotedPure also closes its
+// table against len(promotedOps), and without the same closure here a NINETEENTH
+// promoted op ships with no row: every descriptor-side test passes (the opcode is
+// covered, the token is distinct, the partition is sized) and the missing
+// Identity: on its spec is a total deopt the whole tree stays green over. The
+// identity-set check below is that closure, reaching promotedOps through
+// machine.PromotedIdentities.
+func TestPromotedPrimitivesCarryTheirIdentity(t *testing.T) {
+	tests := []struct {
+		name string
+		want *machine.PrimitiveIdentity
+	}{
+		{"eq?", machine.IdentityEqQ},
+		{"vector?", machine.IdentityVectorQ},
+		{"vector-ref", machine.IdentityVectorRef},
+		{"null?", machine.IdentityNullQ},
+		{"pair?", machine.IdentityPairQ},
+		{"car", machine.IdentityCar},
+		{"cdr", machine.IdentityCdr},
+		{"cons", machine.IdentityCons},
+		{"+", machine.IdentityAdd},
+		{"-", machine.IdentitySub},
+		{"*", machine.IdentityMul},
+		{"/", machine.IdentityDiv},
+		{"<", machine.IdentityNumLt},
+		{"<=", machine.IdentityNumLe},
+		{">", machine.IdentityNumGt},
+		{">=", machine.IdentityNumGe},
+		{"=", machine.IdentityNumEq},
+		{"set-cdr!", machine.IdentitySetCdr},
+	}
+
+	claimed := make(map[*machine.PrimitiveIdentity]string, len(tests))
+	for _, tt := range tests {
+		prev, dup := claimed[tt.want]
+		if dup {
+			t.Errorf("rows %q and %q claim the same identity token", prev, tt.name)
+		}
+		claimed[tt.want] = tt.name
+	}
+	promoted := machine.PromotedIdentities()
+	if len(claimed) != len(promoted) {
+		t.Errorf("ratchet restates %d promoted primitives, machine holds %d: add the new one here and declare its Identity: on its spec",
+			len(claimed), len(promoted))
+	}
+	for _, identity := range promoted {
+		_, ok := claimed[identity]
+		if !ok {
+			t.Errorf("promoted primitive %q has no ratchet row, so a missing Identity: on its spec would deopt it silently", identity.Name())
+		}
+	}
+
+	ctx := context.Background()
+	engine, err := NewEngine(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v, ok := engine.Get(tt.name)
+			if !ok {
+				t.Fatalf("%s is not bound", tt.name)
+			}
+			got := machine.IdentityOf(v.Internal())
+			if got != tt.want {
+				t.Errorf("IdentityOf(%s) = %v, want %v", tt.name, got, tt.want)
 			}
 		})
 	}
