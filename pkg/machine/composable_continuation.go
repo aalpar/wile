@@ -42,6 +42,10 @@ type ComposableContinuation struct {
 	// continuation captured inside a call-with-values producer (etc.) restores the
 	// outer handler/parameter values. See collectReachableMarks.
 	capturedMarks []markEntry
+	// escalatorArms are the non-continuable finalizer frames' arms carried by this
+	// segment, precomputed at capture. Nil for essentially every capture, which is
+	// what keeps the resume path's added cost to one length test.
+	escalatorArms []*escalatorArm
 }
 
 // bottomOfChain walks a continuation chain to its terminal frame (parent == nil).
@@ -56,17 +60,31 @@ func bottomOfChain(head *MachineContinuation) *MachineContinuation {
 	return current
 }
 
+// collectEscalatorArms gathers the escalator arms of every frame in a chain.
+// Deliberately a second walk rather than a return value bolted onto bottomOfChain:
+// composable_continuation_test.go pins that helper's signature.
+func collectEscalatorArms(head *MachineContinuation) []*escalatorArm {
+	var q []*escalatorArm
+	for current := head; current != nil; current = current.parent {
+		if current.escalatorArm != nil {
+			q = append(q, current.escalatorArm)
+		}
+	}
+	return q
+}
+
 // NewComposableContinuation creates a composable continuation from a
 // continuation chain segment and the winding stack captured at the point
 // of capture. barrierValid is mc.BarrierValid() at capture time; nil means
 // the capture happened outside any with-continuation-barrier.
 func NewComposableContinuation(cont *MachineContinuation, windingStack WindingStack, threadID uint64, barrierValid *BarrierToken) *ComposableContinuation {
 	q := &ComposableContinuation{
-		cont:         cont,
-		windingStack: windingStack,
-		threadID:     threadID,
-		barrierValid: barrierValid,
-		bottom:       bottomOfChain(cont),
+		cont:          cont,
+		windingStack:  windingStack,
+		threadID:      threadID,
+		barrierValid:  barrierValid,
+		bottom:        bottomOfChain(cont),
+		escalatorArms: collectEscalatorArms(cont),
 	}
 	return q
 }

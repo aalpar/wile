@@ -186,15 +186,16 @@ When a `ComposableContinuation` is called as a procedure (dispatched by `ApplyCa
 
 1. Thread check: reject if invoked from a different SRFI-18 thread. Barrier check: reject if the barrier token differs.
 2. Copy the argument values off the eval stack, whose backing array `Restore` recycles.
-3. Delegate to `ReinstallSegment` with `boundary = p.cont`, which:
-   a. installs the captured marks and bumps `resumeGeneration`;
+3. Select the escalator arms this resume revives, against `p.cont` — the invoking context's live chain, which the winding reconcile below can re-point.
+4. Delegate to `ReinstallSegment` with `boundary = p.cont`, which:
+   a. installs the captured marks;
    b. calls `AcquireSegment()`: the original frames on first invocation (marking the chain shared), a deep copy on re-invocation;
-   c. reconciles dynamic-wind: `RestoreWithWindingFrom(nil, current, captured)` unwinds extents not in the captured stack and rewinds captured extents not in the current stack;
+   c. reconciles dynamic-wind: `RestoreWithWindingFrom(nil, current, captured)` unwinds extents not in the captured stack and rewinds captured extents not in the current stack, then marks the selected arms revived (only a reconcile that succeeded re-entered the frame);
    d. grafts the segment's bottom frame onto `boundary`, restores from the segment's top frame, and delivers the values.
 
-`ReinstallSegment` is the *single* resume primitive: the abortive `call/cc` resume goes through it too, differing only in `boundary` (from `FindPrompt`, `nil` = replace the whole chain) and `isolate` (true, restoring the captured mark snapshot).
+`ReinstallSegment` is the *single* resume primitive: the abortive `call/cc` resume goes through it too, differing only in `boundary` (from `FindPrompt`, `nil` = replace the whole chain), `isolate` (true, restoring the captured mark snapshot), and where step 3 ran — at the `(k v)` site, carried on the signal, because the trampoline reinstates on a driver whose chain is not the invoker's.
 
-The share-then-copy discipline in step 3b is essential in both directions. Without the first-invocation shared marking, a normal return through a reinstalled frame could pool an environment the captured segment still needs. Without the re-invocation copy, a second resume would corrupt frames the first one mutated.
+The share-then-copy discipline in step 4b is essential in both directions. Without the first-invocation shared marking, a normal return through a reinstalled frame could pool an environment the captured segment still needs. Without the re-invocation copy, a second resume would corrupt frames the first one mutated.
 
 ## Interaction with dynamic-wind
 

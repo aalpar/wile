@@ -101,16 +101,6 @@ type MachineContext struct {
 	// thunk sub-contexts built in unwindStackTo and RewindTo.
 	isolatedMarks bool
 
-	// resumeGeneration counts continuation-segment reinstatements (ReinstallSegment)
-	// on this driver. raiseToHandlers snapshots it when it arms a non-continuable
-	// handler's escalator frame; escalateFn compares against the snapshot. A change
-	// means handler-k was resumed THROUGH the escalator (forward the resumed value)
-	// rather than the handler returning naturally (escalate the R7RS §6.11 secondary
-	// exception). This replaces the sticky, context-global isolatedMarks gate, which
-	// stayed true after ANY prior resume and so swallowed legitimate secondary
-	// exceptions once a continuation had been resumed on the driver.
-	resumeGeneration uint64
-
 	// reconfigured is set by Apply when it repoints the VM (template/env/pc) to
 	// execute a closure in place. The foreign-call dispatchers (applyForeign,
 	// callForeignCached) consult it to decide whether a primitive reconfigured
@@ -1589,8 +1579,13 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			// isolate=true: this signal is emitted only for call/cc resume, which restores
 			// the captured mark snapshot (composable resume composes marks and bypasses
 			// this signal — it calls ReinstallSegment directly).
+			//
+			// The escalator revivals ride the signal rather than being computed here:
+			// p.cont is THIS driver's chain, and the (k v) site may have been a
+			// sub-context whose frames this chain never held (see escalatorRevivals).
 			wasEmpty, reErr := p.ReinstallSegment(
-				resumeErr.Segment, boundary, resumeErr.SourceWinding, resumeErr.Values, true)
+				resumeErr.Segment, boundary, resumeErr.SourceWinding, resumeErr.Values, true,
+				resumeErr.escalatorRevivals)
 			if reErr != nil {
 				if isControlSignal(reErr) {
 					// The winding reconcile ran an after-thunk that escaped — a raise

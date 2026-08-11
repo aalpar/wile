@@ -116,6 +116,12 @@ func buildProbe(t *testing.T, cfg probeConfig) probe {
 	cont.barrierValid = NewBarrierToken()
 	cont.parent = &MachineContinuation{vmState: vmState{callDepth: 6}}
 	cont.promptHandler = &MachineClosure{}
+	// Seeded non-nil for the same reason as promptHandler: the opCopy SHARE check
+	// compares ref values, so a nil-vs-nil comparison would hold whether or not Copy
+	// transcribes the field — and an untranscribed escalatorArm is a green build with
+	// a dead §6.11 escalation. Delete Copy's `q.escalatorArm = p.escalatorArm` and
+	// TestOracle_Copy/escalatorArm must fail.
+	cont.escalatorArm = &escalatorArm{}
 	cont.shared = cfg.shared
 
 	if cfg.inline {

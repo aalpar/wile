@@ -124,15 +124,26 @@ func (p *MachineContext) applyCapturedContinuation(
 	vals := make([]values.Value, len(args))
 	copy(vals, args)
 
+	// Decide the escalator-arm revivals HERE, against the invoking context's own
+	// chain, for the same reason SourceWinding is copied here: the trampoline hands
+	// the segment to the nearest DefaultPromptTag driver, which is not necessarily
+	// this context. A raise handled inside a sub-context (a dynamic-wind before/after
+	// thunk, a parameter converter) arms its finalizer frame on the SUB's chain, and
+	// this signal is re-raised out of RunWithinBoundary to the top RunResumable —
+	// whose chain never carried that frame. Asking there reads "absent from the live
+	// chain", i.e. a revival, for an arm the jump never actually left.
+	revivals := pendingEscalatorRevivals(capt.cc, p.cont)
+
 	// This signal is emitted only for call/cc resume, which always isolates marks on
 	// reinstall (the captured snapshot in capt.cc, taken at capture time, restores the
 	// outer parameter/handler environment). The driver passes isolate=true to
 	// ReinstallSegment accordingly. Composable resume composes the invoker's marks
 	// instead and bypasses this signal (it calls ReinstallSegment directly).
 	return p, &ErrResumeContinuation{
-		Tag:           DefaultPromptTag,
-		Segment:       capt.cc,
-		Values:        vals,
-		SourceWinding: p.windingStack.Copy(),
+		Tag:               DefaultPromptTag,
+		Segment:           capt.cc,
+		Values:            vals,
+		SourceWinding:     p.windingStack.Copy(),
+		escalatorRevivals: revivals,
 	}
 }
