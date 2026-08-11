@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/extensions/system"
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/extensions/envvars"
 	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/security"
@@ -784,6 +785,104 @@ func TestAuthorizer_DenyBlocksImport(t *testing.T) {
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
 
+// TestLibraryCacheReauthorizedOnHit pins the cache hit against the authorizer.
+//
+// LoadLibrary returns a cached library before it ever reaches the file
+// resolver, and the resolver is the only thing that consults the authorizer. So
+// an import that succeeded under a permissive policy kept succeeding after the
+// policy was tightened, while an uncached import from the SAME directory was
+// refused — the hit and the miss disagreed about what the sandbox allows.
+func TestLibraryCacheReauthorizedOnHit(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	err := writeTestFile(filepath.Join(dir, "alpha.sld"), `(define-library (alpha)
+  (export alpha-secret)
+  (begin (define (alpha-secret) 42)))`)
+	c.Assert(err, qt.IsNil)
+	err = writeTestFile(filepath.Join(dir, "beta.sld"), `(define-library (beta)
+  (export beta-val)
+  (begin (define beta-val 7)))`)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := NewEngine(ctx, WithLibraryPaths(dir))
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	_, err = engine.EvalMultiple(ctx, `(import (alpha))`)
+	c.Assert(err, qt.IsNil, qt.Commentf("the warm import must succeed before the tightening"))
+
+	engine.Namespace().SetAuthorizer(security.DenyAll())
+
+	_, err = engine.EvalMultiple(ctx, `(import (alpha))`)
+	c.Assert(err, qt.IsNotNil, qt.Commentf("the cached import must be re-authorized"))
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+	var ce *CompilationError
+	c.Assert(errors.As(err, &ce), qt.IsTrue,
+		qt.Commentf("an import denial is a compile-time refusal, not a runtime condition"))
+
+	// The differential arm: the uncached twin in the same directory is what made
+	// the hit/miss disagreement visible in the first place.
+	_, err = engine.EvalMultiple(ctx, `(import (beta))`)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+// TestLibraryLoadUsesCallerAuthorizerOnMiss pins the other escape. The
+// resolvers read their authorizer off the root env captured once at engine
+// construction, so a caller namespace with a STRICTER policy was never
+// consulted: the effective policy for a library load was whatever the root
+// happened to hold.
+func TestLibraryLoadUsesCallerAuthorizerOnMiss(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	err := writeTestFile(filepath.Join(dir, "gamma.sld"), `(define-library (gamma)
+  (export gamma-val)
+  (begin (define gamma-val 5)))`)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := NewEngine(ctx, WithLibraryPaths(dir))
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	child := engine.Namespace().NewChildNamespace(
+		environment.WithChildAuthorizer(security.DenyAll()))
+
+	// (gamma) has never been imported in this engine, so this is a MISS and the
+	// load goes all the way to the resolver.
+	_, err = engine.EvalIn(ctx, engine.MustParse(ctx, `(import (gamma))`), child)
+	c.Assert(err, qt.IsNotNil, qt.Commentf("the child's DenyAll must govern its own import"))
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+// TestSyntheticLibraryImportSkipsPathGate is the anti-over-denial ratchet for
+// the cache-hit gate, not a must-fail-first test: it passes with the whole fix
+// reverted. It fails AS A DENIAL if the empty-SourceFile skip is dropped —
+// extension libraries are registered with no source path at all, and every
+// path-containment authorizer refuses a code:load whose Target is "".
+//
+// WithLibraryPaths is load-bearing: without a library registry the import fails
+// for an unrelated reason.
+func TestSyntheticLibraryImportSkipsPathGate(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx,
+		WithLibraryPaths(t.TempDir()),
+		WithExtension(math.Extension),
+		WithAuthorizer(security.ReadOnly()),
+	)
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	v, err := engine.EvalMultiple(ctx, `(import (wile math)) (floor 3.7)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(v.SchemeString(), qt.Equals, "3.0")
+}
+
 func TestAuthorizer_FilesystemRootAllowsInside(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
@@ -957,6 +1056,204 @@ func TestAuthorizer_DenyAllSweep(t *testing.T) {
 			c.Assert(err, qt.IsNotNil, qt.Commentf("expected denial for %s", tc.code))
 			c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
 				qt.Commentf("expected ErrAccessDenied for %s, got: %v", tc.code, err))
+		})
+	}
+}
+
+// TestDenialIsUnswallowable is the handler-wrapped mirror of the sweep above:
+// fifteen guard rows and one with-exception-handler row.
+//
+// Every authorizer denial that reached a primitive frame was converted into a
+// Scheme condition by applyCallableError, so any enclosing handler absorbed it.
+// The fifteen guarded forms — all eleven rows of the sweep, plus
+// (open-input-file ...) and (load ...), plus dynamic-wind, plus a denial inside
+// an SRFI-18 thread joined under guard — evaluated to 'caught with a nil host
+// error. The sixteenth, with-exception-handler, is the one row that failed
+// LOUDLY before the fix but for the wrong reason, and its own comment below
+// says so. A sandboxed program could therefore neutralise its own sandbox's
+// refusals.
+//
+// The scope is the RUNTIME gate sites. The three compile-time load gates
+// surface as *CompilationError and were already unswallowable.
+func TestDenialIsUnswallowable(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx,
+		WithProfile(KitchenSink),
+		WithAuthorizer(security.DenyAll()),
+	)
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	loadPath := filepath.Join(t.TempDir(), "x.scm")
+	err = writeTestFile(loadPath, `(define x 1)`)
+	c.Assert(err, qt.IsNil)
+
+	guarded := []struct {
+		name string
+		code string
+	}{
+		{"command-line", `(guard (e (#t 'caught)) (command-line))`},
+		{"exit", `(guard (e (#t 'caught)) (exit))`},
+		{"get-environment-variable", `(guard (e (#t 'caught)) (get-environment-variable "PATH"))`},
+		{"file-exists?", `(guard (e (#t 'caught)) (file-exists? "/tmp/x"))`},
+		{"open-output-file", `(guard (e (#t 'caught)) (open-output-file "/tmp/x"))`},
+		{"delete-file", `(guard (e (#t 'caught)) (delete-file "/tmp/x"))`},
+		{"eval", `(guard (e (#t 'caught)) (eval '(+ 1 2)))`},
+		{"expand", `(guard (e (#t 'caught)) (expand (datum->syntax #f '(+ 1 2))))`},
+		{"expand-once", `(guard (e (#t 'caught)) (expand-once (datum->syntax #f '(+ 1 2))))`},
+		{"system", `(guard (e (#t 'caught)) (system "true"))`},
+		{"process-spawn", `(guard (e (#t 'caught)) (process-spawn "true"))`},
+		{"open-input-file", `(guard (e (#t 'caught)) (open-input-file "/etc/hosts"))`},
+		{"load", fmt.Sprintf(`(guard (e (#t 'caught)) (load %q))`, loadPath)},
+		// Structurally different dispatch paths, both measured swallowed. The
+		// with-exception-handler row fails on the SENTINEL rather than on
+		// non-nil-ness: unfixed it errors with "exception handler returned from
+		// non-continuable exception", which is not an ErrAccessDenied.
+		{"with-exception-handler",
+			`(with-exception-handler (lambda (e) 'h) (lambda () (open-input-file "/etc/hosts")))`},
+		{"dynamic-wind under guard",
+			`(guard (e (#t 'caught))
+			   (dynamic-wind (lambda () #t)
+			                 (lambda () (open-input-file "/etc/hosts"))
+			                 (lambda () #t)))`},
+		// The SRFI-18 join is what pins *SchemeError over *ErrExceptionEscape:
+		// joinConditionFor turns the latter into a catchable UncaughtException in
+		// the joining thread, so the denial would be swallowed again.
+		{"thread-join! under guard",
+			`(guard (e (#t 'caught))
+			   (thread-join! (thread-start! (make-thread (lambda () (open-input-file "/etc/hosts"))))))`},
+	}
+	for _, tc := range guarded {
+		t.Run(tc.name, func(t *testing.T) {
+			// A per-row qt.C, not the enclosing one: quicktest's Assert calls
+			// FailNow, which must run on the subtest's own goroutine, and a shared
+			// C would report only the first of sixteen rows.
+			c := qt.New(t)
+			_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
+			c.Assert(err, qt.IsNotNil, qt.Commentf("guard absorbed the denial for %s", tc.code))
+			c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+				qt.Commentf("expected ErrAccessDenied to escape for %s, got: %v", tc.code, err))
+		})
+	}
+
+	// RATCHETS, not gate rows: both pass with the fix reverted. They exist to
+	// prove the new arm keys on the denial sentinel rather than on the resource,
+	// or on file errors generally. KitchenSink's own authorizer is nil, so this
+	// second engine has no policy at all.
+	open, err := NewEngine(ctx, WithProfile(KitchenSink))
+	c.Assert(err, qt.IsNil)
+	defer open.Close() //nolint:errcheck // test cleanup
+
+	ratchets := []struct {
+		name string
+		code string
+	}{
+		{"file-error? still catchable",
+			`(guard (e ((file-error? e) 'caught)) (open-input-file "/nonexistent-xyz"))`},
+		{"raise still catchable", `(guard (e (#t 'caught)) (raise 42))`},
+	}
+	for _, tc := range ratchets {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			v, err := open.Eval(ctx, open.MustParse(ctx, tc.code))
+			c.Assert(err, qt.IsNil, qt.Commentf("%s must stay catchable", tc.code))
+			c.Assert(v.SchemeString(), qt.Equals, "caught")
+		})
+	}
+}
+
+// TestDenialCarriesItsProvenance pins that making a denial unswallowable did
+// not cost it its location.
+//
+// A denial travels as a *machine.SchemeError rather than as the exception-escape
+// carrier, precisely because it is not a Scheme condition. wrapRuntimeError
+// unpacked only the latter, so Source and StackTrace came back EMPTY and Message
+// was the generic "runtime error": an embedder asking a RuntimeError to point at
+// the offending form got nothing, for the one error class the sandbox exists to
+// report. The location survived only flattened into the cause's text, which the
+// repo's "Error Chains: Lossless and Traversable" rule does not accept.
+func TestDenialCarriesItsProvenance(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx, WithProfile(KitchenSink), WithAuthorizer(security.DenyAll()))
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(open-input-file "/etc/hosts")`))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+
+	var re *RuntimeError
+	c.Assert(errors.As(err, &re), qt.IsTrue)
+	c.Assert(re.Source, qt.Not(qt.Equals), "",
+		qt.Commentf("the raise-site location must reach the embedder as a field"))
+	c.Assert(re.StackTrace, qt.Not(qt.Equals), "",
+		qt.Commentf("the VM trace must reach the embedder as a field"))
+	c.Assert(re.Message, qt.Contains, "access denied",
+		qt.Commentf("got the generic placeholder instead of the denial: %q", re.Message))
+	// Condition stays nil BY DESIGN: a denial is the sandbox's answer, not a
+	// Scheme condition, and IsSchemeException must keep saying so.
+	c.Assert(re.IsSchemeException(), qt.IsFalse)
+}
+
+// TestUncaughtDenialUnwindsLikeAnyOtherUncaughtError records what the
+// unswallowable denial costs, and pins it to the behaviour of every other error
+// that leaves the VM rather than to nothing at all.
+//
+// Under a guard the after thunk of an enclosing dynamic-wind ran, because the
+// guard reinstated a continuation. A denial no longer takes that path, so the
+// after thunk does not run — exactly as it does not run for an uncaught
+// (error …). Both rows are here so the day Wile decides an escaping error must
+// unwind the wind chain, they move together, and so that "the denial leaks the
+// cleanup" is never read as a property of denials in particular.
+func TestUncaughtDenialUnwindsLikeAnyOtherUncaughtError(t *testing.T) {
+	ctx := context.Background()
+
+	// Each row states its own guarding, because that is the variable: the denial
+	// row IS guarded and escapes anyway, which is the point of the design; the
+	// control row is unguarded, which is the only way an ordinary error also
+	// escapes. A guarded (error …) is caught, and its after thunk duly runs.
+	tcs := []struct {
+		name string
+		opts []EngineOption
+		code string
+	}{
+		{
+			"guarded denial escapes the guard",
+			[]EngineOption{WithProfile(KitchenSink), WithAuthorizer(security.DenyAll())},
+			`(guard (e (#t 'caught))
+               (dynamic-wind (lambda () #t)
+                             (lambda () (open-input-file "/etc/hosts"))
+                             (lambda () (vector-set! cleaned 0 'yes))))`,
+		},
+		{
+			"unguarded error escapes too",
+			[]EngineOption{WithProfile(KitchenSink)},
+			`(dynamic-wind (lambda () #t)
+                           (lambda () (error "boom"))
+                           (lambda () (vector-set! cleaned 0 'yes)))`,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := NewEngine(ctx, tc.opts...)
+			c.Assert(err, qt.IsNil)
+			defer engine.Close() //nolint:errcheck // test cleanup
+
+			_, err = engine.EvalMultiple(ctx, `(define cleaned (vector #f))`)
+			c.Assert(err, qt.IsNil)
+
+			_, err = engine.EvalMultiple(ctx, tc.code)
+			c.Assert(err, qt.IsNotNil, qt.Commentf("the error must leave the VM"))
+
+			v, err := engine.EvalMultiple(ctx, `(vector-ref cleaned 0)`)
+			c.Assert(err, qt.IsNil)
+			c.Assert(v.SchemeString(), qt.Equals, "#f",
+				qt.Commentf("an escaping error does not run the wind chain — for either row"))
 		})
 	}
 }

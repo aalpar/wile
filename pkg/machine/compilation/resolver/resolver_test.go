@@ -17,6 +17,7 @@ package resolver
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -730,8 +731,129 @@ func TestChainFileResolver_AllMiss(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
 }
 
+// TestChainFileResolver_DenialFallsThroughToADifferentSource pins the other
+// half of the denial protocol, the half the WithSourceFS + WithSourceOS pairing
+// depends on.
+//
+// Authorizing before the stat (which is what closes the existence oracle) means
+// a name absent from the fs.FS is REFUSED rather than reported missing. A
+// path-confining authorizer refuses every virtual target by construction, so
+// stopping the chain there made the OS resolver — holding the permitted copy,
+// inside the root — unreachable for every include and every library.
+//
+// The next resolver here authorizes under a different source, which is exactly
+// the condition that separates this from TestChainFileResolver_SecurityDenialStopsChain
+// below: there the next resolver authorizes nothing at all.
+func TestChainFileResolver_DenialFallsThroughToADifferentSource(t *testing.T) {
+	root := realDir(t, t.TempDir())
+	err := os.WriteFile(filepath.Join(root, "lib.scm"), []byte("(define ok 7)"), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+	t.Chdir(root)
+	t.Setenv(SchemeIncludePathEnv, "")
+
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.FilesystemRoot(root))
+	env := ns.Runtime()
+
+	r := NewChainFileResolver([]environment.FileResolver{
+		NewFSFileResolver(fstest.MapFS{}, env),
+		NewOSFileResolver(env),
+	})
+
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "lib.scm")
+	qt.Assert(t, err, qt.IsNil,
+		qt.Commentf("the virtual namespace's refusal is not a verdict on the host file"))
+	defer f.Close() //nolint:errcheck // test cleanup
+	qt.Assert(t, resolved, qt.Equals, filepath.Join(root, "lib.scm"))
+}
+
+// TestChainFileResolver_DenialScansPastASameSourceResolver is the case above
+// with THREE members instead of two, which is the ordinary embedder shape:
+// WithSourceFS(stdlib.FS), WithSourceFS(appFS), WithSourceOS().
+//
+// Inspecting only the IMMEDIATE successor found virtual-fs behind virtual-fs,
+// read that as "nothing new to ask", and abandoned the search at index 0 — so
+// the OS member holding the permitted in-root copy was never reached and every
+// include reported "access denied". A resolver asking the same question decides
+// nothing; that is a reason to SKIP it, not to stop behind it.
+func TestChainFileResolver_DenialScansPastASameSourceResolver(t *testing.T) {
+	root := realDir(t, t.TempDir())
+	err := os.WriteFile(filepath.Join(root, "lib.scm"), []byte("(define ok 7)"), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+	t.Chdir(root)
+	t.Setenv(SchemeIncludePathEnv, "")
+
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.FilesystemRoot(root))
+	env := ns.Runtime()
+
+	r := NewChainFileResolver([]environment.FileResolver{
+		NewFSFileResolver(fstest.MapFS{}, env),
+		NewFSFileResolver(fstest.MapFS{}, env),
+		NewOSFileResolver(env),
+	})
+
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "lib.scm")
+	qt.Assert(t, err, qt.IsNil,
+		qt.Commentf("a second virtual layer must not hide the host member behind it"))
+	defer f.Close() //nolint:errcheck // test cleanup
+	qt.Assert(t, resolved, qt.Equals, filepath.Join(root, "lib.scm"))
+}
+
+// TestChainFileResolver_ScanStopsAtAnUngatedResolver bounds the scan the test
+// above requires. Walking forward for a different source must still stop dead
+// at a resolver that authorizes NOTHING, even when a differently-gated member
+// sits behind it: reaching the ungated one hands out its copy of the file the
+// policy just refused, and the members after it are never the question.
+func TestChainFileResolver_ScanStopsAtAnUngatedResolver(t *testing.T) {
+	dir := realDir(t, t.TempDir())
+	t.Chdir(dir)
+	t.Setenv(SchemeIncludePathEnv, "")
+
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.DenyAll())
+	env := ns.Runtime()
+
+	backup := fstest.MapFS{"secret.scm": {Data: []byte("backup")}}
+
+	r := NewChainFileResolver([]environment.FileResolver{
+		NewFSFileResolver(fstest.MapFS{"secret.scm": {Data: []byte("classified")}}, env),
+		NewEmbedFileResolver(backup),
+		NewOSFileResolver(env),
+	})
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "secret.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+		qt.Commentf("the ungated member ends the scan, whatever follows it"))
+}
+
+// TestChainFileResolver_DenialOfEveryGatedSourceIsReported pins that falling
+// through does not turn a refusal into an absence: when every resolver refuses,
+// the chain still answers "denied".
+func TestChainFileResolver_DenialOfEveryGatedSourceIsReported(t *testing.T) {
+	dir := realDir(t, t.TempDir())
+	t.Chdir(dir)
+	t.Setenv(SchemeIncludePathEnv, "")
+
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.DenyAll())
+	env := ns.Runtime()
+
+	r := NewChainFileResolver([]environment.FileResolver{
+		NewFSFileResolver(fstest.MapFS{"lib.scm": {Data: []byte("(define ok 7)")}}, env),
+		NewOSFileResolver(env),
+	})
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "lib.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+		qt.Commentf("every source refused, so the chain reports the refusal"))
+}
+
 func TestChainFileResolver_SecurityDenialStopsChain(t *testing.T) {
-	// First resolver denies access — chain should NOT fall through.
+	// First resolver denies access — the next authorizes NOTHING, so the chain
+	// must not fall through: it would hand out its copy of the refused file.
 	fsys := fstest.MapFS{"secret.scm": {Data: []byte("classified")}}
 	ns := environment.NewNamespace()
 	ns.SetAuthorizer(security.DenyAll())
@@ -747,6 +869,144 @@ func TestChainFileResolver_SecurityDenialStopsChain(t *testing.T) {
 	_, _, err := r.ResolveAndOpen(context.Background(), "secret.scm")
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+// permissionFS answers every request for its one named path with a hard
+// fs.ErrPermission, and not-exist for anything else. It deliberately does not
+// implement fs.StatFS so that both fs.Stat and Open surface the same failure.
+type permissionFS struct {
+	name string
+}
+
+func (p permissionFS) Open(name string) (fs.File, error) {
+	if name == p.name {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrPermission}
+	}
+	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+}
+
+// TestChainFileResolver_HardErrorStopsChain pins the fall-through protocol: only
+// genuine ABSENCE continues the chain. A hard error (here fs.ErrPermission) used
+// to be relabelled with the werr.ErrFileNotFound sentinel, so the chain fell
+// through to a lower-priority resolver and served ITS copy of secret.scm — a
+// higher-priority file that exists but cannot be read was silently substituted.
+func TestChainFileResolver_HardErrorStopsChain(t *testing.T) {
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+
+	backup := fstest.MapFS{"secret.scm": {Data: []byte("(display \"backup\")")}}
+
+	r := NewChainFileResolver([]environment.FileResolver{
+		NewFSFileResolver(permissionFS{name: "secret.scm"}, env),
+		NewEmbedFileResolver(backup),
+	})
+
+	f, _, err := r.ResolveAndOpen(context.Background(), "secret.scm")
+	qt.Assert(t, f, qt.IsNil, qt.Commentf("a hard error must not yield the next resolver's file"))
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, fs.ErrPermission), qt.IsTrue,
+		qt.Commentf("the cause must survive the wrap (Error Chains: Lossless and Traversable)"))
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsFalse,
+		qt.Commentf("a permission failure is not an absence"))
+}
+
+// countingFS wraps an fs.FS and counts Open calls. It deliberately does NOT
+// implement fs.StatFS, so fs.Stat falls back to Open — which is what makes
+// "authorize before the STAT" load-bearing rather than merely "before the open".
+type countingFS struct {
+	inner fs.FS
+	opens int
+}
+
+func (p *countingFS) Open(name string) (fs.File, error) {
+	p.opens++
+	return p.inner.Open(name)
+}
+
+// TestFSFileResolver_GatesBeforeStat is the portable twin of the FIFO test in
+// confined_unix_test.go: a denied candidate must never be touched at all. The
+// resolver used to stat-and-open first and consult the authorizer afterwards.
+func TestFSFileResolver_GatesBeforeStat(t *testing.T) {
+	counter := &countingFS{inner: fstest.MapFS{"trap.scm": {Data: []byte("(launch-missiles)")}}}
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.DenyAll())
+	r := NewFSFileResolver(counter, ns.Runtime())
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "trap.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+	qt.Assert(t, counter.opens, qt.Equals, 0,
+		qt.Commentf("a denied candidate must not be opened, and fs.Stat's fallback is an Open"))
+}
+
+// TestOSFileResolver_StatENOTDIRContinuesTheSearch pins that a stat failure
+// which DECIDES the candidate cannot exist is absence, not a hard error.
+//
+// ENOTDIR arrives whenever a path component is a regular file. It is not
+// fs.ErrNotExist and errors.Is does not relate the two, so classifying only
+// fs.ErrNotExist as absence stopped the whole search — and, in a chain, every
+// later resolver — at the first search directory that happened to hold a file
+// where the path wanted a directory. The copy in the next directory was never
+// reached.
+func TestOSFileResolver_StatENOTDIRContinuesTheSearch(t *testing.T) {
+	first := realDir(t, t.TempDir())
+	second := realDir(t, t.TempDir())
+
+	// A regular file where "sub/" would have to be: stat(first/sub/lib.scm) is
+	// ENOTDIR, which proves lib.scm is not under first.
+	err := os.WriteFile(filepath.Join(first, "sub"), []byte("not a directory"), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+	err = os.MkdirAll(filepath.Join(second, "sub"), 0o755)
+	qt.Assert(t, err, qt.IsNil)
+	want := filepath.Join(second, "sub", "lib.scm")
+	err = os.WriteFile(want, []byte("(define ok 1)"), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+
+	t.Setenv(SchemeIncludePathEnv, first+string(os.PathListSeparator)+second)
+
+	r := NewOSFileResolver(environment.NewNamespace().Runtime())
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "sub/lib.scm")
+	qt.Assert(t, err, qt.IsNil,
+		qt.Commentf("ENOTDIR is absence at that candidate, not a failure of the search"))
+	defer f.Close() //nolint:errcheck // test cleanup
+	qt.Assert(t, resolved, qt.Equals, want)
+}
+
+// TestOSFileResolver_DenialIsIndistinguishableFromAbsence closes the existence
+// oracle: statting before authorizing made "access denied" versus "not found"
+// report whether a denied path exists. Both rows must now answer the same way.
+//
+// The DenyAll() namespace is what makes this test real — under a nil or
+// permissive authorizer both rows say "not found" and it passes either way.
+func TestOSFileResolver_DenialIsIndistinguishableFromAbsence(t *testing.T) {
+	dir := realDir(t, t.TempDir())
+	err := os.WriteFile(filepath.Join(dir, "exists.scm"), []byte("(display 1)"), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+
+	tcs := []struct {
+		name string
+		path string
+	}{
+		{"existing denied file", "exists.scm"},
+		{"absent path", "absent-xyz-12345.scm"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Chdir(dir)
+			t.Setenv(SchemeIncludePathEnv, "")
+
+			ns := environment.NewNamespace()
+			ns.SetAuthorizer(security.DenyAll())
+			r := NewOSFileResolver(ns.Runtime())
+
+			_, _, resolveErr := r.ResolveAndOpen(context.Background(), tc.path)
+			qt.Assert(t, resolveErr, qt.IsNotNil)
+			qt.Assert(t, errors.Is(resolveErr, security.ErrAccessDenied), qt.IsTrue,
+				qt.Commentf("both rows must report the denial"))
+			qt.Assert(t, errors.Is(resolveErr, werr.ErrFileNotFound), qt.IsFalse,
+				qt.Commentf("reporting absence tells the program the file is not there"))
+		})
+	}
 }
 
 func TestChainFileResolver_PanicsOnEmptyResolvers(t *testing.T) {

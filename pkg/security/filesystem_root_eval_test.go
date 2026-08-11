@@ -76,6 +76,69 @@ func TestFilesystemRootDeniesCodeEvalRegardlessOfCWD(t *testing.T) {
 	})
 }
 
+// TestFilesystemRootDeniesVirtualSourceRegardlessOfCWD is the twin of the test
+// above in the other axis, and fails the same way for the same reason.
+//
+// A target served by an embedder's WithSourceFS arrives with a path that only
+// that fs.FS understands ("evil.scm"). containedInRoot resolves it against the
+// process working directory, so an untrusted virtual filesystem was admitted
+// whenever the host happened to be running inside its own confinement root, and
+// refused for an unrelated reason when it was not. The second subtest is the one
+// that used to allow.
+func TestFilesystemRootDeniesVirtualSourceRegardlessOfCWD(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	qt.Assert(t, err, qt.IsNil)
+
+	req := security.AccessRequest{
+		Resource:     security.ResourceCode,
+		Action:       security.ActionLoad,
+		Target:       "evil.scm",
+		TargetSource: security.SourceVirtualFS,
+	}
+
+	assertVerdicts := func(t *testing.T) {
+		t.Helper()
+		err := security.CheckWithAuthorizer(security.FilesystemRoot(root), req)
+		qt.Assert(t, err, qt.IsNotNil,
+			qt.Commentf("a virtual target is not a path this root can bound"))
+		qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+
+		// The opt-in variant serves it with no path confinement — the embedder
+		// asserting that its own fs.FS is the boundary.
+		err = security.CheckWithAuthorizer(security.FilesystemRootWithVirtualSources(root), req)
+		qt.Assert(t, err, qt.IsNil,
+			qt.Commentf("FilesystemRootWithVirtualSources must serve a virtual target"))
+	}
+
+	t.Run("cwd outside the root", func(t *testing.T) {
+		assertVerdicts(t)
+	})
+
+	t.Run("cwd inside the root", func(t *testing.T) {
+		prev, err := os.Getwd()
+		qt.Assert(t, err, qt.IsNil)
+		t.Cleanup(func() {
+			_ = os.Chdir(prev)
+		})
+		qt.Assert(t, os.Chdir(root), qt.IsNil)
+
+		// With the old path-containment gate, "evil.scm" now resolved to
+		// <root>/evil.scm — inside the root — and the sandbox ran it.
+		assertVerdicts(t)
+	})
+
+	// The opt-in must not become a blanket allow: host-filesystem targets stay
+	// confined exactly as before.
+	err = security.CheckWithAuthorizer(security.FilesystemRootWithVirtualSources(root),
+		security.AccessRequest{
+			Resource: security.ResourceCode,
+			Action:   security.ActionLoad,
+			Target:   "/etc/lib.scm",
+		})
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+		qt.Commentf("an OS path must still be confined to the root"))
+}
+
 // TestFilesystemRootStillGatesFilesByPath guards the other direction: fixing the
 // eval arm must not turn FilesystemRoot into a blanket deny for the resource it
 // actually exists to confine.

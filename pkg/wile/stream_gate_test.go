@@ -17,6 +17,9 @@ package wile
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -47,6 +50,237 @@ func (p *recordingAuthorizer) streamTargets() []string {
 		}
 	}
 	return q
+}
+
+// codeLoadRequests returns the recorded code:load requests, in order.
+func (p *recordingAuthorizer) codeLoadRequests() []security.AccessRequest {
+	var q []security.AccessRequest
+	for _, r := range p.reqs {
+		if r.Resource == security.ResourceCode && r.Action == security.ActionLoad {
+			q = append(q, r)
+		}
+	}
+	return q
+}
+
+// TestVirtualSourceIsNotGatedAgainstProcessCWD pins the end of the CWD
+// coincidence. A file served by WithSourceFS is named by a path that only its
+// fs.FS understands ("evil.scm"), and a path-confining authorizer resolves such
+// a name against the PROCESS working directory. With the CWD inside the
+// confinement root the untrusted program was admitted and ran; with the CWD
+// outside it was refused for a reason that had nothing to do with the file.
+func TestVirtualSourceIsNotGatedAgainstProcessCWD(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	trusted, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	untrusted, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(untrusted, "evil.scm"), []byte("(define evil-ran 42)"), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	rec := &recordingAuthorizer{inner: security.FilesystemRoot(trusted)}
+	engine, err := NewEngine(ctx,
+		WithProfile(KitchenSink),
+		WithAuthorizer(rec),
+		WithSourceFS(os.DirFS(untrusted)))
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	t.Chdir(trusted)
+
+	_, err = engine.EvalMultiple(ctx, `(include "evil.scm") evil-ran`)
+	c.Assert(err, qt.IsNotNil, qt.Commentf("a virtual path is not a path under the root"))
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+
+	// The gate must have been consulted with the path the fs.FS was asked for,
+	// verbatim — the missing assertion that let the CWD coincidence hide.
+	//
+	// EVERY consultation, not the first: a single unlabelled request is enough
+	// to put the verdict back on the process working directory, and inspecting
+	// only reqs[0] is what let exactly that survive on the library cache-hit
+	// path (see TestLibraryCacheHitReauthorizesWithItsOwnSource).
+	reqs := rec.codeLoadRequests()
+	c.Assert(len(reqs) > 0, qt.IsTrue, qt.Commentf("no code:load request was recorded"))
+	for i, r := range reqs {
+		c.Assert(r.Target, qt.Equals, "evil.scm", qt.Commentf("request %d", i))
+		c.Assert(r.TargetSource, qt.Equals, security.SourceVirtualFS, qt.Commentf("request %d", i))
+	}
+}
+
+// TestLibraryCacheHitReauthorizesWithItsOwnSource pins that the re-authorization
+// a cache hit performs asks the SAME question the resolver asked on the miss.
+//
+// The hit gate manufactures its request from the recorded source path. Omitting
+// TargetSource made a virtual library path be judged as an OS path, which
+// containedInRoot resolves against the process working directory — the exact
+// coincidence the resolver gate stopped depending on, reintroduced one layer up.
+// It broke the opt-in authorizer this branch ships for embedders serving a
+// virtual stdlib: (import (alpha)) failed on the FIRST import from any normal
+// CWD, because building the export index has already loaded the library, so the
+// import is a hit.
+func TestLibraryCacheHitReauthorizesWithItsOwnSource(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	virtual, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(virtual, "alpha.sld"),
+		[]byte("(define-library (alpha) (export a) (begin (define a 42)))"), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	// A CWD deliberately outside the confinement root: under the defect the
+	// verdict flipped with this choice, which is what made it a coincidence.
+	outside, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	t.Chdir(outside)
+
+	rec := &recordingAuthorizer{inner: security.FilesystemRootWithVirtualSources(root)}
+	engine, err := NewEngine(ctx,
+		WithProfile(KitchenSink),
+		WithAuthorizer(rec),
+		WithSourceFS(os.DirFS(virtual)),
+		WithLibraryPaths("."))
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	v, err := engine.EvalMultiple(ctx, `(import (alpha)) a`)
+	c.Assert(err, qt.IsNil, qt.Commentf("the opt-in variant must serve a virtual library"))
+	c.Assert(v.SchemeString(), qt.Equals, "42")
+
+	// At least two: the resolver's, and the cache hit's. Every one of them names
+	// the virtual source, or one of them is judging a virtual path as a host one.
+	reqs := rec.codeLoadRequests()
+	c.Assert(len(reqs) >= 2, qt.IsTrue,
+		qt.Commentf("want a resolver request and a cache-hit request, got %d", len(reqs)))
+	for i, r := range reqs {
+		c.Assert(r.TargetSource, qt.Equals, security.SourceVirtualFS,
+			qt.Commentf("request %d (%q) lost its source", i, r.Target))
+	}
+}
+
+// TestSourceChainFallsThroughAVirtualDenial is the end-to-end form of the chain
+// protocol: the documented WithSourceFS + WithSourceOS pairing must keep working
+// under a path-confining authorizer.
+//
+// Since the resolver authorizes a candidate before stat'ing it, a name absent
+// from the fs.FS is refused rather than reported missing, and FilesystemRoot
+// refuses every virtual target by construction. Treating that refusal as final
+// made the OS half of the chain unreachable: an (include …) of a file sitting
+// inside the confinement root reported "access denied".
+func TestSourceChainFallsThroughAVirtualDenial(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	trusted, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	virtual, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(trusted, "lib.scm"), []byte("(define chain-ran 7)"), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := NewEngine(ctx,
+		WithProfile(KitchenSink),
+		WithAuthorizer(security.FilesystemRoot(trusted)),
+		WithSourceFS(os.DirFS(virtual)),
+		WithSourceOS())
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	t.Chdir(trusted)
+
+	v, err := engine.EvalMultiple(ctx, `(include "lib.scm") chain-ran`)
+	c.Assert(err, qt.IsNil, qt.Commentf("the permitted host copy must still be reachable"))
+	c.Assert(v.SchemeString(), qt.Equals, "7")
+
+	// The policy is not weakened by the fall-through: a host file OUTSIDE the
+	// root is still refused, and the refusal is not reported as an absence.
+	outside, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(outside, "outside.scm"), []byte("(define escaped 1)"), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.EvalMultiple(ctx, fmt.Sprintf(`(include %q)`,
+		filepath.Join(outside, "outside.scm")))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+		qt.Commentf("got: %v", err))
+}
+
+// TestSourceChainScansPastASameSourceDenial is the test above at the chain
+// length embedders actually build: two virtual layers ahead of the OS one,
+// WithSourceFS(stdlib.FS) + WithSourceFS(appFS) + WithSourceOS() as documented
+// on WithSourceFS.
+//
+// The fall-through condition used to read only the immediate successor, so the
+// second virtual layer — same source, same question — looked like the end of
+// the chain and the OS member became unreachable. Both source-loading entries
+// are exercised: (include …) reads a file, (import …) reads a library, and they
+// reach the resolver by different paths.
+func TestSourceChainScansPastASameSourceDenial(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	trusted, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	stdlibLayer, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	appLayer, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+
+	err = os.WriteFile(filepath.Join(trusted, "lib.scm"), []byte("(define chain-ran 7)"), 0o644)
+	c.Assert(err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(trusted, "beta.sld"),
+		[]byte("(define-library (beta) (export b) (begin (define b 11)))"), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	t.Chdir(trusted)
+
+	engine, err := NewEngine(ctx,
+		WithProfile(KitchenSink),
+		WithAuthorizer(security.FilesystemRoot(trusted)),
+		WithSourceFS(os.DirFS(stdlibLayer)),
+		WithSourceFS(os.DirFS(appLayer)),
+		WithSourceOS(),
+		WithLibraryPaths("."))
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	// Subtests rather than one straight-line body: include and import reach the
+	// resolver by different paths, and each must report its own verdict instead
+	// of being pre-empted by an earlier assertion's abort.
+	t.Run("include", func(t *testing.T) {
+		c := qt.New(t)
+		v, err := engine.EvalMultiple(ctx, `(include "lib.scm") chain-ran`)
+		c.Assert(err, qt.IsNil, qt.Commentf("the permitted host copy must still be reachable"))
+		c.Assert(v.SchemeString(), qt.Equals, "7")
+	})
+
+	t.Run("import", func(t *testing.T) {
+		c := qt.New(t)
+		v, err := engine.EvalMultiple(ctx, `(import (beta)) b`)
+		c.Assert(err, qt.IsNil, qt.Commentf("a host library is reached through the same chain"))
+		c.Assert(v.SchemeString(), qt.Equals, "11")
+	})
+
+	// Falling through two virtual layers does not weaken the policy: a host file
+	// outside the root is still refused, and not as an absence.
+	t.Run("outside the root is still refused", func(t *testing.T) {
+		c := qt.New(t)
+		outside, err := filepath.EvalSymlinks(t.TempDir())
+		c.Assert(err, qt.IsNil)
+		err = os.WriteFile(filepath.Join(outside, "outside.scm"), []byte("(define escaped 1)"), 0o644)
+		c.Assert(err, qt.IsNil)
+
+		_, err = engine.EvalMultiple(ctx, fmt.Sprintf(`(include %q)`,
+			filepath.Join(outside, "outside.scm")))
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+			qt.Commentf("got: %v", err))
+	})
 }
 
 // TestHostStdioIsGated pins the stream gate (reviews/2026-08-07/REVIEW.md 2.1.1).

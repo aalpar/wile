@@ -65,36 +65,66 @@ func NewFinder(fsys fs.FS, searchDirs []string, opts ...FinderOption) *Finder {
 //
 // The returned path goes through canonicalize (if set) before being returned.
 // Returns ErrNotFound immediately for an empty path argument.
+//
+// Open is the composition of Candidates and OpenCandidate. A caller that must
+// authorize a candidate before touching it uses those two directly, so that the
+// gate sits visibly between them; there is still one implementation of each half.
 func (p *Finder) Open(name string) (fs.File, string, error) {
-	if name == "" {
-		return nil, "", ErrNotFound
+	for _, candidate := range p.Candidates(name) {
+		f, resolved, err := p.OpenCandidate(candidate)
+		if err == nil {
+			return f, resolved, nil
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		return nil, "", err
 	}
-	for _, dir := range p.buildSearchDirs() {
+	return nil, "", ErrNotFound
+}
+
+// Candidates returns the ordered paths Open would try for name, in search
+// order, with invalid fs paths dropped. It touches the filesystem not at all,
+// so a caller can put an authorization gate ahead of every access to a
+// candidate rather than behind the first one.
+//
+// Returns nil for an empty name.
+func (p *Finder) Candidates(name string) []string {
+	if name == "" {
+		return nil
+	}
+	dirs := p.buildSearchDirs()
+	q := make([]string, 0, len(dirs))
+	for _, dir := range dirs {
 		candidate := path.Join(dir, name)
 		if !fs.ValidPath(candidate) {
 			continue
 		}
-		_, err := fs.Stat(p.fsys, candidate)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			return nil, "", err
-		}
-		f, err := p.fsys.Open(candidate)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			return nil, "", err
-		}
-		resolved := candidate
-		if p.canonicalize != nil {
-			resolved = p.canonicalize(candidate)
-		}
-		return f, resolved, nil
+		q = append(q, candidate)
 	}
-	return nil, "", ErrNotFound
+	return q
+}
+
+// OpenCandidate stats then opens one already-chosen candidate, returning the
+// resolved path (canonicalize applied, if set).
+//
+// Errors are returned raw so a caller can classify them: errors.Is(err,
+// fs.ErrNotExist) is "keep searching", anything else is a hard failure that
+// must not be mistaken for absence.
+func (p *Finder) OpenCandidate(candidate string) (fs.File, string, error) {
+	_, err := fs.Stat(p.fsys, candidate)
+	if err != nil {
+		return nil, "", err
+	}
+	f, err := p.fsys.Open(candidate)
+	if err != nil {
+		return nil, "", err
+	}
+	resolved := candidate
+	if p.canonicalize != nil {
+		resolved = p.canonicalize(candidate)
+	}
+	return f, resolved, nil
 }
 
 // buildSearchDirs returns the ordered list of directories to try. The stack's

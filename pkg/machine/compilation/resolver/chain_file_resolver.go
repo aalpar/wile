@@ -20,12 +20,16 @@ import (
 	"io/fs"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// ChainFileResolver tries multiple resolvers in order, falling through
-// to the next on ErrFileNotFound. Non-file-not-found errors (security
-// denials, I/O errors) propagate immediately.
+// ChainFileResolver tries multiple resolvers in order, falling through to the
+// next on absence, and on a denial only when some later resolver will re-ask
+// under a different source (see continuesPast). Anything else — a permission
+// failure, any other I/O error — propagates immediately, so a higher-priority
+// file that exists but cannot be read is never silently replaced by a
+// lower-priority one.
 type ChainFileResolver struct {
 	resolvers []environment.FileResolver
 }
@@ -42,20 +46,74 @@ func NewChainFileResolver(resolvers []environment.FileResolver) *ChainFileResolv
 }
 
 // ResolveAndOpen tries each resolver in order, returning the first successful
-// result. Falls through on ErrFileNotFound; other errors propagate immediately.
+// result. The reported failure is the last resolver's, which is the only one
+// that searched to the end of the chain.
 func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error) {
 	var lastErr error
-	for _, r := range p.resolvers {
+	for i, r := range p.resolvers {
 		f, resolved, err := r.ResolveAndOpen(ctx, path)
 		if err == nil {
 			return f, resolved, nil
 		}
-		if !errors.Is(err, werr.ErrFileNotFound) {
+		if !p.continuesPast(err, i) {
 			return nil, "", err
 		}
 		lastErr = err
 	}
 	return nil, "", lastErr
+}
+
+// continuesPast reports whether the chain may look in resolvers[i+1:] after
+// resolvers[i] failed with err. Absence always continues. A denial continues
+// only when SOME later resolver authorizes under a DIFFERENT source, reachable
+// without passing an ungated one: the scan walks forward, skipping resolvers
+// that authorize under the same source as the refusal, and stops at the first
+// resolver that authorizes under a different source (continue) or at the first
+// that authorizes nothing at all (stop).
+//
+// Both halves of that condition are load-bearing.
+//
+// It must continue sometimes, or the documented WithSourceFS + WithSourceOS
+// pairing breaks under every path-confining authorizer: since a candidate is
+// now authorized before it is stat'd (which is what closes the existence
+// oracle), a name absent from the fs.FS is refused rather than reported
+// missing, and refusing the virtual namespace says nothing about the host file
+// the OS resolver holds.
+//
+// It must NOT continue otherwise. A resolver asking NO question —
+// EmbedFileResolver, which authorizes nothing and therefore implements no
+// SourceGate — would hand out its copy of the very file the policy just
+// refused, so it bounds the scan; and a chain whose remaining members all ask
+// the same question the refusal already answered has nothing left to try.
+//
+// The scan is why a same-source resolver is SKIPPED rather than treated as the
+// end of the chain. "Asking the same question gets the same answer" says that
+// such a resolver decides nothing, not that the resolvers behind it decide
+// nothing: with the ordinary two-layer embedder shape
+// (WithSourceFS(stdlib.FS), WithSourceFS(appFS), WithSourceOS()), inspecting
+// only the immediate successor found virtual-fs behind virtual-fs and abandoned
+// the search at index 0, leaving the permitted host copy unreachable.
+func (p *ChainFileResolver) continuesPast(err error, i int) bool {
+	if IsNotFound(err) {
+		return true
+	}
+	if !errors.Is(err, security.ErrAccessDenied) {
+		return false
+	}
+	refused, ok := p.resolvers[i].(SourceGate)
+	if !ok {
+		return false
+	}
+	for _, r := range p.resolvers[i+1:] {
+		later, ok := r.(SourceGate)
+		if !ok {
+			return false
+		}
+		if later.AuthorizedSource() != refused.AuthorizedSource() {
+			return true
+		}
+	}
+	return false
 }
 
 // EnumerateFiles unions file enumerations from all child resolvers that

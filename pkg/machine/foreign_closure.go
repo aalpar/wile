@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -69,11 +70,49 @@ func isControlSignal(err error) bool {
 // applyCallableError converts a Go error from a primitive into a Scheme exception
 // by invoking the current handler in place (RaiseInPlace) — the single bridge
 // between Go-level failures and the mark-based handler chain, so they are catchable
-// by guard and with-exception-handler. Errors that are already Scheme-level control
-// flow pass through unchanged; see isControlSignal.
+// by guard and with-exception-handler.
+//
+// Two classes bypass that bridge.
+//
+// Control signals pass through unchanged; see isControlSignal.
+//
+// An authorizer denial passes through as a *SchemeError, because a security
+// denial is not a Scheme condition: it is the sandbox's answer, not the
+// program's business. Converting it made every runtime gate site absorbable by
+// an enclosing guard or with-exception-handler, so a sandboxed program could
+// neutralise its own refusals. It now terminates the evaluation and reaches the
+// embedder with errors.Is(err, security.ErrAccessDenied) intact.
+//
+// Scope: this covers the RUNTIME gate sites only. The three compile-time load
+// gates (resolver's FS and OS resolvers, library_loader) never reach this
+// function — they surface as *CompilationError and were already unswallowable.
 func applyCallableError(mc *MachineContext, err error) error {
 	if isControlSignal(err) {
 		return err
+	}
+	if errors.Is(err, security.ErrAccessDenied) {
+		// errors.Is, not errors.As: ErrAccessDenied is a static sentinel and
+		// CheckWithAuthorizer wraps every denial with action/resource/target, so
+		// both the bare and the contextualised form must match. This is NOT folded
+		// into isControlSignal — that function is a positive test for control
+		// TRANSFER, and a denial is a failure.
+		var stamped *SchemeError
+		if errors.As(err, &stamped) {
+			// Already carried through one primitive frame. Re-stamping would
+			// prepend a second location and a second trace, which is exactly what
+			// the SRFI-18 join path does: raiseJoinCondition returns the error
+			// unchanged for a carrier joinConditionFor does not recognise, and it
+			// re-enters here.
+			return err
+		}
+		// WrapError, not a bare pass-through: it stamps the raise-site location
+		// and the VM trace onto the error, which returning err raw would drop.
+		// *SchemeError is deliberately not *ErrExceptionEscape — that is the
+		// uncaught-CONDITION carrier, which the SRFI-18 join turns back into a
+		// catchable values.UncaughtException. The embedder side of that choice is
+		// Engine.wrapDenial, which unpacks this carrier into RuntimeError.Source
+		// and .StackTrace; without it the stamp survives only as message text.
+		return mc.WrapError(err, "")
 	}
 	return RaiseInPlace(mc, goErrorToCondition(err), false)
 }

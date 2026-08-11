@@ -51,6 +51,24 @@ func SelectLoadStack(ctx context.Context) *sourceload.LoadStack {
 	return sourceload.LoadStackFromContext(ctx)
 }
 
+// SelectAuthorizer returns the Authorizer that governs this resolution. It is
+// the resolver-side selection point for the security policy, and it exists for
+// the same reason SelectLoadStack does: the env a resolver holds is the ROOT env
+// captured once at engine construction, not the caller's. A caller with a
+// stricter policy — a child Namespace, or a root whose authorizer was tightened
+// after construction — can only reach the resolver through ctx.
+//
+// The two-branch shape here is deliberate and is NOT SelectLoadStack's (whose
+// env fallback was deleted): LoadLibrary is the only installer, so every other
+// caller leaves ctx bare and gets the captured env's authorizer, unchanged.
+func SelectAuthorizer(ctx context.Context, env *environment.EnvironmentFrame) security.Authorizer {
+	auth := security.FromContext(ctx)
+	if auth != nil {
+		return auth
+	}
+	return env.Namespace().Authorizer()
+}
+
 // SchemeIncludePathEnv is the environment variable name for the Scheme include path.
 const SchemeIncludePathEnv = "SCHEME_INCLUDE_PATH"
 
@@ -74,13 +92,105 @@ func isSchemeFile(name string) bool {
 }
 
 // isAuthorized reports whether the security authorizer permits loading the
-// given path. Returns true when no authorizer is configured (open sandbox).
-func isAuthorized(auth security.Authorizer, target string) bool {
+// given path, drawn from source (empty = the host OS filesystem).
+// Returns true when no authorizer is configured (open sandbox).
+func isAuthorized(auth security.Authorizer, target, source string) bool {
 	return security.CheckWithAuthorizer(auth, security.AccessRequest{
-		Resource: security.ResourceCode,
-		Action:   security.ActionLoad,
-		Target:   target,
+		Resource:     security.ResourceCode,
+		Action:       security.ActionLoad,
+		Target:       target,
+		TargetSource: source,
 	}) == nil
+}
+
+// IsNotFound reports whether err means the file is genuinely absent, which
+// always licenses continuing a search: falling through to the next resolver in
+// a chain, or from a library's .sld to its .scm. (A chain continues past a
+// denial too, under the narrower condition ChainFileResolver.continuesPast
+// states; absence is the unconditional half.)
+//
+// It accepts both sentinels because both are minted for absence and neither
+// implies the other: werr.ErrFileNotFound is a bare static sentinel with no
+// fs.ErrNotExist in its chain, and a raw fs.ErrNotExist arrives from the
+// virtual-filesystem side without ever being relabelled.
+func IsNotFound(err error) bool {
+	return errors.Is(err, werr.ErrFileNotFound) || errors.Is(err, fs.ErrNotExist)
+}
+
+// SourceGate is implemented by a FileResolver that authorizes every candidate
+// before opening it, and names the security.AccessRequest.TargetSource it
+// authorizes them under ("" = the host OS filesystem).
+//
+// It exists so ChainFileResolver can tell a refusal it may look past from one
+// it may not: a resolver that implements SourceGate under a different source
+// asks the authorizer a different question, while one that does not implement
+// it asks none at all (EmbedFileResolver) and must never be reached with a
+// denial standing. ChainFileResolver itself deliberately does not implement it:
+// a chain authorizes under as many sources as it has members, so there is no
+// single answer, and the conservative reading of "not gated" is the safe one.
+type SourceGate interface {
+	AuthorizedSource() string
+}
+
+// authorizeCandidates walks candidates in search order, authorizing each one
+// BEFORE open is allowed to touch it, and returns the first candidate that is
+// both permitted and present.
+//
+// The ordering is the point. Locating a candidate first and gating afterwards
+// hands out an oracle (a denied path that exists answers differently from one
+// that does not) and, when open blocks or has side effects — a FIFO under
+// os.DirFS, an embedder's instrumented fs.FS — performs the very act the
+// authorizer was about to refuse. Here a refusal costs the candidate nothing.
+//
+// A denial does not abort the search: a later search directory may hold a
+// permitted copy. The FIRST denial is remembered and reported only if no
+// candidate succeeds, so denied-and-existent and denied-and-absent are
+// indistinguishable. Absence continues the search; any other open failure is
+// propagated with its cause, never relabelled as absence.
+//
+// The helper owns the ORDER; open owns the DIAGNOSIS. An opener's error is
+// returned to the caller unchanged, so whichever operation actually failed is
+// the one the sentinel and the message name — a stat that never reached an open
+// must not surface as werr.ErrFileOpen. What the helper reads off that error is
+// only whether it means absence (IsNotFound), which is what continues the loop.
+//
+// source labels the namespace the candidates are drawn from; see
+// security.AccessRequest.TargetSource. Returns sourceload.ErrNotFound when
+// every candidate was absent, so the caller can build its own searched-dirs
+// diagnostic.
+func authorizeCandidates(
+	auth security.Authorizer,
+	source string,
+	candidates []string,
+	open func(candidate string) (fs.File, error),
+) (fs.File, string, error) {
+	var denied error
+	for _, candidate := range candidates {
+		authErr := security.CheckWithAuthorizer(auth, security.AccessRequest{
+			Resource:     security.ResourceCode,
+			Action:       security.ActionLoad,
+			Target:       candidate,
+			TargetSource: source,
+		})
+		if authErr != nil {
+			if denied == nil {
+				denied = authErr
+			}
+			continue
+		}
+		f, openErr := open(candidate)
+		if openErr == nil {
+			return f, candidate, nil
+		}
+		if IsNotFound(openErr) {
+			continue
+		}
+		return nil, "", openErr
+	}
+	if denied != nil {
+		return nil, "", denied
+	}
+	return nil, "", sourceload.ErrNotFound
 }
 
 // osSearchDirs returns the fallback directory list for OS-based file search.
@@ -103,6 +213,25 @@ func osSearchDirs(env *environment.EnvironmentFrame) []string {
 	return dirs
 }
 
+// openConfined opens absPath through confinedOpenFile (see confined.go) and
+// labels the failure, which confinedOpenFile itself leaves as the raw os error.
+// Absence keeps the ErrFileNotFound sentinel so a search may continue past it;
+// every other failure really is an open failure and says so.
+//
+// Both OS arms go through here, so the absolute path and the search-relative
+// candidate cannot end up labelled differently for the same failure.
+func openConfined(auth security.Authorizer, absPath string) (fs.File, error) {
+	f, err := confinedOpenFile(auth, absPath)
+	if err == nil {
+		return f, nil
+	}
+	sentinel := werr.ErrFileOpen
+	if errors.Is(err, os.ErrNotExist) {
+		sentinel = werr.ErrFileNotFound
+	}
+	return nil, werr.WrapForeignErrorWithCause(sentinel, err, "open %s", absPath)
+}
+
 // openAuthorized performs security authorization then opens absPath on the OS
 // filesystem, through os.Root when the authorizer confines access to a root so
 // the check and the open cannot observe different files (see confined.go).
@@ -115,13 +244,9 @@ func openAuthorized(auth security.Authorizer, absPath string) (fs.File, string, 
 	if err != nil {
 		return nil, "", err
 	}
-	f, err := confinedOpenFile(auth, absPath)
+	f, err := openConfined(auth, absPath)
 	if err != nil {
-		sentinel := werr.ErrFileOpen
-		if errors.Is(err, os.ErrNotExist) {
-			sentinel = werr.ErrFileNotFound
-		}
-		return nil, "", werr.WrapForeignErrorWithCause(sentinel, err, "open %s", absPath)
+		return nil, "", err
 	}
 	return f, absPath, nil
 }
@@ -145,7 +270,7 @@ func WalkOSSchemeFiles(baseDir string, auth security.Authorizer, fn func(relPath
 			return nil
 		}
 		absPath, absErr := filepath.Abs(path)
-		if walkErr != nil || absErr != nil || !isSchemeFile(d.Name()) || !isAuthorized(auth, absPath) {
+		if walkErr != nil || absErr != nil || !isSchemeFile(d.Name()) || !isAuthorized(auth, absPath, "") {
 			return nil //nolint:nilerr // skip unreadable/irrelevant/denied files, continue walking
 		}
 		rel, relErr := filepath.Rel(baseDir, path)

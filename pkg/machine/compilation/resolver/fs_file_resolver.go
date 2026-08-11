@@ -53,6 +53,12 @@ func NewFSFileResolver(fsys fs.FS, env *environment.EnvironmentFrame) *FSFileRes
 	}
 }
 
+// AuthorizedSource reports the source every candidate is authorized under: the
+// virtual filesystem this resolver serves. See SourceGate.
+func (*FSFileResolver) AuthorizedSource() string {
+	return security.SourceVirtualFS
+}
+
 // fsRegistryDirs returns the registry search paths (non-empty entries only).
 // The load-path-stack current dir is NOT included here — it is injected into
 // the Finder via WithStack so the Finder handles directory-relative resolution.
@@ -92,23 +98,33 @@ func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 	}
 	finder := sourceload.NewFinder(p.fsys, registryDirs, opts...)
 
-	f, resolved, err := finder.Open(path)
-	if err == nil {
-		// Security check after finding the file; close and deny if rejected.
-		authErr := security.CheckWithAuthorizer(p.env.Namespace().Authorizer(), security.AccessRequest{
-			Resource: security.ResourceCode,
-			Action:   security.ActionLoad,
-			Target:   resolved,
-		})
-		if authErr != nil {
-			f.Close() //nolint:errcheck // closing on denial; error irrelevant
-			return nil, "", authErr
+	// The candidate is authorized before the Finder is allowed to stat or open
+	// it. The Finder is deliberately used in two halves here rather than through
+	// Open: fs.Stat falls back to Open for an fs.FS that is not a fs.StatFS, so
+	// "gate before the open" and "gate before the stat" are the same requirement.
+	//
+	// FSFileResolver sets no canonicalize function, so the candidate the helper
+	// returns is already the resolved path.
+	//
+	// The opener labels its own failures: authorizeCandidates returns them
+	// unchanged, and an fs.FS reports a hard failure as a bare *fs.PathError with
+	// no sentinel a Wile caller can match.
+	opener := func(candidate string) (fs.File, error) {
+		q, _, openErr := finder.OpenCandidate(candidate)
+		if openErr != nil && !IsNotFound(openErr) {
+			return nil, werr.WrapForeignErrorWithCause(werr.ErrFileOpen, openErr,
+				"open %s in virtual filesystem", candidate)
 		}
+		return q, openErr
+	}
+	auth := SelectAuthorizer(ctx, p.env)
+	f, resolved, err := authorizeCandidates(auth, security.SourceVirtualFS, finder.Candidates(path), opener)
+	if err == nil {
 		return f, resolved, nil
 	}
 
 	if !errors.Is(err, sourceload.ErrNotFound) {
-		return nil, "", werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, err, "resolve %s in virtual filesystem", path)
+		return nil, "", err
 	}
 
 	// Build the searched-dirs list for the not-found error, mirroring what
@@ -158,7 +174,7 @@ func (p *FSFileResolver) EnumerateFiles() ([]string, error) {
 	searchDirs := p.buildEnumSearchDirs()
 
 	err := sourceload.Walk(p.fsys, searchDirs, isSchemeFile, func(relPath string) {
-		if isAuthorized(auth, relPath) {
+		if isAuthorized(auth, relPath, security.SourceVirtualFS) {
 			result = append(result, relPath)
 		}
 	})

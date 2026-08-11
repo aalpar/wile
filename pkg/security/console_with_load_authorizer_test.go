@@ -15,6 +15,8 @@
 package security_test
 
 import (
+	"errors"
+	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -64,6 +66,62 @@ func TestConsoleWithLoadAuthorizer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestConsoleWithLoadDeniesVirtualSourceRegardlessOfCWD is the ConsoleWithLoad
+// twin of TestFilesystemRootDeniesVirtualSourceRegardlessOfCWD: this profile
+// confines code:load to /tmp, so a virtual path was admitted whenever the
+// process CWD sat under /tmp — which, for a program staging its sources there,
+// is the normal case rather than the exotic one.
+func TestConsoleWithLoadDeniesVirtualSourceRegardlessOfCWD(t *testing.T) {
+	req := security.AccessRequest{
+		Resource:     security.ResourceCode,
+		Action:       security.ActionLoad,
+		Target:       "evil.scm",
+		TargetSource: security.SourceVirtualFS,
+	}
+
+	assertVerdicts := func(t *testing.T) {
+		t.Helper()
+		err := security.CheckWithAuthorizer(security.ConsoleWithLoadAuthorizer(), req)
+		qt.Assert(t, err, qt.IsNotNil,
+			qt.Commentf("a virtual target has no relation to /tmp"))
+		qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+
+		err = security.CheckWithAuthorizer(security.ConsoleWithLoadAllowingVirtualSources(), req)
+		qt.Assert(t, err, qt.IsNil,
+			qt.Commentf("the opt-in variant must serve a virtual target"))
+	}
+
+	t.Run("cwd outside /tmp", func(t *testing.T) {
+		assertVerdicts(t)
+	})
+
+	t.Run("cwd under /tmp", func(t *testing.T) {
+		dir, err := os.MkdirTemp("/tmp", "wile-cwl-")
+		qt.Assert(t, err, qt.IsNil)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
+		prev, err := os.Getwd()
+		qt.Assert(t, err, qt.IsNil)
+		t.Cleanup(func() {
+			_ = os.Chdir(prev)
+		})
+		qt.Assert(t, os.Chdir(dir), qt.IsNil)
+
+		assertVerdicts(t)
+	})
+
+	// The opt-in stays a virtual-source exemption, not a blanket allow.
+	err := security.CheckWithAuthorizer(security.ConsoleWithLoadAllowingVirtualSources(),
+		security.AccessRequest{
+			Resource: security.ResourceCode,
+			Action:   security.ActionLoad,
+			Target:   "/etc/lib.scm",
+		})
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+		qt.Commentf("an OS path must still be confined to /tmp"))
 }
 
 // TestConsoleWithLoad_DelegatesNonCodeToConsole pins the composition invariant:

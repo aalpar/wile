@@ -33,6 +33,7 @@ import (
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/registry/core"
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -1219,6 +1220,10 @@ func wrapCompilationError(msg string, cause error) *CompilationError {
 // source location, stack trace, and condition value from ErrExceptionEscape when
 // present. Falls back to a plain RuntimeError for non-exception errors.
 func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
+	denial := p.wrapDenial(err)
+	if denial != nil {
+		return denial
+	}
 	var ee *machine.ErrExceptionEscape
 	if errors.As(err, &ee) {
 		// Pull the bare condition text into Message and the location/trace into
@@ -1239,6 +1244,34 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 		return re
 	}
 	return newRuntimeErrorWithCause("runtime error", err)
+}
+
+// wrapDenial unpacks an authorizer denial that terminated the evaluation, or
+// returns nil when err is not one.
+//
+// A denial deliberately is NOT a Scheme condition (see applyCallableError), so
+// it travels as a *machine.SchemeError rather than as the exception-escape
+// carrier the branch above unpacks. Without this arm the location and the VM
+// trace the VM stamped on it survive only flattened into the cause's text:
+// RuntimeError.Source and .StackTrace came back empty, and Message was the
+// generic "runtime error", for the one error class a sandboxed embedder most
+// needs to localise. Condition stays nil — there is no condition, which is the
+// whole point — so IsSchemeException correctly reports false.
+func (*Engine) wrapDenial(err error) *RuntimeError {
+	if !errors.Is(err, security.ErrAccessDenied) {
+		return nil
+	}
+	var se *machine.SchemeError
+	if !errors.As(err, &se) {
+		return nil
+	}
+	return &RuntimeError{
+		Message:    se.Message,
+		Cause:      err,
+		Source:     se.Source.Location(),
+		StackTrace: se.StackTrace,
+		structured: true,
+	}
 }
 
 // newFileResolver creates the appropriate FileResolver from resolver factories.
