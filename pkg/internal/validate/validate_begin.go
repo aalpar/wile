@@ -29,11 +29,21 @@ func validateBegin(ctx context.Context, env *environment.EnvironmentFrame, pair 
 	}
 
 	// R7RS allows (begin) with no expressions (returns unspecified value)
+	//
+	// The same per-element env thread validateBodySlice runs, for the same
+	// reason: R7RS §5.3.2 SPLICES a body-level begin, so (define quote f) and a
+	// following (quote 9) are one body whether or not a begin sits between
+	// them. Without it the two passes disagreed — validateBegin read the head
+	// as the special form while predeclareDefineFromValidatedRecursive (which
+	// does recurse through the begin) gave the compiler a local variable of
+	// that name.
 	var body []ValidatedExpr
+	bodyEnv := env
 	for i := 1; i < len(elements); i++ {
-		expr := validateExpr(ctx, env, elements[i], result)
+		expr := validateExpr(ctx, bodyEnv, elements[i], result)
 		if expr != nil {
 			body = append(body, expr)
+			bodyEnv = bindBodyDefineNames(bodyEnv, expr)
 		}
 	}
 

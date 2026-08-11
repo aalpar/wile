@@ -1605,6 +1605,37 @@ func TestValidateShadowing(t *testing.T) {
 				return lambdaBodyOf(c, e)[1]
 			},
 		},
+		{
+			// (lambda () (begin (define quote 1) (quote))) — the reference is
+			// INSIDE the same begin, not after it. R7RS §5.3.2 splices a
+			// body-level begin, so this is the same body as the row above and
+			// must shadow the same way; the row above only exercises a reference
+			// placed AFTER the begin, which bindBodyDefineNames' *ValidatedBegin
+			// fold already covered. validateBegin threading its own bodyEnv is
+			// what this one needs, and without it the two passes disagree:
+			// validate said "special form" while
+			// predeclareDefineFromValidatedRecursive (which does recurse through
+			// the begin) handed the compiler a local variable of that name.
+			name: "internal define shadows quote inside the same begin",
+			input: values.List(
+				values.NewSymbol("lambda"),
+				values.EmptyList,
+				values.List(
+					values.NewSymbol("begin"),
+					values.List(
+						values.NewSymbol("define"),
+						values.NewSymbol("quote"),
+						values.NewInteger(1),
+					),
+					values.List(values.NewSymbol("quote")),
+				),
+			),
+			shadowed: func(c *qt.C, e ValidatedExpr) ValidatedExpr {
+				begun, ok := lambdaBodyOf(c, e)[0].(*ValidatedBegin)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("body[0] is not a begin"))
+				return begun.Body()[1]
+			},
+		},
 	}
 
 	env := environment.NewNamespace().Runtime()
