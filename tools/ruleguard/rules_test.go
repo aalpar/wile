@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -84,7 +85,40 @@ func WrapForeignErrorf(err error, msg string, vs ...any) error {
 }
 `)
 
+	// Minimal values stub. The package MUST be named "values": the
+	// noUncheckedArgCast patterns are syntactic on the `*values.$t` selector,
+	// so any other package name silently matches nothing.
+	writeFile("values/values.go", `package values
+
+// Integer is a concrete pointer target for the assertion fixtures.
+type Integer struct {
+	Value int64
+}
+
+// Get exists so the selector-chain form has something to chain onto.
+func (p *Integer) Get() int64 {
+	return p.Value
+}
+`)
+
 	// golangci-lint configuration: only enable gocritic/ruleguard.
+	//
+	// The issues block disables all three of golangci-lint's output caps.
+	// One bites today and is why the block exists: max-same-issues (default
+	// 3) counts by identical message text, so armed it emits only three of
+	// the six same-message noUncheckedArgCast positives (measured: 41:2,
+	// 46:9 and 51:9 dropped, making live patterns read as dead).
+	//
+	// The other two are latent, and the more dangerous of the pair is
+	// max-issues-per-linter (default 50): gocritic is the only enabled
+	// linter, so this whole table shares one budget, and truncation makes
+	// every `present: false` row pass vacuously (measured at 15 of 50 today;
+	// forced to 3, all five negative rows pass while twelve positives fail).
+	// uniq-by-line (default true) would hide a second rule firing on a line
+	// another expectation already pins; no fixture line carries two rules
+	// today, so removing it currently changes nothing (measured: 15
+	// diagnostics on 15 distinct lines, suite green). The output_not_truncated
+	// subtest below is what keeps all three disabled.
 	writeFile(".golangci.yml", `version: "2"
 run:
   timeout: 1m
@@ -104,6 +138,10 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
+issues:
+  uniq-by-line: false
+  max-same-issues: 0
+  max-issues-per-linter: 0
 `)
 
 	// ── Production fixture: positive cases (should trigger) ──────────
@@ -265,6 +303,75 @@ func TestRegisterDirectAccessAllowed(t *testing.T) {
 }
 `)
 
+	// ── Production fixture: Arg() type assertions ────────────────────
+	//
+	// Targets noUncheckedArgCast: one function per pattern, so a dead pattern
+	// shows up as exactly one failing subtest, plus a second call-argument
+	// case that puts the assertion in a non-first argument slot.
+
+	writeFile("argcast.go", `package main
+
+import "testmod/values"
+
+type argCtx struct {
+	args []any
+}
+
+func (p *argCtx) Arg(n int) any {
+	return p.args[n]
+}
+
+func consume(v *values.Integer) int64 {
+	return v.Get()
+}
+
+func consume2(i int, v *values.Integer) int64 {
+	return v.Get() + int64(i)
+}
+
+// noUncheckedArgCast — positive (short assign)
+func shortAssignBad(mc *argCtx) {
+	n := mc.Arg(0).(*values.Integer)
+	_ = n
+}
+
+// noUncheckedArgCast — positive (plain assign)
+func plainAssignBad(mc *argCtx) {
+	var n *values.Integer
+	n = mc.Arg(0).(*values.Integer)
+	_ = n
+}
+
+// noUncheckedArgCast — positive (selector chain)
+func selectorChainBad(mc *argCtx) int64 {
+	return mc.Arg(0).(*values.Integer).Get()
+}
+
+// noUncheckedArgCast — positive (return)
+func returnBad(mc *argCtx) *values.Integer {
+	return mc.Arg(0).(*values.Integer)
+}
+
+// noUncheckedArgCast — positive (call argument, sole)
+func callArgSoleBad(mc *argCtx) int64 {
+	return consume(mc.Arg(0).(*values.Integer))
+}
+
+// noUncheckedArgCast — positive (call argument, non-first)
+func callArgNonFirstBad(mc *argCtx) int64 {
+	return consume2(1, mc.Arg(0).(*values.Integer))
+}
+
+// noUncheckedArgCast — negative (comma-ok)
+func commaOkGood(mc *argCtx) {
+	n, ok := mc.Arg(0).(*values.Integer)
+	if !ok {
+		return
+	}
+	_ = n
+}
+`)
+
 	// Populate go.sum via "go get" instead of "go mod tidy". The latter
 	// would strip the dsl require (nothing in our Go sources imports it)
 	// but golangci-lint needs it to parse the rules file.
@@ -402,7 +509,69 @@ func TestRegisterDirectAccessAllowed(t *testing.T) {
 			substr:  `fixture_test.go:39:`,
 			present: false,
 		},
+
+		// ── noUncheckedArgCast ───────────────────────────────────
+		{
+			name:    "noUncheckedArgCast/positive_short_assign",
+			substr:  `argcast.go:23:2: ruleguard: unchecked type assertion on Arg()`,
+			present: true,
+		},
+		{
+			name:    "noUncheckedArgCast/positive_plain_assign",
+			substr:  `argcast.go:30:2: ruleguard: unchecked type assertion on Arg()`,
+			present: true,
+		},
+		{
+			name:    "noUncheckedArgCast/positive_selector_chain",
+			substr:  `argcast.go:36:9: ruleguard: unchecked type assertion on Arg()`,
+			present: true,
+		},
+		{
+			name:    "noUncheckedArgCast/positive_return",
+			substr:  `argcast.go:41:2: ruleguard: unchecked type assertion on Arg()`,
+			present: true,
+		},
+		{
+			name:    "noUncheckedArgCast/positive_call_arg_sole",
+			substr:  `argcast.go:46:9: ruleguard: unchecked type assertion on Arg()`,
+			present: true,
+		},
+		{
+			name:    "noUncheckedArgCast/positive_call_arg_nonfirst",
+			substr:  `argcast.go:51:9: ruleguard: unchecked type assertion on Arg()`,
+			present: true,
+		},
+		{
+			name:    "noUncheckedArgCast/negative_comma_ok",
+			substr:  `argcast.go:56:`,
+			present: false,
+		},
+		{
+			name:    "noUncheckedArgCast/negative_values_stub",
+			substr:  `values/values.go`,
+			present: false,
+		},
 	}
+
+	// Truncation guard, and the only thing that keeps the present:false rows
+	// honest. Each present:true row pins exactly one diagnostic, so the
+	// emitted count must equal the number of such rows. If any of the three
+	// output caps in the fixture .golangci.yml is re-armed, the tail of the
+	// output disappears and every present:false row starts passing because
+	// its substring is absent from a truncated output rather than from a
+	// correct one — a failure mode no substring assertion can see.
+	t.Run("output_not_truncated", func(t *testing.T) {
+		want := 0
+		for _, exp := range expectations {
+			if exp.present {
+				want++
+			}
+		}
+		got := len(ruleguardDiagnostic.FindAllString(lintOutput, -1))
+		if got != want {
+			t.Errorf("expected %d ruleguard diagnostics, got %d (a shortfall means an output cap truncated; an excess means a rule fired somewhere the table does not pin)", want, got)
+		}
+	})
 
 	for _, exp := range expectations {
 		t.Run(exp.name, func(t *testing.T) {
@@ -416,6 +585,10 @@ func TestRegisterDirectAccessAllowed(t *testing.T) {
 		})
 	}
 }
+
+// ruleguardDiagnostic matches one golangci-lint diagnostic line attributed to
+// a ruleguard rule: "path/file.go:line:col: ruleguard: <message>".
+var ruleguardDiagnostic = regexp.MustCompile(`(?m)^[^\s:]+\.go:\d+:\d+: ruleguard: `)
 
 // testContext returns a context bounded by either the test deadline (if set)
 // or the given fallback duration, whichever is shorter.
