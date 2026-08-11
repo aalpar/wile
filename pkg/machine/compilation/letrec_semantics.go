@@ -125,13 +125,29 @@ func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, s
 	// The returned index is PINNED to the slot this call landed on, at THIS view's
 	// own coordinates, so the source stamp below cannot land on another slot of the
 	// same name — one belonging to another expansion, or to the sealed startup set.
-	ownIndex, _ := env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable, scopes)
+	ownIndex, created := env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable, scopes)
 	binding := env.GlobalEnvironment().GetOwnGlobalBinding(ownIndex)
-	if binding == nil || source == nil {
+	if binding == nil {
+		return
+	}
+	// The slot is a LOCATION, not yet a denotation: it exists so a forward
+	// reference resolves, but until the define is compiled the name still means
+	// whatever it meant before (a special form, an import, a primitive). Only a
+	// slot this pre-scan actually minted is marked — reusing an existing binding
+	// must not un-define it.
+	//
+	// The stamp is unconditional on source, which the old early return made it
+	// not: a binder with no source context is still predeclared.
+	if source == nil && !created {
 		return
 	}
 	binding.UpdateMeta(func(m *environment.BindingMeta) bool {
-		m.Source = source
+		if source != nil {
+			m.Source = source
+		}
+		if created {
+			m.Predeclared = true
+		}
 		return true
 	})
 }

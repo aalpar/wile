@@ -254,6 +254,13 @@ func headDenotesSpecialForm(
 	if b.BindingType() != environment.BindingTypeVariable {
 		return true
 	}
+	// A slot the letrec* pre-scan minted is a LOCATION with no denotation yet:
+	// its define has not been compiled, so the head still means what it meant
+	// before the body. This is the P1 arm — see BindingMeta.Predeclared.
+	m := b.Meta()
+	if m != nil && m.Predeclared {
+		return true
+	}
 	if b == ge.SealedBindingAt(symVal, q, env.PhaseLevel()) {
 		return true
 	}

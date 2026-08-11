@@ -137,6 +137,21 @@ type BindingMeta struct {
 	// Origins) or propagated at import (markBindingImported); the nil zero value is
 	// meaningful, so like the sibling flags above it needs no constructor edit.
 	Origin *OriginRef
+	// Predeclared marks a slot minted by a letrec* PRE-SCAN whose define has not
+	// been compiled yet — a location that exists so a forward reference can
+	// resolve, carrying no claim about what the name DENOTES.
+	//
+	// It rides in the meta rather than in Binding.bindingType because bindingType
+	// is a plain field outside the atomicCell, read lock-free by cachedBindings
+	// and by the frame optimizer's IsStable/IsCaptureSafe; promoting a type in
+	// place would be an unsynchronized write to it. UpdateMeta's copy-on-write CAS
+	// is the existing race-safe channel, and both writers (predeclareBinding,
+	// compile_define) already call it for their other stamps.
+	//
+	// Set ONLY on the global arm of predeclareBinding (top-level and library
+	// bodies). A lambda/let body's predeclaration is local and keeps plain
+	// letrec* per R7RS §5.3.2, so it never carries this.
+	Predeclared bool
 }
 
 // Binding represents a variable binding in the environment.

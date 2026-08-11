@@ -128,6 +128,10 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 		if symbolSource != nil {
 			m.Source = symbolSource
 		}
+		// The pre-scan's location becomes a denotation HERE, where the define is
+		// actually compiled. Before this point the slot resolved but the name
+		// still meant whatever it meant before the body.
+		m.Predeclared = false
 		if immTop {
 			// Discharge the rebind-stability conclusion from in-unit evidence:
 			// the language now forbids the cross-unit set!/redefine that
