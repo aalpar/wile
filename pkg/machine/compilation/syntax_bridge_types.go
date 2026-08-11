@@ -115,7 +115,14 @@ type SyntaxCaseClause struct {
 	// (it needs a non-nil literal map AND a non-nil matcher), so a syntax-case
 	// pattern literal matched a use-site identifier that shadows it — R7RS
 	// §4.3.2 requires the two to share a binding.
-	LiteralSyntax  map[string]*syntax.SyntaxSymbol
+	LiteralSyntax map[string]*syntax.SyntaxSymbol
+	// LiteralDefs pins each pattern literal to the binding it had in the macro
+	// DEFINITION environment. It has to ride on the clause because this path
+	// builds its matcher at RUNTIME, in the use site's environment — the one
+	// place that cannot recompute a definition-site resolution. (The syntax-rules
+	// path needs no such field: its matcher is built at definition time and
+	// carries the pins directly.)
+	LiteralDefs    map[string]match.LiteralPin
 	EllipsisVars   map[int]map[string]struct{}
 	EllipsisDepths map[int]int
 }

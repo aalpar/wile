@@ -228,6 +228,7 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *machine.MachineContext) (*machine.M
 		EllipsisVars:   clause.EllipsisVars,
 		EllipsisDepths: clause.EllipsisDepths,
 		LiteralSyntax:  clause.LiteralSyntax,
+		LiteralDefs:    clause.LiteralDefs,
 		BindingChecker: &envBindingChecker{env: bindingEnv},
 	})
 

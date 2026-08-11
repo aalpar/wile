@@ -230,6 +230,12 @@ func (p *mockBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *env
 	return p.bindings[sym]
 }
 
+// The mock has one flat binding table with no phase structure, so the
+// phase-searching resolution is the plain one and never ambiguous.
+func (p *mockBindingChecker) GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool) {
+	return p.GetBinding(sym, scopes), true
+}
+
 // TestLiteralScopesMatchWithChecker verifies R7RS §4.3.2 literal matching:
 // literals match only when both identifiers have the same binding.
 func TestLiteralScopesMatchWithChecker(t *testing.T) {
@@ -310,4 +316,10 @@ func (p *mockBindingCheckerWithScopes) GetBinding(sym string, scopes []*syntax.S
 		return p.inputBinding
 	}
 	return p.patternBinding
+}
+
+// The mock has no phase structure, so the phase-searching resolution is the
+// plain one and never ambiguous.
+func (p *mockBindingCheckerWithScopes) GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool) {
+	return p.GetBinding(sym, scopes), true
 }

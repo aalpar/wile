@@ -32,9 +32,11 @@ type Scope struct {
 	// IsRebinding indicates whether this scope can potentially rebind auxiliary syntax.
 	// True for let-syntax/letrec-syntax scopes which create local macro bindings.
 	// False for with-binding-scope which only adds scopes for binding hygiene.
-	// This distinction is used in (*SyntaxMatcher).literalScopesMatchWithChecker
+	// This distinction is used in literalScopesMatchWithDef
 	// (pkg/internal/match/syntax_adapter.go) to correctly handle auxiliary
-	// syntax like => and else in cond/case.
+	// syntax like => and else in cond/case. Follow that name, not the
+	// literalScopesMatchWithChecker delegate beside it: the delegate is the
+	// unpinned comparison and today has no production caller.
 	IsRebinding bool
 	// Label is an optional human-readable description for debugging.
 	// Examples: "lambda", "let-syntax", "intro:my-macro", "library:(wile kanren)".
