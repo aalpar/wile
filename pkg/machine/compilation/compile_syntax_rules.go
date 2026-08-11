@@ -233,6 +233,12 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 // stale pointer degrades to a forgone match and can never alias a live binding,
 // because Go retains the old array.
 //
+// The lookup runs with definitionFallbackPhases, which descends BELOW env's own
+// phase before falling back to the special-form registry phase — the literal is
+// compared at the phase where the macro is used, and a syntax-case inside a
+// (lambda (stx) ...) transformer writes its literals one phase above that. The use
+// side does not descend; see useSiteFallbackPhases.
+//
 // Returns nil (no pins, today's behaviour verbatim) for a nil env or no literals.
 func resolveLiteralDefinitions(env *environment.EnvironmentFrame, literalSyntax map[string]*syntax.SyntaxSymbol) map[string]match.LiteralPin {
 	if env == nil || len(literalSyntax) == 0 {
@@ -240,7 +246,7 @@ func resolveLiteralDefinitions(env *environment.EnvironmentFrame, literalSyntax 
 	}
 	q := make(map[string]match.LiteralPin, len(literalSyntax))
 	for k, ls := range literalSyntax {
-		binding, ok := lookupBindingAcrossPhases(env, k, ls.Scopes())
+		binding, ok := lookupLiteralBinding(env, k, ls.Scopes(), definitionFallbackPhases(env))
 		if !ok {
 			q[k] = match.LiteralPin{Ambiguous: true}
 			continue

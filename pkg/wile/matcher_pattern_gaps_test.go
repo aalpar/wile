@@ -571,12 +571,14 @@ func TestPatternLiteralIdentifiedByDefinitionSiteBinding(t *testing.T) {
 	}
 }
 
-// w16LibEngine builds an engine whose library search path holds exactly one
-// library file, mirroring newHostileEngine (import_postseal_test.go).
-func w16LibEngine(t *testing.T, librarySrc string) *wile.Engine {
+// w16LibEngine builds an engine whose library search path holds exactly the given
+// library files (basename -> source), mirroring newHostileEngine
+// (import_postseal_test.go).
+func w16LibEngine(t *testing.T, libs map[string]string) *wile.Engine {
 	t.Helper()
-	libFS := fstest.MapFS{
-		"w16lib.scm": &fstest.MapFile{Data: []byte(librarySrc)},
+	libFS := fstest.MapFS{}
+	for name, src := range libs {
+		libFS[name] = &fstest.MapFile{Data: []byte(src)}
 	}
 	eng, err := wile.NewEngine(context.Background(),
 		wile.WithProfile(wile.KitchenSink),
@@ -595,9 +597,17 @@ func w16LibEngine(t *testing.T, librarySrc string) *wile.Engine {
 // The cross-library half of wave 1 §6, and the reason the definition-site pin
 // cannot be replaced by "is the use-site name bound?". A library defines `lit`
 // and a macro with `lit` as a pattern literal, and exports only the macro. The
-// importing program cannot see the library's `lit` at all, so its own `lit` — or
-// its complete absence of one — is a different binding and must not match. Every
-// row answered MATCHED-LITERAL at the base.
+// importing program cannot see the library's `lit`, so its own `lit` — or its
+// complete absence of one — is a different binding and must not match. The first
+// two rows and the syntax-case row answered MATCHED-LITERAL at the base.
+//
+// The discrimination is NOT absolute, and the last row says so out loud.
+// literalNotShadowed accepts ANY imported binding of the name, from any library,
+// because an import mints a fresh *Binding and the rider cannot tell which library
+// minted it. So a use-site `lit` imported from an UNRELATED library still matches
+// the private literal, where R7RS §4.3.2 wants the fallback. That row records
+// today's answer as a residual, not as the correct one; it is here so a later
+// tightening of the rider is a measurable flip rather than a silent change.
 func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 	const libRules = `(define-library (w16lib)
   (export mg)
@@ -631,21 +641,28 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
           ((_ x) #''OTHER))))))
 `
 
+	const libUnrelatedLit = `(define-library (w16other)
+  (export lit)
+  (import (scheme base))
+  (begin
+    (define lit 999)))
+`
+
 	cases := []struct {
 		name string
-		lib  string
+		libs map[string]string
 		src  string
 		want string
 	}{
 		{
 			name: "importing only the macro leaves the literal's binding out of reach",
-			lib:  libRules,
+			libs: map[string]string{"w16lib.scm": libRules},
 			src:  "(import (w16lib))\n(mg lit)",
 			want: "OTHER",
 		},
 		{
 			name: "the program's own lit is a different binding",
-			lib:  libRules,
+			libs: map[string]string{"w16lib.scm": libRules},
 			src:  "(import (w16lib))\n(define lit 7)\n(mg lit)",
 			want: "OTHER",
 		},
@@ -655,13 +672,26 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 			// row is what makes literalNotShadowed's IsImported rider load-bearing:
 			// without it the answer degrades to OTHER.
 			name: "importing the literal too restores the match",
-			lib:  libRulesExportingLit,
+			libs: map[string]string{"w16lib.scm": libRulesExportingLit},
 			src:  "(import (w16lib))\n(mg lit)",
 			want: "MATCHED-LITERAL",
 		},
 		{
+			// RESIDUAL, not the correct answer. The use-site `lit` is (w16other)'s
+			// binding and has nothing to do with (w16lib)'s private one, so R7RS
+			// §4.3.2 wants OTHER. It answers MATCHED-LITERAL because
+			// literalNotShadowed's IsImported rider accepts any imported binding
+			// of the name — the price of keeping the row above working. Dropping
+			// (w16other) from the import list is the discriminator: that program
+			// answers OTHER. Flip this want only together with the rider.
+			name: "RESIDUAL: an unrelated library's lit is still accepted",
+			libs: map[string]string{"w16lib.scm": libRules, "w16other.scm": libUnrelatedLit},
+			src:  "(import (w16lib) (w16other))\n(mg lit)",
+			want: "MATCHED-LITERAL",
+		},
+		{
 			name: "syntax-case takes the same path",
-			lib:  libCase,
+			libs: map[string]string{"w16lib.scm": libCase},
 			src:  "(import (w16lib))\n(mg lit)",
 			want: "OTHER",
 		},
@@ -669,8 +699,68 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			eng := w16LibEngine(t, tc.lib)
+			eng := w16LibEngine(t, tc.libs)
 			got := evalString(t, eng, tc.src)
+			if got != tc.want {
+				t.Errorf("got %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// The literal lookup is PHASE-SCOPED on the use side: the identifier is resolved
+// in the frame's own lexical chain at its own phase, plus the ambient special-form
+// registry phase, and nowhere else.
+//
+// These rows are the regression gate for a phase-BLIND lookup. An earlier revision
+// of the pin walked every phase the owner had instantiated, ascending. From a
+// transformer body (phase 1) that walk hit phase 0 first, so a user's top-level
+// (define else #f) pre-empted the ambient `else` and refused cond's literal — a
+// hard compile error ("no such binding \"else\"") on programs that compiled
+// before, for cond, case, guard and syntax-case alike. The leak ran the other way
+// too: a (begin-for-syntax (define else #f)) reached phase-0 code.
+//
+// Nothing here is about whether the pin idea is right; each row is a program whose
+// two identifiers live at DIFFERENT phases and must not see each other.
+func TestPatternLiteralLookupIsPhaseScoped(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "a phase-0 else does not reach cond in a transformer body",
+			src: "(define else #f)\n" +
+				"(define-syntax m (lambda (stx) (cond ((eqv? 1 2) #''a) (else #''PHASE1-ELSE))))\n" +
+				"(m)",
+			want: "PHASE1-ELSE",
+		},
+		{
+			name: "a phase-0 => does not reach cond in a transformer body",
+			src: "(define => #f)\n" +
+				"(define-syntax m (lambda (stx) (cond (7 => (lambda (v) #''GOT)) (#t #''NO))))\n" +
+				"(m)",
+			want: "GOT",
+		},
+		{
+			name: "a phase-0 else does not reach case in a transformer body",
+			src: "(define else #f)\n" +
+				"(define-syntax m (lambda (stx) (case 9 ((1) #''one) (else #''PHASE1-ELSE))))\n" +
+				"(m)",
+			want: "PHASE1-ELSE",
+		},
+		{
+			// The mirror direction: a for-syntax define is phase-1 and must not
+			// decide a phase-0 literal.
+			name: "a begin-for-syntax else does not reach phase-0 cond",
+			src:  "(begin-for-syntax (define else #f))\n(cond (else 'TOOK-ELSE))",
+			want: "TOOK-ELSE",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := evalMultiForm(t, tc.src)
 			if got != tc.want {
 				t.Errorf("got %s, want %s", got, tc.want)
 			}

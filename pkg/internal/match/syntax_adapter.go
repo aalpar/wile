@@ -93,13 +93,15 @@ type BindingChecker interface {
 	// binding (per R7RS §4.3.2).
 	GetBinding(sym string, scopes []*syntax.Scope) *environment.Binding
 
-	// GetBindingAcrossPhases resolves sym the way a LiteralPin was resolved, so
-	// the two sides of the R7RS §4.3.2 comparison are drawn from the same kind of
-	// lookup: the frame's own lexical chain first, then every phase the owner has
-	// instantiated. The phase search is what makes auxiliary syntax visible —
-	// else and => are registered at PhaseCompile, where GetBinding above (phase 0
-	// only) reports them as unbound. ok is false when resolution was ambiguous.
-	GetBindingAcrossPhases(sym string, scopes []*syntax.Scope) (*environment.Binding, bool)
+	// GetLiteralBinding resolves the USE-SITE side of the R7RS §4.3.2 comparison:
+	// the frame's own lexical chain at its own phase, then the special-form
+	// registry phase, and no other phase. That second probe is what makes
+	// auxiliary syntax visible — else and => are registered at PhaseCompile,
+	// ambient to every phase, where GetBinding above (the frame's own phase only)
+	// reports them unbound. Searching further would let one phase's binding of the
+	// name decide another phase's literal. ok is false when resolution was
+	// ambiguous.
+	GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool)
 }
 
 // SyntaxMatcher adapts the core Matcher to work with syntax objects and hygiene.
@@ -122,14 +124,28 @@ type BindingChecker interface {
 // This implements R7RS's requirement that auxiliary syntax like => and else
 // be treated as regular expressions when locally shadowed.
 //
-// R7RS Binding Check: For full R7RS compliance (§4.3.2), we also compare the
-// input identifier's binding with the pattern literal's. The checker can arrive
-// two ways, and both are read-only after construction: on the opts struct, for
-// a matcher built per invocation (syntax-case, whose clause is matched in the
-// environment it was compiled against), or as MatchWithBindingChecker's
-// argument, for a matcher compiled once at macro-definition time and matched
-// against a different use-site environment each expansion (syntax-rules).
-// Match() supplies neither and so skips the binding check.
+// R7RS Binding Check: For full R7RS compliance (§4.3.2), the input identifier's
+// binding is compared with the pattern literal's. WHICH binding stands for the
+// literal depends on literalDefs, the definition-site pins:
+//
+//   - Pinned (the primary path — every syntax-rules/syntax-case form with
+//     literals compiled against a non-nil env): the pattern literal is never
+//     resolved at match time. pin.Binding, captured when the macro was compiled,
+//     is compared against a phase-scoped use-site resolution. An Ambiguous pin
+//     refuses the literal outright, before any checker is consulted.
+//   - Unpinned (a literal unbound at definition time, or no env): both sides are
+//     resolved through the use-site checker, which is the pre-pin behaviour and
+//     is left verbatim so the pin only ever tightens.
+//
+// The checker can arrive two ways, and both are read-only after construction: on
+// the opts struct, for a matcher built per invocation (syntax-case, whose clause
+// is matched in the environment it was compiled against), or as
+// MatchWithBindingChecker's argument, for a matcher compiled once at
+// macro-definition time and matched against a different use-site environment each
+// expansion (syntax-rules). Match() supplies no per-call checker and falls back
+// to the opts one — that fallback is how syntax-case gets its checker at all.
+// With a checker in neither position the binding comparison is skipped, but an
+// Ambiguous pin still refuses the literal.
 type SyntaxMatcher struct {
 	matcher        *Matcher
 	ellipsisID     string                          // Custom ellipsis identifier (default "...")
@@ -364,13 +380,12 @@ func literalScopesMatchWithChecker(checker BindingChecker, input, pattern *synta
 // The checker is a parameter, not a field read: see MatchWithBindingChecker.
 //
 // 1. Binding check (R7RS compliant). With a pin (pin.Binding non-nil) the
-// definition-site binding captured at macro-compile time is compared against a
-// phase-searching use-site resolution — the only pairing that actually asks the
+// definition-site binding captured at macro-compile time is compared against the
+// use site's phase-scoped resolution — the only pairing that actually asks the
 // spec's two questions, since a definition-site ENVIRONMENT resolved at match
 // time returns the same *Binding as the use-site one (see LiteralPin). Without a
 // pin, both sides are resolved through the use-site checker by pointer identity,
-// which still discriminates a lexical shadow: the let-bound `=>` below is a local
-// binding the pattern's `=>` does not reach.
+// which still discriminates a lexical shadow.
 //
 // 2. Scope check (for let-syntax): We also check rebinding scopes from
 // let-syntax/letrec-syntax. If input has rebinding scopes that pattern doesn't,
@@ -379,9 +394,12 @@ func literalScopesMatchWithChecker(checker BindingChecker, input, pattern *synta
 // Example with regular let:
 //
 //	(let ((=> #f)) (cond (#t => 'ok)))
-//	The input => has a lexical binding (the let-bound variable)
-//	Pattern => has no lexical binding
-//	They don't match because one is bound and one isn't
+//
+// cond's `=>` IS pinned (to the ambient auxiliary-syntax binding), so this takes
+// the PINNED branch, and the operative reason is that the use site resolves `=>`
+// to the let-bound local: a non-primitive, non-imported binding, which
+// literalNotShadowed refuses. It is not the unpinned arm's "one is bound and one
+// isn't" — a reader instrumenting that arm for this program will see nothing run.
 //
 // Example with let-syntax:
 //
@@ -400,7 +418,7 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 	}
 
 	if pin.Binding != nil && checker != nil {
-		useB, ok := checker.GetBindingAcrossPhases(input.Key(), input.Scopes())
+		useB, ok := checker.GetLiteralBinding(input.Key(), input.Scopes())
 		if !ok {
 			return false
 		}
@@ -434,19 +452,29 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 // denote the same pattern literal.
 //
 // Pointer identity is the primary test, and it covers both-nil. Kind equivalence
-// on BindingTypePrimitive is the widening that keeps auxiliary syntax working:
-// each library environment mints its OWN *Binding for every special form and
-// auxiliary-syntax name (memory "library envs are primitive islands"), so a
-// bootstrap macro's pinned phase-2 `else` is a different object from the one a
-// library-loaded use site resolves. Measured reachable: under the library-heavy
-// suites (TestChibiTestComparator, the SRFI library tests) `else` arrives here
-// with two distinct primitive bindings that IsImported does not cover, and
-// strict pointer identity would stop `cond`'s else clause matching there.
+// on BindingTypePrimitive is a deliberate widening: each library environment mints
+// its OWN *Binding for every special form and auxiliary-syntax name (memory
+// "library envs are primitive islands"), so a bootstrap macro's pinned phase-2
+// `else` and the one a library-loaded use site resolves can be different objects
+// for one ambient name.
 //
-// The widening is bounded by the caller, which already requires identical
-// spelling before any binding check runs (match.go, ByteCodeCompareCar), and by
-// the rebinding-scope check that follows. It only ever ACCEPTS, so its failure
-// mode is a forgone tightening, never a capture.
+// Reachability, measured rather than asserted: NO test in this repo reaches the
+// widening. Instrumenting the arm and running `go test ./pkg/... ./integration/...
+// ./extensions/...` plus `make cover-scm` (64 Scheme files) prints it zero times —
+// the two-distinct-primitives shape never arises, because a library-resolved
+// ambient name arrives IMPORTED and literalNotShadowed's rider takes it first. An
+// earlier revision of this comment named TestChibiTestComparator and the SRFI
+// library tests as observing the widening; re-measurement refutes that, and
+// ablating the widening leaves every one of those suites green.
+//
+// It is kept, rather than deleted on that evidence, because "no test reaches it"
+// is not "no program reaches it": the per-library minting above is real, and the
+// arm's failure mode is a forgone tightening, never a capture. It is bounded by
+// the caller, which already requires identical spelling before any binding check
+// runs (match.go, ByteCodeCompareCar), and by the rebinding-scope check that
+// follows. Since no end-to-end program pins it, the rule itself is pinned as a
+// truth table by TestSameLiteralBinding in syntax_adapter_literal_test.go — that
+// is the red test a future change to the rule has to answer to.
 func sameLiteralBinding(a, b *environment.Binding) bool {
 	if a == b {
 		return true
@@ -469,6 +497,15 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 // which library the import came from. The under-accepting alternative breaks the
 // legitimate re-export, and this predicate's false positive is a forgone
 // discrimination, not a capture.
+//
+// The over-acceptance is a SURVIVING residual of R7RS §4.3.2, not a closed case,
+// and it is not hypothetical: with a library exporting only a macro over its own
+// private `lit`, and an unrelated library exporting a different `lit`, importing
+// both makes (mg lit) match the literal where the spec wants the fallback. That
+// exact program is pinned — as today's answer, labelled residual — by the
+// imported-shadow row of TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding
+// (pkg/wile/matcher_pattern_gaps_test.go), so a later tightening of the rider has
+// a measurement to flip rather than a silent behaviour change.
 func literalNotShadowed(defB, useB *environment.Binding) bool {
 	if sameLiteralBinding(defB, useB) {
 		return true

@@ -232,7 +232,7 @@ func (p *mockBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *env
 
 // The mock has one flat binding table with no phase structure, so the
 // phase-searching resolution is the plain one and never ambiguous.
-func (p *mockBindingChecker) GetBindingAcrossPhases(sym string, scopes []*syntax.Scope) (*environment.Binding, bool) {
+func (p *mockBindingChecker) GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool) {
 	return p.GetBinding(sym, scopes), true
 }
 
@@ -320,6 +320,6 @@ func (p *mockBindingCheckerWithScopes) GetBinding(sym string, scopes []*syntax.S
 
 // The mock has no phase structure, so the phase-searching resolution is the
 // plain one and never ambiguous.
-func (p *mockBindingCheckerWithScopes) GetBindingAcrossPhases(sym string, scopes []*syntax.Scope) (*environment.Binding, bool) {
+func (p *mockBindingCheckerWithScopes) GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool) {
 	return p.GetBinding(sym, scopes), true
 }
