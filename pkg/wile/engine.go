@@ -639,11 +639,21 @@ func (p *Engine) EvalProgram(ctx context.Context, code string, source string) (V
 // machine/compilation/expander_lambda.go). Building the wrapper structurally,
 // rather than concatenating "(begin " onto source text, keeps each form's real
 // source location and avoids the trailing-line-comment and line-shift hazards of
-// string surgery. begin is dispatched by name, so the synthetic head (borrowing
-// the first form's source context) resolves to the special form.
+// string surgery.
+//
+// THE HEAD CARRIES A FRESH SCOPE, and that is load-bearing, not decoration. The
+// head is no longer dispatched by name: validate.headDenotesSpecialForm decides
+// by the binding it resolves to, so a program containing (define begin 9) made
+// its OWN wrapper a call — the whole file compiled to (9 form ...) and died with
+// "expected a procedure, got #<void>" after running. A scope the user's ∅-scoped
+// binder does not carry keeps the wrapper out of its reach: an identifier with
+// scopes reaches a ∅-scoped global only through the macro-expansion widening
+// that referenceReachesBinderDirectly refuses. Forms keep their own contexts;
+// only this head is scoped, so nothing inside the program is affected.
 func wrapInBegin(forms []syntax.SyntaxValue) syntax.SyntaxValue {
 	srcCtx := forms[0].SourceContext()
-	beginSym := syntax.NewSyntaxSymbol("begin", srcCtx)
+	beginSym := syntax.NewSyntaxSymbol("begin", srcCtx).
+		AddScope(syntax.NewScopeWithLabel("program"))
 	return syntax.NewSyntaxCons(beginSym, syntax.SyntaxList(srcCtx, forms...), srcCtx)
 }
 

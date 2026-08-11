@@ -70,10 +70,18 @@ func validateBodySlice(
 // This is INCREMENTAL where its compile-side analogue
 // (compilation.predeclareDefineFromValidatedRecursive) is a PRE-pass over the
 // whole body. A pre-pass is impossible here: validation is what PRODUCES the
-// *ValidatedDefine to scan. So this covers the backward direction only — a
-// reference after the define — which is the only direction a shadow needs; a
-// forward reference to an internal binding is not evaluated before the define
-// runs (R7RS §5.3.2), and the compiler's pre-pass is what makes it resolve.
+// *ValidatedDefine to scan. So it covers the backward direction only — a
+// reference AFTER the define.
+//
+// THE FORWARD DIRECTION IS A KNOWN, UNCLOSED HOLE, not a case the compiler
+// rescues. R7RS §5.3.2 makes an internal define's region the whole body, so in
+// (define (f) (define (g) (quote 9)) (define quote cube) (g)) the `quote`
+// inside g denotes the local and 729 is the meaning; Wile yields 9. The
+// compiler's pre-pass cannot repair it: it creates the VARIABLE, but validation
+// has already frozen the head into a *ValidatedQuote, and nothing downstream
+// re-asks. Closing it needs a name-collecting scan over the raw body syntax
+// before any element is validated, which is a separate change. Master answers 9
+// here too, so this is not a regression.
 //
 // The nil-env guard is required, not defensive: createChildEnvWithSymbols
 // bottoms out in NewEnvironmentFrameWithParent, which PANICS on a nil parent,
@@ -190,6 +198,18 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 // validateCall. An imported re-export of a special form still denotes the form;
 // only a VARIABLE shadows one.
 //
+// RESOLVING BY SCOPES IS NOT ENOUGH ON ITS OWN, because a special form has no
+// binding to pin. Wile keeps a free template identifier hygienic by recording
+// its definition-site *GlobalIndex on the symbol (SyntaxSymbol.ResolvedBinding,
+// consulted by CompileSymbol.tryResolvedBinding), and collectFreeIdentifiers
+// records nothing when the name was unbound at definition time — which is
+// exactly the case for a special form. So a template's `set!` arrives here
+// carrying only an intro scope, and a user's ∅-scoped top-level (define set! …)
+// satisfies ScopesCompatible(∅, {intro}) and would capture it: (inc! n) with
+// inc! expanding to (set! v (+ v 1)) silently discarded the assignment.
+// referenceReachesBinderDirectly is the guard; see its own comment for the
+// three footings it admits and the one it gives up.
+//
 // GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
 // tie. That is deliberately not caught: it reaches the compile path's recover
 // boundary and surfaces as a CompilationError chaining the sentinel, which is
@@ -202,7 +222,8 @@ func headDenotesSpecialForm(env *environment.EnvironmentFrame, symVal *values.Sy
 	if ge == nil {
 		return true
 	}
-	q := syntax.ScopesOf(sym.Scopes())
+	scopes := sym.Scopes()
+	q := syntax.ScopesOf(scopes)
 	b := env.GetBinding(symVal, q)
 	if b == nil {
 		// Measured: if, lambda, quote, set!, let, begin, define and
@@ -213,7 +234,75 @@ func headDenotesSpecialForm(env *environment.EnvironmentFrame, symVal *values.Sy
 	if b.BindingType() != environment.BindingTypeVariable {
 		return true
 	}
-	return b == ge.SealedBindingAt(symVal, q, env.PhaseLevel())
+	if b == ge.SealedBindingAt(symVal, q, env.PhaseLevel()) {
+		return true
+	}
+	return !referenceReachesBinderDirectly(env, symVal, scopes, b)
+}
+
+// referenceReachesBinderDirectly reports whether the reference sym reaches the
+// variable binding b at its OWN hygienic footing, rather than only through the
+// scope-set widening a macro expansion produces.
+//
+// It is the hygiene half of headDenotesSpecialForm's identity rule. Subset
+// resolution (bindingScopes ⊆ useScopes) is deliberately permissive so a
+// template identifier can name an outer global at all; that permissiveness is
+// safe for ordinary names because they carry a definition-site pin, and unsafe
+// for a special form because it has none. Three footings are admitted, and each
+// is one of the shapes the shadow is claimed for (scope sets measured):
+//
+//   - THE REFERENCE HAS NO SCOPES. A scope-less identifier can only have been
+//     written at top level (CompileSymbol's empty-scope fast path states the
+//     same invariant), so nothing widened it. Top-level (define set! list) then
+//     (set! 1 2 3 4): reference ∅, binder ∅.
+//   - THE BINDER HAS SCOPES. It was introduced by a binding form or an expansion
+//     the reference is inside, which is the same test CompileSymbol's
+//     co-introduced arm makes (coIntroducedByExpansion: "a ∅-scoped global
+//     qualifies for nothing"). A define-function-form parameter and an internal
+//     define both land here: reference {lambda}, binder {lambda}.
+//   - THE REFERENCE NAMES THE LIBRARY THAT BINDS IT. A library env is a flat
+//     island whose bindings carry ∅ scopes while every identifier in its body
+//     carries the library scope, so the arm above can never fire there.
+//     Redirecting through that scope (the same lookup CompileSymbol's
+//     library-scope arm uses) asks the stronger question, and a template
+//     identifier substituted with ANOTHER library's definition-site scopes
+//     cannot answer it. Imported rename: reference {lambda,
+//     library:(lib-setbang)}, binder ∅ in that library.
+//
+// "THE BINDER HAS SCOPES" IS NOT "THE BINDER IS LOCAL", and the difference is
+// load-bearing: bindBodyDefineNames fabricates a local frame for a body's
+// internal defines, and at the top level of a program (EvalProgram wraps a file
+// in one begin, whose body validateBegin now threads) that frame holds an
+// ordinary ∅-scoped top-level define. Testing locality accepted it and
+// (define let 3) went back to capturing every `or` expansion's template `let`.
+//
+// GIVEN UP: a top-level (define set! list) does NOT shadow inside a lambda body
+// ({lambda} vs ∅), because that shape is bit-for-bit identical to the captured
+// template identifier ({intro} vs ∅) at this point in the pipeline — same
+// cardinalities, same binding type, same imported flag, same owner env. Master
+// did not shadow there either, so this is a narrowing of the fix, not a
+// regression. Widening it needs the definition-site meaning recorded on the
+// symbol the way ResolvedBinding records a bound one.
+func referenceReachesBinderDirectly(
+	env *environment.EnvironmentFrame,
+	symVal *values.Symbol,
+	scopes []*syntax.Scope,
+	b *environment.Binding,
+) bool {
+	if len(scopes) == 0 {
+		return true
+	}
+	if len(b.Scopes()) > 0 {
+		return true
+	}
+	libGI := env.GetGlobalIndexFromLibraryScopes(symVal, scopes)
+	if libGI == nil || libGI.Env == nil {
+		return false
+	}
+	// Identity, not merely "a binding of that name exists in some named
+	// library": the redirect has to land on the SAME binding the ranked probe
+	// chose, or it is answering about a different one.
+	return libGI.Env.GetOwnGlobalBinding(libGI) == b
 }
 
 // collectList converts a syntax list to a slice of elements, reporting whether

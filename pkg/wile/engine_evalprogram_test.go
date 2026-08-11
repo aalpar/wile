@@ -83,3 +83,38 @@ func TestEngine_EvalProgram_StructuralWrap(t *testing.T) {
 		}
 	})
 }
+
+// TestEngine_EvalProgram_WrapperHeadIsNotShadowable pins the scope on
+// wrapInBegin's synthetic head.
+//
+// A special form is now shadowable by a top-level define (R7RS §4.3, decided by
+// binding identity in validate.headDenotesSpecialForm rather than by the head's
+// spelling). That made the program wrapper itself capturable: with (define begin
+// 9) anywhere in the file, the (begin form ...) EvalProgram builds compiled to
+// (9 form ...) — measured, it ran the whole program and then died with
+// "application: expected a procedure, got #<void>". The user's binder carries no
+// scopes, so a scoped head is out of its reach.
+//
+// `let` is the second row because it is the head every `or`, `and` and `cond`
+// expansion goes through, so a capture there is the widest blast radius a single
+// define can have.
+func TestEngine_EvalProgram_WrapperHeadIsNotShadowable(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{name: "define begin", src: "(define begin 9)\n(let () 1 2 3)", want: "3"},
+		{name: "define let", src: "(define let 3)\n(or #f 5)", want: "5"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			eng, err := wile.NewEngine(ctx)
+			qt.Assert(t, err, qt.IsNil)
+			result, err := eng.EvalProgram(ctx, tc.src, "<test>")
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}

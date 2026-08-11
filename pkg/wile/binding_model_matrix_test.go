@@ -349,6 +349,34 @@ func TestBindingModelMatrix(t *testing.T) {
 		{name: "imported rename shadows set! special form",
 			units: []string{`(import (lib-setbang)) (probe)`},
 			want:  "(1 2 3 4)"},
+		// AND THE SHADOW STOPS AT THE MACRO BOUNDARY (R7RS §4.3). A template's
+		// free `set!` means what it meant where the macro was WRITTEN. Wile
+		// records that for names that were bound at definition time, as a
+		// *GlobalIndex pin on the symbol (SyntaxSymbol.ResolvedBinding,
+		// tryResolvedBinding); a special form has no binding, so it gets no pin,
+		// and the template's `set!{intro}` is left resolving against the use
+		// site — where a ∅-scoped (define set! list) satisfies
+		// ScopesCompatible(∅, {intro}) and captures it.
+		//
+		// SILENT when it broke: the first row below returned 1, not 2 — the
+		// assignment compiled into a `list` call and was discarded, exit 0, no
+		// diagnostic. The second is the common shape: `or` expands to
+		// (let ((x E)) (if x x B)), so a captured `let` turns every `or` in the
+		// program into a call to 3.
+		//
+		// The counter is LET-bound rather than top-level only to dodge the
+		// immutable top level (`set!` on a define from an earlier unit is
+		// refused — see "set! own define later unit refused"); the capture under
+		// test is the template's `set!`, not the target's tier.
+		{name: "top-level define does not capture a template's set!",
+			units: []string{
+				`(define-syntax inc! (syntax-rules () ((_ v) (set! v (+ v 1)))))`,
+				`(define set! list)`,
+				`(define (bump) (let ((n 1)) (inc! n) n)) (bump)`},
+			want: "2"},
+		{name: "top-level define does not capture or's template let",
+			units: []string{`(define let 3)`, `(or #f 5)`},
+			want:  "5"},
 		// M8: delete own define works; delete sealed refused. Three separate
 		// units (not a begin-wrap, and not one multi-form EvalMultiple call) so
 		// runMatrix's per-unit failedAt can pin the failure to the READ
