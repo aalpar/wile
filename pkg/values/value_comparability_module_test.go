@@ -143,7 +143,13 @@ func TestValueImplementorPackages_ListIsComplete(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			if d.Name() == "testdata" || d.Name() == ".git" || d.Name() == "dist" {
+			// .claude holds git worktrees of this same repository (the EnterWorktree
+			// tooling puts them under .claude/worktrees/). Without this skip, a scan
+			// run while any worktree exists reports every package in that checkout as
+			// "missing from the list" — naming .claude/worktrees/<id>/pkg/... paths that
+			// cannot be added to a list of import paths. The roster is a property of
+			// THIS module's source, not of whatever is nested beneath it.
+			if d.Name() == "testdata" || d.Name() == ".git" || d.Name() == "dist" || d.Name() == ".claude" {
 				return filepath.SkipDir
 			}
 			return nil
