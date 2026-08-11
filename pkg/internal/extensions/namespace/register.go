@@ -43,7 +43,11 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 		{Name: "namespace-name", ParamCount: 1, Impl: PrimNamespaceName,
 			Doc: "Returns the name of NS as a string, or #f if unnamed. A fresh namespace from (make-namespace) is named \"namespace\" by default.\n\nExamples:\n  (namespace-name (make-namespace))  => \"namespace\"", ParamNames: []string{"ns"}, Category: "namespace",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "make-namespace", ParamCount: 1, IsVariadic: true, Impl: PrimMakeNamespace,
+		// InvokesProcedure: an import spec loads a library, and a library body
+		// runs its own procedural transformers — compilation.ImportSpecInto →
+		// LoadLibrary → the expander → invokeTransformerClosure, an Apply+Run on
+		// a sub-context. Same sink as `environment`, which shares ImportSpecInto.
+		{Name: "make-namespace", InvokesProcedure: true, ParamCount: 1, IsVariadic: true, Impl: PrimMakeNamespace,
 			Doc: "Creates a new namespace, optionally pre-loaded with libraries specified by import-specs.\n\nExamples:\n  (make-namespace)                      => #<namespace>\n  (make-namespace '(scheme base))       => #<namespace>  ; with (scheme base) imported", ParamNames: []string{"import-spec"}, Category: "namespace",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "namespace-derive", ParamCount: 1, Impl: PrimNamespaceDerive,
@@ -70,7 +74,8 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 			Doc: "Returns a list of all symbols that have bindings in NS.\n\nExamples:\n  (let ((ns (make-namespace))) (namespace-define! ns 'x 1) (namespace-bound-names ns))  ; => (x)", ParamNames: []string{"ns"}, Category: "namespace",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeList},
-		{Name: "namespace-require", ParamCount: 2, Impl: PrimNamespaceRequire,
+		// InvokesProcedure: same ImportSpecInto sink as make-namespace above.
+		{Name: "namespace-require", InvokesProcedure: true, ParamCount: 2, Impl: PrimNamespaceRequire,
 			Doc: "Dynamically imports a library specified by LIB-SPEC into NS.\n\nExamples:\n  (let ((ns (make-namespace))) (namespace-require ns '(scheme base)))", ParamNames: []string{"ns", "lib-spec"}, Category: "namespace",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeList},
 			ReturnType: values.TypeVoid},

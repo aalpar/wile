@@ -58,11 +58,28 @@
 // This paragraph used to claim "no such case exists today". It was false, and it
 // was false about the most consequential primitive in the tree: `error` reached
 // ApplyCallable through machine.RaiseInPlace, a helper in pkg/machine, and went
-// unannotated for the whole life of this guard (review-wave-1 item 5). The
-// selector is listed now, so the instance is closed — but the hole is structural.
-// Every sink reachable only under a name not in the two selector sets above is
-// still invisible, and nothing here detects that.
-// TestInvokesProcedureCompleteness remains the behavioral backstop.
+// unannotated for the whole life of this guard (review-wave-1 item 5).
+//
+// It was false three times, and the third one was found only because the second
+// fix was reviewed. All three sink through pkg/machine/compilation and then
+// pkg/machine, packages that host no registered primitive Impl and that the
+// analyzer therefore never parses:
+//
+//   - `expand` / `expand-once` via ExpanderTimeContinuation.ExpandExpression /
+//     ExpandOnce (review-wave-4 item 10). `expand` carried a hand-placed
+//     annotation; `expand-once` carried none.
+//   - `environment` / `make-namespace` / `namespace-require` via
+//     compilation.ImportSpecInto, which loads a library whose BODY runs its own
+//     procedural transformers. None of the three was annotated.
+//
+// Those instances are closed; the structural hole is not, and the third instance
+// is the evidence. It was missed by an audit that widened the selector set by
+// grepping for the two names it had already chosen — a search that can only
+// confirm the enumeration it starts from. Every sink reachable under a name not
+// in the two selector sets above is still invisible, and nothing here detects
+// that. TestInvokesProcedureCompleteness remains the behavioral backstop, and
+// TestProcedureInvokersMatchesInvokesProcedure (capture_safety_test.go) now
+// keeps its list derived from the annotations rather than curated.
 
 package wile
 
@@ -132,6 +149,39 @@ var subContextFactories = map[string]bool{
 // primitive it most needed to catch. Adding the selector closes the INSTANCE. It
 // does not close the selector-keying that makes the guard blind in kind: a sink
 // reached under any name not listed here is still invisible.
+//
+// ExpandExpression/ExpandOnce are the second instance, and they are not even
+// machine-package names: they are *ExpanderTimeContinuation methods in
+// pkg/machine/compilation, and their sink (invokeTransformerClosure, an
+// Apply+Run on a sub-context) is a further package away in pkg/machine. Neither
+// package hosts a registered primitive Impl, so the analyzer parses neither, and
+// expand/expand-once were invisible to it — `expand` was annotated by hand and
+// `expand-once` was not annotated at all. Selector matching does not care which
+// package a name comes from, so listing them here reaches both.
+//
+// ImportSpecInto is the third, and it is the one that shows the enumeration is
+// what stays wrong, not the selector list's shape: expand/expand-once were found
+// by grepping for the two names already chosen, which cannot surface a third
+// spelling. compilation.ImportSpecInto loads a library, and a library BODY runs
+// its own procedural transformers, so `environment`, `make-namespace` and
+// `namespace-require` were all live unannotated invokers. Reproduced at runtime,
+// not inferred: importing a library whose body expands a (lambda (stx) …)
+// transformer prints from inside the (environment '(…)) call.
+//
+// How this list was last CLOSED, so the next reviewer does not re-derive it by
+// grep. Run the analyzer over pkg/machine and pkg/machine/compilation as if they
+// were primitive packages, take the top-level functions that reach a sink there,
+// and intersect with the selector names actually called from the 16 packages that
+// do host primitive Impls. That yields seven candidates beyond the ones listed
+// here: Expand, ExpandAndCompile, RunBodyUnderBarrier, RunBodyUnderTimer,
+// RunWithEscapeHandling, UnwindTo, and Run. Measured, each adds ZERO new
+// unannotated primitives — every caller of the middle five is already annotated,
+// Run is already handled by the sub-context dataflow above, and bare `Expand`
+// yields only false positives (EnvironmentFrame.Expand() is an unrelated method
+// of the same name, which is why the generic spelling stays out). None were
+// added: an unpinned selector that discovers nothing is a comment, not a gate.
+// Redo that intersection, not a grep for the names already here — a grep can only
+// confirm the enumeration it starts from, which is how ImportSpecInto survived.
 var procInvokingDriverSelectors = map[string]bool{
 	"RunBodyUnderFrame":     true,
 	"RunBodyUnderConsumer":  true,
@@ -139,6 +189,9 @@ var procInvokingDriverSelectors = map[string]bool{
 	"RunBodyUnderPrompt":    true,
 	"RunWithinBoundary":     true,
 	"RaiseInPlace":          true,
+	"ExpandExpression":      true,
+	"ExpandOnce":            true,
+	"ImportSpecInto":        true,
 }
 
 // closureSuffix matches the trailing .func1[.func2...] that runtime function names
@@ -454,6 +507,21 @@ func TestInvokesProcedureStaticGuard(t *testing.T) {
 		// / RaiseInPlace), outside the analyzer's static call graph, same as the
 		// pre-existing note above on raise.)
 		modulePath + "/extensions/eval.PrimEval",
+		// One row per NEW selector, because the soundness loop above cannot pin
+		// any of them: it fires only on discovered && !annotated, and all five
+		// primitives these selectors reach are now annotated, so dropping a
+		// selector would leave that loop green while silently reopening the hole.
+		// PrimExpandOnce reaches its sink only through ExpandOnce (both branches,
+		// prim_eval.go:552,563) and PrimExpand only through ExpandExpression
+		// (:510), so these rows pin one selector each — a single row would pin one
+		// selector and leave the other free to be deleted as "redundant".
+		modulePath + "/extensions/eval.PrimExpandOnce",
+		modulePath + "/extensions/eval.PrimExpand",
+		// Pins ImportSpecInto. make-namespace / namespace-require reach the same
+		// selector from pkg/internal/extensions/namespace, so this one row does
+		// not cover them against a package-set regression — but the selector is
+		// what a cleanup would delete, and this row refuses that.
+		modulePath + "/extensions/eval.PrimEnvironment",
 	}
 	for _, key := range mustDiscover {
 		if !invokes[key] {

@@ -63,7 +63,14 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 		{Name: "null-environment", ParamCount: 1, Impl: PrimNullEnvironment,
 			Doc: "Returns a fresh environment with no bindings for the given Scheme VERSION (5 or 7).\n\nExamples:\n  (null-environment 7)  => #<environment>", ParamNames: []string{"version"}, Category: "eval",
 			ParamTypes: []values.TypeConstraint{values.TypeInteger}, ReturnType: values.TypeAny},
-		{Name: "environment", ParamCount: 1, IsVariadic: true, Impl: PrimEnvironment,
+		// InvokesProcedure: each import spec goes through
+		// compilation.ImportSpecInto → LoadLibrary, and a library body runs its
+		// own procedural transformers (invokeTransformerClosure, an Apply+Run on
+		// a sub-context). Demonstrable: importing a library whose body expands a
+		// (lambda (stx) …) transformer runs that transformer inside this call.
+		// scheme-report-environment / null-environment do NOT import, so they
+		// stay unannotated.
+		{Name: "environment", InvokesProcedure: true, ParamCount: 1, IsVariadic: true, Impl: PrimEnvironment,
 			Doc: "Creates an environment populated by the given import specs. Each spec names a library to import.\n\nExamples:\n  (eval '(+ 1 2) (environment '(scheme base)))  => 3", ParamNames: []string{"import-spec"}, Category: "eval",
 			ParamTypes: []values.TypeConstraint{values.TypeList}, ReturnType: values.TypeAny},
 		// expand/expand-once produce syntax objects; no ValueType enum for
@@ -74,7 +81,12 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		// expand-once returns multiple values — ReturnType annotates only the
 		// primary value.
-		{Name: "expand-once", ParamCount: 1, Impl: PrimExpandOnce,
+		//
+		// InvokesProcedure: a user-supplied procedural transformer runs through
+		// ExpanderTimeContinuation.ExpandOnce → MacroEvaluator.InvokeTransformer →
+		// invokeTransformerClosure, which is an Apply+Run on a sub-context. Exactly
+		// what expand does above; it was annotated and this was not.
+		{Name: "expand-once", InvokesProcedure: true, ParamCount: 1, Impl: PrimExpandOnce,
 			Doc: "Expands one level of macros. Returns two values: the expanded form and a boolean indicating whether expansion occurred.\n\nExamples:\n  (expand-once '(and a b))  ; => (values <one-step expansion> #t)", ParamNames: []string{"stx"}, Category: "eval",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "compile", InvokesProcedure: true, ParamCount: 1, Impl: PrimCompile,

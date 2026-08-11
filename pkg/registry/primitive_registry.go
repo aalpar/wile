@@ -52,10 +52,18 @@ type PrimitiveSpec struct {
 	// trusted.
 	//
 	// REQUIRED for any primitive whose Impl reaches ApplyCallable or runs a
-	// sub-context (sub.Run()): set InvokesProcedure:true. Two guards in pkg/wile
-	// enforce this — TestInvokesProcedureStaticGuard discovers the requirement
-	// statically (AST of the Impl's call graph) and fails CI when the annotation is
-	// missing; TestInvokesProcedureCompleteness pins the curated set behaviorally.
+	// sub-context (sub.Run()): set InvokesProcedure:true. Three guards in pkg/wile
+	// enforce this, and a new primitive must satisfy all three:
+	//   - TestInvokesProcedureStaticGuard discovers the requirement statically (AST
+	//     of the Impl's call graph) and fails CI when the annotation is missing.
+	//   - TestProcedureInvokersMatchesInvokesProcedure derives the pkg/wile name
+	//     list from these annotations in both directions, so annotating a primitive
+	//     without adding its name to procedureInvokers (capture_safety_test.go)
+	//     fails too — as does listing a name nothing annotates.
+	//   - TestInvokesProcedureCompleteness pins that list behaviorally
+	//     (IsCaptureSafe()==false on the live binding).
+	// The set is no longer curated: the second guard is what makes the first two
+	// agree, so "add the annotation" and "add the name" are one change.
 	//
 	// It flows to BindingMeta.CaptureSafe at registration; the classifier reads the
 	// binding flag because pkg/internal/validate must not import pkg/registry.
