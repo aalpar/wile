@@ -91,8 +91,9 @@ func NewMachineContinuation(parent *MachineContinuation, tpl *NativeTemplate, en
 // this function, but other callers do not:
 //
 //   - SaveContinuation: mc.callDepth already incremented → mc.callDepth != chain length
-//   - CaptureInterruptContinuationAt (timer interrupt): mc.callDepth == 0,
-//     mc.cont == nil on a rootless context
+//   - CaptureInterruptContinuationAt: on a rootless context (the timer's) both
+//     mc.callDepth == 0 and mc.cont == nil; on a debugger break neither holds,
+//     because InstallBreakPrompt pushed the boundary frame and counted it
 //
 // Using mc.callDepth - 1 would underflow to -1 in that case (mc.callDepth == 0).
 // The parent-pointer formula is correct for all callers and immune to underflow.

@@ -154,9 +154,11 @@ For ad-hoc disassembly of an expression rather than a named procedure, use the
 
 ### Debugger Commands
 
-The debugger is built into the REPL. Setting a breakpoint, stepping, or
-hitting an error suspends execution and returns control to the prompt, where
-the following commands are available.
+The debugger is built into the REPL. Reaching a breakpoint, or completing a
+step, suspends execution and drops into a `(dbg)` prompt. Errors do not suspend:
+there are no error breakpoints, and an exception unwinds to the REPL as usual.
+
+The commands below are available at the ordinary prompt.
 
 | Command                | Aliases | Description |
 |------------------------|---------|-------------|
@@ -174,7 +176,42 @@ the following commands are available.
 
 Breakpoints survive across continuation resumes — they are attached to source
 locations, not to particular VM states. A breakpoint set inside a procedure
-will fire on every call.
+fires on every call that re-enters its line; see the stop-counting rule below
+for the shapes where a call does not re-enter it.
+
+#### At the `(dbg)` prompt
+
+While execution is suspended only six of the commands above are accepted:
+`,continue`, `,step`, `,next` and `,finish` each resume with a different
+stepping mode, and `,backtrace` and `,where` report the suspended state and
+leave you at the prompt. Anything else — including a Scheme expression — is
+refused, because evaluating it would re-enter the VM the break is holding
+still. `Ctrl-D` abandons the suspended computation; its `dynamic-wind`
+after-thunks still run.
+
+A breakpoint names a source LINE, so one entry to that line is one stop even
+though the line compiles to several instructions. The counting is per
+breakpoint: two breakpoints on one line, at different columns, each stop once
+per entry.
+
+The stop is keyed on entering the line, so any construct that never leaves it
+stops once rather than once per activation — a loop whose entire body is one
+source line, and equally a recursion whose entire body is one source line. Give
+the body a second line to get a stop per activation.
+
+`,finish` is keyed on call DEPTH: it resumes and stops at the first source line
+reached at a strictly shallower depth. Its predecessor compared frame pointers,
+which cannot survive a suspension — the captured frames are copies. The
+consequence of the depth key is that the stop is not guaranteed to be in the
+frame that called the suspended one; it is whichever frame at a shallower depth
+executes a source line first.
+
+Two limits worth knowing. A breakpoint inside code reached through `load` or
+`eval` reports its stop but does not suspend: that code runs on a sub-context
+that does not carry the break boundary. And the first suspension of a run
+permanently disables environment-frame pooling for the rest of that
+evaluation, so a stepped run is not comparable with a benchmark — measure with
+no breakpoint armed.
 
 ## See Also
 

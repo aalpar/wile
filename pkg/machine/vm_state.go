@@ -169,8 +169,8 @@ type vmState struct {
 	// callDepth caches the continuation chain length to avoid O(d) traversals.
 	//
 	// On MachineContext: number of frames in the cont chain (mc.cont → ... → nil).
-	//   Maintained by SaveContinuation (++) and Restore/RestoreAndRelease (read
-	//   from continuation).
+	//   Maintained by SaveContinuation (++), InstallBreakPrompt (++, it pushes a
+	//   frame too), and Restore/RestoreAndRelease (read from continuation).
 	//
 	// On MachineContinuation: number of ancestor frames (parent → ... → nil).
 	//   Set once at creation time, never mutated. A root frame (parent == nil)

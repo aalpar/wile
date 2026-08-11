@@ -357,7 +357,7 @@ func TestDebugger_ShouldStep_StepOver_SameDepth(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	d := machine.NewDebugger()
-	d.StepOver(mc)
+	d.StepOver(mc.CallDepth())
 
 	// Same depth - should step
 	c.Assert(d.ShouldStep(mc), qt.IsTrue)
@@ -374,7 +374,7 @@ func TestDebugger_ShouldStep_StepOver_DeeperFrame(t *testing.T) {
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	d := machine.NewDebugger()
-	d.StepOver(mc) // Depth 0
+	d.StepOver(mc.CallDepth()) // Depth 0
 
 	// Add a continuation to increase depth
 	mc.SaveContinuation(5) // Now depth 1
@@ -399,7 +399,7 @@ func TestDebugger_ShouldStep_StepOver_ShallowerFrame(t *testing.T) {
 	// mc now has cont pointing to parentCont, depth = 1
 
 	d := machine.NewDebugger()
-	d.StepOver(mc) // Set at depth 1
+	d.StepOver(mc.CallDepth()) // Set at depth 1
 
 	// Restore from parent (depth goes to 0)
 	mc.Restore(parentCont)
@@ -414,18 +414,20 @@ func TestDebugger_ShouldStep_StepOut(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
-	addOpsWithSource(tpl, 5, source)
+	// Ten ops, not five: SaveContinuation(5) makes the restore land at pc 5, and
+	// the depth-keyed step-out arm also requires source AT that pc.
+	addOpsWithSource(tpl, 10, source)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 	mc.SaveContinuation(5)
 
 	d := machine.NewDebugger()
-	d.StepOut(mc) // Record current frame
+	d.StepOut(mc.CallDepth()) // Record the depth to return out of
 
-	// Still same frame - should NOT step
+	// Still at that depth - should NOT step
 	c.Assert(d.ShouldStep(mc), qt.IsFalse)
 
-	// Return from the continuation - frame changed
+	// Return from the continuation - strictly shallower now
 	mc.RestoreAndRelease(mc.Parent())
 	c.Assert(d.ShouldStep(mc), qt.IsTrue)
 }

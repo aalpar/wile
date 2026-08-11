@@ -26,10 +26,13 @@ import (
 	"github.com/aalpar/wile/pkg/wile"
 )
 
-// DebugContext holds the state for debug commands. The break state itself
-// (the most recent break's MachineContext) is owned by the wrapped
-// wile.Debugger and read through p.debugger.CurrentState() — DebugContext
-// deliberately keeps no parallel copy, so the two can never disagree.
+// DebugContext holds the state for debug commands. The break state itself — a
+// snapshot frozen at the most recent break, NOT a live VM context — is owned by
+// the wrapped wile.Debugger and read through p.debugger.CurrentState().
+// DebugContext deliberately keeps no parallel copy, so the two can never
+// disagree. Handing back the live context instead is what made ,where and
+// ,backtrace report "No source location available": it is pool-recycled and
+// zeroed the moment the evaluation ends.
 type DebugContext struct {
 	debugger *wile.Debugger
 }
@@ -112,6 +115,18 @@ func (p *DebugContext) DebugCommands() []DebugCommandInfo {
 		}
 	}
 	return q
+}
+
+// canonicalDebugCommand maps a typed token (comma already stripped) to the
+// canonical debug command name, so alias handling lives in one table and the
+// break prompt cannot drift from ,help.
+func canonicalDebugCommand(token string) (string, bool) {
+	for _, m := range debugCommandMetadata {
+		if token == m.Name || slices.Contains(m.Aliases, token) {
+			return m.Name, true
+		}
+	}
+	return "", false
 }
 
 // HandleDebugCommand processes a debug command starting with ','.
@@ -270,7 +285,9 @@ func (p *DebugContext) cmdBacktrace(_ []string, out io.Writer) {
 		return
 	}
 
-	fmt.Fprintln(out, "Stack trace:")
+	// No header here: StackTrace.String already emits "Stack trace:". The
+	// duplicate was invisible while this command could only ever read a
+	// pool-zeroed context, whose trace was always empty.
 	fmt.Fprint(out, trace)
 }
 

@@ -120,6 +120,36 @@ type MachineContext struct {
 
 	timer *timerState // nil = no timer active; both handler and cancel set together
 
+	// brk is the innermost armed debugger break boundary, or nil when no
+	// suspension is possible on this context (a bare embedder with a Go-only
+	// debugger, and every load/eval sub-context). Like the fields above and
+	// unlike vmState, it describes the executing context and must NOT be saved
+	// into continuations. See InstallBreakPrompt.
+	brk *breakState
+	// breakResumeValues is the value register frozen at the current suspension,
+	// to be handed back as the arguments that resume it. See
+	// resolveBreakInterrupt and BreakResumeValues.
+	breakResumeValues MultipleValues
+
+	// lastBreakFile/lastBreakLine/lastBreakFired/lastBreakIDs are the debugger's
+	// per-line de-duplication cursor, maintained by CheckBreakpoint and consulted
+	// (for a step stop) by the debugger hook in Run. Several consecutive
+	// instructions carry one source line, and a breakpoint names a LINE, so the
+	// cursor collapses them into a single stop per breakpoint per entry to the
+	// line. lastBreakFired is the whole-line half, which suppresses a STEP stop
+	// once anything has stopped on the line; lastBreakIDs is the per-breakpoint
+	// half, without which the first breakpoint to fire masks every other
+	// breakpoint on the same line.
+	// They live here rather than on the Debugger because the Debugger is
+	// shared across SRFI-18 threads and sub-contexts while the cursor is a
+	// property of one instruction stream; per-context also means no lock.
+	// Like the fields above and unlike vmState, they describe the executing
+	// context and must NOT be saved into continuations.
+	lastBreakFile  string
+	lastBreakLine  int
+	lastBreakFired bool
+	lastBreakIDs   []BreakpointID
+
 	// immutableLiterals and authorizer are the namespace-derived engine state,
 	// snapshotted so a released environment frame cannot blank it. They are a
 	// FALLBACK, never the authority: the accessors still read p.env.Namespace()
@@ -399,10 +429,25 @@ func (p *MachineContext) Run() error {
 
 		if mc.debugger != nil {
 			bp := mc.debugger.CheckBreakpoint(mc)
-			if bp != nil {
+			stop := bp != nil
+			// A step stop obeys the same one-stop-per-source-line cursor
+			// CheckBreakpoint maintains, for two reasons: "step to the next source
+			// location" means the next LINE, and a resumed computation re-executes
+			// the instruction it was suspended on — so a step that stopped again on
+			// the same line would never advance.
+			if !stop && !mc.lastBreakFired {
+				stop = mc.debugger.ShouldStep(mc)
+				mc.lastBreakFired = stop
+			}
+			if stop {
+				// With a break boundary armed, emit the signal and let the driver
+				// suspend at the boundary — the same shape as the timer emit above.
+				// Without one, fall back to calling the render-only callback inline,
+				// which is all a Go-embedded debugger has ever had.
+				if mc.brk != nil {
+					return &ErrBreakInterrupt{Handler: mc.brk.handler, Tag: mc.brk.tag, BP: bp}
+				}
 				mc.debugger.TriggerBreak(mc, bp)
-			} else if mc.debugger.ShouldStep(mc) {
-				mc.debugger.TriggerBreak(mc, nil)
 			}
 		}
 
@@ -1135,6 +1180,9 @@ const defaultBacktraceDepth = 20
 // The walk stops at a context with isolatedMarks set (a re-invoked continuation
 // running a grafted chain), mirroring findParameterInMarks: the trace then shows
 // the continuation's own extent, not the invoker's.
+//
+// The debugger's break-boundary frame is elided: it is VM scaffolding rather
+// than a Scheme call, and it is transparent to the computation it wraps.
 func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace {
 	trace := make(StackTrace, 0, 16)
 	depth := 0
@@ -1164,6 +1212,13 @@ func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace {
 		// call instruction), so pc-1 gives the call site source location.
 		cont := mc.cont
 		for cont != nil && depth < maxDepth {
+			// The debugger's break boundary is a frame the VM pushed, not a call
+			// the program made. Rendering it puts a locationless <anonymous> at
+			// the bottom of every trace taken while a boundary is armed.
+			if mc.brk != nil && cont.promptTag == mc.brk.tag {
+				cont = cont.parent
+				continue
+			}
 			frame := StackFrame{}
 			if cont.template != nil {
 				frame.FunctionName = cont.template.Name()
@@ -1630,6 +1685,32 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			continue
 		}
 
+		// A break is emitted only with p.brk armed, and the only thing that arms it
+		// pushes the boundary frame in the same call, so a break reaching the top
+		// driver MUST have a boundary on the chain.
+		var breakErr *ErrBreakInterrupt
+		if errors.As(err, &breakErr) {
+			boundary, found := p.FindPrompt(breakErr.Tag)
+			if !found {
+				return werr.WrapForeignErrorf(werr.ErrInternal,
+					"debugger: no boundary frame found for break interrupt")
+			}
+			applyErr := p.resolveBreakInterrupt(breakErr, boundary)
+			if applyErr != nil {
+				if isControlSignal(applyErr) {
+					// The suspension handler transferred control instead of resuming
+					// — an abandoning handler aborts to the break prompt, which is
+					// still on the chain. Dispatch it here rather than returning it,
+					// or the embedder receives a raw "abort to prompt" (defect 27's
+					// shape).
+					pending = applyErr
+					continue
+				}
+				return applyErr
+			}
+			continue
+		}
+
 		return err
 	}
 }
@@ -1683,6 +1764,32 @@ func (p *MachineContext) RunWithinBoundary() error {
 				boundary, found := p.FindPrompt(timerErr.Tag)
 				if found {
 					applyErr := p.resolveTimerInterrupt(timerErr, boundary)
+					if applyErr != nil {
+						return applyErr
+					}
+					continue
+				}
+			}
+			// Same shape for a debugger break, with the same not-found rule: the break
+			// prompt is installed on the TOP-LEVEL chain, so a break emitted inside a
+			// surviving sub-context re-raises to the enclosing driver rather than being
+			// resolved against a boundary this chain cannot see.
+			//
+			// No sub-context can reach the found branch today: NewSubContext copies
+			// neither brk nor the debugger, and NewSubContextWithTemplate (load, eval)
+			// copies the debugger but not brk, so those stops take the render-only
+			// fallback. The arm is here for symmetry with the timer, so that arming a
+			// boundary on a sub-context later does not silently escape its driver.
+			//
+			// Out of scope, and correct: the foreign-call interrupt rechecks in
+			// call_foreign_cached.go and applyForeign need no break arm. A breakpoint is
+			// evaluated at exactly one site — the top of the PC loop — so a break can
+			// never be pending across a foreign call the way a wall-clock timer can.
+			var breakErr *ErrBreakInterrupt
+			if errors.As(err, &breakErr) {
+				boundary, found := p.FindPrompt(breakErr.Tag)
+				if found {
+					applyErr := p.resolveBreakInterrupt(breakErr, boundary)
 					if applyErr != nil {
 						return applyErr
 					}
@@ -1809,5 +1916,59 @@ func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boun
 	}
 
 	_, applyErr := p.ApplyCallable(timerErr.Handler, resumable)
+	return applyErr
+}
+
+// resolveBreakInterrupt is the shared debugger-break arm of RunResumable and
+// RunWithinBoundary, modelled on resolveTimerInterrupt: each call site does its own
+// FindPrompt and reaches this helper only with boundary (the frame
+// InstallBreakPrompt pushed) already matched.
+//
+// It (1) freezes the break point's location, trace and depth from the LIVE chain and
+// hands them to the debugger, BEFORE anything is restored — afterwards the context
+// describes the boundary, not the break point, and the whole context is recycled once
+// the evaluation ends; (2) captures the suspended computation DELIMITED at boundary as
+// a composable continuation the handler may resume; (3) HARD-SUSPENDS onto the boundary
+// without unwinding; (4) applies the handler to that resumable.
+//
+// The break prompt STAYS ARMED across the suspension: p.cont = boundary leaves the
+// frame itself on the chain, so a second break — the next step stop, or the same
+// breakpoint on the next call — routes to it again. Nothing is torn down here, which
+// is where this departs from the timer: a break has no ctx half, no cancel to call and
+// no saved context to restore.
+//
+// The live winding stack is deliberately NOT reset to the boundary's (the timer does
+// reset it, to drop the timed-out thunk's after-thunks un-run). Leaving it live is what
+// lets an abandoning handler raise ErrPromptAbort{SourceWinding: …} and have resolveAbort
+// run the dynamic-wind after-thunks between the break point and the boundary.
+//
+// Rider: CaptureInterruptContinuationAt slices through SliceContinuationAt, which calls
+// MarkChainShared. That mark is monotonic, so the FIRST break permanently forgoes env
+// frame pooling for the rest of that evaluation. A stepped run is therefore not
+// performance-representative; benchmark with no breakpoint armed.
+func (p *MachineContext) resolveBreakInterrupt(breakErr *ErrBreakInterrupt, boundary *MachineContinuation) error {
+	p.debugger.setBreak(newBreakSnapshot(p), breakErr.BP)
+
+	// The value register at an arbitrary instruction boundary is live state, not a
+	// parameter: it holds the operand the suspended instruction is about to consume.
+	// Restore does not carry it (a continuation's values arrive as arguments), and
+	// ReinstallSegment ends with SetValues(args...), so resuming with no arguments
+	// would clear it and the next OpPush would push nothing. Stash it here and hand
+	// it back as the resume arguments.
+	live := p.GetValues()
+	saved := make(MultipleValues, len(live))
+	copy(saved, live)
+	p.breakResumeValues = saved
+
+	segment := p.CaptureInterruptContinuationAt(boundary)
+	windingCopy := p.windingStack.Copy()
+	resumable := NewComposableContinuation(segment, windingCopy, p.threadID, p.barrierValid)
+
+	p.cont = boundary
+	oldEvals := p.evals
+	p.evals = p.acquireStack()
+	p.releaseStack(oldEvals)
+
+	_, applyErr := p.ApplyCallable(breakErr.Handler, resumable)
 	return applyErr
 }

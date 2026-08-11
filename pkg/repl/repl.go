@@ -178,26 +178,17 @@ func (p *REPL) Run(ctx context.Context) error {
 	}
 	defer rl.Close() //nolint:errcheck
 
-	// Set up break callback. The debugger has already recorded this break's
-	// state (see wile.Debugger.OnBreak); the inspection commands read it back
-	// via p.debugCtx.Debugger().CurrentState(), so the callback only renders.
-	p.debugCtx.Debugger().OnBreak(func(state values.DebugState, bp *wile.BreakpointInfo) {
-		if bp != nil {
-			fmt.Fprintf(p.out, "\nBreakpoint %d hit", bp.ID)
-			loc := state.CurrentLocation()
-			if loc != nil {
-				fmt.Fprintf(p.out, " at %s:%d:%d", loc.File, loc.Line, loc.Column)
-			}
-			fmt.Fprintln(p.out)
-		} else {
-			fmt.Fprint(p.out, "\nStepped")
-			loc := state.CurrentLocation()
-			if loc != nil {
-				fmt.Fprintf(p.out, " to %s:%d:%d", loc.File, loc.Line, loc.Column)
-			}
-			fmt.Fprintln(p.out)
-		}
-	})
+	// The suspending callback owns the interactive break prompt. The render-only
+	// callback stays installed as the fallback for stops that cannot suspend —
+	// a breakpoint inside load or eval, whose freshly compiled template runs on
+	// a sub-context that does not carry the break boundary.
+	p.debugCtx.Debugger().OnBreak(p.renderBreak)
+	p.debugCtx.Debugger().OnBreakSuspend(p.breakVerdict(func() (string, error) {
+		rl.SetPrompt(debugPrompt)
+		line, lerr := rl.ReadLine()
+		rl.SetPrompt(p.prompt)
+		return line, lerr
+	}))
 
 	var inputBuffer strings.Builder
 
@@ -273,8 +264,16 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 	// Attach debugger to engine so Engine.Run picks it up.
 	p.eng.SetDebugger(p.debugCtx.Debugger())
 
-	fmt.Fprint(p.out, p.prompt)
 	reader := newLineReader(p.in)
+	// The break prompt shares this reader so a suspended evaluation consumes the
+	// same input stream, not a second one opened over the same fd.
+	p.debugCtx.Debugger().OnBreak(p.renderBreak)
+	p.debugCtx.Debugger().OnBreakSuspend(p.breakVerdict(func() (string, error) {
+		fmt.Fprint(p.out, debugPrompt)
+		return reader.ReadLine()
+	}))
+
+	fmt.Fprint(p.out, p.prompt)
 	var inputBuffer strings.Builder
 
 	for {
@@ -387,6 +386,78 @@ func (p *REPL) evalAndPrint(ctx context.Context, sigCh <-chan os.Signal, expr *w
 	if !val.IsVoid() {
 		fmt.Fprintf(p.out, "%s\n", val.SchemeString())
 	}
+}
+
+// debugPrompt is the prompt shown while execution is suspended at a break.
+const debugPrompt = "(dbg) "
+
+// breakCommandHelp lists what the break prompt accepts. Everything else,
+// including a bare Scheme expression, is refused: evaluating user code from a
+// suspended VM would re-enter the machine the break is holding still.
+const breakCommandHelp = "only ,continue ,step ,next ,finish ,backtrace ,where are available at a break prompt"
+
+// breakVerdict builds the suspension handler for one REPL entry point. readLine
+// supplies that entry point's own line source — readline's in Run, the shared
+// lineReader in RunSimple — so the break prompt reads from the same input the
+// REPL does rather than opening a second one. It also owns showing debugPrompt,
+// because readline draws its own prompt and the simple loop does not.
+//
+// EOF is BreakAbandon: at a break there is no further input, so the only
+// remaining choice is to discard the computation (its dynamic-wind after-thunks
+// still run) and return to the caller.
+func (p *REPL) breakVerdict(readLine func() (string, error)) func(values.DebugState, *wile.BreakpointInfo) wile.BreakAction {
+	return func(state values.DebugState, bp *wile.BreakpointInfo) wile.BreakAction {
+		p.renderBreak(state, bp)
+		for {
+			line, err := readLine()
+			if err != nil {
+				fmt.Fprintln(p.out)
+				return wile.BreakAbandon
+			}
+			token := strings.TrimPrefix(strings.TrimSpace(line), ",")
+			name, known := canonicalDebugCommand(token)
+			if !known {
+				fmt.Fprintln(p.out, breakCommandHelp)
+				continue
+			}
+			switch name {
+			case "continue":
+				return wile.BreakContinue
+			case "step":
+				return wile.BreakStep
+			case "next":
+				return wile.BreakNext
+			case "finish":
+				return wile.BreakFinish
+			case "backtrace":
+				// Both read the debugger's snapshot of this break, which is the
+				// same state this callback was handed.
+				p.debugCtx.cmdBacktrace(nil, p.out)
+			case "where":
+				p.debugCtx.cmdWhere(nil, p.out)
+			default:
+				fmt.Fprintln(p.out, breakCommandHelp)
+			}
+		}
+	}
+}
+
+// renderBreak prints the one-line banner announcing a stop.
+func (p *REPL) renderBreak(state values.DebugState, bp *wile.BreakpointInfo) {
+	if bp != nil {
+		fmt.Fprintf(p.out, "\nBreakpoint %d hit", bp.ID)
+	} else {
+		fmt.Fprint(p.out, "\nStepped")
+	}
+	loc := state.CurrentLocation()
+	if loc != nil {
+		if bp != nil {
+			fmt.Fprintf(p.out, " at %s:%d:%d", loc.File, loc.Line, loc.Column)
+		} else {
+			fmt.Fprintf(p.out, " to %s:%d:%d", loc.File, loc.Line, loc.Column)
+		}
+	}
+	fmt.Fprintln(p.out)
 }
 
 // Debugger returns the REPL's debugger for external configuration.
