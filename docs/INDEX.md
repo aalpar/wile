@@ -22,7 +22,7 @@ implementation notes, and educational articles for a single subsystem.
 
 ## See Also
 
-- [`PRIMITIVES.md`](../PRIMITIVES.md) -- Complete reference of types and primitives
+- [`PRIMITIVES.md`](../PRIMITIVES.md) -- Reference for types and primitives (deliberately not exhaustive; it says so and states the gap)
 - [`BIBLIOGRAPHY.md`](../BIBLIOGRAPHY.md) -- Academic papers, specifications, canonical references
 - [`CODING_STYLE.md`](../CODING_STYLE.md) -- Go code style guide
 - [`TOC.md`](TOC.md) -- Flat listing of every document

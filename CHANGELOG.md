@@ -31,10 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and agrees with `equal?` even on bisimilar cycles of different node counts.
 
   `(rnrs hashtables)` is the first `(rnrs ...)` library in the tree. It is
-  registered VERSIONLESS — R6RS's `(rnrs hashtables (6))` does not resolve,
-  since versioned library names are unimplemented — and it deliberately does not
-  re-export the four hash procedures; see `docs/reference/r7rs-differences.md`
-  items 12-15.
+  registered VERSIONLESS — R6RS's `(rnrs hashtables (6))` resolves to the same
+  library, the version reference being parsed and dropped — and it deliberately
+  does not re-export the four hash procedures; see
+  `docs/reference/r7rs-differences.md` items 12-15.
 
   This retires `graph.scm`'s atomic-node-identifier restriction entirely: a
   graph keyed on lists or vectors now interns *and* reaches the Go counting

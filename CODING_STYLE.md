@@ -589,7 +589,7 @@ import (
     "strings"
 
     "github.com/aalpar/wile/pkg/environment"
-    "github.com/aalpar/wile/pkg/internal/syntax"
+    "github.com/aalpar/wile/pkg/syntax"
     "github.com/aalpar/wile/pkg/values"
 
     "github.com/jessevdk/go-flags"

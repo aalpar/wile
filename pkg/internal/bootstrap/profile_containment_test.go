@@ -17,6 +17,12 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"slices"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -82,36 +88,179 @@ func denyNamespaceOnly() security.Authorizer {
 	})
 }
 
-// coreRegistryPrimitiveCount is the number of registered primitives whose Go
-// symbol is under github.com/aalpar/wile/pkg/registry/core in
-// testdata/axis-b-manifest.scm, the reproducible source (467 rows, one per
-// registered primitive).
-//
-// Two other counts are NOT this quantity and both gaps reconcile exactly. A
-// static count of unique `Name:` literals under pkg/registry/core gives 198,
-// missing the ten comparison names registered from a table rather than from a
-// per-name literal (char<?…char>=?, string<?…string>=?); 198 + 10 = 208 with
-// nothing in the other direction. Counting by the manifest's *file* column
-// gives 178, missing the thirty core primitives whose Impl is declared in
-// pkg/registry/helpers — 20 type predicates through helpers.MakeTypePredicate
-// and 10 accessors/mutators through helpers/accessor.go — while their specs,
-// and their symbols, are core's.
-const coreRegistryPrimitiveCount = 208
+const (
+	// axisBManifestPath is the checked-in per-primitive manifest, relative to the
+	// repo root. It is regenerated only under WILE_AXIS_B_UPDATE=1.
+	axisBManifestPath = "testdata/axis-b-manifest.scm"
+	// coreImplPrefix selects the manifest's core rows by their Go SYMBOL, which
+	// is not the same selector as their source file — see coreManifestNames.
+	coreImplPrefix = "github.com/aalpar/wile/pkg/registry/core."
+	// helpersImplPrefix is the counter-selector that makes coreImplPrefix
+	// falsifiable. No manifest row may carry it — see coreManifestNames.
+	helpersImplPrefix = "github.com/aalpar/wile/pkg/registry/helpers."
+)
 
-// TestExtensionPrimitiveNamesCountsCore is the unit gate for review
-// 2026-08-07 wave 2 item 12. An empty extension slice is exactly the tiny
-// profile, and tiny is not an empty surface: it is the core registry. At
+// axisBManifestRow parses one manifest row: (name return-type (params…) symbol
+// source). Capture 1 is the primitive name, capture 2 its fully-qualified Go
+// symbol. The leading `\(?` absorbs the extra paren on the first row, which
+// opens the outer list.
+var axisBManifestRow = regexp.MustCompile(`^\s*\(?\("([^"]+)" "[^"]*" \([^)]*\) "([^"]*)" "[^"]*"\)`)
+
+// bootstrapRepoRoot returns the absolute path of the wile repo root, inferred
+// from this test file's location. This package lives at pkg/internal/bootstrap,
+// so the module root is three directories up. Mirrors repoRoot in
+// pkg/wile/audit_manifest_test.go, which does the same with two hops.
+func bootstrapRepoRoot(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatalf("runtime.Caller(0) failed — cannot infer repo root")
+	}
+	q := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
+	return q
+}
+
+// coreManifestNames derives the core primitive surface from the checked-in
+// axis-B manifest: every row whose Go SYMBOL is declared under
+// pkg/registry/core.
+//
+// The symbol column is NOT derived from the registry spec. It is
+// runtime.FuncForPC(reflect.ValueOf(spec.Impl).Pointer()).Name(), taken at
+// generation time by resolveImpl in pkg/wile/audit_manifest_test.go — a
+// property of the compiled binary, not of the declaration. Thirty core
+// primitives get their Impl from a constructor in pkg/registry/helpers, and
+// their symbols read `…/pkg/registry/core.init.MakeTypePredicate.funcN` only
+// because the compiler INLINES that constructor into core's package init.
+// Build with -gcflags=all=-l and the same thirty rows read
+// `…/pkg/registry/helpers.MakeTypePredicate.funcN`, coreImplPrefix stops
+// matching them, and this derivation silently loses thirty names. That is why
+// the loop below refuses any row carrying helpersImplPrefix: it is the
+// falsifier for the inline attribution this selector rides on, and its
+// diagnosis ("the manifest was generated with different inlining") is the
+// opposite advice from the liveOnly comment's ("regenerate the manifest"),
+// which would only reproduce the loss.
+//
+// The two obvious alternative selectors are worse, and both gaps reconcile
+// exactly against 208 (all figures in this comment measured 2026-08-10 against
+// the committed manifest; re-derive rather than trusting them). A static count
+// of unique non-test `Name:` literals under pkg/registry/core —
+//
+//	grep -ohE 'Name:[[:space:]]+"[^"]+"' pkg/registry/core/*.go | sort -u | wc -l
+//
+// gives 198, missing the ten comparison names registered from a table rather
+// than from a per-name literal (char<?…char>=?, string<?…string>=?). The
+// manifest's *file* column —
+//
+//	grep -c '"pkg/registry/core/' testdata/axis-b-manifest.scm
+//
+// gives 178, missing exactly those thirty helpers-built rows: 19 under
+// helpers/type.go (17 through MakeTypePredicate, plus exact? and inexact?
+// through MakeNumericPredicate) and 11 under helpers/accessor.go (10 through
+// MakeUnaryAccessor, plus one MakeBinarySetter). For the manifest's own size,
+// run wc -l on it.
+//
+// This couples the test to the manifest exactly as TestBuildAxisBManifest is
+// coupled: adding or removing a core primitive turns this red until the
+// manifest is regenerated with WILE_AXIS_B_UPDATE=1. That is the ratchet, not a
+// defect — regenerate, do not patch a number back in.
+func coreManifestNames(t *testing.T) map[string]struct{} {
+	t.Helper()
+	path := filepath.Join(bootstrapRepoRoot(t), axisBManifestPath)
+	body, err := os.ReadFile(path)
+	if err != nil {
+		// Never t.Skip: the manifest is tracked, so an unreadable one is a broken
+		// checkout, and skipping is how this assertion would pass vacuously.
+		t.Fatalf("%s: %v", axisBManifestPath, err)
+	}
+
+	q := map[string]struct{}{}
+	deinlined := []string{}
+	for i, line := range strings.Split(string(body), "\n") {
+		if line == "" {
+			continue
+		}
+		m := axisBManifestRow.FindStringSubmatch(line)
+		if m == nil {
+			t.Fatalf("%s:%d does not parse as a manifest row: %s", axisBManifestPath, i+1, line)
+		}
+		if strings.HasPrefix(m[2], helpersImplPrefix) {
+			deinlined = append(deinlined, m[1])
+		}
+		if !strings.HasPrefix(m[2], coreImplPrefix) {
+			continue
+		}
+		q[m[1]] = struct{}{}
+	}
+	if len(deinlined) > 0 {
+		slices.Sort(deinlined)
+		t.Fatalf("%s carries %d row(s) whose symbol is under %s — %v.\n"+
+			"A helper constructor's closure is attributed to its own package only when the compiler did NOT inline it into the registering package's init, so the manifest was generated under different inlining (-gcflags=all=-l, or the helper outgrew the inline budget). coreImplPrefix under-counts by exactly these rows; DO NOT regenerate with WILE_AXIS_B_UPDATE=1 — that is what produced this manifest. Regenerate with the default toolchain flags, or reselect on a property that is not an inlining artifact.",
+			axisBManifestPath, len(deinlined), helpersImplPrefix, deinlined)
+	}
+	if len(q) < 100 {
+		t.Fatalf("%s yielded only %d names under %s — the symbol column's shape has changed and the derivation is silently under-counting",
+			axisBManifestPath, len(q), coreImplPrefix)
+	}
+	return q
+}
+
+// TestExtensionPrimitiveNamesIsTheCoreManifestSurface is the unit gate for
+// review 2026-08-07 wave 2 item 12. An empty extension slice is exactly the
+// tiny profile, and tiny is not an empty surface: it is the core registry. At
 // 003b3353 this returned 0, so namesNotIn could never see a core acquisition
-// and (environment '(wile tiny)) handed out 208 primitives with no capability
-// question asked.
-func TestExtensionPrimitiveNamesCountsCore(t *testing.T) {
+// and (environment '(wile tiny)) handed out the whole core surface with no
+// capability question asked.
+//
+// The assertion is SET equality against a derivation, not a hand-typed
+// cardinality: cardinality survives a swap (one name gained, one lost) and the
+// number it was compared against had no source of truth — the comment beside it
+// had already rotted, claiming a manifest row count 12 too high.
+//
+// This is the count half of the wave-6 §8 mechanism (1) "premises become
+// generated assertions". The static go/ast half — every resolved-global arm of
+// CompileSymbol reaches emitCachedBindingLoad — is NOT here and is blocked on
+// wave 5 cluster E; when it lands it must generalise the derived
+// procedureInvokers list in pkg/wile/capture_safety_test.go (wave 4 item 10)
+// rather than add a second hand derivation.
+//
+// The boundary this does not reach: it checks premises stated in Go and in
+// TODO.md, never one stated only in a plans/ file. That residue is covered by
+// `make planlint` and `make indexlint`, which CI does not run.
+func TestExtensionPrimitiveNamesIsTheCoreManifestSurface(t *testing.T) {
 	c := qt.New(t)
 	names, err := extensionPrimitiveNames(nil)
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(names), qt.Equals, coreRegistryPrimitiveCount)
 
-	// A sample of names an embedder would recognise, so a future registry
-	// churn that changes the count says which direction it moved.
+	manifest := coreManifestNames(t)
+	liveOnly := []string{}
+	for name := range names {
+		_, ok := manifest[name]
+		if !ok {
+			liveOnly = append(liveOnly, name)
+		}
+	}
+	manifestOnly := []string{}
+	for name := range manifest {
+		_, ok := names[name]
+		if !ok {
+			manifestOnly = append(manifestOnly, name)
+		}
+	}
+	slices.Sort(liveOnly)
+	slices.Sort(manifestOnly)
+	// Check, not Assert: a rename moves a name in BOTH directions at once, and
+	// an Assert on the first difference aborts before the second is printed,
+	// reporting an addition where the change was a rename.
+	c.Check(liveOnly, qt.HasLen, 0,
+		qt.Commentf("registered by core but absent from %s: %v — regenerate the manifest with WILE_AXIS_B_UPDATE=1",
+			axisBManifestPath, liveOnly))
+	c.Check(manifestOnly, qt.HasLen, 0,
+		qt.Commentf("in %s under %s but no longer registered: %v",
+			axisBManifestPath, coreImplPrefix, manifestOnly))
+
+	// A sample of names an embedder would recognise, kept below the set
+	// assertion as the reader-legible check: it says what this surface IS,
+	// where the difference above only says what moved.
 	for _, name := range []string{"car", "cons", "string-append", "vector-fill!", "char<?", "string<?"} {
 		_, ok := names[name]
 		c.Assert(ok, qt.IsTrue, qt.Commentf("core primitive %q missing from the tiny surface", name))
@@ -214,7 +363,8 @@ func TestCheckProfileWidening(t *testing.T) {
 // Tiny is one of those requests. It used to be the exception here — an empty
 // extension slice looked like an empty request, so it was waved through — and
 // that reading was the item 12 fail-open. A profile is core plus its
-// extensions, so the smallest request in the system is 208 names, and against
+// extensions, so the smallest request in the system is the entire core surface
+// (TestExtensionPrimitiveNamesIsTheCoreManifestSurface derives it), and against
 // an unprovable surface even tiny must be asked about.
 func TestCheckProfileWideningUnknownSurfaceIsNotContained(t *testing.T) {
 	c := qt.New(t)

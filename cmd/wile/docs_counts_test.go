@@ -135,6 +135,32 @@ var proseCounts = []proseCount{
 			"for a different question (its §5 adds one harness defect), so a row asserting that " +
 			"total instead would need its own derivation, not a patched number here.",
 	},
+	{
+		name:    "r7rs_differences_summary_count",
+		doc:     "docs/reference/r7rs-differences.md",
+		rowKey:  "known differences exist",
+		claimed: regexp.MustCompile(`(\d+) known differences`),
+		source:  "docs/reference/r7rs-differences.md",
+		derive:  countSummaryDeviations,
+		why: "The sentence introduces the ## Summary list directly below it, so the two drift " +
+			"apart whenever a deviation is appended without re-reading the lead-in — which is " +
+			"how it came to say eleven over sixteen items. This row is the ratchet for that: " +
+			"the number must be a numeral, because claimed feeds strconv.Atoi.",
+	},
+	{
+		name:    "PRIMITIVES_undocumented_names",
+		doc:     "PRIMITIVES.md",
+		rowKey:  "not exhaustive",
+		claimed: regexp.MustCompile(`(\d+) names bound`),
+		source:  "PRIMITIVES.md",
+		derive:  countUndocumentedBoundNames,
+		why: "The basis is `(environment-bound-names (interaction-environment))` under the CLI's " +
+			"KitchenSink profile, less `%`-prefixed internals, checked against the names " +
+			"PRIMITIVES.md spells inside a code span. `Engine.BoundNames()` (pkg/wile/engine.go) " +
+			"is a different, broader surface — its own doc comment says so: all phases plus the " +
+			"sealed base, keywords included — so deriving from it instead changes the arithmetic " +
+			"without changing the sentence.",
+	},
 }
 
 // scopeSectionCount matches one entry of a plan's per-section defect tally, the
@@ -175,6 +201,115 @@ func sumScopeSectionCounts(t *testing.T, source string) int {
 	q := 0
 	for _, e := range entries {
 		q += numberWords[e[1]]
+	}
+	return q
+}
+
+// summaryItemHead matches the head of one numbered item in r7rs-differences.md's
+// ## Summary list. It is applied per line, so the anchor means column zero, and
+// that is what makes it a list-HEAD matcher: an item's continuation lines are
+// indented four spaces, and without the anchor any numeral followed by a period
+// and a space inside an item's prose would add a deviation that is not there.
+var summaryItemHead = regexp.MustCompile(`^\d+\. `)
+
+// countSummaryDeviations recomputes r7rs-differences.md's deviation count from
+// the ## Summary list the lead-in sentence introduces.
+//
+// The list is the derivation rather than the numbered body sections below it,
+// because the Summary is what the sentence claims to summarise; the body carries
+// prose sections for some deviations and none for others.
+func countSummaryDeviations(t *testing.T, source string) int {
+	t.Helper()
+	start := strings.Index(source, "## Summary")
+	if start < 0 {
+		t.Fatalf("no ## Summary heading — the derivation's source has moved")
+	}
+	summary := source[start:]
+	end := len(summary)
+	heading := strings.Index(summary, "\n## ")
+	if heading >= 0 {
+		end = heading
+	}
+	rule := strings.Index(summary, "\n---")
+	if rule >= 0 && rule < end {
+		end = rule
+	}
+	q := 0
+	for line := range strings.SplitSeq(summary[:end], "\n") {
+		if summaryItemHead.MatchString(line) {
+			q++
+		}
+	}
+	if q == 0 {
+		t.Fatalf("the ## Summary section holds no numbered items — the derivation's source has moved")
+	}
+	return q
+}
+
+// docCodeSpan matches one inline code span in Markdown. A span may hold several
+// names ("`car` and `cdr`" is two spans, but "`(vector-ref v k)`" is one span
+// naming one primitive among punctuation), so callers split its body on
+// whitespace rather than treating the whole span as a single name.
+var docCodeSpan = regexp.MustCompile("`([^`\n]+)`")
+
+// spanTokenNames yields the primitive names a whitespace-delimited code-span
+// token can be spelling: the token itself, and — when the token is wrapped in
+// list or quote punctuation — the bare name inside it. Splitting on whitespace
+// alone does NOT recover a name from an applied form, since "`(vector-ref v k)`"
+// splits to "(vector-ref", "v", "k)" and enters neither "vector-ref" nor a
+// closing-paren-free "k".
+//
+// Only edge characters that cannot occur at that edge of a Scheme identifier are
+// trimmed. `?` and `!` are identifier characters (char-ready?, set-car!) and
+// trimming them would silently un-document every predicate and mutator, so the
+// cut set is deliberately narrow.
+func spanTokenNames(token string) []string {
+	q := []string{token}
+	bare := strings.Trim(token, "()[]',")
+	if bare != "" && bare != token {
+		q = append(q, bare)
+	}
+	return q
+}
+
+// countUndocumentedBoundNames counts the names bound in the CLI's default top
+// level that PRIMITIVES.md never spells.
+//
+// The bound-name list comes from the CLI itself rather than from a Go API, so
+// the count matches the sentence it checks: runCLI re-execs this test binary
+// through TestMain, which pins the CLI's KitchenSink profile — the same surface
+// a reader gets by typing `wile`. `%`-prefixed names are engine internals with
+// no user-facing contract and are excluded on both sides.
+//
+// A name counts as documented when a code span spells it, either as a whole
+// whitespace-separated token or as one wrapped in list/quote punctuation (see
+// spanTokenNames). That makes the result exact for "never spelled in a code
+// span" — a primitive documented only in applied form, `(char-ready? port)`,
+// still counts — and a lower bound on "has no entry": a name mentioned only in
+// passing, in another primitive's prose, suppresses its own row. The generous
+// direction is deliberate, since the alternative is parsing the document's
+// table shape.
+func countUndocumentedBoundNames(t *testing.T, source string) int {
+	t.Helper()
+	documented := map[string]bool{}
+	for _, m := range docCodeSpan.FindAllStringSubmatch(source, -1) {
+		for token := range strings.FieldsSeq(m[1]) {
+			for _, name := range spanTokenNames(token) {
+				documented[name] = true
+			}
+		}
+	}
+
+	res := runCLI(t, "-e", "(for-each (lambda (n) (display n) (newline)) (environment-bound-names (interaction-environment)))")
+	if res.exitCode != 0 {
+		t.Fatalf("listing the bound names exited %d: %s", res.exitCode, res.stderr)
+	}
+	q := 0
+	for name := range strings.SplitSeq(res.stdout, "\n") {
+		if name == "" || strings.HasPrefix(name, "%") || documented[name] {
+			continue
+		}
+		q++
 	}
 	return q
 }
