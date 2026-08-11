@@ -153,7 +153,7 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 			// binding it resolves to. The name test comes first so an ordinary
 			// call pays no resolution.
 			spec := forms.RegistryFor(env).Lookup(symVal.Key)
-			if spec != nil && spec.Validate != nil && headDenotesSpecialForm(env, symVal, sym) {
+			if spec != nil && spec.Validate != nil && headDenotesSpecialForm(env, symVal, sym, definitionBinder(spec.Name, pair)) {
 				expr := spec.Validate(ctx, env, pair, result)
 				if expr != nil {
 					// Override formName only for passthrough forms (prefixed with "@")
@@ -210,11 +210,31 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 // referenceReachesBinderDirectly is the guard; see its own comment for the
 // three footings it admits and the one it gives up.
 //
+// A DEFINITION'S OWN HEAD IS EXEMPT, via the binder parameter. The shadow a
+// define establishes begins AFTER the define, never at its own keyword — R7RS
+// §5.3.1 contemplates defining a variable whose name is a syntactic keyword, so
+// (define define 3) is a definition and evaluates to 3 in Chez as it did on
+// master. Wile could not see that without help: the expander's letrec* pre-scan
+// (compilation.ExpandBodyWithDefineSyntax) predeclares a top-level define's
+// ∅-scoped binder BEFORE validation runs, so by the time the head is resolved
+// the binding the form is still establishing already answers, and
+// referenceReachesBinderDirectly's ∅-scoped footing grants it the shadow. The
+// exemption is asked the same way as everything else here — by binding
+// IDENTITY, resolving the binder off this same env inside this same window —
+// so it fires only for the form's own binding and leaves a LATER define of a
+// different name demoted, which is what both master and Chez do once `define`
+// is a variable.
+//
 // GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
 // tie. That is deliberately not caught: it reaches the compile path's recover
 // boundary and surfaces as a CompilationError chaining the sentinel, which is
 // the answer an ambiguous identifier is supposed to get.
-func headDenotesSpecialForm(env *environment.EnvironmentFrame, symVal *values.Symbol, sym *syntax.SyntaxSymbol) bool {
+func headDenotesSpecialForm(
+	env *environment.EnvironmentFrame,
+	symVal *values.Symbol,
+	sym *syntax.SyntaxSymbol,
+	binder *syntax.SyntaxSymbol,
+) bool {
 	if env == nil {
 		return true
 	}
@@ -237,7 +257,82 @@ func headDenotesSpecialForm(env *environment.EnvironmentFrame, symVal *values.Sy
 	if b == ge.SealedBindingAt(symVal, q, env.PhaseLevel()) {
 		return true
 	}
+	if formEstablishesBinding(env, binder, b) {
+		return true
+	}
 	return !referenceReachesBinderDirectly(env, symVal, scopes, b)
+}
+
+// formEstablishesBinding reports whether b is the very binding the definition
+// form under validation introduces, so that the form's head is being demoted by
+// its own definiendum.
+//
+// The resolution is deliberately made HERE rather than by the caller: it is the
+// third leg of headDenotesSpecialForm's identity compare, and a *Binding is an
+// identity only inside a window that creates no bindings (see that function's
+// comment). It is also reached only once the head has already resolved to a
+// non-sealed variable — i.e. only in a program that has shadowed the keyword —
+// so the ordinary define pays nothing for it.
+func formEstablishesBinding(env *environment.EnvironmentFrame, binder *syntax.SyntaxSymbol, b *environment.Binding) bool {
+	if binder == nil {
+		return false
+	}
+	name, ok := binder.Unwrap().(*values.Symbol)
+	if !ok {
+		return false
+	}
+	return env.GetBinding(name, syntax.ScopesOf(binder.Scopes())) == b
+}
+
+// definitionBinder returns the identifier a definition form introduces — the
+// definiendum of (define name value) or the operator of
+// (define (name params …) body …) — and nil for any other form or a shape that
+// is not a well-formed definition.
+//
+// Keyed by the form NAME, exactly like the registry lookup beside it and for
+// the same reason: the keyword answers which syntactic position holds the
+// binder (candidacy); headDenotesSpecialForm still decides denotation by the
+// binding that position resolves to.
+//
+// `define` is the only keyword listed because it is the only definition form
+// whose binder exists before validation sees the head. The expander's letrec*
+// pre-scan predeclares exactly what compilation.extractDefineName reports, and
+// that function recognizes `define` alone; define-syntax binds in the expand
+// environment, and define-values and define-record-type desugar into `define`
+// forms that arrive here in this same shape. This helper must keep agreeing
+// with extractDefineName about where a define's binder sits, or the exemption
+// stops covering what the pre-scan predeclared.
+//
+// A shape with no value/body — (define x), (define (f)) — is NOT a definition
+// for this purpose. Reporting a binder there would let (f f), where f is a
+// local variable spelled `define`, be re-read as a malformed definition instead
+// of the call it is.
+func definitionBinder(formName string, pair *syntax.SyntaxPair) *syntax.SyntaxSymbol {
+	if formName != "define" {
+		return nil
+	}
+	rest, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(rest) {
+		return nil
+	}
+	tail, ok := rest.SyntaxCdr().(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(tail) {
+		return nil
+	}
+	switch s := rest.SyntaxCar().(type) {
+	case *syntax.SyntaxSymbol:
+		return s
+	case *syntax.SyntaxPair:
+		if syntax.IsSyntaxEmptyList(s) {
+			return nil
+		}
+		name, ok := s.SyntaxCar().(*syntax.SyntaxSymbol)
+		if !ok {
+			return nil
+		}
+		return name
+	}
+	return nil
 }
 
 // referenceReachesBinderDirectly reports whether the reference sym reaches the

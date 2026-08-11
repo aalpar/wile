@@ -118,3 +118,65 @@ func TestEngine_EvalProgram_WrapperHeadIsNotShadowable(t *testing.T) {
 		})
 	}
 }
+
+// TestEngine_EvalProgram_DefinitionHeadIsNotSelfShadowed pins that a define
+// whose name is a syntactic keyword is still a define. R7RS §5.3.1 explicitly
+// contemplates it, Chez answers 3 for (define define 3) then define, and so did
+// master.
+//
+// It regressed the moment special-form heads started being decided by binding
+// identity: the expander's letrec* pre-scan predeclares a top-level define's
+// ∅-scoped binder BEFORE validation resolves the head, so the head of the very
+// form that CREATES the binding found it and demoted itself. The whole program
+// then compiled to (#<void> define 3) and died at RUNTIME with "application:
+// expected a procedure, got #<void>" — no compile diagnostic, exit 1 only after
+// the earlier forms had already run.
+//
+// EvalProgram, not EvalMultiple, is the reproducing path and the only one that
+// matters: the pre-scan runs over a (begin …) body, which is what EvalProgram
+// (and the CLI's -e, which joins its expressions into one program) builds.
+//
+// The last row is the other side of the exemption, and the reason it is asked
+// as an identity compare rather than "this form is a define": once `define` IS
+// a variable, a LATER define of a different name is an application of it.
+// Measured on Petite Chez 10 — "(define define 3) (define foo 5)" reports
+// "variable foo is not bound", i.e. Chez also read the second form as a call.
+func TestEngine_EvalProgram_DefinitionHeadIsNotSelfShadowed(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name    string
+		src     string
+		want    string
+		wantErr bool
+	}{
+		{name: "define define", src: "(define define 3)\ndefine", want: "3"},
+		{name: "define define alone", src: "(define define 3)", want: "#<void>"},
+		// The later-form shape: the failure was reported at <eval>:2:1, so the
+		// demotion is not an artifact of the define being first in the program.
+		{name: "define define in a later form",
+			src: "(+ 1 1)\n(define define 3)\ndefine", want: "3"},
+		// define-syntax is a keyword the pre-scan does NOT predeclare (it binds in
+		// the expand environment), so this row is a ratchet: green before and
+		// after, pinning that the exemption did not have to reach it.
+		{name: "define define-syntax", src: "(define define-syntax 3)\ndefine-syntax", want: "3"},
+		{name: "define-syntax define-syntax",
+			src:  "(define-syntax define-syntax (syntax-rules () ((_ a b) 7)))\n(define-syntax p q)",
+			want: "7"},
+		{name: "a later define of another name is a call",
+			src: "(define define 3)\n(define foo 5)", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			eng, err := wile.NewEngine(ctx)
+			qt.Assert(t, err, qt.IsNil)
+			result, err := eng.EvalProgram(ctx, tc.src, "<test>")
+			if tc.wantErr {
+				qt.Assert(t, err, qt.IsNotNil,
+					qt.Commentf("a define form headed by a variable must be a call"))
+				return
+			}
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
