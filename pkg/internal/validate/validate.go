@@ -48,8 +48,9 @@ func validateBodySlice(
 ) ([]ValidatedExpr, bool) {
 	var body []ValidatedExpr
 	bodyEnv := env
+	bodyCtx := withBodyEntryEnv(ctx, env)
 	for i := start; i < len(elements); i++ {
-		expr := validateExpr(ctx, bodyEnv, elements[i], result)
+		expr := validateExpr(bodyCtx, bodyEnv, elements[i], result)
 		if expr != nil {
 			body = append(body, expr)
 			bodyEnv = bindBodyDefineNames(bodyEnv, expr)
@@ -153,7 +154,7 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 			// binding it resolves to. The name test comes first so an ordinary
 			// call pays no resolution.
 			spec := forms.RegistryFor(env).Lookup(symVal.Key)
-			if spec != nil && spec.Validate != nil && headDenotesSpecialForm(env, symVal, sym, definitionBinder(spec.Name, pair)) {
+			if spec != nil && spec.Validate != nil && headDenotesSpecialForm(ctx, env, symVal, sym, definitionBinder(spec.Name, pair)) {
 				expr := spec.Validate(ctx, env, pair, result)
 				if expr != nil {
 					// Override formName only for passthrough forms (prefixed with "@")
@@ -212,24 +213,36 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 //
 // A DEFINITION'S OWN HEAD IS EXEMPT, via the binder parameter. The shadow a
 // define establishes begins AFTER the define, never at its own keyword — R7RS
-// §5.3.1 contemplates defining a variable whose name is a syntactic keyword, so
-// (define define 3) is a definition and evaluates to 3 in Chez as it did on
-// master. Wile could not see that without help: the expander's letrec* pre-scan
-// (compilation.ExpandBodyWithDefineSyntax) predeclares a top-level define's
-// ∅-scoped binder BEFORE validation runs, so by the time the head is resolved
-// the binding the form is still establishing already answers, and
-// referenceReachesBinderDirectly's ∅-scoped footing grants it the shadow. The
-// exemption is asked the same way as everything else here — by binding
-// IDENTITY, resolving the binder off this same env inside this same window —
-// so it fires only for the form's own binding and leaves a LATER define of a
-// different name demoted, which is what both master and Chez do once `define`
+// §5.3.1 (p.26) contemplates defining a variable whose name is a syntactic
+// keyword, so (define define 3) is a definition and evaluates to 3. Measured
+// 2026-08-11: Petite Chez 10.4.1 and Racket 9.2 both answer 3, as did master.
+//
+// The exemption is asked the same way as everything else here — by binding
+// IDENTITY, resolving the binder off this same env inside this same window — so
+// it fires only for the form's own binding and leaves a LATER define of a
+// DIFFERENT name demoted, which is what master and both peers do once `define`
 // is a variable.
+//
+// AT THE TOP LEVEL THE Predeclared ARM ABOVE NOW REACHES (define define 3)
+// FIRST, so the exemption is left carrying two narrower cases: a REDEFINITION
+// after the first has compiled and cleared the mark, and a body-local define
+// whose name the enclosing body already bound. Wile reads both as definitions;
+// measured 2026-08-11, both peers read a redefinition as a CALL and error
+// ("attempt to apply non-procedure 3"). R7RS does not settle it — §5.3.1's
+// keyword clause licenses the definition reading, and §5.3.2 p.27 says only
+// "it is an error" — so this divergence is pre-existing and left alone.
+//
+// IT IS REFUSED when the head's binding predates the body. Inside
+// (let ((define f)) (define define 2)) the definiendum resolves onto the LET's
+// binding, not onto one this define establishes, and exempting there re-reads a
+// call as a definition. See body_entry_env.go.
 //
 // GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
 // tie. That is deliberately not caught: it reaches the compile path's recover
 // boundary and surfaces as a CompilationError chaining the sentinel, which is
 // the answer an ambiguous identifier is supposed to get.
 func headDenotesSpecialForm(
+	ctx context.Context,
 	env *environment.EnvironmentFrame,
 	symVal *values.Symbol,
 	sym *syntax.SyntaxSymbol,
@@ -264,7 +277,11 @@ func headDenotesSpecialForm(
 	if b == ge.SealedBindingAt(symVal, q, env.PhaseLevel()) {
 		return true
 	}
-	if formEstablishesBinding(env, binder, b) {
+	// The own-head exemption, refused when the head's binding predates the body:
+	// inside (let ((define f)) (define define 2)) the definiendum resolves onto
+	// the LET's binding, so exempting there re-reads a call as a definition. See
+	// body_entry_env.go.
+	if !bodyBindingPredatesBody(ctx, symVal, scopes, b) && formEstablishesBinding(env, binder, b) {
 		return true
 	}
 	return !referenceReachesBinderDirectly(env, symVal, scopes, b)

@@ -405,6 +405,34 @@ func TestBindingModelMatrix(t *testing.T) {
 		{name: "locally shadowed define with no value is already a call",
 			units: []string{`(let ((define (lambda args 'called))) (define define))`},
 			want:  "called"},
+		// A BODY-LEVEL begin SPLICES, so the row above must answer the same
+		// through one. R7RS §5.3.2 (p.26) closing sentence: "Wherever an
+		// internal definition can occur, (begin ⟨definition₁⟩ …) is equivalent
+		// to the sequence of definitions that form the body of the begin."
+		//
+		// This is the ratchet on the CARRIER, and it is the row that says why
+		// validateBegin must NOT start its own body record: a spliced begin is
+		// not a region, so it inherits the enclosing body's entry environment.
+		// Giving it its own would make (lambda () (define define 1) (begin
+		// (define define 2))) see the FIRST define's fabricated frame as the
+		// entry chain and demote the second — the enclosing body's own define
+		// misread as an enclosing binder's.
+		{name: "locally shadowed define stays a call through a spliced begin",
+			units: []string{`(let ((define (lambda args 'called))) (begin (define define 2)))`},
+			want:  "called"},
+		// AN INTERNAL DEFINE'S REGION IS THE WHOLE BODY, including a head
+		// EARLIER in it. R7RS §5.3.2 (p.26): the variables are "local to the
+		// ⟨body⟩" and "the region of the binding is the entire ⟨body⟩".
+		//
+		// This is the direction bindBodyDefineNames' comment calls a known hole
+		// — it is incremental, so it covers a reference AFTER the define only.
+		// Measured 2026-08-11: Petite Chez 10.4.1 729, Racket 9.2 729, Wile
+		// master 9. Master is the outlier and this branch closes it; the row is
+		// here so a later change to the entry-env carrier cannot quietly hand
+		// the head back to the special form.
+		{name: "internal define shadows a special form for the whole body",
+			units: []string{`(let () (define quote (lambda (x) (* x x x))) (quote 9))`},
+			want:  "729"},
 		// The IMPORTED-RENAME arm, which the deleted local-only check could
 		// never see. Measured at the parent commit:
 		// "set! requires exactly 2 argument(s), got 4".
