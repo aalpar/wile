@@ -234,9 +234,10 @@ func TestLetIsOrShapedRefusals(t *testing.T) {
 
 // TestLetIsOrShapedOpaqueIsNotBlanketRefusal is the other direction of the
 // opaque scan. Refusing every opaque alternative would be sound and useless —
-// the lowering exists for `or`, whose 340 stdlib expansions sit next to
-// quasiquote-heavy code. The scan reuses forEachRawSymbol's depth walk, so a
-// template that merely MENTIONS the name as data does not cost the frame.
+// the lowering exists for `or`, whose 340 expansions across the stdlib and the
+// larceny corpus (LetIsOrShaped's own count) sit next to quasiquote-heavy code.
+// The scan reuses forEachRawSymbol's depth walk, so a template that merely
+// MENTIONS the name as data does not cost the frame.
 func TestLetIsOrShapedOpaqueIsNotBlanketRefusal(t *testing.T) {
 	// `(missing t) — t is datum, not a reference; no unquote brings it back to
 	// an evaluated position.

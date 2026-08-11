@@ -139,18 +139,23 @@ func TestLibraryBody_SyntacticKeywordAsVariableRefused(t *testing.T) {
 	}
 }
 
-// The control for the test above: the TOP-LEVEL twins already refused, which is
+// The control for the test above: the TOP-LEVEL twins already failed, which is
 // what made the library arm a hole rather than a missing feature. Without this
 // row, a change that made the whole tree refuse keywords for some unrelated
 // reason would look like the fix.
 //
-// The two sentinels differ, and the difference is the same fact
-// headDenotesSpecialForm turns on: `if` has NO phase-0 binding at all, so the
-// top level reports it unbound, while `define-syntax` DOES have one (measured:
-// BindingTypePrimitive, a syntax compiler) and reaches the keyword refusal.
-// Inside a library body both resolve, through the library-scope arm, so both
-// must reach the refusal there.
-func TestTopLevel_SyntacticKeywordAsVariableRefused(t *testing.T) {
+// NAMED FOR WHAT IT PINS, which is weaker than a keyword refusal on every row.
+// The property held here is that a syntactic keyword in value position never
+// yields a VALUE at the top level; only the `define-syntax` row pins the keyword
+// refusal itself. The two sentinels differ because of the same fact
+// headDenotesSpecialForm turns on: `if` has NO phase-0 binding at all, so the top
+// level reports it unbound (ErrNoSuchBinding — a different mechanism, which
+// would keep passing if the keyword refusal were deleted from the top-level
+// path), while `define-syntax` DOES have one (measured: BindingTypePrimitive, a
+// syntax compiler) and reaches the refusal. Inside a library body both resolve,
+// through the library-scope arm, so both must reach the refusal there — that is
+// what TestLibraryBody_SyntacticKeywordAsVariableRefused asserts.
+func TestTopLevel_KeywordInValuePositionNeverYieldsAValue(t *testing.T) {
 	cases := []struct {
 		keyword string
 		want    error
