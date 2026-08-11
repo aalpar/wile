@@ -303,8 +303,20 @@ func TestBindingModelMatrix(t *testing.T) {
 		{name: "define over bootstrap macro name",
 			units: []string{`(define when 5) (list when (when #t 1))`},
 			want:  "(5 1)"},
-		// A SPECIAL FORM is shadowable too (R7RS §4.3: "local variable bindings
-		// can shadow syntactic bindings"). The validator used to decide "is this
+		// A SPECIAL FORM is shadowable too. The on-point authority for THIS row
+		// is R7RS §5.3.1 (p.26), not §4.3: a top-level definition "has
+		// essentially the same effect as the assignment expression (set! …) if
+		// ⟨variable⟩ is bound to a non-syntax value. However, if ⟨variable⟩ is
+		// not bound, OR IS A SYNTACTIC KEYWORD, then the definition will bind
+		// ⟨variable⟩ to a new location before performing the assignment." §4.3's
+		// guarantee is worded against "local variable bindings", so it covers
+		// the lambda/let rows below but does not by itself license this one.
+		//
+		// Measured 2026-08-11: Petite Chez 10.4.1 and Racket 9.2 (-I r5rs) both
+		// answer (1 2 3 4); Wile master raises "set! requires exactly 2
+		// argument(s), got 4".
+		//
+		// The validator used to decide "is this
 		// a special form" by a registry hit on the NAME, gated only on a
 		// lexical-chain local check, so a top-level define was invisible to it
 		// and (set! 1 2 3 4) was read as the form. It is now decided by binding
@@ -332,7 +344,27 @@ func TestBindingModelMatrix(t *testing.T) {
 			want:  "7"},
 		// THE SHADOW MUST NOT REACH BACKWARDS. A top-level define shadows the
 		// special form from the define ONWARD; a use EARLIER in the same program
-		// still denotes the form. Master answers 5 and so does Chez.
+		// still denotes the form.
+		//
+		// THE AUTHORITY IS R7RS §4.2.3 (p.17), not a peer implementation:
+		// "(begin ⟨expression or definition⟩ …) … can appear as part of a
+		// ⟨body⟩, or at the outermost level of a ⟨program⟩, or at the REPL …
+		// It causes the contained expressions and definitions to be evaluated
+		// EXACTLY AS IF THE ENCLOSING BEGIN CONSTRUCT WERE NOT PRESENT."
+		// So this row's program and the same two forms written directly must
+		// agree, and §5.3.2's letrec* rule does not reach here: its enumeration
+		// (lambda, let, let*, letrec, letrec*, let-values, let*-values,
+		// let-syntax, letrec-syntax, parameterize, guard, case-lambda) does not
+		// include the top level.
+		//
+		// MEASURED 2026-08-11, sequential forms vs the same forms in a begin:
+		//   Racket 9.2 (racket -I r5rs)  5 / 5   — conforms
+		//   Wile master                  5 / 5   — conforms
+		//   Petite Chez 10.4.1           5 / "Exception: invalid syntax ()"
+		// Chez DEVIATES here, so it is not the reference for this row; it
+		// disagrees with its own sequential answer, which is what §4.2.3
+		// forbids. Do not "fix" this row toward Chez. Chez and Racket DO both
+		// agree with the other shadow rows below (see each).
 		//
 		// This needs an explicit (begin …) and cannot be written as two units.
 		// EvalMultiple compiles each top-level form independently, so across
@@ -352,10 +384,17 @@ func TestBindingModelMatrix(t *testing.T) {
 			units: []string{`(begin (define captured (let () 5)) (define let 3) captured)`},
 			want:  "5"},
 		// A LOCAL binding of `define` makes (define define 2) a CALL, not a
-		// definition — master and Chez both answer called. The own-head exemption
-		// is meant to fire only for the binding the form itself establishes, but
-		// it resolves the binder off the same env, so when the binder is SPELLED
-		// `define` it lands on the local shadow and the exemption misfires.
+		// definition. R7RS §5.3.2 (p.26): the variables defined by internal
+		// definitions are local to the ⟨body⟩ and "the region of the binding is
+		// the entire ⟨body⟩", so the let's `define` governs the whole body
+		// including this form's head. Measured 2026-08-11 — Petite Chez 10.4.1
+		// `called`, Racket 9.2 (-I r5rs) `called`, Wile master `called`. All
+		// three agree, unlike the §4.2.3 row above.
+		//
+		// The own-head exemption is meant to fire only for the binding the form
+		// itself establishes, but it resolves the binder off the same env, so
+		// when the binder is SPELLED `define` it lands on the local shadow and
+		// the exemption misfires.
 		{name: "locally shadowed define with a value is a call",
 			units: []string{`(let ((define (lambda args 'called))) (define define 2))`},
 			want:  "called"},
