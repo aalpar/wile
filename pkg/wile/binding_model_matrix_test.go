@@ -330,6 +330,42 @@ func TestBindingModelMatrix(t *testing.T) {
 		{name: "define apply then read it back",
 			units: []string{`(define apply 7)`, `apply`},
 			want:  "7"},
+		// THE SHADOW MUST NOT REACH BACKWARDS. A top-level define shadows the
+		// special form from the define ONWARD; a use EARLIER in the same program
+		// still denotes the form. Master answers 5 and so does Chez.
+		//
+		// This needs an explicit (begin …) and cannot be written as two units.
+		// EvalMultiple compiles each top-level form independently, so across
+		// units — or across two entries here — the earlier (let () 5) is already
+		// compiled before the define exists and the bug cannot appear: measured,
+		// two units give 5 then void on BOTH binaries. The (begin …) is what the
+		// CLI applies to -e and --file, and it is what routes the body through
+		// the expander's letrec* pre-scan (ExpandBodyWithDefineSyntax), which
+		// predeclares EVERY binder in the body before ANY head is resolved. The
+		// validator then resolves `let` against a binding whose define has not
+		// run, and demotes a call that precedes it.
+		//
+		// So this row is also the only one in the table that exercises the
+		// begin-wrapped path at all — which is exactly why the arm shipped with
+		// this defect unnoticed.
+		{name: "shadow does not reach a use before it",
+			units: []string{`(begin (define captured (let () 5)) (define let 3) captured)`},
+			want:  "5"},
+		// A LOCAL binding of `define` makes (define define 2) a CALL, not a
+		// definition — master and Chez both answer called. The own-head exemption
+		// is meant to fire only for the binding the form itself establishes, but
+		// it resolves the binder off the same env, so when the binder is SPELLED
+		// `define` it lands on the local shadow and the exemption misfires.
+		{name: "locally shadowed define with a value is a call",
+			units: []string{`(let ((define (lambda args 'called))) (define define 2))`},
+			want:  "called"},
+		// RATCHET, green before and after, and it localises the defect above:
+		// the no-VALUE shape (f f) is already guarded, so a fix must not be
+		// written as "stop exempting when the binder is spelled like the head" —
+		// that would regress this row. Only (f f v) misfires.
+		{name: "locally shadowed define with no value is already a call",
+			units: []string{`(let ((define (lambda args 'called))) (define define))`},
+			want:  "called"},
 		// The IMPORTED-RENAME arm, which the deleted local-only check could
 		// never see. Measured at the parent commit:
 		// "set! requires exactly 2 argument(s), got 4".
