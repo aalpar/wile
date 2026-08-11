@@ -43,6 +43,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING (sandbox semantics): an authorizer denial can no longer be caught
+  from Scheme.** Every primitive-frame error was converted into a Scheme
+  condition, so an enclosing `guard` or `with-exception-handler` absorbed
+  authorizer refusals: under `KitchenSink` plus a deny-all authorizer, all
+  eleven rows of the authorizer sweep, `(load …)`, a guarded `dynamic-wind`, and
+  a denial inside an SRFI-18 thread joined under `guard` all evaluated to
+  `'caught` with a nil host error. A sandboxed program could neutralise its own
+  sandbox's refusals.
+
+  Denials now reach the embedder carrying their source location and stack trace,
+  and `IsSchemeException` reports false for them — a denial is the sandbox's
+  answer, not a Scheme condition. The visible cost, pinned in the same table: an
+  escaping denial does not run an enclosing `dynamic-wind`'s *after* thunk,
+  exactly as an unguarded `(error …)` does not.
+
+- **Special forms can be shadowed by `define`, `let`, and any other binding
+  form.** The validator asked a name-keyed registry whether a head was a special
+  form and consulted only *local* bindings for a shadow, so a top-level `define`
+  and an imported rename were both invisible to it. It now resolves the head
+  through the environment and dispatches on the resulting binding. `(define set!
+  list)` followed by `(set! 1 2 3 4)` answers `(1 2 3 4)`, which R7RS §5.3.1
+  (p.26) blesses explicitly ("if ⟨variable⟩ is not bound, **or is a syntactic
+  keyword**, then the definition will bind ⟨variable⟩ to a new location") and
+  which Chez and Racket both implement; Wile previously errored. An imported
+  rename such as `(rename (lib) (put! set!))` works for the same reason.
+
+- **The REPL debugger suspends execution at a breakpoint** instead of only
+  rendering the stop. The `(dbg)` prompt's six stepping commands are live, with
+  one stop per source line and a depth-keyed `,finish` that also stops on a
+  same-depth sibling frame. Two limits are pinned rather than fixed:
+  **suspension does not reach `load` or `eval`**, which still fall back to
+  rendering, and a stepped run is not benchmarkable, because stepping defeats
+  environment-frame pooling. `docs/reference/cli-and-repl.md` claimed "hitting an
+  error suspends execution"; there are no error breakpoints and errors do not
+  suspend.
+
+- **`Engine.Close` reaps the resources of its own engine.** The per-engine
+  closer seam was per-*registration*, so on a registry shared through
+  `WithRegistry` every engine bound the *first* engine's `process-spawn` /
+  `thread-start!`, and the tracker captured in that closure collected the wrong
+  engine's resources. Measured: after `engine2.Close()` its own child was still
+  running, and `engine1.Close()` then SIGKILLed a live child of a still-running
+  engine. Ownership now hangs off the calling engine's root namespace.
+
 - **New: `registry.PrimitiveSpec.Mutates`.** Declares that a primitive
   destructively updates an existing Scheme value. Default `false`; required for
   any primitive whose `Impl` — or a closure it RETURNS — reaches a
@@ -272,6 +316,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `callForeignCached`'s eager recheck is unchanged.
 
 ### Fixed
+
+- **A top-level `(begin …)` gave its contents `letrec*` body semantics.** R7RS
+  §4.2.3 (p.17) requires a `begin` at the outermost level of a program to
+  evaluate its contents "exactly as if the enclosing `begin` construct were not
+  present", and §5.3.2 (p.26) enumerates the `letrec*` contexts without
+  including the top level. Every `--file`, `-e` and `--check` program is spliced
+  into one `(begin …)`, and the pre-scan minted a full binding for each `define`
+  in it before any head was resolved — so a `define` on the last line shadowed a
+  use of the same name on the first. A forward reference needs the *slot*, not
+  the denotation; the slot now carries a mark that clears when its `define` is
+  actually compiled. Measured against peers: Racket 9.2 conforms, Petite Chez
+  10.4.1 deviates here (it disagrees with its own answer for the same forms
+  written separately), so Chez is not the reference for this rule.
+
+- **`include` and `import` of a host file failed under any path-confining
+  authorizer once three or more source resolvers were chained.** The scan for a
+  differently-sourced resolver read only the immediately next member, so a chain
+  with two virtual layers ahead of the OS one — `WithSourceFS(stdlib.FS)`,
+  `WithSourceFS(appFS)`, `WithSourceOS()`, the shape `WithSourceFS` documents —
+  found virtual-fs behind virtual-fs and abandoned the search there. Every such
+  load reported `comes from virtual source "virtual-fs", not the host
+  filesystem: access denied`. Two members worked and three did not, which is why
+  every gate passed.
+
+- **A top-level `(define else #f)` broke `cond`, `case`, `guard` and
+  `syntax-case`.** The pattern-literal pin resolved both sides by walking every
+  instantiated phase in ascending order, so from a transformer body at phase 1
+  the walk reached phase 0 first and a user's definition pre-empted the ambient
+  auxiliary binding — a hard compile error on programs that had compiled before.
+  The leak ran the other way too: a `(begin-for-syntax (define else #f))`
+  reached phase-0 code.
+
+- **A registry supplying both an expand-phase primitive and a bootstrap macro of
+  one name overwrote the primitive's slot in place.** Sealing the expand-phase
+  copies put them on the exact coordinate a bootstrap `define-syntax` writes,
+  and those two sites store through a path the immutability guard never ran on.
+  The transformer then sat where the phase-binding tag filter could not find it
+  as syntax, under a stability stamp asserting a closed writer set over a slot
+  that had just been rewritten.
+
+- **`environment`, `make-namespace` and `namespace-require` were stamped
+  capture-safe while able to invoke a procedure.** A library body runs its own
+  procedural transformers, so the import path is a procedure-invoker; the
+  frame-reclaim classifier trusts that stamp to release an environment frame
+  across a capturing call. Reproduced at runtime, not inferred.
 
 - **`gcd`, `lcm`, `quotient`, `remainder` and `modulo` answered wrongly, and
   silently, on large inexact integers.** `(gcd 1e30 6)` was `1.0` where it is
