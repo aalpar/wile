@@ -19,6 +19,44 @@ package compilation
 // begin, include) use letrec* semantics: all defined names are visible
 // throughout the body, enabling forward references between defines.
 //
+// WHICH CONTEXTS ARE letrec*, PER THE SPEC — the list is closed, and the top
+// level is NOT in it. R7RS §5.3.2 (p.26) enumerates: "the body of a lambda,
+// let, let*, letrec, letrec*, let-values, let*-values, let-syntax,
+// letrec-syntax, parameterize, guard, or case-lambda" (plus bodies that only
+// become apparent after expanding other syntax). §5.3.2 also gives the rule
+// that unifies begin: "Wherever an internal definition can occur, (begin
+// ⟨definition₁⟩ …) is equivalent to the sequence of definitions that form the
+// body of the begin" — begin SPLICES INTO ITS CONTEXT and never forms a region
+// of its own. At the outermost level §4.2.3 (p.17) says the same from the other
+// side: a top-level begin's contents are evaluated "exactly as if the enclosing
+// begin construct were not present".
+//
+// This matters here because Engine.EvalProgram (pkg/wile/engine.go, wrapInBegin)
+// splices EVERY --file/-e/--check/MCP program into one (begin …). That wrapper
+// must stay semantically invisible; giving it body semantics makes a define on
+// the last line visible on the first, which §4.2.3 forbids. Measured 2026-08-11
+// on `(define captured (let () 5))` + `(define let 3)`, sequential vs wrapped:
+// Racket 9.2 (racket -I r5rs) 5/5 and Wile master 5/5 both conform; Petite Chez
+// 10.4.1 gives 5 then "Exception: invalid syntax ()" and DEVIATES. Do not take
+// Chez as the reference for this rule.
+//
+// A LIBRARY BODY IS NOT STATED TO BE letrec* EITHER, contrary to common belief.
+// §5.6.1 (p.28) leaves it out of §5.3.2's list, calls its begin "analogous to,
+// but not the same as, the two types of begin defined in section 4.2.3", and
+// says its expressions are expanded "in the order in which they occur" and
+// executed "in textual order". Treat library-body letrec* as an implementation
+// choice to be justified, not as a requirement to be preserved.
+//
+// WHAT A FORWARD REFERENCE ACTUALLY NEEDS is a global INDEX, not a binding:
+// CompileSymbol's zero-scope arm raises ErrNoSuchBinding only when
+// GetGlobalIndexWithScopes returns nil, and when the index exists with no
+// binding it already emits a runtime-resolution load ("Binding not yet defined
+// at compile time"). predeclareBinding below creates a full BindingTypeVariable,
+// which is more than that path requires — and the surplus is what the
+// validator's headDenotesSpecialForm reads as a variable shadowing a keyword.
+// Top-level mutual recursion never needed letrec* at all: the reference sits in
+// a lambda body and resolves when the procedure is called.
+//
 // The letrec* algorithm has two passes:
 //   1. Pre-scan: walk forms, detect define forms, register placeholder bindings
 //   2. Process: expand or compile each form sequentially (with all names visible)
@@ -70,7 +108,7 @@ import (
 //
 // This is the shared implementation used by both the expander
 // (ExpandBodyWithDefineSyntax) and the compiler (predeclareDefineBinding,
-// predeclareDefineBindingFromValidated).
+// predeclareDefineFromValidatedRecursive).
 func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, scopes []*syntax.Scope, source *syntax.SourceContext) {
 	if env.LocalEnvironment() != nil {
 		_, _ = env.MaybeCreateLocalBinding(name, environment.BindingTypeVariable, scopes, source)
@@ -87,13 +125,29 @@ func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, s
 	// The returned index is PINNED to the slot this call landed on, at THIS view's
 	// own coordinates, so the source stamp below cannot land on another slot of the
 	// same name — one belonging to another expansion, or to the sealed startup set.
-	ownIndex, _ := env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable, scopes)
+	ownIndex, created := env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable, scopes)
 	binding := env.GlobalEnvironment().GetOwnGlobalBinding(ownIndex)
-	if binding == nil || source == nil {
+	if binding == nil {
+		return
+	}
+	// The slot is a LOCATION, not yet a denotation: it exists so a forward
+	// reference resolves, but until the define is compiled the name still means
+	// whatever it meant before (a special form, an import, a primitive). Only a
+	// slot this pre-scan actually minted is marked — reusing an existing binding
+	// must not un-define it.
+	//
+	// The stamp is unconditional on source, which the old early return made it
+	// not: a binder with no source context is still predeclared.
+	if source == nil && !created {
 		return
 	}
 	binding.UpdateMeta(func(m *environment.BindingMeta) bool {
-		m.Source = source
+		if source != nil {
+			m.Source = source
+		}
+		if created {
+			m.Predeclared = true
+		}
 		return true
 	})
 }

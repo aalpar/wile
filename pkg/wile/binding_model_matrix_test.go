@@ -99,6 +99,23 @@ func matrixEngine(t *testing.T, extra ...wile.EngineOption) *wile.Engine {
   (import (scheme base))
   (begin (define map 3) (define (g) map)))
 `)},
+			// lib-renamer/lib-setbang are the IMPORTED-RENAME half of the
+			// special-form shadow ("imported rename shadows set!" below). The
+			// except is not decoration: (scheme base) exports set! itself, and
+			// the import-conflict detector (R7RS §5.6, library_bindings.go:688)
+			// refuses two different bindings of one name, which would make the
+			// row fail for the wrong reason.
+			"lib-renamer.scm": &fstest.MapFile{Data: []byte(`(define-library (lib-renamer)
+  (export put!)
+  (import (scheme base))
+  (begin (define put! list)))
+`)},
+			"lib-setbang.scm": &fstest.MapFile{Data: []byte(`(define-library (lib-setbang)
+  (export probe)
+  (import (except (scheme base) set!)
+          (rename (lib-renamer) (put! set!)))
+  (begin (define (probe) (set! 1 2 3 4))))
+`)},
 		}),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
@@ -289,6 +306,183 @@ func TestBindingModelMatrix(t *testing.T) {
 		{name: "define over bootstrap macro name",
 			units: []string{`(define when 5) (list when (when #t 1))`},
 			want:  "(5 1)"},
+		// A SPECIAL FORM is shadowable too. The on-point authority for THIS row
+		// is R7RS §5.3.1 (p.26), not §4.3: a top-level definition "has
+		// essentially the same effect as the assignment expression (set! …) if
+		// ⟨variable⟩ is bound to a non-syntax value. However, if ⟨variable⟩ is
+		// not bound, OR IS A SYNTACTIC KEYWORD, then the definition will bind
+		// ⟨variable⟩ to a new location before performing the assignment." §4.3's
+		// guarantee is worded against "local variable bindings", so it covers
+		// the lambda/let rows below but does not by itself license this one.
+		//
+		// Measured 2026-08-11: Petite Chez 10.4.1 and Racket 9.2 (-I r5rs) both
+		// answer (1 2 3 4); Wile master raises "set! requires exactly 2
+		// argument(s), got 4".
+		//
+		// The validator used to decide "is this
+		// a special form" by a registry hit on the NAME, gated only on a
+		// lexical-chain local check, so a top-level define was invisible to it
+		// and (set! 1 2 3 4) was read as the form. It is now decided by binding
+		// IDENTITY: the head resolves by scopes and denotes the form only when
+		// it resolves to the SEALED binding (or to nothing at all).
+		//
+		// Two units, so the shadow has to survive ACROSS compilation units
+		// rather than only inside the one that declared it. One unit also
+		// discriminates — the expander predeclares a top-level define's binding
+		// before validation runs, so GetBinding finds it either way (measured on
+		// both binaries with a single -e) — but it would pin the weaker claim.
+		// Measured at the parent commit: "set! requires exactly 2 argument(s),
+		// got 4 in set! form: invalid syntax".
+		{name: "define shadows set! special form",
+			units: []string{`(define set! list)`, `(set! 1 2 3 4)`},
+			want:  "(1 2 3 4)"},
+		// The other side of the identity rule, and the reason the sealed-pointer
+		// COMPARE is needed rather than a bare "has a binding" test: apply and
+		// dynamic-wind are both validator table entries AND phase-0 bindings
+		// that resolve to their own sealed slot, so an unshadowed one must keep
+		// denoting the form. This row is a RATCHET (green before and after) —
+		// it pins that shadowing apply leaves its codegen intact.
+		{name: "define apply then read it back",
+			units: []string{`(define apply 7)`, `apply`},
+			want:  "7"},
+		// THE SHADOW MUST NOT REACH BACKWARDS. A top-level define shadows the
+		// special form from the define ONWARD; a use EARLIER in the same program
+		// still denotes the form.
+		//
+		// THE AUTHORITY IS R7RS §4.2.3 (p.17), not a peer implementation:
+		// "(begin ⟨expression or definition⟩ …) … can appear as part of a
+		// ⟨body⟩, or at the outermost level of a ⟨program⟩, or at the REPL …
+		// It causes the contained expressions and definitions to be evaluated
+		// EXACTLY AS IF THE ENCLOSING BEGIN CONSTRUCT WERE NOT PRESENT."
+		// So this row's program and the same two forms written directly must
+		// agree, and §5.3.2's letrec* rule does not reach here: its enumeration
+		// (lambda, let, let*, letrec, letrec*, let-values, let*-values,
+		// let-syntax, letrec-syntax, parameterize, guard, case-lambda) does not
+		// include the top level.
+		//
+		// MEASURED 2026-08-11, sequential forms vs the same forms in a begin:
+		//   Racket 9.2 (racket -I r5rs)  5 / 5   — conforms
+		//   Wile master                  5 / 5   — conforms
+		//   Petite Chez 10.4.1           5 / "Exception: invalid syntax ()"
+		// Chez DEVIATES here, so it is not the reference for this row; it
+		// disagrees with its own sequential answer, which is what §4.2.3
+		// forbids. Do not "fix" this row toward Chez. Chez and Racket DO both
+		// agree with the other shadow rows below (see each).
+		//
+		// This needs an explicit (begin …) and cannot be written as two units.
+		// EvalMultiple compiles each top-level form independently, so across
+		// units — or across two entries here — the earlier (let () 5) is already
+		// compiled before the define exists and the bug cannot appear: measured,
+		// two units give 5 then void on BOTH binaries. The (begin …) is what the
+		// CLI applies to -e and --file, and it is what routes the body through
+		// the expander's letrec* pre-scan (ExpandBodyWithDefineSyntax), which
+		// predeclares EVERY binder in the body before ANY head is resolved. The
+		// validator then resolves `let` against a binding whose define has not
+		// run, and demotes a call that precedes it.
+		//
+		// So this row is also the only one in the table that exercises the
+		// begin-wrapped path at all — which is exactly why the arm shipped with
+		// this defect unnoticed.
+		{name: "shadow does not reach a use before it",
+			units: []string{`(begin (define captured (let () 5)) (define let 3) captured)`},
+			want:  "5"},
+		// A LOCAL binding of `define` makes (define define 2) a CALL, not a
+		// definition. R7RS §5.3.2 (p.26): the variables defined by internal
+		// definitions are local to the ⟨body⟩ and "the region of the binding is
+		// the entire ⟨body⟩", so the let's `define` governs the whole body
+		// including this form's head. Measured 2026-08-11 — Petite Chez 10.4.1
+		// `called`, Racket 9.2 (-I r5rs) `called`, Wile master `called`. All
+		// three agree, unlike the §4.2.3 row above.
+		//
+		// The own-head exemption is meant to fire only for the binding the form
+		// itself establishes, but it resolves the binder off the same env, so
+		// when the binder is SPELLED `define` it lands on the local shadow and
+		// the exemption misfires.
+		{name: "locally shadowed define with a value is a call",
+			units: []string{`(let ((define (lambda args 'called))) (define define 2))`},
+			want:  "called"},
+		// RATCHET, green before and after, and it localises the defect above:
+		// the no-VALUE shape (f f) is already guarded, so a fix must not be
+		// written as "stop exempting when the binder is spelled like the head" —
+		// that would regress this row. Only (f f v) misfires.
+		{name: "locally shadowed define with no value is already a call",
+			units: []string{`(let ((define (lambda args 'called))) (define define))`},
+			want:  "called"},
+		// A BODY-LEVEL begin SPLICES, so the row above must answer the same
+		// through one. R7RS §5.3.2 (p.26) closing sentence: "Wherever an
+		// internal definition can occur, (begin ⟨definition₁⟩ …) is equivalent
+		// to the sequence of definitions that form the body of the begin."
+		//
+		// This is the ratchet on the CARRIER, and it is the row that says why
+		// validateBegin must NOT start its own body record: a spliced begin is
+		// not a region, so it inherits the enclosing body's entry environment.
+		// Giving it its own would make (lambda () (define define 1) (begin
+		// (define define 2))) see the FIRST define's fabricated frame as the
+		// entry chain and demote the second — the enclosing body's own define
+		// misread as an enclosing binder's.
+		{name: "locally shadowed define stays a call through a spliced begin",
+			units: []string{`(let ((define (lambda args 'called))) (begin (define define 2)))`},
+			want:  "called"},
+		// AN INTERNAL DEFINE'S REGION IS THE WHOLE BODY, including a head
+		// EARLIER in it. R7RS §5.3.2 (p.26): the variables are "local to the
+		// ⟨body⟩" and "the region of the binding is the entire ⟨body⟩".
+		//
+		// This is the direction bindBodyDefineNames' comment calls a known hole
+		// — it is incremental, so it covers a reference AFTER the define only.
+		// Measured 2026-08-11: Petite Chez 10.4.1 729, Racket 9.2 729, Wile
+		// master 9. Master is the outlier and this branch closes it; the row is
+		// here so a later change to the entry-env carrier cannot quietly hand
+		// the head back to the special form.
+		{name: "internal define shadows a special form for the whole body",
+			units: []string{`(let () (define quote (lambda (x) (* x x x))) (quote 9))`},
+			want:  "729"},
+		// The IMPORTED-RENAME arm, which the deleted local-only check could
+		// never see. Measured at the parent commit:
+		// "set! requires exactly 2 argument(s), got 4".
+		//
+		// It has to be a LIBRARY BODY, and the reason is the TIER, not
+		// evaluation order. A top-level import installs at (phase 0, SEALED)
+		// (see "define supersedes import then set!" above), so GetBinding and
+		// SealedBindingAt return the SAME pointer and the identity rule
+		// correctly says "this is still the form" — probed directly: resolved
+		// and sealed are one pointer, BindingTypeVariable, imported=true, even
+		// with the import in its own earlier unit. A library env is a flat
+		// island with no sealed tier of its own, so there the import is the
+		// maximal resolution and nothing sealed answers. Shadowing a special
+		// form by importing a rename at the ordinary top level therefore still
+		// does NOT happen, and that is a deliberate consequence of keeping the
+		// sealed compare rather than an oversight.
+		{name: "imported rename shadows set! special form",
+			units: []string{`(import (lib-setbang)) (probe)`},
+			want:  "(1 2 3 4)"},
+		// AND THE SHADOW STOPS AT THE MACRO BOUNDARY (R7RS §4.3). A template's
+		// free `set!` means what it meant where the macro was WRITTEN. Wile
+		// records that for names that were bound at definition time, as a
+		// *GlobalIndex pin on the symbol (SyntaxSymbol.ResolvedBinding,
+		// tryResolvedBinding); a special form has no binding, so it gets no pin,
+		// and the template's `set!{intro}` is left resolving against the use
+		// site — where a ∅-scoped (define set! list) satisfies
+		// ScopesCompatible(∅, {intro}) and captures it.
+		//
+		// SILENT when it broke: the first row below returned 1, not 2 — the
+		// assignment compiled into a `list` call and was discarded, exit 0, no
+		// diagnostic. The second is the common shape: `or` expands to
+		// (let ((x E)) (if x x B)), so a captured `let` turns every `or` in the
+		// program into a call to 3.
+		//
+		// The counter is LET-bound rather than top-level only to dodge the
+		// immutable top level (`set!` on a define from an earlier unit is
+		// refused — see "set! own define later unit refused"); the capture under
+		// test is the template's `set!`, not the target's tier.
+		{name: "top-level define does not capture a template's set!",
+			units: []string{
+				`(define-syntax inc! (syntax-rules () ((_ v) (set! v (+ v 1)))))`,
+				`(define set! list)`,
+				`(define (bump) (let ((n 1)) (inc! n) n)) (bump)`},
+			want: "2"},
+		{name: "top-level define does not capture or's template let",
+			units: []string{`(define let 3)`, `(or #f 5)`},
+			want:  "5"},
 		// M8: delete own define works; delete sealed refused. Three separate
 		// units (not a begin-wrap, and not one multi-form EvalMultiple call) so
 		// runMatrix's per-unit failedAt can pin the failure to the READ

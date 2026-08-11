@@ -450,7 +450,7 @@ func CompileValidatedBegin(p *CompileTimeContinuation, ctctx CompileTimeCallCont
 	// R7RS §5.3.2: Internal definitions use letrec* semantics
 	// Pass 1: Pre-declare all define bindings so forward references work
 	for _, expr := range v.Body() {
-		p.predeclareDefineBindingFromValidated(expr)
+		p.predeclareDefineFromValidatedRecursive(expr)
 	}
 
 	// Pass 1.5 (Lever A): at the user-program top-level unit only, classify the unit

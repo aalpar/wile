@@ -47,16 +47,63 @@ func validateBodySlice(
 	result *ValidationResult,
 ) ([]ValidatedExpr, bool) {
 	var body []ValidatedExpr
+	bodyEnv := env
+	bodyCtx := withBodyEntryEnv(ctx, env)
 	for i := start; i < len(elements); i++ {
-		expr := validateExpr(ctx, env, elements[i], result)
+		expr := validateExpr(bodyCtx, bodyEnv, elements[i], result)
 		if expr != nil {
 			body = append(body, expr)
+			bodyEnv = bindBodyDefineNames(bodyEnv, expr)
 		}
 	}
 	if len(body) != len(elements)-start {
 		return nil, false
 	}
 	return body, true
+}
+
+// bindBodyDefineNames extends env with the names an ALREADY-VALIDATED body
+// expression defines, so a later expression in the same body sees them as local
+// variables. Without it an internal define cannot shadow a special form
+// (R7RS §4.2.2, §4.3): (let () (define quote (lambda (x) (* x x x))) (quote 9))
+// read `quote` as the special form and yielded 9.
+//
+// This is INCREMENTAL where its compile-side analogue
+// (compilation.predeclareDefineFromValidatedRecursive) is a PRE-pass over the
+// whole body. A pre-pass is impossible here: validation is what PRODUCES the
+// *ValidatedDefine to scan. So it covers the backward direction only — a
+// reference AFTER the define.
+//
+// THE FORWARD DIRECTION IS A KNOWN, UNCLOSED HOLE, not a case the compiler
+// rescues. R7RS §5.3.2 makes an internal define's region the whole body, so in
+// (define (f) (define (g) (quote 9)) (define quote cube) (g)) the `quote`
+// inside g denotes the local and 729 is the meaning; Wile yields 9. The
+// compiler's pre-pass cannot repair it: it creates the VARIABLE, but validation
+// has already frozen the head into a *ValidatedQuote, and nothing downstream
+// re-asks. Closing it needs a name-collecting scan over the raw body syntax
+// before any element is validated, which is a separate change. Master answers 9
+// here too, so this is not a regression.
+//
+// The nil-env guard is required, not defensive: createChildEnvWithSymbols
+// bottoms out in NewEnvironmentFrameWithParent, which PANICS on a nil parent,
+// and this package's callers routinely validate with no environment at all.
+func bindBodyDefineNames(env *environment.EnvironmentFrame, expr ValidatedExpr) *environment.EnvironmentFrame {
+	if env == nil {
+		return nil
+	}
+	switch v := expr.(type) {
+	case *ValidatedDefine:
+		return createChildEnvWithSymbols(env, []*syntax.SyntaxSymbol{v.Name()})
+
+	case *ValidatedBegin:
+		// define-values and friends expand to (begin (define …) …), so the
+		// defines a body actually introduces can sit one level down.
+		for _, sub := range v.Body() {
+			env = bindBodyDefineNames(env, sub)
+		}
+		return env
+	}
+	return env
 }
 
 func validateExpr(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
@@ -102,17 +149,12 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 	if ok {
 		symVal, ok := sym.Unwrap().(*values.Symbol)
 		if ok {
-			// R7RS §4.2.2: Local variable bindings shadow special forms
-			// Check if there's a local variable binding that shadows this form
-			hasLocal := env.HasLocalVariableBinding(symVal, syntax.ScopesOf(sym.Scopes()))
-			if hasLocal {
-				// Local variable shadows the special form - treat as procedure call
-				return validateCall(ctx, env, pair, result)
-			}
-
-			// Look up the form in the registry
+			// The registry answers CANDIDACY by name; headDenotesSpecialForm
+			// answers whether the head really denotes that form here, by the
+			// binding it resolves to. The name test comes first so an ordinary
+			// call pays no resolution.
 			spec := forms.RegistryFor(env).Lookup(symVal.Key)
-			if spec != nil && spec.Validate != nil {
+			if spec != nil && spec.Validate != nil && headDenotesSpecialForm(ctx, env, symVal, sym, definitionBinder(spec.Name, pair)) {
 				expr := spec.Validate(ctx, env, pair, result)
 				if expr != nil {
 					// Override formName only for passthrough forms (prefixed with "@")
@@ -132,6 +174,254 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 
 	// Not a special form - it's a function call
 	return validateCall(ctx, env, pair, result)
+}
+
+// headDenotesSpecialForm reports whether a form head the validator's table
+// already recognizes BY NAME actually denotes that special form here, rather
+// than an ordinary operator that happens to share the spelling.
+//
+// R7RS §4.3 makes a variable binding shadow a syntactic one, and §5.3.1 lets a
+// top-level define do it too. A name cannot answer that question; only the
+// binding the head RESOLVES to can. So it is asked as an identity compare: the
+// head denotes the form when it resolves to the binding the startup set
+// installed, or to no binding at all, and denotes a variable otherwise.
+//
+// Both resolutions run in ONE call off ONE env, and neither may be hoisted out:
+// a local binding is a pointer into a frame's []Binding and EnsureLocalBinding
+// can reallocate it, so a *Binding is an identity only inside a window that
+// creates no bindings.
+//
+// THE BindingTypeVariable ARM IS THE LIBRARY CASE, not an optimization.
+// (scheme base) exports the special forms themselves, so inside a library body
+// that imports it, `define` resolves to an IMPORTED binding — a
+// BindingTypePrimitive with no sealed twin at phase 0 — and a rule that only
+// compared against the sealed binding would route every library define to
+// validateCall. An imported re-export of a special form still denotes the form;
+// only a VARIABLE shadows one.
+//
+// RESOLVING BY SCOPES IS NOT ENOUGH ON ITS OWN, because a special form has no
+// binding to pin. Wile keeps a free template identifier hygienic by recording
+// its definition-site *GlobalIndex on the symbol (SyntaxSymbol.ResolvedBinding,
+// consulted by CompileSymbol.tryResolvedBinding), and collectFreeIdentifiers
+// records nothing when the name was unbound at definition time — which is
+// exactly the case for a special form. So a template's `set!` arrives here
+// carrying only an intro scope, and a user's ∅-scoped top-level (define set! …)
+// satisfies ScopesCompatible(∅, {intro}) and would capture it: (inc! n) with
+// inc! expanding to (set! v (+ v 1)) silently discarded the assignment.
+// referenceReachesBinderDirectly is the guard; see its own comment for the
+// three footings it admits and the one it gives up.
+//
+// A DEFINITION'S OWN HEAD IS EXEMPT, via the binder parameter. The shadow a
+// define establishes begins AFTER the define, never at its own keyword — R7RS
+// §5.3.1 (p.26) contemplates defining a variable whose name is a syntactic
+// keyword, so (define define 3) is a definition and evaluates to 3. Measured
+// 2026-08-11: Petite Chez 10.4.1 and Racket 9.2 both answer 3, as did master.
+//
+// The exemption is asked the same way as everything else here — by binding
+// IDENTITY, resolving the binder off this same env inside this same window — so
+// it fires only for the form's own binding and leaves a LATER define of a
+// DIFFERENT name demoted, which is what master and both peers do once `define`
+// is a variable.
+//
+// AT THE TOP LEVEL THE Predeclared ARM ABOVE NOW REACHES (define define 3)
+// FIRST, so the exemption is left carrying two narrower cases: a REDEFINITION
+// after the first has compiled and cleared the mark, and a body-local define
+// whose name the enclosing body already bound. Wile reads both as definitions;
+// measured 2026-08-11, both peers read a redefinition as a CALL and error
+// ("attempt to apply non-procedure 3"). R7RS does not settle it — §5.3.1's
+// keyword clause licenses the definition reading, and §5.3.2 p.27 says only
+// "it is an error" — so this divergence is pre-existing and left alone.
+//
+// IT IS REFUSED when the head's binding predates the body. Inside
+// (let ((define f)) (define define 2)) the definiendum resolves onto the LET's
+// binding, not onto one this define establishes, and exempting there re-reads a
+// call as a definition. See body_entry_env.go.
+//
+// GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
+// tie. That is deliberately not caught: it reaches the compile path's recover
+// boundary and surfaces as a CompilationError chaining the sentinel, which is
+// the answer an ambiguous identifier is supposed to get.
+func headDenotesSpecialForm(
+	ctx context.Context,
+	env *environment.EnvironmentFrame,
+	symVal *values.Symbol,
+	sym *syntax.SyntaxSymbol,
+	binder *syntax.SyntaxSymbol,
+) bool {
+	if env == nil {
+		return true
+	}
+	ge := env.GlobalEnvironment()
+	if ge == nil {
+		return true
+	}
+	scopes := sym.Scopes()
+	q := syntax.ScopesOf(scopes)
+	b := env.GetBinding(symVal, q)
+	if b == nil {
+		// Measured: if, lambda, quote, set!, let, begin, define and
+		// with-continuation-mark have no phase-0 binding of any kind. The table
+		// is the only thing that knows them, so a miss means the form.
+		return true
+	}
+	if b.BindingType() != environment.BindingTypeVariable {
+		return true
+	}
+	// A slot the letrec* pre-scan minted is a LOCATION with no denotation yet:
+	// its define has not been compiled, so the head still means what it meant
+	// before the body. This is the P1 arm — see BindingMeta.Predeclared.
+	m := b.Meta()
+	if m != nil && m.Predeclared {
+		return true
+	}
+	if b == ge.SealedBindingAt(symVal, q, env.PhaseLevel()) {
+		return true
+	}
+	// The own-head exemption, refused when the head's binding predates the body:
+	// inside (let ((define f)) (define define 2)) the definiendum resolves onto
+	// the LET's binding, so exempting there re-reads a call as a definition. See
+	// body_entry_env.go.
+	if !bodyBindingPredatesBody(ctx, symVal, scopes, b) && formEstablishesBinding(env, binder, b) {
+		return true
+	}
+	return !referenceReachesBinderDirectly(env, symVal, scopes, b)
+}
+
+// formEstablishesBinding reports whether b is the very binding the definition
+// form under validation introduces, so that the form's head is being demoted by
+// its own definiendum.
+//
+// The resolution is deliberately made HERE rather than by the caller: it is the
+// third leg of headDenotesSpecialForm's identity compare, and a *Binding is an
+// identity only inside a window that creates no bindings (see that function's
+// comment). It is also reached only once the head has already resolved to a
+// non-sealed variable — i.e. only in a program that has shadowed the keyword —
+// so the ordinary define pays nothing for it.
+func formEstablishesBinding(env *environment.EnvironmentFrame, binder *syntax.SyntaxSymbol, b *environment.Binding) bool {
+	if binder == nil {
+		return false
+	}
+	name, ok := binder.Unwrap().(*values.Symbol)
+	if !ok {
+		return false
+	}
+	return env.GetBinding(name, syntax.ScopesOf(binder.Scopes())) == b
+}
+
+// definitionBinder returns the identifier a definition form introduces — the
+// definiendum of (define name value) or the operator of
+// (define (name params …) body …) — and nil for any other form or a shape that
+// is not a well-formed definition.
+//
+// Keyed by the form NAME, exactly like the registry lookup beside it and for
+// the same reason: the keyword answers which syntactic position holds the
+// binder (candidacy); headDenotesSpecialForm still decides denotation by the
+// binding that position resolves to.
+//
+// `define` is the only keyword listed because it is the only definition form
+// whose binder exists before validation sees the head. The expander's letrec*
+// pre-scan predeclares exactly what compilation.extractDefineName reports, and
+// that function recognizes `define` alone; define-syntax binds in the expand
+// environment, and define-values and define-record-type desugar into `define`
+// forms that arrive here in this same shape. This helper must keep agreeing
+// with extractDefineName about where a define's binder sits, or the exemption
+// stops covering what the pre-scan predeclared.
+//
+// A shape with no value/body — (define x), (define (f)) — is NOT a definition
+// for this purpose. Reporting a binder there would let (f f), where f is a
+// local variable spelled `define`, be re-read as a malformed definition instead
+// of the call it is.
+func definitionBinder(formName string, pair *syntax.SyntaxPair) *syntax.SyntaxSymbol {
+	if formName != "define" {
+		return nil
+	}
+	rest, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(rest) {
+		return nil
+	}
+	tail, ok := rest.SyntaxCdr().(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(tail) {
+		return nil
+	}
+	switch s := rest.SyntaxCar().(type) {
+	case *syntax.SyntaxSymbol:
+		return s
+	case *syntax.SyntaxPair:
+		if syntax.IsSyntaxEmptyList(s) {
+			return nil
+		}
+		name, ok := s.SyntaxCar().(*syntax.SyntaxSymbol)
+		if !ok {
+			return nil
+		}
+		return name
+	}
+	return nil
+}
+
+// referenceReachesBinderDirectly reports whether the reference sym reaches the
+// variable binding b at its OWN hygienic footing, rather than only through the
+// scope-set widening a macro expansion produces.
+//
+// It is the hygiene half of headDenotesSpecialForm's identity rule. Subset
+// resolution (bindingScopes ⊆ useScopes) is deliberately permissive so a
+// template identifier can name an outer global at all; that permissiveness is
+// safe for ordinary names because they carry a definition-site pin, and unsafe
+// for a special form because it has none. Three footings are admitted, and each
+// is one of the shapes the shadow is claimed for (scope sets measured):
+//
+//   - THE REFERENCE HAS NO SCOPES. A scope-less identifier can only have been
+//     written at top level (CompileSymbol's empty-scope fast path states the
+//     same invariant), so nothing widened it. Top-level (define set! list) then
+//     (set! 1 2 3 4): reference ∅, binder ∅.
+//   - THE BINDER HAS SCOPES. It was introduced by a binding form or an expansion
+//     the reference is inside, which is the same test CompileSymbol's
+//     co-introduced arm makes (coIntroducedByExpansion: "a ∅-scoped global
+//     qualifies for nothing"). A define-function-form parameter and an internal
+//     define both land here: reference {lambda}, binder {lambda}.
+//   - THE REFERENCE NAMES THE LIBRARY THAT BINDS IT. A library env is a flat
+//     island whose bindings carry ∅ scopes while every identifier in its body
+//     carries the library scope, so the arm above can never fire there.
+//     Redirecting through that scope (the same lookup CompileSymbol's
+//     library-scope arm uses) asks the stronger question, and a template
+//     identifier substituted with ANOTHER library's definition-site scopes
+//     cannot answer it. Imported rename: reference {lambda,
+//     library:(lib-setbang)}, binder ∅ in that library.
+//
+// "THE BINDER HAS SCOPES" IS NOT "THE BINDER IS LOCAL", and the difference is
+// load-bearing: bindBodyDefineNames fabricates a local frame for a body's
+// internal defines, and at the top level of a program (EvalProgram wraps a file
+// in one begin, whose body validateBegin now threads) that frame holds an
+// ordinary ∅-scoped top-level define. Testing locality accepted it and
+// (define let 3) went back to capturing every `or` expansion's template `let`.
+//
+// GIVEN UP: a top-level (define set! list) does NOT shadow inside a lambda body
+// ({lambda} vs ∅), because that shape is bit-for-bit identical to the captured
+// template identifier ({intro} vs ∅) at this point in the pipeline — same
+// cardinalities, same binding type, same imported flag, same owner env. Master
+// did not shadow there either, so this is a narrowing of the fix, not a
+// regression. Widening it needs the definition-site meaning recorded on the
+// symbol the way ResolvedBinding records a bound one.
+func referenceReachesBinderDirectly(
+	env *environment.EnvironmentFrame,
+	symVal *values.Symbol,
+	scopes []*syntax.Scope,
+	b *environment.Binding,
+) bool {
+	if len(scopes) == 0 {
+		return true
+	}
+	if len(b.Scopes()) > 0 {
+		return true
+	}
+	libGI := env.GetGlobalIndexFromLibraryScopes(symVal, scopes)
+	if libGI == nil || libGI.Env == nil {
+		return false
+	}
+	// Identity, not merely "a binding of that name exists in some named
+	// library": the redirect has to land on the SAME binding the ranked probe
+	// chose, or it is answering about a different one.
+	return libGI.Env.GetOwnGlobalBinding(libGI) == b
 }
 
 // collectList converts a syntax list to a slice of elements, reporting whether

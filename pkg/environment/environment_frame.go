@@ -730,9 +730,17 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) 
 }
 
 // HasLocalVariableBinding reports whether sym has a local variable binding
-// satisfying the scope-set query q. This is the shared implementation used by
-// both the macro expander (to decide whether a local variable shadows a macro)
-// and the validator (to decide whether a local variable shadows a special form).
+// satisfying the scope-set query q. Its consumer is the macro expander, deciding
+// whether a local variable shadows a macro.
+//
+// THE VALIDATOR NO LONGER CALLS IT. "Does this head denote a special form" is
+// decided by binding IDENTITY in validate.headDenotesSpecialForm — resolve by
+// scopes, refuse a non-variable, compare against the sealed binding — because a
+// local-only test could not see a top-level define or a library import shadowing
+// a form. Locality turned out to be the wrong question in the other direction
+// too: an internal define's name is fabricated into a local frame even when it
+// is an ordinary ∅-scoped top-level define, so the validator asks whether the
+// BINDER CARRIES SCOPES instead.
 //
 // The check implements Flatt's hygiene rule: a binding matches a reference when
 // bindingScopes ⊆ useScopes. Bindings with no scopes (user code) match any use.

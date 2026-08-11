@@ -20,7 +20,7 @@ package compilation
 // CompileValidatedCaseLambda (compile_validated.go), CompileValidatedDefineFn
 // (compile_define.go), and compileLetrecBindingInit (compile_let.go).
 // CompileValidatedBegin shares only the letrec* pre-declaration helper
-// (predeclareDefineBindingFromValidated), not the closure path.
+// (predeclareDefineFromValidatedRecursive, compile_let.go), not the closure path.
 
 import (
 	"strings"
@@ -175,7 +175,7 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 	// R7RS §5.3.2: Internal definitions use letrec* semantics
 	// Pass 1: Pre-declare all define bindings so forward references work
 	for _, bodyExpr := range body {
-		childCompiler.predeclareDefineBindingFromValidated(bodyExpr)
+		childCompiler.predeclareDefineFromValidatedRecursive(bodyExpr)
 	}
 
 	// Docstring: the validator has already extracted any leading string
@@ -193,18 +193,6 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 
 	childCompiler.AppendOperations(machine.NewOperationRestoreContinuation())
 	return nil
-}
-
-// predeclareDefineBindingFromValidated pre-creates a binding for a validated define form.
-// This enables forward references within lambda bodies per R7RS §5.3.2.
-// See letrec_semantics.go for the shared pattern documentation.
-func (p *CompileTimeContinuation) predeclareDefineBindingFromValidated(expr validate.ValidatedExpr) {
-	def, ok := expr.(*validate.ValidatedDefine)
-	if !ok {
-		return
-	}
-	sym := def.Name().Sym
-	predeclareBinding(p.env, sym, def.Name().Scopes(), def.Name().SourceContext())
 }
 
 // bindRestParameter binds the rest parameter (if any) to the local environment.

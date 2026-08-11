@@ -312,7 +312,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 
 		bd := p.env.GetGlobalBinding(gi)
 		if bd != nil {
-			return p.emitCachedBindingLoad(sym, bd)
+			return p.emitCachedBindingLoad(expr.SourceContext(), sym, bd)
 		}
 		// Binding not yet defined at compile time — fall back to runtime resolution
 		i := p.template.MaybeAppendLiteral(gi)
@@ -368,7 +368,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	if coGI != nil && coGI.Env != nil {
 		coBD := coGI.Env.GetOwnGlobalBinding(coGI)
 		if coIntroducedByExpansion(coBD) {
-			return p.emitCachedBindingLoad(sym, coBD)
+			return p.emitCachedBindingLoad(expr.SourceContext(), sym, coBD)
 		}
 	}
 
@@ -387,6 +387,20 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// in the caller env, which would falsely match any reference scopes.
 	libGI := p.env.GetGlobalIndexFromLibraryScopes(sym, symbolScopes)
 	if libGI != nil {
+		// The syntactic-keyword refusal is applied HERE rather than by routing
+		// through emitCachedBindingLoad: the value must be read at execution
+		// time (see below), and a cached-binding load reads it now. Classifying
+		// the binding is compile-time work, so it can be done here without
+		// disturbing that. Env is nil for a DEFERRED index, which resolveGlobal
+		// never produces but the type does not forbid; a nil binding is not a
+		// refusal (refuseCompileTimeMeaning says why).
+		if libGI.Env != nil {
+			libBD := libGI.Env.GetOwnGlobalBinding(libGI)
+			err := refuseCompileTimeMeaning(expr.SourceContext(), sym, libBD)
+			if err != nil {
+				return err
+			}
+		}
 		// Use runtime resolution via GlobalIndex so the binding value
 		// is read at execution time (after the library template runs).
 		i := p.template.MaybeAppendLiteral(libGI)
@@ -402,7 +416,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		// It must be a global binding (since local lookup failed).
 		// globalBinding was found by GetBinding — use it directly
 		// as a cached binding to skip runtime map/lock overhead.
-		return p.emitCachedBindingLoad(sym, globalBinding)
+		return p.emitCachedBindingLoad(expr.SourceContext(), sym, globalBinding)
 	}
 
 	// No binding found that matches the scopes. Same stamp, same reason, as
@@ -411,36 +425,80 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key))
 }
 
-// emitCachedBindingLoad emits a load of an already-resolved global binding,
-// caching the *Binding on the template so the VM skips the runtime map lookup and
-// its lock. Every arm of CompileSymbol that ends at a resolved global funnels
-// through here; there are three, and the two that predate the co-introduced-binder
-// arm each carried the same two statements inline.
+// refuseCompileTimeMeaning is the syntactic-keyword refusal every arm of
+// CompileSymbol that reaches a resolved global must apply. A syntax compiler or
+// primitive expander (BindingTypePrimitive) and a macro transformer
+// (BindingTypeSyntax) are compile-time meanings, and emitting a load of one
+// leaks it into the value world (R7RS §4.1.1/§4.3.1 — a syntactic keyword is
+// not a variable). BindingType is the authority; the frame the walk landed in
+// is not. Globals only ever carry Variable, Primitive or Syntax (Unknown is
+// local-slot scaffolding), so the negative form refuses exactly the two handler
+// tags.
 //
-// It REFUSES a binding whose type is not BindingTypeVariable: a syntax compiler
-// or primitive expander (BindingTypePrimitive) or a macro transformer
-// (BindingTypeSyntax) is a compile-time meaning, and emitting a load would leak
-// it into the value world (R7RS §4.1.1/§4.3.1 — a syntactic keyword is not a
-// variable). BindingType is the authority; the frame the walk landed in is not.
-// The refusal RAISES here because at this point the ordinary path IS what
-// resolved to the handler; its twin in tryResolvedBinding FALLS THROUGH instead,
-// because there the caller still has ordinary resolution to try. Globals only
-// ever carry Variable, Primitive, or Syntax (Unknown is local-slot scaffolding),
-// so the negative form refuses exactly the two handler tags.
+// A nil binding is NOT a refusal. It means the name has no compile-time binding
+// yet, so there is nothing to classify — the arm that reads one falls through
+// to runtime resolution, which is the shape the library-scope arm needs.
+// emitCachedBindingLoad's own callers have already established non-nil, so this
+// tolerance does not widen anything there.
 //
 // No runtime-side twin is needed: handlers are seated exclusively at owner
 // construction, which precedes every user compilation against that owner, so a
 // name that is unbound at compile time cannot become handler-bound later and a
 // deferred index can never resolve to one.
 //
+// It RAISES on the arms that reach a resolved global, because there the
+// ordinary path IS what resolved to the handler. tryResolvedBinding calls it
+// for the CLASSIFICATION only and discards the error, falling through to
+// ordinary resolution — that arm is a fallback with a path left to try, and a
+// dialect-removed form must end at ErrNoSuchBinding rather than here. Calling
+// it there rather than re-testing the tag inline is what keeps one authority
+// for "this is a compile-time meaning".
+//
+// src stamps the IDENTIFIER's own location, for the reason the unbound-
+// reference arms above give: without it the error reaches
+// wrapCompilationError carrying no SourcedError, and the enclosing form's line
+// is reported instead — measured, a library body's (list if) at 7:12 reported
+// 6:5, and the top-level twin reported 1:0.
+//
+// TestCompileSymbolRefusesCompileTimeMeaningOnEveryGlobalArm is the ratchet
+// that keeps a new arm from skipping it.
+func refuseCompileTimeMeaning(src *syntax.SourceContext, sym *values.Symbol, bd *environment.Binding) error {
+	if bd == nil {
+		return nil
+	}
+	if bd.BindingType() != environment.BindingTypeVariable {
+		return wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrSyntacticKeywordAsVariable,
+			"compile: syntactic keyword %q used as a variable", sym.Key))
+	}
+	return nil
+}
+
+// emitCachedBindingLoad emits a load of an already-resolved global binding,
+// caching the *Binding on the template so the VM skips the runtime map lookup
+// and its lock, and applying refuseCompileTimeMeaning first.
+//
+// CompileSymbol reaches a resolved global on SIX arms, not three, and every one
+// of them applies refuseCompileTimeMeaning. Three funnel through here — the
+// empty-scope global, the co-introduced binder, and the scoped global. The
+// library-scope arm CANNOT: it must keep runtime resolution because the library
+// template has not run when the reference compiles, and a cached-binding load
+// would read the value too early, so it calls the refusal directly. That is why
+// the refusal is a free function rather than a step inside this one. The
+// remaining two are tryResolvedBinding's own resolved-pin paths, which call it
+// for the classification and fall through rather than raising.
+//
+// (The "there are three" wording this comment carried was false for the whole
+// life of the library arm, and a library body's (list if) evaluated to
+// (#<primitive-expander:if>) behind it.)
+//
 // Callers must have established that bd is a GLOBAL binding. A local resolves by
 // slot (LoadLocalByLocalIndex) and caching its *Binding would be wrong twice over:
 // the wrong opcode, and a pointer into a []Binding that EnsureLocalBinding can
 // reallocate.
-func (p *CompileTimeContinuation) emitCachedBindingLoad(sym *values.Symbol, bd *environment.Binding) error {
-	if bd.BindingType() != environment.BindingTypeVariable {
-		return werr.WrapForeignErrorf(werr.ErrSyntacticKeywordAsVariable,
-			"compile: syntactic keyword %q used as a variable", sym.Key)
+func (p *CompileTimeContinuation) emitCachedBindingLoad(src *syntax.SourceContext, sym *values.Symbol, bd *environment.Binding) error {
+	err := refuseCompileTimeMeaning(src, sym, bd)
+	if err != nil {
+		return err
 	}
 	idx := p.template.AppendCachedBinding(bd)
 	p.AppendOperations(
@@ -474,13 +532,17 @@ func (p *CompileTimeContinuation) tryResolvedBinding(expr *syntax.SyntaxSymbol) 
 		// the load so the caller falls through to ordinary resolution — for a
 		// dialect-removed form that chain ends at ErrNoSuchBinding (a phase-1
 		// primitive expander is not a phase-0 candidate), the documented
-		// removed-form contract (dialect.go). The predicate is the TAG, same
-		// authority as emitCachedBindingLoad and lookupMacroBinding's pin arm;
-		// the old compileTimeHandler type assertion missed a pinned macro
-		// TRANSFORMER (a plain machine closure), which leaked by this path.
-		// Falling through is right here and raising is right there: this is a
-		// fallback with an ordinary path left to try.
-		if bd.BindingType() != environment.BindingTypeVariable {
+		// removed-form contract (dialect.go). The old compileTimeHandler type
+		// assertion missed a pinned macro TRANSFORMER (a plain machine closure),
+		// which leaked by this path.
+		//
+		// The CLASSIFICATION is refuseCompileTimeMeaning's, called for its
+		// verdict and not for its error: this arm falls through where the
+		// resolved-global arms raise, because it still has an ordinary path to
+		// try. Re-testing the tag inline here is what let a change to the
+		// classification land on one of the two and not the other, and it kept
+		// this arm out of the ratchet's reach set.
+		if refuseCompileTimeMeaning(expr.SourceContext(), expr.Sym, bd) != nil {
 			return false
 		}
 		idx := p.template.AppendCachedBinding(bd)

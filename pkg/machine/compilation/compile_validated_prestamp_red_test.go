@@ -81,7 +81,7 @@ func TestFrameReclaimClassifiesForwardEdgeWithoutMutatingBinding(t *testing.T) {
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ctc := NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	for _, e := range begin.Body() {
-		ctc.predeclareDefineBindingFromValidated(e)
+		ctc.predeclareDefineFromValidatedRecursive(e)
 	}
 	barName := byName["bar"].Name()
 	bar := env.GetBinding(barName.Sym, syntax.ScopesOf(barName.Scopes()))

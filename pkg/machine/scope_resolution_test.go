@@ -19,8 +19,11 @@ package machine_test
 // Two code paths implement Flatt's "bindingScopes ⊆ useScopes" scope resolution:
 //
 //   Path 1 — Shadow detection (environment/environment_frame.go)
-//     HasLocalVariableBinding: shared by both the expander (macro shadow check)
-//     and the validator (special form shadow check). Checks binding-site scopes.
+//     HasLocalVariableBinding: the expander's macro shadow check. Checks
+//     binding-site scopes. It is NO LONGER the validator's special-form shadow
+//     check — that is decided by binding identity in
+//     validate.headDenotesSpecialForm, which resolves by scopes and compares
+//     against the sealed binding.
 //
 //   Path 2 — Compiler (machine/compile_time_continuation.go)
 //     CompileSymbol: dispatches between local/global/scoped code generation.

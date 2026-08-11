@@ -1456,11 +1456,40 @@ func TestValidateDynamicWindImproperList(t *testing.T) {
 	c.Assert(result.Errors[0].Message, qt.Contains, "proper list")
 }
 
-// TestValidateShadowing tests that lambda parameters shadow special forms (R7RS §4.2.2)
+// lambdaBodyOf and defineBodyOf pull the body out of the validated form each
+// binder shape produces, so TestValidateShadowing's rows can name where the
+// shadowed reference landed instead of the assertion guessing.
+func lambdaBodyOf(c *qt.C, e ValidatedExpr) []ValidatedExpr {
+	v, ok := e.(*ValidatedLambda)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("want *ValidatedLambda, got %T", e))
+	return v.Body()
+}
+
+func defineBodyOf(c *qt.C, e ValidatedExpr) []ValidatedExpr {
+	v, ok := e.(*ValidatedDefine)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("want *ValidatedDefine, got %T", e))
+	return v.Body()
+}
+
+// TestValidateShadowing tests that a binder shadows a special form (R7RS §4.2.2,
+// §4.3). Every row spells the shadowed name in operator position at an arity the
+// special form REFUSES, so "validated as a call" and "validated as the form" are
+// distinguishable: (quote) needs one argument, (if) needs two.
+//
+// The rows cover the binder shapes that reach a body: a lambda parameter, a
+// define-function-form parameter, that form's REST parameter, and an internal
+// define (bare, and through the begin define-values expands to). The
+// define-function-form rows are the ones validateDefineFunction used to miss —
+// it validated its body against the un-extended environment, so
+// (define (f quote) (quote 9)) called the special form and the procedure
+// evaluated to 9 instead of applying its argument.
 func TestValidateShadowing(t *testing.T) {
 	tests := []struct {
 		name  string
 		input values.Value
+		// shadowed picks the one expression whose validation must have become a
+		// call. Each binder shape parks it in a different node.
+		shadowed func(*qt.C, ValidatedExpr) ValidatedExpr
 	}{
 		{
 			// (lambda (quote) (quote)) — quote param shadows special form.
@@ -1472,6 +1501,9 @@ func TestValidateShadowing(t *testing.T) {
 				values.List(values.NewSymbol("quote")),
 				values.List(values.NewSymbol("quote")),
 			),
+			shadowed: func(c *qt.C, e ValidatedExpr) ValidatedExpr {
+				return lambdaBodyOf(c, e)[0]
+			},
 		},
 		{
 			// (lambda (if) (if)) — if param shadows special form.
@@ -1483,6 +1515,126 @@ func TestValidateShadowing(t *testing.T) {
 				values.List(values.NewSymbol("if")),
 				values.List(values.NewSymbol("if")),
 			),
+			shadowed: func(c *qt.C, e ValidatedExpr) ValidatedExpr {
+				return lambdaBodyOf(c, e)[0]
+			},
+		},
+		{
+			// (define (f quote) (quote)) — the function form's parameter list is
+			// a lambda's, and must bind the same way.
+			name: "define function-form param shadows quote",
+			input: values.List(
+				values.NewSymbol("define"),
+				values.List(values.NewSymbol("f"), values.NewSymbol("quote")),
+				values.List(values.NewSymbol("quote")),
+			),
+			shadowed: func(c *qt.C, e ValidatedExpr) ValidatedExpr {
+				return defineBodyOf(c, e)[0]
+			},
+		},
+		{
+			// (define (f . quote) (quote)) — a REST parameter binds too, and a
+			// fix that carried only Required would pass the row above while
+			// failing this one.
+			name: "define function-form rest param shadows quote",
+			input: values.List(
+				values.NewSymbol("define"),
+				values.NewCons(values.NewSymbol("f"), values.NewSymbol("quote")),
+				values.List(values.NewSymbol("quote")),
+			),
+			shadowed: func(c *qt.C, e ValidatedExpr) ValidatedExpr {
+				return defineBodyOf(c, e)[0]
+			},
+		},
+		{
+			// (lambda () (define (f quote) (quote))) — the same define reached
+			// through a body rather than at top level.
+			name: "internal define function-form param shadows quote",
+			input: values.List(
+				values.NewSymbol("lambda"),
+				values.EmptyList,
+				values.List(
+					values.NewSymbol("define"),
+					values.List(values.NewSymbol("f"), values.NewSymbol("quote")),
+					values.List(values.NewSymbol("quote")),
+				),
+			),
+			shadowed: func(c *qt.C, e ValidatedExpr) ValidatedExpr {
+				return defineBodyOf(c, lambdaBodyOf(c, e)[0])[0]
+			},
+		},
+		{
+			// (lambda () (define quote 1) (quote)) — an INTERNAL DEFINE, not a
+			// parameter. The binder is produced by validating the body's own
+			// first element, so only a per-body environment that grows as the
+			// body is validated can see it (bindBodyDefineNames).
+			name: "internal define shadows quote",
+			input: values.List(
+				values.NewSymbol("lambda"),
+				values.EmptyList,
+				values.List(
+					values.NewSymbol("define"),
+					values.NewSymbol("quote"),
+					values.NewInteger(1),
+				),
+				values.List(values.NewSymbol("quote")),
+			),
+			shadowed: func(c *qt.C, e ValidatedExpr) ValidatedExpr {
+				return lambdaBodyOf(c, e)[1]
+			},
+		},
+		{
+			// The same through a begin — the shape define-values expands to, and
+			// the reason bindBodyDefineNames folds over *ValidatedBegin rather
+			// than matching *ValidatedDefine alone.
+			name: "internal define inside begin shadows quote",
+			input: values.List(
+				values.NewSymbol("lambda"),
+				values.EmptyList,
+				values.List(
+					values.NewSymbol("begin"),
+					values.List(
+						values.NewSymbol("define"),
+						values.NewSymbol("quote"),
+						values.NewInteger(1),
+					),
+				),
+				values.List(values.NewSymbol("quote")),
+			),
+			shadowed: func(c *qt.C, e ValidatedExpr) ValidatedExpr {
+				return lambdaBodyOf(c, e)[1]
+			},
+		},
+		{
+			// (lambda () (begin (define quote 1) (quote))) — the reference is
+			// INSIDE the same begin, not after it. R7RS §5.3.2 splices a
+			// body-level begin, so this is the same body as the row above and
+			// must shadow the same way; the row above only exercises a reference
+			// placed AFTER the begin, which bindBodyDefineNames' *ValidatedBegin
+			// fold already covered. validateBegin threading its own bodyEnv is
+			// what this one needs, and without it the two passes disagree:
+			// validate said "special form" while
+			// predeclareDefineFromValidatedRecursive (which does recurse through
+			// the begin) handed the compiler a local variable of that name.
+			name: "internal define shadows quote inside the same begin",
+			input: values.List(
+				values.NewSymbol("lambda"),
+				values.EmptyList,
+				values.List(
+					values.NewSymbol("begin"),
+					values.List(
+						values.NewSymbol("define"),
+						values.NewSymbol("quote"),
+						values.NewInteger(1),
+					),
+					values.List(values.NewSymbol("quote")),
+				),
+			),
+			shadowed: func(c *qt.C, e ValidatedExpr) ValidatedExpr {
+				begun, ok := lambdaBodyOf(c, e)[0].(*ValidatedBegin)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("body[0] is not a begin"))
+				return begun.Body()[1]
+			},
 		},
 	}
 
@@ -1493,12 +1645,10 @@ func TestValidateShadowing(t *testing.T) {
 			c := qt.New(t)
 			result := ValidateExpression(context.TODO(), env, makeSyntax(tt.input))
 			c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
-			lambda, ok := result.Expr.(*ValidatedLambda)
-			c.Assert(ok, qt.IsTrue)
-			// Body should be a call (param shadows the special form)
-			_, isCall := lambda.Body()[0].(*ValidatedCall)
+			got := tt.shadowed(c, result.Expr)
+			_, isCall := got.(*ValidatedCall)
 			c.Assert(isCall, qt.IsTrue,
-				qt.Commentf("expected body to be a call (shadowed), got %T", lambda.Body()[0]))
+				qt.Commentf("expected a call (the binder shadows the special form), got %T", got))
 		})
 	}
 }
