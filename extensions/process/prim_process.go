@@ -58,6 +58,10 @@ func PrimSystem(mc machine.CallContext) error {
 
 // PrimProcessSpawn implements the (process-spawn) primitive.
 // Creates a subprocess with stdin/stdout/stderr pipes.
+//
+// A spawned child is recorded against the calling engine's namespace so
+// Engine.Close can kill and reap it (close.go). A spawn that failed is not
+// recorded.
 func PrimProcessSpawn(mc machine.CallContext) error {
 	command, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "process-spawn")
 	if err != nil {
@@ -124,14 +128,15 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 		return werr.WrapForeignProcessError(err, "process-spawn", command.Value)
 	}
 
-	proc := values.NewProcess(
+	q := values.NewProcess(
 		command.Value,
 		cmd,
 		values.NewCharacterOutputPortFromWriter(stdinPipe),
 		values.NewCharacterInputPortFromReader(stdoutPipe),
 		values.NewCharacterInputPortFromReader(stderrPipe),
 	)
-	mc.SetValue(proc)
+	trackSpawnedProcess(mc, q)
+	mc.SetValue(q)
 	return nil
 }
 
@@ -152,6 +157,10 @@ var PrimProcessStdin = helpers.MakeUnaryAccessor(werr.ErrNotAProcess, "process-s
 
 // PrimProcessWait implements the (process-wait) primitive.
 // Blocks until the process exits and returns the exit code.
+//
+// The wait goes through values.Process.Wait, not cmd.Wait: two SRFI-18 threads
+// in (process-wait p), or one of them racing Engine.Close's reaper, would
+// otherwise wait4 the same pid twice and tear cmd.ProcessState between them.
 func PrimProcessWait(mc machine.CallContext) error {
 	proc, err := helpers.RequireArg[*values.Process](mc, 0, werr.ErrNotAProcess, "process-wait")
 	if err != nil {
@@ -164,7 +173,7 @@ func PrimProcessWait(mc machine.CallContext) error {
 			"process-wait: process has no underlying command",
 		)
 	}
-	waitErr := cmd.Wait()
+	waitErr := proc.Wait()
 	if waitErr != nil {
 		var exitErr *exec.ExitError
 		if errors.As(waitErr, &exitErr) {

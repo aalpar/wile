@@ -31,6 +31,13 @@ var Builder = registry.NewRegistryBuilder(addThreads, addMutexes, addConditionVa
 var AddToRegistry = Builder.AddToRegistry
 
 func addThreads(r *registry.PrimitiveRegistry) error {
+	// Engine.Close terminates the threads the closing engine started. The hook
+	// takes no state from here: it finds the tracker on the namespace of the
+	// engine being closed (close.go), which is what keeps it per-engine even when
+	// this registry is shared and every engine binds the first engine's
+	// thread-start!. A registry.Closeable hook on the Extension var above could
+	// not do this at all — that var is package-level and gets no engine handle.
+	r.AddCloser(closeLiveThreads)
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// TODO(contracts): *values.Thread, *values.Mutex, *values.ConditionVariable,
 		// and *values.Time have no ValueType enum entries. Those argument

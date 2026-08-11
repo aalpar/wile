@@ -156,6 +156,10 @@ var PrimThreadSpecificSet = helpers.MakeBinarySetter(werr.ErrNotAThread, "thread
 
 // PrimThreadStart starts a thread
 // (thread-start! thread) -> thread
+//
+// A started thread is recorded against the calling engine's namespace so
+// Engine.Close can terminate it (close.go). A thread that fails to start is not
+// recorded.
 func PrimThreadStart(mc machine.CallContext) error {
 	thread, err := helpers.RequireArg[*values.Thread](mc, 0, werr.ErrNotAThread, "thread-start!")
 	if err != nil {
@@ -167,6 +171,7 @@ func PrimThreadStart(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(err, "thread-start!")
 	}
 
+	trackStartedThread(mc, thread)
 	mc.SetValue(thread)
 	return nil
 }

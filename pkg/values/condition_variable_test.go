@@ -15,7 +15,6 @@
 package values_test
 
 import (
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -26,27 +25,6 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
 )
-
-// stableGoroutineCount polls runtime.NumGoroutine() until two consecutive
-// reads return the same value, or the deadline elapses. Logs a warning if
-// stability is not achieved.
-func stableGoroutineCount(t testing.TB, deadline time.Duration) int {
-	t.Helper()
-	end := time.Now().Add(deadline)
-	prev := runtime.NumGoroutine()
-	for time.Now().Before(end) {
-		runtime.Gosched()
-		runtime.GC()
-		time.Sleep(1 * time.Millisecond)
-		curr := runtime.NumGoroutine()
-		if curr == prev {
-			return curr
-		}
-		prev = curr
-	}
-	t.Logf("stableGoroutineCount: count did not stabilize within %v (last=%d)", deadline, prev)
-	return prev
-}
 
 func TestConditionVariable_NewConditionVariable(t *testing.T) {
 	cv := values.NewConditionVariable("test-cv")
@@ -112,7 +90,7 @@ func TestConditionVariable_Wait_NoGoroutineLeak(t *testing.T) {
 	c := qt.New(t)
 
 	// Measure baseline goroutine count
-	baseline := stableGoroutineCount(t, 2*time.Second)
+	baseline := testutil.StableGoroutineCount(t, 2*time.Second)
 
 	cv := values.NewConditionVariable("leak-test")
 	timeout := 10 * time.Millisecond
@@ -124,7 +102,7 @@ func TestConditionVariable_Wait_NoGoroutineLeak(t *testing.T) {
 	}
 
 	// Give goroutines time to exit
-	final := stableGoroutineCount(t, 2*time.Second)
+	final := testutil.StableGoroutineCount(t, 2*time.Second)
 	// Allow small variance (±2) for test framework overhead
 	c.Assert(final <= baseline+2, qt.IsTrue,
 		qt.Commentf("goroutine leak detected: baseline=%d final=%d", baseline, final))

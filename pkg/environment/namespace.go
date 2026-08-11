@@ -401,6 +401,19 @@ func (p *Namespace) root() *Namespace {
 	return p
 }
 
+// Root returns the topmost Namespace on the parent chain: for a child minted by
+// (environment …) / scheme-report-environment / eval's fresh top level, the
+// engine's own Namespace; for that Namespace, itself.
+//
+// It is the exported form of root, for state whose lifetime is the ENGINE
+// rather than the environment. Extension state stored under
+// SetExtensionState is per-Namespace by design (the SAT model wants exactly
+// that), but a resource tracker read by Engine.Close must be found again from
+// the engine's runtime frame, so it keys on Root().
+func (p *Namespace) Root() *Namespace {
+	return p.root()
+}
+
 // FileResolver returns the file resolver for include/load operations.
 // Returns nil if no resolver has been set. Delegated to root.
 func (p *Namespace) FileResolver() FileResolver {

@@ -33,6 +33,10 @@ func testValue(s string) values.Value {
 	return values.NewString(s)
 }
 
+// errCloserTest is the sentinel a test closer returns, so the assertion can be
+// errors.Is rather than a string or a bare non-nil check.
+var errCloserTest = werr.NewStaticError("registry test: closer failed")
+
 func TestRegistry_NewRegistry(t *testing.T) {
 	c := qt.New(t)
 
@@ -840,6 +844,51 @@ func TestExtensionWithCloseInvokesFn(t *testing.T) {
 	c.Assert(called, qt.Equals, 2)
 }
 
+// TestAddCloserCollectsPerRegistrationHooks pins the per-engine closer seam:
+// AddCloser appends and Closers reports in registration order, over a defensive
+// copy. Modelled on TestExtensionWithCloseInvokesFn, but the hook is registered
+// against the REGISTRY rather than the process-global Extension value, which is
+// the whole point of the seam (see registry.CloseFunc).
+func TestAddCloserCollectsPerRegistrationHooks(t *testing.T) {
+	c := qt.New(t)
+
+	r := NewRegistry()
+	c.Assert(r.Closers(), qt.HasLen, 0)
+
+	var order []string
+	var seenEnv []*environment.EnvironmentFrame
+	r.AddCloser(func(env *environment.EnvironmentFrame) error {
+		order = append(order, "first")
+		seenEnv = append(seenEnv, env)
+		return nil
+	})
+	r.AddCloser(func(*environment.EnvironmentFrame) error {
+		order = append(order, "second")
+		return errCloserTest
+	})
+
+	ns := environment.NewNamespace()
+	closers := r.Closers()
+	c.Assert(closers, qt.HasLen, 2)
+	c.Assert(closers[0](ns.Runtime()), qt.IsNil)
+	c.Assert(errors.Is(closers[1](ns.Runtime()), errCloserTest), qt.IsTrue)
+	c.Assert(order, qt.DeepEquals, []string{"first", "second"})
+	// The frame is forwarded, not swallowed: it is how a hook finds the closing
+	// engine's state (registry.CloseFunc).
+	c.Assert(seenEnv[0], qt.Equals, ns.Runtime())
+
+	// Defensive copy: overwriting an element of the returned slice must not
+	// reach the registry's backing array. A length check alone would pass even
+	// on a shared array.
+	closers[0] = nil
+	c.Assert(closers[0], qt.IsNil) // the local copy did take the write
+	again := r.Closers()
+	c.Assert(again, qt.HasLen, 2)
+	c.Assert(again[0], qt.IsNotNil)
+	c.Assert(again[0](ns.Runtime()), qt.IsNil)
+	c.Assert(order, qt.DeepEquals, []string{"first", "second", "first"})
+}
+
 func TestNewDescribedExtensionForwardsToOptions(t *testing.T) {
 	c := qt.New(t)
 
@@ -880,6 +929,7 @@ func TestDeepCopyTouchesEverySliceField(t *testing.T) {
 	p.procedureSources = append(p.procedureSources, "s")
 	p.globalValues = append(p.globalValues, GlobalValue{})
 	p.namespaceInits = append(p.namespaceInits, nil)
+	p.closeFuncs = append(p.closeFuncs, nil)
 
 	pv := reflect.ValueOf(p).Elem()
 	pt := pv.Type()

@@ -21,6 +21,8 @@ import (
 	"time"
 
 	extthreads "github.com/aalpar/wile/extensions/threads"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/testutil"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -1398,4 +1400,105 @@ func TestWithTimeoutInterruptsParkedThreadSleep(t *testing.T) {
 			c.Assert(result.Internal().SchemeString(), qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestEngineCloseTerminatesLiveThreads pins the closer registered by addThreads:
+// closing an engine must terminate the SRFI-18 threads that engine started, not
+// leave them spinning for the life of the host process.
+//
+// The thread-state assertion is the gate. It is valid immediately after Close
+// returns because the closer calls Terminate (which records the terminal outcome
+// synchronously) and only then waits on Thread.Done(). Without the closer the
+// thread is still ThreadRunnable and its goroutine is still looping.
+//
+// The goroutine count is corroboration only, and it is asserted TIGHT
+// (final <= baseline). The ±2 slack that
+// TestConditionVariable_Wait_NoGoroutineLeak allows would make this arm VACUOUS
+// here: exactly one goroutine leaks, so baseline+2 passes with the fix reverted.
+func TestEngineCloseTerminatesLiveThreads(t *testing.T) {
+	c := qt.New(t)
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(extthreads.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	baseline := testutil.StableGoroutineCount(t, 2*time.Second)
+
+	result := eval(t, engine, `
+		(define spinner
+		  (make-thread (lambda () (let loop () (thread-sleep! 0.05) (loop)))))
+		(thread-start! spinner)`)
+	th, ok := result.Internal().(*values.Thread)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("thread-start! returned %T", result.Internal()))
+	testutil.PollUntil(t, func() bool {
+		return th.State() != values.ThreadNew
+	}, 2*time.Second)
+
+	err = engine.Close()
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(th.State(), qt.Equals, values.ThreadTerminated,
+		qt.Commentf("Engine.Close must terminate the threads the engine started"))
+
+	final := testutil.StableGoroutineCount(t, 2*time.Second)
+	c.Assert(final <= baseline, qt.IsTrue,
+		qt.Commentf("thread goroutine outlived Engine.Close: baseline=%d final=%d", baseline, final))
+}
+
+// TestEngineCloseReapsOwnThreadsOnSharedRegistry is the cross-engine arm of the
+// same gate, and the one that discriminates ownership from registration order.
+//
+// With a registry shared through WithRegistry, registry.Apply binds the FIRST
+// registration of a name in every engine (pkg/registry/apply.go, the `bound`
+// StringSet), so engine2 runs engine1's thread-start!. A tracker captured in
+// that closure therefore collects engine2's threads under engine1 —
+// engine2.Close() finds nothing (observed before the fix: State()=="runnable",
+// still spinning) and engine1.Close() terminates a thread belonging to a
+// still-running engine. Keying the tracker on the calling namespace
+// (extensions/threads/close.go) is what makes the closing engine, rather than
+// the registering one, the owner.
+func TestEngineCloseReapsOwnThreadsOnSharedRegistry(t *testing.T) {
+	c := qt.New(t)
+
+	shared := registry.NewRegistry()
+	c.Assert(core.AddToRegistry(shared), qt.IsNil)
+
+	newShared := func() *wile.Engine {
+		engine, err := wile.NewEngine(context.Background(),
+			wile.WithRegistry(shared),
+			wile.WithExtension(extthreads.Extension),
+		)
+		c.Assert(err, qt.IsNil)
+		return engine
+	}
+	engine1 := newShared()
+	engine2 := newShared()
+
+	const spin = `
+		(define spinner
+		  (make-thread (lambda () (let loop () (thread-sleep! 0.05) (loop)))))
+		(thread-start! spinner)`
+	started := func(engine *wile.Engine) *values.Thread {
+		result, err := engine.EvalMultiple(context.Background(), spin)
+		c.Assert(err, qt.IsNil)
+		th, ok := result.Internal().(*values.Thread)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("thread-start! returned %T", result.Internal()))
+		testutil.PollUntil(t, func() bool {
+			return th.State() != values.ThreadNew
+		}, 2*time.Second)
+		return th
+	}
+	th1 := started(engine1)
+	th2 := started(engine2)
+
+	// Close the SECOND engine first: its thread is the one a closure-captured
+	// tracker would have filed under engine1.
+	c.Assert(engine2.Close(), qt.IsNil)
+	c.Assert(th2.State(), qt.Equals, values.ThreadTerminated,
+		qt.Commentf("an engine must terminate the thread IT started, even on a shared registry"))
+	c.Assert(th1.State(), qt.Not(qt.Equals), values.ThreadTerminated,
+		qt.Commentf("closing engine2 must not reach into a still-running engine1"))
+
+	c.Assert(engine1.Close(), qt.IsNil)
+	c.Assert(th1.State(), qt.Equals, values.ThreadTerminated)
 }

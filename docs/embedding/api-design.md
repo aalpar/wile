@@ -42,7 +42,9 @@ The `wile` package exposes a high-level API for embedding the Scheme interpreter
 
 If any step fails (including bootstrap macro loading), the engine is not returned.
 
-`Close()` releases resources held by extensions implementing `registry.Closeable`; individual closer errors are joined. A second call returns `ErrEngineClosed`.
+`Close()` releases resources from two sources: extensions implementing `registry.Closeable`, and per-engine hooks registered via `PrimitiveRegistry.AddCloser` from an extension's `AddToRegistry`. The shipped `threads` and `process` extensions use the second — closing an engine terminates the SRFI-18 threads it started and kills the children it spawned. Individual closer errors are joined. A second call returns `ErrEngineClosed`.
+
+`Closeable` hangs off the `Extension` value, which is a package-level var shared by every engine in the process, so it cannot express per-engine cleanup; `AddCloser` hooks receive the closing engine's runtime frame and find that engine's state on its `Namespace`. The frame is what makes them per-engine, not the registration: with a registry shared through `WithRegistry`, `Apply` binds the *first* engine's primitives in every engine, so a hook that reaped a tracker captured at registration time would reap the wrong engine's resources. An engine built with `WithNamespace` gets no closers from either source, since that path never builds a registry.
 
 ### Per-Instance Isolation
 

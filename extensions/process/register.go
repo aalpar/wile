@@ -31,6 +31,13 @@ var Builder = registry.NewRegistryBuilder(addPrimitives)
 var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.PrimitiveRegistry) error {
+	// Engine.Close kills and reaps the children the closing engine spawned. The
+	// hook takes no state from here: it finds the tracker on the namespace of the
+	// engine being closed (close.go), which is what keeps it per-engine even when
+	// this registry is shared and every engine binds the first engine's
+	// process-spawn. A registry.Closeable hook on the Extension var above could
+	// not do this at all — that var is package-level and gets no engine handle.
+	r.AddCloser(closeLiveProcs)
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// TODO(contracts): *values.Process has no ValueType enum entry, so
 		// process-* primitives use TypeAny for the process argument; the

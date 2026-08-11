@@ -411,3 +411,24 @@ func TestClone_PreservesNamespaceInits(t *testing.T) {
 	qt.Assert(t, clone.Apply(context.Background(), ns.Runtime()), qt.IsNil)
 	qt.Assert(t, ran, qt.Equals, 1) // hook survived the clone
 }
+
+// TestClone_PreservesClosers is the same guard for closeFuncs: it is a
+// deepCopy-completeness check, of the kind TestDeepCopyTouchesEverySliceField
+// enumerates, and nothing more. No production path reads Closers() off a cloned
+// or filtered registry — Engine.Close's hooks are collected in buildRegistry
+// from the unfiltered reg, before Without/WithoutCategory/WithProcedureSources
+// ever clone it — so a dropped copy here would NOT stop an engine reaping. Keep
+// the test; do not infer from it that the clone path is load-bearing for Close.
+func TestClone_PreservesClosers(t *testing.T) {
+	r := NewRegistry()
+	ran := 0
+	r.AddCloser(func(*environment.EnvironmentFrame) error {
+		ran++
+		return nil
+	})
+	clone := r.Clone()
+	closers := clone.Closers()
+	qt.Assert(t, closers, qt.HasLen, 1) // hook survived the clone
+	qt.Assert(t, closers[0](nil), qt.IsNil)
+	qt.Assert(t, ran, qt.Equals, 1)
+}
