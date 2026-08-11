@@ -210,6 +210,79 @@ func TestSourceChainFallsThroughAVirtualDenial(t *testing.T) {
 		qt.Commentf("got: %v", err))
 }
 
+// TestSourceChainScansPastASameSourceDenial is the test above at the chain
+// length embedders actually build: two virtual layers ahead of the OS one,
+// WithSourceFS(stdlib.FS) + WithSourceFS(appFS) + WithSourceOS() as documented
+// on WithSourceFS.
+//
+// The fall-through condition used to read only the immediate successor, so the
+// second virtual layer — same source, same question — looked like the end of
+// the chain and the OS member became unreachable. Both source-loading entries
+// are exercised: (include …) reads a file, (import …) reads a library, and they
+// reach the resolver by different paths.
+func TestSourceChainScansPastASameSourceDenial(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	trusted, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	stdlibLayer, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	appLayer, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+
+	err = os.WriteFile(filepath.Join(trusted, "lib.scm"), []byte("(define chain-ran 7)"), 0o644)
+	c.Assert(err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(trusted, "beta.sld"),
+		[]byte("(define-library (beta) (export b) (begin (define b 11)))"), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	t.Chdir(trusted)
+
+	engine, err := NewEngine(ctx,
+		WithProfile(KitchenSink),
+		WithAuthorizer(security.FilesystemRoot(trusted)),
+		WithSourceFS(os.DirFS(stdlibLayer)),
+		WithSourceFS(os.DirFS(appLayer)),
+		WithSourceOS(),
+		WithLibraryPaths("."))
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	// Subtests rather than one straight-line body: include and import reach the
+	// resolver by different paths, and each must report its own verdict instead
+	// of being pre-empted by an earlier assertion's abort.
+	t.Run("include", func(t *testing.T) {
+		c := qt.New(t)
+		v, err := engine.EvalMultiple(ctx, `(include "lib.scm") chain-ran`)
+		c.Assert(err, qt.IsNil, qt.Commentf("the permitted host copy must still be reachable"))
+		c.Assert(v.SchemeString(), qt.Equals, "7")
+	})
+
+	t.Run("import", func(t *testing.T) {
+		c := qt.New(t)
+		v, err := engine.EvalMultiple(ctx, `(import (beta)) b`)
+		c.Assert(err, qt.IsNil, qt.Commentf("a host library is reached through the same chain"))
+		c.Assert(v.SchemeString(), qt.Equals, "11")
+	})
+
+	// Falling through two virtual layers does not weaken the policy: a host file
+	// outside the root is still refused, and not as an absence.
+	t.Run("outside the root is still refused", func(t *testing.T) {
+		c := qt.New(t)
+		outside, err := filepath.EvalSymlinks(t.TempDir())
+		c.Assert(err, qt.IsNil)
+		err = os.WriteFile(filepath.Join(outside, "outside.scm"), []byte("(define escaped 1)"), 0o644)
+		c.Assert(err, qt.IsNil)
+
+		_, err = engine.EvalMultiple(ctx, fmt.Sprintf(`(include %q)`,
+			filepath.Join(outside, "outside.scm")))
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+			qt.Commentf("got: %v", err))
+	})
+}
+
 // TestHostStdioIsGated pins the stream gate (reviews/2026-08-07/REVIEW.md 2.1.1).
 // A Console engine under DenyAll used to read the host's stdin and write its
 // stdout with the authorizer never consulted.

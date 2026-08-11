@@ -25,7 +25,7 @@ import (
 )
 
 // ChainFileResolver tries multiple resolvers in order, falling through to the
-// next on absence, and on a denial only when the next resolver will re-ask
+// next on absence, and on a denial only when some later resolver will re-ask
 // under a different source (see continuesPast). Anything else — a permission
 // failure, any other I/O error — propagates immediately, so a higher-priority
 // file that exists but cannot be read is never silently replaced by a
@@ -65,7 +65,11 @@ func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs
 
 // continuesPast reports whether the chain may look in resolvers[i+1:] after
 // resolvers[i] failed with err. Absence always continues. A denial continues
-// only when the next resolver authorizes under a DIFFERENT source.
+// only when SOME later resolver authorizes under a DIFFERENT source, reachable
+// without passing an ungated one: the scan walks forward, skipping resolvers
+// that authorize under the same source as the refusal, and stops at the first
+// resolver that authorizes under a different source (continue) or at the first
+// that authorizes nothing at all (stop).
 //
 // Both halves of that condition are load-bearing.
 //
@@ -76,11 +80,19 @@ func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs
 // missing, and refusing the virtual namespace says nothing about the host file
 // the OS resolver holds.
 //
-// It must NOT continue otherwise. A resolver asking the same question gets the
-// same answer, so continuing is pointless; and one asking NO question —
+// It must NOT continue otherwise. A resolver asking NO question —
 // EmbedFileResolver, which authorizes nothing and therefore implements no
 // SourceGate — would hand out its copy of the very file the policy just
-// refused.
+// refused, so it bounds the scan; and a chain whose remaining members all ask
+// the same question the refusal already answered has nothing left to try.
+//
+// The scan is why a same-source resolver is SKIPPED rather than treated as the
+// end of the chain. "Asking the same question gets the same answer" says that
+// such a resolver decides nothing, not that the resolvers behind it decide
+// nothing: with the ordinary two-layer embedder shape
+// (WithSourceFS(stdlib.FS), WithSourceFS(appFS), WithSourceOS()), inspecting
+// only the immediate successor found virtual-fs behind virtual-fs and abandoned
+// the search at index 0, leaving the permitted host copy unreachable.
 func (p *ChainFileResolver) continuesPast(err error, i int) bool {
 	if IsNotFound(err) {
 		return true
@@ -88,18 +100,20 @@ func (p *ChainFileResolver) continuesPast(err error, i int) bool {
 	if !errors.Is(err, security.ErrAccessDenied) {
 		return false
 	}
-	if i+1 >= len(p.resolvers) {
-		return false
-	}
 	refused, ok := p.resolvers[i].(SourceGate)
 	if !ok {
 		return false
 	}
-	next, ok := p.resolvers[i+1].(SourceGate)
-	if !ok {
-		return false
+	for _, r := range p.resolvers[i+1:] {
+		later, ok := r.(SourceGate)
+		if !ok {
+			return false
+		}
+		if later.AuthorizedSource() != refused.AuthorizedSource() {
+			return true
+		}
 	}
-	return next.AuthorizedSource() != refused.AuthorizedSource()
+	return false
 }
 
 // EnumerateFiles unions file enumerations from all child resolvers that

@@ -767,6 +767,67 @@ func TestChainFileResolver_DenialFallsThroughToADifferentSource(t *testing.T) {
 	qt.Assert(t, resolved, qt.Equals, filepath.Join(root, "lib.scm"))
 }
 
+// TestChainFileResolver_DenialScansPastASameSourceResolver is the case above
+// with THREE members instead of two, which is the ordinary embedder shape:
+// WithSourceFS(stdlib.FS), WithSourceFS(appFS), WithSourceOS().
+//
+// Inspecting only the IMMEDIATE successor found virtual-fs behind virtual-fs,
+// read that as "nothing new to ask", and abandoned the search at index 0 — so
+// the OS member holding the permitted in-root copy was never reached and every
+// include reported "access denied". A resolver asking the same question decides
+// nothing; that is a reason to SKIP it, not to stop behind it.
+func TestChainFileResolver_DenialScansPastASameSourceResolver(t *testing.T) {
+	root := realDir(t, t.TempDir())
+	err := os.WriteFile(filepath.Join(root, "lib.scm"), []byte("(define ok 7)"), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+	t.Chdir(root)
+	t.Setenv(SchemeIncludePathEnv, "")
+
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.FilesystemRoot(root))
+	env := ns.Runtime()
+
+	r := NewChainFileResolver([]environment.FileResolver{
+		NewFSFileResolver(fstest.MapFS{}, env),
+		NewFSFileResolver(fstest.MapFS{}, env),
+		NewOSFileResolver(env),
+	})
+
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "lib.scm")
+	qt.Assert(t, err, qt.IsNil,
+		qt.Commentf("a second virtual layer must not hide the host member behind it"))
+	defer f.Close() //nolint:errcheck // test cleanup
+	qt.Assert(t, resolved, qt.Equals, filepath.Join(root, "lib.scm"))
+}
+
+// TestChainFileResolver_ScanStopsAtAnUngatedResolver bounds the scan the test
+// above requires. Walking forward for a different source must still stop dead
+// at a resolver that authorizes NOTHING, even when a differently-gated member
+// sits behind it: reaching the ungated one hands out its copy of the file the
+// policy just refused, and the members after it are never the question.
+func TestChainFileResolver_ScanStopsAtAnUngatedResolver(t *testing.T) {
+	dir := realDir(t, t.TempDir())
+	t.Chdir(dir)
+	t.Setenv(SchemeIncludePathEnv, "")
+
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.DenyAll())
+	env := ns.Runtime()
+
+	backup := fstest.MapFS{"secret.scm": {Data: []byte("backup")}}
+
+	r := NewChainFileResolver([]environment.FileResolver{
+		NewFSFileResolver(fstest.MapFS{"secret.scm": {Data: []byte("classified")}}, env),
+		NewEmbedFileResolver(backup),
+		NewOSFileResolver(env),
+	})
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "secret.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+		qt.Commentf("the ungated member ends the scan, whatever follows it"))
+}
+
 // TestChainFileResolver_DenialOfEveryGatedSourceIsReported pins that falling
 // through does not turn a refusal into an absence: when every resolver refuses,
 // the chain still answers "denied".
