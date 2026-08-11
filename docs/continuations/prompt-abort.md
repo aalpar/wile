@@ -120,7 +120,7 @@ routed by `FindPrompt`, a resume by `ReinstallSegment`.
 │    │                                                               │
 │    ├─ ErrResumeContinuation  (the trampoline bounce)               │
 │    │   boundary := FindPrompt(tag)                                 │
-│    │   ReinstallSegment(seg, boundary, SourceWinding, vals, true)  │
+│    │   ReinstallSegment(seg, bnd, srcWinding, vals, true, arms)    │
 │    │   control signal? → pending; continue loop                    │
 │    │   wasEmpty? boundary == nil → return nil; else Restore(bnd)   │
 │    │   continue loop                                               │
@@ -430,7 +430,7 @@ it loops):
 1. `applyCapturedContinuation` invoked with value 42
 2. Thread check and barrier check pass
 3. It selects the escalator arms to revive against **its own** `p.cont`, then returns
-   `ErrResumeContinuation{DefaultPromptTag, segment, [42], SourceWinding: [], EscalatorRevivals: …}`.
+   `ErrResumeContinuation{DefaultPromptTag, segment, [42], SourceWinding: [], escalatorRevivals: …}`.
    The segment is **not** run here. Both site-local fields are frozen now for the
    same reason: step 5 may hand the signal to a driver several sub-contexts out.
 4. `applyCallableError` passes the signal through unchanged

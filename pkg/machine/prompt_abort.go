@@ -57,14 +57,17 @@ type ErrResumeContinuation struct {
 	Segment       *ComposableContinuation // carried UNRUN
 	Values        []values.Value          // resume args, already copied off the eval stack
 	SourceWinding WindingStack            // .Copy() of the winding live at the (k v) site
-	// EscalatorRevivals is the non-continuable escalator arms this resume re-enters
+	// escalatorRevivals is the non-continuable escalator arms this resume re-enters
 	// from OUTSIDE their finalizer frame's extent, decided at the (k v) site — the
 	// only place the answer exists. The signal trampolines to the top driver, whose
 	// own chain never held the frames of the sub-context a raise may have been
 	// handled in (a dynamic-wind thunk, a parameter converter), so asking the
 	// driver's chain there reads "absent" for an arm that is in fact still live.
 	// Like SourceWinding, this is state of the invocation site, not of the driver.
-	EscalatorRevivals []*escalatorArm
+	//
+	// Unexported unlike its neighbours: escalatorArm is package-private, so an
+	// exported field would be surface an embedder can neither set nor read through.
+	escalatorRevivals []*escalatorArm
 }
 
 func (p *ErrResumeContinuation) Error() string {

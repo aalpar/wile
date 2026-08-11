@@ -144,6 +144,6 @@ func (p *MachineContext) applyCapturedContinuation(
 		Segment:           capt.cc,
 		Values:            vals,
 		SourceWinding:     p.windingStack.Copy(),
-		EscalatorRevivals: revivals,
+		escalatorRevivals: revivals,
 	}
 }

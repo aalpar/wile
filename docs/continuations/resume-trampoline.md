@@ -81,10 +81,11 @@ of the current dynamic-wind state into a control signal and *returns* it:
 ```go
 // applyCapturedContinuation, pkg/machine/captured_continuation.go
 return p, &ErrResumeContinuation{
-    Tag:           DefaultPromptTag,
-    Segment:       capt.cc,            // carried UNRUN
-    Values:        vals,              // already copied off the eval stack
-    SourceWinding: p.windingStack.Copy(),
+    Tag:               DefaultPromptTag,
+    Segment:           capt.cc,       // carried UNRUN
+    Values:            vals,          // already copied off the eval stack
+    SourceWinding:     p.windingStack.Copy(),
+    escalatorRevivals: revivals,      // both frozen against THIS context
 }
 ```
 
@@ -106,7 +107,8 @@ if errors.As(err, &resumeErr) {
     boundary, _ := p.FindPrompt(resumeErr.Tag)
     wasEmpty, reErr := p.ReinstallSegment(
         resumeErr.Segment, boundary,
-        resumeErr.SourceWinding, resumeErr.Values, true)
+        resumeErr.SourceWinding, resumeErr.Values, true,
+        resumeErr.escalatorRevivals)
     ...
     continue                          // <-- the bounce
 }
@@ -148,6 +150,7 @@ func (p *MachineContext) ReinstallSegment(
     srcWinding WindingStack,        // winding live at the (k v) call site
     vals []values.Value,            // the resume values
     isolate bool,                   // restore captured marks vs. compose
+    revived []*escalatorArm,        // arms to mark, chosen at the (k v) site
 ) (bool, error)
 ```
 
@@ -283,7 +286,7 @@ frame on the *sub's* chain, and the top driver's chain never held it. Asking the
 driver reads "absent", i.e. a revival, for a jump that never left the extent, and
 swallows the secondary exactly as the two earlier answers did. So
 `applyCapturedContinuation` computes the set and carries it on
-`ErrResumeContinuation.EscalatorRevivals`; `applyComposableContinuation`, which
+`ErrResumeContinuation.escalatorRevivals`; `applyComposableContinuation`, which
 resumes in place, computes it directly. `ReinstallSegment` only *applies* it, and
 only *after* `RestoreWithWindingFrom` succeeds — a failed reinstatement never
 re-entered the frame, so it contributes no revival.

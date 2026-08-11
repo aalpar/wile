@@ -1582,10 +1582,10 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			//
 			// The escalator revivals ride the signal rather than being computed here:
 			// p.cont is THIS driver's chain, and the (k v) site may have been a
-			// sub-context whose frames this chain never held (see EscalatorRevivals).
+			// sub-context whose frames this chain never held (see escalatorRevivals).
 			wasEmpty, reErr := p.ReinstallSegment(
 				resumeErr.Segment, boundary, resumeErr.SourceWinding, resumeErr.Values, true,
-				resumeErr.EscalatorRevivals)
+				resumeErr.escalatorRevivals)
 			if reErr != nil {
 				if isControlSignal(reErr) {
 					// The winding reconcile ran an after-thunk that escaped — a raise
