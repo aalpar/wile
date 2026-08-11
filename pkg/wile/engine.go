@@ -1362,14 +1362,18 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.P
 	//
 	// SealedSlots() is every sealed slot at EVERY phase (the fold merged the
 	// per-phase seal frames into one store), where the pre-fold walk visited only
-	// the phase-0 seal's own slots. A phase-1 sealed slot is always
-	// BindingTypeSyntax (a bootstrap macro) or BindingTypePrimitive (a
-	// compile-only binding), never BindingTypeVariable: car's phase-1 expand
-	// copy — see the binding-model matrix header — is BindingTypeVariable, but
-	// registry.Apply's phaseTargets writes it through env.Expand(), an ordinary
-	// MUTABLE view, so it lives at (1, mutable) and SealedSlots() (which filters
-	// on rank) never returns it. The BindingTypeVariable filter below is what
-	// excludes the phase-1 sealed entries; it does not also cause a double visit.
+	// the phase-0 seal's own slots. The BindingTypeVariable filter below therefore
+	// does NOT confine the walk to phase 0: registry.Apply's phaseTargets seals its
+	// expand-phase copies too, and those are BindingTypeVariable holding a
+	// ForeignClosure (apply.go), so the loop reaches every dual-phase primitive
+	// twice — 146 names, measured on a bootstrapped KitchenSink namespace.
+	//
+	// Harmless by construction, not by luck: AddDocOnlyPrimitive returns early on
+	// any name already in reg.primitives (primitive_registry.go), and every name
+	// this walk sees twice is a registry primitive, so the second visit adds
+	// nothing. The cost is the duplicate Doc()/ParseDocstring pair, once per
+	// applyBaseEnvironment — which the IsNamespaceRuntime guard above already
+	// limits to the root.
 	for _, slot := range ns.Store().SealedSlots() {
 		sym := slot.Name
 		bnd := slot.Binding

@@ -166,7 +166,8 @@ func TestResolveRankedAmbiguityScopedToWinningTier(t *testing.T) {
 // Coordinate identity on CREATE: scope-set equality alone must NOT reuse a slot
 // at different coordinates — that reuse rule is what makes a phase-0 define a
 // SHADOW of the sealed entry rather than a supersede once the stores merge, and
-// what keeps define-for-syntax over the (1, mutable) registry copy a supersede.
+// equally what makes a define-for-syntax over the registry's (1, sealed) expand
+// copy a shadow.
 func TestCreateMatchesCoordinatesAndScopes(t *testing.T) {
 	sym := values.NewSymbol("v")
 	g := NewGlobalEnvironmentFrame()

@@ -860,7 +860,9 @@ func (p *EnvironmentFrame) writeCoordinates() (PhaseKey, bool) {
 // scopes become part of the binding's identity; a nil set is the ordinary
 // user-written top-level define. Coordinates are the other half of that identity
 // (see CreateGlobalBindingAt): a phase-0 define of a sealed name is a new slot,
-// a define-for-syntax over the expand-phase registry copy is the same slot.
+// and so is a top-level define-for-syntax over the expand-phase registry copy —
+// the copy sits at (1, sealed) and the define writes at (1, mutable), so the
+// phase-1 case shadows for exactly the reason the phase-0 one does.
 func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt BindingType, scopes []*syntax.Scope) (*GlobalIndex, bool) {
 	phase, sealed := p.writeCoordinates()
 	return p.global.CreateGlobalBindingAt(key, bt, scopes, phase, sealed)

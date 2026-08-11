@@ -89,7 +89,10 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	// same-named mutable entry when this view is the sealed-write one (a bootstrap
 	// macro), which would write the transformer where a user can overwrite it.
 	symbolScopes := keywordSym.Scopes()
-	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, symbolScopes)
+	globalIndex, err := createPhaseBindingUnlessStable(expandEnv, keyword, environment.BindingTypeSyntax, symbolScopes, "define-syntax")
+	if err != nil {
+		return p.wrapCompilationError(err)
+	}
 
 	// Provenance and docstring only — the scope set is now the creation key, not
 	// a post-stamp. The metadata write goes through UpdateMeta (copy-on-write
@@ -126,6 +129,54 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 
 	// define-syntax is compile-time only, emit no runtime operations
 	return nil
+}
+
+// createPhaseBindingUnlessStable is the one-phase-up create used by every
+// syntax-definition writer that stores through a pinned index rather than
+// through DefineOwnGlobal: CompileDefineSyntax, CompileDefineForSyntax and
+// compileDefineSyntaxFromSyntax. It refuses a write that would land on an
+// already-Stable slot, and returns the pinned index otherwise.
+//
+// Those three sites deliberately do NOT use DefineOwnGlobal — a phase-1
+// definition is R7RS-legal whatever the name, and the user-level case writes at
+// (1, mutable) where nothing is Stable. But the SAME sites compile bootstrap
+// sources, whose defining frame is the owner's phase-0 seal, so NextPhase()
+// hands them the (1, SEALED) view — the exact coordinate registry.Apply's
+// phaseTargets now writes its expand-phase primitive copies to. Without this
+// guard a registry that supplies both an expand-phase primitive and a bootstrap
+// macro of one name silently overwrote the primitive's slot in place, keeping
+// its BindingTypeVariable tag and its Stable stamp: a transformer stored where
+// no lookup finds it as syntax, under a stamp asserting the writer set is
+// closed.
+//
+// m.Stable, not IsStable(): an IMPORTED binding must stay supersedable by a
+// define-syntax (R7RS §5.3.1), which is what the m.Imported reset below the
+// call sites exists for. registry.Apply is the only writer of the Stable field
+// on a global, so this can only fire against a registry primitive copy.
+func createPhaseBindingUnlessStable(
+	expandEnv *environment.EnvironmentFrame,
+	sym *values.Symbol,
+	bt environment.BindingType,
+	scopes []*syntax.Scope,
+	form string,
+) (*environment.GlobalIndex, error) {
+	gi, created := expandEnv.MaybeCreateOwnGlobalBinding(sym, bt, scopes)
+	if created {
+		return gi, nil
+	}
+	b := expandEnv.GlobalEnvironment().GetOwnGlobalBinding(gi)
+	if b == nil {
+		return gi, nil
+	}
+	m := b.Meta()
+	if m == nil || !m.Stable {
+		return gi, nil
+	}
+	return nil, werr.WrapForeignErrorf(
+		werr.ErrImmutableBinding,
+		"%s: cannot rebind stable binding %q at the defining frame's next phase",
+		form, sym.Key,
+	)
 }
 
 // splitDefineSyntaxRest separates an optional leading docstring from the

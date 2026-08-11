@@ -469,10 +469,12 @@ These invariants must be maintained:
    - **`SealedWriteViewAt(phase)` is what registration writes through.** It
      returns the owner's cached sealed-write view for `phase` when the axis has
      a row there, else falls back to the receiver's own ordinary view at that
-     phase (`unsealedTargetAt`) — which is what leaves a library's registry
-     expand-phase primitives exactly where `registry.Apply`'s `phaseTargets`
-     put them (the mutable expand tier, never sealed; that placement was never a
-     property of a frame kind).
+     phase (`unsealedTargetAt`). Both `sealedAxis` rows are owned by every owner,
+     a library env included, so that fallback is dead for phases 0 and 1 and only
+     phases 2 and above take it. `registry.Apply`'s `phaseTargets` therefore
+     seats its expand-phase primitives at **(1, sealed)**, which is what makes a
+     top-level `(define-for-syntax car …)` a shadow at (1, mutable) rather than a
+     write through the registry's copy.
    - **`AtPhase`'s climb from a sealed-write view stays sealed** wherever the
      target phase has a sealed-write view of its own, and falls through to the
      ordinary phase view everywhere else. Bootstrap macros compile with
