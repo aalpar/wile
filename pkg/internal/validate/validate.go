@@ -48,9 +48,8 @@ func validateBodySlice(
 ) ([]ValidatedExpr, bool) {
 	var body []ValidatedExpr
 	bodyEnv := env
-	bodyCtx := withBodyEntryEnv(ctx, env)
 	for i := start; i < len(elements); i++ {
-		expr := validateExpr(bodyCtx, bodyEnv, elements[i], result)
+		expr := validateExpr(ctx, bodyEnv, elements[i], result)
 		if expr != nil {
 			body = append(body, expr)
 			bodyEnv = bindBodyDefineNames(bodyEnv, expr)
@@ -154,7 +153,7 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 			// binding it resolves to. The name test comes first so an ordinary
 			// call pays no resolution.
 			spec := forms.RegistryFor(env).Lookup(symVal.Key)
-			if spec != nil && spec.Validate != nil && headDenotesSpecialForm(ctx, env, symVal, sym, definitionBinder(spec.Name, pair)) {
+			if spec != nil && spec.Validate != nil && headDenotesSpecialForm(env, symVal, sym) {
 				expr := spec.Validate(ctx, env, pair, result)
 				if expr != nil {
 					// Override formName only for passthrough forms (prefixed with "@")
@@ -211,42 +210,47 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 // referenceReachesBinderDirectly is the guard; see its own comment for the
 // three footings it admits and the one it gives up.
 //
-// A DEFINITION'S OWN HEAD IS EXEMPT, via the binder parameter. The shadow a
-// define establishes begins AFTER the define, never at its own keyword — R7RS
-// §5.3.1 (p.26) contemplates defining a variable whose name is a syntactic
-// keyword, so (define define 3) is a definition and evaluates to 3. Measured
-// 2026-08-11: Petite Chez 10.4.1 and Racket 9.2 both answer 3, as did master.
+// A DEFINITION'S OWN HEAD NEEDS NO SPECIAL CASE, and the one that used to be
+// here is deleted. The FIRST (define define 3) is a definition — R7RS §5.3.1
+// (p.26) contemplates defining a variable whose name is a syntactic keyword, and
+// both peers answer 3 — but it reaches that answer through the ARMS ABOVE, not
+// through an exemption:
 //
-// The exemption is asked the same way as everything else here — by binding
-// IDENTITY, resolving the binder off this same env inside this same window — so
-// it fires only for the form's own binding and leaves a LATER define of a
-// DIFFERENT name demoted, which is what master and both peers do once `define`
-// is a variable.
+//	top level, and a library body   the Predeclared arm: the letrec* pre-scan has
+//	                                minted the slot but no define has compiled, so
+//	                                the head still means the form
+//	a lambda or let body            the nil-binding arm: bindBodyDefineNames is
+//	                                incremental, so at the moment this head is
+//	                                validated the name is not yet locally bound
 //
-// AT THE TOP LEVEL THE Predeclared ARM ABOVE NOW REACHES (define define 3)
-// FIRST, so the exemption is left carrying two narrower cases: a REDEFINITION
-// after the first has compiled and cleared the mark, and a body-local define
-// whose name the enclosing body already bound. Wile reads both as definitions;
-// measured 2026-08-11, both peers read a redefinition as a CALL and error
-// ("attempt to apply non-procedure 3"). R7RS does not settle it — §5.3.1's
-// keyword clause licenses the definition reading, and §5.3.2 p.27 says only
-// "it is an error" — so this divergence is pre-existing and left alone.
+// Nothing else pins that correspondence, so it is ratcheted per context by the
+// three "first ... define of a keyword name binds" rows in
+// pkg/wile/binding_model_matrix_test.go. A change to the pre-scan or to
+// bindBodyDefineNames can break one context and not the others.
 //
-// IT IS REFUSED when the head's binding predates the body. Inside
-// (let ((define f)) (define define 2)) the definiendum resolves onto the LET's
-// binding, not onto one this define establishes, and exempting there re-reads a
-// call as a definition. See body_entry_env.go.
+// A REDEFINITION IS A CALL, which is what falling through to
+// referenceReachesBinderDirectly gives. Once `define` denotes a variable, a
+// following (define define 4) applies it and raises ErrNotAProcedure. Wile used
+// to answer 4 here, alone: measured 2026-08-11, Petite Chez 10.4.1 and Racket 9.2
+// both raise. R7RS does not settle it in terms — §5.3.1's keyword clause licenses
+// the first definition and §5.3.2 p.27 says only "it is an error" — so the peers
+// are the oracle. Deleting the exemption also removed body_entry_env.go, whose
+// only job was to refuse the exemption inside (let ((define f)) (define define 2)).
+//
+// STILL DIVERGENT, deliberately, and not this function's business: a top-level
+// shadow reaching into a lambda body, and both macro-mediated shapes, still
+// answer 4 where the peers raise. They turn on referenceReachesBinderDirectly's
+// hygiene guard below, which exists to stop a user's (define set! …) capturing a
+// template's set!. Relaxing it is its own arc.
 //
 // GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
 // tie. That is deliberately not caught: it reaches the compile path's recover
 // boundary and surfaces as a CompilationError chaining the sentinel, which is
 // the answer an ambiguous identifier is supposed to get.
 func headDenotesSpecialForm(
-	ctx context.Context,
 	env *environment.EnvironmentFrame,
 	symVal *values.Symbol,
 	sym *syntax.SyntaxSymbol,
-	binder *syntax.SyntaxSymbol,
 ) bool {
 	if env == nil {
 		return true
@@ -277,86 +281,7 @@ func headDenotesSpecialForm(
 	if b == ge.SealedBindingAt(symVal, q, env.PhaseLevel()) {
 		return true
 	}
-	// The own-head exemption, refused when the head's binding predates the body:
-	// inside (let ((define f)) (define define 2)) the definiendum resolves onto
-	// the LET's binding, so exempting there re-reads a call as a definition. See
-	// body_entry_env.go.
-	if !bodyBindingPredatesBody(ctx, symVal, scopes, b) && formEstablishesBinding(env, binder, b) {
-		return true
-	}
 	return !referenceReachesBinderDirectly(env, symVal, scopes, b)
-}
-
-// formEstablishesBinding reports whether b is the very binding the definition
-// form under validation introduces, so that the form's head is being demoted by
-// its own definiendum.
-//
-// The resolution is deliberately made HERE rather than by the caller: it is the
-// third leg of headDenotesSpecialForm's identity compare, and a *Binding is an
-// identity only inside a window that creates no bindings (see that function's
-// comment). It is also reached only once the head has already resolved to a
-// non-sealed variable — i.e. only in a program that has shadowed the keyword —
-// so the ordinary define pays nothing for it.
-func formEstablishesBinding(env *environment.EnvironmentFrame, binder *syntax.SyntaxSymbol, b *environment.Binding) bool {
-	if binder == nil {
-		return false
-	}
-	name, ok := binder.Unwrap().(*values.Symbol)
-	if !ok {
-		return false
-	}
-	return env.GetBinding(name, syntax.ScopesOf(binder.Scopes())) == b
-}
-
-// definitionBinder returns the identifier a definition form introduces — the
-// definiendum of (define name value) or the operator of
-// (define (name params …) body …) — and nil for any other form or a shape that
-// is not a well-formed definition.
-//
-// Keyed by the form NAME, exactly like the registry lookup beside it and for
-// the same reason: the keyword answers which syntactic position holds the
-// binder (candidacy); headDenotesSpecialForm still decides denotation by the
-// binding that position resolves to.
-//
-// `define` is the only keyword listed because it is the only definition form
-// whose binder exists before validation sees the head. The expander's letrec*
-// pre-scan predeclares exactly what compilation.extractDefineName reports, and
-// that function recognizes `define` alone; define-syntax binds in the expand
-// environment, and define-values and define-record-type desugar into `define`
-// forms that arrive here in this same shape. This helper must keep agreeing
-// with extractDefineName about where a define's binder sits, or the exemption
-// stops covering what the pre-scan predeclared.
-//
-// A shape with no value/body — (define x), (define (f)) — is NOT a definition
-// for this purpose. Reporting a binder there would let (f f), where f is a
-// local variable spelled `define`, be re-read as a malformed definition instead
-// of the call it is.
-func definitionBinder(formName string, pair *syntax.SyntaxPair) *syntax.SyntaxSymbol {
-	if formName != "define" {
-		return nil
-	}
-	rest, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(rest) {
-		return nil
-	}
-	tail, ok := rest.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(tail) {
-		return nil
-	}
-	switch s := rest.SyntaxCar().(type) {
-	case *syntax.SyntaxSymbol:
-		return s
-	case *syntax.SyntaxPair:
-		if syntax.IsSyntaxEmptyList(s) {
-			return nil
-		}
-		name, ok := s.SyntaxCar().(*syntax.SyntaxSymbol)
-		if !ok {
-			return nil
-		}
-		return name
-	}
-	return nil
 }
 
 // referenceReachesBinderDirectly reports whether the reference sym reaches the

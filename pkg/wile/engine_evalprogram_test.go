@@ -136,11 +136,14 @@ func TestEngine_EvalProgram_WrapperHeadIsNotShadowable(t *testing.T) {
 // matters: the pre-scan runs over a (begin …) body, which is what EvalProgram
 // (and the CLI's -e, which joins its expressions into one program) builds.
 //
-// The last row is the other side of the exemption, and the reason it is asked
-// as an identity compare rather than "this form is a define": once `define` IS
-// a variable, a LATER define of a different name is an application of it.
-// Measured on Petite Chez 10 — "(define define 3) (define foo 5)" reports
-// "variable foo is not bound", i.e. Chez also read the second form as a call.
+// The last row is why the question is asked as an identity compare rather than
+// "this form is a define": once `define` IS a variable, a LATER define is an
+// application of it. Measured on Petite Chez 10 — "(define define 3) (define foo
+// 5)" reports "variable foo is not bound", i.e. Chez also read the second form as
+// a call. That holds for a later define of the SAME name too, which is what the
+// own-head exemption used to suppress and why deleting it cost nothing here: the
+// rows below are green with and without it. The redefinition case is ratcheted
+// in binding_model_matrix_test.go, not here.
 func TestEngine_EvalProgram_DefinitionHeadIsNotSelfShadowed(t *testing.T) {
 	ctx := context.Background()
 	cases := []struct {

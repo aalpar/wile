@@ -394,17 +394,19 @@ func TestBindingModelMatrix(t *testing.T) {
 		// `called`, Racket 9.2 (-I r5rs) `called`, Wile master `called`. All
 		// three agree, unlike the §4.2.3 row above.
 		//
-		// The own-head exemption is meant to fire only for the binding the form
-		// itself establishes, but it resolves the binder off the same env, so
-		// when the binder is SPELLED `define` it lands on the local shadow and
-		// the exemption misfires.
+		// This holds by ordinary fallthrough now, not by a special case: the head
+		// resolves to a variable that is neither predeclared nor sealed, so
+		// headDenotesSpecialForm reaches referenceReachesBinderDirectly and the
+		// form is a call. It used to need the own-head exemption to be REFUSED
+		// here — the exemption resolved the binder off the same env, landed on
+		// the let's binding and re-read the call as a definition.
 		{name: "locally shadowed define with a value is a call",
 			units: []string{`(let ((define (lambda args 'called))) (define define 2))`},
 			want:  "called"},
-		// RATCHET, green before and after, and it localises the defect above:
-		// the no-VALUE shape (f f) is already guarded, so a fix must not be
-		// written as "stop exempting when the binder is spelled like the head" —
-		// that would regress this row. Only (f f v) misfires.
+		// RATCHET, green throughout the exemption's life and after its removal.
+		// It says a fix must never be written as "this form is a define, so its
+		// head is one" — the no-VALUE shape (f f) is a call, and any rule keyed
+		// on the head's spelling rather than on what it resolves to regresses it.
 		{name: "locally shadowed define with no value is already a call",
 			units: []string{`(let ((define (lambda args 'called))) (define define))`},
 			want:  "called"},
@@ -413,16 +415,57 @@ func TestBindingModelMatrix(t *testing.T) {
 		// internal definition can occur, (begin ⟨definition₁⟩ …) is equivalent
 		// to the sequence of definitions that form the body of the begin."
 		//
-		// This is the ratchet on the CARRIER, and it is the row that says why
-		// validateBegin must NOT start its own body record: a spliced begin is
-		// not a region, so it inherits the enclosing body's entry environment.
-		// Giving it its own would make (lambda () (define define 1) (begin
-		// (define define 2))) see the FIRST define's fabricated frame as the
-		// entry chain and demote the second — the enclosing body's own define
-		// misread as an enclosing binder's.
+		// A spliced begin is not a region, so it must not change any head's
+		// denotation. The carrier this row used to ratchet — the body-entry
+		// environment that decided whether the own-head exemption applied — is
+		// gone with the exemption, but the property it protected is not, and it
+		// now has a second ratchet from the other side: "keyword redefinition
+		// through a spliced begin is a call", below.
 		{name: "locally shadowed define stays a call through a spliced begin",
 			units: []string{`(let ((define (lambda args 'called))) (begin (define define 2)))`},
 			want:  "called"},
+		// A REDEFINITION OF A KEYWORD-NAMED VARIABLE IS A CALL. Once `define`
+		// denotes a variable, a following (define define v) is an application of
+		// that variable, not a definition — so it raises rather than rebinding.
+		// R7RS does not settle this in terms (§5.3.1's keyword clause licenses
+		// the first definition; §5.3.2 p.27 says only "it is an error"), so the
+		// peers are the oracle. Measured 2026-08-11: Petite Chez 10.4.1 "attempt
+		// to apply non-procedure 3" and Racket 9.2 "not a procedure, given 3".
+		//
+		// These three rows are the ratchet on deleting the own-head exemption.
+		// Nothing pinned this before: the suite was green with the exemption AND
+		// without it, which is exactly why the exemption could be reintroduced as
+		// an innocuous-looking special case with no test going red.
+		{name: "top-level keyword redefinition is a call",
+			units:   []string{`(define define 3)`, `(define define 4)`},
+			wantErr: werr.ErrNotAProcedure},
+		{name: "body keyword redefinition is a call",
+			units:   []string{`(let () (define define 3) (define define 4) define)`},
+			wantErr: werr.ErrNotAProcedure},
+		// The spliced-begin case, from the other side: the row above proves a
+		// second define in one body is a call, and this proves a begin does not
+		// buy it a fresh region that would make it a definition again.
+		{name: "keyword redefinition through a spliced begin is a call",
+			units:   []string{`((lambda () (define define 1) (begin (define define 2)) define))`},
+			wantErr: werr.ErrNotAProcedure},
+		// CONTROLS, green before and after. The FIRST (define define v) is a
+		// definition in every context — R7RS §5.3.1 (p.26) contemplates defining
+		// a variable whose name is a syntactic keyword, and both peers answer 3.
+		//
+		// Three rows because three DIFFERENT arms of headDenotesSpecialForm carry
+		// them and nothing else pins the correspondence: the Predeclared arm at
+		// top level, and the nil-binding arm inside a lambda or let body. A change
+		// to the letrec* pre-scan or to bindBodyDefineNames could break one
+		// context and not the others.
+		{name: "first top-level define of a keyword name binds",
+			units: []string{`(define define 3)`, `define`},
+			want:  "3"},
+		{name: "first lambda-body define of a keyword name binds",
+			units: []string{`((lambda () (define define 3) define))`},
+			want:  "3"},
+		{name: "first let-body define of a keyword name binds",
+			units: []string{`(let () (define define 3) define)`},
+			want:  "3"},
 		// AN INTERNAL DEFINE'S REGION IS THE WHOLE BODY, including a head
 		// EARLIER in it. R7RS §5.3.2 (p.26): the variables are "local to the
 		// ⟨body⟩" and "the region of the binding is the entire ⟨body⟩".

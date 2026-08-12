@@ -317,6 +317,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Redefining a variable whose name is a syntactic keyword silently rebound it
+  instead of raising.** `(define define 3)` is a definition — R7RS §5.3.1 (p.26)
+  contemplates defining a variable whose name is a syntactic keyword — but once
+  `define` denotes a variable, a following `(define define 4)` is an
+  *application* of that variable, not a second definition. Wile answered `4`;
+  Petite Chez 10.4.1 and Racket 9.2 both raise, and Wile now raises too:
+  `application: expected a procedure, got 3`. The same correction applies inside
+  a `lambda` or `let` body and through a spliced body-level `begin`. R7RS does
+  not settle it in terms (§5.3.2 p.27 says only "it is an error"), so the two
+  reference implementations are the oracle.
+
+  The first definition is unaffected in every context. The fix **deleted** the
+  own-head exemption that produced the old answer rather than adding a rule, so
+  `pkg/internal/validate` loses one file and two helpers. Three shapes still
+  diverge and are unchanged: a top-level shadow reaching into a `lambda` body,
+  and the two macro-mediated forms — those turn on the hygiene guard that stops
+  a user's `(define set! …)` capturing a macro template's `set!`.
+
 - **A top-level `(begin …)` gave its contents `letrec*` body semantics.** R7RS
   §4.2.3 (p.17) requires a `begin` at the outermost level of a program to
   evaluate its contents "exactly as if the enclosing `begin` construct were not
