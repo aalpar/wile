@@ -58,6 +58,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   escaping denial does not run an enclosing `dynamic-wind`'s *after* thunk,
   exactly as an unguarded `(error …)` does not.
 
+- **BREAKING (sandbox semantics): `(file-exists? path)` answers `#f` on a denied
+  path instead of raising.** It raised the authorizer's denial, which after the
+  change above kills the program rather than being catchable. R7RS §6.14 gives
+  the procedure a boolean and no error clause, and an authorizer violation does
+  not present itself as an error: a denial is a message to the host that
+  installed the authorizer, not to the program it constrains. So the predicate
+  reports what it is permitted to report.
+
+  Denial and absence are now **indistinguishable**, deliberately — a denied
+  path, an OS `EACCES`, and a path that is simply not there all answer `#f`.
+  A predicate that told them apart would hand a sandboxed program an oracle for
+  the filesystem outside its sandbox. A caller needing the reason is not served
+  by this procedure; a lower-level call that reports it is anticipated and is
+  not built.
+
+  Refusal is not the whole error space, and the other half of the split is new
+  behaviour in the opposite direction: a system error that says nothing about
+  existence — `EIO`, `ELOOP`, `ENAMETOOLONG`, a timeout — now **raises**, where
+  before every `stat` failure alike collapsed to `#f` and reported the file as
+  absent on evidence that never spoke to absence.
+
+  Scope: the predicate only. `open-input-file`, `open-output-file`,
+  `delete-file`, `call-with-{input,output}-file` and the five directory
+  procedures are commands with no non-error answer to give, and their denials
+  still escape to the host.
+
 - **Special forms can be shadowed by `define`, `let`, and any other binding
   form.** The validator asked a name-keyed registry whether a head was a special
   form and consulted only *local* bindings for a shadow, so a top-level `define`
@@ -147,6 +173,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (both wait loops exit on it exactly as on `MutexUnlocked`), so the three-value
   enum plus the owner field always encoded all four answers. Only the renderer
   collapsed them.
+
+- **BREAKING (embedders): `values.Mutex.Owner()` survives abandonment.** It
+  returned `nil` once the owning thread terminated, discarding the one fact
+  worth having about an abandoned mutex — which thread died holding it — to
+  uphold a `MutexAbandoned ⇒ owner == nil` invariant that bought nothing.
+  Ownership is now an independent axis: `MarkAbandoned` keeps the owner,
+  `Unlock` still clears it, and the next acquirer still replaces it. The Scheme
+  surface is unchanged, because `mutex-state` answers `'abandoned` off the
+  state; SRFI-18 gives the thread answer to the held-and-owned case alone. A Go
+  caller asking "who holds this *now*" must pair `Owner()` with `State()`
+  rather than reading `Owner() != nil` as heldness.
+
+- **A mutex acquired by a thread that has already terminated is abandoned at
+  once.** `Thread.AbandonOwnedMutexes` emptied the ownership list without
+  closing it, so a later acquisition was appended to a list nothing would read
+  again: the mutex stayed locked with a dead owner, and every untimed
+  `mutex-lock!` on it parked with no wakeup to come. Termination now raises a
+  barrier, and `TrackMutex` abandons past it. The window was narrow and the VM
+  closed it by accident — cancelling the thread's context walks the goroutine to
+  an exit defer that abandons a second time — so this turns an incidental
+  guarantee into a structural one rather than fixing a reproducible hang.
 
 - **BREAKING (Scheme): a datum nested deeper than 10,000 levels is refused.**
   `datum->syntax` and `eval` bound structural NESTING the way the reader and
