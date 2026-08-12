@@ -622,9 +622,62 @@ func TestAuthorizer_DenyBlocksFileRead(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(file-exists? "/tmp/x")`))
+	// A read is a command, and a denied command fails. This row used to be
+	// (file-exists? ...), which is a PREDICATE and now answers #f under denial
+	// — see TestAuthorizer_DenialIsIndistinguishableFromAbsence. Opening the
+	// file is what "blocks file read" means, and it still raises.
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(open-input-file "/tmp/x")`))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+// TestAuthorizer_DenialIsIndistinguishableFromAbsence is gates G5b.1 and G5b.2.
+//
+// R7RS §6.14 gives file-exists? a boolean and no error clause. Wile answers #f
+// for absence and #f for every refusal — an authorizer denial, an OS EACCES —
+// so a sandboxed program cannot use the predicate as an oracle for what lies
+// outside its sandbox. That indistinguishability is the point, not a rounding
+// error: it is the confidentiality property Wave 2 item 9c buys for `include`.
+//
+// The OS half of the same split, and the system errors that do NOT collapse to
+// #f, are gated in extensions/files/prim_file_exists_test.go.
+func TestAuthorizer_DenialIsIndistinguishableFromAbsence(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	present := filepath.Join(dir, "present.txt")
+	err := writeTestFile(present, "here")
+	c.Assert(err, qt.IsNil)
+
+	denied, err := NewEngine(ctx,
+		WithAuthorizer(security.DenyAll()),
+		WithExtension(files.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	permitted, err := NewEngine(ctx, WithExtension(files.Extension))
+	c.Assert(err, qt.IsNil)
+
+	rows := []struct {
+		name   string
+		engine *Engine
+		path   string
+		want   string
+	}{
+		{"denied, and the file is there", denied, present, "#f"},
+		{"denied, and the file is not", denied, filepath.Join(dir, "absent.txt"), "#f"},
+		{"permitted, and the file is there", permitted, present, "#t"},
+		{"permitted, and the file is not", permitted, filepath.Join(dir, "absent.txt"), "#f"},
+	}
+	for _, tc := range rows {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			v, err := tc.engine.Eval(ctx, tc.engine.MustParse(ctx, fmt.Sprintf(`(file-exists? %q)`, tc.path)))
+			c.Assert(err, qt.IsNil, qt.Commentf("file-exists? must not raise for %s", tc.name))
+			c.Assert(v.SchemeString(), qt.Equals, tc.want)
+		})
+	}
 }
 
 func TestAuthorizer_DenyBlocksFileWrite(t *testing.T) {
@@ -914,7 +967,15 @@ func TestAuthorizer_FilesystemRootDeniesOutside(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(file-exists? "/etc/passwd")`))
+	// Outside the root, opening raises. The predicate does not: file-exists?
+	// answers #f rather than confirming that /etc/passwd is there — the whole
+	// of W4-6. Both arms are asserted here so "denies outside" keeps meaning
+	// what its name says.
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, `(file-exists? "/etc/passwd")`))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "#f")
+
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(open-input-file "/etc/passwd")`))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
@@ -996,11 +1057,11 @@ func TestAuthorizer_DenyBlocksCommandLine(t *testing.T) {
 // os.Exit, so invoking it in-process is safe.
 //
 // The sweep is representative, not exhaustive: it covers one primitive per gate
-// action (process:read/exit/exec/exec-shell, env:read, file:stat/write/delete,
+// action (process:read/exit/exec/exec-shell, env:read, file:read/write/delete,
 // code:eval), PLUS one per separately-reachable gate SITE, not every gated
-// primitive — e.g. open-input-file shares file:read/stat with the file-exists?
-// row, and current-directory is uncovered. A new gate action should add a row
-// here, and so should a new gate site on an existing action.
+// primitive — e.g. call-with-input-file shares file:read with the
+// open-input-file row, and current-directory is uncovered. A new gate action
+// should add a row here, and so should a new gate site on an existing action.
 //
 // The second clause is load-bearing and was added when expand/expand-once were
 // gated: they share code:eval with the eval row, so under the action-only
@@ -1015,6 +1076,14 @@ func TestAuthorizer_DenyBlocksCommandLine(t *testing.T) {
 // closed current-{input,output,error}-port rather than as an ErrAccessDenied
 // from a primitive — the shape every row here asserts. TestHostStdioIsGated
 // covers it in the shape it actually has.
+//
+// file:stat is covered, but not as a row, for the same reason. file-exists? is
+// a predicate: W4-6 makes it answer #f under denial rather than raise, so its
+// gate cannot surface as an ErrAccessDenied either. The assertion after the
+// table keeps the gate netted in the shape it has — a file that IS there must
+// still read as #f under DenyAll, which is exactly what a dropped
+// security.Check would break. file:write and file:delete keep their rows;
+// they are commands.
 //
 // The sweep deliberately does NOT cover (environment '(wile kitchen-sink)).
 // That constructor is now gated, but on containment rather than on a per-action
@@ -1041,7 +1110,7 @@ func TestAuthorizer_DenyAllSweep(t *testing.T) {
 		{"command-line (system, process:read)", `(command-line)`},
 		{"exit (system, process:exit)", `(exit)`},
 		{"get-environment-variable (envvars, env:read)", `(get-environment-variable "PATH")`},
-		{"file-exists? (files, file:stat)", `(file-exists? "/tmp/x")`},
+		{"open-input-file (files, file:read)", `(open-input-file "/tmp/x")`},
 		{"open-output-file (files, file:write)", `(open-output-file "/tmp/x")`},
 		{"delete-file (files, file:delete)", `(delete-file "/tmp/x")`},
 		{"eval (eval, code:eval)", `(eval '(+ 1 2))`},
@@ -1058,20 +1127,44 @@ func TestAuthorizer_DenyAllSweep(t *testing.T) {
 				qt.Commentf("expected ErrAccessDenied for %s, got: %v", tc.code, err))
 		})
 	}
+
+	// file:stat, in the shape it has. See the charter above: file-exists? is a
+	// predicate and answers #f under denial, so it cannot be a row. Point it at
+	// a file that demonstrably IS there, so a dropped security.Check turns this
+	// #f into #t rather than leaving the gate uncovered.
+	t.Run("file-exists? (files, file:stat)", func(t *testing.T) {
+		c := qt.New(t)
+		present := filepath.Join(t.TempDir(), "present.txt")
+		err := writeTestFile(present, "here")
+		c.Assert(err, qt.IsNil)
+
+		v, err := engine.Eval(ctx, engine.MustParse(ctx, fmt.Sprintf(`(file-exists? %q)`, present)))
+		c.Assert(err, qt.IsNil)
+		c.Assert(v.SchemeString(), qt.Equals, "#f",
+			qt.Commentf("file:stat gate dropped: DenyAll let file-exists? see %s", present))
+	})
 }
 
 // TestDenialIsUnswallowable is the handler-wrapped mirror of the sweep above:
-// fifteen guard rows and one with-exception-handler row.
+// guard rows plus one with-exception-handler row.
 //
 // Every authorizer denial that reached a primitive frame was converted into a
 // Scheme condition by applyCallableError, so any enclosing handler absorbed it.
-// The fifteen guarded forms — all eleven rows of the sweep, plus
-// (open-input-file ...) and (load ...), plus dynamic-wind, plus a denial inside
-// an SRFI-18 thread joined under guard — evaluated to 'caught with a nil host
-// error. The sixteenth, with-exception-handler, is the one row that failed
-// LOUDLY before the fix but for the wrong reason, and its own comment below
-// says so. A sandboxed program could therefore neutralise its own sandbox's
-// refusals.
+// The guarded forms — the sweep's rows, plus (open-input-file ...) and
+// (load ...), plus dynamic-wind, plus a denial inside an SRFI-18 thread joined
+// under guard — evaluated to 'caught with a nil host error. The
+// with-exception-handler row is the one that failed LOUDLY before the fix but
+// for the wrong reason, and its own comment below says so. A sandboxed program
+// could therefore neutralise its own sandbox's refusals.
+//
+// file-exists? is asserted after the table rather than in it, and the reason is
+// NOT that its denial became swallowable. W4-6 makes the predicate answer #f
+// under denial, so no denial ever reaches a handler: there is nothing to
+// swallow. The principle here — a denial the sandboxed program can absorb is a
+// sandbox it can neutralise — is untouched, because the case it governs no
+// longer arises for this one procedure. Reading the moved row as a regression
+// against this test is the mistake to avoid; the assertion below is what keeps
+// the claim checked.
 //
 // The scope is the RUNTIME gate sites. The three compile-time load gates
 // surface as *CompilationError and were already unswallowable.
@@ -1097,7 +1190,6 @@ func TestDenialIsUnswallowable(t *testing.T) {
 		{"command-line", `(guard (e (#t 'caught)) (command-line))`},
 		{"exit", `(guard (e (#t 'caught)) (exit))`},
 		{"get-environment-variable", `(guard (e (#t 'caught)) (get-environment-variable "PATH"))`},
-		{"file-exists?", `(guard (e (#t 'caught)) (file-exists? "/tmp/x"))`},
 		{"open-output-file", `(guard (e (#t 'caught)) (open-output-file "/tmp/x"))`},
 		{"delete-file", `(guard (e (#t 'caught)) (delete-file "/tmp/x"))`},
 		{"eval", `(guard (e (#t 'caught)) (eval '(+ 1 2)))`},
@@ -1129,7 +1221,7 @@ func TestDenialIsUnswallowable(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// A per-row qt.C, not the enclosing one: quicktest's Assert calls
 			// FailNow, which must run on the subtest's own goroutine, and a shared
-			// C would report only the first of sixteen rows.
+			// C would report only the first row.
 			c := qt.New(t)
 			_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
 			c.Assert(err, qt.IsNotNil, qt.Commentf("guard absorbed the denial for %s", tc.code))
@@ -1137,6 +1229,19 @@ func TestDenialIsUnswallowable(t *testing.T) {
 				qt.Commentf("expected ErrAccessDenied to escape for %s, got: %v", tc.code, err))
 		})
 	}
+
+	// The moved file-exists? row. See the charter above: the guard must not
+	// fire, because nothing is raised — the predicate reports #f and the
+	// program continues. A denial reappearing here as a caught condition would
+	// mean W4-6 was reverted; a denial escaping as a host error would mean the
+	// #f arm was.
+	t.Run("file-exists? reports #f rather than a swallowable denial", func(t *testing.T) {
+		c := qt.New(t)
+		v, err := engine.Eval(ctx, engine.MustParse(ctx,
+			`(guard (e (#t 'caught)) (file-exists? "/tmp/x"))`))
+		c.Assert(err, qt.IsNil)
+		c.Assert(v.SchemeString(), qt.Equals, "#f")
+	})
 
 	// RATCHETS, not gate rows: both pass with the fix reverted. They exist to
 	// prove the new arm keys on the denial sentinel rather than on the resource,

@@ -62,10 +62,19 @@ func TestProfile_Console_FileSandbox(t *testing.T) {
 	eng, err := NewEngine(ctx, WithProfile(Console))
 	c.Assert(err, qt.IsNil)
 
-	_, err = eng.EvalMultiple(ctx, `(file-exists? "/tmp")`)
+	result, err := eng.EvalMultiple(ctx, `(file-exists? "/tmp")`)
 	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "#t")
 
-	_, err = eng.EvalMultiple(ctx, `(file-exists? "/etc/passwd")`)
+	// Outside the sandbox the predicate answers #f, not an error: W4-6 makes a
+	// denial indistinguishable from absence, so /etc/passwd reads exactly as a
+	// path that is not there. The sandbox is still enforced — the command form
+	// below raises — but the predicate is not an oracle for what is outside it.
+	result, err = eng.EvalMultiple(ctx, `(file-exists? "/etc/passwd")`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "#f")
+
+	_, err = eng.EvalMultiple(ctx, `(open-input-file "/etc/passwd")`)
 	c.Assert(err, qt.IsNotNil)
 }
 
