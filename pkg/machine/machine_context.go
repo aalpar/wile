@@ -465,6 +465,17 @@ func (p *MachineContext) Run() error {
 		// --- Wave 1: zero-operand operations ---
 
 		case OpPush:
+			perr := mc.pushSingleValueRegisterTo(mc.evals)
+			if perr != nil {
+				return perr
+			}
+			err := mc.checkStackSize()
+			if err != nil {
+				return err
+			}
+			mc.pc++
+
+		case OpPushValues:
 			mc.pushValueRegisterTo(mc.evals)
 			err := mc.checkStackSize()
 			if err != nil {

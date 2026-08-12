@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // markEntry is a single continuation mark key-value pair.
@@ -337,6 +338,25 @@ func (p *vmState) pushValueRegisterTo(s *Stack) {
 	if p.singleValue != nil {
 		s.Push(p.singleValue)
 	}
+}
+
+// pushSingleValueRegisterTo pushes the value register onto s as exactly one
+// entry, raising when the register does not hold exactly one value. Used by
+// OpPush, which delivers one argument, initializer or store operand into one
+// stack slot: every drain that reads a compile-time count depends on that
+// one-push-one-entry correspondence. The multiple-value delivery seam is
+// pushValueRegisterTo, reached through OpPushValues.
+func (p *vmState) pushSingleValueRegisterTo(s *Stack) error {
+	if p.singleValue != nil {
+		s.Push(p.singleValue)
+		return nil
+	}
+	if len(p.multiValues) == 1 {
+		s.Push(p.multiValues[0])
+		return nil
+	}
+	return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
+		"pushSingleValueRegisterTo: returned %d values to a single-value context", len(p.multiValues))
 }
 
 // copyValueRegisterFrom copies both halves of the value register from src.
