@@ -619,7 +619,14 @@ func PrimMutexUnlock(mc machine.CallContext) error {
 		}
 	}
 
-	// Untrack mutex from the owning thread before unlocking
+	// Drop the ownership record before unlocking, so termination cannot abandon
+	// a mutex this call is in the middle of releasing.
+	//
+	// Owner() survives abandonment, so on an abandoned mutex this untracks from
+	// the thread that abandoned it rather than from nobody. That is a no-op and
+	// deliberately so: the abandoning thread's list was emptied by
+	// AbandonOwnedMutexes, and the scan finds nothing. Unlocking clears the
+	// owner either way.
 	owner := mutex.Owner()
 	if owner != nil {
 		owner.UntrackMutex(mutex)
