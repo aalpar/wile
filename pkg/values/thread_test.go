@@ -123,6 +123,61 @@ func TestThread_Done(t *testing.T) {
 	qt.Assert(t, th.Done(), qt.Not(qt.IsNil))
 }
 
+// --- Mutex ownership tracking ---
+
+// TestThread_AbandonOwnedMutexes marks the whole tracked set and empties it,
+// so a second call has nothing left to abandon.
+func TestThread_AbandonOwnedMutexes(t *testing.T) {
+	th := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "owner")
+	held := values.NewMutex("held")
+	released := values.NewMutex("released")
+
+	held.Lock(nil, th)
+	th.TrackMutex(held)
+	released.Lock(nil, th)
+	th.TrackMutex(released)
+	released.Unlock(nil, nil)
+	th.UntrackMutex(released)
+
+	th.AbandonOwnedMutexes()
+	qt.Assert(t, held.State(), qt.Equals, values.MutexAbandoned)
+	qt.Assert(t, released.State(), qt.Equals, values.MutexUnlocked)
+
+	// Idempotent: Terminate calls it, then the goroutine's exit defer calls it
+	// again. The second call must not disturb a mutex acquired since.
+	th.AbandonOwnedMutexes()
+	qt.Assert(t, held.State(), qt.Equals, values.MutexAbandoned)
+}
+
+// TestThread_TrackMutexPastTerminationBarrier is the 15b gate.
+//
+// AbandonOwnedMutexes takes the ownership list and drops it. Before the
+// barrier, a mutex acquired after that point was appended to a list nothing
+// would ever read again: it stayed MutexLocked with a terminated owner, and
+// every untimed mutex-lock! on it parked forever with no wakeup to come. The
+// window is real but narrow today — the machine loop's ctx poll gets the
+// goroutine to its exit defer, which abandons a second time — so the guarantee
+// was incidental. The barrier makes it structural.
+func TestThread_TrackMutexPastTerminationBarrier(t *testing.T) {
+	th := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "terminated")
+	th.AbandonOwnedMutexes()
+
+	late := values.NewMutex("late")
+	ok, err := late.Lock(nil, th)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, err, qt.IsNil)
+	th.TrackMutex(late)
+
+	qt.Assert(t, late.State(), qt.Equals, values.MutexAbandoned)
+	qt.Assert(t, late.StateValue(), valuestest.SchemeEquals, values.NewSymbol("abandoned"))
+
+	// The point of abandoning it: the next acquirer gets it, and is told.
+	acquired, lockErr := late.Lock(nil, nil)
+	qt.Assert(t, acquired, qt.IsTrue)
+	var abandoned *values.AbandonedMutexException
+	qt.Assert(t, errors.As(lockErr, &abandoned), qt.IsTrue)
+}
+
 // --- Thread Exception Types ---
 
 func TestJoinTimeoutException_Error(t *testing.T) {

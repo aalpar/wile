@@ -69,17 +69,25 @@ var (
 // reads state to also know which states permit owner != nil. Instead,
 // MutexLocked is one state; owner = nil iff acquired without owner.
 //
-// Invariants enforced by Lock/Unlock/MarkAbandoned:
+// Ownership is an INDEPENDENT AXIS, not a function of the state. Two of the
+// three states constrain the owner field; the third deliberately does not:
 //
 //	state == MutexUnlocked   ⇒ owner == nil          (renders 'not-abandoned)
 //	state == MutexLocked     — owner is the identity  (nil ⇒ 'not-owned: held
 //	                           by a caller with no Thread object, which is the
 //	                           PRIMORDIAL thread or an explicit #f owner —
 //	                           see the symbol block above)
-//	state == MutexAbandoned  ⇒ owner == nil          (renders 'abandoned)
+//	state == MutexAbandoned  — owner SURVIVES: it is the thread that abandoned
+//	                           it, retained as the debugging payload (who died
+//	                           holding this?). It is not rendered: SRFI-18 says
+//	                           an abandoned mutex answers 'abandoned, never a
+//	                           thread. Read Owner() with State(), never alone,
+//	                           if the question is "who holds this now".
+//
+// Enforced by Lock/Unlock/MarkAbandoned.
 type MutexState int
 
-// MutexState constants. See the invariant block above for state↔owner relations.
+// MutexState constants. See the block above for state↔owner relations.
 const (
 	MutexUnlocked  MutexState = iota // Not locked
 	MutexLocked                      // Held
@@ -108,9 +116,10 @@ type Mutex struct {
 	mu    sync.Mutex
 	cond  *sync.Cond
 	state MutexState
-	// owner is nil in three distinct situations, which the state field
-	// disambiguates: not held at all; held by the primordial thread or an
-	// explicit #f owner ('not-owned); or abandoned. See the invariant block.
+	// owner is nil in two distinct situations, which the state field
+	// disambiguates: not held at all; or held by the primordial thread or an
+	// explicit #f owner ('not-owned). An abandoned mutex keeps the thread that
+	// abandoned it. See the state block above.
 	owner *Thread
 }
 
@@ -160,15 +169,16 @@ func (p *Mutex) State() MutexState {
 	return p.state
 }
 
-// StateValue returns the state as a Scheme value per R7RS SRFI-18.
-// Returns package-level singletons for symbol states; the singletons avoid
-// re-allocating the symbol, and eq? on symbols is by name (see EqIdentity).
-// Returns: 'not-owned, 'abandoned, or the owner thread.
+// StateValue returns the state as a Scheme value per SRFI-18. All four answers
+// are distinguishable: 'not-abandoned, 'not-owned, 'abandoned, or the owner
+// thread. Returns package-level singletons for the symbol answers; the
+// singletons avoid re-allocating the symbol, and eq? on symbols is by name
+// (see EqIdentity).
 //
-// SRFI-18 collapses "unlocked" and "locked without owner" into the single
-// 'not-owned symbol — they are indistinguishable to Scheme. The Go-side
-// distinction is preserved by MutexState (Unlocked is acquirable without
-// blocking; Locked-without-owner is held by a non-thread caller).
+// An abandoned mutex retains its abandoning thread in owner (see the MutexState
+// block), and this renders 'abandoned regardless. SRFI-18 gives the thread
+// answer to the held-and-owned case alone; the retained identity is for a Go
+// caller debugging who died holding it, not for the Scheme surface.
 func (p *Mutex) StateValue() Value {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -203,7 +213,10 @@ func (p *Mutex) StateValue() Value {
 	}
 }
 
-// Owner returns the current owner thread, or nil if not owned
+// Owner returns the thread this mutex is associated with, or nil if there is
+// none. That is NOT the same question as "who holds it": an abandoned mutex
+// still reports the thread that abandoned it, which is the point of retaining
+// it. Pair this with State() when heldness matters.
 func (p *Mutex) Owner() *Thread {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -358,13 +371,17 @@ func (p *Mutex) UnlockContext(ctx context.Context, cv *ConditionVariable, timeou
 // MarkAbandoned marks the mutex as abandoned (called when owner thread terminates).
 // Only mutexes in MutexLocked state can be abandoned — unlocked and already-
 // abandoned mutexes are no-ops.
+//
+// The owner is KEPT. Clearing it discarded the one fact worth having about an
+// abandoned mutex — which thread died holding it — and bought nothing:
+// StateValue answers 'abandoned off the state, and the next acquirer overwrites
+// owner with itself. The next Unlock clears it, as it clears any owner.
 func (p *Mutex) MarkAbandoned() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.state == MutexLocked {
 		p.state = MutexAbandoned
-		p.owner = nil
 		p.cond.Broadcast()
 	}
 }

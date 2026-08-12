@@ -60,7 +60,7 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeString},
 			ReturnType: values.TypeBinaryOutputPort},
 		{Name: "file-exists?", ParamCount: 1, Impl: PrimFileExistsQ,
-			Doc: "Returns #t if a file or directory exists at FILENAME.", ParamNames: []string{"filename"}, Category: "files",
+			Doc: "Returns #t if a file or directory exists at FILENAME. Answers #f when it does not, and also when access is refused: a denial is deliberately indistinguishable from absence. Raises for a system error that says nothing about existence.", ParamNames: []string{"filename"}, Category: "files",
 			ParamTypes: []values.TypeConstraint{values.TypeString},
 			ReturnType: values.TypeBoolean},
 		{Name: "delete-file", ParamCount: 1, Impl: PrimDeleteFile,

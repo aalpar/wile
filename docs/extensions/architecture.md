@@ -663,11 +663,23 @@ R7RS gives a procedure a non-error way to report, that is the right answer:
 `file-exists?` returning `#f` on a denied path is the procedure reporting what
 it is permitted to report, not an error in disguise.
 
-This is the governing principle, and the sites do not all implement it yet:
-today a denial inside a file primitive still surfaces as a catchable condition
-whose `(file-error? e)` is `#f`. Treat the current behaviour as unspecified and
-do not build on it. In particular, do not write an authorizer whose denial is
-meant to be caught by the sandboxed program.
+`file-exists?` is the only procedure with such a non-error way to report, and it
+now uses it: a denied path answers `#f`, indistinguishably from an absent one.
+Both halves of that are load-bearing. Answering at all is what keeps the denial
+out of the program's error domain; answering the *same* as absence is what stops
+the predicate becoming an oracle for the filesystem outside the sandbox. A
+caller that needs to know which it was is not served by this procedure.
+
+The remaining file procedures are commands, with no non-error answer to give.
+Their denials do not become conditions either — they escape the program's
+handlers entirely and reach the host, which is the party the message is for. Do
+not write an authorizer whose denial is meant to be caught by the sandboxed
+program.
+
+Refusal is not the whole error space, and the split matters: a system error that
+says nothing about whether a file exists — `EIO`, `ELOOP`, `ENAMETOOLONG`, a
+timeout — still raises out of `file-exists?`. Collapsing those to `#f` would
+report a file as absent on evidence that never spoke to absence.
 
 ### What this contract does not reach
 

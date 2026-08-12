@@ -15,6 +15,8 @@
 package files
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -84,8 +86,43 @@ func PrimOpenBinaryOutputFile(mc machine.CallContext) error {
 	})
 }
 
+// statAnswersFalse reports whether a stat failure is one file-exists? answers #f
+// for rather than raising.
+//
+// Three sources, one answer, and the classifier must accept all three or the
+// split is wrong in a way tests do not see. ErrNotExist is the ordinary absent
+// file. ErrPermission is the OS refusing the lookup — EACCES on an unreadable
+// parent, EPERM. ErrAccessDenied is this engine's own authorizer refusing it,
+// which reaches here (rather than through the gate above) when confinedStat
+// re-gates a resolved symlink target. Keying on the sentinel alone would let an
+// EACCES raise; keying on the errno alone would let the re-gate raise.
+//
+// Everything else — EIO, ELOOP, ENAMETOOLONG, a timeout — says nothing about
+// whether the file is there, so it is not a #f and must not be reported as one.
+func statAnswersFalse(err error) bool {
+	return errors.Is(err, fs.ErrNotExist) ||
+		errors.Is(err, fs.ErrPermission) ||
+		errors.Is(err, security.ErrAccessDenied)
+}
+
 // PrimFileExistsQ implements the (file-exists?) primitive.
-// Returns #t if file exists.
+// Returns #t if the file exists and this engine is permitted to see it.
+//
+// DENIAL AND ABSENCE ARE DELIBERATELY INDISTINGUISHABLE. A path the authorizer
+// refuses, and a path the OS refuses to stat, both answer #f — the same answer
+// a path that is not there gets. That is not a rounding error to be fixed back:
+// R7RS §6.14 gives this procedure a boolean and no error clause, an authorizer
+// violation does not present itself as an error (it stays in the authorizer's
+// domain and escapes to the host that installed it, not to the sandboxed
+// program), and a predicate that distinguished the two would hand a sandboxed
+// program an oracle for the filesystem outside its sandbox. A caller that needs
+// to know WHY is not served by this procedure; a lower-level call that reports
+// the reason is anticipated and is not built here.
+//
+// The refusals are not the whole error space. A system error that carries no
+// information about existence — EIO, ELOOP, ENAMETOOLONG, a timeout — raises,
+// because reporting it as #f would claim the file is absent on evidence that
+// says nothing of the kind. See statAnswersFalse for where the line falls.
 func PrimFileExistsQ(mc machine.CallContext) error {
 	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "file-exists?")
 	if err != nil {
@@ -97,9 +134,19 @@ func PrimFileExistsQ(mc machine.CallContext) error {
 		Target:   filename.Value,
 	})
 	if err != nil {
-		return err
+		// Deliberately dropped, and this is the whole point of the item: the
+		// denial IS the answer, rendered as #f. Returning it would report an
+		// authorizer decision to the sandboxed program, which is not the party
+		// it is addressed to. Unconditional, not statAnswersFalse-gated — an
+		// authorizer that denies with an unexpected cause is still a denial,
+		// and must not become the one refusal that raises.
+		mc.SetValue(values.FalseValue)
+		return nil //nolint:nilerr // a denial is reported as #f, never as an error
 	}
 	_, err = confinedStat(mc.Authorizer(), filename.Value)
+	if err != nil && !statAnswersFalse(err) {
+		return werr.WrapForeignFileError(err, "file-exists?", filename.Value)
+	}
 	mc.SetValue(values.BoolToBoolean(err == nil))
 	return nil
 }

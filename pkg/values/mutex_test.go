@@ -155,10 +155,10 @@ func TestMutex_MarkAbandoned(t *testing.T) {
 		wantOwner bool // true if Owner() should be non-nil after MarkAbandoned
 	}{
 		{
-			name:      "locked-with-owner → abandoned",
+			name:      "locked-with-owner → abandoned, owner retained",
 			setup:     func(m *values.Mutex) { m.Lock(nil, th) },
 			wantState: values.MutexAbandoned,
-			wantOwner: false,
+			wantOwner: true,
 		},
 		{
 			name:      "locked-without-owner → abandoned",
@@ -173,13 +173,13 @@ func TestMutex_MarkAbandoned(t *testing.T) {
 			wantOwner: false,
 		},
 		{
-			name: "already-abandoned → no-op (stays abandoned)",
+			name: "already-abandoned → no-op (stays abandoned, owner still retained)",
 			setup: func(m *values.Mutex) {
 				m.Lock(nil, th)
 				m.MarkAbandoned()
 			},
 			wantState: values.MutexAbandoned,
-			wantOwner: false,
+			wantOwner: true,
 		},
 	}
 	for _, tc := range tcs {
@@ -188,11 +188,56 @@ func TestMutex_MarkAbandoned(t *testing.T) {
 			tc.setup(m)
 			m.MarkAbandoned()
 			qt.Assert(t, m.State(), qt.Equals, tc.wantState)
-			// Invariant: only MutexLocked admits a non-nil owner.
+			// Owner is an independent axis, not a function of the state.
+			// Abandonment KEEPS it — the thread that died holding the mutex is
+			// the one fact worth having about it, and dropping it was the whole
+			// of the loss. The nil rows are nil because they were locked with a
+			// nil owner or never locked, not because abandonment cleared one.
 			ownerNonNil := m.Owner() != nil
 			qt.Assert(t, ownerNonNil, qt.Equals, tc.wantOwner)
+			// Retained, but never rendered: SRFI-18 gives the thread answer to
+			// the held-and-owned case alone.
+			if tc.wantState == values.MutexAbandoned {
+				qt.Assert(t, m.StateValue(), valuestest.SchemeEquals, values.NewSymbol("abandoned"))
+			}
 		})
 	}
+}
+
+// TestMutex_UnlockClearsRetainedOwner pins the other end of retention: an owner
+// that survives abandonment must not survive the next release, or a released
+// mutex would keep naming a thread that has nothing to do with it.
+func TestMutex_UnlockClearsRetainedOwner(t *testing.T) {
+	m := values.NewMutex("retain")
+	th := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "owner")
+
+	m.Lock(nil, th)
+	m.MarkAbandoned()
+	qt.Assert(t, m.Owner(), qt.Equals, th)
+
+	m.Unlock(nil, nil)
+	qt.Assert(t, m.State(), qt.Equals, values.MutexUnlocked)
+	qt.Assert(t, m.Owner() == nil, qt.IsTrue)
+	qt.Assert(t, m.StateValue(), valuestest.SchemeEquals, values.NewSymbol("not-abandoned"))
+}
+
+// TestMutex_AbandonedAcquireReplacesRetainedOwner pins that retention does not
+// outlive its usefulness the other way either: the next acquirer owns the
+// mutex, and the dead thread's identity goes with the state it belonged to.
+func TestMutex_AbandonedAcquireReplacesRetainedOwner(t *testing.T) {
+	m := values.NewMutex("retain-acquire")
+	dead := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "dead")
+	live := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "live")
+
+	m.Lock(nil, dead)
+	m.MarkAbandoned()
+
+	ok, err := m.Lock(nil, live)
+	qt.Assert(t, ok, qt.IsTrue)
+	var abandoned *values.AbandonedMutexException
+	qt.Assert(t, errors.As(err, &abandoned), qt.IsTrue)
+	qt.Assert(t, m.Owner(), qt.Equals, live)
+	qt.Assert(t, m.StateValue(), qt.Equals, values.Value(live))
 }
 
 func TestMutex_LockAbandoned(t *testing.T) {

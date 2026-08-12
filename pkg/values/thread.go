@@ -121,8 +121,14 @@ type Thread struct {
 
 	// ownedMutexes tracks mutexes currently owned by this thread.
 	// On thread termination, all owned mutexes are marked as abandoned.
-	ownedMutexes []*Mutex
-	mutexMu      sync.Mutex // protects ownedMutexes
+	//
+	// mutexesAbandoned is the termination barrier: once AbandonOwnedMutexes has
+	// run, this thread can no longer accumulate ownership, so a mutex it
+	// acquires afterwards is abandoned on the spot rather than added to a list
+	// nobody will read again. See TrackMutex.
+	ownedMutexes     []*Mutex
+	mutexesAbandoned bool
+	mutexMu          sync.Mutex // protects ownedMutexes and mutexesAbandoned
 }
 
 // NewThread creates a new thread that will execute the given thunk.
@@ -410,10 +416,30 @@ func (p *Thread) Sleep(d time.Duration) {
 
 // TrackMutex adds a mutex to this thread's ownership tracking set.
 // Called by mutex-lock! when a mutex is acquired with this thread as owner.
+//
+// Past the termination barrier there is no set left to add to, so it abandons
+// on the spot instead. An acquisition tracked past that point would be held by
+// a thread that has already terminated and would never be abandoned: the mutex
+// stays locked forever and every untimed mutex-lock! on it parks with no wakeup
+// to come.
+//
+// The barrier makes that structural rather than incidental. The VM closes the
+// window today by accident — Terminate cancels the thread's context, the machine
+// loop's ctx poll aborts, and the goroutine's exit defer abandons a second time
+// — so anything that widens it reopens the hole: a primitive that blocks without
+// watching ctx, a cleanup that outlives cancellation.
+//
+// MarkAbandoned is called with mutexMu released, keeping the Thread.mutexMu →
+// Mutex.mu order this type already establishes in AbandonOwnedMutexes.
 func (p *Thread) TrackMutex(m *Mutex) {
 	p.mutexMu.Lock()
-	defer p.mutexMu.Unlock()
+	if p.mutexesAbandoned {
+		p.mutexMu.Unlock()
+		m.MarkAbandoned()
+		return
+	}
 	p.ownedMutexes = append(p.ownedMutexes, m)
+	p.mutexMu.Unlock()
 }
 
 // UntrackMutex removes a mutex from this thread's ownership tracking set.
@@ -431,10 +457,18 @@ func (p *Thread) UntrackMutex(m *Mutex) {
 
 // AbandonOwnedMutexes marks all mutexes owned by this thread as abandoned.
 // Called during thread termination to ensure waiting threads are notified.
+//
+// It also raises the termination barrier, permanently: this thread will not
+// accumulate ownership again, and TrackMutex abandons rather than tracks from
+// here on. Calling it twice is ordinary — Terminate calls it while the goroutine
+// is still unwinding, and the goroutine's exit defer calls it again after the
+// dynamic-wind after thunks have had their chance to unlock cleanly. The second
+// call finds an empty list and re-raises an already-raised barrier.
 func (p *Thread) AbandonOwnedMutexes() {
 	p.mutexMu.Lock()
 	mutexes := p.ownedMutexes
 	p.ownedMutexes = nil
+	p.mutexesAbandoned = true
 	p.mutexMu.Unlock()
 
 	for _, m := range mutexes {
