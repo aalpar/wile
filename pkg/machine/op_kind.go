@@ -44,6 +44,10 @@ func (*OperationPush) OpKind() OpCode {
 	return OpPush
 }
 
+func (*OperationPushValues) OpKind() OpCode {
+	return OpPushValues
+}
+
 func (*OperationPop) OpKind() OpCode {
 	return OpPop
 }

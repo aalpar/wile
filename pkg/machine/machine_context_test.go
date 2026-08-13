@@ -1421,8 +1421,27 @@ func TestRunDispatch_OpPush(t *testing.T) {
 func TestRunDispatch_OpPush_Nil(t *testing.T) {
 	c := qt.New(t)
 	tpl := NewNativeTemplate(0, 0, false)
-	// OpPush with nil value register should be a no-op (line 631 guard)
+	// OpPush delivers exactly one value into exactly one slot, so an empty
+	// value register raises rather than silently pushing nothing. The old
+	// no-op is what let (define x (values)) reach Stack.Pop with an empty
+	// stack. OpPushValues is the seam that still accepts 0/1/N.
 	tpl.AppendInstruction(Instruction{Op: OpPush})
+
+	env := environment.NewNamespace().Runtime()
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	err := mc.Run()
+	c.Assert(err, qt.ErrorIs, werr.ErrWrongNumberOfValues)
+	c.Assert(mc.evals.Len(), qt.Equals, 0)
+}
+
+func TestRunDispatch_OpPushValues_Nil(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+	// The multiple-value seam keeps the old spread behaviour: zero values
+	// pushes nothing, which is what call-with-values needs for (values).
+	tpl.AppendInstruction(Instruction{Op: OpPushValues})
 
 	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)

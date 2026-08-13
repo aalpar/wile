@@ -51,6 +51,7 @@ var (
 	ErrNotACloseParen             = NewStaticError("not a close parenthesis")
 	ErrDatumLabelUndefined        = NewStaticError("undefined datum label")
 	ErrWrongNumberOfArguments     = NewStaticError("wrong number of arguments")
+	ErrWrongNumberOfValues        = NewStaticError("wrong number of values")
 	ErrNotAMachineContext         = NewTypeSentinel("machine context")
 	ErrNotAPair                   = NewTypeSentinel("pair")
 	ErrNotACons                   = NewTypeSentinel("cons")

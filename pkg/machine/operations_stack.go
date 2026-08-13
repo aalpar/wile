@@ -38,6 +38,26 @@ func (p *OperationPush) EqualTo(o values.Value) bool {
 	return SameType(p, v, ok)
 }
 
+// --- PushValues ---
+
+// OperationPushValues spreads the value register's 0/1/N values onto the eval
+// stack. It is the multiple-value delivery seam; OperationPush is the
+// single-value one and raises on any other count.
+type OperationPushValues struct {
+	OperationBase
+}
+
+func NewOperationPushValues() *OperationPushValues {
+	return &OperationPushValues{
+		OperationBase: NewOperationBase("machine-operation-push-values"),
+	}
+}
+
+func (p *OperationPushValues) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationPushValues)
+	return SameType(p, v, ok)
+}
+
 // --- Pop ---
 
 // OperationPop removes the top value from the eval stack into the value

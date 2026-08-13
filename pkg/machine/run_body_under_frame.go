@@ -67,8 +67,9 @@ var returnTemplate = &NativeTemplate{
 // closure (literal 0) to the 0/1/N values its body left live in the value register.
 // It runs when the body returns normally:
 //
-//	OpPush          — spread the body's 0/1/N values onto the eval stack
-//	                  (pushValueRegisterTo is multiple-values-aware)
+//	OpPushValues    — spread the body's 0/1/N values onto the eval stack
+//	                  (this is the ONLY multiple-value delivery seam; OpPush
+//	                  raises on any count but one)
 //	OpLoadLiteral 0 — load the applied closure (literal 0) into the value register
 //	OpApply         — apply that closure to the spread args, draining the stack
 //
@@ -89,7 +90,7 @@ var returnTemplate = &NativeTemplate{
 //
 // INVARIANT: shared, read-only — the VM never mutates template code.
 var applyToValuesCode = []Instruction{
-	{Op: OpPush},
+	{Op: OpPushValues},
 	{Op: OpLoadLiteral, Arg: 0},
 	{Op: OpApply},
 }

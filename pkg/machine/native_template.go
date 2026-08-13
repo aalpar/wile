@@ -154,6 +154,8 @@ func instructionToOperation(instr Instruction) Operation {
 	// --- Wave 1: zero-operand operations ---
 	case OpPush:
 		return NewOperationPush()
+	case OpPushValues:
+		return NewOperationPushValues()
 	case OpPop:
 		return NewOperationPop()
 	case OpPull:

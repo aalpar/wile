@@ -146,6 +146,13 @@ const (
 	OpSetCdr        // Non-tail inlined set-cdr!
 	OpSetCdrTail    // Tail inlined set-cdr!
 
+	// OpPushValues spreads the value register's 0/1/N values onto the eval
+	// stack. Unlike OpPush — which delivers exactly one value into one slot
+	// and raises when the register holds any other count — this op is the
+	// multiple-value delivery seam, used only by applyToValuesCode to hand a
+	// body's results to a consumer (call-with-values and friends).
+	OpPushValues
+
 	// Fallback: dispatch to sideTable[Arg]
 
 	OpComplex
@@ -199,6 +206,7 @@ type opcodeInfo struct {
 var opcodeTable = [opCount]opcodeInfo{
 	OpInvalid:               {name: "Invalid"},
 	OpPush:                  {name: "Push"},
+	OpPushValues:            {name: "PushValues"},
 	OpPop:                   {name: "Pop", writesValue: true},
 	OpPull:                  {name: "Pull", writesValue: true},
 	OpLoadVoid:              {name: "LoadVoid", writesValue: true},

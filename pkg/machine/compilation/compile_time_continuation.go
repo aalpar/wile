@@ -786,6 +786,24 @@ func (p *CompileTimeContinuation) AppendOperations(ops ...machine.Operation) {
 	p.template.AppendOperationsWithSource(p.currentSource(), ops...)
 }
 
+// appendPushAt emits an OpPush attributed to src rather than to the form
+// currently being compiled.
+//
+// OpPush raises when the expression it is delivering produced any count but one
+// value, and that raise is reported at the instruction's own source location.
+// For an argument or initializer push, the useful location is the SUBEXPRESSION
+// that misbehaved, not the call or binding form containing it: compileValidated
+// has already popped the argument's source by the time the push is emitted, so
+// without this the diagnostic for `(+ (values 1 2) 3)` points at the `+` call.
+// A nil src falls back to the enclosing form.
+func (p *CompileTimeContinuation) appendPushAt(src *syntax.SourceContext) {
+	if src == nil {
+		p.AppendOperations(machine.NewOperationPush())
+		return
+	}
+	p.template.AppendOperationsWithSource(src, machine.NewOperationPush())
+}
+
 // emitPatchableSaveContinuation emits a SaveContinuation with a placeholder
 // offset of 0. Returns the code[] index for later patching via
 // patchSaveContinuationOffset.

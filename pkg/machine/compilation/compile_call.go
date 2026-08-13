@@ -38,7 +38,7 @@ func (p *CompileTimeContinuation) emitProcAndArgs(ctctx CompileTimeCallContext, 
 		if err != nil {
 			return err
 		}
-		p.AppendOperations(machine.NewOperationPush())
+		p.appendPushAt(arg.Source())
 	}
 	return nil
 }
@@ -89,7 +89,7 @@ func (p *CompileTimeContinuation) tryEmitSelfTailCall(ctctx CompileTimeCallConte
 		if err != nil {
 			return false, err
 		}
-		p.AppendOperations(machine.NewOperationPush())
+		p.appendPushAt(arg.Source())
 	}
 	p.AppendOperations(machine.NewOperationSelfTailCall(ctctx.frameReuse.arity))
 	return true, nil

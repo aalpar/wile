@@ -43,6 +43,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING (value semantics): delivering ≠1 values into a single-value slot
+  now raises instead of splicing.** `OpPush` pushed the value register's *live
+  arity* into an argument slot, so N values became N stack entries, and multiple
+  values silently spliced into the surrounding form: `(+ (values 1 2) 3)` was
+  `6`, `(list (values 1 2) 9)` was `(1 2 9)`, and `(+ 1 (call/cc (lambda (c) (c
+  5 6))))` was `12`. Every drain that reads a count fixed at compile time then
+  read a depth the stack did not have, so the same premise produced wrong
+  answers and reachable panics from ordinary Scheme: `(define x (values))` and
+  `(let ((x (values))) x)` panicked in `Stack.Pop`; `(define (h x) (+ (values)
+  x))` panicked in `Stack.Pop2`; a self-tail call with a two-value argument
+  bound the wrong parameters via `DrainN`; and a two-value `let` init left its
+  extra value on the eval stack for an *unrelated later call* to drain, so
+  `(define (f) (let ((x (values 1 2))) (list 'a)))` answered `(1 a)`.
+
+  One opcode was serving two contracts, and that conflation was the defect.
+  `OpPush` now delivers exactly one value into one slot and raises on any other
+  count; a new `OpPushValues` keeps the spread and is the only multiple-value
+  delivery seam, reached solely from `applyToValuesCode`. Multiple-value
+  receivers are unaffected: `call-with-values`, `let-values`, `define-values`,
+  `make-parameter`, `call-with-exit`, `with-timeout`, the non-continuable
+  `raise` escalator, `guard`'s body, and `dynamic-wind`'s multiple-value
+  propagation all still accept 0, 1 or N.
+
+  The raise is a **catchable** Scheme condition carrying `ErrWrongNumberOfValues`
+  (a new sentinel: `(define x (values))` has no arguments at all, so
+  `ErrWrongNumberOfArguments` does not describe it). `error-object?` answers
+  `#t`, `file-error?` and `read-error?` `#f`, and it reports at the **offending
+  subexpression**, not the enclosing form: `(+ 3 (values 1 2))` points at column
+  15, `(let ((a 1) (x (values 1 2))) x)` at the second binding's init. Argument,
+  `let` init and `define` value pushes are now source-attributed for this.
+
+  R7RS §6.10 leaves the ≠1-value case unspecified, so no particular answer was
+  owed; Chez and Racket both raise at the delivery point and Wile now matches
+  them on every probe, catchability included. This **reverses a previously declined** enforcement: the
+  decline was costed against a check on the `RestoreContinuation` hot path, and
+  the check as built sits at the delivery instruction on a branch
+  `pushValueRegisterTo` already took. `RestoreContinuation` is untouched. See
+  `docs/reference/r7rs-differences.md` → "Value-Count at a Single-Value Slot".
+
 - **BREAKING (sandbox semantics): an authorizer denial can no longer be caught
   from Scheme.** Every primitive-frame error was converted into a Scheme
   condition, so an enclosing `guard` or `with-exception-handler` absorbed
@@ -363,6 +402,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `callForeignCached`'s eager recheck is unchanged.
 
 ### Fixed
+
+- **A multi-expression `eval-when` body under the `eval` situation panicked.**
+  `(eval-when (eval) (display 1) (display 2))` printed `1` and then panicked
+  with `Stack.Pop: stack is empty`. The compiler discarded each non-final body
+  result with `OpPop`, but `CompileExpression` leaves its result in the value
+  register, not on the eval stack, so the pop drained an entry nobody had
+  pushed. In a register machine a non-final result needs no discarding at all,
+  since the next expression overwrites the register, so the emit is deleted
+  rather than repaired. Only the `eval` situation was reachable: the `compile`
+  situation does not run the body's instructions through the VM and was correct
+  throughout. `OpPop` now has no compiler producer.
 
 - **Redefining a variable whose name is a syntactic keyword silently rebound it
   instead of raising.** `(define define 3)` is a definition — R7RS §5.3.1 (p.26)

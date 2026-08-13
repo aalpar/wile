@@ -29,7 +29,11 @@ func TestMachine_Operations(t *testing.T) {
 	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(0)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
-	tpl := NewNativeTemplate(0, 0, false, NewOperationPush())
+	// The load is load-bearing: OpPush now requires exactly one live value in
+	// the register, so pushing off an uninitialized register raises.
+	tpl := NewNativeTemplate(0, 0, false,
+		NewOperationLoadLiteralByLiteralIndexImmediate(0),
+		NewOperationPush())
 	tpl.MaybeAppendLiteral(values.NewSymbol("bindSymbolWithScopes"))
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 	err := mc.Run()
