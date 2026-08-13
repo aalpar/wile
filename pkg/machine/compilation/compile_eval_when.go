@@ -223,15 +223,16 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 			exprCcnt = ctctx.NotInTail()
 		}
 
-		// Compile the expression
+		// Compile the expression. A non-final result needs no discarding: it
+		// lands in the value register, which the next expression overwrites.
+		// This used to emit OpPop, which drained the EVAL STACK for a value
+		// that was never pushed onto it, so any multi-expression body under
+		// the eval situation underflowed:
+		//   (eval-when (eval) (display 1) (display 2))
+		//     => panic "Stack.Pop: stack is empty"
 		err = p.CompileExpression(exprCcnt, expandedExpr)
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "eval-when: compilation failed"))
-		}
-
-		// Pop intermediate results (except for the last one)
-		if !isLast {
-			p.AppendOperations(machine.NewOperationPop())
 		}
 	}
 
