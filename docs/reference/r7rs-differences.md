@@ -15,7 +15,7 @@ This document catalogs differences between the current implementation and the R7
 4. Pair and vector literals are **immutable** — mutating one **raises an error** (R7RS permits but does not require this detection), matching immutable string literals.
 5. **Default** (opt out with `WithMutableTopLevel`): a defined-once, never-`set!`-in-unit top-level `define` in the user program is immutable, so a later `set!` **raises an error**, and code already compiled against a sealed base binding does not observe a later shadowing re-`define` (Chez two-environment model). User-loaded libraries stay mutable. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
 6. Importing one identifier from two libraries with **different** bindings **raises an error** (`ErrDuplicateBinding`) rather than silently letting the last import win. R7RS §5.6 makes this "an error" (undefined) but does not require signalling; Wile signals it, matching Chez/Racket. Re-export diamonds and repeated imports stay legal.
-7. Invoking a continuation with a number of values other than one **splices** those values into the capture position rather than raising an arity error. R7RS §6.10 leaves this **unspecified** for continuations not made by `call-with-values`, so this is a choice within unspecified territory (Racket instead raises an arity error); both conform.
+7. Delivering a number of values other than one into a **single-value slot** (a call argument, a `let` init, a `define` or `set!` operand) **raises an error**, whether those values come from `(values …)` or from invoking a continuation. R7RS §6.10 leaves the ≠1-value case **unspecified** for continuations not made by `call-with-values`, so this is a choice within unspecified territory; it matches Chez and Racket. `call-with-values` and the other multiple-value receivers still accept 0, 1 or N. **Changed:** Wile previously spliced the values into the slot.
 8. `current-second` returns POSIX/Unix time, not TAI. R7RS §6.13.2 specifies TAI (International Atomic Time); Wile returns seconds since the Unix epoch (leap seconds excluded), which trails TAI by a fixed offset (37 s as of 2017). A portable leap-second table is maintenance overhead with little practical benefit, so the deviation is documented rather than corrected.
 9. `equal?` is **structural** on records, hashtables, and boxes, where Chez and Racket answer `#f` for distinct objects. R7RS §6.1 permits either — records fall under "in all other cases, `equal?` may return either `#t` or `#f`" — so this is a deliberate choice, not a deviation from the spec. It is a deviation from most other Schemes, which is why it is listed here. **Item 14 narrows this for hashtables specifically.**
 10. Procedure calls evaluate **strictly left to right**, operator before operands, and `let` evaluates its inits in written order. R7RS §4.1.3 leaves that order **unspecified**, so the guarantee is stricter than the standard requires: a program that relies on it does not port to an implementation that evaluates right to left.
@@ -320,10 +320,15 @@ as `caar`/`map`) is rejected with `ErrImmutableBinding`. This is ordinary Scheme
 
 ---
 
-## Continuation Value-Count (Splicing, Not Arity-Checked)
+## Value-Count at a Single-Value Slot (Arity-Checked, Not Spliced)
 
-**Affected Primitives:** `call-with-current-continuation` / `call/cc` escape
-procedures, `call-with-composable-continuation`, and any captured continuation.
+**Affected:** every expression that delivers its result into a slot holding
+exactly one value: a procedure-call argument, a `let` / `let*` / `letrec` init, a
+`define` or `set!` operand, an operand of a promoted primitive. Invoking a
+captured continuation is included, because a continuation resumes *at* the
+delivery instruction: `call-with-current-continuation` / `call/cc` escape
+procedures and `call-with-composable-continuation` are therefore governed by the
+same rule as `(values …)`.
 
 **R7RS §6.10 Requirement:**
 > Except for continuations created by the `call-with-values` procedure
@@ -331,35 +336,65 @@ procedures, `call-with-composable-continuation`, and any captured continuation.
 > than one value to continuations that were not created by `call-with-values` is
 > unspecified.
 
-**Wile Behavior:** A continuation accepts **any** number of values. The values
-delivered when it is invoked are **spliced into the capture position**:
+**Wile Behavior:** delivering any count but one **raises**. Chez and Racket
+agree on every row below; Chez's wording is "returned 2 values to single value
+return context".
 
 ```scheme
-(+ 1 (call/cc (lambda (c) (c 5 6))))   ; => 12   i.e. (+ 1 5 6)
-(+ 1 (call/cc (lambda (c) (c))))       ; => 1    i.e. (+ 1)
-(call-with-values (lambda () (call/cc (lambda (c) (c 1 2 3)))) list) ; => (1 2 3)
+(+ (values 1 2) 3)                     ; raises  (was 6, i.e. (+ 1 2 3))
+(list (values 1 2) 9)                  ; raises  (was (1 2 9))
+(define x (values))                    ; raises  (was a Stack.Pop panic)
+(let ((x (values))) x)                 ; raises  (was a Stack.Pop panic)
+(+ 1 (call/cc (lambda (c) (c 5 6))))   ; raises  (was 12)
+(+ 1 (call/cc (lambda (c) (c))))       ; raises  (was 1)
 ```
 
-A continuation captured in a single-value context invoked with two values does
-**not** raise an arity error (Racket raises one); it splices both. A
-continuation invoked with zero values resumes with no values, not a fabricated
-unspecified value.
+Multiple-value *receivers* are unaffected and still accept 0, 1 or N:
 
-**Rationale:** This is emergent from the CESK value-register / eval-stack VM
-model — invoking a continuation places the delivered values at the capture
-position, where the surrounding form consumes however many are present. R7RS
-§6.10 explicitly leaves the ≠1-value case unspecified, so both Wile's splicing
-and Racket's arity error conform. `AcceptsArity` returns `true` for continuations
-(they are variadic); the value-count is governed by the resumption context, not
-by an arity gate. See `docs/continuations/delimited.md` and
+```scheme
+(call-with-values (lambda () (values 1 2)) +)                        ; => 3
+(call-with-values (lambda () (values)) list)                         ; => ()
+(call-with-values (lambda () (call/cc (lambda (c) (c 1 2 3)))) list)  ; => (1 2 3)
+(let-values (((a b) (values 1 2))) (list a b))                       ; => (1 2)
+(call-with-values
+  (lambda () (dynamic-wind (lambda () 1) (lambda () (values 1 2)) (lambda () 3)))
+  list)                                                              ; => (1 2)
+```
+
+**Mechanism:** the value register holds 0, 1 or N values, and two opcodes read
+it. `OpPush` delivers exactly one into one stack slot and raises on any other
+count; `OpPushValues` spreads whatever is there. Only `applyToValuesCode`
+(`pkg/machine/run_body_under_frame.go`) emits `OpPushValues`, which is what
+`call-with-values`, `make-parameter`, `call-with-exit`, `with-timeout` and the
+non-continuable `raise` escalator run under. Everything the compiler emits uses
+`OpPush`. See `docs/continuations/delimited.md` and
 `docs/continuations/escape-design.md` for the capture/restore mechanism.
 
-**Settled follow-ups** (`TODO.md` → "Continuation multiple-values follow-ups"):
-`dynamic-wind` now preserves multiple values from its thunk, and
-`procedure-arity` reports a continuation as `(0 . #f)`, matching its
-`AcceptsArity`. Enforcing a value-count in single-value resumption contexts was
-investigated and **declined**: it costs a check on the `RestoreContinuation` hot
-path to constrain behavior R7RS leaves unspecified.
+**Rationale:** the previous splicing was emergent rather than designed. One
+opcode served both roles, so `OpPush` pushed the register's live arity and N
+values became N stack entries. Every drain that reads a count fixed at compile
+time then read a depth the stack did not have: `DrainN(argCount)` under
+`OpSelfTailCall`, `Stack.Pop2` in a fused promoted operator, `Stack.Pop` under
+the store opcodes. The result was wrong answers and reachable internal-invariant
+panics from ordinary Scheme, including a case where the extra value survived on
+the eval stack and was drained by an unrelated later call
+(`(define (f) (let ((x (values 1 2))) (list 'a)))` answered `(1 a)`). Splitting
+the opcode fixes the whole family at the point of delivery, which is the last
+instruction that can still see the count: once the values are on the stack,
+`[+, 1, 2, 3]` is indistinguishable from a genuine three-argument call.
+
+**Reverses a prior decision.** Enforcing a value-count in single-value
+resumption contexts had been investigated and declined, on the grounds that it
+costs a check on the `RestoreContinuation` hot path to constrain behavior R7RS
+leaves unspecified. That cost objection does not apply to the check as built:
+it sits at the delivery instruction, on a branch `pushValueRegisterTo` already
+took to distinguish the single-value fast path from the multiple-value one.
+`RestoreContinuation` is untouched.
+
+**Unchanged:** `dynamic-wind` still preserves multiple values from its thunk,
+`guard` still propagates them, and `procedure-arity` still reports a
+continuation as `(0 . #f)`, matching its `AcceptsArity` of `true`. What a
+continuation *accepts* has not narrowed; what a single-value slot accepts has.
 
 ---
 
@@ -573,7 +608,7 @@ R7RS does not specify directory operations. This follows SRFI-170 conventions.
 
 R7RS §7.3's reference implementation of `guard` uses `(let ((result (begin e1 e2 ...))) ...)`, which binds a single value. If the body produces multiple values via `(values v1 v2 ...)`, the `let` binding triggers an arity mismatch.
 
-Wile's `guard` uses `call-with-values` to capture all values from the body, then re-emits them via `(apply values results)`. This means `(guard (e (#f)) (values 1 2))` correctly propagates both values, whereas the R7RS reference implementation would signal an error.
+Wile's `guard` uses `call-with-values` to capture all values from the body, then re-emits them via `(apply values results)`. This means `(guard (e (#f)) (values 1 2))` correctly propagates both values, whereas the R7RS reference implementation would signal an error. Observing them needs a multiple-value receiver: `(call-with-values (lambda () (guard (e (#f)) (values 1 2))) list)` is `(1 2)`, while placing the same `guard` in a single-value slot raises, per "Value-Count at a Single-Value Slot" above.
 
 ### Loss-Signal-Aware Numeric Conversion Primitives
 

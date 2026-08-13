@@ -102,6 +102,19 @@ func TestSingleValueDelivery_Raises(t *testing.T) {
 			src:  "(let ((f (lambda (x) x))) (f (values 1 2)))",
 		},
 		{
+			// 77f23e03: 12, i.e. (+ 1 5 6). A continuation resumes AT the delivery
+			// instruction, so it is governed by the same rule as (values ...).
+			// This row is the one that reverses a previously declined enforcement;
+			// see docs/reference/r7rs-differences.md item 7.
+			name: "continuation invoked with two values",
+			src:  "(+ 1 (call/cc (lambda (c) (c 5 6))))",
+		},
+		{
+			// 77f23e03: 1, i.e. (+ 1)
+			name: "continuation invoked with zero values",
+			src:  "(+ 1 (call/cc (lambda (c) (c))))",
+		},
+		{
 			// 77f23e03: (1 99 7) -- DrainN(argCount) took a compile-time 2 off a
 			// 3-deep stack and bound the wrong parameters. This reproduces the
 			// review's loopH symptom verbatim. Top-level define under the default
@@ -176,6 +189,19 @@ func TestSingleValueDelivery_MultiValueSeamStillWorks(t *testing.T) {
 			name: "single value passes through OpPush",
 			src:  "(car (values '(1 2)))",
 			want: "1",
+		},
+		{
+			// What a continuation ACCEPTS has not narrowed; what a single-value
+			// slot accepts has. Resumed under call-with-values, three values
+			// still arrive intact.
+			name: "continuation into a multiple-value receiver",
+			src:  "(call-with-values (lambda () (call/cc (lambda (c) (c 1 2 3)))) list)",
+			want: "(1 2 3)",
+		},
+		{
+			name: "guard body propagates multiple values",
+			src:  "(call-with-values (lambda () (guard (e (#f)) (values 1 2))) list)",
+			want: "(1 2)",
 		},
 	}
 
