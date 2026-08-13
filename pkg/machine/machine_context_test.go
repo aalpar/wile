@@ -1432,7 +1432,7 @@ func TestRunDispatch_OpPush_Nil(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 
 	err := mc.Run()
-	c.Assert(err, qt.ErrorIs, werr.ErrWrongNumberOfArguments)
+	c.Assert(err, qt.ErrorIs, werr.ErrWrongNumberOfValues)
 	c.Assert(mc.evals.Len(), qt.Equals, 0)
 }
 

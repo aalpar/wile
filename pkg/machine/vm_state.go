@@ -355,8 +355,16 @@ func (p *vmState) pushSingleValueRegisterTo(s *Stack) error {
 		s.Push(p.multiValues[0])
 		return nil
 	}
-	return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
-		"pushSingleValueRegisterTo: returned %d values to a single-value context", len(p.multiValues))
+	// ErrWrongNumberOfValues, not ErrWrongNumberOfArguments: the two faults are
+	// distinct and a host must be able to tell them apart. `(define x (values))`
+	// has no arguments at all, and `(f (values 1 2))` is a well-formed one-argument
+	// call whose argument misbehaved, not a two-argument call.
+	//
+	// The message names no argument position or variable, because OpPush is
+	// zero-operand and cannot know which it is serving. The raise-site source
+	// location supplies that instead, and points at the offending expression.
+	return werr.WrapForeignErrorf(werr.ErrWrongNumberOfValues,
+		"single-value context: expected 1 value, got %d", len(p.multiValues))
 }
 
 // copyValueRegisterFrom copies both halves of the value register from src.

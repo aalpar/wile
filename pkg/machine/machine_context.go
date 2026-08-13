@@ -467,7 +467,22 @@ func (p *MachineContext) Run() error {
 		case OpPush:
 			perr := mc.pushSingleValueRegisterTo(mc.evals)
 			if perr != nil {
-				return perr
+				// A value-count violation is a DOMAIN condition, not an internal
+				// invariant violation: the program delivered the wrong number of
+				// values, and R7RS-adjacent implementations let the program catch
+				// that (Chez answers `(caught)` for
+				// `(guard (e (#t (list 'caught))) (+ (values 1 2) 3))`). Bridging
+				// here is what makes it catchable and what stamps the raise-site
+				// source location onto it, naming the offending expression. The
+				// internal ErrStackUnderflow that Stack.Pop/Pop2/DrainN raise stays
+				// a panic; with this check in front of them it is unreachable from
+				// ordinary Scheme.
+				var berr error
+				mc, berr = bridgeForeignError(mc, perr)
+				if berr != nil {
+					return berr
+				}
+				continue
 			}
 			err := mc.checkStackSize()
 			if err != nil {

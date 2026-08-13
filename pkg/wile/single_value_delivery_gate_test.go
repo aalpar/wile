@@ -16,6 +16,7 @@ package wile
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/werr"
@@ -129,8 +130,110 @@ func TestSingleValueDelivery_Raises(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			err := evalStringErr(t, tt.src)
-			c.Assert(err, qt.ErrorIs, werr.ErrWrongNumberOfArguments)
+			c.Assert(err, qt.ErrorIs, werr.ErrWrongNumberOfValues)
+			// Never an internal-invariant panic. Six of these rows reached
+			// Stack.Pop / Stack.Pop2 / DrainN at 77f23e03; the pre-check in front
+			// of them is what keeps ErrStackUnderflow unreachable from ordinary
+			// Scheme without making it catchable, which Wave 4 §3 forbids.
+			c.Assert(err.Error(), qt.Not(qt.Contains), "recovered panic")
+			c.Assert(err.Error(), qt.Not(qt.Contains), "stack underflow")
 		})
+	}
+}
+
+// TestSingleValueDelivery_IsACatchableCondition pins that the value-count
+// violation is a DOMAIN condition and not an internal fault escaping to the host.
+// It is catchable from Scheme, `error-object?` answers #t, it impersonates neither
+// a file nor a read error, and it carries the raise-site source location — which is
+// what names the offending expression, since OpPush is zero-operand and cannot know
+// whether it is serving an argument, a `let` init or a `define` operand.
+//
+// Chez agrees it is catchable: (guard (e (#t (list 'caught))) (+ (values 1 2) 3))
+// answers (caught) there too.
+func TestSingleValueDelivery_IsACatchableCondition(t *testing.T) {
+	c := qt.New(t)
+
+	c.Run("catchable by guard", func(c *qt.C) {
+		c.Assert(evalString(t, "(guard (e (#t 'caught)) (+ (values 1 2) 3))"), qt.Equals, "caught")
+	})
+	c.Run("catchable at a store opcode too", func(c *qt.C) {
+		c.Assert(evalString(t, "(guard (e (#t 'caught)) (define x (values)))"), qt.Equals, "caught")
+	})
+	c.Run("is an error object, and impersonates nothing", func(c *qt.C) {
+		c.Assert(
+			evalString(t, "(guard (e (#t (list (error-object? e) (file-error? e) (read-error? e))))"+
+				" (+ (values 1 2) 3))"),
+			qt.Equals, "(#t #f #f)")
+	})
+	c.Run("message names the count, not a Go symbol", func(c *qt.C) {
+		msg := evalString(t, "(guard (e (#t (error-object-message e))) (+ (values 1 2) 3))")
+		c.Assert(msg, qt.Contains, "expected 1 value, got 2")
+		c.Assert(msg, qt.Not(qt.Contains), "pushSingleValueRegisterTo")
+	})
+	c.Run("carries the raise-site source location", func(c *qt.C) {
+		err := evalStringErr(t, "(display (+ (values 1 2) 3))")
+		c.Assert(err, qt.IsNotNil)
+		// Column 13 is where (values 1 2) starts, not the head of the enclosing form.
+		c.Assert(err.Error(), qt.Contains, ":1:13:")
+	})
+}
+
+// TestSingleValueDelivery_DrainSiteMatrix is Wave 1 §4.5's ratchet, in the form
+// decision D leaves it needing.
+//
+// The plan specified a table asserting that the depth delta the DISASSEMBLER
+// predicts equals the delta the VM produces, because with a per-drain fix the
+// only way to be sure every drain was covered was to enumerate them. Closing the
+// family at the single point of delivery instead makes that table's premise moot:
+// there is exactly one instruction that can put a value-register value on the eval
+// stack in a single-value context, so "did we miss a drain?" is answered by
+// construction rather than by enumeration.
+//
+// What still needs pinning is the plan's own driver: "a program that delivers 0, 1
+// and 2 values into each argument position". Every drain that reads a count fixed
+// at compile time gets all three, and the required answer is uniform -- 1 works,
+// 0 and 2 raise the same catchable condition, and none of the six panics.
+func TestSingleValueDelivery_DrainSiteMatrix(t *testing.T) {
+	c := qt.New(t)
+
+	// Each site is a program with a %s hole for the delivering expression.
+	sites := []struct {
+		name string
+		src  string
+		want string // the answer when the hole delivers exactly one value
+	}{
+		{"OpSelfTailCall (DrainN)", "(define (loop i n) (if (>= i n) i (loop %s n))) (loop 0 1)", "1"},
+		{"fused promoted op (Pop2)", "(define (h x) (+ %s x)) (h 3)", "4"},
+		{"OpStoreLocal (Pop)", "(let ((x %s)) x)", "1"},
+		{"OpStoreGlobal (Pop)", "(define dsm %s) dsm", "1"},
+		{"generic apply (Drain)", "(list %s 9)", "(1 9)"},
+		{"inlined let-bound lambda", "(let ((f (lambda (x) x))) (f %s))", "1"},
+	}
+
+	deliveries := []struct {
+		name  string
+		expr  string
+		count int
+	}{
+		{"zero values", "(values)", 0},
+		{"one value", "(values 1)", 1},
+		{"two values", "(values 1 2)", 2},
+	}
+
+	for _, site := range sites {
+		for _, d := range deliveries {
+			c.Run(site.name+"/"+d.name, func(c *qt.C) {
+				src := strings.Replace(site.src, "%s", d.expr, 1)
+				if d.count == 1 {
+					c.Assert(evalString(t, src), qt.Equals, site.want)
+					return
+				}
+				err := evalStringErr(t, src)
+				c.Assert(err, qt.ErrorIs, werr.ErrWrongNumberOfValues)
+				c.Assert(err.Error(), qt.Not(qt.Contains), "recovered panic")
+				c.Assert(err.Error(), qt.Not(qt.Contains), "stack underflow")
+			})
+		}
 	}
 }
 

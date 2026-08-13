@@ -94,7 +94,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 			if err != nil {
 				return err
 			}
-			p.AppendOperations(machine.NewOperationPush())
+			p.appendPushAt(b.Init.Source())
 		}
 	}
 
@@ -167,7 +167,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 					"compile let*: binding %q not found in local environment",
 					b.Name.Sym)
 			}
-			p.AppendOperations(machine.NewOperationPush())
+			p.appendPushAt(b.Init.Source())
 			p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
 		}
 
@@ -186,7 +186,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 					"compile letrec*: binding %q not found in local environment",
 					b.Name.Sym)
 			}
-			p.AppendOperations(machine.NewOperationPush())
+			p.appendPushAt(b.Init.Source())
 			p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
 		}
 
@@ -197,7 +197,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 			if err != nil {
 				return err
 			}
-			p.AppendOperations(machine.NewOperationPush())
+			p.appendPushAt(v.Bindings[i].Init.Source())
 		}
 		for i := n - 1; i >= 0; i-- {
 			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym, syntax.ScopesOf(v.Bindings[i].Name.Scopes()))

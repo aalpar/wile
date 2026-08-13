@@ -340,6 +340,16 @@ same rule as `(values …)`.
 agree on every row below; Chez's wording is "returned 2 values to single value
 return context".
 
+The raise is a **catchable** condition, as it is in Chez:
+`(guard (e (#t 'caught)) (+ (values 1 2) 3))` answers `caught`. `error-object?`
+is `#t`, and it impersonates nothing (`file-error?` and `read-error?` are `#f`).
+From Go it matches `werr.ErrWrongNumberOfValues`, which is deliberately distinct
+from `ErrWrongNumberOfArguments`: `(define x (values))` has no arguments, and
+`(f (values 1 2))` is a well-formed one-argument call whose argument misbehaved.
+It reports at the **offending subexpression** rather than the enclosing form, so
+`(+ 3 (values 1 2))` names column 15 and `(let ((a 1) (x (values 1 2))) x)` names
+the second binding's init.
+
 ```scheme
 (+ (values 1 2) 3)                     ; raises  (was 6, i.e. (+ 1 2 3))
 (list (values 1 2) 9)                  ; raises  (was (1 2 9))

@@ -182,7 +182,7 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCal
 	// Step 3: Store the compiled value into the binding and load void.
 	// After this, the binding holds the value and the value register contains void
 	// (since define returns an unspecified value per R7RS).
-	return p.emitDefineStore(sym, v.Name().Scopes())
+	return p.emitDefineStore(sym, v.Name().Scopes(), v.SubExp().Source())
 }
 
 // emitDefineStore emits bytecode to store the compiled value into the defined binding.
@@ -193,10 +193,15 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCal
 // and CompileValidatedDefineFn. The caller has already:
 //  1. Declared the binding via declareDefineBinding
 //  2. Compiled the value expression (leaving result in value register)
-func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol, scopes []*syntax.Scope) error {
+//
+// valueSrc attributes the push to the VALUE expression, so a value-count
+// violation is reported at the expression that produced the wrong count rather
+// than at the head of the whole define form. nil is correct for the function
+// form, whose value is a closure and can never deliver any count but one.
+func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol, scopes []*syntax.Scope, valueSrc *syntax.SourceContext) error {
 	// Push the value from the value register to the eval stack.
 	// Store operations consume from the stack, not the value register.
-	p.AppendOperations(machine.NewOperationPush())
+	p.appendPushAt(valueSrc)
 
 	if p.env.LocalEnvironment() != nil {
 		// Local context (inside a lambda body): store to local variable slot.
@@ -300,7 +305,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 
 	// Step 4: Store the closure in the binding and load void as the result.
 	// define returns an unspecified value per R7RS; we use void.
-	return p.emitDefineStore(sym, v.Name().Scopes())
+	return p.emitDefineStore(sym, v.Name().Scopes(), nil)
 }
 
 // frameReuseForDefine returns the frame-reuse disposition for a function-form

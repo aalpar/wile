@@ -66,9 +66,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `raise` escalator, `guard`'s body, and `dynamic-wind`'s multiple-value
   propagation all still accept 0, 1 or N.
 
+  The raise is a **catchable** Scheme condition carrying `ErrWrongNumberOfValues`
+  (a new sentinel: `(define x (values))` has no arguments at all, so
+  `ErrWrongNumberOfArguments` does not describe it). `error-object?` answers
+  `#t`, `file-error?` and `read-error?` `#f`, and it reports at the **offending
+  subexpression**, not the enclosing form: `(+ 3 (values 1 2))` points at column
+  15, `(let ((a 1) (x (values 1 2))) x)` at the second binding's init. Argument,
+  `let` init and `define` value pushes are now source-attributed for this.
+
   R7RS §6.10 leaves the ≠1-value case unspecified, so no particular answer was
   owed; Chez and Racket both raise at the delivery point and Wile now matches
-  them on every probe. This **reverses a previously declined** enforcement: the
+  them on every probe, catchability included. This **reverses a previously declined** enforcement: the
   decline was costed against a check on the `RestoreContinuation` hot path, and
   the check as built sits at the delivery instruction on a branch
   `pushValueRegisterTo` already took. `RestoreContinuation` is untouched. See
