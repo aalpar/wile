@@ -550,6 +550,19 @@ func TestAssocLookup_Errors(t *testing.T) {
 			values.List(values.NewInteger(99)),
 			werr.ErrNotAPair,
 		},
+		{
+			// The empty list satisfies values.Tuple, so it passed the entry
+			// assertion and Car() panicked. A panic here is not a returned
+			// error: it crossed the host boundary and reached the embedder as
+			// an "internal error" that no guard could catch. Asserting the
+			// SENTINEL rather than merely "an error" is the discriminator —
+			// a blanket recover in the VM would also make this row non-fatal,
+			// but it would not produce ErrNotAPair.
+			"alist entry is the empty list",
+			values.NewInteger(1),
+			values.List(values.EmptyList),
+			werr.ErrNotAPair,
+		},
 	}
 
 	for _, tc := range tcs {

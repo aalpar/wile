@@ -182,6 +182,15 @@ func AssocLookup(
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotAPair, "%s: expected a pair in alist but got %T", name, elem)
 		}
+		// The empty list satisfies values.Tuple, so the assertion above admits it
+		// and entry.Car() would panic — an argument-domain fault ('(()) is outside
+		// R7RS §6.3's "list of pairs") raised through the host boundary as an
+		// uncatchable internal error. Reject it here so it reads as the domain
+		// error it is, which is also the answer the Scheme-level sibling assoc
+		// already gives on the same input.
+		if values.IsEmptyList(elem) {
+			return werr.WrapForeignErrorf(werr.ErrNotAPair, "%s: expected a pair in alist but got the empty list", name)
+		}
 		if eq(entry.Car(), obj) {
 			mc.SetValue(entry)
 			return werr.ErrStopIteration
