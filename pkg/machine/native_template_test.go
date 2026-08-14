@@ -30,67 +30,6 @@ func TestNewNativeTemplate(t *testing.T) {
 	NewNativeTemplate(0, 0, false, NewOperationPush())
 }
 
-func TestNativeTemplate_DeduplicateLiteral(t *testing.T) {
-	c := qt.New(t)
-
-	tmpl := NewNativeTemplate(0, 0, false)
-
-	sym1 := values.NewSymbol("bindSymbolWithScopes")
-	tmpl.MaybeAppendLiteral(sym1)
-
-	sym2 := values.NewSymbol("bindSymbolWithScopes")
-	dedupedSym := tmpl.DeduplicateLiteral(sym2)
-	c.Assert(dedupedSym == sym1, qt.IsTrue, qt.Commentf("symbol should be deduplicated to same instance"))
-	c.Assert(dedupedSym == sym2, qt.IsFalse, qt.Commentf("symbol should not be the new instance"))
-
-	int1 := values.NewInteger(42)
-	tmpl.MaybeAppendLiteral(int1)
-
-	int2 := values.NewInteger(42)
-	dedupedInt := tmpl.DeduplicateLiteral(int2)
-	c.Assert(dedupedInt == int1, qt.IsTrue, qt.Commentf("integer should be deduplicated to same instance"))
-}
-
-func TestNativeTemplate_DeduplicateLiteral_NestedPair(t *testing.T) {
-	c := qt.New(t)
-
-	tmpl := NewNativeTemplate(0, 0, false)
-
-	symB := values.NewSymbol("b")
-	tmpl.MaybeAppendLiteral(symB)
-
-	innerSym := values.NewSymbol("b")
-	innerInt := values.NewInteger(2)
-	innerPair := values.NewCons(innerSym, values.NewCons(innerInt, values.EmptyList))
-	outerPair := values.NewCons(innerPair, values.EmptyList)
-
-	deduped := tmpl.DeduplicateLiteral(outerPair)
-	dedupedPair, ok := deduped.(*values.Pair)
-	c.Assert(ok, qt.IsTrue)
-
-	dedupedInner, ok := dedupedPair.Car().(*values.Pair)
-	c.Assert(ok, qt.IsTrue)
-
-	dedupedSymInner := dedupedInner.Car()
-	c.Assert(dedupedSymInner == symB, qt.IsTrue, qt.Commentf("symbol inside nested pair should be deduplicated"))
-}
-
-func TestNativeTemplate_DeduplicateLiteral_Vector(t *testing.T) {
-	c := qt.New(t)
-
-	tmpl := NewNativeTemplate(0, 0, false)
-
-	sym := values.NewSymbol("x")
-	tmpl.MaybeAppendLiteral(sym)
-
-	vec := values.NewVector(values.NewSymbol("x"), values.NewInteger(1))
-	deduped := tmpl.DeduplicateLiteral(vec)
-
-	dedupedVec, ok := deduped.(*values.Vector)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(dedupedVec.Elems()[0] == sym, qt.IsTrue, qt.Commentf("symbol inside vector should be deduplicated"))
-}
-
 func TestNativeTemplate_Doc(t *testing.T) {
 	tpl := &NativeTemplate{}
 	qt.Assert(t, tpl.Doc(), qt.Equals, "")
@@ -183,52 +122,6 @@ func TestNativeTemplate_EqualTo(t *testing.T) {
 	qt.Assert(t, nilTpl.EqualTo(nilTpl), qt.IsTrue)
 }
 
-func TestNativeTemplate_DeduplicateLiteral_EmptyPair(t *testing.T) {
-	tmpl := NewNativeTemplate(0, 0, false)
-
-	// Empty list
-	result := tmpl.DeduplicateLiteral(values.EmptyList)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.EmptyList)
-}
-
-func TestNativeTemplate_DeduplicateLiteral_EmptyVector(t *testing.T) {
-	tmpl := NewNativeTemplate(0, 0, false)
-
-	// Empty vector
-	emptyVec := values.NewVector()
-	result := tmpl.DeduplicateLiteral(emptyVec)
-	qt.Assert(t, result, qt.Equals, emptyVec)
-}
-
-func TestNativeTemplate_DeduplicateLiteral_NoChange(t *testing.T) {
-	tmpl := NewNativeTemplate(0, 0, false)
-
-	// Pair with elements that don't need deduplication
-	pair := values.NewCons(values.NewFloat(3.14), values.EmptyList)
-	result := tmpl.DeduplicateLiteral(pair)
-	// Same object since no deduplication happened
-	qt.Assert(t, result, qt.Equals, pair)
-
-	// Vector with no change
-	vec := values.NewVector(values.NewFloat(1.0), values.NewFloat(2.0))
-	result = tmpl.DeduplicateLiteral(vec)
-	qt.Assert(t, result, qt.Equals, vec)
-}
-
-func TestNativeTemplate_DeduplicateLiteral_OtherTypes(t *testing.T) {
-	tmpl := NewNativeTemplate(0, 0, false)
-
-	// Float - not deduplicated, just returned
-	f := values.NewFloat(3.14)
-	result := tmpl.DeduplicateLiteral(f)
-	qt.Assert(t, result, qt.Equals, f)
-
-	// String
-	s := values.NewString("hello")
-	result = tmpl.DeduplicateLiteral(s)
-	qt.Assert(t, result, qt.Equals, s)
-}
-
 // Tests moved from coverage_additional_test.go
 // TestNativeTemplateMethodsAdditional tests NativeTemplate methods
 func TestNativeTemplateMethodsAdditional(t *testing.T) {
@@ -248,29 +141,6 @@ func TestNativeTemplateMethodsAdditional(t *testing.T) {
 
 	var nilTpl *NativeTemplate
 	qt.Assert(t, tpl.EqualTo(nilTpl), qt.IsFalse)
-}
-
-// TestNativeTemplateDeduplicateLiteralVector tests vector literal deduplication
-func TestNativeTemplateDeduplicateLiteralVector(t *testing.T) {
-	tpl := NewNativeTemplate(0, 0, false)
-
-	// Create a vector with symbols
-	sym := values.NewSymbol("test")
-	vec := values.NewVector(sym, values.NewInteger(42))
-
-	// Deduplicate
-	deduped := tpl.DeduplicateLiteral(vec)
-	qt.Assert(t, deduped, qt.IsNotNil)
-}
-
-// TestNativeTemplateDeduplicateLiteralEmptyVector tests empty vector deduplication
-func TestNativeTemplateDeduplicateLiteralEmptyVector(t *testing.T) {
-	tpl := NewNativeTemplate(0, 0, false)
-
-	// Empty vector
-	vec := values.NewVector()
-	deduped := tpl.DeduplicateLiteral(vec)
-	qt.Assert(t, deduped, qt.Equals, vec)
 }
 
 // TestNativeTemplateCopyNil tests Copy on nil NativeTemplate
@@ -322,41 +192,10 @@ func TestNativeTemplateLiterals(t *testing.T) {
 	qt.Assert(t, idx2, qt.Equals, LiteralIndex(1))
 	qt.Assert(t, idx3, qt.Equals, LiteralIndex(0)) // should be same as idx1
 
-	// Test findLiteral
-	found := tpl.findLiteral(values.NewInteger(2))
-	qt.Assert(t, found, qt.IsNotNil)
-
-	notFound := tpl.findLiteral(values.NewInteger(999))
-	qt.Assert(t, notFound, qt.IsNil)
-}
-
-// TestNativeTemplateDeduplicateLiteral tests deduplication edge cases
-func TestNativeTemplateDeduplicateLiteral(t *testing.T) {
-	tpl := NewNativeTemplate(0, 0, false)
-
-	// Test with nil Pair
-	var nilPair *values.Pair
-	result := tpl.DeduplicateLiteral(nilPair)
-	qt.Assert(t, result, qt.Equals, nilPair)
-
-	// Test with empty list
-	result = tpl.DeduplicateLiteral(values.EmptyList)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.EmptyList)
-
-	// Test with nil Vector
-	var nilVec *values.Vector
-	result = tpl.DeduplicateLiteral(nilVec)
-	qt.Assert(t, result, qt.Equals, nilVec)
-
-	// Test with empty vector
-	emptyVec := values.NewVector()
-	result = tpl.DeduplicateLiteral(emptyVec)
-	qt.Assert(t, result, qt.Equals, emptyVec)
-
-	// Test with non-deduplicatable type (string)
-	str := values.NewString("hello")
-	result = tpl.DeduplicateLiteral(str)
-	qt.Assert(t, result, qt.Equals, str)
+	// Reading a pooled literal back is the other half of the pool's contract,
+	// and it is what the deleted findLiteral half of this test used to cover.
+	qt.Assert(t, tpl.Literals()[idx2], valuestest.SchemeEquals, values.NewInteger(2))
+	qt.Assert(t, len(tpl.Literals()), qt.Equals, 2)
 }
 
 func TestMaybeAppendLiteral_Dedup(t *testing.T) {

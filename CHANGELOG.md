@@ -425,6 +425,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **BREAKING (Go API): `machine.NativeTemplate.DeduplicateLiteral`, with the
+  five unexported functions behind it** (`findLiteral`, `deduplicateLiteral`,
+  `deduplicateVector`, `deduplicatePairMemo`, `deduplicateLiteralMemo`).
+
+  The cluster was **production-dead, and dead in a way a call-graph tool reports
+  as live**: its only non-test caller was `deduplicateVector`, calling back into
+  `DeduplicateLiteral` — a closed recursion with no external entry point.
+  Everything else reaching it was test code. Nothing in the compiler, the VM or
+  any extension has pooled a literal through it; `MaybeAppendLiteral` is and was
+  the live path, and it keeps `literalIdentical`, which is now that function's
+  sole caller.
+
+  Deleting it also retires a latent defect rather than only volume.
+  `deduplicateVector` rebuilt through `NewVectorWithLength` and
+  `deduplicatePairMemo` through `NewCons`, so had anything started calling it
+  after vectors and bytevectors gained an intrinsic `immutable` flag, the rebuilt
+  copy would have come back **unflagged** — a quoted literal silently made
+  mutable, with no error and no failing test.
+
+  −296 lines, +7. The one thing the deleted tests covered that the survivors did
+  not — reading a pooled literal back — moved into `TestNativeTemplateLiterals`.
+
 - **BREAKING — the `rw-mutex-*` and `once-*` primitive families, and the exported
   `values.RWMutex` / `values.Once` Go types.** Twelve primitives (`make-rw-mutex`,
   `rw-mutex?`, `rw-mutex-read-lock!`, `rw-mutex-read-unlock!`,
