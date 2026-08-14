@@ -45,33 +45,56 @@ func (p *OperationApply) EqualTo(o values.Value) bool {
 
 // --- SelfTailCall ---
 
-// OperationSelfTailCall is the in-place self-recursive tail call: it drains the
-// ArgCount already-evaluated argument values off the eval stack, writes them into
-// the current frame's parameter slots 0..ArgCount-1 (parallel assignment — the
-// args are on the stack, so old slot values stay intact during evaluation), and
-// resets pc=0. No frame acquire, no SaveContinuation, no continuation growth.
+// OperationSelfTailCall is the in-place self-recursive tail call: it pops PopCount
+// intermediate env frames, drains the ArgCount already-evaluated argument values
+// off the eval stack, writes them into the parameter frame's slots 0..ArgCount-1
+// (parallel assignment — the args are on the stack, so old slot values stay intact
+// during evaluation), and resets pc=0. No frame acquire, no SaveContinuation, no
+// continuation growth.
 //
-// Emitted only behind validate.bodyIsSelfTailReusable + a depth-0 self-tail call
-// site; that proof (no capture, no escaping closure, non-variadic) is what makes
-// reusing the live frame sound (escape-gated plan Phase 4).
+// PopCount is the number of `let` frames lexically between the parameter frame and
+// the call, and it is why this op is ONE instruction rather than a pop sequence
+// followed by a rebind. Between the pops and the rebind, mc.env points at a frame
+// whose slots are about to be overwritten while its arguments sit on the eval
+// stack; splitting that across instructions makes the intermediate state
+// representable to the peephole pass and to anything that can interpose. Popping
+// is also the one thing that must not use OpPopEnv: that op clears envPooled as a
+// statement about the frame it pops TO, which is exactly the fact this op needs to
+// leave alone.
+//
+// PopCount == 0 encodes byte-identically to the pre-Phase-C operand, so every
+// depth-0 site's instruction stream is unchanged.
+//
+// Emitted only behind validate.BodyIsSelfTailReusable at a self-tail call site;
+// that proof (no capture operator anywhere in the body, no escaping closure,
+// non-variadic, no set! of the self name) is what makes reusing the live frame
+// sound, and it covers let bodies for the same reason it covers the top level —
+// it walks the whole body. So the popped frames are unreachable except through
+// mc.env by the same argument that licenses the rebind (escape-gated plan Phase 4,
+// widened to depth>0 by frame-reclaim Phase C).
 type OperationSelfTailCall struct {
 	OperationBase
 	ArgCount int
+	PopCount int
 }
 
-// NewOperationSelfTailCall returns a self-tail-call op rebinding argCount slots.
-func NewOperationSelfTailCall(argCount int) *OperationSelfTailCall {
+// NewOperationSelfTailCall returns a self-tail-call op that pops popCount
+// intermediate frames and then rebinds argCount parameter slots.
+func NewOperationSelfTailCall(argCount, popCount int) *OperationSelfTailCall {
 	return &OperationSelfTailCall{
 		OperationBase: NewOperationBaseWithGoName("operation:self-tail-call", "SelfTailCall"),
 		ArgCount:      argCount,
+		PopCount:      popCount,
 	}
 }
 
-// EqualTo returns true if o is also an OperationSelfTailCall with the same arity.
+// EqualTo returns true if o is also an OperationSelfTailCall with the same arity
+// and pop count. Both are compared: two sites that agree on arity but not on depth
+// are different instructions, and merging them would rebind the wrong frame.
 func (p *OperationSelfTailCall) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationSelfTailCall)
-	return FieldMatches(p, v, ok, func(op *OperationSelfTailCall) int {
-		return op.ArgCount
+	return FieldMatches(p, v, ok, func(op *OperationSelfTailCall) [2]int {
+		return [2]int{op.ArgCount, op.PopCount}
 	})
 }
 

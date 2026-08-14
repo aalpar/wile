@@ -87,10 +87,22 @@ const (
 	frameReuseRelease
 )
 
-// frameReuse describes the parameter frame's reuse disposition. selfSym and arity
-// are meaningful only for frameReuseSelfTail; the zero value is frameReuseNone.
+// frameReuse describes the parameter frame's reuse disposition. selfSym, arity and
+// letDepth are meaningful only for frameReuseSelfTail; the zero value is
+// frameReuseNone.
 type frameReuse struct {
 	kind frameReuseKind
+	// letDepth is how many `let` frames lexically separate the call site from the
+	// parameter frame — the operand OpSelfTailCall pops before rebinding.
+	//
+	// It is counted HERE and not by the validate-side walk, and that is the whole
+	// coupling argument. compileValidatedLet emits exactly one OpPushEnv and makes
+	// exactly one UnderLetFrame() call, so the counter equals the runtime frame
+	// count by construction rather than by two walks agreeing. The or-shaped let
+	// (compileOrShapedLet) emits no frame and passes ctctx through untouched, so it
+	// contributes nothing to either side automatically — where a second counter in
+	// validate would have had to remember not to count it.
+	letDepth int
 	// selfSym is the armed closure's own binder IDENTIFIER, not its spelling. The
 	// emit gate resolves it against the call site's env and compares BINDINGS, so a
 	// tail call to a same-spelled DIFFERENT binding — a macro template's escape to a
@@ -112,7 +124,8 @@ func noFrameReuse() frameReuse {
 }
 
 // selfTailReuse arms the self-tail (in-place rebind) mode for the closure bound by
-// selfSym, at arity.
+// selfSym, at arity. letDepth starts at 0 — the closure body itself runs in the
+// parameter frame.
 func selfTailReuse(selfSym *syntax.SyntaxSymbol, arity int) frameReuse {
 	return frameReuse{kind: frameReuseSelfTail, selfSym: selfSym, arity: arity}
 }
@@ -190,12 +203,27 @@ func (p CompileTimeCallContext) WithEnclosingDefines(body []validate.ValidatedEx
 	return q
 }
 
-// WithoutFrameReuse returns a copy with the frame-reuse context cleared. Used when
-// descending into a frame-pushing form (let): its body runs in a pushed frame, so
-// a call there is no longer at the parameter-frame depth — neither the in-place
-// OpSelfTailCall nor OpReleaseEnvFrame (both act on the parameter frame) may fire.
-func (p CompileTimeCallContext) WithoutFrameReuse() CompileTimeCallContext {
+// UnderLetFrame returns a copy describing the body of a form that pushes one env
+// frame (a let). It is the ONLY site that may say so, because it is paired 1:1
+// with compileValidatedLet's single OpPushEnv emit.
+//
+// The two dispositions answer differently, and the asymmetry is the phase:
+//
+//   - SELF-TAIL survives, with letDepth incremented. OpSelfTailCall pops that many
+//     frames before rebinding, so a self call under a let is rewritable after all
+//     (frame-reclaim Phase C). Before Phase C this cleared, and the call leaked one
+//     parameter frame per iteration.
+//   - RELEASE is cleared. OpReleaseEnvFrame releases mc.env, which inside a let body
+//     is the LET frame, not the parameter frame — and a let frame is not pool-owned
+//     (OpPushEnv allocates it directly and sets envPooled=false), so the release
+//     would be a no-op that reads as an optimization. Widening the release path to
+//     depth>0 is a different lever and is not this one.
+func (p CompileTimeCallContext) UnderLetFrame() CompileTimeCallContext {
 	q := p
-	q.frameReuse = noFrameReuse()
+	if p.frameReuse.kind != frameReuseSelfTail {
+		q.frameReuse = noFrameReuse()
+		return q
+	}
+	q.frameReuse.letDepth++
 	return q
 }

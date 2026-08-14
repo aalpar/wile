@@ -83,6 +83,8 @@ W4 item 4 (`goErrorToCondition` re-wraps a returned `*NativeError`), W4 5+7 half
 C, W6 §8 mechanism (1)'s `CompileSymbol` static half (its W5-E blocker landed, so
 it is READY), IM Phases 2b and 3, and frame-reclaim Phase C (unblocked by W1 §4).
 
+**All five closed by 2026-08-14** — the four below on 2026-08-13, frame-reclaim Phase C on 2026-08-14 (`feat/frame-reclaim-phase-c`; see its row in the plan index for the three corrections it makes to its own plan text).
+
 **Four of those five closed 2026-08-13.** W4 item 4 shipped (`6b3e1d25`), IM
 Phase 2b (`80c9bd34`) and Phase 3 (`f6e90d4b`, gates `f6974bce`) shipped, and
 **W6 §8 mechanism (1)'s static half was already shipped when the sweep filed it**
@@ -103,7 +105,8 @@ the package whose premise it is. §8.4's gate does not require the table — it
 requires the two named instances, membership in `ci:`, and checked-in inputs —
 and the per-package shape is better on the axis §8 exists for: an assertion next
 to what it asserts cannot be orphaned by a move. **Do not re-open this looking
-for the table.** Only frame-reclaim Phase C and W4 5+7 half C remain.
+for the table.** Frame-reclaim Phase C shipped 2026-08-14; only W4 5+7 half C
+remains.
 
 ### Open — implementation work with a live plan
 
@@ -113,7 +116,7 @@ for the table.** Only frame-reclaim Phase C and W4 5+7 half C remain.
 | `2026-03-26-extension-contracts-impl.local.md` | Phase 1 + Phase 4 (runtime enforcement) shipped; Phases 2–3 annotation rollout **partial** |
 | `2026-03-26-extension-contracts-phase2-design.local.md` | Infrastructure + enforcement complete; extension annotations partial |
 | `2026-05-14-stderr-flush-on-exit.local.md` | Design locked, implementation **not started** (re-verified against source) |
-| `2026-06-18-frame-reclaim-precision-coverage.local.md` | A/E/B/D + A-local **shipped**, only A-local converted to clock (`primes` −4.2%); B/D moved verdicts, emitted ~nothing; **C deferred** 2026-07-29 (the `or` lowering removed 340 macro frames more cheaply, but reaches a disjoint set — Appendix A); F/G open. **Phase C's inbound edge is now satisfied:** Wave 1 §4 had to land first or C (`OpSelfTailCall` v2 at depth>0) would have widened the ≠1-value defect to every depth; §4 shipped 2026-08-13 (`48a52a3c`), and its fix is at the delivery instruction rather than in `OpSelfTailCall`, so C inherits it for free and needs no arity work of its own |
+| `2026-06-18-frame-reclaim-precision-coverage.local.md` | A/E/B/D + A-local **shipped**, only A-local converted to clock (`primes` −4.2%); B/D moved verdicts, emitted ~nothing; **C deferred** 2026-07-29 (the `or` lowering removed 340 macro frames more cheaply, but reaches a disjoint set — Appendix A); F/G open. **Phase C SHIPPED 2026-08-14.** Its inbound edge was satisfied by Wave 1 §4 (`48a52a3c`), whose fix sits at the delivery instruction rather than in `OpSelfTailCall`, so C inherited it and needed no arity work. **Three corrections to the plan's own Phase C text, all measured:** (1) Step 1's *"assert 0-alloc"* target is unreachable — a `let` frame costs 3 allocations and is not pool-owned, so the landed result is 5.0 → **3.0** for one let and 8.0 → **6.0** for two, removing the fixed 2 the leaked parameter frame cost; pooling `OpPushEnv` frames is a separate, unstarted lever. (2) Q-C1 resolved to **(a)**, a bit-packed `(argCount | popCount<<16)` where `popCount == 0` encodes byte-identically to the old operand — decided not on peephole grounds but because the pops and the rebind must be inseparable, and because `OpPopEnv` clears `envPooled` as a claim about the frame it pops TO. (3) Step 2's *"analysis returns depth"* was **not implemented and should not be**: `tailExprHasSelfCall` stopped counting depth, and the count is carried by the compile-time context at the single site that pairs 1:1 with `compileValidatedLet`'s single `OpPushEnv` — one counter instead of two that must agree, which retires A.7's coupling, and per CALL SITE rather than the per-closure max the plan specified (a procedure with self calls at two depths needs both). **Ledger:** armed sites 47 → 50 over 78 corpus files, none lost; the three are outside the Gabriel suite, which is why the interleaved A/B reads geomean +0.33% against a +0.12% A/A control. A.5's disjoint-frame-sets prediction held. Only F/G remain |
 | `2026-07-15-review-2026-07-13-sec4-remediation.md` | 22/23 closed; **AU.1 audit open** |
 | `2026-07-17-review-remediation-impl.md` | Confirmed at HEAD; documented guarantee and runtime disagree |
 | `2026-07-18-bootstrap-core-unification-and-signals.md` | W1 shipped; remainder open |

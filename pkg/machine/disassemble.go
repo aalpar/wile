@@ -33,6 +33,7 @@ type DisassembledInstruction struct {
 	Literal string // SchemeString() of resolved literal; "" when not applicable
 	Binding string // name of cached binding's value; "" when not applicable
 	SideOp  string // String() of InlinedOperation; "" when not applicable
+	Detail  string // pre-rendered operand detail for ops with a bespoke encoding; "" when not applicable
 	Source  string // "file:line:col" or ""
 }
 
@@ -130,6 +131,15 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 			// No special annotation needed.
 		}
 
+		// Special-case: SelfTailCall's Arg is bit-packed (argCount | popCount<<16),
+		// so the raw operand reads as a nonsense integer at any depth above 0 —
+		// 65538 for two arguments under one let. Disassembly is how frame-reclaim
+		// decisions get audited, so unpack it here rather than leave the reader to.
+		if instr.Op == OpSelfTailCall {
+			argCount, popCount := DecodeSelfTailCall(instr.Arg)
+			di.Detail = fmt.Sprintf("args=%d pop=%d", argCount, popCount)
+		}
+
 		// Special-case: MakeClosure annotates with the preceding literal's template name.
 		if instr.Op == OpMakeClosure {
 			di.Literal = makeClosureAnnotation(pc, code, literals)
@@ -206,6 +216,9 @@ func formatDetail(di DisassembledInstruction) string {
 
 	if di.Slot >= 0 {
 		parts = append(parts, fmt.Sprintf("slot=%d depth=%d", di.Slot, di.Depth))
+	}
+	if di.Detail != "" {
+		parts = append(parts, di.Detail)
 	}
 	if di.Target >= 0 {
 		parts = append(parts, fmt.Sprintf("\u2192%d", di.Target))

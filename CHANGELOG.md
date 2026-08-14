@@ -43,6 +43,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A self-tail call nested inside a `let` now reuses its parameter frame.**
+  `OpSelfTailCall` rebinds the enclosing procedure's parameter slots in place and
+  jumps to pc=0; until now it was emitted only when that frame was the current
+  one, so `(define (loop x) (let ((y (f x))) (loop y)))` — an extremely ordinary
+  shape — fell back to a full call and leaked one parameter frame per iteration.
+  The op now carries the number of `let` frames to unwind first, and the analysis
+  that used to refuse on depth no longer counts depth at all.
+
+  Measured, allocations per iteration:
+
+  | shape | before | after |
+  |---|---|---|
+  | self-tail call, no `let` | 0 | 0 |
+  | one `let` wrapping the call | 5 | **3** |
+  | two `let`s wrapping the call | 8 | **6** |
+
+  **The floor is not zero, and the arithmetic says why.** A `let` frame costs 3
+  allocations and is not pool-owned — `OpPushEnv` builds it directly and, in tail
+  position, nothing pops it. This change removes the *parameter* frame, a fixed 2
+  per iteration at any depth. Pooling let frames is a separate, unstarted lever.
+
+  No measurable clock change on the canonical Gabriel suite, and that is the
+  expected result rather than a disappointment: a census over 78 corpus files
+  finds the change arms **3 additional sites** (47 → 50) and loses none, and all
+  three are outside that suite. The depth>0 frames those benchmarks did have were
+  introduced by `or`, and a previous change had already stopped `or` from emitting
+  a frame at all.
+
 - **BREAKING (Scheme semantics): a PAIR literal is no longer immutable.**
   `(set-car! '(a b c) 999)` raised `ErrImmutablePair` and now succeeds; the same
   for `set-cdr!` and `list-set!`. Vector, bytevector and string literals are

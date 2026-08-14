@@ -65,7 +65,7 @@ const (
 	OpStoreGlobal
 	OpPeekK
 	OpPushEnv      // Push new env frame with Arg local slots
-	OpSelfTailCall // Self-recursive tail call: rebind Arg param slots in place, pc=0
+	OpSelfTailCall // Self-recursive tail call: pop Arg's high half of env frames, rebind its low half of param slots in place, pc=0
 
 	// Wave 3: two-operand operations (Arg = bit-packed slot|depth)
 

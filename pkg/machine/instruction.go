@@ -96,3 +96,34 @@ func DecodeLocalIndex(arg int32) (slot, depth int) {
 	depth = int(int16(arg >> 16))
 	return
 }
+
+// EncodeSelfTailCall packs OpSelfTailCall's two operands: the argument count in
+// the low half, the count of intermediate env frames to pop in the high half.
+//
+// The low half carries argCount so that popCount == 0 encodes to argCount itself.
+// Every depth-0 self-tail site therefore emits the same instruction word it did
+// before Phase C widened the op, which keeps the change invisible to the peephole
+// pass, to the disassembler's existing goldens, and to any stored template.
+//
+// Both operands are non-negative and small — argCount is bounded by the frame's
+// slot capacity and popCount by lexical let nesting — so the int16 halves are not
+// a practical limit; the panic is a corrupt-compiler assertion, matching
+// EncodeLocalIndex.
+func EncodeSelfTailCall(argCount, popCount int) int32 {
+	if argCount < 0 || argCount > math.MaxInt16 {
+		panic(werr.WrapForeignErrorf(ErrLocalIndexOverflow,
+			"EncodeSelfTailCall: argCount %d outside 0..%d", argCount, math.MaxInt16))
+	}
+	if popCount < 0 || popCount > math.MaxInt16 {
+		panic(werr.WrapForeignErrorf(ErrLocalIndexOverflow,
+			"EncodeSelfTailCall: popCount %d outside 0..%d", popCount, math.MaxInt16))
+	}
+	return int32(popCount)<<16 | int32(argCount)
+}
+
+// DecodeSelfTailCall unpacks OpSelfTailCall's argument count and frame-pop count.
+func DecodeSelfTailCall(arg int32) (argCount, popCount int) {
+	argCount = int(arg & 0xFFFF)
+	popCount = int(arg >> 16)
+	return
+}
