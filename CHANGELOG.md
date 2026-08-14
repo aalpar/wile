@@ -403,6 +403,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`assq` and `assv` crashed the evaluation on an alist holding `()`.**
+  `(assq 'x '(()))` aborted with `internal error: emptyList.Car`, uncatchable by
+  `guard`, while the sibling `assoc` answered normally on the same input — so
+  the family disagreed with itself over which of its three members a program
+  could guard. `'(())` is outside R7RS §6.3's domain ("a list of pairs"), so no
+  correct answer was at stake and this is not a conformance change: only the
+  error *channel* was wrong. The shared `helpers.AssocLookup` asserted
+  `values.Tuple`, which the empty list satisfies, and then called `Car()` on it;
+  the empty list is now rejected beside the existing non-pair arm, as the domain
+  error it is. `assq` and `assv` are one site — `assv` delegates to the same
+  helper — so both are fixed by the one guard.
+
 - **A multi-expression `eval-when` body under the `eval` situation panicked.**
   `(eval-when (eval) (display 1) (display 2))` printed `1` and then panicked
   with `Stack.Pop: stack is empty`. The compiler discarded each non-final body
