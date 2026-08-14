@@ -183,13 +183,11 @@ Because Wile shares structure for same-shape literals (`(eq? '(a b c) '(a b c)) 
 
 **Implementation:**
 
-Immutability has **two homes**, split by what the type can afford.
+Immutability is **intrinsic to the value**. `*values.Vector` and `*values.ByteVector` are structs carrying an `immutable` flag, the same shape `*values.String` uses; `values.Immutable` normalizes the read across all three (the underlying fields do not agree on polarity), and `values.MarkImmutable` is the one write surface. Each type's `Set` self-enforces, so a caller reaching the setter from a path nobody gated still gets the refusal.
 
-`*values.Vector` and `*values.ByteVector` are structs carrying an intrinsic `immutable` flag, the same shape `*values.String` uses. `values.MarkImmutable` is the one write surface, and each type's `Set` self-enforces, so a caller reaching the setter from a path nobody gated still gets the refusal.
+The flag is written by one compile-time walk, the quote hook's `markLiteralImmutable` (`machine/compilation/compile_literal_immutability.go`), which descends the whole literal and flags every vector and bytevector in it — including ones reachable only through a pair spine, which is why that walk still traverses pairs while flagging nothing in them. The write happens before the value can be named from Scheme, so a plain `bool` suffices with no synchronization. Only literals are constrained: `list`, `cons`, `make-vector` and the copying procedures all yield unflagged allocations, and structure-shared siblings are one object, so one flag covers them all.
 
-`*values.Pair` is `[2]Value` and cannot afford the word: an inline flag grows the 32-byte cons cell ~25%, and it is the dominant heap object. Literal pairs are recorded instead in an engine-scoped side set (`environment.ImmutableLiterals`, a `sync.Map` keyed by pointer identity).
-
-Both homes are populated by one compile-time walk: the quote hook's `markLiteralImmutable` (`machine/compilation/compile_literal_immutability.go`) descends the whole literal, marking pairs in the side set and flagging vectors and bytevectors in place. Membership is by pointer identity either way, so structure-shared siblings are covered by a single mark, and only literals — never `list`/`cons`/`make-vector` allocations — are constrained. Internal Go `SetCar` calls bypass the pair guard (it lives in the primitive, not in `values`), so scratch reuse of literal pair structure is unaffected; a vector's flag, being on the value, is not bypassable that way.
+There was, until 2026-08, a second home: an engine-scoped `sync.Map` side set keyed by pointer identity, which is how pair literals were tracked. It is deleted along with pair-literal immutability.
 
 **Workaround (for programs that must mutate):**
 
