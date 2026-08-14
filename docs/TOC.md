@@ -55,6 +55,7 @@ Every document in `docs/`, organized by topic.
 
 - [system.md](environment/system.md) -- Environment system architecture
 - [diagram.md](environment/diagram.md) -- Environment relationship diagram
+- [frame-allocation.md](environment/frame-allocation.md) -- Frame allocation, pooling, and why a let's parent frame is not recovered
 - [racket-namespaces.md](environment/racket-namespaces.md) -- Racket namespaces (comparative reference)
 
 ## Extensions
