@@ -74,10 +74,11 @@ func TestPromotedOpsAreClassified(t *testing.T) {
 //
 // OpReleaseEnvFrame is the one release site that leaves mc.env pointing at a
 // frame it just handed to the pool; ResetForPool zeroes that frame's namespace
-// back-pointer. Both consumers of the namespace fail OPEN on nil —
-// ImmutableLiterals.IsImmutable returns false on a nil receiver, and
+// back-pointer. The consumer of the namespace fails OPEN on nil —
 // security.CheckWithAuthorizer treats a nil authorizer as allow — so losing the
-// namespace here silently disarms both.
+// namespace here silently disarms it. The immutable-literal set was the second
+// such consumer and the one whose nil-open failure was live; it no longer
+// exists, since a vector's flag rides on the value.
 func TestOpReleaseEnvFrameKeepsEngineStateReachable(t *testing.T) {
 	ns := environment.NewNamespace()
 	ns.SetAuthorizer(security.ConsoleAuthorizer())
@@ -100,9 +101,10 @@ func TestOpReleaseEnvFrameKeepsEngineStateReachable(t *testing.T) {
 	qt.Assert(t, mc.env, qt.Equals, frame)
 	qt.Assert(t, mc.env.Namespace(), qt.IsNil)
 
-	// And the engine state a promoted op reads is still reachable.
-	qt.Assert(t, mc.ImmutableLiterals(), qt.IsNotNil)
-	qt.Assert(t, mc.ImmutableLiterals(), qt.Equals, ns.ImmutableLiterals())
+	// And the engine state a promoted op reads is still reachable. The set this
+	// test was written for is gone — a vector's immutability rides on the value,
+	// so no namespace lookup can lose it — but the authorizer half is the same
+	// nil-open shape and keeps the pin.
 	qt.Assert(t, mc.Authorizer(), qt.IsNotNil)
 }
 
@@ -118,11 +120,10 @@ func TestNewSubContextCarriesEngineState(t *testing.T) {
 	parent := NewMachineContext(context.Background(),
 		NewMachineContinuation(nil, NewNativeTemplate(0, 0, false), root))
 	parent.snapshotEngineState()
-	qt.Assert(t, parent.immutableLiterals, qt.IsNotNil)
+	qt.Assert(t, parent.authorizer, qt.IsNotNil)
 
 	sub := parent.NewSubContext()
 	defer ReleaseSubContext(sub)
-	qt.Assert(t, sub.immutableLiterals, qt.Equals, parent.immutableLiterals)
 	qt.Assert(t, sub.authorizer, qt.Equals, parent.authorizer)
 
 	// The snapshot is a fallback, never the authority: a live namespace on the
@@ -130,7 +131,6 @@ func TestNewSubContextCarriesEngineState(t *testing.T) {
 	// namespace's environment does not inherit the parent's engine state.
 	other := environment.NewNamespace()
 	sub.env = other.Runtime()
-	qt.Assert(t, sub.ImmutableLiterals(), qt.Equals, other.ImmutableLiterals())
 	var nilAuth security.Authorizer
 	qt.Assert(t, sub.Authorizer(), qt.Equals, nilAuth)
 }

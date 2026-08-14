@@ -100,6 +100,6 @@ func TestGetOutputBytevector(t *testing.T) {
 	`)
 	qt.Assert(t, err, qt.IsNil)
 	// "Hi" as bytes: H=72, i=105
-	expected := values.ByteVector{{Value: 72}, {Value: 105}}
-	qt.Assert(t, result, valuestest.SchemeEquals, &expected)
+	expected := values.NewByteVectorFromBytes(72, 105)
+	qt.Assert(t, result, valuestest.SchemeEquals, expected)
 }

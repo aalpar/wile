@@ -520,7 +520,7 @@ func (s nameSet) shadowLookup(name string, refScopes []*syntax.Scope) (localBind
 	cands := s[name]
 	best := -1
 	ambiguous := false
-	for i := len(cands) - 1; i >= 0; i-- {
+	for i := range slices.Backward(cands) {
 		if !syntax.ScopesCompatible(cands[i].scopes, refScopes) {
 			continue
 		}

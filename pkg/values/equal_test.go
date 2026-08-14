@@ -15,6 +15,8 @@
 package values_test
 
 import (
+	"slices"
+
 	"sync"
 	"testing"
 
@@ -41,10 +43,9 @@ import (
 // would silently widen the gate to admit the recursing case. If this test fails,
 // do not delete it: push key comparison through the worklist first.
 func TestNoContainerIsHashable(t *testing.T) {
-	vec := values.Vector([]values.Value{values.NewInteger(1)})
 	containers := map[string]values.Value{
 		"*Pair":      values.NewCons(values.NewInteger(1), values.EmptyList),
-		"*Vector":    &vec,
+		"*Vector":    values.NewVector(values.NewInteger(1)),
 		"*Hashtable": values.NewEmptyHashtable(),
 		"*Box":       values.NewBox(values.NewInteger(1)),
 	}
@@ -129,8 +130,8 @@ func TestEqual_FlatListIsConstantAuxiliarySpace(t *testing.T) {
 func TestEqual_ShortListsUnchanged(t *testing.T) {
 	mk := func(vs ...int64) values.Value {
 		q := values.Value(values.EmptyList)
-		for i := len(vs) - 1; i >= 0; i-- {
-			q = values.NewCons(values.NewInteger(vs[i]), q)
+		for _, v := range slices.Backward(vs) {
+			q = values.NewCons(values.NewInteger(v), q)
 		}
 		return q
 	}

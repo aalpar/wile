@@ -268,7 +268,7 @@ func addPortState(r *registry.PrimitiveRegistry) error {
 	// re-run would reset the engine's current ports (e.g. discard a mid-eval
 	// output redirect the moment any library is imported). So reuse the existing
 	// State when the shared Namespace already has one — the State is engine-scoped
-	// (root-delegated, like ImmutableLiterals), not per-Apply. Distinct engines
+	// (root-delegated, like the file resolver), not per-Apply. Distinct engines
 	// have distinct Namespaces, so each still gets its own State.
 	r.AddNamespaceInit(func(env *environment.EnvironmentFrame) error {
 		ns := env.Namespace()

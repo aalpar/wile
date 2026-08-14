@@ -15,7 +15,6 @@
 package compilation
 
 import (
-	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/values"
 )
@@ -27,31 +26,28 @@ import (
 //
 // The order is the fix, not a detail. MaybeAppendLiteral dedups by
 // literalIdentical (reflect type + EqualTo), so the object that survives is
-// whichever equal? twin was appended FIRST, and membership in
-// ImmutableLiterals is pointer identity. Marking after the append therefore
-// stamped the discarded copy whenever an unmarked twin got there first, which
-// made literal immutability depend on declaration order within a compilation
-// unit: '#(1 2 3) mutated iff a bare #(1 2 3) appeared above it. Marking before
-// the append means the survivor was marked at its own append in either order,
-// so no pooled aggregate is ever reachable unmarked and no dedup key has to
-// know about immutability.
-//
-// A nil namespace (phase frames, some transient compile environments) is
-// tolerated: markLiteralImmutable is a no-op on a nil set.
+// whichever equal? twin was appended FIRST, and the flag lives on that object.
+// Flagging after the append therefore stamped the discarded copy whenever an
+// unflagged twin got there first, which made literal immutability depend on
+// declaration order within a compilation unit: '#(1 2 3) mutated iff a bare
+// #(1 2 3) appeared above it. Flagging before the append means the survivor was
+// flagged at its own append in either order, so no pooled aggregate is ever
+// reachable unflagged and no dedup key has to know about immutability.
 func (p *CompileTimeContinuation) appendConstantLiteral(v values.Value) machine.LiteralIndex {
-	ns := p.env.Namespace()
-	if ns != nil {
-		markLiteralImmutable(v, ns.ImmutableLiterals(), make(map[values.Value]struct{}))
-	}
+	markLiteralImmutable(v, make(map[values.Value]struct{}))
 	return p.template.MaybeAppendLiteral(v)
 }
 
-// markLiteralImmutable records every pair and vector reachable from v in the
-// engine-scoped immutable-literal set. R7RS §4.1.2 makes quoted-literal
-// constants immutable. Call it through appendConstantLiteral, which fixes the
-// order relative to the literal pool; marking a datum that is then discarded by
-// dedup is exactly the defect that order guards against. The visited map makes
-// cyclic literals (#0=(1 . #0#)) terminate.
+// markLiteralImmutable flags every vector and bytevector reachable from v.
+// R7RS §4.1.2 makes quoted-literal constants immutable. Call it through
+// appendConstantLiteral, which fixes the order relative to the literal pool;
+// flagging a datum that is then discarded by dedup is exactly the defect that
+// order guards against. The visited map makes cyclic literals (#0=(1 . #0#))
+// terminate.
+//
+// The *Pair case flags nothing — pair literals are mutable by decision, since a
+// flag word is ~25% growth on the dominant heap object — but the spine walk
+// STAYS, because it is how a vector nested inside '(1 #(2 3)) is reached.
 //
 // The cdr spine is walked iteratively; only cars recurse, matching
 // validateQuotedLiteralWithVisited (compile_time_continuation.go), which
@@ -63,10 +59,7 @@ func (p *CompileTimeContinuation) appendConstantLiteral(v values.Value) machine.
 // Unlike the validator's, these marks are never unwound: visited is a
 // termination and de-duplication set, not a path-scoped cycle detector, so a
 // node reached a second time by any route is already done.
-func markLiteralImmutable(v values.Value, set *environment.ImmutableLiterals, visited map[values.Value]struct{}) {
-	if set == nil {
-		return
-	}
+func markLiteralImmutable(v values.Value, visited map[values.Value]struct{}) {
 	switch obj := v.(type) {
 	case *values.Pair:
 		cur := obj
@@ -76,12 +69,11 @@ func markLiteralImmutable(v values.Value, set *environment.ImmutableLiterals, vi
 				return
 			}
 			visited[cur] = struct{}{}
-			set.Mark(cur)
-			markLiteralImmutable(cur.Car(), set, visited)
+			markLiteralImmutable(cur.Car(), visited)
 
 			next, isPair := cur.Cdr().(*values.Pair)
 			if !isPair || next == nil {
-				markLiteralImmutable(cur.Cdr(), set, visited)
+				markLiteralImmutable(cur.Cdr(), visited)
 				return
 			}
 			cur = next
@@ -92,13 +84,13 @@ func markLiteralImmutable(v values.Value, set *environment.ImmutableLiterals, vi
 			return
 		}
 		visited[obj] = struct{}{}
-		set.Mark(obj)
-		for _, elem := range *obj {
-			markLiteralImmutable(elem, set, visited)
+		values.MarkImmutable(obj)
+		for _, elem := range obj.Elems() {
+			markLiteralImmutable(elem, visited)
 		}
 	case *values.ByteVector:
 		// Elements are *Byte leaves (no nested aggregates), so mark the
 		// bytevector itself without recursing. R7RS §4.1.2.
-		set.Mark(obj)
+		values.MarkImmutable(obj)
 	}
 }

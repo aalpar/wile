@@ -2479,19 +2479,3 @@ func TestRunWithEscapeHandling_ContainsNonForeignError(t *testing.T) {
 	c.Assert(strings.Contains(rerr.Error(), "not a foreign error"), qt.IsTrue,
 		qt.Commentf("Error()=%q", rerr.Error()))
 }
-
-// TestMachineContext_ImmutableLiterals verifies the CallContext accessor
-// returns the engine-scoped immutable-literal set when a namespace exists.
-func TestMachineContext_ImmutableLiterals(t *testing.T) {
-	env := environment.NewNamespace().Runtime()
-	cont := NewMachineContinuation(nil, nil, env)
-	mc := NewMachineContext(context.Background(), cont)
-
-	set := mc.ImmutableLiterals()
-	if set == nil {
-		t.Fatalf("MachineContext.ImmutableLiterals must be non-nil when a namespace exists")
-	}
-	if set != env.Namespace().ImmutableLiterals() {
-		t.Fatalf("MachineContext.ImmutableLiterals must equal the namespace's set")
-	}
-}

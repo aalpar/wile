@@ -88,7 +88,7 @@ func TestNativeTemplate_DeduplicateLiteral_Vector(t *testing.T) {
 
 	dedupedVec, ok := deduped.(*values.Vector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert((*dedupedVec)[0] == sym, qt.IsTrue, qt.Commentf("symbol inside vector should be deduplicated"))
+	c.Assert(dedupedVec.Elems()[0] == sym, qt.IsTrue, qt.Commentf("symbol inside vector should be deduplicated"))
 }
 
 func TestNativeTemplate_Doc(t *testing.T) {

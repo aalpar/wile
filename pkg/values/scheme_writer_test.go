@@ -149,7 +149,7 @@ func TestWriteValueToString_CircularPair(t *testing.T) {
 func TestWriteValueToString_CircularVector(t *testing.T) {
 	// Create a vector that contains itself
 	v := values.NewVector(values.NewInteger(1), nil)
-	(*v)[1] = v // make circular
+	v.Elems()[1] = v // make circular
 
 	result := mustRender(t, values.WriteValueToString, v)
 	qt.Assert(t, result, qt.Equals, "#0=#(1 #0#)")

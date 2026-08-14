@@ -591,8 +591,8 @@ func TestBytevectorPorts(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// "AB" as bytes
-	expected := values.ByteVector{{Value: 65}, {Value: 66}}
-	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, &expected)
+	expected := values.NewByteVectorFromBytes(65, 66)
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
 func TestBytevectorInputPort(t *testing.T) {

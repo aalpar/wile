@@ -186,7 +186,7 @@ func TestAllValueExemplarsCompleteness(t *testing.T) {
 // matches the AST-level type declaration.
 func exemplarTypeName(v Value) string {
 	rt := reflect.TypeOf(v)
-	if rt.Kind() == reflect.Ptr {
+	if rt.Kind() == reflect.Pointer {
 		return rt.Elem().Name()
 	}
 	return rt.Name()

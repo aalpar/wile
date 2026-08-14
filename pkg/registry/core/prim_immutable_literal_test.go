@@ -26,18 +26,19 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestImmutableLiteral_MutatorsRaise verifies the list/vector/bytevector
-// mutators reject a quoted literal (R7RS §4.1.2) with the per-type sentinel,
-// matching the existing immutable-string behavior.
+// TestImmutableLiteral_MutatorsRaise verifies the vector and bytevector mutators
+// reject a quoted literal (R7RS §4.1.2) with the per-type sentinel, matching the
+// existing immutable-string behavior.
+//
+// The three PAIR mutators used to be rows here. They moved to
+// TestPairLiteral_IsMutableByDecision rather than being deleted, so the change
+// of answer is pinned instead of merely un-asserted.
 func TestImmutableLiteral_MutatorsRaise(t *testing.T) {
 	tcs := []struct {
 		name string
 		code string
 		want error
 	}{
-		{"set-car! on literal", `(set-car! '(a b) 'x)`, werr.ErrImmutablePair},
-		{"set-cdr! on literal", `(set-cdr! '(a b) 'x)`, werr.ErrImmutablePair},
-		{"list-set! on literal", `(list-set! '(a b c) 1 'x)`, werr.ErrImmutablePair},
 		{"vector-set! on literal", `(vector-set! '#(1 2 3) 0 9)`, werr.ErrImmutableVector},
 		{"vector-fill! on literal", `(vector-fill! '#(1 2 3) 0)`, werr.ErrImmutableVector},
 		{"bytevector-u8-set! on literal", `(bytevector-u8-set! '#u8(1 2 3) 0 9)`, werr.ErrImmutableBytevector},
@@ -81,19 +82,52 @@ func TestImmutableLiteral_AllocatedStillMutable(t *testing.T) {
 	}
 }
 
-// TestImmutableLiteral_StructureSharingProbe is the corruption probe from the
-// design draft: two equal? literals in ONE compilation unit dedup to one
-// object, so set-cdr! through one must RAISE rather than silently corrupt the
-// other. The (begin ...) wrapper forces a single compilation unit (per-template
-// equal? dedup); separate REPL units would give distinct objects.
-func TestImmutableLiteral_StructureSharingProbe(t *testing.T) {
-	_, err := testhelpers.RunSchemeCode(t, `(begin
+// TestPairLiteral_IsMutableByDecision is the flipped half of
+// TestImmutableLiteral_MutatorsRaise. Each row raised werr.ErrImmutablePair
+// until the side set was deleted; each now succeeds.
+//
+// This is a narrowing of a documented deviation, not a new one: R7RS §4.1.2's
+// "it is an error" is a case an implementation is encouraged but not required to
+// detect (§1.3.2), so dropping detection returns Wile to the conforming
+// baseline. What bought it is that *Pair stays [2]Value — a flag word is ~25%
+// growth on the dominant heap object, on a mutation path the peephole promotes.
+func TestPairLiteral_IsMutableByDecision(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "set-car! on literal",
+			Code: `(let ((p '(a b))) (set-car! p 'x) (car p))`, Expected: values.NewSymbol("x")},
+		{Name: "set-cdr! on literal",
+			Code: `(let ((p '(a b))) (set-cdr! p 'x) (cdr p))`, Expected: values.NewSymbol("x")},
+		{Name: "list-set! on literal",
+			Code: `(let ((p '(a b c))) (list-set! p 1 'x) (list-ref p 1))`, Expected: values.NewSymbol("x")},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// TestPairLiteral_StructureSharingCorrupts is the price of the test above, and
+// it is asserted rather than left as "no error".
+//
+// Two equal? pair literals in ONE compilation unit dedup to a single object, so
+// set-cdr! through one is visible through the other. That corruption is what
+// pair-literal immutability bought, and dropping the flag gives it back; a test
+// that only checked "the mutation succeeds" would hide it. The (begin ...)
+// wrapper forces a single compilation unit (per-template equal? dedup); separate
+// REPL units would give distinct objects and the row would prove nothing.
+func TestPairLiteral_StructureSharingCorrupts(t *testing.T) {
+	result, err := testhelpers.RunSchemeCode(t, `(begin
 		(define x '(1 2 3))
 		(define y '(1 2 3))
-		(set-cdr! x 99))`)
-	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, errors.Is(err, werr.ErrImmutablePair), qt.IsTrue,
-		qt.Commentf("set-cdr! through a shared literal must raise ErrImmutablePair, got %v", err))
+		(set-cdr! x 99)
+		y)`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(1 . 99)",
+		qt.Commentf("y must show x's mutation: the two literals are one object, and "+
+			"nothing refuses the write any more"))
 }
 
 // TestImmutableLiteral_EveryConstantAppenderMarks covers the three compile-time
@@ -135,16 +169,19 @@ func TestImmutableLiteral_EveryConstantAppenderMarks(t *testing.T) {
 
 // TestImmutableLiteral_OrderIndependence is the strongest of the gates and the
 // one nothing in the tree covered. Two structurally equal aggregates in ONE
-// compilation unit dedup to a single pooled object; membership in
-// ImmutableLiterals is pointer identity. While only the quote path marked, the
-// mark landed on whichever copy dedup DISCARDED whenever an unmarked twin was
-// appended first — so a quoted literal's immutability depended on declaration
-// order.
+// compilation unit dedup to a single pooled object, and the flag rides on that
+// object. While only the quote path marked, the mark landed on whichever copy
+// dedup DISCARDED whenever an unmarked twin was appended first — so a quoted
+// literal's immutability depended on declaration order.
 //
 // Every "unquoted first" row below is the red one: at 003b3353 mutating the
 // QUOTED name succeeded and returned #(9 2 3) / #u8(9 2 3). The "quoted first"
 // rows already refused, and must keep refusing — after the fix they refuse on
 // their own mark rather than by deduping onto a marked twin.
+//
+// The two PAIR rows went with pair-literal immutability. Order independence
+// still holds for pairs — both twins are equally mutable — but it is no longer
+// observable through an error, so there is nothing left here to assert.
 func TestImmutableLiteral_OrderIndependence(t *testing.T) {
 	tcs := []struct {
 		name string
@@ -175,14 +212,6 @@ func TestImmutableLiteral_OrderIndependence(t *testing.T) {
 			(define b2 '#u8(1 2 3))
 			(define b1 #u8(1 2 3))
 			(bytevector-u8-set! b2 0 9))`, werr.ErrImmutableBytevector},
-		{"pair, quasiquoted first (red at 003b3353)", "(begin\n" +
-			"(define x `(1 2 3))\n" +
-			"(define y '(1 2 3))\n" +
-			"(set-car! y 9))", werr.ErrImmutablePair},
-		{"pair, quoted first", "(begin\n" +
-			"(define y '(1 2 3))\n" +
-			"(define x `(1 2 3))\n" +
-			"(set-car! y 9))", werr.ErrImmutablePair},
 		{"nested vector, quasiquoted first (red at 003b3353)", "(begin\n" +
 			"(define a `(1 #(2 3)))\n" +
 			"(define b '(1 #(2 3)))\n" +
@@ -251,4 +280,114 @@ func TestImmutableLiteral_StringParityPreserved(t *testing.T) {
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, errors.Is(err, werr.ErrImmutableString), qt.IsTrue,
 		qt.Commentf("string-set! on a literal must still raise ErrImmutableString, got %v", err))
+}
+
+// --- Phase 3 gates: the three rules a per-object flag has to obey ---
+
+// TestImmutability_CopyClears pins R7RS's "newly allocated" clause across the
+// copying procedures: a copy of an immutable literal is mutable.
+//
+// Every row is GREEN today, so the must-fail-first form is a named sabotage
+// rather than a red run — make the named procedure return its source instead of
+// allocating, and the row goes red:
+//
+//	vector-copy      PrimVectorCopy
+//	bytevector-copy  PrimBytevectorCopy
+//	string-copy      PrimStringCopy
+//
+// string-copy is the row that earns its place. NewString defaults to IMMUTABLE,
+// so "just don't set the flag" gives the wrong answer for strings; PrimStringCopy
+// has to reach for NewMutableString, and does, under a comment saying why. The
+// polarity is not uniform across the flagged types (String.immutable vs
+// Hashtable.mutable) — values.Immutable normalizes the read, never the write.
+//
+// list-copy has no row: with pair literals mutable there is no immutable pair
+// source for it to clear from, so the assertion would be vacuous.
+func TestImmutability_CopyClears(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "vector-copy",
+			Code:     `(let ((v (vector-copy '#(1 2 3)))) (vector-set! v 0 9) v)`,
+			Expected: values.NewVector(values.NewInteger(9), values.NewInteger(2), values.NewInteger(3))},
+		{Name: "bytevector-copy",
+			Code:     `(let ((b (bytevector-copy '#u8(1 2 3)))) (bytevector-u8-set! b 0 9) b)`,
+			Expected: values.NewByteVectorFromBytes(9, 2, 3)},
+		{Name: "string-copy",
+			Code:     `(let ((s (string-copy "abc"))) (string-set! s 0 #\z) s)`,
+			Expected: values.NewMutableString("zbc")},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// TestImmutability_AllocatorsReturnMutable is the same rule for procedures R7RS
+// specifies as returning a NEWLY ALLOCATED string. Both rows were RED when this
+// gate was written — number->string built every arm with values.NewString, whose
+// default is immutable, and PrimUtf8ToString did the same — and both were turned
+// green by the string-allocator fix, not by this phase. They stay here because a
+// default-immutable constructor makes this the standing failure mode: any new
+// allocator that reaches for NewString instead of NewMutableString fails here.
+func TestImmutability_AllocatorsReturnMutable(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "number->string",
+			Code:     `(let ((s (number->string 42))) (string-set! s 0 #\9) s)`,
+			Expected: values.NewMutableString("92")},
+		{Name: "utf8->string",
+			Code:     `(let ((s (utf8->string #u8(97 98)))) (string-set! s 0 #\z) s)`,
+			Expected: values.NewMutableString("zb")},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// TestImmutability_SharingPreserves is the regression pin that a per-object flag
+// keeps answering per object: a vector nested inside a quoted literal is frozen
+// wherever it is reached from, including through a pair spine that carries no
+// flag of its own.
+//
+// The sabotage that makes it red is precise, and it is the mistake the "keep the
+// case, drop the mark" instruction exists to prevent: delete the *Pair case from
+// markLiteralImmutable. The walk then never reaches the vector, and this row
+// answers (1 #(9 3)) instead of raising.
+func TestImmutability_SharingPreserves(t *testing.T) {
+	_, err := testhelpers.RunSchemeCode(t,
+		`(let ((b '(1 #(2 3)))) (vector-set! (cadr b) 0 9) b)`)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrImmutableVector), qt.IsTrue,
+		qt.Commentf("a vector reached through a pair spine must stay frozen, got %v", err))
+}
+
+// TestImmutability_DestinationOnly pins which operand a copying mutator may
+// consult: the destination, never the source. Copying OUT of a literal is legal
+// and common.
+//
+// Sabotage per row: add a source-side check to the named primitive.
+//
+//	vector-copy!      PrimVectorCopyTo
+//	bytevector-copy!  PrimBytevectorCopyBang
+func TestImmutability_DestinationOnly(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "vector-copy! from a literal source",
+			Code:     `(let ((dst (make-vector 3 0))) (vector-copy! dst 0 '#(1 2 3)) dst)`,
+			Expected: values.NewVector(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
+		{Name: "bytevector-copy! from a literal source",
+			Code:     `(let ((dst (make-bytevector 3 0))) (bytevector-copy! dst 0 '#u8(1 2 3)) dst)`,
+			Expected: values.NewByteVectorFromBytes(1, 2, 3)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
 }

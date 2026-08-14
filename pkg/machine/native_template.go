@@ -485,14 +485,15 @@ func (p *NativeTemplate) deduplicateLiteral(v values.Value) values.Value {
 // Returns a new vector if any elements were changed, or the original vector otherwise.
 // TODO: optimize for the common case where no elements change.  consider in place modification?
 func (p *NativeTemplate) deduplicateVector(v *values.Vector) *values.Vector {
-	if v == nil || len(*v) == 0 {
+	if v == nil || v.Length() == 0 {
 		return v
 	}
 	changed := false
 	newElements := values.NewVectorWithLength(v.Length())
-	for i, elem := range *v {
+	slots := newElements.Elems()
+	for i, elem := range v.Elems() {
 		deduped := p.DeduplicateLiteral(elem)
-		(*newElements)[i] = deduped
+		slots[i] = deduped
 		if deduped != elem {
 			changed = true
 		}

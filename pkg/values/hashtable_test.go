@@ -141,22 +141,22 @@ func TestHashtable_KeysValues(t *testing.T) {
 	c := qt.New(t)
 
 	ht := values.NewEmptyHashtable()
-	c.Assert(len(*ht.KeysVector()), qt.Equals, 0)
+	c.Assert(ht.KeysVector().Length(), qt.Equals, 0)
 	emptyKs, emptyVs := ht.EntriesVectors()
-	c.Assert(len(*emptyKs), qt.Equals, 0)
-	c.Assert(len(*emptyVs), qt.Equals, 0)
+	c.Assert(emptyKs.Length(), qt.Equals, 0)
+	c.Assert(emptyVs.Length(), qt.Equals, 0)
 
 	ht.Set(values.NewSymbol("a"), values.NewInteger(1))
 
 	keys := ht.KeysVector()
-	c.Assert(len(*keys), qt.Equals, 1)
-	c.Assert((*keys)[0], valuestest.SchemeEquals, values.NewSymbol("a"))
+	c.Assert(keys.Length(), qt.Equals, 1)
+	c.Assert(keys.Elems()[0], valuestest.SchemeEquals, values.NewSymbol("a"))
 
 	ks, vs := ht.EntriesVectors()
-	c.Assert(len(*ks), qt.Equals, 1)
-	c.Assert(len(*vs), qt.Equals, 1)
-	c.Assert((*ks)[0], valuestest.SchemeEquals, values.NewSymbol("a"))
-	c.Assert((*vs)[0], valuestest.SchemeEquals, values.NewInteger(1))
+	c.Assert(ks.Length(), qt.Equals, 1)
+	c.Assert(vs.Length(), qt.Equals, 1)
+	c.Assert(ks.Elems()[0], valuestest.SchemeEquals, values.NewSymbol("a"))
+	c.Assert(vs.Elems()[0], valuestest.SchemeEquals, values.NewInteger(1))
 }
 
 func TestHashtable_CopyClear(t *testing.T) {

@@ -146,7 +146,7 @@ func TestHostCrash_AtomicBoxTypeChange(t *testing.T) {
 // TestHostCrash_VectorCopyDestinationOverflow asserts that a near-MaxInt64
 // destination index is rejected rather than slice-panicking.
 //
-// Citation: prim_vectors.go:165. The guard `atIdx+(end-start) > len(*to)` overflows
+// Citation: PrimVectorCopyTo. The guard `atIdx+(end-start) > to.Length()` overflows
 // int64 for a huge atIdx: the sum wraps negative, the guard passes, and the slice
 // expression panics uncatchably. Values above MaxInt64 parse as BigInteger and are
 // rejected upstream, so MaxInt64-1 is the boundary that matters.

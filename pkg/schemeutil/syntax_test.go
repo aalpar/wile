@@ -265,7 +265,7 @@ func (p *DatumToSyntaxValueSuite) TestCarCycle(c *qt.C) {
 
 func (p *DatumToSyntaxValueSuite) TestVectorSelfReference(c *qt.C) {
 	v := values.NewVector(values.FalseValue)
-	(*v)[0] = v
+	v.Elems()[0] = v
 	_, err := DatumToSyntaxValue(context.Background(), p.sctx, v)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, werr.ErrCircularList), qt.IsTrue)

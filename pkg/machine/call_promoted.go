@@ -347,10 +347,6 @@ func inlineSetCdr(mc *MachineContext, name string) error {
 		return werr.WrapForeignErrorf(
 			werr.ErrNotAPair, "%s: expected pair, got %s", name, o.SchemeString())
 	}
-	if mc.ImmutableLiterals().IsImmutable(p) {
-		return werr.WrapForeignErrorf(
-			werr.ErrImmutablePair, "%s: cannot mutate immutable literal pair", name)
-	}
 	p.SetCdr(val)
 	mc.SetValue(values.Void)
 	return nil

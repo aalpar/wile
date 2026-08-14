@@ -22,14 +22,15 @@ package wile_test
 // item 7 closes no code defect, it scopes a claim. 3a passes by construction,
 // 3b passes because the reach is real and decided (design §8 Q3 = Keep), 3c's
 // detector fires today because no test starts two threads against a shared
-// aggregate at all, and 3d is a canary calibrated to pass now and to fail when
-// the immutability plan's Phase 2 removes prim_vectors.go:77's
-// ImmutableLiterals().IsImmutable(v) — the sync.Map load that is currently the
-// only synchronisation anywhere on the vector-set! path.
+// aggregate at all, and 3d is a canary that was calibrated to pass while
+// vector-set! still consulted a sync.Map — the only synchronisation anywhere on
+// that path. The immutability plan's Phase 2 replaced that load with a plain
+// field read, so 3d now runs with no synchronisation at all, which is the state
+// it was written to survive.
 //
 // Everything touching values.Vector goes through the METHOD surface
-// (NewVector/Get/Set/Length), never slice-shaped: that plan's Phase 2 converts
-// Vector to a struct and compile-errors every slice-shaped use while method
+// (NewVector/Get/Set/Length), never slice-shaped: Phase 2b converted Vector to a
+// struct and compile-errored every slice-shaped use while method
 // sites survive untouched. Both threaded arms use an UNTIMED thread-join!, so
 // wave 3 item 16's blocking-wait rewrite does not have to touch them.
 
@@ -164,8 +165,8 @@ const pin3dIterations = 2000000
 const pin3cIterations = 2000
 
 // sharedAggregateCases names the payloads. The review's §8 identifies the
-// class as values/vector.go:48 (Vector.Set's plain (*p)[i] = value) AND
-// machine/parameter.go:80 (Parameter.SetValue's plain p.value = v), so the
+// class as values.Vector.Set (a plain element store, guarded only against
+// immutability) AND machine.Parameter.SetValue (a plain p.value = v), so the
 // arms are parameterised over both rather than written once for Vector.
 var sharedAggregateCases = []string{"scheme-vector-set", "values-vector-set", "machine-parameter-set"}
 
@@ -284,7 +285,7 @@ func raceSchemeVectorSet(t *testing.T, iterations int) {
 	qt.Assert(t, result.SchemeString(), qt.Equals, "ok")
 }
 
-// raceValuesVectorSet pins values/vector.go:48 directly, through the method
+// raceValuesVectorSet pins values.Vector.Set directly, through the method
 // surface only.
 func raceValuesVectorSet(iterations int) {
 	shared := values.NewVector(values.NewInteger(0))

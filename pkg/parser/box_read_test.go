@@ -103,10 +103,10 @@ func TestReadSyntaxBoxInCompound(t *testing.T) {
 	c.Assert(ok, qt.IsTrue, qt.Commentf("expected Pair, got %T", pair.Cdr()))
 	vec, ok := rest.Car().(*values.Vector)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("expected Vector, got %T", rest.Car()))
-	c.Assert(len(*vec), qt.Equals, 1)
+	c.Assert(vec.Length(), qt.Equals, 1)
 
-	nested, ok := (*vec)[0].(*values.Box)
-	c.Assert(ok, qt.IsTrue, qt.Commentf("expected Box, got %T", (*vec)[0]))
+	nested, ok := vec.Elems()[0].(*values.Box)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("expected Box, got %T", vec.Elems()[0]))
 	c.Assert(values.Equal(nested.Unbox(), values.NewInteger(2)), qt.IsTrue)
 }
 

@@ -18,7 +18,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/values"
 
@@ -90,77 +89,96 @@ func collectTemplates(root *machine.NativeTemplate) []*machine.NativeTemplate {
 	return q
 }
 
+// aggregateCounts separates what the walk TOUCHED from what it could ASSERT on.
+// Pair literals are mutable by decision, so a pooled pair carries no obligation;
+// it is still counted, because reaching a nested vector is what the spine walk
+// is for and an entry that pools nothing at all cannot ratchet anything.
+type aggregateCounts struct {
+	inspected int // every aggregate reached
+	flaggable int // those with an immutability obligation: vectors, bytevectors
+}
+
+func (p *aggregateCounts) add(o aggregateCounts) {
+	p.inspected += o.inspected
+	p.flaggable += o.flaggable
+}
+
 // assertAggregateImmutable checks v and every aggregate reachable from it.
-// Recursion mirrors markLiteralImmutable's walk, so a mark that stops short of
-// a nested element fails here rather than at some later mutator call site. It
-// returns the number of aggregates inspected, which the caller uses to prove
-// the corpus is not passing vacuously.
+// Recursion mirrors markLiteralImmutable's walk, so a flag that stops short of a
+// nested element fails here rather than at some later mutator call site.
 func assertAggregateImmutable(
 	t *testing.T,
-	set *environment.ImmutableLiterals,
 	v values.Value,
 	visited map[values.Value]struct{},
-) int {
+) aggregateCounts {
 	switch obj := v.(type) {
 	case *values.Pair:
 		_, seen := visited[obj]
 		if seen {
-			return 0
+			return aggregateCounts{}
 		}
 		visited[obj] = struct{}{}
-		qt.Assert(t, set.IsImmutable(obj), qt.IsTrue,
-			qt.Commentf("pooled pair %s is mutable", obj.SchemeString()))
-		n := 1
-		n += assertAggregateImmutable(t, set, obj.Car(), visited)
-		n += assertAggregateImmutable(t, set, obj.Cdr(), visited)
-		return n
+		// No assertion: a pair literal is mutable, and that is the decision
+		// (a flag word is ~25% growth on the 32-byte cons cell). The recursion
+		// below is the whole reason this arm still exists.
+		q := aggregateCounts{inspected: 1}
+		q.add(assertAggregateImmutable(t, obj.Car(), visited))
+		q.add(assertAggregateImmutable(t, obj.Cdr(), visited))
+		return q
 	case *values.Vector:
 		_, seen := visited[obj]
 		if seen {
-			return 0
+			return aggregateCounts{}
 		}
 		visited[obj] = struct{}{}
-		qt.Assert(t, set.IsImmutable(obj), qt.IsTrue,
+		qt.Assert(t, obj.IsImmutable(), qt.IsTrue,
 			qt.Commentf("pooled vector %s is mutable", obj.SchemeString()))
-		n := 1
-		for _, elem := range *obj {
-			n += assertAggregateImmutable(t, set, elem, visited)
+		q := aggregateCounts{inspected: 1, flaggable: 1}
+		for _, elem := range obj.Elems() {
+			q.add(assertAggregateImmutable(t, elem, visited))
 		}
-		return n
+		return q
 	case *values.ByteVector:
 		_, seen := visited[obj]
 		if seen {
-			return 0
+			return aggregateCounts{}
 		}
 		visited[obj] = struct{}{}
-		qt.Assert(t, set.IsImmutable(obj), qt.IsTrue,
+		qt.Assert(t, obj.IsImmutable(), qt.IsTrue,
 			qt.Commentf("pooled bytevector %s is mutable", obj.SchemeString()))
-		return 1
+		return aggregateCounts{inspected: 1, flaggable: 1}
 	default:
 		// Non-aggregate pool entries carry no immutability obligation:
 		// values.Void, *GlobalIndex, *NativeTemplate, *EnvironmentFrame,
 		// *ClausesWrapper, *SyntaxCaseClause and syntax objects all reach the
 		// pool from the other MaybeAppendLiteral call sites. The set is derived
 		// from those call sites, not from a remembered type blacklist: only the
-		// three types markLiteralImmutable walks are asserted on.
-		return 0
+		// three types markLiteralImmutable walks are counted.
+		return aggregateCounts{}
 	}
 }
 
 // TestLiteralPoolAggregatesAreImmutable is the ratchet behind shape D′. The
-// invariant it states is stronger than "the three appenders mark": every
+// invariant it states is stronger than "the three appenders flag": every
 // aggregate that reaches a literal pool is a compile-time constant — (vector 1
-// 2) is a call and never pools — so every pooled aggregate must be immutable.
-// A fourth appender added later fails here instead of silently shipping a
-// mutable constant.
+// 2) is a call and never pools — so every pooled aggregate that CAN be frozen
+// must be. A fourth appender added later fails here instead of silently
+// shipping a mutable constant.
 //
-// It is also the ONLY gate on the immutability-representation plan's Phase 2.
-// Once *Vector implements values.Immutable, IsImmutable takes the interface arm
-// and never consults the side set, so a migration that flags the type while the
-// compiler still calls set.Mark compiles cleanly and un-freezes every quoted
-// vector. Do not weaken or fold this test.
+// It was the only gate on the immutability-representation plan's Phase 2, and it
+// earned that: with *Vector flagged while the compiler still called set.Mark,
+// every row of this test went red and (vector-set! '#(1 2 3) 0 9) answered
+// #(9 2 3). Phase 3 then deleted the side set, so the query is now the value's
+// own IsImmutable. Do not weaken or fold this test.
+//
+// Scope it lost, stated rather than left implicit: pooled PAIRS are no longer
+// asserted on, because pair-literal immutability was dropped with the side set.
+// Entries whose only aggregates are pairs (the two quasiquote rows) therefore
+// ratchet the walk's reach and termination and nothing else; the corpus-level
+// flaggable count below is what keeps the suite as a whole non-vacuous.
 func TestLiteralPoolAggregatesAreImmutable(t *testing.T) {
 	ctx := context.Background()
+	corpusFlaggable := 0
 	for _, tc := range literalPoolCorpus {
 		t.Run(tc.name, func(t *testing.T) {
 			eng, err := NewEngine(ctx, WithProfile(KitchenSink))
@@ -170,20 +188,21 @@ func TestLiteralPoolAggregatesAreImmutable(t *testing.T) {
 			cc, err := eng.Compile(ctx, expr)
 			qt.Assert(t, err, qt.IsNil)
 
-			set := eng.Namespace().ImmutableLiterals()
-			qt.Assert(t, set, qt.IsNotNil)
-
 			visited := make(map[values.Value]struct{})
-			total := 0
+			var total aggregateCounts
 			for _, tpl := range collectTemplates(cc.template) {
 				for _, lit := range tpl.Literals() {
-					total += assertAggregateImmutable(t, set, lit, visited)
+					total.add(assertAggregateImmutable(t, lit, visited))
 				}
 			}
-			qt.Assert(t, total > 0, qt.IsTrue,
+			corpusFlaggable += total.flaggable
+			qt.Assert(t, total.inspected > 0, qt.IsTrue,
 				qt.Commentf("corpus entry pooled no aggregate; it cannot ratchet anything"))
 		})
 	}
+	qt.Assert(t, corpusFlaggable > 0, qt.IsTrue,
+		qt.Commentf("no corpus entry pooled a flaggable aggregate: every row would "+
+			"pass with immutability switched off entirely"))
 }
 
 // TestEvalOfRuntimeVectorReturnsMutableCopy is the pre-check that licensed

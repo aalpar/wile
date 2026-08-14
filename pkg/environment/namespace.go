@@ -73,8 +73,7 @@ var _ values.Value = (*Namespace)(nil)
 //
 //	Delegated to root via root() walk (the field lives only on the root
 //	namespace; children reach it through the parent chain in O(depth)):
-//	  fileResolver, scopeRegistry, immutableLiterals,
-//	  immutableTopLevel
+//	  fileResolver, scopeRegistry, immutableTopLevel
 //
 //	Pointer-shared via *EngineServices (allocated once in NewNamespace;
 //	every child receives the same pointer at construction — no root() walk,
@@ -114,14 +113,6 @@ type Namespace struct {
 	// syntaxInterns is the per-instance syntax object interning table.
 	syntaxInterns   map[values.Value]syntax.SyntaxValue
 	syntaxInternsMu sync.RWMutex
-
-	// immutableLiterals is the engine-scoped set of immutable literal
-	// pair/vector objects (R7RS §4.1.2). Delegated to root (see the field
-	// inheritance policy comment above): only the root Namespace holds it
-	// (nil in children); children read it via ImmutableLiterals() which
-	// resolves through root(). Engine-scoped so a literal compiled under any
-	// child is checkable by any mutator anywhere in the namespace tree.
-	immutableLiterals *ImmutableLiterals
 
 	// services holds the engine-lifetime, layering-opaque services (ioState,
 	// formRegistry, the forwarded inlineThreshold/maxExpandDepth compiler
@@ -243,10 +234,9 @@ type ModuleInstance struct {
 // This is the primary entry point for creating an isolated Wile VM instance.
 func NewNamespace() *Namespace {
 	q := &Namespace{
-		syntaxInterns:     make(map[values.Value]syntax.SyntaxValue),
-		scopeRegistry:     make(map[*syntax.Scope]*EnvironmentFrame),
-		immutableLiterals: &ImmutableLiterals{},
-		services:          &EngineServices{},
+		syntaxInterns: make(map[values.Value]syntax.SyntaxValue),
+		scopeRegistry: make(map[*syntax.Scope]*EnvironmentFrame),
+		services:      &EngineServices{},
 	}
 	initOwner(q, NewGlobalEnvironmentFrame())
 	return q
@@ -424,13 +414,6 @@ func (p *Namespace) FileResolver() FileResolver {
 // Delegated to root: the resolver always lives on the root Namespace.
 func (p *Namespace) SetFileResolver(resolver FileResolver) {
 	p.root().fileResolver = resolver
-}
-
-// ImmutableLiterals returns the engine-scoped set of immutable literal
-// pair/vector objects (R7RS §4.1.2). Defined once on the root Namespace;
-// children delegate through root(), so every mutator sees the same set.
-func (p *Namespace) ImmutableLiterals() *ImmutableLiterals {
-	return p.root().immutableLiterals
 }
 
 // SetIOState stores the per-engine I/O extension state on the shared EngineServices.

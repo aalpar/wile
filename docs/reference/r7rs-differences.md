@@ -12,7 +12,7 @@ This document catalogs differences between the current implementation and the R7
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
-4. Pair and vector literals are **immutable** — mutating one **raises an error** (R7RS permits but does not require this detection), matching immutable string literals.
+4. Vector and bytevector literals are **immutable** — mutating one **raises an error** (R7RS permits but does not require this detection), matching immutable string literals. Pair literals are **not** detected: the flag would have to grow the cons cell, and R7RS does not require the detection.
 5. **Default** (opt out with `WithMutableTopLevel`): a defined-once, never-`set!`-in-unit top-level `define` in the user program is immutable, so a later `set!` **raises an error**, and code already compiled against a sealed base binding does not observe a later shadowing re-`define` (Chez two-environment model). User-loaded libraries stay mutable. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
 6. Importing one identifier from two libraries with **different** bindings **raises an error** (`ErrDuplicateBinding`) rather than silently letting the last import win. R7RS §5.6 makes this "an error" (undefined) but does not require signalling; Wile signals it, matching Chez/Racket. Re-export diamonds and repeated imports stay legal.
 7. Delivering a number of values other than one into a **single-value slot** (a call argument, a `let` init, a `define` or `set!` operand) **raises an error**, whether those values come from `(values …)` or from invoking a continuation. R7RS §6.10 leaves the ≠1-value case **unspecified** for continuations not made by `call-with-values`, so this is a choice within unspecified territory; it matches Chez and Racket. `call-with-values` and the other multiple-value receivers still accept 0, 1 or N. **Changed:** Wile previously spliced the values into the slot.
@@ -156,28 +156,38 @@ This difference is observable only when code mutates a parameter via `(p val)` i
 
 ---
 
-## Immutable Pair and Vector Literals
+## Immutable Vector and Bytevector Literals
 
-**Affected Primitives:** `set-car!`, `set-cdr!`, `list-set!`, `vector-set!`, `vector-fill!`
+**Affected Primitives:** `vector-set!`, `vector-fill!`, `vector-copy!`, `bytevector-u8-set!`, `bytevector-copy!`
 
 **R7RS §6.4 Requirement:**
 > It is an error to attempt to store in a literal.
 
 R7RS §1.3.2 clarifies "it is an error" as a case implementations are not required to detect, but "encouraged to detect ... so as to help the programmer detect them."
 
-**Wile Behavior:** Mutating a pair or vector literal **raises an error** (`ErrImmutablePair` / `ErrImmutableVector`), matching the long-standing immutable-string behavior. Wile detects the case R7RS encourages detecting.
+**Wile Behavior:** Mutating a vector or bytevector literal **raises an error** (`ErrImmutableVector` / `ErrImmutableBytevector`), matching the long-standing immutable-string behavior. Wile detects the case R7RS encourages detecting.
 
 ```scheme
-(set-car! '(a b c) 999)        ; raises ErrImmutablePair
-(vector-set! '#(1 2 3) 0 'x)   ; raises ErrImmutableVector
-(string-set! "abc" 0 #\X)      ; raises ErrImmutableString
+(vector-set! '#(1 2 3) 0 'x)       ; raises ErrImmutableVector
+(bytevector-u8-set! '#u8(1) 0 9)   ; raises ErrImmutableBytevector
+(string-set! "abc" 0 #\X)          ; raises ErrImmutableString
 ```
 
-Because Wile shares structure for same-shape literals (`(eq? '(a b c) '(a b c)) → #t`, R7RS-permissible), detection also prevents non-local corruption: mutating one literal through a shared instance — which would have been visible through every syntactically identical quotation — is now rejected rather than silently propagated.
+**A PAIR literal is not detected**, and that is a decision rather than an omission. The detection needs a per-object flag; `*values.Pair` is a two-word cons cell and the dominant heap object, so the flag is ~25% growth on it, and the mutation path it would guard is one the peephole optimizer promotes to an inline opcode. Measured: 5.86 ns for the side-set lookup this replaced, against 0.73 ns for a flag read and 0.22 ns for the store being guarded. Since R7RS only encourages the detection, dropping it for pairs stays conforming.
+
+```scheme
+(set-car! '(a b c) 999)   ; succeeds
+```
+
+Because Wile shares structure for same-shape literals (`(eq? '(a b c) '(a b c)) → #t`, R7RS-permissible), detection also prevents non-local corruption: mutating one vector literal through a shared instance — which would otherwise be visible through every syntactically identical quotation — is rejected rather than silently propagated. **That protection is exactly what pairs give up.** Within one compilation unit, `(begin (define x '(1 2 3)) (define y '(1 2 3)) (set-cdr! x 99))` leaves `y` as `(1 . 99)`. A program that mutates list structure must build it with `list` or `cons`.
 
 **Implementation:**
 
-`*values.Pair` (`[2]Value`) and `*values.Vector` (`[]Value`) are not structs, so an inline `immutable` flag like `*values.String`'s is not available without growing the 32-byte cons cell ~25% (the dominant heap object). Instead, an engine-scoped side-set (`environment.ImmutableLiterals`, a `sync.Map` keyed by pointer identity) records literal pairs/vectors. The set is populated once at compile time when the quote hook interns a literal (`markLiteralImmutable`, `machine/compilation/compile_literal_immutability.go`, which marks every pair and vector reachable from the literal) and read on the cold mutation path by the five mutator primitives. Membership is by pointer identity, so structure-shared siblings are covered by a single mark, and only literals — never `list`/`cons`/`make-vector` allocations — are members. Internal Go `SetCar`/`Set` calls bypass the guard (it lives in the primitive, not in `values`), so scratch reuse of literal structure is unaffected.
+Immutability is **intrinsic to the value**. `*values.Vector` and `*values.ByteVector` are structs carrying an `immutable` flag, the same shape `*values.String` uses; `values.Immutable` normalizes the read across all three (the underlying fields do not agree on polarity), and `values.MarkImmutable` is the one write surface. Each type's `Set` self-enforces, so a caller reaching the setter from a path nobody gated still gets the refusal.
+
+The flag is written by one compile-time walk, the quote hook's `markLiteralImmutable` (`machine/compilation/compile_literal_immutability.go`), which descends the whole literal and flags every vector and bytevector in it — including ones reachable only through a pair spine, which is why that walk still traverses pairs while flagging nothing in them. The write happens before the value can be named from Scheme, so a plain `bool` suffices with no synchronization. Only literals are constrained: `list`, `cons`, `make-vector` and the copying procedures all yield unflagged allocations, and structure-shared siblings are one object, so one flag covers them all.
+
+There was, until 2026-08, a second home: an engine-scoped `sync.Map` side set keyed by pointer identity, which is how pair literals were tracked. It is deleted along with pair-literal immutability.
 
 **Workaround (for programs that must mutate):**
 

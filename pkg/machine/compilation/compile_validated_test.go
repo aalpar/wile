@@ -403,39 +403,50 @@ func TestCompileValidatedCaseLambda_VariadicClause(t *testing.T) {
 }
 
 // TestMarkLiteralImmutable_RecursiveAndCyclic verifies the quote-hook marker
-// records every reachable pair/vector by pointer identity, descends into nested
-// structure and vectors, and terminates on cyclic literals.
+// reaches every vector and bytevector, descends into nested structure through
+// the pair spine, and terminates on cyclic literals.
+//
+// The pair arm flags nothing — pair literals are mutable by decision — but the
+// walk still has to traverse it, because that is the only route to a vector
+// nested inside '(1 #(2 3)). Deleting the *Pair case along with its mark is the
+// mistake this test exists to catch.
 func TestMarkLiteralImmutable_RecursiveAndCyclic(t *testing.T) {
-	set := &environment.ImmutableLiterals{}
-
-	// (1 #(2 3)) — a top pair whose cadr is a vector.
+	// (1 #(2 3)) — a top pair whose cadr is a vector reachable only through it.
 	vec := values.NewVector(values.NewInteger(2), values.NewInteger(3))
 	inner := values.NewCons(vec, values.EmptyList)
 	top := values.NewCons(values.NewInteger(1), inner)
 
-	markLiteralImmutable(top, set, make(map[values.Value]struct{}))
+	markLiteralImmutable(top, make(map[values.Value]struct{}))
 
-	for _, v := range []values.Value{top, inner, vec} {
-		if !set.Contains(v) {
-			t.Fatalf("expected %T to be marked immutable", v)
-		}
-	}
-	// Atoms are not marked (membership is for pairs/vectors only).
-	if set.Contains(values.NewInteger(1)) {
-		t.Fatalf("atoms must not be marked")
+	if !vec.IsImmutable() {
+		t.Fatalf("the nested *values.Vector must carry the immutable flag: the " +
+			"pair spine is how the walk reaches it")
 	}
 
-	// Cyclic literal: #0=(1 . #0#). Must terminate.
-	cyc := values.NewCons(values.NewInteger(1), values.EmptyList)
+	// A bytevector nested one level deeper, so the recursion is exercised past
+	// the first car rather than only at the top.
+	bv := values.NewByteVectorFromBytes(1, 2)
+	nested := values.NewCons(values.NewCons(bv, values.EmptyList), values.EmptyList)
+	markLiteralImmutable(nested, make(map[values.Value]struct{}))
+	if !bv.IsImmutable() {
+		t.Fatalf("a *values.ByteVector two levels down must carry the flag")
+	}
+
+	// Cyclic literal carrying a vector: #0=(#(1) . #0#). Must terminate, and
+	// must still reach the vector.
+	cycVec := values.NewVector(values.NewInteger(1))
+	cyc := values.NewCons(cycVec, values.EmptyList)
 	cyc.SetCdr(cyc)
-	cycSet := &environment.ImmutableLiterals{}
-	markLiteralImmutable(cyc, cycSet, make(map[values.Value]struct{}))
-	if !cycSet.Contains(cyc) {
-		t.Fatalf("cyclic pair must be marked")
+	markLiteralImmutable(cyc, make(map[values.Value]struct{}))
+	if !cycVec.IsImmutable() {
+		t.Fatalf("a vector inside a cyclic literal must carry the flag")
 	}
 
-	// nil set is a no-op (no panic).
-	markLiteralImmutable(top, nil, make(map[values.Value]struct{}))
+	// A pair literal is NOT flagged, and that is the decision rather than an
+	// omission: a flag word is ~25% growth on the dominant heap object.
+	if values.MarkImmutable(top) {
+		t.Fatalf("*values.Pair must not be flaggable")
+	}
 }
 
 // TestMarkLiteralImmutable_LongFlatList pins the length-vs-depth invariant on
@@ -450,29 +461,23 @@ func TestMarkLiteralImmutable_RecursiveAndCyclic(t *testing.T) {
 // without re-measuring. A Go stack overflow is a fatal runtime.throw, not a
 // recoverable panic, so the pre-fix signal is a killed test binary, not a
 // t.Fatal.
+//
+// The assertion is on the LAST element rather than on any mark: pairs carry no
+// flag, so the only observable is that a vector at the far end of six million
+// cdrs was reached at all.
 func TestMarkLiteralImmutable_LongFlatList(t *testing.T) {
 	const elements = 6000000
 
-	q := values.Value(values.EmptyList)
+	tail := values.NewVector(values.NewInteger(0))
+	q := values.Value(values.NewCons(tail, values.EmptyList))
 	for i := range elements {
 		q = values.NewCons(values.NewInteger(int64(i)), q)
 	}
 
-	set := &environment.ImmutableLiterals{}
-	markLiteralImmutable(q, set, make(map[values.Value]struct{}))
+	markLiteralImmutable(q, make(map[values.Value]struct{}))
 
-	if !set.Contains(q) {
-		t.Fatalf("head of the long list must be marked immutable")
-	}
-	last := q
-	for {
-		next, isPair := last.(*values.Pair).Cdr().(*values.Pair)
-		if !isPair {
-			break
-		}
-		last = next
-	}
-	if !set.Contains(last) {
-		t.Fatalf("last pair of the long list must be marked immutable")
+	if !tail.IsImmutable() {
+		t.Fatalf("a vector six million cdrs down must be reached: the spine walk " +
+			"is iterative and must not stop early")
 	}
 }

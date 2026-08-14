@@ -68,7 +68,7 @@ func ListToVector(mc machine.CallContext, name string) error {
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, o)
 	}
-	var elems values.Vector
+	var elems []values.Value
 	err := ForEachList(mc.Context(), pr, name, func(_ context.Context, _ int, _ bool, v values.Value) error {
 		elems = append(elems, v)
 		return nil
@@ -102,10 +102,10 @@ func CollectVectors(rest values.Value, name string) ([]*values.Vector, int, erro
 	if len(vectors) == 0 {
 		return nil, 0, nil
 	}
-	minLen := len(*vectors[0])
+	minLen := vectors[0].Length()
 	for _, v := range vectors[1:] {
-		if len(*v) < minLen {
-			minLen = len(*v)
+		if v.Length() < minLen {
+			minLen = v.Length()
 		}
 	}
 	return vectors, minLen, nil

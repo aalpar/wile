@@ -233,11 +233,7 @@ func PrimOpenInputBytevector(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	// Convert []Byte to []byte
-	data := make([]byte, len(*bv))
-	for i, b := range *bv {
-		data[i] = b.Value
-	}
+	data := bv.AsBytes()
 	mc.SetValue(values.NewByteVectorInputPortFromReader(bytes.NewReader(data)))
 	return nil
 }

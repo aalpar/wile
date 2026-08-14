@@ -241,7 +241,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 		}
 
 	case *Vector:
-		if val == nil || len(*val) == 0 {
+		if val == nil || val.Length() == 0 {
 			return
 		}
 		_, found := p.seenVectors[val]
@@ -250,7 +250,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 			return
 		}
 		p.seenVectors[val] = -1
-		for _, elem := range *val {
+		for _, elem := range val.Elems() {
 			p.findShared(elem, depth+1)
 			if p.err != nil {
 				return
@@ -346,7 +346,7 @@ func (p *SchemeWriter) filterToCircular(v Value) {
 			}
 
 		case *Vector:
-			if val == nil || len(*val) == 0 {
+			if val == nil || val.Length() == 0 {
 				return
 			}
 			if onStackVectors[val] {
@@ -358,7 +358,7 @@ func (p *SchemeWriter) filterToCircular(v Value) {
 			}
 			visitedVectors[val] = true
 			onStackVectors[val] = true
-			for _, elem := range *val {
+			for _, elem := range val.Elems() {
 				walk(elem)
 			}
 			delete(onStackVectors, val)
@@ -587,7 +587,7 @@ func (p *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector, depth int) 
 	}
 
 	sb.WriteString("#(")
-	for i, elem := range *vec {
+	for i, elem := range vec.Elems() {
 		if p.err != nil {
 			return
 		}

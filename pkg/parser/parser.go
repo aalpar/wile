@@ -793,7 +793,10 @@ func (p *Parser) checkByteVectorClose(err error) error {
 func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 	// See readListInto: the opener is the location to report on a mid-parse EOF.
 	openTok := p.cur
-	q0 := values.NewByteVector()
+	// Accumulated as a plain slice and built once at the end: ByteVector is a
+	// struct, so there is no in-place append onto it, and NewByteVector is the
+	// only constructor that owns the element storage.
+	var bs []*values.Byte
 	err := p.advance()
 	if err != nil {
 		return nil, p.cur, wrapMidParseEOF(err, openTok, "bytevector")
@@ -805,7 +808,7 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 	}
 	if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
 		// Empty bytevector case: #u8()
-		return p.wrapSyntax(q0, p.cur), p.cur, nil
+		return p.wrapSyntax(values.NewByteVector(), p.cur), p.cur, nil
 	}
 	cerr := p.checkByteVectorClose(err)
 	if cerr != nil {
@@ -819,7 +822,7 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if i.Value < 0 || i.Value > 255 {
 			return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotAByte, p.cur, "byte value out of range (0-255): %d", i.Value)
 		}
-		*q0 = append(*q0, values.NewByte(uint8(i.Value)))
+		bs = append(bs, values.NewByte(uint8(i.Value)))
 		err = p.advance()
 		if err != nil {
 			return nil, p.cur, wrapMidParseEOF(err, openTok, "bytevector")
@@ -837,7 +840,7 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 		}
 		i, ok = stx.Unwrap().(*values.Integer)
 	}
-	return p.wrapSyntax(q0, p.cur), p.cur, nil
+	return p.wrapSyntax(values.NewByteVector(bs...), p.cur), p.cur, nil
 }
 
 // parseCharacter parses a character literal from the current token.

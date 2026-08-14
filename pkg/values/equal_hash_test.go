@@ -15,6 +15,8 @@
 package values_test
 
 import (
+	"slices"
+
 	"math"
 	"strconv"
 	"testing"
@@ -30,8 +32,8 @@ import (
 func TestEqualHash_Contract(t *testing.T) {
 	list := func(ns ...int64) values.Value {
 		q := values.Value(values.EmptyList)
-		for i := len(ns) - 1; i >= 0; i-- {
-			q = values.NewCons(values.NewInteger(ns[i]), q)
+		for _, n := range slices.Backward(ns) {
+			q = values.NewCons(values.NewInteger(n), q)
 		}
 		return q
 	}
@@ -111,7 +113,7 @@ func TestEqualHash_TerminatesOnCycles(t *testing.T) {
 	self := values.NewCons(values.NewInteger(1), values.EmptyList)
 	self.SetCdr(self)
 	v := values.NewVector(values.NewInteger(0))
-	(*v)[0] = v
+	v.Elems()[0] = v
 	// A record field is MUTABLE (Record.SetField), so a record can contain itself.
 	// Record.EqualComponents' own comment names this as the cycle that used to
 	// overflow the host stack; the budget is what terminates it here.

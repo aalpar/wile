@@ -116,11 +116,11 @@ var EOFObject Value = eofType{}
 // "comparing uncomparable type" when the dynamic type behind an interface is a
 // slice, map, or func. Not an error return: a panic, in the embedder's process.
 //
-// The RECEIVER, not the underlying type, decides. Vector is []Value and it is
-// perfectly safe, because its methods take POINTER receivers — the dynamic type
-// boxed into the interface is *Vector, which is a pointer and hence comparable.
-// The mistake to avoid is a VALUE receiver on a slice-, map-, or func-backed
-// type, which puts the naked slice into the interface:
+// The RECEIVER, not the underlying type, decides. A slice-backed declaration is
+// perfectly safe when its methods take POINTER receivers — the dynamic type boxed
+// into the interface is then a pointer, and pointers compare. The mistake to avoid
+// is a VALUE receiver on a slice-, map-, or func-backed type, which puts the naked
+// slice into the interface:
 //
 //	type MyThing []Value        // with VALUE receivers: eq? panics on it
 //	type MyThing struct{ … }    // with POINTER receivers: *MyThing is comparable, safe
@@ -272,23 +272,54 @@ type Tuple interface {
 // ---------------------------------------------------------------------------
 
 // Immutable is implemented by value types that store their immutability as an
-// intrinsic, per-instance property — currently *String (R7RS §6.7: literal
-// strings and symbol->string results are immutable) and *Hashtable (R6RS
-// (rnrs hashtables): hashtable-copy without a true second argument yields an
-// immutable table). The underlying fields have OPPOSITE polarity —
-// String.immutable and Hashtable.mutable — which is exactly what this interface
-// normalizes. It normalizes the READ only; every setter stays per type.
+// intrinsic, per-instance property — *String (R7RS §6.7: literal strings and
+// symbol->string results are immutable), *Hashtable (R6RS (rnrs hashtables):
+// hashtable-copy without a true second argument yields an immutable table), and
+// *Vector / *ByteVector (R7RS §4.1.2: quoted-literal constants). The underlying
+// fields have OPPOSITE polarity — String.immutable and Hashtable.mutable — which
+// is exactly what this interface normalizes. It normalizes the READ only; every
+// setter stays per type.
 //
 // It exists so callers can ask "may this value be mutated in place?" without
-// knowing the storage mechanism. Pair and Vector deliberately do NOT implement
-// it: they are raw [2]Value / []Value types whose immutability is tracked in an
-// engine-scoped side-set (see environment.ImmutableLiterals) to keep the
-// dominant heap objects word-for-word minimal. The uniform query that spans
-// both mechanisms is (*environment.ImmutableLiterals).IsImmutable.
+// knowing the storage mechanism. Pair deliberately does NOT implement it: it is a
+// raw [2]Value type, the dominant heap object, and adding a word to grow it ~25%
+// was measured against a mutation path the peephole pass promotes. Pair literals
+// are mutable by decision; see docs/reference/r7rs-differences.md, which records
+// that R7RS permits but does not require the detection.
 type Immutable interface {
 	Value
 	// IsImmutable reports whether in-place mutation of this value is forbidden.
 	IsImmutable() bool
+}
+
+// immutableMarker is the write half of Immutable, implemented only by the types
+// whose flag is set AFTER construction — the quoted-literal aggregates. *String
+// and *Hashtable are constructor-determined and deliberately absent: their
+// polarity is decided by which constructor ran, and a post-hoc setter would
+// destroy the write-once property Hashtable's lock-free contract rests on.
+type immutableMarker interface {
+	setImmutable()
+}
+
+// MarkImmutable records that v is a quoted literal and must refuse in-place
+// mutation, reporting whether v is a type that can carry the constraint.
+//
+// It is the ONE greppable write surface for immutability, and it is TOTAL: a
+// value that cannot carry the flag answers false rather than erroring, because
+// "this type is not flaggable" is the compiler's normal case (a literal is a
+// tree, and most of its nodes are scalars).
+//
+// The write must happen before v is reachable from Scheme. The compiler's
+// literal-pool appender is the only production caller, and it runs at compile
+// time on a datum no thread can yet name, which is why a plain bool field
+// suffices with no synchronization.
+func MarkImmutable(v Value) bool {
+	q, ok := v.(immutableMarker)
+	if !ok {
+		return false
+	}
+	q.setImmutable()
+	return true
 }
 
 // ---------------------------------------------------------------------------

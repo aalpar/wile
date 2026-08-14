@@ -16,26 +16,34 @@ package wile
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/machine"
-	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
 
 // promotedMutatorPrograms pairs each promoted mutator with a tail-position and a
-// non-tail-position use on a quoted literal. Both must raise.
+// non-tail-position use on a quoted literal. The two arms must AGREE.
 //
-// The tail arm is the one that mattered. The peephole emits OpReleaseEnvFrame
-// immediately ahead of a promoted tail op; releaseEnvFrame runs
-// EnvironmentFrame.ResetForPool, which zeroes the frame's namespace back-pointer
-// while mc.env still points at it, and the promoted op then runs on the same
-// context. mc.ImmutableLiterals() resolved through that namespace, got nil, and
-// IsImmutable on a nil receiver is false — so the guard was present, ran, and
+// Agreement is the durable property, and disagreement was the actual defect. The
+// peephole emits OpReleaseEnvFrame immediately ahead of a promoted tail op;
+// releaseEnvFrame runs EnvironmentFrame.ResetForPool, which zeroes the frame's
+// namespace back-pointer while mc.env still points at it, and the promoted op
+// then runs on the same context. The immutability guard resolved through that
+// namespace, got nil, and answered false — so the guard was present, ran, and
 // passed. At 003b3353 the tail arm returned #!void and left the literal as
-// (1 . 9); the non-tail arm raised.
+// (1 . 9) while the non-tail arm raised: the same program, two answers,
+// decided by an optimizer pass.
+//
+// wantErr is what BOTH arms must now do. It is false for set-cdr! because
+// pair-literal immutability was dropped when the side set was deleted — a flag
+// word is ~25% growth on the 32-byte cons cell, measured against a path this
+// very optimizer promotes. The tail arm's old answer is now the specified one
+// for both, which is why the table records an expectation rather than being
+// deleted along with the guard: a promoted VECTOR mutator added later lands
+// here with wantErr true, and a promoted mutator with no program at all still
+// fails loudly.
 //
 // This must run on a full Engine, not on the testhelpers pipeline. Promotion
 // needs the peephole (tpl.Optimize) AND stable base primitives, which only
@@ -44,12 +52,12 @@ import (
 var promotedMutatorPrograms = map[string]struct {
 	tail    string
 	nonTail string
-	want    error
+	wantErr bool
 }{
 	"set-cdr!": {
 		tail:    `(define (m p v) (set-cdr! p v)) (m '(1 2) 9)`,
 		nonTail: `(define (m p v) (begin (set-cdr! p v) 'done)) (m '(1 2) 9)`,
-		want:    werr.ErrImmutablePair,
+		wantErr: false,
 	},
 }
 
@@ -60,9 +68,9 @@ var promotedMutatorPrograms = map[string]struct {
 //
 // It is the behavioural arm. The structural one is
 // TestOpReleaseEnvFrameKeepsEngineStateReachable in pkg/machine, and it is not
-// redundant: once an aggregate carries its own immutability flag its guard stops
-// reading mc.env, so a future promoted vector mutator would pass this test
-// without touching the namespace-loss class at all.
+// redundant: an aggregate that carries its own immutability flag has a guard
+// that never reads mc.env, so a future promoted vector mutator would pass this
+// test without touching the namespace-loss class at all.
 func TestPromotedMutatorsRespectImmutableLiterals(t *testing.T) {
 	ctx := context.Background()
 	names := machine.PromotedMutatorNames()
@@ -85,9 +93,14 @@ func TestPromotedMutatorsRespectImmutableLiterals(t *testing.T) {
 				eng, err := NewEngine(ctx, WithProfile(KitchenSink))
 				qt.Assert(t, err, qt.IsNil)
 				_, err = eng.EvalMultipleWithSource(ctx, arm.code, "promoted-mutator.scm")
-				qt.Assert(t, err, qt.IsNotNil)
-				qt.Assert(t, errors.Is(err, progs.want), qt.IsTrue,
-					qt.Commentf("want %v, got %v", progs.want, err))
+				if progs.wantErr {
+					qt.Assert(t, err, qt.IsNotNil,
+						qt.Commentf("%s/%s must refuse to mutate a literal", name, arm.label))
+					return
+				}
+				qt.Assert(t, err, qt.IsNil,
+					qt.Commentf("%s/%s must agree with its sibling arm; a difference here "+
+						"means an optimizer pass decided the answer", name, arm.label))
 			})
 		}
 	}
