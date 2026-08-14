@@ -26,18 +26,19 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestImmutableLiteral_MutatorsRaise verifies the list/vector/bytevector
-// mutators reject a quoted literal (R7RS §4.1.2) with the per-type sentinel,
-// matching the existing immutable-string behavior.
+// TestImmutableLiteral_MutatorsRaise verifies the vector and bytevector mutators
+// reject a quoted literal (R7RS §4.1.2) with the per-type sentinel, matching the
+// existing immutable-string behavior.
+//
+// The three PAIR mutators used to be rows here. They moved to
+// TestPairLiteral_IsMutableByDecision rather than being deleted, so the change
+// of answer is pinned instead of merely un-asserted.
 func TestImmutableLiteral_MutatorsRaise(t *testing.T) {
 	tcs := []struct {
 		name string
 		code string
 		want error
 	}{
-		{"set-car! on literal", `(set-car! '(a b) 'x)`, werr.ErrImmutablePair},
-		{"set-cdr! on literal", `(set-cdr! '(a b) 'x)`, werr.ErrImmutablePair},
-		{"list-set! on literal", `(list-set! '(a b c) 1 'x)`, werr.ErrImmutablePair},
 		{"vector-set! on literal", `(vector-set! '#(1 2 3) 0 9)`, werr.ErrImmutableVector},
 		{"vector-fill! on literal", `(vector-fill! '#(1 2 3) 0)`, werr.ErrImmutableVector},
 		{"bytevector-u8-set! on literal", `(bytevector-u8-set! '#u8(1 2 3) 0 9)`, werr.ErrImmutableBytevector},
@@ -81,19 +82,52 @@ func TestImmutableLiteral_AllocatedStillMutable(t *testing.T) {
 	}
 }
 
-// TestImmutableLiteral_StructureSharingProbe is the corruption probe from the
-// design draft: two equal? literals in ONE compilation unit dedup to one
-// object, so set-cdr! through one must RAISE rather than silently corrupt the
-// other. The (begin ...) wrapper forces a single compilation unit (per-template
-// equal? dedup); separate REPL units would give distinct objects.
-func TestImmutableLiteral_StructureSharingProbe(t *testing.T) {
-	_, err := testhelpers.RunSchemeCode(t, `(begin
+// TestPairLiteral_IsMutableByDecision is the flipped half of
+// TestImmutableLiteral_MutatorsRaise. Each row raised werr.ErrImmutablePair
+// until the side set was deleted; each now succeeds.
+//
+// This is a narrowing of a documented deviation, not a new one: R7RS §4.1.2's
+// "it is an error" is a case an implementation is encouraged but not required to
+// detect (§1.3.2), so dropping detection returns Wile to the conforming
+// baseline. What bought it is that *Pair stays [2]Value — a flag word is ~25%
+// growth on the dominant heap object, on a mutation path the peephole promotes.
+func TestPairLiteral_IsMutableByDecision(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "set-car! on literal",
+			Code: `(let ((p '(a b))) (set-car! p 'x) (car p))`, Expected: values.NewSymbol("x")},
+		{Name: "set-cdr! on literal",
+			Code: `(let ((p '(a b))) (set-cdr! p 'x) (cdr p))`, Expected: values.NewSymbol("x")},
+		{Name: "list-set! on literal",
+			Code: `(let ((p '(a b c))) (list-set! p 1 'x) (list-ref p 1))`, Expected: values.NewSymbol("x")},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// TestPairLiteral_StructureSharingCorrupts is the price of the test above, and
+// it is asserted rather than left as "no error".
+//
+// Two equal? pair literals in ONE compilation unit dedup to a single object, so
+// set-cdr! through one is visible through the other. That corruption is what
+// pair-literal immutability bought, and dropping the flag gives it back; a test
+// that only checked "the mutation succeeds" would hide it. The (begin ...)
+// wrapper forces a single compilation unit (per-template equal? dedup); separate
+// REPL units would give distinct objects and the row would prove nothing.
+func TestPairLiteral_StructureSharingCorrupts(t *testing.T) {
+	result, err := testhelpers.RunSchemeCode(t, `(begin
 		(define x '(1 2 3))
 		(define y '(1 2 3))
-		(set-cdr! x 99))`)
-	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, errors.Is(err, werr.ErrImmutablePair), qt.IsTrue,
-		qt.Commentf("set-cdr! through a shared literal must raise ErrImmutablePair, got %v", err))
+		(set-cdr! x 99)
+		y)`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(1 . 99)",
+		qt.Commentf("y must show x's mutation: the two literals are one object, and "+
+			"nothing refuses the write any more"))
 }
 
 // TestImmutableLiteral_EveryConstantAppenderMarks covers the three compile-time
@@ -135,16 +169,19 @@ func TestImmutableLiteral_EveryConstantAppenderMarks(t *testing.T) {
 
 // TestImmutableLiteral_OrderIndependence is the strongest of the gates and the
 // one nothing in the tree covered. Two structurally equal aggregates in ONE
-// compilation unit dedup to a single pooled object; membership in
-// ImmutableLiterals is pointer identity. While only the quote path marked, the
-// mark landed on whichever copy dedup DISCARDED whenever an unmarked twin was
-// appended first — so a quoted literal's immutability depended on declaration
-// order.
+// compilation unit dedup to a single pooled object, and the flag rides on that
+// object. While only the quote path marked, the mark landed on whichever copy
+// dedup DISCARDED whenever an unmarked twin was appended first — so a quoted
+// literal's immutability depended on declaration order.
 //
 // Every "unquoted first" row below is the red one: at 003b3353 mutating the
 // QUOTED name succeeded and returned #(9 2 3) / #u8(9 2 3). The "quoted first"
 // rows already refused, and must keep refusing — after the fix they refuse on
 // their own mark rather than by deduping onto a marked twin.
+//
+// The two PAIR rows went with pair-literal immutability. Order independence
+// still holds for pairs — both twins are equally mutable — but it is no longer
+// observable through an error, so there is nothing left here to assert.
 func TestImmutableLiteral_OrderIndependence(t *testing.T) {
 	tcs := []struct {
 		name string
@@ -175,14 +212,6 @@ func TestImmutableLiteral_OrderIndependence(t *testing.T) {
 			(define b2 '#u8(1 2 3))
 			(define b1 #u8(1 2 3))
 			(bytevector-u8-set! b2 0 9))`, werr.ErrImmutableBytevector},
-		{"pair, quasiquoted first (red at 003b3353)", "(begin\n" +
-			"(define x `(1 2 3))\n" +
-			"(define y '(1 2 3))\n" +
-			"(set-car! y 9))", werr.ErrImmutablePair},
-		{"pair, quoted first", "(begin\n" +
-			"(define y '(1 2 3))\n" +
-			"(define x `(1 2 3))\n" +
-			"(set-car! y 9))", werr.ErrImmutablePair},
 		{"nested vector, quasiquoted first (red at 003b3353)", "(begin\n" +
 			"(define a `(1 #(2 3)))\n" +
 			"(define b '(1 #(2 3)))\n" +

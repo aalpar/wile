@@ -44,10 +44,6 @@ func (*foreignCallContext) Context() context.Context                        { re
 func (*foreignCallContext) EnvironmentFrame() *environment.EnvironmentFrame { return nil }
 func (*foreignCallContext) Thread() *values.Thread                          { return nil }
 
-func (*foreignCallContext) ImmutableLiterals() *environment.ImmutableLiterals {
-	return nil
-}
-
 // Compile-time assertion: foreignCallContext satisfies CallContext without being
 // the concrete *MachineContext the primitives need.
 var _ machine.CallContext = (*foreignCallContext)(nil)

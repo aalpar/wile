@@ -415,9 +415,9 @@ func CompileValidatedQuote(p *CompileTimeContinuation, _ CompileTimeCallContext,
 	if err != nil {
 		return err
 	}
-	// R7RS §4.1.2 makes quoted-literal pairs and vectors immutable. Mark them
-	// in the engine-scoped side-set before interning so the list/vector
-	// mutators can reject set-car! etc. on this datum.
+	// R7RS §4.1.2 makes quoted-literal vectors and bytevectors immutable. Flag
+	// them before interning so the mutators can reject vector-set! etc. on this
+	// datum; pair literals are mutable by decision.
 	litIdx := p.appendConstantLiteral(validated)
 	p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 	return nil

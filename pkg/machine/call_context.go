@@ -59,12 +59,6 @@ type CallContext interface {
 
 	// Thread returns the SRFI-18 thread object (nil for primordial thread).
 	Thread() *values.Thread
-
-	// ImmutableLiterals returns the engine-scoped set of immutable literal
-	// pair/vector objects, or nil if the context has no namespace. The five
-	// list/vector mutators consult it to enforce R7RS §4.1.2 constant
-	// immutability.
-	ImmutableLiterals() *environment.ImmutableLiterals
 }
 
 // RequireMachineContext asserts that cc is a *MachineContext, returning a

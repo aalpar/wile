@@ -15,6 +15,8 @@
 package compilation
 
 import (
+	"slices"
+
 	"context"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -711,7 +713,7 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 			return val, nil
 		}
 		out := tail
-		for i := len(spine) - 1; i >= 0; i-- {
+		for i := range slices.Backward(spine) {
 			out = values.NewCons(cars[i], out)
 		}
 		return out, nil

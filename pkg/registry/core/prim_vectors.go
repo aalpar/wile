@@ -74,7 +74,9 @@ func PrimVectorRef(mc machine.CallContext) error {
 func PrimVectorSet(mc machine.CallContext) error {
 	return helpers.SequenceSet(mc, werr.ErrNotAVector, "vector-set!",
 		func(v *values.Vector, idx int, mc machine.CallContext) error {
-			if mc.ImmutableLiterals().IsImmutable(v) {
+			// v.Set self-enforces; this gate stays for the message, which names
+			// the primitive the program called rather than the setter.
+			if v.IsImmutable() {
 				return werr.WrapForeignErrorf(werr.ErrImmutableVector, "vector-set!: cannot mutate immutable literal vector")
 			}
 			return v.Set(idx, mc.Arg(2))
@@ -136,7 +138,7 @@ func PrimVectorCopyTo(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	if mc.ImmutableLiterals().IsImmutable(to) {
+	if to.IsImmutable() {
 		return werr.WrapForeignErrorf(werr.ErrImmutableVector, "vector-copy!: cannot mutate immutable literal vector")
 	}
 	at, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotAnInteger, "vector-copy!")
@@ -185,7 +187,7 @@ func PrimVectorFill(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	if mc.ImmutableLiterals().IsImmutable(v) {
+	if v.IsImmutable() {
 		return werr.WrapForeignErrorf(werr.ErrImmutableVector, "vector-fill!: cannot mutate immutable literal vector")
 	}
 	fillArg := mc.Arg(1)

@@ -15,6 +15,8 @@
 package values_test
 
 import (
+	"slices"
+
 	"math"
 	"strconv"
 	"testing"
@@ -30,8 +32,8 @@ import (
 func TestEqualHash_Contract(t *testing.T) {
 	list := func(ns ...int64) values.Value {
 		q := values.Value(values.EmptyList)
-		for i := len(ns) - 1; i >= 0; i-- {
-			q = values.NewCons(values.NewInteger(ns[i]), q)
+		for _, n := range slices.Backward(ns) {
+			q = values.NewCons(values.NewInteger(n), q)
 		}
 		return q
 	}

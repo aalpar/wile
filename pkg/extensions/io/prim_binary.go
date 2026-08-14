@@ -185,7 +185,7 @@ func PrimReadBytevectorBang(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	if mc.ImmutableLiterals().IsImmutable(bv) {
+	if bv.IsImmutable() {
 		return werr.WrapForeignErrorf(werr.ErrImmutableBytevector,
 			"read-bytevector!: cannot mutate immutable literal bytevector")
 	}

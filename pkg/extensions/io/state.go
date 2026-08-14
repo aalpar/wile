@@ -182,7 +182,7 @@ func (p *State) GetErrorPort() (*values.PortObject, error) {
 // stateFrom pulls the per-engine State off the CallContext's namespace, or
 // returns a wrapped sentinel when the context has no namespace/State (e.g. a bare
 // sub-context). The State lives on the engine's Namespace (root-delegated, like
-// ImmutableLiterals); this reaches it via the already-typed CallContext surface
+// the file resolver); this reaches it via the already-typed CallContext surface
 // rather than a dedicated interface method, keeping the opaque `any` slot off the
 // public contract.
 func stateFrom(cc machine.CallContext) (*State, error) {

@@ -114,7 +114,7 @@ is the authority — new fields must pick one):
 |---|---|---|
 | Per-VM | `Name`, `parent`, `phases`, `runtime`, `moduleInstances`, `syntaxInterns` | child gets its own; `syntaxInterns` is nil and `InternSyntax` delegates to the parent |
 | Captured at construction | `libraryRegistry`, `libraryEnvFactory`, `registry`, `authorizer`, `envMap` | child copies the parent's pointer at fork time; a later `parent.SetRegistry(other)` does **not** reach it, but mutation *through* the shared pointer does |
-| Delegated to root | `fileResolver`, `scopeRegistry`, `immutableLiterals`, `immutableTopLevel` | child stores nothing; reads walk the parent chain |
+| Delegated to root | `fileResolver`, `scopeRegistry`, `immutableTopLevel` | child stores nothing; reads walk the parent chain |
 | Pointer-shared (`*EngineServices`) | `ioState`, `formRegistry`, `inlineThreshold`, `maxExpandDepth`, `exportIndex` | one struct for the whole namespace tree |
 | Owned outright | `sealedWriteRoot`, `inlineHOFTemplates`, `effectiveRegistry`, `extensionState` | child builds its own; unrelated to the parent's |
 

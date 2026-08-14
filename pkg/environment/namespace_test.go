@@ -424,28 +424,6 @@ func TestNamespace_ChildEnvMapIsolatedFromParentMutation(t *testing.T) {
 	c.Assert(child.EnvMap(), qt.DeepEquals, map[string]string{"C": "child"})
 }
 
-// TestNamespace_ImmutableLiteralsSharedViaParent verifies that the
-// engine-scoped immutable-literal set lives only on the root Namespace and is
-// shared by children through root() delegation. A literal compiled under any
-// child must be checkable by any mutator anywhere in the tree.
-func TestNamespace_ImmutableLiteralsSharedViaParent(t *testing.T) {
-	root := NewNamespace()
-
-	if root.ImmutableLiterals() == nil {
-		t.Fatalf("root must own a non-nil ImmutableLiterals")
-	}
-
-	child := root.NewChildNamespace()
-	if child.ImmutableLiterals() != root.ImmutableLiterals() {
-		t.Fatalf("child must delegate ImmutableLiterals to root")
-	}
-
-	report := root.NewSchemeReportNamespace()
-	if report.ImmutableLiterals() != root.ImmutableLiterals() {
-		t.Fatalf("scheme-report child must delegate ImmutableLiterals to root")
-	}
-}
-
 // TestNamespace_ImmutableTopLevelScopedToRoot verifies top-level-define immutability
 // is a property of the engine's PRIMARY (root) namespace only: it defaults off and the
 // root reports the setting after SetImmutableTopLevel. CHILD namespaces created for

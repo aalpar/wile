@@ -15,6 +15,8 @@
 package values_test
 
 import (
+	"slices"
+
 	"sync"
 	"testing"
 
@@ -128,8 +130,8 @@ func TestEqual_FlatListIsConstantAuxiliarySpace(t *testing.T) {
 func TestEqual_ShortListsUnchanged(t *testing.T) {
 	mk := func(vs ...int64) values.Value {
 		q := values.Value(values.EmptyList)
-		for i := len(vs) - 1; i >= 0; i-- {
-			q = values.NewCons(values.NewInteger(vs[i]), q)
+		for _, v := range slices.Backward(vs) {
+			q = values.NewCons(values.NewInteger(v), q)
 		}
 		return q
 	}

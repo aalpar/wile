@@ -105,7 +105,7 @@ func PrimBytevectorU8Ref(mc machine.CallContext) error {
 func PrimBytevectorU8Set(mc machine.CallContext) error {
 	return helpers.SequenceSet(mc, werr.ErrNotAByteVector, "bytevector-u8-set!",
 		func(bv *values.ByteVector, idx int, mc machine.CallContext) error {
-			if mc.ImmutableLiterals().IsImmutable(bv) {
+			if bv.IsImmutable() {
 				return werr.WrapForeignErrorf(werr.ErrImmutableBytevector, "bytevector-u8-set!: cannot mutate immutable literal bytevector")
 			}
 			byteVal, err := helpers.RequireType[*values.Integer](mc.Arg(2), werr.ErrNotAnInteger, "bytevector-u8-set!")
@@ -165,7 +165,7 @@ func PrimBytevectorCopyBang(mc machine.CallContext) error {
 	if atIdx.Value < 0 || atIdx.Value > int64(toBv.Length())-int64(end-start) {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "bytevector-copy!: invalid destination index")
 	}
-	if mc.ImmutableLiterals().IsImmutable(toBv) {
+	if toBv.IsImmutable() {
 		return werr.WrapForeignErrorf(werr.ErrImmutableBytevector, "bytevector-copy!: cannot mutate immutable literal bytevector")
 	}
 
