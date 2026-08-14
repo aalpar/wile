@@ -423,8 +423,9 @@ func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
 }
 
 // literalIdentical reports whether two values are interchangeable for literal-pool
-// deduplication. It is THE pool's only equality predicate — every dedup path goes
-// through it (MaybeAppendLiteral and findLiteral both).
+// deduplication. It is THE pool's only equality predicate, and MaybeAppendLiteral
+// is its only caller — both of its arms, the hash-bucketed one and the linear
+// fallback for non-hashable values.
 //
 // It is STRICTER than EqualTo in exactly one way: KIND. Two values of different
 // concrete types never dedup, even when they are eqv?. An Integer 1 and a BigInteger 1
@@ -454,103 +455,6 @@ func literalIdentical(a, b values.Value) bool {
 		return false
 	}
 	return a.EqualTo(b)
-}
-
-// findLiteral returns the pooled literal interchangeable with v, or nil.
-//
-// It uses literalIdentical, NOT a bare EqualTo. It used to use EqualTo, which made the
-// pool carry two dedup predicates that disagreed: MaybeAppendLiteral refused to merge across
-// concrete types while this path merged freely, so deduplicateLiteral could hand back a
-// pooled Integer 1 in place of a BigInteger 1 and silently re-type the literal.
-func (p *NativeTemplate) findLiteral(v values.Value) values.Value {
-	for _, l := range p.literals {
-		if literalIdentical(l, v) {
-			return l
-		}
-	}
-	return nil
-}
-
-func (p *NativeTemplate) deduplicateLiteral(v values.Value) values.Value {
-	existing := p.findLiteral(v)
-	if existing != nil {
-		return existing
-	}
-	p.literals = append(p.literals, v)
-	return v
-}
-
-// deduplicateVector deduplicates all elements in the given vector
-// using the template's literal pool.
-// Returns a new vector if any elements were changed, or the original vector otherwise.
-// TODO: optimize for the common case where no elements change.  consider in place modification?
-func (p *NativeTemplate) deduplicateVector(v *values.Vector) *values.Vector {
-	if v == nil || v.Length() == 0 {
-		return v
-	}
-	changed := false
-	newElements := values.NewVectorWithLength(v.Length())
-	slots := newElements.Elems()
-	for i, elem := range v.Elems() {
-		deduped := p.DeduplicateLiteral(elem)
-		slots[i] = deduped
-		if deduped != elem {
-			changed = true
-		}
-	}
-	// No changes, return original vector
-	// this avoids unnecessary pointer changes in the caller
-	if !changed {
-		return v
-	}
-	return newElements
-}
-
-// deduplicatePairMemo deduplicates all elements in the given pair
-// using the template's literal pool, with memoization for shared structures
-// and cycle detection for defense in depth. The memo map stores the
-// deduplicated result for each pair; an entry mapping to itself serves as
-// an in-progress sentinel for cycle termination.
-func (p *NativeTemplate) deduplicatePairMemo(v *values.Pair, memo map[*values.Pair]*values.Pair) *values.Pair {
-	if v == nil {
-		return nil
-	}
-	result, ok := memo[v]
-	if ok {
-		return result
-	}
-	// Mark in-progress: identity mapping acts as cycle sentinel.
-	memo[v] = v
-	car := p.deduplicateLiteralMemo(v.Car(), memo)
-	cdr := p.deduplicateLiteralMemo(v.Cdr(), memo)
-	// No changes, return original pair
-	// this avoids unnecessary pointer changes in the caller
-	q := v
-	if car != v.Car() || cdr != v.Cdr() {
-		q = values.NewCons(car, cdr)
-	}
-	memo[v] = q
-	return q
-}
-
-func (p *NativeTemplate) deduplicateLiteralMemo(v values.Value, memo map[*values.Pair]*values.Pair) values.Value {
-	switch val := v.(type) {
-	case *values.Symbol, *values.Integer:
-		return p.deduplicateLiteral(val)
-	case *values.Pair:
-		return p.deduplicatePairMemo(val, memo)
-	case *values.Vector:
-		return p.deduplicateVector(val)
-	default:
-		return v
-	}
-}
-
-// DeduplicateLiteral deduplicates the given value using the template's literal pool.
-// For composite values (pairs and vectors), all elements are deduplicated recursively.
-// Returns the deduplicated value.
-func (p *NativeTemplate) DeduplicateLiteral(v values.Value) values.Value {
-	return p.deduplicateLiteralMemo(v, make(map[*values.Pair]*values.Pair))
 }
 
 // AppendCachedBinding adds a *Binding to the cached bindings array,
