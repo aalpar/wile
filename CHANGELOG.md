@@ -403,6 +403,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A primitive that returned a `*values.NativeError` lost its irritants and its
+  kind.** `CODING_STYLE.md` has prescribed that return form since 2026-06-27 —
+  *"the return value IS the condition"* — and it did not work on the day it was
+  written. `goErrorToCondition` rebuilt a fresh condition out of `err.Error()`,
+  so the message survived and nothing else did: `values.NewFileError("boom", 5)`
+  reached Scheme with `(error-object-irritants e)` = `()` and `(file-error? e)` =
+  `#f`, where the Scheme-side `(error "boom" 5)` baseline gives `(5)` and `#t`. A
+  `*NativeError` is already a condition, so it is now forwarded rather than
+  rebuilt.
+
+  The recognition is a **direct type assertion, not `errors.As`**, and the
+  difference is the fix's whole boundary: `errors.As` would also match a
+  condition buried under a `werr` wrap, and forwarding that inner value would
+  silently discard the wrap's message — one losslessness bug traded for another.
+  A wrapped condition therefore keeps taking the rebuild path, which is what
+  `TestWrappedNativeErrorIsNotForwarded` pins; every row of the positive gate
+  still passes under the `errors.As` spelling, so that negative arm is the only
+  thing that can detect the regression.
+
+  Nothing in the tree returned the form — the one site that tried backed out to
+  `RaiseInPlace` the same day it was written — so the change is invisible to
+  existing code and only makes the documented pattern true. The "irritants are
+  dropped" row is removed from `docs/extensions/architecture.md`'s known-gaps
+  table, which now carries one gap instead of two.
+
 - **`assq` and `assv` crashed the evaluation on an alist holding `()`.**
   `(assq 'x '(()))` aborted with `internal error: emptyList.Car`, uncatchable by
   `guard`, while the sibling `assoc` answered normally on the same input — so
