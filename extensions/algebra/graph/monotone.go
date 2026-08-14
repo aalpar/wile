@@ -21,6 +21,8 @@
 package graph
 
 import (
+	"slices"
+
 	"math/big"
 
 	"github.com/aalpar/wile/pkg/werr"
@@ -131,8 +133,7 @@ func CountPathsInDAG(numNodes int, edges []Edge, source int) []*big.Int {
 	// non-zero count, propagate counts[u] to each successor's count via
 	// in-place addition. Pattern 3A's monotone-add inner-loop step, applied
 	// in the order that makes it correct.
-	for i := len(postorder) - 1; i >= 0; i-- {
-		u := postorder[i]
+	for _, u := range slices.Backward(postorder) {
 		if counts[u].Sign() == 0 {
 			continue
 		}

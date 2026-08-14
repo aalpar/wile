@@ -15,6 +15,8 @@
 package validate
 
 import (
+	"slices"
+
 	"context"
 	"testing"
 
@@ -42,8 +44,8 @@ func arityDefine(name string, required []string, rest string) values.Value {
 	} else {
 		head = values.NewSymbol(rest)
 	}
-	for i := len(required) - 1; i >= 0; i-- {
-		head = values.NewCons(values.NewSymbol(required[i]), head)
+	for _, r := range slices.Backward(required) {
+		head = values.NewCons(values.NewSymbol(r), head)
 	}
 	head = values.NewCons(values.NewSymbol(name), head)
 	return values.List(values.NewSymbol("define"), head, values.NewInteger(1))
