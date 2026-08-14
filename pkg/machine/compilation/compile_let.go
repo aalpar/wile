@@ -210,14 +210,16 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 		}
 	}
 
-	// The let body runs in the pushed frame (OpPushEnv above), so it is no longer
-	// at the enclosing closure's parameter-frame depth: clear any self-tail context
-	// so a self call inside the body is NOT rewritten to the in-place OpSelfTailCall
-	// (which rebinds the parameter frame). Tail position itself is preserved.
-	// A let body predeclares its own internal defines, so it is their letrec*
-	// group — override rather than inherit the enclosing one, which would name
-	// different procedures.
-	err = p.compileValidatedSequence(ctctx.WithoutFrameReuse().WithEnclosingDefines(v.Body()), v.Body())
+	// The let body runs in the pushed frame (OpPushEnv above), one level below the
+	// enclosing closure's parameter frame. UnderLetFrame records that: a self-tail
+	// disposition survives with its pop count incremented (OpSelfTailCall pops back
+	// to the parameter frame before rebinding), a release disposition is cleared.
+	// This call and the OpPushEnv above are paired 1:1 — that pairing is what makes
+	// the pop count equal the runtime frame count. Tail position itself is
+	// preserved. A let body predeclares its own internal defines, so it is their
+	// letrec* group — override rather than inherit the enclosing one, which would
+	// name different procedures.
+	err = p.compileValidatedSequence(ctctx.UnderLetFrame().WithEnclosingDefines(v.Body()), v.Body())
 	if err != nil {
 		return err
 	}

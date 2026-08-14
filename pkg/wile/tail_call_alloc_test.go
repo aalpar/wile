@@ -457,3 +457,75 @@ func TestMutatedCalleeAllocControl(t *testing.T) {
 		"(define (mc i n) (if (>= i n) i (begin (sq i) (mc (+ i 1) n))))\n)"
 	allocFloorControl(t, def, "mc", "(mc 0 10000)", "(mc 0 30000)", 1.0)
 }
+
+// --- Phase C: self-tail calls nested under a let (depth > 0) ---
+
+// TestNestedLetSelfTailAllocations is Phase C's headline probe: a self-tail call
+// wrapped in a body-level `let`. Before Phase C the reuse disposition was CLEARED
+// on the let descent, so neither OpSelfTailCall nor OpReleaseEnvFrame fired and
+// the callee's parameter frame leaked once per iteration.
+//
+// THE TARGET IS NOT ZERO, and the plan's Step 1 (\"assert 0-alloc\") was wrong
+// about that. Measured decomposition at HEAD, per iteration:
+//
+//	depth-0 self-tail, no let ......................... 0.0
+//	let in ARGUMENT position (self call still depth 0) . 3.0   <- the let frame alone
+//	let WRAPPING the tail call (this probe) ............ 5.0   <- + the leaked param frame
+//	two nested lets wrapping the tail call ............. 8.0   <- 3 per let + 2
+//
+// A `let` frame costs 3 allocations and is NOT pool-owned: OpPushEnv calls
+// NewLocalEnvironment + NewEnvironmentFrameWithParent directly and sets
+// envPooled=false, and in tail position no OpPopEnv is even emitted. Phase C pops
+// those frames so the parameter frame can be rebound in place; it does not and
+// cannot make them free. The fixed 2.0 it removes is exactly the amount the
+// depth-0 case already saves, which is why the ceiling here is the let-frame
+// floor of 3.0 and not 0.
+//
+// Pooling OpPushEnv frames is a different lever and is not this phase.
+func TestNestedLetSelfTailAllocations(t *testing.T) {
+	const def = "(begin (define (nested-loop i n) " +
+		"(if (>= i n) i (let ((j (+ i 1))) (nested-loop j n))))\n)"
+	assertReclaimable(t, def, "nested-loop", true)
+
+	const smallTrips = 10000
+	const bigTrips = 30000
+	small := allocsForRun(t, def, "(nested-loop 0 10000)")
+	big := allocsForRun(t, def, "(nested-loop 0 30000)")
+
+	slope := allocSlope(small, big, smallTrips, bigTrips)
+	t.Logf("nested-loop allocs: %d trips=%.0f, %d trips=%.0f, slope=%.3f frames/iter",
+		smallTrips, small, bigTrips, big, slope)
+
+	// 3.0 is the let-frame floor; 5.0 is the pre-Phase-C leak. The midpoint
+	// separates them with room for measurement noise in either direction.
+	if slope > 4.0 {
+		t.Errorf("self-tail call under a let leaks its parameter frame: %.3f frames/iter "+
+			"(want the 3.0 let-frame floor, not the 5.0 leak); %d→%.0f allocs, %d→%.0f allocs",
+			slope, smallTrips, small, bigTrips, big)
+	}
+}
+
+// TestDoublyNestedLetSelfTailAllocations pins that the pop count is a COUNT and
+// not a flag. Two lets wrap the self call, so the op must pop two frames; popping
+// one would rebind the inner let's frame as if it were the parameter frame —
+// which is corruption, not a lost optimization, and is why the value assertion in
+// TestNestedLetSelfTailCallReturnsCorrectValues runs beside this one.
+//
+// Floor is 6.0 (3 per let frame), leak is 8.0.
+func TestDoublyNestedLetSelfTailAllocations(t *testing.T) {
+	const def = "(begin (define (deep-loop i n) " +
+		"(if (>= i n) i (let ((j (+ i 1))) (let ((k j)) (deep-loop k n)))))\n)"
+	assertReclaimable(t, def, "deep-loop", true)
+
+	small := allocsForRun(t, def, "(deep-loop 0 10000)")
+	big := allocsForRun(t, def, "(deep-loop 0 30000)")
+
+	slope := allocSlope(small, big, 10000, 30000)
+	t.Logf("deep-loop allocs: 10000 trips=%.0f, 30000 trips=%.0f, slope=%.3f frames/iter",
+		small, big, slope)
+
+	if slope > 7.0 {
+		t.Errorf("doubly-nested self-tail call leaks its parameter frame: %.3f frames/iter "+
+			"(want the 6.0 two-let floor, not the 8.0 leak)", slope)
+	}
+}

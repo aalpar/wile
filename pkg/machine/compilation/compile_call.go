@@ -43,16 +43,25 @@ func (p *CompileTimeContinuation) emitProcAndArgs(ctctx CompileTimeCallContext, 
 	return nil
 }
 
-// tryEmitSelfTailCall emits OpSelfTailCall for a depth-0 tail call to the
-// enclosing self-tail-reusable closure, returning (true, nil) if it did so.
+// tryEmitSelfTailCall emits OpSelfTailCall for a tail call to the enclosing
+// self-tail-reusable closure, returning (true, nil) if it did so.
 //
 // The selfTail context is armed only on a closure body proven safe (and, for a
-// top-level self, Stable) and is cleared on every let descent and dropped by
-// NotInTail(), so a set selfTail at an inTail call site whose operator name and
-// arity match the enclosing closure is exactly a DEPTH-0 tail self call. The
-// emit evaluates the arguments (non-tail, pushing each onto the eval stack in
-// slot order — old parameter values stay intact, making the op's drain-and-bind a
-// parallel assignment), then the op rebinds the parameter slots and loops to pc=0.
+// top-level self, Stable) and is dropped by NotInTail(), so a set selfTail at an
+// inTail call site whose operator name and arity match the enclosing closure is
+// exactly a tail self call. The emit evaluates the arguments (non-tail, pushing
+// each onto the eval stack in slot order — old parameter values stay intact,
+// making the op's drain-and-bind a parallel assignment), then the op unwinds any
+// intervening let frames, rebinds the parameter slots and loops to pc=0.
+//
+// frameReuse.letDepth is the unwind count, and evaluating the arguments BEFORE it
+// is the ordering that makes depth>0 work at all: the arguments are what read the
+// let bindings, so a pop that ran first would read frames it had already left.
+// The count is carried by the context rather than recomputed here, and it is
+// incremented at exactly one site — see UnderLetFrame.
+//
+// This runs FIRST in compileValidatedCall, ahead of the three inline
+// specializations, so a site that becomes a self-tail call cannot also be inlined.
 func (p *CompileTimeContinuation) tryEmitSelfTailCall(ctctx CompileTimeCallContext, v *validate.ValidatedCall) (bool, error) {
 	if !ctctx.inTail || ctctx.frameReuse.kind != frameReuseSelfTail {
 		return false, nil
@@ -91,7 +100,7 @@ func (p *CompileTimeContinuation) tryEmitSelfTailCall(ctctx CompileTimeCallConte
 		}
 		p.appendPushAt(arg.Source())
 	}
-	p.AppendOperations(machine.NewOperationSelfTailCall(ctctx.frameReuse.arity))
+	p.AppendOperations(machine.NewOperationSelfTailCall(ctctx.frameReuse.arity, ctctx.frameReuse.letDepth))
 	return true, nil
 }
 

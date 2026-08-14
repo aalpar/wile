@@ -660,11 +660,36 @@ func (p *MachineContext) Run() error {
 		case OpSelfTailCall:
 			// In-place self-recursive tail call: the args were already evaluated
 			// onto the eval stack with the OLD slot values intact, so draining then
-			// writing them into the current frame's parameter slots is a parallel
+			// writing them into the parameter frame's slots is a parallel
 			// assignment. No frame acquire, no SaveContinuation — the emit-time proof
-			// (bodyIsSelfTailReusable: no capture, no escaping closure, non-variadic,
-			// depth-0) guarantees the live frame is reachable only through mc.env.
-			argCount := int(instr.Arg)
+			// (bodyIsSelfTailReusable: no capture, no escaping closure, non-variadic)
+			// guarantees the live frame is reachable only through mc.env.
+			argCount, popCount := DecodeSelfTailCall(instr.Arg)
+			// The call may sit under popCount `let` frames. Those frames are dead —
+			// the args that read them are already on the eval stack — and the same
+			// proof that licenses the rebind covers them, because it walks the whole
+			// body: a closure escaping from a let body, or a capture operator
+			// anywhere in it, refuses the arming outright.
+			//
+			// envPooled is deliberately NOT touched. It describes whichever frame
+			// mc.env names, and the frame this walk lands on is the parameter frame
+			// whose pooled status has not changed. It was cleared to false by the
+			// OpPushEnv that created the let frame and stays false, so a later
+			// OpReleaseEnvFrame on the loop's EXIT path is skipped — once per loop,
+			// not per iteration, and skipping a release leaks a frame rather than
+			// releasing a live one. Restoring it to true here would be the unsafe
+			// direction: nothing at this point proves the parameter frame is
+			// pool-owned, and a wrong true is a double release.
+			for range popCount {
+				parent := mc.env.Parent()
+				if parent == nil {
+					// The compiler counted more let frames than the runtime pushed.
+					// Fresh VM-internal mint → enrich with source + trace.
+					return mc.WrapError(werr.ErrNilParentEnvironment,
+						"SelfTailCall: frame-pop count exceeds the environment chain")
+				}
+				mc.env = parent
+			}
 			if argCount > 0 {
 				// DrainN (not Drain) takes EXACTLY argCount from the stack top, in slot
 				// order, with no allocation: it leaves any residue below intact rather

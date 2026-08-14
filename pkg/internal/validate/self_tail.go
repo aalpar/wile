@@ -535,7 +535,7 @@ func bodyIsSelfTailReusable(
 	if seqMutatesName(body, selfName, seed) {
 		return false
 	}
-	return tailSeqHasSelfCall(body, 0, seed, selfName, len(p.Required))
+	return tailSeqHasSelfCall(body, seed, selfName, len(p.Required))
 }
 
 // seqMutatesName walks a body sequence for a set! of name. Internal-define names
@@ -627,11 +627,11 @@ func exprMutatesName(expr ValidatedExpr, name string, bound nameSet) bool {
 }
 
 // tailSeqHasSelfCall reports whether the tail position of a body sequence
-// contains a depth-0 self call to selfName with the given arity. Only the last
+// contains a self call to selfName with the given arity. Only the last
 // expression of the sequence is in tail position; internal-define names are
 // hoisted into the shadow set (letrec* — a same-name internal define means the
 // operator no longer resolves to the enclosing self).
-func tailSeqHasSelfCall(body []ValidatedExpr, depth int, bound nameSet, selfName string, arity int) bool {
+func tailSeqHasSelfCall(body []ValidatedExpr, bound nameSet, selfName string, arity int) bool {
 	if len(body) == 0 {
 		return false
 	}
@@ -646,17 +646,27 @@ func tailSeqHasSelfCall(body []ValidatedExpr, depth int, bound nameSet, selfName
 	if len(defined) > 0 {
 		inner = bound.with(defined...)
 	}
-	return tailExprHasSelfCall(body[len(body)-1], depth, inner, selfName, arity)
+	return tailExprHasSelfCall(body[len(body)-1], inner, selfName, arity)
 }
 
-// tailExprHasSelfCall reports whether expr, evaluated in tail position at the
-// given frame depth, is (or contains in a tail sub-position) a depth-0 self call
-// to selfName with the given arity. It descends ONLY through tail-transparent
-// forms (if branches, begin/let tails); a let body increments depth because it
-// runs in a pushed frame. Non-tail sub-expressions (call arguments, if tests,
-// let inits) are deliberately not walked — a self call there cannot reuse the
-// frame, so it is irrelevant to this query.
-func tailExprHasSelfCall(expr ValidatedExpr, depth int, bound nameSet, selfName string, arity int) bool {
+// tailExprHasSelfCall reports whether expr, evaluated in tail position, is (or
+// contains in a tail sub-position) a self call to selfName with the given arity.
+// It descends ONLY through tail-transparent forms (if branches, begin/let tails).
+// Non-tail sub-expressions (call arguments, if tests, let inits) are deliberately
+// not walked — a self call there cannot reuse the frame, so it is irrelevant to
+// this query.
+//
+// IT NO LONGER COUNTS FRAME DEPTH, and the deletion is frame-reclaim Phase C.
+// This walk used to carry a depth and admit only depth == 0, because
+// OpSelfTailCall could rebind the parameter frame only when it WAS mc.env. The op
+// now pops the intermediate frames first, so any depth is admissible and the
+// question here reduces to "is there a self call in tail position at all".
+//
+// The pop COUNT is not computed here. It is carried by the compile-time context
+// (frameReuse.letDepth, incremented by the single UnderLetFrame call that pairs
+// with compileValidatedLet's single OpPushEnv), so there is exactly one counter
+// and no second walk to keep in step with codegen.
+func tailExprHasSelfCall(expr ValidatedExpr, bound nameSet, selfName string, arity int) bool {
 	if expr == nil {
 		return false
 	}
@@ -673,33 +683,34 @@ func tailExprHasSelfCall(expr ValidatedExpr, depth int, bound nameSet, selfName 
 		if sym.Symbol.Sym.Key != selfName || verdict != shadowNo {
 			return false
 		}
-		return depth == 0 && len(v.Body()) == arity
+		return len(v.Body()) == arity
 	case *ValidatedIf:
 		// Both branches inherit the tail position and frame depth.
-		return tailExprHasSelfCall(v.Conseq, depth, bound, selfName, arity) ||
-			tailExprHasSelfCall(v.Alt, depth, bound, selfName, arity)
+		return tailExprHasSelfCall(v.Conseq, bound, selfName, arity) ||
+			tailExprHasSelfCall(v.Alt, bound, selfName, arity)
 	case *ValidatedBegin:
-		return tailSeqHasSelfCall(v.Body(), depth, bound, selfName, arity)
+		return tailSeqHasSelfCall(v.Body(), bound, selfName, arity)
 	case *ValidatedLet:
 		// The (let ((t E)) (if t t B)) shape `or` expands to compiles WITHOUT a
-		// frame (compileOrShapedLet), so its alternative's tail self calls stay at
-		// this depth. Keeping the two readings in step is why LetIsOrShaped is
-		// exported instead of being a shape match local to codegen: if only the
-		// compiler dropped the frame, this walk would still count the call at
-		// depth+1 and refuse to rewrite the very site the lowering just freed.
-		//
-		// The bound set is deliberately NOT extended. LetIsOrShaped has already
+		// frame (compileOrShapedLet), so only its alternative is walked, and the
+		// bound set is deliberately NOT extended: LetIsOrShaped has already
 		// established that the binder does not occur in B at a compatible scope, so
 		// there is nothing there for it to shadow — including the case where the
 		// binder happens to spell selfName, which that same scan refuses outright.
+		//
+		// Since Phase C this arm no longer affects WHETHER the call is rewritable —
+		// depth is not a gate any more — but it still governs the shadow set, so it
+		// stays. The frame the lowering removes is now visible instead in the POP
+		// COUNT: an or-wrapped self call pops 0, a real let pops 1. That is what
+		// TestOrAlternativeSelfTailCallPopsNoFrame asserts.
 		_, orAlt, isOrShaped := LetIsOrShaped(v)
 		if isOrShaped {
-			return tailExprHasSelfCall(orAlt, depth, bound, selfName, arity)
+			return tailExprHasSelfCall(orAlt, bound, selfName, arity)
 		}
-		// A let runs its body in a frame pushed above the parameter frame, so its
-		// tail self calls are at depth+1 (v1 leaves them un-rewritten). Its bound
+		// A let runs its body in a frame pushed above the parameter frame. Its tail
+		// self calls are still rewritable — the op pops that frame — and its bound
 		// names shadow.
-		return tailSeqHasSelfCall(v.Body(), depth+1, bound.withLetBindings(v.Bindings), selfName, arity)
+		return tailSeqHasSelfCall(v.Body(), bound.withLetBindings(v.Bindings), selfName, arity)
 	default:
 		return false
 	}

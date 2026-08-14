@@ -129,25 +129,57 @@ func TestOrLoweringPreservesValues(t *testing.T) {
 	}
 }
 
-// TestOrAlternativeSelfTailCallIsDepthZero is the frame-reclaim half, and the
+// selfTailPops returns the pop counts of every OpSelfTailCall in a template tree,
+// in code order. Since frame-reclaim Phase C the op carries the number of `let`
+// frames it unwinds before rebinding, which is where the `or` lowering's effect is
+// now visible.
+func selfTailPops(tpl *machine.NativeTemplate) []int {
+	var q []int
+	for _, instr := range tpl.Code() {
+		if instr.Op == machine.OpSelfTailCall {
+			_, pops := machine.DecodeSelfTailCall(instr.Arg)
+			q = append(q, pops)
+		}
+	}
+	for _, lit := range tpl.Literals() {
+		sub, ok := lit.(*machine.NativeTemplate)
+		if !ok {
+			continue
+		}
+		q = append(q, selfTailPops(sub)...)
+	}
+	return q
+}
+
+// TestOrAlternativeSelfTailCallPopsNoFrame is the frame-reclaim half, and the
 // reason the lowering happens in the validated tree rather than only in codegen.
-// A self tail call in the alternative sits under the `or` let, so
-// tailExprHasSelfCall counts it at depth 1 and refuses to rewrite it — the exact
-// shape Phase C (OpSelfTailCall for depth>0) was scoped to reach. Removing the
-// frame puts the call back at depth 0, where the shipped machinery already works.
 //
-// The control holds the loop shape constant and only wraps the recursive call in
-// an `or`, so a pass cannot be explained by "self-recursive procedures get
-// OpSelfTailCall".
-func TestOrAlternativeSelfTailCallIsDepthZero(t *testing.T) {
+// It used to assert that the call was REWRITTEN AT ALL: a self tail call in the
+// alternative sat under the `or` let, so the walk counted it at depth 1 and
+// refused. Phase C removed that depth gate, so the site is rewritten either way
+// and the old assertion can no longer see the lowering — it would pass with the
+// lowering deleted. What discriminates now is the POP COUNT: `or` emits no frame,
+// so the op unwinds none; a real `let` emits one, so the op unwinds one.
+//
+// The two controls hold the loop shape constant and vary only the wrapper, so a
+// pass cannot be explained by "self-recursive procedures get OpSelfTailCall".
+func TestOrAlternativeSelfTailCallPopsNoFrame(t *testing.T) {
 	plain := templateOf(t,
 		"(define (f n acc) (if (= n 0) acc (f (- n 1) (+ acc n))))", "f")
-	qt.Assert(t, selfTailSites(plain), qt.Equals, 1,
-		qt.Commentf("control: a plain self tail call must already be rewritten"))
+	qt.Assert(t, selfTailPops(plain), qt.DeepEquals, []int{0},
+		qt.Commentf("control: a plain self tail call is already at the parameter frame"))
 
 	wrapped := templateOf(t,
 		"(define (f n acc) (if (= n 0) acc (or #f (f (- n 1) (+ acc n)))))", "f")
-	qt.Assert(t, selfTailSites(wrapped), qt.Equals, 1,
-		qt.Commentf("a self tail call in an or's alternative must be rewritten too — "+
-			"the or frame that made it depth 1 is gone"))
+	qt.Assert(t, selfTailPops(wrapped), qt.DeepEquals, []int{0},
+		qt.Commentf("an or's alternative must pop NOTHING: the lowering emits no "+
+			"OpPushEnv, so there is no frame between the call and the parameter frame. "+
+			"A 1 here means the lowering stopped firing and the op is compensating "+
+			"for a frame that should never have existed"))
+
+	letWrapped := templateOf(t,
+		"(define (f n acc) (if (= n 0) acc (let ((m (- n 1))) (f m (+ acc n)))))", "f")
+	qt.Assert(t, selfTailPops(letWrapped), qt.DeepEquals, []int{1},
+		qt.Commentf("control: a REAL let does push a frame, so the op must unwind it — "+
+			"this is what makes the 0 above a measurement rather than a constant"))
 }

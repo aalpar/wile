@@ -193,7 +193,7 @@ func instructionToOperation(instr Instruction) Operation {
 	case OpPushEnv:
 		return NewOperationPushEnv(int(instr.Arg))
 	case OpSelfTailCall:
-		return NewOperationSelfTailCall(int(instr.Arg))
+		return NewOperationSelfTailCall(DecodeSelfTailCall(instr.Arg))
 
 	// --- Wave 3: StoreLocal (only LocalIdx op with a distinct decomposition) ---
 	case OpStoreLocal:
@@ -316,7 +316,7 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 	case *OperationPushEnv:
 		return Instruction{Op: kind, Arg: int32(v.SlotCount)}, true
 	case *OperationSelfTailCall:
-		return Instruction{Op: kind, Arg: int32(v.ArgCount)}, true
+		return Instruction{Op: kind, Arg: EncodeSelfTailCall(v.ArgCount, v.PopCount)}, true
 
 	// --- Wave 3: two-operand operations (bit-packed LocalIndex) ---
 	case *OperationLoadLocalByLocalIndexImmediate:

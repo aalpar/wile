@@ -54,10 +54,15 @@ func fnWith(name string, ps *ValidatedParams, body ...ValidatedExpr) *ValidatedD
 }
 
 // TestBodyIsSelfTailReusable is the correctness core for OpSelfTailCall: it pins
-// which closures may have their activation frame reused in place at a depth-0
-// self-tail call. The predicate is the safety gate; any false positive here is
-// silent corruption (see the escape-gated plan's kill criterion), so the negative
-// cases are adversarial.
+// which closures may have their activation frame reused in place at a self-tail
+// call. The predicate is the safety gate; any false positive here is silent
+// corruption (see the escape-gated plan's kill criterion), so the negative cases
+// are adversarial.
+//
+// Depth is no longer among the conditions (frame-reclaim Phase C): the op pops the
+// intermediate let frames before rebinding, so this predicate answers only the
+// in-body safety question. Two rows that used to refuse partly on depth now refuse
+// on their own stated reason alone, and say so.
 func TestBodyIsSelfTailReusable(t *testing.T) {
 	letBind := func(name string) ValidatedLetBinding {
 		return ValidatedLetBinding{Name: syntax.NewSyntaxSymbol(name, nil), Init: lit()}
@@ -131,14 +136,21 @@ func TestBodyIsSelfTailReusable(t *testing.T) {
 			self: "v", want: false,
 		},
 		{
-			name: "negative: self-tail call nested in a let (depth > 0, v1 restriction)",
+			// Frame-reclaim Phase C. This was a NEGATIVE until 2026-08-14: v1's
+			// OpSelfTailCall could rebind the parameter frame only while it was
+			// mc.env, so a call under a let frame was refused here. The op now pops
+			// the intermediate frames first, so the depth gate is gone and this walk
+			// answers the smaller question — is there a self call in tail position.
+			// The POP COUNT is codegen's (frameReuse.letDepth), not this walk's.
+			name: "positive: self-tail call nested in a let (depth > 0, Phase C)",
 			proc: fnWith("g", params("i"),
 				ifx(call(symRef("done?"), symRef("i")),
 					symRef("i"),
 					nestedLet([]ValidatedLetBinding{letBind("x")},
 						call(symRef("g"), call(symRef("+"), symRef("i"), symRef("x")))))),
-			self: "g", want: false,
+			self: "g", want: true,
 		},
+
 		{
 			name: "negative: only a non-tail self-call (nothing reusable in tail)",
 			proc: fnWith("nt", params("i"),
@@ -168,6 +180,10 @@ func TestBodyIsSelfTailReusable(t *testing.T) {
 			self: "leaf", want: false,
 		},
 		{
+			// This row refused for TWO reasons until Phase C removed the depth gate:
+			// the call was at depth 1 AND the let binder shadows the self name. Only
+			// the shadow reason is left, which is the one it was written for — so it
+			// now discriminates rather than passing on the coarser condition.
 			name: "negative: self-tail call shadowed by an inner let binding",
 			proc: fnWith("s", params("i"),
 				nestedLet([]ValidatedLetBinding{letBind("s")},
