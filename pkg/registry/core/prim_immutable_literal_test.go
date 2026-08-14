@@ -281,3 +281,113 @@ func TestImmutableLiteral_StringParityPreserved(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrImmutableString), qt.IsTrue,
 		qt.Commentf("string-set! on a literal must still raise ErrImmutableString, got %v", err))
 }
+
+// --- Phase 3 gates: the three rules a per-object flag has to obey ---
+
+// TestImmutability_CopyClears pins R7RS's "newly allocated" clause across the
+// copying procedures: a copy of an immutable literal is mutable.
+//
+// Every row is GREEN today, so the must-fail-first form is a named sabotage
+// rather than a red run — make the named procedure return its source instead of
+// allocating, and the row goes red:
+//
+//	vector-copy      PrimVectorCopy
+//	bytevector-copy  PrimBytevectorCopy
+//	string-copy      PrimStringCopy
+//
+// string-copy is the row that earns its place. NewString defaults to IMMUTABLE,
+// so "just don't set the flag" gives the wrong answer for strings; PrimStringCopy
+// has to reach for NewMutableString, and does, under a comment saying why. The
+// polarity is not uniform across the flagged types (String.immutable vs
+// Hashtable.mutable) — values.Immutable normalizes the read, never the write.
+//
+// list-copy has no row: with pair literals mutable there is no immutable pair
+// source for it to clear from, so the assertion would be vacuous.
+func TestImmutability_CopyClears(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "vector-copy",
+			Code:     `(let ((v (vector-copy '#(1 2 3)))) (vector-set! v 0 9) v)`,
+			Expected: values.NewVector(values.NewInteger(9), values.NewInteger(2), values.NewInteger(3))},
+		{Name: "bytevector-copy",
+			Code:     `(let ((b (bytevector-copy '#u8(1 2 3)))) (bytevector-u8-set! b 0 9) b)`,
+			Expected: values.NewByteVectorFromBytes(9, 2, 3)},
+		{Name: "string-copy",
+			Code:     `(let ((s (string-copy "abc"))) (string-set! s 0 #\z) s)`,
+			Expected: values.NewMutableString("zbc")},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// TestImmutability_AllocatorsReturnMutable is the same rule for procedures R7RS
+// specifies as returning a NEWLY ALLOCATED string. Both rows were RED when this
+// gate was written — number->string built every arm with values.NewString, whose
+// default is immutable, and PrimUtf8ToString did the same — and both were turned
+// green by the string-allocator fix, not by this phase. They stay here because a
+// default-immutable constructor makes this the standing failure mode: any new
+// allocator that reaches for NewString instead of NewMutableString fails here.
+func TestImmutability_AllocatorsReturnMutable(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "number->string",
+			Code:     `(let ((s (number->string 42))) (string-set! s 0 #\9) s)`,
+			Expected: values.NewMutableString("92")},
+		{Name: "utf8->string",
+			Code:     `(let ((s (utf8->string #u8(97 98)))) (string-set! s 0 #\z) s)`,
+			Expected: values.NewMutableString("zb")},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// TestImmutability_SharingPreserves is the regression pin that a per-object flag
+// keeps answering per object: a vector nested inside a quoted literal is frozen
+// wherever it is reached from, including through a pair spine that carries no
+// flag of its own.
+//
+// The sabotage that makes it red is precise, and it is the mistake the "keep the
+// case, drop the mark" instruction exists to prevent: delete the *Pair case from
+// markLiteralImmutable. The walk then never reaches the vector, and this row
+// answers (1 #(9 3)) instead of raising.
+func TestImmutability_SharingPreserves(t *testing.T) {
+	_, err := testhelpers.RunSchemeCode(t,
+		`(let ((b '(1 #(2 3)))) (vector-set! (cadr b) 0 9) b)`)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrImmutableVector), qt.IsTrue,
+		qt.Commentf("a vector reached through a pair spine must stay frozen, got %v", err))
+}
+
+// TestImmutability_DestinationOnly pins which operand a copying mutator may
+// consult: the destination, never the source. Copying OUT of a literal is legal
+// and common.
+//
+// Sabotage per row: add a source-side check to the named primitive.
+//
+//	vector-copy!      PrimVectorCopyTo
+//	bytevector-copy!  PrimBytevectorCopyBang
+func TestImmutability_DestinationOnly(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "vector-copy! from a literal source",
+			Code:     `(let ((dst (make-vector 3 0))) (vector-copy! dst 0 '#(1 2 3)) dst)`,
+			Expected: values.NewVector(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
+		{Name: "bytevector-copy! from a literal source",
+			Code:     `(let ((dst (make-bytevector 3 0))) (bytevector-copy! dst 0 '#u8(1 2 3)) dst)`,
+			Expected: values.NewByteVectorFromBytes(1, 2, 3)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}

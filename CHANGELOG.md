@@ -43,6 +43,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING (Scheme semantics): a PAIR literal is no longer immutable.**
+  `(set-car! '(a b c) 999)` raised `ErrImmutablePair` and now succeeds; the same
+  for `set-cdr!` and `list-set!`. Vector, bytevector and string literals are
+  unchanged and still raise.
+
+  This **narrows a documented deviation rather than adding one.** R7RS §4.1.2's
+  "it is an error to attempt to store in a literal" is a case §1.3.2 encourages
+  but does not require an implementation to detect, and
+  `docs/reference/r7rs-differences.md` already recorded the detection as a
+  choice. Dropping it for pairs returns Wile to the conforming baseline.
+
+  What bought it: detection needs a per-object flag, and `*values.Pair` is the
+  two-word cons cell — the dominant heap object, where a flag is ~25% growth.
+  The alternative it replaced was an engine-scoped `sync.Map` side set, measured
+  at 5.86 ns per lookup (hit *and* miss) against 0.73 ns for a flag read and
+  0.22 ns for the store being guarded, on a path the peephole optimizer promotes
+  to an inline opcode.
+
+  **The price is structure sharing, and it is real.** Wile shares same-shape
+  literals within a compilation unit, so
+  `(begin (define x '(1 2 3)) (define y '(1 2 3)) (set-cdr! x 99))` now leaves
+  `y` as `(1 . 99)`. A program that mutates list structure must build it with
+  `list` or `cons`. `TestPairLiteral_StructureSharingCorrupts` asserts that
+  value rather than merely asserting the absence of an error.
+
+- **BREAKING (Go API): `machine.CallContext` loses `ImmutableLiterals()`.** The
+  interface is what every Go extension's `Impl` receives, so this is a source
+  break for an extension that called it. There is nothing to migrate to and
+  nothing to migrate: immutability is now the value's own `IsImmutable()`, which
+  `values.Immutable` exposes on `*String`, `*Hashtable`, `*Vector` and
+  `*ByteVector`. `environment.ImmutableLiterals` and `werr.ErrImmutablePair` are
+  deleted, and `Namespace` loses a field.
+
 - **BREAKING (Go API): `pkg/values.Vector` and `pkg/values.ByteVector` are no
   longer slice types.** Each is now a struct carrying its elements plus an
   intrinsic `immutable` flag, with an `Elems()` accessor returning the backing
