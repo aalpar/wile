@@ -23,7 +23,23 @@ type ForeignFunction func(mc CallContext) error
 // NativeError). It detects ForeignFileError and ForeignReadError to set the
 // appropriate NativeError kind per R7RS §6.11. RaiseInPlace later stamps the
 // raise-site source location and stack trace onto it.
+//
+// A primitive that RETURNS a *values.NativeError is already holding a condition,
+// so it is forwarded rather than rebuilt: rebuilding reads only err.Error(), which
+// drops the irritants and the kind. CODING_STYLE.md has prescribed that return
+// form since 2026-06-27 and it did not work until wave 4 item 4.
+//
+// The assertion is deliberately DIRECT, never errors.As. errors.As would also
+// match a *NativeError reached through a werr wrap, and forwarding that inner
+// value would discard the wrap's own message — one losslessness bug traded for
+// another. A wrapped condition is a Go error something has added context to, and
+// it belongs on the rebuild path. Pinned by TestWrappedNativeErrorIsNotForwarded
+// (pkg/wile/native_error_passthrough_test.go).
 func goErrorToCondition(err error) values.Value {
+	nativeErr, ok := err.(*values.NativeError)
+	if ok {
+		return nativeErr
+	}
 	kind := values.NativeErrorKindGeneric
 	var fileErr *werr.ForeignFileError
 	var readErr *werr.ForeignReadError

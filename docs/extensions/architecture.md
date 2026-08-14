@@ -606,23 +606,30 @@ wrapping is safe: a `*werr.ForeignFileError` anywhere in the chain makes
 `(file-error? e)` true, and a `*werr.ForeignReadError` makes `(read-error? e)`
 true. Any other error is a generic condition.
 
-### Two known gaps, both real today
+A `*values.NativeError` is not converted at all — it is already a condition, so
+it is forwarded unchanged and keeps its irritants and its kind. Returning
+`values.NewFileError("boom", n)` gives Scheme `(error-object-irritants e)` = `(n)`
+and `(file-error? e)` = `#t`, matching what Scheme-side `(error "boom" n)`
+produces. The recognition is a direct type assertion, so this applies to the
+value you return and **not** to a condition buried under a `werr` wrap: wrapping
+adds a message, and forwarding the inner value would discard it, so a wrapped
+condition takes the rebuild path above and reports the wrap's message with no
+irritants.
 
-Both are measured, not predicted, and both are open work rather than intended
-behaviour. They are listed here because a contract that omits its own
+### One known gap, real today
+
+It is measured, not predicted, and it is open work rather than intended
+behaviour. It is listed here because a contract that omits its own
 counter-examples is worse than no contract.
 
 | You do this | What Scheme sees today |
 |---|---|
-| return a `*values.NativeError` built with `values.NewErrorObjectWithCause` / `NewFileError` / `NewReadError`, carrying irritants | message survives; **the irritants are dropped**, and for the two kinded constructors the kind is dropped too — returning `values.NewFileError("boom", n)` yields `(error-object-irritants e)` = `()` and `(file-error? e)` = `#f` |
 | register the same panicking Go function twice, once with `RegisterPrimitive` and once with `RegisterFunc` | the `RegisterPrimitive` one escapes `guard`; the `RegisterFunc` one is caught by it |
 
-The first gap is why a primitive that wants irritants should raise them
-Scheme-side rather than return a `*values.NativeError`. The second is the
-`RegisterFunc` wrapper's own `defer recover()`, which lives *inside* the
-generated `ForeignFunction` and therefore fires wherever that function is
-called; `RegisterPrimitive` installs no such thing. Do not rely on either
-answer: whichever way the asymmetry is closed, one of the two changes.
+The cause is the `RegisterFunc` wrapper's own `defer recover()`, which lives
+*inside* the generated `ForeignFunction` and therefore fires wherever that
+function is called; `RegisterPrimitive` installs no such thing. Do not rely on
+either answer: whichever way the asymmetry is closed, one of the two changes.
 
 ### Panics are contained, not converted
 
