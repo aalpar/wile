@@ -176,9 +176,21 @@ suites with use-after-release. The transferable finding:
 
 ## What it costs, measured
 
+**Read the counters below as PARAMETER frames only.** A `let` frame never enters
+the pool in either direction — `OpPushEnv` allocates one directly and nothing ever
+calls `releaseEnvFrame` on it — so `let` frames are invisible to these numbers and
+their recovery rate is **0%, in every row**. What the hit rate measures is how
+often `Apply`'s acquire found a recycled *parameter* frame waiting instead of
+minting a new one.
+
+That is the shape of the cost: a `let` allocates three frames' worth of objects
+that are never recycled, **and** it knocks out recovery of the enclosing
+procedure's parameter frame, which is a different frame and the one the pool
+exists for.
+
 The freelist's own counters, whole-program:
 
-| benchmark | acquires | releases | misses | hit rate |
+| benchmark | parameter frames acquired | released back | misses | recovered |
 |---|---|---|---|---|
 | `fib` (no `let`) | 2,692,550 | 2,692,549 | 27 | **100.0%** |
 | `nqueens` | 8,503,623 | 5,623,346 | 2,880,278 | 66.1% |
@@ -193,14 +205,16 @@ returned.
 Isolating the cause, on three `fib` variants that differ only in where a `let`
 sits:
 
-| body | acquires | releases | hit rate |
+| body | parameter frames acquired | released back | recovered |
 |---|---|---|---|
 | no `let` | 57,313 | 57,313 | **100.0%** |
 | `let` in non-tail position | 85,969 | 57,313 | 66.7% |
 | `let` wrapping **only the base branch** | 57,313 | **28,656** | **50.0%** |
 
-The third row is the sharpest: that `let` is off the recursive path and allocates
-nothing — acquires are unchanged — and half the releases still vanish.
+The third row is the sharpest: that `let` is off the recursive path and changes
+no acquire count at all — and half the *parameter* frames stop coming back. The
+`let` frames it created are additional, and are not counted here because none of
+them was ever poolable.
 
 Per-iteration allocation for a loop, by shape:
 
