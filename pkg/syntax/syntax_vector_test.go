@@ -76,7 +76,7 @@ func (p *SyntaxVectorSuite) TestUnwrap_Empty(c *qt.C) {
 
 	resultVec, ok := result.(*values.Vector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(*resultVec), qt.Equals, 0)
+	c.Assert(resultVec.Length(), qt.Equals, 0)
 }
 
 func (p *SyntaxVectorSuite) TestUnwrap_WithValues(c *qt.C) {
@@ -87,10 +87,10 @@ func (p *SyntaxVectorSuite) TestUnwrap_WithValues(c *qt.C) {
 	result := vec.Unwrap()
 	resultVec, ok := result.(*values.Vector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(*resultVec), qt.Equals, 2)
+	c.Assert(resultVec.Length(), qt.Equals, 2)
 	// Unwrap keeps syntax values inside
-	c.Assert((*resultVec)[0], valuestest.SchemeEquals, v1)
-	c.Assert((*resultVec)[1], valuestest.SchemeEquals, v2)
+	c.Assert(resultVec.Elems()[0], valuestest.SchemeEquals, v1)
+	c.Assert(resultVec.Elems()[1], valuestest.SchemeEquals, v2)
 }
 
 func (p *SyntaxVectorSuite) TestUnwrap_Nil(c *qt.C) {
@@ -105,7 +105,7 @@ func (p *SyntaxVectorSuite) TestUnwrapAll_Empty(c *qt.C) {
 
 	resultVec, ok := result.(*values.Vector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(*resultVec), qt.Equals, 0)
+	c.Assert(resultVec.Length(), qt.Equals, 0)
 }
 
 func (p *SyntaxVectorSuite) TestUnwrapAll_WithValues(c *qt.C) {
@@ -116,10 +116,10 @@ func (p *SyntaxVectorSuite) TestUnwrapAll_WithValues(c *qt.C) {
 	result := vec.UnwrapAll()
 	resultVec, ok := result.(*values.Vector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(*resultVec), qt.Equals, 2)
+	c.Assert(resultVec.Length(), qt.Equals, 2)
 	// UnwrapAll recursively unwraps to raw values
-	c.Assert((*resultVec)[0], valuestest.SchemeEquals, values.NewInteger(1))
-	c.Assert((*resultVec)[1], valuestest.SchemeEquals, values.NewInteger(2))
+	c.Assert(resultVec.Elems()[0], valuestest.SchemeEquals, values.NewInteger(1))
+	c.Assert(resultVec.Elems()[1], valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 func (p *SyntaxVectorSuite) TestUnwrapAll_Nested(c *qt.C) {

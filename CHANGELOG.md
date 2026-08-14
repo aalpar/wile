@@ -43,6 +43,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING (Go API): `pkg/values.Vector` and `pkg/values.ByteVector` are no
+  longer slice types.** Each is now a struct carrying its elements plus an
+  intrinsic `immutable` flag, with an `Elems()` accessor returning the backing
+  slice. Go code that indexed, ranged, `len`-ed, `make`-d, sliced or converted
+  one directly (`(*v)[i]`, `len(*v)`, `range *v`, `make(values.Vector, n)`,
+  `values.ByteVector{…}`) uses `v.Elems()`, `v.Length()`, and the existing
+  `NewVector` / `NewByteVector*` constructors instead. Scheme-visible behaviour
+  is unchanged. Pre-1.0 break, taken deliberately rather than worked around.
+
+  Method-based use is unaffected — `Get`, `Set`, `Length`, `AsList`, `AsBytes`,
+  `EqualTo` all keep their signatures — which is precisely why the compiler was
+  **not** the checklist for this change: the conversion errors out every
+  slice-shaped use and leaves every method-shaped one compiling silently.
+
+  The flag is what the change is for. R7RS §4.1.2 literal immutability for these
+  two types moves off `environment.ImmutableLiterals`, the engine-scoped
+  `sync.Map` side set, and onto the value; `values.MarkImmutable` is the single
+  write surface, and `Set` self-enforces the way `*String.SetChar` does. `*Pair`
+  stays in the side set — a word on the 32-byte cons cell is ~25% growth on the
+  dominant heap object, measured against a mutation path the peephole pass
+  promotes. That leaves the side set with one member type, and only the one type
+  that could not afford the alternative.
+
 - **BREAKING (value semantics): delivering ≠1 values into a single-value slot
   now raises instead of splicing.** `OpPush` pushed the value register's *live
   arity* into an argument slot, so N values became N stack entries, and multiple

@@ -948,7 +948,7 @@ func TestCoverage_Bytevector(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	bv, ok := syn.Unwrap().(*values.ByteVector)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
-	c.Assert(len(*bv), qt.Equals, 3)
+	c.Assert(bv.Length(), qt.Equals, 3)
 }
 
 func TestCoverage_EmptyBytevector(t *testing.T) {
@@ -960,7 +960,7 @@ func TestCoverage_EmptyBytevector(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	bv, ok := syn.Unwrap().(*values.ByteVector)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", syn.Unwrap()))
-	c.Assert(len(*bv), qt.Equals, 0)
+	c.Assert(bv.Length(), qt.Equals, 0)
 }
 
 // ---------------------------------------------------------------------------

@@ -45,8 +45,8 @@ func TestImmutableLiterals_MarkContains(t *testing.T) {
 // *Box and *Record are deliberately absent rather than missing. Both are
 // non-flaggable by decision: nothing marks either and nothing can (records have
 // no reader syntax, so a record can never appear in a quoted literal; boxes have
-// no side-set fallback because the side set only ever receives pairs, vectors
-// and bytevectors). The consequence is that a quoted literal box is mutable —
+// no side-set fallback because the side set only ever receives pairs). The
+// consequence is that a quoted literal box is mutable —
 // (set-box! (car '(#&1)) 2) succeeds — which is extension semantics, not an
 // R7RS deviation, since boxes are not R7RS. Adding a row for either would assert
 // a property this design does not intend to hold.
@@ -55,10 +55,13 @@ func TestImmutableLiterals_IsImmutable(t *testing.T) {
 
 	markedPair := values.NewCons(values.NewInteger(1), values.EmptyList)
 	set.Mark(markedPair)
+	// Vector and ByteVector carry the flag intrinsically; the side set never
+	// receives them, and marking one there would be a no-op the predicate
+	// cannot see (it takes the values.Immutable arm first).
 	markedVector := values.NewVector(values.NewInteger(1))
-	set.Mark(markedVector)
+	values.MarkImmutable(markedVector)
 	markedByteVector := values.NewByteVectorFromBytes(1)
-	set.Mark(markedByteVector)
+	values.MarkImmutable(markedByteVector)
 
 	// Marked in set, but queried through a nil receiver below. Marking it is what
 	// makes that row load-bearing: the answer must be false because the receiver
@@ -86,6 +89,7 @@ func TestImmutableLiterals_IsImmutable(t *testing.T) {
 		{"Integer never flaggable", set, values.NewInteger(7), false},
 		// The intrinsic arm answers without a receiver; the side-set arm cannot.
 		{"nil receiver, flagged value", nil, values.NewString("abc"), true},
+		{"nil receiver, flagged vector", nil, markedVector, true},
 		{"nil receiver, side-set value", nil, nilReceiverPair, false},
 	}
 	for _, tt := range tests {

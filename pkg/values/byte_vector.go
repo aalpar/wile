@@ -16,36 +16,43 @@ package values
 
 import "github.com/aalpar/wile/pkg/werr"
 
-var _ Value = (*ByteVector)(nil)
+var (
+	_ Value     = (*ByteVector)(nil)
+	_ Immutable = (*ByteVector)(nil)
+)
 
 // ByteVector represents a Scheme bytevector.
-type ByteVector []*Byte
+//
+// Like Vector, it carries its own immutability rather than being tracked in an
+// engine-scoped side set; see that type's comment for the write discipline.
+type ByteVector struct {
+	elems     []*Byte
+	immutable bool
+}
 
 // NewByteVector creates a new bytevector from byte values.
 func NewByteVector(vs ...*Byte) *ByteVector {
 	if len(vs) == 0 {
 		return &ByteVector{}
 	}
-	bs := make([]*Byte, len(vs))
-	q := ByteVector(bs)
+	q := &ByteVector{elems: make([]*Byte, len(vs))}
 	for i := range vs {
 		b := NewByte(vs[i].Value)
-		q[i] = b
+		q.elems[i] = b
 	}
-	return &q
+	return q
 }
 
 func NewByteVectorFromBytes(vs ...byte) *ByteVector {
 	if len(vs) == 0 {
 		return NewByteVector()
 	}
-	bs := make([]*Byte, len(vs))
-	q := ByteVector(bs)
+	q := &ByteVector{elems: make([]*Byte, len(vs))}
 	for i := range vs {
 		b := NewByte(vs[i])
-		q[i] = b
+		q.elems[i] = b
 	}
-	return &q
+	return q
 }
 
 // NewByteVectorFromIntegers creates a new bytevector from integer values.
@@ -54,33 +61,58 @@ func NewByteVectorFromIntegers(vs ...*Integer) (*ByteVector, error) {
 	if len(vs) == 0 {
 		return &ByteVector{}, nil
 	}
-	bs := make([]*Byte, len(vs))
-	q := ByteVector(bs)
+	q := &ByteVector{elems: make([]*Byte, len(vs))}
 	for i := range vs {
 		err := ValidateByteValue(vs[i], "NewByteVectorFromIntegers", "element")
 		if err != nil {
 			return nil, err
 		}
 		b := NewByte(uint8(vs[i].Value))
-		q[i] = b
+		q.elems[i] = b
 	}
-	return &q, nil
+	return q, nil
+}
+
+// Elems returns the bytevector's backing element slice. It is the storage, not a
+// copy; see Vector.Elems for what that costs a caller.
+func (p *ByteVector) Elems() []*Byte {
+	if p.IsVoid() {
+		return nil
+	}
+	return p.elems
 }
 
 func (p *ByteVector) Get(i int) Value {
-	return (*p)[i]
+	return p.elems[i]
 }
 
 // Set sets the element at the specified index to the given value.
-// ByteVectors are always mutable, so this never returns an error from immutability.
-// Returns an error if the value is not a Byte.
+// Returns an error if the bytevector is immutable or the value is not a Byte.
 func (p *ByteVector) Set(i int, value Value) error {
+	if p.immutable {
+		return werr.WrapForeignErrorf(werr.ErrImmutableBytevector, "ByteVector.Set: cannot mutate immutable bytevector")
+	}
 	x, ok := value.(*Byte)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAByte, "bytevector element must be a byte")
 	}
-	(*p)[i] = x
+	p.elems[i] = x
 	return nil
+}
+
+// IsImmutable reports whether in-place mutation of this bytevector is forbidden.
+// R7RS §4.1.2: a quoted-literal constant is immutable.
+func (p *ByteVector) IsImmutable() bool {
+	return p != nil && p.immutable
+}
+
+// setImmutable marks the bytevector immutable. Unexported for the same reason
+// Vector.setImmutable is; values.MarkImmutable is the entry point.
+func (p *ByteVector) setImmutable() {
+	if p == nil {
+		return
+	}
+	p.immutable = true
 }
 
 // AsList converts the vector to a proper list (linked list of pairs).
@@ -91,15 +123,18 @@ func (p *ByteVector) AsList() Tuple {
 	if p.IsVoid() {
 		return (*Pair)(nil)
 	}
-	vs := make([]Value, len(*p))
-	for i, b := range *p {
+	vs := make([]Value, len(p.elems))
+	for i, b := range p.elems {
 		vs[i] = b
 	}
 	return List(vs...)
 }
 
 func (p *ByteVector) Length() int {
-	return len(*p)
+	if p.IsVoid() {
+		return 0
+	}
+	return len(p.elems)
 }
 
 // AsBytes converts the bytevector to a Go byte slice.
@@ -126,7 +161,7 @@ func (p *ByteVector) AsBytes(is ...int) []byte {
 		starti = endi
 	}
 	out := make([]byte, endi-starti)
-	for i, v := range (*p)[starti:endi] {
+	for i, v := range p.elems[starti:endi] {
 		out[i] = v.Value
 	}
 	return out
@@ -143,11 +178,11 @@ func (p *ByteVector) EqualTo(v Value) bool {
 	if !ok {
 		return false
 	}
-	if len(*p) != len(*other) {
+	if len(p.elems) != len(other.elems) {
 		return false
 	}
-	for i := range *p {
-		if (*p)[i].Value != (*other)[i].Value {
+	for i := range p.elems {
+		if p.elems[i].Value != other.elems[i].Value {
 			return false
 		}
 	}
@@ -159,7 +194,7 @@ func (p *ByteVector) EqualTo(v Value) bool {
 // is needed (nil visited) and the depth bound is never reached (bytes cannot
 // recurse). Elements sit one level below the bytevector root (depth 2).
 func (p *ByteVector) SchemeString() string {
-	return formatIndexable("#u8(", len(*p), func(i int) Value {
-		return (*p)[i]
+	return formatIndexable("#u8(", len(p.elems), func(i int) Value {
+		return p.elems[i]
 	}, nil, 2)
 }

@@ -41,10 +41,9 @@ import (
 // would silently widen the gate to admit the recursing case. If this test fails,
 // do not delete it: push key comparison through the worklist first.
 func TestNoContainerIsHashable(t *testing.T) {
-	vec := values.Vector([]values.Value{values.NewInteger(1)})
 	containers := map[string]values.Value{
 		"*Pair":      values.NewCons(values.NewInteger(1), values.EmptyList),
-		"*Vector":    &vec,
+		"*Vector":    values.NewVector(values.NewInteger(1)),
 		"*Hashtable": values.NewEmptyHashtable(),
 		"*Box":       values.NewBox(values.NewInteger(1)),
 	}

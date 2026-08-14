@@ -1517,8 +1517,9 @@ Closed. One line each so the fix stays findable; detail is in the cited commits 
   nested depth. Guard: `TestImmutableTopLevel_OpaqueSubtreeOverMark`.
 - [x] **`Value` Go-comparability is now a stated, enforced contract** (2026-07-14,
   `fix/value-comparability-contract`): the rule that actually decides it — **the receiver, not the
-  underlying type** — is on the `Value` doc comment (`Vector` is `[]Value` and is safe because its
-  methods take pointer receivers), enforced by `reflect.TypeOf(v).Comparable()` over rosters, since
+  underlying type** — is on the `Value` doc comment (a slice-typed declaration is safe when its
+  methods take pointer receivers; `Vector` was the worked example until it became a struct in the
+  2026-08 immutability change), enforced by `reflect.TypeOf(v).Comparable()` over rosters, since
   Go comparability has no method set and cannot be asserted at compile time. **Three violators, not
   the two audited**: `reflect` found `machine.boxedValuesType`, the only one reachable from Scheme
   (`OperationBoxValues` puts it in the value register, so `dynamic-wind` gets there) — it became

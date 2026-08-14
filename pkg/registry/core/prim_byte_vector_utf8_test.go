@@ -106,11 +106,11 @@ func TestStringToUtf8CharacterIndices(t *testing.T) {
 
 			// Convert to hex string for comparison
 			var gotHex strings.Builder
-			for i := 0; i < len(*bv); i++ {
+			for i := 0; i < bv.Length(); i++ {
 				if i > 0 {
 					gotHex.WriteString(" ")
 				}
-				fmt.Fprintf(&gotHex, "%02x", (*bv)[i].Value)
+				fmt.Fprintf(&gotHex, "%02x", bv.Elems()[i].Value)
 			}
 
 			c.Assert(gotHex.String(), qt.Equals, tc.wantHex,
@@ -169,11 +169,11 @@ func TestStringToUtf8EdgeCases(t *testing.T) {
 			c.Assert(ok, qt.IsTrue, qt.Commentf("expected bytevector, got %T", result))
 
 			var gotHex strings.Builder
-			for i := 0; i < len(*bv); i++ {
+			for i := 0; i < bv.Length(); i++ {
 				if i > 0 {
 					gotHex.WriteString(" ")
 				}
-				fmt.Fprintf(&gotHex, "%02x", (*bv)[i].Value)
+				fmt.Fprintf(&gotHex, "%02x", bv.Elems()[i].Value)
 			}
 
 			c.Assert(gotHex.String(), qt.Equals, tc.wantHex)

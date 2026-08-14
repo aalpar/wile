@@ -403,8 +403,9 @@ func TestCompileValidatedCaseLambda_VariadicClause(t *testing.T) {
 }
 
 // TestMarkLiteralImmutable_RecursiveAndCyclic verifies the quote-hook marker
-// records every reachable pair/vector by pointer identity, descends into nested
-// structure and vectors, and terminates on cyclic literals.
+// reaches every pair and vector, descends into nested structure and vectors, and
+// terminates on cyclic literals. Pairs are recorded in the side set by pointer
+// identity; vectors and bytevectors carry an intrinsic flag.
 func TestMarkLiteralImmutable_RecursiveAndCyclic(t *testing.T) {
 	set := &environment.ImmutableLiterals{}
 
@@ -415,10 +416,22 @@ func TestMarkLiteralImmutable_RecursiveAndCyclic(t *testing.T) {
 
 	markLiteralImmutable(top, set, make(map[values.Value]struct{}))
 
-	for _, v := range []values.Value{top, inner, vec} {
+	// Two homes, one walk. The pair spine lands in the engine-scoped side set;
+	// the vector carries its own flag, so asking the side set about it answers
+	// false however thoroughly the walk reached it. Checking each in the wrong
+	// home is exactly the silent failure the flag conversion could introduce.
+	for _, v := range []values.Value{top, inner} {
 		if !set.Contains(v) {
 			t.Fatalf("expected %T to be marked immutable", v)
 		}
+	}
+	if !vec.IsImmutable() {
+		t.Fatalf("expected the nested *values.Vector to carry the immutable flag")
+	}
+	if set.Contains(vec) {
+		t.Fatalf("the nested vector must NOT be in the side set: a flagged type " +
+			"that is also marked there means the walk still writes to both, and " +
+			"the side set's copy is the one nothing reads")
 	}
 	// Atoms are not marked (membership is for pairs/vectors only).
 	if set.Contains(values.NewInteger(1)) {

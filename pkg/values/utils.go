@@ -413,7 +413,7 @@ func VectorToList(vs *Vector) Tuple {
 	if IsVoid(vs) {
 		return EmptyList
 	}
-	return List([]Value(*vs)...)
+	return List(vs.Elems()...)
 }
 
 // ExactInteger extracts an exact integer from a Scheme value.

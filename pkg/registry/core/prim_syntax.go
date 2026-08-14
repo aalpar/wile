@@ -148,8 +148,8 @@ func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visite
 		}
 		visited[datum] = true
 		defer delete(visited, datum)
-		elems := make([]syntax.SyntaxValue, len(*v))
-		for i, elem := range *v {
+		elems := make([]syntax.SyntaxValue, v.Length())
+		for i, elem := range v.Elems() {
 			e, err := datumToSyntaxVisited(elem, sctx, visited, depth+1)
 			if err != nil {
 				return nil, err

@@ -40,7 +40,7 @@ func PrimMakeVector(mc machine.CallContext) error {
 	if ok {
 		fill = v
 	}
-	elems := make(values.Vector, size.Value)
+	elems := make([]values.Value, size.Value)
 	for i := range elems {
 		elems[i] = fill
 	}
@@ -92,12 +92,12 @@ func PrimVectorToList(mc machine.CallContext) error {
 	}
 	rest := mc.Arg(1)
 
-	start, end, err := helpers.ParseSubrange(rest, len(*v), "vector->list")
+	start, end, err := helpers.ParseSubrange(rest, v.Length(), "vector->list")
 	if err != nil {
 		return err
 	}
 
-	mc.SetValue(values.List((*v)[start:end]...))
+	mc.SetValue(values.List(v.Elems()[start:end]...))
 	return nil
 }
 
@@ -116,15 +116,14 @@ func PrimVectorCopy(mc machine.CallContext) error {
 	}
 	rest := mc.Arg(1)
 
-	start, end, err := helpers.ParseSubrange(rest, len(*v), "vector-copy")
+	start, end, err := helpers.ParseSubrange(rest, v.Length(), "vector-copy")
 	if err != nil {
 		return err
 	}
 
 	// Create a new vector with the copied elements
-	newLen := end - start
-	elems := make(values.Vector, newLen)
-	copy(elems, (*v)[start:end])
+	elems := make([]values.Value, end-start)
+	copy(elems, v.Elems()[start:end])
 	mc.SetValue(values.NewVector(elems...))
 	return nil
 }
@@ -161,19 +160,19 @@ func PrimVectorCopyTo(mc machine.CallContext) error {
 		return err
 	}
 
-	start, end, err := helpers.ParseSubrange(tuple.Cdr(), len(*from), "vector-copy!")
+	start, end, err := helpers.ParseSubrange(tuple.Cdr(), from.Length(), "vector-copy!")
 	if err != nil {
 		return err
 	}
 	// Subtract rather than add: atIdx+(end-start) overflows int64 for a near-MaxInt64
 	// atIdx, wrapping negative so the guard passes and the slice expression panics.
-	// len(*to)-(end-start) cannot wrap, both terms being bounded by the slice length.
-	if atIdx < 0 || atIdx > len(*to)-(end-start) {
+	// to.Length()-(end-start) cannot wrap, both terms being bounded by the slice length.
+	if atIdx < 0 || atIdx > to.Length()-(end-start) {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "vector-copy!: invalid destination index")
 	}
 
 	// Copy elements
-	copy((*to)[atIdx:], (*from)[start:end])
+	copy(to.Elems()[atIdx:], from.Elems()[start:end])
 	mc.SetValue(values.Void)
 	return nil
 }
@@ -192,14 +191,15 @@ func PrimVectorFill(mc machine.CallContext) error {
 	fillArg := mc.Arg(1)
 	rest := mc.Arg(2)
 
-	start, end, err := helpers.ParseSubrange(rest, len(*v), "vector-fill!")
+	start, end, err := helpers.ParseSubrange(rest, v.Length(), "vector-fill!")
 	if err != nil {
 		return err
 	}
 
 	// Fill the elements
+	slots := v.Elems()
 	for i := start; i < end; i++ {
-		(*v)[i] = fillArg
+		slots[i] = fillArg
 	}
 	mc.SetValue(values.Void)
 	return nil
@@ -217,13 +217,13 @@ func PrimVectorAppend(mc machine.CallContext) error {
 	// Create the result vector
 	totalLen := 0
 	for _, v := range vectors {
-		totalLen += len(*v)
+		totalLen += v.Length()
 	}
-	elems := make(values.Vector, totalLen)
+	elems := make([]values.Value, totalLen)
 	idx := 0
 	for _, v := range vectors {
-		copy(elems[idx:], *v)
-		idx += len(*v)
+		copy(elems[idx:], v.Elems())
+		idx += v.Length()
 	}
 
 	mc.SetValue(values.NewVector(elems...))
@@ -240,15 +240,16 @@ func PrimVectorToString(mc machine.CallContext) error {
 	}
 	rest := mc.Arg(1)
 
-	start, end, err := helpers.ParseSubrange(rest, len(*v), "vector->string")
+	start, end, err := helpers.ParseSubrange(rest, v.Length(), "vector->string")
 	if err != nil {
 		return err
 	}
 
 	// Convert characters to string
+	elems := v.Elems()
 	runes := make([]rune, end-start)
 	for i := start; i < end; i++ {
-		ch, err := helpers.RequireType[*values.Character]((*v)[i], werr.ErrNotACharacter, "vector->string")
+		ch, err := helpers.RequireType[*values.Character](elems[i], werr.ErrNotACharacter, "vector->string")
 		if err != nil {
 			return err
 		}
@@ -277,7 +278,7 @@ func PrimStringToVector(mc machine.CallContext) error {
 	}
 
 	// Create vector of characters
-	elems := make(values.Vector, end-start)
+	elems := make([]values.Value, end-start)
 	for i := start; i < end; i++ {
 		elems[i-start] = values.NewCharacter(runes[i])
 	}

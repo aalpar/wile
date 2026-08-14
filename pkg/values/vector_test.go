@@ -65,7 +65,7 @@ func TestVectorCreation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			v := values.NewVector(tc.values...)
 			qt.Assert(t, v, qt.Not(qt.IsNil))
-			qt.Assert(t, len(*v), qt.Equals, tc.length)
+			qt.Assert(t, v.Length(), qt.Equals, tc.length)
 		})
 	}
 }
@@ -254,7 +254,7 @@ func TestVectorSchemeString(t *testing.T) {
 // truncation (dropped element, marker in the wrong slot) is caught.
 func TestVectorSchemeStringCyclic(t *testing.T) {
 	v := values.NewVector(values.NewInteger(1), values.NewInteger(2), nil)
-	(*v)[2] = v // self-reference
+	v.Elems()[2] = v // self-reference
 
 	qt.Assert(t, v.SchemeString(), qt.Equals, "#(1 2 ...)")
 }
@@ -266,7 +266,7 @@ func TestVectorSchemeStringCyclic(t *testing.T) {
 func TestVectorSchemeStringCrossCycle(t *testing.T) {
 	v := values.NewVector(values.NewInteger(1), nil)
 	p := values.NewCons(values.NewSymbol("a"), v)
-	(*v)[1] = p // vector -> pair -> vector
+	v.Elems()[1] = p // vector -> pair -> vector
 
 	// Entry from the vector root.
 	qt.Assert(t, v.SchemeString(), qt.Equals, "#(1 (a . ...))")

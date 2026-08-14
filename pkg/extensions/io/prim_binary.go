@@ -172,11 +172,7 @@ func PrimReadBytevector(mc machine.CallContext) error {
 		return werr.WrapForeignReadErrorf(err, "read-bytevector: error reading from port")
 	}
 
-	bv := make(values.ByteVector, len(buf))
-	for i := range buf {
-		bv[i] = &values.Byte{Value: buf[i]}
-	}
-	mc.SetValue(&bv)
+	mc.SetValue(values.NewByteVectorFromBytes(buf...))
 	return nil
 }
 
@@ -200,7 +196,7 @@ func PrimReadBytevectorBang(mc machine.CallContext) error {
 	}
 
 	// Extract optional start/end arguments
-	start, end, err := helpers.ParseSubrange(tuple.Cdr(), len(*bv), "read-bytevector!")
+	start, end, err := helpers.ParseSubrange(tuple.Cdr(), bv.Length(), "read-bytevector!")
 	if err != nil {
 		return err
 	}
@@ -213,8 +209,9 @@ func PrimReadBytevectorBang(mc machine.CallContext) error {
 	if err != nil {
 		if errors.Is(err, io.ErrUnexpectedEOF) {
 			// Partial read at EOF: copy what we got and return the count.
+			slots := bv.Elems()
 			for i := range n {
-				(*bv)[start+i] = values.NewByte(buf[i])
+				slots[start+i] = values.NewByte(buf[i])
 			}
 			mc.SetValue(values.NewInteger(int64(n)))
 			return nil
@@ -226,8 +223,9 @@ func PrimReadBytevectorBang(mc machine.CallContext) error {
 		return werr.WrapForeignReadErrorf(err, "read-bytevector!: error reading from port")
 	}
 
+	slots := bv.Elems()
 	for i := range n {
-		(*bv)[start+i] = values.NewByte(buf[i])
+		slots[start+i] = values.NewByte(buf[i])
 	}
 	mc.SetValue(values.NewInteger(int64(n)))
 	return nil
@@ -248,7 +246,7 @@ func PrimWriteBytevector(mc machine.CallContext) error {
 	}
 
 	// Extract optional start/end arguments
-	start, end, err := helpers.ParseSubrange(tuple.Cdr(), len(*bv), "write-bytevector")
+	start, end, err := helpers.ParseSubrange(tuple.Cdr(), bv.Length(), "write-bytevector")
 	if err != nil {
 		return err
 	}

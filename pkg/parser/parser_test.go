@@ -2454,7 +2454,7 @@ func TestParser_EmptyVector(t *testing.T) {
 
 	vec, ok := syn.UnwrapAll().(*values.Vector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(*vec), qt.Equals, 0)
+	c.Assert(vec.Length(), qt.Equals, 0)
 }
 
 // TestParser_EmptyByteVector tests parsing empty byte vectors
@@ -2469,7 +2469,7 @@ func TestParser_EmptyByteVector(t *testing.T) {
 
 	bv, ok := syn.UnwrapAll().(*values.ByteVector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(*bv), qt.Equals, 2)
+	c.Assert(bv.Length(), qt.Equals, 2)
 }
 
 // TestParser_SingleElementVector tests vectors with one element (tests wrapSyntaxVector)
@@ -2483,8 +2483,8 @@ func TestParser_SingleElementVector(t *testing.T) {
 
 	vec, ok := syn.UnwrapAll().(*values.Vector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(*vec), qt.Equals, 1)
-	c.Assert((*vec)[0], valuestest.SchemeEquals, values.NewInteger(42))
+	c.Assert(vec.Length(), qt.Equals, 1)
+	c.Assert(vec.Elems()[0], valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestParser_NestedLists tests lists within lists (tests listSyntax with multiple elements)
@@ -2520,12 +2520,12 @@ func TestParser_VectorWithMixedTypes(t *testing.T) {
 
 	vec, ok := syn.UnwrapAll().(*values.Vector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(*vec), qt.Equals, 4)
+	c.Assert(vec.Length(), qt.Equals, 4)
 
-	c.Assert((*vec)[0], valuestest.SchemeEquals, values.NewInteger(42))
-	c.Assert((*vec)[1], valuestest.SchemeEquals, values.NewString("hello"))
-	c.Assert((*vec)[2], valuestest.SchemeEquals, values.TrueValue)
-	c.Assert((*vec)[3], valuestest.SchemeEquals, values.NewSymbol("foo"))
+	c.Assert(vec.Elems()[0], valuestest.SchemeEquals, values.NewInteger(42))
+	c.Assert(vec.Elems()[1], valuestest.SchemeEquals, values.NewString("hello"))
+	c.Assert(vec.Elems()[2], valuestest.SchemeEquals, values.TrueValue)
+	c.Assert(vec.Elems()[3], valuestest.SchemeEquals, values.NewSymbol("foo"))
 }
 
 // TestParser_ListSyntaxMultipleElements tests listSyntax with more than 2 elements
@@ -2617,11 +2617,11 @@ func TestParser_ByteVectorWithMultipleValues(t *testing.T) {
 
 	bv, ok := syn.UnwrapAll().(*values.ByteVector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(*bv), qt.Equals, 4)
-	c.Assert((*bv)[0].Value, qt.Equals, uint8(255))
-	c.Assert((*bv)[1].Value, qt.Equals, uint8(128))
-	c.Assert((*bv)[2].Value, qt.Equals, uint8(0))
-	c.Assert((*bv)[3].Value, qt.Equals, uint8(64))
+	c.Assert(bv.Length(), qt.Equals, 4)
+	c.Assert(bv.Elems()[0].Value, qt.Equals, uint8(255))
+	c.Assert(bv.Elems()[1].Value, qt.Equals, uint8(128))
+	c.Assert(bv.Elems()[2].Value, qt.Equals, uint8(0))
+	c.Assert(bv.Elems()[3].Value, qt.Equals, uint8(64))
 }
 
 // TestParser_ReadSyntaxPreservesTokenizer tests that ReadSyntax preserves tokenizer
@@ -2687,7 +2687,7 @@ func TestParser_VectorLoop(t *testing.T) {
 
 	vec, ok := syn.UnwrapAll().(*values.Vector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(*vec), qt.Equals, 5)
+	c.Assert(vec.Length(), qt.Equals, 5)
 }
 
 // TestParser_ListWithMultipleElements tests list parsing loop
@@ -2716,7 +2716,7 @@ func TestParser_ByteVectorLoop(t *testing.T) {
 
 	bv, ok := syn.UnwrapAll().(*values.ByteVector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(*bv), qt.Equals, 8)
+	c.Assert(bv.Length(), qt.Equals, 8)
 }
 
 // TestParser_EmptyList tests empty list parsing

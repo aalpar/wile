@@ -95,9 +95,10 @@ func equalHashStep(v Value, h uint64, stack []Value, budget int) (uint64, []Valu
 	case *Pair:
 		return mixHash(h, hashUint64(seedPair, 0)), append(stack, t.Cdr(), t.Car())
 	case *Vector:
-		h = mixHash(h, hashUint64(seedVector, uint64(len(*t))))
-		for i := min(len(*t), budget) - 1; i >= 0; i-- {
-			stack = append(stack, (*t)[i])
+		elems := t.Elems()
+		h = mixHash(h, hashUint64(seedVector, uint64(len(elems))))
+		for i := min(len(elems), budget) - 1; i >= 0; i-- {
+			stack = append(stack, elems[i])
 		}
 		return h, stack
 	case *ByteVector:
@@ -108,9 +109,10 @@ func equalHashStep(v Value, h uint64, stack []Value, budget int) (uint64, []Valu
 		// is a plausible key (binary ids, digests), so that was a linear scan on
 		// content compares, strictly worse than the identity-equal? types the
 		// default arm is meant for.
-		h = mixHash(h, hashUint64(seedByteVector, uint64(len(*t))))
-		for i := min(len(*t), budget) - 1; i >= 0; i-- {
-			stack = append(stack, (*t)[i])
+		elems := t.Elems()
+		h = mixHash(h, hashUint64(seedByteVector, uint64(len(elems))))
+		for i := min(len(elems), budget) - 1; i >= 0; i-- {
+			stack = append(stack, elems[i])
 		}
 		return h, stack
 	case *Box:

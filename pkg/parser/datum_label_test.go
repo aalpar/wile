@@ -192,7 +192,7 @@ func TestReader_VectorClose(t *testing.T) {
 			t.Fatalf("#(1 #;2 ) rejected: %v", err)
 		}
 		vec, ok := q.UnwrapAll().(*values.Vector)
-		if !ok || len(*vec) != 1 {
+		if !ok || vec.Length() != 1 {
 			t.Fatalf("#(1 #;2 ) = %s, want a 1-element vector #(1)", q.UnwrapAll().SchemeString())
 		}
 	})

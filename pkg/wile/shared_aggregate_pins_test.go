@@ -164,8 +164,8 @@ const pin3dIterations = 2000000
 const pin3cIterations = 2000
 
 // sharedAggregateCases names the payloads. The review's §8 identifies the
-// class as values/vector.go:48 (Vector.Set's plain (*p)[i] = value) AND
-// machine/parameter.go:80 (Parameter.SetValue's plain p.value = v), so the
+// class as values.Vector.Set (a plain element store, guarded only against
+// immutability) AND machine.Parameter.SetValue (a plain p.value = v), so the
 // arms are parameterised over both rather than written once for Vector.
 var sharedAggregateCases = []string{"scheme-vector-set", "values-vector-set", "machine-parameter-set"}
 
@@ -284,7 +284,7 @@ func raceSchemeVectorSet(t *testing.T, iterations int) {
 	qt.Assert(t, result.SchemeString(), qt.Equals, "ok")
 }
 
-// raceValuesVectorSet pins values/vector.go:48 directly, through the method
+// raceValuesVectorSet pins values.Vector.Set directly, through the method
 // surface only.
 func raceValuesVectorSet(iterations int) {
 	shared := values.NewVector(values.NewInteger(0))

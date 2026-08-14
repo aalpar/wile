@@ -283,7 +283,7 @@ func TestByteVectorBufferedOutputPort_ReadByteVector(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	bv, err := ext.ReadByteVector()
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(*bv), qt.Equals, 3)
+	c.Assert(bv.Length(), qt.Equals, 3)
 }
 
 func TestByteVectorInputOutputPort_ReadByteVector_EmptyEOF(t *testing.T) {
@@ -301,7 +301,7 @@ func TestByteVectorBufferedOutputPort_ReadByteVector_EmptyNoEOF(t *testing.T) {
 	ext, _ := p.AsByteVectorExtractor()
 	bv, err := ext.ReadByteVector()
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(*bv), qt.Equals, 0,
+	c.Assert(bv.Length(), qt.Equals, 0,
 		qt.Commentf("BufferedOutputPort.ReadByteVector returns empty, not EOF"))
 }
 

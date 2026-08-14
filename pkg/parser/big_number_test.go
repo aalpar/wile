@@ -270,10 +270,10 @@ func TestReadSyntaxBigIntegerInVector(t *testing.T) {
 	// Verify we got a vector - UnwrapAll recursively unwraps
 	vec, ok := syn.UnwrapAll().(*values.Vector)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(len(*vec), qt.Equals, 2)
+	c.Assert(vec.Length(), qt.Equals, 2)
 
 	// First element: BigInteger with value 100
-	first := (*vec)[0]
+	first := vec.Elems()[0]
 	bigInt, ok := first.(*values.BigInteger)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(bigInt.BigInt().Int64(), qt.Equals, int64(100))

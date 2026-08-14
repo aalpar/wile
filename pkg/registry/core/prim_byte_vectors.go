@@ -44,11 +44,11 @@ func PrimMakeBytevector(mc machine.CallContext) error {
 		return err
 	}
 	fill := uint8(fillInt.Value)
-	bv := make(values.ByteVector, size.Value)
-	for i := range bv {
-		bv[i] = &values.Byte{Value: fill}
+	bs := make([]byte, size.Value)
+	for i := range bs {
+		bs[i] = fill
 	}
-	mc.SetValue(&bv)
+	mc.SetValue(values.NewByteVectorFromBytes(bs...))
 	return nil
 }
 
@@ -57,8 +57,7 @@ func PrimMakeBytevector(mc machine.CallContext) error {
 func PrimBytevector(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
-		bv := values.ByteVector{}
-		mc.SetValue(&bv)
+		mc.SetValue(values.NewByteVector())
 		return nil
 	}
 	tuple, ok := o.(values.Tuple)
@@ -81,8 +80,7 @@ func PrimBytevector(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	bv := values.ByteVector(bytes)
-	mc.SetValue(&bv)
+	mc.SetValue(values.NewByteVector(bytes...))
 	return nil
 }
 
@@ -97,7 +95,7 @@ func PrimBytevectorLength(mc machine.CallContext) error {
 func PrimBytevectorU8Ref(mc machine.CallContext) error {
 	return helpers.SequenceRef(mc, werr.ErrNotAByteVector, "bytevector-u8-ref",
 		func(bv *values.ByteVector, idx int) values.Value {
-			return values.NewInteger(int64((*bv)[idx].Value))
+			return values.NewInteger(int64(bv.Elems()[idx].Value))
 		},
 	)
 }
@@ -118,8 +116,7 @@ func PrimBytevectorU8Set(mc machine.CallContext) error {
 			if err != nil {
 				return err
 			}
-			(*bv)[idx] = values.NewByte(uint8(byteVal.Value))
-			return nil
+			return bv.Set(idx, values.NewByte(uint8(byteVal.Value)))
 		},
 	)
 }
@@ -133,14 +130,12 @@ func PrimBytevectorCopy(mc machine.CallContext) error {
 	}
 	rest := mc.Arg(1)
 
-	start, end, err := helpers.ParseSubrange(rest, len(*bv), "bytevector-copy")
+	start, end, err := helpers.ParseSubrange(rest, bv.Length(), "bytevector-copy")
 	if err != nil {
 		return err
 	}
 
-	result := make(values.ByteVector, end-start)
-	copy(result, (*bv)[start:end])
-	mc.SetValue(&result)
+	mc.SetValue(values.NewByteVector(bv.Elems()[start:end]...))
 	return nil
 }
 
@@ -161,13 +156,13 @@ func PrimBytevectorCopyBang(mc machine.CallContext) error {
 	}
 	rest := mc.Arg(3)
 
-	start, end, err := helpers.ParseSubrange(rest, len(*fromBv), "bytevector-copy!")
+	start, end, err := helpers.ParseSubrange(rest, fromBv.Length(), "bytevector-copy!")
 	if err != nil {
 		return err
 	}
 	// Subtract rather than add: see the identical guard in prim_vectors.go. The sum
 	// overflows int64 for a near-MaxInt64 atIdx and wraps negative past the guard.
-	if atIdx.Value < 0 || atIdx.Value > int64(len(*toBv))-int64(end-start) {
+	if atIdx.Value < 0 || atIdx.Value > int64(toBv.Length())-int64(end-start) {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "bytevector-copy!: invalid destination index")
 	}
 	if mc.ImmutableLiterals().IsImmutable(toBv) {
@@ -175,7 +170,7 @@ func PrimBytevectorCopyBang(mc machine.CallContext) error {
 	}
 
 	// Use copy with correct slice bounds - handles overlapping regions correctly
-	copy((*toBv)[atIdx.Value:], (*fromBv)[start:end])
+	copy(toBv.Elems()[atIdx.Value:], fromBv.Elems()[start:end])
 	mc.SetValue(values.Void)
 	return nil
 }
@@ -185,27 +180,26 @@ func PrimBytevectorCopyBang(mc machine.CallContext) error {
 func PrimBytevectorAppend(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
-		bv := values.ByteVector{}
-		mc.SetValue(&bv)
+		mc.SetValue(values.NewByteVector())
 		return nil
 	}
 	tuple, ok := o.(values.Tuple)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "bytevector-append: expected a list but got %T", o)
 	}
-	result := values.NewByteVector()
+	var elems []*values.Byte
 	err := helpers.ForEachList(mc.Context(), tuple, "bytevector-append", func(_ context.Context, _ int, _ bool, v values.Value) error {
 		bv, ok := v.(*values.ByteVector)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotAByteVector, "bytevector-append: expected a bytevector but got %T", v)
 		}
-		*result = append(*result, *bv...)
+		elems = append(elems, bv.Elems()...)
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	mc.SetValue(result)
+	mc.SetValue(values.NewByteVector(elems...))
 	return nil
 }
 
@@ -222,15 +216,12 @@ func PrimUtf8ToString(mc machine.CallContext) error {
 	}
 	rest := mc.Arg(1)
 
-	start, end, err := helpers.ParseSubrange(rest, len(*bv), "utf8->string")
+	start, end, err := helpers.ParseSubrange(rest, bv.Length(), "utf8->string")
 	if err != nil {
 		return err
 	}
 
-	bytes := make([]byte, end-start)
-	for i := start; i < end; i++ {
-		bytes[i-start] = (*bv)[i].Value
-	}
+	bytes := bv.AsBytes(start, end)
 	// R7RS §6.9: "It is an error if bytevector between start and end is not
 	// a well-formed UTF-8 string."
 	if !utf8.Valid(bytes) {
@@ -270,10 +261,6 @@ func PrimStringToUtf8(mc machine.CallContext) error {
 	substring := string(runes[start:end])
 	bytes := []byte(substring)
 
-	bv := make(values.ByteVector, len(bytes))
-	for i, b := range bytes {
-		bv[i] = values.NewByte(b)
-	}
-	mc.SetValue(&bv)
+	mc.SetValue(values.NewByteVectorFromBytes(bytes...))
 	return nil
 }

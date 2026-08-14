@@ -123,7 +123,7 @@ func assertAggregateImmutable(
 		qt.Assert(t, set.IsImmutable(obj), qt.IsTrue,
 			qt.Commentf("pooled vector %s is mutable", obj.SchemeString()))
 		n := 1
-		for _, elem := range *obj {
+		for _, elem := range obj.Elems() {
 			n += assertAggregateImmutable(t, set, elem, visited)
 		}
 		return n

@@ -111,7 +111,7 @@ func TestEqualHash_TerminatesOnCycles(t *testing.T) {
 	self := values.NewCons(values.NewInteger(1), values.EmptyList)
 	self.SetCdr(self)
 	v := values.NewVector(values.NewInteger(0))
-	(*v)[0] = v
+	v.Elems()[0] = v
 	// A record field is MUTABLE (Record.SetField), so a record can contain itself.
 	// Record.EqualComponents' own comment names this as the cycle that used to
 	// overflow the host stack; the budget is what terminates it here.

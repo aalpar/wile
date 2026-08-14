@@ -41,7 +41,7 @@ func PrimApply(cc machine.CallContext) error {
 	}
 
 	// Collect all elements from rest except the last one, which is the final args list
-	var prefixArgs values.Vector
+	var prefixArgs []values.Value
 	var finalList values.Value
 	for {
 		car := restTuple.Car()
