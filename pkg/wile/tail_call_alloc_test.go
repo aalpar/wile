@@ -16,6 +16,8 @@ package wile
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/stdlib"
@@ -527,5 +529,70 @@ func TestDoublyNestedLetSelfTailAllocations(t *testing.T) {
 	if slope > 7.0 {
 		t.Errorf("doubly-nested self-tail call leaks its parameter frame: %.3f frames/iter "+
 			"(want the 6.0 two-let floor, not the 8.0 leak)", slope)
+	}
+}
+
+// TestEnvFramePoolReleasesCountsReleaseOpcode pins that the
+// VMCounters.EnvFramePoolReleases counter sees EVERY env-frame release,
+// including the OpReleaseEnvFrame path.
+//
+// The counter was incremented beside each releaseEnvFrame call rather than
+// inside it. OpReleaseEnvFrame — the opcode this whole file exists to test —
+// arrived later without one, so the counter reported fewer releases than the
+// pool actually made, and the gap grew with the reclamation proof's reach
+// (nqueens: 2,264 of 5,623,323 uncounted). The count now lives in
+// MachineContext.releaseEnvFrame, so a new release site cannot miss it.
+//
+// bump's body is a tail call to a capture-safe primitive, which is the shape
+// codegen releases through the opcode; the disassembly assertion fails loudly
+// if that stops being true, so a counter regression cannot hide behind a probe
+// that no longer executes the op.
+func TestEnvFramePoolReleasesCountsReleaseOpcode(t *testing.T) {
+	ctx := context.Background()
+	engine, err := NewEngine(ctx,
+		WithProfile(KitchenSink),
+		WithSourceFS(stdlib.FS),
+		WithLibraryPaths(),
+		WithImmutableTopLevel(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const trips = 5000
+	const setup = "(begin (define (bump n) (+ n 1))\n" +
+		"(define (drive i n acc) (if (>= i n) acc (drive (+ i 1) n (bump acc))))\n)"
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, setup))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bump, err := engine.Eval(ctx, engine.MustParse(ctx, "bump"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	disasm, err := engine.DisassembleValue(bump)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(disasm, "ReleaseEnvFrame") {
+		t.Fatalf("probe no longer emits OpReleaseEnvFrame; it cannot detect an "+
+			"uncounted release. Disassembly:\n%s", disasm)
+	}
+
+	drive := fmt.Sprintf("(drive 0 %d 0)", trips)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, drive))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := engine.LastCounters()
+	t.Logf("EnvsCopied=%d EnvFramePoolReleases=%d", c.EnvsCopied, c.EnvFramePoolReleases)
+
+	if c.EnvsCopied < trips {
+		t.Fatalf("probe applied %d frames, want at least %d — shape changed",
+			c.EnvsCopied, trips)
+	}
+	if c.EnvFramePoolReleases < trips {
+		t.Errorf("EnvFramePoolReleases = %d for %d acquires; the OpReleaseEnvFrame "+
+			"path is not being counted", c.EnvFramePoolReleases, c.EnvsCopied)
 	}
 }

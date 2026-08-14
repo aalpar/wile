@@ -193,7 +193,6 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 			// frame, mirroring OpPopEnv. Clearing envPooled prevents
 			// ReleaseSubContext from releasing the same frame a second time.
 			if p.envPooled {
-				p.counters.EnvFramePoolReleases++
 				dead := p.env
 				p.env = dead.Parent()
 				p.envPooled = false

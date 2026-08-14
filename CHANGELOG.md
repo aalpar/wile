@@ -509,6 +509,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`VMCounters.EnvFramePoolReleases` did not count frames released by
+  `OpReleaseEnvFrame`.** The counter was incremented beside each
+  `releaseEnvFrame` call rather than inside it, so the release opcode — added
+  after the four original sites — reported nothing. The count was silently low
+  by exactly that opcode's executions (2,264 of 5,623,323 on `nqueens`), and the
+  gap widens as the frame-reclamation proof reaches more shapes, which is the
+  direction that makes an unrecovered-frame ratio read as a regression when it
+  is an improvement. The pool freelist's own counters were never affected, so no
+  published measurement changes. Counting now lives in
+  `MachineContext.releaseEnvFrame`, where a new release site cannot miss it.
+
 - **A primitive that returned a `*values.NativeError` lost its irritants and its
   kind.** `CODING_STYLE.md` has prescribed that return form since 2026-06-27 —
   *"the return value IS the condition"* — and it did not work on the day it was

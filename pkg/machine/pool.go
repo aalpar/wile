@@ -179,10 +179,18 @@ func (p *MachineContext) acquireEnvFrame() *environment.EnvironmentFrame {
 
 // releaseEnvFrame returns an EnvironmentFrame to this context's pool. Nil-safe.
 // Must NOT be called on frames stored in shared continuations.
+//
+// EnvFramePoolReleases is counted HERE, not at the call sites. It used to be
+// incremented beside each call, and OpReleaseEnvFrame — added later — did not
+// get one, so the counter undercounted by exactly that opcode's executions
+// (2,264 of 5,623,323 on nqueens: silent, and worse the further the reclamation
+// proof reaches). Owning the count here makes a new release site countable by
+// construction.
 func (p *MachineContext) releaseEnvFrame(f *environment.EnvironmentFrame) {
 	if f == nil {
 		return
 	}
+	p.counters.EnvFramePoolReleases++
 	if p.pools != nil {
 		p.pools.envFrames.Release(f)
 		return
@@ -263,7 +271,6 @@ func ReleaseSubContext(mc *MachineContext) {
 		mc.parentMC.counters.SubContextPoolReleases++
 	}
 	if mc.envPooled {
-		mc.counters.EnvFramePoolReleases++
 		mc.releaseEnvFrame(mc.env)
 		mc.env = nil
 	}
@@ -297,7 +304,6 @@ func ReleaseTopLevelContext(mc *MachineContext) {
 		return
 	}
 	if mc.envPooled {
-		mc.counters.EnvFramePoolReleases++
 		mc.releaseEnvFrame(mc.env)
 		mc.env = nil
 	}

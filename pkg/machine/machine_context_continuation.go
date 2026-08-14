@@ -150,7 +150,6 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	// a foreign function call), oldEnv == cont.env and releasing would corrupt
 	// the live env.
 	if oldEnvPooled && oldEnv != p.env {
-		p.counters.EnvFramePoolReleases++
 		p.releaseEnvFrame(oldEnv)
 	}
 	p.releaseContinuation(cont)
