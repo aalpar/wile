@@ -509,6 +509,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`TestRuleguardRules` passed exactly once per `golangci-lint cache clean`
+  and failed every run after.** golangci-lint caches by file content, and these
+  fixtures are byte-identical across runs, but a cached issue carries the
+  absolute path of the run that produced it: a `t.TempDir()` that no longer
+  exists. The nolint processor reopens that path to read the
+  `//nolint:gocritic` directives on the fixture's `werr` stub, fails, and drops
+  the suppression instead of erroring — so three stub diagnostics leaked into
+  the count the truncation guard checks. The lint run now uses a
+  `GOLANGCI_LINT_CACHE` inside the test's own temp directory.
+
 - **`VMCounters.EnvFramePoolReleases` did not count frames released by
   `OpReleaseEnvFrame`.** The counter was incremented beside each
   `releaseEnvFrame` call rather than inside it, so the release opcode — added

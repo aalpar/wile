@@ -386,8 +386,24 @@ func commaOkGood(mc *argCtx) {
 	}
 
 	// Run golangci-lint. It will exit non-zero if it finds issues (expected).
+	//
+	// GOLANGCI_LINT_CACHE points into tmpDir, and that is load-bearing rather
+	// than hygiene. golangci-lint's cache is keyed on file CONTENT, and these
+	// fixtures are byte-identical across runs, but a cached issue carries the
+	// ABSOLUTE PATH of the run that produced it — a t.TempDir() that has since
+	// been deleted. On a cache hit the nolint processor reopens that path to
+	// find the //nolint:gocritic directives on the werr stub, fails with "no
+	// such file or directory", and DROPS THE SUPPRESSION rather than failing:
+	// the stub's three errors.New calls then leak into the count and
+	// output_not_truncated reads 18 where the table pins 15.
+	//
+	// The symptom is the tell: the suite passed exactly once after
+	// `golangci-lint cache clean` and failed every run after. Do not "fix" a
+	// recurrence by widening the expectation table — that would pin the
+	// corrupted output as correct.
 	cmd := exec.CommandContext(ctx, golangciLint, "run", "./...")
 	cmd.Dir = tmpDir
+	cmd.Env = append(os.Environ(), "GOLANGCI_LINT_CACHE="+filepath.Join(tmpDir, ".lintcache"))
 	output, _ := cmd.CombinedOutput()
 	lintOutput := string(output)
 
