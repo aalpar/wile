@@ -112,29 +112,31 @@ type proseCount struct {
 	why     string
 }
 
+// TWO ROWS REMOVED 2026-08-14, and the reason is not that they went red.
+//
+// TODO_wave1_defect_count and TODO_wave6_defect_count pinned "N defects" on the
+// TODO.md Plan Index rows for the Wave 1 and Wave 6 design notes, deriving N
+// from each plan's own **Scope:** tally. The 2026-08-07 wave arc closed and all
+// fourteen of its files were archived to memory/, which takes the Plan Index
+// rows with them — so the claim these guarded is no longer stated in any
+// checked-in document. Both failed on the locator, not on the arithmetic:
+// "no line contains ... — the count's locator has moved; re-pin it, do not
+// delete the row".
+//
+// Re-pinning is not available. A row's `doc` must be checked in (that is this
+// table's scope; only `source` may be gitignored, and it skips loudly), and no
+// tracked file restates either count. Deletion is therefore the header's first
+// choice arriving by a different route than usual: not "a reader could derive
+// this in one command", but "there is no longer a checked-in sentence to
+// protect". A row kept alive by re-pointing it at memory/ would assert nothing
+// about the tracked corpus while still reading as coverage.
+//
+// This halves the table, so say so rather than let the shrinkage pass as
+// pruning: mechanism (2) now guards two counts, both of which happen to be
+// self-sourcing within one checked-in document. It has no row left that spans
+// the TODO.md -> plans/ boundary it was built for, and the next plan-summarising
+// count added to TODO.md should take one.
 var proseCounts = []proseCount{
-	{
-		name:    "TODO_wave1_defect_count",
-		doc:     "TODO.md",
-		rowKey:  "2026-08-07-review-wave1-silent-corruption-design.local.md",
-		claimed: regexp.MustCompile(`(\d+) defects`),
-		source:  "plans/2026-08-07-review-wave1-silent-corruption-design.local.md",
-		derive:  sumScopeSectionCounts,
-		why: "The row summarises Wave 1's own Scope header, which states the per-section tally " +
-			"and sums it. The plan's header also records that no grouping recovers the older " +
-			"number and that this row still carries it.",
-	},
-	{
-		name:    "TODO_wave6_defect_count",
-		doc:     "TODO.md",
-		rowKey:  "2026-08-07-review-wave6-cli-stdlib-docs-design.local.md",
-		claimed: regexp.MustCompile(`(\d+) defects`),
-		source:  "plans/2026-08-07-review-wave6-cli-stdlib-docs-design.local.md",
-		derive:  sumScopeSectionCounts,
-		why: "The row summarises Wave 6's own Scope header. Note the plan offers a second total " +
-			"for a different question (its §5 adds one harness defect), so a row asserting that " +
-			"total instead would need its own derivation, not a patched number here.",
-	},
 	{
 		name:    "r7rs_differences_summary_count",
 		doc:     "docs/reference/r7rs-differences.md",
@@ -163,47 +165,16 @@ var proseCounts = []proseCount{
 	},
 }
 
-// scopeSectionCount matches one entry of a plan's per-section defect tally, the
-// shape both wave plans state their Scope in: "§1 four, §2 three, §3 five".
-// The whitespace after the section number is load-bearing twice over: it keeps
-// this off possessives like "§4's two mechanisms", which count something else,
-// and it must admit a newline, because the tally wraps mid-entry in one of the
-// two plans (matching only a literal space silently drops that section and
-// under-counts).
-var scopeSectionCount = regexp.MustCompile(`§\d+\s+(one|two|three|four|five|six|seven|eight|nine|ten)\b`)
-
-var numberWords = map[string]int{
-	"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-	"six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
-}
-
-// sumScopeSectionCounts recomputes a wave plan's defect count from the plan's
-// own Scope paragraph, by summing the per-section tally stated there.
-//
-// The tally is the derivation rather than the plan's own total sentence on
-// purpose: a total is one more prose number that can drift from its parts, and
-// the parts are what a reader checks against the section headers.
-func sumScopeSectionCounts(t *testing.T, source string) int {
-	t.Helper()
-	start := strings.Index(source, "**Scope:**")
-	if start < 0 {
-		t.Fatalf("no **Scope:** paragraph — the derivation's source has moved")
-	}
-	scope := source[start:]
-	end := strings.Index(scope, "\n\n")
-	if end >= 0 {
-		scope = scope[:end]
-	}
-	entries := scopeSectionCount.FindAllStringSubmatch(scope, -1)
-	if len(entries) == 0 {
-		t.Fatalf("the **Scope:** paragraph states no per-section tally:\n%s", scope)
-	}
-	q := 0
-	for _, e := range entries {
-		q += numberWords[e[1]]
-	}
-	return q
-}
+// sumScopeSectionCounts, scopeSectionCount and numberWords went with the two
+// wave rows above: they summed a plan's per-section **Scope:** tally, which no
+// surviving row derives from. Two observations worth keeping, because the shape
+// recurs whenever a plan states a tally rather than a total. The whitespace
+// after the section number was load-bearing twice — it kept the pattern off
+// possessives like "§4's two mechanisms", which count something else, and it had
+// to admit a newline, because the tally wrapped mid-entry in one of the two
+// plans and matching a literal space silently dropped that section. And the
+// tally was the derivation rather than the plan's own total sentence on purpose:
+// a total is one more prose number that can drift from its parts.
 
 // summaryItemHead matches the head of one numbered item in r7rs-differences.md's
 // ## Summary list. It is applied per line, so the anchor means column zero, and

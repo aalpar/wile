@@ -171,6 +171,15 @@ row (so `panic_channel_gate_test.go`'s shape under-reports), and a `nil`
 `context.Context` SIGSEGVs `NewEngine` / `EvalMultiple` / `MustParse` while
 `Parse` / `Eval` / `Compile` return normally.
 
+**The nil-`context.Context` half is CLOSED as working-as-intended, 2026-08-14
+(maintainer):** passing a nil ctx is a programmer error, and a nil-deref panic is
+the desirable answer to one. It is not a runtime condition to substitute
+`context.Background()` for or to convert into a typed error — either would let a
+caller's mistake run to completion under a context they did not choose. The
+asymmetry with `Parse` / `Eval` / `Compile` is therefore not a defect to level
+out; those three simply never dereference the ctx. Nothing to build. The
+`qt.New(t)` half stands and is a test-shape defect, not a contract question.
+
 ### Open — implementation work with a live plan
 
 | Plan | Status |
@@ -520,7 +529,22 @@ that names the same probe the row does.
   out a member would make the tree look more consistent while leaving the security-relevant one
   silent.
 
-  **The fork.** Aaron leans toward returning an error, with stated uncertainty (2026-08-04).
+  **DECIDED 2026-08-14 (maintainer): this is a programmer error, and a panic is the desirable
+  answer.** That supersedes the 2026-08-04 lean toward an error return, and it removes option 2
+  (apply post-hoc) entirely: a mistake in engine construction is not something to paper over at
+  run time. Note what it costs — a panic is not catchable by `errors.Is`, so a caller cannot
+  probe for the condition, which is the point. The house rule applies to the shape: wrap it,
+  never `panic(sentinel)` bare (see `noBareSentinelPanic` in `tools/ruleguard/rules.go` and
+  `189e18b4`).
+
+  **What the decision does NOT settle: the trigger.** Options 1 and 3 differ in *when* to panic,
+  not in what to do, and the shared-slice caller below is the whole reason that still matters —
+  a blanket panic at the `WithNamespace` branch breaks the caller `NewNamespace`'s doc comment
+  explicitly invites, which is correct today. Option 3's narrow trigger ("the option appears
+  *only* at `NewEngine`") spares that caller, at the price of the nil-ness test and its
+  comparability trap. Pick one before writing code.
+
+  **The fork (mechanism now settled; read these for the trigger question only).**
 
   1. **Reject the family at the `WithNamespace` branch.** Matches `WithDialect`, fails loud.
      **The cost is real and is why this is not obvious:** `NewNamespace`'s doc comment explicitly
