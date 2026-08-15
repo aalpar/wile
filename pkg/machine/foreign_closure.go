@@ -5,6 +5,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -35,6 +36,13 @@ type ForeignFunction func(mc CallContext) error
 // another. A wrapped condition is a Go error something has added context to, and
 // it belongs on the rebuild path. Pinned by TestWrappedNativeErrorIsNotForwarded
 // (pkg/wile/native_error_passthrough_test.go).
+//
+// A rebuilt condition is pre-stamped when the chain carries a compile-time
+// location. Without that, a compile failure returned by load, eval or compile
+// gets the location of the CALL from enrichNativeError, because the raise
+// happens at the frame that invoked the compiler — so error-object-source
+// contradicted the message text, which held the real site. See
+// innermostCompileLocation.
 func goErrorToCondition(err error) values.Value {
 	nativeErr, ok := err.(*values.NativeError)
 	if ok {
@@ -48,7 +56,49 @@ func goErrorToCondition(err error) values.Value {
 	} else if errors.As(err, &readErr) {
 		kind = values.NativeErrorKindRead
 	}
-	return values.NewErrorObjectWithCauseAndKind(err.Error(), err, kind)
+	q := values.NewErrorObjectWithCauseAndKind(err.Error(), err, kind)
+	loc := innermostCompileLocation(err)
+	if loc != "" {
+		// enrichNativeError's once-guard keys on an empty location, so stamping
+		// here is idempotent for free: the compile site wins and the raise site
+		// is never written over it.
+		q.SetSourceLocation(loc)
+	}
+	return q
+}
+
+// sourcedError is compilation.SourcedError seen from below. The compiler stamps a
+// source context onto the errors it raises, but compilation imports this package,
+// so the concrete type cannot be named here and an errors.As target has to be an
+// interface.
+//
+// SourceContext, not a location string, is the discriminating method on purpose:
+// *values.NativeError already has SourceLocation, and an interface keyed on that
+// name would match a condition buried in the chain and stamp its location onto
+// the one being built.
+type sourcedError interface {
+	error
+	SourceContext() *syntax.SourceContext
+}
+
+// innermostCompileLocation returns the deepest non-empty location on err's
+// compiler chain, or "" when it carries none — which is the ordinary case for a
+// runtime failure, and the reason stamping is conditional.
+//
+// Deepest wins because it names the sub-expression that failed rather than the
+// form enclosing it. Same rule and same walk as wile.wrapCompilationError, which
+// is what an embedder catching the compile error as a Go error already sees; this
+// is the Scheme-visible half agreeing with it.
+func innermostCompileLocation(err error) string {
+	q := ""
+	var se sourcedError
+	for e := err; errors.As(e, &se); e = errors.Unwrap(se) {
+		loc := se.SourceContext().Location()
+		if loc != "" {
+			q = loc
+		}
+	}
+	return q
 }
 
 // isControlSignal reports whether err is Scheme-level control flow rather than a

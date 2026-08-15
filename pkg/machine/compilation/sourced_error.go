@@ -54,6 +54,15 @@ func (p *SourcedError) Unwrap() error {
 	return p.Cause
 }
 
+// SourceContext returns the context this error was stamped with. It exists so
+// that pkg/machine can recognise the type structurally: this package imports
+// pkg/machine, so the concrete type cannot be named from that side of the edge,
+// and an errors.As target there has to be an interface. Source is the same field
+// and stays exported for the callers that already read it.
+func (p *SourcedError) SourceContext() *syntax.SourceContext {
+	return p.Source
+}
+
 // wrapSourcedError attaches source location to an error.
 // For use in standalone functions that lack a CompileTimeContinuation receiver.
 // If src is nil, returns the error unchanged.
