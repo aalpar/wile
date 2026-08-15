@@ -75,7 +75,8 @@ func ConditionFromError(err error) values.Value {
 }
 
 // irritantError is a compile-time failure that named irritants — today only
-// (syntax-error message irritant ...), which R7RS §4.3.1 defines in those terms.
+// (syntax-error message irritant ...), which R7RS §4.3.3 defines by delegation to
+// error (§6.11), whose trailing operands are irritants.
 // Same edge and same reason as sourcedError: the concrete type lives in
 // compilation, which imports this package.
 //

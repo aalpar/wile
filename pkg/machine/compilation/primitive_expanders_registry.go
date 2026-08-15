@@ -55,7 +55,7 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	// Binding scope for hygienic let/letrec macros
 	{"with-binding-scope", (*ExpanderTimeContinuation).expandWithBindingScope},
 
-	// R7RS §4.3.1: syntax-error raises compile-time errors
+	// R7RS §4.3.3: syntax-error raises compile-time errors
 	{"syntax-error", (*ExpanderTimeContinuation).expandSyntaxError},
 
 	// Forms that expand their subexpressions

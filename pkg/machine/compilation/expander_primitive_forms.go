@@ -215,9 +215,10 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 }
 
 // expandSyntaxError handles the (syntax-error message arg ...) form.
-// R7RS §4.3.1: syntax-error signals a compile-time error during macro expansion.
-// When encountered, it raises a compilation error with the given message and
-// arguments formatted as irritants.
+// R7RS §4.3.3: syntax-error signals a compile-time error during macro expansion.
+// The spec defines it by delegation — "behaves similarly to error (6.11)" — so
+// the trailing operands are error's irritants, reachable through
+// error-object-irritants and not only as message text.
 //
 // This allows macro authors to provide meaningful error messages for invalid uses:
 //

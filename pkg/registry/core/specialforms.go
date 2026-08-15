@@ -167,7 +167,7 @@ var compileTimeBindingSpecs = []nameDoc{
 			"side effects and definitions.\n" +
 			"Syntax: (eval-when (PHASE ...) EXPRESSION ...)\n" +
 			"Category: macros"},
-	// R7RS §4.3.1: syntax-error for compile-time errors in macros
+	// R7RS §4.3.3: syntax-error for compile-time errors in macros
 	{"syntax-error",
 		"Signals a compile-time error during macro expansion.\n" +
 			"MESSAGE is a string; IRRITANTs provide additional context.\n" +

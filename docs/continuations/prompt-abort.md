@@ -69,7 +69,7 @@ Both are declared in `machine/prompt_abort.go`.
 // 2. ErrExceptionEscape      (errors.As) → pass through unchanged
 // 3. ErrTimerInterrupt       (errors.As) → pass through unchanged
 // 4. ErrResumeContinuation   (errors.As) → pass through unchanged
-// 5. any other Go error → RaiseInPlace(goErrorToCondition(err))
+// 5. any other Go error → RaiseInPlace(ConditionFromError(err))
 ```
 
 No live call site recovers panics around this function. The one that did,

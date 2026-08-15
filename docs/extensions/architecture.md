@@ -589,7 +589,7 @@ point of this section. Three words in it are doing work:
 //   primitive returns err
 //     → machine.applyCallableError   (pkg/machine/foreign_closure.go)
 //         control signal?  → pass through untouched
-//         otherwise        → goErrorToCondition, then RaiseInPlace
+//         otherwise        → machine.ConditionFromError, then RaiseInPlace
 //     → the Scheme handler chain (guard / with-exception-handler)
 //   nothing caught it
 //     → *wile.RuntimeError at the Engine boundary, IsSchemeException() == true
@@ -601,10 +601,12 @@ interrupt, and a continuation resume. An extension will not normally construct
 any of them; a primitive that calls back into Scheme can *observe* one, and must
 return it unchanged rather than swallowing it.
 
-`goErrorToCondition` reads the error's kind off the chain with `errors.As`, so
-wrapping is safe: a `*werr.ForeignFileError` anywhere in the chain makes
+`machine.ConditionFromError` reads the error's kind off the chain with `errors.As`,
+so wrapping is safe: a `*werr.ForeignFileError` anywhere in the chain makes
 `(file-error? e)` true, and a `*werr.ForeignReadError` makes `(read-error? e)`
-true. Any other error is a generic condition.
+true. Any other error is a generic condition. It is exported because the compile
+funnel calls it too (`CompilationError.Condition`), which is what keeps the two
+paths one representation rather than two that agree by convention.
 
 A `*values.NativeError` is not converted at all — it is already a condition, so
 it is forwarded unchanged and keeps its irritants and its kind. Returning

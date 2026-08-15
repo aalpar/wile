@@ -21,10 +21,16 @@ import (
 // syntaxError decorates a (syntax-error message irritant ...) failure with its
 // irritants as Scheme values.
 //
-// R7RS §4.3.1 names the irritants, and error-object-irritants is a registered
-// primitive with a waiting consumer, so they have to travel as values: joining
-// them into the message left error-object-irritants answering () while the
-// irritants themselves existed only inside a string.
+// R7RS §4.3.3 defines syntax-error by delegation — "behaves similarly to error
+// (6.11)" — so the trailing operands ARE error's irritants and
+// error-object-irritants is the accessor §6.11 gives them. Joining them into the
+// message left that accessor answering () while the values existed only inside a
+// string.
+//
+// The delegation has a second half this type does NOT satisfy:
+// error-object-message should then be the message alone, and it is still the whole
+// Go chain's text. Filed in TODO.md; closing it is a message/chain split across
+// every compile error, not a syntax-error change.
 //
 // It adds no text. Error forwards the cause, which is the same wrap the join
 // always produced, so the diagnostic an embedder reads is byte-identical and the
