@@ -340,25 +340,40 @@ perf lever.
 
 Items that block production embedded use or prevent silent state corruption.
 
-### `Imported` is unsound evidence for `IsStable()` at phase 1 (2026-08-09)
+### `Imported` is unsound evidence for `IsStable()` at phase 1 — DISCHARGED 2026-08-10, one refusal left (2026-08-09)
 
 Opened by the wave-1 §5 / Phase 5 work, and it is the **named owner** for the
 residual that work deliberately left standing. `Binding.IsStable()` returns
 `m.Imported || m.Stable` (`pkg/environment/binding.go`), on the premise that a
-define can no longer reach an import's slot. The T2 relocation makes that premise
-true **at phase 0 only**.
+define can no longer reach an import's slot. The T2 relocation made that premise
+true at phase 0 only, and these three rows were the phase-1 gap.
 
-- [ ] **`define-syntax` over an imported macro still supersedes in place, and
-      leaves `imported=true`.** Measured: `(import (scheme base))` then
-      `(define-syntax when …)` reuses the `(1, mutable)` imported slot and writes
-      the user's transformer (`compile_define_syntax.go`). `compile_define.go`
-      clears `m.Imported` on supersede for the *variable* case, so the variable
-      path is provenance-clean; `define-syntax` has no such clear. `Imported` then
-      claims a rebind-stability that was just falsified, and it feeds
-      `IsStable()`, which feeds `compile_call_arity.go:62`. Two candidate fixes:
-      clear `m.Imported` on a `define-syntax` supersede (cheap, symmetric with
-      the variable case), or relocate the phase-1 installs — which needs its own
-      answer to the hazard below first.
+**Both soundness rows closed within a day of being filed, and sat unticked for
+five (re-verified 2026-08-14 by mutation, not by reading).** The heading's claim
+is therefore **discharged**: `Imported` is sound evidence at phase 1 too, from two
+directions — every route that rebinds an import's slot now clears the flag (item
+1), and the one `Stable`-stamped phase-1 population is no longer user-writable
+(item 3). What remains is item 2, which is not work: it is a **recorded refusal**,
+kept so nobody "finishes the job" by flipping a constant.
+
+The pattern is the one this file keeps re-learning: a row is written when work is
+*scheduled*, so it ages in exactly one direction. Item 3 is the sharper case — its
+premise was **true when filed and false the next morning**, falsified by a commit
+that names the same probe the row does.
+
+- [x] **`define-syntax` over an imported macro still supersedes in place, and
+      leaves `imported=true`.** **FIXED 2026-08-09, `297bb18b`** — the same day
+      this row was filed. The cheap candidate was taken: `m.Imported = false` on
+      the supersede (`compile_define_syntax.go:110`), symmetric with the variable
+      path and citing the same R7RS §5.3.1. The shape note is the part worth
+      keeping: the `UpdateMeta` call sat behind `docstring != ""`, so the guard had
+      to move onto the `m.Doc` assignment and `UpdateMeta` now runs for *every*
+      `define-syntax`. Gate `TestDefineSyntaxSupersedesImportClearsImported`
+      (`pkg/wile/immutable_import_test.go:143`); mutation-verified red at HEAD on
+      2026-08-14 by neutering that one line, and the assertion that goes red is
+      `IsImported()` alone — the two premise assertions (the import outranks
+      bootstrap's sealed `when` at phase 1; the supersede is pointer-equal on the
+      `*Binding`) pass either way and are the non-vacuity guard.
 
 - [ ] **The phase-1 import installs cannot simply take the T2 tier.** This is the
       scope the relocation explicitly refused, recorded so nobody "finishes the
@@ -371,18 +386,34 @@ true **at phase 0 only**.
       way to keep imports off the startup set's coordinates — a distinct rank, or a
       non-ambient scope set — not a different argument.
       `TestImportDoesNotOverwriteSealedBootstrapMacro` (`pkg/wile/import_tier_seal_test.go`)
-      is the gate; the whole rest of the suite is blind to this, measured.
+      is the gate; the whole rest of the suite is blind to this, measured. The
+      file's header states the mutation that reddens it — flip either
+      `placementInPlace` to `placementShadowable` in `library_bindings.go`.
+      **The coordinate got more crowded on 2026-08-10, which raises the price of
+      getting this wrong**: item 3's fix moved the 146 expand-phase primitive
+      copies onto `(1, sealed)` beside the ~60 bootstrap names (`24e08ceb`'s
+      census; intersection 0), so an imported macro landing there now has a
+      larger startup population to collide with, not a smaller one.
 
-- [ ] **The phase-1 registry copy is stamped `Stable` over an open writer set.**
-      `registerPhasePrimitive` stamps `Stable` at every phase it registers into,
-      and `define-for-syntax` legitimately supersedes the `(1, mutable)` copy —
-      documented, and pinned by three rows of `TestBindingModelMatrix`. So Q3's
-      "Stable is stamped only where the writer set is closed" does not hold at
-      phase 1. `compile_define_for_syntax.go` therefore writes around
-      `DefineOwnGlobal`'s refusal, with the reasoning at the call site. Either the
-      phase-1 copy should not be stamped `Stable`, or the supersede should be
-      refused; both are Q3-scale decisions. Bounded to phase-1 code, and predates
-      the refusal.
+- [x] **The phase-1 registry copy is stamped `Stable` over an open writer set.**
+      **FIXED 2026-08-10, `24e08ceb`** — one day after this row was filed, which
+      is why the row as written is now wrong in its particulars. `phaseTargets`
+      bound `PhaseExpand` through `env.Expand()`, putting the 146 copies at
+      `(1, mutable)` — the coordinate a top-level `define-for-syntax` writes — so
+      the `Stable` stamp asserted a closed writer set over an open one. Probed
+      against a `KitchenSink` engine: `(define-for-syntax car 42)` wrote through
+      the same `*Binding` with `Stable` still true, and a phase-1 closure
+      compiled before it then applied 42. The fix routes `bindingEnv` through
+      `env.SealedWriteViewAt(PhaseExpand)`, matching
+      `RegisterPrimitiveExpanders`' taproot; `closureEnv` stays `expandEnv`,
+      since compile / expand / `free-identifier=?` resolve user code through it
+      and the sealed-write view hides every user define. **So Q3's "Stable is
+      stamped only where the writer set is closed" DOES hold at phase 1, and
+      `define-for-syntax` SHADOWS the registry copy rather than superseding it** —
+      the two land at different coordinates and `CreateGlobalBindingAt` mints a
+      new slot. Pinned by `TestBindingModelMatrix`'s three M7 rows, of which only
+      the third discriminates: the preservation row and the by-name row both read
+      the same under supersede and under shadow.
 
 ### `(environment '(wile <profile>))` is ungated and crosses profile boundaries (2026-07-29)
 
