@@ -128,6 +128,24 @@ remaining candidates are all on the `RegisterPrimitive` path, which already
 bypassed `guard`; certifying them needs the `go/analysis` SSA pass the sweep
 identified, which is **not** something ruleguard can be widened into.
 
+**`pkg/wile` audited 2026-08-14, and the sweep had never looked at it.** Its
+seven finders all targeted the `RegisterPrimitive` population — the one its own
+correction (a) proves half C does *not* change — and reached the `RegisterFunc`
+converter chain only through a ruleguard pass that is structurally blind to
+shape (2). Zero of its 14 defects are in `pkg/wile`. The five converter files
+are now read for all three shapes and driven by **107 probes** whose reachability
+is decided by running the trigger: **no escapes** beyond the struct converter
+already fixed. Shape (3) has no purchase there (indices are reflect-derived; both
+narrowing sites are guarded, which is what sweep #7/#8 lacked), and a circular
+list into a `[]T` parameter is caught rather than hung. The negative result is
+held by `pkg/wile/ffi_degenerate_input_test.go`, which matters chiefly because
+**six** independent routes reach the struct arm and only one was pinned;
+mutation-verified red on all six. Two things fell out of it, both filed above
+rather than fixed: a parent-scoped `qt.New(t)` aborts a table on its first red
+row (so `panic_channel_gate_test.go`'s shape under-reports), and a `nil`
+`context.Context` SIGSEGVs `NewEngine` / `EvalMultiple` / `MustParse` while
+`Parse` / `Eval` / `Compile` return normally.
+
 ### Open — implementation work with a live plan
 
 | Plan | Status |
