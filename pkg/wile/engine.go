@@ -33,7 +33,6 @@ import (
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/registry/core"
-	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -1259,9 +1258,9 @@ func wrapCompilationError(msg string, cause error) *CompilationError {
 // source location, stack trace, and condition value from ErrExceptionEscape when
 // present. Falls back to a plain RuntimeError for non-exception errors.
 func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
-	denial := p.wrapDenial(err)
-	if denial != nil {
-		return denial
+	structured := p.wrapSchemeError(err)
+	if structured != nil {
+		return structured
 	}
 	var ee *machine.ErrExceptionEscape
 	if errors.As(err, &ee) {
@@ -1285,21 +1284,24 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 	return newRuntimeErrorWithCause("runtime error", err)
 }
 
-// wrapDenial unpacks an authorizer denial that terminated the evaluation, or
-// returns nil when err is not one.
+// wrapSchemeError unpacks a *machine.SchemeError that terminated the
+// evaluation, or returns nil when err carries none.
 //
-// A denial deliberately is NOT a Scheme condition (see applyCallableError), so
-// it travels as a *machine.SchemeError rather than as the exception-escape
-// carrier the branch above unpacks. Without this arm the location and the VM
-// trace the VM stamped on it survive only flattened into the cause's text:
-// RuntimeError.Source and .StackTrace came back empty, and Message was the
-// generic "runtime error", for the one error class a sandboxed embedder most
-// needs to localise. Condition stays nil — there is no condition, which is the
-// whole point — so IsSchemeException correctly reports false.
-func (*Engine) wrapDenial(err error) *RuntimeError {
-	if !errors.Is(err, security.ErrAccessDenied) {
-		return nil
-	}
+// This covers every error the VM raises that is deliberately NOT a Scheme
+// condition, and there are two such classes: an authorizer denial (see
+// applyCallableError) and a recovered host-fault panic (see
+// MachineContext.RunResumable). Both travel as a *machine.SchemeError rather
+// than as the exception-escape carrier the branch above unpacks, and the VM has
+// already stamped each with a source location and a continuation-chain trace.
+//
+// Without this arm those survive only flattened into the cause's text:
+// RuntimeError.Source and .StackTrace came back empty and Message was the
+// generic "runtime error" — for the two error classes an embedder most needs to
+// localise, since neither is catchable from Scheme and the Go-side diagnostic is
+// therefore the only channel it has. Condition stays nil — there is no
+// condition, which is the whole point — so IsSchemeException correctly reports
+// false for both.
+func (*Engine) wrapSchemeError(err error) *RuntimeError {
 	var se *machine.SchemeError
 	if !errors.As(err, &se) {
 		return nil

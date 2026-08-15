@@ -39,15 +39,20 @@ import (
 // panicEngine builds a KitchenSink engine carrying two deliberately faulting
 // primitives, one per registration route.
 //
-// The two routes differ TODAY, and the difference is the subject:
+// The two routes AGREE as of wave 4 item 5+7 half C, and the agreement is the
+// subject:
 //
 //   - RegisterPrimitive takes the ForeignFunction as given. Nothing wraps it, so
 //     a panic in the Impl unwinds to the VM boundary recover (RunResumable) and
 //     reaches the embedder — guard never sees it.
 //   - RegisterFunc reflects a plain Go function and installs ffiSpec.makeWrapper
-//     around it (pkg/wile/ffi_wrapper.go:28), whose defer converts a panic into a
-//     returned error. A returned error routes through bridgeForeignError like any
-//     other, so guard DOES catch it.
+//     around it (pkg/wile/ffi_wrapper.go), whose defer converts only a fault
+//     raised by the callback protocol and re-panics everything else. A host bug
+//     therefore unwinds to the same VM boundary recover.
+//
+// Half C reached that by TIGHTENING, not by loosening: the 2026-06-23 directive
+// that a Go-level bug is not a Scheme condition is unamended, and the FFI
+// wrapper stopped being a second answer to it.
 func panicEngine(t *testing.T) *wile.Engine {
 	t.Helper()
 	eng, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
@@ -131,26 +136,40 @@ func TestMalformedArgumentIsACondition(t *testing.T) {
 // TestGenuinePrimitivePanicStaysUncatchable is half A's negative arm: the item
 // must not drift into half B.
 //
-// A panic from a raw RegisterPrimitive Impl is a violated host invariant, not an
+// A panic from either registration route is a violated host invariant, not an
 // argument-domain fault, and it must keep escaping guard and reaching the
-// embedder. The FFI row is a labelled CONTROL, not an assertion that the two
-// routes agree — they do not, and recording which way each falls is the point:
-// half B would have made the first row read like the second, and the review
-// declined it.
+// embedder. Both rows are now POSITIVE PINS of the shipped rule. The FFI row
+// was a labelled control while the two routes disagreed; half C removed the
+// disagreement by narrowing the FFI wrapper's recover, so the row it used to
+// record is now the row it asserts.
+//
+// The arm still does the job half A gave it: a reinstated blanket recover at
+// the foreign-call boundary would make every half-A domain-error row pass more
+// easily, and only these two rows can see it.
 func TestGenuinePrimitivePanicStaysUncatchable(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := panicEngine(t)
 
-	t.Run("raw primitive panic escapes guard", func(t *testing.T) {
-		_, err := eng.EvalMultiple(ctx, `(guard (e (#t 'caught)) (raw-panic))`)
-		c.Assert(err, qt.IsNotNil,
-			qt.Commentf("a raw primitive panic became guard-catchable: half A drifted into half B"))
-	})
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{
+			name: "raw primitive panic escapes guard",
+			code: `(guard (e (#t 'caught)) (raw-panic))`,
+		},
+		{
+			name: "FFI panic escapes guard",
+			code: `(guard (e (#t 'caught)) (ffi-panic))`,
+		},
+	}
 
-	t.Run("FFI panic is caught by guard (control)", func(t *testing.T) {
-		v, err := eng.EvalMultiple(ctx, `(guard (e (#t 'caught)) (ffi-panic))`)
-		c.Assert(err, qt.IsNil)
-		c.Assert(v.Internal(), valuestest.SchemeEquals, values.NewSymbol("caught"))
-	})
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := eng.EvalMultiple(ctx, tc.code)
+			c.Assert(err, qt.IsNotNil,
+				qt.Commentf("a host-fault panic became guard-catchable: the panic channel drifted into half B"))
+		})
+	}
 }

@@ -1395,6 +1395,43 @@ func (p *MachineContext) WrapError(err error, msg string) *SchemeError {
 	return NewSchemeErrorWithCause(msg, source, trace.String(), err)
 }
 
+// foreignCallName names the foreign procedure this context was executing, or
+// "" when the current instruction is not a direct foreign call.
+//
+// It exists for RunResumable's recover: a panic out of a Go primitive is not
+// catchable from Scheme, so the Go-side diagnostic is the embedder's only
+// channel, and "which primitive" is the one fact the unwind destroys.
+//
+// Read post-mortem from the instruction stream rather than tracked as the call
+// happens. OpCallForeignCached does not advance pc before dispatching — the
+// callee repoints it through RestoreAndRelease or returnImmediate, neither of
+// which runs when the callee panics — so pc still indexes the call instruction
+// and its operand still resolves the *ForeignClosure. That costs nothing on the
+// hot path, which a field the dispatcher had to set and clear per call would
+// not.
+//
+// Two cases yield "" rather than a wrong answer, both deliberate: a primitive
+// reached through Apply rather than through the peephole-promoted call op (its
+// callable is on the eval stack, not in cachedBindings), and a fault raised by
+// the VM itself between calls.
+func (p *MachineContext) foreignCallName() string {
+	if p.template == nil || p.pc < 0 || p.pc >= len(p.template.code) {
+		return ""
+	}
+	instr := p.template.code[p.pc]
+	if instr.Op != OpCallForeignCached && instr.Op != OpCallForeignCachedTail {
+		return ""
+	}
+	if instr.Arg < 0 || int(instr.Arg) >= len(p.template.cachedBindings) {
+		return ""
+	}
+	fcls, ok := p.template.cachedBindings[instr.Arg].Value().(*ForeignClosure)
+	if !ok {
+		return ""
+	}
+	return fcls.name
+}
+
 // Counters returns a snapshot of the performance counters for this context.
 func (p *MachineContext) Counters() VMCounters {
 	return p.counters
@@ -1586,12 +1623,21 @@ func (p *MachineContext) RunResumable() (rerr error) {
 		// an internal-error sentinel so it, too, stays within the VM boundary as a
 		// matchable, wrapped error.
 		err := werr.RecoverAsError(r, werr.ErrInternal, "")
+		// Name the primitive when the faulting instruction identifies one. Neither
+		// registration route can be guarded from Scheme, so this message is the
+		// embedder's whole diagnostic, and the location alone points at the call
+		// site without saying what was called.
+		site := "RunResumable: recovered panic"
+		name := p.foreignCallName()
+		if name != "" {
+			site = fmt.Sprintf("RunResumable: recovered panic in %q", name)
+		}
 		// Fold the recovered error's text into the message. SchemeError.Error()
 		// renders Message + source + trace but NOT Cause, so without this the
 		// printed error would read only "recovered panic" and the real detail
 		// (e.g. a runtime.Error "index out of range" message) would be reachable
 		// only via Unwrap. Cause stays set (WrapError chains it) for errors.Is/As.
-		rerr = p.WrapError(err, "RunResumable: recovered panic: "+err.Error())
+		rerr = p.WrapError(err, site+": "+err.Error())
 	}()
 
 	// pending carries a control signal raised by the resolution of a PREVIOUS

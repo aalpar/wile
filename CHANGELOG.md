@@ -43,6 +43,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A Go-level bug in an embedder's function now escapes `guard` from either
+  registration route, and reports itself the same way from both.** Registering
+  the same panicking Go function twice — once with `Engine.RegisterPrimitive`,
+  once with `Engine.RegisterFunc` — used to give Scheme two different answers:
+  the first escaped `guard`, the second was caught by it and arrived at the host
+  claiming to be a Scheme exception (`IsSchemeException()` was `true`).
+
+  The asymmetry was never decided; it fell out of where a `recover` happened to
+  sit. `RegisterFunc` wraps the Go function, and that wrapper's `defer recover()`
+  fired wherever the function was called, converting every panic into a returned
+  error — which then routed through the ordinary condition path.
+
+  Closed by **narrowing the wrapper**, not by adding a recover to the other
+  route, so the standing rule that a Go-level bug is not a Scheme condition
+  needed no amendment. The wrapper now converts only faults raised by the
+  callback protocol — `callbackErrorResult` / `callbackSuccessResult` panic
+  because the host's Go signature has no error slot to return through, so there
+  the panic **is** the return path — and re-raises everything else to the VM
+  boundary. Matching is on the two protocol sentinels rather than on the error's
+  type, because the VM's own invariant guards panic with a `*werr.ForeignError`
+  too, and a type test would convert one of *those* into a catchable condition
+  whenever it crossed a host function that had called back into Scheme.
+
+  **BREAKING for embedders** who relied on `guard` catching a genuine Go bug from
+  a `RegisterFunc` function: that fault now reaches the Go boundary instead of
+  the Scheme program. Nothing in-tree relied on it.
+
+  Two diagnostic improvements ride along, because with neither route catchable
+  from Scheme the Go-side error is the embedder's only channel:
+
+  - The error **names the primitive** (`recovered panic in "take-cfg"`). The name
+    is read post-mortem off the faulting instruction rather than tracked per
+    call: `OpCallForeignCached` does not advance `pc` before dispatching, so on a
+    panic the operand still resolves the `*ForeignClosure`. That costs nothing on
+    the hot path. A primitive reached through `apply` rather than the
+    peephole-promoted call op yields no name rather than a wrong one.
+  - `RuntimeError.Source` and `.StackTrace` are **populated** on it. They were
+    empty, with the location and trace surviving only flattened into the cause's
+    text. The unpack that already did this for authorizer denials now covers
+    every `*machine.SchemeError`, which is exactly the set of VM errors that are
+    deliberately not Scheme conditions.
+
+- **`RegisterFunc` struct parameters no longer crash on an alist entry that is
+  the empty list.** `(take-cfg '(()))` panicked out of `emptyList.Car`: the
+  converter asserted `values.Tuple` on each element, which `'()` satisfies. It is
+  an argument-domain error and now reports as one. Same shape and same fix as
+  `helpers.AssocLookup`. Found by the shape-(2) enumeration the panic-channel
+  work owed; it was masked before, since the wrapper's blanket recover made it
+  look like an ordinary catchable condition.
+
 - **A self-tail call nested inside a `let` now reuses its parameter frame.**
   `OpSelfTailCall` rebinds the enclosing procedure's parameter slots in place and
   jumps to pc=0; until now it was emitted only when that frame was the current

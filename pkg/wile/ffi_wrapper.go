@@ -16,6 +16,7 @@ package wile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -35,17 +36,42 @@ func (p *ffiSpec) makeWrapper() ForeignFunction {
 				// have set it on a normal error return.
 				return
 			}
-			// Return the panic as an error rather than re-raising it. The VM's
-			// foreign-call dispatcher routes a returned error through
-			// bridgeForeignError exactly as it routes a recovered panic, and the
-			// ErrPanicRecovery wrap is transparent to that routing: bridgeForeignError
-			// matches VM signal types (prompt abort, exception escape, timer interrupt,
-			// continuation resume) with errors.As, which traverses the cause chain.
-			// The wrap is what makes a Go runtime fault in the host's function —
-			// a runtime.Error, and so already an error — carry the sentinel and this
-			// function's name rather than reaching Scheme as an anonymous condition.
-			returnErr = werr.RecoverAsError(r, werr.ErrPanicRecovery,
-				fmt.Sprintf("FFI %q", p.name))
+			// A fault raised by the callback protocol is deliberate, not a host bug.
+			// callbackErrorResult and callbackSuccessResult (ffi_arg_converters.go)
+			// panic when the Go signature has no error slot to return through, so
+			// the panic IS the return path, and converting it back to an error here
+			// is what the protocol is for. The VM's foreign-call dispatcher then
+			// routes it through bridgeForeignError exactly as it routes any returned
+			// error — the ErrPanicRecovery wrap is transparent to that routing,
+			// because bridgeForeignError matches VM signal types (prompt abort,
+			// exception escape, timer interrupt, continuation resume) with errors.As,
+			// which traverses the cause chain. Scheme guard catches the result.
+			//
+			// Match on the two protocol sentinels, NOT on "is a *werr.ForeignError".
+			// The VM's own invariant guards panic with a *ForeignError too, so a type
+			// test would convert one of those into a catchable condition whenever it
+			// crossed a host function that had called back into Scheme.
+			err, isErr := r.(error)
+			if isErr &&
+				(errors.Is(err, werr.ErrFFICallbackError) ||
+					errors.Is(err, werr.ErrCallbackResultConversion)) {
+				returnErr = werr.RecoverAsError(r, werr.ErrPanicRecovery,
+					fmt.Sprintf("FFI %q", p.name))
+				return
+			}
+
+			// Anything else is a Go-level bug in the host's function — a
+			// runtime.Error, a nil map write, a bare panic("..."). Re-raise it
+			// unchanged so it reaches the VM boundary recover
+			// (MachineContext.RunResumable) and surfaces to the embedder, rather
+			// than becoming a Scheme condition that guard can swallow. That boundary
+			// names the primitive itself (MachineContext.foreignCallName), so
+			// re-wrapping here would only say it twice.
+			//
+			// This is the one rule both registration routes now follow:
+			// RegisterPrimitive never had a recover here, and RegisterFunc no longer
+			// has one that catches more than the protocol above.
+			panic(r)
 		}()
 
 		var args []reflect.Value

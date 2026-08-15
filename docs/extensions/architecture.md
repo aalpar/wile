@@ -616,20 +616,21 @@ adds a message, and forwarding the inner value would discard it, so a wrapped
 condition takes the rebuild path above and reports the wrap's message with no
 irritants.
 
-### One known gap, real today
+### The registration routes used to disagree; they no longer do
 
-It is measured, not predicted, and it is open work rather than intended
-behaviour. It is listed here because a contract that omits its own
-counter-examples is worse than no contract.
+Registering the same panicking Go function twice — once with
+`RegisterPrimitive`, once with `RegisterFunc` — used to give Scheme two
+different answers: the `RegisterPrimitive` one escaped `guard`, the
+`RegisterFunc` one was caught by it. The cause was the `RegisterFunc` wrapper's
+own `defer recover()`, which lives *inside* the generated `ForeignFunction` and
+therefore fired wherever that function was called; `RegisterPrimitive` installs
+no such thing.
 
-| You do this | What Scheme sees today |
-|---|---|
-| register the same panicking Go function twice, once with `RegisterPrimitive` and once with `RegisterFunc` | the `RegisterPrimitive` one escapes `guard`; the `RegisterFunc` one is caught by it |
-
-The cause is the `RegisterFunc` wrapper's own `defer recover()`, which lives
-*inside* the generated `ForeignFunction` and therefore fires wherever that
-function is called; `RegisterPrimitive` installs no such thing. Do not rely on
-either answer: whichever way the asymmetry is closed, one of the two changes.
+Closed by **narrowing the wrapper**, not by adding a recover to the other route.
+The wrapper now converts only a fault raised by the callback protocol and
+re-raises everything else, so a Go-level bug escapes `guard` from either route.
+Pinned by `TestHostBugEscapesGuardFromEitherRoute`
+(`pkg/wile/panic_channel_uniform_test.go`), which registers one body both ways.
 
 ### Panics are contained, not converted
 
@@ -639,18 +640,20 @@ impossible state (`CODING_STYLE.md`). It is contained rather than converted: the
 host gets a `*wile.RuntimeError` whose `IsSchemeException()` is `false`, and the
 Scheme program gets nothing.
 
-Containment is **one** recover, at one place, plus one unavoidable second:
+Containment is **one** recover, at one place, plus two that recover something
+narrower than "a panic":
 
 | Site | Role |
 |---|---|
-| `pkg/machine/machine_context.go`, `MachineContext.RunResumable` | the boundary. Wraps any panic as an uncatchable `*machine.SchemeError`, attaching the VM source location and continuation-chain stack trace, and chaining the original so `errors.Is` still resolves. A panic unwinds the whole goroutine stack, so this one site also catches panics tripped inside nested sub-context `Run()` calls. |
+| `pkg/machine/machine_context.go`, `MachineContext.RunResumable` | the boundary. Wraps any panic as an uncatchable `*machine.SchemeError`, attaching the VM source location and continuation-chain stack trace, naming the primitive when the faulting instruction identifies one, and chaining the original so `errors.Is` still resolves. A panic unwinds the whole goroutine stack, so this one site also catches panics tripped inside nested sub-context `Run()` calls. |
 | `pkg/values/thread.go` | the root of an SRFI-18 thread's goroutine. No ancestor frame can recover it, so this is a necessity rather than a policy. |
+| `pkg/wile/ffi_wrapper.go`, `ffiSpec.makeWrapper` | **not** a containment site. It converts a fault raised by the callback protocol — which panics because the host's Go signature has no error slot to return through — and re-panics everything else. Matching is on the two protocol sentinels (`ErrFFICallbackError`, `ErrCallbackResultConversion`), not on the error's type: the VM's own invariant guards panic with a `*werr.ForeignError` too, and a type test would convert one of those into a catchable condition whenever it crossed a host function that had called back into Scheme. |
 
 That table is grep-checkable rather than asserted:
-`grep -rn 'recover()' --include='*.go' pkg/machine/ pkg/values/ | grep -v _test.go`
-returns those two plus `pkg/values/big_float.go` (a local guard around
+`grep -rn 'recover()' --include='*.go' pkg/machine/ pkg/values/ pkg/wile/ | grep -v _test.go`
+returns those three plus `pkg/values/big_float.go` (a local guard around
 `big.Float` parsing, not a VM boundary). An earlier revision of this
-documentation described a third, per-call recovery inside a bytecode
+documentation described a further per-call recovery inside a bytecode
 `OperationForeignFunctionCall`; that operation was measured to have no
 production references and was deleted in 2026-08.
 

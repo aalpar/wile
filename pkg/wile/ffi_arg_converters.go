@@ -305,6 +305,18 @@ func makeStructArgConverter(name string, pos int, t reflect.Type, lossyAllowed b
 					"%s: argument %d: expected alist pair, got %s", name, pos, elem.SchemeString(),
 				)
 			}
+			// The empty list satisfies values.Tuple, so the assertion above admits it
+			// and entry.Car() would panic. Reject it here so it reads as the
+			// argument-domain error it is: '(()) is a caller mistake, not a host bug,
+			// and since ffiSpec.makeWrapper stopped recovering host bugs it would
+			// otherwise escape guard entirely. Same shape, same fix as
+			// helpers.AssocLookup.
+			if values.IsEmptyList(elem) {
+				return werr.WrapForeignErrorf(
+					werr.ErrTypeConversion,
+					"%s: argument %d: expected alist pair, got the empty list", name, pos,
+				)
+			}
 			sym, ok := entry.Car().(*values.Symbol)
 			if !ok {
 				return werr.WrapForeignErrorf(

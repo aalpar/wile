@@ -45,6 +45,20 @@ returned to the embedder, not as a Scheme condition `guard` can see. This
 contract is otherwise enforced by code review only; there is no test or lint
 that catches a primitive that violates it.
 
+**The rule is one rule, and it covers both registration routes.** A Go-level bug
+escapes `guard` whether the function was installed by `Engine.RegisterPrimitive`
+or by `Engine.RegisterFunc`. The one `defer recover()` that sits inside a
+generated `ForeignFunction` exists *solely* for the deliberate callback protocol:
+`callbackErrorResult` and `callbackSuccessResult`
+(`pkg/wile/ffi_arg_converters.go`) panic when the host's Go signature has no
+error slot to return a fault through, so there the panic **is** the return path.
+`ffiSpec.makeWrapper` therefore matches the two protocol sentinels and re-raises
+everything else. It used to recover unconditionally, which made a host bug from
+a `RegisterFunc` function guard-catchable while the same bug from a
+`RegisterPrimitive` function was not — an unnoticed second answer that fell out
+of where the recover sat, not a decision. `CODING_STYLE.md`'s rule needed no
+amendment to close it.
+
 ### Closure Interface
 
 ```go
