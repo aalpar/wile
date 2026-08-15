@@ -1233,23 +1233,50 @@ func (p *Engine) LastCounters() machine.VMCounters {
 // offending token on *parser.ParserError. Without the second lookup a parse
 // error's file:line:col is dropped on the floor even though the parser knew it
 // — see REVIEW.md "Error Chain Losslessness".
+//
+// The location is also what Cause's text renders, but only when the INNERMOST
+// SourcedError is the one carrying it: SourcedError.Error prefixes its location
+// only if no deeper SourcedError exists. So the same walk that finds the location
+// decides whether Error() should prefix it again — see CompilationError.structured.
+//
+// Condition is the same object a Scheme guard catches, built by the single
+// converter in pkg/machine rather than assembled here, so the compile-time and
+// runtime representations cannot drift. It is populated unconditionally: a nil
+// Condition then means "no cause to convert" and never "this path skipped it",
+// which is the polarity nil carries everywhere else in the API.
 func wrapCompilationError(msg string, cause error) *CompilationError {
 	ce := &CompilationError{Message: msg, Cause: cause}
 	var se *compilation.SourcedError
 	for err := cause; errors.As(err, &se); err = se.Cause {
 		loc := se.Source.Location()
+		ce.structured = loc != ""
 		if loc != "" {
 			ce.Source = loc
 		}
 	}
 	// Parse errors carry location on their token rather than a SourcedError.
 	// Consult them only when the compiler chain yielded nothing, so a genuine
-	// compiler location (more specific) always wins when both are present.
+	// compiler location (more specific) always wins when both are present. The
+	// ParserError renders its position in its own format ("at index N, line L,
+	// …"), not as file:line:col, so this location is not a duplicate and keeps
+	// its prefix.
 	if ce.Source == "" {
 		var pe *parser.ParserError
 		if errors.As(cause, &pe) {
 			ce.Source = pe.Location()
 		}
+	}
+	if cause == nil {
+		return ce
+	}
+	ce.Condition = wrapValue(machine.ConditionFromError(cause))
+	// ConditionFromError stamps the innermost location off the SourcedError chain,
+	// which a parse error does not have. Hand it the one this funnel recovered so
+	// the two halves of the same error agree, and only when the condition has none
+	// — a condition a primitive built and returned already knows its own site.
+	ne, ok := ce.Condition.Internal().(*values.NativeError)
+	if ok && ne.SourceLocation() == "" && ce.Source != "" {
+		ne.SetSourceLocation(ce.Source)
 	}
 	return ce
 }

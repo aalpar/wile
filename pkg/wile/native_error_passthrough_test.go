@@ -30,7 +30,7 @@ import (
 // it reaches Scheme intact.
 //
 // CODING_STYLE.md has prescribed that pattern since 2026-06-27, and it did not
-// work on the day it was written: goErrorToCondition rebuilt a fresh condition
+// work on the day it was written: ConditionFromError rebuilt a fresh condition
 // from err.Error(), so the message survived and the irritants and the kind did
 // not. The one in-tree site that tried it backed out to RaiseInPlace the same
 // day (prim_exceptions.go), which is why nothing failed for fourteen months.
@@ -194,7 +194,7 @@ func TestWrappedNativeErrorIsNotForwarded(t *testing.T) {
 	})
 
 	t.Run("the wrapped chain still reports its file kind (control)", func(t *testing.T) {
-		// Rebuilding is not lossy in every direction: goErrorToCondition reads
+		// Rebuilding is not lossy in every direction: ConditionFromError reads
 		// the KIND off the chain with errors.As, and that arm is untouched. This
 		// row is here so the negative arm above is not misread as "a wrapped
 		// condition loses everything".

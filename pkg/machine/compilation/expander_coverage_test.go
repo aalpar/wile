@@ -238,7 +238,13 @@ func TestExpandSyntaxError_MissingMessage(t *testing.T) {
 func TestFormatIrritants(t *testing.T) {
 	c := qt.New(t)
 
-	c.Assert(formatIrritants([]string{"a"}), qt.Equals, "a")
-	c.Assert(formatIrritants([]string{"a", "b"}), qt.Equals, "a, b")
-	c.Assert(formatIrritants([]string{"x", "y", "z"}), qt.Equals, "x, y, z")
+	// Rendered from the stripped datums, so an irritant reads as the program
+	// wrote it: a symbol irritant is "a", not the syntax object's #'a.
+	sym := func(s string) values.Value {
+		return values.NewSymbol(s)
+	}
+	c.Assert(formatIrritants([]values.Value{sym("a")}), qt.Equals, "a")
+	c.Assert(formatIrritants([]values.Value{sym("a"), sym("b")}), qt.Equals, "a, b")
+	c.Assert(formatIrritants([]values.Value{values.NewInteger(1), values.NewString("y")}),
+		qt.Equals, `1, "y"`)
 }

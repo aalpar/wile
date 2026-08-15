@@ -249,29 +249,37 @@ func (p *ExpanderTimeContinuation) expandSyntaxError(_ *syntax.SyntaxSymbol, exp
 		message = msgVal.SchemeString()
 	}
 
-	// Collect irritants (remaining arguments)
-	var irritants []string
+	// Collect irritants (remaining arguments), stripped to datums. One
+	// representation feeds both the rendered text and the Scheme-visible
+	// irritant list; carrying the syntax objects instead would put
+	// scope-set-bearing values in a list a program can hold, and both Chez and
+	// Racket surface the datum where R7RS §4.3.1 is silent.
+	var irritants []values.Value
 	rest := pair.SyntaxCdr()
 	for {
 		restPair, ok := rest.(*syntax.SyntaxPair)
 		if !ok || syntax.IsSyntaxEmptyList(restPair) {
 			break
 		}
-		irritant := restPair.SyntaxCar()
-		irritants = append(irritants, irritant.SchemeString())
+		irritants = append(irritants, restPair.SyntaxCar().UnwrapAll())
 		rest = restPair.SyntaxCdr()
 	}
 
 	// Format the error message
 	if len(irritants) > 0 {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: %s: %s", message, formatIrritants(irritants)))
+		wrapped := werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: %s: %s", message, formatIrritants(irritants))
+		return nil, wrapSourcedError(expr.SourceContext(), &syntaxError{irritants: irritants, cause: wrapped})
 	}
 	return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: %s", message))
 }
 
-// formatIrritants joins irritants with commas for error display.
-func formatIrritants(irritants []string) string {
-	return strings.Join(irritants, ", ")
+// formatIrritants renders irritants for the message text, comma-separated.
+func formatIrritants(irritants []values.Value) string {
+	parts := make([]string, len(irritants))
+	for i, irr := range irritants {
+		parts[i] = irr.SchemeString()
+	}
+	return strings.Join(parts, ", ")
 }
 
 // expandBeginForm expands (begin expr ...) by expanding all subexpressions.
