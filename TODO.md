@@ -349,6 +349,33 @@ perf lever.
 
 Items that block production embedded use or prevent silent state corruption.
 
+### The `race` CI job runs the multi-threaded tests only (2026-08-15)
+
+- [x] **`make test-race` no longer runs `./...`** [Tooling, **SHIPPED 2026-08-15**]: the job had been
+  red since `f483b4dd` added `test/scheme_inprocess_test.go`, failing with `panic: test timed out
+  after 30m0s` — not a deadlock, `TestSchemeSuiteInProcess` was still making progress at the wall.
+  The detector reports only on genuinely concurrent access, so a single-threaded test pays 10–30×
+  for no signal: `test/wile/algebra-tree-test.scm` is **2.3s plain, 65.6s instrumented**, and the
+  47 Scheme conformance files that driver walks use **no** thread primitive at all.
+
+  `tools/sh/race-selection.sh` now **derives** the set from the source — three predicates (a
+  goroutine spawn, a `t.Parallel()` call, a Scheme thread/channel/mutex/timer *call*) at test-FILE
+  granularity, plus every test of a package whose own production code spawns a goroutine. 1339
+  tests, 19 packages, ~4m40 cold. `make test-race-list` prints the selection.
+
+  **Derived and not curated on purpose: a hand-kept list fails OPEN** — it goes green while testing
+  nothing. Three details worth keeping: the Scheme and `t.Parallel` patterns are anchored to look
+  like *calls*, because three files in this tree mention `t.Parallel` only to say they must not use
+  it and several name thread primitives only to assert a profile denies them; the roots come from
+  `go list` after a hardcoded walk silently skipped `coverage/`, `integration/` and `tools/`; and
+  the one exclusion (`TestSchemeSuiteInProcess`, whose only goroutine is `captureStdout`'s pipe
+  drainer) carries a **ratchet** that fails the script if any `*-test.scm` under its roots ever
+  starts a thread — mutation-verified.
+
+  Known cost, left in deliberately: `cmd/wile` is 12s plain / 145s instrumented, over half the job,
+  because `setupSignals` spawns a SIGQUIT stack-dump goroutine that no test triggers and that
+  shares nothing. Trimming it means naming 66 tests, which is the curation the script avoids.
+
 ### `Imported` is unsound evidence for `IsStable()` at phase 1 — DISCHARGED 2026-08-10, one refusal left (2026-08-09)
 
 Opened by the wave-1 §5 / Phase 5 work, and it is the **named owner** for the
