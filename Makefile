@@ -198,7 +198,14 @@ tutorial-test: build
 
 .PHONY: test-race
 test-race: build
-	$(GO_TEST) -race -timeout 30m ./...
+	@bash $(SH_TOOLS_DIR)/race-selection.sh
+
+# Print what test-race would run, without running it. Useful when a concurrency
+# test looks uncovered: if it is missing here, its file does not match any of the
+# script's three predicates.
+.PHONY: test-race-list
+test-race-list:
+	@bash $(SH_TOOLS_DIR)/race-selection.sh --list
 
 # Run the parser fuzzers, MUTATING from their seed corpus to discover new inputs.
 # Unlike `make test` (which runs only the committed corpus deterministically),
