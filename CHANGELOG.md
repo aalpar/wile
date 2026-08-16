@@ -18,6 +18,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`CompilationError.Condition` — a compile failure now reaches a Go host as the
+  same condition object a Scheme `guard` would catch.** The field mirrors
+  `RuntimeError.Condition`, is `nil` only when there was no cause to convert, and
+  carries the message, irritants, kind and location as values rather than as text
+  a host has to parse back out of `Error()`. Nothing was removed: `Message`,
+  `Source` and `Cause` are unchanged, and every existing `*CompilationError`
+  assertion still holds.
+
+  It is built by `machine.ConditionFromError`, which is the runtime bridge's own
+  converter, newly exported so that it stays the only one. A compile failure and a
+  primitive failure therefore have one Scheme-visible representation, decided by
+  the error rather than by which verb was running — the point of the unification,
+  and the reason the compile funnel does not assemble a condition of its own.
+
 - **R6RS `(rnrs hashtables)`.** The hash moves from the KEY to the TABLE, so
   **any object can be a hashtable key** — lists, vectors, records, nested tables.
   Which objects count as one key is now the constructor's choice.
@@ -559,6 +573,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`(syntax-error "msg" irritant ...)` lost its irritants.** R7RS §4.3.3 defines
+  the form by delegation — *"behaves similarly to `error` (6.11)"* — so its
+  trailing operands are `error`'s irritants and `error-object-irritants` is the
+  accessor §6.11 gives them. It answered `()`: the expander rendered each irritant
+  with `SchemeString` and joined the results into the message, so the values
+  existed only inside a string. They now travel as Scheme values and reach the
+  condition, stripped to datums — `(error-object-irritants e)` on a caught
+  `(syntax-error "expected a pair" x 42)` is `(hello 42)`, with nesting,
+  exactness and improper tails intact.
+
+  The delegation's other half is **not** closed: `error-object-message` on such a
+  condition is still the whole Go chain's text, where `(error "boom" 1 2)` gives
+  `"boom"`. Recorded in `TODO.md` — it is a message/chain split across every
+  compile-originated condition, not a `syntax-error` change.
+
+  Stripping is what both Chez and Racket do where the spec is silent, and it keeps
+  a scope-set-bearing syntax object out of a list a program can hold. The same
+  stripped values render the message text, so an irritant now reads as the program
+  wrote it (`hello, 42`) rather than as the expander's view of it
+  (`#'hello, #'42`) — one representation feeding both, instead of two spellings of
+  the same fact.
+
+- **A compile error rendered its source location twice.**
+  `CompilationError.Error()` prefixed `Source` while the innermost
+  `*SourcedError` in the chain prefixed the same location again, so `(car)`
+  reported `<eval>:1:1: expand/compile error: compilation: <eval>:1:1: call to
+  car: …`. The envelope now yields to the located cause, exactly as
+  `ParserError.contextSuffix` yields to a located tokenizer error and as
+  `SourcedError` itself suppresses its outer locations: the layer that can name
+  the failure most precisely is the one that renders it.
+
+  Visible consequence: for a compile error the location no longer leads the line,
+  it sits where the chain names it (`expand/compile error: compilation:
+  <eval>:1:1: call to car: …`). `Source` is unchanged and is still the field to
+  read. A **parse** error keeps its prefix — its location comes from
+  `parser.ParserError`, which renders position in its own `at index N, line L`
+  form rather than as `file:line:col`, so there is nothing to duplicate.
+
 - **`TestRuleguardRules` passed exactly once per `golangci-lint cache clean`
   and failed every run after.** golangci-lint caches by file content, and these
   fixtures are byte-identical across runs, but a cached issue carries the
@@ -583,7 +635,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A primitive that returned a `*values.NativeError` lost its irritants and its
   kind.** `CODING_STYLE.md` has prescribed that return form since 2026-06-27 —
   *"the return value IS the condition"* — and it did not work on the day it was
-  written. `goErrorToCondition` rebuilt a fresh condition out of `err.Error()`,
+  written. The converter (`goErrorToCondition`, exported later in this same cycle
+  as `machine.ConditionFromError`) rebuilt a fresh condition out of `err.Error()`,
   so the message survived and nothing else did: `values.NewFileError("boom", 5)`
   reached Scheme with `(error-object-irritants e)` = `()` and `(file-error? e)` =
   `#f`, where the Scheme-side `(error "boom" 5)` baseline gives `(5)` and `#t`. A

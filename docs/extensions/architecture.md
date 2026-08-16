@@ -589,7 +589,7 @@ point of this section. Three words in it are doing work:
 //   primitive returns err
 //     → machine.applyCallableError   (pkg/machine/foreign_closure.go)
 //         control signal?  → pass through untouched
-//         otherwise        → goErrorToCondition, then RaiseInPlace
+//         otherwise        → machine.ConditionFromError, then RaiseInPlace
 //     → the Scheme handler chain (guard / with-exception-handler)
 //   nothing caught it
 //     → *wile.RuntimeError at the Engine boundary, IsSchemeException() == true
@@ -601,10 +601,12 @@ interrupt, and a continuation resume. An extension will not normally construct
 any of them; a primitive that calls back into Scheme can *observe* one, and must
 return it unchanged rather than swallowing it.
 
-`goErrorToCondition` reads the error's kind off the chain with `errors.As`, so
-wrapping is safe: a `*werr.ForeignFileError` anywhere in the chain makes
+`machine.ConditionFromError` reads the error's kind off the chain with `errors.As`,
+so wrapping is safe: a `*werr.ForeignFileError` anywhere in the chain makes
 `(file-error? e)` true, and a `*werr.ForeignReadError` makes `(read-error? e)`
-true. Any other error is a generic condition.
+true. Any other error is a generic condition. It is exported because the compile
+funnel calls it too (`CompilationError.Condition`), which is what keeps the two
+paths one representation rather than two that agree by convention.
 
 A `*values.NativeError` is not converted at all — it is already a condition, so
 it is forwarded unchanged and keeps its irritants and its kind. Returning
@@ -698,14 +700,19 @@ as they are.
 
 1. **Anything raised before execution.** A denial or failure during macro
    expansion, `include`, or library import reaches the embedder as a
-   `*wile.CompilationError`, not as a Scheme condition — so
-   `(guard (e (#t …)) (import (x)))` and `(guard (e (#t …)) (include "x"))`
-   behave differently from `(guard (e (#t …)) (load "x"))`. Giving the contract
-   a compile-time half — one error representation across analysis and
-   execution, so `CompilationError` stops being a separate kind — is a
-   separate and substantially larger piece of work. It is scheduled, not
-   settled; until it lands, treat an analysis-time failure as a host-facing
-   Go error and nothing else.
+   `*wile.CompilationError`, and Scheme still cannot catch it: `(guard (e (#t …))
+   (import (x)))` and `(guard (e (#t …)) (include "x"))` behave differently from
+   `(guard (e (#t …)) (load "x"))`, because the guard is compiled after the
+   failure that would have to reach it. That is the routing half, and it is
+   unbuilt.
+
+   The **representation** half has landed. `CompilationError.Condition` holds the
+   same condition object a `guard` would have caught, built by the same
+   `machine.ConditionFromError` the runtime bridge uses, so an analysis-time
+   failure is no longer a different *kind* of thing to a host — only a differently
+   *delivered* one. Read `Condition` for the message, irritants, kind and
+   location as values; treat the absence of a Scheme-side handler as the open
+   part.
 2. **The VM's own cancellation poll.** When the engine's `context.Context` is
    cancelled or its deadline expires, `MachineContext.Run` returns
    `mc.ctx.Err()` directly. The host receives a `*wile.RuntimeError` for which

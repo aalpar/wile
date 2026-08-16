@@ -20,10 +20,17 @@ import (
 // continuation manipulation) should type-assert to *MachineContext.
 type ForeignFunction func(mc CallContext) error
 
-// goErrorToCondition converts a Go error into a Scheme condition object (a
+// ConditionFromError converts a Go error into a Scheme condition object (a
 // NativeError). It detects ForeignFileError and ForeignReadError to set the
 // appropriate NativeError kind per R7RS §6.11. RaiseInPlace later stamps the
 // raise-site source location and stack trace onto it.
+//
+// This is THE converter, and it is exported so that it stays the only one: the
+// compile funnel (wile.wrapCompilationError, filling CompilationError.Condition)
+// and the runtime bridge (applyCallableError) both go through it, so a Go failure
+// has one Scheme-visible representation no matter which verb was running when it
+// happened. A second conversion written next to a caller is the defect this
+// signature exists to prevent.
 //
 // A primitive that RETURNS a *values.NativeError is already holding a condition,
 // so it is forwarded rather than rebuilt: rebuilding reads only err.Error(), which
@@ -43,7 +50,7 @@ type ForeignFunction func(mc CallContext) error
 // happens at the frame that invoked the compiler — so error-object-source
 // contradicted the message text, which held the real site. See
 // innermostCompileLocation.
-func goErrorToCondition(err error) values.Value {
+func ConditionFromError(err error) values.Value {
 	nativeErr, ok := err.(*values.NativeError)
 	if ok {
 		return nativeErr
@@ -56,7 +63,7 @@ func goErrorToCondition(err error) values.Value {
 	} else if errors.As(err, &readErr) {
 		kind = values.NativeErrorKindRead
 	}
-	q := values.NewErrorObjectWithCauseAndKind(err.Error(), err, kind)
+	q := values.NewErrorObjectWithCauseAndKind(err.Error(), err, kind, irritantsOf(err)...)
 	loc := innermostCompileLocation(err)
 	if loc != "" {
 		// enrichNativeError's once-guard keys on an empty location, so stamping
@@ -65,6 +72,31 @@ func goErrorToCondition(err error) values.Value {
 		q.SetSourceLocation(loc)
 	}
 	return q
+}
+
+// irritantError is a compile-time failure that named irritants — today only
+// (syntax-error message irritant ...), which R7RS §4.3.3 defines by delegation to
+// error (§6.11), whose trailing operands are irritants.
+// Same edge and same reason as sourcedError: the concrete type lives in
+// compilation, which imports this package.
+//
+// ErrorIrritants rather than Irritants: *values.NativeError has an Irritants
+// method, so the shorter name would match a condition buried in the chain and
+// harvest its irritants onto the one being built.
+type irritantError interface {
+	error
+	ErrorIrritants() []values.Value
+}
+
+// irritantsOf returns the irritants err named, or nil when it named none — which
+// is the ordinary case, and the reason NewErrorObjectWithCauseAndKind is called
+// variadically rather than through two branches.
+func irritantsOf(err error) []values.Value {
+	var ie irritantError
+	if errors.As(err, &ie) {
+		return ie.ErrorIrritants()
+	}
+	return nil
 }
 
 // sourcedError is compilation.SourcedError seen from below. The compiler stamps a
@@ -184,7 +216,7 @@ func applyCallableError(mc *MachineContext, err error) error {
 		// and .StackTrace; without it the stamp survives only as message text.
 		return mc.WrapError(err, "")
 	}
-	return RaiseInPlace(mc, goErrorToCondition(err), false)
+	return RaiseInPlace(mc, ConditionFromError(err), false)
 }
 
 var _ Closure = (*ForeignClosure)(nil)

@@ -30,15 +30,34 @@ import (
 // Source provides the source location ("file:line:col") where the error occurred,
 // when available. Compilation errors from the core compiler include source locations;
 // parse errors and some edge cases may have an empty Source.
+//
+// # Condition
+//
+// Condition holds the same condition object a Scheme guard would have caught had
+// the failure crossed a primitive frame — the compile-time counterpart to
+// [RuntimeError.Condition], built by the one converter both funnels use
+// (machine.ConditionFromError). It is nil only when there was no cause to convert.
+// Reading it is how a host recovers the message, irritants, kind and location as
+// values instead of parsing them back out of Error().
 type CompilationError struct {
-	Message string
-	Source  string // formatted source location ("file:line:col"), empty if unavailable
-	Cause   error
+	Message   string
+	Source    string // formatted source location ("file:line:col"), empty if unavailable
+	Cause     error
+	Condition Value // the condition Scheme would see; nil when there is no cause
+
+	// structured is true when Cause's own text already renders Source — which is
+	// the case whenever the innermost *compilation.SourcedError carries a
+	// location, since that is the one link in the chain that prefixes it
+	// (SourcedError.Error suppresses the outer ones). Error() then omits its own
+	// prefix rather than emitting "file:line:col: … file:line:col: …". Same
+	// discipline as RuntimeError.structured, applied to the location alone: the
+	// cause text here IS the diagnostic, so it cannot be dropped wholesale.
+	structured bool
 }
 
 func (p *CompilationError) Error() string {
 	var b strings.Builder
-	if p.Source != "" {
+	if p.Source != "" && !p.structured {
 		b.WriteString(p.Source)
 		b.WriteString(": ")
 	}
