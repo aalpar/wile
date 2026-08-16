@@ -102,6 +102,35 @@ is_excluded() {
 	return 1
 }
 
+# Packages where the production-goroutine rule does NOT apply. The goroutine is
+# real, but no test can make it race, so selecting every test in the package buys
+# nothing. This does not exclude the package outright: its concurrency-bearing
+# test FILES are still selected on their own merit.
+#
+#   cmd/wile - its one production goroutine is setupSignals' SIGQUIT stack-dump
+#     handler. TestSetupSignalsDirect does start it, but nothing sends SIGQUIT, so
+#     it sits in `range sigChan` for the life of the process and touches only that
+#     channel and a local buffer: there is no shared state for the detector to
+#     find. The rule was pulling in 29 unrelated tests worth 51.7s instrumented
+#     locally, 65% of the whole run's time on a CI runner. mcp_test.go keeps its 36
+#     tests, which spawn goroutines that contend on the MCP session lock and are
+#     the regression test for a real one - see TestHandleEval_ZeroTimeoutDoesNotWedgeServer.
+EXCLUDED_PROD_PKGS=(
+	"cmd/wile"
+)
+
+is_prod_excluded() {
+	local importpath="$1" e
+	for e in "${EXCLUDED_PROD_PKGS[@]}"; do
+		case "$importpath" in
+		*"/$e")
+			return 0
+			;;
+		esac
+	done
+	return 1
+}
+
 # bears_concurrency reports whether a single Go file matches any predicate.
 bears_concurrency() {
 	local f="$1"
@@ -159,12 +188,32 @@ if [ -n "$scm_thread_users" ]; then
 	exit 1
 fi
 
+# Ratchet for EXCLUDED_PROD_PKGS. Each entry's premise is "one goroutine site, and
+# it cannot race". A second site means a different goroutine has appeared and the
+# premise has to be re-argued rather than inherited.
+for excluded in "${EXCLUDED_PROD_PKGS[@]}"; do
+	prod_files=$(ls "$excluded"/*.go 2>/dev/null | grep -v '_test\.go$' || true)
+	if [ -z "$prod_files" ]; then
+		echo "race-selection: $excluded is in EXCLUDED_PROD_PKGS but has no non-test sources" >&2
+		exit 1
+	fi
+	# shellcheck disable=SC2086
+	sites=$(grep -hE "$GO_SPAWN" $prod_files 2>/dev/null | wc -l | tr -d ' ')
+	if [ "$sites" != "1" ]; then
+		echo "race-selection: $excluded has $sites production goroutine site(s), not the 1 its exclusion assumes" >&2
+		echo "race-selection: re-argue the exclusion in EXCLUDED_PROD_PKGS or drop it" >&2
+		exit 1
+	fi
+done
+
 # importpath<TAB>test, one line per selected test function.
 selected=$(
 	printf '%s\n' "$pkgs" | while read -r importpath dir; do
 		prod=0
-		if spawns_in_production "$dir"; then
-			prod=1
+		if ! is_prod_excluded "$importpath"; then
+			if spawns_in_production "$dir"; then
+				prod=1
+			fi
 		fi
 		for f in "$dir"/*_test.go; do
 			if [ ! -f "$f" ]; then
