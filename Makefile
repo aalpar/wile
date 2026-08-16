@@ -196,6 +196,15 @@ tutorial-test: build
 	done
 	@echo "All tutorial files passed"
 
+# Run the multi-threaded tests under the race detector. The selection is derived
+# from the source by the script, not curated — see its header.
+#
+# NOT part of `make ci`, and no longer part of the CI workflow either: it runs
+# nightly and on demand via .github/workflows/race.yml. So this is the only thing
+# that covers concurrency before a merge, and running it locally is a deliberate
+# act. Do it before landing anything that touches threads, channels, mutexes, or
+# shared compiler state.
+#   make test-race
 .PHONY: test-race
 test-race: build
 	@bash $(SH_TOOLS_DIR)/race-selection.sh

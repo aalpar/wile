@@ -1,3 +1,10 @@
+# The merge gate: lint, build-all, the full test suite, coverage, docs and
+# examples, via `make ci`.
+#
+# The race detector is deliberately NOT here. It lives in race.yml, which runs
+# nightly and on demand rather than per merge. `make ci` does not build with
+# -race, so a green run of this workflow says nothing about data races - see
+# race.yml for what does, and for why it was taken out of the gate.
 name: CI
 
 on:
@@ -59,28 +66,3 @@ jobs:
           name: benchmark-results-${{ github.sha }}
           path: examples/benchmarks/canonical-results-*.csv
           retention-days: 90
-
-  # Race-detector gate. Runs in parallel with `ci` so the main job stays fast.
-  # The `ci` job's `make ci` does NOT build with -race; without this job a
-  # concurrency regression (e.g. the SRFI-18 thread-terminate race that
-  # TestMutexAbandonedOnTermination catches only under -race) would merge green.
-  #
-  # `make test-race` runs the MULTI-THREADED tests only, selected from the source
-  # by tools/sh/race-selection.sh. The detector reports only on genuinely
-  # concurrent access, so instrumenting a single-threaded test costs 10-30x wall
-  # clock for no signal: this job hit the 30-minute wall on 2026-08-15 once
-  # TestSchemeSuiteInProcess landed, and that test runs 47 Scheme conformance
-  # files none of which start a thread. Do not widen this back to ./... - widen
-  # the script's predicates instead, so the reason travels with the selection.
-  race:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: "1.24"
-          cache-dependency-path: go.sum
-
-      - name: Test (race detector)
-        run: make test-race

@@ -40,7 +40,16 @@
 
 set -euo pipefail
 
-TIMEOUT="20m"
+# Per `go test` invocation, and there is one per package — so this bounds a single
+# hung package and NOT the run. The run is bounded by timeout-minutes in
+# .github/workflows/race.yml, which is sized to clear this one firing.
+#
+# 8m is ~3x the slowest package: cmd/wile, 93s local and ~2m30s projected on a
+# runner (it was 3m46s there before its production-rule exclusion), with the next
+# slowest at 37s. So no legitimate package can trip it. It stays deliberately short
+# because a `go test` timeout dumps every goroutine, and that dump is the whole
+# diagnostic when something deadlocks.
+TIMEOUT="8m"
 LIST_ONLY=0
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -202,6 +211,7 @@ if [ "$LIST_ONLY" -eq 1 ]; then
 	exit 0
 fi
 
+started=$SECONDS
 status=0
 while IFS=$'\t' read -r pkg regex; do
 	if ! go test -race -timeout "$TIMEOUT" -run "$regex" "$pkg"; then
@@ -210,6 +220,13 @@ while IFS=$'\t' read -r pkg regex; do
 done <<EOF
 $runs
 EOF
+elapsed=$((SECONDS - started))
+
+# Printed on every run so the next person sizing the budget reads a number
+# instead of re-measuring by hand. -timeout above is PER PACKAGE, so it bounds an
+# individual hang and NOT this total; the job-level timeout-minutes in
+# .github/workflows/race.yml is what bounds the whole thing.
+printf 'race-selection: %dm%02ds total across %s package(s)\n' "$((elapsed / 60))" "$((elapsed % 60))" "$pkg_count"
 
 if [ "$status" -ne 0 ]; then
 	echo "race-selection: FAILED" >&2

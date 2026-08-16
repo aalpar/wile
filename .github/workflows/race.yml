@@ -1,0 +1,75 @@
+# Race-detector gate, deliberately OFF the merge path.
+#
+# `make ci` does not build with -race, so nothing in ci.yml covers concurrency: a
+# regression like the SRFI-18 thread-terminate race that TestMutexAbandonedOnTermination
+# catches only under -race is invisible there. This workflow is what catches it.
+#
+# It runs nightly and on demand rather than per merge. The consequence is explicit
+# and accepted: a data race can sit on master for up to a day. Two mitigations —
+# `make test-race` is the same selection locally, and `gh workflow run race.yml`
+# runs this on demand before landing anything that touches threads, channels,
+# mutexes, or shared compiler state.
+#
+# `make test-race` runs the MULTI-THREADED tests only, selected from the source by
+# tools/sh/race-selection.sh. The detector reports only on genuinely concurrent
+# access, so instrumenting a single-threaded test costs 10-30x wall clock for no
+# signal. Do not widen this back to ./... - widen the script's predicates instead,
+# so the reason travels with the selection.
+name: Race
+
+on:
+  schedule:
+    # 09:00 UTC daily (02:00 US/Pacific), well clear of the working day so a
+    # failure is waiting rather than interrupting.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  race:
+    runs-on: ubuntu-latest
+
+    # THE budget. The -timeout inside race-selection.sh is per `go test`
+    # invocation and the script makes one per package, so it bounds a single hung
+    # package and CANNOT bound the job: 19 packages x that timeout is the worst
+    # case it permits. Hence this line.
+    #
+    # Measured on this runner, 2026-08-16 (run 31921030568), over the 1339-test
+    # selection that preceded cmd/wile's production-rule exclusion:
+    #
+    #   whole step, cold                    7m21s   includes build and per-package link
+    #   sum of reported test times          5m48s   so ~1m33s is compile/link
+    #   slowest single package              3m46s   cmd/wile, 225.8s
+    #   next three                          37s / 29s / 18s   values, repl, wile
+    #
+    # A runner is ~1.6x an M4 Max on the slowest package and ~1.4x on the test-time
+    # sum. The selection since dropped 29 cmd/wile tests that only the
+    # production-goroutine rule was pulling in, taking the local total from 4m06s to
+    # 3m16s, so the step here should land near 6m - PROJECTED, not measured. The
+    # first scheduled run measures it, which is what the script's own total line is
+    # for.
+    #
+    # 25m = the 7m21s step + two 8m per-package timeouts + margin. That sum, not a
+    # tighter multiple of the observed time, is what makes a hang DIAGNOSABLE
+    # rather than merely fatal: `go test` dumps every goroutine when its own
+    # -timeout fires, which is how the 30m whole-tree failure was identified as a
+    # budget overrun rather than a deadlock, whereas a job timeout kills the runner
+    # with no dump. Sizing this below step + per-package would buy a few minutes
+    # and cost the stack trace.
+    #
+    # Re-derive from the "race-selection: NmNNs total" line the script prints on
+    # every run rather than adjusting this by feel.
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+          cache-dependency-path: go.sum
+
+      - name: Test (race detector, multi-threaded tests only)
+        run: make test-race
