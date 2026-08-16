@@ -18,24 +18,23 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// syntaxError decorates a (syntax-error message irritant ...) failure with its
-// irritants as Scheme values.
+// syntaxError decorates a (syntax-error message irritant ...) failure with the two
+// facts the form named, as Scheme values.
 //
 // R7RS §4.3.3 defines syntax-error by delegation — "behaves similarly to error
-// (6.11)" — so the trailing operands ARE error's irritants and
-// error-object-irritants is the accessor §6.11 gives them. Joining them into the
-// message left that accessor answering () while the values existed only inside a
-// string.
-//
-// The delegation has a second half this type does NOT satisfy:
-// error-object-message should then be the message alone, and it is still the whole
-// Go chain's text. Filed in TODO.md; closing it is a message/chain split across
-// every compile error, not a syntax-error change.
+// (6.11)" — so the operands ARE error's message and irritants, and §6.11's two
+// accessors are what a program reads them back with. Joining them into the wrap
+// text left error-object-irritants answering () and error-object-message answering
+// the whole Go chain, when both values were sitting right here at the raise site.
 //
 // It adds no text. Error forwards the cause, which is the same wrap the join
 // always produced, so the diagnostic an embedder reads is byte-identical and the
-// format lives in one place — the raise site, not here.
+// format lives in one place — the raise site, not here. The declared message is
+// therefore NOT the rendered one: the rendering keeps its "syntax-error: " prefix
+// and its joined irritants, while the accessor answers the message alone, exactly
+// as it does for (error "expected a pair" 'hello 42).
 type syntaxError struct {
+	message   string
 	irritants []values.Value
 	cause     error
 }
@@ -48,15 +47,23 @@ func (p *syntaxError) Unwrap() error {
 	return p.cause
 }
 
-// ErrorIrritants returns the irritants as Scheme values. It exists so that
-// pkg/machine can recognise this type structurally: this package imports
-// pkg/machine, so the concrete type cannot be named from that side of the edge,
-// and an errors.As target there has to be an interface.
+// ErrorMessage returns the message the form named, without the "syntax-error: "
+// prefix the rendering adds. See ErrorIrritants for why both names carry the Error
+// prefix.
+func (p *syntaxError) ErrorMessage() string {
+	return p.message
+}
+
+// ErrorIrritants returns the irritants as Scheme values. Together with
+// ErrorMessage it exists so that pkg/machine can recognise this type
+// structurally: this package imports pkg/machine, so the concrete type cannot be
+// named from that side of the edge, and an errors.As target there has to be an
+// interface.
 //
-// The name is deliberately not Irritants: *values.NativeError already has that
-// method, and an interface keyed on it would match a condition buried in the
-// chain and harvest its irritants onto the one being built — the same hazard
-// SourceContext avoids for the location.
+// The names are deliberately not Message and Irritants: *values.NativeError
+// already has both, and an interface keyed on them would match a condition buried
+// in the chain and harvest its message and irritants onto the one being built —
+// the same hazard SourceContext avoids for the location.
 func (p *syntaxError) ErrorIrritants() []values.Value {
 	return p.irritants
 }

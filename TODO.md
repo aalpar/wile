@@ -184,6 +184,7 @@ out; those three simply never dereference the ctx. Nothing to build. The
 
 | Plan | Status |
 |---|---|
+| `2026-08-15-condition-message-split.local.md` | **SHIPPED 2026-08-15** on `fix/n1-condition-message-split`, both phases. Closes the one residual the N-1 arc left: `error-object-message` was the whole Go wrap chain, and is now the failure alone (R7RS §6.11, reached from §4.3.3's delegation). Three mechanisms, each cutting on a structure and never on text — the category is every `*werr.StaticError` (`werr.FailureMessage`), the route is everything above the innermost `*SourcedError` (`machine.failureChain`), and a raise site that knew its message now carries it. **Its §2 is the part to read before touching this again:** the obvious rule ("take the innermost wrap") is refuted by two of the tree's own tests, because `ForeignError`'s `err` slot is overloaded three ways — a category sentinel, the next wrap in, or an OS root cause — so a primitive's outer wraps (`file-exists?: argument 0`) are the operation, not breadcrumbs. §3 records why `NativeError.Error()` was deliberately left alone. Two traps: the family types **embed** `*ForeignError` (a concrete assertion readmits their categories), and a non-`werr` wrapper is descended through only when it adds no text of its own. Blast radius 5 test functions, all reading a category out of a rendered message; all now use `errors.Is`. Gates: `pkg/werr/failure_message_test.go`, `pkg/wile/condition_message_test.go` |
 | `2026-08-01-remove-rwmutex-once-impl.local.md` | **SHIPPED** 2026-08-09 on `refactor/remove-rwmutex-once`, all 3 phases, 33 files, +179/−1370; `make lint` / `make covercheck` / `make test-race` all green. Archivable to `memory/`. Open question 3 resolved by porting rather than dropping (`TestWithTimeoutInterruptsParkedMutexLock`); questions 1 (`gointerop` is a misnomer once only atomics remain) and 2 (stale channel-seam TODO entries) left open. **The plan's own claim that this index row was "already in (added 2026-08-08)" was false** — `git log -S 'rwmutex' -- TODO.md` shows no commit ever touched it, which is the same class of unchecked premise the removal's absence from this index caused in the first place |
 | `2026-03-26-extension-contracts-impl.local.md` | Phase 1 + Phase 4 (runtime enforcement) shipped; Phases 2–3 annotation rollout **partial** |
 | `2026-03-26-extension-contracts-phase2-design.local.md` | Infrastructure + enforcement complete; extension annotations partial |
@@ -212,7 +213,7 @@ out; those three simply never dereference the ctx. Nothing to build. The
 
 | Plan | Status |
 |---|---|
-| `2026-08-09-unified-error-representation-design.local.md` | **S0–S3 SHIPPED; S4 recommended against, so the arc is spent.** S2 and S3 landed 2026-08-15 on `fix/n1-s2-s3-error-representation`, closing V2 and V3: `(syntax-error "m" x 42)` now reaches `error-object-irritants` as `(hello 42)` (stripped datums, Q3), and `CompilationError` gained `Condition` plus a `structured` flag so the location renders once. **Eight corrections to the design are in its new §5.5**; the three worth knowing at index level are that **S2 was two sites, not one** (the values must cross the `compilation`→`machine` edge, so it needed a carrier plus a consumer-side interface — the same shape S1 needed for the location, and the design priced only the literal type change), that **S3's gate (i) is unsatisfiable as written** (`errors.As` cannot reach a struct field; built as §2.1's own sketch says, a field mirroring `RuntimeError.Condition`, with `errors.Is(ne, ce.Cause)` asserted instead), and that **V3 is closed by the envelope yielding to the located cause**, so a compile error's location no longer leads the CLI line — same innermost-wins rule as `SourcedError.Error` and `ParserError.contextSuffix`, and the alternative was string surgery on a diagnostic. The converter is now exported as `machine.ConditionFromError` and both funnels call it, which is what makes "one representation" structural rather than conventional. Also splits `docs/extensions/architecture.md`'s carve-out 1: the representation half has landed, the routing half (a `guard` cannot see an expansion-time failure in its own top-level form) is the larger piece and is untouched. Gates in `pkg/wile/compile_error_condition_test.go`, all four mutation-verified red. **One residual, filed, not a slice:** the `error-object-message` conformance gap §4.3.3's delegation leaves open (own Tier-1 row above). All three of the plan's ownerless provenance defects are settled — VERDICTS 92 and 93 both shipped in S0 (`2b3e6738`, whose subject names both halves: "stop losing and stop inventing source"), 94 was refuted on verification. A first pass at this row said 93 was never taken, on the plan's prose rather than the code; corrected the same day, and it is trap 1 in the preamble above. **One citation correction that reaches four code comments:** `syntax-error` is R7RS **§4.3.3**, not §4.3.1 — and §4.3.3 names no irritants at all, it delegates to `error` (§6.11), which is the stronger version of S2's own argument. §6.4a re-argues S4: as sliced it partitions on the FORM, so `syntax-error?` would answer `#f` for `(nope 1)` and `(car)` while answering `#t` for `(if)` — the axis worth a predicate is **phase**, and it keys on the compile funnel S3 made single. **S0/S1 record, retained:** S1 landed 2026-08-15 on `fix/n1-s1-compile-error-provenance`: `goErrorToCondition` (now `ConditionFromError`) pre-stamps the innermost compile-time location, so `error-object-source` on a `load`-caught compile error names the failing sub-expression instead of the `load` call. Closes V1. **The plan's "~5 lines, same loop as `engine.go`" understates one thing and it is the only interesting part:** `compilation` imports `machine`, so the converter **cannot name `*SourcedError`** — the `errors.As` target is a consumer-side interface, and it must be keyed on `SourceContext()`, never on a location-string method, because `*values.NativeError` has `SourceLocation` and would match a condition buried in the chain. Gate is `pkg/wile/compile_error_source_test.go`, red before the fix on both arms. The `-design` label is stale for the whole file now — only S4 is unbuilt, and §6.4 recommends against it. The `N-1` work decision 7's second half implies, which belonged to no plan. **The filed "~140 sites / 17 files" prices the wrong axis:** that is provenance *attachment* (really 220 sites / 27 files) and unification leaves all of it alone; the *representation* axis is 12 construction call sites in 3 files behind one production constructor. Verdict **M**, sliced S0–S3, and **no wave item consumes it** — Wave 2's denial sites and Wave 4 item 6 consume decision 7's *first* half, which shares no code. So S0 (provenance repair) and S1 move forward into stage 1; S2/S3 go last because nothing waits on them. Surfaces three CONFIRMED provenance defects (VERDICTS 92/93/94) that belong to no wave and no plan, and one measured hazard: shipping unification over 92 promotes a *wrong* location into a Scheme-visible accessor |
+| `2026-08-09-unified-error-representation-design.local.md` | **S0–S3 SHIPPED; S4 recommended against, so the arc is spent.** S2 and S3 landed 2026-08-15 on `fix/n1-s2-s3-error-representation`, closing V2 and V3: `(syntax-error "m" x 42)` now reaches `error-object-irritants` as `(hello 42)` (stripped datums, Q3), and `CompilationError` gained `Condition` plus a `structured` flag so the location renders once. **Eight corrections to the design are in its new §5.5**; the three worth knowing at index level are that **S2 was two sites, not one** (the values must cross the `compilation`→`machine` edge, so it needed a carrier plus a consumer-side interface — the same shape S1 needed for the location, and the design priced only the literal type change), that **S3's gate (i) is unsatisfiable as written** (`errors.As` cannot reach a struct field; built as §2.1's own sketch says, a field mirroring `RuntimeError.Condition`, with `errors.Is(ne, ce.Cause)` asserted instead), and that **V3 is closed by the envelope yielding to the located cause**, so a compile error's location no longer leads the CLI line — same innermost-wins rule as `SourcedError.Error` and `ParserError.contextSuffix`, and the alternative was string surgery on a diagnostic. The converter is now exported as `machine.ConditionFromError` and both funnels call it, which is what makes "one representation" structural rather than conventional. Also splits `docs/extensions/architecture.md`'s carve-out 1: the representation half has landed, the routing half (a `guard` cannot see an expansion-time failure in its own top-level form) is the larger piece and is untouched. Gates in `pkg/wile/compile_error_condition_test.go`, all four mutation-verified red. **The one residual it left is now closed too** — `error-object-message` was the whole wrap chain; shipped the same day as `plans/2026-08-15-condition-message-split.local.md`, whose row above records that this plan's "innermost message" guess was refuted by two in-tree tests. All three of the plan's ownerless provenance defects are settled — VERDICTS 92 and 93 both shipped in S0 (`2b3e6738`, whose subject names both halves: "stop losing and stop inventing source"), 94 was refuted on verification. A first pass at this row said 93 was never taken, on the plan's prose rather than the code; corrected the same day, and it is trap 1 in the preamble above. **One citation correction that reaches four code comments:** `syntax-error` is R7RS **§4.3.3**, not §4.3.1 — and §4.3.3 names no irritants at all, it delegates to `error` (§6.11), which is the stronger version of S2's own argument. §6.4a re-argues S4: as sliced it partitions on the FORM, so `syntax-error?` would answer `#f` for `(nope 1)` and `(car)` while answering `#t` for `(if)` — the axis worth a predicate is **phase**, and it keys on the compile funnel S3 made single. **S0/S1 record, retained:** S1 landed 2026-08-15 on `fix/n1-s1-compile-error-provenance`: `goErrorToCondition` (now `ConditionFromError`) pre-stamps the innermost compile-time location, so `error-object-source` on a `load`-caught compile error names the failing sub-expression instead of the `load` call. Closes V1. **The plan's "~5 lines, same loop as `engine.go`" understates one thing and it is the only interesting part:** `compilation` imports `machine`, so the converter **cannot name `*SourcedError`** — the `errors.As` target is a consumer-side interface, and it must be keyed on `SourceContext()`, never on a location-string method, because `*values.NativeError` has `SourceLocation` and would match a condition buried in the chain. Gate is `pkg/wile/compile_error_source_test.go`, red before the fix on both arms. The `-design` label is stale for the whole file now — only S4 is unbuilt, and §6.4 recommends against it. The `N-1` work decision 7's second half implies, which belonged to no plan. **The filed "~140 sites / 17 files" prices the wrong axis:** that is provenance *attachment* (really 220 sites / 27 files) and unification leaves all of it alone; the *representation* axis is 12 construction call sites in 3 files behind one production constructor. Verdict **M**, sliced S0–S3, and **no wave item consumes it** — Wave 2's denial sites and Wave 4 item 6 consume decision 7's *first* half, which shares no code. So S0 (provenance repair) and S1 move forward into stage 1; S2/S3 go last because nothing waits on them. Surfaces three CONFIRMED provenance defects (VERDICTS 92/93/94) that belong to no wave and no plan, and one measured hazard: shipping unification over 92 promotes a *wrong* location into a Scheme-visible accessor |
 | `2026-08-09-primitive-surface-panic-sweep.local.md` | **Sweep RUN 2026-08-09 against `a52c7993`; read-only, no code changed. STATUS OF THE 14, corrected 2026-08-10 — 11 are now closed:** #3 on master via `PRIM-EVAL`; #4–#10 and #12–#14 on this branch; #11 REFUTED as filed and re-filed against the engine (uninterruptibility is a documented VM-wide property of every foreign call, and a 60-character loop of `*` with no `expt` reaches 147 MB / 14 s, so a ceiling on `exptExact` alone would refuse `(expt 10 N)` while permitting its own algorithm written in Scheme) — see the "No memory or CPU custodian at the engine level" row. **#1 and #2 CLOSED 2026-08-13; all 14 are now accounted for.** They were ONE site, not two — `PrimAssv` is three lines delegating to the same `helpers.AssocLookup` as `PrimAssq` — and one guard closed both. The sweep's table renders them as two rows at two file positions and its priority list prices two edits; both were wrong. The fix is an `IsEmptyList` arm beside the existing `values.Tuple` assertion, returning `werr.ErrNotAPair`: the sweep's own shape-(2) diagnosis was exactly right, the comma-ok assertion SUCCEEDS on `'()` and the panic is in the following `Car()`. Pinned at both levels — a sentinel assertion in `TestAssocLookup_Errors` (asserting `ErrNotAPair`, not merely "an error", so a blanket VM recover could not satisfy it) and a Scheme catchability table in `TestAssocFamilyMalformedEntryIsCatchable` that keeps `assoc` as the control it was always measured against. Seven parallel finders over the whole Scheme-reachable surface plus one adversarial refuter each: 30 candidates, 15 refuted, 14 distinct defects survived, every one an uncatchable panic *today*. **Two premise corrections, and the first re-aims the sweep:** (1) shape (C) is **not** what makes these worse — everything registered through `RegisterPrimitive` already bypasses `makeWrapper`'s recover, so those panics already escape `guard` (confirmed by running `(assq 'z '(() (a . 1)))`); the narrowing changes the blast radius for exactly one population, Go functions registered via `Engine.RegisterFunc`/`RegisterFuncs`, where `guard` catches every panic today and none after. Fix the 14 regardless; do not sell them to the maintainer on Phase 8's stated grounds. (2) `noUncheckedArgCast` **matches nothing** — 137 single-value assertions tree-wide, zero with `Arg(` as receiver — so widening it is a free ratchet that will find nothing. **The load-bearing finding: ruleguard is structurally incapable of catching shape (2)**, where the exposure actually is, because the comma-ok assertion *succeeds* (`emptyListType` implements `values.Tuple`) and the panic is in the following `Car()`; catching it needs a `go/analysis` SSA pass asking whether a `values.Tuple` assertion reaches a `Car`/`Cdr` with no dominating `IsEmptyList` check. Two things the sweep did **not** settle: the 36 `pkg/machine/compilation` assertions were sampled, not read; and post-narrowing behaviour was *simulated* by routing panics through `RegisterPrimitive`, not observed on a patched wrapper |
 | `2026-04-17-mcp-server-sota-design.local.md` | Proposed, 5 phases |
 | `2026-08-04-library-phase-isolation-design.local.md`<br>`2026-08-04-library-phase-isolation-impl.local.md` | **SHIPPED** 2026-08-05, 7 tasks, on `feat/library-phase-isolation` (`cadf219f`, `01fdf6b1`, `95cdb2b6`, `5d54b0ab`). Design option A1: the sealed axis moved onto `PhaseRegistry` so a library env owns one while sharing its parent's `Namespace`, then the library-scope resolution arm became phase-relative. Root cause was a *single* arm (`GetGlobalIndexFromLibraryScopes`, searching `{0,1,2}` regardless of the referring phase), **not** the `phaseParent` edge — four experiments, all reverted. See the closed Tier-1 entry below for the three findings the design did not predict, the measured cost, and the two residuals (Q3's `predeclareBinding` twin slot; Q2's `{0,1,2}` export ceiling — **CLOSED** 2026-08-05 on `feat/flat-binding-model`, design Phase D). |
@@ -347,6 +348,33 @@ perf lever.
 ## Tier 1 — Security & Correctness
 
 Items that block production embedded use or prevent silent state corruption.
+
+### The `race` CI job runs the multi-threaded tests only (2026-08-15)
+
+- [x] **`make test-race` no longer runs `./...`** [Tooling, **SHIPPED 2026-08-15**]: the job had been
+  red since `f483b4dd` added `test/scheme_inprocess_test.go`, failing with `panic: test timed out
+  after 30m0s` — not a deadlock, `TestSchemeSuiteInProcess` was still making progress at the wall.
+  The detector reports only on genuinely concurrent access, so a single-threaded test pays 10–30×
+  for no signal: `test/wile/algebra-tree-test.scm` is **2.3s plain, 65.6s instrumented**, and the
+  47 Scheme conformance files that driver walks use **no** thread primitive at all.
+
+  `tools/sh/race-selection.sh` now **derives** the set from the source — three predicates (a
+  goroutine spawn, a `t.Parallel()` call, a Scheme thread/channel/mutex/timer *call*) at test-FILE
+  granularity, plus every test of a package whose own production code spawns a goroutine. 1339
+  tests, 19 packages, ~4m40 cold. `make test-race-list` prints the selection.
+
+  **Derived and not curated on purpose: a hand-kept list fails OPEN** — it goes green while testing
+  nothing. Three details worth keeping: the Scheme and `t.Parallel` patterns are anchored to look
+  like *calls*, because three files in this tree mention `t.Parallel` only to say they must not use
+  it and several name thread primitives only to assert a profile denies them; the roots come from
+  `go list` after a hardcoded walk silently skipped `coverage/`, `integration/` and `tools/`; and
+  the one exclusion (`TestSchemeSuiteInProcess`, whose only goroutine is `captureStdout`'s pipe
+  drainer) carries a **ratchet** that fails the script if any `*-test.scm` under its roots ever
+  starts a thread — mutation-verified.
+
+  Known cost, left in deliberately: `cmd/wile` is 12s plain / 145s instrumented, over half the job,
+  because `setupSignals` spawns a SIGQUIT stack-dump goroutine that no test triggers and that
+  shares nothing. Trimming it means naming 66 tests, which is the curation the script avoids.
 
 ### `Imported` is unsound evidence for `IsStable()` at phase 1 — DISCHARGED 2026-08-10, one refusal left (2026-08-09)
 
@@ -2008,32 +2036,49 @@ stay protected inside mutable children. Design:
 
 ### `error-object-message` on a compile-originated condition is the whole Go chain (2026-08-15)
 
-- [ ] **A caught compile failure's `error-object-message` is the entire wrap chain, not the
-  message** [Correctness/conformance, M]: R7RS §4.3.3 defines `syntax-error` by delegation —
+- [x] **A caught compile failure's `error-object-message` is the entire wrap chain, not the
+  message** [Correctness/conformance, M, **SHIPPED 2026-08-15** on
+  `fix/n1-condition-message-split`]: R7RS §4.3.3 defines `syntax-error` by delegation —
   *"behaves similarly to `error` (6.11)"* — and §6.11 splits message from irritants. N-1 slice
-  S2 closed the irritant half on 2026-08-15; the message half is open, and the two now
-  disagree in a way that is easy to see. Measured on `fix/n1-s2-s3-error-representation`:
+  S2 closed the irritant half; this closed the message half the same day. `(guard … (load
+  "synerr.scm"))` now answers `"expected a pair"` / `(hello 42)`, the pair `(error "expected a
+  pair" 'hello 42)` answers.
 
-  ```
-  (error "boom" 1 2)                       → message "boom"                irritants (1 2)
-  (guard … (load "synerr.scm"))            → message "load: in synerr.scm: expansion: expand:
-                                              failed to expand list expression: … syntax-error:
-                                              expected a pair: hello, 42: invalid syntax"
-                                                                            irritants (hello 42)
-  ```
+  **The filed diagnosis was right about the site and wrong about the rule.** The site is
+  `machine.ConditionFromError`, as filed, and it is every rebuilt condition rather than
+  `syntax-error`. But the row's own guess — "the accessor gets the innermost message" — is
+  **refuted by two of the tree's own tests**, and finding that out was most of the work:
+  `TestContractEnforcement_EndToEnd` wants `file-exists?` in the message, and it lives in an
+  *outer* wrap; `open-input-file` keeps `no such file or directory` only because the OS error
+  sits in the same slot a category sentinel would. A primitive's outer wraps are the operation,
+  not breadcrumbs. Three separate mechanisms, each cutting on a structure and never on text:
 
-  A conforming answer for the second row is `"expected a pair"`. **Not a `syntax-error`
-  defect** — the message is `err.Error()` of the Go chain for *every* condition
-  `machine.ConditionFromError` rebuilds, so the fix is a message/chain split at that one
-  converter: carry the raise site's own message separately from the wrap context, the way
-  `RuntimeError` already separates `Message` from `Cause` via its `structured` flag. The
-  irritants half proves the shape works; this is the same move for the message.
-  **Sized M and NOT S** because the message is what every existing error-text assertion in
-  the tree reads, and the chain context ("`load: in synerr.scm:`", "`compilation:`") must stay
-  reachable somewhere rather than being deleted — probably as the rendered `Error()` while the
-  accessor gets the innermost message. Do not start it by editing `expandSyntaxError`.
-  Recorded in `plans/2026-08-09-unified-error-representation-design.local.md` §5.5 item 10;
-  the arc that surfaced it is otherwise closed.
+  1. **The category comes off** — every `*werr.StaticError` in the chain, since that is the
+     layer `errors.Is` answers (`werr.FailureMessage`). Not `errors.As`: a strict type test,
+     or a wrapped root cause would be mistaken for a label.
+  2. **The route comes off** — everything above the innermost `*SourcedError`
+     (`machine.failureChain`). That stamp is the boundary: above it the wraps describe the
+     compiler's traversal, below it the failure. This is what makes the cut principled rather
+     than a list of prefixes to strip, and it is also why the location stops appearing twice.
+  3. **A declared message wins** — `syntax-error` carries both halves of §6.11's pair as
+     values now, so the exact form the spec names needs no reconstruction at all.
+
+  Two traps worth keeping. `ForeignFileError`/`ForeignReadError` **embed** `*ForeignError`, so
+  the walk must be written against an interface — a concrete assertion silently readmits their
+  categories, and only the read-error row of `TestFailureMessage` catches it. And a non-`werr`
+  wrapper in the chain blocks the descent; it is descended through **only** when its `Error()`
+  equals its cause's, which is lossless by that equality and is the shape a value-carrying
+  decorator has.
+
+  Nothing is unreachable: the chain stays on the condition's wrapped error and
+  `CompilationError.Error()` still renders it, so the CLI's compile line is byte-identical.
+  `NativeError.Error()` was deliberately left alone — see the plan's §3 for why re-rendering
+  the chain there loses `boom` from a hand-built condition. Blast radius was 5 test functions,
+  every one of them reading a category out of a rendered message; all now assert the sentinel
+  with `errors.Is`. Gates: `pkg/werr/failure_message_test.go` (10 rows) and
+  `pkg/wile/condition_message_test.go` (4 gates, 3 mutation-verified red plus one
+  over-narrowing guard that was green before and had to stay green).
+  Plan: `plans/2026-08-15-condition-message-split.local.md`.
 
 ---
 ## Tier 2 — Embedding API & Product Value

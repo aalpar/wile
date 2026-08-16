@@ -573,6 +573,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`error-object-message` answered the whole Go wrap chain.** R7RS §6.11 splits a
+  condition into a message and irritants, and §4.3.3 hands `syntax-error` the same
+  pair by delegation. `(error "boom" 1 2)` gave `"boom"`, but a caught compile
+  failure gave `"load: in synerr.scm: expansion: expand: failed to expand list
+  expression: … syntax-error: expected a pair: hello, 42: invalid syntax"` — three
+  different kinds of text fused into one string. It is now `"expected a pair"`,
+  the same answer the equivalent `error` call gives.
+
+  Three kinds, and only the middle one is a message:
+
+  | | example | now |
+  |---|---|---|
+  | the **route** to the failure | `load: in f.scm:`, `compilation:`, `expansion:` | dropped |
+  | the **failure** | `call to car: expected 1 argument(s), got 0` | kept |
+  | the sentinel's **category** | `: invalid syntax`, `: not a pair` | dropped |
+
+  Each is dropped on a structural boundary, never by editing text. The category is
+  every `*werr.StaticError` in the chain — the layer `errors.Is` exists to answer,
+  so repeating it in prose was duplication (`werr.FailureMessage`). The route is
+  everything above the innermost `*SourcedError`, the compiler's provenance stamp:
+  above it the wraps describe the compiler's traversal, below it they describe the
+  failure (`machine.failureChain`). And where a raise site knew the message all
+  along, it is now carried rather than reconstructed — `(syntax-error "expected a
+  pair" x 42)` hands over both halves of §6.11's pair as values.
+
+  **What is deliberately NOT narrowed:** a *primitive's* wraps. `file-exists?:
+  argument 0`, `/: division error` and `open-input-file: /nope` all name where the
+  failure happened, and a rule that reduced to the innermost wrap would delete them
+  — along with `no such file or directory`, since an OS error arrives in the same
+  slot a category sentinel would occupy. Only the compile funnel stacks wraps that
+  describe a traversal.
+
+  **Nothing is unreachable.** The full chain stays on the condition's wrapped error
+  (`errors.Unwrap`/`Is`/`As`), and `CompilationError.Error()` still renders it, so
+  the CLI's compile diagnostic is byte-identical. The one visible change beyond the
+  accessor: an uncaught *runtime* error's `Error:` line no longer ends with the
+  category (`… got 5` rather than `… got 5: not a pair`).
+
+  Four in-tree assertions read a category out of a rendered message; each now
+  asserts the sentinel with `errors.Is`, which is what the sentinel is for.
+
 - **`(syntax-error "msg" irritant ...)` lost its irritants.** R7RS §4.3.3 defines
   the form by delegation — *"behaves similarly to `error` (6.11)"* — so its
   trailing operands are `error`'s irritants and `error-object-irritants` is the
@@ -583,10 +624,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `(syntax-error "expected a pair" x 42)` is `(hello 42)`, with nesting,
   exactness and improper tails intact.
 
-  The delegation's other half is **not** closed: `error-object-message` on such a
-  condition is still the whole Go chain's text, where `(error "boom" 1 2)` gives
-  `"boom"`. Recorded in `TODO.md` — it is a message/chain split across every
-  compile-originated condition, not a `syntax-error` change.
+  The delegation's other half is closed by the entry below.
 
   Stripping is what both Chez and Racket do where the spec is silent, and it keeps
   a scope-set-bearing syntax object out of a list a program can hold. The same

@@ -301,13 +301,15 @@ func TestOpCallForeignCached(t *testing.T) {
 
 			if tt.wantErr != nil {
 				qt.Assert(t, err, qt.IsNotNil, qt.Commentf("expected error"))
-				// The error may be wrapped in ErrExceptionEscape, so we just
-				// check that the original sentinel is somewhere in the chain.
-				// applyCallableError wraps non-exception errors via goErrorToSchemeException.
-				// For ErrWrongNumberOfArguments, it's wrapped in ErrExceptionEscape
-				// whose .Error() contains the original message.
-				// For the generic error test, the foreign fn's error is also wrapped.
-				qt.Assert(t, err.Error(), qt.Contains, tt.wantErr.Error())
+				// The claim is chain membership, so assert it structurally.
+				// applyCallableError turns the failure into a condition and
+				// ErrExceptionEscape carries it out, and the sentinel stays
+				// reachable through both. Matching on the sentinel's TEXT instead
+				// asserted the same thing via the rendered message, which is what
+				// error-object-message no longer repeats: the category is what
+				// errors.Is answers.
+				qt.Assert(t, errors.Is(err, tt.wantErr), qt.IsTrue,
+					qt.Commentf("want %v in the chain, got %v", tt.wantErr, err))
 				return
 			}
 

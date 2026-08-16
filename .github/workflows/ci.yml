@@ -64,6 +64,14 @@ jobs:
   # The `ci` job's `make ci` does NOT build with -race; without this job a
   # concurrency regression (e.g. the SRFI-18 thread-terminate race that
   # TestMutexAbandonedOnTermination catches only under -race) would merge green.
+  #
+  # `make test-race` runs the MULTI-THREADED tests only, selected from the source
+  # by tools/sh/race-selection.sh. The detector reports only on genuinely
+  # concurrent access, so instrumenting a single-threaded test costs 10-30x wall
+  # clock for no signal: this job hit the 30-minute wall on 2026-08-15 once
+  # TestSchemeSuiteInProcess landed, and that test runs 47 Scheme conformance
+  # files none of which start a thread. Do not widen this back to ./... - widen
+  # the script's predicates instead, so the reason travels with the selection.
   race:
     runs-on: ubuntu-latest
     steps:

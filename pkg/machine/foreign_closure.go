@@ -63,7 +63,8 @@ func ConditionFromError(err error) values.Value {
 	} else if errors.As(err, &readErr) {
 		kind = values.NativeErrorKindRead
 	}
-	q := values.NewErrorObjectWithCauseAndKind(err.Error(), err, kind, irritantsOf(err)...)
+	msg, irritants := conditionMessageAndIrritants(err)
+	q := values.NewErrorObjectWithCauseAndKind(msg, err, kind, irritants...)
 	loc := innermostCompileLocation(err)
 	if loc != "" {
 		// enrichNativeError's once-guard keys on an empty location, so stamping
@@ -74,29 +75,81 @@ func ConditionFromError(err error) values.Value {
 	return q
 }
 
-// irritantError is a compile-time failure that named irritants — today only
-// (syntax-error message irritant ...), which R7RS §4.3.3 defines by delegation to
-// error (§6.11), whose trailing operands are irritants.
+// conditionError is a compile-time failure that named both halves of R7RS §6.11's
+// pair itself — today only (syntax-error message irritant ...), which §4.3.3
+// defines by delegation to error, so its operands ARE that pair and nothing has to
+// be recovered from rendered text.
+//
 // Same edge and same reason as sourcedError: the concrete type lives in
 // compilation, which imports this package.
 //
-// ErrorIrritants rather than Irritants: *values.NativeError has an Irritants
-// method, so the shorter name would match a condition buried in the chain and
-// harvest its irritants onto the one being built.
-type irritantError interface {
+// ErrorMessage and ErrorIrritants rather than Message and Irritants:
+// *values.NativeError has both of the shorter names, so an interface keyed on them
+// would match a condition buried in the chain and harvest ITS message and
+// irritants onto the one being built — the same hazard SourceContext avoids for
+// the location.
+type conditionError interface {
 	error
+	ErrorMessage() string
 	ErrorIrritants() []values.Value
 }
 
-// irritantsOf returns the irritants err named, or nil when it named none — which
-// is the ordinary case, and the reason NewErrorObjectWithCauseAndKind is called
-// variadically rather than through two branches.
-func irritantsOf(err error) []values.Value {
-	var ie irritantError
-	if errors.As(err, &ie) {
-		return ie.ErrorIrritants()
+// conditionMessageAndIrritants projects err onto the two facts R7RS §6.11
+// specifies. They are returned together because one lookup answers both whenever
+// the raise site declared them, and splitting the pair would walk the chain twice
+// with two different notions of which link won.
+//
+// The message is NOT err.Error(). A rendered chain fuses the route to the failure,
+// the failure, and the sentinel's category; failureChain drops the first and
+// werr.FailureMessage drops the third. The whole chain stays on the condition's
+// wrapped error, so nothing an embedder or a rendering could reach before is
+// unreachable now — see values.NativeError.Unwrap and wile.CompilationError.Error.
+//
+// Irritants are nil in the ordinary case, which is why
+// NewErrorObjectWithCauseAndKind is called variadically rather than through two
+// branches.
+func conditionMessageAndIrritants(err error) (string, []values.Value) {
+	var ce conditionError
+	if errors.As(err, &ce) {
+		return ce.ErrorMessage(), ce.ErrorIrritants()
 	}
-	return nil
+	msg := werr.FailureMessage(failureChain(err))
+	if msg == "" {
+		// The chain is nothing but a category sentinel, so its own text is all
+		// there is. Widest fallback on purpose: this is the one shape where
+		// nothing better exists.
+		msg = err.Error()
+	}
+	return msg, nil
+}
+
+// failureChain returns the part of err that describes the failure rather than the
+// compiler's route to it: everything below the innermost sourcedError, which is
+// where provenance was stamped and therefore where "what failed" ends and "how the
+// compiler reached it" begins. A runtime failure carries no sourcedError and comes
+// back unchanged.
+//
+// Cutting on the stamp rather than reducing to the innermost wrap is the load-bearing
+// choice. Every wrap message is supposed to name where and what, so at a primitive
+// the outer ones are substance — "file-exists?: argument 0" is the operation, and
+// "/: division error" is the primitive that failed. Only the compile funnel stacks
+// wraps that describe its own traversal ("compilation", "expansion", "expand: failed
+// to expand list expression", "load: in f.scm"), and every one of them sits above
+// the stamp. The file name in that last one is not lost either: it is the head of
+// the location innermostCompileLocation puts on the condition.
+//
+// Same walk as innermostCompileLocation, different reduction — deepest, versus
+// deepest with a non-empty location.
+func failureChain(err error) error {
+	q := err
+	var se sourcedError
+	for e := err; errors.As(e, &se); e = errors.Unwrap(se) {
+		inner := errors.Unwrap(se)
+		if inner != nil {
+			q = inner
+		}
+	}
+	return q
 }
 
 // sourcedError is compilation.SourcedError seen from below. The compiler stamps a
