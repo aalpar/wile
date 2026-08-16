@@ -376,6 +376,45 @@ Items that block production embedded use or prevent silent state corruption.
   because `setupSignals` spawns a SIGQUIT stack-dump goroutine that no test triggers and that
   shares nothing. Trimming it means naming 66 tests, which is the curation the script avoids.
 
+- [x] **The race detector is off the merge path, with a measured budget** [Tooling, **SHIPPED
+  2026-08-15**]: moved out of `ci.yml` into its own `race.yml`, triggered by `schedule` (09:00 UTC
+  daily) and `workflow_dispatch` only. It no longer gates a merge, and `make ci` never built with
+  `-race`, so **nothing on the merge path covers concurrency now** — the accepted consequence is
+  that a data race can sit on master for up to a day, mitigated by `make test-race` locally and
+  `gh workflow run race.yml` before landing anything touching threads, channels, mutexes, or shared
+  compiler state.
+
+  **The budget is two levels, and the flaw worth knowing is that `-timeout` is per `go test`
+  invocation.** The script makes one per package, so a per-package timeout bounds a single hung
+  package and permits 19× that for the run — it cannot be the budget. Measured on a runner
+  2026-08-16 (run 31921030568): the step is **7m21s** cold, of which **5m48s** is reported test time
+  and ~1m33s is build and per-package link; the slowest package is **`cmd/wile` at 3m46s** and the
+  next three are 37s / 29s / 18s. A runner is ~1.6× an M4 Max on that slowest package and ~1.4× on
+  the test-time sum. Hence `-timeout 8m` (**2.1×** the slowest package) and `timeout-minutes: 25`
+  (= 7m21s + two per-package timeouts + margin).
+
+  **`cmd/wile` was 3m46s of that 5m48s test total, and the lever has since been pulled.** The
+  production-goroutine rule no longer applies to it (`EXCLUDED_PROD_PKGS`): its one production
+  goroutine is `setupSignals`' SIGQUIT stack-dump handler, which `TestSetupSignalsDirect` does start
+  but which nothing sends SIGQUIT to, so it sits in `range sigChan` touching only that channel and a
+  local buffer — no shared state for the detector to find. That dropped 29 free-riding tests worth
+  51.7s instrumented, taking the local total **4m06s → 3m16s** (`cmd/wile` 142.9s → 93.4s); the
+  runner step should land near 6m, projected, and the first scheduled run measures it.
+
+  **It is NOT a whole-package drop, and the difference matters.** `mcp_test.go` keeps its 36 tests
+  because they spawn goroutines that contend on the MCP server's session lock —
+  `TestHandleEval_ZeroTimeoutDoesNotWedgeServer` is the regression test for a real unbounded hold,
+  with the observing commit cited in its own comment. A blanket exclusion of `cmd/wile` would have
+  deleted `-race` coverage of that. The exclusion carries a ratchet: the script fails if `cmd/wile`
+  ever has more than the one production goroutine site its premise assumes — mutation-verified.
+
+  **Why the job bound must clear the per-package ones rather than being tight:** `go test` dumps
+  every goroutine when its own `-timeout` fires, and that dump is the entire diagnostic — it is how
+  the original 30m failure was identified as a budget overrun rather than a deadlock. A job timeout
+  kills the runner with no dump. So sizing the job bound below `total + per-package` would trade the
+  diagnostic for a few saved minutes. Re-derive from the `race-selection: NmNNs total` line the
+  script now prints on every run.
+
 ### `Imported` is unsound evidence for `IsStable()` at phase 1 — DISCHARGED 2026-08-10, one refusal left (2026-08-09)
 
 Opened by the wave-1 §5 / Phase 5 work, and it is the **named owner** for the
