@@ -598,10 +598,16 @@ import modifiers under [Libraries](#libraries)).
 ```
 
 Signals a compile-time error. Useful in macro templates for invalid pattern
-matches. R7RS §4.3.3 defines it by delegation to `error` (§6.11), so the
-irritants are `error`'s: each is stripped to its datum and reaches
-`error-object-irritants` as a value, not as message text. Stripping is deliberate
-— an identifier irritant arrives as a plain symbol, carrying no scope set.
+matches. R7RS §4.3.3 defines it by delegation to `error` (§6.11), so both of
+§6.11's accessors answer what the form named: `error-object-message` is the
+message alone, and `error-object-irritants` is the trailing operands as values
+rather than as message text. `(syntax-error "expected a pair" x 42)` and
+`(error "expected a pair" 'x 42)` are read back identically.
+
+Each irritant is stripped to its datum, so an identifier arrives as a plain
+symbol carrying no scope set. The rendered diagnostic still joins them
+(`syntax-error: expected a pair: x, 42`) — the message accessor is narrower than
+the text a human sees, not a replacement for it.
 
 Catching one needs the failure to cross a primitive frame, which means `load` or
 `eval`; a `guard` in the same top-level form is compiled *after* the expansion

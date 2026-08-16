@@ -349,10 +349,13 @@ func TestRegisterFuncTypeMismatchMessage(t *testing.T) {
 	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(need-int "hello")`))
 	c.Assert(err, qt.IsNotNil)
 
-	// The runtime error should contain the type conversion message.
+	// The runtime error should name the mismatch, and classify it as a conversion
+	// failure. The classification is asserted structurally: "type conversion
+	// failed" is ErrTypeConversion's own text, and a condition's message no longer
+	// repeats the category errors.Is answers.
 	var rtErr *wile.RuntimeError
 	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
-	c.Assert(rtErr.Error(), qt.Contains, "type conversion failed")
+	c.Assert(errors.Is(err, werr.ErrTypeConversion), qt.IsTrue)
 	c.Assert(rtErr.Error(), qt.Contains, "expected integer")
 }
 
@@ -1059,8 +1062,10 @@ func TestRegisterFuncCallbackErrorSentinels(t *testing.T) {
 	if !errors.Is(evalErr, werr.ErrFFICallbackError) {
 		t.Errorf("expected errors.Is(err, ErrFFICallbackError) = true, got false\nerror: %v", evalErr)
 	}
-	// The error message should contain the original error's context.
-	if !strings.Contains(evalErr.Error(), "division by zero") {
+	// The error message should contain the original error's context. The operation
+	// that failed, not ErrDivisionByZero's category text — a condition's message no
+	// longer repeats what the errors.Is above already asserts.
+	if !strings.Contains(evalErr.Error(), "division by exact zero") {
 		t.Errorf("expected error to contain original error context, got: %v", evalErr)
 	}
 }
@@ -1089,8 +1094,8 @@ func TestRegisterFuncCallbackPanicToError(t *testing.T) {
 	if !errors.Is(evalErr, werr.ErrFFICallbackError) {
 		t.Errorf("expected errors.Is(err, ErrFFICallbackError) = true, got false\nerror: %v", evalErr)
 	}
-	if !strings.Contains(evalErr.Error(), "division by zero") {
-		t.Errorf("expected error to mention division by zero, got: %v", evalErr)
+	if !strings.Contains(evalErr.Error(), "division by exact zero") {
+		t.Errorf("expected error to mention division by exact zero, got: %v", evalErr)
 	}
 }
 

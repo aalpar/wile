@@ -254,7 +254,7 @@ func (p *ExpanderTimeContinuation) expandSyntaxError(_ *syntax.SyntaxSymbol, exp
 	// representation feeds both the rendered text and the Scheme-visible
 	// irritant list; carrying the syntax objects instead would put
 	// scope-set-bearing values in a list a program can hold, and both Chez and
-	// Racket surface the datum where R7RS §4.3.1 is silent.
+	// Racket surface the datum where R7RS §4.3.3 is silent.
 	var irritants []values.Value
 	rest := pair.SyntaxCdr()
 	for {
@@ -266,12 +266,15 @@ func (p *ExpanderTimeContinuation) expandSyntaxError(_ *syntax.SyntaxSymbol, exp
 		rest = restPair.SyntaxCdr()
 	}
 
-	// Format the error message
+	// Format the error message. The carrier goes on unconditionally, irritants or
+	// not: it is what makes the message half of §6.11's pair reachable too, and
+	// gating it on the irritants would leave (syntax-error "m") answering the
+	// rendered "syntax-error: m" while the irritant-bearing form answers "m".
+	wrapped := werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: %s", message)
 	if len(irritants) > 0 {
-		wrapped := werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: %s: %s", message, formatIrritants(irritants))
-		return nil, wrapSourcedError(expr.SourceContext(), &syntaxError{irritants: irritants, cause: wrapped})
+		wrapped = werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: %s: %s", message, formatIrritants(irritants))
 	}
-	return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: %s", message))
+	return nil, wrapSourcedError(expr.SourceContext(), &syntaxError{message: message, irritants: irritants, cause: wrapped})
 }
 
 // formatIrritants renders irritants for the message text, comma-separated.
