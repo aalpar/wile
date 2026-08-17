@@ -17,7 +17,6 @@ package machine
 import (
 	"fmt"
 
-	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -34,38 +33,34 @@ func NewOperationMakeClosure() *OperationMakeClosure {
 	}
 }
 
-// popMakeClosureArgs pops the two MakeClosure operands off the eval stack and
-// validates their types: the compile-time environment frame (top) and the
-// native template beneath it. Both the (production-vestigial)
+// popMakeClosureArgs pops the MakeClosure operand off the eval stack and
+// validates its type. One operand, not two: the compile-time frame used to ride
+// alongside the template, and now rides ON it (NativeTemplate.shape), so
+// codegen no longer pushes it. Both the (production-vestigial)
 // OperationMakeClosure.Apply method and the inline OpMakeClosure case in Run()
-// use it so the two-pop validation lives in one place.
-func popMakeClosureArgs(mc *MachineContext) (*environment.EnvironmentFrame, *NativeTemplate, error) {
-	envVal, tplVal := mc.evals.Pop2()
-	compiletimeEnv, ok := envVal.(*environment.EnvironmentFrame)
+// use this so the validation lives in one place.
+func popMakeClosureArgs(mc *MachineContext) (*NativeTemplate, error) {
+	tpl, ok := mc.evals.Pop().(*NativeTemplate)
 	if !ok {
-		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotALocalEnvironmentFrame,
-			"MakeClosure: expected environment frame on stack")
-	}
-	tpl, ok := tplVal.(*NativeTemplate)
-	if !ok {
-		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate,
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate,
 			"MakeClosure: expected native template on stack")
 	}
-	return compiletimeEnv, tpl, nil
+	return tpl, nil
 }
 
 func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error) {
-	compiletimeEnv, tpl, err := popMakeClosureArgs(mc)
+	tpl, err := popMakeClosureArgs(mc)
 	if err != nil {
 		return mc, err
 	}
 	// Linked closure (Cardelli 1983). Captures E by pointer, not by copy.
 	//
-	//   closure = ⟨tpl, compiletimeEnv.local, mc.env⟩
+	//   closure = ⟨tpl, mc.env⟩, with tpl.shape supplying the parameter
+	//   structure
 	//
-	//   where compiletimeEnv supplies the parameter structure and mc.env
-	//   becomes the parent for free variable access. The two are kept as a
-	//   pair; see MachineClosure for why they are not combined into a frame.
+	//   The shape is a property of the compiled body, so it rides on the
+	//   template; only the runtime parent varies per closure. See
+	//   MachineClosure for why neither is combined into a frame.
 	//
 	//   Invariant: the parent pointer must be the RUNTIME mc.env, not
 	//     the compile-time env. Compile-time frames hold placeholders;
@@ -85,7 +80,7 @@ func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error
 	// The closure holds mc.env as that parent, so mark it non-poolable —
 	// RestoreAndRelease must not recycle a frame a closure still points at.
 	mc.envPooled = false
-	cls := NewClosureCapturing(tpl, compiletimeEnv, mc.env)
+	cls := NewClosureCapturing(tpl, mc.env)
 	mc.SetValue(cls)
 	mc.pc++
 	return mc, nil

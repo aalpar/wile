@@ -80,17 +80,15 @@ func TestCompileContext_CompileLambda(t *testing.T) {
 	cont, err := newTopLevelThunk(mustDatumToSyntax(sctx, prog), env)
 	qt.Assert(t, err, qt.IsNil)
 	// check that the closure has been compiled correctly
-	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 5)
+	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 3)
 	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
-		machine.NewOperationPush(),
-		machine.NewOperationLoadLiteralByLiteralIndexImmediate(1),
 		machine.NewOperationPush(),
 		machine.NewOperationMakeClosure(),
 	))
 	qt.Assert(t, cont.Template().IsVariadic(), qt.Equals, false)
 	qt.Assert(t, cont.Template().ParameterCount(), qt.Equals, 0)
-	qt.Assert(t, cont.Template().Literals(), qt.HasLen, 2)
+	qt.Assert(t, cont.Template().Literals(), qt.HasLen, 1)
 	tpl0, ok := cont.Template().Literals()[0].(*machine.NativeTemplate)
 	qt.Assert(t, ok, qt.IsTrue)
 	// check that the template has been compiled correctly
@@ -101,8 +99,9 @@ func TestCompileContext_CompileLambda(t *testing.T) {
 	))
 	qt.Assert(t, tpl0.IsVariadic(), qt.Equals, true)
 	qt.Assert(t, tpl0.ParameterCount(), qt.Equals, 1)
-	env0, ok := cont.Template().Literals()[1].(*environment.EnvironmentFrame)
-	qt.Assert(t, ok, qt.IsTrue)
+	// The body's frame reaches the VM on the template, not as a second literal.
+	env0 := tpl0.Shape()
+	qt.Assert(t, env0, qt.IsNotNil)
 	// check that the env has been set up correctly
 	qt.Assert(t, env0.LocalEnvironment().Keys(), qt.HasLen, 1)
 	qt.Assert(t, env0.GlobalEnvironment(), qt.Equals, env.GlobalEnvironment())
@@ -125,16 +124,14 @@ func TestCompileContext_CompileLambdaCall(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// check that the closure has been compiled correctly
-	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 11)
+	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 9)
 	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
-		machine.NewOperationSaveContinuationOffsetImmediate(11),
+		machine.NewOperationSaveContinuationOffsetImmediate(9),
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
-		machine.NewOperationPush(),
-		machine.NewOperationLoadLiteralByLiteralIndexImmediate(1),
 		machine.NewOperationPush(),
 		machine.NewOperationMakeClosure(),
 		machine.NewOperationPush(),
-		machine.NewOperationLoadLiteralByLiteralIndexImmediate(2),
+		machine.NewOperationLoadLiteralByLiteralIndexImmediate(1),
 		machine.NewOperationPush(),
 		machine.NewOperationPull(),
 		machine.NewOperationApply(),
@@ -142,7 +139,7 @@ func TestCompileContext_CompileLambdaCall(t *testing.T) {
 	))
 	qt.Assert(t, cont.Template().IsVariadic(), qt.Equals, false)
 	qt.Assert(t, cont.Template().ParameterCount(), qt.Equals, 0)
-	qt.Assert(t, cont.Template().Literals(), qt.HasLen, 3)
+	qt.Assert(t, cont.Template().Literals(), qt.HasLen, 2)
 	tpl0, ok := cont.Template().Literals()[0].(*machine.NativeTemplate)
 	qt.Assert(t, ok, qt.IsTrue)
 	// check that the template has been compiled correctly
@@ -153,8 +150,9 @@ func TestCompileContext_CompileLambdaCall(t *testing.T) {
 	))
 	qt.Assert(t, tpl0.IsVariadic(), qt.Equals, true)
 	qt.Assert(t, tpl0.ParameterCount(), qt.Equals, 1)
-	env0, ok := cont.Template().Literals()[1].(*environment.EnvironmentFrame)
-	qt.Assert(t, ok, qt.IsTrue)
+	// The body's frame reaches the VM on the template, not as a second literal.
+	env0 := tpl0.Shape()
+	qt.Assert(t, env0, qt.IsNotNil)
 	// check that the env has been set up correctly
 	qt.Assert(t, env0.LocalEnvironment().Keys(), qt.HasLen, 1)
 	qt.Assert(t, env0.GlobalEnvironment(), qt.Equals, env.GlobalEnvironment())
@@ -583,11 +581,10 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// check that the closure has been compiled correctly
-	qt.Assert(t, cont.Template().Literals(), qt.HasLen, 4)
+	qt.Assert(t, cont.Template().Literals(), qt.HasLen, 3)
 	assertLiterals(t, cont.Template().Literals(),
 		machine.NewMultipleValues(
 			cont.Template().Literals()[0],
-			cont.Template().Literals()[1],
 			// A top-level define now emits a RESOLVED index (frame + slot), not a
 			// deferred one: the store must address the binding it just declared
 			// under that binder's scope set, and a deferred index would resolve
@@ -596,27 +593,25 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 			values.NewString("bindSymbolWithScopes"),
 		),
 	)
-	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 15)
+	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 13)
 	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		machine.NewOperationPush(),
-		machine.NewOperationLoadLiteralByLiteralIndexImmediate(1),
-		machine.NewOperationPush(),
 		machine.NewOperationMakeClosure(),
 		machine.NewOperationPush(),
-		machine.NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(2),
+		machine.NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(1),
 		machine.NewOperationLoadVoid(),
 		machine.NewOperationSaveContinuationOffsetImmediate(7),
 		machine.NewOperationLoadCachedBinding(0),
 		machine.NewOperationPush(),
-		machine.NewOperationLoadLiteralByLiteralIndexImmediate(3),
+		machine.NewOperationLoadLiteralByLiteralIndexImmediate(2),
 		machine.NewOperationPush(),
 		machine.NewOperationPull(),
 		machine.NewOperationApply(),
 	))
 	qt.Assert(t, cont.Template().IsVariadic(), qt.Equals, false)
 	qt.Assert(t, cont.Template().ParameterCount(), qt.Equals, 0)
-	qt.Assert(t, cont.Template().Literals(), qt.HasLen, 4)
+	qt.Assert(t, cont.Template().Literals(), qt.HasLen, 3)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, cont.Template(), env))
 	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)

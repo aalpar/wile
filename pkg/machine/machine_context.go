@@ -764,7 +764,7 @@ func (p *MachineContext) Run() error {
 		// --- Wave 5: promoted complex operations ---
 
 		case OpMakeClosure:
-			compiletimeEnv, tpl, err := popMakeClosureArgs(mc)
+			tpl, err := popMakeClosureArgs(mc)
 			if err != nil {
 				return err
 			}
@@ -772,7 +772,7 @@ func (p *MachineContext) Run() error {
 			// RestoreAndRelease won't recycle it while the closure holds a live
 			// reference. See MachineClosure for why no frame is built here.
 			mc.envPooled = false
-			cls := NewClosureCapturing(tpl, compiletimeEnv, mc.env)
+			cls := NewClosureCapturing(tpl, mc.env)
 			mc.SetValue(cls)
 			mc.pc++
 

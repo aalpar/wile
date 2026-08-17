@@ -37,11 +37,32 @@ type NativeTemplate struct {
 	parameterCount int
 	valueCount     int
 	isVariadic     bool
-	literals       MultipleValues
-	sourceRefs     []uint32                // parallel to code, index into sourceTable
-	sourceTable    []*syntax.SourceContext // index 0 = nil (no source)
-	name           string                  // Function name (for stack traces)
-	doc            string                  // Guile-style docstring from leading string literal in body
+
+	// shape is the frame this template's body was compiled against: the local
+	// parameter/internal-define structure every closure over this template
+	// applies with. It lives here, not on MachineClosure, because it is a
+	// property of the compiled body — one template, one shape — while the
+	// environment a closure captures is per-activation. Apply reads only its
+	// local half (InitApplyFrameWithParent derives everything else from the
+	// runtime parent), and reads it at APPLY time rather than snapshotting it,
+	// which is sound because compileClosureBody finishes populating the frame
+	// before it emits the OpMakeClosure that can first observe it.
+	//
+	// Kept next to the fields Apply already touches (parameterCount,
+	// isVariadic) so the extra load lands on a cache line the apply path has
+	// warmed anyway.
+	//
+	// nil for a template that is not a closure body — a top-level program
+	// template, or one still under construction. Both closure constructors
+	// refuse a nil shape rather than deferring the fault to Apply.
+	shape *environment.EnvironmentFrame
+
+	// literals holds constant values referenced by bytecode instructions in this template.
+	literals    MultipleValues
+	sourceRefs  []uint32                // parallel to code, index into sourceTable
+	sourceTable []*syntax.SourceContext // index 0 = nil (no source)
+	name        string                  // Function name (for stack traces)
+	doc         string                  // Guile-style docstring from leading string literal in body
 
 	// cachedBindings stores *Binding pointers resolved at compile time.
 	// OpLoadCachedBinding/OpPushCachedBinding index into this array,
@@ -104,6 +125,22 @@ func NewEmptyNativeTemplate() *NativeTemplate {
 
 func (p *NativeTemplate) ParameterCount() int {
 	return p.parameterCount
+}
+
+// Shape returns the frame this template's body was compiled against, whose
+// local half every closure over the template applies with. nil for a template
+// that is not a closure body; see the field comment.
+func (p *NativeTemplate) Shape() *environment.EnvironmentFrame {
+	return p.shape
+}
+
+// SetShape records the frame this template's body was compiled against. Called
+// once, by whoever compiled the body, before any closure over the template can
+// exist — compileClosureBody for lambda and case-lambda clauses, and the two
+// callers that build a template and its environment together
+// (extensions/eval PrimCompile, createTransformerClosure).
+func (p *NativeTemplate) SetShape(env *environment.EnvironmentFrame) {
+	p.shape = env
 }
 
 func (p *NativeTemplate) ValueCount() int {

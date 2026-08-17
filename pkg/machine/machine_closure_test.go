@@ -16,12 +16,27 @@ package machine
 
 import (
 	"testing"
+	"unsafe"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
 )
+
+// TestMachineClosureIsTwoWords is a ratchet, not a curiosity. Closure size is
+// what the shape-vs-parent arc has been trading against since the pair split:
+// materializing the environment cost an 80-byte frame per evaluated lambda, the
+// pair that replaced it cost a third word (16 -> 24B, measured as +1.3% on
+// call-bound code), and moving the shape onto NativeTemplate is what bought that
+// word back. A fourth field would undo it silently — every functional test would
+// still pass.
+//
+// Adding a field here is a decision to re-open that trade. Measure it, do not
+// just update the constant.
+func TestMachineClosureIsTwoWords(t *testing.T) {
+	qt.Assert(t, unsafe.Sizeof(MachineClosure{}), qt.Equals, 2*unsafe.Sizeof(uintptr(0)))
+}
 
 func TestMachineClosure_IsVoid(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
@@ -68,11 +83,13 @@ func TestMachineClosure_EqualTo(t *testing.T) {
 	cls5 := NewClosureWithTemplate(tpl, env2)
 	qt.Assert(t, cls1.EqualTo(cls5), qt.IsFalse)
 
-	// The pair representation, which no test covered before: two closures from
-	// one lambda form in one activation share frame, parent AND template.
+	// The capturing representation, which no test covered before: two closures
+	// from one lambda form in one activation share parent AND template — and so,
+	// necessarily, the shape the template carries.
 	shape := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), env)
-	pair1 := NewClosureCapturing(tpl, shape, env)
-	pair2 := NewClosureCapturing(tpl, shape, env)
+	tpl.SetShape(shape)
+	pair1 := NewClosureCapturing(tpl, env)
+	pair2 := NewClosureCapturing(tpl, env)
 	qt.Assert(t, pair1.EqualTo(pair2), qt.IsFalse)
 	qt.Assert(t, pair1.EqualTo(pair1), qt.IsTrue)
 

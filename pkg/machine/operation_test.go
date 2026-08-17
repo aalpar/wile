@@ -153,9 +153,9 @@ func TestOperation(t *testing.T) {
 			setupFn: func(t *testing.T, mc *MachineContext) {
 				topEnv := environment.NewNamespace().Runtime()
 				lenv := environment.NewLocalEnvironment(0)
-				env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 				tpl := NewNativeTemplate(0, 0, false)
-				mc.evals.PushAll([]values.Value{tpl, env})
+				tpl.SetShape(environment.NewEnvironmentFrameWithParent(lenv, topEnv))
+				mc.evals.PushAll([]values.Value{tpl})
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)

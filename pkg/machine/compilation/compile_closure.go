@@ -53,9 +53,11 @@ func checkLocalSlotCapacity(slots int, form string) error {
 		"compile %s: frame requires %d locals, maximum %d", form, slots, maxLocalSlots)
 }
 
-// compileClosureBody binds parameters, compiles the body, optimizes, and registers
-// the template and environment as literals. Returns the literal indices so the
-// caller can emit the appropriate closure opcodes.
+// compileClosureBody binds parameters, records the body's frame on the template
+// as its shape, compiles the body, optimizes, and registers the template as a
+// literal. Returns the literal index so the caller can emit the closure opcodes.
+// The frame is no longer a literal of its own: it reaches the VM on the
+// template, so MakeClosure takes one operand rather than two.
 //
 // Used by compileClosure (lambda, define-fn) and CompileValidatedCaseLambda.
 func (p *CompileTimeContinuation) compileClosureBody(
@@ -65,7 +67,7 @@ func (p *CompileTimeContinuation) compileClosureBody(
 	v validate.ValidatedBodyAndParams,
 	errContext string,
 	fr frameReuse,
-) (machine.LiteralIndex, machine.LiteralIndex, error) {
+) (machine.LiteralIndex, error) {
 	// Phase 1: Bind required parameters to the local environment.
 	// Each parameter becomes a local variable slot populated by the VM at call time.
 	// Params() is nil for zero-arg case-lambda clauses: (() ...).
@@ -82,7 +84,7 @@ func (p *CompileTimeContinuation) compileClosureBody(
 			// This mirrors the let/define fix in PRs #606/#607 (SRFI-42 Bug A).
 			_, created := lenv.MaybeCreateLocalBinding(param, environment.BindingTypeVariable, paramScopes, nil)
 			if !created {
-				return 0, 0, werr.WrapForeignErrorf(
+				return 0, werr.WrapForeignErrorf(
 					werr.ErrDuplicateBinding,
 					"duplicate parameter %q in %s", param.Key, errContext,
 				)
@@ -95,46 +97,59 @@ func (p *CompileTimeContinuation) compileClosureBody(
 		// For (lambda (a b . rest) ...), binds 'rest' to receive excess args as a list.
 		err := bindRestParameter(v, p, lenv, tpl)
 		if err != nil {
-			return 0, 0, err
+			return 0, err
 		}
 	}
 
 	err := checkLocalSlotCapacity(len(lenv.Bindings()), errContext)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
-	// Phase 3: Create child environment and register literals.
+	// Phase 3: Create child environment, hand it to the template, register the
+	// template literal.
 	// lenv must be fully populated before NewEnvironmentFrameWithParent (embeds by value).
+	//
+	// childEnv, not lenv, is the shape: the copy taken here is what Phase 4's
+	// internal defines extend, so lenv holds the parameters alone. Recording a
+	// pointer means later extensions are seen; the frame itself does not move.
+	//
+	// Registering the template BEFORE Phase 4 is what keeps one template to one
+	// shape, and is now load-bearing rather than incidental. The literal pool
+	// dedups non-hashable values through NativeTemplate.EqualTo, which compares
+	// code and literals but NOT shape; registering while tpl is still empty
+	// means it can only match another empty template, and every template already
+	// in this pool has had its body compiled. Move this below compileBody and
+	// two lambdas with identical bytecode would collapse to one template and one
+	// shape — with the loser's binder scope sets, which is a binding-identity
+	// bug, not a wasted allocation.
 	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
+	tpl.SetShape(childEnv)
 	tpli := p.template.MaybeAppendLiteral(tpl)
-	envi := p.template.MaybeAppendLiteral(childEnv)
 
 	// Phase 4: Compile body expressions into child template. The last expression
 	// is compiled in tail position for proper tail-call optimization.
 	err = p.compileBody(ctctx, v, childEnv, tpl, fr)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
 	// Phase 5: Peephole optimization.
 	tpl.Optimize()
 
-	return tpli, envi, nil
+	return tpli, nil
 }
 
 // compileClosure compiles a complete closure (lambda or define-fn body).
 // Binds parameters, compiles body, and emits MakeClosure operations.
 func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, tpl *machine.NativeTemplate, lenv *environment.LocalEnvironmentFrame, v validate.ValidatedProcedure, fr frameReuse) error {
-	tpli, envi, err := p.compileClosureBody(ctctx, tpl, lenv, v, "lambda", fr)
+	tpli, err := p.compileClosureBody(ctctx, tpl, lenv, v, "lambda", fr)
 	if err != nil {
 		return err
 	}
 
 	p.AppendOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
-		machine.NewOperationPush(),
-		machine.NewOperationLoadLiteralByLiteralIndexImmediate(envi),
 		machine.NewOperationPush(),
 		machine.NewOperationMakeClosure(),
 	)

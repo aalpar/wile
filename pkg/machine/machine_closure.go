@@ -46,36 +46,41 @@ var (
 //
 // See BIBLIOGRAPHY.md "Linked Closure Representation".
 //
-// E is held as a (frame, parent) PAIR, never materialized into one frame.
-// Materializing it cost an extra 80-byte object per evaluated lambda that every
-// consumer then took apart again: InitApplyFrame reads exactly p.local and
-// p.parent and derives global/phase/namespace from the parent. The frame was a
-// carrier, not an environment. Keeping the pair makes closure creation a single
-// allocation, at the cost of one word (24 bytes, was 16) which measured as
-// +1.3% on call-bound code that never builds a closure. Accepted; the candidate
-// for recovering it is filed under Tier 4 in TODO.md.
+// E is never materialized into one frame. Materializing it cost an extra
+// 80-byte object per evaluated lambda that every consumer then took apart
+// again: InitApplyFrame reads exactly p.local and p.parent and derives
+// global/phase/namespace from the parent. The frame was a carrier, not an
+// environment.
 //
-//	frame   the lambda's COMPILE-TIME frame, a template constant shared by
-//	        every evaluation, contributing only the local parameter shape.
-//	parent  the runtime environment captured at closure creation.
+//	parent    the runtime environment captured at closure creation — the ONLY
+//	          per-activation word, and the whole of what makes this a closure.
+//	template  the compiled body, which also owns the local parameter shape
+//	          (NativeTemplate.shape). One template, one shape: the shape is a
+//	          property of the compiled body, so every closure over a lambda
+//	          agrees on it and none of them need to carry it.
 //
-// Apply reads frame.local at APPLY time rather than snapshotting it at
-// creation. Sound because a lambda's compile-time frame is final before any
-// runtime OpMakeClosure for it can execute — compile_closure.go populates the
-// frame's bindings and only then compiles the body that references them. Note
-// this is a real change from the materialized form, which froze the slice
-// header at creation; it is not, as an earlier revision of this comment
-// claimed, the same aliasing.
+// The shape was briefly a third field here, which is why an intermediate design
+// paid 24 bytes to avoid the 80-byte frame. It is now on the template and this
+// type is back to two words.
 //
-// parent is non-nil for every closure a program can build: OpMakeClosure passes
-// mc.env, and both production NewClosureWithTemplate callers (extensions/eval
-// PrimCompile, compilation/compile_syntax_rules.go) pass a
-// frame from NewEnvironmentFrameWithParent, which panics on a nil parent. A nil
-// ApplyParent therefore means the frame was RELEASED while this closure still
-// held it, since ResetForPool zeroes the parent. Apply faults on it rather than
-// treating it as a second representation.
+// BOTH constructors capture parent eagerly, so there is one representation and
+// no nil branch discriminating a second: OpMakeClosure passes mc.env, and
+// NewClosureWithTemplate reads it off the frame it is handed. A nil parent is
+// unreachable from production — NewClosureCapturing panics on one, and both
+// NewClosureWithTemplate callers (extensions/eval PrimCompile,
+// compilation/compile_syntax_rules.go createTransformerClosure) pass a frame
+// from NewEnvironmentFrameWithParent, which panics on a nil parent. Apply
+// faults on it anyway rather than running with no global, namespace or phases.
+//
+// Reading it eagerly gives up one check an earlier late frame.Parent() read
+// bought: a frame RELEASED after the closure was built zeroes its own parent,
+// and this closure no longer notices. That check only ever covered the two
+// NewClosureWithTemplate sites — OpMakeClosure has always captured eagerly, and
+// builds every closure a Scheme program makes — and both of them now build a
+// fresh frame instead of borrowing a pooled one, which is what actually closed
+// the (compile ...) use-after-release the check was standing in for. The live
+// protection is mc.envPooled = false at OpMakeClosure, not a nil read.
 type MachineClosure struct {
-	frame    *environment.EnvironmentFrame
 	parent   *environment.EnvironmentFrame
 	template *NativeTemplate
 }
@@ -84,40 +89,45 @@ func (p *MachineClosure) closureMarker() {
 }
 
 // NewClosureWithTemplate builds a closure over an already-materialized
-// environment, taking its parent as the closure's parent. env must therefore
-// have one, which NewEnvironmentFrameWithParent guarantees for both production
-// callers.
+// environment, for the two callers that build a template and its environment
+// together rather than going through compileClosureBody. It splits env the same
+// way OpMakeClosure does: the local half becomes the template's shape, the
+// parent becomes the closure's captured environment. env must therefore have a
+// parent, which NewEnvironmentFrameWithParent guarantees for both.
+//
+// Recording the shape on the template is a write to a shared object, so it is
+// sound only because both callers pass a template they just built and have not
+// yet published. A template already carrying a different shape is a caller
+// error, not a case to merge.
 func NewClosureWithTemplate(tpl *NativeTemplate, env *environment.EnvironmentFrame) *MachineClosure {
+	tpl.SetShape(env)
 	q := &MachineClosure{
-		frame:    env,
+		parent:   env.Parent(),
 		template: tpl,
 	}
 	return q
 }
 
 // ApplyParent returns the runtime parent the closure's apply frame hangs from.
-// A nil result is not a shape, it is a released frame; see the type comment.
+// A nil result is not a shape, it is a closure that recorded no environment;
+// see the type comment.
 func (p *MachineClosure) ApplyParent() *environment.EnvironmentFrame {
-	if p.parent != nil {
-		return p.parent
-	}
-	return p.frame.Parent()
+	return p.parent
 }
 
-// NewClosureCapturing builds a closure from a lambda's compile-time frame and
-// the runtime environment captured at creation, without materializing the
-// intermediate frame the two would combine into. This is the OpMakeClosure
-// path. parent must be non-nil: a nil one would silently reclassify the closure
-// into the released-frame state and, worse, make ApplyParent fall back to the
-// COMPILE-TIME parent, whose bindings are placeholders — a wrong answer rather
-// than a crash.
-func NewClosureCapturing(tpl *NativeTemplate, shape, parent *environment.EnvironmentFrame) *MachineClosure {
+// NewClosureCapturing builds a closure over a template whose shape is already
+// recorded and the runtime environment captured at creation, without
+// materializing the frame the two would combine into. This is the OpMakeClosure
+// path. parent must be non-nil: a nil one would leave the closure with no
+// record of what it closed over, and the compile-time frame reachable through
+// the template holds placeholders, so any fallback would be a wrong answer
+// rather than a crash.
+func NewClosureCapturing(tpl *NativeTemplate, parent *environment.EnvironmentFrame) *MachineClosure {
 	if parent == nil {
 		panic(werr.WrapForeignErrorf(werr.ErrNilParentEnvironment,
 			"NewClosureCapturing: nil runtime parent; a captured closure must record the environment it closed over"))
 	}
 	q := &MachineClosure{
-		frame:    shape,
 		parent:   parent,
 		template: tpl,
 	}
@@ -128,16 +138,22 @@ func (p *MachineClosure) Template() *NativeTemplate {
 	return p.template
 }
 
-// Env returns the closure's captured environment, materializing it when the
-// closure holds the (compile-time shape, runtime parent) pair. Callers get a
-// fresh frame each time rather than a shared one, so this is a reflection and
-// debugging accessor, not an apply-path call: Apply goes straight to
-// InitApplyFrameWithParent and never builds this.
+// Env materializes the environment from the template's shape and the captured
+// parent. Callers get a fresh frame each time rather than a shared one, so this
+// is a reflection and debugging accessor, not an apply-path call: Apply goes
+// straight to InitApplyFrameWithParent and never builds this. The local half is
+// copied by value (see EnvironmentFrame.local), so the result reads the same
+// bindings, not a snapshot of them.
+//
+// nil for a closure that recorded no environment, or over a template with no
+// shape — the same degenerate states Apply faults on, reported here as "no
+// environment" because callers already treat a nil frame that way.
 func (p *MachineClosure) Env() *environment.EnvironmentFrame {
-	if p.parent == nil {
-		return p.frame
+	shape := p.template.Shape()
+	if p.parent == nil || shape == nil {
+		return nil
 	}
-	return environment.NewEnvironmentFrameWithParent(p.frame.LocalEnvironment(), p.parent)
+	return environment.NewEnvironmentFrameWithParent(shape.LocalEnvironment(), p.parent)
 }
 
 func (p *MachineClosure) IsVoid() bool {

@@ -2051,19 +2051,16 @@ func TestRunDispatch_OpMakeClosure(t *testing.T) {
 	c := qt.New(t)
 	topEnv := environment.NewNamespace().Runtime()
 
-	// Template and env to push on stack
+	// One operand: the template, which carries its own shape.
 	innerTpl := NewNativeTemplate(1, 0, false)
 	innerTpl.AppendInstruction(Instruction{Op: OpLoadVoid})
 	innerLenv := environment.NewLocalEnvironment(1)
-	innerEnv := environment.NewEnvironmentFrameWithParent(innerLenv, topEnv)
+	innerTpl.SetShape(environment.NewEnvironmentFrameWithParent(innerLenv, topEnv))
 
 	tpl := NewNativeTemplate(0, 0, false)
 	litTpl := tpl.MaybeAppendLiteral(innerTpl)
-	litEnv := tpl.MaybeAppendLiteral(innerEnv)
 
-	// Push order: template first, then env (Pop order: env first, then template)
 	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litTpl)})
-	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litEnv)})
 	tpl.AppendInstruction(Instruction{Op: OpMakeClosure})
 
 	cont := NewMachineContinuation(nil, tpl, topEnv)
@@ -2080,16 +2077,12 @@ func TestRunDispatch_OpMakeClosure(t *testing.T) {
 func TestRunDispatch_OpMakeClosure_BadTemplate(t *testing.T) {
 	c := qt.New(t)
 	topEnv := environment.NewNamespace().Runtime()
-	innerLenv := environment.NewLocalEnvironment(1)
-	innerEnv := environment.NewEnvironmentFrameWithParent(innerLenv, topEnv)
 
 	tpl := NewNativeTemplate(0, 0, false)
 	// Push a non-template (integer) in the template position
 	litBad := tpl.MaybeAppendLiteral(values.NewInteger(999))
-	litEnv := tpl.MaybeAppendLiteral(innerEnv)
 
 	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litBad)})
-	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litEnv)})
 	tpl.AppendInstruction(Instruction{Op: OpMakeClosure})
 
 	cont := NewMachineContinuation(nil, tpl, topEnv)
@@ -2100,28 +2093,35 @@ func TestRunDispatch_OpMakeClosure_BadTemplate(t *testing.T) {
 	c.Assert(errors.Is(err, werr.ErrNotAMachineTemplate), qt.IsTrue)
 }
 
-func TestRunDispatch_OpMakeClosure_BadEnv(t *testing.T) {
+// TestRunDispatch_OpMakeClosure_NoShape replaces the former _BadEnv case. There
+// is no env operand to get wrong any more; the way a MakeClosure can now be
+// mispaired is a template that was never compiled as a closure body, which
+// carries no shape. That faults at Apply, not at MakeClosure -- building the
+// closure is fine, calling it is not.
+func TestRunDispatch_OpMakeClosure_NoShape(t *testing.T) {
 	c := qt.New(t)
 	topEnv := environment.NewNamespace().Runtime()
 
-	innerTpl := NewNativeTemplate(1, 0, false)
-	innerTpl.AppendInstruction(Instruction{Op: OpLoadVoid})
+	innerTpl := NewNativeTemplate(0, 0, false)
+	innerTpl.AppendInstruction(Instruction{Op: OpRestoreContinuation})
 
 	tpl := NewNativeTemplate(0, 0, false)
 	litTpl := tpl.MaybeAppendLiteral(innerTpl)
-	// Push a non-env (integer) in the env position
-	litBad := tpl.MaybeAppendLiteral(values.NewInteger(999))
-
 	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litTpl)})
-	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litBad)})
 	tpl.AppendInstruction(Instruction{Op: OpMakeClosure})
 
 	cont := NewMachineContinuation(nil, tpl, topEnv)
 	mc := NewMachineContext(context.Background(), cont)
 
 	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+
+	cls, ok := mc.GetValue().(*MachineClosure)
+	c.Assert(ok, qt.IsTrue)
+
+	_, err = mc.Apply(cls)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, werr.ErrNotALocalEnvironmentFrame), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrNotAMachineTemplate), qt.IsTrue)
 }
 
 // --- Wave 6: cached binding ops ---

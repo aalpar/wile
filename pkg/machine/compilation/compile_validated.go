@@ -288,15 +288,13 @@ func CompileValidatedCaseLambda(p *CompileTimeContinuation, ctctx CompileTimeCal
 		tpl := machine.NewNativeTemplate(0, 0, false)
 
 		// case-lambda clauses are anonymous arity dispatch — no frame-reuse context.
-		tpli, envi, err := p.compileClosureBody(ctctx, tpl, lenv, clause, "case-lambda clause", noFrameReuse())
+		tpli, err := p.compileClosureBody(ctctx, tpl, lenv, clause, "case-lambda clause", noFrameReuse())
 		if err != nil {
 			return err
 		}
 
 		p.AppendOperations(
 			machine.NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
-			machine.NewOperationPush(),
-			machine.NewOperationLoadLiteralByLiteralIndexImmediate(envi),
 			machine.NewOperationPush(),
 			machine.NewOperationMakeClosure(),
 			machine.NewOperationPush(),

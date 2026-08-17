@@ -47,21 +47,30 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	// captures mc.env, and (2) concurrent SRFI-18 threads sharing binding
 	// slots when calling the same closure.
 	//
-	// A nil ApplyParent is not a closure shape, it is a released frame. Every
-	// producer supplies a parent, directly (OpMakeClosure) or through a frame
-	// built by NewEnvironmentFrameWithParent, which panics on a nil parent. The
-	// only way to observe nil here is ResetForPool having zeroed a frame this
-	// closure still points at. Reusing it would install an environment with no
-	// global, namespace or phases and corrupt silently, so fault instead. See
-	// MachineClosure for the enumeration of producers.
+	// A nil ApplyParent is not a closure shape, it is a closure that recorded no
+	// environment. Every producer supplies a parent, directly (OpMakeClosure) or
+	// read off a frame built by NewEnvironmentFrameWithParent, which panics on a
+	// nil parent — so this is unreachable from production. Running anyway would
+	// install an environment with no global, namespace or phases and corrupt
+	// silently, so fault instead. See MachineClosure for the enumeration of
+	// producers.
 	parent := mcls.ApplyParent()
 	if parent == nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrNilParentEnvironment,
-			"apply: closure environment has no parent; its frame was released while the closure still held it")
+			"apply: closure recorded no environment; it was built over a frame with no parent")
+	}
+
+	// The local shape rides on the template, not the closure — one template,
+	// one shape. nil means the template is not a closure body, which no
+	// producer can pair with a closure; fault rather than nil-deref.
+	shape := tpl.Shape()
+	if shape == nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate,
+			"apply: closure template records no local shape; it was not compiled as a closure body")
 	}
 
 	env := p.acquireEnvFrame()
-	mcls.frame.InitApplyFrameWithParent(env, parent)
+	shape.InitApplyFrameWithParent(env, parent)
 	// A zero-parameter closure over a frame with no local environment copies to
 	// an apply frame that has none either, so LocalEnvironment can be nil here.
 	// Every closure used to have parameters, which is why the unguarded form
