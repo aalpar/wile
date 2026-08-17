@@ -218,16 +218,13 @@ func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol, scopes []*
 	} else {
 		// Global context (top-level): store to global environment.
 		// Global indices are stored in the literals pool since they're runtime values.
-		// The operation loads the index from literals and stores the value there.
-		// Mirror of the local branch above: the binding was declared scope-aware,
-		// so address it scope-aware too — and at THIS view's own coordinates, the
-		// same question the meta stamp above asks. The index the create returns is
-		// PINNED to the slot it landed on at those coordinates, so OpStoreGlobal
-		// takes gi.Env's direct path (machine_context.go) rather than resolving the
-		// bare name wildcard to its first slot — the user's binding, not the
-		// macro's. Unlike the other create sites this pin outlives compilation: it
-		// rides the literal pool into the template, and a delete that nils its slot
-		// is re-healed at the pin's own recorded coordinates by healWriteLocked.
+		// Mirror of the local branch above; same pin as declareDefineBinding's
+		// create. OpStoreGlobal therefore takes gi.Env's direct path
+		// (machine_context.go) rather than resolving the bare name wildcard to its
+		// first slot — the user's binding, not the macro's. Unlike the other create
+		// sites this pin outlives compilation: it rides the literal pool into the
+		// template, and a delete that nils its slot is re-healed at the pin's own
+		// recorded coordinates by healWriteLocked.
 		gi, _ := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, scopes)
 		liti := p.template.MaybeAppendLiteral(gi)
 		p.AppendOperations(machine.NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(liti))

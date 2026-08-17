@@ -324,14 +324,14 @@ func classifyCallee(
 // A well-formed program yields a unique maximum. An AMBIGUOUS maximum — two
 // same-name nodes with equal-cardinality but mutually-incomparable scope sets, both
 // subset-matching the reference — is refused (returns nil ⇒ unresolved ⇒ unsafe),
-// NOT resolved by map-iteration order. GetBinding breaks that tie deterministically
-// by binding creation order (global_environment_frame.go resolveRankedLocked, over
-// a creation-ordered slot list within one tier); this map cannot cheaply replicate
-// that order, so it
-// declines to guess rather than grant a reclaim verdict on a coin-flip — the sound
-// direction (frame_reclaim.go: a false positive would corrupt). The refusal costs
-// reclamation only on a genuinely ambiguous binder, which a sound analysis would not
-// have reclaimed anyway.
+// NOT resolved by map-iteration order. env.GetBinding answers the same tie by
+// panicking with a wrapped werr.ErrAmbiguousBinding (global_environment_frame.go
+// resolveRankedLocked); this analysis declines instead, because it is an
+// optimization gate — raising here would turn a forgone reclamation into a compile
+// error, whereas refusing costs only the optimization and keeps the sound direction
+// (frame_reclaim.go: a false positive would corrupt). It is the same mapping the
+// caller gives shadowUnknown. The refusal costs reclamation only on a genuinely
+// ambiguous binder, which a sound analysis would not have reclaimed anyway.
 func resolveNodeByScopes(byIdent map[ScopedBindingKey]*reclaimNode, name string, refScopes []*syntax.Scope) *reclaimNode {
 	var best *reclaimNode
 	bestLen := -1
