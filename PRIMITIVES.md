@@ -644,6 +644,7 @@ Reference for the types, primitives, and special forms in Wile. It is **not exha
 | `error-object-irritants` | Get error irritants |
 | `read-error?` | Test for read error |
 | `file-error?` | Test for file error |
+| `current-stack-trace` | Live stack at the call site as a list of per-frame alists; optional max-depth (default 20) |
 
 ## Promises
 

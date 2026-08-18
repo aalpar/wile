@@ -15,6 +15,8 @@
 package core
 
 import (
+	"math"
+
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
 	"github.com/aalpar/wile/pkg/values"
@@ -55,6 +57,53 @@ func PrimErrorContextSource(mc machine.CallContext) error {
 		return nil
 	}
 	mc.SetValue(values.NewString(loc))
+	return nil
+}
+
+// PrimCurrentStackTrace implements (current-stack-trace [max-depth]).
+// Returns the live Scheme stack at the call site in the same list-of-alists
+// shape as error-context-stack-trace, without needing an error to carry it.
+//
+// The walk starts at the calling context: a foreign primitive runs inline in
+// its caller's MachineContext, so no frame is synthesized for
+// current-stack-trace itself and the innermost frame is the procedure that
+// called it.
+//
+// max-depth is an exact non-negative integer bounding the number of frames
+// walked; omitting it uses machine.DefaultBacktraceDepth. As with an error
+// trace, a walk that stops short appends a "... N more frames ..." frame
+// rather than silently truncating.
+func PrimCurrentStackTrace(cc machine.CallContext) error {
+	mc, err := machine.RequireMachineContext(cc, "current-stack-trace")
+	if err != nil {
+		return err
+	}
+	depth := int64(machine.DefaultBacktraceDepth)
+	v, ok, err := helpers.ParseOptionalArg(mc.Arg(0), "current-stack-trace")
+	if err != nil {
+		return err
+	}
+	if ok {
+		exact := false
+		depth, exact = values.ExactInteger(v)
+		if !exact {
+			// ExactInteger also refuses an exact integer too large for int64,
+			// hence "in machine-word range" rather than a bare type phrase.
+			return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
+				"current-stack-trace: max-depth must be an exact integer in machine-word range but got %s", v.SchemeString())
+		}
+		if depth < 0 {
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"current-stack-trace: max-depth must be non-negative")
+		}
+		// A budget past the chain's own length just stops at the chain, so
+		// saturating here costs nothing and keeps the int conversion exact on
+		// a 32-bit host.
+		if depth > math.MaxInt {
+			depth = math.MaxInt
+		}
+	}
+	mc.SetValue(machine.StackTraceToSchemeList(mc.CaptureStackTrace(int(depth))))
 	return nil
 }
 

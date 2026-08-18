@@ -18,6 +18,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`(current-stack-trace [max-depth])` — the live stack, without needing an error
+  to carry it.** Until now the only way to see a backtrace from Scheme was to
+  raise and read `error-object-stack-trace` off the condition. This returns the
+  same list-of-alists shape (`name`, and `file`/`line`/`column` when the frame has
+  a position) for the stack at the call site.
+
+  `max-depth` defaults to `machine.DefaultBacktraceDepth` (20), the same budget an
+  error trace gets, and a walk that stops short ends with a `... N more frames ...`
+  frame rather than truncating silently. A foreign primitive runs inline in its
+  caller's context, so no frame is synthesized for `current-stack-trace` itself
+  and the innermost frame is the procedure that called it. Tail calls do not
+  appear, because they left no frame — this reports the continuation chain, not a
+  call history.
+
 - **`CompilationError.Condition` — a compile failure now reaches a Go host as the
   same condition object a Scheme `guard` would catch.** The field mirrors
   `RuntimeError.Condition`, is `nil` only when there was no cause to convert, and

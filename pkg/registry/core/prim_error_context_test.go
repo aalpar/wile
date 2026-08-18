@@ -204,3 +204,105 @@ func TestErrorContext_Primitives(t *testing.T) {
 		})
 	}
 }
+
+func TestCurrentStackTrace(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name:     "returns a non-empty list",
+			Code:     `(let ((st (current-stack-trace))) (and (list? st) (> (length st) 0)))`,
+			Expected: values.TrueValue,
+		},
+		{
+			Name: "innermost frame names the calling procedure",
+			Code: `(begin (define (f) (current-stack-trace))
+				(cdr (assq 'name (car (f)))))`,
+			Expected: values.NewString("f"),
+		},
+		{
+			Name: "frames carry a source position",
+			Code: `(begin (define (f) (current-stack-trace))
+				(let ((frame (car (f))))
+					(and (assq 'line frame) (assq 'column frame) #t)))`,
+			Expected: values.TrueValue,
+		},
+		{
+			// The budget bounds the walked frames; a truncated walk adds one
+			// "... N more frames ..." marker on top, hence n+1.
+			Name: "max-depth bounds the trace",
+			Code: `(begin (define (deep n)
+					(if (= n 0)
+						(length (current-stack-trace 3))
+						(+ 0 (deep (- n 1)))))
+				(<= (deep 20) 4))`,
+			Expected: values.TrueValue,
+		},
+		{
+			Name:     "zero max-depth walks no frames",
+			Code:     `(<= (length (current-stack-trace 0)) 1)`,
+			Expected: values.TrueValue,
+		},
+		{
+			Name: "default budget is 20 frames",
+			Code: `(begin (define (deep n)
+					(if (= n 0)
+						(length (current-stack-trace))
+						(+ 0 (deep (- n 1)))))
+				(let ((len (deep 40))) (and (>= len 20) (<= len 21))))`,
+			Expected: values.TrueValue,
+		},
+		{
+			// A tail call reuses the frame, so the same nesting written
+			// tail-recursively must not grow the trace the way the
+			// non-tail form above does.
+			Name: "tail calls do not accumulate frames",
+			Code: `(begin (define (tail-deep n)
+					(if (= n 0)
+						(length (current-stack-trace))
+						(tail-deep (- n 1))))
+				(< (tail-deep 40) 20))`,
+			Expected: values.TrueValue,
+		},
+		{
+			Name:     "a big-enough budget is not an error",
+			Code:     `(list? (current-stack-trace 100000))`,
+			Expected: values.TrueValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+
+	// Error cases
+	errorTcs := []testhelpers.SchemeCodeErrorTestCase{
+		{
+			Name: "max-depth not a number",
+			Code: `(current-stack-trace "deep")`,
+		},
+		{
+			Name: "max-depth inexact",
+			Code: `(current-stack-trace 1.5)`,
+		},
+		{
+			Name: "max-depth negative",
+			Code: `(current-stack-trace -1)`,
+		},
+		{
+			Name: "max-depth exceeds machine word",
+			Code: `(current-stack-trace (expt 2 100))`,
+		},
+		{
+			Name: "too many arguments",
+			Code: `(current-stack-trace 1 2)`,
+		},
+	}
+	for _, tc := range errorTcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}

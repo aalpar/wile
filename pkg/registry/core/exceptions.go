@@ -89,6 +89,13 @@ func addExceptions(r *registry.PrimitiveRegistry) error {
 			Doc: "Returns the stack trace from ERROR-OBJ as a list of alists, or () if unavailable.\nEach alist always has key name; keys file, line, column are present only when the frame has a source position, and file is #f when that position has no filename.\n\nExamples:\n  (guard (e (#t (error-object-stack-trace e))) (error \"oops\"))  => (((name . \"...\") ...))", ParamNames: []string{"error-obj"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeList,
 			Keywords: []string{"error stack trace", "error diagnostics", "backtrace"}},
+		// The live-stack counterpart of error-object-stack-trace: same list-of-alists
+		// shape, no error needed to carry it. MAX-DEPTH is optional, so ParamCount is
+		// 1 with IsVariadic (ParamCount 0 + IsVariadic panics at registration).
+		{Name: "current-stack-trace", ParamCount: 1, IsVariadic: true, Impl: PrimCurrentStackTrace,
+			Doc: "Returns the stack trace at the call site as a list of alists, innermost frame first.\nEach alist always has key name; keys file, line, and column are present only when the frame has a source position, and file is #f when that position has no filename.\nMAX-DEPTH is an exact non-negative integer bounding the frames walked; it defaults to 20, and a walk that stops short ends with a \"... N more frames ...\" frame.\n\nExamples:\n  (define (f) (current-stack-trace))\n  (car (f))  => ((name . \"f\") (file . \"eval\") (line . 1) (column . 13))", ParamNames: []string{"max-depth"}, Category: "exceptions",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeList,
+			Keywords: []string{"stack trace", "backtrace", "debugging", "call stack"}},
 	}, registry.PhaseSetRuntime)
 	return nil
 }

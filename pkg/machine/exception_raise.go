@@ -94,7 +94,7 @@ func RaiseInPlace(mc *MachineContext, cond values.Value, continuable bool) error
 // frame that escalates runs after the handler's marks are gone).
 func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, handlers values.Value) error {
 	source := mc.CurrentSource()
-	trace := mc.CaptureStackTrace(defaultBacktraceDepth)
+	trace := mc.CaptureStackTrace(DefaultBacktraceDepth)
 	enrichNativeError(cond, source, trace)
 
 	pair, ok := handlers.(*values.Pair)
