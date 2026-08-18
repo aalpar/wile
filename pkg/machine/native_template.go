@@ -428,7 +428,7 @@ func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
 		// been initialized yet (e.g., after Copy() which clones literals
 		// but not the index).
 		if p.literalIndex == nil {
-			p.literalIndex = make(map[uint64][]int)
+			p.literalIndex = make(map[uint64][]int, len(p.literals)/2+1)
 			for i, lit := range p.literals {
 				hLit, okLit := lit.(values.Hashable)
 				if okLit {
