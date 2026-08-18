@@ -84,13 +84,6 @@ func NewGlobalIndex(key *values.Symbol) *GlobalIndex {
 	return &GlobalIndex{Index: key, query: syntax.AllScopes()}
 }
 
-// NewDeferredGlobalIndex creates a deferred GlobalIndex that carries the
-// reference's scope set, so the execution-time parent-chain walk can resolve it
-// hygienically rather than by bare name.
-func NewDeferredGlobalIndex(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
-	return &GlobalIndex{Index: key, query: syntax.ScopesOf(scopes)}
-}
-
 // newResolvedGlobalIndex creates a GlobalIndex pinned to the frame and to the
 // slot resolution landed on, coordinates included. Its query is the wildcard
 // (AllScopes): a wildcard resolution re-resolves by bare name if its slot dies.
