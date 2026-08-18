@@ -1669,6 +1669,7 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			return nil
 		}
 
+		// Check for control signals (prompt abort, continuation resume, timer interrupt)
 		var abortErr *ErrPromptAbort
 		if errors.As(err, &abortErr) {
 			prompt, found := p.FindPrompt(abortErr.Tag)
@@ -1753,6 +1754,9 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			continue
 		}
 
+		// A timer interrupt is emitted only with a with-timeout boundary armed, and the only thing that arms it pushes
+		// the boundary frame in the same call, so a fired timer reaching the top driver MUST have a boundary on the
+		// chain.
 		var timerErr *ErrTimerInterrupt
 		if errors.As(err, &timerErr) {
 			boundary, found := p.FindPrompt(timerErr.Tag)
@@ -1836,6 +1840,17 @@ func (p *MachineContext) RunWithinBoundary() error {
 			return nil
 		}
 
+		// ErrPromptAbort is the only control signal this driver resolves inline. A
+		// timer interrupt or a debugger break is resolved only if the boundary is on
+		// THIS sub-context's own chain; otherwise they re-raise to the enclosing
+		// driver, exactly like a not-found abort. ErrResumeContinuation is never an
+		// ErrPromptAbort, so it always re-raises to the top RunResumable.
+		//
+		// The enclosing driver (RunResumable) handles any other error: a foreign-call
+		// panic, an outer timer, an exception escape, or a real error.
+		//
+		// The enclosing driver is the one that installed the promptTag for this
+		// sub-context, so it owns the abort/resume driver and the timer/break arms.
 		var abortErr *ErrPromptAbort
 		if !errors.As(err, &abortErr) {
 			// A timer whose with-timeout boundary is on THIS sub-context's own chain is
