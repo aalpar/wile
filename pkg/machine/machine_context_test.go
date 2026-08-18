@@ -2096,8 +2096,14 @@ func TestRunDispatch_OpMakeClosure_BadTemplate(t *testing.T) {
 // TestRunDispatch_OpMakeClosure_NoShape replaces the former _BadEnv case. There
 // is no env operand to get wrong any more; the way a MakeClosure can now be
 // mispaired is a template that was never compiled as a closure body, which
-// carries no shape. That faults at Apply, not at MakeClosure -- building the
-// closure is fine, calling it is not.
+// carries no shape.
+//
+// It faults at MakeClosure, not at Apply, and deliberately: the shape is settled
+// once per closure, so re-asking per call is hot-path work for a producer error.
+// That is a structural argument — an interleaved A/B of the two guard positions
+// did not move BenchmarkParallelScalingCompute either way. It panics rather than
+// returning, matching the nil-parent arm of the same constructor; the VM
+// boundary converts a *werr.ForeignError panic into an error for embedders.
 func TestRunDispatch_OpMakeClosure_NoShape(t *testing.T) {
 	c := qt.New(t)
 	topEnv := environment.NewNamespace().Runtime()
@@ -2113,14 +2119,16 @@ func TestRunDispatch_OpMakeClosure_NoShape(t *testing.T) {
 	cont := NewMachineContinuation(nil, tpl, topEnv)
 	mc := NewMachineContext(context.Background(), cont)
 
-	err := mc.Run()
-	c.Assert(err, qt.IsNil)
-
-	cls, ok := mc.GetValue().(*MachineClosure)
+	var recovered any
+	func() {
+		defer func() {
+			recovered = recover()
+		}()
+		_ = mc.Run()
+	}()
+	c.Assert(recovered, qt.IsNotNil)
+	err, ok := recovered.(error)
 	c.Assert(ok, qt.IsTrue)
-
-	_, err = mc.Apply(cls)
-	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, werr.ErrNotAMachineTemplate), qt.IsTrue)
 }
 

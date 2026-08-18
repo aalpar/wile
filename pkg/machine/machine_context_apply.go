@@ -60,17 +60,15 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 			"apply: closure recorded no environment; it was built over a frame with no parent")
 	}
 
-	// The local shape rides on the template, not the closure — one template,
-	// one shape. nil means the template is not a closure body, which no
-	// producer can pair with a closure; fault rather than nil-deref.
-	shape := tpl.Shape()
-	if shape == nil {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate,
-			"apply: closure template records no local shape; it was not compiled as a closure body")
-	}
-
+	// The local shape rides on the template, not the closure — one template, one
+	// shape — so it is settled once per CLOSURE, in the constructors, and is not
+	// re-asked per call here. That is a structural argument, not a measured one:
+	// an interleaved A/B of the guard in this position versus in
+	// NewClosureCapturing was indistinguishable (BenchmarkParallelScalingCompute
+	// P=1, +1.23% and +1.22% against master respectively, n=6 each). Do not cite
+	// this line as a hot-path win.
 	env := p.acquireEnvFrame()
-	shape.InitApplyFrameWithParent(env, parent)
+	tpl.Shape().InitApplyFrameWithParent(env, parent)
 	// A zero-parameter closure over a frame with no local environment copies to
 	// an apply frame that has none either, so LocalEnvironment can be nil here.
 	// Every closure used to have parameters, which is why the unguarded form

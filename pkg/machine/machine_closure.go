@@ -127,6 +127,16 @@ func NewClosureCapturing(tpl *NativeTemplate, parent *environment.EnvironmentFra
 		panic(werr.WrapForeignErrorf(werr.ErrNilParentEnvironment,
 			"NewClosureCapturing: nil runtime parent; a captured closure must record the environment it closed over"))
 	}
+	// Checked here rather than in Apply: the shape is a property of the
+	// template, so it is settled once per closure and does not need re-asking
+	// per call. A template with no shape was never compiled as a closure body,
+	// which makes this a producer error — the frame it would apply with does not
+	// exist, so there is nothing to degrade to. Structural, not measured: moving
+	// the guard here did not move BenchmarkParallelScalingCompute.
+	if tpl.Shape() == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate,
+			"NewClosureCapturing: template records no local shape; it was not compiled as a closure body"))
+	}
 	q := &MachineClosure{
 		parent:   parent,
 		template: tpl,
