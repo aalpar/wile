@@ -105,6 +105,9 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 		} else {
 			p.counters.StackPoolReleases++
 			oldEvals := p.evals
+			// Must copy evals to avoid corrupting the continuation's saved stack.
+			// Without copying, modifications to p.evals after restoration would mutate
+			// cont.evals, breaking re-invocation of the continuation.
 			p.evals = cont.evals.Copy()
 			p.releaseStack(oldEvals)
 		}

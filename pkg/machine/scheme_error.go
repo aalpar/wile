@@ -30,6 +30,7 @@ type SchemeError struct {
 	Cause      error                 // Underlying error (if any)
 }
 
+// NewSchemeError creates a new SchemeError with the given message, source context, and stack trace.
 func NewSchemeError(msg string, source *syntax.SourceContext, stackTrace string) *SchemeError {
 	return &SchemeError{
 		Message:    msg,
@@ -38,6 +39,7 @@ func NewSchemeError(msg string, source *syntax.SourceContext, stackTrace string)
 	}
 }
 
+// NewSchemeErrorWithCause creates a new SchemeError with the given message, source context, stack trace, and underlying cause.
 func NewSchemeErrorWithCause(msg string, source *syntax.SourceContext, stackTrace string, cause error) *SchemeError {
 	return &SchemeError{
 		Message:    msg,
@@ -47,6 +49,7 @@ func NewSchemeErrorWithCause(msg string, source *syntax.SourceContext, stackTrac
 	}
 }
 
+// Error implements the error interface for SchemeError.
 func (p *SchemeError) Error() string {
 	var b strings.Builder
 
@@ -69,6 +72,7 @@ func (p *SchemeError) Error() string {
 	return b.String()
 }
 
+// Unwrap returns the underlying cause of the SchemeError, if any.
 func (p *SchemeError) Unwrap() error {
 	return p.Cause
 }

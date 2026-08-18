@@ -47,6 +47,7 @@ func NewPromptTag(name string) *PromptTag {
 // DefaultPromptTag is the default prompt tag installed at the top of execution.
 var DefaultPromptTag = NewPromptTag("default")
 
+// SchemeString returns a string representation of the prompt tag for debugging.
 func (p *PromptTag) SchemeString() string {
 	if p.name != "" {
 		return fmt.Sprintf("#<continuation-prompt-tag:%s>", p.name)
@@ -54,10 +55,12 @@ func (p *PromptTag) SchemeString() string {
 	return fmt.Sprintf("#<continuation-prompt-tag:%d>", p.id)
 }
 
+// IsVoid returns true if the prompt tag is nil (void).
 func (p *PromptTag) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo returns true if the prompt tag is equal to another value.
 func (p *PromptTag) EqualTo(o values.Value) bool {
 	v, ok := o.(*PromptTag)
 	if !ok {

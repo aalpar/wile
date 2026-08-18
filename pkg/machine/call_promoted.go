@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package machine
+
 // ADDING A NEW PROMOTED OP
 //
 // Promoted ops inline hot primitives directly in the VM dispatch loop,
@@ -57,7 +59,6 @@
 // opcodeTable[op].operandKind metadata to handle OperandCachedBinding generically.
 // The peephole optimizer (peephole.go) also needs no changes — it uses
 // promotedOpForIdentity() to discover promoted ops generically.
-package machine
 
 import (
 	"github.com/aalpar/wile/pkg/values"
