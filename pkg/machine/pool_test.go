@@ -560,20 +560,6 @@ func TestSubContextPool_StatsTracked(t *testing.T) {
 	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(1))
 }
 
-func TestPoolManager_AllStats_ReportsAllPools(t *testing.T) {
-	stats := pools.AllStats()
-	qt.Assert(t, len(stats) >= 4, qt.IsTrue)
-
-	names := make(map[string]bool)
-	for _, s := range stats {
-		names[s.Name] = true
-	}
-	qt.Assert(t, names["stack"], qt.IsTrue)
-	qt.Assert(t, names["sub_context"], qt.IsTrue)
-	qt.Assert(t, names["continuation"], qt.IsTrue)
-	qt.Assert(t, names["env_frame"], qt.IsTrue)
-}
-
 // ---------------------------------------------------------------------------
 // Concurrent access
 // ---------------------------------------------------------------------------

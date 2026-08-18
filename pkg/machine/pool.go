@@ -39,15 +39,11 @@ import (
 // Profiling shows >97% of PopAll depths are ≤4.
 const stackInitialCap = 8
 
-// pools is the package-level pool manager. It aggregates all pools for
-// unified observation and control (stats, drain, enable/disable).
-var pools = NewPoolManager()
-
 // stackPool recycles Stack allocations. A non-tail call (SaveContinuation)
 // acquires a stack only when the eval stack is deeper than inlineEvalsCap;
 // a shallower save inlines its values into the continuation frame and reuses
 // mc's stack. Pooling avoids repeated heap allocation of the backing slice.
-var stackPool = registerFreeList(pools, NewFreeList("stack", newStackPoolEntry, resetStackPoolEntry))
+var stackPool = NewFreeList("stack", newStackPoolEntry, resetStackPoolEntry)
 
 func newStackPoolEntry() *Stack {
 	s := make(Stack, 0, stackInitialCap)
@@ -66,7 +62,7 @@ func resetStackPoolEntry(s *Stack) {
 // Sub-contexts are created by NewSubContext for every foreign function
 // that needs to call back into Scheme, and are immediately dead after
 // the call returns.
-var subContextPool = registerPool(pools, NewPool("sub_context",
+var subContextPool = NewPool("sub_context",
 	func() *MachineContext {
 		return &MachineContext{}
 	},
@@ -76,14 +72,14 @@ var subContextPool = registerPool(pools, NewPool("sub_context",
 		// reset runs; here we only zero the struct.
 		*mc = MachineContext{}
 	},
-))
+)
 
 // continuationPool recycles MachineContinuation frames. Frames are created
 // on every non-tail call (SaveContinuation) and consumed on every normal
 // return (RestoreAndRelease). Only the normal-return path pools frames;
 // call/cc, escape, and composable continuation paths must not pool because
 // the frame may be re-invoked.
-var continuationPool = registerFreeList(pools, NewFreeList("continuation", newContinuationPoolEntry, resetContinuationPoolEntry))
+var continuationPool = NewFreeList("continuation", newContinuationPoolEntry, resetContinuationPoolEntry)
 
 func newContinuationPoolEntry() *MachineContinuation {
 	return &MachineContinuation{}
@@ -114,7 +110,7 @@ const defaultBindingsCap = 4
 // 1000+ times per second, giving sync.Pool a <1% hit rate. A freelist
 // survives GC, so after warmup (one full recursion depth) every acquire
 // is a hit and copyForApplyInto reuses the retained bindings capacity.
-var envFramePool = registerFreeList(pools, NewFreeList("env_frame", newEnvFramePoolEntry, resetEnvFramePoolEntry))
+var envFramePool = NewFreeList("env_frame", newEnvFramePoolEntry, resetEnvFramePoolEntry)
 
 // newEnvFramePoolEntry / resetEnvFramePoolEntry are the env-frame freelist
 // factory and reset. Extracted as named functions so the process-global
@@ -150,10 +146,9 @@ type threadPools struct {
 	stacks        *unsyncFreeList[Stack]
 }
 
-// newThreadPools mints a fresh, unregistered set of per-thread freelists.
-// Per-thread pools are deliberately NOT registered with the global PoolManager:
-// they are single-goroutine, so they use the lock-free unsyncFreeList (no mutex,
-// no atomic counters) and must not share its lock or aggregate counters.
+// newThreadPools mints a fresh set of per-thread freelists. They are
+// single-goroutine, so they use the lock-free unsyncFreeList (no mutex, no
+// atomic counters) rather than the synchronized global FreeList.
 func newThreadPools() *threadPools {
 	return &threadPools{
 		envFrames:     newUnsyncFreeList(newEnvFramePoolEntry, resetEnvFramePoolEntry),
@@ -241,6 +236,20 @@ func (p *MachineContext) releaseContinuation(cont *MachineContinuation) {
 	}
 	continuationPool.Release(cont)
 }
+
+// The package-level acquire/release pair below is the GLOBAL-pool path. Only
+// acquireStack and acquireContinuation have production callers (macro_evaluator,
+// acquireMacroContext, NewMachineContinuationFromMachineContext); every
+// production RELEASE goes through the *MachineContext methods instead, because
+// those route to the caller's per-thread freelist when it has one.
+//
+// So `deadcode -test=false` reports releaseStack, releaseContinuation,
+// acquireEnvFrame and releaseEnvFrame as unreachable, and that reading is wrong:
+// pool_test.go and the pool round-trip benchmarks drive the global pool through
+// exactly these, and each one carries behavior (the nil guard, and
+// releaseContinuation's stack hand-back) that inlining at ~20 call sites would
+// duplicate. They are test-facing API, not dead code. Do not delete them on a
+// deadcode report alone.
 
 // acquireStack returns a zeroed-length Stack from the pool.
 func acquireStack() *Stack {
