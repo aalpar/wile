@@ -50,7 +50,6 @@ type VMCounters struct {
 	ContinuationPoolReleases uint64
 	EnvFramePoolReleases     uint64
 	SharedFrameRestores      uint64
-	KeysShared               uint64
 	InlineEvalsSaved         uint64 // SaveContinuation used inline slots instead of stack pool
 
 	// Per-callee call counting. Tracks both ForeignClosure (Go primitives) and
@@ -150,7 +149,6 @@ func (p VMCounters) String() string {
 			"continuation_pool_releases:   %d\n"+
 			"env_frame_pool_releases:      %d\n"+
 			"shared_frame_restores:        %d\n"+
-			"keys_shared:                  %d\n"+
 			"inline_evals_saved:           %d\n"+
 			"stack_max_depth:              %d\n"+
 			"stack_depth_0to2:             %d\n"+
@@ -173,7 +171,6 @@ func (p VMCounters) String() string {
 		p.ContinuationPoolReleases,
 		p.EnvFramePoolReleases,
 		p.SharedFrameRestores,
-		p.KeysShared,
 		p.InlineEvalsSaved,
 		p.StackMaxDepth,
 		p.StackDepth0to2,

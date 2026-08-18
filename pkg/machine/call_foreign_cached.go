@@ -67,7 +67,6 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	mc.envPooled = true
 	mc.counters.EnvsCopied++
 	mc.counters.BindingsCopied += uint64(len(bnds))
-	mc.counters.KeysShared++
 
 	bindArgs(bnds, vs, l, fcls.isVariadic, mc.buildRestArg)
 

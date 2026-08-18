@@ -517,6 +517,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **BREAKING (Go API): `machine.VMCounters.KeysShared`.** It counted the same
+  events as `EnvsCopied` and always held the same value. The two were
+  incremented on consecutive lines, with no branch between them, at all three
+  sites that initialize an apply frame (`Apply`, `applyForeign`,
+  `callForeignCached`), and nothing reset one without the other.
+
+  It was redundant from the commit that introduced it, not by later drift. It
+  arrived with copy-on-write for environment-frame keys, to measure how often the
+  keys map was *shared* rather than cloned — but it was only ever wired to the
+  share side, directly beneath the existing `EnvsCopied++`. The clone side
+  (`LocalEnvironmentFrame`'s copy-on-write split) was never instrumented, so the
+  ratio it existed to express was never computable. What it actually measured is
+  "an apply frame was initialized", which is what `EnvsCopied` already means.
+
+  `EnvsCopied` survives and is the accurate name: the bindings slice genuinely is
+  copied; only the keys map is shared. Reachable via `Engine.LastCounters()` and
+  `MachineContext.Counters()`, so an embedder reading the field must drop the
+  read. The only observable change otherwise is the `keys_shared:` line leaving
+  `VMCounters.String()`, which no production code and no test consumed.
+
 - **BREAKING (Go API): `machine.NativeTemplate.DeduplicateLiteral`, with the
   five unexported functions behind it** (`findLiteral`, `deduplicateLiteral`,
   `deduplicateVector`, `deduplicatePairMemo`, `deduplicateLiteralMemo`).

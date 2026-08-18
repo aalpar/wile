@@ -81,7 +81,6 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	p.envPooled = true
 	p.counters.EnvsCopied++
 	p.counters.BindingsCopied += uint64(len(bnds))
-	p.counters.KeysShared++
 
 	bindArgs(bnds, vs, l, tpl.IsVariadic(), nil)
 
@@ -122,7 +121,6 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	p.envPooled = true
 	p.counters.EnvsCopied++
 	p.counters.BindingsCopied += uint64(len(bnds))
-	p.counters.KeysShared++
 
 	bindArgs(bnds, vs, l, fcls.isVariadic, p.buildRestArg)
 
