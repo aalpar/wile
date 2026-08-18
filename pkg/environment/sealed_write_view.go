@@ -16,7 +16,7 @@ package environment
 
 // The sealed axis: the phases that own a SEALED-WRITE view.
 //
-// A view's rank says which tier its writes land in; the axis says which phases
+// A view's sealed flag says which tier its writes land in; the axis says which phases
 // have such a view at all, and therefore where AtPhase's climb from a
 // sealed-write view can still stay sealed.
 

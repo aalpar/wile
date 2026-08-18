@@ -197,7 +197,7 @@ type Namespace struct {
 	runtime *EnvironmentFrame
 
 	// sealedWriteRoot is this namespace's phase-0 SEALED-WRITE view: the same store
-	// as runtime, at the same phase, with writeRankSealed, so a write through it
+	// as runtime, at the same phase, sealed, so a write through it
 	// lands at the ambient (ANY, sealed) coordinate that every phase reaches. It is
 	// what bootstrap and registry application register through, and — with runtime —
 	// what IsOwnerRoot recognizes, so the immutable-top-level define gate fires for
@@ -284,7 +284,7 @@ func (p *Namespace) Runtime() *EnvironmentFrame {
 }
 
 // Store returns this namespace's one binding store: every global binding it
-// holds, at every phase and every registration rank. The phase environments are
+// holds, at every phase, sealed and mutable alike. The phase environments are
 // views over it, so reaching a binding "in another phase" is a coordinate on the
 // query rather than a different object.
 //
@@ -323,7 +323,7 @@ func (p *Namespace) BoundSymbolNames() values.Value {
 }
 
 // BoundNamesAcrossPhases returns a sorted, deduplicated list of every binding name
-// this namespace holds anywhere: every phase, every rank. Unlike BoundSymbolNames —
+// this namespace holds anywhere: every phase, sealed and mutable alike. Unlike BoundSymbolNames —
 // which spans phase 0 only, returning a Scheme list for the bound-names primitives —
 // this also reports names bound at the expand and compile phases, so macro and
 // special-form keywords appear. It is the set a REPL wants for tab completion.
@@ -331,8 +331,8 @@ func (p *Namespace) BoundSymbolNames() values.Value {
 func (p *Namespace) BoundNamesAcrossPhases() []string {
 	seen := values.StringSet{}
 	var names []string
-	// One pass over the owner store, filtered to live slots at any phase and any
-	// rank — the set the pre-fold union over every phase frame plus every sealed
+	// One pass over the owner store, filtered to live slots at any phase, sealed
+	// or not — the set the pre-fold union over every phase frame plus every sealed
 	// frame produced, now that all of those are views over this one store.
 	for _, s := range p.Store().LiveSlots() {
 		_, dup := seen[s.Name.Key]
@@ -798,7 +798,7 @@ func WithChildAuthorizer(a security.Authorizer) NamespaceOption {
 //   - EnvironmentFrame (runtime, phase 0) — the child's ROOT VIEW (parent nil),
 //     the mutable user scope
 //   - GlobalEnvironmentFrame — its own store: isolated global bindings at every
-//     phase and rank (define, set!, a profile's sealed apply)
+//     phase, sealed and mutable alike (define, set!, a profile's sealed apply)
 //   - PhaseRegistry — isolated phase hierarchy (expand, compile created on demand)
 //
 // The child's runtime EnvironmentFrame.namespace points to the child (not the
@@ -984,7 +984,7 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 	// define-shadow stays legal. Syntax interning delegates through q → p via the
 	// Namespace.parent chain.
 	//
-	// The copy spans every phase and rank, which is a deliberate widening from the
+	// The copy spans every phase, sealed and mutable alike, a deliberate widening from the
 	// pre-fold contract: back when phase-1 lived in its own seal frame, this
 	// constructor copied only the phase-0 tiers and gave phase 1 a FRESH, empty
 	// seal, so no define-syntax-defined macro (bootstrap or user) was reachable —
@@ -1107,7 +1107,7 @@ func newPhaseRegistry(owner *Namespace, runtime *EnvironmentFrame) *PhaseRegistr
 			phaseLevel: phase,
 			phases:     q,
 			namespace:  owner,
-			rank:       writeRankSealed,
+			sealed:     true,
 		}
 	}
 	runtime.phases = q
@@ -1115,7 +1115,7 @@ func newPhaseRegistry(owner *Namespace, runtime *EnvironmentFrame) *PhaseRegistr
 }
 
 // initOwner wires a freshly-constructed Namespace around ONE store: the root view
-// (mutable, phase 0) that Runtime() returns, its rank-sealed twin that bootstrap
+// (mutable, phase 0) that Runtime() returns, its sealed-write twin that bootstrap
 // and registry application write through, and the registry that caches every
 // other view over the same store.
 //

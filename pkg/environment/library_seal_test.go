@@ -92,9 +92,9 @@ func TestChildRuntimeMirrorsTheWholeSealedAxis(t *testing.T) {
 		c.Assert(libOK, qt.IsTrue, qt.Commentf("phase %s", phase))
 		c.Assert(libView, qt.Not(qt.Equals), nsView, qt.Commentf("phase %s", phase))
 		// A sealed-write view is the same store at the same phase, differing only
-		// in the rank its writes stamp.
+		// in whether its writes stamp the sealed tier.
 		c.Assert(libView.GlobalEnvironment(), qt.Equals, lib.GlobalEnvironment(), qt.Commentf("phase %s", phase))
-		c.Assert(libView.rank, qt.Equals, writeRankSealed, qt.Commentf("phase %s", phase))
+		c.Assert(libView.sealed, qt.IsTrue, qt.Commentf("phase %s", phase))
 	}
 
 	base, _ := lib.phases.sealedViewAt(PhaseRuntime)
@@ -165,13 +165,13 @@ func TestSealedWriteViewAtRequiresAnOwnerRoot(t *testing.T) {
 	sealedRoot, _ := ns.phases.sealedViewAt(PhaseRuntime)
 
 	c.Assert(ns.Runtime().SealedWriteViewAt(PhaseRuntime), qt.Equals, sealedRoot)
-	c.Assert(ns.NewChildRuntime().SealedWriteViewAt(PhaseRuntime).rank, qt.Equals, writeRankSealed)
+	c.Assert(ns.NewChildRuntime().SealedWriteViewAt(PhaseRuntime).sealed, qt.IsTrue)
 
 	// A lexical child shares the registry and is answered with ITSELF: its own
 	// view at phase 0, mutable, not the owner's sealed writer.
 	inner := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), ns.Runtime())
 	c.Assert(inner.SealedWriteViewAt(PhaseRuntime), qt.Equals, inner)
-	c.Assert(inner.SealedWriteViewAt(PhaseRuntime).rank, qt.Equals, writeRankMutable)
+	c.Assert(inner.SealedWriteViewAt(PhaseRuntime).sealed, qt.IsFalse)
 
 	// The reach a sealed-write view has by climbing is unaffected: AtPhase from a
 	// sealed view stays sealed wherever the axis has a row, so the guard costs

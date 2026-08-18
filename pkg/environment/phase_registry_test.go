@@ -115,7 +115,7 @@ func TestPhaseRegistry_PhaseEnvIsAParentlessView(t *testing.T) {
 	qt.Assert(t, topLevel.GlobalEnvironment(), qt.Equals, store)
 }
 
-// The sealed-write views are the same store at the same phase, with the rank that
+// The sealed-write views are the same store at the same phase, with the flag that
 // sends a write into the sealed tier. They are distinct frames from the ordinary
 // views, which is what lets AtPhase's climb keep a bootstrap define-syntax sealed.
 func TestPhaseRegistry_SealedViewsShareTheStore(t *testing.T) {
@@ -127,7 +127,7 @@ func TestPhaseRegistry_SealedViewsShareTheStore(t *testing.T) {
 		qt.Assert(t, ok, qt.IsTrue, qt.Commentf("phase %s", phase))
 		qt.Assert(t, view.GlobalEnvironment(), qt.Equals, store, qt.Commentf("phase %s", phase))
 		qt.Assert(t, view.PhaseLevel(), qt.Equals, phase, qt.Commentf("phase %s", phase))
-		qt.Assert(t, view.rank, qt.Equals, writeRankSealed, qt.Commentf("phase %s", phase))
+		qt.Assert(t, view.sealed, qt.IsTrue, qt.Commentf("phase %s", phase))
 		qt.Assert(t, view, qt.Not(qt.Equals), topLevel.AtPhase(phase), qt.Commentf("phase %s", phase))
 	}
 

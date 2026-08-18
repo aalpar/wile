@@ -46,7 +46,7 @@ func TestEveryOwnerMintsEverySealedRow(t *testing.T) {
 				qt.Assert(t, view, qt.IsNotNil, qt.Commentf("phase %s", phase))
 				qt.Assert(t, view.GlobalEnvironment(), qt.Equals, owner.GlobalEnvironment(),
 					qt.Commentf("phase %s", phase))
-				qt.Assert(t, view.rank, qt.Equals, writeRankSealed, qt.Commentf("phase %s", phase))
+				qt.Assert(t, view.sealed, qt.IsTrue, qt.Commentf("phase %s", phase))
 			}
 		})
 	}

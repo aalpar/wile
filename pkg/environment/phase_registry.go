@@ -95,7 +95,7 @@ type PhaseRegistry struct {
 	// Immutable after construction.
 	runtime *EnvironmentFrame
 	// sealedViews caches this owner's SEALED-WRITE views, one per sealedAxis row:
-	// the same store as envs, at the same phase, with writeRankSealed. They are
+	// the same store as envs, at the same phase, sealed. They are
 	// what AtPhase's climb hands a sealed-write view (design §4.5), and what
 	// SealedWriteViewAt returns to a registration target.
 	//
@@ -155,7 +155,7 @@ func (p *PhaseRegistry) GetOrCreate(phase Phase) *EnvironmentFrame {
 }
 
 // createPhaseEnv mints the owner's ordinary VIEW at the given phase: the one
-// owner store, at that phase, mutable rank, no lexical parent.
+// owner store, at that phase, mutable (not sealed), no lexical parent.
 //
 // Hermeticity is no longer a parent link that skips the mutable runtime — it is
 // key disjointness in the store. A phase-N read is a candidate only for slots at

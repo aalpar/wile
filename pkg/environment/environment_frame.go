@@ -69,7 +69,7 @@ import (
 //   - EnvironmentFrame: Many per VM. Share namespace and phases references.
 //   - GlobalEnvironmentFrame: One per OWNER, not one per phase. Every phase view
 //     and every sealed-write view is a thin frame over the SAME store, differing
-//     only in the (phase, rank) coordinates its reads probe and its writes stamp.
+//     only in the (phase, sealed) coordinates its reads probe and its writes stamp.
 //     No direct Namespace back-reference (reach Namespace via the owning frame).
 //   - LocalEnvironmentFrame: One per lexical scope. No external references.
 //
@@ -109,33 +109,28 @@ type EnvironmentFrame struct {
 	// phaseLevel indicates which phase this frame represents
 	// (PhaseTemplate=-1, PhaseRuntime=0, PhaseExpand=1, PhaseCompile=2)
 	phaseLevel Phase
-	// rank says which tier a write through this frame lands in. Every sealed-write
-	// view (newPhaseRegistry mints one per sealedAxis row) carries writeRankSealed;
-	// every other frame is the zero value writeRankMutable. Placed next to
-	// phaseLevel: both are single bytes that share the padding already required
-	// before the next pointer field, so this costs nothing in EnvironmentFrame's
-	// size (see layout_size_test.go).
-	rank writeRank
+	// sealed says which tier a write through this frame lands in. It is the same
+	// fact the store records on every slot (slotRef.sealed), stamped by
+	// writeCoordinates, which is why it is a bool here too and not a rank: the
+	// write axis has exactly two positions, and the third read tier (ambient)
+	// comes from the PHASE axis, not from this field.
+	//
+	// True on every sealed-write view (newPhaseRegistry mints one per sealedAxis
+	// row); false — the zero value, the mutable tier — on every other frame. It
+	// is a property of the VIEW, not an argument, because LoadBootstrapCore
+	// COMPILES stdlib Scheme whose defines must land sealed, and the compiler
+	// cannot thread a sealing parameter through define compilation (design Q2,
+	// decided by force majeure).
+	//
+	// Placed next to phaseLevel: both are single bytes that share the padding
+	// already required before the next pointer field, so this costs nothing in
+	// EnvironmentFrame's size (see layout_size_test.go).
+	sealed bool
 	// phases is the shared phase registry, owned by Namespace
 	phases *PhaseRegistry
 	// namespace is the owning Namespace
 	namespace *Namespace
 }
-
-// writeRank says which tier a write through this frame lands in. The zero value
-// is mutable — every ordinary frame; the sealed rank is carried only by the
-// sealed-write views — permanent entries in PhaseRegistry.sealedViews, one per
-// sealedAxis row, that every registration writes through (there are no seal
-// frames; that topology is gone). It is a property of the VIEW, not an
-// argument, because LoadBootstrapCore COMPILES stdlib Scheme whose defines
-// must land sealed, and the compiler cannot thread a sealing parameter through
-// define compilation (design Q2, decided by force majeure).
-type writeRank uint8
-
-const (
-	writeRankMutable writeRank = iota
-	writeRankSealed
-)
 
 // NewNamespaceFrame creates a new root environment frame via NewNamespace.
 //
@@ -148,8 +143,10 @@ func NewNamespaceFrame() *EnvironmentFrame {
 
 // newEnvironmentFrame creates an isolated environment frame without a
 // Namespace or PhaseRegistry. Calling AtPhase() on the result
-// will panic. Use NewNamespace().Runtime() for full environments
-// or NewEnvironmentFrameWithParent() for child scopes.
+// will panic.
+//
+// Deprecated: Use NewNamespace().Runtime() for full environments or
+// NewEnvironmentFrameWithParent() for child scopes.
 func newEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironmentFrame) *EnvironmentFrame {
 	q := &EnvironmentFrame{
 		global:     global,
@@ -162,14 +159,14 @@ func newEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironment
 	return q
 }
 
-// NewEnvironmentFrameWithParent creates a new environment frame with the given local environment frame and parent environment frame.
-// The global environment frame is inherited from the parent.
-// This is used for creating child frames within a phase (e.g., lambda bodies, let-syntax).
-// The phase level, registry, and namespace are inherited from the parent. rank is
-// NOT inherited — the new frame is always writeRankMutable (the zero value),
-// because a lexical child (a lambda body) is never a registration target, only a
-// sealed-write view is.
-// Panics if parent is nil - use NewNamespaceFrame() instead.
+// NewEnvironmentFrameWithParent creates a new environment frame with the given local environment frame and parent
+// environment frame.
+//
+// The global environment frame is inherited from the parent. This is used for creating child frames within a phase
+// (e.g., lambda bodies, let-syntax). The phase level, registry, and namespace are inherited from the parent. sealed is
+// NOT inherited — the new frame is always mutable (the zero value), because a lexical child (a lambda body)
+// is never a registration target, only a sealed-write view is. Panics if parent is nil - use NewNamespaceFrame()
+// instead.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
 	if parent == nil {
 		panic(werr.WrapForeignErrorf(
@@ -314,7 +311,7 @@ func (p *EnvironmentFrame) AtPhase(phase Phase) *EnvironmentFrame {
 	// bootstrap macro's NextPhase() into the phase-1 seal, re-expressed as a
 	// write mode instead of topology. It asks the frame's OWN registry: the rows
 	// are the same for every owner, the frames are not.
-	if phase > p.phaseLevel && p.rank == writeRankSealed && p.phases != nil {
+	if phase > p.phaseLevel && p.sealed && p.phases != nil {
 		sealed, ok := p.phases.sealedViewAt(phase)
 		if ok {
 			return sealed
@@ -853,11 +850,10 @@ func (p *EnvironmentFrame) SetLocalValueBySlotDepth(slot, depth int, v values.Va
 // ambient and the phase-1 seal's exact, because a phase frame's parent chain ran
 // through the phase-0 seal and no further; the same fact is now one branch here.
 func (p *EnvironmentFrame) writeCoordinates() (PhaseKey, bool) {
-	sealed := p.rank == writeRankSealed
-	if sealed && p.phaseLevel == PhaseRuntime {
+	if p.sealed && p.phaseLevel == PhaseRuntime {
 		return AnyPhase(), true
 	}
-	return ExactPhase(p.phaseLevel), sealed
+	return ExactPhase(p.phaseLevel), p.sealed
 }
 
 // MaybeCreateOwnGlobalBinding creates a new global binding in the owner store at
@@ -983,11 +979,11 @@ func (p *EnvironmentFrame) IsOwnerRoot() bool {
 //   - the same COORDINATES. This is what a lexical child passes and what makes
 //     the predicate wider than IsOwnerRoot at all.
 //
-// Note that the fix is deliberately NOT to change `rank` on a lexical child.
-// rank is left at writeRankMutable on purpose (see NewEnvironmentFrameWithParent),
-// and that is exactly what makes writeCoordinates resolve to
+// Note that the fix is deliberately NOT to change `sealed` on a lexical child.
+// It is left false on purpose (see NewEnvironmentFrameWithParent), and that is
+// exactly what makes writeCoordinates resolve to
 // (ExactPhase(0), mutable) and the write land on the runtime root's slot.
-// Setting it to writeRankSealed would redirect the write to (ANY, sealed) — a
+// Setting it true would redirect the write to (ANY, sealed) — a
 // strictly worse outcome, and it would break the write this guard is protecting.
 func (p *EnvironmentFrame) WritesOwnerRootCoordinates() bool {
 	if p.namespace == nil {

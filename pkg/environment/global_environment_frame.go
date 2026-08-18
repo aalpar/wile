@@ -198,12 +198,12 @@ type slotRef struct {
 }
 
 // GlobalEnvironmentFrame is one OWNER's whole binding store: every global
-// binding a namespace or library env holds, at every phase and every
-// registration rank, in one scope-keyed slot table.
+// binding a namespace or library env holds, at every phase, sealed and mutable
+// alike, in one scope-keyed slot table.
 //
 // Design: it has no hierarchy of its own, and after the store fold there is no
 // hierarchy above it either — an owner's phase frames are VIEWS over this one
-// instance, distinguished by the (phase, rank) coordinates their writes stamp
+// instance, distinguished by the (phase, sealed) coordinates their writes stamp
 // and the phase their reads probe at. What used to be a parent walk across
 // (layer × phase) frames is resolveRankedLocked's tier order.
 //
@@ -412,7 +412,7 @@ type NamedSlot struct {
 	Binding *Binding
 }
 
-// LiveSlots snapshots every live slot in the store: any phase, any rank. It is
+// LiveSlots snapshots every live slot in the store: any phase, sealed or not. It is
 // the "every binding this owner holds anywhere" enumeration that the doc/apropos
 // walk wants, and it replaces the old union over every phase frame plus every
 // sealed frame — which, now that all of those are views over one store, would
@@ -423,7 +423,7 @@ func (p *GlobalEnvironmentFrame) LiveSlots() []NamedSlot {
 }
 
 // SealedSlots snapshots every live SEALED-tier slot in the store, at any phase.
-// This is the rank-filtered form of LiveSlots: the startup set a registry apply
+// This is the sealed-filtered form of LiveSlots: the startup set a registry apply
 // and the bootstrap load wrote, as distinct from anything user code has defined
 // since.
 // Thread-safe: uses RLock for read-only access.
