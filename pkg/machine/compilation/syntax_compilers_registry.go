@@ -50,22 +50,29 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 	{"eval-when", (*CompileTimeContinuation).CompileEvalWhen},
 }
 
-// RegisterSyntaxCompilers binds all syntax compilers at (PhaseRuntime, handler) —
-// the frozen taproot, which every owner of a sealed axis has: the main namespace's
-// sealed base, or a NewChildRuntime library env's own. Unlike the primitive
-// expanders, these WANT the
-// phase-0 seal: because every phase frame parents to that taproot (see the
-// reparent in environment/phase_registry.go createPhaseEnv), a binding placed
-// here is ambient: reachable uniformly from the runtime, expand, and compile
-// phases via the parent chain, instead of being pinned to the phase-2 (compile)
-// frame. These bindings serve two purposes:
+// RegisterSyntaxCompilers binds all syntax compilers through the level-0
+// SEALED-WRITE view, which every owner of a sealed axis has: the main
+// namespace's, or a NewChildRuntime library env's own. Unlike the primitive
+// expanders, these WANT the level-0 seal, because that is the one write whose
+// coordinate is the ambient (AnyPhase, sealed) one — every other write, mutable
+// at any level or sealed above 0, lands at an exact level
+// (EnvironmentFrame.writeCoordinates). A binding placed here is therefore
+// reachable from a frame at any level as the ranked probe's T3 tier, instead of
+// being pinned to the PhaseCompile view.
+//
+// This is a write COORDINATE, not a topology: phase views have no lexical parent,
+// and hermeticity is key disjointness in the one store. Comments here once said
+// "every phase frame parents to that taproot"; createPhaseEnv stopped reparenting
+// when the store was flattened.
+//
+// These bindings serve two purposes:
 //
 //  1. Library export/import: findLibraryBinding in library_bindings.go searches
-//     a library's own runtime/expand/compile frames to locate syntax compilers
-//     when exporting or importing forms like syntax-case, define-syntax, etc.
-//     A NewChildRuntime library env is an island — its frame graph roots at its
-//     OWN sealed base, so it does not reach the engine root's taproot at any
-//     phase — and special forms stay ambient-only, unchanged by this relocation.
+//     the levels the library's own registry has instantiated (PresentPhases) to
+//     locate syntax compilers when exporting or importing forms like syntax-case,
+//     define-syntax, etc. A NewChildRuntime library env is an island — it owns its
+//     own store, so the engine root's ambient tier is not reachable from it at any
+//     level — and special forms stay ambient-only, unchanged by this relocation.
 //  2. Scope-aware lookup via LookupSyntaxCompiler for hygiene resolution.
 //
 // Compilation dispatch itself goes through the forms registry (register.go),
@@ -84,11 +91,15 @@ func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
 		})
 }
 
-// LookupSyntaxCompiler looks up a syntax compiler by symbol, entering through
-// the compile phase frame. Returns the SyntaxCompiler if found, or nil if the
-// symbol does not name a syntax compiler. The compilers live in the ambient
-// taproot (see RegisterSyntaxCompilers); the compile frame reaches them through
-// its parent chain, so a phase-2 shadow still takes precedence.
+// LookupSyntaxCompiler looks up a syntax compiler by symbol, entering through the
+// PhaseCompile view. Returns the SyntaxCompiler if found, or nil if the symbol
+// does not name a syntax compiler. The compilers live in the ambient tier (see
+// RegisterSyntaxCompilers), which that view's ranked probe reaches as T3, so a
+// PhaseCompile shadow at T1 or T2 still takes precedence.
+//
+// Naming PhaseCompile by constant is correct here, unlike a climb: it is a fixed
+// registry coordinate rather than a rung of the macro tower, so it does not vary
+// with the level of the frame asking. See environment.Phase.
 //
 // This function handles hygiene by using scoped lookup - it will only match
 // bindings whose scopes are a subset of the symbol's scopes.

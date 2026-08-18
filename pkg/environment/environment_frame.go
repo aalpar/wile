@@ -48,7 +48,7 @@ import (
 //	│  parent ─────────── *EnvironmentFrame (lexical parent, nil at top)      │
 //	│  local ──────────── LocalEnvironmentFrame (value; keys==nil → none)     │
 //	│  global ─────────── *GlobalEnvironmentFrame (define bindings)           │
-//	│  phaseLevel ─────── Phase (-1=template, 0=runtime, 1=expand, 2=compile) │
+//	│  phaseLevel ─────── Phase (RELATIVE level; 0 == the owner's runtime)    │
 //	│  phases ─────────── *PhaseRegistry (shared reference)                   │
 //	│  namespace ───────── *Namespace (back-reference)                        │
 //	└─────────────────────────────────────────────────────────────────────────┘
@@ -87,7 +87,13 @@ import (
 //	    ├── [0] Runtime EnvironmentFrame (normal execution)
 //	    ├── [1] Expand EnvironmentFrame (macro expansion, for-syntax)
 //	    ├── [2] Compile EnvironmentFrame (syntax compilers, for-meta 2)
+//	    ├── [3…] minted on demand as the macro tower climbs
 //	    └── [-1] Template EnvironmentFrame (for-template, future)
+//
+// The indices are RELATIVE levels, counted from THIS owner's runtime — see the
+// Phase type. The registry is per-owner, so a library env's [1] and the
+// namespace's [1] are different frames, and the named levels are the ones the
+// top level uses rather than the ones that exist.
 //
 // These are VIEWS, not owners: every entry shares the one GlobalEnvironmentFrame
 // and the one Namespace. Phase separation is key disjointness in that store — a
@@ -106,8 +112,11 @@ type EnvironmentFrame struct {
 	local LocalEnvironmentFrame
 	// global holds global bindings for this phase
 	global *GlobalEnvironmentFrame
-	// phaseLevel indicates which phase this frame represents
-	// (PhaseTemplate=-1, PhaseRuntime=0, PhaseExpand=1, PhaseCompile=2)
+	// phaseLevel is this frame's level on the macro tower, RELATIVE to the
+	// owner's own runtime (level 0). It is not an absolute compilation stage:
+	// the same number denotes different frames under different owners, and the
+	// named constants (PhaseTemplate=-1 … PhaseCompile=2) are the levels the top
+	// level occupies, not the range. See the Phase type.
 	phaseLevel Phase
 	// sealed says which tier a write through this frame lands in. It is the same
 	// fact the store records on every slot (slotRef.sealed), stamped by
@@ -291,8 +300,17 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 }
 
 // AtPhase returns the environment for the given phase level, creating it if needed.
-// Phase 0 is runtime, phase 1 is expansion (for-syntax), phase 2 is compile-time, etc.
-// Negative phases (e.g., -1 for for-template) are also supported.
+// The argument is a RELATIVE level in the OWNER's tower, counted from its own
+// runtime (0), not an absolute compilation stage; any int8 is legal, including
+// negatives (-1 is for-template) and levels above 2, which the macro tower mints
+// on demand.
+//
+// A caller moving ALONG the tower must derive the argument from the receiver —
+// p.PhaseLevel()+1, or NextPhase(), which is that expression named. Passing a
+// constant pins the target to one level and silently collapses the tower for
+// every frame that is not already at level 0. The exception is PhaseCompile,
+// which is a fixed registry coordinate rather than a rung (see the Phase type),
+// and is correctly reached by constant.
 //
 // A climb rooted at a SEALED-WRITE view stays sealed wherever the target phase has
 // a sealed-write view of its own; every other receiver, and every phase without
@@ -327,7 +345,15 @@ func (p *EnvironmentFrame) AtPhase(phase Phase) *EnvironmentFrame {
 	return topLevel.phases.GetOrCreate(phase)
 }
 
-// PhaseLevel returns the phase level of this environment frame.
+// PhaseLevel returns this frame's level on its owner's macro tower, relative to
+// that owner's runtime (0).
+//
+// Comparing it against PhaseRuntime is well defined — it asks "is this the
+// owner's own runtime", which every owner answers for itself. Comparing two
+// frames' levels across owners is not: the number says how far up each frame
+// sits in its own tower, not which stage of one compilation both are in. It is
+// a base to compute from (import composes it with a shift; NextPhase adds one),
+// not a stage tag.
 func (p *EnvironmentFrame) PhaseLevel() Phase {
 	return p.phaseLevel
 }
@@ -372,14 +398,25 @@ func (p *EnvironmentFrame) MutableRuntimeOrNil() *EnvironmentFrame {
 	return nil
 }
 
-// Expand returns the expand phase environment (phase 1), creating it if needed.
-// This is where syntax bindings from define-syntax are stored.
+// Expand returns the owner's level-1 environment, creating it if needed. This is
+// where a TOP-LEVEL define-syntax stores its transformer.
+//
+// It is not "the expand phase" of an arbitrary frame: a define-syntax inside a
+// transformer body stores one level above THAT body, not at level 1. Climbing
+// sites must use NextPhase(); this accessor is for code that has already
+// established it is talking about the owner's first rung.
 func (p *EnvironmentFrame) Expand() *EnvironmentFrame {
 	return p.AtPhase(PhaseExpand)
 }
 
-// Compile returns the compile phase environment (phase 2), creating it if needed.
-// This is where compile-time procedures (syntax compilers) are stored.
+// Compile returns the owner's PhaseCompile view, creating it if needed. This is
+// where registry apply installs syntax compilers and auxiliary keywords, and
+// where LookupSyntaxCompiler reads them back.
+//
+// Unlike Expand, reaching this one by constant is correct: PhaseCompile is a
+// fixed registry coordinate, not a rung of the tower a frame climbs (see the
+// Phase type). That a transformer body at level 1 also climbs to level 2 is a
+// shared number, not a shared meaning.
 func (p *EnvironmentFrame) Compile() *EnvironmentFrame {
 	return p.AtPhase(PhaseCompile)
 }
@@ -1148,9 +1185,10 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 // cannot detect.
 //
 // The phase-0 (runtime) search reaching the mutable runtime frame's OWN defines
-// is DELIBERATE and load-bearing — it is NOT the accidental parent-chain leak
-// the phase-frame reparent (createPhaseEnv) closed, and must NOT be routed to
-// the phase-0 seal. A macro-generating-macro introduces a phase-0
+// is DELIBERATE and load-bearing — it is NOT the accidental cross-level leak that
+// phase-frame parenting once allowed (closed when createPhaseEnv stopped
+// reparenting and hermeticity became key disjointness in the store), and must NOT
+// be routed to the phase-0 seal. A macro-generating-macro introduces a phase-0
 // define that a generated inner macro references by scope-aware
 // identifier; only searching the runtime frame resolves that intro-scoped
 // binding at compile time. Sealing it breaks R7RS §4.3 referential transparency

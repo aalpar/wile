@@ -23,9 +23,14 @@ import (
 
 // PhaseSet is a bitset over non-negative environment.Phase values, used to
 // declare which phases a primitive is registered for. The companion type
-// environment.Phase is a typed enum identifying a single phase; PhaseSet
-// is the registration vocabulary that says "this primitive is available
-// at runtime", "at runtime and expand", etc.
+// environment.Phase is a single RELATIVE level in one owner's macro tower;
+// PhaseSet is the registration vocabulary that says "this primitive is
+// available at runtime", "at runtime and expand", etc.
+//
+// Registration only ever names the bottom of a tower, so the relative/absolute
+// distinction does not bite here: Apply installs into the levels of the owner it
+// is handed, and the set is built from compile-time constants naming that
+// owner's own levels 0..2. A PhaseSet is not a way to address a climbed level.
 //
 // Representable phases are 0 ≤ phase < phaseSetBits. environment.PhaseTemplate
 // (-1) and any phase ≥ phaseSetBits are unrepresentable. With(unrepresentable)

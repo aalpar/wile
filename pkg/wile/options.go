@@ -48,9 +48,12 @@ const (
 	strictLevelNoBindings
 )
 
-// Phase is a typed enum identifying a stage of compilation/evaluation.
-// Re-exported from environment for embedder convenience; use the
-// PhaseRuntime/PhaseExpand/PhaseCompile/PhaseTemplate constants below.
+// Phase is a level in one owner's macro tower, counted RELATIVE to that owner's
+// own runtime (0) rather than as an absolute stage of compilation. The named
+// constants below are the levels the top level occupies, not the range: the
+// tower climbs past them whenever a transformer body defines a macro of its own.
+// Re-exported from environment for embedder convenience; see environment.Phase
+// for the full model.
 type Phase = environment.Phase
 
 // Phase constants for LibraryImportEvent.Phase and other phase-keyed APIs.

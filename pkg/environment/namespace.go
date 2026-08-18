@@ -346,21 +346,25 @@ func (p *Namespace) BoundNamesAcrossPhases() []string {
 	return names
 }
 
-// AtPhase returns the environment for the given phase level, creating it if needed.
-// Phase 0 is runtime, phase 1 is expansion (for-syntax), phase 2 is compile-time, etc.
-// Negative phases (e.g., -1 for for-template) are also supported.
+// AtPhase returns the environment for the given phase level, creating it if
+// needed. The argument is a RELATIVE level in THIS namespace's tower, counted
+// from its own runtime (0), not an absolute compilation stage; any int8 is
+// legal, including negatives (-1 is for-template) and levels above 2, which the
+// macro tower mints on demand. See the Phase type.
 func (p *Namespace) AtPhase(phase Phase) *EnvironmentFrame {
 	return p.phases.GetOrCreate(phase)
 }
 
-// Expand returns the expand phase environment (phase 1), creating it if needed.
-// This is where syntax bindings from define-syntax are stored.
+// Expand returns this namespace's level-1 environment, creating it if needed.
+// This is where a TOP-LEVEL define-syntax stores its transformer. A climb from
+// an arbitrary frame belongs on EnvironmentFrame.NextPhase(), not here.
 func (p *Namespace) Expand() *EnvironmentFrame {
 	return p.AtPhase(PhaseExpand)
 }
 
-// Compile returns the compile phase environment (phase 2), creating it if needed.
-// This is where compile-time procedures (syntax compilers) are stored.
+// Compile returns this namespace's PhaseCompile view, creating it if needed.
+// This is the fixed registry coordinate where syntax compilers live, not a rung
+// of the macro tower — see the Phase type.
 func (p *Namespace) Compile() *EnvironmentFrame {
 	return p.AtPhase(PhaseCompile)
 }

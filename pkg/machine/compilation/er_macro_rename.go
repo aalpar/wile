@@ -69,11 +69,12 @@ func NewERRenameClosure(
 // is added to ensure the renamed identifier is distinct from any use-site
 // binding with the same name, preventing variable capture.
 func resolveRenamedSymbol(defExpandEnv *environment.EnvironmentFrame, sym *values.Symbol, introScope *syntax.Scope) *syntax.SyntaxSymbol {
-	// Definition-site lookup. The expand frame parents to the namespace's sealed
-	// EXPAND base, which in turn parents to the frozen sealed base, so this reaches
-	// base bindings; phase-0 user/import bindings are
-	// intentionally invisible (hermeticity — see the reparent in
-	// environment/phase_registry.go createPhaseEnv).
+	// Definition-site lookup. defExpandEnv's ranked probe reaches base bindings via
+	// the ambient T3 tier; level-0 user/import bindings are intentionally invisible,
+	// because a read at this level is a candidate only against slots at exactly this
+	// level or the ambient coordinate. Hermeticity is that key disjointness, not a
+	// parent link — createPhaseEnv (environment/phase_registry.go) mints a view with
+	// no lexical parent at all.
 	bnd := defExpandEnv.GetBinding(sym, syntax.AllScopes())
 	if bnd != nil {
 		return symbolWithBindingScopes(sym.Key, bnd, defExpandEnv)
