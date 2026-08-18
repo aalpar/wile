@@ -371,7 +371,13 @@ func PrimDocTopic(mc machine.CallContext) error {
 // PrimLibraryDescription implements (library-description library-name).
 // Returns the description string of a loaded library, or #f if none or not loaded.
 func PrimLibraryDescription(mc machine.CallContext) error {
-	nameList := mc.Arg(0)
+	// The argument is whatever Scheme handed us, so the "a library name is a
+	// list" check lives here rather than inside the parser: this is the only
+	// entry point where a non-list is a user error rather than a compiler bug.
+	nameList, ok := mc.Arg(0).(values.Tuple)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "library-description: library name must be a list")
+	}
 	libName, err := compilation.ParseLibraryNameFromDatum(mc.Context(), nameList)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "library-description: invalid library name")

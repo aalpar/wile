@@ -21,24 +21,27 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// ParseLibraryNameFromDatum extracts a LibraryName from a datum list like (scheme base).
-// Used at both runtime (by the 'environment' procedure) and compile time
-// (via UnwrapAll on syntax objects).
-func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryName, error) {
+// ParseLibraryNameFromDatum extracts a LibraryName from a datum list like
+// (scheme base). Used at both runtime (by the library-reflection primitives) and
+// compile time (via ParseLibraryNameFromSyntax).
+//
+// The parameter is values.Tuple, not values.Value: "a library name is a list" is
+// a precondition, not a parse failure, so it is settled before the call. The two
+// entry points that face untyped input carry that check —
+// ParseLibraryNameFromSyntax for the three compile-time sites, and the primitive
+// itself for user-supplied arguments.
+func ParseLibraryNameFromDatum(ctx context.Context, expr values.Tuple) (LibraryName, error) {
 	if values.IsEmptyList(expr) {
 		return LibraryName{}, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "library name cannot be empty")
 	}
-	tuple, ok := expr.(values.Tuple)
-	if !ok {
-		return LibraryName{}, werr.WrapForeignErrorf(werr.ErrNotAList, "library name must be a list")
-	}
 
 	var parts []string
-	err := values.ForEachProperList(ctx, tuple, "library name", func(_ context.Context, _ int, hasNext bool, partExpr values.Value) error {
+	err := values.ForEachProperList(ctx, expr, "library name", func(_ context.Context, _ int, hasNext bool, partExpr values.Value) error {
 		// An R6RS version (or version reference) is a LIST in the final position:
 		// (rnrs hashtables (6)), (srfi :1 (and (>= 1) (< 2))). R7RS name parts are
 		// only identifiers and exact non-negative integers, so a list here is
@@ -79,6 +82,24 @@ func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryN
 		return LibraryName{}, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "library name cannot be empty")
 	}
 	return NewLibraryName(parts...), nil
+}
+
+// ParseLibraryNameFromSyntax unwraps a syntax datum to a library name. It is the
+// compile-time entry point, and the one place the "a library name is a list"
+// precondition is checked for it — the three sites that need a name out of source
+// (define-library's own name, cond-expand's (library ...) feature requirement,
+// and the export-index prescan) all previously repeated UnwrapAll at the call and
+// let the parser sort out non-lists.
+//
+// A non-list here is a malformed program, not an internal error, so it reports
+// ErrNotAList and leaves the source-context wrapping to the caller, which is the
+// only one that knows which form is at fault.
+func ParseLibraryNameFromSyntax(ctx context.Context, expr syntax.SyntaxValue) (LibraryName, error) {
+	tuple, ok := expr.UnwrapAll().(values.Tuple)
+	if !ok {
+		return LibraryName{}, werr.WrapForeignErrorf(werr.ErrNotAList, "library name must be a list")
+	}
+	return ParseLibraryNameFromDatum(ctx, tuple)
 }
 
 // isVersionReference reports whether v has the SHAPE of an R6RS version or
@@ -138,7 +159,7 @@ func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet
 	}
 
 	// Not a modifier, must be a library name
-	libName, err := ParseLibraryNameFromDatum(ctx, expr)
+	libName, err := ParseLibraryNameFromDatum(ctx, tuple)
 	if err != nil {
 		return nil, err
 	}

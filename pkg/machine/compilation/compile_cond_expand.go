@@ -230,7 +230,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "library: expected library name"))
 			}
 			libNameExpr := argsPair.SyntaxCar()
-			libName, err := ParseLibraryNameFromDatum(ctx, libNameExpr.UnwrapAll())
+			libName, err := ParseLibraryNameFromSyntax(ctx, libNameExpr)
 			if err != nil {
 				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "library: invalid library name"))
 			}

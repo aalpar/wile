@@ -22,6 +22,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -63,7 +64,7 @@ func TestParseLibraryNameRejectsTraversal(t *testing.T) {
 // names with a dot inside an identifier and integer parts must still parse.
 func TestParseLibraryNameAllowsLegitimate(t *testing.T) {
 	cases := []struct {
-		datum values.Value
+		datum values.Tuple
 		key   string
 	}{
 		{values.List(values.NewSymbol("srfi"), values.NewInteger(1)), "srfi/1"},
@@ -96,7 +97,7 @@ func TestParseLibraryNameDropsVersionReference(t *testing.T) {
 
 	cases := []struct {
 		name  string
-		datum values.Value
+		datum values.Tuple
 		key   string
 	}{
 		{"plain version", values.List(values.NewSymbol("rnrs"), values.NewSymbol("hashtables"), version), "rnrs/hashtables"},
@@ -113,7 +114,7 @@ func TestParseLibraryNameDropsVersionReference(t *testing.T) {
 
 	rejected := []struct {
 		name  string
-		datum values.Value
+		datum values.Tuple
 	}{
 		{"list in a non-final position", values.List(version, values.NewSymbol("rnrs"))},
 		{"list in the middle", values.List(values.NewSymbol("rnrs"), version, values.NewSymbol("hashtables"))},
@@ -137,10 +138,34 @@ func TestParseLibraryNameFromDatum_WithNumbers(t *testing.T) {
 	qt.Assert(t, result.Key(), qt.Equals, "srfi/1")
 }
 
-func TestParseLibraryNameFromDatum_NotAPair(t *testing.T) {
-	_, err := ParseLibraryNameFromDatum(context.Background(), values.NewInteger(42))
+// TestParseLibraryNameFromSyntax_NotAList covers what
+// TestParseLibraryNameFromDatum_NotAPair used to: a library name that is not a
+// list is rejected with ErrNotAList. It moved because ParseLibraryNameFromDatum
+// now takes a values.Tuple, which makes the bad call a COMPILE error rather than
+// a runtime one — the case cannot be written against that function any more. The
+// check lives at the two entry points facing untyped input, and this is the
+// compile-time one; the runtime one is PrimLibraryDescription.
+func TestParseLibraryNameFromSyntax_NotAList(t *testing.T) {
+	sctx := syntax.NewZeroValueSourceContext()
+	_, err := ParseLibraryNameFromSyntax(context.Background(),
+		syntax.NewSyntaxObject(values.NewInteger(42), sctx))
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue)
+}
+
+// TestParseLibraryNameFromSyntax_Delegates pins that the syntax entry point is a
+// thin unwrap over the datum one, not a second parser: a well-formed name gives
+// the same LibraryName either way.
+func TestParseLibraryNameFromSyntax_Delegates(t *testing.T) {
+	sctx := syntax.NewZeroValueSourceContext()
+	name := syntax.NewSyntaxCons(
+		syntax.NewSyntaxSymbol("scheme", sctx),
+		syntax.NewSyntaxCons(
+			syntax.NewSyntaxSymbol("base", sctx),
+			syntax.SyntaxEmptyList, sctx), sctx)
+	got, err := ParseLibraryNameFromSyntax(context.Background(), name)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, got.Key(), qt.Equals, "scheme/base")
 }
 
 func TestParseLibraryNameFromDatum_Empty(t *testing.T) {
@@ -168,7 +193,7 @@ func TestParseLibraryNameFromDatum_InvalidPart(t *testing.T) {
 func TestParseLibraryNameFromDatum_RejectsImproperList(t *testing.T) {
 	tcs := []struct {
 		name string
-		expr values.Value
+		expr values.Tuple
 	}{
 		{
 			name: "dotted-pair",

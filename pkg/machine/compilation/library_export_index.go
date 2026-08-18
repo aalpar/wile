@@ -106,7 +106,7 @@ func ParseLibrarySummary(ctx context.Context, r io.Reader, filePath string, name
 			"define-library: missing library name in %s", filePath)
 	}
 
-	parsedName, err := ParseLibraryNameFromDatum(ctx, cdr.SyntaxCar().UnwrapAll())
+	parsedName, err := ParseLibraryNameFromSyntax(ctx, cdr.SyntaxCar())
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed,
 			"define-library: malformed library name in %s", filePath)

@@ -60,7 +60,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 
 	// Parse library name: (lib-name) is a list of identifiers
 	libNameExpr := rest.SyntaxCar()
-	libName, err := ParseLibraryNameFromDatum(ctctx.ctx, libNameExpr.UnwrapAll())
+	libName, err := ParseLibraryNameFromSyntax(ctctx.ctx, libNameExpr)
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-library: invalid library name"))
 	}
