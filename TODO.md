@@ -2152,6 +2152,37 @@ stay protected inside mutable children. Design:
   predicate slice and records the three decisions it must make. The predicate itself stays
   behind §6.4's consumer gate and is **not** filed here.
 
+### `force` still runs its thunk in a sub-context, truncating captured continuations (2026-08-18)
+
+- [ ] **Convert `force` to a live-chain boundary** [Correctness/continuations, M, NOT STARTED]:
+  `(let ((captured 'unset)) (force (delay (set! captured (call/cc (lambda (r) (r 42))))))
+  (list 'END captured))` answers `#!void`; the same shape through `call-with-values`
+  answers `(END 42)`. A continuation captured inside a delayed thunk ends at the
+  sub-context boundary, so re-entry never replays the program tail. This is the exact
+  class the 2026-06-28 boundary-reification arc fixed for ten other victims — `force`
+  was simply not in that set.
+
+  **Why it was left.** `executeThunk` (`pkg/internal/extensions/all/prim_all.go`) needs
+  the thunk's value back **in Go**: `forcePromise` re-checks `promise.IsForced()` (the
+  thunk may have forced this same promise re-entrantly), recurses when the result is
+  another promise (the `delay-force` chain), and memoizes with `promise.Force(result)`.
+  The `RunBodyUnder*` family cannot deliver a value to Go — `RunBodyUnderFrame`
+  (`pkg/machine/run_body_under_frame.go`) ends at `ApplyCallable` and the body runs
+  after the primitive has returned, so post-body work must be reified as a chain frame.
+
+  **Shape of the fix.** `make-parameter` is the precedent: its post-thunk work became a
+  `ForeignClosure` finalizer used as the consumer (`pkg/registry/core/prim_parameters.go`).
+  `force` needs more than one such finalizer because its post-work is a *loop* — each
+  `delay-force` link memoizes against its own promise, so the finalizer must carry that
+  promise's identity and push the next consumer frame itself. Confirm the converted form
+  still walks a 100k-link `delay-force` chain (measured working today) before landing.
+
+  **Gate**: `WILE_RUN_RED_CONTINUATION=1 go test ./pkg/registry/core/ -run
+  TestForceSubContextTruncationRed` — two cases, red on master. When they go green
+  un-gated, move the rows into `TestSubContextNonTailEscapeTruncation` and drop the
+  env gate. The tail-position controls (`force-delay tail`, `force-delay-force tail`
+  in `TestSubContextEscapeControls`) are already green and must stay green.
+
 ---
 ## Tier 2 — Embedding API & Product Value
 
