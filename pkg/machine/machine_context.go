@@ -822,17 +822,53 @@ func (p *MachineContext) Run() error {
 		// --- Wave 5: promoted complex operations ---
 
 		case OpMakeClosure:
-			tpl, err := popMakeClosureArgs(mc)
+			freeCount, selfSlot := DecodeMakeClosure(instr.Arg)
+			tpl, free, err := popMakeClosureArgs(mc, freeCount)
 			if err != nil {
 				return err
 			}
-			// The closure references mc.env as its parent. Mark it non-poolable so
-			// RestoreAndRelease won't recycle it while the closure holds a live
-			// reference. See MachineClosure for why no frame is built here.
+			// The closure holds mc.env as its STATIC LINK — for global resolution
+			// and the namespace/phase the apply frame derives from it, not for
+			// free variables, which the vector above already carries. Mark the
+			// frame non-poolable so RestoreAndRelease will not recycle it while
+			// the closure points at it.
 			mc.envPooled = false
-			cls := NewClosureCapturing(tpl, mc.env)
+			cls := NewClosureCapturing(tpl, mc.env, free)
+			backPatchSelfSlot(cls, free, selfSlot)
 			mc.SetValue(cls)
 			mc.pc++
+
+		// --- Flat-closure free-vector access ---
+
+		case OpLoadFree:
+			v, err := mc.resolveFree(instr)
+			if err != nil {
+				return err
+			}
+			mc.SetValue(v)
+			mc.pc++
+
+		case OpPushFree:
+			v, err := mc.resolveFree(instr)
+			if err != nil {
+				return err
+			}
+			mc.evals.Push(v)
+			err = mc.checkStackSize()
+			if err != nil {
+				return err
+			}
+			mc.pc++
+
+		case OpCallFree:
+			v, err := mc.resolveFree(instr)
+			if err != nil {
+				return err
+			}
+			mc, err = mc.drainAndApply(v)
+			if err != nil {
+				return err
+			}
 
 		// --- Wave 6: cached binding operations ---
 
@@ -1431,6 +1467,24 @@ func (p *MachineContext) resolveLocalBinding(instr Instruction) (*environment.Bi
 			fmt.Sprintf("no such local binding %d:%d", slot, depth))
 	}
 	return bd, nil
+}
+
+// resolveFree reads one entry of the executing closure's free vector.
+//
+// Both failures are compiler/VM disagreements, not user errors: the index is an
+// immediate the emitter chose against a layout the same emitter fixed, and the
+// vector is installed by Apply from the closure whose body is running.
+func (p *MachineContext) resolveFree(instr Instruction) (values.Value, error) {
+	if p.free == nil {
+		return nil, p.WrapError(ErrNoFreeVector,
+			"free variable access outside a closure body")
+	}
+	i := int(instr.Arg)
+	if i < 0 || i >= len(p.free) {
+		return nil, p.WrapError(ErrFreeIndexOutOfRange,
+			fmt.Sprintf("free index %d against a vector of %d", i, len(p.free)))
+	}
+	return p.free[i], nil
 }
 
 // resolveBoxSlot reads the box installed in a local slot by OpBoxSlot.

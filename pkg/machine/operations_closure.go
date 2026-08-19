@@ -25,31 +25,59 @@ import (
 
 type OperationMakeClosure struct {
 	OperationBase
+	// freeCount is how many free values sit under the template on the eval
+	// stack, in slot order.
+	freeCount int
+	// selfSlot is the free-vector index the finished closure writes itself into
+	// (the letrec T2 back-patch), or -1 when the closure has no self reference.
+	selfSlot int
 }
 
-func NewOperationMakeClosure() *OperationMakeClosure {
+// NewOperationMakeClosure returns a make-closure op that pops freeCount free
+// values (pushed in slot order) and then the template. selfSlot is the free-vector
+// index the closure must write ITSELF into once built — the letrec T2
+// back-patch — or -1 when there is none.
+func NewOperationMakeClosure(freeCount, selfSlot int) *OperationMakeClosure {
 	return &OperationMakeClosure{
 		OperationBase: NewOperationBase("machine-operation-make-closure"),
+		freeCount:     freeCount,
+		selfSlot:      selfSlot,
 	}
 }
 
-// popMakeClosureArgs pops the MakeClosure operand off the eval stack and
-// validates its type. One operand, not two: the compile-time frame used to ride
-// alongside the template, and now rides ON it (NativeTemplate.shape), so
-// codegen no longer pushes it. Both the (production-vestigial)
-// OperationMakeClosure.Apply method and the inline OpMakeClosure case in Run()
-// use this so the validation lives in one place.
-func popMakeClosureArgs(mc *MachineContext) (*NativeTemplate, error) {
+// popMakeClosureArgs pops MakeClosure's operands off the eval stack: the
+// template (pushed LAST, so popped first), then freeCount free values, which
+// were pushed in slot order and therefore come back bottom-to-top.
+//
+// The compile-time frame used to ride alongside the template and now rides ON it
+// (NativeTemplate.shape), so codegen pushes the template and the free values and
+// nothing else. Both the (production-vestigial) OperationMakeClosure.Apply
+// method and the inline OpMakeClosure case in Run() use this so the validation
+// lives in one place.
+func popMakeClosureArgs(mc *MachineContext, freeCount int) (*NativeTemplate, []values.Value, error) {
 	tpl, ok := mc.evals.Pop().(*NativeTemplate)
 	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate,
+		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate,
 			"MakeClosure: expected native template on stack")
 	}
-	return tpl, nil
+	if freeCount == 0 {
+		return tpl, nil, nil
+	}
+	free := make([]values.Value, freeCount)
+	// PopN hands back the drained values bottom-to-top, which IS slot order:
+	// the emitter pushed slot 0 first. Copying rather than retaining the drain
+	// buffer matters — it is reused by the next drain.
+	drained := mc.evals.PopN(freeCount)
+	if len(drained) != freeCount {
+		return nil, nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"MakeClosure: expected %d free values on stack, got %d", freeCount, len(drained))
+	}
+	copy(free, drained)
+	return tpl, free, nil
 }
 
 func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error) {
-	tpl, err := popMakeClosureArgs(mc)
+	tpl, free, err := popMakeClosureArgs(mc, p.freeCount)
 	if err != nil {
 		return mc, err
 	}
@@ -80,15 +108,38 @@ func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error
 	// The closure holds mc.env as that parent, so mark it non-poolable —
 	// RestoreAndRelease must not recycle a frame a closure still points at.
 	mc.envPooled = false
-	cls := NewClosureCapturing(tpl, mc.env)
+	cls := NewClosureCapturing(tpl, mc.env, free)
+	backPatchSelfSlot(cls, free, p.selfSlot)
 	mc.SetValue(cls)
 	mc.pc++
 	return mc, nil
 }
 
+// backPatchSelfSlot writes the just-built closure into its own free vector — the
+// letrec T2 carve-out. The emitter pushed a placeholder for that slot, and no
+// bytecode runs between the push and here, so the placeholder window is not
+// observable: the closure cannot be applied before it exists.
+//
+// slot < 0 means the closure has no self-reference, which is the common case.
+func backPatchSelfSlot(cls *MachineClosure, free []values.Value, slot int) {
+	if slot < 0 || slot >= len(free) {
+		return
+	}
+	free[slot] = cls
+}
+
+// EqualTo compares BOTH packed fields.
+//
+// THIS IS LOAD-BEARING, NOT STYLE. The literal pool dedups templates through
+// NativeTemplate.EqualTo, which compares their code, and two MakeClosure
+// instructions that differ only in free count or self slot would otherwise
+// compare equal — collapsing two templates whose closures capture different
+// things. Mirrors OperationMakeCaseLambdaClosure.EqualTo.
 func (p *OperationMakeClosure) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationMakeClosure)
-	return SameType(p, v, ok)
+	return FieldMatches(p, v, ok, func(op *OperationMakeClosure) [2]int {
+		return [2]int{op.freeCount, op.selfSlot}
+	})
 }
 
 // --- MakeCaseLambdaClosure ---

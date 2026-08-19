@@ -206,6 +206,16 @@ type vmState struct {
 	//  │ acquireMacroContext      │ false(0) │ n/a (fresh context)               │
 	//  └──────────────────────────┴──────────┴───────────────────────────────────┘
 	envPooled bool
+	// free is the executing closure's free-variable vector, installed by Apply
+	// from the closure being applied and read by OpLoadFree / OpPushFree /
+	// OpCallFree. nil outside a closure body, and for a closure that captures
+	// nothing.
+	//
+	// INVARIANT: every site that writes mc.template MUST also write mc.free, for
+	// the same reason every site that writes mc.env must write envPooled — a
+	// stale vector is read with the NEW template's indices and silently returns
+	// another closure's variables.
+	free []values.Value
 	// marks holds per-frame continuation marks (Racket-style key-value annotations).
 	// nil when no marks are set on this frame (zero-cost common case).
 	// Lazily allocated by SetMark on first use.

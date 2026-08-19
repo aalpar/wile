@@ -27,6 +27,16 @@ import (
 // with this sentinel when the bytecode format cannot represent the index.
 var ErrLocalIndexOverflow = werr.NewStaticError("local index overflow")
 
+// ErrFreeIndexOutOfRange reports a free-vector index that the executing
+// closure's vector does not contain. It is a compiler/VM disagreement, not a
+// user error: the index is an immediate the emitter chose against a layout the
+// same emitter fixed.
+var ErrFreeIndexOutOfRange = werr.NewStaticError("free variable index out of range")
+
+// ErrNoFreeVector reports a free-vector access executed with no closure vector
+// installed — a body compiled as a closure body running outside Apply.
+var ErrNoFreeVector = werr.NewStaticError("no free vector installed")
+
 // Instruction is a single VM instruction for the switch-dispatch loop.
 // Op selects the operation; Arg carries an immediate operand whose meaning
 // depends on Op:
@@ -125,5 +135,36 @@ func EncodeSelfTailCall(argCount, popCount int) int32 {
 func DecodeSelfTailCall(arg int32) (argCount, popCount int) {
 	argCount = int(arg & 0xFFFF)
 	popCount = int(arg >> 16)
+	return
+}
+
+// EncodeMakeClosure packs OpMakeClosure's two operands: the free-variable count
+// in the low half, the self-reference slot in the high half.
+//
+// selfSlot is stored as selfSlot+1 so that 0 means "no self slot". The natural
+// -1 cannot ride in a half of a codec that refuses a negative operand, which is
+// the same constraint EncodeSelfTailCall works under.
+//
+// freeCount 0 with no self slot encodes to 0, so every closure that captures
+// nothing emits the same instruction word OpMakeClosure emitted before this
+// change — invisible to the peephole, to the disassembler's goldens, and to any
+// stored template.
+func EncodeMakeClosure(freeCount, selfSlot int) int32 {
+	if freeCount < 0 || freeCount > math.MaxInt16 {
+		panic(werr.WrapForeignErrorf(ErrLocalIndexOverflow,
+			"EncodeMakeClosure: freeCount %d outside 0..%d", freeCount, math.MaxInt16))
+	}
+	if selfSlot < -1 || selfSlot >= math.MaxInt16 {
+		panic(werr.WrapForeignErrorf(ErrLocalIndexOverflow,
+			"EncodeMakeClosure: selfSlot %d outside -1..%d", selfSlot, math.MaxInt16-1))
+	}
+	return int32(selfSlot+1)<<16 | int32(freeCount)
+}
+
+// DecodeMakeClosure unpacks OpMakeClosure's free-variable count and
+// self-reference slot. selfSlot is -1 when the closure has none.
+func DecodeMakeClosure(arg int32) (freeCount, selfSlot int) {
+	freeCount = int(arg & 0xFFFF)
+	selfSlot = int(arg>>16) - 1
 	return
 }

@@ -32,6 +32,7 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 	p.counters.ContinuationsRestored++
 	p.env = cont.env
 	p.template = cont.template
+	p.free = cont.free
 	p.cont = cont.parent
 	p.pc = cont.pc
 	// Restore callDepth from the continuation's cached value.
@@ -86,6 +87,7 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 
 	p.env = cont.env
 	p.template = cont.template
+	p.free = cont.free
 	p.cont = cont.parent
 	p.pc = cont.pc
 	p.callDepth = cont.callDepth

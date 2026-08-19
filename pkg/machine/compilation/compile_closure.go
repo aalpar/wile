@@ -162,7 +162,7 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 	p.AppendOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
 		machine.NewOperationPush(),
-		machine.NewOperationMakeClosure(),
+		machine.NewOperationMakeClosure(0, -1),
 	)
 
 	return nil

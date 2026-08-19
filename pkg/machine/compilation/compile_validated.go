@@ -296,7 +296,7 @@ func CompileValidatedCaseLambda(p *CompileTimeContinuation, ctctx CompileTimeCal
 		p.AppendOperations(
 			machine.NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
 			machine.NewOperationPush(),
-			machine.NewOperationMakeClosure(),
+			machine.NewOperationMakeClosure(0, -1),
 			machine.NewOperationPush(),
 		)
 	}

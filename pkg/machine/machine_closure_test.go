@@ -24,18 +24,25 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestMachineClosureIsTwoWords is a ratchet, not a curiosity. Closure size is
-// what the shape-vs-parent arc has been trading against since the pair split:
+// TestMachineClosureSize is a ratchet, not a curiosity. Closure size is what the
+// shape-vs-parent arc has been trading against since the pair split:
 // materializing the environment cost an 80-byte frame per evaluated lambda, the
 // pair that replaced it cost a third word (16 -> 24B, measured as +1.3% on
-// call-bound code), and moving the shape onto NativeTemplate is what bought that
-// word back. A fourth field would undo it silently — every functional test would
-// still pass.
+// call-bound code), and moving the shape onto NativeTemplate bought that word
+// back.
 //
-// Adding a field here is a decision to re-open that trade. Measure it, do not
-// just update the constant.
-func TestMachineClosureIsTwoWords(t *testing.T) {
-	qt.Assert(t, unsafe.Sizeof(MachineClosure{}), qt.Equals, 2*unsafe.Sizeof(uintptr(0)))
+// Flat-closure conversion re-opened the trade DELIBERATELY: `free
+// []values.Value` adds a slice header, taking the struct from 2 words to 5 (16
+// -> 40 B). The trade it buys is that a closure no longer pins an environment
+// frame, so the frames a loop allocates become collectable instead of being
+// held by every closure the loop built. That is a per-CLOSURE cost against a
+// per-FRAME saving, and the applies-per-creation ratio (38.5:1 on the schelog
+// backtracking workload) is why the direction was chosen.
+//
+// A SIXTH word would be a new decision. Measure it, do not just update the
+// constant.
+func TestMachineClosureSize(t *testing.T) {
+	qt.Assert(t, unsafe.Sizeof(MachineClosure{}), qt.Equals, 5*unsafe.Sizeof(uintptr(0)))
 }
 
 func TestMachineClosure_IsVoid(t *testing.T) {
@@ -88,8 +95,8 @@ func TestMachineClosure_EqualTo(t *testing.T) {
 	// necessarily, the shape the template carries.
 	shape := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), env)
 	tpl.SetShape(shape)
-	pair1 := NewClosureCapturing(tpl, env)
-	pair2 := NewClosureCapturing(tpl, env)
+	pair1 := NewClosureCapturing(tpl, env, nil)
+	pair2 := NewClosureCapturing(tpl, env, nil)
 	qt.Assert(t, pair1.EqualTo(pair2), qt.IsFalse)
 	qt.Assert(t, pair1.EqualTo(pair1), qt.IsTrue)
 

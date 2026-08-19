@@ -265,12 +265,14 @@ func instructionToOperation(instr Instruction) Operation {
 		return NewOperationStoreThroughBox(li)
 	case OpUnbox:
 		return NewOperationUnbox()
+	case OpLoadFree, OpPushFree, OpCallFree:
+		return NewOperationLoadFree(int(instr.Arg))
 
 	// --- Wave 5: fused zero-operand ops ---
 	case OpPullApply:
 		return NewOperationPull()
 	case OpMakeClosure:
-		return NewOperationMakeClosure()
+		return NewOperationMakeClosure(DecodeMakeClosure(instr.Arg))
 
 	default:
 		// Metadata-driven decomposition for peephole-emitted opcodes.
@@ -396,6 +398,12 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 	// --- Wave 6: cached binding operations ---
 	case *OperationLoadCachedBinding:
 		return Instruction{Op: kind, Arg: v.BindingIndex}, true
+
+	// --- Flat closures: packed and single-dimension operands ---
+	case *OperationMakeClosure:
+		return Instruction{Op: kind, Arg: EncodeMakeClosure(v.freeCount, v.selfSlot)}, true
+	case *OperationLoadFree:
+		return Instruction{Op: kind, Arg: int32(v.Index)}, true
 
 	default:
 		// Zero-operand operations (Wave 1, Wave 5 OperationMakeClosure):

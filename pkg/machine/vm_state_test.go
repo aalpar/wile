@@ -190,6 +190,7 @@ var vmStateFieldCoverage = map[string]map[string]string{
 		"callDepth":    "zero (fresh call stack)",
 		"envPooled":    "zero (false; not from pool)",
 		"marks":        "zero (fresh context)",
+		"free":         "copy (travels with template)",
 	},
 	// NewSubContext: mc → mc (sub-context for foreign calls)
 	"NewSubContext": {
@@ -206,6 +207,7 @@ var vmStateFieldCoverage = map[string]map[string]string{
 		"callDepth":    "zero (fresh call stack)",
 		"envPooled":    "zero (false; top-level env)",
 		"marks":        "zero (fresh context)",
+		"free":         "zero (no template; caller sets via Apply)",
 	},
 }
 

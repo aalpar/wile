@@ -81,8 +81,33 @@ var (
 // the (compile ...) use-after-release the check was standing in for. The live
 // protection is mc.envPooled = false at OpMakeClosure, not a nil read.
 type MachineClosure struct {
-	parent   *environment.EnvironmentFrame
+	// link is the STATIC LINK: the environment the apply frame hangs from, for
+	// GLOBAL resolution and for the namespace/phase/store the frame derives from
+	// it. It is one pointer to a view, not a chain to be walked: free-variable
+	// lookup no longer travels it.
+	//
+	// It is the creating context's own environment rather than the root view,
+	// because phaseLevel is a RELATIVE index on the owner's macro tower and
+	// today's apply frame inherits the creating frame's level through this
+	// pointer. A link pinned to Runtime() would collapse the tower for every
+	// closure built above phase 0.
+	link     *environment.EnvironmentFrame
 	template *NativeTemplate
+	// free holds the VALUES of the closure's free variables, in the slot order
+	// compileClosureBody fixed (NativeTemplate.FreeNames names them, FreeBoxed
+	// says which are cells). A boxed entry holds the *values.Box, shared with
+	// every other holder.
+	//
+	// nil for a closure that captures nothing, and for the two closures built
+	// over an already-materialized environment (createTransformerClosure,
+	// PrimCompile) — neither has a free VARIABLE, only an environment for global
+	// resolution, which is what link is.
+	//
+	// This is what makes "no closure built by OpMakeClosure points at a frame"
+	// true by construction. It does NOT extend to call/cc: a captured
+	// continuation still holds mc.env (NewMachineContinuation), and nothing in
+	// this design changes that.
+	free []values.Value
 }
 
 func (p *MachineClosure) closureMarker() {
@@ -102,17 +127,24 @@ func (p *MachineClosure) closureMarker() {
 func NewClosureWithTemplate(tpl *NativeTemplate, env *environment.EnvironmentFrame) *MachineClosure {
 	tpl.SetShape(env)
 	q := &MachineClosure{
-		parent:   env.Parent(),
+		link:     env.Parent(),
 		template: tpl,
 	}
 	return q
 }
 
-// ApplyParent returns the runtime parent the closure's apply frame hangs from.
-// A nil result is not a shape, it is a closure that recorded no environment;
-// see the type comment.
-func (p *MachineClosure) ApplyParent() *environment.EnvironmentFrame {
-	return p.parent
+// Link returns the static link: the environment the closure's apply frame hangs
+// from. A nil result is not a shape, it is a closure that recorded no
+// environment; see the type comment.
+func (p *MachineClosure) Link() *environment.EnvironmentFrame {
+	return p.link
+}
+
+// Free returns the closure's free-variable vector, in the slot order the
+// template's FreeNames name. nil for a closure that captures nothing. The slice
+// is the closure's own — treat it as read-only.
+func (p *MachineClosure) Free() []values.Value {
+	return p.free
 }
 
 // NewClosureCapturing builds a closure over a template whose shape is already
@@ -122,10 +154,10 @@ func (p *MachineClosure) ApplyParent() *environment.EnvironmentFrame {
 // record of what it closed over, and the compile-time frame reachable through
 // the template holds placeholders, so any fallback would be a wrong answer
 // rather than a crash.
-func NewClosureCapturing(tpl *NativeTemplate, parent *environment.EnvironmentFrame) *MachineClosure {
-	if parent == nil {
+func NewClosureCapturing(tpl *NativeTemplate, link *environment.EnvironmentFrame, free []values.Value) *MachineClosure {
+	if link == nil {
 		panic(werr.WrapForeignErrorf(werr.ErrNilParentEnvironment,
-			"NewClosureCapturing: nil runtime parent; a captured closure must record the environment it closed over"))
+			"NewClosureCapturing: nil static link; a captured closure must record the environment it resolves globals through"))
 	}
 	// Checked here rather than in Apply: the shape is a property of the
 	// template, so it is settled once per closure and does not need re-asking
@@ -138,8 +170,9 @@ func NewClosureCapturing(tpl *NativeTemplate, parent *environment.EnvironmentFra
 			"NewClosureCapturing: template records no local shape; it was not compiled as a closure body"))
 	}
 	q := &MachineClosure{
-		parent:   parent,
+		link:     link,
 		template: tpl,
+		free:     free,
 	}
 	return q
 }
@@ -160,10 +193,10 @@ func (p *MachineClosure) Template() *NativeTemplate {
 // environment" because callers already treat a nil frame that way.
 func (p *MachineClosure) Env() *environment.EnvironmentFrame {
 	shape := p.template.Shape()
-	if p.parent == nil || shape == nil {
+	if p.link == nil || shape == nil {
 		return nil
 	}
-	return environment.NewEnvironmentFrameWithParent(shape.LocalEnvironment(), p.parent)
+	return environment.NewEnvironmentFrameWithParent(shape.LocalEnvironment(), p.link)
 }
 
 func (p *MachineClosure) IsVoid() bool {

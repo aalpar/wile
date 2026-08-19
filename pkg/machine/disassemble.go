@@ -141,8 +141,14 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 		}
 
 		// Special-case: MakeClosure annotates with the preceding literal's template name.
+		//
+		// Its Arg is bit-packed (freeCount | (selfSlot+1)<<16) since flat-closure
+		// conversion, so like SelfTailCall it reads as a nonsense integer raw.
+		// Detail and Literal are separate fields on di, so both are reported.
 		if instr.Op == OpMakeClosure {
 			di.Literal = makeClosureAnnotation(pc, code, literals)
+			freeCount, selfSlot := DecodeMakeClosure(instr.Arg)
+			di.Detail = fmt.Sprintf("free=%d self=%d", freeCount, selfSlot)
 		}
 
 		// Source location.

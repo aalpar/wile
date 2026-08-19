@@ -105,6 +105,8 @@ func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *Mach
 	q := mc.acquireContinuation()
 	q.env = mc.env
 	q.template = mc.template
+	// free travels with template, per the vmState.free invariant.
+	q.free = mc.free
 	q.copyValueRegisterFrom(&mc.vmState)
 	q.evals = mc.evals
 	q.pc = mc.pc + off
@@ -164,6 +166,7 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 	q := acquireContinuation()
 	q.env = p.env
 	q.template = p.template
+	q.free = p.free
 	q.cloneValueRegisterFrom(&p.vmState)
 	if p.evals != nil {
 		q.evals = p.evals.Copy()

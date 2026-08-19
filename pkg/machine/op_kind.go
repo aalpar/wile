@@ -88,6 +88,10 @@ func (*OperationStoreLocalByLocalIndexImmediate) OpKind() OpCode {
 	return OpStoreLocal
 }
 
+func (*OperationLoadFree) OpKind() OpCode {
+	return OpLoadFree
+}
+
 func (*OperationBoxSlot) OpKind() OpCode {
 	return OpBoxSlot
 }

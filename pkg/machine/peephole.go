@@ -112,6 +112,7 @@ var loadToFusedPush = [opCount]OpCode{
 	OpLoadGlobal:        OpPushGlobal,
 	OpLoadLocal:         OpPushLocal,
 	OpLoadCachedBinding: OpPushCachedBinding,
+	OpLoadFree:          OpPushFree,
 }
 
 // fuseLoadPush scans for LoadLiteral+Push, LoadGlobal+Push, LoadLocal+Push, and
@@ -413,6 +414,10 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 var calleeToCallOp = [opCount]OpCode{
 	OpPushLocal:         OpCallLocal,
 	OpPushCachedBinding: OpCallCachedBinding,
+	// Calling a CAPTURED procedure is the common case in higher-order code, so
+	// leaving this row out would silently deoptimize exactly the workloads flat
+	// closures target — and nothing but the arc's site-count ratchet would say so.
+	OpPushFree: OpCallFree,
 }
 
 // fuseCallGeneric rewrites PushLocal/PushCachedBinding...PullApply sequences

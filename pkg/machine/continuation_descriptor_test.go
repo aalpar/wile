@@ -286,7 +286,7 @@ var contDescriptor = map[contOp]siteSpec{
 	opSave: {
 		dest: destCont,
 		fields: cat(
-			always(verbShare, "env", "template", "singleValue", "multiValues",
+			always(verbShare, "env", "template", "free", "singleValue", "multiValues",
 				"evals", "threadID", "envPooled", "marks", "barrierValid"),
 			always(verbOffset, "pc"),
 			always(verbDerive, "callDepth", "parent"),
@@ -314,7 +314,7 @@ var contDescriptor = map[contOp]siteSpec{
 	opRestore: {
 		dest: destMc,
 		fields: cat(
-			always(verbShare, "env", "template", "pc", "callDepth", "barrierValid"),
+			always(verbShare, "env", "template", "free", "pc", "callDepth", "barrierValid"),
 			always(verbReset, "envPooled"), // never pool old env on re-entry
 			always(verbClone, "marks"),
 			always(verbSkip, "singleValue", "multiValues", "windingStack",
@@ -334,7 +334,7 @@ var contDescriptor = map[contOp]siteSpec{
 	opRestoreAndRelease: {
 		dest: destMc,
 		fields: cat(
-			always(verbShare, "env", "template", "pc", "callDepth", "barrierValid"),
+			always(verbShare, "env", "template", "free", "pc", "callDepth", "barrierValid"),
 			always(verbSkip, "singleValue", "multiValues", "windingStack",
 				"promptTag", "threadID",
 				"parent", "promptHandler", "shared", "inlineEvals", "inlineEvalsLen",
@@ -363,7 +363,7 @@ var contDescriptor = map[contOp]siteSpec{
 	opCopy: {
 		dest: destCont,
 		fields: cat(
-			always(verbShare, "env", "template", "singleValue", "pc", "promptTag",
+			always(verbShare, "env", "template", "free", "singleValue", "pc", "promptTag",
 				"threadID", "callDepth", "barrierValid", "parent", "promptHandler",
 				"inlineEvals", "inlineEvalsLen", "escalatorArm"),
 			always(verbClone, "multiValues", "marks"),
@@ -477,6 +477,12 @@ var vmFieldProbes = map[string]fieldProbe{
 	"envPooled": {
 		ref:    func(s *vmState) any { return s.envPooled },
 		isZero: func(s *vmState) bool { return !s.envPooled },
+	},
+	// free travels with template: a continuation that restored one without the
+	// other would read the new template's free indices against the old vector.
+	"free": {
+		ref:    func(s *vmState) any { return sliceIdent(s.free) },
+		isZero: func(s *vmState) bool { return s.free == nil },
 	},
 	"marks": {
 		ref: func(s *vmState) any { return sliceIdent(s.marks) },

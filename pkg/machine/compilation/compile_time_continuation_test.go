@@ -84,7 +84,7 @@ func TestCompileContext_CompileLambda(t *testing.T) {
 	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		machine.NewOperationPush(),
-		machine.NewOperationMakeClosure(),
+		machine.NewOperationMakeClosure(0, -1),
 	))
 	qt.Assert(t, cont.Template().IsVariadic(), qt.Equals, false)
 	qt.Assert(t, cont.Template().ParameterCount(), qt.Equals, 0)
@@ -129,7 +129,7 @@ func TestCompileContext_CompileLambdaCall(t *testing.T) {
 		machine.NewOperationSaveContinuationOffsetImmediate(9),
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		machine.NewOperationPush(),
-		machine.NewOperationMakeClosure(),
+		machine.NewOperationMakeClosure(0, -1),
 		machine.NewOperationPush(),
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(1),
 		machine.NewOperationPush(),
@@ -597,7 +597,7 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		machine.NewOperationPush(),
-		machine.NewOperationMakeClosure(),
+		machine.NewOperationMakeClosure(0, -1),
 		machine.NewOperationPush(),
 		machine.NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(1),
 		machine.NewOperationLoadVoid(),

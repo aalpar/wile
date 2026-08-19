@@ -90,9 +90,23 @@ const (
 
 	OpPullApply // Pull + Apply
 
-	// Wave 5: promoted complex operations (zero-operand)
+	// Wave 5: promoted complex operations
+	//
+	// OpMakeClosure's Arg is a packed (freeCount, selfSlot) pair — see
+	// EncodeMakeClosure. It encodes to 0 for a closure that captures nothing,
+	// which is the word it carried when it was zero-operand.
 
-	OpMakeClosure // MakeClosure (was OpComplex)
+	OpMakeClosure
+
+	// Flat-closure free-vector access (Arg = free-vector index).
+	//
+	// OperandRaw, not OperandLocalIdx: a free index is ONE dimension, not a
+	// (slot, depth) pair, so these must stay out of the LocalIdx family that
+	// instructionToOperation's metadata-driven default arm decomposes.
+
+	OpLoadFree // Load free[Arg] into the value register
+	OpPushFree // LoadFree + Push
+	OpCallFree // Resolve free[Arg] as the callee, drain args, ApplyCallable
 
 	// Wave 6: cached binding operations (Arg = index into cachedBindings)
 
@@ -242,7 +256,10 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpPushGlobal:            {name: "PushGlobal", operandKind: OperandLiteralIdx},
 	OpPushLocal:             {name: "PushLocal", operandKind: OperandLocalIdx},
 	OpPullApply:             {name: "PullApply"},
-	OpMakeClosure:           {name: "MakeClosure", writesValue: true},
+	OpMakeClosure:           {name: "MakeClosure", operandKind: OperandRaw, writesValue: true},
+	OpLoadFree:              {name: "LoadFree", operandKind: OperandRaw, writesValue: true},
+	OpPushFree:              {name: "PushFree", operandKind: OperandRaw},
+	OpCallFree:              {name: "CallFree", operandKind: OperandRaw},
 	OpLoadCachedBinding:     {name: "LoadCachedBinding", operandKind: OperandCachedBinding, writesValue: true},
 	OpPushCachedBinding:     {name: "PushCachedBinding", operandKind: OperandCachedBinding},
 	OpCallForeignCached:     {name: "CallForeignCached", operandKind: OperandCachedBinding},

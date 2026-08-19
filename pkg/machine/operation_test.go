@@ -149,7 +149,7 @@ func TestOperation(t *testing.T) {
 			},
 		},
 		{
-			op: NewOperationMakeClosure(),
+			op: NewOperationMakeClosure(0, -1),
 			setupFn: func(t *testing.T, mc *MachineContext) {
 				topEnv := environment.NewNamespace().Runtime()
 				lenv := environment.NewLocalEnvironment(0)
@@ -369,8 +369,8 @@ func TestOperationValueMethods(t *testing.T) {
 
 	// Test MakeClosure
 	t.Run("MakeClosure", func(t *testing.T) {
-		op1 := NewOperationMakeClosure()
-		op2 := NewOperationMakeClosure()
+		op1 := NewOperationMakeClosure(0, -1)
+		op2 := NewOperationMakeClosure(0, -1)
 		qt.Assert(t, op1.IsVoid(), qt.IsFalse)
 		qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
 		qt.Assert(t, op1.EqualTo(values.NewInteger(1)), qt.IsFalse)
@@ -625,12 +625,12 @@ func TestOperationLoadVoidMethods(t *testing.T) {
 
 // TestOperationMakeClosureMethods tests MakeClosure operation methods
 func TestOperationMakeClosureMethods(t *testing.T) {
-	op := NewOperationMakeClosure()
+	op := NewOperationMakeClosure(0, -1)
 	qt.Assert(t, op.SchemeString(), qt.IsNotNil)
 	qt.Assert(t, op.IsVoid(), qt.IsFalse)
 
 	// Test EqualTo
-	op2 := NewOperationMakeClosure()
+	op2 := NewOperationMakeClosure(0, -1)
 	qt.Assert(t, op.EqualTo(op2), qt.IsTrue)
 }
 
@@ -786,7 +786,7 @@ func TestOperationMakeClosureError(t *testing.T) {
 		// Push something that's not a template
 		NewOperationLoadLiteralByLiteralIndexImmediate(tpl.MaybeAppendLiteral(values.NewInteger(99))),
 		NewOperationPush(),
-		NewOperationMakeClosure(),
+		NewOperationMakeClosure(0, -1),
 	)
 
 	cont := NewMachineContinuation(nil, tpl, env)

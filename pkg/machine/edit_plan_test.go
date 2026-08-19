@@ -344,9 +344,9 @@ func TestEditPlan_AddLiteral_Dedup(t *testing.T) {
 // --- SideTable GC ---
 
 func TestEditPlan_SideTableGC(t *testing.T) {
-	op0 := NewOperationMakeClosure()
-	op1 := NewOperationMakeClosure()
-	op2 := NewOperationMakeClosure()
+	op0 := NewOperationMakeClosure(0, -1)
+	op1 := NewOperationMakeClosure(0, -1)
+	op2 := NewOperationMakeClosure(0, -1)
 
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{
@@ -370,7 +370,7 @@ func TestEditPlan_SideTableGC(t *testing.T) {
 }
 
 func TestEditPlan_SideTableGC_NoneUnreferenced(t *testing.T) {
-	op0 := NewOperationMakeClosure()
+	op0 := NewOperationMakeClosure(0, -1)
 
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{

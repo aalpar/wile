@@ -31,42 +31,42 @@ func TestOperationsClosure(t *testing.T) {
 		// --- MakeClosure ---
 		{
 			name: "MakeClosure/constructor",
-			op:   NewOperationMakeClosure(),
+			op:   NewOperationMakeClosure(0, -1),
 			checkFn: func(t *testing.T, op Operation) {
 				qt.Assert(t, op, qt.IsNotNil)
 			},
 		},
 		{
 			name: "MakeClosure/SchemeString",
-			op:   NewOperationMakeClosure(),
+			op:   NewOperationMakeClosure(0, -1),
 			checkFn: func(t *testing.T, op Operation) {
 				qt.Assert(t, op.SchemeString(), qt.Contains, "make-closure")
 			},
 		},
 		{
 			name: "MakeClosure/IsVoid",
-			op:   NewOperationMakeClosure(),
+			op:   NewOperationMakeClosure(0, -1),
 			checkFn: func(t *testing.T, op Operation) {
 				qt.Assert(t, op.IsVoid(), qt.IsFalse)
 			},
 		},
 		{
 			name: "MakeClosure/EqualTo_self",
-			op:   NewOperationMakeClosure(),
+			op:   NewOperationMakeClosure(0, -1),
 			checkFn: func(t *testing.T, op Operation) {
-				qt.Assert(t, op.EqualTo(NewOperationMakeClosure()), qt.IsTrue)
+				qt.Assert(t, op.EqualTo(NewOperationMakeClosure(0, -1)), qt.IsTrue)
 			},
 		},
 		{
 			name: "MakeClosure/EqualTo_different_type",
-			op:   NewOperationMakeClosure(),
+			op:   NewOperationMakeClosure(0, -1),
 			checkFn: func(t *testing.T, op Operation) {
 				qt.Assert(t, op.EqualTo(values.NewInteger(1)), qt.IsFalse)
 			},
 		},
 		{
 			name: "MakeClosure/EqualTo_nil",
-			op:   NewOperationMakeClosure(),
+			op:   NewOperationMakeClosure(0, -1),
 			checkFn: func(t *testing.T, op Operation) {
 				var nilOp *OperationMakeClosure
 				qt.Assert(t, op.EqualTo(nilOp), qt.IsFalse)

@@ -166,7 +166,7 @@ func TestOperationToInstruction_AllDirectDispatch(t *testing.T) {
 		{"Apply", NewOperationApply(), OpApply},
 		{"UnpackListToStack", NewOperationUnpackListToStack(), OpUnpackListToStack},
 		{"RestoreContinuation", NewOperationRestoreContinuation(), OpRestoreContinuation},
-		{"MakeClosure", NewOperationMakeClosure(), OpMakeClosure},
+		{"MakeClosure", NewOperationMakeClosure(0, -1), OpMakeClosure},
 
 		// Operand-bearing ops (matched by the type switch).
 		{"PeekK", NewOperationPeekK(3), OpPeekK},

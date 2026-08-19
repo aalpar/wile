@@ -47,14 +47,14 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	// captures mc.env, and (2) concurrent SRFI-18 threads sharing binding
 	// slots when calling the same closure.
 	//
-	// A nil ApplyParent is not a closure shape, it is a closure that recorded no
+	// A nil static link is not a closure shape, it is a closure that recorded no
 	// environment. Every producer supplies a parent, directly (OpMakeClosure) or
 	// read off a frame built by NewEnvironmentFrameWithParent, which panics on a
 	// nil parent — so this is unreachable from production. Running anyway would
 	// install an environment with no global, namespace or phases and corrupt
 	// silently, so fault instead. See MachineClosure for the enumeration of
 	// producers.
-	parent := mcls.ApplyParent()
+	parent := mcls.Link()
 	if parent == nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrNilParentEnvironment,
 			"apply: closure recorded no environment; it was built over a frame with no parent")
@@ -86,6 +86,9 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 
 	p.template = tpl
 	p.env = env
+	// Moves with p.template, per the vmState.free invariant: a stale vector read
+	// with the new template's indices returns another closure's variables.
+	p.free = mcls.Free()
 	p.pc = 0
 	// Signal in-place reconfiguration so the foreign-call dispatchers continue
 	// execution even when tpl == the caller's template (self-application).
