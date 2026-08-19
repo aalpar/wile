@@ -76,7 +76,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		// Use extractLiteralsWithSyntax to enable scope-aware literal matching.
 		// Pass a non-nil literals map because extractLiteralsWithSyntax
 		// unconditionally writes to it; only literalSyntax is used downstream.
-		literals := make(map[string]struct{})
+		literals := make(values.StringSet)
 		err := extractLiteralsWithSyntax(ctctx.ctx, literalsPair, literals, literalSyntax, match.DefaultEllipsis)
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "syntax-case: invalid literals list"))
@@ -186,7 +186,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// literalSyntax names the pattern literals, so they are excluded here; it is
 	// also stored on the clause below, which is what carries their definition-site
 	// scopes to the matcher for the R7RS §4.3.2 binding check.
-	patternVars := make(map[string]struct{})
+	patternVars := make(values.StringSet)
 	// patternVarSyntax records each pattern variable's syntax symbol (with its
 	// scopes) so the ellipsis template-expansion path can do scope-aware
 	// substitution for nested-macro hygiene — the same data the syntax-rules
@@ -369,7 +369,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 
 // createPatternVarEnvironment creates a child environment with local bindings
 // for the pattern variables. Uses sorted order for consistent indexing with runtime.
-func (p *CompileTimeContinuation) createPatternVarEnvironment(patternVars map[string]struct{}) *environment.EnvironmentFrame {
+func (p *CompileTimeContinuation) createPatternVarEnvironment(patternVars values.StringSet) *environment.EnvironmentFrame {
 	vars := slices.Sorted(maps.Keys(patternVars))
 
 	localEnv := environment.NewLocalEnvironment(len(patternVars))

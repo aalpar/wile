@@ -686,12 +686,12 @@ func (p *mcpServer) registerPrompts(s *server.MCPServer) error {
 func (p *mcpServer) makePromptHandler(template string, argNames []string) server.PromptHandlerFunc {
 	allowed := make(values.StringSet, len(argNames))
 	for _, n := range argNames {
-		allowed[n] = struct{}{}
+		allowed.Set(n)
 	}
 	return func(_ context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		text := template
 		for k, v := range req.Params.Arguments {
-			_, ok := allowed[k]
+			ok := allowed.Get(k)
 			if !ok {
 				continue
 			}

@@ -780,8 +780,8 @@ func TestSealedSlotsFiltersByRank(t *testing.T) {
 	mustDefine(c, ns.Runtime().SealedWriteViewAt(PhaseRuntime), sealedName, BindingTypeVariable, AmbientScopes(), values.NewInteger(1))
 	mustDefine(c, ns.Runtime(), mutableName, BindingTypeVariable, AmbientScopes(), values.NewInteger(2))
 
-	names := func(slots []NamedSlot) map[string]struct{} {
-		q := map[string]struct{}{}
+	names := func(slots []NamedSlot) values.StringSet {
+		q := values.StringSet{}
 		for _, s := range slots {
 			q[s.Name.Key] = struct{}{}
 		}

@@ -171,7 +171,7 @@ func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet
 // appends the corresponding modifier carrying the parsed identifier list.
 func parseImportSetFilterFromDatum(
 	ctx context.Context, keyword string, tuple values.Tuple,
-	apply func(*ImportSet, map[string]struct{}),
+	apply func(*ImportSet, values.StringSet),
 ) (*ImportSet, error) {
 	nestedExpr, idsExpr, err := values.Uncons(tuple.Cdr(), keyword, "import-set and identifiers")
 	if err != nil {
@@ -320,7 +320,7 @@ func parseImportSetForMetaFromDatum(ctx context.Context, tuple values.Tuple) (*I
 }
 
 // parseIdentifierListFromDatum parses a list of identifiers into a name set.
-func parseIdentifierListFromDatum(ctx context.Context, expr values.Value) (map[string]struct{}, error) {
+func parseIdentifierListFromDatum(ctx context.Context, expr values.Value) (values.StringSet, error) {
 	if values.IsEmptyList(expr) {
 		return nil, nil
 	}
@@ -330,7 +330,7 @@ func parseIdentifierListFromDatum(ctx context.Context, expr values.Value) (map[s
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "expected list of identifiers")
 	}
 
-	ids := make(map[string]struct{})
+	ids := make(values.StringSet)
 	err := values.ForEachProperList(ctx, tuple, "identifier list", func(_ context.Context, _ int, _ bool, idExpr values.Value) error {
 		idSym, ok := idExpr.(*values.Symbol)
 		if !ok {

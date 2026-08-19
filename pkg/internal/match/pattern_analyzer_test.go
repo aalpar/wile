@@ -18,6 +18,8 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/values"
 )
 
 func TestContainsVariables(t *testing.T) {
@@ -26,7 +28,7 @@ func TestContainsVariables(t *testing.T) {
 		testSyntaxSym("x"),
 		testSyntaxInt(42),
 	)
-	variables := map[string]struct{}{
+	variables := values.StringSet{
 		"x": {},
 	}
 
@@ -45,7 +47,7 @@ func TestGetVariables(t *testing.T) {
 		testSyntaxSym("x"),
 		testSyntaxSym("y"),
 	)
-	variables := map[string]struct{}{
+	variables := values.StringSet{
 		"x": {},
 		"y": {},
 	}
@@ -79,7 +81,7 @@ func TestGetVariablesVectorSubPattern(t *testing.T) {
 		sub,
 		testSyntaxSym("..."),
 	)
-	variables := map[string]struct{}{
+	variables := values.StringSet{
 		"x": {},
 		"a": {},
 	}
@@ -87,7 +89,7 @@ func TestGetVariablesVectorSubPattern(t *testing.T) {
 	analysis := AnalyzePattern(pattern, variables)
 
 	c.Assert(analysis.ContainsVariables(sub), qt.IsTrue)
-	c.Assert(analysis.GetVariables(sub), qt.DeepEquals, map[string]struct{}{
+	c.Assert(analysis.GetVariables(sub), qt.DeepEquals, values.StringSet{
 		"x": {},
 		"a": {},
 	})

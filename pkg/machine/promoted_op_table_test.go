@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -30,13 +31,13 @@ import (
 // classified as pure and skip the immutability ratchet, which is exactly how the
 // tail-position set-cdr! bypass survived — the guard existed, and nothing
 // asserted it ran.
-var expectedPromotedPure = map[string]struct{}{
+var expectedPromotedPure = values.StringSet{
 	"eq?": {}, "vector?": {}, "vector-ref": {}, "null?": {}, "pair?": {},
 	"car": {}, "cdr": {}, "cons": {}, "+": {}, "-": {}, "*": {}, "/": {},
 	"<": {}, "<=": {}, ">": {}, ">=": {}, "=": {},
 }
 
-var expectedPromotedMutators = map[string]struct{}{
+var expectedPromotedMutators = values.StringSet{
 	"set-cdr!": {},
 }
 

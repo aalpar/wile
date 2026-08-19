@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
@@ -123,7 +124,7 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 	}
 	only := func(ids ...string) func(*ImportSet) {
 		return func(is *ImportSet) {
-			set := make(map[string]struct{}, len(ids))
+			set := make(values.StringSet, len(ids))
 			for _, id := range ids {
 				set[id] = struct{}{}
 			}
@@ -132,7 +133,7 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 	}
 	except := func(ids ...string) func(*ImportSet) {
 		return func(is *ImportSet) {
-			set := make(map[string]struct{}, len(ids))
+			set := make(values.StringSet, len(ids))
 			for _, id := range ids {
 				set[id] = struct{}{}
 			}

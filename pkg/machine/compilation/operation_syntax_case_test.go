@@ -34,7 +34,7 @@ func TestSyntaxCaseClause_EqualTo(t *testing.T) {
 	c := qt.New(t)
 
 	clause := &SyntaxCaseClause{
-		PatternVars: map[string]struct{}{"x": {}},
+		PatternVars: values.StringSet{"x": {}},
 	}
 
 	c.Assert(clause.EqualTo(clause), qt.IsFalse) // Always returns false
@@ -104,7 +104,7 @@ func TestOperationSyntaxCaseMatch_IsVoid(t *testing.T) {
 func TestNewOperationBindPatternVars(t *testing.T) {
 	c := qt.New(t)
 
-	vars := map[string]struct{}{"x": {}, "y": {}}
+	vars := values.StringSet{"x": {}, "y": {}}
 	op := NewOperationBindPatternVars(vars)
 
 	c.Assert(op, qt.IsNotNil)
@@ -114,31 +114,31 @@ func TestNewOperationBindPatternVars(t *testing.T) {
 func TestOperationBindPatternVars_String(t *testing.T) {
 	c := qt.New(t)
 
-	op := NewOperationBindPatternVars(map[string]struct{}{"x": {}})
+	op := NewOperationBindPatternVars(values.StringSet{"x": {}})
 	c.Assert(op.String(), qt.Equals, "BindPatternVars")
 }
 
 func TestOperationBindPatternVars_SchemeString(t *testing.T) {
 	c := qt.New(t)
 
-	op := NewOperationBindPatternVars(map[string]struct{}{"x": {}})
+	op := NewOperationBindPatternVars(values.StringSet{"x": {}})
 	c.Assert(op.SchemeString(), qt.Equals, "#<operation:bind-pattern-vars>")
 }
 
 func TestOperationBindPatternVars_IsVoid(t *testing.T) {
 	c := qt.New(t)
 
-	op := NewOperationBindPatternVars(map[string]struct{}{"x": {}})
+	op := NewOperationBindPatternVars(values.StringSet{"x": {}})
 	c.Assert(op.IsVoid(), qt.IsFalse)
 }
 
 func TestOperationBindPatternVars_EqualTo(t *testing.T) {
 	c := qt.New(t)
 
-	op1 := NewOperationBindPatternVars(map[string]struct{}{"x": {}})
-	op2 := NewOperationBindPatternVars(map[string]struct{}{"x": {}})
-	op3 := NewOperationBindPatternVars(map[string]struct{}{"y": {}})
-	op4 := NewOperationBindPatternVars(map[string]struct{}{"x": {}, "y": {}})
+	op1 := NewOperationBindPatternVars(values.StringSet{"x": {}})
+	op2 := NewOperationBindPatternVars(values.StringSet{"x": {}})
+	op3 := NewOperationBindPatternVars(values.StringSet{"y": {}})
+	op4 := NewOperationBindPatternVars(values.StringSet{"x": {}, "y": {}})
 
 	c.Assert(op1.EqualTo(op2), qt.IsTrue)
 	c.Assert(op1.EqualTo(op3), qt.IsFalse) // Different var name

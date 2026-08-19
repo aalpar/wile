@@ -93,7 +93,7 @@ cheaper check than the one it replaces:
    have caught all seven. The status sentences in this index are written when a
    plan is *scheduled*, so they age in exactly one direction.
 2. **A grep that finds the old shape is not evidence the fix is absent.** W1 §6
-   looked open because `literals map[string]struct{}` is still keyed on
+   looked open because `literals values.StringSet` is still keyed on
    `sym.Key()` — but that map answers "which names in this pattern are
    literals", a syntactic question. The identity comparison it was confused with
    lives in `literalScopesMatchWithDef` / `match.LiteralPin`. Likewise W4 item 10

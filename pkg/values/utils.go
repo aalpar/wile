@@ -449,4 +449,32 @@ func ExactInteger(v Value) (int64, bool) {
 	}
 }
 
-type StringSet map[string]struct{}
+type MapSet[T comparable] map[T]struct{}
+
+func (p *MapSet[T]) Set(s T) {
+	(*p)[s] = struct{}{}
+}
+
+func (p *MapSet[T]) Unset(s T) {
+	delete(*p, s)
+}
+
+func (p MapSet[T]) Get(s T) bool {
+	_, q := p[s]
+	return q
+}
+
+type StringSet MapSet[string]
+
+func (p *StringSet) Set(s string) {
+	(*p)[s] = struct{}{}
+}
+
+func (p *StringSet) Unset(s string) {
+	delete(*p, s)
+}
+
+func (p StringSet) Get(s string) bool {
+	_, q := p[s]
+	return q
+}

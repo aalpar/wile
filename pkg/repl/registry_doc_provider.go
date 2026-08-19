@@ -208,12 +208,12 @@ func (p *RegistryDocProvider) Categories() []string {
 	cats := make(values.StringSet)
 	for _, pr := range p.reg.Primitives() {
 		if pr.Spec.Category != "" {
-			cats[pr.Spec.Category] = struct{}{}
+			cats.Set(pr.Spec.Category)
 		}
 	}
 	for _, r := range registry.NonPrimitiveDocs(p.reg) {
 		if r.Category != "" {
-			cats[r.Category] = struct{}{}
+			cats.Set(r.Category)
 		}
 	}
 

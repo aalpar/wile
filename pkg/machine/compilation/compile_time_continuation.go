@@ -15,9 +15,8 @@
 package compilation
 
 import (
-	"slices"
-
 	"context"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/machine"
 
@@ -58,7 +57,7 @@ type CompileTimeContinuation struct {
 	// pattern variables (substituted) from free identifiers (resolved at the
 	// definition site); patternVarSyntax carries each pattern variable's scopes
 	// for nested-macro scope comparison.
-	patternVars      map[string]struct{}
+	patternVars      values.StringSet
 	patternVarSyntax map[string]*syntax.SyntaxSymbol
 	// fileResolver controls how include/load resolves files.
 	// Defaults to the resolver stored on Namespace (usually

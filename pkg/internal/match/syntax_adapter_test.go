@@ -27,7 +27,7 @@ import (
 
 func TestSyntaxMatcher(t *testing.T) {
 	t.Run("NewSyntaxMatcher", func(t *testing.T) {
-		variables := map[string]struct{}{
+		variables := values.StringSet{
 			"x": {},
 		}
 		codes := []SyntaxCommand{
@@ -41,14 +41,14 @@ func TestSyntaxMatcher(t *testing.T) {
 	})
 
 	t.Run("NewSyntaxMatcher with ellipsis vars", func(t *testing.T) {
-		variables := map[string]struct{}{
+		variables := values.StringSet{
 			"x": {},
 		}
 		codes := []SyntaxCommand{
 			ByteCodeCaptureCar{Binding: "x"},
 			ByteCodeDone{},
 		}
-		ellipsisVars := map[int]map[string]struct{}{
+		ellipsisVars := map[int]values.StringSet{
 			0: {"x": {}},
 		}
 
@@ -58,7 +58,7 @@ func TestSyntaxMatcher(t *testing.T) {
 	})
 
 	t.Run("Match and Expand", func(t *testing.T) {
-		variables := map[string]struct{}{
+		variables := values.StringSet{
 			"x": {},
 		}
 
@@ -98,7 +98,7 @@ func TestSyntaxMatcher(t *testing.T) {
 	})
 
 	t.Run("Match error on non-pair", func(t *testing.T) {
-		variables := map[string]struct{}{}
+		variables := values.StringSet{}
 		codes := []SyntaxCommand{
 			ByteCodeDone{},
 		}
@@ -113,7 +113,7 @@ func TestSyntaxMatcher(t *testing.T) {
 	})
 
 	t.Run("ExpandWithIntroScope", func(t *testing.T) {
-		variables := map[string]struct{}{
+		variables := values.StringSet{
 			"x": {},
 		}
 
@@ -166,7 +166,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 			srcCtx,
 		)
 
-		variables := map[string]struct{}{
+		variables := values.StringSet{
 			"x": {},
 		}
 
@@ -192,7 +192,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 			srcCtx,
 		)
 
-		variables := map[string]struct{}{
+		variables := values.StringSet{
 			"x": {},
 		}
 
@@ -207,7 +207,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
 		pattern := syntax.NewSyntaxObject(values.NewInteger(42), srcCtx)
 
-		variables := map[string]struct{}{}
+		variables := values.StringSet{}
 
 		compiled, err := CompileSyntaxPattern(context.Background(), pattern, variables, nil)
 		qt.Assert(t, err, qt.IsNotNil)

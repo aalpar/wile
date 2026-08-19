@@ -130,7 +130,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 		return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing literals list"))
 	}
 
-	literals := make(map[string]struct{})
+	literals := make(values.StringSet)
 	literalSyntax := make(map[string]*syntax.SyntaxSymbol)
 
 	// Process literals list
@@ -264,7 +264,7 @@ func compileClauseWithEllipsisAndLiterals(
 	ctx context.Context,
 	env *environment.EnvironmentFrame,
 	pattern, template syntax.SyntaxValue,
-	literals map[string]struct{},
+	literals values.StringSet,
 	literalSyntax map[string]*syntax.SyntaxSymbol,
 	ellipsis string,
 	libraryScope *syntax.Scope,
@@ -272,7 +272,7 @@ func compileClauseWithEllipsisAndLiterals(
 	// Determine pattern variables (anything not a literal, keyword, or ellipsis)
 	// Use literalSyntax for scope-aware literal matching (R7RS bound-identifier=? semantics)
 	// Also collect pattern variable syntax for nested macro hygiene
-	variables := make(map[string]struct{})
+	variables := make(values.StringSet)
 	varSyntax := make(map[string]*syntax.SyntaxSymbol)
 	err := collectPatternVariablesWithEllipsis(pattern, literalSyntax, true, variables, varSyntax, ellipsis)
 	if err != nil {
@@ -417,7 +417,7 @@ func ClausesFromClosure(closure values.Value) []*SyntaxRulesClause {
 // t.Scopes()). A bare-name key let the second write clobber the first, so at
 // expansion both occurrences received the surviving resolution. The consumer
 // (syntax_expand.go applyHygieneToSymbol) reads back under the same key.
-func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*FreeIdResolution, ellipsis string, libraryScope *syntax.Scope) {
+func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars values.StringSet, freeIds map[string]*FreeIdResolution, ellipsis string, libraryScope *syntax.Scope) {
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := t.Unwrap()
@@ -534,7 +534,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 // pattern variable. This is critical for nested macro hygiene: when an outer macro introduces
 // a symbol into an inner macro's template, the symbol's scopes distinguish it from inner
 // pattern variables.
-func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSyntax map[string]*syntax.SyntaxSymbol, isFirst bool, variables map[string]struct{}, varSyntax map[string]*syntax.SyntaxSymbol, ellipsis string) error {
+func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSyntax map[string]*syntax.SyntaxSymbol, isFirst bool, variables values.StringSet, varSyntax map[string]*syntax.SyntaxSymbol, ellipsis string) error {
 	switch p := pattern.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := p.Unwrap()
@@ -554,7 +554,7 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 						syntax.ScopesMatch(litScopes, patternScopes)
 					if !scopesMatch {
 						// Same name but different scopes - treat as pattern variable
-						variables[symVal.Key] = struct{}{}
+						variables.Set(symVal.Key)
 						// Record the pattern variable's syntax for nested macro hygiene
 						if varSyntax != nil {
 							varSyntax[symVal.Key] = p
@@ -563,7 +563,7 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 					// If scopes match, it's a literal - don't add to variables
 				} else {
 					// Name not in literals - it's a pattern variable
-					variables[symVal.Key] = struct{}{}
+					variables.Set(symVal.Key)
 					// Record the pattern variable's syntax for nested macro hygiene
 					if varSyntax != nil {
 						varSyntax[symVal.Key] = p
@@ -657,7 +657,7 @@ func skipEllipses(lst syntax.SyntaxValue, ellipsis string) (int, syntax.SyntaxVa
 // template check reads patternDepths[name] with a 0 default, so a pattern
 // variable this walker fails to reach would be silently mis-depthed as 0 — a
 // spurious (loud) rejection. Keep the two case sets in lockstep.
-func computePatternVarDepths(pattern syntax.SyntaxValue, variables map[string]struct{}, ellipsis string, depth int, out map[string]int) {
+func computePatternVarDepths(pattern syntax.SyntaxValue, variables values.StringSet, ellipsis string, depth int, out map[string]int) {
 	switch p := pattern.(type) {
 	case *syntax.SyntaxSymbol:
 		symVal, ok := p.Unwrap().(*values.Symbol)
@@ -736,7 +736,7 @@ func computePatternVarDepths(pattern syntax.SyntaxValue, variables map[string]st
 // symbol (for source-location reporting). Mirrors the runtime expander's
 // findSyntaxPatternVariables: every pattern variable textually present, at any
 // nesting depth, contributes.
-func collectTemplatePatternVars(tmpl syntax.SyntaxValue, variables map[string]struct{}, ellipsis string, out map[string]*syntax.SyntaxSymbol) {
+func collectTemplatePatternVars(tmpl syntax.SyntaxValue, variables values.StringSet, ellipsis string, out map[string]*syntax.SyntaxSymbol) {
 	switch t := tmpl.(type) {
 	case *syntax.SyntaxSymbol:
 		symVal, ok := t.Unwrap().(*values.Symbol)
@@ -781,7 +781,7 @@ func collectTemplatePatternVars(tmpl syntax.SyntaxValue, variables map[string]st
 // no driver (every variable bound shallower than requiredDepth) cannot be
 // iterated — this is the over-ellipsis violation. A sub-template with no pattern
 // variables at all is permitted (R7RS: repeated zero times, dropped).
-func checkEllipsisGroupDriver(sub syntax.SyntaxValue, variables map[string]struct{}, patternDepths map[string]int, ellipsis string, requiredDepth int) error {
+func checkEllipsisGroupDriver(sub syntax.SyntaxValue, variables values.StringSet, patternDepths map[string]int, ellipsis string, requiredDepth int) error {
 	vars := make(map[string]*syntax.SyntaxSymbol)
 	collectTemplatePatternVars(sub, variables, ellipsis, vars)
 	if len(vars) == 0 {
@@ -821,7 +821,7 @@ func checkEllipsisGroupDriver(sub syntax.SyntaxValue, variables map[string]struc
 // variable depths via checkEllipsisGroupDriver. Errors are wrapped with the
 // offending node's source location and surface as a CompilationError at
 // macro-definition time.
-func validateTemplateEllipsisDepth(tmpl syntax.SyntaxValue, variables map[string]struct{}, patternDepths map[string]int, ellipsis string, depth int) error {
+func validateTemplateEllipsisDepth(tmpl syntax.SyntaxValue, variables values.StringSet, patternDepths map[string]int, ellipsis string, depth int) error {
 	pair, ok := tmpl.(*syntax.SyntaxPair)
 	if !ok {
 		return nil
@@ -891,7 +891,7 @@ func validateTemplateEllipsisDepth(tmpl syntax.SyntaxValue, variables map[string
 //nolint:unparam
 func extractLiteralsWithSyntax(ctx context.Context,
 	literalsList *syntax.SyntaxPair,
-	literals map[string]struct{},
+	literals values.StringSet,
 	literalSyntax map[string]*syntax.SyntaxSymbol,
 	ellipsis string,
 ) error {
@@ -929,7 +929,7 @@ func extractLiteralsWithSyntax(ctx context.Context,
 // from parameter 0, tries each clause's pattern in order, expands the first
 // match's template and applies intro-scope hygiene to the result. See
 // operation_syntax_rules_transform.go.
-func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*SyntaxRulesClause, literals map[string]struct{}) (*machine.MachineClosure, error) { //nolint:unparam
+func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*SyntaxRulesClause, literals values.StringSet) (*machine.MachineClosure, error) { //nolint:unparam
 	// Takes 1 parameter - the input form to transform
 	template := machine.NewNativeTemplate(1, 0, false)
 

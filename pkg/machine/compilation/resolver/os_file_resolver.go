@@ -25,6 +25,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -181,18 +182,18 @@ func (p *OSFileResolver) osAbsSearchDirs(ctx context.Context) []string {
 
 	dirs = append(dirs, osSearchDirs(p.env)...)
 
-	seen := make(map[string]struct{}, len(dirs))
+	seen := make(values.StringSet, len(dirs))
 	q := make([]string, 0, len(dirs))
 	for _, d := range dirs {
 		abs, err := filepath.Abs(d)
 		if err != nil {
 			continue
 		}
-		_, dup := seen[abs]
+		dup := seen.Get(abs)
 		if dup {
 			continue
 		}
-		seen[abs] = struct{}{}
+		seen.Set(abs)
 		q = append(q, abs)
 	}
 	return q

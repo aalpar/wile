@@ -131,7 +131,7 @@ func TestImportSet(t *testing.T) {
 
 	// Test 'only' filter
 	importSet2 := compilation.NewImportSet(name)
-	importSet2.AddOnly(map[string]struct{}{"bindSymbolWithScopes": {}, "bar": {}})
+	importSet2.AddOnly(values.StringSet{"bindSymbolWithScopes": {}, "bar": {}})
 	bindings2, err := importSet2.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(bindings2), qt.Equals, 2)
@@ -140,7 +140,7 @@ func TestImportSet(t *testing.T) {
 
 	// Test 'except' filter
 	importSet3 := compilation.NewImportSet(name)
-	importSet3.AddExcept(map[string]struct{}{"baz": {}})
+	importSet3.AddExcept(values.StringSet{"baz": {}})
 	bindings3, err := importSet3.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(bindings3), qt.Equals, 2)
@@ -173,14 +173,14 @@ func TestImportSetErrors(t *testing.T) {
 
 	// Test 'only' with non-existent identifier
 	importSet := compilation.NewImportSet(name)
-	importSet.AddOnly(map[string]struct{}{"nonexistent": {}})
+	importSet.AddOnly(values.StringSet{"nonexistent": {}})
 	_, err := importSet.ApplyToExports(lib)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "nonexistent")
 
 	// Test 'except' with non-existent identifier
 	importSet2 := compilation.NewImportSet(name)
-	importSet2.AddExcept(map[string]struct{}{"nonexistent": {}})
+	importSet2.AddExcept(values.StringSet{"nonexistent": {}})
 	_, err2 := importSet2.ApplyToExports(lib)
 	c.Assert(err2, qt.IsNotNil)
 }
@@ -712,8 +712,8 @@ func TestLibraryNamePathConversion(t *testing.T) {
 // coverage of composition lives in pkg/machine/compilation and pkg/wile).
 func TestImportSetFields(t *testing.T) {
 	is := compilation.NewImportSet(compilation.NewLibraryName("scheme", "base"))
-	is.AddOnly(map[string]struct{}{"car": {}, "cdr": {}})
-	is.AddExcept(map[string]struct{}{"cons": {}})
+	is.AddOnly(values.StringSet{"car": {}, "cdr": {}})
+	is.AddExcept(values.StringSet{"cons": {}})
 	is.AddPrefix("my-")
 	is.AddRename(map[string]string{"old": "new"})
 

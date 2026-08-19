@@ -92,7 +92,7 @@ func TestSyntaxMatcher_GetBindings(t *testing.T) {
 		ByteCodeCaptureCar{Binding: "x"},
 		ByteCodeDone{},
 	}
-	vars := map[string]struct{}{"x": {}}
+	vars := values.StringSet{"x": {}}
 	m := NewSyntaxMatcher(vars, codes, nil)
 
 	target := testSyntaxList(testSyntaxInt(99))
@@ -420,7 +420,7 @@ func TestMatchSyntax_CaptureCdr(t *testing.T) {
 		ByteCodeDone{},
 		ByteCodeDone{},
 	}
-	vars := map[string]struct{}{"a": {}, "rest": {}}
+	vars := values.StringSet{"a": {}, "rest": {}}
 
 	c.Run("captures car and cdr", func(c *qt.C) {
 		m := NewMatcher(vars, codes)

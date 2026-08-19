@@ -888,11 +888,11 @@ func (p *PrimitiveRegistry) WithoutCategory(categories ...string) *PrimitiveRegi
 	// stays, so NewEngine fails to compile the orphaned source.
 	drop := make(values.StringSet, len(categories))
 	for _, c := range categories {
-		drop[c] = struct{}{}
+		drop.Set(c)
 	}
 	q.procedureSources = slices.DeleteFunc(q.procedureSources, func(src string) bool {
 		for _, need := range q.procedureSourceCategories[src] {
-			_, gone := drop[need]
+			gone := drop.Get(need)
 			if gone {
 				return true
 			}
@@ -907,12 +907,12 @@ func (p *PrimitiveRegistry) WithoutCategory(categories ...string) *PrimitiveRegi
 func (p *PrimitiveRegistry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegistration) string) *PrimitiveRegistry {
 	set := make(values.StringSet, len(exclude))
 	for _, v := range exclude {
-		set[v] = struct{}{}
+		set.Set(v)
 	}
 
 	q := p.deepCopy()
 	q.primitives = slices.DeleteFunc(q.primitives, func(r PrimitiveRegistration) bool {
-		_, ok := set[keyFn(r)]
+		ok := set.Get(keyFn(r))
 		return ok
 	})
 	return q
@@ -931,7 +931,7 @@ func (p *PrimitiveRegistry) filterPrimitives(exclude []string, keyFn func(Primit
 func (p *PrimitiveRegistry) WithoutBindings(names ...string) *PrimitiveRegistry {
 	exclude := make(values.StringSet, len(names))
 	for _, name := range names {
-		exclude[name] = struct{}{}
+		exclude.Set(name)
 	}
 
 	q := p.deepCopy()
@@ -939,7 +939,7 @@ func (p *PrimitiveRegistry) WithoutBindings(names ...string) *PrimitiveRegistry 
 		if s.DocOnly {
 			return false
 		}
-		_, ok := exclude[s.Name]
+		ok := exclude.Get(s.Name)
 		return ok
 	})
 	return q

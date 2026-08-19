@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // TestAlgebraUmbrellaCoversLeafExports guards against drift between the
@@ -30,7 +32,7 @@ func TestAlgebraUmbrellaCoversLeafExports(t *testing.T) {
 	umbrellaExports, err := readSldExports(umbrellaPath)
 	c.Assert(err, qt.IsNil, qt.Commentf("reading umbrella %s", umbrellaPath))
 
-	umbrellaSet := make(map[string]struct{}, len(umbrellaExports))
+	umbrellaSet := make(values.StringSet, len(umbrellaExports))
 	for _, s := range umbrellaExports {
 		umbrellaSet[s] = struct{}{}
 	}

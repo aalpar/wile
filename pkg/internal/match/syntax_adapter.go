@@ -36,6 +36,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -157,7 +158,7 @@ type SyntaxMatcher struct {
 // SyntaxMatcherOpts holds optional parameters for NewSyntaxMatcher.
 // A nil opts pointer means all defaults (no ellipsis vars, default "...", no literals).
 type SyntaxMatcherOpts struct {
-	EllipsisVars   map[int]map[string]struct{}
+	EllipsisVars   map[int]values.StringSet
 	EllipsisDepths map[int]int // ellipsisID -> compilation order (lower = inner)
 	EllipsisID     string
 	LiteralSyntax  map[string]*syntax.SyntaxSymbol
@@ -179,12 +180,12 @@ type SyntaxMatcherOpts struct {
 // has a literal's name but has been shadowed (has additional scopes), it won't match
 // the pattern literal. R7RS §4.3.2 requires this for auxiliary syntax like => and else.
 func NewSyntaxMatcher(
-	variables map[string]struct{},
+	variables values.StringSet,
 	codes []SyntaxCommand,
 	opts *SyntaxMatcherOpts,
 ) *SyntaxMatcher {
 	var (
-		ellipsisVars   map[int]map[string]struct{}
+		ellipsisVars   map[int]values.StringSet
 		ellipsisDepths map[int]int
 		ellipsisID     = DefaultEllipsis
 		literalSyntax  map[string]*syntax.SyntaxSymbol
@@ -291,7 +292,7 @@ func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input synta
 // CompiledPattern contains the compiled bytecode and ellipsis variable mapping.
 type CompiledPattern struct {
 	Codes          []SyntaxCommand
-	EllipsisVars   map[int]map[string]struct{}
+	EllipsisVars   map[int]values.StringSet
 	EllipsisDepths map[int]int // ellipsisID -> compilation order (lower = inner)
 	EllipsisID     string      // The ellipsis identifier used during compilation
 }
@@ -299,7 +300,7 @@ type CompiledPattern struct {
 // CompilePatternOpts holds optional parameters for CompileSyntaxPattern.
 // A nil opts pointer means all defaults (no literals, default "...").
 type CompilePatternOpts struct {
-	Literals         map[string]struct{}
+	Literals         values.StringSet
 	EllipsisID       string
 	MatchAllElements bool // false (default): skip first element (R7RS syntax-rules macro keyword); true: match all elements (syntax-case)
 }
@@ -312,11 +313,11 @@ type CompilePatternOpts struct {
 func CompileSyntaxPattern(
 	ctx context.Context,
 	pattern syntax.SyntaxValue,
-	variables map[string]struct{},
+	variables values.StringSet,
 	opts *CompilePatternOpts,
 ) (*CompiledPattern, error) {
 	ellipsisID := DefaultEllipsis
-	var literals map[string]struct{}
+	var literals values.StringSet
 	skipKeyword := true // R7RS §4.3.2 default: first element is macro keyword
 	if opts != nil {
 		if opts.EllipsisID != "" {

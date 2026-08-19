@@ -39,7 +39,7 @@ import (
 func TestSyntaxMatcher_CloneForMatchConcurrent(t *testing.T) {
 	c := qt.New(t)
 
-	variables := map[string]struct{}{"x": {}}
+	variables := values.StringSet{"x": {}}
 	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables

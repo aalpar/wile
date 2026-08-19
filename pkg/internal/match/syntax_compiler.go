@@ -52,6 +52,7 @@ import (
 	"slices"
 
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -66,7 +67,7 @@ type syntaxCompilerStackEntry struct {
 	lastElementStart int                // position where the last element's bytecode starts
 	lastElement      syntax.SyntaxValue // the actual last element value for analysis lookup
 	pr               *syntax.SyntaxPair
-	variables        map[string]struct{}
+	variables        values.StringSet
 	vararg           bool
 }
 
@@ -88,16 +89,16 @@ type SyntaxCommand interface {
 // SyntaxCompiler compiles pattern syntax into bytecode.
 type SyntaxCompiler struct {
 	codes              []SyntaxCommand
-	variables          map[string]struct{}
-	literals           map[string]struct{}         // literals to match exactly
-	analysis           *PatternAnalysis            // pattern analysis results
-	nextEllipsisID     int                         // counter for assigning unique ellipsis IDs
-	ellipsisVars       map[int]map[string]struct{} // ellipsisID -> captured pattern variables
-	ellipsisDepth      int                         // monotonic counter: inner ellipsis < outer ellipsis
-	ellipsisDepths     map[int]int                 // ellipsisID -> compilation order (lower = inner)
-	ellipsis           string                      // custom ellipsis identifier (default "...")
-	skipMacroKeyword   bool                        // true = skip first element as macro keyword placeholder
-	macroKeywordPassed bool                        // true = first root element has been processed
+	variables          values.StringSet
+	literals           values.StringSet         // literals to match exactly
+	analysis           *PatternAnalysis         // pattern analysis results
+	nextEllipsisID     int                      // counter for assigning unique ellipsis IDs
+	ellipsisVars       map[int]values.StringSet // ellipsisID -> captured pattern variables
+	ellipsisDepth      int                      // monotonic counter: inner ellipsis < outer ellipsis
+	ellipsisDepths     map[int]int              // ellipsisID -> compilation order (lower = inner)
+	ellipsis           string                   // custom ellipsis identifier (default "...")
+	skipMacroKeyword   bool                     // true = skip first element as macro keyword placeholder
+	macroKeywordPassed bool                     // true = first root element has been processed
 }
 
 // NewSyntaxCompiler creates a new syntax compiler with the default ellipsis ("...").
@@ -112,9 +113,9 @@ func NewSyntaxCompilerWithEllipsis(ellipsis string) *SyntaxCompiler {
 		ellipsis = DefaultEllipsis
 	}
 	q := &SyntaxCompiler{
-		variables:        map[string]struct{}{},
-		literals:         map[string]struct{}{},
-		ellipsisVars:     map[int]map[string]struct{}{},
+		variables:        values.StringSet{},
+		literals:         values.StringSet{},
+		ellipsisVars:     map[int]values.StringSet{},
 		ellipsisDepths:   map[int]int{},
 		ellipsis:         ellipsis,
 		skipMacroKeyword: false, // Default: match all elements. Set to true for syntax-rules.
@@ -141,7 +142,7 @@ func (p *SyntaxCompiler) Compile(ctx context.Context, pr *syntax.SyntaxPair) err
 
 func compile(ctx context.Context, vis *SyntaxCompiler, v0 *syntax.SyntaxPair) bool {
 	stack := []syntaxCompilerStackEntry{
-		{pr: v0, variables: map[string]struct{}{}},
+		{pr: v0, variables: values.StringSet{}},
 	}
 
 	for len(stack) > 0 {
@@ -248,7 +249,7 @@ func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, p
 	// Push new stack entry for nested processing
 	stack = append(stack, syntaxCompilerStackEntry{
 		pr:        pr,
-		variables: map[string]struct{}{},
+		variables: values.StringSet{},
 	})
 	return stack, true
 }
@@ -291,7 +292,7 @@ func compileVectorElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
 	// Push converted chain for nested processing
 	stack = append(stack, syntaxCompilerStackEntry{
 		pr:        chain,
-		variables: map[string]struct{}{},
+		variables: values.StringSet{},
 	})
 	return stack, true
 }
@@ -326,7 +327,7 @@ func compileBoxElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
 
 	stack = append(stack, syntaxCompilerStackEntry{
 		pr:        chain,
-		variables: map[string]struct{}{},
+		variables: values.StringSet{},
 	})
 	return stack, true
 }
@@ -472,21 +473,21 @@ func countPatternTailElements(ellipsisPair *syntax.SyntaxPair) int {
 }
 
 // collectCapturedVariables gathers all pattern variables captured by an ellipsis pattern.
-func collectCapturedVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) map[string]struct{} {
-	capturedVars := make(map[string]struct{})
+func collectCapturedVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) values.StringSet {
+	capturedVars := make(values.StringSet)
 
 	prevPair, ok := entry.lastElement.(*syntax.SyntaxPair)
 	if ok {
 		vars := vis.analysis.GetVariables(prevPair)
 		for v := range vars {
-			capturedVars[v] = struct{}{}
+			capturedVars.Set(v)
 		}
 	} else {
 		prevSym, ok := entry.lastElement.(*syntax.SyntaxSymbol)
 		if ok {
-			_, isVar := vis.variables[prevSym.Key()]
+			isVar := vis.variables.Get(prevSym.Key())
 			if isVar {
-				capturedVars[prevSym.Key()] = struct{}{}
+				capturedVars.Set(prevSym.Key())
 			}
 		}
 	}

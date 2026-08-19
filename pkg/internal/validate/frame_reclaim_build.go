@@ -20,13 +20,14 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // captureOperatorNames are the core primitives that capture or abort a
 // continuation. Detection is gated on resolved binding identity (see
 // makeIsCaptureOp), not the name alone, so a locally-shadowed or user-redefined
 // symbol of the same name is not mistaken for the primitive.
-var captureOperatorNames = map[string]struct{}{
+var captureOperatorNames = values.StringSet{
 	"call-with-current-continuation":    {},
 	"call/cc":                           {},
 	"call-with-composable-continuation": {},

@@ -78,9 +78,9 @@ type SyntaxRulesClause struct {
 	Template         syntax.SyntaxValue
 	Bytecode         []match.SyntaxCommand
 	Matcher          *match.SyntaxMatcher
-	PatternVars      map[string]struct{}
+	PatternVars      values.StringSet
 	PatternVarSyntax map[string]*syntax.SyntaxSymbol
-	EllipsisVars     map[int]map[string]struct{}
+	EllipsisVars     map[int]values.StringSet
 	FreeIds          map[string]*FreeIdResolution
 	Ellipsis         string
 	LiteralSyntax    map[string]*syntax.SyntaxSymbol
@@ -108,7 +108,7 @@ func (p *ClausesWrapper) SchemeString() string {
 // Created by the compiler, consumed by OperationSyntaxCaseMatch at runtime.
 type SyntaxCaseClause struct {
 	Bytecode    []match.SyntaxCommand
-	PatternVars map[string]struct{}
+	PatternVars values.StringSet
 	// LiteralSyntax carries each pattern literal with the scopes it had at the
 	// macro definition site, the same data SyntaxRulesClause.LiteralSyntax
 	// carries. Without it match.go's hygiene block is gated off on this path
@@ -123,7 +123,7 @@ type SyntaxCaseClause struct {
 	// path needs no such field: its matcher is built at definition time and
 	// carries the pins directly.)
 	LiteralDefs    map[string]match.LiteralPin
-	EllipsisVars   map[int]map[string]struct{}
+	EllipsisVars   map[int]values.StringSet
 	EllipsisDepths map[int]int
 }
 

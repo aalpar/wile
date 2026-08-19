@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -35,7 +36,7 @@ import (
 func TestNestedSublistDottedTail(t *testing.T) {
 	c := qt.New(t)
 
-	variables := map[string]struct{}{"x": {}, "body": {}}
+	variables := values.StringSet{"x": {}, "body": {}}
 
 	// Build pattern ((x) . body): a pair whose car is the sublist (x) and
 	// whose cdr (improper tail) is the bare symbol body.
@@ -91,7 +92,7 @@ func TestNestedSublistDottedTail(t *testing.T) {
 func TestEllipsisThenImproperTail(t *testing.T) {
 	c := qt.New(t)
 
-	variables := map[string]struct{}{"a": {}, "rest": {}}
+	variables := values.StringSet{"a": {}, "rest": {}}
 
 	// Pattern (a ... . rest):
 	//   (a . (... . rest))  — a, then ellipsis, then improper tail rest.
@@ -159,7 +160,7 @@ func TestEllipsisThenImproperTail(t *testing.T) {
 	// mismatch: `(a ...)` is a proper-list pattern.
 	c.Run("improper input against a proper pattern", func(c *qt.C) {
 		compiler := NewSyntaxCompiler()
-		properVars := map[string]struct{}{"a": {}}
+		properVars := values.StringSet{"a": {}}
 		compiler.variables = properVars
 		properPattern := syntax.NewSyntaxCons(
 			testSyntaxSym("a"),

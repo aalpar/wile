@@ -19,6 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -109,7 +110,7 @@ func checkProfileWidening(callerNS *environment.Namespace, profileName string, e
 // never see a core acquisition, and a WithoutCore() engine asking for tiny —
 // an empty extension slice, and so an apparently empty request — acquired the
 // core surface with no capability question put to the policy.
-func extensionPrimitiveNames(exts []registry.Extension) (map[string]struct{}, error) {
+func extensionPrimitiveNames(exts []registry.Extension) (values.StringSet, error) {
 	reg := registry.NewRegistry()
 	err := core.AddToRegistry(reg)
 	if err != nil {
@@ -137,7 +138,7 @@ func extensionPrimitiveNames(exts []registry.Extension) (map[string]struct{}, er
 // A nil result means "unknown", and callers must treat that as not-contained —
 // an engine whose surface cannot be established is one whose containment cannot
 // be proven.
-func enginePrimitiveNames(callerNS *environment.Namespace) map[string]struct{} {
+func enginePrimitiveNames(callerNS *environment.Namespace) values.StringSet {
 	reg, ok := callerNS.Registry().(*registry.PrimitiveRegistry)
 	if !ok || reg == nil {
 		return nil
@@ -146,8 +147,8 @@ func enginePrimitiveNames(callerNS *environment.Namespace) map[string]struct{} {
 }
 
 // primitiveNameSet projects a registry down to the set of names it registers.
-func primitiveNameSet(reg *registry.PrimitiveRegistry) map[string]struct{} {
-	q := make(map[string]struct{}, reg.PrimitiveCount())
+func primitiveNameSet(reg *registry.PrimitiveRegistry) values.StringSet {
+	q := make(values.StringSet, reg.PrimitiveCount())
 	for _, p := range reg.Primitives() {
 		q[p.Spec.Name] = struct{}{}
 	}
@@ -163,7 +164,7 @@ func primitiveNameSet(reg *registry.PrimitiveRegistry) map[string]struct{} {
 // order over a Go map is randomized, so which witness appears varies between
 // runs — the message names an instance, never an exhaustive list, and its
 // wording ("e.g.") says so.
-func namesNotIn(requested, have map[string]struct{}) string {
+func namesNotIn(requested, have values.StringSet) string {
 	for name := range requested {
 		_, ok := have[name]
 		if !ok {

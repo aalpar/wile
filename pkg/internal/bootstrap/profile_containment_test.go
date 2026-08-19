@@ -163,7 +163,7 @@ func bootstrapRepoRoot(t *testing.T) string {
 // coupled: adding or removing a core primitive turns this red until the
 // manifest is regenerated with WILE_AXIS_B_UPDATE=1. That is the ratchet, not a
 // defect — regenerate, do not patch a number back in.
-func coreManifestNames(t *testing.T) map[string]struct{} {
+func coreManifestNames(t *testing.T) values.StringSet {
 	t.Helper()
 	path := filepath.Join(bootstrapRepoRoot(t), axisBManifestPath)
 	body, err := os.ReadFile(path)
@@ -173,7 +173,7 @@ func coreManifestNames(t *testing.T) map[string]struct{} {
 		t.Fatalf("%s: %v", axisBManifestPath, err)
 	}
 
-	q := map[string]struct{}{}
+	q := values.StringSet{}
 	deinlined := []string{}
 	for i, line := range strings.Split(string(body), "\n") {
 		if line == "" {

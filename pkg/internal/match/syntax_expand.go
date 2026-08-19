@@ -163,7 +163,7 @@ func (p *SyntaxMatcher) Expand(template syntax.SyntaxValue, opts ExpandOptions) 
 func (p *SyntaxMatcher) expandSyntaxValue(
 	template syntax.SyntaxValue,
 	ctx *captureContext,
-	ellipsisVars map[string]struct{},
+	ellipsisVars values.StringSet,
 	excludeEllipsisIDs map[int]struct{},
 	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
@@ -260,7 +260,7 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 func (p *SyntaxMatcher) expandVectorTemplate(
 	t *syntax.SyntaxVector,
 	ctx *captureContext,
-	ellipsisVars map[string]struct{},
+	ellipsisVars values.StringSet,
 	excludeEllipsisIDs map[int]struct{},
 	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
@@ -561,7 +561,7 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 	pattern syntax.SyntaxValue,
 	rest syntax.SyntaxValue,
 	ctx *captureContext,
-	ellipsisVars map[string]struct{},
+	ellipsisVars values.StringSet,
 	excludeEllipsisIDs map[int]struct{},
 	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
@@ -607,10 +607,10 @@ func (p *SyntaxMatcher) expandEllipsisSingleGroup(
 	pattern syntax.SyntaxValue,
 	rest syntax.SyntaxValue,
 	ctx *captureContext,
-	ellipsisVars map[string]struct{},
+	ellipsisVars values.StringSet,
 	excludeEllipsisIDs map[int]struct{},
 	opts *ExpandOptions,
-	patternVarsInTemplate map[string]struct{},
+	patternVarsInTemplate values.StringSet,
 	ellipsisID int,
 ) (syntax.SyntaxValue, error) {
 	children := ctx.children[ellipsisID]
@@ -640,10 +640,10 @@ func (p *SyntaxMatcher) expandEllipsisCrossGroup(
 	pattern syntax.SyntaxValue,
 	rest syntax.SyntaxValue,
 	ctx *captureContext,
-	ellipsisVars map[string]struct{},
+	ellipsisVars values.StringSet,
 	excludeEllipsisIDs map[int]struct{},
 	opts *ExpandOptions,
-	patternVarsInTemplate map[string]struct{},
+	patternVarsInTemplate values.StringSet,
 	matchingIDs []int,
 ) (syntax.SyntaxValue, error) {
 	// Verify all groups have the same iteration count.
@@ -714,17 +714,17 @@ func (p *SyntaxMatcher) expandEllipsisCrossGroup(
 func (p *SyntaxMatcher) expandEllipsisChildren(
 	pattern syntax.SyntaxValue,
 	children []*captureContext,
-	ellipsisVars map[string]struct{},
+	ellipsisVars values.StringSet,
 	excludeEllipsisIDs map[int]struct{},
 	opts *ExpandOptions,
-	patternVarsInTemplate map[string]struct{},
+	patternVarsInTemplate values.StringSet,
 ) ([]syntax.SyntaxValue, error) {
 	results := make([]syntax.SyntaxValue, 0, len(children))
 	for _, childCtx := range children {
-		newEllipsisVars := make(map[string]struct{})
+		newEllipsisVars := make(values.StringSet)
 		maps.Copy(newEllipsisVars, ellipsisVars)
 		for v := range patternVarsInTemplate {
-			newEllipsisVars[v] = struct{}{}
+			newEllipsisVars.Set(v)
 		}
 
 		expanded, err := p.expandSyntaxValue(pattern, childCtx, newEllipsisVars, excludeEllipsisIDs, opts)
@@ -742,7 +742,7 @@ func (p *SyntaxMatcher) combineEllipsisResults(
 	results []syntax.SyntaxValue,
 	rest syntax.SyntaxValue,
 	ctx *captureContext,
-	ellipsisVars map[string]struct{},
+	ellipsisVars values.StringSet,
 	excludeEllipsisIDs map[int]struct{},
 	pattern syntax.SyntaxValue,
 	opts *ExpandOptions,
@@ -768,19 +768,19 @@ func (p *SyntaxMatcher) combineEllipsisResults(
 }
 
 // findSyntaxPatternVariables finds all pattern variables in a syntax template.
-func (p *SyntaxMatcher) findSyntaxPatternVariables(template syntax.SyntaxValue) map[string]struct{} {
-	vars := make(map[string]struct{})
+func (p *SyntaxMatcher) findSyntaxPatternVariables(template syntax.SyntaxValue) values.StringSet {
+	vars := make(values.StringSet)
 	p.findSyntaxVarsRecursive(template, vars)
 	return vars
 }
 
-func (p *SyntaxMatcher) findSyntaxVarsRecursive(template syntax.SyntaxValue, vars map[string]struct{}) {
+func (p *SyntaxMatcher) findSyntaxVarsRecursive(template syntax.SyntaxValue, vars values.StringSet) {
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
 		key := t.Key()
-		_, ok := p.matcher.variables[key]
+		ok := p.matcher.variables.Get(key)
 		if ok {
-			vars[key] = struct{}{}
+			vars.Set(key)
 		}
 	case *syntax.SyntaxPair:
 		if !syntax.IsSyntaxEmptyList(t) {
@@ -804,7 +804,7 @@ func (p *SyntaxMatcher) findSyntaxVarsRecursive(template syntax.SyntaxValue, var
 func (p *SyntaxMatcher) expandEscapedSyntaxTemplate(
 	template syntax.SyntaxValue,
 	ctx *captureContext,
-	ellipsisVars map[string]struct{},
+	ellipsisVars values.StringSet,
 	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
 	if template == nil {

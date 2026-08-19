@@ -72,13 +72,13 @@ const DefaultEllipsis = "..."
 // It executes compiled pattern bytecode against an input form,
 // capturing pattern variable bindings that can be used for template expansion.
 type Matcher struct {
-	variables      map[string]struct{}         // Known pattern variables
-	codes          []SyntaxCommand             // Compiled pattern bytecode
-	captureStack   []*captureContext           // Binding capture stack (nesting for ellipsis)
-	syntaxStack    []syntaxPathEntry           // Input traversal stack (syntax-native)
-	ellipsisVars   map[int]map[string]struct{} // ellipsisID -> captured pattern variables
-	ellipsisDepths map[int]int                 // ellipsisID -> compilation order (lower = inner)
-	ellipsisID     string                      // Custom ellipsis identifier (default "...")
+	variables      values.StringSet         // Known pattern variables
+	codes          []SyntaxCommand          // Compiled pattern bytecode
+	captureStack   []*captureContext        // Binding capture stack (nesting for ellipsis)
+	syntaxStack    []syntaxPathEntry        // Input traversal stack (syntax-native)
+	ellipsisVars   map[int]values.StringSet // ellipsisID -> captured pattern variables
+	ellipsisDepths map[int]int              // ellipsisID -> compilation order (lower = inner)
+	ellipsisID     string                   // Custom ellipsis identifier (default "...")
 
 	// tailCountCache and tailCountPC cache the remaining element count for
 	// ByteCodeSkipIfTailCount to avoid re-walking the list on every loop
@@ -95,7 +95,7 @@ type MatcherOption func(*Matcher)
 
 // WithEllipsisVars supplies the ellipsis-id → captured-variables map. When
 // absent, the matcher operates with no ellipsis-bound variables.
-func WithEllipsisVars(v map[int]map[string]struct{}) MatcherOption {
+func WithEllipsisVars(v map[int]values.StringSet) MatcherOption {
 	return func(m *Matcher) {
 		m.ellipsisVars = v
 	}
@@ -133,7 +133,7 @@ func WithEllipsisID(id string) MatcherOption {
 // Defaults: ellipsisID = DefaultEllipsis ("..."); ellipsisVars / ellipsisDepths
 // nil. When ellipsisVars is supplied but ellipsisDepths is not, depths are
 // inferred from the ID values.
-func NewMatcher(variables map[string]struct{}, codes []SyntaxCommand, opts ...MatcherOption) *Matcher {
+func NewMatcher(variables values.StringSet, codes []SyntaxCommand, opts ...MatcherOption) *Matcher {
 	q := &Matcher{
 		variables:  variables,
 		codes:      codes,
@@ -621,7 +621,7 @@ func (p *Matcher) GetBindings() map[string]syntax.SyntaxValue {
 // template expression. In the common case where one ID covers all variables, a single-
 // element slice is returned. When variables span multiple groups (cross-group zipping),
 // every contributing ID is returned in sorted order.
-func (p *Matcher) findMatchingEllipsisIDs(vars map[string]struct{}, excludeIDs map[int]struct{}) []int {
+func (p *Matcher) findMatchingEllipsisIDs(vars values.StringSet, excludeIDs map[int]struct{}) []int {
 	if p.ellipsisVars == nil {
 		return []int{0}
 	}
@@ -632,12 +632,12 @@ func (p *Matcher) findMatchingEllipsisIDs(vars map[string]struct{}, excludeIDs m
 	// not drive which group(s) repeat. Leaving it in would fail the single-ID
 	// "all vars present" test and force a spurious cross-group zip against the
 	// iterated variable's groups.
-	sel := make(map[string]struct{}, len(vars))
+	sel := make(values.StringSet, len(vars))
 	for v := range vars {
 		for id := range p.ellipsisVars {
-			_, ok := p.ellipsisVars[id][v]
+			ok := p.ellipsisVars[id].Get(v)
 			if ok {
-				sel[v] = struct{}{}
+				sel.Set(v)
 				break
 			}
 		}
@@ -667,7 +667,7 @@ func (p *Matcher) findMatchingEllipsisIDs(vars map[string]struct{}, excludeIDs m
 	for _, id := range ids {
 		allFound := true
 		for v := range vars {
-			_, ok := p.ellipsisVars[id][v]
+			ok := p.ellipsisVars[id].Get(v)
 			if !ok {
 				allFound = false
 				break
@@ -690,7 +690,7 @@ func (p *Matcher) findMatchingEllipsisIDs(vars map[string]struct{}, excludeIDs m
 	var contributing []int
 	for _, id := range ids {
 		for v := range vars {
-			_, ok := p.ellipsisVars[id][v]
+			ok := p.ellipsisVars[id].Get(v)
 			if ok {
 				contributing = append(contributing, id)
 				break

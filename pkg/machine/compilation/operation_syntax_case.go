@@ -269,7 +269,7 @@ type OperationBindPatternVars struct {
 	PatternVars []string // Ordered list for consistent indexing
 }
 
-func NewOperationBindPatternVars(patternVars map[string]struct{}) *OperationBindPatternVars {
+func NewOperationBindPatternVars(patternVars values.StringSet) *OperationBindPatternVars {
 	// Convert to a sorted list for consistent indexing
 	vars := slices.Sorted(maps.Keys(patternVars))
 	return &OperationBindPatternVars{

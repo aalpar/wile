@@ -18,6 +18,7 @@ import (
 	"maps"
 
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // PatternAnalysis holds analysis results for a pattern
@@ -25,19 +26,19 @@ type PatternAnalysis struct {
 	// Maps each subtree (SyntaxPair) to whether it contains pattern variables
 	containsVariables map[*syntax.SyntaxPair]bool
 	// Maps each subtree to the set of variables it contains
-	variablesInSubtree map[*syntax.SyntaxPair]map[string]struct{}
+	variablesInSubtree map[*syntax.SyntaxPair]values.StringSet
 }
 
 // NewPatternAnalysis creates a new pattern analysis
 func NewPatternAnalysis() *PatternAnalysis {
 	return &PatternAnalysis{
 		containsVariables:  make(map[*syntax.SyntaxPair]bool),
-		variablesInSubtree: make(map[*syntax.SyntaxPair]map[string]struct{}),
+		variablesInSubtree: make(map[*syntax.SyntaxPair]values.StringSet),
 	}
 }
 
 // AnalyzePattern analyzes a pattern and returns analysis results
-func AnalyzePattern(pattern *syntax.SyntaxPair, variables map[string]struct{}) *PatternAnalysis {
+func AnalyzePattern(pattern *syntax.SyntaxPair, variables values.StringSet) *PatternAnalysis {
 	analysis := NewPatternAnalysis()
 	analyzeRecursive(pattern, variables, analysis)
 	return analysis
@@ -56,23 +57,23 @@ func AnalyzePattern(pattern *syntax.SyntaxPair, variables map[string]struct{}) *
 // claim it.
 func analyzeRecursive(
 	v syntax.SyntaxValue,
-	variables map[string]struct{},
+	variables values.StringSet,
 	analysis *PatternAnalysis,
-) map[string]struct{} {
+) values.StringSet {
 	switch t := v.(type) {
 	case *syntax.SyntaxSymbol:
 		_, isVar := variables[t.Key()]
 		if !isVar {
 			return nil
 		}
-		return map[string]struct{}{t.Key(): {}}
+		return values.StringSet{t.Key(): {}}
 
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(t) {
 			return nil
 		}
 
-		varsInSubtree := make(map[string]struct{})
+		varsInSubtree := make(values.StringSet)
 		maps.Copy(varsInSubtree, analyzeRecursive(t.SyntaxCar(), variables, analysis))
 		maps.Copy(varsInSubtree, analyzeRecursive(t.SyntaxCdr(), variables, analysis))
 
@@ -89,7 +90,7 @@ func analyzeRecursive(
 		// compiler converts the vector to a pair chain and Merges that chain's
 		// analysis, which is what supplies map entries for the chain's own pairs;
 		// here we only propagate the names upward.
-		varsInVector := make(map[string]struct{})
+		varsInVector := make(values.StringSet)
 		for _, elem := range t.Values {
 			maps.Copy(varsInVector, analyzeRecursive(elem, variables, analysis))
 		}
@@ -129,7 +130,7 @@ func (p *PatternAnalysis) ContainsVariables(pair *syntax.SyntaxPair) bool {
 }
 
 // GetVariables returns the set of variables in a subtree
-func (p *PatternAnalysis) GetVariables(pair *syntax.SyntaxPair) map[string]struct{} {
+func (p *PatternAnalysis) GetVariables(pair *syntax.SyntaxPair) values.StringSet {
 	if pair == nil {
 		return nil
 	}

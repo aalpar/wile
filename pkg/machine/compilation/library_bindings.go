@@ -212,9 +212,9 @@ const (
 // kind is populated.
 type importModifier struct {
 	kind    importModifierKind
-	ids     map[string]struct{} // only / except
-	prefix  string              // prefix
-	renames map[string]string   // rename: old-name -> new-name
+	ids     values.StringSet  // only / except
+	prefix  string            // prefix
+	renames map[string]string // rename: old-name -> new-name
 }
 
 // NewImportSet creates a new import set for a library, with no modifiers.
@@ -229,13 +229,13 @@ func NewImportSet(name LibraryName) *ImportSet {
 // (only <import-set> <identifier> …) with zero-or-more identifiers, so (only LIB)
 // with no identifiers denotes the empty subset. AddOnly is called exactly once per
 // syntactic `only` form, so the empty case is a real "import nothing", not "no filter".
-func (p *ImportSet) AddOnly(ids map[string]struct{}) {
+func (p *ImportSet) AddOnly(ids values.StringSet) {
 	p.Modifiers = append(p.Modifiers, importModifier{kind: importModOnly, ids: ids})
 }
 
 // AddExcept appends an `except` modifier removing ids from the import. Empty/nil is a
 // no-op.
-func (p *ImportSet) AddExcept(ids map[string]struct{}) {
+func (p *ImportSet) AddExcept(ids values.StringSet) {
 	if len(ids) == 0 {
 		return
 	}
