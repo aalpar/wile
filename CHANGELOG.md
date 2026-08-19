@@ -90,6 +90,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   iterations of `(force (delay (* n 2)))` go from 0.48 s / 312 MB to 0.71 s /
   1334 MB.
 
+- **Every `call-with-values`, `call-with-exit`, `force`, continuation prompt and
+  continuation barrier drained one environment frame from the pool, per call.**
+  Each of these reifies its boundary as a continuation frame built over the
+  primitive's own argument frame, and that frame was then dropped rather than
+  recycled — twice over: the frame constructor did not carry the "this env came
+  from the pool" flag that `call/cc`'s constructor has always carried, and for the
+  shapes whose frame applies a consumer, the apply overwrote the environment
+  before anything could release it. Both are closed, so a boundary primitive now
+  costs the pool exactly what an ordinary call costs it: nothing. Measured against
+  a plain-call control in the same harness, and pinned by
+  `TestBoundaryFramesReleaseTheirEnvFrame`.
+
+  No behavior changes. The Gabriel benchmarks are flat (none of them calls a
+  boundary primitive in a loop); the 1M-iteration `force` loop above drops from
+  0.72 s / 1334 MB to 0.67 s / 1143 MB.
+
   Embedders writing primitives get the seam this needed:
   `MachineContext.RunBodyUnderGoFrame(body, func(*MachineContext, values.Value) error)`
   runs a body on the live continuation chain and hands its result to **Go**. Until

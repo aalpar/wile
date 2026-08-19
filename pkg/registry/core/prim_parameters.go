@@ -58,10 +58,7 @@ func PrimMakeParameter(cc machine.CallContext) error {
 	// (the finalizer), mirroring how call-with-exit forwards its value: RunBodyUnderConsumer
 	// inline-applies the converter to init, then applies the finalizer to its result. Fixes
 	// the parameterize-converter case of continuation_subcontext_truncation_red_test.go.
-	closureEnv := mc.EnvironmentFrame().MutableRuntimeOrNil()
-	if closureEnv == nil {
-		closureEnv = mc.EnvironmentFrame()
-	}
+	closureEnv := mc.ClosureEnv()
 	finalizer := machine.NewForeignClosure(closureEnv, 1, false, func(finCC machine.CallContext) error {
 		finMC, err := machine.RequireMachineContext(finCC, "make-parameter")
 		if err != nil {

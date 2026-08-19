@@ -95,6 +95,7 @@ var returnTemplate = &NativeTemplate{
 // INVARIANT: shared, read-only — the VM never mutates template code.
 var applyToValuesCode = []Instruction{
 	{Op: OpPushValues},
+	{Op: OpReleaseEnvFrame},
 	{Op: OpLoadLiteral, Arg: 0},
 	{Op: OpApply},
 }
@@ -145,6 +146,36 @@ type goFrame struct {
 	table [1]InlinedOperation
 }
 
+// transferEnvOwnership hands the caller's env frame to the reified frame that is
+// about to capture it, so the frame's restore recycles it instead of dropping it.
+//
+// Every helper here builds its frame over p.env and then immediately applies a
+// body, which repoints p.env at the callee's own frame. p.env is therefore
+// reachable ONLY through the reified frame for the whole of the body — but
+// NewMachineContinuation leaves envPooled false, so RestoreAndRelease read "not
+// pooled" and let the frame fall to the GC. Inside a primitive that env is the
+// pooled apply frame holding the primitive's arguments, so every
+// call-with-values, call-with-exit, prompt, barrier and force call drained one
+// frame from the pool. Measured with EnvsCopied vs EnvFramePoolReleases: exactly
+// one leak per call, against zero for an ordinary call.
+//
+// SaveContinuation already does this (NewMachineContinuationFromMachineContext
+// copies mc.envPooled), and this position is strictly safer than that one:
+// SaveContinuation leaves a window in which the saved frame is still mc.env while
+// operands evaluate, so an OpPushEnv or OpMakeClosure in an argument can parent a
+// frame on it after the flag was captured. Here the apply happens on the very
+// next line, and no bytecode runs in between.
+//
+// It is an ownership TRANSFER, not a copy: p.envPooled is cleared so the frame is
+// the single owner and cannot be released twice. Invariant H — "a frame with
+// envPooled=true is never any other frame's parent" — survives because the only
+// Go-level site that parents a lasting frame on a primitive's apply frame is
+// ClosureEnv's detached-env fallback, which clears the flag before we read it.
+func transferEnvOwnership(p *MachineContext, frame *MachineContinuation) {
+	frame.envPooled = p.envPooled
+	p.envPooled = false
+}
+
 // RunBodyUnderFrame pushes frame as mc.cont and inline-applies body on this
 // context (no sub-context, no nested Run), so body runs ON THE LIVE CHAIN under
 // frame: O(1) Go frames, and a continuation captured in body spans frame and
@@ -183,6 +214,7 @@ func (p *MachineContext) RunBodyUnderFrame(frame *MachineContinuation, body valu
 	// The reified frame inherits the current barrier so a continuation captured in the
 	// body records it (crossing detection still fires) and the frame's restore reverts it.
 	frame.barrierValid = p.barrierValid
+	transferEnvOwnership(p, frame)
 	p.cont = frame
 	return p.ApplyCallable(body, args...)
 }
@@ -273,6 +305,7 @@ func (p *MachineContext) RunBodyUnderBarrier(body values.Value, token *BarrierTo
 		frame.marks = cloneMarks(p.marks)
 	}
 	frame.barrierValid = p.barrierValid // outer token = restore target on frame exit
+	transferEnvOwnership(p, frame)
 	p.cont = frame
 	p.barrierValid = token // flip the live barrier for the body
 	return p.ApplyCallable(body)

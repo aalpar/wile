@@ -2190,10 +2190,40 @@ stay protected inside mutable children. Design:
   **Note for the next pass** — the estimate in this entry's earlier version over-predicted
   the win, because the finalizer's apply frame was being recycled correctly and was never
   the cost. What remains, per force: the `MachineContinuation` (~265 B, shared with every
-  boundary-reifying primitive), the `goFrame` block (~310 B), and an env-frame pool drain
-  (~300 B) that is NOT specific to force — every RunBodyUnder* call drains one frame, and
-  `call-with-values` and `call-with-exit` pay it too. That drain is the largest single
-  remaining item and the right next target.
+  boundary-reifying primitive) and the `goFrame` block (~310 B).
+
+- [x] **Boundary frames return their argument frame to the pool** [Perf, M, DONE]:
+  every `RunBodyUnder*` call drained exactly one env frame from the pool, against zero for
+  an ordinary call — measured with `EnvsCopied` vs `EnvFramePoolReleases`, pinned by
+  `TestBoundaryFramesReleaseTheirEnvFrame` (`pkg/wile/tail_call_alloc_test.go`), which
+  reads each primitive against a plain-call control in the same harness.
+
+  **The earlier diagnosis in this entry was wrong**, and instrumenting rather than reading
+  is what caught it. `applyForeign`'s early return on reconfiguration is NOT a leak: the
+  argument frame is still reachable through the reified frame at that point. The two real
+  losses were later, and neither is in `applyForeign`:
+
+  1. `NewMachineContinuation` leaves `envPooled` false, so `RestoreAndRelease` read "not
+     pooled" and dropped the frame it had just restored. `SaveContinuation`'s constructor
+     (`NewMachineContinuationFromMachineContext`) has always propagated the flag; the
+     family's constructor was the odd one out. Fixed by `transferEnvOwnership`, which
+     hands the flag to the frame and clears it on the context, so there is one owner.
+  2. For the apply-frame shapes the `OpApply` inside `applyToValuesCode` then overwrote
+     `mc.env` with the consumer's frame before anything could release it. Fixed with an
+     `OpReleaseEnvFrame` after `OpPushValues`: the values are already on the eval stack, so
+     the frame is dead there. Both halves are load-bearing — reverting (1) reddens every
+     row, reverting (2) reddens only call-with-values / call-with-exit.
+
+  **Invariant H** ("a frame with `envPooled=true` is never any other frame's parent",
+  `memory/envpooled-clear-is-invariant-h`) survives because the only Go-level site that
+  parents a lasting frame on a primitive's own apply frame is the detached-env fallback
+  five call sites had open-coded. That is now `MachineContext.ClosureEnv`, which clears
+  the flag on that branch exactly as `OpMakeClosure` does — so the transfer reads a flag
+  that is already false wherever a capture happened.
+
+  **Measured**: force's 1M-iteration bench 0.72 s → 0.67 s, 1334 MB → 1143 MB,
+  15.7M → 14.5M objects. `make bench-gabriel` is flat, as expected — none of its 16
+  programs calls a boundary primitive in a loop.
 
 ---
 ## Tier 2 — Embedding API & Product Value

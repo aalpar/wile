@@ -200,10 +200,7 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 	// raise fires inside a reified call-with-values producer the live procedure frame
 	// is detached (nil namespace), so MutableRuntime() would panic. The escalator is a
 	// pure-Go closure; any valid frame serves for its apply-time InitApplyFrame.
-	escalatorEnv := mc.EnvironmentFrame().MutableRuntimeOrNil()
-	if escalatorEnv == nil {
-		escalatorEnv = mc.EnvironmentFrame()
-	}
+	escalatorEnv := mc.ClosureEnv()
 	escalator := NewForeignClosure(escalatorEnv, 1, true, escalateFn)
 	escalateTpl := &NativeTemplate{
 		code:     applyToValuesCode,

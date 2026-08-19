@@ -52,10 +52,7 @@ func (p *MachineContext) RunBodyUnderTimer(
 	}
 	p.ctx = timerCtx
 
-	closureEnv := p.env.MutableRuntimeOrNil()
-	if closureEnv == nil {
-		closureEnv = p.env
-	}
+	closureEnv := p.ClosureEnv()
 	finalizer := NewForeignClosure(closureEnv, 1, true, func(finCC CallContext) error {
 		finMC, ferr := RequireMachineContext(finCC, "with-timeout")
 		if ferr != nil {

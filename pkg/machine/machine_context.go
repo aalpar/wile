@@ -315,6 +315,33 @@ func (p *MachineContext) SetEnvPooled(v bool) {
 	p.envPooled = v
 }
 
+// ClosureEnv returns the environment a primitive should parent a ForeignClosure
+// on when that closure OUTLIVES the primitive call — a finalizer handed to
+// RunBodyUnderConsumer, an escape procedure, a timer teardown. It is the
+// namespace's mutable runtime, which is long-lived and shared.
+//
+// The fallback matters more than the happy path. p.env can be a detached frame
+// with no namespace anywhere in its lexical chain (see MutableRuntimeOrNil), and
+// then the only environment available is p.env itself — which, inside a
+// primitive, is a POOLED apply frame that the closure would outlive. Parenting on
+// it therefore clears envPooled, exactly as OpMakeClosure does when a Scheme
+// closure captures mc.env. That clear is Invariant H at the Go level: "a frame
+// with envPooled=true is never any other frame's parent" is what lets
+// RestoreAndRelease recycle a frame without walking the parent chain, and it is
+// what makes RunBodyUnderFrame's ownership transfer safe. Leaking the frame to
+// the GC is the price, and it is the same price OpMakeClosure pays.
+//
+// Use this rather than open-coding the fallback: five sites did, and the clear
+// was missing from all five.
+func (p *MachineContext) ClosureEnv() *environment.EnvironmentFrame {
+	q := p.env.MutableRuntimeOrNil()
+	if q != nil {
+		return q
+	}
+	p.envPooled = false
+	return p.env
+}
+
 // Authorizer returns the security authorizer from this context's namespace,
 // falling back to the snapshot taken before the frame was released. See
 // snapshotEngineState for why the fallback exists and why nil here is

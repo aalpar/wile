@@ -596,3 +596,91 @@ func TestEnvFramePoolReleasesCountsReleaseOpcode(t *testing.T) {
 			"path is not being counted", c.EnvFramePoolReleases, c.EnvsCopied)
 	}
 }
+
+// TestBoundaryFramesReleaseTheirEnvFrame pins that a RunBodyUnder* primitive
+// returns its own argument frame to the pool, like every ordinary call does.
+//
+// Each of these primitives reifies its boundary as a continuation frame built
+// over mc.env — the pooled apply frame holding the primitive's arguments — and
+// then applies a body, which repoints mc.env at the callee. From that moment the
+// argument frame is reachable only through the reified frame. It used to be lost
+// twice over: NewMachineContinuation left envPooled false, so RestoreAndRelease
+// read "not pooled" and dropped it; and for the apply-frame shapes the OpApply
+// inside applyToValuesCode then overwrote mc.env before anything could release
+// it. Measured cost: exactly one drained frame per call, every call.
+//
+// The probe compares acquires (EnvsCopied) against releases
+// (EnvFramePoolReleases). It counts the WHOLE program, so `drive` itself
+// contributes a constant leak of its own — the non-tail call in its body defeats
+// the frame-reclaim proof — which is why the control row exists: the assertion is
+// that a boundary primitive costs no MORE leaked frames than the plain call in
+// the same harness, not that the harness leaks nothing.
+//
+// Every lambda is hoisted out of the loop so no OpMakeClosure runs inside drive:
+// that clears envPooled by design (Invariant H) and would swamp the signal.
+func TestBoundaryFramesReleaseTheirEnvFrame(t *testing.T) {
+	const iters = 10000
+
+	leaksPerIter := func(t *testing.T, setup, body string) float64 {
+		t.Helper()
+		ctx := context.Background()
+		engine, err := NewEngine(ctx,
+			WithProfile(KitchenSink),
+			WithSourceFS(stdlib.FS),
+			WithLibraryPaths(),
+			WithImmutableTopLevel(),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		src := "(begin " + setup +
+			"\n(define (drive i n) (if (>= i n) 'done (begin " + body + " (drive (+ i 1) n)))))"
+		_, err = engine.Eval(ctx, engine.MustParse(ctx, src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = engine.Eval(ctx, engine.MustParse(ctx, fmt.Sprintf("(drive 0 %d)", iters)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := engine.LastCounters()
+		if c.EnvsCopied < iters {
+			t.Fatalf("probe applied %d frames for %d iterations — shape changed", c.EnvsCopied, iters)
+		}
+		return float64(int64(c.EnvsCopied)-int64(c.EnvFramePoolReleases)) / float64(iters)
+	}
+
+	// The control: an ordinary non-tail call, in the same harness and to the same
+	// KIND of callee the rows use (a lambda bound by define, not a named define —
+	// the two compile differently and leak differently). Its leak rate is the
+	// harness's own, and it is the budget every row below must meet.
+	control := leaksPerIter(t, "(define pp (lambda () 1))", "(pp)")
+	t.Logf("control (plain call) = %.2f leaked frames/iter", control)
+	if control > 1.5 {
+		t.Fatalf("control leaks %.2f frames/iter; the harness itself regressed, so the "+
+			"rows below cannot be read", control)
+	}
+
+	tcs := []struct {
+		name  string
+		setup string
+		body  string
+	}{
+		{"force", "(define th (lambda () 5))", "(force (%make-lazy-promise th))"},
+		{"call-with-values/scheme-consumer", "(define pp (lambda () 1))\n(define cc (lambda (x) x))", "(call-with-values pp cc)"},
+		{"call-with-values/foreign-consumer", "(define pp (lambda () 1))", "(call-with-values pp list)"},
+		{"call-with-exit", "(define ee (lambda (k) 1))", "(call-with-exit ee)"},
+		{"call-with-continuation-barrier", "(define bb (lambda () 1))", "(call-with-continuation-barrier bb)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got := leaksPerIter(t, tc.setup, tc.body)
+			t.Logf("%s = %.2f leaked frames/iter (control %.2f)", tc.name, got, control)
+			if got > control+0.5 {
+				t.Errorf("%s leaks %.2f env frames/iter against a control of %.2f: the "+
+					"boundary frame is not returning its argument frame to the pool",
+					tc.name, got, control)
+			}
+		})
+	}
+}

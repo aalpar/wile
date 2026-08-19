@@ -52,10 +52,7 @@ func PrimCallWithExit(cc machine.CallContext) error {
 	// when call-with-exit is invoked inside a reified call-with-values producer the
 	// live procedure frame has a nil namespace, so MutableRuntime() would panic. The
 	// closures are pure Go; any valid frame serves for apply-time InitApplyFrame.
-	closureEnv := mc.EnvironmentFrame().MutableRuntimeOrNil()
-	if closureEnv == nil {
-		closureEnv = mc.EnvironmentFrame()
-	}
+	closureEnv := mc.ClosureEnv()
 
 	tag := machine.NewPromptTag("exit")
 	valid := &atomic.Bool{}

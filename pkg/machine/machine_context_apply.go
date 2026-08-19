@@ -386,10 +386,7 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 		// converter to the new value, then applies the finalizer to its result.
 		// Pinned by the parameter-set-converter case of
 		// continuation_subcontext_truncation_red_test.go.
-		closureEnv := p.EnvironmentFrame().MutableRuntimeOrNil()
-		if closureEnv == nil {
-			closureEnv = p.EnvironmentFrame()
-		}
+		closureEnv := p.ClosureEnv()
 		finalizer := NewForeignClosure(closureEnv, 1, false, func(finCC CallContext) error {
 			param.SetValue(finCC.Arg(0))
 			finCC.SetValue(values.Void)
