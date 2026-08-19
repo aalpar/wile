@@ -34,7 +34,7 @@ import (
 // where sub-extensions are listed individually, this avoids double-registration.
 // Use Builder.AddToRegistry for standalone use that includes all sub-extensions.
 var Extension = registry.NewDescribedExtension("all",
-	"All Wile extensions combined.",
+	"Records, promises, strings, characters -- the same set as all-safe; the privileged sub-extensions are registered individually by the profiles that grant them.",
 	SafeBuilder.AddToRegistry)
 
 // Builder aggregates all extension registration functions.
