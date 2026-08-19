@@ -116,6 +116,14 @@ type CompileTimeContinuation struct {
 	// expander. 0 means use DefaultMaxExpandDepth; tests set a low value to
 	// exercise the bound cheaply. See effectiveQuasiMaxDepth.
 	quasiMaxDepth int
+	// assignedSlots is the flat-closure boxing analysis's "assigned" half: every
+	// local slot that some set! in scope targets, named absolutely by owning
+	// frame rather than by (slot, depth). Seeded by recordAssignedSlots at each
+	// frame-creating site, and SHARED — not copied — with the child continuation
+	// a lambda body compiles under, which is what lets an inner lambda see a
+	// set! that sits in its enclosing body. Absolute keys are what make the
+	// sharing correct without re-basing at every descent.
+	assignedSlots map[assignedSlotKey]bool
 }
 
 // unitFrameReclaimVerdict reports the interprocedural verdict for the define with

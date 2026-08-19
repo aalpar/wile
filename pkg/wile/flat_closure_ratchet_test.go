@@ -52,6 +52,15 @@ import (
 // moved it, and in which direction the plan says that phase may move it.
 const armedSelfTailSitesBaseline = 3
 
+// boxedFreeSlotsBaseline is the number of free-vector slots
+// flatClosureRatchetCorpus boxes.
+//
+// Over-boxing is CORRECT — a boxed slot evaluates to the same value — so a T2
+// letrec carve-out that regressed to T1, or a captured-read-only variable that
+// started boxing, costs only speed and passes every value assertion in the
+// suite. This number is what notices. It must not move without a stated reason.
+const boxedFreeSlotsBaseline = 0
+
 // flatClosureRatchetCorpus is the fixed loop-and-closure corpus the arc's counts
 // are taken over. One expression per entry, because Parse enforces exactly one.
 //
@@ -209,6 +218,83 @@ func TestFlatClosureArmedSiteCount(t *testing.T) {
 		t.Errorf("armed OpSelfTailCall sites = %d, want %d; if this was intended, "+
 			"update armedSelfTailSitesBaseline AND say which phase moved it",
 			got, armedSelfTailSitesBaseline)
+	}
+}
+
+// countBoxedFreeSlotsInTree sums the boxed free-vector slots of tpl and every
+// sub-template reachable through its literal pool.
+func countBoxedFreeSlotsInTree(
+	tpl *machine.NativeTemplate,
+	seen map[*machine.NativeTemplate]bool,
+) int {
+	if tpl == nil || seen[tpl] {
+		return 0
+	}
+	seen[tpl] = true
+	q := 0
+	for _, b := range tpl.FreeBoxed() {
+		if b {
+			q++
+		}
+	}
+	for _, lit := range tpl.Literals() {
+		sub, ok := lit.(*machine.NativeTemplate)
+		if ok {
+			q += countBoxedFreeSlotsInTree(sub, seen)
+		}
+	}
+	return q
+}
+
+// TestFlatClosureBoxedSlotCount pins how many free slots flatClosureRatchetCorpus
+// boxes. See boxedFreeSlotsBaseline for why a number has to be checked in.
+//
+// The corpus's zero is meaningful rather than vacuous: the corpus contains both
+// halves of the predicate separately — "loop with a set! parameter" is assigned
+// and not captured, "closure over an enclosing parameter" is captured and not
+// assigned — so a predicate that collapsed to either conjunct alone would move
+// this off zero. TestBoxingSet in pkg/machine/compilation carries the
+// both-conjuncts fixtures.
+func TestFlatClosureBoxedSlotCount(t *testing.T) {
+	tpls := compileRatchetCorpus(t)
+	got := 0
+	for i, tpl := range tpls {
+		n := countBoxedFreeSlotsInTree(tpl, map[*machine.NativeTemplate]bool{})
+		t.Logf("%-44s boxed=%d", flatClosureRatchetCorpus[i].name, n)
+		got += n
+	}
+	if got != boxedFreeSlotsBaseline {
+		t.Errorf("boxed free slots = %d, want %d; over-boxing is correct and "+
+			"therefore silent, so state which phase moved this and why",
+			got, boxedFreeSlotsBaseline)
+	}
+}
+
+// TestFlatClosureBoxingPredicateHasTeeth is the vacuity guard for the zero
+// above: a source that genuinely needs a box must produce one. Without it,
+// deleting markBoxedFreeVars outright would leave every ratchet green.
+func TestFlatClosureBoxingPredicateHasTeeth(t *testing.T) {
+	ctx := context.Background()
+	engine, err := NewEngine(ctx)
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	// `x` is captured by two closures AND assigned through one of them, so it
+	// must be shared rather than copied.
+	const code = `(lambda (x) (cons (lambda () (set! x 1)) (lambda () x)))`
+	expr, err := engine.Parse(ctx, code)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	compiled, err := engine.Compile(ctx, expr)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	got := countBoxedFreeSlotsInTree(compiled.template, map[*machine.NativeTemplate]bool{})
+	if got == 0 {
+		t.Fatalf("a captured-and-assigned variable produced no boxed slot — the "+
+			"boxing predicate is not running, so %s's zero proves nothing",
+			"TestFlatClosureBoxedSlotCount")
 	}
 }
 

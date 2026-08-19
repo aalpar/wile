@@ -115,6 +115,18 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 	// Predeclare body defines to count total slots needed.
 	p.predeclareBodyDefines(v.Body())
 
+	// Record this let frame's set!-targeted slots. A let frame is a binder site
+	// like a lambda's, so it owes the flat-closure boxing analysis the same
+	// seed: without it, a closure over a let binding that some later body form
+	// assigns would copy the value instead of sharing a cell. The inits are
+	// included because a letrec init can set! a sibling.
+	inits := make([]validate.ValidatedExpr, 0, n)
+	for i := range v.Bindings {
+		inits = append(inits, v.Bindings[i].Init)
+	}
+	p.recordAssignedSlots(inits)
+	p.recordAssignedSlots(v.Body())
+
 	// For let*: binding names aren't in the env yet, so add their
 	// count to get the true total for OpPushEnv.
 	totalSlots := len(childEnv.LocalEnvironment().Bindings())

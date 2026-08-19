@@ -55,10 +55,12 @@ type freeVarKey struct {
 // freeVar is one slot of a lambda's flat-closure free vector.
 //
 // sym is retained for diagnostics and for the reflection names phase 7 reports;
-// key is the identity.
+// key is the identity. boxed is filled in by Pass 2 (boxing.go) and is always
+// false as collectFreeVars leaves it.
 type freeVar struct {
-	sym *syntax.SyntaxSymbol
-	key freeVarKey
+	sym   *syntax.SyntaxSymbol
+	key   freeVarKey
+	boxed bool
 }
 
 // collectFreeVars returns the ordered free-variable set of a lambda body.

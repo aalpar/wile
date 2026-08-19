@@ -109,11 +109,13 @@ func (p *CompileTimeContinuation) compileClosureBody(
 	// Pass 1 of flat-closure conversion: the lambda's free-variable set, by
 	// resolution against the ENCLOSING frame (p.env, not childEnv). It must run
 	// before Phase 3, because Phase 3 registers the template literal and Phase 4
-	// compiles the body against the layout this fixes. Recording the names is
-	// metadata only — EqualTo does not compare freeNames, and no generated code
-	// reads it yet.
+	// compiles the body against the layout this fixes. Pass 2 then decides which
+	// of those slots must hold a shared box rather than a copied value.
+	// Recording the layout is metadata only — EqualTo does not compare it, and
+	// no generated code reads it yet.
 	fvs := collectFreeVars(v, p.env)
-	tpl.SetFreeNames(freeVarNames(fvs))
+	fvs = p.markBoxedFreeVars(fvs)
+	tpl.SetFreeLayout(freeVarNames(fvs), freeVarBoxedFlags(fvs))
 
 	// Phase 3: Create child environment, hand it to the template, register the
 	// template literal.
@@ -175,6 +177,12 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *machine.NativeTemplate, fr frameReuse) error {
 	childCompiler := NewCompileTimeContinuation(tpl, childEnv, p.evaluator)
 	childCompiler.SetInlineThreshold(p.inlineThreshold)
+	// The flat-closure boxing analysis's assigned set is SHARED, not copied: an
+	// inner lambda's layout has to see a set! that sits in THIS body, which is
+	// outside the inner lambda entirely. Keys are frame-absolute, so no
+	// re-basing is needed across the descent.
+	p.ensureAssignedSlots()
+	childCompiler.assignedSlots = p.assignedSlots
 	// The unit's arity table follows the body down. Nearly every call to a
 	// same-unit define sits inside some procedure, so a table that stopped at the
 	// top level would never be consulted where it matters. Propagating it is safe
@@ -201,6 +209,11 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 	for _, bodyExpr := range body {
 		childCompiler.predeclareDefineFromValidatedRecursive(bodyExpr)
 	}
+
+	// Record this frame's set!-targeted slots before compiling anything under
+	// it. AFTER the pre-declare pass, so a set! of an internal define resolves;
+	// BEFORE the body, so a nested lambda's boxing layout can consult it.
+	childCompiler.recordAssignedSlots(body)
 
 	// Docstring: the validator has already extracted any leading string
 	// literal and stripped it from the body. Just read the field.

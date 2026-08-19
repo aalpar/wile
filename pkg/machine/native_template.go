@@ -76,6 +76,12 @@ type NativeTemplate struct {
 	// compiled as a closure body.
 	freeNames []*values.Symbol
 
+	// freeBoxed is parallel to freeNames: slot i holds a shared *values.Box
+	// rather than a copied value. nil when NO slot is boxed, which is the
+	// overwhelmingly common case — a free variable is boxed only when it is both
+	// captured and assigned.
+	freeBoxed []bool
+
 	// cachedBindings stores *Binding pointers resolved at compile time.
 	// OpLoadCachedBinding/OpPushCachedBinding index into this array,
 	// bypassing the runtime environment lookup path.
@@ -420,10 +426,17 @@ func (p *NativeTemplate) SetDoc(doc string) {
 	p.doc = doc
 }
 
-// SetFreeNames records the free-variable names in free-vector slot order.
-// Written once, by compileClosureBody, before the body is compiled.
-func (p *NativeTemplate) SetFreeNames(names []*values.Symbol) {
+// SetFreeLayout records the free-variable names in free-vector slot order and,
+// parallel to them, which slots are boxed. Written once, by compileClosureBody,
+// before the body is compiled. boxed may be nil when no slot is boxed; when it
+// is not nil it must have the same length as names.
+func (p *NativeTemplate) SetFreeLayout(names []*values.Symbol, boxed []bool) {
+	if boxed != nil && len(boxed) != len(names) {
+		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"SetFreeLayout: %d boxed flags against %d free names", len(boxed), len(names)))
+	}
 	p.freeNames = names
+	p.freeBoxed = boxed
 }
 
 // FreeNames returns the free-variable names in free-vector slot order. nil for
@@ -431,6 +444,12 @@ func (p *NativeTemplate) SetFreeNames(names []*values.Symbol) {
 // closure body. The slice is the template's own — treat it as read-only.
 func (p *NativeTemplate) FreeNames() []*values.Symbol {
 	return p.freeNames
+}
+
+// FreeBoxed reports, per free-vector slot, whether that slot holds a shared box
+// rather than a copied value. nil when no slot is boxed. Read-only.
+func (p *NativeTemplate) FreeBoxed() []bool {
+	return p.freeBoxed
 }
 
 func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
@@ -715,5 +734,6 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 	// cloned with them. (shape is deliberately NOT copied — see its field
 	// comment; a copy is not yet any closure's body.)
 	q.freeNames = slices.Clone(p.freeNames)
+	q.freeBoxed = slices.Clone(p.freeBoxed)
 	return q
 }
