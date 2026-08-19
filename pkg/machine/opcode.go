@@ -104,9 +104,10 @@ const (
 	// (slot, depth) pair, so these must stay out of the LocalIdx family that
 	// instructionToOperation's metadata-driven default arm decomposes.
 
-	OpLoadFree // Load free[Arg] into the value register
-	OpPushFree // LoadFree + Push
-	OpCallFree // Resolve free[Arg] as the callee, drain args, ApplyCallable
+	OpLoadFree  // Load free[Arg] into the value register
+	OpPushFree  // LoadFree + Push
+	OpCallFree  // Resolve free[Arg] as the callee, drain args, ApplyCallable
+	OpStoreFree // Pop a value and write it INTO the box at free[Arg]
 
 	// Wave 6: cached binding operations (Arg = index into cachedBindings)
 
@@ -260,6 +261,7 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpLoadFree:              {name: "LoadFree", operandKind: OperandRaw, writesValue: true},
 	OpPushFree:              {name: "PushFree", operandKind: OperandRaw},
 	OpCallFree:              {name: "CallFree", operandKind: OperandRaw},
+	OpStoreFree:             {name: "StoreFree", operandKind: OperandRaw},
 	OpLoadCachedBinding:     {name: "LoadCachedBinding", operandKind: OperandCachedBinding, writesValue: true},
 	OpPushCachedBinding:     {name: "PushCachedBinding", operandKind: OperandCachedBinding},
 	OpCallForeignCached:     {name: "CallForeignCached", operandKind: OperandCachedBinding},

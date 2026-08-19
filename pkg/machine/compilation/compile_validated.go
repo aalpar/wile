@@ -258,8 +258,9 @@ func CompileValidatedLambda(p *CompileTimeContinuation, ctctx CompileTimeCallCon
 	lenv := environment.NewLocalEnvironment(0)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
-	// Anonymous lambdas have no self name to recurse on — no frame-reuse context.
-	err := p.compileClosure(ctctx, tpl, lenv, v, noFrameReuse())
+	// Anonymous lambdas have no self name to recurse on — no frame-reuse context,
+	// and no self slot to back-patch.
+	err := p.compileClosure(ctctx, tpl, lenv, v, noFrameReuse(), nil)
 	if err != nil {
 		return err
 	}
@@ -288,17 +289,15 @@ func CompileValidatedCaseLambda(p *CompileTimeContinuation, ctctx CompileTimeCal
 		tpl := machine.NewNativeTemplate(0, 0, false)
 
 		// case-lambda clauses are anonymous arity dispatch — no frame-reuse context.
-		tpli, err := p.compileClosureBody(ctctx, tpl, lenv, clause, "case-lambda clause", noFrameReuse())
+		tpli, layout, err := p.compileClosureBody(ctctx, tpl, lenv, clause, "case-lambda clause", noFrameReuse())
 		if err != nil {
 			return err
 		}
 
-		p.AppendOperations(
-			machine.NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
-			machine.NewOperationPush(),
-			machine.NewOperationMakeClosure(0, -1),
-			machine.NewOperationPush(),
-		)
+		// Each clause is its own closure with its own layout. A case-lambda is
+		// anonymous, so no clause has a self slot.
+		p.emitClosureCreation(tpli, layout, nil)
+		p.AppendOperations(machine.NewOperationPush())
 	}
 
 	// Phase 2: Combine all clause closures into a single case-lambda dispatch structure.

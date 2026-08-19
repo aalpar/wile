@@ -108,7 +108,7 @@ func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error
 	// The closure holds mc.env as that parent, so mark it non-poolable —
 	// RestoreAndRelease must not recycle a frame a closure still points at.
 	mc.envPooled = false
-	cls := NewClosureCapturing(tpl, mc.env, free)
+	cls := NewClosureCapturing(tpl, closureLink(mc.env, tpl), free)
 	backPatchSelfSlot(cls, free, p.selfSlot)
 	mc.SetValue(cls)
 	mc.pc++

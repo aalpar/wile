@@ -126,6 +126,109 @@ func validatedLetOf(t *testing.T, code string) *validate.ValidatedLet {
 	return v
 }
 
+// bodyOfLambda compiles code far enough to hand back the body of the lambda it
+// consists of, so the internal-define tiers can be asserted on the real
+// validated tree.
+func bodyOfLambda(t *testing.T, code string) []validate.ValidatedExpr {
+	t.Helper()
+	env := newFreeVarEnv()
+	prog := parseSchemeExpr(t, env, code)
+	ctx := context.Background()
+	expanded, err := NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).
+		ExpandTopLevelExpression(prog)
+	qt.Assert(t, err, qt.IsNil)
+	res := validate.ValidateExpression(ctx, env, expanded)
+	qt.Assert(t, res.Ok(), qt.IsTrue, qt.Commentf("%v", res.Errors))
+	lam, ok := res.Expr.(*validate.ValidatedLambda)
+	qt.Assert(t, ok, qt.IsTrue, qt.Commentf("fixture is a %T, not a ValidatedLambda", res.Expr))
+	return lam.Body()
+}
+
+// TestBodyDefineTiers is TestLetrecTiers' twin for the OTHER spelling of a
+// letrec* region, and the one that occurs in practice: internal defines.
+//
+// R7RS §5.3.2 gives them letrec* semantics, so they carry the identical
+// initialization-order hazard — a closure built by one define can capture a slot
+// a later define has not stored into yet. They are never rewritten into a
+// ValidatedLet, so the let-shaped tier function never sees them, while
+// benchmarks/larceny/src/compiler.scm alone carries 255 of them against zero
+// explicit letrec forms.
+//
+// The T2 row is the one that pays: (define (loop n) … (loop …)) is the
+// commonest recursion shape in the corpus, and boxing it would put an unbox on
+// every iteration for a value that exists the instant the closure is built.
+func TestBodyDefineTiers(t *testing.T) {
+	tcs := []struct {
+		name  string
+		code  string
+		index int
+		want  letrecTier
+	}{
+		{
+			name: "T2: a self-recursive internal define",
+			code: `(lambda ()
+			         (define (loop n) (if (= n 0) 0 (loop (- n 1))))
+			         (loop 3))`,
+			index: 0,
+			want:  tierSelfPatch,
+		},
+		{
+			name: "T2: a self-recursive lambda value form",
+			code: `(lambda ()
+			         (define loop (lambda (n) (if (= n 0) 0 (loop (- n 1)))))
+			         (loop 3))`,
+			index: 0,
+			want:  tierSelfPatch,
+		},
+		{
+			name: "T3: mutually recursive internal defines",
+			code: `(lambda ()
+			         (define (ev n) (if (= n 0) 1 (od (- n 1))))
+			         (define (od n) (if (= n 0) 0 (ev (- n 1))))
+			         (ev 4))`,
+			index: 0,
+			want:  tierMutual,
+		},
+		{
+			name: "T1: captured by a LATER define's body",
+			code: `(lambda ()
+			         (define (helper n) n)
+			         (define (use n) (helper n))
+			         (use 1))`,
+			index: 0,
+			want:  tierBoxed,
+		},
+		{
+			name: "T1: read during initialization rather than from a closure",
+			code: `(lambda ()
+			         (define a 1)
+			         (define b (+ a 1))
+			         b)`,
+			index: 0,
+			want:  tierBoxed,
+		},
+		{
+			// A case-lambda compiles to one closure per clause, wrapped
+			// afterwards, so there is no single closure for OpMakeClosure to
+			// back-patch. It falls through to T1 and shares a cell.
+			name: "a self-recursive case-lambda is boxed, not self-patched",
+			code: `(lambda ()
+			         (define f (case-lambda ((n) (f n 1)) ((n m) n)))
+			         (f 1))`,
+			index: 0,
+			want:  tierBoxed,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			body := bodyOfLambda(t, tc.code)
+			got := bodyDefineTier(body, tc.index)
+			c.Assert(got, qt.Equals, tc.want)
+		})
+	}
+}
+
 // TestLetrecTiers pins the three-tier carve-out.
 //
 // THE T2 CASE MUST FAIL IF T2 IS BOXED. Over-boxing is CORRECT — it evaluates to

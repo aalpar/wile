@@ -82,6 +82,18 @@ type NativeTemplate struct {
 	// captured and assigned.
 	freeBoxed []bool
 
+	// retainsLexicalEnv marks a closure body that must keep the CREATING frame
+	// as its static link rather than the lexical root, because it reads through
+	// the frame chain in a way the free-variable pass cannot see: an opaque
+	// subtree (a quasiquote template, or a passthrough form — a `syntax`
+	// template's pattern variables are the case that occurs).
+	//
+	// The narrowing is what makes a flat closure stop pinning its creator's
+	// frames, so this flag is a per-body opt-out from the arc's whole point.
+	// It is set by compileClosureBody from a transitive scan, so an enclosing
+	// body inherits it from a nested one.
+	retainsLexicalEnv bool
+
 	// cachedBindings stores *Binding pointers resolved at compile time.
 	// OpLoadCachedBinding/OpPushCachedBinding index into this array,
 	// bypassing the runtime environment lookup path.
@@ -267,6 +279,8 @@ func instructionToOperation(instr Instruction) Operation {
 		return NewOperationUnbox()
 	case OpLoadFree, OpPushFree, OpCallFree:
 		return NewOperationLoadFree(int(instr.Arg))
+	case OpStoreFree:
+		return NewOperationStoreFree(int(instr.Arg))
 
 	// --- Wave 5: fused zero-operand ops ---
 	case OpPullApply:
@@ -404,6 +418,8 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 		return Instruction{Op: kind, Arg: EncodeMakeClosure(v.freeCount, v.selfSlot)}, true
 	case *OperationLoadFree:
 		return Instruction{Op: kind, Arg: int32(v.Index)}, true
+	case *OperationStoreFree:
+		return Instruction{Op: kind, Arg: int32(v.Index)}, true
 
 	default:
 		// Zero-operand operations (Wave 1, Wave 5 OperationMakeClosure):
@@ -472,6 +488,18 @@ func (p *NativeTemplate) FreeNames() []*values.Symbol {
 // rather than a copied value. nil when no slot is boxed. Read-only.
 func (p *NativeTemplate) FreeBoxed() []bool {
 	return p.freeBoxed
+}
+
+// SetRetainsLexicalEnv records that closures over this template must keep the
+// creating frame as their static link. See the field comment.
+func (p *NativeTemplate) SetRetainsLexicalEnv() {
+	p.retainsLexicalEnv = true
+}
+
+// RetainsLexicalEnv reports whether closures over this template must keep the
+// creating frame as their static link rather than the lexical root.
+func (p *NativeTemplate) RetainsLexicalEnv() bool {
+	return p.retainsLexicalEnv
 }
 
 func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
@@ -757,5 +785,6 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 	// comment; a copy is not yet any closure's body.)
 	q.freeNames = slices.Clone(p.freeNames)
 	q.freeBoxed = slices.Clone(p.freeBoxed)
+	q.retainsLexicalEnv = p.retainsLexicalEnv
 	return q
 }

@@ -182,7 +182,7 @@ func branchTargets(code []Instruction) []bool {
 // load and apply.
 func isPushOp(op OpCode) bool {
 	switch op {
-	case OpPush, OpPushLiteral, OpPushGlobal, OpPushLocal, OpPushCachedBinding:
+	case OpPush, OpPushLiteral, OpPushGlobal, OpPushLocal, OpPushCachedBinding, OpPushFree:
 		return true
 	default:
 		return false

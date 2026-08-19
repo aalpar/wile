@@ -46,6 +46,7 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// Create binding early for recursion support
 	if p.env.LocalEnvironment() != nil {
 		li, _ := p.env.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, symbolScopes, symbolSource)
+		p.maybeBoxOnDeclare(v.Name(), li)
 		// An internal define allocates its slot here, after compileClosureBody's
 		// parameter-count check has already run, so this is the only place a body
 		// define's slot can be rejected before a Load/StoreLocal is emitted for it.
@@ -174,7 +175,22 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCal
 	// The expression is NOT in tail position because define is a definition, not
 	// an expression that returns a meaningful value. The result goes into the
 	// value register, ready to be stored.
-	err = p.compileValidated(ctctx.NotInTail(), v.SubExp())
+	// A lambda value form is compiled through compileClosure explicitly rather
+	// than through the generic dispatch, so the define's own name reaches it as
+	// the self binder. An INTERNAL (define f (lambda … (f …))) is a letrec*
+	// self-reference whose value does not exist until OpMakeClosure back-patches
+	// it; the generic path passes no self binder and the closure would capture
+	// #!void. A top-level define's name is a global, so selfFreeSlot answers -1
+	// and this costs it nothing.
+	lam, isLambda := v.SubExp().(*validate.ValidatedLambda)
+	if isLambda {
+		lenv := environment.NewLocalEnvironment(0)
+		tpl := machine.NewNativeTemplate(0, 0, false)
+		tpl.SetName(sym.Key)
+		err = p.compileClosure(ctctx.NotInTail(), tpl, lenv, lam, noFrameReuse(), v.Name())
+	} else {
+		err = p.compileValidated(ctctx.NotInTail(), v.SubExp())
+	}
 	if err != nil {
 		return err
 	}
@@ -295,7 +311,11 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 
 	// Step 3: Compile the closure - binds parameters, compiles body, emits MakeClosure.
 	// After this, the closure is in the value register ready to be stored.
-	err = p.compileClosure(ctctx, tpl, lenv, v, p.frameReuseForDefine(ctctx, v))
+	// The define's own name is the closure's self binder. It is a free variable
+	// only when the define is INTERNAL — a top-level define's name is a global,
+	// which collectFreeVars never puts in a layout, so selfFreeSlot answers -1
+	// there without this site having to distinguish the two.
+	err = p.compileClosure(ctctx, tpl, lenv, v, p.frameReuseForDefine(ctctx, v), v.Name())
 	if err != nil {
 		return err
 	}

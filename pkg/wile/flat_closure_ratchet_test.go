@@ -59,7 +59,14 @@ const armedSelfTailSitesBaseline = 3
 // letrec carve-out that regressed to T1, or a captured-read-only variable that
 // started boxing, costs only speed and passes every value assertion in the
 // suite. This number is what notices. It must not move without a stated reason.
-const boxedFreeSlotsBaseline = 0
+//
+// Moved 0 -> 2 in phase 4b, and the reason is the letrec* initialization-order
+// hazard, not mutation: once free variables are COPIED, `ev?` and `od?` in the
+// mutual-recursion entry are each captured by the other's init before their own
+// store has run, so a value copy would freeze #!void. Both are T3, which the
+// tiers box. The two named-let / letrec-self-call entries stay at 0 — they are
+// T2, where OpMakeClosure's self back-patch supplies the value without a cell.
+const boxedFreeSlotsBaseline = 2
 
 // flatClosureRatchetCorpus is the fixed loop-and-closure corpus the arc's counts
 // are taken over. One expression per entry, because Parse enforces exactly one.
@@ -295,6 +302,44 @@ func TestFlatClosureBoxingPredicateHasTeeth(t *testing.T) {
 		t.Fatalf("a captured-and-assigned variable produced no boxed slot — the "+
 			"boxing predicate is not running, so %s's zero proves nothing",
 			"TestFlatClosureBoxedSlotCount")
+	}
+}
+
+// TestFlatClosureDoesNotPinItsCreatorsFrame is the arc's headline property,
+// asserted directly rather than inferred from an allocation slope.
+//
+// A closure's static link must be a structural ROOT — parent == nil — so the
+// activation frames it was created under are not reachable from it at all, and
+// its free variables are values in a vector instead. Everything else in this
+// arc exists to make that safe.
+func TestFlatClosureDoesNotPinItsCreatorsFrame(t *testing.T) {
+	ctx := context.Background()
+	engine, err := NewEngine(ctx)
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	// Two nesting levels, so the returned closure captures a variable of a frame
+	// that is neither its own nor its immediate creator's.
+	got, err := engine.EvalMultiple(ctx, `(((lambda (a) (lambda (b) (lambda () (+ a b)))) 1) 2)`)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	cls, ok := unwrapValue(got).(*machine.MachineClosure)
+	if !ok {
+		t.Fatalf("result is %T, want a *machine.MachineClosure", unwrapValue(got))
+	}
+	link := cls.Link()
+	if link == nil {
+		t.Fatal("closure recorded no static link")
+	}
+	if link.Parent() != nil {
+		t.Errorf("static link has a lexical parent — the closure still pins the " +
+			"frames it was created under, which is the one thing this arc exists " +
+			"to stop")
+	}
+	if len(cls.Free()) != 2 {
+		t.Errorf("free vector has %d entries, want 2 (a and b): the variables have "+
+			"to travel SOMEWHERE once the link no longer reaches them", len(cls.Free()))
 	}
 }
 

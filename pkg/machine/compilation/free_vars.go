@@ -58,8 +58,13 @@ type freeVarKey struct {
 // key is the identity. boxed is filled in by Pass 2 (boxing.go) and is always
 // false as collectFreeVars leaves it.
 type freeVar struct {
-	sym   *syntax.SyntaxSymbol
-	key   freeVarKey
+	sym *syntax.SyntaxSymbol
+	key freeVarKey
+	// abs is key resolved to the frame that OWNS the slot. key is relative to
+	// the enclosing frame and so means something different to every reader; abs
+	// is what a reference arbitrarily deep inside the body can be matched
+	// against without re-basing.
+	abs   boxedSlotKey
 	boxed bool
 }
 
@@ -159,8 +164,12 @@ func (p *freeVarCollector) visit(sym *syntax.SyntaxSymbol) {
 	if p.seen[k] {
 		return
 	}
+	abs, ok := absoluteSlot(p.enclosing, li)
+	if !ok {
+		return
+	}
 	p.seen[k] = true
-	p.q = append(p.q, freeVar{sym: sym, key: k})
+	p.q = append(p.q, freeVar{sym: sym, key: k, abs: abs})
 }
 
 // boundInside reports whether some binder introduced within the lambda covers
@@ -317,4 +326,68 @@ func freeVarNames(fvs []freeVar) []*values.Symbol {
 		q[i] = fv.sym.Sym
 	}
 	return q
+}
+
+// bodyReadsThroughFrameChain reports whether body contains an OPAQUE SUBTREE:
+// a quasiquote template, or a passthrough form parked in a ValidatedLiteral
+// (cond-expand, include, let-syntax, with-syntax, a `syntax` template …).
+//
+// WHY THIS GATES THE STATIC LINK. Pass 1 decides free-variable membership over
+// the VALIDATED tree, and an opaque subtree is raw syntax this package never
+// looks inside — pkg/internal/validate's own opaque_subtree.go documents the
+// same blindness and takes the same stance, that an un-analysed subtree counts
+// as unsafe. A `syntax` template's pattern-variable references are exactly such
+// a reference: they resolve at run time through a frame BindPatternVars pushed,
+// and they appear in no free layout because nothing walked them. Narrowing such
+// a closure's link to the lexical root makes that frame unreachable, which is
+// how "no syntax-case pattern-variable frame in scope" and "no such local
+// binding 1:1" showed up the moment the link moved.
+//
+// The answer is transitive for free: WalkSubExprs descends into nested lambda
+// bodies, so a template whose INNER lambda hides an opaque subtree is flagged
+// too — which it must be, or the chain the inner closure needs is already
+// severed above it.
+//
+// Refusing to narrow costs the space win on these bodies and nothing else. The
+// opposite error is a wrong answer, and a loud one: the read faults rather than
+// returning the wrong value.
+func bodyReadsThroughFrameChain(body []validate.ValidatedExpr) bool {
+	found := false
+	var walk func(e validate.ValidatedExpr)
+	walk = func(e validate.ValidatedExpr) {
+		if found || e == nil {
+			return
+		}
+		if isOpaqueSubtree(e) {
+			found = true
+			return
+		}
+		validate.WalkSubExprs(e, func(child validate.ValidatedExpr, _ validate.ChildRole) {
+			walk(child)
+		})
+	}
+	for _, e := range body {
+		walk(e)
+	}
+	return found
+}
+
+// isOpaqueSubtree mirrors validate's own classification of the two shapes that
+// reach compilation as un-analysed code.
+//
+// A *ValidatedLiteral is overloaded: genuine self-evaluating data (numbers,
+// strings, booleans, the empty list) AND passthrough forms. Only the latter
+// conceal code, and a form is a non-empty syntax pair — self-evaluating data
+// never is.
+func isOpaqueSubtree(expr validate.ValidatedExpr) bool {
+	_, isQuasi := expr.(*validate.ValidatedQuasiquote)
+	if isQuasi {
+		return true
+	}
+	lit, ok := expr.(*validate.ValidatedLiteral)
+	if !ok {
+		return false
+	}
+	pair, ok := lit.Value.(*syntax.SyntaxPair)
+	return ok && !pair.IsEmptyList()
 }

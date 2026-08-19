@@ -827,13 +827,29 @@ func (p *MachineContext) Run() error {
 			if err != nil {
 				return err
 			}
-			// The closure holds mc.env as its STATIC LINK — for global resolution
-			// and the namespace/phase the apply frame derives from it, not for
-			// free variables, which the vector above already carries. Mark the
-			// frame non-poolable so RestoreAndRelease will not recycle it while
-			// the closure points at it.
+			// THE LINK IS THE LEXICAL ROOT, NOT mc.env. This is the line that
+			// makes "no closure built by OpMakeClosure points at an environment
+			// frame" true: TopLevel() walks to the structural root — the owner's
+			// view at this frame's phase, with the same store and the same
+			// sealed flag, and parent == nil — so the activation frames the
+			// closure was created under are not reachable from it at all. Free
+			// variables travel in the vector above instead.
+			//
+			// TopLevel() rather than AtPhase(PhaseLevel()): a sealed-write view
+			// must stay sealed, and AtPhase resolves a same-level climb through
+			// the ordinary registry, which would silently drop the seal for
+			// every closure a bootstrap macro builds.
+			//
+			// The walk is short and stays short: every apply frame's parent is
+			// already a root by this rule, so the chain is the body's own let
+			// frames plus one.
+			//
+			// mc.envPooled = false is retained for now. It is no longer needed
+			// for THIS closure — it holds no frame — but the flag is Invariant
+			// H's, and retiring it belongs with the predicates that phase 8
+			// removes, not here.
 			mc.envPooled = false
-			cls := NewClosureCapturing(tpl, mc.env, free)
+			cls := NewClosureCapturing(tpl, closureLink(mc.env, tpl), free)
 			backPatchSelfSlot(cls, free, selfSlot)
 			mc.SetValue(cls)
 			mc.pc++
@@ -869,6 +885,19 @@ func (p *MachineContext) Run() error {
 			if err != nil {
 				return err
 			}
+
+		case OpStoreFree:
+			v, err := mc.resolveFree(instr)
+			if err != nil {
+				return err
+			}
+			box, ok := v.(*values.Box)
+			if !ok {
+				return mc.WrapError(werr.ErrNotABox,
+					fmt.Sprintf("store-free: free slot %d holds %T, not a box", instr.Arg, v))
+			}
+			box.Value = mc.evals.Pop()
+			mc.pc++
 
 		// --- Wave 6: cached binding operations ---
 
@@ -1467,6 +1496,27 @@ func (p *MachineContext) resolveLocalBinding(instr Instruction) (*environment.Bi
 			fmt.Sprintf("no such local binding %d:%d", slot, depth))
 	}
 	return bd, nil
+}
+
+// closureLink chooses a new closure's static link.
+//
+// The lexical ROOT is the answer that makes flat closures flat: it is the
+// owner's view at this frame's phase — same store, same sealed flag, parent ==
+// nil — so the activation frames the closure was created under are not
+// reachable from it, and free variables travel in the vector instead.
+// TopLevel() rather than AtPhase(PhaseLevel()) because a sealed-write view must
+// stay sealed, and a same-level AtPhase climb resolves through the ordinary
+// registry and would silently drop the seal for every closure a bootstrap macro
+// builds.
+//
+// A body that reads through the frame chain in a way the free-variable pass
+// cannot see keeps the creating frame instead. That is one bool off the
+// template, which the apply path already touches.
+func closureLink(env *environment.EnvironmentFrame, tpl *NativeTemplate) *environment.EnvironmentFrame {
+	if tpl.RetainsLexicalEnv() {
+		return env
+	}
+	return env.TopLevel()
 }
 
 // resolveFree reads one entry of the executing closure's free vector.

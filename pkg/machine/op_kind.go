@@ -92,6 +92,10 @@ func (*OperationLoadFree) OpKind() OpCode {
 	return OpLoadFree
 }
 
+func (*OperationStoreFree) OpKind() OpCode {
+	return OpStoreFree
+}
+
 func (*OperationBoxSlot) OpKind() OpCode {
 	return OpBoxSlot
 }

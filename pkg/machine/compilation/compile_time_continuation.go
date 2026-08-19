@@ -131,6 +131,20 @@ type CompileTimeContinuation struct {
 	// Scheme: emitBoxSlots at the binder, emitLocalLoad at every read,
 	// emitLocalStore at every write. All three route through localIsBoxed.
 	boxedSlots map[boxedSlotKey]bool
+	// freeLayout is the free-variable layout of the lambda whose body THIS
+	// continuation compiles — the vector its closures were built with, and the
+	// only way its body can reach a variable of an enclosing lambda now that the
+	// static link is a phase view with no lexical parent.
+	//
+	// nil for the top-level program compiler and for any body that captures
+	// nothing. Set by compileBody on the child continuation, never shared: a
+	// layout belongs to one lambda.
+	freeLayout []freeVar
+	// boxOnDeclare is the set!-target list of the body region currently being
+	// compiled, consulted by declareDefineBinding for a define whose slot no
+	// region scan enumerated. See maybeBoxOnDeclare for why it exists and why
+	// its predicate is weaker than the region scans'.
+	boxOnDeclare []*syntax.SyntaxSymbol
 }
 
 // unitFrameReclaimVerdict reports the interprocedural verdict for the define with

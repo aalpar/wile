@@ -119,9 +119,95 @@ func binderIsBoxed(name *syntax.SyntaxSymbol, scope []validate.ValidatedExpr) bo
 	return false
 }
 
+// letrecRegionBinder is one binder of a letrec* region — a letrec/letrec*/named-let
+// binding, or an internal define — paired with the expression that gives it its
+// value.
+//
+// The two spellings are one region for this analysis and differ only in how the
+// pairs are collected, which is why the tier logic below takes this rather than a
+// *ValidatedLet. Internal defines are the spelling that actually occurs:
+// benchmarks/larceny/src/compiler.scm alone carries 255 of them against zero
+// explicit letrec forms.
+type letrecRegionBinder struct {
+	name *syntax.SyntaxSymbol
+	init validate.ValidatedExpr
+}
+
+// letBindersOfRegion projects a let form's bindings into region binders.
+func letBindersOfRegion(v *validate.ValidatedLet) []letrecRegionBinder {
+	q := make([]letrecRegionBinder, 0, len(v.Bindings))
+	for i := range v.Bindings {
+		q = append(q, letrecRegionBinder{name: v.Bindings[i].Name, init: v.Bindings[i].Init})
+	}
+	return q
+}
+
+// bodyBindersOfRegion projects a body's internal defines into region binders, in
+// definition order, recursing into begin exactly as bodyDefineNames does.
+//
+// A function-form define's "init" is the define node itself: its lambda is not a
+// separate ValidatedExpr, so the reference scans walk the ValidatedDefine, whose
+// body WalkSubExprs reports as RoleClosureBody — which is what makes a
+// self-recursive internal define read as a capture inside a closure.
+func bodyBindersOfRegion(body []validate.ValidatedExpr) []letrecRegionBinder {
+	var q []letrecRegionBinder
+	for _, e := range body {
+		d, ok := e.(*validate.ValidatedDefine)
+		if ok {
+			q = append(q, letrecRegionBinder{name: d.Name(), init: d})
+			continue
+		}
+		b, ok := e.(*validate.ValidatedBegin)
+		if ok {
+			q = append(q, bodyBindersOfRegion(b.Body())...)
+		}
+	}
+	return q
+}
+
+// letrecRegionForcesBox reports whether binder i of a letrec* region must hold a
+// cell for a reason that has nothing to do with mutation.
+//
+// THE HAZARD IS INITIALIZATION ORDER, AND IT ONLY EXISTS ONCE FREE VARIABLES ARE
+// COPIED. A letrec* binder is in scope throughout the region's inits, so a
+// closure built by one init can capture a slot whose value has not been stored
+// yet. Under linked closures that was harmless — the closure held the frame and
+// read the slot later. A flat closure copies, so it would copy #!void and keep
+// it forever.
+//
+// The carve-out is the T2 tier: when the ONLY capture is the binder's own init
+// lambda, OpMakeClosure's self back-patch writes the finished closure into its
+// own free slot, and no cell is needed. That is the difference between
+// (define (loop n) … (loop …)) costing an unbox per iteration and costing
+// nothing, on the commonest recursion shape in the corpus.
+//
+// A capture in the region's BODY is safe — every store has run by then — so the
+// scan covers the inits alone. That precision is what keeps a merely
+// body-captured binder unboxed.
+func letrecRegionForcesBox(bs []letrecRegionBinder, i int) bool {
+	if i < 0 || i >= len(bs) {
+		return false
+	}
+	capturedDuringInit := false
+	for j := range bs {
+		if referencesBinder(bs[j].init, bs[i].name, refInsideClosure) {
+			capturedDuringInit = true
+			break
+		}
+	}
+	if !capturedDuringInit {
+		return false
+	}
+	return letrecRegionTier(bs, i) != tierSelfPatch
+}
+
 // markBoxedBinders decides, for each binder in binders, whether it is boxed over
 // scope; records the boxed ones in p.boxedSlots by absolute slot; and returns
 // their LocalIndexes in binder order so the caller can emit OpBoxSlot.
+//
+// forced is an extra, independent reason to box the i-th binder — the letrec*
+// initialization-order hazard — or nil when the binders are not a letrec* region.
+// Boxing is the union: either reason alone is sufficient.
 //
 // The binder must already exist in p.env — this resolves it there, which is what
 // keeps the emit site, every read, and every write agreeing on one slot: all
@@ -129,13 +215,17 @@ func binderIsBoxed(name *syntax.SyntaxSymbol, scope []validate.ValidatedExpr) bo
 func (p *CompileTimeContinuation) markBoxedBinders(
 	binders []*syntax.SyntaxSymbol,
 	scope []validate.ValidatedExpr,
+	forced func(i int) bool,
 ) []*environment.LocalIndex {
 	if p.env == nil || len(binders) == 0 {
 		return nil
 	}
 	var q []*environment.LocalIndex
-	for _, b := range binders {
-		if b == nil || !binderIsBoxed(b, scope) {
+	for i, b := range binders {
+		if b == nil {
+			continue
+		}
+		if !binderIsBoxed(b, scope) && (forced == nil || !forced(i)) {
 			continue
 		}
 		li := p.env.GetLocalIndex(b.Sym, syntax.ScopesOf(b.Scopes()))
@@ -151,6 +241,89 @@ func (p *CompileTimeContinuation) markBoxedBinders(
 		q = append(q, li)
 	}
 	return q
+}
+
+// setBangTargetsIn returns every set!-target symbol in body, in traversal order.
+//
+// These are REFERENCES, not binders — their scope sets are supersets of the
+// binder's, which is the direction sameBinder(binder, ref) tests.
+func setBangTargetsIn(body []validate.ValidatedExpr) []*syntax.SyntaxSymbol {
+	var q []*syntax.SyntaxSymbol
+	var walk func(e validate.ValidatedExpr)
+	walk = func(e validate.ValidatedExpr) {
+		if e == nil {
+			return
+		}
+		setBang, ok := e.(*validate.ValidatedSetBang)
+		if ok && setBang.Name != nil {
+			q = append(q, setBang.Name)
+		}
+		validate.WalkSubExprs(e, func(child validate.ValidatedExpr, _ validate.ChildRole) {
+			walk(child)
+		})
+	}
+	for _, e := range body {
+		walk(e)
+	}
+	return q
+}
+
+// withBoxOnDeclare installs the set!-target list for a body region and returns a
+// restore function, so a nested region does not leak its list outward.
+func (p *CompileTimeContinuation) withBoxOnDeclare(body []validate.ValidatedExpr) func() {
+	saved := p.boxOnDeclare
+	p.boxOnDeclare = setBangTargetsIn(body)
+	return func() {
+		p.boxOnDeclare = saved
+	}
+}
+
+// maybeBoxOnDeclare boxes an internal define's slot at the moment the slot is
+// created, when some set! in the enclosing body targets that binder.
+//
+// THIS IS THE SAFETY NET, AND IT IS LOAD-BEARING RATHER THAN BELT-AND-BRACES.
+// The region scans (compileBody, CompileValidatedLet) enumerate the defines they
+// can SEE — direct body elements and those inside a begin, which is exactly what
+// predeclareDefineFromValidatedRecursive reaches. A define that arrives any other
+// way still allocates a slot here, lazily, and would then be captured by value
+// with no cell: measured on (chibi test)'s `test` expansion, where the defines
+// land in a frame no region scan enumerates, and the closure's set! faulted with
+// "store-free: free slot 0 holds *values.Boolean, not a box".
+//
+// The predicate is ASSIGNED ALONE, deliberately weaker than captured ∧ assigned.
+// Testing "captured" here would mean comparing two REFERENCES' scope sets against
+// each other, and neither is a subset of the other in general — a false negative
+// there is a wrong answer, while boxing an assigned-but-uncaptured define costs
+// one indirection. The binder-vs-reference comparison this does make is the sound
+// direction: binderScopes ⊆ refScopes, the same subset test resolution uses.
+//
+// The cell is installed BEFORE the define's value expression is compiled, so a
+// closure built by that expression captures the cell rather than the void the
+// slot holds at that instant.
+func (p *CompileTimeContinuation) maybeBoxOnDeclare(binder *syntax.SyntaxSymbol, li *environment.LocalIndex) {
+	if binder == nil || li == nil || len(p.boxOnDeclare) == 0 {
+		return
+	}
+	if p.localIsBoxed(li) {
+		return
+	}
+	assigned := false
+	for _, t := range p.boxOnDeclare {
+		if sameBinder(binder, t) {
+			assigned = true
+			break
+		}
+	}
+	if !assigned {
+		return
+	}
+	k, ok := absoluteSlot(p.env, li)
+	if !ok {
+		return
+	}
+	p.ensureBoxedSlots()
+	p.boxedSlots[k] = true
+	p.AppendOperations(machine.NewOperationBoxSlot(li))
 }
 
 // ensureBoxedSlots allocates the shared verdict map on first use.
@@ -186,9 +359,46 @@ func (p *CompileTimeContinuation) emitBoxSlots(lis []*environment.LocalIndex) {
 	}
 }
 
-// emitLocalStore emits the write form the slot needs: a plain store, or a store
-// through the box when the slot holds one.
+// freeSlotOf reports the free-vector index of the variable li resolves to, when
+// this body's layout carries it.
+//
+// The comparison is on the ABSOLUTE key, so it holds from anywhere inside the
+// body — including under any number of let frames, which change li's depth but
+// not the slot's owner. A linear scan rather than a map: measured free-variable
+// density on the schelog workload is 1.8 slots per lambda, and a map would cost
+// an allocation per compiled body to save nothing.
+func (p *CompileTimeContinuation) freeSlotOf(li *environment.LocalIndex) (int, bool) {
+	if len(p.freeLayout) == 0 || p.env == nil || li == nil {
+		return 0, false
+	}
+	k, ok := absoluteSlot(p.env, li)
+	if !ok {
+		return 0, false
+	}
+	for i := range p.freeLayout {
+		if p.freeLayout[i].abs == k {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// emitLocalStore emits the write form the variable needs.
+//
+// Three forms, and the free one is not optional: a free variable is no longer in
+// the frame at all, so a plain store would write an unrelated slot of whatever
+// frame the depth happens to land on.
 func (p *CompileTimeContinuation) emitLocalStore(li *environment.LocalIndex) {
+	i, isFree := p.freeSlotOf(li)
+	if isFree {
+		// A free variable that is WRITTEN is captured and assigned, so the
+		// boxing pass put a cell in this slot and OpStoreFree writes through it.
+		// Storing the value into the vector instead would leave every other
+		// holder — including the frame the variable is bound in — reading the
+		// old one.
+		p.AppendOperations(machine.NewOperationStoreFree(i))
+		return
+	}
 	if p.localIsBoxed(li) {
 		p.AppendOperations(machine.NewOperationStoreThroughBox(li))
 		return
@@ -196,41 +406,40 @@ func (p *CompileTimeContinuation) emitLocalStore(li *environment.LocalIndex) {
 	p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
 }
 
-// emitLocalLoad emits the read form the slot needs: a plain load, followed by an
-// unbox when the slot holds a box.
+// emitLocalLoad emits the read form the variable needs: from the free vector
+// when this body captured it, otherwise from the frame — and in either case
+// followed by an unbox when the slot holds a cell.
 func (p *CompileTimeContinuation) emitLocalLoad(li *environment.LocalIndex) {
-	p.AppendOperations(machine.NewOperationLoadLocalByLocalIndexImmediate(li))
+	i, isFree := p.freeSlotOf(li)
+	if isFree {
+		p.AppendOperations(machine.NewOperationLoadFree(i))
+	} else {
+		p.AppendOperations(machine.NewOperationLoadLocalByLocalIndexImmediate(li))
+	}
 	if p.localIsBoxed(li) {
 		p.AppendOperations(machine.NewOperationUnbox())
 	}
 }
 
-// procBoxBinders returns the binders a procedure body's own frame owns: the
-// parameters, the rest parameter, and every internal define predeclared into the
-// same frame.
-func procBoxBinders(v validate.ValidatedBodyAndParams) []*syntax.SyntaxSymbol {
-	q := procBinders(v)
-	return append(q, bodyDefineNames(v.Body())...)
-}
-
-// bodyDefineNames returns the names every internal define in body introduces,
-// recursing into begin the same way predeclareDefineFromValidatedRecursive does
-// — a define reached only through a macro-produced begin is predeclared into the
-// frame and so owns a slot like any other.
-func bodyDefineNames(body []validate.ValidatedExpr) []*syntax.SyntaxSymbol {
-	var q []*syntax.SyntaxSymbol
-	for _, e := range body {
-		d, ok := e.(*validate.ValidatedDefine)
-		if ok {
-			q = append(q, d.Name())
-			continue
-		}
-		b, ok := e.(*validate.ValidatedBegin)
-		if ok {
-			q = append(q, bodyDefineNames(b.Body())...)
-		}
+// emitFreeVarPush pushes one free variable's value for OpMakeClosure to drain.
+//
+// THE PUSH FORM IS NOT ALWAYS OpPushLocal, and this is the whole reason Pass 1's
+// transitive closure is load-bearing rather than bookkeeping. In
+// (lambda (a) (lambda (b) (lambda (c) a))), when the MIDDLE lambda runs and
+// builds the inner closure, `a` is not a local of the middle activation at all —
+// it is entry 0 of the middle closure's OWN free vector. OpPushLocal there reads
+// an unrelated slot.
+//
+// The value pushed is the slot's RAW contents: for a boxed variable that is the
+// cell, which is exactly what must be shared.
+func (p *CompileTimeContinuation) emitFreeVarPush(fv freeVar) {
+	li := environment.NewLocalIndex(fv.key.slot, fv.key.depth)
+	i, isFree := p.freeSlotOf(li)
+	if isFree {
+		p.AppendOperations(machine.NewOperationLoadFree(i), machine.NewOperationPush())
+		return
 	}
-	return q
+	p.AppendOperations(machine.NewOperationLoadLocalByLocalIndexImmediate(li), machine.NewOperationPush())
 }
 
 // markBoxedFreeVars sets freeVar.boxed from the binder-side decision, so a free
@@ -293,55 +502,95 @@ func (p letrecTier) String() string {
 	return "unknown"
 }
 
-// letrecBindingTier classifies the i-th binding of a letrec / letrec* group.
+// letrecRegionTier classifies binder i of a letrec* region: a letrec / letrec* /
+// named-let binding group, or a body's internal defines.
 //
-// PRECONDITION: v.Kind must be recursive (letrec family, which includes the
-// desugared named let). In a plain let or let* the bindings are not in each
-// other's inits, so there is no forward reference to classify and every answer
-// here would describe outer bindings instead.
+// PRECONDITION for the let spelling: v.Kind must be recursive (letrec family,
+// which includes the desugared named let). In a plain let or let* the bindings
+// are not in each other's inits, so there is no forward reference to classify and
+// every answer here would describe outer bindings instead. Internal defines are
+// letrec* by R7RS §5.3.2 and always qualify.
 //
 // The three questions, in the order that makes the answers disjoint:
 //
-//  1. Does a SIBLING init reference binding i? Then i is captured before its own
-//     init runs. If i's init reciprocates, that is mutual recursion (T3);
-//     otherwise it is an ordinary forward reference (T1).
-//  2. Is binding i referenced OUTSIDE a closure body by any init — including its
+//  1. Does a SIBLING init reference binder i? Then i is read before its own init
+//     has stored anything. If i's init reciprocates, that is mutual recursion
+//     (T3); otherwise it is an ordinary forward reference (T1).
+//  2. Is binder i referenced OUTSIDE a closure body by any init — including its
 //     own? Then the reference is evaluated during initialization, when the value
 //     really does not exist (T1).
-//  3. Otherwise: is i's own init a lambda that references i? Then the only
-//     reader is a closure that cannot run before it exists (T2).
+//  3. Otherwise: does i's own init reference i from inside a closure? Then the
+//     only reader is a closure that cannot run before it exists (T2).
 //
 // Identity is decided the usual way: the name Key narrows, ScopesCompatible
 // decides. Shadowing inside an init is deliberately NOT modelled — a shadowed
-// same-name reference counts as a reference, which can only move a binding
-// toward tierBoxed, the conservative direction.
-func letrecBindingTier(v *validate.ValidatedLet, i int) letrecTier {
-	if v == nil || i < 0 || i >= len(v.Bindings) {
+// same-name reference counts as a reference, which can only move a binder toward
+// tierBoxed, the conservative direction.
+func letrecRegionTier(bs []letrecRegionBinder, i int) letrecTier {
+	if i < 0 || i >= len(bs) {
 		return tierBoxed
 	}
-	self := v.Bindings[i].Name
-	for j := range v.Bindings {
+	self := bs[i].name
+	for j := range bs {
 		if j == i {
 			continue
 		}
-		if !referencesBinder(v.Bindings[j].Init, self, refAnywhere) {
+		if !referencesBinder(bs[j].init, self, refAnywhere) {
 			continue
 		}
-		if referencesBinder(v.Bindings[i].Init, v.Bindings[j].Name, refAnywhere) {
+		if referencesBinder(bs[i].init, bs[j].name, refAnywhere) {
 			return tierMutual
 		}
 		return tierBoxed
 	}
-	for j := range v.Bindings {
-		if referencesBinder(v.Bindings[j].Init, self, refOutsideClosure) {
+	for j := range bs {
+		if referencesBinder(bs[j].init, self, refOutsideClosure) {
 			return tierBoxed
 		}
 	}
-	_, isLambda := v.Bindings[i].Init.(*validate.ValidatedLambda)
-	if isLambda && referencesBinder(v.Bindings[i].Init, self, refAnywhere) {
+	if regionInitIsLambda(bs[i].init) && referencesBinder(bs[i].init, self, refInsideClosure) {
 		return tierSelfPatch
 	}
 	return tierBoxed
+}
+
+// regionInitIsLambda reports whether a region binder's init produces exactly one
+// closure that OpMakeClosure can back-patch into its own free vector.
+//
+// The restriction is what keeps T2 honest, and case-lambda is why it is not
+// merely "is the init a procedure". A case-lambda compiles to one closure PER
+// CLAUSE, wrapped afterwards by OpMakeCaseLambdaClosure; back-patching a clause
+// with itself would bind the self reference to the clause rather than to the
+// dispatcher. Such a binder falls through to tierBoxed, where the cell it shares
+// receives the finished dispatcher like any other T1.
+func regionInitIsLambda(init validate.ValidatedExpr) bool {
+	_, ok := init.(*validate.ValidatedLambda)
+	if ok {
+		return true
+	}
+	d, ok := init.(*validate.ValidatedDefine)
+	if !ok {
+		return false
+	}
+	if d.IsFunction {
+		return true
+	}
+	_, ok = d.SubExp().(*validate.ValidatedLambda)
+	return ok
+}
+
+// letrecBindingTier classifies the i-th binding of a letrec / letrec* group.
+func letrecBindingTier(v *validate.ValidatedLet, i int) letrecTier {
+	if v == nil {
+		return tierBoxed
+	}
+	return letrecRegionTier(letBindersOfRegion(v), i)
+}
+
+// bodyDefineTier classifies the i-th internal define of a body — the OTHER
+// spelling of a letrec* region, and the one that occurs in practice.
+func bodyDefineTier(body []validate.ValidatedExpr, i int) letrecTier {
+	return letrecRegionTier(bodyBindersOfRegion(body), i)
 }
 
 // referencesBinder reports whether expr contains a reference to the binding

@@ -28,6 +28,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -67,7 +68,7 @@ func (p *CompileTimeContinuation) compileClosureBody(
 	v validate.ValidatedBodyAndParams,
 	errContext string,
 	fr frameReuse,
-) (machine.LiteralIndex, error) {
+) (machine.LiteralIndex, []freeVar, error) {
 	// Phase 1: Bind required parameters to the local environment.
 	// Each parameter becomes a local variable slot populated by the VM at call time.
 	// Params() is nil for zero-arg case-lambda clauses: (() ...).
@@ -84,7 +85,7 @@ func (p *CompileTimeContinuation) compileClosureBody(
 			// This mirrors the let/define fix in PRs #606/#607 (SRFI-42 Bug A).
 			_, created := lenv.MaybeCreateLocalBinding(param, environment.BindingTypeVariable, paramScopes, nil)
 			if !created {
-				return 0, werr.WrapForeignErrorf(
+				return 0, nil, werr.WrapForeignErrorf(
 					werr.ErrDuplicateBinding,
 					"duplicate parameter %q in %s", param.Key, errContext,
 				)
@@ -97,13 +98,13 @@ func (p *CompileTimeContinuation) compileClosureBody(
 		// For (lambda (a b . rest) ...), binds 'rest' to receive excess args as a list.
 		err := bindRestParameter(v, p, lenv, tpl)
 		if err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 	}
 
 	err := checkLocalSlotCapacity(len(lenv.Bindings()), errContext)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	// Pass 1 of flat-closure conversion: the lambda's free-variable set, by
@@ -116,6 +117,9 @@ func (p *CompileTimeContinuation) compileClosureBody(
 	fvs := collectFreeVars(v, p.env)
 	fvs = p.markBoxedFreeVars(fvs)
 	tpl.SetFreeLayout(freeVarNames(fvs), freeVarBoxedFlags(fvs))
+	if bodyReadsThroughFrameChain(v.Body()) {
+		tpl.SetRetainsLexicalEnv()
+	}
 
 	// Phase 3: Create child environment, hand it to the template, register the
 	// template literal.
@@ -140,32 +144,94 @@ func (p *CompileTimeContinuation) compileClosureBody(
 
 	// Phase 4: Compile body expressions into child template. The last expression
 	// is compiled in tail position for proper tail-call optimization.
-	err = p.compileBody(ctctx, v, childEnv, tpl, fr)
+	err = p.compileBody(ctctx, v, childEnv, tpl, fr, fvs)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	// Phase 5: Peephole optimization.
 	tpl.Optimize()
 
-	return tpli, nil
+	return tpli, fvs, nil
 }
 
 // compileClosure compiles a complete closure (lambda or define-fn body).
 // Binds parameters, compiles body, and emits MakeClosure operations.
-func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, tpl *machine.NativeTemplate, lenv *environment.LocalEnvironmentFrame, v validate.ValidatedProcedure, fr frameReuse) error {
-	tpli, err := p.compileClosureBody(ctctx, tpl, lenv, v, "lambda", fr)
+// selfSym is the binder the closure is being bound to when that binder is a
+// LOCAL the closure's own body may reference — a letrec/named-let binding, or an
+// internal define. It exists for the T2 back-patch: such a reference is a free
+// variable whose value is the closure itself, and there is nothing to copy at
+// creation time. nil for an anonymous lambda and for a top-level define, whose
+// name is a global and therefore never a free variable ([nil means NONE]).
+func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, tpl *machine.NativeTemplate, lenv *environment.LocalEnvironmentFrame, v validate.ValidatedProcedure, fr frameReuse, selfSym *syntax.SyntaxSymbol) error {
+	tpli, layout, err := p.compileClosureBody(ctctx, tpl, lenv, v, "lambda", fr)
 	if err != nil {
 		return err
 	}
+	p.emitClosureCreation(tpli, layout, selfSym)
+	return nil
+}
 
+// emitClosureCreation emits the F6-a creation protocol: one push per free
+// variable in slot order, then the template, then OpMakeClosure with the packed
+// (count, selfSlot) immediate.
+//
+// The free values go UNDER the template on the eval stack because the template
+// is pushed last, which is the order popMakeClosureArgs drains in and the same
+// convention OperationMakeCaseLambdaClosure uses.
+func (p *CompileTimeContinuation) emitClosureCreation(
+	tpli machine.LiteralIndex,
+	layout []freeVar,
+	selfSym *syntax.SyntaxSymbol,
+) {
+	selfSlot := p.selfFreeSlot(layout, selfSym)
+	for i := range layout {
+		if i == selfSlot {
+			// Nothing to copy: the value IS the closure being built. Push a
+			// placeholder and let OpMakeClosure overwrite the slot with the
+			// finished closure. No bytecode runs in between, so the placeholder
+			// is not observable — the closure cannot be applied before it exists.
+			p.AppendOperations(machine.NewOperationLoadVoid(), machine.NewOperationPush())
+			continue
+		}
+		p.emitFreeVarPush(layout[i])
+	}
 	p.AppendOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(tpli),
 		machine.NewOperationPush(),
-		machine.NewOperationMakeClosure(0, -1),
+		machine.NewOperationMakeClosure(len(layout), selfSlot),
 	)
+}
 
-	return nil
+// selfFreeSlot returns the free-vector index holding the closure's own binding,
+// or -1 when it has none.
+//
+// Only a T2 binder reaches here with a slot: a T1 or T3 binder was boxed by
+// letrecRegionForcesBox, so its free entry holds a cell that already exists and
+// the ordinary push is correct. Resolving selfSym rather than trusting the tier
+// is what keeps the two in step — if the boxing pass and this disagreed, a T1
+// binder would get a placeholder its box never receives.
+func (p *CompileTimeContinuation) selfFreeSlot(layout []freeVar, selfSym *syntax.SyntaxSymbol) int {
+	if selfSym == nil || len(layout) == 0 || p.env == nil {
+		return -1
+	}
+	li := p.env.GetLocalIndex(selfSym.Sym, syntax.ScopesOf(selfSym.Scopes()))
+	if li == nil {
+		return -1
+	}
+	if p.localIsBoxed(li) {
+		return -1
+	}
+	k, ok := absoluteSlot(p.env, li)
+	if !ok {
+		return -1
+	}
+	for i := range layout {
+		if layout[i].abs == k {
+			return i
+		}
+	}
+	return -1
 }
 
 // compileBody compiles a sequence of body expressions for a lambda or case-lambda clause.
@@ -174,9 +240,13 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 //
 // R7RS §5.3.2: Internal definitions use letrec* semantics - all defined names are visible
 // throughout the body, enabling forward references between defines.
-func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *machine.NativeTemplate, fr frameReuse) error {
+func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *machine.NativeTemplate, fr frameReuse, layout []freeVar) error {
 	childCompiler := NewCompileTimeContinuation(tpl, childEnv, p.evaluator)
 	childCompiler.SetInlineThreshold(p.inlineThreshold)
+	// The body's own free layout: how it reaches a variable of an enclosing
+	// lambda now that the static link has no lexical parent. Not shared with the
+	// parent continuation — a layout belongs to exactly one lambda.
+	childCompiler.freeLayout = layout
 	// The boxing verdict is SHARED, not copied: a read arbitrarily deep inside
 	// this body has to agree with the emit that installed the cell, which may
 	// have been at any enclosing binder. Keys are frame-absolute, so no
@@ -220,7 +290,25 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 	// That is load-bearing rather than incidental: the op rebinds the parameter
 	// slots in place, and re-entering here allocates a FRESH cell per iteration,
 	// so closures made in different iterations of a loop do not share one.
-	childCompiler.emitBoxSlots(childCompiler.markBoxedBinders(procBoxBinders(clause), body))
+	// Parameters and the rest parameter are bound by Apply before pc 0, so they
+	// carry no initialization-order hazard; the internal defines DO — they are a
+	// letrec* region (R7RS §5.3.2) whose slots hold #!void until their own define
+	// runs. defineBinders is that region, and paramBinders is not, which is why
+	// the two are marked separately rather than as one list.
+	paramBinders := procBinders(clause)
+	childCompiler.emitBoxSlots(childCompiler.markBoxedBinders(paramBinders, body, nil))
+	defineRegion := bodyBindersOfRegion(body)
+	defineNames := make([]*syntax.SyntaxSymbol, len(defineRegion))
+	for i := range defineRegion {
+		defineNames[i] = defineRegion[i].name
+	}
+	childCompiler.emitBoxSlots(childCompiler.markBoxedBinders(defineNames, body,
+		func(i int) bool {
+			return letrecRegionForcesBox(defineRegion, i)
+		}))
+	// The safety net for a define this scan could not enumerate.
+	restoreBoxOnDeclare := childCompiler.withBoxOnDeclare(body)
+	defer restoreBoxOnDeclare()
 
 	// Docstring: the validator has already extracted any leading string
 	// literal and stripped it from the body. Just read the field.

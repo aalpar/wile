@@ -56,13 +56,15 @@ func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCall
 	if !selfTail && validate.LetBindingFrameReleasable(v, i, p.env) {
 		reuse = releaseReuse()
 	}
-	if reuse.kind == frameReuseNone {
-		return p.compileValidated(ctctx.NotInTail(), v.Bindings[i].Init)
-	}
+	// The explicit closure path is taken even with no frame reuse, because the
+	// self binder has to reach compileClosure either way: a T2 binding's lambda
+	// captures its own name, whose value does not exist until OpMakeClosure
+	// back-patches it. Routing the no-reuse case through compileValidated lost
+	// that and left the closure holding #!void.
 	lenv := environment.NewLocalEnvironment(0)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	tpl.SetName(name.Sym.Key)
-	return p.compileClosure(ctctx.NotInTail(), tpl, lenv, lam, reuse)
+	return p.compileClosure(ctctx.NotInTail(), tpl, lenv, lam, reuse, name)
 }
 
 // CompileValidatedLet compiles all binding forms based on Kind.
@@ -145,13 +147,40 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 	// let* binders are absent here — they are created one at a time in the loop
 	// below, and boxed there. Body defines are present: predeclareBodyDefines
 	// above already gave them slots.
-	letBinders := bodyDefineNames(v.Body())
-	if v.Kind != validate.LetKindLetStar {
-		for i := range v.Bindings {
-			letBinders = append(letBinders, v.Bindings[i].Name)
-		}
+	// Body defines are a letrec* region of their own, whatever the let's kind.
+	restoreBoxOnDeclare := p.withBoxOnDeclare(letScope)
+	defer restoreBoxOnDeclare()
+
+	bodyRegion := bodyBindersOfRegion(v.Body())
+	bodyNames := make([]*syntax.SyntaxSymbol, len(bodyRegion))
+	for i := range bodyRegion {
+		bodyNames[i] = bodyRegion[i].name
 	}
-	p.emitBoxSlots(p.markBoxedBinders(letBinders, letScope))
+	p.emitBoxSlots(p.markBoxedBinders(bodyNames, letScope, func(i int) bool {
+		return letrecRegionForcesBox(bodyRegion, i)
+	}))
+
+	// The let's own binders. Only a letrec-family group carries the
+	// initialization-order hazard: in a plain let the inits are evaluated before
+	// the frame exists, and in a let* a binder is not in scope in its own init,
+	// so no closure can capture either before its store. let* binders are absent
+	// from this list for a second reason as well — they do not exist yet.
+	letRegion := letBindersOfRegion(v)
+	if v.Kind != validate.LetKindLetStar {
+		letNames := make([]*syntax.SyntaxSymbol, len(letRegion))
+		for i := range letRegion {
+			letNames[i] = letRegion[i].name
+		}
+		forced := func(int) bool {
+			return false
+		}
+		if v.Kind.InitsInScope() {
+			forced = func(i int) bool {
+				return letrecRegionForcesBox(letRegion, i)
+			}
+		}
+		p.emitBoxSlots(p.markBoxedBinders(letNames, letScope, forced))
+	}
 
 	// Emit init compilation + stores based on Kind.
 	switch v.Kind {
@@ -196,7 +225,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 			// A let* binder is not in scope in its own init, so installing its
 			// cell right after the store is early enough: the next init is the
 			// first code that can close over it.
-			p.emitBoxSlots(p.markBoxedBinders([]*syntax.SyntaxSymbol{b.Name}, letScope))
+			p.emitBoxSlots(p.markBoxedBinders([]*syntax.SyntaxSymbol{b.Name}, letScope, nil))
 		}
 
 	case validate.LetKindLetrecStar:

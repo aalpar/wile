@@ -67,3 +67,38 @@ func (p *OperationLoadFree) EqualTo(o values.Value) bool {
 		return op.Index
 	})
 }
+
+// OperationStoreFree pops a value and writes it into the BOX held at one entry
+// of the executing closure's free vector.
+//
+// It exists because a free variable that is written is captured-and-assigned,
+// hence boxed, and the cell lives in the vector rather than in a frame slot —
+// so neither OpStoreLocal nor OpStoreThroughBox can reach it. Writing the
+// vector entry instead of the cell would leave every other holder, including
+// the frame the variable is bound in, reading the old value.
+type OperationStoreFree struct {
+	OperationBase
+	// Index is the free-vector slot whose box receives the value.
+	Index int
+}
+
+// NewOperationStoreFree creates a write-through-the-free-vector's-box operation.
+func NewOperationStoreFree(i int) *OperationStoreFree {
+	return &OperationStoreFree{
+		OperationBase: NewOperationBase("machine-operation-store-free"),
+		Index:         i,
+	}
+}
+
+// SchemeString returns the Scheme representation of the operation.
+func (p *OperationStoreFree) SchemeString() string {
+	return fmt.Sprintf("#<machine-operation-store-free %d>", p.Index)
+}
+
+// EqualTo compares the free-vector index.
+func (p *OperationStoreFree) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationStoreFree)
+	return FieldMatches(p, v, ok, func(op *OperationStoreFree) int {
+		return op.Index
+	})
+}
