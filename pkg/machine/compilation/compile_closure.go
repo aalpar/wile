@@ -106,6 +106,15 @@ func (p *CompileTimeContinuation) compileClosureBody(
 		return 0, err
 	}
 
+	// Pass 1 of flat-closure conversion: the lambda's free-variable set, by
+	// resolution against the ENCLOSING frame (p.env, not childEnv). It must run
+	// before Phase 3, because Phase 3 registers the template literal and Phase 4
+	// compiles the body against the layout this fixes. Recording the names is
+	// metadata only — EqualTo does not compare freeNames, and no generated code
+	// reads it yet.
+	fvs := collectFreeVars(v, p.env)
+	tpl.SetFreeNames(freeVarNames(fvs))
+
 	// Phase 3: Create child environment, hand it to the template, register the
 	// template literal.
 	// lenv must be fully populated before NewEnvironmentFrameWithParent (embeds by value).

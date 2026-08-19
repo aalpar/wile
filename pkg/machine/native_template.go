@@ -64,6 +64,18 @@ type NativeTemplate struct {
 	name        string                  // Function name (for stack traces)
 	doc         string                  // Guile-style docstring from leading string literal in body
 
+	// freeNames records the free-variable names in free-vector slot order, as
+	// compileClosureBody's Pass 1 computed them.
+	//
+	// Metadata, not code: EqualTo does not compare it, so it cannot affect
+	// literal-pool dedup, and no generated instruction reads it. Reflection
+	// (prim_reflection.go) is its consumer — a flat closure has no parent frame
+	// to walk, so the names have to be recorded where the body was compiled.
+	//
+	// nil for a template that closes over nothing, and for every template not
+	// compiled as a closure body.
+	freeNames []*values.Symbol
+
 	// cachedBindings stores *Binding pointers resolved at compile time.
 	// OpLoadCachedBinding/OpPushCachedBinding index into this array,
 	// bypassing the runtime environment lookup path.
@@ -408,6 +420,19 @@ func (p *NativeTemplate) SetDoc(doc string) {
 	p.doc = doc
 }
 
+// SetFreeNames records the free-variable names in free-vector slot order.
+// Written once, by compileClosureBody, before the body is compiled.
+func (p *NativeTemplate) SetFreeNames(names []*values.Symbol) {
+	p.freeNames = names
+}
+
+// FreeNames returns the free-variable names in free-vector slot order. nil for
+// a template that closes over nothing, and for every template not compiled as a
+// closure body. The slice is the template's own — treat it as read-only.
+func (p *NativeTemplate) FreeNames() []*values.Symbol {
+	return p.freeNames
+}
+
 func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
 	// Don't deduplicate environments - each closure needs its own instance
 	// because environments are mutable and context-dependent. The parent
@@ -686,5 +711,9 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 	q.sourceRefs = slices.Clone(p.sourceRefs)
 	q.sourceTable = slices.Clone(p.sourceTable)
 	q.executed = slices.Clone(p.executed)
+	// freeNames describes the compiled body, like code and literals, so it is
+	// cloned with them. (shape is deliberately NOT copied — see its field
+	// comment; a copy is not yet any closure's body.)
+	q.freeNames = slices.Clone(p.freeNames)
 	return q
 }
