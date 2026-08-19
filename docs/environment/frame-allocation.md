@@ -358,14 +358,14 @@ already does for a lambda — would remove one of the three allocations at every
 site.
 
 There is also a standing argument that the premise of this section is the problem.
-`plans/2026-08-18-flat-closure-conversion-design.local.md` (design only, nothing
-implemented or measured) observes that every lever here needs that same proof, and
-proposes deleting one of the two capture paths instead: a flat closure holds the
-*values* of its free variables, so no closure ever points at a frame and the
-question stops being asked. It declines the corollary — captured continuations,
-sub-contexts, SRFI-18 thread starts and `dynamic-wind` winders still reach frames,
-so a tail release would need that set re-derived on its own, which is exactly the
-inference that failed before.
+Every lever above needs the same escape proof, so an alternative is to delete one
+of the two capture paths instead of proving things about it: a **flat closure**
+holds the *values* of its free variables rather than a pointer to the frame they
+live in, after which no closure built by `OpMakeClosure` points at a frame and the
+question stops being asked. That does not carry the corollary — captured
+continuations, sub-contexts, SRFI-18 thread starts and `dynamic-wind` winders
+still reach frames, so a tail release would need that set re-derived on its own,
+which is exactly the inference that failed before.
 
 ## See also
 
