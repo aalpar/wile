@@ -114,7 +114,9 @@ type inlineHOFSpec struct {
 // again a plain transcription and map's own definition carries no depth ceiling for
 // the fall-through path to inherit.
 var inlineHOFSpecs = map[string]inlineHOFSpec{
-	"for-each": {callbackParam: 0, template: `(lambda (f lst)
+	"for-each": {
+		callbackParam: 0,
+		template: `(lambda (f lst)
   (let loop ((lst lst))
     (if (null? lst) (if #f #f)
         (begin (f (car lst)) (loop (cdr lst))))))`},
@@ -122,11 +124,16 @@ var inlineHOFSpecs = map[string]inlineHOFSpec{
 	// reverse once at the end. What the inlining still buys is the callback —
 	// substituted and stamped capture-safe, so the loop reclaims its env frame,
 	// which the real map cannot do while f is an unknown callee.
-	"map": {callbackParam: 0, template: `(lambda (f lst)
+	"map": {
+		callbackParam: 0,
+		template: `(lambda (f lst)
   (let loop ((lst lst) (acc '()))
     (if (null? lst) (reverse acc)
         (loop (cdr lst) (cons (f (car lst)) acc)))))`},
-	"vector-map": {callbackParam: 0, requires: []string{"vector-set!"}, template: `(lambda (f v)
+	"vector-map": {
+		callbackParam: 0,
+		requires:      []string{"vector-set!"},
+		template: `(lambda (f v)
   (let ((len (vector-length v)))
     (let ((result (make-vector len)))
       (let loop ((i 0))
@@ -135,7 +142,8 @@ var inlineHOFSpecs = map[string]inlineHOFSpec{
               (vector-set! result i (f (vector-ref v i)))
               (loop (+ i 1)))
             result)))))`},
-	"vector-for-each": {callbackParam: 0, template: `(lambda (f v)
+	"vector-for-each": {
+		callbackParam: 0, template: `(lambda (f v)
   (let ((len (vector-length v)))
     (let loop ((i 0))
       (if (< i len)

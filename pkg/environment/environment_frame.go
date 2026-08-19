@@ -104,14 +104,18 @@ import (
 //
 // Two-phase search: first all locals up parent chain, then globals.
 type EnvironmentFrame struct {
+	// phases is the shared phase registry, owned by Namespace
+	phases *PhaseRegistry
+	// namespace is the owning Namespace
+	namespace *Namespace
 	// parent links to enclosing lexical scope (nil for root frame)
 	parent *EnvironmentFrame
+	// global holds global bindings for this phase
+	global *GlobalEnvironmentFrame
 	// local holds local bindings for this frame (parameters, let-bound variables).
 	// Embedded by value to eliminate a separate heap allocation per closure call.
 	// Sentinel: local.keys == nil means "no local environment" (zero value).
 	local LocalEnvironmentFrame
-	// global holds global bindings for this phase
-	global *GlobalEnvironmentFrame
 	// phaseLevel is this frame's level on the macro tower, RELATIVE to the
 	// owner's own runtime (level 0). It is not an absolute compilation stage:
 	// the same number denotes different frames under different owners, and the
@@ -131,14 +135,10 @@ type EnvironmentFrame struct {
 	// cannot thread a sealing parameter through define compilation (design Q2,
 	// decided by force majeure).
 	//
-	// Placed next to phaseLevel: both are single bytes that share the padding
-	// already required before the next pointer field, so this costs nothing in
+	// Placed next to phaseLevel, after every pointer field: both are single
+	// bytes and share the struct's trailing padding, so this costs nothing in
 	// EnvironmentFrame's size (see layout_size_test.go).
 	sealed bool
-	// phases is the shared phase registry, owned by Namespace
-	phases *PhaseRegistry
-	// namespace is the owning Namespace
-	namespace *Namespace
 }
 
 // NewNamespaceFrame creates a new root environment frame via NewNamespace.

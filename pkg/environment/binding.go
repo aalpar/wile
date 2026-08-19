@@ -23,99 +23,82 @@ import (
 )
 
 // OriginRef identifies the provenance ROOT of a binding with library identity:
-// the (define ...) that ultimately created it, addressed by the KEY of the
-// library that defines it (RootLib) and the DEFINING name inside that library
-// (RootName, invariant to any export/import renaming). It is value-identity —
-// a library define and every import of it, however renamed or re-exported, carry
-// equal OriginRefs — and is set once (at the library's finalization for a define,
-// or by propagation at import) and never mutated, so it is safe to share across
-// the copy-on-write BindingMeta path. A nil *OriginRef means a binding with NO
-// library identity: a program-top-level (define ...), which is never imported and
-// so is only ever compared as the identical object. Identity assumes RootLib (a
-// LibraryName.Key()) names its library uniquely, the same key assumption
-// ScopeKey/FreeIdKey already rely on.
+// the defining library's KEY (RootLib) plus the DEFINING name inside it
+// (RootName, invariant to any export/import renaming). It is value-identity: a
+// library define and every import of it, however renamed or re-exported, carry
+// equal OriginRefs. Set once (library finalization for a define, propagation at
+// import) and never mutated, so it is safe to share across the copy-on-write
+// BindingMeta path. A nil *OriginRef means NO library identity: a
+// program-top-level (define ...), never imported, so only ever compared as the
+// identical object. Identity assumes RootLib (a LibraryName.Key()) names its
+// library uniquely, the same key assumption ScopeKey/FreeIdKey rely on.
 type OriginRef struct {
 	RootLib  string
 	RootName string
 }
 
-// BindingMeta holds compile-time metadata (scopes and source location) that is
-// never read during VM execution — but IS read and written concurrently across
-// SRFI-18 threads at compile time (two threads compiling a "define" of the same
-// top-level name). For a global binding it is therefore published copy-on-write
-// through the binding's atomicCell (see UpdateMeta); a reader always sees a
-// complete, immutable snapshot. Stored behind a pointer so that runtime Binding
-// copies (the hot path) move a pointer instead of the whole struct.
+// BindingMeta holds compile-time metadata (scopes, source location) never read
+// during VM execution, but read and written concurrently across SRFI-18 threads
+// at compile time (two threads compiling a "define" of the same top-level name).
+// A global binding therefore publishes it copy-on-write through its atomicCell
+// (see UpdateMeta), so a reader always sees a complete, immutable snapshot.
+// Behind a pointer so runtime Binding copies (the hot path) move a pointer.
 type BindingMeta struct {
-	Scopes   []*syntax.Scope
-	Source   *syntax.SourceContext
-	Doc      string
-	Imported bool
-	// Stable is the conclusion of a rebind-stability proof: the binding will
-	// not be rebound. It is set ONLY by a completed proof, never as a synonym
-	// for evidence. Imported (above) is *evidence* sufficient for that
-	// conclusion — R7RS forbids set! on imports — so IsStable() treats Imported
-	// as standing evidence and this flag carries the conclusion when a proof
-	// discharges it by other means (defined-once ∧ ¬set! ∧ unit-closed for a
-	// top-level define). The WithImmutableTopLevel engine option (the default)
-	// discharges it for top-level defines: the compiler sets this from the
-	// validator's in-unit evidence (StableInUnit) and the language then forbids
-	// the cross-unit set!/redefine that evidence alone could not rule out (set!
-	// gate + redefine guard in compile_validated.go), making unit-closure hold
-	// by enforcement rather than inference. When the option is off (WithMutableTopLevel),
-	// this flag stays false for non-imported bindings — asserting it from
-	// partial evidence would be a false conclusion. Read by the frame-reclaim
-	// classifier (validate.classifyCallee). Distinct from set!-permission (Imported alone,
-	// unless the option is on) and from the retired "Constant" flag (which
-	// conflated provenance, stability, and compile-time-value-known).
+	Scopes []*syntax.Scope
+	Source *syntax.SourceContext
+	Doc    string
+	// Stable is the conclusion of a rebind-stability proof (this binding will
+	// not be rebound), never a synonym for the evidence. Imported is standing
+	// evidence, since R7RS forbids set! on imports, and IsStable() ORs it in;
+	// this flag carries the conclusion when a proof discharges it otherwise
+	// (defined-once ∧ ¬set! ∧ unit-closed for a top-level define).
 	//
-	// A second writer also discharges it: under the same WithImmutableTopLevel
-	// option, registry.WithStableBasePrimitives stamps the ambient capture-safe
-	// core primitives (+, car, <, …) Stable at registration (registry/apply.go),
-	// backed by the same set!/redefine enforcement. Both writers mean the same
-	// thing — "non-rebindable" — which is why the redefine guard treats a Stable
-	// ambient primitive as frozen, stricter than an Imported binding (which a
-	// top-level define may still supersede per R7RS §5.3.1).
-	Stable bool
+	// Two writers set it, both only under WithImmutableTopLevel (the default),
+	// which makes unit-closure hold by enforcement rather than inference (set!
+	// gate + redefine guard in compile_validated.go): the compiler, for a
+	// top-level define, from the validator's in-unit evidence (StableInUnit);
+	// and registry.WithStableBasePrimitives, for the ambient core primitives
+	// (+, car, <, …) at registration (registry/apply.go). Under
+	// WithMutableTopLevel it stays false for non-imported bindings.
+	//
+	// Read by the frame-reclaim classifier (validate.classifyCallee). The
+	// redefine guard treats a Stable ambient primitive as frozen, stricter than
+	// Imported, which a top-level define may still supersede per R7RS §5.3.1.
+	Imported, Stable bool
 	// CaptureSafe marks a binding whose callee cannot invoke a Scheme procedure and
-	// therefore cannot transitively capture a continuation. Two writers stamp it:
-	// a Go primitive at registration from !PrimitiveSpec.InvokesProcedure
+	// therefore cannot transitively capture a continuation. Two writers stamp it: a
+	// Go primitive at registration from !PrimitiveSpec.InvokesProcedure
 	// (registry/apply.go), and a Scheme procedure proven capture-safe at compile
-	// time (compile_define.go via validate.ProcedureBodyIsCaptureSafe — stdlib like
-	// zero?/not, or a user helper). It is the classifier-readable form of that
-	// capability, because pkg/internal/validate cannot import pkg/registry —
-	// mirroring how Stable carries the rebind-stability conclusion across the same
-	// boundary. The frame-reclaim classifier trusts a callee only when CaptureSafe
-	// AND Stable both hold: CaptureSafe is the "cannot capture" capability, Stable
-	// the "cannot be rebound to something that can" guarantee.
+	// time (compile_define.go via validate.ProcedureBodyIsCaptureSafe). It is a
+	// field because pkg/internal/validate cannot import pkg/registry, the same
+	// boundary Stable crosses. The frame-reclaim classifier trusts a callee only
+	// when CaptureSafe AND Stable both hold: "cannot capture", plus "cannot be
+	// rebound to something that can".
 	//
-	// INVARIANT — do NOT fold any sibling flag into IsCaptureSafe() the way IsStable
-	// ORs in Imported: Imported does NOT imply capture-safe (an imported `apply` or
-	// `map` is Imported yet invokes a procedure). IsCaptureSafe() reads this field
-	// alone, by design. A user redefinition of a primitive name (e.g.
-	// (define car <lambda>)) carries this flag ONLY if its own body proves
-	// capture-safe — a capturing redefinition is never stamped, which is how the
-	// classifier avoids trusting a capturing shadow by name.
+	// INVARIANT: do NOT fold a sibling flag into IsCaptureSafe() the way IsStable
+	// ORs in Imported. Imported does not imply capture-safe (an imported apply or
+	// map is Imported yet invokes a procedure). Likewise a user redefinition of a
+	// primitive name is stamped ONLY if its own body proves capture-safe, which is
+	// how the classifier avoids trusting a capturing shadow by name.
 	CaptureSafe bool
 	// InlineHOF marks a curated higher-order procedure whose single-sequence
 	// case-lambda clause may be inlined at a call site that independently proves
-	// the callback capture-safe (callback specialization Strategy A). Stamped on
-	// the sealed-base tail HOFs post-bootstrap (for-each, vector-map,
-	// vector-for-each, string-map, string-for-each) and on import-gated ones from
-	// their library (fold, srfi/1); NOT auto-derived. The curated set lives in
+	// the callback capture-safe (callback specialization Strategy A). Stamped,
+	// never auto-derived, on the sealed-base tail HOFs post-bootstrap (for-each,
+	// vector-map, vector-for-each, string-map, string-for-each) and on import-gated
+	// ones from their library (fold, srfi/1); the curated set lives in
 	// compilation.inlineHOFSpecs. Consumed by the compiler's inline-HOF dispatch.
 	//
-	// ORTHOGONAL to CaptureSafe: an inline HOF is itself NOT capture-safe — it
-	// applies the callback, which may capture (for-each.IsCaptureSafe() is false,
-	// pinned by capture_safety_test.go). This flag says "inlinable WHEN the
-	// callback is proven safe," a different question about the same binding.
+	// ORTHOGONAL to CaptureSafe: an inline HOF applies its callback, so it is
+	// itself NOT capture-safe (for-each.IsCaptureSafe() is false, pinned by
+	// capture_safety_test.go). This flag says "inlinable WHEN the callback is
+	// proven safe".
 	//
-	// The gating bool is what keeps the capability zero-value-correct: a plain
-	// -1-sentinel int would read 0 ("callback param 0") on every binding that ever
-	// calls UpdateMeta (which is every primitive — see registry/apply.go), falsely
-	// marking them inline HOFs. With the bool, the &BindingMeta{} zero value
-	// (InlineHOF=false) correctly means "not an inline HOF," preserving the
-	// invariant that adding a metadata field needs no constructor edits.
+	// A bool, not a -1-sentinel int, keeps the capability zero-value-correct: a
+	// sentinel would read 0 ("callback param 0") on every binding that calls
+	// UpdateMeta, i.e. every primitive (registry/apply.go), falsely marking them
+	// inline HOFs. With the bool, &BindingMeta{} means "not an inline HOF", so
+	// adding a metadata field still needs no constructor edits.
 	InlineHOF bool
 	// InlineHOFCallbackParam is the callback's parameter index, read ONLY when
 	// InlineHOF is true. Stored as data (not hardcoded 0) so a future HOF whose
