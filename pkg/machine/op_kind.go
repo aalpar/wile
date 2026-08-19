@@ -169,6 +169,7 @@ var (
 	_ InlinedOperation = (*OperationRestoreContMark)(nil)
 	_ InlinedOperation = (*OperationBoxValues)(nil)
 	_ InlinedOperation = (*OperationUnboxValues)(nil)
+	_ InlinedOperation = (*OperationGoReturn)(nil)
 )
 
 func (*OperationMakeCaseLambdaClosure) OpKind() OpCode {
@@ -200,5 +201,9 @@ func (*OperationBoxValues) OpKind() OpCode {
 }
 
 func (*OperationUnboxValues) OpKind() OpCode {
+	return OpComplex
+}
+
+func (*OperationGoReturn) OpKind() OpCode {
 	return OpComplex
 }

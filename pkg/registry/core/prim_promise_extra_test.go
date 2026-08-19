@@ -386,6 +386,59 @@ func TestForceCircularPromise(t *testing.T) {
 	}
 }
 
+// TestForceDeepDelayForceChain pins the chain-depth property of force's loop.
+//
+// force walks a delay-force chain one link at a time, and each link's thunk runs
+// under its own consumer frame (stepForcePromise, pkg/internal/extensions/all/
+// prim_all.go). That frame is RESTORED before its finalizer starts the next link,
+// so the frames replace each other instead of nesting: Go stack, continuation
+// chain, and eval stack stay O(1) in the chain length. A conversion that nests the
+// links instead — pushing link n+1's frame under link n's — blows the call-depth
+// limit or the Go stack here while every short-chain case above stays green.
+//
+// 100k links is the figure the conversion was measured against; the pre-conversion
+// Go recursion also handled it, so this is a no-regression pin, not a new ceiling.
+func TestForceDeepDelayForceChain(t *testing.T) {
+	code := `(let ()
+	           (define (mkchain n)
+	             (if (= n 0)
+	                 (delay 'done)
+	                 (delay-force (mkchain (- n 1)))))
+	           (force (mkchain 100000)))`
+	result, err := testhelpers.RunSchemeCode(t, code)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("done"))
+}
+
+// TestForceMultipleValuesTakesTheFirst pins what force does with a thunk that
+// returns a value count other than one: it takes the first, or Void for none.
+//
+// R7RS §6.10 leaves this unspecified — "the effect of passing an inappropriate
+// number of values to a continuation not created by call-with-values" — and Chez
+// raises instead ("returned 2 values to single value return context"). These are
+// the answers Wile has always given, and they survived the 2026-08-18 move onto
+// the live continuation chain because the Go-frame hands its callback
+// mc.GetValue(), which has exactly the register's take-the-first semantics.
+//
+// This is a seam, not an accident: an intermediate version of that move used a
+// one-parameter Scheme finalizer instead, which turned all three rows into arity
+// errors. If Wile ever adopts Chez's polarity it should be a decision recorded
+// here, not a side effect of how a boundary was reified.
+func TestForceMultipleValuesTakesTheFirst(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "two values from a delay thunk", Code: `(force (delay (values 1 2)))`, Expected: values.NewInteger(1)},
+		{Name: "zero values from a delay thunk", Code: `(force (delay (values)))`, Expected: values.Void},
+		{Name: "two values through a delay-force link", Code: `(force (delay-force (delay (values 1 2))))`, Expected: values.NewInteger(1)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
 // TestMakePromiseEdgeCases tests make-promise edge cases
 func TestMakePromiseEdgeCases(t *testing.T) {
 	tcs := []struct {

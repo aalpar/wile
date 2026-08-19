@@ -15,7 +15,6 @@
 package core_test
 
 import (
-	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -52,8 +51,8 @@ func redExpected() values.Value {
 // continuation after that primitive: the program value was the truncated remainder
 // instead of the resumed program tail. The resume-trampoline + boundary-reification
 // arc fixed it — applyCapturedContinuation now bounces through RunResumable, and
-// each of the ten victim primitives reifies its boundary as a chain frame, so a
-// captured segment spans the boundary and re-entry replays the tail.
+// each victim primitive reifies its boundary as a chain frame, so a captured segment
+// spans the boundary and re-entry replays the tail.
 //
 // Each case wraps captureEscape in one such primitive; a correct VM resumes the
 // continuation AND delivers the escape value, so the program value is `(END 42)`.
@@ -65,6 +64,14 @@ func redExpected() values.Value {
 // removed once all ten passed (2026-06-29). See the design archive doc
 // 2026-06-26-subcontext-continuation-the-open-problem.local.md for the
 // falsification arc that produced the fix.
+//
+// The two `force` rows joined later (2026-08-18): force was the one boundary the
+// arc did not convert, because forcePromise needed the thunk's value back in Go for
+// the re-entrancy re-check, the delay-force chain walk, and memoization. It now runs
+// each link's thunk under a RunBodyUnderConsumer finalizer that carries that link's
+// promise, so the post-thunk work is a chain frame rather than a Go return. The
+// delay-force chain-depth property that conversion had to preserve is pinned
+// separately by TestForceDeepDelayForceChain (prim_promise_extra_test.go).
 func TestSubContextNonTailEscapeTruncation(t *testing.T) {
 	cases := []struct {
 		name string
@@ -84,6 +91,8 @@ func TestSubContextNonTailEscapeTruncation(t *testing.T) {
 		{"with-timeout", `(with-timeout 100000 (lambda (k) k) (lambda () ` + captureEscape + `))`},
 		{"call-with-immediate-continuation-mark", `(call-with-immediate-continuation-mark 'k (lambda (v) ` + captureEscape + `) #f)`},
 		{"exception-handler-dispatch", `(with-exception-handler (lambda (e) ` + captureEscape + `) (lambda () (raise-continuable 'x)))`},
+		{"force-delay", `(force (delay ` + captureEscape + `))`},
+		{"force-delay-force", `(force (delay-force (delay ` + captureEscape + `)))`},
 	}
 
 	for _, tc := range cases {
@@ -94,54 +103,6 @@ func TestSubContextNonTailEscapeTruncation(t *testing.T) {
 			// Post-fix the continuation resumes with the escape value, so the
 			// program value is (END 42). The bug drops the trailing (list ...)
 			// at the sub-context boundary and yields the truncated remainder.
-			qt.Assert(t, result, valuestest.SchemeEquals, redExpected())
-		})
-	}
-}
-
-// TestForceSubContextTruncationRed is the RED target for the one victim the
-// 2026-06-28 boundary-reification arc did not convert: `force`. It FAILS on master
-// today, so it is gated behind WILE_RUN_RED_CONTINUATION=1 — the same gate the ten
-// cases above carried while they were red (a99d39ac).
-//
-// WHY FORCE IS STILL A SUB-CONTEXT. `executeThunk`
-// (pkg/internal/extensions/all/prim_all.go) runs the promise thunk in a sub-context
-// because `forcePromise` needs the thunk's value back IN GO: it re-checks
-// `promise.IsForced()` (the thunk may have forced this same promise re-entrantly),
-// recurses when the result is another promise (the delay-force chain), and memoizes
-// with `promise.Force(result)`. The RunBodyUnder* family cannot deliver a value to
-// Go — `RunBodyUnderFrame` ends at `ApplyCallable`
-// (pkg/machine/run_body_under_frame.go) and the body runs after the primitive has
-// already returned, so post-body work must be reified as a chain frame.
-// `make-parameter` shows the escape hatch (a ForeignClosure finalizer as the
-// consumer, prim_parameters.go), but force's post-work is a LOOP whose memoization
-// is keyed to each link's promise, so the conversion needs one consumer frame per
-// link rather than the single finalizer make-parameter got.
-//
-// OBSERVED TODAY (2026-08-18): both cases answer `#!void` — the resumed segment ends
-// at the dead sub-context, so the trailing `(list 'END captured)` never runs.
-//
-// ACCEPTANCE CRITERION for that conversion: both cases pass un-gated, and these rows
-// move into TestSubContextNonTailEscapeTruncation above. The tail-position controls
-// in TestSubContextEscapeControls are already green and must stay green.
-func TestForceSubContextTruncationRed(t *testing.T) {
-	if os.Getenv("WILE_RUN_RED_CONTINUATION") == "" {
-		t.Skip("RED: force still runs its thunk in a sub-context; set WILE_RUN_RED_CONTINUATION=1 to run")
-	}
-
-	cases := []struct {
-		name string
-		form string
-	}{
-		{"force-delay", `(force (delay ` + captureEscape + `))`},
-		{"force-delay-force", `(force (delay-force (delay ` + captureEscape + `)))`},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			code := `(let ((captured 'unset)) ` + tc.form + ` (list 'END captured))`
-			result, err := testhelpers.RunSchemeCode(t, code)
-			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, redExpected())
 		})
 	}

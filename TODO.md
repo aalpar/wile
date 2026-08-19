@@ -2152,36 +2152,48 @@ stay protected inside mutable children. Design:
   predicate slice and records the three decisions it must make. The predicate itself stays
   behind §6.4's consumer gate and is **not** filed here.
 
-### `force` still runs its thunk in a sub-context, truncating captured continuations (2026-08-18)
+### `force` sub-context truncation — FIXED, at an allocation cost (2026-08-18)
 
-- [ ] **Convert `force` to a live-chain boundary** [Correctness/continuations, M, NOT STARTED]:
+- [x] **Convert `force` to a live-chain boundary** [Correctness/continuations, M, DONE]:
   `(let ((captured 'unset)) (force (delay (set! captured (call/cc (lambda (r) (r 42))))))
-  (list 'END captured))` answers `#!void`; the same shape through `call-with-values`
-  answers `(END 42)`. A continuation captured inside a delayed thunk ends at the
-  sub-context boundary, so re-entry never replays the program tail. This is the exact
-  class the 2026-06-28 boundary-reification arc fixed for ten other victims — `force`
-  was simply not in that set.
+  (list 'END captured))` answered `#!void` where the same shape through `call-with-values`
+  answered `(END 42)` — a continuation captured inside a delayed thunk ended at the
+  sub-context boundary, so re-entry never replayed the program tail. `force` was the one
+  victim the 2026-06-28 boundary-reification arc did not convert.
 
-  **Why it was left.** `executeThunk` (`pkg/internal/extensions/all/prim_all.go`) needs
-  the thunk's value back **in Go**: `forcePromise` re-checks `promise.IsForced()` (the
-  thunk may have forced this same promise re-entrantly), recurses when the result is
-  another promise (the `delay-force` chain), and memoizes with `promise.Force(result)`.
-  The `RunBodyUnder*` family cannot deliver a value to Go — `RunBodyUnderFrame`
-  (`pkg/machine/run_body_under_frame.go`) ends at `ApplyCallable` and the body runs
-  after the primitive has returned, so post-body work must be reified as a chain frame.
+  **What landed.** `executeThunk`/`forcePromise` (the sub-context + Go recursion) became
+  `stepForcePromise` (`pkg/internal/extensions/all/prim_all.go`): one link per call, each
+  link's thunk inline-applied via `RunBodyUnderGoFrame` under a frame whose Go callback
+  carries that link's promise plus the `pendingForce` list of links still awaiting
+  memoization. The callback runs after its own frame is restored, so links replace each
+  other instead of nesting: Go stack and chain depth are O(1) in the chain length. The two
+  red rows moved into `TestSubContextNonTailEscapeTruncation` un-gated, and
+  `TestForceDeepDelayForceChain` (`prim_promise_extra_test.go`) pins the 100k-link walk.
 
-  **Shape of the fix.** `make-parameter` is the precedent: its post-thunk work became a
-  `ForeignClosure` finalizer used as the consumer (`pkg/registry/core/prim_parameters.go`).
-  `force` needs more than one such finalizer because its post-work is a *loop* — each
-  `delay-force` link memoizes against its own promise, so the finalizer must carry that
-  promise's identity and push the next consumer frame itself. Confirm the converted form
-  still walks a 100k-link `delay-force` chain (measured working today) before landing.
+- [x] **`RunBodyUnderGoFrame` — post-body work in Go, on the chain** [Perf/substrate, M,
+  DONE]: `pkg/machine/{operation_go_return.go,run_body_under_frame.go}`. Every other
+  member of the family hands a body's result to a SCHEME procedure (an apply-frame's
+  consumer), so a primitive with Go post-work had to mint a `ForeignClosure` finalizer
+  just to get the value back — or, before that, run the body in a sub-context and truncate
+  any continuation captured inside it. This one is a frame whose template is a single
+  `OperationGoReturn` calling `func(*MachineContext, values.Value) error`, plus an
+  `OpRestoreContinuation` the callback skips by reconfiguring the VM. `force` is the
+  only caller; the seam is general.
 
-  **Gate**: `WILE_RUN_RED_CONTINUATION=1 go test ./pkg/registry/core/ -run
-  TestForceSubContextTruncationRed` — two cases, red on master. When they go green
-  un-gated, move the rows into `TestSubContextNonTailEscapeTruncation` and drop the
-  env gate. The tail-position controls (`force-delay tail`, `force-delay-force tail`
-  in `TestSubContextEscapeControls`) are already green and must stay green.
+  **Measured** on 1M iterations of `(force (delay (* n 2)))`, against the pre-conversion
+  sub-context form: 0.48 s / 312 MB / 6.6M objects → **0.71 s / 1334 MB / 15.7M objects**.
+  The intermediate `ForeignClosure`-finalizer form was 0.84 s / 1496 MB / 19.7M objects,
+  so the Go-frame bought −15% time and −4.0M objects. Co-allocating the template, the
+  operation and its one-entry side table in a single `goFrame` block (rather than three
+  news) was −2.3M objects of that.
+
+  **Note for the next pass** — the estimate in this entry's earlier version over-predicted
+  the win, because the finalizer's apply frame was being recycled correctly and was never
+  the cost. What remains, per force: the `MachineContinuation` (~265 B, shared with every
+  boundary-reifying primitive), the `goFrame` block (~310 B), and an env-frame pool drain
+  (~300 B) that is NOT specific to force — every RunBodyUnder* call drains one frame, and
+  `call-with-values` and `call-with-exit` pay it too. That drain is the largest single
+  remaining item and the right next target.
 
 ---
 ## Tier 2 — Embedding API & Product Value

@@ -71,6 +71,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A continuation captured inside a `delay`/`delay-force` thunk now spans the
+  rest of the program.** `force` was the last boundary running its body in a
+  sub-context, so a continuation captured in a delayed thunk ended at that
+  boundary and re-entry never replayed the program tail:
+  `(let ((captured 'unset)) (force (delay (set! captured (call/cc (lambda (r) (r 42)))))) (list 'END captured))`
+  answered `#!void` where the same shape through `call-with-values` answered
+  `(END 42)`. Each link of a promise chain now runs its thunk on the live
+  continuation chain under a frame that carries that link's promise, which is
+  where the re-entrancy re-check, the `delay-force` walk, and the memoization
+  moved to.
+
+  What `force` answers is unchanged, including for a thunk that returns a value
+  count other than one: `(force (delay (values 1 2)))` is still `1` and
+  `(force (delay (values)))` is still void, where Chez raises. Chain depth is
+  unchanged too — the per-link frames replace each other rather than nesting, and
+  a 100k-link `delay-force` chain still walks. `force` does allocate more: 1M
+  iterations of `(force (delay (* n 2)))` go from 0.48 s / 312 MB to 0.71 s /
+  1334 MB.
+
+  Embedders writing primitives get the seam this needed:
+  `MachineContext.RunBodyUnderGoFrame(body, func(*MachineContext, values.Value) error)`
+  runs a body on the live continuation chain and hands its result to **Go**. Until
+  now the `RunBodyUnder*` family could only hand a body's result to a Scheme
+  procedure, so a primitive whose post-body work was Go — a re-entrancy check, a
+  memoization, a decision about what to run next — had to run the body in a
+  sub-context, which truncates any continuation captured inside it.
+
 - **A Go-level bug in an embedder's function now escapes `guard` from either
   registration route, and reports itself the same way from both.** Registering
   the same panicking Go function twice — once with `Engine.RegisterPrimitive`,

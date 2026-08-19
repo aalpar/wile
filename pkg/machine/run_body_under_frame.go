@@ -30,8 +30,12 @@ package machine
 //   - RunBodyUnderPrompt    → call-with-continuation-prompt  (prim_prompt.go)
 //   - RunBodyUnderFrame     → raise-continuable and the non-continuable raise
 //                             escalator                       (exception_raise.go)
+//   - RunBodyUnderGoFrame   → force                (extensions/all/prim_all.go)
 //   - RunWithinBoundary     → barrier / RaiseInPlace handler / composable / the sweep
 //                             sites (machine_context.go and call sites)
+//
+// RunBodyUnderGoFrame joined later (2026-08-18): its post-body work is GO, not a
+// Scheme procedure.
 //
 // An earlier A/B crosscheck proved the reification and the winding-aware resume (the
 // "flip") are INSEPARABLE — reified boundaries depend on driver routing and winding
@@ -93,6 +97,52 @@ var applyToValuesCode = []Instruction{
 	{Op: OpPushValues},
 	{Op: OpLoadLiteral, Arg: 0},
 	{Op: OpApply},
+}
+
+// goReturnCode is the body of a Go-frame: run the frame's OperationGoReturn (side
+// table 0), then return its value to the parent. OperationGoReturn skips that
+// return by not advancing pc when its callback reconfigured the VM.
+//
+// INVARIANT: shared, read-only — the VM never mutates template code. The side
+// table is NOT shared; each Go-frame carries its own one-entry table.
+var goReturnCode = []Instruction{
+	{Op: OpComplex, Arg: 0},
+	{Op: OpRestoreContinuation},
+}
+
+// RunBodyUnderGoFrame reifies "run a body, then do some work in GO" on the live
+// chain: the Go-side counterpart of RunBodyUnderConsumer, with a Go callback in
+// place of a Scheme consumer, so no ForeignClosure is minted and no apply frame is
+// bound to carry the value across.
+//
+// A primitive whose post-body work must happen in Go otherwise has to run the body
+// in a sub-context to get the value back, truncating any continuation captured
+// inside it. force is the first caller; see GoFrameFunc for the callback's two
+// legal endings.
+func (p *MachineContext) RunBodyUnderGoFrame(body values.Value, fn GoFrameFunc, args ...values.Value) (*MachineContext, error) {
+	// One allocation for the template, the operation, and its one-entry side
+	// table: all three are per-call (the callback is) and die with the frame, and
+	// force allocates a goFrame per promise-chain link. Three separate news
+	// measured ~90 B/call and 2 mallocs more.
+	g := &goFrame{}
+	g.op = OperationGoReturn{
+		OperationBase: goReturnOpBase,
+		fn:            fn,
+	}
+	g.table[0] = &g.op
+	g.tpl.code = goReturnCode
+	g.tpl.sideTable = g.table[:]
+	frame := NewMachineContinuation(p.cont, &g.tpl, p.env)
+	return p.RunBodyUnderFrame(frame, body, args...)
+}
+
+// goFrame co-allocates the three per-call parts of a Go-frame. Nothing references
+// it as a whole after construction — the frame holds &g.tpl → g.table → &g.op — so
+// the block lives exactly as long as the frame.
+type goFrame struct {
+	tpl   NativeTemplate
+	op    OperationGoReturn
+	table [1]InlinedOperation
 }
 
 // RunBodyUnderFrame pushes frame as mc.cont and inline-applies body on this

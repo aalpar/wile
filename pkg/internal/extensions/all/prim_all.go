@@ -303,50 +303,68 @@ func PrimMakePromise(mc machine.CallContext) error {
 	return nil
 }
 
-// executeThunk runs a promise thunk and returns its result.
-// The thunk is already validated as Callable when the promise was created.
-func executeThunk(mc *machine.MachineContext, thunk values.Callable) (values.Value, error) {
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	_, err := sub.ApplyCallable(thunk)
-	if err != nil {
-		return nil, err
-	}
-	err = sub.RunWithinBoundary()
-	if err != nil {
-		return nil, err
-	}
-	return sub.GetValue(), nil
+// pendingForce is a link of the delay-force chain whose memoization is still
+// outstanding, innermost first (next delegated to this one). Every link memoizes
+// the SAME final value, head-to-tail matching the order the recursive form this
+// replaced produced as it unwound.
+//
+// A list rather than a slice: links are built inside a continuation-chain frame,
+// so a re-entered continuation can start a second walk, and two walks sharing a
+// backing array would overwrite each other. Cons-ing is also O(1) per link, which
+// TestForceDeepDelayForceChain's 100k-link chain depends on.
+type pendingForce struct {
+	promise *values.Promise
+	next    *pendingForce
 }
 
-// forcePromise forces a promise and returns its result.
-// This is the core recursive implementation of R7RS force semantics.
-func forcePromise(mc *machine.MachineContext, promise *values.Promise) (values.Value, error) {
-	if promise.IsForced() {
-		return promise.CachedResult(), nil
+// memoize forces every outstanding link with the chain's final value. A nil
+// receiver means nothing is outstanding (per [nil means NONE]).
+func (p *pendingForce) memoize(result values.Value) {
+	for l := p; l != nil; l = l.next {
+		l.promise.Force(result)
 	}
+}
 
-	result, err := executeThunk(mc, promise.Thunk())
-	if err != nil {
-		return nil, err
+// stepForcePromise runs ONE link of the force loop on the live continuation chain
+// and returns; the VM drives the rest. An already-forced cur finishes here in Go;
+// otherwise cur's thunk is inline-applied under a Go-frame carrying (chain, cur),
+// so a continuation captured inside the thunk spans that frame and the rest of the
+// program instead of ending at the sub-context boundary the recursive form used
+// (the force rows of
+// pkg/registry/core/continuation_subcontext_truncation_red_test.go).
+//
+// The callback runs AFTER cur's frame is restored, so the next link's frame
+// replaces it rather than nesting: Go stack, VM chain depth, and eval-stack depth
+// are all O(1) in the chain length, against O(n) Go frames before. Only
+// pendingForce grows.
+func stepForcePromise(mc *machine.MachineContext, chain *pendingForce, cur *values.Promise) error {
+	if cur.IsForced() {
+		result := cur.CachedResult()
+		chain.memoize(result)
+		mc.SetValue(result)
+		return nil
 	}
-
-	// Nested call may have already forced this promise
-	if promise.IsForced() {
-		return promise.CachedResult(), nil
-	}
-
-	// Recursively force promise results (delay-force semantics)
-	rp, ok := result.(*values.Promise)
-	if ok && rp != promise {
-		result, err = forcePromise(mc, rp)
-		if err != nil {
-			return nil, err
+	_, err := mc.RunBodyUnderGoFrame(cur.Thunk(), func(stepMC *machine.MachineContext, result values.Value) error {
+		// The thunk may have forced this same promise re-entrantly. Its cached
+		// result wins and cur is left off the chain — it is already memoized.
+		if cur.IsForced() {
+			cached := cur.CachedResult()
+			chain.memoize(cached)
+			stepMC.SetValue(cached)
+			return nil
 		}
-	}
-
-	promise.Force(result)
-	return result, nil
+		outstanding := &pendingForce{promise: cur, next: chain}
+		// delay-force semantics: a promise result is forced in turn, and every
+		// link of the chain memoizes that innermost value.
+		rp, ok := result.(*values.Promise)
+		if ok && rp != cur {
+			return stepForcePromise(stepMC, outstanding, rp)
+		}
+		outstanding.memoize(result)
+		stepMC.SetValue(result)
+		return nil
+	})
+	return err
 }
 
 // PrimForce implements the (force) primitive.
@@ -366,13 +384,7 @@ func PrimForce(cc machine.CallContext) error {
 		mc.SetValue(o)
 		return nil
 	}
-
-	result, err := forcePromise(mc, promise)
-	if err != nil {
-		return err
-	}
-	mc.SetValue(result)
-	return nil
+	return stepForcePromise(mc, nil, promise)
 }
 
 // PrimMakeLazyPromise implements the internal (%make-lazy-promise thunk)
