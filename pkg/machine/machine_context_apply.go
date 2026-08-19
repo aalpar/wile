@@ -372,28 +372,30 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 			return p, err
 		}
 
-		newVal := args[0]
-
-		if param.HasConverter() {
-			converter := param.Converter()
-			sub := p.NewSubContext()
-			defer ReleaseSubContext(sub)
-			_, err := sub.ApplyCallable(converter, newVal)
-			if err != nil {
-				wrapErr := p.WrapError(err, "parameter: failed to apply converter")
-				return p, wrapErr
-			}
-			err = sub.RunWithinBoundary()
-			if err != nil {
-				wrapErr := p.WrapError(err, "parameter: converter error")
-				return p, wrapErr
-			}
-			newVal = sub.GetValue()
+		if !param.HasConverter() {
+			param.SetValue(args[0])
+			p.SetValue(values.Void)
+			return p.returnImmediate(), nil
 		}
 
-		param.SetValue(newVal)
-		p.SetValue(values.Void)
-		return p.returnImmediate(), nil
+		// Converter present: apply it on the LIVE chain (not a sub-context) so a
+		// continuation captured inside the converter spans the rest of the program.
+		// The post-thunk work — installing the converted value as the new base —
+		// runs as a chain frame (the finalizer), mirroring what PrimMakeParameter
+		// does for the init conversion: RunBodyUnderConsumer inline-applies the
+		// converter to the new value, then applies the finalizer to its result.
+		// Pinned by the parameter-set-converter case of
+		// continuation_subcontext_truncation_red_test.go.
+		closureEnv := p.EnvironmentFrame().MutableRuntimeOrNil()
+		if closureEnv == nil {
+			closureEnv = p.EnvironmentFrame()
+		}
+		finalizer := NewForeignClosure(closureEnv, 1, false, func(finCC CallContext) error {
+			param.SetValue(finCC.Arg(0))
+			finCC.SetValue(values.Void)
+			return nil
+		})
+		return p.RunBodyUnderConsumer(param.Converter(), finalizer, args[0])
 
 	default:
 		err := p.WrapError(werr.ErrWrongNumberOfArguments, fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)))
