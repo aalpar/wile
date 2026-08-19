@@ -57,6 +57,12 @@ graph TD
 A procedure whose body contains a `let` builds a two-frame chain. The parameter
 frame is the pooled one; the `let` frame hangs off it as a lexical child.
 
+```scheme
+(define (count-up i n)        ; parameter frame — slots i, n — POOLED
+  (let ((j (+ i 1)))          ; let frame       — slot  j    — not pooled
+    (if (>= j n) j (* j n))))
+```
+
 ```mermaid
 graph RL
     LF["let frame<br/>slots: j<br/>NOT pooled"] -->|parent| PF["parameter frame<br/>slots: i, n<br/>POOLED"]
@@ -78,18 +84,20 @@ graph RL
 `mc.env` currently names, and it answers one question — *may this frame be
 returned to the pool when it is overwritten?*
 
-Two runtime operations make the current frame a **parent**, and both clear it in
-the same step:
+Four sites make the current frame a **parent**, and each clears the flag in the
+same step:
 
-| op | why it clears |
+| site | why it clears |
 |---|---|
 | `OpPushEnv` | the new `let` frame points at `mc.env` as its parent |
 | `OpMakeClosure` | the closure holds `mc.env` as its captured parent |
+| `OperationBindPatternVars` | `syntax-case` binds its pattern variables in a child frame (`compilation/operation_syntax_case.go:292`, cleared at `:350`) |
+| `ClosureEnv`'s detached-env fallback | a `ForeignClosure` outliving its call is parented on `mc.env` when that frame has no mutable runtime (`machine_context.go:341`) |
 
-Those are the only two runtime sites that build a frame parented to `mc.env`
-(`machine_context.go`'s `OpPushEnv` case is the sole runtime
-`NewEnvironmentFrameWithParent(_, mc.env)`; every other such call is compile- or
-expand-time). That fact has a name.
+The first two are the ones a Scheme program reaches on every call; the other two
+are narrow, and each carries its own clear. All four run under `Run` — being
+"expand-time" is a claim about `syntax-case`'s phase, not about which loop
+executes it. What is uniform across them has a name.
 
 > **Invariant H.** A frame with `envPooled == true` is never any other frame's
 > parent.
@@ -132,6 +140,24 @@ graph TD
     style LEAK fill:#5c1a1a,color:#fff
 ```
 
+The two shapes, and what each compiles to:
+
+```scheme
+;; TAIL — the let is the last thing the body evaluates.
+;; Emits: PushEnv=1  PopEnv=0
+(define (tail-let i n)
+  (if (>= i n)
+      i
+      (let ((j (+ i 1)))
+        (helper j n))))         ; mc.env is still the LET frame at return
+
+;; NON-TAIL — the let is an argument, so its value must come back.
+;; Emits: PushEnv=1  PopEnv=1
+(define (arg-let i n)
+  (+ (let ((j (+ i 1))) j)
+     n))
+```
+
 In tail position the flag is *correct* — `mc.env` really is a non-pooled `let`
 frame — and the limitation is **reach**: `RestoreAndRelease` releases exactly one
 frame, and the pooled one is that frame's parent.
@@ -157,6 +183,16 @@ sequenceDiagram
     B->>MC: OpPopEnv — restores the SAVED true ❌
     B->>PF: RestoreAndRelease recycles PF
     Note over PF: use-after-release —<br/>the escaped closure still reads it
+```
+
+A program that walks that sequence:
+
+```scheme
+;; Emits: PushEnv=1  MakeClosure=1  PopEnv=1 — all three of the diagram's ops.
+(define (leaky i n)
+  (cons (let ((j (+ i 1)))
+          (lambda () (+ i j)))  ; escapes, and reads i from the PARAMETER frame
+        n))                     ; the let is an argument to cons, so PopEnv runs
 ```
 
 A closure created inside the `let` body parents to the `let` frame and therefore
@@ -202,8 +238,30 @@ pool works perfectly when frames come back. Everywhere else
 `misses == in-flight-at-exit` exactly — every miss is one frame acquired and never
 returned.
 
+Re-measured at `e28364f9` (2026-08-19): all four recovery rates are unchanged and
+every release count is identical. Acquires differ by 9 on `fib` and 1 on
+`nqueens`, unattributed. The misses column was not re-read — it is the freelist's
+own factory counter, not `VMCounters`.
+
 Isolating the cause, on three `fib` variants that differ only in where a `let`
 sits:
+
+```scheme
+;; 1 — no let
+(define (fib n)
+  (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))
+
+;; 2 — a let in non-tail position (an argument to +)
+(define (fib n)
+  (if (< n 2) n (+ (let ((a (- n 1))) (fib a)) (fib (- n 2)))))
+
+;; 3 — a let wrapping ONLY the base branch, off the recursive path entirely
+(define (fib n)
+  (if (< n 2) (let ((b n)) b) (+ (fib (- n 1)) (fib (- n 2)))))
+```
+
+Driven by `(fib 22)`, whose 57,313 activations are the whole of column one in row
+1 — nothing else in the program applies a closure:
 
 | body | parameter frames acquired | released back | recovered |
 |---|---|---|---|
@@ -213,33 +271,80 @@ sits:
 
 The third row is the sharpest: that `let` is off the recursive path and changes
 no acquire count at all — and half the *parameter* frames stop coming back. The
+28,657 activations that reach the base branch are exactly the ones that stop
+releasing. It is a *tail* `let` — the last form the body evaluates on that branch
+— so it compiles to `PushEnv` with no `PopEnv`, same as `tail-let` above. The
 `let` frames it created are additional, and are not counted here because none of
 them was ever poolable.
 
 Per-iteration allocation for a loop, by shape:
 
+```scheme
+(define (tail-loop i n)
+  (if (>= i n) i (tail-loop (+ i 1) n)))
+
+(define (arg-loop i n)
+  (if (>= i n) i (arg-loop (let ((j (+ i 1))) j) n)))
+
+(define (nested-loop i n)
+  (if (>= i n) i
+      (let ((j (+ i 1)))
+        (nested-loop j n))))
+
+(define (deep-loop i n)
+  (if (>= i n) i
+      (let ((j (+ i 1)))
+        (let ((k j))
+          (deep-loop k n)))))
+```
+
 | shape | allocs/iteration |
 |---|---|
-| self-tail call, no `let` | 0 |
-| `let` in argument position (call still at depth 0) | 3 |
-| `let` wrapping the tail call | 3 |
-| two `let`s wrapping the tail call | 6 |
+| `tail-loop` — self-tail call, no `let` | 0 |
+| `arg-loop` — `let` in argument position (call still at depth 0) | 3 |
+| `nested-loop` — `let` wrapping the tail call | 3 |
+| `deep-loop` — two `let`s wrapping the tail call | 6 |
 
 The last two rows were 5 and 8 before `OpSelfTailCall` learned to unwind `let`
 frames; what remains in each is 3 per `let` frame, which is the subject of this
-document.
+document. Both are pinned as regression floors by
+`TestNestedLetSelfTailAllocations` and `TestDoublyNestedLetSelfTailAllocations`
+(`pkg/wile/tail_call_alloc_test.go`), which read the slope across two trip counts
+so a fixed startup cost cannot hide in it.
 
 ## What a sound recovery would need
 
-Not a runtime flag. The discipline this codebase uses for every other frame
-reclamation is a **compile-time proof**, and the same one applies here: a `let`
-body that provably creates no escaping closure and references no capture operator
-cannot make its parent chain reachable, so the enclosing frame stays releasable
-across it. Those two predicates already exist (`bodyCreatesEscapingClosure`,
+Not a runtime flag — for this case. The discipline this codebase uses for nearly
+every other frame reclamation is a **compile-time proof**, and the same one
+applies here: a `let` body that provably creates no escaping closure and
+references no capture operator cannot make its parent chain reachable, so the
+enclosing frame stays releasable across it. Those two predicates already exist
+(`bodyCreatesEscapingClosure`,
 `bodyReferencesCaptureOperator`) and are already composed for the self-tail-call
-proof.
+proof. The minimal pair is `leaky` above against:
 
-Two separate pieces would follow from it, and they are different sizes:
+```scheme
+(define (safe i n)
+  (cons (let ((j (+ i 1)))
+          (* i j))            ; no lambda, no call/cc — nothing outlives the let
+        n))
+```
+
+**The one class recovered without a proof, and why it does not generalize.** Until
+`e28364f9`, every `call-with-values`, `call-with-exit`, prompt, barrier and
+`force` call drained exactly one frame from the pool: the helper builds its
+continuation frame over `mc.env` — inside a primitive, that is the pooled apply
+frame holding the primitive's own arguments — and `NewMachineContinuation` left
+`envPooled` false, so the restore dropped it to the GC instead of recycling it.
+The fix is a runtime **ownership transfer** (`transferEnvOwnership`,
+`run_body_under_frame.go`): the pooled status moves to the continuation frame and
+`p.envPooled` is cleared, so there is exactly one owner and no double release. Its
+licence is that no bytecode runs between building the frame and applying the body,
+so nothing can parent on it in that window. That is a window argument, not an
+escape analysis, and a `let` is the opposite case — arbitrary bytecode runs under
+it, which is what forces the proof.
+
+Two separate pieces would follow from the proof, and they are different sizes:
 
 - Re-arming the release at `OpPopEnv` behind that proof — reaches the 8% of `let`
   frames that have a pop.
@@ -251,6 +356,16 @@ a compile-time constant that `OpPushEnv` rebuilds every time. Interning the
 compile-time frame as a template literal — exactly what `compileClosureBody`
 already does for a lambda — would remove one of the three allocations at every
 site.
+
+There is also a standing argument that the premise of this section is the problem.
+`plans/2026-08-18-flat-closure-conversion-design.local.md` (design only, nothing
+implemented or measured) observes that every lever here needs that same proof, and
+proposes deleting one of the two capture paths instead: a flat closure holds the
+*values* of its free variables, so no closure ever points at a frame and the
+question stops being asked. It declines the corollary — captured continuations,
+sub-contexts, SRFI-18 thread starts and `dynamic-wind` winders still reach frames,
+so a tail release would need that set re-derived on its own, which is exactly the
+inference that failed before.
 
 ## See also
 
