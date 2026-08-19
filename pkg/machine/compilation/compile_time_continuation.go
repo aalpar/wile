@@ -116,14 +116,21 @@ type CompileTimeContinuation struct {
 	// expander. 0 means use DefaultMaxExpandDepth; tests set a low value to
 	// exercise the bound cheaply. See effectiveQuasiMaxDepth.
 	quasiMaxDepth int
-	// assignedSlots is the flat-closure boxing analysis's "assigned" half: every
-	// local slot that some set! in scope targets, named absolutely by owning
-	// frame rather than by (slot, depth). Seeded by recordAssignedSlots at each
-	// frame-creating site, and SHARED — not copied — with the child continuation
-	// a lambda body compiles under, which is what lets an inner lambda see a
-	// set! that sits in its enclosing body. Absolute keys are what make the
-	// sharing correct without re-basing at every descent.
-	assignedSlots map[assignedSlotKey]bool
+	// boxedSlots is the flat-closure boxing verdict: every local slot that holds
+	// a *values.Box rather than its value directly, named absolutely by owning
+	// frame rather than by (slot, depth).
+	//
+	// Decided at the BINDER (markBoxedBinders), because "captured ∧ assigned" is
+	// a property of the variable and a lambda cannot see a set! in its enclosing
+	// body. SHARED — not copied — with the child continuation a lambda body
+	// compiles under, so a read arbitrarily deep inside agrees with the emit
+	// that installed the cell. Absolute keys are what make the sharing correct
+	// without re-basing at every frame descent.
+	//
+	// Three sites must give the same answer or the program hands a #<box> to
+	// Scheme: emitBoxSlots at the binder, emitLocalLoad at every read,
+	// emitLocalStore at every write. All three route through localIsBoxed.
+	boxedSlots map[boxedSlotKey]bool
 }
 
 // unitFrameReclaimVerdict reports the interprocedural verdict for the define with
@@ -288,9 +295,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		// Try local binding first
 		li := p.env.GetLocalIndex(sym, syntax.EmptyScopes())
 		if li != nil {
-			p.AppendOperations(
-				machine.NewOperationLoadLocalByLocalIndexImmediate(li),
-			)
+			p.emitLocalLoad(li)
 			return nil
 		}
 
@@ -340,9 +345,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	li := p.env.GetLocalIndex(sym, syntax.ScopesOf(symbolScopes))
 	if li != nil {
 		// Found a local binding with matching scopes
-		p.AppendOperations(
-			machine.NewOperationLoadLocalByLocalIndexImmediate(li),
-		)
+		p.emitLocalLoad(li)
 		return nil
 	}
 

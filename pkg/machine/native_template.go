@@ -250,11 +250,21 @@ func instructionToOperation(instr Instruction) Operation {
 	case OpSelfTailCall:
 		return NewOperationSelfTailCall(DecodeSelfTailCall(instr.Arg))
 
-	// --- Wave 3: StoreLocal (only LocalIdx op with a distinct decomposition) ---
+	// --- Wave 3: the LocalIdx ops with a distinct decomposition ---
 	case OpStoreLocal:
 		slot, depth := DecodeLocalIndex(instr.Arg)
 		li := environment.NewLocalIndex(slot, depth)
 		return NewOperationStoreLocalByLocalIndexImmediate(li)
+	case OpBoxSlot:
+		slot, depth := DecodeLocalIndex(instr.Arg)
+		li := environment.NewLocalIndex(slot, depth)
+		return NewOperationBoxSlot(li)
+	case OpStoreThroughBox:
+		slot, depth := DecodeLocalIndex(instr.Arg)
+		li := environment.NewLocalIndex(slot, depth)
+		return NewOperationStoreThroughBox(li)
+	case OpUnbox:
+		return NewOperationUnbox()
 
 	// --- Wave 5: fused zero-operand ops ---
 	case OpPullApply:
@@ -377,6 +387,10 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 	case *OperationLoadLocalByLocalIndexImmediate:
 		return Instruction{Op: kind, Arg: EncodeLocalIndex(v.LocalIndex)}, true
 	case *OperationStoreLocalByLocalIndexImmediate:
+		return Instruction{Op: kind, Arg: EncodeLocalIndex(v.LocalIndex)}, true
+	case *OperationBoxSlot:
+		return Instruction{Op: kind, Arg: EncodeLocalIndex(v.LocalIndex)}, true
+	case *OperationStoreThroughBox:
 		return Instruction{Op: kind, Arg: EncodeLocalIndex(v.LocalIndex)}, true
 
 	// --- Wave 6: cached binding operations ---

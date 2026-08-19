@@ -115,17 +115,13 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 	// Predeclare body defines to count total slots needed.
 	p.predeclareBodyDefines(v.Body())
 
-	// Record this let frame's set!-targeted slots. A let frame is a binder site
-	// like a lambda's, so it owes the flat-closure boxing analysis the same
-	// seed: without it, a closure over a let binding that some later body form
-	// assigns would copy the value instead of sharing a cell. The inits are
-	// included because a letrec init can set! a sibling.
-	inits := make([]validate.ValidatedExpr, 0, n)
+	// The let's scope for the flat-closure boxing decision: its own inits (a
+	// letrec init can set! a sibling) plus its body.
+	letScope := make([]validate.ValidatedExpr, 0, n+len(v.Body()))
 	for i := range v.Bindings {
-		inits = append(inits, v.Bindings[i].Init)
+		letScope = append(letScope, v.Bindings[i].Init)
 	}
-	p.recordAssignedSlots(inits)
-	p.recordAssignedSlots(v.Body())
+	letScope = append(letScope, v.Body()...)
 
 	// For let*: binding names aren't in the env yet, so add their
 	// count to get the true total for OpPushEnv.
@@ -141,6 +137,22 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 
 	p.AppendOperations(machine.NewOperationPushEnv(totalSlots))
 
+	// Install the cells for this frame's captured-and-assigned slots, before any
+	// init runs. A letrec init that closes over a sibling must capture the
+	// SIBLING'S cell, not a value the slot does not hold yet, so the boxes go in
+	// immediately after the frame and every store below writes through them.
+	//
+	// let* binders are absent here — they are created one at a time in the loop
+	// below, and boxed there. Body defines are present: predeclareBodyDefines
+	// above already gave them slots.
+	letBinders := bodyDefineNames(v.Body())
+	if v.Kind != validate.LetKindLetStar {
+		for i := range v.Bindings {
+			letBinders = append(letBinders, v.Bindings[i].Name)
+		}
+	}
+	p.emitBoxSlots(p.markBoxedBinders(letBinders, letScope))
+
 	// Emit init compilation + stores based on Kind.
 	switch v.Kind {
 	case validate.LetKindLet:
@@ -155,7 +167,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 					"compile let: binding %q not found in local environment",
 					v.Bindings[i].Name.Sym)
 			}
-			p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
+			p.emitLocalStore(li)
 		}
 
 	case validate.LetKindLetStar:
@@ -180,7 +192,11 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 					b.Name.Sym)
 			}
 			p.appendPushAt(b.Init.Source())
-			p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
+			p.emitLocalStore(li)
+			// A let* binder is not in scope in its own init, so installing its
+			// cell right after the store is early enough: the next init is the
+			// first code that can close over it.
+			p.emitBoxSlots(p.markBoxedBinders([]*syntax.SyntaxSymbol{b.Name}, letScope))
 		}
 
 	case validate.LetKindLetrecStar:
@@ -199,7 +215,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 					b.Name.Sym)
 			}
 			p.appendPushAt(b.Init.Source())
-			p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
+			p.emitLocalStore(li)
 		}
 
 	case validate.LetKindLetrec:
@@ -218,7 +234,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 					"compile letrec: binding %q not found in local environment",
 					v.Bindings[i].Name.Sym)
 			}
-			p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
+			p.emitLocalStore(li)
 		}
 	}
 

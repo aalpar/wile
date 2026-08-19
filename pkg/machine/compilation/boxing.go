@@ -25,22 +25,23 @@ package compilation
 import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/validate"
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/syntax"
 )
 
-// assignedSlotKey names a local slot ABSOLUTELY: the compile-time frame that
-// owns it, and its index in that frame.
+// boxedSlotKey names a local slot ABSOLUTELY: the compile-time frame that owns
+// it, and its index in that frame.
 //
-// Absolute, not (slot, depth), because the assigned set is shared down the whole
-// compile and a depth is relative to whoever is asking. Re-basing a depth at
-// every frame descent would be one more thing to keep in step with
-// compileBody's and CompileValidatedLet's env switches; an owning-frame pointer
-// simply does not move.
+// Absolute, not (slot, depth), because the boxing decision is made once at the
+// binder and consulted from arbitrarily deep inside, where a depth means
+// something else. Re-basing at every frame descent would be one more thing to
+// keep in step with compileBody's and CompileValidatedLet's env switches; an
+// owning-frame pointer simply does not move.
 //
 // The frame pointer is a stable identity in a way a *environment.Binding is not:
 // EnsureLocalBinding appends to the frame's []Binding, which can reallocate the
 // slice, but never the *EnvironmentFrame itself.
-type assignedSlotKey struct {
+type boxedSlotKey struct {
 	frame *environment.EnvironmentFrame
 	slot  int
 }
@@ -49,99 +50,199 @@ type assignedSlotKey struct {
 // frame-absolute key, by walking depth lexical parents. Returns ok=false when
 // the chain is shorter than the depth, which would mean the index did not come
 // from this frame.
-func absoluteSlot(env *environment.EnvironmentFrame, li *environment.LocalIndex) (assignedSlotKey, bool) {
+func absoluteSlot(env *environment.EnvironmentFrame, li *environment.LocalIndex) (boxedSlotKey, bool) {
 	owner := env
 	for range li.Up() {
 		if owner == nil {
-			return assignedSlotKey{}, false
+			return boxedSlotKey{}, false
 		}
 		owner = owner.Parent()
 	}
 	if owner == nil {
-		return assignedSlotKey{}, false
+		return boxedSlotKey{}, false
 	}
-	return assignedSlotKey{frame: owner, slot: li.Over()}, true
+	return boxedSlotKey{frame: owner, slot: li.Over()}, true
 }
 
-// recordAssignedSlots adds every set!-targeted local slot in body to p's shared
-// assigned set, resolving each target against p.env.
+// refPosition selects which occurrences of a binder a reference scan counts.
+type refPosition int
+
+const (
+	// refAnywhere counts every reference.
+	refAnywhere refPosition = iota
+	// refOutsideClosure counts only references evaluated where they are
+	// written — outside the body of any lambda, case-lambda clause or
+	// function-form define.
+	refOutsideClosure
+	// refInsideClosure counts only references inside such a body. That IS
+	// "captured": a closure over the binder exists and will read it.
+	refInsideClosure
+)
+
+// binderIsBoxed reports whether the variable bound by name must live in a box
+// rather than in the slot directly: it is CAPTURED by some closure in scope AND
+// ASSIGNED by some set! in scope.
 //
-// WHY THE SET IS SEEDED AT THE FRAME, NOT AT THE CAPTURE. "Assigned" is a
-// property of the VARIABLE, so it has to be decided where the variable is bound
-// — a lambda cannot see a set! that sits in its enclosing body, and that set! is
-// exactly as invisible to a value-copying closure as one it can see. The
-// depth-qualified formulation this replaces got both halves wrong:
+// Both conjuncts are decided syntactically, over the binder's own scope, by
+// BINDER IDENTITY — the spelling narrows, ScopesCompatible decides. Deciding it
+// at the binder rather than at the capture is what makes it correct: a lambda
+// cannot see a set! that sits in its ENCLOSING body, and that set! is exactly as
+// invisible to a value-copying closure as one it can see. The depth-qualified
+// formulation this replaces missed both directions —
 // `(let ((a 0)) ((lambda (x) (set! a x)) 7) a)` reports depth 0 because the
 // lambda does not ESCAPE, and
 // `(let ((a 0)) (let ((f (lambda () a))) (set! a 1) f))` reports depth 0 for the
 // plainer reason that its set! is inside no lambda at all.
 //
-// WalkBindingRefs walks the whole subtree, so one call at a frame covers every
-// set! below it; a nested frame's own call is a refinement for the names IT
-// binds, not a repetition.
-//
-// Two over-approximations, both stated rather than papered over. A set! whose
-// target is bound by a frame that does not exist yet (a nested let's own
-// binding, at the moment an enclosing lambda seeds) resolves outward and can
-// mark a same-spelled outer slot; and a set! whose target is shadowed between
-// here and its binder resolves to the shadowed binding. Both cost one
-// indirection on a slot that did not need it. The opposite error — missing a
-// genuine assignment — is a wrong answer, and is what the nested-frame seeding
-// exists to prevent.
-func (p *CompileTimeContinuation) recordAssignedSlots(body []validate.ValidatedExpr) {
-	if p.env == nil {
-		return
+// Over-approximation, stated: a reference shadowed between here and this binder
+// still satisfies the subset test and counts. Boxing a slot that did not need it
+// costs one indirection. The opposite error is a wrong answer — and cannot
+// happen, because a genuine reference necessarily carries the binder's scopes as
+// a subset, which is the same relation GetLocalIndex resolves by.
+func binderIsBoxed(name *syntax.SyntaxSymbol, scope []validate.ValidatedExpr) bool {
+	if name == nil {
+		return false
 	}
-	p.ensureAssignedSlots()
-	for _, e := range body {
-		validate.WalkBindingRefs(e, func(sym *syntax.SyntaxSymbol, role validate.RefRole, _ int) {
-			if role != validate.RefSetBangTarget {
-				return
-			}
-			li := p.env.GetLocalIndex(sym.Sym, syntax.ScopesOf(sym.Scopes()))
-			if li == nil {
-				return
-			}
-			k, ok := absoluteSlot(p.env, li)
-			if !ok {
-				return
-			}
-			p.assignedSlots[k] = true
-		})
+	captured := false
+	assigned := false
+	for _, e := range scope {
+		if !captured {
+			captured = referencesBinder(e, name, refInsideClosure)
+		}
+		if !assigned {
+			assigned = assignsBinder(e, name)
+		}
+		if captured && assigned {
+			return true
+		}
 	}
+	return false
 }
 
-// ensureAssignedSlots allocates the shared assigned set on first use.
+// markBoxedBinders decides, for each binder in binders, whether it is boxed over
+// scope; records the boxed ones in p.boxedSlots by absolute slot; and returns
+// their LocalIndexes in binder order so the caller can emit OpBoxSlot.
 //
-// Allocated lazily but shared eagerly: compileBody calls this before handing the
-// map to the child continuation, so one map serves a whole compile even when
-// the outermost frame binds nothing that is ever set!.
-func (p *CompileTimeContinuation) ensureAssignedSlots() {
-	if p.assignedSlots == nil {
-		p.assignedSlots = make(map[assignedSlotKey]bool)
+// The binder must already exist in p.env — this resolves it there, which is what
+// keeps the emit site, every read, and every write agreeing on one slot: all
+// three go through GetLocalIndex against the same frame.
+func (p *CompileTimeContinuation) markBoxedBinders(
+	binders []*syntax.SyntaxSymbol,
+	scope []validate.ValidatedExpr,
+) []*environment.LocalIndex {
+	if p.env == nil || len(binders) == 0 {
+		return nil
 	}
-}
-
-// markBoxedFreeVars sets freeVar.boxed for every free variable that is both
-// captured and assigned, and returns the updated layout.
-//
-// CAPTURED is fvs — Pass 1 already answered it, and a nested lambda's free set
-// is a subset of this one by the transitive closure in collectFreeVars.
-//
-// ASSIGNED is p.assignedSlots, seeded at every frame-creating site by
-// recordAssignedSlots. Both conjuncts are boundary-free: neither consults a
-// closure-nesting count.
-func (p *CompileTimeContinuation) markBoxedFreeVars(fvs []freeVar) []freeVar {
-	if len(fvs) == 0 || len(p.assignedSlots) == 0 || p.env == nil {
-		return fvs
-	}
-	for i := range fvs {
-		li := environment.NewLocalIndex(fvs[i].key.slot, fvs[i].key.depth)
+	var q []*environment.LocalIndex
+	for _, b := range binders {
+		if b == nil || !binderIsBoxed(b, scope) {
+			continue
+		}
+		li := p.env.GetLocalIndex(b.Sym, syntax.ScopesOf(b.Scopes()))
+		if li == nil {
+			continue
+		}
 		k, ok := absoluteSlot(p.env, li)
 		if !ok {
 			continue
 		}
-		fvs[i].boxed = p.assignedSlots[k]
+		p.ensureBoxedSlots()
+		p.boxedSlots[k] = true
+		q = append(q, li)
+	}
+	return q
+}
+
+// ensureBoxedSlots allocates the shared verdict map on first use.
+//
+// Allocated lazily but shared eagerly: compileBody calls this before handing the
+// map to the child continuation, so one map serves a whole compile even when the
+// outermost frame boxes nothing.
+func (p *CompileTimeContinuation) ensureBoxedSlots() {
+	if p.boxedSlots == nil {
+		p.boxedSlots = make(map[boxedSlotKey]bool)
+	}
+}
+
+// localIsBoxed reports whether the slot li names, resolved against p.env, holds
+// a box. Every read, write and free-vector site asks this one question, so the
+// three cannot disagree.
+func (p *CompileTimeContinuation) localIsBoxed(li *environment.LocalIndex) bool {
+	if len(p.boxedSlots) == 0 || p.env == nil || li == nil {
+		return false
+	}
+	k, ok := absoluteSlot(p.env, li)
+	if !ok {
+		return false
+	}
+	return p.boxedSlots[k]
+}
+
+// emitBoxSlots emits one OpBoxSlot per index, installing the cells before any
+// closure in scope can observe the slots.
+func (p *CompileTimeContinuation) emitBoxSlots(lis []*environment.LocalIndex) {
+	for _, li := range lis {
+		p.AppendOperations(machine.NewOperationBoxSlot(li))
+	}
+}
+
+// emitLocalStore emits the write form the slot needs: a plain store, or a store
+// through the box when the slot holds one.
+func (p *CompileTimeContinuation) emitLocalStore(li *environment.LocalIndex) {
+	if p.localIsBoxed(li) {
+		p.AppendOperations(machine.NewOperationStoreThroughBox(li))
+		return
+	}
+	p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
+}
+
+// emitLocalLoad emits the read form the slot needs: a plain load, followed by an
+// unbox when the slot holds a box.
+func (p *CompileTimeContinuation) emitLocalLoad(li *environment.LocalIndex) {
+	p.AppendOperations(machine.NewOperationLoadLocalByLocalIndexImmediate(li))
+	if p.localIsBoxed(li) {
+		p.AppendOperations(machine.NewOperationUnbox())
+	}
+}
+
+// procBoxBinders returns the binders a procedure body's own frame owns: the
+// parameters, the rest parameter, and every internal define predeclared into the
+// same frame.
+func procBoxBinders(v validate.ValidatedBodyAndParams) []*syntax.SyntaxSymbol {
+	q := procBinders(v)
+	return append(q, bodyDefineNames(v.Body())...)
+}
+
+// bodyDefineNames returns the names every internal define in body introduces,
+// recursing into begin the same way predeclareDefineFromValidatedRecursive does
+// — a define reached only through a macro-produced begin is predeclared into the
+// frame and so owns a slot like any other.
+func bodyDefineNames(body []validate.ValidatedExpr) []*syntax.SyntaxSymbol {
+	var q []*syntax.SyntaxSymbol
+	for _, e := range body {
+		d, ok := e.(*validate.ValidatedDefine)
+		if ok {
+			q = append(q, d.Name())
+			continue
+		}
+		b, ok := e.(*validate.ValidatedBegin)
+		if ok {
+			q = append(q, bodyDefineNames(b.Body())...)
+		}
+	}
+	return q
+}
+
+// markBoxedFreeVars sets freeVar.boxed from the binder-side decision, so a free
+// vector slot and the frame slot it copies from can never disagree about
+// whether the value is behind a cell.
+func (p *CompileTimeContinuation) markBoxedFreeVars(fvs []freeVar) []freeVar {
+	if len(fvs) == 0 || len(p.boxedSlots) == 0 || p.env == nil {
+		return fvs
+	}
+	for i := range fvs {
+		li := environment.NewLocalIndex(fvs[i].key.slot, fvs[i].key.depth)
+		fvs[i].boxed = p.localIsBoxed(li)
 	}
 	return fvs
 }
@@ -223,37 +324,38 @@ func letrecBindingTier(v *validate.ValidatedLet, i int) letrecTier {
 		if j == i {
 			continue
 		}
-		if !initReferences(v.Bindings[j].Init, self, false) {
+		if !referencesBinder(v.Bindings[j].Init, self, refAnywhere) {
 			continue
 		}
-		if initReferences(v.Bindings[i].Init, v.Bindings[j].Name, false) {
+		if referencesBinder(v.Bindings[i].Init, v.Bindings[j].Name, refAnywhere) {
 			return tierMutual
 		}
 		return tierBoxed
 	}
 	for j := range v.Bindings {
-		if initReferences(v.Bindings[j].Init, self, true) {
+		if referencesBinder(v.Bindings[j].Init, self, refOutsideClosure) {
 			return tierBoxed
 		}
 	}
 	_, isLambda := v.Bindings[i].Init.(*validate.ValidatedLambda)
-	if isLambda && initReferences(v.Bindings[i].Init, self, false) {
+	if isLambda && referencesBinder(v.Bindings[i].Init, self, refAnywhere) {
 		return tierSelfPatch
 	}
 	return tierBoxed
 }
 
-// initReferences reports whether expr references the binder name. When
-// outsideClosureOnly, references that sit inside a closure body are ignored —
-// the "is it read during initialization?" question, as opposed to "is it read at
-// all?".
+// referencesBinder reports whether expr contains a reference to the binding
+// name introduces, at the requested position.
 //
 // The closure boundary is WalkSubExprs's RoleClosureBody, which marks the body
 // of every lambda, case-lambda clause and function-form define. That is the
 // honest boundary: WalkBindingRefs's depth counts only ESCAPING closures, and an
 // immediately-applied lambda's body is not an escaping closure but is still not
 // evaluated where it is written.
-func initReferences(expr validate.ValidatedExpr, name *syntax.SyntaxSymbol, outsideClosureOnly bool) bool {
+//
+// A set! target counts as a reference — a write reaches the same location a read
+// does, so a closure holding only a set! of the binder has still captured it.
+func referencesBinder(expr validate.ValidatedExpr, name *syntax.SyntaxSymbol, where refPosition) bool {
 	if expr == nil || name == nil {
 		return false
 	}
@@ -263,18 +365,18 @@ func initReferences(expr validate.ValidatedExpr, name *syntax.SyntaxSymbol, outs
 		if found || e == nil {
 			return
 		}
-		if outsideClosureOnly && inClosure {
-			return
-		}
+		counts := where == refAnywhere ||
+			(where == refInsideClosure && inClosure) ||
+			(where == refOutsideClosure && !inClosure)
 		sym, ok := e.(*validate.ValidatedSymbol)
 		if ok {
-			if sameBinder(name, sym.Symbol) {
+			if counts && sameBinder(name, sym.Symbol) {
 				found = true
 			}
 			return
 		}
 		setBang, ok := e.(*validate.ValidatedSetBang)
-		if ok && sameBinder(name, setBang.Name) {
+		if ok && counts && sameBinder(name, setBang.Name) {
 			found = true
 			return
 		}
@@ -283,6 +385,31 @@ func initReferences(expr validate.ValidatedExpr, name *syntax.SyntaxSymbol, outs
 		})
 	}
 	walk(expr, false)
+	return found
+}
+
+// assignsBinder reports whether expr contains a set! whose target is the binding
+// name introduces, at any closure depth.
+func assignsBinder(expr validate.ValidatedExpr, name *syntax.SyntaxSymbol) bool {
+	if expr == nil || name == nil {
+		return false
+	}
+	found := false
+	var walk func(e validate.ValidatedExpr)
+	walk = func(e validate.ValidatedExpr) {
+		if found || e == nil {
+			return
+		}
+		setBang, ok := e.(*validate.ValidatedSetBang)
+		if ok && sameBinder(name, setBang.Name) {
+			found = true
+			return
+		}
+		validate.WalkSubExprs(e, func(child validate.ValidatedExpr, _ validate.ChildRole) {
+			walk(child)
+		})
+	}
+	walk(expr)
 	return found
 }
 

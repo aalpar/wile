@@ -381,10 +381,8 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 	}
 
 	if li != nil {
-		p.AppendOperations(
-			machine.NewOperationStoreLocalByLocalIndexImmediate(li),
-			machine.NewOperationLoadVoid(),
-		)
+		p.emitLocalStore(li)
+		p.AppendOperations(machine.NewOperationLoadVoid())
 	} else {
 		// Must be global. Scope-aware, matching the local lookup above: once a
 		// macro-introduced binder is stored under its intro scope, a wildcard

@@ -177,12 +177,12 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *machine.NativeTemplate, fr frameReuse) error {
 	childCompiler := NewCompileTimeContinuation(tpl, childEnv, p.evaluator)
 	childCompiler.SetInlineThreshold(p.inlineThreshold)
-	// The flat-closure boxing analysis's assigned set is SHARED, not copied: an
-	// inner lambda's layout has to see a set! that sits in THIS body, which is
-	// outside the inner lambda entirely. Keys are frame-absolute, so no
+	// The boxing verdict is SHARED, not copied: a read arbitrarily deep inside
+	// this body has to agree with the emit that installed the cell, which may
+	// have been at any enclosing binder. Keys are frame-absolute, so no
 	// re-basing is needed across the descent.
-	p.ensureAssignedSlots()
-	childCompiler.assignedSlots = p.assignedSlots
+	p.ensureBoxedSlots()
+	childCompiler.boxedSlots = p.boxedSlots
 	// The unit's arity table follows the body down. Nearly every call to a
 	// same-unit define sits inside some procedure, so a table that stopped at the
 	// top level would never be consulted where it matters. Propagating it is safe
@@ -210,10 +210,17 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 		childCompiler.predeclareDefineFromValidatedRecursive(bodyExpr)
 	}
 
-	// Record this frame's set!-targeted slots before compiling anything under
-	// it. AFTER the pre-declare pass, so a set! of an internal define resolves;
-	// BEFORE the body, so a nested lambda's boxing layout can consult it.
-	childCompiler.recordAssignedSlots(body)
+	// Install the cells for this frame's captured-and-assigned slots — its
+	// parameters, its rest parameter, and its internal defines. AFTER the
+	// pre-declare pass, so a define's slot exists; BEFORE anything in the body
+	// is compiled, so every read and write below agrees, and so no closure can
+	// capture the slot before its cell is there.
+	//
+	// The ops land at pc 0..k, which is also where OpSelfTailCall jumps back to.
+	// That is load-bearing rather than incidental: the op rebinds the parameter
+	// slots in place, and re-entering here allocates a FRESH cell per iteration,
+	// so closures made in different iterations of a loop do not share one.
+	childCompiler.emitBoxSlots(childCompiler.markBoxedBinders(procBoxBinders(clause), body))
 
 	// Docstring: the validator has already extracted any leading string
 	// literal and stripped it from the body. Just read the field.

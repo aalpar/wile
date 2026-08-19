@@ -214,7 +214,7 @@ func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol, scopes []*
 			return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 				"compile define: binding %q not found in local environment", sym.Key)
 		}
-		p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
+		p.emitLocalStore(li)
 	} else {
 		// Global context (top-level): store to global environment.
 		// Global indices are stored in the literals pool since they're runtime values.

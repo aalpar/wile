@@ -745,6 +745,37 @@ func (p *MachineContext) Run() error {
 			}
 			mc.pc++
 
+		// --- Flat-closure boxing ---
+
+		case OpBoxSlot:
+			bd, err := mc.resolveLocalBinding(instr)
+			if err != nil {
+				return err
+			}
+			slot, depth := DecodeLocalIndex(instr.Arg)
+			err = mc.env.SetLocalValueBySlotDepth(slot, depth, values.NewBox(bd.Value()))
+			if err != nil {
+				return mc.WrapError(err, "")
+			}
+			mc.pc++
+
+		case OpStoreThroughBox:
+			box, err := mc.resolveBoxSlot(instr)
+			if err != nil {
+				return err
+			}
+			box.Value = mc.evals.Pop()
+			mc.pc++
+
+		case OpUnbox:
+			box, ok := mc.GetValue().(*values.Box)
+			if !ok {
+				return mc.WrapError(werr.ErrNotABox,
+					fmt.Sprintf("unbox: value register holds %T, not a box", mc.GetValue()))
+			}
+			mc.SetValue(box.Value)
+			mc.pc++
+
 		// --- Wave 4: fused push operations ---
 
 		case OpPushLiteral:
@@ -1400,6 +1431,26 @@ func (p *MachineContext) resolveLocalBinding(instr Instruction) (*environment.Bi
 			fmt.Sprintf("no such local binding %d:%d", slot, depth))
 	}
 	return bd, nil
+}
+
+// resolveBoxSlot reads the box installed in a local slot by OpBoxSlot.
+//
+// Both failures are compiler/VM disagreements, not user errors: the slot is an
+// immediate the emitter chose against a boxing set the same emitter fixed, and
+// every write to a boxed slot goes through here precisely so the slot keeps
+// holding the same cell.
+func (p *MachineContext) resolveBoxSlot(instr Instruction) (*values.Box, error) {
+	bd, err := p.resolveLocalBinding(instr)
+	if err != nil {
+		return nil, err
+	}
+	box, ok := bd.Value().(*values.Box)
+	if !ok {
+		slot, depth := DecodeLocalIndex(instr.Arg)
+		return nil, p.WrapError(werr.ErrNotABox,
+			fmt.Sprintf("local %d:%d holds %T, not a box", slot, depth, bd.Value()))
+	}
+	return box, nil
 }
 
 // Error creates a SchemeError with the current source location and stack

@@ -72,6 +72,14 @@ const (
 	OpLoadLocal
 	OpStoreLocal
 
+	// Flat-closure boxing: a captured-and-assigned local slot holds a
+	// *values.Box, so a closure that copies the slot still shares the cell.
+	// The three form one protocol — see operations_box.go.
+
+	OpBoxSlot         // Replace slot's contents with a fresh box holding them
+	OpStoreThroughBox // Pop a value and write it INTO the slot's box
+	OpUnbox           // Replace the value register with the box's contents
+
 	// Wave 4: fused push operations (Arg = same as unfused Load variant)
 
 	OpPushLiteral // LoadLiteral + Push
@@ -227,6 +235,9 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpReleaseEnvFrame:       {name: "ReleaseEnvFrame"},
 	OpLoadLocal:             {name: "LoadLocal", operandKind: OperandLocalIdx, writesValue: true},
 	OpStoreLocal:            {name: "StoreLocal", operandKind: OperandLocalIdx},
+	OpBoxSlot:               {name: "BoxSlot", operandKind: OperandLocalIdx},
+	OpStoreThroughBox:       {name: "StoreThroughBox", operandKind: OperandLocalIdx},
+	OpUnbox:                 {name: "Unbox", writesValue: true},
 	OpPushLiteral:           {name: "PushLiteral", operandKind: OperandLiteralIdx},
 	OpPushGlobal:            {name: "PushGlobal", operandKind: OperandLiteralIdx},
 	OpPushLocal:             {name: "PushLocal", operandKind: OperandLocalIdx},
