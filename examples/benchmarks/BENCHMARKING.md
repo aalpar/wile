@@ -227,26 +227,50 @@ tracking Wile against its own history. They are **not** the set to quote against
 another implementation, for the reason given under "Scope" above; use
 `make bench-larceny` for that.
 
-| Benchmark | Description | Expected Time (M4 Max) |
-|-----------|-------------|------------------------|
-| `tak.scm` | Takeuchi function | ~0.5s |
-| `takl.scm` | Takeuchi with lists | ~2s |
-| `ctak.scm` | Continuation-based Takeuchi | ~5s |
-| `cpstak.scm` | CPS Takeuchi | ~1s |
-| `fib.scm` | Fibonacci | ~0.3s |
-| `triangl.scm` | Double recursion | ~0.3s |
-| `sum.scm` | Recursive sum | ~5s |
-| `sumfp.scm` | Floating-point sum | ~1s |
-| `diviter.scm` | Iterative division | ~1s |
-| `divrec.scm` | Recursive division | ~1s |
-| `deriv.scm` | Symbolic differentiation | ~0.7s |
-| `ackermann.scm` | Ackermann function | ~2s |
-| `sieve.scm` | Sieve of Eratosthenes | ~5s |
-| `nqueens.scm` | N-Queens puzzle | ~3s |
-| `primes.scm` | Prime generation | ~2s |
-| `peval.scm` | Partial evaluation | ~0.2s |
+| Benchmark | Description | Iterations | Wall time |
+|-----------|-------------|-----------:|----------:|
+| `tak.scm` | Takeuchi function | 10 | 0.14s |
+| `takl.scm` | Takeuchi with lists | 10 | 0.50s |
+| `ctak.scm` | Continuation-based Takeuchi | 10 | 1.54s |
+| `cpstak.scm` | CPS Takeuchi | 10 | 0.29s |
+| `fib.scm` | Fibonacci | 10 | 0.34s |
+| `triangl.scm` | Double recursion | 100 | 0.05s |
+| `sum.scm` | Recursive sum | 15 | 0.04s |
+| `sumfp.scm` | Floating-point sum | 7 | 0.72s |
+| `diviter.scm` | Iterative division | 6000 | 1.97s |
+| `divrec.scm` | Recursive division | 2000 | 0.74s |
+| `deriv.scm` | Symbolic differentiation | 10000 | 0.13s |
+| `ackermann.scm` | Ackermann function | 5 | 0.45s |
+| `sieve.scm` | Sieve of Eratosthenes | 10 | 0.12s |
+| `nqueens.scm` | N-Queens puzzle | 2 | 1.53s |
+| `primes.scm` | Prime generation | 100 | 0.21s |
+| `peval.scm` | Partial evaluation | 100000 | 0.11s |
 
-Times are approximate and vary by hardware/implementation.
+**Provenance.** Measured 2026-08-20 on an Apple M4 Max (Mac16,5, 16 cores,
+macOS 26.6, Go 1.26.6), `wile` built from `8f323b4f`. Each figure is the median
+of 16 runs of the documented command,
+`./dist/wile -q --file examples/benchmarks/<name>.scm`. Medians are stable to
+about 1%, but the min-to-max range across those 16 runs is wide: 3-10% for
+fourteen benchmarks, 13% for `ackermann`, and **26% for `sum`**, whose 0.04s is
+mostly process startup. Do not read a single run of a short benchmark as a
+measurement.
+
+Two things to know before quoting a row:
+
+- **Iterations are not uniform**, and they are set per file. A wall time only
+  means something next to its iteration count: `peval` runs its workload 100,000
+  times in 0.11s, `nqueens` runs its twice in 1.53s.
+- **Wall time is the whole command**, so it includes process startup, stdlib
+  bootstrap, the warmup call, and the result check. That is why it exceeds the
+  `Total time:` line the benchmark prints for itself, and by a per-benchmark
+  amount rather than a constant: `ctak` spends 0.15s outside its own timer,
+  `tak` 0.03s. Use the program's own `Total time:` when comparing VM work;
+  use this column to know how long the command takes.
+
+Re-measure these when they drift. The previous version of this table was off by
+as much as 125x (it listed `sum` at ~5s against the 0.04s measured here, and
+`sieve` at ~5s against 0.12s), which is what happens to a table with no
+provenance line.
 
 ## Interpreting Results
 
