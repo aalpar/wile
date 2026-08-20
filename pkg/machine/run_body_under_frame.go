@@ -171,7 +171,33 @@ type goFrame struct {
 // envPooled=true is never any other frame's parent" — survives because the only
 // Go-level site that parents a lasting frame on a primitive's apply frame is
 // ClosureEnv's detached-env fallback, which clears the flag before we read it.
+//
+// THE TRANSFER IS REFUSED WHEN A CONTINUATION ALREADY HOLDS THE SAME FRAME, and
+// that guard is what makes "single owner" true rather than merely intended. The
+// comment above reasons from a primitive's apply frame, which applyForeign built
+// AFTER the caller's SaveContinuation — so p.cont.env is the CALLER's frame and
+// p.envPooled is the only token for p.env. applyParameter reaches here from the
+// VM's own apply path instead: a parameter object is not a foreign closure, so no
+// argument frame is built and p.env is still the caller's activation frame, which
+// p.cont already carries a token for. Transferring there produces two owners, and
+// both spend: the frame's restore hands the token back to the caller, whose tail
+// call releases through OpReleaseEnvFrame, and the caller's own continuation
+// releases the same frame again on return. Measured before the guard:
+// `(define (g p) (p 5) (p))` applied to a parameter WITH A CONVERTER released one
+// frame twice, handed it to the converter's finalizer, and read the converted
+// value back out of the callee slot — "expected a procedure, got 10".
+//
+// Checking p.cont alone is sufficient, not a sample: if p.cont.env differs from
+// p.env then p.env was acquired after p.cont was saved (mc.env changes only by an
+// Apply, which acquires a fresh frame, or by a restore, which would have popped
+// p.cont), so no deeper continuation can hold it either.
+//
+// Refusing costs the early release, never correctness: the frame is still
+// released, by whichever owner remains.
 func transferEnvOwnership(p *MachineContext, frame *MachineContinuation) {
+	if p.cont != nil && p.cont.env == p.env {
+		return
+	}
 	frame.envPooled = p.envPooled
 	p.envPooled = false
 }
