@@ -102,6 +102,28 @@ func opaqueRawSyntax(expr ValidatedExpr) (syntax.SyntaxValue, bool) {
 	return nil, false
 }
 
+// IsOpaqueSubtree reports whether an expression is an opaque subtree — the
+// boolean half of opaqueRawSyntax, without the payload.
+//
+// It is exported because the classification is needed OUTSIDE this package and
+// must not be re-derived there. pkg/machine/compilation's Pass 1 asks the same
+// question for a different reason: an opaque subtree may hold an outer
+// reference free-variable enumeration cannot name, so the closure keeps its
+// static link. That is "not enumerable ⇒ retain"; this package's own consumer
+// (bodyReferencesCaptureOperator) reads the same shapes as "not analysable ⇒
+// may capture".
+//
+// Two justifications, one classification, and the frame-release gates depend on
+// them agreeing: a closure whose template retains the lexical env pins the
+// creating frame, and the only thing keeping the release gates off such a body
+// is that the capture walk refuses it too. That agreement was previously an
+// unenforced coincidence between this function and a hand-copy in compilation.
+// Adding a third opaque shape to opaqueRawSyntax now moves both walks at once.
+func IsOpaqueSubtree(expr ValidatedExpr) bool {
+	_, ok := opaqueRawSyntax(expr)
+	return ok
+}
+
 // quasiDepthCode is the entry depth for a subtree that is ordinary CODE: a
 // passthrough body, an include, a cond-expand. Every symbol in it is a live
 // reference until a quote or quasiquote says otherwise.

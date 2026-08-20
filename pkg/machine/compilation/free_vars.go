@@ -335,9 +335,11 @@ func freeVarNames(fvs []freeVar) []*values.Symbol {
 //
 // WHY THIS GATES THE STATIC LINK. Pass 1 decides free-variable membership over
 // the VALIDATED tree, and an opaque subtree is raw syntax this package never
-// looks inside — pkg/internal/validate's own opaque_subtree.go documents the
-// same blindness and takes the same stance, that an un-analysed subtree counts
-// as unsafe. A `syntax` template's pattern-variable references are exactly such
+// looks inside. The shape classification is validate.IsOpaqueSubtree — the same
+// function validate's own capture walk asks, deliberately, so the two cannot
+// drift; opaque_subtree.go documents the shapes and the stance that an
+// un-analysed subtree counts as unsafe. A `syntax` template's pattern-variable
+// references are exactly such
 // a reference: they resolve at run time through a frame BindPatternVars pushed,
 // and they appear in no free layout because nothing walked them. Narrowing such
 // a closure's link to the lexical root makes that frame unreachable, which is
@@ -359,7 +361,7 @@ func bodyReadsThroughFrameChain(body []validate.ValidatedExpr) bool {
 		if found || e == nil {
 			return
 		}
-		if isOpaqueSubtree(e) {
+		if validate.IsOpaqueSubtree(e) {
 			found = true
 			return
 		}
@@ -371,24 +373,4 @@ func bodyReadsThroughFrameChain(body []validate.ValidatedExpr) bool {
 		walk(e)
 	}
 	return found
-}
-
-// isOpaqueSubtree mirrors validate's own classification of the two shapes that
-// reach compilation as un-analysed code.
-//
-// A *ValidatedLiteral is overloaded: genuine self-evaluating data (numbers,
-// strings, booleans, the empty list) AND passthrough forms. Only the latter
-// conceal code, and a form is a non-empty syntax pair — self-evaluating data
-// never is.
-func isOpaqueSubtree(expr validate.ValidatedExpr) bool {
-	_, isQuasi := expr.(*validate.ValidatedQuasiquote)
-	if isQuasi {
-		return true
-	}
-	lit, ok := expr.(*validate.ValidatedLiteral)
-	if !ok {
-		return false
-	}
-	pair, ok := lit.Value.(*syntax.SyntaxPair)
-	return ok && !pair.IsEmptyList()
 }

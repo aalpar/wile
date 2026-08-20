@@ -490,3 +490,51 @@ func typeSwitchTargets(t *testing.T, fn string) map[string]bool {
 	}
 	return q
 }
+
+// TestOpaqueSubtreeStampsRetainsLexicalEnv is the compilation half of the
+// Phase 2 ratchet whose validate half is opaque_subtree_ratchet_test.go.
+//
+// bodyReadsThroughFrameChain no longer carries its own copy of validate's
+// opacity classification; it asks validate.IsOpaqueSubtree, the same function
+// validate's capture walk asks. That is what makes "a body Pass 1 cannot
+// enumerate is also a body the frame-release gates refuse" an invariant rather
+// than an agreement between two hand-written mirrors.
+//
+// Driven through the real compiler on purpose: a direct call would not exercise
+// compile_closure.go's gate, and the stamp is what closure creation reads.
+func TestOpaqueSubtreeStampsRetainsLexicalEnv(t *testing.T) {
+	cases := []struct {
+		name string
+		code string
+		want bool
+	}{
+		{
+			// `(,x ,y) — an unquote can hold any expression, so the inner
+			// lambda's outer references are not enumerable.
+			name: "quasiquote",
+			code: "(lambda (x) (lambda (y) `(,x ,y)))",
+			want: true,
+		},
+		{
+			// A passthrough form parked in a ValidatedLiteral: compiled later,
+			// in its own validation unit, so nothing here walked it.
+			name: "cond-expand",
+			code: "(lambda (x) (lambda (y) (cond-expand (else (+ x y)))))",
+			want: true,
+		},
+		{
+			// The negative control. Without it the assertion would pass for a
+			// gate that stamped every template.
+			name: "transparent",
+			code: "(lambda (x) (lambda (y) (+ x y)))",
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			tpl := deepestTemplate(t, compileToTemplate(t, tc.code))
+			c.Assert(tpl.RetainsLexicalEnv(), qt.Equals, tc.want)
+		})
+	}
+}
