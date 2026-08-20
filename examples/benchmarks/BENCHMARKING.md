@@ -1,5 +1,42 @@
 # Benchmarking Guide
 
+## Scope: this suite is Wile-local
+
+**The `.scm` files in this directory are Wile-local variants, not the canonical
+Gabriel/Larceny sources.** They carry the canonical names and compute the same
+functions, but several have been rewritten or reduced, so a number produced here
+is **not** comparable to another implementation's published number for the
+benchmark of that name.
+
+Measured by compiling both sets and counting closure-creation sites
+(`MakeClosure` count / total free-vector width / widest vector / sites nested
+inside another closure):
+
+| benchmark | this directory | canonical (`benchmarks/larceny/src`) |
+|-----------|----------------|--------------------------------------|
+| `peval` | 10 / 8 / 3 / 1 | **74 / 57 / 5 / 14** |
+| `browse` | 5 / 5 / 5 / 0 | **36 / 47 / 4 / 8** |
+| `nqueens` | 8 / 17 / 5 / 1 | 8 / **7** / **2** / 1 |
+| `cpstak` | 10 / 17 / 5 / 3 | 9 / 21 / 6 / 3 |
+| `ctak` | 9 / 20 / 5 / 3 | 10 / 20 / 4 / 3 |
+| `tak`, `takl`, `deriv`, `sum`, `sumfp`, `triangl` | \- | within 1-2 of this directory's |
+
+`peval` and `browse` are reduced rewrites. `cpstak` hoists the recursive `tak`
+to top level where the canonical form keeps it as an internal define, which makes
+every closure in it one free variable narrower.
+
+Use this suite for **tracking Wile against itself** across commits, which is what
+it is good at: the files are stable, self-timing, and fast enough to run in a
+loop. For **cross-implementation comparison**, run the canonical suite instead:
+
+```bash
+make bench-larceny                                              # 1 iteration each
+make bench-larceny LARCENY_COUNT= LARCENY_BENCHMARKS=gabriel    # Gabriel group, original counts
+```
+
+That suite is the unmodified upstream source under `benchmarks/larceny/`, driven
+by `benchmarks/larceny/bench.sh`.
+
 ## Running Wile's Canonical Benchmarks
 
 ### Quick Run - All Canonical Benchmarks
@@ -28,7 +65,27 @@ cd examples/benchmarks
 
 ## Comparing Against Other Scheme Implementations
 
-### Option 1: Use the r7rs-benchmarks Suite (Recommended)
+Do not use this directory's `.scm` files for this. See "Scope" above.
+
+### Option 0: The in-repo Larceny suite (Recommended)
+
+`benchmarks/larceny/` holds the unmodified upstream r7rs-benchmarks sources, so
+no clone or wrapper is needed:
+
+```bash
+make bench-larceny                                            # 1 iteration each, all
+make bench-larceny LARCENY_BENCHMARKS="fib tak ack"           # named benchmarks
+make bench-larceny LARCENY_BENCHMARKS=quick                   # fast subset
+make bench-larceny LARCENY_COUNT= LARCENY_BENCHMARKS=gabriel  # Gabriel group, original counts
+```
+
+The variables are `LARCENY_COUNT` and `LARCENY_BENCHMARKS`. Bare `COUNT=` and
+`BENCHMARKS=` are **silently ignored** and you get the default run instead.
+
+Numbers from this suite are directly comparable to the published results linked
+under Option 3.
+
+### Option 1: Use the r7rs-benchmarks Suite
 
 The [ecraven/r7rs-benchmarks](https://github.com/ecraven/r7rs-benchmarks) repository provides a standardized benchmarking framework used across the Scheme community.
 
@@ -165,7 +222,10 @@ You can compare Wile's numbers against the published results for other implement
 
 ## Canonical Benchmark List
 
-For cross-implementation comparison, use **only these benchmarks**:
+These sixteen are the suite `make bench-gabriel` runs and the set to quote when
+tracking Wile against its own history. They are **not** the set to quote against
+another implementation, for the reason given under "Scope" above; use
+`make bench-larceny` for that.
 
 | Benchmark | Description | Expected Time (M4 Max) |
 |-----------|-------------|------------------------|

@@ -331,11 +331,13 @@ bench-extended: build
 
 # Run Larceny R7RS benchmark suite (standard cross-implementation benchmarks).
 # Uses single iteration by default for a quick check (~60s).
-# Override COUNT for full benchmark runs: make bench-larceny COUNT=
+# Override LARCENY_COUNT for full benchmark runs: make bench-larceny LARCENY_COUNT=
 #   make bench-larceny                   # Quick run (1 iteration each)
-#   make bench-larceny BENCHMARKS=quick  # Fast subset only
-#   make bench-larceny COUNT= BENCHMARKS=gabriel  # Gabriel group, original counts
-#   make bench-larceny BENCHMARKS="fib tak ack"   # Specific benchmarks
+#   make bench-larceny LARCENY_BENCHMARKS=quick  # Fast subset only
+#   make bench-larceny LARCENY_COUNT= LARCENY_BENCHMARKS=gabriel  # Gabriel group, original counts
+#   make bench-larceny LARCENY_BENCHMARKS="fib tak ack"   # Specific benchmarks
+# The recipe reads LARCENY_COUNT / LARCENY_BENCHMARKS. Bare COUNT= and
+# BENCHMARKS= are silently ignored and yield the default run.
 LARCENY_COUNT ?= 1
 LARCENY_BENCHMARKS ?= all
 
