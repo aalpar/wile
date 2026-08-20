@@ -268,11 +268,16 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	bodyCompiler.patternVars = patternVars
 	bodyCompiler.patternVarSyntax = patternVarSyntax
 	// The merge maps are shared so a reference from this clause body out into an
-	// enclosing merged `let` translates. `shape` is deliberately NOT set: a `let`
-	// here sits under the pattern-variable frame BindPatternVars pushes at run
-	// time, whose width this compiler does not own, so it must keep pushing a
-	// frame of its own. canMergeLet would refuse it on the walk anyway; leaving
-	// shape nil states the reason at the source rather than relying on that.
+	// enclosing merged `let` translates.
+	//
+	// The pattern-variable frame IS the shape for this clause body. It was not,
+	// for as long as its width was fixed by the pattern rather than owned here:
+	// BindPatternVars sized the runtime frame from its own PatternVars list, so a
+	// slot appended to the compile-time mirror had no runtime counterpart. The
+	// operation now carries the count (MergedSlots, written below), which is what
+	// takes ownership of the width and lets a `let` in a clause body merge like
+	// any other.
+	bodyCompiler.shape = bodyEnv
 	bodyCompiler.mergedShape = p.mergedShape
 	bodyCompiler.mergedSlot = p.mergedSlot
 	// Inherit the parent compiler's current source so that operations emitted
@@ -292,7 +297,8 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// variables, and CompileSyntaxPattern refuses it today
 	// (internal/match/syntax_adapter.go gates on *syntax.SyntaxPair), so the
 	// temptation arrives with the fix for that.
-	bodyCompiler.AppendOperations(NewOperationBindPatternVars(patternVars))
+	bindVars := NewOperationBindPatternVars(patternVars)
+	bodyCompiler.AppendOperations(bindVars)
 
 	// Create expander for the body environment (to expand macros like let)
 	bodyExpander := NewExpanderTimeContinuation(ctctx.ctx, bodyEnv, p.evaluator)
@@ -324,6 +330,15 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "error compiling body"))
 	}
+
+	// Everything that could merge into this frame has now done so. Reading the
+	// count off the compile-time frame rather than tracking it during the compile
+	// is what keeps the two sides equal by construction: the mirror IS the
+	// record, and a merge site that forgot to report itself cannot exist.
+	//
+	// The fender compiled ABOVE this point can also merge, which is why the count
+	// is taken once, after both.
+	bindVars.MergedSlots = mergedSlotsIn(bodyEnv)
 
 	// Restore the parent environment on the MATCHED path. There are three exit
 	// edges out of a clause, not two, and each needs its own accounting:
@@ -380,7 +395,10 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 func (p *CompileTimeContinuation) createPatternVarEnvironment(patternVars values.StringSet) *environment.EnvironmentFrame {
 	vars := slices.Sorted(maps.Keys(patternVars))
 
-	localEnv := environment.NewLocalEnvironment(len(patternVars))
+	// Empty, then append — see OperationBindPatternVars.Apply for why the two
+	// sides build the frame this way and why "however many appends have
+	// happened" is the only next-index description both can compute.
+	localEnv := environment.NewLocalEnvironment(0)
 	childEnv := environment.NewEnvironmentFrameWithParent(localEnv, p.env)
 
 	// Create bindings for each pattern variable in sorted order
@@ -389,7 +407,33 @@ func (p *CompileTimeContinuation) createPatternVarEnvironment(patternVars values
 		childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, nil, nil)
 	}
 
+	// Reserve the state slot the runtime frame appends next (bindSyntaxCaseState).
+	// It used to be absent here, correctly: nothing on this side named it, and
+	// the frame ended at the pattern variables. It has to exist now, because a
+	// merged `let` in the clause body takes the slot AFTER it and the two sides
+	// would otherwise disagree by one — the let's first slot would land on the
+	// form's own state.
+	//
+	// A pattern variable spelled exactly like the reserved key would dedup into
+	// this slot rather than reserve a new one; that program is already refused,
+	// at run time, by bindSyntaxCaseState.
+	childEnv.MaybeCreateLocalBinding(syntaxCaseStateKey, environment.BindingTypeVariable, nil, nil)
+
 	return childEnv
+}
+
+// mergedSlotsIn reports how many anonymous slots frame holds beyond the named
+// ones — the count a merged `let` in a clause body took out of it.
+//
+// copyCount is the boundary: MaybeCreateLocalBinding raises it to the new length
+// and AppendAnonymousSlot deliberately does not, so every named slot sits below
+// it and everything above is a merge.
+func mergedSlotsIn(frame *environment.EnvironmentFrame) int {
+	lenv := frame.LocalEnvironment()
+	if lenv == nil {
+		return 0
+	}
+	return len(lenv.Bindings()) - lenv.CopyCount()
 }
 
 // SyntaxCaseClause is defined in syntax_bridge_types.go in this package.

@@ -267,6 +267,16 @@ func (p *OperationSyntaxCaseMatch) EqualTo(other values.Value) bool {
 type OperationBindPatternVars struct {
 	machine.OperationBase
 	PatternVars []string // Ordered list for consistent indexing
+	// MergedSlots is how many anonymous slots a `let` in the clause body took
+	// out of this frame instead of pushing one of its own.
+	//
+	// WRITTEN AFTER THE OPERATION IS EMITTED, by compileSyntaxCaseClause, once
+	// the body it brackets has been compiled — the count is not knowable before
+	// then, and this operation is reached through the side table by pointer, so
+	// the emitted instruction sees the final value. Compare
+	// CompileValidatedLet's OpPushEnv operand patch, which solves the same
+	// problem for an operand that is packed into the instruction word.
+	MergedSlots int
 }
 
 func NewOperationBindPatternVars(patternVars values.StringSet) *OperationBindPatternVars {
@@ -287,8 +297,19 @@ func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.M
 		return nil, mc.WrapError(werr.ErrInternal, "syntax-case: state has no bindings (OperationSyntaxCaseMatch did not succeed?)")
 	}
 
-	// Create a new local environment frame with slots for pattern variables
-	localEnv := environment.NewLocalEnvironment(len(p.PatternVars))
+	// Create the pattern-variable frame EMPTY and let every slot be appended.
+	//
+	// NewLocalEnvironment(n) would prefix n void filler slots that nothing ever
+	// names — MaybeCreateLocalBinding appends, so the pattern variables land at
+	// n..2n-1 either way. The filler was harmless while the frame's layout was
+	// private to this operation and its compile-time mirror
+	// (createPatternVarEnvironment builds it the same way, which is why the two
+	// agreed). It stops being harmless once a merged `let` takes slots out of
+	// this frame: the two sides must agree on WHICH INDEX comes next, and
+	// "however many appends have happened" is the only description of that both
+	// can compute. Passing 0 makes the layout literally the append order:
+	// pattern variables, the state slot, then the clause body's merged slots.
+	localEnv := environment.NewLocalEnvironment(0)
 	childEnv := environment.NewEnvironmentFrameWithParent(localEnv, mc.EnvironmentFrame())
 
 	// Bind each pattern variable. MaybeCreateLocalBinding returns
@@ -341,6 +362,17 @@ func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.M
 		return nil, err
 	}
 
+	// The clause body's merged `let` slots, appended after the state slot so the
+	// indices match the compile-time mirror exactly. They are anonymous: the
+	// binder's NAME stays in the let's own compile-time frame, where scope-set
+	// resolution can still shadow it, and only the slot moves here.
+	lenv := childEnv.LocalEnvironment()
+	if lenv != nil {
+		for range p.MergedSlots {
+			lenv.AppendAnonymousSlot()
+		}
+	}
+
 	// Switch to the new environment. childEnv was heap-allocated (not from
 	// envFramePool), so clear envPooled to prevent RestoreAndRelease from
 	// recycling it. See vm_state.go envPooled write-site table. That is also
@@ -352,8 +384,15 @@ func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.M
 	return mc, nil
 }
 
+// EqualTo compares the frame this operation builds: which pattern variables it
+// binds AND how wide the frame ends up. Two clauses over the same pattern whose
+// bodies merge different numbers of `let` slots build different frames, so
+// MergedSlots is part of the identity rather than metadata.
 func (p *OperationBindPatternVars) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationBindPatternVars)
+	if ok && p != nil && v != nil && p.MergedSlots != v.MergedSlots {
+		return false
+	}
 	return machine.SliceMatches(p, v, ok,
 		func(op *OperationBindPatternVars) []string {
 			return op.PatternVars
