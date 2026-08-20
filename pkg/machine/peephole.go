@@ -229,6 +229,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 		return
 	}
 	targets := branchTargets(code)
+	depths := evalStackDepths(code)
 
 	// Track PullApply indices already claimed by a fusion to prevent
 	// the same PullApply from being matched by both non-tail and tail
@@ -332,13 +333,21 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			continue
 		}
 
-		// Tail pattern: PushCachedBinding (not preceded by SaveContinuation) ... PullApply
+		// Tail pattern: PushCachedBinding opening an empty group ... PullApply
 		if code[i].Op == OpPushCachedBinding {
-			// The PushCachedBinding must be the callee (first push in the
-			// call sequence). If preceded by SaveContinuation, the non-tail
-			// pattern handles it. If preceded by a push op, this
-			// PushCachedBinding is an argument, not the callee — skip it.
-			if i > 0 && (code[i-1].Op == OpSaveContinuation || isPushOp(code[i-1].Op)) {
+			// Preceded by SaveContinuation: the non-tail pattern above owns
+			// this sequence. Skipping it here is DEDUPLICATION, not a
+			// soundness condition — the depth test below passes there too,
+			// since SaveContinuation hands the callee an empty stack, and both
+			// passes would then delete the same push.
+			if i > 0 && code[i-1].Op == OpSaveContinuation {
+				continue
+			}
+			// The PushCachedBinding must be the CALLEE, which OpPullApply reads
+			// from the BOTTOM of the eval stack — so the stack must be empty
+			// here. This subsumes the old "predecessor is not a push" test and
+			// closes the gap that test left; see eval_depth.go.
+			if !evalStackEmptyAt(depths, i) {
 				continue
 			}
 
@@ -455,6 +464,7 @@ func fuseCallGeneric(tpl *NativeTemplate, plan *EditPlan) {
 		return
 	}
 	targets := branchTargets(code)
+	depths := evalStackDepths(code)
 
 	for i := range len(code) {
 		// Non-tail pattern: SaveContinuation + PushLocal/PushCachedBinding ... PullApply
@@ -506,12 +516,22 @@ func fuseCallGeneric(tpl *NativeTemplate, plan *EditPlan) {
 			continue
 		}
 
-		// Tail pattern: PushLocal/PushCachedBinding (not preceded by SaveCont/push) ... PullApply
+		// Tail pattern: PushLocal/PushCachedBinding opening an empty group ... PullApply
 		calleeOp := calleeToCallOp[code[i].Op]
 		if calleeOp == OpInvalid {
 			continue
 		}
-		if i > 0 && (code[i-1].Op == OpSaveContinuation || isPushOp(code[i-1].Op)) {
+		// Preceded by SaveContinuation: the non-tail pattern above owns it.
+		// Deduplication, not soundness — see the same guard in
+		// fuseCallForeignCached.
+		if i > 0 && code[i-1].Op == OpSaveContinuation {
+			continue
+		}
+		// The callee is what OpPullApply pulls from the BOTTOM of the eval
+		// stack, so this push is it only when the stack is empty here. This
+		// subsumes the old "predecessor is not a push" test and closes the gap
+		// that test left; see eval_depth.go.
+		if !evalStackEmptyAt(depths, i) {
 			continue
 		}
 
