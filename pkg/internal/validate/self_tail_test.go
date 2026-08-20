@@ -122,12 +122,23 @@ func TestBodyIsSelfTailReusable(t *testing.T) {
 			self: "bad", want: false,
 		},
 		{
-			name: "negative: escaping lambda in body",
+			// Was a negative until phase 8 of the flat-closure arc. A LINKED
+			// closure held its creating frame as its static link, so a lambda
+			// handed to `save` could outlive the call while still reaching the
+			// parameter frame. A flat closure's link is a structural root and its
+			// free variables are copied at OpMakeClosure, so it never reaches that
+			// frame — the clause that refused this had no remaining reason.
+			//
+			// This case being POSITIVE is the phase-8 assertion at the unit level;
+			// pkg/wile's armedSelfTailSitesBaseline is the same claim end-to-end,
+			// and pkg/wile/self_tail_box_test.go pins the per-iteration values a
+			// captured loop parameter now has to produce.
+			name: "positive: escaping lambda in body (flat closures do not pin the frame)",
 			proc: fnWith("esc", params("i"),
 				ifx(call(symRef("done?"), symRef("i")),
 					symRef("i"),
 					call(symRef("esc"), call(symRef("save"), lam(symRef("i")))))),
-			self: "esc", want: false,
+			self: "esc", want: true,
 		},
 		{
 			name: "negative: variadic params (no flat slot rebind)",

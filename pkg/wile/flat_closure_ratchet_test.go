@@ -50,7 +50,12 @@ import (
 //
 // Measured, not chosen. Do not update it to make a test pass: state which phase
 // moved it, and in which direction the plan says that phase may move it.
-const armedSelfTailSitesBaseline = 3
+//
+// Moved 3 -> 4 in phase 8, which drops the escaping-closure clause from
+// bodyIsSelfTailReusable. The mover is "closure per iteration, map OUTSIDE the
+// loop", and its sibling "map INSIDE the loop" staying at 0 is what says the
+// widening did not also reach past bodyCalleesAllCaptureSafe.
+const armedSelfTailSitesBaseline = 4
 
 // boxedFreeSlotsBaseline is the number of free-vector slots
 // flatClosureRatchetCorpus boxes.

@@ -481,19 +481,35 @@ func letMutatesName(v *ValidatedLet, name string) bool {
 //  2. The body references no capture operator (bodyReferencesCaptureOperator): a
 //     captured continuation pins the frame, so reusing it would corrupt the
 //     continuation (the failure mode that sank the runtime recycler).
-//  3. The body creates no escaping closure (bodyCreatesEscapingClosure): an
-//     escaping closure parents the frame and may outlive the call.
-//  4. There is at least one call to selfName in TAIL position at depth 0 — mc.env
+//  3. There is at least one call to selfName in TAIL position at depth 0 — mc.env
 //     at that call IS the parameter frame, not nested inside a let/lambda that
 //     pushed an intermediate frame (v1 restriction) — with arity == len(Required).
 //
+// THE ESCAPING-CLOSURE CLAUSE IS GONE, and flat closures are why. It read "the
+// body creates no escaping closure (bodyCreatesEscapingClosure): an escaping
+// closure parents the frame and may outlive the call" — true of a LINKED closure,
+// which held its creating frame as its static link. A flat closure's link is a
+// structural root (parent == nil) and its free variables are copied into a vector
+// at OpMakeClosure, so it does not reach the parameter frame at all and cannot
+// outlive anything by holding it. TestFlatClosureDoesNotPinItsCreatorsFrame
+// asserts that property directly; this clause was its last consumer here.
+//
+// The predicate is NOT deleted — three frame-RELEASE gates in this file still
+// call it, and release has not been re-derived under flat closures. This is the
+// one caller the flat-closure arc discharges.
+//
 // SOUNDNESS of ignoring the rest. Reuse fires ONLY at the depth-0 tail self calls
-// (per-site in codegen). With (2) and (3) excluded, every SaveContinuation in the
-// body is balanced (LIFO, restored on return), so at a depth-0 tail self call the
-// frame is reachable only through mc.env — its args are already evaluated onto the
-// stack and nothing executes after. Therefore non-tail self calls, self used as a
-// value, and depth>0 tail self calls are neither required nor disqualifying: they
-// just don't satisfy (4), so a body containing only such forms returns false.
+// (per-site in codegen). With (2) excluded, every SaveContinuation in the body is
+// balanced (LIFO, restored on return), so at a depth-0 tail self call the frame is
+// reachable only through mc.env — its args are already evaluated onto the stack
+// and nothing executes after. Therefore non-tail self calls, self used as a value,
+// and depth>0 tail self calls are neither required nor disqualifying: they just
+// don't satisfy (3), so a body containing only such forms returns false.
+//
+// A closure the body BUILT is not a second route to the frame, per the paragraph
+// above; a boxed loop parameter it captured gets a fresh cell per iteration
+// because OpBoxSlot sits at pc 0..k, inside the window OpSelfTailCall re-enters
+// (pkg/wile/self_tail_box_test.go pins the resulting values).
 //
 // selfName is the closure's own bound name (a define name, or a named-let loop
 // variable) as a symbol Key. isCaptureOp is the resolved capture-operator identity
@@ -518,9 +534,9 @@ func bodyIsSelfTailReusable(
 	if bodyReferencesCaptureOperator(body, isCaptureOp) {
 		return false
 	}
-	if bodyCreatesEscapingClosure(body) {
-		return false
-	}
+	// No escaping-closure clause: a flat closure does not parent the frame. See
+	// the doc comment.
+	//
 	// Seed the shadow set with the parameter names: a parameter named the same as
 	// the function shadows the self reference, so a call to it is not a self-call
 	// (e.g. (define (loop loop) (loop x)) invokes the parameter).
