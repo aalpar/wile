@@ -28,23 +28,72 @@ import (
 // Note: LocalEnvironmentFrame has no hierarchy of its own; the hierarchy is
 // managed by EnvironmentFrame via its parent field.
 type LocalEnvironmentFrame struct {
-	keys       map[values.Symbol][]int
-	bindings   []Binding
+	keys     map[values.Symbol][]int
+	bindings []Binding
+	// copyCount is how many LEADING slots copyForApplyInto transfers when this
+	// frame is a template's shape. It is not the parameter count: internal
+	// defines extend the shape too, and they carry a binding type and a
+	// *BindingMeta that an apply frame must see.
+	//
+	// The slots it excludes are exactly the anonymous ones AppendAnonymousSlot
+	// mints for a merged `let`. Their shape entry is Binding{value: Void} and
+	// nothing else — no name, no type, no meta — so copying one writes the same
+	// bytes voidBinding already holds, and the destination's backing array is
+	// void-filled at every point it can reach copyForApplyInto (see
+	// makeVoidBindings).
+	//
+	// Both binder-creating methods raise it to the new length and
+	// AppendAnonymousSlot does not, so every NAMED slot sits below it. That is
+	// the whole invariant: the excluded region need not be contiguous with the
+	// end of the merge, only free of named slots. A merged `let` that opens
+	// before a body define is compiled therefore keeps its slots copied rather
+	// than corrupting the define's, which is the safe direction.
+	//
+	// int32, not int, and sized by the struct rather than by the domain: it lands
+	// in padding LocalEnvironmentFrame already had, so the field is free. An int
+	// would take EnvironmentFrame from 80 to 88 bytes and across a size class,
+	// costing every unpooled apply frame 16 bytes to save a 40-byte copy. A slot
+	// index is already bounded far below this by EncodeLocalIndex's int16 pack.
+	copyCount  int32
 	keysShared bool // true when keys map is shared with another frame (CoW)
+}
+
+// voidBinding is the state every unwritten binding slot holds: #!void, no type,
+// no cell, no metadata. It is what a fresh slot means, and — since it holds no
+// heap pointer, values.Void being an empty struct — filling with it releases
+// references exactly as zeroing does.
+var voidBinding = Binding{value: values.Void, bindingType: BindingTypeUnknown}
+
+// makeVoidBindings allocates n slots and fills the whole backing array,
+// capacity included, with voidBinding.
+//
+// Capacity rather than length because the array outlives this call: a pooled
+// frame reslices into its spare capacity on a later, wider apply, and
+// copyForApplyInto deliberately does not write the slots past copyCount. A nil
+// values.Value reaching one of those is not a stale value, it is a Go nil that
+// OpLoadLocal would hand to the value register.
+func makeVoidBindings(n int) []Binding {
+	q := make([]Binding, n)
+	fillVoid(q[:cap(q)])
+	return q
+}
+
+// fillVoid resets every slot of bs to voidBinding.
+func fillVoid(bs []Binding) {
+	for i := range bs {
+		bs[i] = voidBinding
+	}
 }
 
 // NewLocalEnvironment creates a new local environment frame with pre-allocated
 // slots for the given parameter count. Each slot is initialized with a void
 // binding of unknown type.
 func NewLocalEnvironment(pcnt int) *LocalEnvironmentFrame {
-	q := &LocalEnvironmentFrame{
-		keys:     make(map[values.Symbol][]int, pcnt),
-		bindings: make([]Binding, pcnt),
+	return &LocalEnvironmentFrame{
+		keys:      make(map[values.Symbol][]int, pcnt),
+		bindings:  makeVoidBindings(pcnt),
+		copyCount: int32(pcnt),
 	}
-	for i := range pcnt {
-		q.bindings[i] = Binding{value: values.Void, bindingType: BindingTypeUnknown}
-	}
-	return q
 }
 
 // Bindings returns the slice of bindings in this local environment.
@@ -91,6 +140,7 @@ func (p *LocalEnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt Bindin
 	i := len(p.bindings)
 	p.keys[*key] = []int{i}
 	p.bindings = append(p.bindings, Binding{value: values.Void, bindingType: bt})
+	p.copyCount = int32(len(p.bindings))
 	return &LocalIndex{i, 0}, true
 }
 
@@ -147,6 +197,7 @@ func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
 		b.meta = &BindingMeta{Scopes: scopes, Source: source}
 	}
 	p.bindings = append(p.bindings, b)
+	p.copyCount = int32(len(p.bindings))
 	return NewLocalIndex(i, 0), true
 }
 
@@ -163,9 +214,16 @@ func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
 //
 // The slot is initialized to Void rather than the zero Binding, so a read that
 // precedes any store sees `#!void` the way a freshly pushed frame's slot does.
+// A letrec forward reference and OpBoxSlot both perform that read, so it is a
+// requirement rather than tidiness.
+//
+// copyCount is deliberately NOT raised: voidBinding is bit-for-bit what this
+// appends, so an apply frame reaches the same state by not copying the slot at
+// all. That exemption is the whole point of merging a `let` into the shape —
+// the slots exist for free at compile time and cost nothing per call.
 func (p *LocalEnvironmentFrame) AppendAnonymousSlot() int {
 	i := len(p.bindings)
-	p.bindings = append(p.bindings, Binding{value: values.Void, bindingType: BindingTypeUnknown})
+	p.bindings = append(p.bindings, voidBinding)
 	return i
 }
 
@@ -211,6 +269,14 @@ func (p *LocalEnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) er
 // instead of allocated. This eliminates the per-call make([]Binding, n)
 // that dominates allocation profiles in recursive workloads.
 //
+// Only p.copyCount slots are transferred, not all n: the tail is the merged
+// `let` slots, which are voidBinding in the shape and voidBinding already in
+// dst's backing array. The reslice past them is sound only because EVERY array
+// a dst can present is void-filled to its capacity — makeVoidBindings on the
+// allocating paths, ResetForPool on the recycling one. Reslicing onto an array
+// that was merely zeroed would hand a letrec forward reference a nil
+// values.Value instead of #!void.
+//
 // Bindings copy as whole structs, so the destination shares each source
 // binding's *BindingMeta pointer. A local binding's meta is mutated IN PLACE
 // (UpdateMeta) rather than published copy-on-write the way a global's is, so
@@ -219,14 +285,29 @@ func (p *LocalEnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) er
 // expander_body / letrec_semantics / compile_define — and none of them runs on
 // an apply frame. A compile-time writer that reached one would stamp the
 // closure's own compiled frame through the shared pointer.
-func (p *LocalEnvironmentFrame) copyForApplyInto(dst *LocalEnvironmentFrame) {
+//
+// Returns the number of slots transferred, for the VM's BindingsCopied counter.
+func (p *LocalEnvironmentFrame) copyForApplyInto(dst *LocalEnvironmentFrame) int {
 	dst.keys = p.keys
 	dst.keysShared = true
 	n := len(p.bindings)
 	if cap(dst.bindings) >= n {
 		dst.bindings = dst.bindings[:n]
 	} else {
-		dst.bindings = make([]Binding, n)
+		dst.bindings = makeVoidBindings(n)
 	}
-	copy(dst.bindings, p.bindings)
+	copy(dst.bindings, p.bindings[:p.copyCount])
+	// An apply frame is a runtime frame: every one of its slots holds a live
+	// value the instant the body starts storing into the merged region, so it
+	// has no exempt tail of its own. Saying so keeps the field's meaning true of
+	// every frame rather than only of shapes.
+	dst.copyCount = int32(n)
+	return int(p.copyCount)
+}
+
+// CopyCount returns how many of this frame's slots copyForApplyInto transfers.
+// See the field comment: the difference from len(Bindings()) is the merged
+// `let` slots, which cost nothing per call.
+func (p *LocalEnvironmentFrame) CopyCount() int {
+	return int(p.copyCount)
 }

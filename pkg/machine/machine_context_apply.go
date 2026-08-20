@@ -68,7 +68,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	// P=1, +1.23% and +1.22% against master respectively, n=6 each). Do not cite
 	// this line as a hot-path win.
 	env := p.acquireEnvFrame()
-	tpl.Shape().InitApplyFrameWithParent(env, parent)
+	copied := tpl.Shape().InitApplyFrameWithParent(env, parent)
 	// A zero-parameter closure over a frame with no local environment copies to
 	// an apply frame that has none either, so LocalEnvironment can be nil here.
 	// Every closure used to have parameters, which is why the unguarded form
@@ -80,7 +80,11 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	}
 	p.envPooled = true
 	p.counters.EnvsCopied++
-	p.counters.BindingsCopied += uint64(len(bnds))
+	// The frame is len(bnds) wide but only `copied` slots were transferred — the
+	// rest are a merged `let`'s, which the shape carries as #!void and the pooled
+	// backing array already holds. Counting the width instead would report the
+	// merge as a copy regression it is not.
+	p.counters.BindingsCopied += uint64(copied)
 
 	bindArgs(bnds, vs, l, tpl.IsVariadic(), nil)
 
@@ -119,11 +123,11 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	// Acquire a fresh frame to prevent concurrent SRFI-18 threads from
 	// racing on shared binding slots when calling the same ForeignClosure.
 	env := p.acquireEnvFrame()
-	fcls.env.InitApplyFrame(env)
+	copied := fcls.env.InitApplyFrame(env)
 	bnds := env.LocalEnvironment().Bindings()
 	p.envPooled = true
 	p.counters.EnvsCopied++
-	p.counters.BindingsCopied += uint64(len(bnds))
+	p.counters.BindingsCopied += uint64(copied)
 
 	bindArgs(bnds, vs, l, fcls.isVariadic, p.buildRestArg)
 

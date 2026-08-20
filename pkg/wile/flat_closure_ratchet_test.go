@@ -540,3 +540,106 @@ func TestLetFrameCorpusValues(t *testing.T) {
 		}
 	}
 }
+
+// mergedSlotsBaseline is how many binding slots letFrameCorpus's merged `let`s
+// add to their enclosing shapes — the width the parameter frame grew by, and
+// therefore the per-apply copy the merge would cost if copyForApplyInto did not
+// reslice past it.
+//
+// Measured, not chosen. It is the copy-side twin of pushEnvSitesBaseline: that
+// one says the frames are gone, this one says their slots are free. Fork F4 of
+// plans/2026-08-14-oppushenv-frame-pooling-scope.local.md decided the exemption;
+// dropping it leaves every value assertion in this file passing while
+// BindingsCopied/EnvsCopied climbs (measured +6.4% on schelog-zebra).
+//
+// 13 exempt against 9 copied: over this corpus the merged slots are the MAJORITY
+// of shape width, which is why the exemption is worth a field on the frame.
+const mergedSlotsBaseline = 13
+
+// shapeWidthAndCopyCount sums, over a template tree, each shape's slot count and
+// the leading prefix copyForApplyInto actually transfers. Their difference is
+// the merged-`let` population.
+func shapeWidthAndCopyCount(
+	tpl *machine.NativeTemplate,
+	seen map[*machine.NativeTemplate]bool,
+) (int, int) {
+	if tpl == nil || seen[tpl] {
+		return 0, 0
+	}
+	seen[tpl] = true
+	width, copied := 0, 0
+	shape := tpl.Shape()
+	if shape != nil {
+		lenv := shape.LocalEnvironment()
+		if lenv != nil {
+			width += len(lenv.Bindings())
+			copied += lenv.CopyCount()
+		}
+	}
+	for _, lit := range tpl.Literals() {
+		sub, ok := lit.(*machine.NativeTemplate)
+		if ok {
+			w, c := shapeWidthAndCopyCount(sub, seen)
+			width += w
+			copied += c
+		}
+	}
+	return width, copied
+}
+
+// TestLetFrameMergeSlotsAreExemptFromApplyCopy pins that merged `let` slots
+// widen the shape without widening the per-apply copy.
+func TestLetFrameMergeSlotsAreExemptFromApplyCopy(t *testing.T) {
+	tpls := compileLetFrameCorpus(t)
+	width, copied := 0, 0
+	for i, tpl := range tpls {
+		w, c := shapeWidthAndCopyCount(tpl, map[*machine.NativeTemplate]bool{})
+		t.Logf("%-44s width=%d copied=%d exempt=%d", letFrameCorpus[i].name, w, c, w-c)
+		width += w
+		copied += c
+	}
+	if width-copied != mergedSlotsBaseline {
+		t.Errorf("exempt slots = %d (width %d, copied %d), want %d; if this was "+
+			"intended, update mergedSlotsBaseline AND say which phase moved it",
+			width-copied, width, copied, mergedSlotsBaseline)
+	}
+	if copied == 0 {
+		t.Errorf("copied = 0: the exemption swallowed the parameters too")
+	}
+}
+
+// TestMergedLetSlotReadsVoidAfterRecycling is the correctness arm of the
+// exemption. An exempt slot is never written by the apply copy, so whatever the
+// pooled frame's backing array holds IS what a read before the `let`'s own store
+// sees. A letrec forward reference is that read.
+//
+// The frame this exercises has been recycled: `dirty` writes the same slot
+// indices first, so a reset that merely ZEROED would leave a nil values.Value
+// and the probe would fail with "expected 1 value, got 0" rather than #!void.
+func TestMergedLetSlotReadsVoidAfterRecycling(t *testing.T) {
+	ctx := context.Background()
+	engine, err := NewEngine(ctx)
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	got, err := engine.EvalMultiple(ctx, `
+(define (dirty n)
+  (let ((x n) (y (* n 2)) (z (* n 3)))
+    (+ x y z)))
+(define (probe)
+  (letrec ((a b) (b 1))
+    (list a b)))
+(define (churn i)
+  (if (= i 0) 'done (churn (- i 1))))
+(dirty 5)
+(churn 50)
+(map dirty '(1 2 3 4 5))
+(probe)
+`)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	if got.SchemeString() != "(#<void> 1)" {
+		t.Errorf("probe = %s, want (#<void> 1)", got.SchemeString())
+	}
+}

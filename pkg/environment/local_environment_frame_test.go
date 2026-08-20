@@ -169,3 +169,58 @@ func TestCopyForApplyInto_ConcurrentSourceRaceFree(t *testing.T) {
 	qt.Assert(t, len(le.Keys()), qt.Equals, 2)
 	qt.Assert(t, le.keysShared, qt.IsFalse)
 }
+
+// TestCopyForApplyInto_SkipsAnonymousSlots pins the merged-`let` exemption: a
+// slot minted by AppendAnonymousSlot is not transferred, and the destination
+// reads it as #!void anyway because its backing array was void-filled.
+//
+// Both halves matter. Dropping the exemption re-introduces the per-apply copy
+// the merge exists to avoid; keeping it over a merely ZEROED array hands a
+// letrec forward reference a nil values.Value, which surfaces as
+// "expected 1 value, got 0" rather than #!void.
+func TestCopyForApplyInto_SkipsAnonymousSlots(t *testing.T) {
+	le := NewLocalEnvironment(1)
+	le.MaybeCreateLocalBinding(values.NewSymbol("d"), BindingTypeVariable, nil, nil)
+	anon := le.AppendAnonymousSlot()
+
+	qt.Assert(t, len(le.Bindings()), qt.Equals, 3)
+	qt.Assert(t, le.CopyCount(), qt.Equals, 2)
+	qt.Assert(t, anon, qt.Equals, 2)
+
+	// A destination the pool would hand out: capacity void-filled, length 0.
+	var dst EnvironmentFrame
+	dst.PreAllocateBindings(4)
+
+	copied := le.copyForApplyInto(&dst.local)
+	qt.Assert(t, copied, qt.Equals, 2)
+	qt.Assert(t, len(dst.local.Bindings()), qt.Equals, 3)
+	qt.Assert(t, dst.local.Bindings()[anon].Value(), valuestest.SchemeEquals, values.Void)
+
+	// An apply frame has no exempt tail of its own — every slot is live.
+	qt.Assert(t, dst.local.CopyCount(), qt.Equals, 3)
+}
+
+// TestResetForPool_RestoresVoidNotNil is the recycling half of the invariant
+// above: a slot the previous activation wrote must come back as #!void, because
+// the next copyForApplyInto reslices onto it without writing.
+func TestResetForPool_RestoresVoidNotNil(t *testing.T) {
+	le := NewLocalEnvironment(1)
+	anon := le.AppendAnonymousSlot()
+
+	var f EnvironmentFrame
+	f.PreAllocateBindings(4)
+	le.copyForApplyInto(&f.local)
+	f.local.Bindings()[anon].SetValue(values.NewInteger(7))
+
+	f.ResetForPool()
+	full := f.LocalBindingsSlice()[:cap(f.LocalBindingsSlice())]
+	for i := range full {
+		qt.Assert(t, full[i].Value(), valuestest.SchemeEquals, values.Void)
+		qt.Assert(t, full[i].BindingType(), qt.Equals, BindingTypeUnknown)
+		qt.Assert(t, full[i].Meta(), qt.IsNil)
+	}
+
+	// And the reslice after the reset sees void, not the stale 7.
+	le.copyForApplyInto(&f.local)
+	qt.Assert(t, f.local.Bindings()[anon].Value(), valuestest.SchemeEquals, values.Void)
+}

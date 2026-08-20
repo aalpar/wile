@@ -211,8 +211,8 @@ func (p *EnvironmentFrame) NewApplyFrame() *EnvironmentFrame {
 // InitApplyFrame populates dst from p's closure environment without allocating
 // a new EnvironmentFrame. The caller is responsible for providing dst (e.g.
 // from a pool). This is the pooling-friendly counterpart of NewApplyFrame.
-func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
-	p.InitApplyFrameWithParent(dst, p.parent)
+func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) int {
+	return p.InitApplyFrameWithParent(dst, p.parent)
 }
 
 // InitApplyFrameWithParent is InitApplyFrame with the runtime parent supplied
@@ -225,7 +225,14 @@ func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
 //
 // Only p.local is read off p. Everything else (global, phase, namespace) comes
 // from parent, which is why substituting a different parent is sound.
-func (p *EnvironmentFrame) InitApplyFrameWithParent(dst *EnvironmentFrame, parent *EnvironmentFrame) {
+//
+// Returns how many binding slots were actually transferred, which is p's
+// copyCount and not dst's width — the difference is the merged `let` slots
+// copyForApplyInto reslices past. The VM's BindingsCopied counter takes it from
+// here rather than measuring len(dst.Bindings()) so that the meter keeps naming
+// work done rather than frame width; it is already in a register at the copy, so
+// returning it costs the hot path nothing.
+func (p *EnvironmentFrame) InitApplyFrameWithParent(dst *EnvironmentFrame, parent *EnvironmentFrame) int {
 	if parent == nil {
 		panic(werr.WrapForeignErrorf(
 			werr.ErrNilParentEnvironment,
@@ -237,7 +244,7 @@ func (p *EnvironmentFrame) InitApplyFrameWithParent(dst *EnvironmentFrame, paren
 	dst.phaseLevel = parent.phaseLevel
 	dst.phases = parent.phases
 	dst.namespace = parent.namespace
-	p.local.copyForApplyInto(&dst.local)
+	return p.local.copyForApplyInto(&dst.local)
 }
 
 // ResetForPool clears the EnvironmentFrame for return to the FreeList while
@@ -248,12 +255,17 @@ func (p *EnvironmentFrame) InitApplyFrameWithParent(dst *EnvironmentFrame, paren
 // After reset, the frame is a valid zero-value EnvironmentFrame whose
 // local.bindings has cap > 0 but len == 0. The next copyForApplyInto call
 // will reslice instead of allocating when cap >= n.
+//
+// The fill is voidBinding, not the zero Binding, and that is a correctness
+// requirement rather than a nicety: copyForApplyInto reslices past a shape's
+// merged `let` slots without writing them, so whatever this leaves in the
+// capacity IS what those slots hold on the next call. voidBinding drops every
+// reference the same way zeroing does — values.Void is an empty struct — so the
+// GC argument above is unaffected.
 func (p *EnvironmentFrame) ResetForPool() {
 	bindings := p.local.bindings
 	full := bindings[:cap(bindings)]
-	for i := range full {
-		full[i] = Binding{}
-	}
+	fillVoid(full)
 	*p = EnvironmentFrame{}
 	p.local.bindings = full[:0]
 }
@@ -263,11 +275,15 @@ func (p *EnvironmentFrame) ResetForPool() {
 // have sufficient capacity for copyForApplyInto to reslice instead of allocate.
 // Must only be called on freshly constructed frames (before any other use).
 // n must be non-negative; negative values are clamped to 0.
+//
+// The capacity is void-filled, for the reason ResetForPool gives: a frame that
+// has never been recycled still gets resliced onto, and copyForApplyInto does
+// not write the merged-`let` tail.
 func (p *EnvironmentFrame) PreAllocateBindings(n int) {
 	if n < 0 {
 		n = 0
 	}
-	p.local.bindings = make([]Binding, 0, n)
+	p.local.bindings = makeVoidBindings(n)[:0]
 }
 
 // LocalBindingsSlice returns the raw local bindings slice, bypassing the
