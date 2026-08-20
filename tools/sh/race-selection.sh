@@ -44,12 +44,25 @@ set -euo pipefail
 # hung package and NOT the run. The run is bounded by timeout-minutes in
 # .github/workflows/race.yml, which is sized to clear this one firing.
 #
-# 8m is ~3x the slowest package: cmd/wile, 93s local and ~2m30s projected on a
-# runner (it was 3m46s there before its production-rule exclusion), with the next
-# slowest at 37s. So no legitimate package can trip it. It stays deliberately short
-# because a `go test` timeout dumps every goroutine, and that dump is the whole
-# diagnostic when something deadlocks.
-TIMEOUT="8m"
+# 30m, raised from 8m on 2026-08-19 by request. 8m was ~3x the slowest package
+# (cmd/wile, 93s local and ~2m30s projected on a runner, next slowest 37s), sized
+# so no legitimate package could trip it.
+#
+# The current selection does not need the headroom and nothing here is near either
+# bound. What it buys is room for a slow test that is not a concurrency test at
+# all: selection is FILE-level, so one `bears_concurrency` or `spawns_in_production`
+# hit takes every Test in that file or package with it. pkg/wile's
+# TestHostCrash_InternalDefinesExceedingLocalSlots compiles 40,000 internal defines
+# and takes 55s UNINSTRUMENTED — enough that `go test -race ./pkg/wile/`, the form
+# a developer types by hand, already blows Go's own 10m default. It is not in this
+# selection today; a widening predicate is all it would take.
+#
+# The cost is stated rather than hidden: a genuine deadlock now takes up to 30m to
+# report instead of 8m. The dump is still what makes it diagnosable — `go test`
+# prints every goroutine when its OWN -timeout fires, where a job-level kill prints
+# nothing — so the job budget in .github/workflows/race.yml moves with this number
+# and must stay above step + one firing.
+TIMEOUT="30m"
 LIST_ONLY=0
 while [ $# -gt 0 ]; do
 	case "$1" in

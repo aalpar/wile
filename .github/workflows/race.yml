@@ -51,7 +51,7 @@ jobs:
     # first scheduled run measures it, which is what the script's own total line is
     # for.
     #
-    # 25m = the 7m21s step + two 8m per-package timeouts + margin. That sum, not a
+    # 40m = the 7m21s step + ONE 30m per-package timeout + margin. That sum, not a
     # tighter multiple of the observed time, is what makes a hang DIAGNOSABLE
     # rather than merely fatal: `go test` dumps every goroutine when its own
     # -timeout fires, which is how the 30m whole-tree failure was identified as a
@@ -59,9 +59,15 @@ jobs:
     # with no dump. Sizing this below step + per-package would buy a few minutes
     # and cost the stack trace.
     #
+    # It was 25m = step + TWO 8m firings. The per-package timeout went to 30m on
+    # 2026-08-19 (see race-selection.sh for why), and covering two firings at that
+    # width would need ~68m of nightly budget to buy a second stack trace nobody
+    # reads — the first hang is the diagnostic. So the budget covers one, and a
+    # second concurrent hang is killed without a dump. Deliberate, not an oversight.
+    #
     # Re-derive from the "race-selection: NmNNs total" line the script prints on
     # every run rather than adjusting this by feel.
-    timeout-minutes: 25
+    timeout-minutes: 40
 
     steps:
       - uses: actions/checkout@v5
