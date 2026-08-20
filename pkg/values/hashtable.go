@@ -35,12 +35,12 @@ type hashtableEntry struct {
 	value Value
 	// seq is the entry's insertion ordinal, drawn from the owning table's
 	// counter when the key was FIRST added and preserved when its value is
-	// overwritten. It exists because rendering needs a total order and the
-	// store cannot supply one: sync.Map.Range is a per-process seeded walk, and
-	// the bucket hash is the key's POINTER for an eq table (identityHash), so
-	// neither is stable across processes. Insertion order is the only ordering
-	// information a table holds that is a function of the program rather than
-	// of the run. See SchemeWriter.writeHashtable.
+	// overwritten. Rendering needs a total order and the store supplies none:
+	// sync.Map.Range is a per-process seeded walk, and for an eq table the
+	// bucket hash is the key's POINTER (identityHash), so neither is stable
+	// across processes. Insertion order is the only order a table holds that
+	// follows the program rather than the run. See
+	// SchemeWriter.writeHashtable.
 	seq uint64
 }
 
@@ -48,16 +48,16 @@ type hashtableEntry struct {
 // R6RS inversion: the hash belongs to the TABLE, not to the key, so any object can
 // be a key of any table.
 //
-// HashtableEqual is deliberately the ZERO VALUE, so that a table whose kind was
-// never set keeps the equal?-keyed semantics every table in the tree had before
-// kinds existed. Reordering this iota silently reinterprets them. Pinned by
+// HashtableEqual is deliberately the ZERO VALUE, so a table whose kind was never
+// set keeps the equal?-keyed semantics every table had before kinds existed.
+// Reordering this iota silently reinterprets them. Pinned by
 // TestHashtableZeroValueIsEqualKind.
 //
-// Do NOT read that as "a bare &Hashtable{} is a usable table". It is not, and an
-// earlier version of this comment said it was: the mutable field's zero value is
-// false, so a zero Hashtable is an IMMUTABLE equal table that rejects every
-// write. Construct through NewHashtable or NewEmptyHashtable, which is what
-// every site in the tree does.
+// Do NOT read that as "a bare &Hashtable{} is a usable table". It is not, though
+// an earlier version of this comment claimed otherwise: the mutable field's zero
+// value is false, so a zero Hashtable is an IMMUTABLE equal table that rejects
+// every write. Construct through NewHashtable or NewEmptyHashtable, as every
+// site in the tree does.
 type HashtableKind uint8
 
 const (
@@ -69,15 +69,12 @@ const (
 	HashtableEqv
 )
 
-// String renders the kind as its R6RS-facing name, for error messages and
-// debugging. Nothing in the primitive surface returns it: hashtable-hash-function
-// and hashtable-equivalence-function hand back procedure objects, not kind names.
-// HashtableKindCount is the number of defined kinds. It exists as a ratchet:
-// TestHashtableKindsAreExhaustive fails when a kind is added without giving it a
-// row in hashKey, keyEqual, String and equivIdentity. Those four all used to reach
-// an unlisted kind through a `default:` arm that answered EQUAL — so a new kind
-// would silently have inherited equal? key identity, which is the wrong-key-
-// collapse form of data corruption rather than a loud failure.
+// HashtableKindCount is the number of defined kinds. It is a ratchet:
+// TestHashtableKindsAreExhaustive fails when a kind is added without a row in
+// hashKey, keyEqual, String and equivIdentity. All four used to reach an unlisted
+// kind through a `default:` arm answering EQUAL, so a new kind would have
+// inherited equal? key identity — collapsing keys silently rather than failing
+// loudly.
 const HashtableKindCount = 3
 
 // String renders the kind as its R6RS-facing name, for error messages and
@@ -96,17 +93,15 @@ func (p HashtableKind) String() string {
 	}
 }
 
-// Hashtable represents a Scheme hash table mapping hashable values to values.
+// Hashtable represents a Scheme hash table mapping values to values.
 //
-// Separate chaining (Cormen et al., CLRS Ch. 11): collisions are resolved
-// by storing all entries with the same hash in a linked list (here, a Go
-// slice). O(1) amortized with a good hash function.
-// See BIBLIOGRAPHY.md "Separate Chaining Hash Table".
+// Separate chaining (Cormen et al., CLRS Ch. 11) resolves collisions: every
+// entry sharing a hash lives in one bucket, here a Go slice. FNV-1a hashing,
+// O(1) amortized. See BIBLIOGRAPHY.md "Separate Chaining Hash Table".
 //
 // ANY object can be a key. Which objects count as ONE key is the table's choice,
 // carried by its HashtableKind: an equal table hashes with EqualHash and compares
-// with Equal, an eq table by identity, an eqv table by Eqv. Uses bucket chaining
-// with FNV-1a hashing for O(1) amortized operations.
+// with Equal, an eq table by identity, an eqv table by Eqv.
 //
 // Concurrency: LOCK-FREE, by design. A Hashtable is user-owned data that
 // SRFI-18 threads may share; per the concurrency ownership line, the USER
@@ -123,8 +118,8 @@ func (p HashtableKind) String() string {
 // The lock-free store removes Go's fatal "concurrent map read and map write";
 // what it does NOT provide is transactional atomicity. Under UNSYNCHRONIZED
 // concurrent writers to one bucket a Set may be lost (last-Store-wins) and the
-// atomic size may drift — that is the accepted consequence of the user not
-// synchronizing their own shared data. Single-threaded use is exact.
+// atomic size may drift — the accepted price of unsynchronized shared data.
+// Single-threaded use is exact.
 type Hashtable struct {
 	// buckets maps a uint64 hash to an immutable []hashtableEntry snapshot.
 	// Never mutate a stored bucket in place; replace it via Store (copy-on-write).
@@ -134,23 +129,21 @@ type Hashtable struct {
 	size atomic.Int64
 	// nextSeq issues hashtableEntry.seq values. It only ever increases, so a
 	// delete-then-reinsert files the key at the END of the insertion order
-	// rather than reclaiming its old place — which is what makes the ordinal a
-	// function of the write SEQUENCE and not of the live set. Copy carries it
-	// forward so a copy's later inserts cannot collide with the shared buckets'
-	// existing ordinals.
+	// rather than reclaiming its old place — the ordinal therefore follows the
+	// write SEQUENCE, not the live set. Copy carries it forward so a copy's
+	// later inserts cannot collide with the shared buckets' existing ordinals.
 	nextSeq atomic.Uint64
-	// kind is WRITE-ONCE at construction and never mutates, so it does not
-	// participate in the copy-on-write dance and the lock-free contract above is
-	// unaffected.
+	// kind is WRITE-ONCE at construction and never mutates, so it stays out of
+	// the copy-on-write dance and leaves the lock-free contract above intact.
 	kind HashtableKind
 	// mutable is likewise WRITE-ONCE at construction. Only hashtable-copy
 	// without a true second argument produces a false one.
 	mutable bool
 }
 
-// NewEmptyHashtable creates a new empty MUTABLE equal?-keyed hash table. The
-// zero sync.Map and atomic.Int64 are ready to use, and HashtableEqual is the
-// zero HashtableKind by deliberate choice.
+// NewEmptyHashtable creates an empty MUTABLE equal?-keyed hash table. The zero
+// sync.Map and atomic.Int64 are ready to use, and HashtableEqual is the zero
+// HashtableKind by deliberate choice.
 func NewEmptyHashtable() *Hashtable {
 	return NewHashtable(HashtableEqual)
 }
@@ -170,9 +163,9 @@ func (p *Hashtable) Mutable() bool {
 
 // IsImmutable reports whether in-place mutation of this table is forbidden.
 // Note the negation: the field is `mutable` (WRITE-ONCE at construction, see the
-// type comment), while Immutable asks the opposite question. There is
-// deliberately no setter — `mutable` is write-once by design, and that is
-// load-bearing for the lock-free store contract.
+// type comment), while IsImmutable asks the opposite question. There is
+// deliberately no setter: write-once `mutable` is load-bearing for the lock-free
+// store contract.
 func (p *Hashtable) IsImmutable() bool {
 	return !p.mutable
 }
@@ -217,14 +210,13 @@ func (p *Hashtable) hashKey(key Value) uint64 {
 		}
 		return identityHash(key)
 	default:
-		// LEAF FAST PATH, and it is not just an optimization — it is what keeps
-		// this change free for every table that existed before container keys
-		// were legal. EqualHash on a Hashable leaf is exactly
-		// mixHash(fnvOffset, HashCode()), so routing leaves through it bought a
-		// slice header, a type switch and a multiply per lookup for no new
-		// information: measured +76% on Get/symbol/n=10 and +40% on
-		// Get/string/n=1000 against the pre-inversion baseline, at identical
-		// allocations.
+		// LEAF FAST PATH, not merely an optimization: it keeps this change free
+		// for every table that existed before container keys were legal.
+		// EqualHash on a Hashable leaf is exactly mixHash(fnvOffset,
+		// HashCode()), so routing leaves through it bought a slice header, a
+		// type switch and a multiply per lookup for no new information:
+		// measured +76% on Get/symbol/n=10 and +40% on Get/string/n=1000
+		// against the pre-inversion baseline, at identical allocations.
 		//
 		// Splitting the hash space by leaf-ness is sound because no Hashable
 		// value is ever equal? to a non-Hashable one. equal? relates values
@@ -266,7 +258,7 @@ func (p *Hashtable) keyEqual(a, b Value) bool {
 		//
 		// The void guard is NOT redundant with Equal's. A Void key was
 		// unreachable before — Void is not Hashable, so admission rejected it —
-		// and is reachable now, so EqualTo would be called on it without this.
+		// and is reachable now; without this guard, EqualTo would run on it.
 		if IsVoid(a) || IsVoid(b) {
 			return IsVoid(a) == IsVoid(b)
 		}
@@ -274,17 +266,17 @@ func (p *Hashtable) keyEqual(a, b Value) bool {
 	}
 }
 
-// IsVoid returns true if this hash table is nil.
+// IsVoid reports whether this hash table is nil.
 func (p *Hashtable) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if both hash tables have equal contents.
+// EqualTo reports whether both hash tables have equal contents.
 //
-// Keys and values take different routes, and the asymmetry is deliberate: keys
-// are matched inside EqualComponents (a key is always a leaf — see below), while
-// values are pushed onto Equal's iterative worklist, since a value may be a
-// container and may be cyclic.
+// Keys and values take different routes, and the asymmetry is deliberate:
+// EqualComponents matches keys itself (a key is always a leaf — see below) and
+// pushes values onto Equal's iterative worklist, since a value may be a cyclic
+// container.
 func (p *Hashtable) EqualTo(o Value) bool {
 	return Equal(p, o)
 }
@@ -297,8 +289,8 @@ func (p *Hashtable) EqualTo(o Value) bool {
 // That eager lookup is bounded for pair and vector keys, whose EqualTo delegates
 // to the iterative Equal. The unbounded case is a HASHTABLE reachable as a key:
 // Equal -> EqualComponents -> keyEqual -> Equal recurses one Go frame per nesting
-// level, and a cycle of tables-as-keys has no bottom. The structural answer will
-// therefore be gated on every key being a Hashable leaf.
+// level, and a cycle of tables-as-keys has no bottom. equalGate therefore admits
+// only tables whose every key is a Hashable leaf.
 //
 // Both tables are read through lock-free snapshots, so no lock is held during
 // the comparison and two tables never contend.
@@ -358,11 +350,12 @@ func (p *Hashtable) EqualComponents(o Value, push func(a, b Value)) bool {
 // is the price of keeping the deliberate structural-equal? deviation
 // (docs/reference/r7rs-differences.md item 9) rather than dropping it as part of an
 // unrelated migration. Chez and Racket answer identity for all four cases.
+//
 // entries is p's OWN snapshot, passed in rather than re-read. The gate and the
-// comparison that follows it must see one view: two independent lock-free reads
-// let the gate pass on a leaf-only view while the comparison then runs against
-// an entry holding a hashtable key, which is the recursion the gate exists to
-// prevent. Pinned by TestHashtableEqualGateUsesOneSnapshot.
+// comparison that follows it must see one view: under two independent lock-free
+// reads the gate passes on a leaf-only view and the comparison then runs against
+// an entry holding a hashtable key — the very recursion the gate prevents.
+// Pinned by TestHashtableEqualGateUsesOneSnapshot.
 func (p *Hashtable) equalGate(other *Hashtable, entries []hashtableEntry) bool {
 	if p.kind != other.kind {
 		return false
@@ -387,17 +380,16 @@ func (p *Hashtable) SchemeString() string {
 	return p.schemeStringWithVisited(NewMapSet[Value](0), 1)
 }
 
-// schemeStringWithVisited renders the hash table using PATH-SCOPED cycle
-// detection threaded through nested Pair/Vector/Hashtable values, so a cycle
-// that passes through a hashtable (e.g. a pair whose cdr is a hashtable whose
-// value is that pair) is bounded with "..." instead of overflowing the Go
-// stack. The hashtable marks itself on entry and unmarks on exit; keys and
-// values recurse via schemeStringChild, which applies the same discipline.
+// schemeStringWithVisited renders the hash table, bounding cycles with "..."
+// rather than overflowing the Go stack. Marking is PATH-SCOPED and threads
+// through nested Pair/Vector/Hashtable values, so it catches a cycle that runs
+// through a hashtable: a pair whose cdr is a hashtable whose value is that
+// pair. The table marks itself on entry and unmarks on exit; keys and values
+// recurse through schemeStringChild, which keeps the same discipline.
 //
-// depth is this hashtable's nesting level (root = 1); keys and values sit one
-// level deeper (depth+1), where schemeStringChild enforces the host-safety
-// bound. Entries are siblings at the same level, so table size does not consume
-// depth.
+// depth is this table's nesting level, root = 1. Keys and values sit one level
+// deeper, where schemeStringChild enforces the host-safety bound. Entries are
+// siblings at one level, so table size costs no depth.
 func (p *Hashtable) schemeStringWithVisited(visited MapSet[Value], depth int) string {
 	seen := visited.Get(p)
 	if seen {
@@ -440,7 +432,7 @@ func (p *Hashtable) loadBucket(h uint64) []hashtableEntry {
 	return v.([]hashtableEntry)
 }
 
-// get is the internal lookup used by EqualComponents and other methods.
+// get is the internal lookup behind Get, HasKey, and EqualComponents.
 func (p *Hashtable) get(key Value) (Value, bool) {
 	for _, e := range p.loadBucket(p.hashKey(key)) {
 		if p.keyEqual(e.key, key) {
@@ -516,7 +508,7 @@ func (p *Hashtable) Set(key Value, val Value) error {
 	return nil
 }
 
-// HasKey returns whether the key exists in the hash table.
+// HasKey reports whether the key exists in the hash table.
 func (p *Hashtable) HasKey(key Value) bool {
 	_, found := p.get(key)
 	return found
@@ -553,9 +545,9 @@ func (p *Hashtable) Delete(key Value) error {
 // KeysVector returns a vector of all keys in the hash table, for R6RS
 // hashtable-keys. The order is unspecified.
 //
-// This replaced a list-returning Keys() and a sibling Values(); the value half
-// is served by EntriesVectors, which is the only way to get keys and values
-// paired reliably, since two independent snapshots need not agree.
+// This replaced a list-returning Keys() and a sibling Values(). EntriesVectors
+// serves the value half, and is the only reliable way to pair keys with values:
+// two independent snapshots need not agree.
 func (p *Hashtable) KeysVector() *Vector {
 	entries := p.snapshot()
 	ks := make([]Value, len(entries))
@@ -617,8 +609,8 @@ func (p *Hashtable) Clear() error {
 }
 
 // Entries iterates over all entries in the hash table, calling fn for each
-// key-value pair. Iteration stops early if fn returns a non-nil error.
-// This is more efficient than Keys()+Get() as it avoids intermediate allocations.
+// key-value pair. Iteration stops early if fn returns a non-nil error. This
+// beats KeysVector()+Get(), which allocates a vector and re-hashes every key.
 //
 // fn runs against a snapshot: it may be Scheme code that reads or mutates this
 // same table (hashtable-walk). The snapshot is the iteration's view; entries

@@ -290,129 +290,167 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 	}
 }
 
-// filterToCircular replaces the four needsLabel* maps with only the circular entries.
-// An object is circular if it is reachable from itself — i.e., it appears on the
-// DFS recursion stack when revisited. This uses gray/black DFS coloring.
-func (p *SchemeWriter) filterToCircular(v Value) {
-	circularPairs := NewMapSet[*Pair](0)
-	circularVectors := NewMapSet[*Vector](0)
-	circularBoxes := NewMapSet[*Box](0)
-	onStackPairs := NewMapSet[*Pair](0)
-	onStackVectors := NewMapSet[*Vector](0)
-	onStackBoxes := NewMapSet[*Box](0)
-	visitedPairs := NewMapSet[*Pair](0)
-	visitedVectors := NewMapSet[*Vector](0)
-	visitedBoxes := NewMapSet[*Box](0)
-	circularHashtables := NewMapSet[*Hashtable](0)
-	onStackHashtables := NewMapSet[*Hashtable](0)
-	visitedHashtables := NewMapSet[*Hashtable](0)
+// dfsColors is the gray/black DFS coloring for one container type. Gray
+// (onStack) means "on the current recursion path"; black (visited, no longer
+// onStack) means "fully explored". Reaching a gray object is the definition of
+// circular — it is reachable from itself. Reaching a black one means shared but
+// acyclic, which WriteModeWrite does not label.
+//
+// Go map keys must be concrete comparable types, so the four container types
+// cannot share one set; the type parameter shares the *logic* instead.
+type dfsColors[T comparable] struct {
+	// circular accumulates the objects found to be reachable from themselves.
+	// It is the only set that outlives the scan.
+	circular MapSet[T]
+	// onStack holds the objects on the current DFS recursion path (gray).
+	onStack MapSet[T]
+	// visited holds every object ever entered, gray or black.
+	visited MapSet[T]
+}
 
-	var walk func(v Value)
-	walk = func(v Value) {
-		switch val := v.(type) {
-		case *Pair:
-			// Walk the cdr-spine iteratively. Every pair on the spine is an
-			// ancestor of the cars explored below it, so all stay on the DFS
-			// stack until the spine terminates, then pop together. A back-edge
-			// into a still-on-stack pair (via cdr here, or via a car in the
-			// recursive walk) is the cycle. Only car descent recurses, so the
-			// Go stack tracks nesting depth — already bounded by pass 1 — not
-			// list length.
-			spine := []*Pair{}
-			for cur := val; cur != nil; {
-				onStack := onStackPairs.Get(cur)
-				if onStack {
-					circularPairs.Set(cur)
-					break
-				}
-				done := visitedPairs.Get(cur)
-				if done {
-					break
-				}
-				visitedPairs.Set(cur)
-				onStackPairs.Set(cur)
-				spine = append(spine, cur)
-				walk(cur.Car())
-				cdr := cur.Cdr()
-				nextPair, ok := cdr.(*Pair)
-				if !ok {
-					if cdr != nil && !IsEmptyList(cdr) {
-						walk(cdr)
-					}
-					break
-				}
-				cur = nextPair
-			}
-			for _, pr := range spine {
-				onStackPairs.Unset(pr)
-			}
-
-		case *Vector:
-			if val == nil || val.Length() == 0 {
-				return
-			}
-			onStack := onStackVectors.Get(val)
-			if onStack {
-				circularVectors.Set(val)
-				return
-			}
-			done := visitedVectors.Get(val)
-			if done {
-				return
-			}
-			visitedVectors.Set(val)
-			onStackVectors.Set(val)
-			for _, elem := range val.Elems() {
-				walk(elem)
-			}
-			onStackVectors.Unset(val)
-
-		case *Box:
-			if val == nil {
-				return
-			}
-			onStack := onStackBoxes.Get(val)
-			if onStack {
-				circularBoxes.Set(val)
-				return
-			}
-			done := visitedBoxes.Get(val)
-			if done {
-				return
-			}
-			visitedBoxes.Set(val)
-			onStackBoxes.Set(val)
-			walk(val.Value)
-			onStackBoxes.Unset(val)
-
-		case *Hashtable:
-			if val == nil {
-				return
-			}
-			onStack := onStackHashtables.Get(val)
-			if onStack {
-				circularHashtables.Set(val)
-				return
-			}
-			done := visitedHashtables.Get(val)
-			if done {
-				return
-			}
-			visitedHashtables.Set(val)
-			onStackHashtables.Set(val)
-			for _, e := range val.snapshot() {
-				walk(e.value)
-			}
-			onStackHashtables.Unset(val)
-		}
+// newDFSColors returns a coloring with all three sets allocated. MapSet is a
+// map type, so the zero value would panic on the first Set.
+func newDFSColors[T comparable]() dfsColors[T] {
+	q := dfsColors[T]{
+		circular: NewMapSet[T](0),
+		onStack:  NewMapSet[T](0),
+		visited:  NewMapSet[T](0),
 	}
+	return q
+}
 
-	walk(v)
+// enter colors t gray and reports whether the caller should descend into it.
+// A t already gray is circular: it is recorded and not re-entered, which is
+// also what terminates the walk on a cycle. A t already black has nothing new
+// below it. Every true return must be matched by a later leave.
+func (p *dfsColors[T]) enter(t T) bool {
+	onStack := p.onStack.Get(t)
+	if onStack {
+		p.circular.Set(t)
+		return false
+	}
+	done := p.visited.Get(t)
+	if done {
+		return false
+	}
+	p.visited.Set(t)
+	p.onStack.Set(t)
+	return true
+}
 
-	p.needsLabelPair = circularPairs
-	p.needsLabelVector = circularVectors
-	p.needsLabelBox = circularBoxes
-	p.needsLabelHashtable = circularHashtables
+// leave pops t off the recursion path, coloring it black.
+func (p *dfsColors[T]) leave(t T) {
+	p.onStack.Unset(t)
+}
+
+// circularityScan is the DFS state for one filterToCircular pass, one coloring
+// per container type.
+//
+// The state is per-pass scratch, which is why it lives here and not on
+// SchemeWriter: only the circular sets outlive the walk, and filterToCircular
+// moves them onto the writer. A fresh scan per pass needs no reset discipline,
+// unlike the writer's own seen*/needsLabel* fields (see WriteString).
+type circularityScan struct {
+	pairs      dfsColors[*Pair]
+	vectors    dfsColors[*Vector]
+	boxes      dfsColors[*Box]
+	hashtables dfsColors[*Hashtable]
+}
+
+// newCircularityScan returns a scan with every coloring allocated.
+func newCircularityScan() *circularityScan {
+	q := &circularityScan{
+		pairs:      newDFSColors[*Pair](),
+		vectors:    newDFSColors[*Vector](),
+		boxes:      newDFSColors[*Box](),
+		hashtables: newDFSColors[*Hashtable](),
+	}
+	return q
+}
+
+// walk explores v depth-first, recording in each coloring's circular set every
+// object found to be reachable from itself.
+func (p *circularityScan) walk(v Value) {
+	switch val := v.(type) {
+	case *Pair:
+		// Walk the cdr-spine iteratively. Every pair on the spine is an
+		// ancestor of the cars explored below it, so all stay gray until the
+		// spine terminates, then pop together. A back-edge into a still-gray
+		// pair (via cdr here, or via a car in the recursive walk) is the
+		// cycle. Only car descent recurses, so the Go stack tracks nesting
+		// depth — already bounded by pass 1 — not list length.
+		spine := []*Pair{}
+		for cur := val; cur != nil; {
+			descend := p.pairs.enter(cur)
+			if !descend {
+				break
+			}
+			spine = append(spine, cur)
+			p.walk(cur.Car())
+			cdr := cur.Cdr()
+			nextPair, ok := cdr.(*Pair)
+			if !ok {
+				if cdr != nil && !IsEmptyList(cdr) {
+					p.walk(cdr)
+				}
+				break
+			}
+			cur = nextPair
+		}
+		for _, pr := range spine {
+			p.pairs.leave(pr)
+		}
+
+	case *Vector:
+		if val == nil || val.Length() == 0 {
+			return
+		}
+		descend := p.vectors.enter(val)
+		if !descend {
+			return
+		}
+		for _, elem := range val.Elems() {
+			p.walk(elem)
+		}
+		p.vectors.leave(val)
+
+	case *Box:
+		if val == nil {
+			return
+		}
+		descend := p.boxes.enter(val)
+		if !descend {
+			return
+		}
+		p.walk(val.Value)
+		p.boxes.leave(val)
+
+	case *Hashtable:
+		if val == nil {
+			return
+		}
+		descend := p.hashtables.enter(val)
+		if !descend {
+			return
+		}
+		for _, e := range val.snapshot() {
+			p.walk(e.value)
+		}
+		p.hashtables.leave(val)
+	}
+}
+
+// filterToCircular replaces the four needsLabel* maps with only the circular
+// entries. Pass 1 marks every multiply-referenced object, but WriteModeWrite
+// (R7RS write) labels only objects reachable from themselves; sharing is not
+// circularity. See circularityScan for the coloring.
+func (p *SchemeWriter) filterToCircular(v Value) {
+	scan := newCircularityScan()
+	scan.walk(v)
+	p.needsLabelPair = scan.pairs.circular
+	p.needsLabelVector = scan.vectors.circular
+	p.needsLabelBox = scan.boxes.circular
+	p.needsLabelHashtable = scan.hashtables.circular
 }
 
 // write outputs a value, handling cycles with datum labels.
