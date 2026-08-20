@@ -81,33 +81,28 @@ func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error
 	if err != nil {
 		return mc, err
 	}
-	// Linked closure (Cardelli 1983). Captures E by pointer, not by copy.
-	//
-	//   closure = ⟨tpl, mc.env⟩, with tpl.shape supplying the parameter
-	//   structure
+	// FLAT closure. The free variables were copied onto the eval stack by the
+	// creation protocol and travel in the vector; the static link is chosen by
+	// closureLink, which answers the lexical ROOT (parent == nil) for an ordinary
+	// body and only keeps mc.env for a template that reads through the frame
+	// chain in a way the free-variable pass cannot see.
 	//
 	//   The shape is a property of the compiled body, so it rides on the
-	//   template; only the runtime parent varies per closure. See
-	//   MachineClosure for why neither is combined into a frame.
-	//
-	//   Invariant: the parent pointer must be the RUNTIME mc.env, not
-	//     the compile-time env. Compile-time frames hold placeholders;
-	//     runtime frames hold actual values.
+	//   template; only the link varies per closure. See MachineClosure for why
+	//   neither is combined into a frame.
 	//   Constrains: Apply (always builds a fresh frame from the pair to
-	//     prevent aliasing across recursive calls and SRFI-18 thread races),
-	//     envPooled flag (mc.env is not poolable — the closure holds it).
-	//   Constrained by: de Bruijn (depth in free-var access counts
-	//     parent hops through this chain), CESK model (E component).
+	//     prevent aliasing across recursive calls and SRFI-18 thread races).
+	//   Constrained by: CESK model (E component).
 	//
-	// See BIBLIOGRAPHY.md "Linked Closure Representation".
+	// See BIBLIOGRAPHY.md "Linked Closure Representation" for the model this
+	// replaced.
 	//
-	// The runtime parent is critical for two things: nested lambdas reach outer
-	// params through it, and captured variables must resolve to runtime values
-	// rather than the compile-time frame's placeholders.
-	//
-	// The closure holds mc.env as that parent, so mark it non-poolable —
-	// RestoreAndRelease must not recycle a frame a closure still points at.
-	mc.envPooled = false
+	// envPooled is narrowed to the retaining case. The argument lives with the
+	// live path — the inline OpMakeClosure arm in MachineContext.Run — and this
+	// method must not diverge from it.
+	if tpl.RetainsLexicalEnv() {
+		mc.envPooled = false
+	}
 	cls := NewClosureCapturing(tpl, closureLink(mc.env, tpl), free)
 	backPatchSelfSlot(cls, free, p.selfSlot)
 	mc.SetValue(cls)

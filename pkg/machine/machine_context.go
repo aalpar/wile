@@ -844,11 +844,29 @@ func (p *MachineContext) Run() error {
 			// already a root by this rule, so the chain is the body's own let
 			// frames plus one.
 			//
-			// mc.envPooled = false is retained for now. It is no longer needed
-			// for THIS closure — it holds no frame — but the flag is Invariant
-			// H's, and retiring it belongs with the predicates that phase 8
-			// removes, not here.
-			mc.envPooled = false
+			// THE envPooled CLEAR IS NARROWED TO THE RETAINING CASE, and the
+			// narrowing is Invariant H's own argument rather than an exception
+			// to it. H — "a frame with envPooled=true is never any other
+			// frame's parent" — held because OpPushEnv and OpMakeClosure were
+			// the only runtime sites making mc.env a parent. By the paragraph
+			// above this site no longer is one: a non-retaining closure records
+			// env.TopLevel(), so the frame Apply later builds from it
+			// (MachineClosure.InitApplyFrame) is parented at the top level, and
+			// neither the link nor the free vector reaches mc.env. Keeping the
+			// flag set preserves H; it does not weaken it.
+			//
+			// This is exactly as sound as closureLink itself. Were
+			// retainsLexicalEnv ever to under-approximate, the closure would
+			// already be resolving through the wrong chain — a corruption this
+			// flag never protected against.
+			//
+			// Do NOT read this as "restore the flag". OpPushEnv's clear stays:
+			// a let frame really is parented at mc.env, the pool leak that
+			// causes is H's price, and removing THAT clear is a
+			// use-after-release which has been reverted three times.
+			if tpl.RetainsLexicalEnv() {
+				mc.envPooled = false
+			}
 			cls := NewClosureCapturing(tpl, closureLink(mc.env, tpl), free)
 			backPatchSelfSlot(cls, free, selfSlot)
 			mc.SetValue(cls)
