@@ -798,6 +798,41 @@ func TestFuseCallForeignCached(t *testing.T) {
 			wantArg:        map[int]int32{0: 0},
 		},
 		{
+			// Frame reclaim inside a merged `let` body puts a release between the
+			// args and the tail apply. The callee is a cached binding, resolved off
+			// the template rather than through mc.env, so the fusion is sound and
+			// the release stays ahead of it.
+			name: "tail across a ReleaseEnvFrame: PushCachedBinding + arg + release + PullApply",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 3},
+				{Op: OpReleaseEnvFrame},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{foreignBinding},
+			wantOps:        []OpCode{OpPushLocal, OpReleaseEnvFrame, OpCallForeignCachedTail},
+			wantArg:        map[int]int32{0: 3, 2: 0},
+		},
+		{
+			// THE ARITY PIN. A promoted primitive only fuses when the argument
+			// count equals its arity, and the release is NOT an argument. Counting
+			// it (pullIdx-i-1 == 3 against `+`'s arity 2) refuses the promotion
+			// silently, so this row fails as a MISSING OpAddTail rather than as a
+			// wrong answer — which is why it is pinned rather than left to the
+			// value-assertion suite.
+			name: "tail promoted across a ReleaseEnvFrame: release is not counted as an argument",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 0},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpReleaseEnvFrame},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makePromotedBinding("+")},
+			wantOps:        []OpCode{OpPushLocal, OpPushLocal, OpReleaseEnvFrame, OpAddTail},
+			wantArg:        map[int]int32{0: 0, 1: 1, 3: 0},
+		},
+		{
 			name: "tail with args: PushCachedBinding + PushLocal + PullApply",
 			code: []Instruction{
 				{Op: OpPushCachedBinding, Arg: 0},
@@ -1333,6 +1368,54 @@ func TestFuseCallGeneric(t *testing.T) {
 			},
 			wantOps: []OpCode{OpPushLocal, OpCallLocal},
 			wantArg: map[int]int32{0: 3, 1: 7},
+		},
+		{
+			// THE SOUNDNESS CASE. Frame reclaim inside a merged `let` body puts an
+			// OpReleaseEnvFrame between the last argument push and the tail apply.
+			// Fusing here would move the callee's resolution to the apply, i.e.
+			// AFTER mc.env has been handed to the pool and zeroed by ResetForPool —
+			// OpCallLocal would read slot 7 out of a recycled frame. The scan must
+			// stop at the release and leave the whole sequence alone.
+			name: "tail local callee is NOT fused across a ReleaseEnvFrame",
+			code: []Instruction{
+				{Op: OpPushLocal, Arg: 7},
+				{Op: OpPushLocal, Arg: 3},
+				{Op: OpReleaseEnvFrame},
+				{Op: OpPullApply},
+			},
+			wantOps: []OpCode{OpPushLocal, OpPushLocal, OpReleaseEnvFrame, OpPullApply},
+			wantArg: map[int]int32{0: 7, 1: 3},
+		},
+		{
+			// The other half of the split: a cached binding is resolved off the
+			// template, never through mc.env, so the release cannot invalidate it
+			// and the fusion is taken. The release must survive AHEAD of the fused
+			// call — deleting it would silently retract the frame reclaim.
+			name: "tail cached-binding callee IS fused across a ReleaseEnvFrame",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 3},
+				{Op: OpReleaseEnvFrame},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{machineBinding},
+			wantOps:        []OpCode{OpPushLocal, OpReleaseEnvFrame, OpCallCachedBinding},
+			wantArg:        map[int]int32{0: 3, 2: 0},
+		},
+		{
+			// A free callee reads mc.free, the running closure's own vector, which
+			// a flat closure copied by value at creation. Independent of mc.env, so
+			// it fuses too — and this is the row that matters most in higher-order
+			// code, where the callee is nearly always captured.
+			name: "tail free callee IS fused across a ReleaseEnvFrame",
+			code: []Instruction{
+				{Op: OpPushFree, Arg: 5},
+				{Op: OpPushLocal, Arg: 3},
+				{Op: OpReleaseEnvFrame},
+				{Op: OpPullApply},
+			},
+			wantOps: []OpCode{OpPushLocal, OpReleaseEnvFrame, OpCallFree},
+			wantArg: map[int]int32{0: 3, 2: 5},
 		},
 		{
 			name: "non-tail CallCachedBinding: SaveCont + PushCachedBinding(machine closure) + PullApply",

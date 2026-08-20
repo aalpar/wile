@@ -178,9 +178,20 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 	// are on the eval stack), and the enclosing body was proven frame-releasable
 	// (no capture/escape, only capture-safe callees), so release it to the pool
 	// before applying — the callee's acquire reuses it. Emitted after the args
-	// (which still read the frame) and before Pull+Apply. The frameReuseRelease
-	// disposition is depth-0 (cleared on let descent), so p.env is the parameter
-	// frame. A frameReuseSelfTail body takes the OpSelfTailCall path above instead.
+	// (which still read the frame) and before Pull+Apply.
+	//
+	// The frameReuseRelease disposition still describes the parameter frame at
+	// this point: UnderLetFrame drops it on descent into a let that PUSHES a
+	// frame, and keeps it for a merged let, whose body runs in the parameter
+	// frame itself. So mc.env here is always the frame the proof covers.
+	//
+	// The ordering matters to the peephole, not just to the runtime: the callee
+	// push precedes this release, and a tail fusion that hoisted the callee's
+	// RESOLUTION past it would read a frame already handed to the pool. That is
+	// refused by callee kind in peephole.go (releaseSafeCallee), which is why a
+	// local callee here keeps its unfused Push…/PullApply shape.
+	//
+	// A frameReuseSelfTail body takes the OpSelfTailCall path above instead.
 	if ctctx.inTail && ctctx.frameReuse.kind == frameReuseRelease {
 		p.AppendOperations(machine.NewOperationReleaseEnvFrame())
 	}

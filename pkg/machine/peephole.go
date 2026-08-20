@@ -191,6 +191,62 @@ func isPushOp(op OpCode) bool {
 	}
 }
 
+// releaseSafeCallee reports whether a callee pushed by op can still be resolved
+// AFTER an OpReleaseEnvFrame has run.
+//
+// This is the one question a tail fusion has to answer once frame reclaim is
+// armed inside a merged `let` body. The fusion deletes the callee push and
+// resolves the callee at the apply instead, which MOVES that resolution across
+// anything in between. OpReleaseEnvFrame hands mc.env to the pool and
+// ResetForPool zeroes the frame while mc.env still points at it, so the move is
+// sound only for a callee whose resolution never reads mc.env:
+//
+//   - OpPushCachedBinding reads tpl.cachedBindings[i], a *Binding resolved at
+//     compile time and owned by the template.
+//   - OpPushFree reads mc.free[i], the running closure's own free vector, which
+//     a flat closure copied by value at creation.
+//   - OpPushLocal resolves through mc.env (resolveLocalBinding) and is NOT safe.
+//     Its call keeps the unfused Push…/PullApply shape and pays one extra
+//     dispatch, which is the cheaper half of the trade against a pooled frame.
+//
+// Emitting the release is codegen's decision and its proof (no capture, no
+// escaping closure, only capture-safe callees); this predicate only decides
+// whether a fusion may step over one.
+func releaseSafeCallee(op OpCode) bool {
+	switch op {
+	case OpPushCachedBinding, OpPushFree:
+		return true
+	default:
+		return false
+	}
+}
+
+// scanTailCallArgs finds the OpPullApply closing a tail call whose callee push
+// sits at start-1, and reports how many ARGUMENT pushes precede it.
+//
+// allowRelease admits the OpReleaseEnvFrame that frame reclaim emits after the
+// last argument push and before the apply; the caller decides that from
+// releaseSafeCallee. The release is not an argument, which is why the count is
+// returned rather than recomputed as pullIdx-start by the caller — a promoted
+// primitive's arity check reads it, and an off-by-one there would fuse a
+// 2-argument op onto 3 stack entries.
+//
+// Returns -1 when the run hits anything else first.
+func scanTailCallArgs(code []Instruction, start int, allowRelease bool) (pullIdx, argCount int) {
+	for k := start; k < len(code); k++ {
+		switch {
+		case code[k].Op == OpPullApply:
+			return k, argCount
+		case isPushOp(code[k].Op):
+			argCount++
+		case allowRelease && code[k].Op == OpReleaseEnvFrame:
+		default:
+			return -1, 0
+		}
+	}
+	return -1, 0
+}
+
 // fuseCallForeignCached rewrites PushCachedBinding...PullApply sequences
 // into direct OpCallForeignCached / OpCallForeignCachedTail instructions
 // when the cached binding holds a *ForeignClosure. This eliminates the
@@ -362,17 +418,11 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 				continue
 			}
 
-			// Scan forward for PullApply, only allowing Push-family ops.
-			pullIdx := -1
-			for k := i + 1; k < len(code); k++ {
-				if code[k].Op == OpPullApply {
-					pullIdx = k
-					break
-				}
-				if !isPushOp(code[k].Op) {
-					break
-				}
-			}
+			// Scan forward for PullApply, allowing Push-family ops and the
+			// frame-reclaim release — a cached binding is resolved off the
+			// template, so releasing mc.env first cannot invalidate it
+			// (releaseSafeCallee).
+			pullIdx, argCount := scanTailCallArgs(code, i+1, true)
 			if pullIdx < 0 {
 				continue
 			}
@@ -396,7 +446,6 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			}
 
 			// Check for promoted primitive (tail variant).
-			argCount := pullIdx - (i + 1)
 			_, promotedTailOp, promotedArity := promotedOpForIdentity(fcls.identity)
 			if promotedTailOp != OpInvalid && argCount == promotedArity {
 				plan.Delete(i, i+1)
@@ -537,17 +586,11 @@ func fuseCallGeneric(tpl *NativeTemplate, plan *EditPlan) {
 
 		calleeArg := code[i].Arg
 
-		// Scan forward for PullApply, only allowing push-family ops.
-		pullIdx := -1
-		for k := i + 1; k < len(code); k++ {
-			if code[k].Op == OpPullApply {
-				pullIdx = k
-				break
-			}
-			if !isPushOp(code[k].Op) {
-				break
-			}
-		}
+		// Scan forward for PullApply. A frame-reclaim release may sit between
+		// the last argument push and the apply; stepping over it is sound only
+		// for a callee that does not resolve through mc.env, so a PushLocal
+		// callee stops the scan there and keeps its unfused shape.
+		pullIdx, _ := scanTailCallArgs(code, i+1, releaseSafeCallee(code[i].Op))
 		if pullIdx < 0 {
 			continue
 		}

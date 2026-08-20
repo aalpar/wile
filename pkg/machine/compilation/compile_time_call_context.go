@@ -57,9 +57,11 @@ type CompileTimeCallContext struct {
 	// frameReuse is the single frame-reuse disposition of the current position —
 	// at most ONE mode, never a contradiction. It is set on a closure body proven
 	// safe, preserved through tail-transparent forms (if branches, begin/body
-	// tails), dropped by NotInTail(), and cleared on entry to a frame-pushing form
-	// (let) via WithoutFrameReuse — so a non-none frameReuse at a call site means a
-	// DEPTH-0 tail call. The emit site discriminates on frameReuse.kind.
+	// tails), dropped by NotInTail(), and cleared on entry to a form that PUSHES a
+	// frame (see UnderLetFrame) — so a non-none frameReuse at a call site means a
+	// DEPTH-0 tail call, where depth counts RUNTIME frames. A merged let pushes
+	// none, so its body is still depth 0 and keeps the disposition. The emit site
+	// discriminates on frameReuse.kind.
 	frameReuse frameReuse
 	// enclosingDefines is the body sequence whose internal defines form the
 	// letrec* group being compiled, carried so frameReuseForDefine can prove a
@@ -220,25 +222,44 @@ func (p CompileTimeCallContext) WithEnclosingDefines(body []validate.ValidatedEx
 //     contributes no frame, so incrementing would unwind the parameter frame's
 //     PARENT — the count has to equal the runtime frame count by construction,
 //     which is the whole reason it is counted here rather than by a second walk.
-//   - RELEASE is cleared, for a merged let as well. For a pushing let the reason
-//     is that OpReleaseEnvFrame releases mc.env, which inside the body is the LET
-//     frame, not pool-owned. A merged let removes that reason — mc.env there IS
-//     the pooled parameter frame — but taking the release is a SEPARATE lever with
-//     its own hazard: the peephole would then see OpReleaseEnvFrame between the
-//     argument pushes and the apply, and a fusion that survived it would turn a
-//     PushLocal callee into OpCallLocal, which resolves the callee out of the
-//     frame that was just released. Merging already recovers the return-path
-//     release on its own (no OpPushEnv means no envPooled clear, so
-//     RestoreAndRelease recycles), which is §1.1's measured leak; the tail-call
-//     release is left to the lever that owns it.
+//
+//   - RELEASE survives a MERGED let and is still cleared by a pushing one. For a
+//     pushing let the reason is that OpReleaseEnvFrame releases mc.env, which
+//     inside the body is the LET frame — not pool-owned, so the release would be
+//     a no-op at best. A merged let removes that reason exactly: mc.env inside
+//     its body IS the enclosing pooled parameter frame, and the merged slots the
+//     body reads are slots OF that frame, so the enclosing body's releasability
+//     proof covers them unchanged.
+//
+//     Merging on its own recovers only the RETURN-path release (no OpPushEnv
+//     means no envPooled clear, so RestoreAndRelease recycles). A frame
+//     abandoned at a general TAIL call still needs the explicit
+//     OpReleaseEnvFrame, and 92% of let frames are in tail position, so this
+//     clause is what reaches them. Measured on the Gabriel corpus at the default
+//     immutable top level: nqueens 2,264 -> 868,868 releases, pool hit
+//     78.6% -> 88.8%, wall −3.5%. It does NOT explain schelog zebra's 66.9% —
+//     that harness needs a mutable top level, under which no global callee is
+//     Stable and frame reclaim arms nowhere at all. See
+//     plans/flat-closure-baseline.local.md §6.
+//
+//     The peephole hazard this used to name is real but belongs to the peephole:
+//     a fusion that hoisted a PushLocal callee across the release would resolve
+//     it out of the frame just handed to the pool. The interior scans refuse
+//     that by callee kind (peephole.go, releaseSafeCallee) rather than by
+//     refusing to emit the release.
 func (p CompileTimeCallContext) UnderLetFrame(pushesFrame bool) CompileTimeCallContext {
 	q := p
-	if p.frameReuse.kind != frameReuseSelfTail {
+	switch p.frameReuse.kind {
+	case frameReuseSelfTail:
+		if pushesFrame {
+			q.frameReuse.letDepth++
+		}
+	case frameReuseRelease:
+		if pushesFrame {
+			q.frameReuse = noFrameReuse()
+		}
+	default:
 		q.frameReuse = noFrameReuse()
-		return q
-	}
-	if pushesFrame {
-		q.frameReuse.letDepth++
 	}
 	return q
 }

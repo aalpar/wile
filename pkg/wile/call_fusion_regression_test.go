@@ -76,3 +76,78 @@ func TestCallFusionPicksTheGroupsBottom(t *testing.T) {
 		})
 	}
 }
+
+// TestTailCallAcrossFrameReclaimInMergedLet is the value guard for the fusion
+// gate that let-slot merging made reachable.
+//
+// Once a merged `let` body keeps its frame-release disposition, a tail call
+// inside one emits `<callee push> <arg pushes> ReleaseEnvFrame PullApply`. A
+// fusion that deletes the callee push resolves the callee at the apply instead —
+// AFTER OpReleaseEnvFrame has handed mc.env to the pool and ResetForPool zeroed
+// it. That is sound for a callee read off the template or the free vector, and
+// not for one read through mc.env.
+//
+// WHY THIS TEST EXISTS AS A VALUE ASSERTION. Widening releaseSafeCallee to admit
+// OpPushLocal was measured against the whole suite: pkg/machine, pkg/wile and
+// every Scheme corpus test still passed, and only the structural pin in
+// peephole_test.go caught it. The arm below is the shape that actually fails —
+// it reports `no such local binding 1:0`, because slot 1 is the released frame's
+// zeroed callee slot. Without it the class is pinned only by a test that
+// inspects bytecode, which a later fusion rewrite could satisfy while breaking
+// the runtime.
+//
+// The three arms are the three callee kinds, and each reaches a different
+// decision, so a pass cannot be explained by "tail calls work":
+//
+//   - local callee, release armed -> NOT fused, stays PushLocal…/PullApply
+//   - Scheme global (cached binding), release armed -> fused to CallCachedBinding
+//   - promoted primitive, release armed -> fused to the promoted tail op
+//
+// Verified by disassembly at the time of writing; asserted here only by value,
+// because the point is that the ANSWER survives whichever way the peephole goes.
+func TestTailCallAcrossFrameReclaimInMergedLet(t *testing.T) {
+	cases := []struct {
+		name     string
+		code     string
+		want     string
+		noInline bool
+	}{
+		{
+			// A let-bound lambda is a KNOWN, capture-safe callee, so the release
+			// is armed — and it lives in a merged let slot, so the callee push is
+			// a PushLocal. Inlining is disabled to keep the call a real call;
+			// with it on, f's body is folded in and there is no callee at all.
+			name:     "local callee is not resolved out of the released frame",
+			code:     `(define (t n) (let ((f (lambda (x) (* x 2)))) (f n))) (t 21)`,
+			want:     "42",
+			noInline: true,
+		},
+		{
+			name: "Scheme global callee survives the release it is fused across",
+			code: `(define (h x) (* x 2)) (define (t n) (let ((k 1)) (h n))) (t 21)`,
+			want: "42",
+		},
+		{
+			name: "promoted primitive tail call survives the release",
+			code: `(define (t n) (let ((k 1)) (+ n k))) (t 41)`,
+			want: "42",
+		},
+	}
+	ctx := context.Background()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := []EngineOption{}
+			if tc.noInline {
+				opts = append(opts, WithInlineThreshold(0))
+			}
+			eng, err := NewEngine(ctx, opts...)
+			qt.Assert(t, err, qt.IsNil)
+			t.Cleanup(func() {
+				_ = eng.Close()
+			})
+			v, err := eng.EvalMultiple(ctx, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, v.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
