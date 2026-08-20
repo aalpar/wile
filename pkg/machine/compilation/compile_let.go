@@ -160,8 +160,27 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 		return err
 	}
 
+	// A PUSHING let becomes the shape for anything nested inside it, so a `let`
+	// in a `let` merges at the top level exactly as it does inside a procedure.
+	// This is what closes the larger of the two populations that kept depth != 0
+	// alive in emitted code (plans/flat-closure-baseline.local.md §7a: 81 sites of
+	// top-level `let` nesting plus 50 free-var pushes over such a frame).
+	//
+	// The frame width is therefore NOT known when OpPushEnv is emitted: a nested
+	// let appends its slots to childEnv while the body below is being compiled.
+	// The operand is patched at the end, which is why the index is kept. That is
+	// the whole difference from a lambda's shape, where the frame is built from
+	// tpl.shape at Apply time and late growth costs nothing.
+	pushEnvIndex := -1
 	if !merged {
+		pushEnvIndex = p.template.CodeLen()
 		p.AppendOperations(machine.NewOperationPushEnv(totalSlots))
+		p.ensureMergeState()
+		savedShape := p.shape
+		p.shape = childEnv
+		defer func() {
+			p.shape = savedShape
+		}()
 	}
 
 	// Install the cells for this frame's captured-and-assigned slots, before any
@@ -307,6 +326,19 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 		ctctx.UnderLetFrame(!merged).WithEnclosingDefines(v.Body()), v.Body())
 	if err != nil {
 		return err
+	}
+
+	// The frame's final width, now that every nested merge has taken its slots.
+	// Emitting the pre-body count would leave OpPushEnv building a frame the
+	// merged slots index past — an out-of-range slot, not a wrong value, so it
+	// faults rather than corrupting.
+	if pushEnvIndex >= 0 {
+		finalSlots := len(childEnv.LocalEnvironment().Bindings())
+		err = checkLocalSlotCapacity(finalSlots, "let")
+		if err != nil {
+			return err
+		}
+		p.template.PatchInstructionArg(pushEnvIndex, int32(finalSlots))
 	}
 
 	if !merged && !ctctx.inTail {

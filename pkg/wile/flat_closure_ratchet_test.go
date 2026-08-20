@@ -427,9 +427,43 @@ var letFrameCorpus = []struct {
 		want: "11",
 	},
 	{
-		// Does NOT merge: no enclosing frame to merge into.
+		// Does NOT merge: no enclosing frame to merge into. The OUTERMOST
+		// top-level let is the one push this whole corpus still costs.
 		name: "top-level let",
 		code: `(let ((a 1) (b 2)) (+ a b))`,
+		want: "3",
+	},
+	{
+		// Merges twice, into the outermost let's own frame. A pushing let is a
+		// shape for whatever nests inside it, so depth at the top level collapses
+		// the same way it does inside a procedure — this is the shape that used to
+		// be 81 of the 134 depth != 0 emit sites over this suite.
+		//
+		// The frame is three slots wide even though its OpPushEnv is emitted when
+		// only one is known, which is what the operand patch in CompileValidatedLet
+		// exists for. A wrong width faults on an out-of-range slot rather than
+		// reading the wrong one, so the value arm alone would catch it — but only
+		// this census catches the merge silently not happening.
+		name: "nested lets at the top level",
+		code: `(let ((a 1)) (let ((b (+ a 1))) (let ((c (+ b 1))) (+ a b c))))`,
+		want: "6",
+	},
+	{
+		// Merges. let* at the top level is the case whose binders do not exist
+		// when OpPushEnv is emitted AND whose nested slots arrive later still, so
+		// it exercises both sources of late growth against one operand.
+		name: "top-level let* over a nested let",
+		code: `(let* ((a 1) (b (+ a 1))) (let ((c (+ b 1))) (+ a b c)))`,
+		want: "6",
+	},
+	{
+		// Merges, and the merged slot outlives the let: a closure created inside
+		// the nested top-level let is pushed a free variable that now lives in the
+		// OUTER let's frame at depth 0. That push is the second population — 50 of
+		// the 134 sites — and it is only correct if the closure's free vector is
+		// filled from the patched frame.
+		name: "closure over a merged slot at the top level",
+		code: `(let ((a 1)) (let ((b (+ a 1))) ((lambda () (+ a b)))))`,
 		want: "3",
 	},
 	{
@@ -465,12 +499,17 @@ var letFrameCorpus = []struct {
 // push path still evaluates to the same value, so no assertion in the suite would
 // otherwise notice.
 //
-// Moved 11 -> 1 and 3 -> 1 by phase 2 of the let-slot merging plan. The residual
-// pair is "top-level let", which has no enclosing frame to merge into and must
-// keep pushing one of its own.
+// Moved 11 -> 1 and 3 -> 1 by phase 2 of the let-slot merging plan. Moved 1 -> 4
+// by extending merging to the top level, which added FOUR fixtures each keeping
+// exactly one push: a pushing let is now a shape, so the outermost top-level let
+// still pushes and everything nested inside it merges into that frame.
+//
+// The number to watch is therefore push-sites PER top-level-let fixture, which is
+// 1. If a nested top-level let ever pushes again this rises to 6, and the value
+// arm stays green — which is the whole reason the census exists.
 const (
-	pushEnvSitesBaseline = 1
-	popEnvSitesBaseline  = 1
+	pushEnvSitesBaseline = 4
+	popEnvSitesBaseline  = 4
 )
 
 // compileLetFrameCorpus compiles every letFrameCorpus entry through the public
