@@ -76,6 +76,12 @@ func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCall
 //
 // The trailing OpPopEnv is emitted only in non-tail position; a tail let leaves
 // the frame for the enclosing return to unwind.
+//
+// A MERGED let (canMergeLet, merged_slots.go) emits NEITHER bracket: its slots
+// come out of the enclosing lambda's parameter frame, so the stores and loads
+// above are the whole shape. That is the ordinary case — every let inside a
+// procedure body — and the pushing form survives only where there is no frame to
+// merge into (the top level, a syntax-case clause body).
 func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
 	v := expr.(*validate.ValidatedLet)
 
@@ -105,6 +111,15 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 	// bindings (R7RS 4.2.2: let* is equivalent to nested lets).
 	childEnv := p.createLetCompileEnv(v)
 
+	// Decided BEFORE p.env moves to childEnv: canMergeLet asks whether every
+	// compile-time frame between here and the enclosing lambda's parameter frame
+	// is itself merged, which is a question about the frame the let is being
+	// compiled IN.
+	merged := p.canMergeLet()
+	if merged {
+		p.markMerged(childEnv)
+	}
+
 	registeredBIDs := p.registerInlineCandidates(childEnv, v.Bindings)
 	defer p.unregisterInlineCandidates(registeredBIDs)
 
@@ -132,12 +147,22 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 		totalSlots += n
 	}
 
-	err := checkLocalSlotCapacity(totalSlots, "let")
+	// On the merged path the slots come out of the enclosing frame, so the count
+	// that has to fit the De Bruijn encoding is that frame's eventual width, not
+	// this let's own. Checked here rather than in shapeSlotFor because the emit
+	// funnel returns no error; EncodeLocalIndex's panic stays the backstop.
+	frameSlots := totalSlots
+	if merged {
+		frameSlots += p.shapeSlotCount()
+	}
+	err := checkLocalSlotCapacity(frameSlots, "let")
 	if err != nil {
 		return err
 	}
 
-	p.AppendOperations(machine.NewOperationPushEnv(totalSlots))
+	if !merged {
+		p.AppendOperations(machine.NewOperationPushEnv(totalSlots))
+	}
 
 	// Install the cells for this frame's captured-and-assigned slots, before any
 	// init runs. A letrec init that closes over a sibling must capture the
@@ -267,25 +292,43 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 		}
 	}
 
-	// The let body runs in the pushed frame (OpPushEnv above), one level below the
-	// enclosing closure's parameter frame. UnderLetFrame records that: a self-tail
-	// disposition survives with its pop count incremented (OpSelfTailCall pops back
-	// to the parameter frame before rebinding), a release disposition is cleared.
-	// This call and the OpPushEnv above are paired 1:1 — that pairing is what makes
-	// the pop count equal the runtime frame count. Tail position itself is
-	// preserved. A let body predeclares its own internal defines, so it is their
-	// letrec* group — override rather than inherit the enclosing one, which would
-	// name different procedures.
-	err = p.compileValidatedSequence(ctctx.UnderLetFrame().WithEnclosingDefines(v.Body()), v.Body())
+	// A PUSHING let's body runs in the frame OpPushEnv created, one level below the
+	// enclosing closure's parameter frame; a MERGED let's body runs in that
+	// parameter frame itself. UnderLetFrame is told which, and increments the
+	// self-tail pop count only for the pushing form — OpSelfTailCall pops back to
+	// the parameter frame before rebinding, so counting a frame that was never
+	// pushed would unwind one too many. That argument and the OpPushEnv emit above
+	// are driven by the same `merged`, which is what keeps the pop count equal to
+	// the runtime frame count by construction rather than by two walks agreeing.
+	// A release disposition is cleared either way — see UnderLetFrame for why the
+	// merged case does not take it. Tail position itself is preserved. A let body
+	// predeclares its own internal defines, so it is their letrec* group — override
+	// rather than inherit the enclosing one, which would name different
+	// procedures.
+	err = p.compileValidatedSequence(
+		ctctx.UnderLetFrame(!merged).WithEnclosingDefines(v.Body()), v.Body())
 	if err != nil {
 		return err
 	}
 
-	if !ctctx.inTail {
+	if !merged && !ctctx.inTail {
 		p.AppendOperations(machine.NewOperationPopEnv())
 	}
 
 	return nil
+}
+
+// shapeSlotCount returns how many slots the frame a merged let allocates into
+// already holds.
+func (p *CompileTimeContinuation) shapeSlotCount() int {
+	if p.shape == nil {
+		return 0
+	}
+	lenv := p.shape.LocalEnvironment()
+	if lenv == nil {
+		return 0
+	}
+	return len(lenv.Bindings())
 }
 
 // createLetCompileEnv creates a compile-time child environment with all

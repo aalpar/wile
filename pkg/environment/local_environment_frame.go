@@ -150,6 +150,25 @@ func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
 	return NewLocalIndex(i, 0), true
 }
 
+// AppendAnonymousSlot appends one binding slot that no symbol maps to, and
+// returns its index.
+//
+// It is the allocator for a compile-time frame whose slots are addressed
+// positionally rather than by name: `let`-slot merging (compilation's
+// shapeSlotFor) gives a merged `let` binder a slot in the enclosing lambda's
+// frame while the NAME stays in the `let`'s own compile-time frame, where
+// scope-set resolution can still shadow it. Adding the name here instead would
+// alias a same-named parameter — MaybeCreateLocalBinding dedups on scope-set
+// equality, and duplicate-parameter detection is that same call.
+//
+// The slot is initialized to Void rather than the zero Binding, so a read that
+// precedes any store sees `#!void` the way a freshly pushed frame's slot does.
+func (p *LocalEnvironmentFrame) AppendAnonymousSlot() int {
+	i := len(p.bindings)
+	p.bindings = append(p.bindings, Binding{value: values.Void, bindingType: BindingTypeUnknown})
+	return i
+}
+
 // GetLocalIndex returns the LocalIndex for the given symbol in this local environment.
 // Returns the first slot for the key, or nil if not bound.
 func (p *LocalEnvironmentFrame) GetLocalIndex(key *values.Symbol) *LocalIndex {

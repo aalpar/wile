@@ -154,15 +154,21 @@ func selfTailPops(tpl *machine.NativeTemplate) []int {
 // TestOrAlternativeSelfTailCallPopsNoFrame is the frame-reclaim half, and the
 // reason the lowering happens in the validated tree rather than only in codegen.
 //
-// It used to assert that the call was REWRITTEN AT ALL: a self tail call in the
-// alternative sat under the `or` let, so the walk counted it at depth 1 and
-// refused. Phase C removed that depth gate, so the site is rewritten either way
-// and the old assertion can no longer see the lowering — it would pass with the
-// lowering deleted. What discriminates now is the POP COUNT: `or` emits no frame,
-// so the op unwinds none; a real `let` emits one, so the op unwinds one.
+// THE DISCRIMINATOR HAS MOVED TWICE, and each move is a real change rather than
+// a weakened test. It first asserted that the call was REWRITTEN AT ALL; Phase C
+// removed the depth gate, so the site is rewritten either way. It then asserted
+// the POP COUNT — `or` emits no frame, a real `let` emits one — and let-slot
+// merging removed the `let`'s frame too, so both are 0.
 //
-// The two controls hold the loop shape constant and vary only the wrapper, so a
-// pass cannot be explained by "self-recursive procedures get OpSelfTailCall".
+// What separates them now is the BINDING: `or`'s lowering emits no store at all,
+// because OpBranchOnFalseValue leaves the test's own value in the register for
+// the consequent to return. A real `let` still stores its init into a slot, even
+// though that slot now lives in the enclosing frame. The pop counts stay here as
+// the record of what merging did; the store count is what fails if the lowering
+// stops firing.
+//
+// The controls hold the loop shape constant and vary only the wrapper, so a pass
+// cannot be explained by "self-recursive procedures get OpSelfTailCall".
 func TestOrAlternativeSelfTailCallPopsNoFrame(t *testing.T) {
 	plain := templateOf(t,
 		"(define (f n acc) (if (= n 0) acc (f (- n 1) (+ acc n))))", "f")
@@ -177,9 +183,36 @@ func TestOrAlternativeSelfTailCallPopsNoFrame(t *testing.T) {
 			"A 1 here means the lowering stopped firing and the op is compensating "+
 			"for a frame that should never have existed"))
 
+	qt.Assert(t, countOpInTree(wrapped, machine.OpStoreLocal), qt.Equals, 0,
+		qt.Commentf("an or's alternative must bind NOTHING: the consequent reads the "+
+			"value register the test already wrote, so there is no slot to store into"))
+
 	letWrapped := templateOf(t,
 		"(define (f n acc) (if (= n 0) acc (let ((m (- n 1))) (f m (+ acc n)))))", "f")
-	qt.Assert(t, selfTailPops(letWrapped), qt.DeepEquals, []int{1},
-		qt.Commentf("control: a REAL let does push a frame, so the op must unwind it — "+
-			"this is what makes the 0 above a measurement rather than a constant"))
+	qt.Assert(t, selfTailPops(letWrapped), qt.DeepEquals, []int{0},
+		qt.Commentf("a REAL let no longer pushes a frame either, since let-slot "+
+			"merging — which is why the store count below, not this one, is what "+
+			"makes the assertions above a measurement rather than a constant"))
+	qt.Assert(t, countOpInTree(letWrapped, machine.OpStoreLocal), qt.Equals, 1,
+		qt.Commentf("control: a REAL let binds, so it stores its init into a slot — "+
+			"a 0 here would mean this control had stopped discriminating too"))
+}
+
+// countOpInTree counts instructions with opcode op in a template and every
+// sub-template reachable through its literal pool.
+func countOpInTree(tpl *machine.NativeTemplate, op machine.OpCode) int {
+	q := 0
+	for _, instr := range tpl.Code() {
+		if instr.Op == op {
+			q++
+		}
+	}
+	for _, lit := range tpl.Literals() {
+		sub, ok := lit.(*machine.NativeTemplate)
+		if !ok {
+			continue
+		}
+		q += countOpInTree(sub, op)
+	}
+	return q
 }

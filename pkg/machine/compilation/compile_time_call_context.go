@@ -203,27 +203,42 @@ func (p CompileTimeCallContext) WithEnclosingDefines(body []validate.ValidatedEx
 	return q
 }
 
-// UnderLetFrame returns a copy describing the body of a form that pushes one env
-// frame (a let). It is the ONLY site that may say so, because it is paired 1:1
-// with compileValidatedLet's single OpPushEnv emit.
+// UnderLetFrame returns a copy describing the body of a let. It is the ONLY site
+// that may say so, because it is paired 1:1 with compileValidatedLet's single
+// descent into a body.
+//
+// pushesFrame says whether that let emitted an OpPushEnv. A merged let does not
+// (compilation/merged_slots.go): its slots live in the enclosing lambda's frame,
+// so the body runs in the SAME runtime frame the head did.
 //
 // The two dispositions answer differently, and the asymmetry is the phase:
 //
-//   - SELF-TAIL survives, with letDepth incremented. OpSelfTailCall pops that many
-//     frames before rebinding, so a self call under a let is rewritable after all
-//     (frame-reclaim Phase C). Before Phase C this cleared, and the call leaked one
-//     parameter frame per iteration.
-//   - RELEASE is cleared. OpReleaseEnvFrame releases mc.env, which inside a let body
-//     is the LET frame, not the parameter frame — and a let frame is not pool-owned
-//     (OpPushEnv allocates it directly and sets envPooled=false), so the release
-//     would be a no-op that reads as an optimization. Widening the release path to
-//     depth>0 is a different lever and is not this one.
-func (p CompileTimeCallContext) UnderLetFrame() CompileTimeCallContext {
+//   - SELF-TAIL survives, with letDepth incremented ONLY for a pushing let.
+//     OpSelfTailCall pops that many frames before rebinding, so a self call under
+//     a let is rewritable after all (frame-reclaim Phase C). Before Phase C this
+//     cleared, and the call leaked one parameter frame per iteration. A merged let
+//     contributes no frame, so incrementing would unwind the parameter frame's
+//     PARENT — the count has to equal the runtime frame count by construction,
+//     which is the whole reason it is counted here rather than by a second walk.
+//   - RELEASE is cleared, for a merged let as well. For a pushing let the reason
+//     is that OpReleaseEnvFrame releases mc.env, which inside the body is the LET
+//     frame, not pool-owned. A merged let removes that reason — mc.env there IS
+//     the pooled parameter frame — but taking the release is a SEPARATE lever with
+//     its own hazard: the peephole would then see OpReleaseEnvFrame between the
+//     argument pushes and the apply, and a fusion that survived it would turn a
+//     PushLocal callee into OpCallLocal, which resolves the callee out of the
+//     frame that was just released. Merging already recovers the return-path
+//     release on its own (no OpPushEnv means no envPooled clear, so
+//     RestoreAndRelease recycles), which is §1.1's measured leak; the tail-call
+//     release is left to the lever that owns it.
+func (p CompileTimeCallContext) UnderLetFrame(pushesFrame bool) CompileTimeCallContext {
 	q := p
 	if p.frameReuse.kind != frameReuseSelfTail {
 		q.frameReuse = noFrameReuse()
 		return q
 	}
-	q.frameReuse.letDepth++
+	if pushesFrame {
+		q.frameReuse.letDepth++
+	}
 	return q
 }

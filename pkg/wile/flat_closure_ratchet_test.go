@@ -388,3 +388,155 @@ func TestFlatClosureRatchetCorpusStillEvaluates(t *testing.T) {
 		})
 	}
 }
+
+// letFrameCorpus is the fixture set for the let-slot merging census
+// (plans/2026-08-19-let-slot-merging-impl.local.md). Distinct from
+// flatClosureRatchetCorpus because the shapes it must discriminate are different:
+// where the corpus above varies whether a loop body builds a closure, this one
+// varies where a `let` sits relative to a frame that still exists at run time.
+var letFrameCorpus = []struct {
+	name string
+	code string
+	want string
+}{
+	{
+		// Merges: the let sits directly in a lambda body, tail position, so it
+		// emits no OpPopEnv today either.
+		name: "tail let in a lambda body",
+		code: `((lambda (n) (let ((a (+ n 1)) (b (+ n 2))) (+ a b))) 10)`,
+		want: "23",
+	},
+	{
+		// Merges. Non-tail, so it is one of the 8% that has an OpPopEnv today.
+		name: "non-tail let in a lambda body",
+		code: `((lambda (n) (+ (let ((a (+ n 1))) a) n)) 10)`,
+		want: "21",
+	},
+	{
+		// Merges twice. Nested lets are the schelog:unify shape.
+		name: "nested lets in a lambda body",
+		code: `((lambda (n) (let ((a (+ n 1))) (let ((b (+ a 1))) (let ((c (+ b 1))) c)))) 10)`,
+		want: "13",
+	},
+	{
+		// Merges. A let whose binder shadows a parameter is the case that
+		// forbids appending binders to the enclosing frame directly — see §1 of
+		// the plan. The value pins that the two slots stay distinct.
+		name: "let shadowing a parameter",
+		code: `((lambda (x) (+ (let ((x 1)) x) x)) 10)`,
+		want: "11",
+	},
+	{
+		// Does NOT merge: no enclosing frame to merge into.
+		name: "top-level let",
+		code: `(let ((a 1) (b 2)) (+ a b))`,
+		want: "3",
+	},
+	{
+		// Merges, and the let-bound value is captured by an escaping closure.
+		// Flat closures copy, so slot reuse is invisible to it — that property is
+		// what removes this change's soundness gate.
+		name: "closure over a let binding",
+		code: `(((lambda (n) (let ((a (+ n 1))) (lambda () a))) 10))`,
+		want: "11",
+	},
+	{
+		// Merges. let* adds its binders incrementally at compile time, so its
+		// slot count is only correct after the loop that creates them.
+		name: "let* in a lambda body",
+		code: `((lambda (n) (let* ((a (+ n 1)) (b (+ a 1))) (+ a b))) 10)`,
+		want: "23",
+	},
+	{
+		// Merges. A named let is a letrec whose init is a lambda: the letrec
+		// binding merges, and the loop's own parameter frame is a real one.
+		name: "named let in a lambda body",
+		code: `((lambda (n) (let loop ((i 0) (acc 0)) (if (= i n) acc (loop (+ i 1) (+ acc i))))) 5)`,
+		want: "10",
+	},
+}
+
+// pushEnvSitesBaseline / popEnvSitesBaseline are the OpPushEnv and OpPopEnv
+// instruction counts letFrameCorpus compiles to.
+//
+// Measured, not chosen. This is a CENSUS, not a gate ratchet: let-slot merging is
+// an unconditional rewrite, so there is no armed/disarmed count to pin. What it
+// catches is the merge silently not happening — every entry falling back to the
+// push path still evaluates to the same value, so no assertion in the suite would
+// otherwise notice.
+//
+// Moved 11 -> 1 and 3 -> 1 by phase 2 of the let-slot merging plan. The residual
+// pair is "top-level let", which has no enclosing frame to merge into and must
+// keep pushing one of its own.
+const (
+	pushEnvSitesBaseline = 1
+	popEnvSitesBaseline  = 1
+)
+
+// compileLetFrameCorpus compiles every letFrameCorpus entry through the public
+// Engine and returns the compiled templates.
+func compileLetFrameCorpus(t *testing.T) []*machine.NativeTemplate {
+	t.Helper()
+	ctx := context.Background()
+	q := make([]*machine.NativeTemplate, 0, len(letFrameCorpus))
+	for _, tc := range letFrameCorpus {
+		engine, err := NewEngine(ctx)
+		if err != nil {
+			t.Fatalf("%s: new engine: %v", tc.name, err)
+		}
+		expr, err := engine.Parse(ctx, tc.code)
+		if err != nil {
+			t.Fatalf("%s: parse: %v", tc.name, err)
+		}
+		compiled, err := engine.Compile(ctx, expr)
+		if err != nil {
+			t.Fatalf("%s: compile: %v", tc.name, err)
+		}
+		q = append(q, compiled.template)
+	}
+	return q
+}
+
+// TestLetFrameMergeCensus pins how many env-frame pushes and pops letFrameCorpus
+// compiles to. Phase 2 of the let-slot merging plan must move both strictly DOWN.
+func TestLetFrameMergeCensus(t *testing.T) {
+	tpls := compileLetFrameCorpus(t)
+	pushes, pops := 0, 0
+	for i, tpl := range tpls {
+		np := countOpInTemplateTree(tpl, machine.OpPushEnv, map[*machine.NativeTemplate]bool{})
+		nq := countOpInTemplateTree(tpl, machine.OpPopEnv, map[*machine.NativeTemplate]bool{})
+		t.Logf("%-44s pushenv=%d popenv=%d", letFrameCorpus[i].name, np, nq)
+		pushes += np
+		pops += nq
+	}
+	if pushes != pushEnvSitesBaseline {
+		t.Errorf("OpPushEnv sites = %d, want %d; if this was intended, update "+
+			"pushEnvSitesBaseline AND say which phase moved it",
+			pushes, pushEnvSitesBaseline)
+	}
+	if pops != popEnvSitesBaseline {
+		t.Errorf("OpPopEnv sites = %d, want %d; if this was intended, update "+
+			"popEnvSitesBaseline AND say which phase moved it",
+			pops, popEnvSitesBaseline)
+	}
+}
+
+// TestLetFrameCorpusValues is the value arm of the census: every shape it counts
+// pushes for must still evaluate correctly. A census alone cannot tell a merge
+// from a miscompile.
+func TestLetFrameCorpusValues(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range letFrameCorpus {
+		engine, err := NewEngine(ctx)
+		if err != nil {
+			t.Fatalf("%s: new engine: %v", tc.name, err)
+		}
+		got, err := engine.EvalMultiple(ctx, tc.code)
+		if err != nil {
+			t.Fatalf("%s: eval: %v", tc.name, err)
+		}
+		if got.SchemeString() != tc.want {
+			t.Errorf("%s = %s, want %s", tc.name, got.SchemeString(), tc.want)
+		}
+	}
+}

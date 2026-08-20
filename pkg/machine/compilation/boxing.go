@@ -324,7 +324,7 @@ func (p *CompileTimeContinuation) maybeBoxOnDeclare(binder *syntax.SyntaxSymbol,
 	}
 	p.ensureBoxedSlots()
 	p.boxedSlots.Set(k)
-	p.AppendOperations(machine.NewOperationBoxSlot(li))
+	p.AppendOperations(machine.NewOperationBoxSlot(p.runtimeIndex(li)))
 }
 
 // ensureBoxedSlots allocates the shared verdict map on first use.
@@ -356,7 +356,7 @@ func (p *CompileTimeContinuation) localIsBoxed(li *environment.LocalIndex) bool 
 // closure in scope can observe the slots.
 func (p *CompileTimeContinuation) emitBoxSlots(lis []*environment.LocalIndex) {
 	for _, li := range lis {
-		p.AppendOperations(machine.NewOperationBoxSlot(li))
+		p.AppendOperations(machine.NewOperationBoxSlot(p.runtimeIndex(li)))
 	}
 }
 
@@ -400,7 +400,11 @@ func (p *CompileTimeContinuation) emitLocalStore(li *environment.LocalIndex) {
 		p.AppendOperations(machine.NewOperationStoreFree(i))
 		return
 	}
-	if p.localIsBoxed(li) {
+	boxed := p.localIsBoxed(li)
+	// Translated only now: localIsBoxed above and freeSlotOf before it key on the
+	// COMPILE-TIME index, which is what the binder's verdict was recorded under.
+	li = p.runtimeIndex(li)
+	if boxed {
 		p.AppendOperations(machine.NewOperationStoreThroughBox(li))
 		return
 	}
@@ -412,12 +416,13 @@ func (p *CompileTimeContinuation) emitLocalStore(li *environment.LocalIndex) {
 // followed by an unbox when the slot holds a cell.
 func (p *CompileTimeContinuation) emitLocalLoad(li *environment.LocalIndex) {
 	i, isFree := p.freeSlotOf(li)
+	boxed := p.localIsBoxed(li)
 	if isFree {
 		p.AppendOperations(machine.NewOperationLoadFree(i))
 	} else {
-		p.AppendOperations(machine.NewOperationLoadLocalByLocalIndexImmediate(li))
+		p.AppendOperations(machine.NewOperationLoadLocalByLocalIndexImmediate(p.runtimeIndex(li)))
 	}
-	if p.localIsBoxed(li) {
+	if boxed {
 		p.AppendOperations(machine.NewOperationUnbox())
 	}
 }
@@ -440,7 +445,7 @@ func (p *CompileTimeContinuation) emitFreeVarPush(fv freeVar) {
 		p.AppendOperations(machine.NewOperationLoadFree(i), machine.NewOperationPush())
 		return
 	}
-	p.AppendOperations(machine.NewOperationLoadLocalByLocalIndexImmediate(li), machine.NewOperationPush())
+	p.AppendOperations(machine.NewOperationLoadLocalByLocalIndexImmediate(p.runtimeIndex(li)), machine.NewOperationPush())
 }
 
 // markBoxedFreeVars sets freeVar.boxed from the binder-side decision, so a free

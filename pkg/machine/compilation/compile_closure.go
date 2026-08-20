@@ -253,6 +253,17 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 	// re-basing is needed across the descent.
 	p.ensureBoxedSlots()
 	childCompiler.boxedSlots = p.boxedSlots
+	// childEnv is this body's parameter frame AND the shape tpl records, so a slot
+	// appended to it widens every apply frame built from that shape. That is what
+	// makes it the frame a `let` in this body merges into.
+	childCompiler.shape = childEnv
+	// The merge maps are SHARED for the same reason boxedSlots is: a body that
+	// retains its lexical env reaches an enclosing merged slot by depth rather
+	// than through its free vector, and a child with an empty map would emit the
+	// untranslated index.
+	p.ensureMergeState()
+	childCompiler.mergedShape = p.mergedShape
+	childCompiler.mergedSlot = p.mergedSlot
 	// The unit's arity table follows the body down. Nearly every call to a
 	// same-unit define sits inside some procedure, so a table that stopped at the
 	// top level would never be consulted where it matters. Propagating it is safe

@@ -267,6 +267,14 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	bodyCompiler.libraryScope = p.libraryScope
 	bodyCompiler.patternVars = patternVars
 	bodyCompiler.patternVarSyntax = patternVarSyntax
+	// The merge maps are shared so a reference from this clause body out into an
+	// enclosing merged `let` translates. `shape` is deliberately NOT set: a `let`
+	// here sits under the pattern-variable frame BindPatternVars pushes at run
+	// time, whose width this compiler does not own, so it must keep pushing a
+	// frame of its own. canMergeLet would refuse it on the walk anyway; leaving
+	// shape nil states the reason at the source rather than relying on that.
+	bodyCompiler.mergedShape = p.mergedShape
+	bodyCompiler.mergedSlot = p.mergedSlot
 	// Inherit the parent compiler's current source so that operations emitted
 	// by bodyCompiler (like BindPatternVars) are tagged with the syntax-case
 	// form's source location.

@@ -144,6 +144,34 @@ type CompileTimeContinuation struct {
 	// region scan enumerated. See maybeBoxOnDeclare for why it exists and why
 	// its predicate is weaker than the region scans'.
 	boxOnDeclare []*syntax.SyntaxSymbol
+	// shape is the frame a merged `let`'s slots are allocated in: the enclosing
+	// lambda's parameter frame, which is also what tpl.SetShape recorded, so a
+	// slot appended to it widens the frame every apply builds.
+	//
+	// nil disables merging entirely, and that is how the top-level, library and
+	// transformer compilers keep the OpPushEnv path: they have no enclosing frame
+	// to merge into. Set by compileBody on the child continuation.
+	shape *environment.EnvironmentFrame
+	// mergedShape maps each compile-time `let` frame that was merged to the frame
+	// it was merged INTO. A frame present here does not exist at run time, so
+	// runtimeIndex skips it when converting a compile-time depth into a runtime
+	// one. The value is not always p.shape: a body that retains its lexical env
+	// can reach an outer lambda's merged slot by depth.
+	//
+	// SHARED, not copied, with every continuation compiling against the same env
+	// chain — for the same reason boxedSlots is. A reference from inside a
+	// syntax-case clause body reaching out into an enclosing merged `let` is
+	// compiled by a different continuation, and one with an empty map here would
+	// emit an untranslated index.
+	mergedShape map[*environment.EnvironmentFrame]*environment.EnvironmentFrame
+	// mergedSlot maps a merged frame's own slot to the slot it occupies in shape.
+	//
+	// Allocated lazily, one slot at a time, deliberately: a frame's binding count
+	// is not fixed when its `let` starts (predeclareBodyDefines runs first, and
+	// withBoxOnDeclare's net can create a slot at any point during the body), so
+	// a contiguous per-`let` block would be corrupted by any later append to that
+	// frame. Shared alongside mergedFrames.
+	mergedSlot map[boxedSlotKey]int
 }
 
 // unitFrameReclaimVerdict reports the interprocedural verdict for the define with

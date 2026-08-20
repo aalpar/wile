@@ -193,8 +193,13 @@ func TestNestedSelfTailCallAcrossContinuationReentry(t *testing.T) {
 func TestNestedSelfTailCallIsArmed(t *testing.T) {
 	tpl := templateOf(t,
 		"(define (loop i n) (if (>= i n) i (let ((j (+ i 1))) (loop j n))))", "loop")
-	qt.Assert(t, selfTailPops(tpl), qt.DeepEquals, []int{1},
-		qt.Commentf("the let-wrapped self call must compile to one OpSelfTailCall "+
-			"unwinding one frame; an empty result means the value tests above are "+
-			"measuring the unoptimized compiler"))
+	// The pop count is 0, not 1, since let-slot merging: the `let` allocates its
+	// slot in the enclosing parameter frame and emits no OpPushEnv, so there is
+	// no frame between the call site and the frame OpSelfTailCall rebinds. What
+	// this guard is for is unchanged — an EMPTY result still means the value
+	// tests above are measuring an unoptimized compiler.
+	qt.Assert(t, selfTailPops(tpl), qt.DeepEquals, []int{0},
+		qt.Commentf("the let-wrapped self call must compile to one OpSelfTailCall; "+
+			"an empty result means the value tests above are measuring the "+
+			"unoptimized compiler"))
 }
