@@ -89,14 +89,32 @@ var flatClosureRatchetCorpus = []struct {
 		want: "45",
 	},
 	{
-		// The phase-8 subject: identical loop shape, but the body builds a
-		// closure per iteration. Refused today by bodyIsSelfTailReusable's
-		// escaping-closure clause; admitted once flat closures make that
-		// clause's answer permanently "no".
-		name: "named let building a closure per iteration",
+		// A closure-building loop that is refused by the OTHER clause, and is
+		// here to keep the two reasons apart. Its exit branch calls map, which
+		// is stamped InvokesProcedure and therefore not capture-safe, so
+		// bodyCalleesAllCaptureSafe refuses it whatever the escaping-closure
+		// clause says. Measured: still armed=0 with that clause deleted.
+		//
+		// It was written as the phase-8 subject and could not serve as one.
+		// The entry below is the subject; this one stays as the control that
+		// distinguishes "phase 8 widened the gate" from "phase 8 widened it
+		// past the callee check too", which it must not.
+		name: "closure per iteration, map INSIDE the loop",
 		code: `(let loop ((i 0) (acc '()))
 		         (if (= i 3) (map (lambda (f) (f)) acc)
 		             (loop (+ i 1) (cons (lambda () i) acc))))`,
+		want: "(2 1 0)",
+	},
+	{
+		// THE PHASE-8 SUBJECT. Same loop, but the closures are applied after it
+		// returns, so the body's callees are =, +, cons and the self call —
+		// all capture-safe. The only thing refusing it is the escaping-closure
+		// clause of bodyIsSelfTailReusable, which is what phase 8 drops.
+		name: "closure per iteration, map OUTSIDE the loop",
+		code: `(map (lambda (f) (f))
+		         (let loop ((i 0) (acc '()))
+		           (if (= i 3) acc
+		               (loop (+ i 1) (cons (lambda () i) acc)))))`,
 		want: "(2 1 0)",
 	},
 	{
