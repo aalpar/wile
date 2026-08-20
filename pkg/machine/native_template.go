@@ -104,6 +104,15 @@ type NativeTemplate struct {
 	// linear scan. Lazily initialized on first Hashable literal.
 	literalIndex map[uint64][]int
 
+	// sourceIndex maps a source context's identity — sourceEqual's (file, line,
+	// column) triple, exactly — to its sourceTable slot, so interning is a map
+	// probe rather than a scan of the table.
+	//
+	// The key IS the equivalence relation, so unlike literalIndex there are no
+	// collision buckets to re-check. Rebuilt lazily, because Copy clones
+	// sourceTable and not this map.
+	sourceIndex map[sourceKey]uint32
+
 	// Integer dispatch: all operations compiled to Instructions.
 	// Ops with a dedicated opcode (all of opcode.go's waves) are direct switch
 	// cases; the remaining complex ops (case-lambda closures, dynamic-wind,
@@ -317,25 +326,59 @@ func (p *NativeTemplate) SourceAt(pc int) *syntax.SourceContext {
 }
 
 // internSource deduplicates a source context and returns its index in the sourceTable.
-// Uses pointer equality first (fast path), then structural equality via sourceEqual.
 // Index 0 is reserved for nil (no source).
+//
+// One probe of sourceIndex, not a scan of sourceTable. The scan this replaces
+// ran once per EMITTED INSTRUCTION against a table that grows with the compiled
+// form, which made emission quadratic in program size — 61% cumulative on the
+// 40,000-internal-define profile, and the older of the two compile-time
+// quadratics that profile named.
+//
+// Interning still returns the FIRST slot holding an equal context, because
+// sourceIndex only ever records the slot that created a key.
 func (p *NativeTemplate) internSource(src *syntax.SourceContext) uint32 {
 	if src == nil {
 		return 0
 	}
-	for i, s := range p.sourceTable {
-		if s == src || sourceEqual(s, src) {
-			return uint32(i)
-		}
+	p.ensureSourceIndex()
+	k := newSourceKey(src)
+	idx, ok := p.sourceIndex[k]
+	if ok {
+		return idx
 	}
 	if len(p.sourceTable) > math.MaxUint32 {
 		panic(werr.WrapForeignErrorf(
 			werr.ErrInvalidArgument,
 			"internSource: source table overflow (%d entries)", len(p.sourceTable)))
 	}
-	idx := uint32(len(p.sourceTable))
+	idx = uint32(len(p.sourceTable))
 	p.sourceTable = append(p.sourceTable, src)
+	p.sourceIndex[k] = idx
 	return idx
+}
+
+// ensureSourceIndex builds sourceIndex from sourceTable when it is absent —
+// on a freshly constructed template, and after a Copy, which clones the table
+// but not the index.
+//
+// The nil sentinel at slot 0 is skipped: sourceEqual reports nil equal to
+// nothing but nil, and internSource answers a nil source before probing.
+func (p *NativeTemplate) ensureSourceIndex() {
+	if p.sourceIndex != nil {
+		return
+	}
+	p.sourceIndex = make(map[sourceKey]uint32, len(p.sourceTable)+1)
+	for i, s := range p.sourceTable {
+		if s == nil {
+			continue
+		}
+		k := newSourceKey(s)
+		_, seen := p.sourceIndex[k]
+		if seen {
+			continue
+		}
+		p.sourceIndex[k] = uint32(i)
+	}
 }
 
 // AppendOperationsWithSource converts operations to instructions and tags
@@ -438,14 +481,33 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 	}
 }
 
-// sourceEqual compares two source contexts for equality (by location only).
+// sourceKey is a source context reduced to what sourceEqual compares, so that
+// map equality on the key and sourceEqual agree by construction.
+//
+// Keep the two in step: a field added to one is a field the other needs.
+type sourceKey struct {
+	file string
+	line int
+	col  int
+}
+
+// newSourceKey projects a non-nil source context onto its identity.
+func newSourceKey(src *syntax.SourceContext) sourceKey {
+	return sourceKey{
+		file: src.File,
+		line: src.Start.Line(),
+		col:  src.Start.Column(),
+	}
+}
+
+// sourceEqual compares two source contexts for equality (by location only),
+// extending sourceKey's relation to nil: nil is equal to nothing but nil, which
+// is why slot 0's sentinel never interns.
 func sourceEqual(a, b *syntax.SourceContext) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
-	return a.File == b.File &&
-		a.Start.Line() == b.Start.Line() &&
-		a.Start.Column() == b.Start.Column()
+	return newSourceKey(a) == newSourceKey(b)
 }
 
 func (p *NativeTemplate) Name() string {

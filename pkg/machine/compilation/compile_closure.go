@@ -306,19 +306,21 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 	// letrec* region (R7RS §5.3.2) whose slots hold #!void until their own define
 	// runs. defineBinders is that region, and paramBinders is not, which is why
 	// the two are marked separately rather than as one list.
+	//
+	// bodyRefs is the body's reference index: one walk, shared by the parameter
+	// pass, the define pass and the boxOnDeclare safety net below, all of which
+	// used to walk the body once per binder.
+	bodyRefs := newRefIndex(body)
 	paramBinders := procBinders(clause)
-	childCompiler.emitBoxSlots(childCompiler.markBoxedBinders(paramBinders, body, nil))
-	defineRegion := bodyBindersOfRegion(body)
-	defineNames := make([]*syntax.SyntaxSymbol, len(defineRegion))
-	for i := range defineRegion {
-		defineNames[i] = defineRegion[i].name
+	childCompiler.emitBoxSlots(childCompiler.markBoxedBinders(paramBinders, bodyRefs, nil))
+	defineRegion := newLetrecRegion(bodyBindersOfRegion(body))
+	defineNames := make([]*syntax.SyntaxSymbol, len(defineRegion.binders))
+	for i := range defineRegion.binders {
+		defineNames[i] = defineRegion.binders[i].name
 	}
-	childCompiler.emitBoxSlots(childCompiler.markBoxedBinders(defineNames, body,
-		func(i int) bool {
-			return letrecRegionForcesBox(defineRegion, i)
-		}))
+	childCompiler.emitBoxSlots(childCompiler.markBoxedBinders(defineNames, bodyRefs, defineRegion.forcesBox))
 	// The safety net for a define this scan could not enumerate.
-	restoreBoxOnDeclare := childCompiler.withBoxOnDeclare(body)
+	restoreBoxOnDeclare := childCompiler.withBoxOnDeclare(bodyRefs)
 	defer restoreBoxOnDeclare()
 
 	// Docstring: the validator has already extracted any leading string

@@ -135,6 +135,89 @@ func TestInternSource_LargeIndex(t *testing.T) {
 	}
 }
 
+// TestInternSource_DedupSurvivesCopy pins the one hazard the hash index adds
+// over the linear scan it replaced.
+//
+// Copy clones sourceTable and NOT sourceIndex, so a copied template starts with
+// a table and no index. If the rebuild were skipped, interning a context the
+// copy already holds would append a duplicate entry rather than finding it —
+// silently, since SourceAt would still report the right location. The table
+// length is what catches it.
+func TestInternSource_DedupSurvivesCopy(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+
+	source := &syntax.SourceContext{
+		File:  "test.scm",
+		Start: syntax.NewSourceIndexes(11, 7, 4),
+	}
+	tpl.AppendOperationsWithSource(source, NewOperationLoadVoid())
+	before := len(tpl.sourceTable)
+
+	copied := tpl.Copy()
+	c.Assert(len(copied.sourceTable), qt.Equals, before)
+
+	// A DISTINCT pointer with the same location: sourceEqual's relation, which is
+	// what the index must key on.
+	equal := &syntax.SourceContext{
+		File:  "test.scm",
+		Start: syntax.NewSourceIndexes(11, 7, 4),
+	}
+	c.Assert(copied.internSource(equal), qt.Equals, tpl.internSource(source))
+	c.Assert(len(copied.sourceTable), qt.Equals, before)
+
+	// And a genuinely new location still extends it.
+	other := &syntax.SourceContext{
+		File:  "test.scm",
+		Start: syntax.NewSourceIndexes(11, 7, 5),
+	}
+	copied.internSource(other)
+	c.Assert(len(copied.sourceTable), qt.Equals, before+1)
+}
+
+// TestSourceKeyMatchesSourceEqual pins that the map key and the predicate decide
+// the same relation. They are two spellings of one rule, and a field added to
+// one without the other would make interning silently coarser or finer.
+func TestSourceKeyMatchesSourceEqual(t *testing.T) {
+	c := qt.New(t)
+
+	base := &syntax.SourceContext{
+		Text:  "original text",
+		File:  "test.scm",
+		Start: syntax.NewSourceIndexes(11, 7, 4),
+		End:   syntax.NewSourceIndexes(24, 20, 4),
+	}
+	tcs := []struct {
+		name  string
+		other *syntax.SourceContext
+	}{
+		{
+			// Text, End and the absolute byte INDEX all differ; file, line and
+			// column do not. sourceEqual is line/column-only, so these ARE the
+			// same source — which is also what pins index out of the relation.
+			name: "differing text, end and byte index are still equal",
+			other: &syntax.SourceContext{
+				Text:  "rewritten by a macro",
+				File:  "test.scm",
+				Start: syntax.NewSourceIndexes(99, 7, 4),
+				End:   syntax.NewSourceIndexes(99, 9, 9),
+			},
+		},
+		{name: "differing file", other: &syntax.SourceContext{
+			File: "other.scm", Start: syntax.NewSourceIndexes(11, 7, 4)}},
+		{name: "differing line", other: &syntax.SourceContext{
+			File: "test.scm", Start: syntax.NewSourceIndexes(11, 7, 5)}},
+		{name: "differing column", other: &syntax.SourceContext{
+			File: "test.scm", Start: syntax.NewSourceIndexes(11, 8, 4)}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(newSourceKey(base) == newSourceKey(tc.other),
+				qt.Equals, sourceEqual(base, tc.other))
+		})
+	}
+}
+
 func TestCopy_PreservesSourceRefs(t *testing.T) {
 	c := qt.New(t)
 	tpl := NewNativeTemplate(0, 0, false)

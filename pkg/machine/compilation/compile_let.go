@@ -173,38 +173,36 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 	// below, and boxed there. Body defines are present: predeclareBodyDefines
 	// above already gave them slots.
 	// Body defines are a letrec* region of their own, whatever the let's kind.
-	restoreBoxOnDeclare := p.withBoxOnDeclare(letScope)
+	//
+	// scopeRefs is the let scope's reference index: one walk, shared by the body
+	// pass, the binder pass, the let* loop and the boxOnDeclare safety net.
+	scopeRefs := newRefIndex(letScope)
+	restoreBoxOnDeclare := p.withBoxOnDeclare(scopeRefs)
 	defer restoreBoxOnDeclare()
 
-	bodyRegion := bodyBindersOfRegion(v.Body())
-	bodyNames := make([]*syntax.SyntaxSymbol, len(bodyRegion))
-	for i := range bodyRegion {
-		bodyNames[i] = bodyRegion[i].name
+	bodyRegion := newLetrecRegion(bodyBindersOfRegion(v.Body()))
+	bodyNames := make([]*syntax.SyntaxSymbol, len(bodyRegion.binders))
+	for i := range bodyRegion.binders {
+		bodyNames[i] = bodyRegion.binders[i].name
 	}
-	p.emitBoxSlots(p.markBoxedBinders(bodyNames, letScope, func(i int) bool {
-		return letrecRegionForcesBox(bodyRegion, i)
-	}))
+	p.emitBoxSlots(p.markBoxedBinders(bodyNames, scopeRefs, bodyRegion.forcesBox))
 
 	// The let's own binders. Only a letrec-family group carries the
 	// initialization-order hazard: in a plain let the inits are evaluated before
 	// the frame exists, and in a let* a binder is not in scope in its own init,
 	// so no closure can capture either before its store. let* binders are absent
 	// from this list for a second reason as well — they do not exist yet.
-	letRegion := letBindersOfRegion(v)
 	if v.Kind != validate.LetKindLetStar {
-		letNames := make([]*syntax.SyntaxSymbol, len(letRegion))
-		for i := range letRegion {
-			letNames[i] = letRegion[i].name
+		letRegion := newLetrecRegion(letBindersOfRegion(v))
+		letNames := make([]*syntax.SyntaxSymbol, len(letRegion.binders))
+		for i := range letRegion.binders {
+			letNames[i] = letRegion.binders[i].name
 		}
-		forced := func(int) bool {
-			return false
-		}
+		var forced func(i int) bool
 		if v.Kind.InitsInScope() {
-			forced = func(i int) bool {
-				return letrecRegionForcesBox(letRegion, i)
-			}
+			forced = letRegion.forcesBox
 		}
-		p.emitBoxSlots(p.markBoxedBinders(letNames, letScope, forced))
+		p.emitBoxSlots(p.markBoxedBinders(letNames, scopeRefs, forced))
 	}
 
 	// Emit init compilation + stores based on Kind.
@@ -250,7 +248,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 			// A let* binder is not in scope in its own init, so installing its
 			// cell right after the store is early enough: the next init is the
 			// first code that can close over it.
-			p.emitBoxSlots(p.markBoxedBinders([]*syntax.SyntaxSymbol{b.Name}, letScope, nil))
+			p.emitBoxSlots(p.markBoxedBinders([]*syntax.SyntaxSymbol{b.Name}, scopeRefs, nil))
 		}
 
 	case validate.LetKindLetrecStar:

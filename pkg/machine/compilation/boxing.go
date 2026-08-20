@@ -100,24 +100,12 @@ const (
 // costs one indirection. The opposite error is a wrong answer — and cannot
 // happen, because a genuine reference necessarily carries the binder's scopes as
 // a subset, which is the same relation GetLocalIndex resolves by.
-func binderIsBoxed(name *syntax.SyntaxSymbol, scope []validate.ValidatedExpr) bool {
-	if name == nil {
-		return false
-	}
-	captured := false
-	assigned := false
-	for _, e := range scope {
-		if !captured {
-			captured = referencesBinder(e, name, refInsideClosure)
-		}
-		if !assigned {
-			assigned = assignsBinder(e, name)
-		}
-		if captured && assigned {
-			return true
-		}
-	}
-	return false
+//
+// Asked of a refIndex over the scope rather than of the scope itself: the scan
+// this used to run is the same for every binder, so it is enumerated once per
+// region. See ref_index.go.
+func (p refIndex) binderIsBoxed(name *syntax.SyntaxSymbol) bool {
+	return p.capturedBy(name) && p.assignedBy(name)
 }
 
 // letrecRegionBinder is one binder of a letrec* region — a letrec/letrec*/named-let
@@ -166,7 +154,31 @@ func bodyBindersOfRegion(body []validate.ValidatedExpr) []letrecRegionBinder {
 	return q
 }
 
-// letrecRegionForcesBox reports whether binder i of a letrec* region must hold a
+// letrecRegion is a letrec* region — its binders, and the one reference index
+// every tier question about them is answered from.
+//
+// The index is over the region's INITS, indexed by binder position, which is
+// what lets tier() ask "does init j reference binder i" without a walk per
+// (i, j) pair. Build it once per region and reuse it: markBoxedBinders asks
+// forcesBox for every binder, and forcesBox asks about every init.
+type letrecRegion struct {
+	binders []letrecRegionBinder
+	refs    refIndex
+}
+
+// newLetrecRegion indexes a region's inits, keyed by binder position.
+func newLetrecRegion(bs []letrecRegionBinder) *letrecRegion {
+	inits := make([]validate.ValidatedExpr, len(bs))
+	for i := range bs {
+		inits[i] = bs[i].init
+	}
+	return &letrecRegion{
+		binders: bs,
+		refs:    newRefIndex(inits),
+	}
+}
+
+// forcesBox reports whether binder i of a letrec* region must hold a
 // cell for a reason that has nothing to do with mutation.
 //
 // THE HAZARD IS INITIALIZATION ORDER, AND IT ONLY EXISTS ONCE FREE VARIABLES ARE
@@ -185,26 +197,20 @@ func bodyBindersOfRegion(body []validate.ValidatedExpr) []letrecRegionBinder {
 // A capture in the region's BODY is safe — every store has run by then — so the
 // scan covers the inits alone. That precision is what keeps a merely
 // body-captured binder unboxed.
-func letrecRegionForcesBox(bs []letrecRegionBinder, i int) bool {
-	if i < 0 || i >= len(bs) {
+func (p *letrecRegion) forcesBox(i int) bool {
+	if i < 0 || i >= len(p.binders) {
 		return false
 	}
-	capturedDuringInit := false
-	for j := range bs {
-		if referencesBinder(bs[j].init, bs[i].name, refInsideClosure) {
-			capturedDuringInit = true
-			break
-		}
-	}
-	if !capturedDuringInit {
+	if !p.refs.capturedBy(p.binders[i].name) {
 		return false
 	}
-	return letrecRegionTier(bs, i) != tierSelfPatch
+	return p.tier(i) != tierSelfPatch
 }
 
 // markBoxedBinders decides, for each binder in binders, whether it is boxed over
-// scope; records the boxed ones in p.boxedSlots by absolute slot; and returns
-// their LocalIndexes in binder order so the caller can emit OpBoxSlot.
+// the region refs indexes; records the boxed ones in p.boxedSlots by absolute
+// slot; and returns their LocalIndexes in binder order so the caller can emit
+// OpBoxSlot.
 //
 // forced is an extra, independent reason to box the i-th binder — the letrec*
 // initialization-order hazard — or nil when the binders are not a letrec* region.
@@ -215,7 +221,7 @@ func letrecRegionForcesBox(bs []letrecRegionBinder, i int) bool {
 // three go through GetLocalIndex against the same frame.
 func (p *CompileTimeContinuation) markBoxedBinders(
 	binders []*syntax.SyntaxSymbol,
-	scope []validate.ValidatedExpr,
+	refs refIndex,
 	forced func(i int) bool,
 ) []*environment.LocalIndex {
 	if p.env == nil || len(binders) == 0 {
@@ -226,7 +232,7 @@ func (p *CompileTimeContinuation) markBoxedBinders(
 		if b == nil {
 			continue
 		}
-		if !binderIsBoxed(b, scope) && (forced == nil || !forced(i)) {
+		if !refs.binderIsBoxed(b) && (forced == nil || !forced(i)) {
 			continue
 		}
 		li := p.env.GetLocalIndex(b.Sym, syntax.ScopesOf(b.Scopes()))
@@ -244,36 +250,11 @@ func (p *CompileTimeContinuation) markBoxedBinders(
 	return q
 }
 
-// setBangTargetsIn returns every set!-target symbol in body, in traversal order.
-//
-// These are REFERENCES, not binders — their scope sets are supersets of the
-// binder's, which is the direction sameBinder(binder, ref) tests.
-func setBangTargetsIn(body []validate.ValidatedExpr) []*syntax.SyntaxSymbol {
-	var q []*syntax.SyntaxSymbol
-	var walk func(e validate.ValidatedExpr)
-	walk = func(e validate.ValidatedExpr) {
-		if e == nil {
-			return
-		}
-		setBang, ok := e.(*validate.ValidatedSetBang)
-		if ok && setBang.Name != nil {
-			q = append(q, setBang.Name)
-		}
-		validate.WalkSubExprs(e, func(child validate.ValidatedExpr, _ validate.ChildRole) {
-			walk(child)
-		})
-	}
-	for _, e := range body {
-		walk(e)
-	}
-	return q
-}
-
-// withBoxOnDeclare installs the set!-target list for a body region and returns a
-// restore function, so a nested region does not leak its list outward.
-func (p *CompileTimeContinuation) withBoxOnDeclare(body []validate.ValidatedExpr) func() {
+// withBoxOnDeclare installs a body region's reference index and returns a
+// restore function, so a nested region does not leak its index outward.
+func (p *CompileTimeContinuation) withBoxOnDeclare(refs refIndex) func() {
 	saved := p.boxOnDeclare
-	p.boxOnDeclare = setBangTargetsIn(body)
+	p.boxOnDeclare = refs
 	return func() {
 		p.boxOnDeclare = saved
 	}
@@ -308,14 +289,7 @@ func (p *CompileTimeContinuation) maybeBoxOnDeclare(binder *syntax.SyntaxSymbol,
 	if p.localIsBoxed(li) {
 		return
 	}
-	assigned := false
-	for _, t := range p.boxOnDeclare {
-		if sameBinder(binder, t) {
-			assigned = true
-			break
-		}
-	}
-	if !assigned {
+	if !p.boxOnDeclare.assignedBy(binder) {
 		return
 	}
 	k, ok := absoluteSlot(p.env, li)
@@ -532,29 +506,27 @@ func (p letrecTier) String() string {
 // decides. Shadowing inside an init is deliberately NOT modelled — a shadowed
 // same-name reference counts as a reference, which can only move a binder toward
 // tierBoxed, the conservative direction.
-func letrecRegionTier(bs []letrecRegionBinder, i int) letrecTier {
-	if i < 0 || i >= len(bs) {
+func (p *letrecRegion) tier(i int) letrecTier {
+	if i < 0 || i >= len(p.binders) {
 		return tierBoxed
 	}
-	self := bs[i].name
-	for j := range bs {
+	self := p.binders[i].name
+	for j := range p.binders {
 		if j == i {
 			continue
 		}
-		if !referencesBinder(bs[j].init, self, refAnywhere) {
+		if !p.refs.referencedFrom(self, j, refAnywhere) {
 			continue
 		}
-		if referencesBinder(bs[i].init, bs[j].name, refAnywhere) {
+		if p.refs.referencedFrom(p.binders[j].name, i, refAnywhere) {
 			return tierMutual
 		}
 		return tierBoxed
 	}
-	for j := range bs {
-		if referencesBinder(bs[j].init, self, refOutsideClosure) {
-			return tierBoxed
-		}
+	if p.refs.referencedOutsideClosure(self) {
+		return tierBoxed
 	}
-	if regionInitIsLambda(bs[i].init) && referencesBinder(bs[i].init, self, refInsideClosure) {
+	if regionInitIsLambda(p.binders[i].init) && p.refs.referencedFrom(self, i, refInsideClosure) {
 		return tierSelfPatch
 	}
 	return tierBoxed
@@ -586,86 +558,20 @@ func regionInitIsLambda(init validate.ValidatedExpr) bool {
 }
 
 // letrecBindingTier classifies the i-th binding of a letrec / letrec* group.
+//
+// Single-question entry point: it builds a region index to answer one question
+// and throws it away. Compilation goes through letrecRegion directly.
 func letrecBindingTier(v *validate.ValidatedLet, i int) letrecTier {
 	if v == nil {
 		return tierBoxed
 	}
-	return letrecRegionTier(letBindersOfRegion(v), i)
+	return newLetrecRegion(letBindersOfRegion(v)).tier(i)
 }
 
 // bodyDefineTier classifies the i-th internal define of a body — the OTHER
 // spelling of a letrec* region, and the one that occurs in practice.
 func bodyDefineTier(body []validate.ValidatedExpr, i int) letrecTier {
-	return letrecRegionTier(bodyBindersOfRegion(body), i)
-}
-
-// referencesBinder reports whether expr contains a reference to the binding
-// name introduces, at the requested position.
-//
-// The closure boundary is WalkSubExprs's RoleClosureBody, which marks the body
-// of every lambda, case-lambda clause and function-form define. That is the
-// honest boundary: WalkBindingRefs's depth counts only ESCAPING closures, and an
-// immediately-applied lambda's body is not an escaping closure but is still not
-// evaluated where it is written.
-//
-// A set! target counts as a reference — a write reaches the same location a read
-// does, so a closure holding only a set! of the binder has still captured it.
-func referencesBinder(expr validate.ValidatedExpr, name *syntax.SyntaxSymbol, where refPosition) bool {
-	if expr == nil || name == nil {
-		return false
-	}
-	found := false
-	var walk func(e validate.ValidatedExpr, inClosure bool)
-	walk = func(e validate.ValidatedExpr, inClosure bool) {
-		if found || e == nil {
-			return
-		}
-		counts := where == refAnywhere ||
-			(where == refInsideClosure && inClosure) ||
-			(where == refOutsideClosure && !inClosure)
-		sym, ok := e.(*validate.ValidatedSymbol)
-		if ok {
-			if counts && sameBinder(name, sym.Symbol) {
-				found = true
-			}
-			return
-		}
-		setBang, ok := e.(*validate.ValidatedSetBang)
-		if ok && counts && sameBinder(name, setBang.Name) {
-			found = true
-			return
-		}
-		validate.WalkSubExprs(e, func(child validate.ValidatedExpr, role validate.ChildRole) {
-			walk(child, inClosure || role == validate.RoleClosureBody)
-		})
-	}
-	walk(expr, false)
-	return found
-}
-
-// assignsBinder reports whether expr contains a set! whose target is the binding
-// name introduces, at any closure depth.
-func assignsBinder(expr validate.ValidatedExpr, name *syntax.SyntaxSymbol) bool {
-	if expr == nil || name == nil {
-		return false
-	}
-	found := false
-	var walk func(e validate.ValidatedExpr)
-	walk = func(e validate.ValidatedExpr) {
-		if found || e == nil {
-			return
-		}
-		setBang, ok := e.(*validate.ValidatedSetBang)
-		if ok && sameBinder(name, setBang.Name) {
-			found = true
-			return
-		}
-		validate.WalkSubExprs(e, func(child validate.ValidatedExpr, _ validate.ChildRole) {
-			walk(child)
-		})
-	}
-	walk(expr)
-	return found
+	return newLetrecRegion(bodyBindersOfRegion(body)).tier(i)
 }
 
 // sameBinder reports whether ref denotes the binding introduced by binder: the

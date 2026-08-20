@@ -139,11 +139,11 @@ type CompileTimeContinuation struct {
 	// nothing. Set by compileBody on the child continuation, never shared: a
 	// layout belongs to one lambda.
 	freeLayout []freeVar
-	// boxOnDeclare is the set!-target list of the body region currently being
+	// boxOnDeclare is the reference index of the body region currently being
 	// compiled, consulted by declareDefineBinding for a define whose slot no
 	// region scan enumerated. See maybeBoxOnDeclare for why it exists and why
 	// its predicate is weaker than the region scans'.
-	boxOnDeclare []*syntax.SyntaxSymbol
+	boxOnDeclare refIndex
 	// shape is the frame a merged `let`'s slots are allocated in: the enclosing
 	// lambda's parameter frame, which is also what tpl.SetShape recorded, so a
 	// slot appended to it widens the frame every apply builds.
