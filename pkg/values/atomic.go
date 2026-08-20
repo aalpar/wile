@@ -119,7 +119,7 @@ func (p *AtomicBox) SchemeString() string {
 	if p == nil {
 		return "#<atomic:void>"
 	}
-	return p.schemeStringWithVisited(make(map[Value]bool), 1)
+	return p.schemeStringWithVisited(NewMapSet[Value](0), 1)
 }
 
 // schemeStringWithVisited renders the atomic under the same path-scoped cycle
@@ -130,13 +130,14 @@ func (p *AtomicBox) SchemeString() string {
 //
 // depth is this atomic's nesting level (root = 1); its content sits one level
 // deeper, where schemeStringChild enforces the host-safety bound.
-func (p *AtomicBox) schemeStringWithVisited(visited map[Value]bool, depth int) string {
-	if visited[p] {
+func (p *AtomicBox) schemeStringWithVisited(visited MapSet[Value], depth int) string {
+	seen := visited.Get(p)
+	if seen {
 		return "..."
 	}
-	visited[p] = true
+	visited.Set(p)
 	defer func() {
-		delete(visited, p)
+		visited.Unset(p)
 	}()
 	v := p.Load()
 	if v == nil {

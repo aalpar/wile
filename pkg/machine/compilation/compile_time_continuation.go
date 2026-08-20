@@ -74,7 +74,7 @@ type CompileTimeContinuation struct {
 	inlineCandidates map[environment.BindingID]inlineCandidate
 	// currentlyInlining tracks bindings being inlined to prevent infinite
 	// recursion for self-referential letrec bindings.
-	currentlyInlining map[environment.BindingID]struct{}
+	currentlyInlining values.MapSet[environment.BindingID]
 	// inlineThreshold is the maximum body length (in top-level expressions)
 	// for inlining eligibility. 0 disables inlining.
 	inlineThreshold int
@@ -129,7 +129,7 @@ type CompileTimeContinuation struct {
 	// Three sites must give the same answer or the program hands a #<box> to
 	// Scheme: emitBoxSlots at the binder, emitLocalLoad at every read,
 	// emitLocalStore at every write. All three route through localIsBoxed.
-	boxedSlots map[boxedSlotKey]bool
+	boxedSlots values.MapSet[boxedSlotKey]
 	// freeLayout is the free-variable layout of the lambda whose body THIS
 	// continuation compiles — the vector its closures were built with, and the
 	// only way its body can reach a variable of an enclosing lambda now that the
@@ -663,7 +663,7 @@ func (p *CompileTimeContinuation) validateQuotedLiteral(v values.Value) (values.
 }
 
 func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
-	v values.Value, visited map[values.Value]bool,
+	v values.Value, visited values.MapSet[values.Value],
 ) (values.Value, error) {
 	switch val := v.(type) {
 	case *values.Symbol:
@@ -673,7 +673,7 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 			return nil, nil
 		}
 		if visited == nil {
-			visited = make(map[values.Value]bool)
+			visited = values.NewMapSet[values.Value](0)
 		}
 		// Walk the cdr spine iteratively. Recursing per cdr made list *length*
 		// into Go stack depth, so a multi-million-element quoted literal
@@ -693,19 +693,20 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 		)
 		unwind := func() {
 			for _, c := range spine {
-				delete(visited, c)
+				visited.Unset(c)
 			}
 		}
 		cur := val
 		for {
-			if visited[cur] {
+			dup := visited.Get(cur)
+			if dup {
 				unwind()
 				return nil, werr.WrapForeignErrorf(
 					werr.ErrInvalidSyntax,
 					"compile: circular datum label in quoted literal",
 				)
 			}
-			visited[cur] = true
+			visited.Set(cur)
 			spine = append(spine, cur)
 
 			car, err := p.validateQuotedLiteralWithVisited(cur.Car(), visited)
@@ -746,15 +747,16 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 			return val, nil
 		}
 		if visited == nil {
-			visited = make(map[values.Value]bool)
+			visited = values.NewMapSet[values.Value](0)
 		}
-		if visited[val] {
+		dup := visited.Get(val)
+		if dup {
 			return nil, werr.WrapForeignErrorf(
 				werr.ErrInvalidSyntax,
 				"compile: circular datum label in quoted literal",
 			)
 		}
-		visited[val] = true
+		visited.Set(val)
 		changed := false
 		newElements := make([]values.Value, val.Length())
 		for i, elem := range val.Elems() {
@@ -767,7 +769,7 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 				changed = true
 			}
 		}
-		delete(visited, val)
+		visited.Unset(val)
 		if !changed {
 			return val, nil
 		}

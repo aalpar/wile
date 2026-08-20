@@ -1369,22 +1369,24 @@ func trackTemplateTree(col *coverage.Collector, root *machine.NativeTemplate) {
 	if col == nil || root == nil {
 		return
 	}
-	visited := make(map[*machine.NativeTemplate]bool)
+	visited := values.NewMapSet[*machine.NativeTemplate](0)
 	queue := []*machine.NativeTemplate{root}
 	for len(queue) > 0 {
 		tpl := queue[0]
 		queue = queue[1:]
-		if visited[tpl] {
+		done := visited.Get(tpl)
+		if done {
 			continue
 		}
-		visited[tpl] = true
+		visited.Set(tpl)
 		col.Track(tpl)
 		for _, lit := range tpl.Literals() {
 			child, ok := lit.(*machine.NativeTemplate)
 			if !ok {
 				continue
 			}
-			if !visited[child] {
+			seen := visited.Get(child)
+			if !seen {
 				queue = append(queue, child)
 			}
 		}

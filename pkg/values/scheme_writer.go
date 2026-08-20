@@ -85,18 +85,18 @@ type SchemeWriter struct {
 	nextLabel int
 	// needsLabelPair tracks which pairs need labels (referenced more than once).
 	// Must use *Pair (not Tuple) for map key comparability.
-	needsLabelPair map[*Pair]bool
+	needsLabelPair MapSet[*Pair]
 	// needsLabelVector tracks which vectors need labels.
-	needsLabelVector map[*Vector]bool
+	needsLabelVector MapSet[*Vector]
 	// needsLabelBox tracks which boxes need labels.
-	needsLabelBox map[*Box]bool
+	needsLabelBox MapSet[*Box]
 	// seenHashtables maps hashtable pointers to their assigned label numbers.
 	// A Hashtable value slot is mutable, so a cycle can pass through it exactly
 	// as it can through a pair car, vector element, or box; it needs the same
 	// pointer-identity tracking to both label sharing and terminate on cycles.
 	seenHashtables map[*Hashtable]int
 	// needsLabelHashtable tracks which hashtables need labels.
-	needsLabelHashtable map[*Hashtable]bool
+	needsLabelHashtable MapSet[*Hashtable]
 	// displayMode indicates whether to use display format (no quotes on strings).
 	displayMode bool
 	// writeMode controls whether to label all shared or only circular references.
@@ -116,11 +116,11 @@ func NewSchemeWriter() *SchemeWriter {
 		seenPairs:           make(map[*Pair]int),
 		seenVectors:         make(map[*Vector]int),
 		seenBoxes:           make(map[*Box]int),
-		needsLabelPair:      make(map[*Pair]bool),
-		needsLabelVector:    make(map[*Vector]bool),
-		needsLabelBox:       make(map[*Box]bool),
+		needsLabelPair:      NewMapSet[*Pair](0),
+		needsLabelVector:    NewMapSet[*Vector](0),
+		needsLabelBox:       NewMapSet[*Box](0),
 		seenHashtables:      make(map[*Hashtable]int),
-		needsLabelHashtable: make(map[*Hashtable]bool),
+		needsLabelHashtable: NewMapSet[*Hashtable](0),
 		nextLabel:           0,
 		writeMode:           WriteModeWrite,
 		maxDepth:            DefaultMaxWriteDepth,
@@ -153,11 +153,11 @@ func (p *SchemeWriter) WriteString(v Value) (string, error) {
 	p.seenPairs = make(map[*Pair]int)
 	p.seenVectors = make(map[*Vector]int)
 	p.seenBoxes = make(map[*Box]int)
-	p.needsLabelPair = make(map[*Pair]bool)
-	p.needsLabelVector = make(map[*Vector]bool)
-	p.needsLabelBox = make(map[*Box]bool)
+	p.needsLabelPair = NewMapSet[*Pair](0)
+	p.needsLabelVector = NewMapSet[*Vector](0)
+	p.needsLabelBox = NewMapSet[*Box](0)
 	p.seenHashtables = make(map[*Hashtable]int)
-	p.needsLabelHashtable = make(map[*Hashtable]bool)
+	p.needsLabelHashtable = NewMapSet[*Hashtable](0)
 
 	// First pass: identify which objects are referenced multiple times. It also
 	// enforces the nesting bound on its own recursion, which pass 2 inherits:
@@ -218,7 +218,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 			_, found := p.seenPairs[cur]
 			if found {
 				// Seen before - mark as needing a label
-				p.needsLabelPair[cur] = true
+				p.needsLabelPair.Set(cur)
 				return
 			}
 			// Mark as seen (with placeholder -1)
@@ -246,7 +246,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 		}
 		_, found := p.seenVectors[val]
 		if found {
-			p.needsLabelVector[val] = true
+			p.needsLabelVector.Set(val)
 			return
 		}
 		p.seenVectors[val] = -1
@@ -263,7 +263,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 		}
 		_, found := p.seenBoxes[val]
 		if found {
-			p.needsLabelBox[val] = true
+			p.needsLabelBox.Set(val)
 			return
 		}
 		p.seenBoxes[val] = -1
@@ -275,7 +275,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 		}
 		_, found := p.seenHashtables[val]
 		if found {
-			p.needsLabelHashtable[val] = true
+			p.needsLabelHashtable.Set(val)
 			return
 		}
 		p.seenHashtables[val] = -1
@@ -294,18 +294,18 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 // An object is circular if it is reachable from itself — i.e., it appears on the
 // DFS recursion stack when revisited. This uses gray/black DFS coloring.
 func (p *SchemeWriter) filterToCircular(v Value) {
-	circularPairs := make(map[*Pair]bool)
-	circularVectors := make(map[*Vector]bool)
-	circularBoxes := make(map[*Box]bool)
-	onStackPairs := make(map[*Pair]bool)
-	onStackVectors := make(map[*Vector]bool)
-	onStackBoxes := make(map[*Box]bool)
-	visitedPairs := make(map[*Pair]bool)
-	visitedVectors := make(map[*Vector]bool)
-	visitedBoxes := make(map[*Box]bool)
-	circularHashtables := make(map[*Hashtable]bool)
-	onStackHashtables := make(map[*Hashtable]bool)
-	visitedHashtables := make(map[*Hashtable]bool)
+	circularPairs := NewMapSet[*Pair](0)
+	circularVectors := NewMapSet[*Vector](0)
+	circularBoxes := NewMapSet[*Box](0)
+	onStackPairs := NewMapSet[*Pair](0)
+	onStackVectors := NewMapSet[*Vector](0)
+	onStackBoxes := NewMapSet[*Box](0)
+	visitedPairs := NewMapSet[*Pair](0)
+	visitedVectors := NewMapSet[*Vector](0)
+	visitedBoxes := NewMapSet[*Box](0)
+	circularHashtables := NewMapSet[*Hashtable](0)
+	onStackHashtables := NewMapSet[*Hashtable](0)
+	visitedHashtables := NewMapSet[*Hashtable](0)
 
 	var walk func(v Value)
 	walk = func(v Value) {
@@ -320,15 +320,17 @@ func (p *SchemeWriter) filterToCircular(v Value) {
 			// list length.
 			spine := []*Pair{}
 			for cur := val; cur != nil; {
-				if onStackPairs[cur] {
-					circularPairs[cur] = true
+				onStack := onStackPairs.Get(cur)
+				if onStack {
+					circularPairs.Set(cur)
 					break
 				}
-				if visitedPairs[cur] {
+				done := visitedPairs.Get(cur)
+				if done {
 					break
 				}
-				visitedPairs[cur] = true
-				onStackPairs[cur] = true
+				visitedPairs.Set(cur)
+				onStackPairs.Set(cur)
 				spine = append(spine, cur)
 				walk(cur.Car())
 				cdr := cur.Cdr()
@@ -342,60 +344,66 @@ func (p *SchemeWriter) filterToCircular(v Value) {
 				cur = nextPair
 			}
 			for _, pr := range spine {
-				delete(onStackPairs, pr)
+				onStackPairs.Unset(pr)
 			}
 
 		case *Vector:
 			if val == nil || val.Length() == 0 {
 				return
 			}
-			if onStackVectors[val] {
-				circularVectors[val] = true
+			onStack := onStackVectors.Get(val)
+			if onStack {
+				circularVectors.Set(val)
 				return
 			}
-			if visitedVectors[val] {
+			done := visitedVectors.Get(val)
+			if done {
 				return
 			}
-			visitedVectors[val] = true
-			onStackVectors[val] = true
+			visitedVectors.Set(val)
+			onStackVectors.Set(val)
 			for _, elem := range val.Elems() {
 				walk(elem)
 			}
-			delete(onStackVectors, val)
+			onStackVectors.Unset(val)
 
 		case *Box:
 			if val == nil {
 				return
 			}
-			if onStackBoxes[val] {
-				circularBoxes[val] = true
+			onStack := onStackBoxes.Get(val)
+			if onStack {
+				circularBoxes.Set(val)
 				return
 			}
-			if visitedBoxes[val] {
+			done := visitedBoxes.Get(val)
+			if done {
 				return
 			}
-			visitedBoxes[val] = true
-			onStackBoxes[val] = true
+			visitedBoxes.Set(val)
+			onStackBoxes.Set(val)
 			walk(val.Value)
-			delete(onStackBoxes, val)
+			onStackBoxes.Unset(val)
 
 		case *Hashtable:
 			if val == nil {
 				return
 			}
-			if onStackHashtables[val] {
-				circularHashtables[val] = true
+			onStack := onStackHashtables.Get(val)
+			if onStack {
+				circularHashtables.Set(val)
 				return
 			}
-			if visitedHashtables[val] {
+			done := visitedHashtables.Get(val)
+			if done {
 				return
 			}
-			visitedHashtables[val] = true
-			onStackHashtables[val] = true
+			visitedHashtables.Set(val)
+			onStackHashtables.Set(val)
 			for _, e := range val.snapshot() {
 				walk(e.value)
 			}
-			delete(onStackHashtables, val)
+			onStackHashtables.Unset(val)
 		}
 	}
 
@@ -489,7 +497,7 @@ func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair, depth int) {
 	}
 
 	// Check if this needs a label
-	if p.needsLabelPair[pr] {
+	if p.needsLabelPair.Get(pr) {
 		label := p.nextLabel
 		p.nextLabel++
 		p.seenPairs[pr] = label
@@ -551,7 +559,7 @@ func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair, depth in
 			break
 		}
 
-		if p.needsLabelPair[nextPair] {
+		if p.needsLabelPair.Get(nextPair) {
 			// The cdr needs its own label - write as dotted pair. It is a spine
 			// element, not a car, so it stays at the current nesting level.
 			sb.WriteString(" . ")
@@ -579,7 +587,7 @@ func (p *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector, depth int) 
 	}
 
 	// Check if this needs a label
-	if p.needsLabelVector[vec] {
+	if p.needsLabelVector.Get(vec) {
 		label := p.nextLabel
 		p.nextLabel++
 		p.seenVectors[vec] = label
@@ -615,7 +623,7 @@ func (p *SchemeWriter) writeBox(sb *strings.Builder, bx *Box, depth int) {
 		return
 	}
 
-	if p.needsLabelBox[bx] {
+	if p.needsLabelBox.Get(bx) {
 		label := p.nextLabel
 		p.nextLabel++
 		p.seenBoxes[bx] = label
@@ -672,7 +680,7 @@ func (p *SchemeWriter) writeHashtable(sb *strings.Builder, h *Hashtable, depth i
 		return
 	}
 
-	if p.needsLabelHashtable[h] {
+	if p.needsLabelHashtable.Get(h) {
 		label := p.nextLabel
 		p.nextLabel++
 		p.seenHashtables[h] = label

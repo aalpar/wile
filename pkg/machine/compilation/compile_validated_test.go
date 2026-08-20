@@ -416,7 +416,7 @@ func TestMarkLiteralImmutable_RecursiveAndCyclic(t *testing.T) {
 	inner := values.NewCons(vec, values.EmptyList)
 	top := values.NewCons(values.NewInteger(1), inner)
 
-	markLiteralImmutable(top, make(map[values.Value]struct{}))
+	markLiteralImmutable(top, values.NewMapSet[values.Value](0))
 
 	if !vec.IsImmutable() {
 		t.Fatalf("the nested *values.Vector must carry the immutable flag: the " +
@@ -427,7 +427,7 @@ func TestMarkLiteralImmutable_RecursiveAndCyclic(t *testing.T) {
 	// the first car rather than only at the top.
 	bv := values.NewByteVectorFromBytes(1, 2)
 	nested := values.NewCons(values.NewCons(bv, values.EmptyList), values.EmptyList)
-	markLiteralImmutable(nested, make(map[values.Value]struct{}))
+	markLiteralImmutable(nested, values.NewMapSet[values.Value](0))
 	if !bv.IsImmutable() {
 		t.Fatalf("a *values.ByteVector two levels down must carry the flag")
 	}
@@ -437,7 +437,7 @@ func TestMarkLiteralImmutable_RecursiveAndCyclic(t *testing.T) {
 	cycVec := values.NewVector(values.NewInteger(1))
 	cyc := values.NewCons(cycVec, values.EmptyList)
 	cyc.SetCdr(cyc)
-	markLiteralImmutable(cyc, make(map[values.Value]struct{}))
+	markLiteralImmutable(cyc, values.NewMapSet[values.Value](0))
 	if !cycVec.IsImmutable() {
 		t.Fatalf("a vector inside a cyclic literal must carry the flag")
 	}
@@ -474,7 +474,7 @@ func TestMarkLiteralImmutable_LongFlatList(t *testing.T) {
 		q = values.NewCons(values.NewInteger(int64(i)), q)
 	}
 
-	markLiteralImmutable(q, make(map[values.Value]struct{}))
+	markLiteralImmutable(q, values.NewMapSet[values.Value](0))
 
 	if !tail.IsImmutable() {
 		t.Fatalf("a vector six million cdrs down must be reached: the spine walk " +

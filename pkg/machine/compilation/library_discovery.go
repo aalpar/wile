@@ -20,6 +20,7 @@ import (
 	"slices"
 
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // DiscoverAvailableLibraries returns all importable library names by
@@ -35,7 +36,7 @@ import (
 // discarding any partial result; per-path FilePathToLibraryName failures
 // are joined and returned alongside a complete list.
 func DiscoverAvailableLibraries(res FileResolver, reg *LibraryRegistry) ([]LibraryName, error) {
-	seen := make(map[string]bool)
+	seen := values.NewStringSet(0)
 	var result []LibraryName
 
 	// Filesystem discovery via resolver chain.
@@ -55,8 +56,9 @@ func DiscoverAvailableLibraries(res FileResolver, reg *LibraryRegistry) ([]Libra
 				continue
 			}
 			key := name.Key()
-			if !seen[key] {
-				seen[key] = true
+			dup := seen.Get(key)
+			if !dup {
+				seen.Set(key)
 				result = append(result, name)
 			}
 		}
@@ -66,8 +68,9 @@ func DiscoverAvailableLibraries(res FileResolver, reg *LibraryRegistry) ([]Libra
 	if reg != nil {
 		for _, name := range reg.AllNames() {
 			key := name.Key()
-			if !seen[key] {
-				seen[key] = true
+			dup := seen.Get(key)
+			if !dup {
+				seen.Set(key)
 				result = append(result, name)
 			}
 		}

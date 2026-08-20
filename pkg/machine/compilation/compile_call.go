@@ -19,6 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -233,7 +234,7 @@ func (p *CompileTimeContinuation) tryInlineCall(
 
 	// Guard against recursive inlining.
 	if p.currentlyInlining != nil {
-		_, inlining := p.currentlyInlining[bid]
+		inlining := p.currentlyInlining.Get(bid)
 		if inlining {
 			return false, nil
 		}
@@ -276,11 +277,11 @@ func (p *CompileTimeContinuation) tryInlineCall(
 
 	// Set recursion guard.
 	if p.currentlyInlining == nil {
-		p.currentlyInlining = make(map[environment.BindingID]struct{})
+		p.currentlyInlining = values.NewMapSet[environment.BindingID](0)
 	}
-	p.currentlyInlining[bid] = struct{}{}
+	p.currentlyInlining.Set(bid)
 	defer func() {
-		delete(p.currentlyInlining, bid)
+		p.currentlyInlining.Unset(bid)
 	}()
 
 	return true, CompileValidatedLet(p, ctctx, syntheticLet)

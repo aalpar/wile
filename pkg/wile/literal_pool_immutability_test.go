@@ -109,15 +109,15 @@ func (p *aggregateCounts) add(o aggregateCounts) {
 func assertAggregateImmutable(
 	t *testing.T,
 	v values.Value,
-	visited map[values.Value]struct{},
+	visited values.MapSet[values.Value],
 ) aggregateCounts {
 	switch obj := v.(type) {
 	case *values.Pair:
-		_, seen := visited[obj]
+		seen := visited.Get(obj)
 		if seen {
 			return aggregateCounts{}
 		}
-		visited[obj] = struct{}{}
+		visited.Set(obj)
 		// No assertion: a pair literal is mutable, and that is the decision
 		// (a flag word is ~25% growth on the 32-byte cons cell). The recursion
 		// below is the whole reason this arm still exists.
@@ -126,11 +126,11 @@ func assertAggregateImmutable(
 		q.add(assertAggregateImmutable(t, obj.Cdr(), visited))
 		return q
 	case *values.Vector:
-		_, seen := visited[obj]
+		seen := visited.Get(obj)
 		if seen {
 			return aggregateCounts{}
 		}
-		visited[obj] = struct{}{}
+		visited.Set(obj)
 		qt.Assert(t, obj.IsImmutable(), qt.IsTrue,
 			qt.Commentf("pooled vector %s is mutable", obj.SchemeString()))
 		q := aggregateCounts{inspected: 1, flaggable: 1}
@@ -139,11 +139,11 @@ func assertAggregateImmutable(
 		}
 		return q
 	case *values.ByteVector:
-		_, seen := visited[obj]
+		seen := visited.Get(obj)
 		if seen {
 			return aggregateCounts{}
 		}
-		visited[obj] = struct{}{}
+		visited.Set(obj)
 		qt.Assert(t, obj.IsImmutable(), qt.IsTrue,
 			qt.Commentf("pooled bytevector %s is mutable", obj.SchemeString()))
 		return aggregateCounts{inspected: 1, flaggable: 1}
@@ -188,7 +188,7 @@ func TestLiteralPoolAggregatesAreImmutable(t *testing.T) {
 			cc, err := eng.Compile(ctx, expr)
 			qt.Assert(t, err, qt.IsNil)
 
-			visited := make(map[values.Value]struct{})
+			visited := values.NewMapSet[values.Value](0)
 			var total aggregateCounts
 			for _, tpl := range collectTemplates(cc.template) {
 				for _, lit := range tpl.Literals() {

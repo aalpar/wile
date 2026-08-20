@@ -17,6 +17,7 @@ package validate
 import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // bindLocalSymbol binds sym in env as a local variable using the canonical
@@ -88,15 +89,16 @@ func findDuplicateSymbols(syms []*syntax.SyntaxSymbol) []*syntax.SyntaxSymbol {
 	if len(syms) < 2 {
 		return nil
 	}
-	seen := make(map[ScopedBindingKey]bool, len(syms))
+	seen := values.NewMapSet[ScopedBindingKey](len(syms))
 	var dups []*syntax.SyntaxSymbol
 	for _, sym := range syms {
 		id := ScopedBindingKeyOf(sym)
-		if seen[id] {
+		dup := seen.Get(id)
+		if dup {
 			dups = append(dups, sym)
 			continue
 		}
-		seen[id] = true
+		seen.Set(id)
 	}
 	return dups
 }

@@ -148,9 +148,9 @@ func enginePrimitiveNames(callerNS *environment.Namespace) values.StringSet {
 
 // primitiveNameSet projects a registry down to the set of names it registers.
 func primitiveNameSet(reg *registry.PrimitiveRegistry) values.StringSet {
-	q := make(values.StringSet, reg.PrimitiveCount())
+	q := values.NewStringSet(reg.PrimitiveCount())
 	for _, p := range reg.Primitives() {
-		q[p.Spec.Name] = struct{}{}
+		q.Set(p.Spec.Name)
 	}
 	return q
 }
@@ -166,7 +166,7 @@ func primitiveNameSet(reg *registry.PrimitiveRegistry) values.StringSet {
 // wording ("e.g.") says so.
 func namesNotIn(requested, have values.StringSet) string {
 	for name := range requested {
-		_, ok := have[name]
+		ok := have.Get(name)
 		if !ok {
 			return name
 		}

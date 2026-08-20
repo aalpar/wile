@@ -142,7 +142,10 @@ func (p *SyntaxCompiler) Compile(ctx context.Context, pr *syntax.SyntaxPair) err
 
 func compile(ctx context.Context, vis *SyntaxCompiler, v0 *syntax.SyntaxPair) bool {
 	stack := []syntaxCompilerStackEntry{
-		{pr: v0, variables: values.StringSet{}},
+		{
+			pr:        v0,
+			variables: values.StringSet{},
+		},
 	}
 
 	for len(stack) > 0 {
@@ -364,7 +367,7 @@ func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 	// R7RS §4.3.2: The identifier _ is a wildcard that matches any input, unless
 	// it appears in the list of literals, in which case it is matched literally.
 	if sym.Key() == "_" {
-		_, isLiteral := vis.literals[sym.Key()]
+		isLiteral := vis.literals.Get(sym.Key())
 		if !isLiteral {
 			// Wildcard - matches an element without binding it. It has to emit
 			// SOMETHING: an element that produces no bytecode is invisible to
@@ -383,11 +386,11 @@ func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 
 // compileSymbolOrLiteral handles a symbol that's either a pattern variable or a literal.
 func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *syntax.SyntaxSymbol) {
-	_, isVar := vis.variables[sym.Key()]
+	isVar := vis.variables.Get(sym.Key())
 	if isVar {
 		// Pattern variable - capture it
 		vis.codes = append(vis.codes, ByteCodeCaptureCar{Binding: sym.Key()})
-		entry.variables[sym.Key()] = struct{}{}
+		entry.variables.Set(sym.Key())
 	} else {
 		// Literal symbol - compare exactly
 		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbol(sym.Key(), nil)})
@@ -474,7 +477,7 @@ func countPatternTailElements(ellipsisPair *syntax.SyntaxPair) int {
 
 // collectCapturedVariables gathers all pattern variables captured by an ellipsis pattern.
 func collectCapturedVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) values.StringSet {
-	capturedVars := make(values.StringSet)
+	capturedVars := values.NewStringSet(0)
 
 	prevPair, ok := entry.lastElement.(*syntax.SyntaxPair)
 	if ok {
@@ -630,16 +633,16 @@ func emitImproperTailIfPresent(vis *SyntaxCompiler, entry *syntaxCompilerStackEn
 	// included — it matches the rest of the input but must not bind, so a
 	// template `_` stays a free identifier. Unless it was declared a literal, in
 	// which case it is matched literally like any other literal symbol.
-	_, isLiteral := vis.literals[sym.Key()]
+	isLiteral := vis.literals.Get(sym.Key())
 	if sym.Key() == "_" && !isLiteral {
 		vis.codes = append(vis.codes, ByteCodeDiscardCdr{})
 		return
 	}
-	_, isVar := vis.variables[sym.Key()]
+	isVar := vis.variables.Get(sym.Key())
 	if isVar {
 		// The CDR is a pattern variable - emit CaptureCdr to capture the rest
 		vis.codes = append(vis.codes, ByteCodeCaptureCdr{Binding: sym.Key()})
-		entry.variables[sym.Key()] = struct{}{}
+		entry.variables.Set(sym.Key())
 		return
 	}
 	// The CDR is a literal symbol - compare it

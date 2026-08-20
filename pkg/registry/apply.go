@@ -168,16 +168,16 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 	// Precedence is per phase: a name may legitimately be registered at runtime by one
 	// spec and at expand by another, and those are not duplicates of each other.
 	for _, pt := range phaseTargets {
-		bound := make(values.StringSet, len(p.primitives))
+		bound := values.NewStringSet(len(p.primitives))
 		for _, reg := range p.primitives {
 			if !reg.Phases.Has(pt.phase) {
 				continue
 			}
-			_, dup := bound[reg.Spec.Name]
+			dup := bound.Get(reg.Spec.Name)
 			if dup {
 				continue
 			}
-			bound[reg.Spec.Name] = struct{}{}
+			bound.Set(reg.Spec.Name)
 			err := registerPhasePrimitive(pt.bindingEnv, pt.closureEnv, pt.phase, reg.Spec, cfg)
 			if err != nil {
 				return err

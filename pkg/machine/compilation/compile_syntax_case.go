@@ -76,7 +76,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		// Use extractLiteralsWithSyntax to enable scope-aware literal matching.
 		// Pass a non-nil literals map because extractLiteralsWithSyntax
 		// unconditionally writes to it; only literalSyntax is used downstream.
-		literals := make(values.StringSet)
+		literals := values.NewStringSet(0)
 		err := extractLiteralsWithSyntax(ctctx.ctx, literalsPair, literals, literalSyntax, match.DefaultEllipsis)
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "syntax-case: invalid literals list"))
@@ -186,7 +186,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// literalSyntax names the pattern literals, so they are excluded here; it is
 	// also stored on the clause below, which is what carries their definition-site
 	// scopes to the matcher for the R7RS §4.3.2 binding check.
-	patternVars := make(values.StringSet)
+	patternVars := values.NewStringSet(0)
 	// patternVarSyntax records each pattern variable's syntax symbol (with its
 	// scopes) so the ellipsis template-expansion path can do scope-aware
 	// substitution for nested-macro hygiene — the same data the syntax-rules
@@ -203,7 +203,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// doesn't create a void binding for _.
 	_, wildcardIsLiteral := literalSyntax["_"]
 	if !wildcardIsLiteral {
-		delete(patternVars, "_")
+		patternVars.Unset("_")
 		delete(patternVarSyntax, "_")
 	}
 

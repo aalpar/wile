@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // DefaultMaxOriginDepth is the default maximum number of macro expansions to show
@@ -69,7 +70,7 @@ type ValidationResult struct {
 	//     validator, so no slot exists at validation time; marking it even for
 	//     a local shadow of the name is the deliberate over-approximation that
 	//     keeps the frame-reclaim Stable stamp sound (over-match ⇒ non-stable).
-	mutated map[environment.BindingRef]bool
+	mutated values.MapSet[environment.BindingRef]
 
 	// definedKeyCount counts define occurrences by symbol Key across the unit.
 	// A distinct signal from mutation: powers the defined-once half of
@@ -83,14 +84,14 @@ type ValidationResult struct {
 // for a global or a not-yet-created top-level binding.
 func (p *ValidationResult) markMutated(ref environment.BindingRef) {
 	if p.mutated == nil {
-		p.mutated = make(map[environment.BindingRef]bool)
+		p.mutated = values.NewMapSet[environment.BindingRef](0)
 	}
-	p.mutated[ref] = true
+	p.mutated.Set(ref)
 }
 
 // isMutated returns true if the binding named by ref was targeted by set!.
 func (p *ValidationResult) isMutated(ref environment.BindingRef) bool {
-	return p.mutated[ref]
+	return p.mutated.Get(ref)
 }
 
 // recordDefinedKey counts a define of a symbol named key in the unit. Used to

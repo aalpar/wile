@@ -164,7 +164,7 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 	template syntax.SyntaxValue,
 	ctx *captureContext,
 	ellipsisVars values.StringSet,
-	excludeEllipsisIDs map[int]struct{},
+	excludeEllipsisIDs values.IntSet,
 	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
 	if template == nil {
@@ -261,7 +261,7 @@ func (p *SyntaxMatcher) expandVectorTemplate(
 	t *syntax.SyntaxVector,
 	ctx *captureContext,
 	ellipsisVars values.StringSet,
-	excludeEllipsisIDs map[int]struct{},
+	excludeEllipsisIDs values.IntSet,
 	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
 	srcCtx := opts.resolveSourceContext(t)
@@ -562,7 +562,7 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 	rest syntax.SyntaxValue,
 	ctx *captureContext,
 	ellipsisVars values.StringSet,
-	excludeEllipsisIDs map[int]struct{},
+	excludeEllipsisIDs values.IntSet,
 	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
 	// Find which variables in the pattern are bound in child contexts
@@ -608,7 +608,7 @@ func (p *SyntaxMatcher) expandEllipsisSingleGroup(
 	rest syntax.SyntaxValue,
 	ctx *captureContext,
 	ellipsisVars values.StringSet,
-	excludeEllipsisIDs map[int]struct{},
+	excludeEllipsisIDs values.IntSet,
 	opts *ExpandOptions,
 	patternVarsInTemplate values.StringSet,
 	ellipsisID int,
@@ -620,11 +620,11 @@ func (p *SyntaxMatcher) expandEllipsisSingleGroup(
 
 	// Add this ellipsis ID to the exclude set so nested ellipsis expansions
 	// within the children select the inner ID instead of re-selecting this one.
-	innerExclude := make(map[int]struct{}, len(excludeEllipsisIDs)+1)
+	innerExclude := values.NewIntSet(len(excludeEllipsisIDs) + 1)
 	for id := range excludeEllipsisIDs {
-		innerExclude[id] = struct{}{}
+		innerExclude.Set(id)
 	}
-	innerExclude[ellipsisID] = struct{}{}
+	innerExclude.Set(ellipsisID)
 
 	results, err := p.expandEllipsisChildren(pattern, children, ellipsisVars, innerExclude, opts, patternVarsInTemplate)
 	if err != nil {
@@ -641,7 +641,7 @@ func (p *SyntaxMatcher) expandEllipsisCrossGroup(
 	rest syntax.SyntaxValue,
 	ctx *captureContext,
 	ellipsisVars values.StringSet,
-	excludeEllipsisIDs map[int]struct{},
+	excludeEllipsisIDs values.IntSet,
 	opts *ExpandOptions,
 	patternVarsInTemplate values.StringSet,
 	matchingIDs []int,
@@ -693,12 +693,12 @@ func (p *SyntaxMatcher) expandEllipsisCrossGroup(
 	}
 
 	// Add all matching IDs to the exclude set for recursive expansion.
-	innerExclude := make(map[int]struct{}, len(excludeEllipsisIDs)+len(matchingIDs))
+	innerExclude := values.NewIntSet(len(excludeEllipsisIDs) + len(matchingIDs))
 	for id := range excludeEllipsisIDs {
-		innerExclude[id] = struct{}{}
+		innerExclude.Set(id)
 	}
 	for _, id := range matchingIDs {
-		innerExclude[id] = struct{}{}
+		innerExclude.Set(id)
 	}
 
 	results, err := p.expandEllipsisChildren(pattern, mergedChildren, ellipsisVars, innerExclude, opts, patternVarsInTemplate)
@@ -715,13 +715,13 @@ func (p *SyntaxMatcher) expandEllipsisChildren(
 	pattern syntax.SyntaxValue,
 	children []*captureContext,
 	ellipsisVars values.StringSet,
-	excludeEllipsisIDs map[int]struct{},
+	excludeEllipsisIDs values.IntSet,
 	opts *ExpandOptions,
 	patternVarsInTemplate values.StringSet,
 ) ([]syntax.SyntaxValue, error) {
 	results := make([]syntax.SyntaxValue, 0, len(children))
 	for _, childCtx := range children {
-		newEllipsisVars := make(values.StringSet)
+		newEllipsisVars := values.NewStringSet(0)
 		maps.Copy(newEllipsisVars, ellipsisVars)
 		for v := range patternVarsInTemplate {
 			newEllipsisVars.Set(v)
@@ -743,7 +743,7 @@ func (p *SyntaxMatcher) combineEllipsisResults(
 	rest syntax.SyntaxValue,
 	ctx *captureContext,
 	ellipsisVars values.StringSet,
-	excludeEllipsisIDs map[int]struct{},
+	excludeEllipsisIDs values.IntSet,
 	pattern syntax.SyntaxValue,
 	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
@@ -769,7 +769,7 @@ func (p *SyntaxMatcher) combineEllipsisResults(
 
 // findSyntaxPatternVariables finds all pattern variables in a syntax template.
 func (p *SyntaxMatcher) findSyntaxPatternVariables(template syntax.SyntaxValue) values.StringSet {
-	vars := make(values.StringSet)
+	vars := values.NewStringSet(0)
 	p.findSyntaxVarsRecursive(template, vars)
 	return vars
 }

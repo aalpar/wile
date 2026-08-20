@@ -65,7 +65,7 @@ func (p *Box) SchemeString() string {
 	if p == nil {
 		return "#<box:void>"
 	}
-	return p.schemeStringWithVisited(make(map[Value]bool), 1)
+	return p.schemeStringWithVisited(NewMapSet[Value](0), 1)
 }
 
 // schemeStringWithVisited renders the box under the same path-scoped cycle
@@ -75,13 +75,14 @@ func (p *Box) SchemeString() string {
 //
 // depth is this box's nesting level (root = 1); its content sits one level
 // deeper, where schemeStringChild enforces the host-safety bound.
-func (p *Box) schemeStringWithVisited(visited map[Value]bool, depth int) string {
-	if visited[p] {
+func (p *Box) schemeStringWithVisited(visited MapSet[Value], depth int) string {
+	seen := visited.Get(p)
+	if seen {
 		return "..."
 	}
-	visited[p] = true
+	visited.Set(p)
 	defer func() {
-		delete(visited, p)
+		visited.Unset(p)
 	}()
 	return fmt.Sprintf("#&%s", schemeStringChild(p.Value, visited, depth+1))
 }

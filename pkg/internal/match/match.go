@@ -621,7 +621,7 @@ func (p *Matcher) GetBindings() map[string]syntax.SyntaxValue {
 // template expression. In the common case where one ID covers all variables, a single-
 // element slice is returned. When variables span multiple groups (cross-group zipping),
 // every contributing ID is returned in sorted order.
-func (p *Matcher) findMatchingEllipsisIDs(vars values.StringSet, excludeIDs map[int]struct{}) []int {
+func (p *Matcher) findMatchingEllipsisIDs(vars values.StringSet, excludeIDs values.IntSet) []int {
 	if p.ellipsisVars == nil {
 		return []int{0}
 	}
@@ -632,7 +632,7 @@ func (p *Matcher) findMatchingEllipsisIDs(vars values.StringSet, excludeIDs map[
 	// not drive which group(s) repeat. Leaving it in would fail the single-ID
 	// "all vars present" test and force a spurious cross-group zip against the
 	// iterated variable's groups.
-	sel := make(values.StringSet, len(vars))
+	sel := values.NewStringSet(len(vars))
 	for v := range vars {
 		for id := range p.ellipsisVars {
 			ok := p.ellipsisVars[id].Get(v)

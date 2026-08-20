@@ -34,7 +34,7 @@ import (
 // flagged at its own append in either order, so no pooled aggregate is ever
 // reachable unflagged and no dedup key has to know about immutability.
 func (p *CompileTimeContinuation) appendConstantLiteral(v values.Value) machine.LiteralIndex {
-	markLiteralImmutable(v, make(map[values.Value]struct{}))
+	markLiteralImmutable(v, values.NewMapSet[values.Value](0))
 	return p.template.MaybeAppendLiteral(v)
 }
 
@@ -59,16 +59,16 @@ func (p *CompileTimeContinuation) appendConstantLiteral(v values.Value) machine.
 // Unlike the validator's, these marks are never unwound: visited is a
 // termination and de-duplication set, not a path-scoped cycle detector, so a
 // node reached a second time by any route is already done.
-func markLiteralImmutable(v values.Value, visited map[values.Value]struct{}) {
+func markLiteralImmutable(v values.Value, visited values.MapSet[values.Value]) {
 	switch obj := v.(type) {
 	case *values.Pair:
 		cur := obj
 		for {
-			_, seen := visited[cur]
+			seen := visited.Get(cur)
 			if seen {
 				return
 			}
-			visited[cur] = struct{}{}
+			visited.Set(cur)
 			markLiteralImmutable(cur.Car(), visited)
 
 			next, isPair := cur.Cdr().(*values.Pair)
@@ -79,11 +79,11 @@ func markLiteralImmutable(v values.Value, visited map[values.Value]struct{}) {
 			cur = next
 		}
 	case *values.Vector:
-		_, seen := visited[obj]
+		seen := visited.Get(obj)
 		if seen {
 			return
 		}
-		visited[obj] = struct{}{}
+		visited.Set(obj)
 		values.MarkImmutable(obj)
 		for _, elem := range obj.Elems() {
 			markLiteralImmutable(elem, visited)

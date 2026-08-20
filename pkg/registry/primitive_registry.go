@@ -886,10 +886,7 @@ func (p *PrimitiveRegistry) WithoutCategory(categories ...string) *PrimitiveRegi
 	// Also drop every bootstrap procedure source declared against a removed
 	// category. Without this the primitives go and the Scheme written over them
 	// stays, so NewEngine fails to compile the orphaned source.
-	drop := make(values.StringSet, len(categories))
-	for _, c := range categories {
-		drop.Set(c)
-	}
+	drop := values.NewStringSet(len(categories)).SetAll(categories...)
 	q.procedureSources = slices.DeleteFunc(q.procedureSources, func(src string) bool {
 		for _, need := range q.procedureSourceCategories[src] {
 			gone := drop.Get(need)
@@ -905,10 +902,7 @@ func (p *PrimitiveRegistry) WithoutCategory(categories ...string) *PrimitiveRegi
 // filterPrimitives returns a new PrimitiveRegistry with primitives excluded when
 // keyFn(reg) matches any value in exclude. Non-primitive fields are copied unchanged.
 func (p *PrimitiveRegistry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegistration) string) *PrimitiveRegistry {
-	set := make(values.StringSet, len(exclude))
-	for _, v := range exclude {
-		set.Set(v)
-	}
+	set := values.NewStringSet(len(exclude)).SetAll(exclude...)
 
 	q := p.deepCopy()
 	q.primitives = slices.DeleteFunc(q.primitives, func(r PrimitiveRegistration) bool {
@@ -929,10 +923,7 @@ func (p *PrimitiveRegistry) filterPrimitives(exclude []string, keyFn func(Primit
 // exports). Removing them would silently strip docs that the embedder
 // likely wants kept.
 func (p *PrimitiveRegistry) WithoutBindings(names ...string) *PrimitiveRegistry {
-	exclude := make(values.StringSet, len(names))
-	for _, name := range names {
-		exclude.Set(name)
-	}
+	exclude := values.NewStringSet(len(names)).SetAll(names...)
 
 	q := p.deepCopy()
 	q.bindingSpecs = slices.DeleteFunc(q.bindingSpecs, func(s BindingSpec) bool {

@@ -22,6 +22,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/docparse"
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // DocSearchResult holds one search hit from SearchDoc.
@@ -85,9 +86,9 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 	// primitives and doc-only primitives; AddDocOnlyPrimitive's
 	// skip-if-primitive-exists guarantees no duplicate name across the two.
 	prims := reg.Primitives()
-	primNames := make(map[string]bool, len(prims)+8)
+	primNames := values.NewStringSet(len(prims) + 8)
 	for _, pr := range prims {
-		primNames[pr.Spec.Name] = true
+		primNames.Set(pr.Spec.Name)
 		if matchesDoc(pr.Spec.Name, pr.Spec.Doc, pr.Spec.Category, pr.Spec.Keywords, lowerPattern) {
 			q = append(q, DocSearchResult{
 				Name:     pr.Spec.Name,
@@ -98,7 +99,7 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 		}
 	}
 	for _, dp := range reg.DocPrimitives() {
-		primNames[dp.Name] = true
+		primNames.Set(dp.Name)
 		if matchesDoc(dp.Name, dp.Doc, dp.Category, dp.Keywords, lowerPattern) {
 			q = append(q, DocSearchResult{
 				Name:     dp.Name,
@@ -110,13 +111,14 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 	}
 
 	// 2. Binding specs (non-primitive docs; includes DocOnly entries).
-	seen := make(map[string]bool)
+	seen := values.NewStringSet(0)
 	for _, r := range NonPrimitiveDocs(reg) {
-		if primNames[r.Name] || seen[r.Name] {
+		dup := primNames.Get(r.Name) || seen.Get(r.Name)
+		if dup {
 			continue
 		}
 		if matchesDoc(r.Name, r.Doc, r.Category, r.Keywords, lowerPattern) {
-			seen[r.Name] = true
+			seen.Set(r.Name)
 			q = append(q, r)
 		}
 	}
@@ -124,10 +126,11 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 	// 3. Environment bindings.
 	if env != nil {
 		for _, r := range searchEnvironmentBindings(env, lowerPattern) {
-			if primNames[r.Name] || seen[r.Name] {
+			dup := primNames.Get(r.Name) || seen.Get(r.Name)
+			if dup {
 				continue
 			}
-			seen[r.Name] = true
+			seen.Set(r.Name)
 			q = append(q, r)
 		}
 	}
@@ -135,10 +138,11 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 	// 4. Loaded libraries.
 	if libs != nil {
 		for _, r := range searchLibraries(libs, lowerPattern) {
-			if seen[r.Name] {
+			dup := seen.Get(r.Name)
+			if dup {
 				continue
 			}
-			seen[r.Name] = true
+			seen.Set(r.Name)
 			q = append(q, r)
 		}
 	}
@@ -146,10 +150,11 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 	// 5. Unloaded library exports.
 	if exports != nil {
 		for _, r := range searchUnloadedExports(exports, libs, lowerPattern) {
-			if primNames[r.Name] || seen[r.Name] {
+			dup := primNames.Get(r.Name) || seen.Get(r.Name)
+			if dup {
 				continue
 			}
-			seen[r.Name] = true
+			seen.Set(r.Name)
 			q = append(q, r)
 		}
 	}
@@ -192,7 +197,7 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 		return nil
 	}
 
-	seen := make(map[string]bool)
+	seen := values.NewStringSet(0)
 	var q []DocSearchResult
 
 	// One pass over the owner store, every live slot at every phase and rank.
@@ -207,10 +212,11 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 	// audience.
 	for _, slot := range ns.Store().LiveSlots() {
 		name := slot.Name.Key
-		if seen[name] {
+		dup := seen.Get(name)
+		if dup {
 			continue
 		}
-		seen[name] = true
+		seen.Set(name)
 
 		bnd := slot.Binding
 		doc := bnd.Doc()
@@ -275,16 +281,17 @@ func searchUnloadedExports(exports LibraryExportSearcher, libs LibrarySearcher, 
 	// Name strings are an injective key (library name parts are identifiers
 	// with no embedded spaces), so string equality matches the structural
 	// LibraryName equality the old *LibraryRegistry.Lookup performed.
-	loaded := make(map[string]bool)
+	loaded := values.NewStringSet(0)
 	if libs != nil {
 		for _, lib := range libs.AllLibraries() {
-			loaded[lib.Name] = true
+			loaded.Set(lib.Name)
 		}
 	}
 
 	var q []DocSearchResult
 	for _, summary := range exports.AllLibraryExports() {
-		if loaded[summary.Name] {
+		dup := loaded.Get(summary.Name)
+		if dup {
 			continue
 		}
 

@@ -130,7 +130,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 		return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing literals list"))
 	}
 
-	literals := make(values.StringSet)
+	literals := values.NewStringSet(0)
 	literalSyntax := make(map[string]*syntax.SyntaxSymbol)
 
 	// Process literals list
@@ -147,7 +147,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	// and ellipsis functionality is disabled for this syntax-rules form.
 	// Use "\x00" as sentinel since it cannot appear in Scheme symbols and
 	// won't be replaced with default by the match package.
-	_, ellipsisIsLiteral := literals[ellipsis]
+	ellipsisIsLiteral := literals.Get(ellipsis)
 	if ellipsisIsLiteral {
 		ellipsis = "\x00"
 	}
@@ -272,7 +272,7 @@ func compileClauseWithEllipsisAndLiterals(
 	// Determine pattern variables (anything not a literal, keyword, or ellipsis)
 	// Use literalSyntax for scope-aware literal matching (R7RS bound-identifier=? semantics)
 	// Also collect pattern variable syntax for nested macro hygiene
-	variables := make(values.StringSet)
+	variables := values.NewStringSet(0)
 	varSyntax := make(map[string]*syntax.SyntaxSymbol)
 	err := collectPatternVariablesWithEllipsis(pattern, literalSyntax, true, variables, varSyntax, ellipsis)
 	if err != nil {
@@ -428,7 +428,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 				return
 			}
 			// If it's not a pattern variable, it's a free identifier
-			_, isPatternVar := patternVars[symVal.Key]
+			isPatternVar := patternVars.Get(symVal.Key)
 			if !isPatternVar {
 				// Resolve the free identifier to its definition-time binding.
 				// Check local binding first (for let-syntax hygiene).
@@ -664,7 +664,7 @@ func computePatternVarDepths(pattern syntax.SyntaxValue, variables values.String
 		if !ok {
 			return
 		}
-		_, isVar := variables[symVal.Key]
+		isVar := variables.Get(symVal.Key)
 		if !isVar {
 			return
 		}
@@ -743,7 +743,7 @@ func collectTemplatePatternVars(tmpl syntax.SyntaxValue, variables values.String
 		if !ok || symVal.Key == ellipsis {
 			return
 		}
-		_, isVar := variables[symVal.Key]
+		isVar := variables.Get(symVal.Key)
 		if !isVar {
 			return
 		}
@@ -906,7 +906,7 @@ func extractLiteralsWithSyntax(ctx context.Context,
 		if !ok {
 			return wrapSourcedError(literal.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASymbol, "extractLiterals: literal must be a symbol"))
 		}
-		literals[symbol.Key] = struct{}{}
+		literals.Set(symbol.Key)
 		// Store syntax symbol for scope-aware matching if map provided
 		if literalSyntax != nil {
 			literalSyntax[symbol.Key] = sym

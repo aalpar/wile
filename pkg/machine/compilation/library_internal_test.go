@@ -124,19 +124,13 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 	}
 	only := func(ids ...string) func(*ImportSet) {
 		return func(is *ImportSet) {
-			set := make(values.StringSet, len(ids))
-			for _, id := range ids {
-				set[id] = struct{}{}
-			}
+			set := values.NewStringSet(len(ids)).SetAll(ids...)
 			is.AddOnly(set)
 		}
 	}
 	except := func(ids ...string) func(*ImportSet) {
 		return func(is *ImportSet) {
-			set := make(values.StringSet, len(ids))
-			for _, id := range ids {
-				set[id] = struct{}{}
-			}
+			set := values.NewStringSet(len(ids)).SetAll(ids...)
 			is.AddExcept(set)
 		}
 	}

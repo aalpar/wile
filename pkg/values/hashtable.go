@@ -384,7 +384,7 @@ func keysAreLeaves(entries []hashtableEntry) bool {
 
 // SchemeString returns the Scheme representation of this hash table.
 func (p *Hashtable) SchemeString() string {
-	return p.schemeStringWithVisited(make(map[Value]bool), 1)
+	return p.schemeStringWithVisited(NewMapSet[Value](0), 1)
 }
 
 // schemeStringWithVisited renders the hash table using PATH-SCOPED cycle
@@ -398,13 +398,14 @@ func (p *Hashtable) SchemeString() string {
 // level deeper (depth+1), where schemeStringChild enforces the host-safety
 // bound. Entries are siblings at the same level, so table size does not consume
 // depth.
-func (p *Hashtable) schemeStringWithVisited(visited map[Value]bool, depth int) string {
-	if visited[p] {
+func (p *Hashtable) schemeStringWithVisited(visited MapSet[Value], depth int) string {
+	seen := visited.Get(p)
+	if seen {
 		return "..."
 	}
-	visited[p] = true
+	visited.Set(p)
 	defer func() {
-		delete(visited, p)
+		visited.Unset(p)
 	}()
 
 	q := &strings.Builder{}

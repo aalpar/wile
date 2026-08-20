@@ -112,13 +112,13 @@ func PrimDatumToSyntax(mc machine.CallContext) error {
 // (validateQuotedLiteralWithVisited), and a cyclic graph handed to the
 // expander merely relocates the hang — measured.
 func datumToSyntax(datum values.Value, sctx *syntax.SourceContext) (syntax.SyntaxValue, error) {
-	return datumToSyntaxVisited(datum, sctx, map[values.Value]bool{}, 0)
+	return datumToSyntaxVisited(datum, sctx, values.NewMapSet[values.Value](0), 0)
 }
 
 // datumToSyntaxVisited is datumToSyntax's worker. visited is PATH-scoped —
 // entries are removed on the way back out — so shared structure converts as
 // before and only a true cycle is refused.
-func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visited map[values.Value]bool, depth int) (syntax.SyntaxValue, error) {
+func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visited values.MapSet[values.Value], depth int) (syntax.SyntaxValue, error) {
 	if depth > schemeutil.DefaultMaxDatumToSyntaxDepth {
 		return nil, werr.WrapForeignErrorf(werr.ErrParseDepthExceeded,
 			"datum->syntax: datum nested deeper than %d", schemeutil.DefaultMaxDatumToSyntaxDepth)
@@ -143,11 +143,12 @@ func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visite
 		if v.IsVoid() {
 			return syntax.NewSyntaxVector(sctx), nil
 		}
-		if visited[datum] {
+		dup := visited.Get(datum)
+		if dup {
 			return nil, circularDatumError()
 		}
-		visited[datum] = true
-		defer delete(visited, datum)
+		visited.Set(datum)
+		defer visited.Unset(datum)
 		elems := make([]syntax.SyntaxValue, v.Length())
 		for i, elem := range v.Elems() {
 			e, err := datumToSyntaxVisited(elem, sctx, visited, depth+1)
@@ -170,15 +171,16 @@ func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visite
 //
 // depth does NOT advance along the spine, only into cars: a long list is not
 // a deep one, and bounding length would refuse legal data.
-func datumListToSyntax(datum values.Value, v values.Tuple, sctx *syntax.SourceContext, visited map[values.Value]bool, depth int) (syntax.SyntaxValue, error) {
-	if visited[datum] {
+func datumListToSyntax(datum values.Value, v values.Tuple, sctx *syntax.SourceContext, visited values.MapSet[values.Value], depth int) (syntax.SyntaxValue, error) {
+	dup := visited.Get(datum)
+	if dup {
 		return nil, circularDatumError()
 	}
 	spine := []values.Value{datum}
-	visited[datum] = true
+	visited.Set(datum)
 	defer func() {
 		for _, cell := range spine {
-			delete(visited, cell)
+			visited.Unset(cell)
 		}
 	}()
 
@@ -201,10 +203,11 @@ func datumListToSyntax(datum values.Value, v values.Tuple, sctx *syntax.SourceCo
 			place.Values[1] = tail
 			return head, nil
 		}
-		if visited[cdr] {
+		dup := visited.Get(cdr)
+		if dup {
 			return nil, circularDatumError()
 		}
-		visited[cdr] = true
+		visited.Set(cdr)
 		spine = append(spine, cdr)
 
 		cell := syntax.NewSyntaxCons(nil, nil, sctx)

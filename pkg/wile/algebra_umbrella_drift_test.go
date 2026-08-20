@@ -32,10 +32,7 @@ func TestAlgebraUmbrellaCoversLeafExports(t *testing.T) {
 	umbrellaExports, err := readSldExports(umbrellaPath)
 	c.Assert(err, qt.IsNil, qt.Commentf("reading umbrella %s", umbrellaPath))
 
-	umbrellaSet := make(values.StringSet, len(umbrellaExports))
-	for _, s := range umbrellaExports {
-		umbrellaSet[s] = struct{}{}
-	}
+	umbrellaSet := values.NewStringSet(len(umbrellaExports)).SetAll(umbrellaExports...)
 
 	entries, err := os.ReadDir(leafDir)
 	c.Assert(err, qt.IsNil, qt.Commentf("listing %s", leafDir))
@@ -51,7 +48,7 @@ func TestAlgebraUmbrellaCoversLeafExports(t *testing.T) {
 		c.Assert(err, qt.IsNil, qt.Commentf("reading leaf %s", leafPath))
 
 		for _, sym := range leafExports {
-			_, ok := umbrellaSet[sym]
+			ok := umbrellaSet.Get(sym)
 			if !ok {
 				missing[e.Name()] = append(missing[e.Name()], sym)
 			}

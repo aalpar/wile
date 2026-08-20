@@ -16,6 +16,8 @@ package sat
 
 import (
 	"context"
+
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // solver holds the state of one CDCL search.
@@ -545,11 +547,11 @@ func luby(i int64) int64 {
 // clause currently used as a reason on the trail. Tombstoned clauses are
 // skipped in propagate via the len(c.lits)==0 check.
 func (s *solver) reduceClauseDB() {
-	locked := make(map[clauseRef]bool)
+	locked := values.NewMapSet[clauseRef](0)
 	for _, l := range s.trail {
 		r := s.reason[int32(l)>>1]
 		if r != noClauseRef {
-			locked[r] = true
+			locked.Set(r)
 		}
 	}
 	type idxAct struct {
@@ -570,7 +572,8 @@ func (s *solver) reduceClauseDB() {
 	}
 	keep := len(sortable) / 2
 	for k := keep; k < len(sortable); k++ {
-		if !locked[clauseRef(sortable[k].i)] {
+		inUse := locked.Get(clauseRef(sortable[k].i))
+		if !inUse {
 			s.clauses[sortable[k].i].lits = nil // tombstone
 		}
 	}

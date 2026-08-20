@@ -182,7 +182,7 @@ func (p *OSFileResolver) osAbsSearchDirs(ctx context.Context) []string {
 
 	dirs = append(dirs, osSearchDirs(p.env)...)
 
-	seen := make(values.StringSet, len(dirs))
+	seen := values.NewStringSet(len(dirs))
 	q := make([]string, 0, len(dirs))
 	for _, d := range dirs {
 		abs, err := filepath.Abs(d)

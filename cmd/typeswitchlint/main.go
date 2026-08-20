@@ -59,6 +59,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // knownValueTypes lists the exported concrete types in package values that
@@ -217,11 +219,11 @@ func scanFile(path string) ([]switchInfo, error) {
 
 	// Lines carrying an //exhaustive marker. A switch opts in when a marker
 	// sits on its own line (trailing) or the line immediately above it.
-	markerLines := map[int]bool{}
+	markerLines := values.NewIntSet(0)
 	for _, group := range file.Comments {
 		for _, c := range group.List {
 			if isExhaustiveMarker(c.Text) {
-				markerLines[fset.Position(c.Slash).Line] = true
+				markerLines.Set(fset.Position(c.Slash).Line)
 			}
 		}
 	}
@@ -233,7 +235,8 @@ func scanFile(path string) ([]switchInfo, error) {
 			return true
 		}
 		pos := fset.Position(ts.Switch)
-		if !markerLines[pos.Line] && !markerLines[pos.Line-1] {
+		marked := markerLines.Get(pos.Line) || markerLines.Get(pos.Line-1)
+		if !marked {
 			return true
 		}
 		cases, hasValues := extractCaseTypes(ts)

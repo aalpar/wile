@@ -384,7 +384,7 @@ func (p *Pair) SchemeString() string {
 	if p.IsVoid() {
 		return "#<void>"
 	}
-	visited := make(map[Value]bool)
+	visited := NewMapSet[Value](0)
 	return p.schemeStringWithVisited(visited, 1)
 }
 
@@ -401,17 +401,18 @@ func (p *Pair) SchemeString() string {
 // consume depth or the Go stack; only descent into a car or the improper tail
 // — genuine nesting — passes depth+1 to schemeStringChild, where the
 // host-safety bound is enforced.
-func (p *Pair) schemeStringWithVisited(visited map[Value]bool, depth int) string {
-	if visited[p] {
+func (p *Pair) schemeStringWithVisited(visited MapSet[Value], depth int) string {
+	seen := visited.Get(p)
+	if seen {
 		return "..."
 	}
 	// marked accumulates every node this call adds to the path so we can remove
 	// all of them on exit — not just the entry pair, but every spine cdrPair.
 	marked := []Value{p}
-	visited[p] = true
+	visited.Set(p)
 	defer func() {
 		for _, m := range marked {
-			delete(visited, m)
+			visited.Unset(m)
 		}
 	}()
 
@@ -437,11 +438,12 @@ func (p *Pair) schemeStringWithVisited(visited map[Value]bool, depth int) string
 			}
 			break
 		}
-		if visited[cdrPair] {
+		seen = visited.Get(cdrPair)
+		if seen {
 			q.WriteString(" . ...")
 			break
 		}
-		visited[cdrPair] = true
+		visited.Set(cdrPair)
 		marked = append(marked, cdrPair)
 		pr = cdrPair
 		i++
@@ -471,12 +473,12 @@ func (p *Pair) String() string {
 	if p.IsVoid() {
 		return ""
 	}
-	visited := make(map[*Pair]bool)
+	visited := NewMapSet[*Pair](0)
 	return p.stringWithVisited(visited, 1)
 }
 
 // stringWithVisited is the Stringer twin of schemeStringWithVisited. It keeps a
-// pair-only visited set (map[*Pair]bool): vector children are rendered via
+// pair-only visited set (MapSet[*Pair]): vector children are rendered via
 // stringValue → Vector.SchemeString, which carries its own shared visited set,
 // so a pair↔vector cross-cycle still terminates (the vector's set catches the
 // re-entry) even though this set tracks pairs only. The two paths deliberately
@@ -487,11 +489,12 @@ func (p *Pair) String() string {
 // at one level), and only descent into a car pair — genuine nesting — recurses,
 // degrading to deepMarker at DefaultMaxWriteDepth rather than overflowing the Go
 // stack. Non-pair cars route through stringValue → SchemeString, itself bounded.
-func (p *Pair) stringWithVisited(visited map[*Pair]bool, depth int) string {
-	if visited[p] {
+func (p *Pair) stringWithVisited(visited MapSet[*Pair], depth int) string {
+	seen := visited.Get(p)
+	if seen {
 		return "..."
 	}
-	visited[p] = true
+	visited.Set(p)
 
 	q := &strings.Builder{}
 	q.WriteString("(")
@@ -519,11 +522,12 @@ func (p *Pair) stringWithVisited(visited map[*Pair]bool, depth int) string {
 			}
 			break
 		}
-		if visited[cdrPair] {
+		seen = visited.Get(cdrPair)
+		if seen {
 			q.WriteString(" . ...")
 			break
 		}
-		visited[cdrPair] = true
+		visited.Set(cdrPair)
 		pr = cdrPair
 		i++
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -194,14 +195,15 @@ func (p *FSFileResolver) buildEnumSearchDirs() []string {
 	}
 
 	var dirs []string
-	seen := make(map[string]bool)
+	seen := values.NewStringSet(0)
 	for _, raw := range reg.GetSearchPaths() {
 		dir := pathpkg.Clean(raw)
 		if dir == "" {
 			continue
 		}
-		if !seen[dir] {
-			seen[dir] = true
+		dup := seen.Get(dir)
+		if !dup {
+			seen.Set(dir)
 			dirs = append(dirs, dir)
 		}
 	}

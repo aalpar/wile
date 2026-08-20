@@ -55,13 +55,13 @@ const DefaultMaxDatumToSyntaxDepth = 10000
 // only one that terminates: a faithful cyclic graph merely moves the hang into
 // the expander, which was measured before this shape was chosen.
 func DatumToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o values.Value) (syntax.SyntaxValue, error) {
-	return datumToSyntaxValueVisited(ctx, sctx, o, map[values.Value]bool{}, 0)
+	return datumToSyntaxValueVisited(ctx, sctx, o, values.NewMapSet[values.Value](0), 0)
 }
 
 // datumToSyntaxValueVisited is DatumToSyntaxValue's worker. visited is
 // PATH-scoped — entries are removed on the way back out — so shared structure
 // converts exactly as it did before and only a true cycle is refused.
-func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, o values.Value, visited map[values.Value]bool, depth int) (syntax.SyntaxValue, error) {
+func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, o values.Value, visited values.MapSet[values.Value], depth int) (syntax.SyntaxValue, error) {
 	if depth > DefaultMaxDatumToSyntaxDepth {
 		return nil, werr.WrapForeignErrorf(werr.ErrParseDepthExceeded,
 			"DatumToSyntaxValue: datum nested deeper than %d", DefaultMaxDatumToSyntaxDepth)
@@ -87,22 +87,24 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 	case values.Tuple:
 		return datumListToSyntaxValue(ctx, sctx, o, v, visited, depth)
 	case *values.Box:
-		if visited[o] {
+		dup := visited.Get(o)
+		if dup {
 			return nil, circularDatumError()
 		}
-		visited[o] = true
-		defer delete(visited, o)
+		visited.Set(o)
+		defer visited.Unset(o)
 		inner, err := datumToSyntaxValueVisited(ctx, sctx, v.Unbox(), visited, depth+1)
 		if err != nil {
 			return nil, err
 		}
 		return syntax.NewSyntaxObject(values.NewBox(inner), sctx), nil
 	case *values.Vector:
-		if visited[o] {
+		dup := visited.Get(o)
+		if dup {
 			return nil, circularDatumError()
 		}
-		visited[o] = true
-		defer delete(visited, o)
+		visited.Set(o)
+		defer visited.Unset(o)
 		vt0 := syntax.NewSyntaxVector(sctx)
 		for _, elem := range v.Elems() {
 			e, err := datumToSyntaxValueVisited(ctx, sctx, elem, visited, depth+1)
@@ -132,15 +134,16 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 // ctx is no longer polled: the walk is now bounded by the size of a datum
 // already resident in memory, and the caller re-checks the deadline on the
 // very next step.
-func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o values.Value, v values.Tuple, visited map[values.Value]bool, depth int) (syntax.SyntaxValue, error) {
-	if visited[o] {
+func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o values.Value, v values.Tuple, visited values.MapSet[values.Value], depth int) (syntax.SyntaxValue, error) {
+	dup := visited.Get(o)
+	if dup {
 		return nil, circularDatumError()
 	}
 	spine := []values.Value{o}
-	visited[o] = true
+	visited.Set(o)
 	defer func() {
 		for _, cell := range spine {
-			delete(visited, cell)
+			visited.Unset(cell)
 		}
 	}()
 
@@ -163,10 +166,11 @@ func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o v
 			place.Values[1] = tail
 			return head, nil
 		}
-		if visited[cdr] {
+		dup := visited.Get(cdr)
+		if dup {
 			return nil, circularDatumError()
 		}
-		visited[cdr] = true
+		visited.Set(cdr)
 		spine = append(spine, cdr)
 
 		cell := syntax.NewSyntaxCons(nil, nil, sctx)

@@ -57,7 +57,7 @@ const deepMarker = "#<deep>"
 // bounded at DefaultMaxWriteDepth. Every element is a sibling at the same level,
 // so length does not consume depth: a flat collection of any size renders in
 // full (only genuine nesting counts, matching the writer).
-func formatIndexable(prefix string, length int, get func(int) Value, visited map[Value]bool, depth int) string {
+func formatIndexable(prefix string, length int, get func(int) Value, visited MapSet[Value], depth int) string {
 	q := &strings.Builder{}
 	q.WriteString(prefix)
 	if length > 0 {
@@ -92,7 +92,7 @@ func formatIndexable(prefix string, length int, get func(int) Value, visited map
 // allocated lazily for that subtree, so a nil set can never cause a nil-map
 // write. This keeps the nil contract a safe "no tracking" rather than an
 // unchecked "I promise no compound children" caller obligation.
-func schemeStringChild(child Value, visited map[Value]bool, depth int) string {
+func schemeStringChild(child Value, visited MapSet[Value], depth int) string {
 	// Host-safety bound: this is the single chokepoint through which every
 	// compound descent flows (Pair car / improper cdr, Vector element,
 	// Hashtable key/value), so one guard here bounds all container types.
@@ -110,7 +110,7 @@ func schemeStringChild(child Value, visited map[Value]bool, depth int) string {
 			return "#<void>"
 		}
 		if visited == nil {
-			visited = make(map[Value]bool)
+			visited = NewMapSet[Value](0)
 		}
 		return c.schemeStringWithVisited(visited, depth)
 	case *Vector:
@@ -118,7 +118,7 @@ func schemeStringChild(child Value, visited map[Value]bool, depth int) string {
 			return "#<void>"
 		}
 		if visited == nil {
-			visited = make(map[Value]bool)
+			visited = NewMapSet[Value](0)
 		}
 		return c.schemeStringWithVisited(visited, depth)
 	case *Hashtable:
@@ -126,7 +126,7 @@ func schemeStringChild(child Value, visited map[Value]bool, depth int) string {
 			return "#<void>"
 		}
 		if visited == nil {
-			visited = make(map[Value]bool)
+			visited = NewMapSet[Value](0)
 		}
 		return c.schemeStringWithVisited(visited, depth)
 	case *Box:
@@ -134,7 +134,7 @@ func schemeStringChild(child Value, visited map[Value]bool, depth int) string {
 			return "#<box:void>"
 		}
 		if visited == nil {
-			visited = make(map[Value]bool)
+			visited = NewMapSet[Value](0)
 		}
 		return c.schemeStringWithVisited(visited, depth)
 	case *AtomicBox:
@@ -142,7 +142,7 @@ func schemeStringChild(child Value, visited map[Value]bool, depth int) string {
 			return "#<atomic:void>"
 		}
 		if visited == nil {
-			visited = make(map[Value]bool)
+			visited = NewMapSet[Value](0)
 		}
 		return c.schemeStringWithVisited(visited, depth)
 	}
@@ -451,12 +451,23 @@ func ExactInteger(v Value) (int64, bool) {
 
 type MapSet[T comparable] map[T]struct{}
 
-func (p *MapSet[T]) Set(s T) {
-	(*p)[s] = struct{}{}
+func NewMapSet[T comparable](sz int) MapSet[T] {
+	return make(MapSet[T], sz)
 }
 
-func (p *MapSet[T]) Unset(s T) {
-	delete(*p, s)
+func (p MapSet[T]) Set(s T) {
+	p[s] = struct{}{}
+}
+
+func (p MapSet[T]) SetAll(vs ...T) MapSet[T] {
+	for _, v := range vs {
+		p.Set(v)
+	}
+	return p
+}
+
+func (p MapSet[T]) Unset(s T) {
+	delete(p, s)
 }
 
 func (p MapSet[T]) Get(s T) bool {
@@ -466,15 +477,52 @@ func (p MapSet[T]) Get(s T) bool {
 
 type StringSet MapSet[string]
 
-func (p *StringSet) Set(s string) {
-	(*p)[s] = struct{}{}
+func NewStringSet(sz int) StringSet {
+	return make(StringSet, sz)
 }
 
-func (p *StringSet) Unset(s string) {
-	delete(*p, s)
+func (p StringSet) Set(s string) {
+	p[s] = struct{}{}
+}
+
+func (p StringSet) SetAll(vs ...string) StringSet {
+	for _, v := range vs {
+		p.Set(v)
+	}
+	return p
+}
+
+func (p StringSet) Unset(s string) {
+	delete(p, s)
 }
 
 func (p StringSet) Get(s string) bool {
+	_, q := p[s]
+	return q
+}
+
+type IntSet MapSet[int]
+
+func NewIntSet(sz int) IntSet {
+	return make(IntSet, sz)
+}
+
+func (p IntSet) Set(s int) {
+	p[s] = struct{}{}
+}
+
+func (p IntSet) SetAll(vs ...int) IntSet {
+	for _, v := range vs {
+		p.Set(v)
+	}
+	return p
+}
+
+func (p IntSet) Unset(s int) {
+	delete(p, s)
+}
+
+func (p IntSet) Get(s int) bool {
 	_, q := p[s]
 	return q
 }

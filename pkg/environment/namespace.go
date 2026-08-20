@@ -335,11 +335,11 @@ func (p *Namespace) BoundNamesAcrossPhases() []string {
 	// or not — the set the pre-fold union over every phase frame plus every sealed
 	// frame produced, now that all of those are views over this one store.
 	for _, s := range p.Store().LiveSlots() {
-		_, dup := seen[s.Name.Key]
+		dup := seen.Get(s.Name.Key)
 		if dup {
 			continue
 		}
-		seen[s.Name.Key] = struct{}{}
+		seen.Set(s.Name.Key)
 		names = append(names, s.Name.Key)
 	}
 	slices.Sort(names)

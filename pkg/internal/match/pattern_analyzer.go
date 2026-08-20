@@ -62,7 +62,7 @@ func analyzeRecursive(
 ) values.StringSet {
 	switch t := v.(type) {
 	case *syntax.SyntaxSymbol:
-		_, isVar := variables[t.Key()]
+		isVar := variables.Get(t.Key())
 		if !isVar {
 			return nil
 		}
@@ -73,7 +73,7 @@ func analyzeRecursive(
 			return nil
 		}
 
-		varsInSubtree := make(values.StringSet)
+		varsInSubtree := values.NewStringSet(0)
 		maps.Copy(varsInSubtree, analyzeRecursive(t.SyntaxCar(), variables, analysis))
 		maps.Copy(varsInSubtree, analyzeRecursive(t.SyntaxCdr(), variables, analysis))
 
@@ -90,7 +90,7 @@ func analyzeRecursive(
 		// compiler converts the vector to a pair chain and Merges that chain's
 		// analysis, which is what supplies map entries for the chain's own pairs;
 		// here we only propagate the names upward.
-		varsInVector := make(values.StringSet)
+		varsInVector := values.NewStringSet(0)
 		for _, elem := range t.Values {
 			maps.Copy(varsInVector, analyzeRecursive(elem, variables, analysis))
 		}

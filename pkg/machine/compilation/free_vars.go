@@ -98,7 +98,7 @@ func collectFreeVars(v validate.ValidatedBodyAndParams, enclosing *environment.E
 	}
 	c := &freeVarCollector{
 		enclosing: enclosing,
-		seen:      make(map[freeVarKey]bool),
+		seen:      values.NewMapSet[freeVarKey](0),
 	}
 	c.walkProc(v)
 	return c.q
@@ -109,7 +109,7 @@ func collectFreeVars(v validate.ValidatedBodyAndParams, enclosing *environment.E
 type freeVarCollector struct {
 	enclosing *environment.EnvironmentFrame
 	binders   [][]*syntax.SyntaxSymbol
-	seen      map[freeVarKey]bool
+	seen      values.MapSet[freeVarKey]
 	q         []freeVar
 }
 
@@ -161,14 +161,15 @@ func (p *freeVarCollector) visit(sym *syntax.SyntaxSymbol) {
 		return
 	}
 	k := freeVarKey{slot: li.Over(), depth: li.Up()}
-	if p.seen[k] {
+	dup := p.seen.Get(k)
+	if dup {
 		return
 	}
 	abs, ok := absoluteSlot(p.enclosing, li)
 	if !ok {
 		return
 	}
-	p.seen[k] = true
+	p.seen.Set(k)
 	p.q = append(p.q, freeVar{sym: sym, key: k, abs: abs})
 }
 

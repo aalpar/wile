@@ -51,11 +51,11 @@ func (runeSlice) Generate(r *rand.Rand, size int) reflect.Value {
 // dedupAndSort returns the sorted, deduplicated codepoints in rs.
 func dedupAndSort(rs runeSlice) []rune {
 	out := make([]rune, 0, len(rs))
-	seen := make(map[rune]struct{}, len(rs))
+	seen := values.NewMapSet[rune](len(rs))
 	for _, r := range rs {
-		_, ok := seen[r]
+		ok := seen.Get(r)
 		if !ok {
-			seen[r] = struct{}{}
+			seen.Set(r)
 			out = append(out, r)
 		}
 	}

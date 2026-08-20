@@ -53,7 +53,7 @@ type DeepEqualer interface {
 // lazily, so comparing two leaves costs nothing.
 type equalWorklist struct {
 	pending []equalPairKey
-	visited map[equalPairKey]bool
+	visited MapSet[equalPairKey]
 }
 
 // push enqueues a component pair for comparison. It is handed to
@@ -166,12 +166,13 @@ func (p *equalWorklist) step(a, b Value) bool {
 		return true
 	}
 	key := equalPairKey{a, b}
-	if p.visited[key] {
+	dup := p.visited.Get(key)
+	if dup {
 		return true
 	}
 	if p.visited == nil {
-		p.visited = make(map[equalPairKey]bool)
+		p.visited = NewMapSet[equalPairKey](0)
 	}
-	p.visited[key] = true
+	p.visited.Set(key)
 	return da.EqualComponents(b, p.push)
 }

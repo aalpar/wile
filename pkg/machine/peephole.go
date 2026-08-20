@@ -14,6 +14,8 @@
 
 package machine
 
+import "github.com/aalpar/wile/pkg/values"
+
 // Optimize performs a peephole optimization pass on the template's bytecode.
 // It removes dead instructions identified by pattern-matching rules, fixes
 // branch offsets to account for removed instructions, and compacts the code
@@ -232,7 +234,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 	// the same PullApply from being matched by both non-tail and tail
 	// patterns (e.g., when argument-pushing PushCachedBinding follows
 	// the callee PushCachedBinding that was already fused).
-	claimed := make(map[int]bool)
+	claimed := values.NewIntSet(0)
 
 	for i := range len(code) {
 		// Non-tail pattern: SaveContinuation + PushCachedBinding ... PullApply
@@ -249,7 +251,8 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			}
 
 			// Skip if this PullApply was already claimed.
-			if claimed[pullIdx] {
+			done := claimed.Get(pullIdx)
+			if done {
 				continue
 			}
 
@@ -311,7 +314,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 					[]Instruction{{Op: promotedOp, Arg: bindingIdx}},
 					tpl.sourceRefs[pullIdx],
 				)
-				claimed[pullIdx] = true
+				claimed.Set(pullIdx)
 				continue
 			}
 
@@ -325,7 +328,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 				[]Instruction{{Op: OpCallForeignCached, Arg: bindingIdx}},
 				tpl.sourceRefs[pullIdx],
 			)
-			claimed[pullIdx] = true
+			claimed.Set(pullIdx)
 			continue
 		}
 
@@ -366,7 +369,8 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			}
 
 			// Skip if this PullApply was already claimed.
-			if claimed[pullIdx] {
+			done := claimed.Get(pullIdx)
+			if done {
 				continue
 			}
 
@@ -391,7 +395,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 					[]Instruction{{Op: promotedTailOp, Arg: bindingIdx}},
 					tpl.sourceRefs[pullIdx],
 				)
-				claimed[pullIdx] = true
+				claimed.Set(pullIdx)
 				continue
 			}
 
@@ -402,7 +406,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 				[]Instruction{{Op: OpCallForeignCachedTail, Arg: bindingIdx}},
 				tpl.sourceRefs[pullIdx],
 			)
-			claimed[pullIdx] = true
+			claimed.Set(pullIdx)
 			continue
 		}
 	}

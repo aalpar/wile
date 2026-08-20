@@ -330,13 +330,13 @@ func parseIdentifierListFromDatum(ctx context.Context, expr values.Value) (value
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "expected list of identifiers")
 	}
 
-	ids := make(values.StringSet)
+	ids := values.NewStringSet(0)
 	err := values.ForEachProperList(ctx, tuple, "identifier list", func(_ context.Context, _ int, _ bool, idExpr values.Value) error {
 		idSym, ok := idExpr.(*values.Symbol)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotASymbol, "expected identifier symbol")
 		}
-		ids[idSym.Key] = struct{}{}
+		ids.Set(idSym.Key)
 		return nil
 	})
 	if err != nil {

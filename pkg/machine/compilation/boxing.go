@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // boxedSlotKey names a local slot ABSOLUTELY: the compile-time frame that owns
@@ -237,7 +238,7 @@ func (p *CompileTimeContinuation) markBoxedBinders(
 			continue
 		}
 		p.ensureBoxedSlots()
-		p.boxedSlots[k] = true
+		p.boxedSlots.Set(k)
 		q = append(q, li)
 	}
 	return q
@@ -322,7 +323,7 @@ func (p *CompileTimeContinuation) maybeBoxOnDeclare(binder *syntax.SyntaxSymbol,
 		return
 	}
 	p.ensureBoxedSlots()
-	p.boxedSlots[k] = true
+	p.boxedSlots.Set(k)
 	p.AppendOperations(machine.NewOperationBoxSlot(li))
 }
 
@@ -333,7 +334,7 @@ func (p *CompileTimeContinuation) maybeBoxOnDeclare(binder *syntax.SyntaxSymbol,
 // outermost frame boxes nothing.
 func (p *CompileTimeContinuation) ensureBoxedSlots() {
 	if p.boxedSlots == nil {
-		p.boxedSlots = make(map[boxedSlotKey]bool)
+		p.boxedSlots = values.NewMapSet[boxedSlotKey](0)
 	}
 }
 
@@ -348,7 +349,7 @@ func (p *CompileTimeContinuation) localIsBoxed(li *environment.LocalIndex) bool 
 	if !ok {
 		return false
 	}
-	return p.boxedSlots[k]
+	return p.boxedSlots.Get(k)
 }
 
 // emitBoxSlots emits one OpBoxSlot per index, installing the cells before any

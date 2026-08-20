@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/pkg/internal/forms"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -75,14 +76,15 @@ func VerifyCompilers() error {
 // is silently treated as a procedure call during expansion — the most
 // dangerous form of registration drift.
 func VerifyExpanders() error {
-	expanderNames := make(map[string]bool, len(primitiveExpanderEntries))
+	expanderNames := values.NewStringSet(len(primitiveExpanderEntries))
 	for _, e := range primitiveExpanderEntries {
-		expanderNames[e.Name] = true
+		expanderNames.Set(e.Name)
 	}
 
 	var missing []string
 	for _, e := range syntaxCompilerEntries {
-		if !expanderNames[e.Name] {
+		has := expanderNames.Get(e.Name)
+		if !has {
 			missing = append(missing, e.Name+": syntax compiler has no expander")
 		}
 	}
