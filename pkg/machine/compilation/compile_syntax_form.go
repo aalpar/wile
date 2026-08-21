@@ -163,6 +163,7 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 		// outrank the pattern variable — a regression, not a hygiene fix.
 		li := p.env.GetLocalIndex(symVal, syntax.AllScopes())
 		if li != nil {
+			templateLocalEmits.Add(1)
 			// This is a pattern variable - load its value. Translated for
 			// let-slot merging like every other local-index emit: the walk can
 			// cross a merged `let` frame on its way out to the pattern frame,

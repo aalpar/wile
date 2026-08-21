@@ -547,6 +547,7 @@ func (p *SyntaxMatcher) expandSymbol(
 		return p.applyHygieneToSymbol(t, opts), nil
 	}
 
+	patternVarSubstitutions.Add(1)
 	return p.capturedValueToSyntax(capturedVal, opts)
 }
 
