@@ -257,7 +257,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	*failJumps = append(*failJumps, jumpPatch{clauseIndex, failBranchIdx})
 
 	// Create environment with pattern variables bound (shared between fender and body)
-	bodyEnv := p.createPatternVarEnvironment(patternVars)
+	bodyEnv := p.createPatternVarEnvironment(patternVars, patternVarSyntax)
 	bodyCompiler := NewCompileTimeContinuation(p.template, bodyEnv, p.evaluator)
 	bodyCompiler.SetInlineThreshold(p.inlineThreshold)
 	// Carry the clause's hygiene context into CompileSyntax so that ellipsis
@@ -392,7 +392,30 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 
 // createPatternVarEnvironment creates a child environment with local bindings
 // for the pattern variables. Uses sorted order for consistent indexing with runtime.
-func (p *CompileTimeContinuation) createPatternVarEnvironment(patternVars values.StringSet) *environment.EnvironmentFrame {
+//
+// Each binding carries its PATTERN IDENTIFIER's scopes, so a template occurrence
+// resolves to it by ordinary subset resolution rather than by a bespoke
+// predicate: the pattern variable is the binder, the occurrence is the
+// reference, and `patternScopes ⊆ templateScopes` is Flatt's relation. A
+// clause-body binder ADDS its scope to the occurrence and still resolves; an
+// identifier an outer macro introduced lacks the use-site scope the pattern
+// variable carries and does not. `compileSyntaxTemplateToOps` is the reader.
+//
+// **Scoping the binding and scoping the query are one change.** While pattern
+// variables were bound scopeless, cardinality 0 lost every maximal-resolution
+// argmax it entered, so an enclosing scoped lexical of the same name outranked
+// them — which is why the query was a wildcard. Either half alone is a
+// regression; see plans/2026-08-20-pattern-variables-as-bindings-impl.local.md.
+//
+// The runtime mirror (OperationBindPatternVars.Apply) deliberately binds with
+// NO scopes. The asymmetry is correct: the compile-time frame exists to be
+// RESOLVED against, while the runtime frame is addressed positionally by the
+// LoadLocal index this resolution produced. Both sides sort by name and append,
+// so scoping one side cannot move a slot.
+func (p *CompileTimeContinuation) createPatternVarEnvironment(
+	patternVars values.StringSet,
+	patternVarSyntax map[string]*syntax.SyntaxSymbol,
+) *environment.EnvironmentFrame {
 	vars := slices.Sorted(maps.Keys(patternVars))
 
 	// Empty, then append — see OperationBindPatternVars.Apply for why the two
@@ -401,10 +424,21 @@ func (p *CompileTimeContinuation) createPatternVarEnvironment(patternVars values
 	localEnv := environment.NewLocalEnvironment(0)
 	childEnv := environment.NewEnvironmentFrameWithParent(localEnv, p.env)
 
-	// Create bindings for each pattern variable in sorted order
+	// Create bindings for each pattern variable in sorted order.
+	//
+	// A name absent from patternVarSyntax binds scopeless, which is the
+	// pre-hygiene "match any" dedup key and resolves against every reference.
+	// That is the conservative direction: collectPatternVariablesWithEllipsis
+	// fills both collections from one walk, so the two agree today, and a future
+	// divergence deoptimizes rather than mis-resolves.
 	for _, varName := range vars {
 		sym := values.NewSymbol(varName)
-		childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, nil, nil)
+		var scopes []*syntax.Scope
+		patSym := patternVarSyntax[varName]
+		if patSym != nil {
+			scopes = patSym.Scopes()
+		}
+		childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, scopes, nil)
 	}
 
 	// Reserve the state slot the runtime frame appends next (bindSyntaxCaseState).

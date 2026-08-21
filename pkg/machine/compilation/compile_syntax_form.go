@@ -147,16 +147,23 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 			p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 			return nil
 		}
-		// AllScopes (match-any, first-match) is deliberate, not an unthreaded
-		// scope set. Pattern variables are bound scopeless in the innermost
-		// createPatternVarEnvironment frame (compile_syntax_case.go), keyed by
-		// bare name — a nominal namespace, not a hygienic one. Under a wildcard
-		// query GetLocalIndex returns the FIRST compatible binding walking
-		// innermost-out, so the scopeless pattern variable wins. A scoped query
-		// (ScopesOf(v.Scopes())) would switch to maximal resolution, where an
-		// enclosing scoped lexical of the same name (larger scope count) could
-		// outrank the pattern variable — a regression, not a hygiene fix.
-		li := p.env.GetLocalIndex(symVal, syntax.AllScopes())
+		// A scoped query, because the pattern variable is now an ordinary
+		// binding: createPatternVarEnvironment binds it at its PATTERN
+		// identifier's scopes, so maximal resolution answers "does this
+		// occurrence denote that pattern variable?" as an instance of Flatt's
+		// relation rather than as a separate question.
+		//
+		// This used to be AllScopes, and the wildcard was load-bearing for as
+		// long as pattern variables were bound scopeless — cardinality 0 loses
+		// every argmax, so an enclosing scoped lexical of the same name would
+		// have outranked them. The two changes are one change; splitting them
+		// in either order is a regression.
+		//
+		// A scoped query can also raise ErrAmbiguousBinding on an incomparable
+		// equal-cardinality tie, which the wildcard's first-match early return
+		// structurally could not. Never observed across the matrix, the Scheme
+		// corpora or the Go suite; loud (a compile-time panic) if it ever is.
+		li := p.env.GetLocalIndex(symVal, syntax.ScopesOf(v.Scopes()))
 		if li != nil {
 			templateLocalEmits.Add(1)
 			// This is a pattern variable - load its value. Translated for
