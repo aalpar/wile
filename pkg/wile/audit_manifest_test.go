@@ -22,6 +22,11 @@
 // (name return-type param-types go-function go-source-location) tuples.
 // Run with WILE_AXIS_B_UPDATE=1 to regenerate after adding/removing primitives.
 //
+// Four of the five columns are golden-asserted against the committed file.
+// The go-function column is generated (the analyzer consumes it) but excluded
+// from that assertion, because its value is a property of the Go compiler
+// rather than of Wile — see maskGoFunctionColumn.
+//
 // ParamTypes slot format:
 //   - One string per fixed parameter slot, containing the TypeConstraint.Name().
 //   - For variadic primitives, the last slot is prefixed "..." to mark it as
@@ -39,6 +44,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -55,9 +61,17 @@ const (
 	// axisBManifestPath is the repo-relative path of the committed manifest.
 	// It lives under testdata/ — the Go-conventional home for golden
 	// fixtures — because this test both generates it (WILE_AXIS_B_UPDATE=1)
-	// and golden-asserts the committed copy. The audit/ analyzer scripts
-	// consume it as their default input dataset.
+	// and golden-asserts the committed copy, every column but go-function.
+	// The audit/ analyzer scripts consume it as their default input dataset.
 	axisBManifestPath = "testdata/axis-b-manifest.scm"
+
+	// wilePackagePrefix is the module path every primitive's Go
+	// implementation must sit under. It is the same predicate the analyzer
+	// applies when it decides which manifest rows are its own
+	// (wile-entry? / wile-package-prefix in
+	// tools/audit/wile-axis-b-params.scm), and it is what the go-function
+	// column is checked FOR now that it is no longer checked byte-for-byte.
+	wilePackagePrefix = "github.com/aalpar/wile/"
 
 	// axisBUpdateEnvVar toggles regeneration of the committed manifest.
 	// Set to any non-empty value to overwrite axisBManifestPath with the
@@ -254,6 +268,48 @@ func formatManifest(entries []manifestEntry) string {
 	return b.String()
 }
 
+// manifestGoFunctionColumn matches one rendered line's go-function column,
+// capturing the location column and closing paren(s) that follow it so the
+// replacement can put them back.
+//
+// Anchoring on the line end is what makes the column addressable: the
+// param-types slot holds a variable number of quoted strings, so go-function
+// has no fixed index from the left, but it always sits exactly one column
+// before the end. The `[^"\\]|\\.` alternation consumes the escapes
+// writeSchemeString emits, so a value containing a quote or backslash cannot
+// end its token early; `\)+` covers the final entry, which carries the outer
+// list's closing paren too.
+var manifestGoFunctionColumn = regexp.MustCompile(`(?m)"(?:[^"\\]|\\.)*"( "(?:[^"\\]|\\.)*"\)+)$`)
+
+// maskGoFunctionColumn blanks the go-function column of a rendered manifest,
+// so the golden comparison can assert the other four columns byte-for-byte.
+//
+// The column holds runtime.FuncForPC's name for the primitive's Impl, which
+// encodes the compiler's INLINING decision rather than a fact about Wile. A
+// closure factory inlined into its caller is attributed to the caller's
+// package; the same factory left alone stays in its own:
+//
+//	go1.24, go1.26.7   …/pkg/registry/core.init.MakeTypePredicate.func67
+//	go1.27.0           …/pkg/registry/helpers.MakeTypePredicate.func1
+//
+// Measured across those three toolchains: 127 of 456 entries change name,
+// while name, return type, param types and source location are byte-identical
+// on all three — runtime.Func.FileLine resolves through the inline even when
+// the symbol does not. Normalizing the two forms into one is not possible,
+// because they disagree on the PACKAGE, so the comparison drops the column.
+//
+// Two consequences worth knowing:
+//
+//   - A Go function RENAMED in place, body left on the same line, no longer
+//     trips the golden diff. Any move — other file, other line — still does.
+//   - Regenerating under a different toolchain rewrites this column and the
+//     test will not flag the result. That churn is expected; the analyzer
+//     only asks whether the value is under wilePackagePrefix, which the
+//     per-entry check above still enforces.
+func maskGoFunctionColumn(manifest string) string {
+	return manifestGoFunctionColumn.ReplaceAllString(manifest, `""${1}`)
+}
+
 // writeParamTypesList writes the param-types slot as "(s1 s2 ... sN)" with
 // each string quoted. Empty input produces "()".
 func writeParamTypesList(b *strings.Builder, types []string) {
@@ -308,9 +364,9 @@ func TestBuildAxisBManifest(t *testing.T) {
 			bindingOnly++
 			continue
 		}
-		if !strings.Contains(e.GoFunction, "/") {
-			t.Errorf("entry %d (%q) GoFunction %q lacks package path",
-				i, e.Name, e.GoFunction)
+		if !strings.HasPrefix(e.GoFunction, wilePackagePrefix) {
+			t.Errorf("entry %d (%q) GoFunction %q is not under %s",
+				i, e.Name, e.GoFunction, wilePackagePrefix)
 		}
 		if e.SourceFile == "" {
 			t.Errorf("entry %d (%q) has populated GoFunction but empty SourceFile",
@@ -380,8 +436,9 @@ func TestBuildAxisBManifest(t *testing.T) {
 		t.Fatalf("read %s: %v (run with %s=1 to generate)",
 			axisBManifestPath, err, axisBUpdateEnvVar)
 	}
-	if string(committed) != generated {
-		t.Errorf("%s is out of date\nrun: %s=1 go test -run TestBuildAxisBManifest .",
+	if maskGoFunctionColumn(string(committed)) != maskGoFunctionColumn(generated) {
+		t.Errorf("%s is out of date (go-function column excluded — see "+
+			"maskGoFunctionColumn)\nrun: %s=1 go test -run TestBuildAxisBManifest .",
 			axisBManifestPath, axisBUpdateEnvVar)
 	}
 }
@@ -462,6 +519,127 @@ func TestFormatManifest(t *testing.T) {
 			got := formatManifest(tc.input)
 			if got != tc.expected {
 				t.Errorf("formatManifest mismatch\nwant: %q\ngot:  %q", tc.expected, got)
+			}
+		})
+	}
+}
+
+// TestMaskGoFunctionColumn pins that the mask blanks exactly the go-function
+// column and nothing else. The dangerous direction is over-matching: a mask
+// that also swallowed the location column, or a param-types string, would make
+// the golden comparison pass over real drift instead of failing on it. Every
+// row therefore feeds output from formatManifest, so the mask is exercised
+// against precisely what the renderer emits.
+func TestMaskGoFunctionColumn(t *testing.T) {
+	tcs := []struct {
+		name  string
+		input []manifestEntry
+		want  string
+	}{
+		{
+			name:  "empty manifest is untouched",
+			input: nil,
+			want:  "()\n",
+		},
+		{
+			name: "single entry keeps every other column",
+			input: []manifestEntry{
+				{Name: "car", ReturnType: "any", GoFunction: "pkg.PrimCar", SourceFile: "a.go", SourceLine: 42},
+			},
+			want: `(("car" "any" () "" "a.go:42"))` + "\n",
+		},
+		{
+			name: "param strings survive — the column has no fixed index from the left",
+			input: []manifestEntry{
+				{
+					Name: "vector-set!", ReturnType: "void",
+					ParamTypes: []string{"vector", "integer", "any"},
+					GoFunction: "pkg.PrimVectorSet", SourceFile: "f.go", SourceLine: 1,
+				},
+			},
+			want: `(("vector-set!" "void" ("vector" "integer" "any") "" "f.go:1"))` + "\n",
+		},
+		{
+			name: "last entry carries the outer closing paren",
+			input: []manifestEntry{
+				{Name: "a", ReturnType: "x", ParamTypes: []string{"y"}, GoFunction: "pkg.A", SourceFile: "a.go", SourceLine: 1},
+				{Name: "b", ReturnType: "", GoFunction: "pkg.B", SourceFile: "b.go", SourceLine: 2},
+			},
+			want: `(("a" "x" ("y") "" "a.go:1")` + "\n" +
+				` ("b" "" () "" "b.go:2"))` + "\n",
+		},
+		{
+			name: "binding-only entry is already blank and stays blank",
+			input: []manifestEntry{
+				{Name: "assoc", ReturnType: "any", GoFunction: "", SourceFile: "", SourceLine: 0},
+			},
+			want: `(("assoc" "any" () "" ""))` + "\n",
+		},
+		{
+			name: "escapes in the masked value do not end the token early",
+			input: []manifestEntry{
+				{Name: "f", ReturnType: "x", GoFunction: `pkg.F"weird\sym`, SourceFile: "f.go", SourceLine: 7},
+			},
+			want: `(("f" "x" () "" "f.go:7"))` + "\n",
+		},
+		{
+			name: "escapes in the location column survive",
+			input: []manifestEntry{
+				{Name: "g", ReturnType: "x", GoFunction: "pkg.G", SourceFile: `od"d\path.go`, SourceLine: 3},
+			},
+			want: `(("g" "x" () "" "od\"d\\path.go:3"))` + "\n",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got := maskGoFunctionColumn(formatManifest(tc.input))
+			if got != tc.want {
+				t.Errorf("maskGoFunctionColumn mismatch\nwant: %q\ngot:  %q", tc.want, got)
+			}
+		})
+	}
+}
+
+// TestMaskGoFunctionColumnDiscriminates pins the property the golden
+// comparison actually rests on: manifests differing ONLY in go-function
+// compare equal after masking, and a difference in any other column still
+// does not. Without the second half the mask could blank the whole line and
+// every row above would still pass.
+func TestMaskGoFunctionColumnDiscriminates(t *testing.T) {
+	base := []manifestEntry{
+		{Name: "car", ReturnType: "any", ParamTypes: []string{"pair"}, GoFunction: "pkg/core.init.Make.func67", SourceFile: "a.go", SourceLine: 42},
+		{Name: "cdr", ReturnType: "any", ParamTypes: []string{"pair"}, GoFunction: "pkg/core.PrimCdr", SourceFile: "a.go", SourceLine: 53},
+	}
+	clone := func(mutate func(e []manifestEntry)) string {
+		q := slices.Clone(base)
+		mutate(q)
+		return maskGoFunctionColumn(formatManifest(q))
+	}
+	masked := clone(func([]manifestEntry) {})
+
+	// The real drift: the inlined symbol form, differing package and all.
+	inlining := clone(func(e []manifestEntry) {
+		e[0].GoFunction = "pkg/helpers.Make.func1"
+	})
+	if inlining != masked {
+		t.Errorf("go-function drift must mask away\n a: %q\n b: %q", masked, inlining)
+	}
+
+	tcs := []struct {
+		name   string
+		mutate func(e []manifestEntry)
+	}{
+		{"name", func(e []manifestEntry) { e[0].Name = "caar" }},
+		{"return type", func(e []manifestEntry) { e[0].ReturnType = "pair" }},
+		{"param types", func(e []manifestEntry) { e[0].ParamTypes = []string{"any"} }},
+		{"source file", func(e []manifestEntry) { e[0].SourceFile = "b.go" }},
+		{"source line", func(e []manifestEntry) { e[0].SourceLine = 43 }},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got := clone(tc.mutate)
+			if got == masked {
+				t.Errorf("%s drift must survive masking, but compared equal: %q", tc.name, got)
 			}
 		})
 	}
