@@ -193,6 +193,24 @@ func (p *SourceContext) WithScope(scope *Scope) *SourceContext {
 	return c
 }
 
+// WithoutScope returns a new SourceContext with scope removed, or the receiver
+// unchanged when the scope is absent. The inverse of WithScope.
+//
+// Removal is a real operation in Flatt's model and not a repair: a use-site
+// scope is added to a macro's input and then stripped again at binder positions
+// whose binding is visible outside the expansion, which is what keeps a
+// macro-generated define reachable from code that never saw the macro use.
+// Racket calls the same operation remove-scopes and drives it from a registry of
+// scopes it minted, never from a property of the scope itself.
+func (p *SourceContext) WithoutScope(scope *Scope) *SourceContext {
+	if p == nil || !slices.Contains(p.Scopes, scope) {
+		return p
+	}
+	c := p.Clone()
+	c.Scopes = RemoveScopeFromSet(p.Scopes, scope)
+	return c
+}
+
 // WithScopes returns a new SourceContext with additional scopes
 func (p *SourceContext) WithScopes(scopes []*Scope) *SourceContext {
 	if p == nil {

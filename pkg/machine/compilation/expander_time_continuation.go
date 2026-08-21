@@ -141,6 +141,10 @@ type ExpanderTimeContinuation struct {
 	// binderScopes records the scopes binding forms mint during this run.
 	// Shared by pointer with child expanders, like depthGuard.
 	binderScopes *binderScopeLog
+	// useSiteScopes registers the use-site scopes this run mints, so pruning can
+	// recognise its own. Shared by pointer with child expanders. See
+	// expander_use_site.go.
+	useSiteScopes *useSiteScopeLog
 }
 
 // newBinderScope mints the scope a binding form stamps on the identifiers under
@@ -194,11 +198,12 @@ func NewExpanderTimeContinuation(ctx context.Context, env *environment.Environme
 		maxDepth = n
 	}
 	q := &ExpanderTimeContinuation{
-		ctx:          ctx,
-		env:          env,
-		evaluator:    evaluator,
-		depthGuard:   &expandDepthGuard{max: maxDepth},
-		binderScopes: &binderScopeLog{},
+		ctx:           ctx,
+		env:           env,
+		evaluator:     evaluator,
+		depthGuard:    &expandDepthGuard{max: maxDepth},
+		binderScopes:  &binderScopeLog{},
+		useSiteScopes: &useSiteScopeLog{scopes: values.NewMapSet[*syntax.Scope](0)},
 	}
 	return q
 }
@@ -217,11 +222,12 @@ func NewExpanderTimeContinuation(ctx context.Context, env *environment.Environme
 // hygiene behavior unchanged.
 func (p *ExpanderTimeContinuation) newChildExpander(env *environment.EnvironmentFrame) *ExpanderTimeContinuation {
 	q := &ExpanderTimeContinuation{
-		ctx:          p.ctx,
-		env:          env,
-		evaluator:    p.evaluator,
-		depthGuard:   p.depthGuard,
-		binderScopes: p.binderScopes,
+		ctx:           p.ctx,
+		env:           env,
+		evaluator:     p.evaluator,
+		depthGuard:    p.depthGuard,
+		binderScopes:  p.binderScopes,
+		useSiteScopes: p.useSiteScopes,
 	}
 	return q
 }
@@ -606,6 +612,11 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 	// expand it.
 	stx, ok := result.(syntax.SyntaxValue)
 	if ok {
+		// Strip this run's use-site scopes from any binder the output defines,
+		// before re-expansion carries the form further. Every macro output passes
+		// this one point, so a definition that only surfaces after several
+		// expansions is pruned at its own level. Identity while nothing mints.
+		stx = p.pruneUseSiteScopes(stx)
 		// Recursively expand the result to handle nested macro calls
 		return p.ExpandExpression(stx)
 	}

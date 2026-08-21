@@ -95,6 +95,28 @@ func (p *SyntaxSymbol) AddScope(scope *Scope) SyntaxValue {
 	}
 }
 
+// RemoveScope returns this symbol with scope removed from its SourceContext, or
+// the receiver unchanged when the scope is absent. The inverse of AddScope, and
+// the primitive use-site-scope pruning is built from.
+//
+// It returns *SyntaxSymbol where AddScope returns SyntaxValue: AddScope exists
+// to be applied generically down a syntax tree, while removal is applied to one
+// identifier in a known binder position, and its caller wants the symbol back.
+// ResolvedBinding survives, as it must — a macro-introduced define name can
+// carry a definition-site pin, and dropping it here would silently re-open the
+// binding to use-site resolution.
+func (p *SyntaxSymbol) RemoveScope(scope *Scope) *SyntaxSymbol {
+	newCtx := p.SourceContext().WithoutScope(scope)
+	if newCtx == p.SourceContext() {
+		return p
+	}
+	return &SyntaxSymbol{
+		Sym:             p.Sym,
+		syntaxBase:      values.NewSyntaxBase(newCtx),
+		ResolvedBinding: p.ResolvedBinding,
+	}
+}
+
 // WithResolvedBinding returns a new SyntaxSymbol with the given pre-resolved binding.
 // This is used during macro expansion to tag free identifiers with their
 // definition-site bindings, enabling proper resolution across library boundaries.
