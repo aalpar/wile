@@ -62,7 +62,7 @@ func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr s
 	}
 
 	// No ellipsis - compile the template to bytecode that constructs the syntax object
-	return p.compileSyntaxTemplateToOps(template)
+	return p.compileSyntaxTemplateToOps(template, bodyScopes)
 }
 
 // templateContainsEllipsis checks if a syntax template contains unescaped ellipsis "...".
@@ -128,13 +128,26 @@ func isEllipsisSymbol(stx syntax.SyntaxValue) bool {
 // compileSyntaxTemplateToOps emits bytecode operations that build a syntax object.
 // Pattern variables are looked up; literals are loaded directly.
 // The result is left in the value register.
-func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxValue, bodyScopes []*syntax.Scope) error {
 	switch v := stx.(type) {
 	case *syntax.SyntaxSymbol:
 		// Check if this symbol is a local binding (pattern variable)
 		symVal, ok := v.Unwrap().(*values.Symbol)
 		if !ok {
 			// Not a symbol - load as literal
+			litIdx := p.template.MaybeAppendLiteral(v)
+			p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
+			return nil
+		}
+		// This clause's pattern variables are gated on scopes before the nominal
+		// lookup below can reach them: an outer expansion's identifier that merely
+		// SPELLS one of them denotes its own definition-site binding, and emitting
+		// it as a literal is what lets it resolve there. Only names this clause
+		// actually binds are gated — a name absent from patternVarSyntax may still
+		// be an ENCLOSING clause's pattern variable, which the nominal lookup finds
+		// and this must not intercept.
+		patSym, isPatternVar := p.patternVarSyntax[symVal.Key]
+		if isPatternVar && !match.TemplateDenotesPatternVariable(v.Scopes(), patSym.Scopes(), bodyScopes) {
 			litIdx := p.template.MaybeAppendLiteral(v)
 			p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 			return nil
@@ -179,12 +192,12 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 			if ok && !cdrPair.IsEmptyList() {
 				// Get the escaped template and compile it directly
 				escapedTemplate := cdrPair.SyntaxCar()
-				return p.compileSyntaxTemplateToOps(escapedTemplate)
+				return p.compileSyntaxTemplateToOps(escapedTemplate, bodyScopes)
 			}
 		}
 
 		// Compile list elements and build a syntax list
-		return p.compileSyntaxTemplateListToOps(v)
+		return p.compileSyntaxTemplateListToOps(v, bodyScopes)
 
 	default:
 		// Other values - load as literal
@@ -196,7 +209,7 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 
 // compileSyntaxTemplateListToOps compiles a list template to bytecode.
 // Each element is compiled and pushed to the stack, then BuildSyntaxList is called.
-func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(pair *syntax.SyntaxPair) error {
+func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(pair *syntax.SyntaxPair, bodyScopes []*syntax.Scope) error {
 	// First, collect all elements to count them
 	var elements []syntax.SyntaxValue
 	current := pair
@@ -222,7 +235,7 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(pair *syntax.Sy
 
 	// Compile each element and push to stack (in order)
 	for _, elem := range elements {
-		err := p.compileSyntaxTemplateToOps(elem)
+		err := p.compileSyntaxTemplateToOps(elem, bodyScopes)
 		if err != nil {
 			return err
 		}

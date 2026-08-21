@@ -370,3 +370,112 @@ func TestSyntaxCaseEllipsisTemplateUnderBodyBinder(t *testing.T) {
 		})
 	}
 }
+
+// TestNestedMacroDoesNotCaptureOuterIntroduction pins that an identifier an
+// OUTER macro introduces into the template of a macro it generates is not
+// captured by that inner macro's same-named pattern variable.
+//
+// A macro-generating macro splices the inner macro's pattern in from its own use
+// site while writing the inner macro's template itself, so the two `x` here have
+// different provenance: the pattern's is the user's, the template's is outer's.
+// R7RS §4.3 fixes the template one to outer's definition site — the global 99 —
+// and nothing the inner pattern spells can take it back. Chez and Racket both
+// answer (99) on every row; Wile answered (5) on the syntax-case rows.
+//
+// The scope sets alone cannot decide this. The template `x` is a strict superset
+// of the pattern `x` in exactly the way a legitimate reference under a clause
+// body's `let` is (TestSyntaxCaseEllipsisTemplateUnderBodyBinder), so a subset
+// test admits the capture and set equality refuses the `let`. What separates
+// them is whether a binder inside THIS clause body minted the extra scope; see
+// match.TemplateDenotesPatternVariable.
+//
+// The four rows cross the two transformer kinds because they reach the gate by
+// different routes: syntax-rules through the runtime expander with no binder
+// allowance, syntax-case through compileSyntaxTemplateToOps, which before this
+// resolved the template symbol by NAME under a wildcard scope query and so could
+// not see the difference at all.
+func TestNestedMacroDoesNotCaptureOuterIntroduction(t *testing.T) {
+	ninetyNine := values.List(values.NewInteger(99))
+	srInner := `(syntax-rules () (pat (list x)))`
+	scInner := `(lambda (s2) (syntax-case s2 () (pat (syntax (list x)))))`
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name: "syntax-rules generates syntax-rules",
+			Code: `(begin
+				(define x 99)
+				(define-syntax outer
+					(syntax-rules ()
+						((_ name pat) (define-syntax name ` + srInner + `))))
+				(outer inner (_ x))
+				(inner 5))`,
+			Expected: ninetyNine,
+		},
+		{
+			Name: "syntax-rules generates syntax-case",
+			Code: `(begin
+				(define x 99)
+				(define-syntax outer
+					(syntax-rules ()
+						((_ name pat) (define-syntax name ` + scInner + `))))
+				(outer inner (_ x))
+				(inner 5))`,
+			Expected: ninetyNine,
+		},
+		{
+			Name: "syntax-case generates syntax-rules",
+			Code: `(begin
+				(define x 99)
+				(define-syntax outer
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ name pat) (syntax (define-syntax name ` + srInner + `))))))
+				(outer inner (_ x))
+				(inner 5))`,
+			Expected: ninetyNine,
+		},
+		{
+			Name: "syntax-case generates syntax-case",
+			Code: `(begin
+				(define x 99)
+				(define-syntax outer
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ name pat) (syntax (define-syntax name ` + scInner + `))))))
+				(outer inner (_ x))
+				(inner 5))`,
+			Expected: ninetyNine,
+		},
+		{
+			// The control that keeps the fix from being "refuse every superset":
+			// written by hand, the pattern and the template share provenance, so
+			// the substitution is the ordinary one and must still happen.
+			Name: "control: hand-written inner macro still substitutes",
+			Code: `(begin
+				(define x 99)
+				(define-syntax inner (syntax-rules () ((_ x) (list x))))
+				(inner 5))`,
+			Expected: values.List(values.NewInteger(5)),
+		},
+		{
+			// The other control, and the one that shows provenance rather than
+			// generation is the discriminator: here the inner PATTERN is written by
+			// outer too, so both `v` occurrences carry outer's scope and agree.
+			Name: "control: generated pattern and template agree",
+			Code: `(begin
+				(define-syntax outer
+					(syntax-rules ()
+						((_ name)
+						 (define-syntax name (syntax-rules () ((_ v) (list v v)))))))
+				(outer inner)
+				(inner 4))`,
+			Expected: values.List(values.NewInteger(4), values.NewInteger(4)),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
