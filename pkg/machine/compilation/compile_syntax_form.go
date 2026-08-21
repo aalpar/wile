@@ -39,6 +39,11 @@ func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr s
 		return p.wrapCompilationError(err)
 	}
 
+	// The scopes binding forms inside the enclosing syntax-case clause body
+	// minted. Both template paths gate substitution on them; see
+	// match.TemplateDenotesPatternVariable.
+	bodyScopes := p.clauseBinderScopes
+
 	// Check if template contains ellipsis - if so, use runtime expansion
 	if templateContainsEllipsis(template) {
 		// Compute hygiene data at compile time, mirroring CompileSyntaxRules:
@@ -52,7 +57,7 @@ func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr s
 		collectFreeIdentifiersWithEllipsis(p.env, template, p.patternVars, freeIds, match.DefaultEllipsis, p.libraryScope)
 		litIdx := p.template.MaybeAppendLiteral(template)
 		p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
-		p.AppendOperations(NewOperationSyntaxTemplateExpand(freeIds, p.patternVarSyntax))
+		p.AppendOperations(NewOperationSyntaxTemplateExpand(freeIds, p.patternVarSyntax, bodyScopes))
 		return nil
 	}
 

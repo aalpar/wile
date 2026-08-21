@@ -26,16 +26,18 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func TestScopesCompatibleForSubstitution(t *testing.T) {
+func TestTemplateDenotesPatternVariable(t *testing.T) {
 	c := qt.New(t)
 
 	scopeA := syntax.NewScope()
 	scopeB := syntax.NewScope()
+	scopeC := syntax.NewScope()
 
 	tcs := []struct {
 		name           string
 		templateScopes []*syntax.Scope
 		patternScopes  []*syntax.Scope
+		bodyScopes     []*syntax.Scope
 		expected       bool
 	}{
 		{
@@ -57,28 +59,54 @@ func TestScopesCompatibleForSubstitution(t *testing.T) {
 			expected:       true,
 		},
 		{
-			name:           "template has extra scope",
+			// The reference-under-a-binder shape: a (syntax ...) template inside a
+			// let in a clause body carries that let's scope on top of the pattern
+			// variable's, and the log says the let minted it.
+			name:           "template extra scope, declared a body binder",
+			templateScopes: []*syntax.Scope{scopeA, scopeB},
+			patternScopes:  []*syntax.Scope{scopeA},
+			bodyScopes:     []*syntax.Scope{scopeB},
+			expected:       true,
+		},
+		{
+			// The same shape with an empty allowance is the nested-macro capture:
+			// scopeB came from an OUTER expansion, not from a binder in this body.
+			// This row and the one above are the whole fix — identical scope sets,
+			// opposite verdicts, decided by provenance alone.
+			name:           "template extra scope, not a body binder",
 			templateScopes: []*syntax.Scope{scopeA, scopeB},
 			patternScopes:  []*syntax.Scope{scopeA},
 			expected:       false,
 		},
 		{
+			// syntax-rules passes no allowance at all, so its gate is set equality.
+			name:           "unrelated body binder does not excuse the extra scope",
+			templateScopes: []*syntax.Scope{scopeA, scopeB},
+			patternScopes:  []*syntax.Scope{scopeA},
+			bodyScopes:     []*syntax.Scope{scopeC},
+			expected:       false,
+		},
+		{
+			// The subset floor, which the allowance never relaxes: a binder the
+			// reference never saw cannot resolve for it.
 			name:           "pattern has extra scope",
 			templateScopes: []*syntax.Scope{scopeA},
 			patternScopes:  []*syntax.Scope{scopeA, scopeB},
+			bodyScopes:     []*syntax.Scope{scopeB},
 			expected:       false,
 		},
 		{
 			name:           "disjoint scopes",
 			templateScopes: []*syntax.Scope{scopeA},
 			patternScopes:  []*syntax.Scope{scopeB},
+			bodyScopes:     []*syntax.Scope{scopeA},
 			expected:       false,
 		},
 	}
 
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
-			result := scopesCompatibleForSubstitution(tc.templateScopes, tc.patternScopes)
+			result := TemplateDenotesPatternVariable(tc.templateScopes, tc.patternScopes, tc.bodyScopes)
 			c.Assert(result, qt.Equals, tc.expected)
 		})
 	}
@@ -603,8 +631,15 @@ func TestSyntaxExpandScopeAwareSubstitution(t *testing.T) {
 func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 	c := qt.New(t)
 
-	// When template symbol has extra scopes vs pattern variable, substitution
-	// should NOT occur (nested macro hygiene).
+	// A pattern variable is a binder and a template occurrence is a reference to
+	// it, so substitution needs patternScopes ⊆ templateScopes. When the pattern
+	// variable carries a scope the template occurrence does not, the binder
+	// cannot resolve for that reference and substitution must NOT occur.
+	//
+	// The opposite direction — a template occurrence carrying EXTRA scopes, as a
+	// (syntax ...) under a let in a clause body does — is the ordinary shape and
+	// substitutes; TestSyntaxCaseEllipsisTemplateUnderBodyBinder is its end-to-end
+	// pin.
 	variables := values.StringSet{"x": {}}
 	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
@@ -627,14 +662,14 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
-	// Pattern var "x" has no scopes, but template "x" has an extra scope.
-	// This models the case where an outer macro introduced "x" with intro scope.
-	outerScope := syntax.NewScope()
-	templateCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{outerScope}}
-	template := syntax.NewSyntaxSymbol("x", templateCtx)
+	// Template "x" has no scopes, but pattern var "x" carries one the reference
+	// never saw, so the binder does not reach it.
+	patternOnlyScope := syntax.NewScope()
+	template := syntax.NewSyntaxSymbol("x", nil)
 
+	patternCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{patternOnlyScope}}
 	patternVarSyntax := map[string]*syntax.SyntaxSymbol{
-		"x": syntax.NewSyntaxSymbol("x", nil), // pattern var has no scopes
+		"x": syntax.NewSyntaxSymbol("x", patternCtx),
 	}
 
 	result, err := sm.Expand(template, ExpandOptions{PatternVarSyntax: patternVarSyntax})

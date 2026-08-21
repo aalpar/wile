@@ -59,6 +59,12 @@ type CompileTimeContinuation struct {
 	// for nested-macro scope comparison.
 	patternVars      values.StringSet
 	patternVarSyntax map[string]*syntax.SyntaxSymbol
+	// clauseBinderScopes are the scopes binding forms inside the clause body
+	// minted while it was expanded — the allowance
+	// match.TemplateDenotesPatternVariable grants a (syntax ...) template
+	// occurrence over its pattern variable's own scopes. Set beside
+	// patternVarSyntax, from the clause's expander log; meaningless without it.
+	clauseBinderScopes []*syntax.Scope
 	// fileResolver controls how include/load resolves files.
 	// Defaults to the resolver stored on Namespace (usually
 	// OSFileResolver); set to EmbedFileResolver for bootstrap.

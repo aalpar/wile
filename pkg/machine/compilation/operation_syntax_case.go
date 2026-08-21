@@ -446,13 +446,19 @@ type OperationSyntaxTemplateExpand struct {
 	// binders carry a fresh intro scope rather than capturing use-site identifiers.
 	FreeIds          map[string]*FreeIdResolution
 	PatternVarSyntax map[string]*syntax.SyntaxSymbol
+	// BodyScopes are the scopes a binding form in the clause body added between
+	// the clause head and this template's site. They are the allowance
+	// match.TemplateDenotesPatternVariable grants a template occurrence over its
+	// pattern variable's own scopes.
+	BodyScopes []*syntax.Scope
 }
 
-func NewOperationSyntaxTemplateExpand(freeIds map[string]*FreeIdResolution, patternVarSyntax map[string]*syntax.SyntaxSymbol) *OperationSyntaxTemplateExpand {
+func NewOperationSyntaxTemplateExpand(freeIds map[string]*FreeIdResolution, patternVarSyntax map[string]*syntax.SyntaxSymbol, bodyScopes []*syntax.Scope) *OperationSyntaxTemplateExpand {
 	return &OperationSyntaxTemplateExpand{
 		OperationBase:    machine.NewOperationBaseWithGoName("operation:syntax-template-expand", "SyntaxTemplateExpand"),
 		FreeIds:          freeIds,
 		PatternVarSyntax: patternVarSyntax,
+		BodyScopes:       bodyScopes,
 	}
 }
 
@@ -492,6 +498,7 @@ func (p *OperationSyntaxTemplateExpand) Apply(mc *machine.MachineContext) (*mach
 		IntroScope:       introScope,
 		FreeIds:          freeIds,
 		PatternVarSyntax: p.PatternVarSyntax,
+		BodyScopes:       p.BodyScopes,
 	})
 	if err != nil {
 		return nil, mc.WrapError(err, "syntax: template expansion error")

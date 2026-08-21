@@ -226,3 +226,147 @@ func TestSyntaxCaseEllipsisHygiene(t *testing.T) {
 		})
 	}
 }
+
+// TestSyntaxCaseEllipsisTemplateUnderBodyBinder pins that an ellipsis template
+// still substitutes its pattern variables when the (syntax ...) form sits under
+// a binding form in the clause body.
+//
+// A clause body's `let`/`lambda`/`do` adds its own scope to every identifier
+// beneath it, the template's included, while the pattern symbols
+// compileSyntaxCaseClause recorded carry only the transformer lambda's. The
+// template occurrence is therefore a strict SUPERSET of its pattern variable.
+// The gate used to demand set equality, which every one of these fails: the
+// pattern variable was refused, fell through to free-identifier hygiene, and
+// escaped into the expansion as an unbound name (`no such binding "a"`).
+//
+// What makes the superset admissible is not the superset relation itself — an
+// outer macro's introduced identifier is a superset of a pattern variable too,
+// and must NOT substitute (TestNestedMacroDoesNotCaptureOuterIntroduction). It
+// is that the clause's expander logged those exact scopes as ones a binder
+// inside the body minted. See match.TemplateDenotesPatternVariable.
+//
+// Only the ellipsis path routes through the runtime gate; a template without
+// ellipsis is emitted by compileSyntaxTemplateToOps, which applies the same
+// predicate at compile time. The last two cases are kept as controls. Chez
+// agrees with every row.
+func TestSyntaxCaseEllipsisTemplateUnderBodyBinder(t *testing.T) {
+	oneTwoThree := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			// The reported shape: `a` is not even the ellipsis variable, but one
+			// ellipsis anywhere in the template routes the WHOLE template through
+			// the runtime expander, so every pattern variable in it is refused.
+			Name: "let: depth-0 and ellipsis variables both substitute",
+			Code: `(begin
+				(define-syntax m
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ a c ...) (let ((p 1)) (syntax (list a c ...)))))))
+				(m 1 2 3))`,
+			Expected: oneTwoThree,
+		},
+		{
+			Name: "let: ellipsis variable alone",
+			Code: `(begin
+				(define-syntax m
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ a c ...) (let ((p 1)) (syntax (list c ...)))))))
+				(m 1 2 3))`,
+			Expected: values.List(values.NewInteger(2), values.NewInteger(3)),
+		},
+		{
+			Name: "let*",
+			Code: `(begin
+				(define-syntax m
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ a c ...) (let* ((p 1)) (syntax (list a c ...)))))))
+				(m 1 2 3))`,
+			Expected: oneTwoThree,
+		},
+		{
+			Name: "letrec",
+			Code: `(begin
+				(define-syntax m
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ a c ...) (letrec ((p 1)) (syntax (list a c ...)))))))
+				(m 1 2 3))`,
+			Expected: oneTwoThree,
+		},
+		{
+			Name: "named let",
+			Code: `(begin
+				(define-syntax m
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ a c ...) (let loop ((p 1)) (syntax (list a c ...)))))))
+				(m 1 2 3))`,
+			Expected: oneTwoThree,
+		},
+		{
+			Name: "lambda",
+			Code: `(begin
+				(define-syntax m
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ a c ...) ((lambda (p) (syntax (list a c ...))) 1)))))
+				(m 1 2 3))`,
+			Expected: oneTwoThree,
+		},
+		{
+			Name: "do",
+			Code: `(begin
+				(define-syntax m
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ a c ...) (do ((p 1 2)) (#t (syntax (list a c ...))))))))
+				(m 1 2 3))`,
+			Expected: oneTwoThree,
+		},
+		{
+			// Two nested binders stack two scopes, so the delta is not a single
+			// scope and cannot be excused as an off-by-one.
+			Name: "nested let",
+			Code: `(begin
+				(define-syntax m
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ a c ...) (let ((p 1)) (let ((q 2)) (syntax (list a c ...))))))))
+				(m 1 2 3))`,
+			Expected: oneTwoThree,
+		},
+		{
+			// begin binds nothing, so it adds no scope: the control that isolates
+			// the binder as the discriminator rather than the extra nesting.
+			Name: "control: begin adds no scope",
+			Code: `(begin
+				(define-syntax m
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ a c ...) (begin (syntax (list a c ...)))))))
+				(m 1 2 3))`,
+			Expected: oneTwoThree,
+		},
+		{
+			// The non-ellipsis control: same let, same scopes, resolved through
+			// the environment instead of the gate.
+			Name: "control: non-ellipsis template under let",
+			Code: `(begin
+				(define-syntax m
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ a c) (let ((p 1)) (syntax (list a c)))))))
+				(m 1 2))`,
+			Expected: values.List(values.NewInteger(1), values.NewInteger(2)),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
