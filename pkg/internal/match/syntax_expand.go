@@ -40,8 +40,8 @@ import (
 // All fields are optional; the zero value expands without hygiene (useful for testing).
 //
 // Whether a template symbol is replaced by a capture is decided by
-// TemplateDenotesPatternVariable over PatternVarSyntax and BodyScopes; see that
-// function for the rule and why neither set equality nor a bare subset test is it.
+// TemplateDenotesPatternVariable over PatternVarSyntax; see that function for
+// the rule and for why plain subset resolution is sufficient.
 type ExpandOptions struct {
 	// IntroScope is the hygiene scope added to template-introduced symbols. It is
 	// not added to newly created pairs or vectors (those carry only a source
@@ -83,12 +83,6 @@ type ExpandOptions struct {
 	// macro hygiene via scope comparison. When set, template symbols are only substituted
 	// if their scopes match the corresponding pattern variable's scopes.
 	PatternVarSyntax map[string]*syntax.SyntaxSymbol
-
-	// BodyScopes are the scopes binding forms inside the transformer's clause
-	// body minted — the allowance TemplateDenotesPatternVariable grants over the
-	// pattern variable's own scopes. Empty for syntax-rules, which has no body to
-	// bind in, which is what makes its gate set equality.
-	BodyScopes []*syntax.Scope
 }
 
 // FreeIdKey is the map key for a free identifier's pre-resolved binding in
@@ -311,53 +305,31 @@ func syntaxListToSlice(v syntax.SyntaxValue) ([]syntax.SyntaxValue, error) {
 // expander here, and the compile-time emit in compileSyntaxTemplateToOps.
 //
 // The pattern variable is the BINDER and the template occurrence is a REFERENCE
-// to it, so Flatt's resolution relation is the floor:
+// to it, so the rule is Flatt's resolution relation and nothing else:
 //
 //	patternScopes ⊆ templateScopes
 //
-// It is not the whole rule, and neither of the two obvious readings is:
+// It is ordinary subset resolution because use-site scopes make it sufficient.
+// Every macro invocation stamps a fresh scope on its input form and never
+// removes it (compilation.newUseSiteScope), so use-site syntax wears a scope
+// macro-introduced syntax does not. An identifier an OUTER macro introduced
+// therefore lacks the use-site scope the inner macro's pattern variable carries,
+// is not a superset of it, and the capture `(outer inner (_ x))` — outer's
+// template saying `(list x)` — is refused here rather than by any extra
+// condition. R7RS §4.3, Chez and Racket agree that `x` denotes outer's
+// definition-site binding.
 //
-//   - Bare subset admits a capture the standard forbids. An identifier an OUTER
-//     macro introduced wears that expansion's scope on top of the use site's,
-//     making it a strict superset of the user-written pattern variable it must
-//     not denote — `(outer inner (_ x))` where outer's template says `(list x)`
-//     yields `(5)` instead of `(99)`. Chez, Racket and R7RS §4.3 agree the `x`
-//     outer introduced refers to outer's definition-site binding, and nothing
-//     an inner macro's pattern spells can recapture it.
-//   - Set equality refuses a substitution the standard requires. A binding form
-//     in a syntax-case clause body — `(let ((p 1)) (syntax (list a c ...)))` —
-//     stamps its scope on the template's identifiers and never on the pattern's,
-//     which were recorded before the body was expanded. Under equality every
-//     pattern variable in such a template was refused, fell through to
-//     applyHygieneToSymbol, and escaped into the expansion unbound.
-//
-// bodyScopes is what separates them: the scopes binding forms INSIDE this
-// transformer's clause body minted, recorded by the clause's own expander as it
-// walked the body (compilation.binderScopeLog). Those scopes, and only those,
-// may appear on the reference and not on the binder:
-//
-//	patternScopes ⊆ templateScopes ⊆ patternScopes ∪ bodyScopes
-//
-// The two rejected readings are the endpoints — bodyScopes = everything is bare
-// subset, bodyScopes = ∅ is set equality, which is exactly what syntax-rules
-// passes, having no body to bind in.
-//
-// This is psyntax's rule expressed in a scope-set model. There, marks (macro
-// expansion provenance) and ribs (binding forms) are separate wraps, and
-// pattern-variable lookup compares marks for EQUALITY while ribs are free to
-// differ. Wile's scope sets carry both, so the mark-equality half has to be
-// recovered by naming the rib-shaped difference and allowing only that.
-func TemplateDenotesPatternVariable(templateScopes, patternScopes, bodyScopes []*syntax.Scope) bool {
-	if !syntax.ScopesMatch(templateScopes, patternScopes) {
-		return false
-	}
-	for _, s := range templateScopes {
-		if slices.Contains(patternScopes, s) || slices.Contains(bodyScopes, s) {
-			continue
-		}
-		return false
-	}
-	return true
+// Before use-site scopes this predicate carried a ceiling as well, naming the
+// scopes binding forms inside the clause body had minted, because bare subset
+// admitted that capture and set equality refused a `(syntax ...)` written under
+// a `let` in a clause body. Both endpoints are now handled by the floor alone:
+// the body binder's scope is on the template and absent from the pattern, which
+// subset permits, while the outer macro's introduction leaves the pattern's
+// use-site scope off the template, which subset refuses. The ceiling, and the
+// binder-scope log that fed it, are gone — see
+// plans/2026-08-20-use-site-scopes-impl.local.md.
+func TemplateDenotesPatternVariable(templateScopes, patternScopes []*syntax.Scope) bool {
+	return syntax.ScopesMatch(templateScopes, patternScopes)
 }
 
 // applyHygieneToSymbol applies hygiene transformations to a template symbol.
@@ -543,7 +515,7 @@ func (p *SyntaxMatcher) expandSymbol(
 	// variable — an outer expansion introduced it. Bail to hygiene, which resolves
 	// it at its own definition site (R7RS §4.3).
 	patternSym, hasPattern := opts.PatternVarSyntax[key]
-	if hasPattern && !TemplateDenotesPatternVariable(t.Scopes(), patternSym.Scopes(), opts.BodyScopes) {
+	if hasPattern && !TemplateDenotesPatternVariable(t.Scopes(), patternSym.Scopes()) {
 		return p.applyHygieneToSymbol(t, opts), nil
 	}
 

@@ -141,8 +141,9 @@ func ScopeFingerprint(scopes []*Scope) string {
 //	  GetBinding (maximal resolution for scoped lookups),
 //	  CompileSymbol (dispatches scoped vs unscoped lookup),
 //	  TemplateDenotesPatternVariable (pattern variable as binder, template
-//	  occurrence as reference — plus an equality half on the difference, which
-//	  no subset relation can express; see that function).
+//	  occurrence as reference — the subset relation and nothing more, because
+//	  a macro use's unflipped use-site scope keeps an outer macro's introduced
+//	  identifier out of the relation; see that function).
 //	Constrained by: NewScope (each macro invocation creates a fresh scope),
 //	  FlipScopeInSet (syntax-local-introduce toggles scope membership).
 //

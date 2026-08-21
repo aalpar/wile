@@ -239,11 +239,12 @@ func TestSyntaxCaseEllipsisHygiene(t *testing.T) {
 // pattern variable was refused, fell through to free-identifier hygiene, and
 // escaped into the expansion as an unbound name (`no such binding "a"`).
 //
-// What makes the superset admissible is not the superset relation itself — an
-// outer macro's introduced identifier is a superset of a pattern variable too,
-// and must NOT substitute (TestNestedMacroDoesNotCaptureOuterIntroduction). It
-// is that the clause's expander logged those exact scopes as ones a binder
-// inside the body minted. See match.TemplateDenotesPatternVariable.
+// The superset is admissible because it is exactly Flatt's resolution relation:
+// the binder is visible to the reference. What it does NOT admit is an outer
+// macro's introduced identifier (TestNestedMacroDoesNotCaptureOuterIntroduction)
+// — that identifier never passed through this macro's use site, so it lacks the
+// use-site scope the pattern variable carries and is not a superset at all. See
+// match.TemplateDenotesPatternVariable.
 //
 // Only the ellipsis path routes through the runtime gate; a template without
 // ellipsis is emitted by compileSyntaxTemplateToOps, which applies the same
@@ -382,18 +383,20 @@ func TestSyntaxCaseEllipsisTemplateUnderBodyBinder(t *testing.T) {
 // and nothing the inner pattern spells can take it back. Chez and Racket both
 // answer (99) on every row; Wile answered (5) on the syntax-case rows.
 //
-// The scope sets alone cannot decide this. The template `x` is a strict superset
-// of the pattern `x` in exactly the way a legitimate reference under a clause
-// body's `let` is (TestSyntaxCaseEllipsisTemplateUnderBodyBinder), so a subset
-// test admits the capture and set equality refuses the `let`. What separates
-// them is whether a binder inside THIS clause body minted the extra scope; see
+// The scope sets decide it, once every macro use stamps an unflipped use-site
+// scope on its input. The pattern `x` arrives through the use site and wears
+// that scope; the template `x` came out of outer's own template and does not,
+// so it is not a superset and subset resolution refuses it. A legitimate
+// reference under a clause body's `let`
+// (TestSyntaxCaseEllipsisTemplateUnderBodyBinder) keeps the use-site scope and
+// merely adds the binder's, so the same relation admits it. See
 // match.TemplateDenotesPatternVariable.
 //
 // The four rows cross the two transformer kinds because they reach the gate by
-// different routes: syntax-rules through the runtime expander with no binder
-// allowance, syntax-case through compileSyntaxTemplateToOps, which before this
-// resolved the template symbol by NAME under a wildcard scope query and so could
-// not see the difference at all.
+// different routes: syntax-rules through the runtime expander, syntax-case
+// through compileSyntaxTemplateToOps, which before this arc resolved the
+// template symbol by NAME under a wildcard scope query and so could not see the
+// difference at all.
 func TestNestedMacroDoesNotCaptureOuterIntroduction(t *testing.T) {
 	ninetyNine := values.List(values.NewInteger(99))
 	srInner := `(syntax-rules () (pat (list x)))`

@@ -18,10 +18,13 @@ package compilation
 // that strips registered use-site scopes from binder positions whose binding is
 // visible outside the macro use that created it.
 //
-// Nothing mints yet. See plans/2026-08-20-use-site-scopes-impl.local.md.
+// The scope is minted per macro invocation by expandMacroInvocation (and by
+// ExpandOnce, its hand-copy) and never flipped back off, which is what makes
+// plain subset resolution refuse the nested-macro capture in
+// match.TemplateDenotesPatternVariable. See
+// plans/2026-08-20-use-site-scopes-impl.local.md.
 
 import (
-	"maps"
 	"slices"
 
 	"github.com/aalpar/wile/pkg/syntax"
@@ -29,13 +32,11 @@ import (
 )
 
 // useSiteScopeLog records the use-site scopes one expansion run minted. Shared
-// by pointer with child expanders (newChildExpander), like depthGuard and
-// binderScopeLog.
+// by pointer with child expanders (newChildExpander), like depthGuard.
 //
-// A SET rather than a slice, unlike binderScopeLog: that log's consumer asks
-// "which scopes did binders add", a question about the whole collection, while
-// this one asks "did I mint this particular scope", a membership test run once
-// per scope on a binder identifier.
+// A SET rather than a slice, because the only question asked of it is "did I
+// mint this particular scope" — a membership test run once per scope on a
+// binder identifier, never an enumeration.
 //
 // **Membership, never a tag.** The registry IS the mechanism, and a kind field
 // on Scope would not be. Racket keeps a `kind` on its scopes, mints use-site
@@ -73,16 +74,6 @@ func (p *ExpanderTimeContinuation) newUseSiteScope() *syntax.Scope {
 // form.
 func (p *ExpanderTimeContinuation) withUseSiteScope(inputForm syntax.SyntaxValue) syntax.SyntaxValue {
 	return syntax.AddScopeToSyntax(inputForm, p.newUseSiteScope())
-}
-
-// UseSiteScopes returns the use-site scopes this run has minted so far, as a
-// snapshot. Ordering is unspecified — the caller unions them into an allowance,
-// which is a set question.
-func (p *ExpanderTimeContinuation) UseSiteScopes() []*syntax.Scope {
-	if p.useSiteScopes == nil {
-		return nil
-	}
-	return slices.Collect(maps.Keys(p.useSiteScopes.scopes))
 }
 
 // isUseSiteScope reports whether this run minted scope as a use-site scope.

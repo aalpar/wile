@@ -380,46 +380,52 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 	})
 
 	// The three verdicts of TemplateDenotesPatternVariable, on the escaped
-	// template path. The first two share a scope set and differ only in whether
-	// BodyScopes claims the extra scope, which is the whole discrimination.
+	// template path. The first two are the two directions a scope set can differ
+	// in, and both are decided by subset alone: the body binder ADDS to the
+	// template, the outer macro's introduction DROPS the use-site scope.
 	c.Run("template extra scope substitutes when a body binder minted it", func(c *qt.C) {
 		sm := &SyntaxMatcher{matcher: &Matcher{}}
 		captured := syntax.NewSyntaxObject(values.NewInteger(42), nil)
 		ctx := &captureContext{
 			bindings: map[string]syntax.SyntaxValue{"x": captured},
 		}
-		// Template symbol carries a scope the pattern does not — what a `let` in
-		// a syntax-case clause body puts on the identifiers under it.
-		extraScope := syntax.NewScope()
-		templateCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{extraScope}}
+		// Both wear the macro use's use-site scope; the template additionally
+		// wears what a `let` in the syntax-case clause body put on the
+		// identifiers under it. patternScopes ⊆ templateScopes, so it substitutes.
+		useSite := syntax.NewScope()
+		bodyBinder := syntax.NewScope()
+		templateCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{useSite, bodyBinder}}
 		template := syntax.NewSyntaxSymbol("x", templateCtx)
+		patternCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{useSite}}
 		patternVarSyntax := map[string]*syntax.SyntaxSymbol{
-			"x": syntax.NewSyntaxSymbol("x", nil), // no scopes
+			"x": syntax.NewSyntaxSymbol("x", patternCtx),
 		}
 		is := syntax.NewScope()
 		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, &ExpandOptions{
 			IntroScope:       is,
 			PatternVarSyntax: patternVarSyntax,
-			BodyScopes:       []*syntax.Scope{extraScope},
 		})
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.Equals, syntax.SyntaxValue(captured))
 	})
 
-	c.Run("template extra scope blocks substitution without that claim", func(c *qt.C) {
+	c.Run("outer expansion's introduction blocks substitution", func(c *qt.C) {
 		sm := &SyntaxMatcher{matcher: &Matcher{}}
 		captured := syntax.NewSyntaxObject(values.NewInteger(42), nil)
 		ctx := &captureContext{
 			bindings: map[string]syntax.SyntaxValue{"x": captured},
 		}
-		// Same shape as above, with no BodyScopes: an OUTER macro's expansion put
-		// the extra scope there, and this occurrence is not a reference to the
-		// pattern variable that merely shares its spelling.
+		// The template occurrence came from an OUTER macro's template, so it
+		// never passed through this macro's use site and lacks the use-site
+		// scope the pattern variable carries. It is not a reference to that
+		// pattern variable, it merely shares its spelling.
+		useSite := syntax.NewScope()
 		outerScope := syntax.NewScope()
 		templateCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{outerScope}}
 		template := syntax.NewSyntaxSymbol("x", templateCtx)
+		patternCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{useSite}}
 		patternVarSyntax := map[string]*syntax.SyntaxSymbol{
-			"x": syntax.NewSyntaxSymbol("x", nil),
+			"x": syntax.NewSyntaxSymbol("x", patternCtx),
 		}
 		is := syntax.NewScope()
 		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, &ExpandOptions{IntroScope: is, PatternVarSyntax: patternVarSyntax})

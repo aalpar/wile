@@ -311,11 +311,6 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "error expanding fender"))
 		}
-		// Hand the compiler the binders the expansion just minted, so a
-		// (syntax ...) under one of them still substitutes its pattern variables.
-		// Read AFTER expanding and per-expansion, not once up front: the log only
-		// holds a binder once the form introducing it has been walked.
-		bodyCompiler.clauseBodyScopes = append(bodyExpander.BinderScopes(), bodyExpander.UseSiteScopes()...)
 		err = bodyCompiler.CompileExpression(ctctx.NotInTail(), expandedFender)
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "error compiling fender"))
@@ -331,7 +326,6 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "error expanding body"))
 	}
-	bodyCompiler.clauseBodyScopes = append(bodyExpander.BinderScopes(), bodyExpander.UseSiteScopes()...)
 	err = bodyCompiler.CompileExpression(ctctx, expandedBody)
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "error compiling body"))

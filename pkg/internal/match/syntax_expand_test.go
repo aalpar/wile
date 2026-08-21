@@ -31,13 +31,11 @@ func TestTemplateDenotesPatternVariable(t *testing.T) {
 
 	scopeA := syntax.NewScope()
 	scopeB := syntax.NewScope()
-	scopeC := syntax.NewScope()
 
 	tcs := []struct {
 		name           string
 		templateScopes []*syntax.Scope
 		patternScopes  []*syntax.Scope
-		bodyScopes     []*syntax.Scope
 		expected       bool
 	}{
 		{
@@ -61,52 +59,42 @@ func TestTemplateDenotesPatternVariable(t *testing.T) {
 		{
 			// The reference-under-a-binder shape: a (syntax ...) template inside a
 			// let in a clause body carries that let's scope on top of the pattern
-			// variable's, and the log says the let minted it.
-			name:           "template extra scope, declared a body binder",
+			// variable's. Ordinary subset resolution admits it — the binder is
+			// visible to the reference.
+			name:           "template extra scope from a body binder",
 			templateScopes: []*syntax.Scope{scopeA, scopeB},
 			patternScopes:  []*syntax.Scope{scopeA},
-			bodyScopes:     []*syntax.Scope{scopeB},
 			expected:       true,
 		},
 		{
-			// The same shape with an empty allowance is the nested-macro capture:
-			// scopeB came from an OUTER expansion, not from a binder in this body.
-			// This row and the one above are the whole fix — identical scope sets,
-			// opposite verdicts, decided by provenance alone.
-			name:           "template extra scope, not a body binder",
-			templateScopes: []*syntax.Scope{scopeA, scopeB},
+			// The nested-macro capture, and what refuses it: scopeA is the use-site
+			// scope this macro's input wears, and an identifier an OUTER macro
+			// introduced never passed through that use site, so it does not carry
+			// it. Not a superset, not a reference to this pattern variable.
+			name:           "outer macro's introduction lacks the use-site scope",
+			templateScopes: []*syntax.Scope{scopeB},
 			patternScopes:  []*syntax.Scope{scopeA},
 			expected:       false,
 		},
 		{
-			// syntax-rules passes no allowance at all, so its gate is set equality.
-			name:           "unrelated body binder does not excuse the extra scope",
-			templateScopes: []*syntax.Scope{scopeA, scopeB},
-			patternScopes:  []*syntax.Scope{scopeA},
-			bodyScopes:     []*syntax.Scope{scopeC},
-			expected:       false,
-		},
-		{
-			// The subset floor, which the allowance never relaxes: a binder the
-			// reference never saw cannot resolve for it.
+			// The subset floor: a binder the reference never saw cannot resolve
+			// for it.
 			name:           "pattern has extra scope",
 			templateScopes: []*syntax.Scope{scopeA},
 			patternScopes:  []*syntax.Scope{scopeA, scopeB},
-			bodyScopes:     []*syntax.Scope{scopeB},
 			expected:       false,
 		},
 		{
 			name:           "disjoint scopes",
 			templateScopes: []*syntax.Scope{scopeA},
 			patternScopes:  []*syntax.Scope{scopeB},
-			bodyScopes:     []*syntax.Scope{scopeA},
 			expected:       false,
 		},
 	}
 
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
-			result := TemplateDenotesPatternVariable(tc.templateScopes, tc.patternScopes, tc.bodyScopes)
+			result := TemplateDenotesPatternVariable(tc.templateScopes, tc.patternScopes)
 			c.Assert(result, qt.Equals, tc.expected)
 		})
 	}

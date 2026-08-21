@@ -39,11 +39,6 @@ func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr s
 		return p.wrapCompilationError(err)
 	}
 
-	// The scopes binding forms inside the enclosing syntax-case clause body
-	// minted. Both template paths gate substitution on them; see
-	// match.TemplateDenotesPatternVariable.
-	bodyScopes := p.clauseBodyScopes
-
 	// Check if template contains ellipsis - if so, use runtime expansion
 	if templateContainsEllipsis(template) {
 		// Compute hygiene data at compile time, mirroring CompileSyntaxRules:
@@ -57,12 +52,12 @@ func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr s
 		collectFreeIdentifiersWithEllipsis(p.env, template, p.patternVars, freeIds, match.DefaultEllipsis, p.libraryScope)
 		litIdx := p.template.MaybeAppendLiteral(template)
 		p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
-		p.AppendOperations(NewOperationSyntaxTemplateExpand(freeIds, p.patternVarSyntax, bodyScopes))
+		p.AppendOperations(NewOperationSyntaxTemplateExpand(freeIds, p.patternVarSyntax))
 		return nil
 	}
 
 	// No ellipsis - compile the template to bytecode that constructs the syntax object
-	return p.compileSyntaxTemplateToOps(template, bodyScopes)
+	return p.compileSyntaxTemplateToOps(template)
 }
 
 // templateContainsEllipsis checks if a syntax template contains unescaped ellipsis "...".
@@ -128,7 +123,7 @@ func isEllipsisSymbol(stx syntax.SyntaxValue) bool {
 // compileSyntaxTemplateToOps emits bytecode operations that build a syntax object.
 // Pattern variables are looked up; literals are loaded directly.
 // The result is left in the value register.
-func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxValue, bodyScopes []*syntax.Scope) error {
+func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxValue) error {
 	switch v := stx.(type) {
 	case *syntax.SyntaxSymbol:
 		// Check if this symbol is a local binding (pattern variable)
@@ -147,7 +142,7 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 		// be an ENCLOSING clause's pattern variable, which the nominal lookup finds
 		// and this must not intercept.
 		patSym, isPatternVar := p.patternVarSyntax[symVal.Key]
-		if isPatternVar && !match.TemplateDenotesPatternVariable(v.Scopes(), patSym.Scopes(), bodyScopes) {
+		if isPatternVar && !match.TemplateDenotesPatternVariable(v.Scopes(), patSym.Scopes()) {
 			litIdx := p.template.MaybeAppendLiteral(v)
 			p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 			return nil
@@ -193,12 +188,12 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 			if ok && !cdrPair.IsEmptyList() {
 				// Get the escaped template and compile it directly
 				escapedTemplate := cdrPair.SyntaxCar()
-				return p.compileSyntaxTemplateToOps(escapedTemplate, bodyScopes)
+				return p.compileSyntaxTemplateToOps(escapedTemplate)
 			}
 		}
 
 		// Compile list elements and build a syntax list
-		return p.compileSyntaxTemplateListToOps(v, bodyScopes)
+		return p.compileSyntaxTemplateListToOps(v)
 
 	default:
 		// Other values - load as literal
@@ -210,7 +205,7 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 
 // compileSyntaxTemplateListToOps compiles a list template to bytecode.
 // Each element is compiled and pushed to the stack, then BuildSyntaxList is called.
-func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(pair *syntax.SyntaxPair, bodyScopes []*syntax.Scope) error {
+func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(pair *syntax.SyntaxPair) error {
 	// First, collect all elements to count them
 	var elements []syntax.SyntaxValue
 	current := pair
@@ -236,7 +231,7 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(pair *syntax.Sy
 
 	// Compile each element and push to stack (in order)
 	for _, elem := range elements {
-		err := p.compileSyntaxTemplateToOps(elem, bodyScopes)
+		err := p.compileSyntaxTemplateToOps(elem)
 		if err != nil {
 			return err
 		}

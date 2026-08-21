@@ -40,7 +40,6 @@ package compilation
 
 import (
 	"context"
-	"slices"
 
 	"github.com/aalpar/wile/pkg/machine"
 
@@ -100,28 +99,6 @@ func (g *expandDepthGuard) leave() {
 	g.depth--
 }
 
-// binderScopeLog records every scope a binding form minted during one expansion
-// run. Shared by pointer with child expanders (newChildExpander), so a `let`
-// nested any distance inside the run's form records into the log the run
-// started with.
-//
-// Its consumer is compileSyntaxCaseClause: a (syntax ...) template in a clause
-// body wears the scope of every binder it sits under, while the pattern
-// variables were recorded at the clause head and wear none of them. The log
-// names that difference, which is what lets
-// match.TemplateDenotesPatternVariable allow it and still refuse the scope an
-// OUTER macro's expansion stamped on an identifier it introduced.
-//
-// Every run keeps one, not just the clause-body runs that read it: a run that
-// cannot forget to switch it on cannot silently answer "no binders here" and
-// send a whole clause body back to the set-equality behaviour this replaced.
-// The cost is a pointer per binding form for the length of the compile — the
-// scopes themselves are already retained by the identifiers they were stamped
-// on, so only the slice is new.
-type binderScopeLog struct {
-	scopes []*syntax.Scope
-}
-
 // ExpanderTimeContinuation is a continuation used during the expansion phase.
 //
 // It walks the syntax tree, detecting and expanding macro invocations.
@@ -138,49 +115,10 @@ type ExpanderTimeContinuation struct {
 	// depthGuard bounds structural recursion. Shared by pointer with child
 	// expanders (newChildExpander) so the whole run shares one counter.
 	depthGuard *expandDepthGuard
-	// binderScopes records the scopes binding forms mint during this run.
-	// Shared by pointer with child expanders, like depthGuard.
-	binderScopes *binderScopeLog
 	// useSiteScopes registers the use-site scopes this run mints, so pruning can
 	// recognise its own. Shared by pointer with child expanders. See
 	// expander_use_site.go.
 	useSiteScopes *useSiteScopeLog
-}
-
-// newBinderScope mints the scope a binding form stamps on the identifiers under
-// it, and records it in this run's log.
-//
-// Every binding form MUST mint through here or through newRebindingBinderScope.
-// One that calls syntax.NewScopeWithLabel directly is invisible to the log, and
-// a (syntax ...) template underneath it in a syntax-case clause body then wears
-// a scope its pattern variables do not — which reads to
-// match.TemplateDenotesPatternVariable exactly like an outer macro's
-// introduction, so every pattern variable in that template quietly stops
-// substituting and escapes the expansion unbound.
-func (p *ExpanderTimeContinuation) newBinderScope(label string) *syntax.Scope {
-	return p.recordBinderScope(syntax.NewScopeWithLabel(label))
-}
-
-// newRebindingBinderScope is newBinderScope for a form whose bindings can shadow
-// auxiliary syntax (let-syntax, letrec-syntax). See values.Scope.IsRebinding.
-func (p *ExpanderTimeContinuation) newRebindingBinderScope(label string) *syntax.Scope {
-	return p.recordBinderScope(syntax.NewRebindingScopeWithLabel(label))
-}
-
-func (p *ExpanderTimeContinuation) recordBinderScope(scope *syntax.Scope) *syntax.Scope {
-	if p.binderScopes != nil {
-		p.binderScopes.scopes = append(p.binderScopes.scopes, scope)
-	}
-	return scope
-}
-
-// BinderScopes returns the scopes binding forms have minted so far in this run.
-// The result is a snapshot: a caller that expands again must ask again.
-func (p *ExpanderTimeContinuation) BinderScopes() []*syntax.Scope {
-	if p.binderScopes == nil {
-		return nil
-	}
-	return slices.Clone(p.binderScopes.scopes)
 }
 
 // NewExpanderTimeContinuation creates a new ExpanderTimeContinuation. The
@@ -202,7 +140,6 @@ func NewExpanderTimeContinuation(ctx context.Context, env *environment.Environme
 		env:           env,
 		evaluator:     evaluator,
 		depthGuard:    &expandDepthGuard{max: maxDepth},
-		binderScopes:  &binderScopeLog{},
 		useSiteScopes: &useSiteScopeLog{scopes: values.NewMapSet[*syntax.Scope](0)},
 	}
 	return q
@@ -226,7 +163,6 @@ func (p *ExpanderTimeContinuation) newChildExpander(env *environment.Environment
 		env:           env,
 		evaluator:     p.evaluator,
 		depthGuard:    p.depthGuard,
-		binderScopes:  p.binderScopes,
 		useSiteScopes: p.useSiteScopes,
 	}
 	return q

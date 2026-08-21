@@ -173,7 +173,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 	body := bodyPair.SyntaxCar()
 
 	// Create a fresh binding scope
-	bindingScope := p.newBinderScope("binding")
+	bindingScope := syntax.NewScopeWithLabel("binding")
 
 	// Add the scope to the entire body
 	// This adds the scope to ALL identifiers in the body, including:

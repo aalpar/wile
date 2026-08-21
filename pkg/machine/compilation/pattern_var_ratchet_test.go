@@ -102,8 +102,10 @@ var patternVarRatchetCorpus = []patternVarRatchetCase{
 	},
 	{
 		// The shape set equality refused until 2026-08-20, and the shape a use-site
-		// scope must not start refusing. Same counts as the row above: the clause
-		// body's `let` changes the scopes, not the substitutions.
+		// scope must not start refusing: the `let`'s scope is ADDED on top of the
+		// pattern variable's, which subset resolution admits. Same counts as the
+		// row above — the clause body's `let` changes the scopes, not the
+		// substitutions.
 		Name: "runtime: ellipsis template under a clause-body let",
 		Code: `(begin
 			(define-syntax m4
@@ -113,8 +115,8 @@ var patternVarRatchetCorpus = []patternVarRatchetCase{
 		Substitutions: 82,
 	},
 	{
-		// syntax-rules reaches the runtime expander with no binder allowance, so
-		// its gate is set equality even after 2026-08-20.
+		// syntax-rules has no clause body to bind in, so pattern and template
+		// scopes coincide and the subset gate is satisfied exactly.
 		Name: "runtime: syntax-rules",
 		Code: `(begin
 			(define-syntax m5 (syntax-rules () ((_ a b) (list a b))))
