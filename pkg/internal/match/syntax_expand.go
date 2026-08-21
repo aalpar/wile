@@ -301,8 +301,18 @@ func syntaxListToSlice(v syntax.SyntaxValue) ([]syntax.SyntaxValue, error) {
 
 // TemplateDenotesPatternVariable reports whether a template occurrence denotes
 // the pattern variable a capture was recorded under, and may therefore be
-// replaced by it. It is the single gate for both template paths: the runtime
-// expander here, and the compile-time emit in compileSyntaxTemplateToOps.
+// replaced by it.
+//
+// **One caller: the runtime expander in this file.** It used to gate both
+// template paths, but the compile-time emit in compileSyntaxTemplateToOps now
+// asks an ordinary scoped GetLocalIndex instead — pattern variables are bound at
+// their pattern identifier's scopes, so resolution answers this question without
+// a separate predicate. This path cannot follow, and the reason is structural
+// rather than pending work: captureContext.bindings is a map[string]SyntaxValue
+// filled by the match VM from pattern-variable NAMES in the compiled pattern
+// bytecode, so there is no environment frame here and no *Binding to compare.
+// Making it resolution-driven means re-keying the capture context and the
+// bytecode by scope set — a redesign of this package's core, not a query change.
 //
 // The pattern variable is the BINDER and the template occurrence is a REFERENCE
 // to it, so the rule is Flatt's resolution relation and nothing else:

@@ -134,32 +134,32 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 			p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 			return nil
 		}
-		// This clause's pattern variables are gated on scopes before the nominal
-		// lookup below can reach them: an outer expansion's identifier that merely
-		// SPELLS one of them denotes its own definition-site binding, and emitting
-		// it as a literal is what lets it resolve there. Only names this clause
-		// actually binds are gated — a name absent from patternVarSyntax may still
-		// be an ENCLOSING clause's pattern variable, which the nominal lookup finds
-		// and this must not intercept.
-		patSym, isPatternVar := p.patternVarSyntax[symVal.Key]
-		if isPatternVar && !match.TemplateDenotesPatternVariable(v.Scopes(), patSym.Scopes()) {
-			litIdx := p.template.MaybeAppendLiteral(v)
-			p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
-			return nil
-		}
-		// A scoped query, because the pattern variable is now an ordinary
-		// binding: createPatternVarEnvironment binds it at its PATTERN
-		// identifier's scopes, so maximal resolution answers "does this
-		// occurrence denote that pattern variable?" as an instance of Flatt's
-		// relation rather than as a separate question.
+		// Resolution decides substitution, and there is nothing else to ask.
 		//
-		// This used to be AllScopes, and the wildcard was load-bearing for as
-		// long as pattern variables were bound scopeless — cardinality 0 loses
-		// every argmax, so an enclosing scoped lexical of the same name would
-		// have outranked them. The two changes are one change; splitting them
-		// in either order is a regression.
+		// createPatternVarEnvironment binds each pattern variable at its PATTERN
+		// identifier's scopes, so this scoped query IS the question "does this
+		// occurrence denote that pattern variable?" — the pattern variable is the
+		// binder, the occurrence is the reference, and maximal resolution answers
+		// it by Flatt's relation. An identifier an outer expansion introduced
+		// merely SPELLS one of this clause's names: it lacks the use-site scope
+		// the pattern variable carries, fails the subset test, resolves to
+		// nothing here, and falls through to the literal emit below, which is
+		// what lets it resolve at its own definition site instead.
 		//
-		// A scoped query can also raise ErrAmbiguousBinding on an incomparable
+		// That fall-through is why the explicit gate this replaced could go. It
+		// bailed to exactly the same literal emit on exactly the same verdict;
+		// the only difference is that the verdict now comes from the resolver
+		// every other identifier already uses. A name ABSENT from this clause's
+		// pattern variables is unaffected either way — it may be an ENCLOSING
+		// clause's pattern variable, which the frame-chain walk finds.
+		//
+		// This used to be an AllScopes wildcard, load-bearing for as long as
+		// pattern variables were bound scopeless: cardinality 0 loses every
+		// argmax, so an enclosing scoped lexical of the same name would have
+		// outranked them. Scoping the binding and scoping the query are one
+		// change; splitting them in either order is a regression.
+		//
+		// A scoped query can raise ErrAmbiguousBinding on an incomparable
 		// equal-cardinality tie, which the wildcard's first-match early return
 		// structurally could not. Never observed across the matrix, the Scheme
 		// corpora or the Go suite; loud (a compile-time panic) if it ever is.
