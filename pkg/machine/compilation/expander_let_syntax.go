@@ -121,7 +121,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 	// (internal/match/syntax_adapter.go) to correctly reject shadowed literals.
 	// Not the literalScopesMatchWithChecker delegate beside it — that is the
 	// unpinned comparison and today has no production caller.
-	letScope := syntax.NewRebindingScopeWithLabel("let-syntax")
+	letScope := p.newRebindingBinderScope("let-syntax")
 
 	// For letrec-syntax, pre-register all keywords so transformers can see each other
 	if recursive && !bindingsEmpty {

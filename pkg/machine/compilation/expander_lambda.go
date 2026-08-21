@@ -92,7 +92,7 @@ func (p *ExpanderTimeContinuation) expandProcedureBody(
 	// This scope is added to both formals and body BEFORE any inner expansion,
 	// ensuring that pattern matching in inner macros (like cond) can correctly
 	// detect when identifiers (like =>) have been bound by this procedure.
-	scope := syntax.NewScopeWithLabel("lambda")
+	scope := p.newBinderScope("lambda")
 
 	formalsStx = syntax.AddScopeToSyntax(formals, scope)
 	bodyWithScope := body.AddScope(scope).(*syntax.SyntaxPair)

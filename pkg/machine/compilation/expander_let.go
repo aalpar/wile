@@ -92,7 +92,7 @@ func (p *ExpanderTimeContinuation) expandLetCommon(
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
-	scope := syntax.NewScopeWithLabel(label)
+	scope := p.newBinderScope(label)
 
 	// Expand bindings based on form semantics
 	var expandedBindings syntax.SyntaxValue
@@ -144,7 +144,7 @@ func (p *ExpanderTimeContinuation) expandNamedLet(sym *syntax.SyntaxSymbol, args
 		return syntax.NewSyntaxCons(sym, argsPair, sym.SourceContext()), nil
 	}
 
-	letrecScope := syntax.NewScopeWithLabel("letrec")
+	letrecScope := p.newBinderScope("letrec")
 
 	tagWithScope := syntax.AddScopeToSyntax(tagSym, letrecScope).(*syntax.SyntaxSymbol)
 
