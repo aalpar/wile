@@ -584,7 +584,14 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 
 	// For syntax-rules transformers, we pass the entire input form as an argument.
 	// The transformer expects the full form including the macro name.
-	inputForm := syntax.NewSyntaxCons(sym, expr, sym.SourceContext())
+	//
+	// The input is stamped with a fresh use-site scope, which is NOT removed from
+	// the result. Everything the transformer passes through therefore wears a
+	// scope nothing it introduces has, which is what lets ordinary subset
+	// resolution tell a use-site identifier from a macro-introduced one. See
+	// newUseSiteScope, and pruneUseSiteScopes below for the binder positions
+	// where the scope has to come off again.
+	inputForm := p.withUseSiteScope(syntax.NewSyntaxCons(sym, expr, sym.SourceContext()))
 
 	// Set up the expander context so the transformer can access the use-site environment.
 	// This is critical for R7RS §4.3.2 auxiliary syntax hygiene: the pattern matcher
@@ -650,7 +657,14 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// Build complete input form: (macro-name . args)
 	inputForm := syntax.NewSyntaxCons(sym, expr, sym.SourceContext())
 
-	// Unwrap to raw s-expression for the transformer
+	// Unwrap to raw s-expression for the transformer.
+	//
+	// This is why use-site scopes stop here: UnwrapAll strips every scope, and
+	// DatumToSyntaxValue re-wraps the result with plain use-site context below, so
+	// an ER transformer neither receives nor returns scoped syntax. Its hygiene is
+	// the rename closure instead. Stamping inputForm above would be erased on this
+	// line — the asymmetry with expandMacroInvocation is the boundary, not an
+	// oversight to repair.
 	rawForm := inputForm.UnwrapAll()
 
 	// Create a fresh intro scope for this invocation. Unbound renamed symbols
@@ -763,7 +777,12 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 		return nil, false, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotAClosure, "not a closure: %T", bnd.Value()))
 	}
 
-	inputForm := syntax.NewSyntaxCons(sym, cdr, sym.SourceContext())
+	// Stamped and pruned exactly as expandMacroInvocation does. This site is a
+	// hand-copy of that one — its own comment above records a defect from the last
+	// time the two diverged — and expand-once exists to show what one expansion
+	// step produces, so an unstamped result here would be a lie about the real
+	// path rather than a saving.
+	inputForm := p.withUseSiteScope(syntax.NewSyntaxCons(sym, cdr, sym.SourceContext()))
 
 	mc, err := p.evaluator.InvokeTransformer(p.ctx, cls, nil, inputForm)
 	if err != nil {
@@ -780,7 +799,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	// Return the result WITHOUT recursive expansion
 	stx, ok := result.(syntax.SyntaxValue)
 	if ok {
-		return stx, true, nil
+		return p.pruneUseSiteScopes(stx), true, nil
 	}
 
 	return nil, false, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxValue, "syntax transformer returned non-syntax value: %T", result))

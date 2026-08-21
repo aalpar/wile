@@ -21,6 +21,7 @@ package compilation
 // Nothing mints yet. See plans/2026-08-20-use-site-scopes-impl.local.md.
 
 import (
+	"maps"
 	"slices"
 
 	"github.com/aalpar/wile/pkg/syntax"
@@ -46,6 +47,42 @@ import (
 // already wrong today. Do not add a kind and branch on it.
 type useSiteScopeLog struct {
 	scopes values.MapSet[*syntax.Scope]
+}
+
+// newUseSiteScope mints the scope one macro invocation stamps on its input, and
+// registers it so pruning can recognise it later.
+//
+// Unlike the introduction scope, it is NOT flipped on the way out. That
+// asymmetry is the whole mechanism: use-site syntax keeps the scope and
+// macro-introduced syntax never acquires it, so an inner macro's pattern
+// variable stops being a subset of an outer macro's introduced template
+// identifier and plain subset resolution refuses the capture.
+//
+// The "use-site" label is diagnostic only, exactly like the "intro" and "lambda"
+// labels beside it. The registry, not the label, is what pruning reads — see
+// useSiteScopeLog.
+func (p *ExpanderTimeContinuation) newUseSiteScope() *syntax.Scope {
+	scope := syntax.NewScopeWithLabel("use-site")
+	if p.useSiteScopes != nil {
+		p.useSiteScopes.scopes.Set(scope)
+	}
+	return scope
+}
+
+// withUseSiteScope stamps a fresh registered use-site scope on a macro's input
+// form.
+func (p *ExpanderTimeContinuation) withUseSiteScope(inputForm syntax.SyntaxValue) syntax.SyntaxValue {
+	return syntax.AddScopeToSyntax(inputForm, p.newUseSiteScope())
+}
+
+// UseSiteScopes returns the use-site scopes this run has minted so far, as a
+// snapshot. Ordering is unspecified — the caller unions them into an allowance,
+// which is a set question.
+func (p *ExpanderTimeContinuation) UseSiteScopes() []*syntax.Scope {
+	if p.useSiteScopes == nil {
+		return nil
+	}
+	return slices.Collect(maps.Keys(p.useSiteScopes.scopes))
 }
 
 // isUseSiteScope reports whether this run minted scope as a use-site scope.

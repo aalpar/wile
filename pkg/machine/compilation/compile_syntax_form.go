@@ -42,7 +42,7 @@ func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr s
 	// The scopes binding forms inside the enclosing syntax-case clause body
 	// minted. Both template paths gate substitution on them; see
 	// match.TemplateDenotesPatternVariable.
-	bodyScopes := p.clauseBinderScopes
+	bodyScopes := p.clauseBodyScopes
 
 	// Check if template contains ellipsis - if so, use runtime expansion
 	if templateContainsEllipsis(template) {

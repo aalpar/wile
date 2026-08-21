@@ -59,12 +59,20 @@ type CompileTimeContinuation struct {
 	// for nested-macro scope comparison.
 	patternVars      values.StringSet
 	patternVarSyntax map[string]*syntax.SyntaxSymbol
-	// clauseBinderScopes are the scopes binding forms inside the clause body
-	// minted while it was expanded — the allowance
+	// clauseBodyScopes are the scopes minted while this clause body was expanded,
+	// binder and use-site alike — the allowance
 	// match.TemplateDenotesPatternVariable grants a (syntax ...) template
 	// occurrence over its pattern variable's own scopes. Set beside
-	// patternVarSyntax, from the clause's expander log; meaningless without it.
-	clauseBinderScopes []*syntax.Scope
+	// patternVarSyntax, from the clause's expander logs; meaningless without it.
+	//
+	// Use-site scopes belong here for the same reason binder scopes do: a macro
+	// USED in the clause body stamps its use-site scope on everything under it,
+	// the template included, and that is a scope added inside this body. `do` is
+	// the shape that proves it — a syntax-rules macro in bootstrap_macros.scm, not
+	// a primitive binding form like the let family beside it, so it is the only
+	// row of TestSyntaxCaseEllipsisTemplateUnderBodyBinder that goes through a
+	// macro invocation at all.
+	clauseBodyScopes []*syntax.Scope
 	// fileResolver controls how include/load resolves files.
 	// Defaults to the resolver stored on Namespace (usually
 	// OSFileResolver); set to EmbedFileResolver for bootstrap.
