@@ -73,11 +73,11 @@ const DefaultMaxExpandDepth int = 50000
 // A single ExpandExpression tree-walk spawns child ExpanderTimeContinuation
 // objects for lambda/let/let-syntax bodies (see newChildExpander). Those child
 // frames stay live on the Go stack while the parent recurses, so the bound must
-// reflect cumulative Go-stack depth, not per-object depth. The guard is shared
-// by pointer across a parent and all its children so depth accumulates
-// regardless of how many continuation objects a single run creates. (This is
-// why a per-object int — sufficient for the parser, which has one object per
-// parse — is not sufficient here.)
+// reflect cumulative Go-stack depth, not per-object depth. Pointer shares the
+// guard across a parent and all its children, so depth accumulates regardless
+// of how many continuation objects a single run creates. (This is why a
+// per-object int — sufficient for the parser, which has one object per parse
+// — is not sufficient here.)
 type expandDepthGuard struct {
 	depth int
 	max   int // 0 = unlimited
@@ -116,7 +116,7 @@ type ExpanderTimeContinuation struct {
 	// expanders (newChildExpander) so the whole run shares one counter.
 	depthGuard *expandDepthGuard
 	// useSiteScopes registers the use-site scopes this run mints, so pruning can
-	// recognise its own. Shared by pointer with child expanders. See
+	// recognize its own. Shared by pointer with child expanders. See
 	// expander_use_site.go.
 	useSiteScopes *useSiteScopeLog
 }
@@ -127,7 +127,7 @@ type ExpanderTimeContinuation struct {
 // the shared EngineServices at engine build) so every expander site — the
 // top-level pass and the ~8 compile-time re-expansion sites reached during
 // library and body compilation — honors it uniformly. A namespace not built by
-// an Engine (e.g. a direct unit-test compile) reports unset and defaults to
+// an Engine (e.g., a direct unit-test compiler) reports unset and defaults to
 // DefaultMaxExpandDepth. SetMaxDepth still overrides per-run afterward.
 func NewExpanderTimeContinuation(ctx context.Context, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) *ExpanderTimeContinuation {
 	maxDepth := DefaultMaxExpandDepth
@@ -154,7 +154,7 @@ func NewExpanderTimeContinuation(ctx context.Context, env *environment.Environme
 // NewExpanderTimeContinuation(p.ctx, env, p.evaluator): ctx and evaluator carry
 // over, env is the nested-body environment, and libraryScope is deliberately
 // left nil (these body sites never propagated it — where library scope must
-// flow into a nested expander, the code sets it explicitly, e.g.
+// flow into a nested expander, the code sets it explicitly, e.g.,
 // compile_time_continuation_include.go). Sharing only the depth guard keeps the
 // hygiene behavior unchanged.
 func (p *ExpanderTimeContinuation) newChildExpander(env *environment.EnvironmentFrame) *ExpanderTimeContinuation {
@@ -218,7 +218,7 @@ func (p *ExpanderTimeContinuation) ExpandTopLevelExpression(expr syntax.SyntaxVa
 // overflow. See expandDepthGuard and DefaultMaxExpandDepth.
 func (p *ExpanderTimeContinuation) ExpandExpression(expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// Context cancellation takes precedence over the depth bound: an explicitly
-	// cancelled run reports ctx.Err(), not ErrExpandDepthExceeded, even when both
+	// canceled run reports ctx.Err(), not ErrExpandDepthExceeded, even when both
 	// conditions are live at this entry. Checked before touching the depth
 	// counter so the increment/decrement stays symmetric on the cancel path.
 	select {
@@ -312,7 +312,7 @@ func (p *ExpanderTimeContinuation) ExpandSelfEvaluating(expr syntax.SyntaxValue)
 // lambda, define, etc. Some primitives need their subexpressions expanded
 // (like if, begin) while others should be left unchanged (like quote, define-syntax).
 //
-// This function looks up the primitive expander in the expand environment registry.
+// This function looks up the primitive expander in the expanded environment registry.
 // If found, it invokes the expander; otherwise returns the form unchanged.
 func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// Look up the primitive expander in the registry
@@ -341,9 +341,9 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syn
 //
 // It takes the full SyntaxSymbol (not the bare *values.Symbol) so it can read the pin; the
 // callers keep their own sym.Unwrap() for the hasLocalVariableBinding / LookupPrimitiveExpander
-// checks. It exists because ExpandOnce once had only arms 1 and 2. A macro reachable solely
-// through the library-scope arm was therefore reported by (expand-once …) as "not a macro" — a
-// real macro call that the expander itself expands perfectly well.
+// checks. It exists because ExpandOnce once had only arms 1 and 2. (Expand-once ...) therefore
+// reported a macro reachable solely real macro call that the expander itself expands perfectly
+// well.
 func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, symbolScopes []*syntax.Scope) *environment.Binding {
 	sym0, ok := sym.Unwrap().(*values.Symbol)
 	if !ok {
@@ -525,7 +525,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 	// the result. Everything the transformer passes through therefore wears a
 	// scope nothing it introduces has, which is what lets ordinary subset
 	// resolution tell a use-site identifier from a macro-introduced one. See
-	// newUseSiteScope, and pruneUseSiteScopes below for the binder positions
+	// the newUseSiteScope and pruneUseSiteScopes below for the binder positions
 	// where the scope has to come off again.
 	inputForm := p.withUseSiteScope(syntax.NewSyntaxCons(sym, expr, sym.SourceContext()))
 
@@ -533,7 +533,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 	// This is critical for R7RS §4.3.2 auxiliary syntax hygiene: the pattern matcher
 	// needs to check if input identifiers have lexical bindings at the use site.
 	// For example, in (let ((=> #f)) (cond (#t => 'ok))), the pattern matcher needs
-	// to see that => is bound by the lambda (from let expansion) to correctly
+	// to see that the lambda binds => (from let expansion) to correctly
 	// determine that it shouldn't match the literal => in cond's pattern.
 	expanderCtx := NewExpanderContext(p.env, p)
 
@@ -642,10 +642,9 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 }
 
 // ExpandOnce performs a single step of macro expansion.
-// Returns (expanded-syntax, did-expand, error).
-// If the input is a macro call, it expands it once and returns (result, true, nil).
-// If the input is not a macro call, it returns (input, false, nil).
-// Unlike ExpandExpression, this does NOT recursively expand the result.
+// Returns (expanded-syntax, did-expand, error).  If the input is a macro call, it expands
+// it once and returns (result, true, nil).  If the input is not a macro call, it returns
+// (input, false, nil).  Unlike ExpandExpression, this does NOT recursively expand the result.
 func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
 	// Only pairs can be macro calls
 	stxPair, ok := expr.(*syntax.SyntaxPair)
@@ -746,11 +745,8 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 func (p *ExpanderTimeContinuation) ExpandSyntaxArgumentList(args syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// instantiate result list
 	q := syntax.SyntaxEmptyList
-	// go through each argument and expand it
-	// and append to result list
-	// if any error, return error
-	// if not a proper list, return error
-	// finally return the new list
+	// go through each argument and expand it and append to result list if any error, return error if not a proper
+	// list, return error finally return the new list
 	tail, err := syntax.SyntaxForEach(p.ctx, args, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
 		v0, err := p.ExpandExpression(v)
 		if err != nil {
