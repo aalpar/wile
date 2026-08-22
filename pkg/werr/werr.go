@@ -446,8 +446,18 @@ func (p *ForeignError) Error() string {
 
 // ForeignFileError represents an error from a file system operation.
 // R7RS §6.11: detected by file-error? predicate.
+// The embedded ForeignError is a VALUE, not a pointer, and that is
+// load-bearing: every one of its methods (Error, Is, As, Cause) has a pointer
+// receiver, so embedding by value keeps them out of the method set of
+// ForeignFileError and puts them only in *ForeignFileError's. Embedding a
+// *ForeignError instead promotes them to BOTH, leaving two types that satisfy
+// error for one error. go vet's printf check rejects that outright ("%w wants
+// operand of error type werr.ForeignFileError, not pointer type
+// *werr.ForeignFileError (defeats errors.Is)"), and it is right to: an
+// errors.As target of the value type would silently never match. The same
+// applies to ForeignProcessError and ForeignReadError below.
 type ForeignFileError struct {
-	*ForeignError
+	ForeignError
 	Filename string // the file path that caused the error
 	Op       string // the operation (e.g., "open-input-file", "delete-file")
 }
@@ -455,7 +465,7 @@ type ForeignFileError struct {
 // WrapForeignFileError wraps an OS error with file context.
 func WrapForeignFileError(err error, op string, filename string) *ForeignFileError {
 	q := &ForeignFileError{
-		ForeignError: WrapForeignErrorf(err, "%s: %s", op, filename),
+		ForeignError: *WrapForeignErrorf(err, "%s: %s", op, filename),
 		Filename:     filename,
 		Op:           op,
 	}
@@ -466,7 +476,7 @@ func WrapForeignFileError(err error, op string, filename string) *ForeignFileErr
 // Parallel to ForeignFileError for programmatic inspection of failed
 // process operations.
 type ForeignProcessError struct {
-	*ForeignError
+	ForeignError
 	Command string // the command that was run
 	Op      string // the operation (e.g., "process-spawn", "system")
 }
@@ -474,7 +484,7 @@ type ForeignProcessError struct {
 // WrapForeignProcessError wraps an OS error with process context.
 func WrapForeignProcessError(err error, op string, command string) *ForeignProcessError {
 	q := &ForeignProcessError{
-		ForeignError: WrapForeignErrorf(err, "%s: %s", op, command),
+		ForeignError: *WrapForeignErrorf(err, "%s: %s", op, command),
 		Command:      command,
 		Op:           op,
 	}
@@ -484,13 +494,13 @@ func WrapForeignProcessError(err error, op string, command string) *ForeignProce
 // ForeignReadError represents an error from a read or parse operation.
 // R7RS §6.11: detected by read-error? predicate.
 type ForeignReadError struct {
-	*ForeignError
+	ForeignError
 }
 
 // WrapForeignReadErrorf wraps an error as a read error.
 func WrapForeignReadErrorf(err error, msg string, vs ...any) *ForeignReadError {
 	q := &ForeignReadError{
-		ForeignError: WrapForeignErrorf(err, msg, vs...),
+		ForeignError: *WrapForeignErrorf(err, msg, vs...),
 	}
 	return q
 }
@@ -498,7 +508,7 @@ func WrapForeignReadErrorf(err error, msg string, vs ...any) *ForeignReadError {
 // NewForeignReadErrorf creates a new read error with a formatted message.
 func NewForeignReadErrorf(msg string, vs ...any) *ForeignReadError {
 	q := &ForeignReadError{
-		ForeignError: NewForeignErrorf(msg, vs...),
+		ForeignError: *NewForeignErrorf(msg, vs...),
 	}
 	return q
 }
