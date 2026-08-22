@@ -1194,6 +1194,52 @@ func TestFusePromotedCompoundArgs(t *testing.T) {
 			},
 		},
 		{
+			// The defect this pass shipped with: the callee push was identified
+			// as "not preceded by SaveContinuation or a push", which is not the
+			// question OpPullApply asks. The real callee (index 0) is still on
+			// the stack when the OpStoreLocal at 2 pops the set!'s value, so the
+			// promoted push at 3 looked like a fresh group start — and promoting
+			// it deletes the REAL callee's push and rewrites the call.
+			// `(h (begin (set! a 1) car) n)` compiled to `(car n)`.
+			name: "promoted push over a non-empty stack is not the callee",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0}, // 0: the real callee, depth 0→1
+				{Op: OpPushLiteral, Arg: 0},       // 1: set!'s value,   depth 1→2
+				{Op: OpStoreLocal, Arg: 0},        // 2: set! pops,      depth 2→1
+				{Op: OpPushCachedBinding, Arg: 1}, // 3: + — NOT the group's bottom
+				{Op: OpPushLocal, Arg: 0},         // 4
+				{Op: OpPushLocal, Arg: 1},         // 5
+				{Op: OpReleaseEnvFrame},           // 6
+				{Op: OpPullApply},                 // 7
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpPushCachedBinding, OpPushLiteral, OpStoreLocal, OpPushCachedBinding,
+				OpPushLocal, OpPushLocal, OpReleaseEnvFrame, OpPullApply,
+			},
+		},
+		{
+			// The height guard at the apply, which is the one fact walkCallArgs
+			// structurally cannot supply: the opcode sequence 1..5 is exactly the
+			// promotable shape, and the branch into the argument region changes
+			// the stack height without changing a single opcode. targets[pullIdx]
+			// does not see it either — the branch lands at 4, not at the apply.
+			name: "branch into the argument region (wrong height at the apply) is left alone",
+			code: []Instruction{
+				{Op: OpBranchOnFalseValue, Arg: 4}, // 0: → 4, skipping both arg pushes
+				{Op: OpPushCachedBinding, Arg: 1},  // 1: + — group bottom, stack empty
+				{Op: OpPushLocal, Arg: 0},          // 2
+				{Op: OpPushLocal, Arg: 1},          // 3
+				{Op: OpReleaseEnvFrame},            // 4: reached at depth 3 and at 0
+				{Op: OpPullApply},                  // 5: height unknown, not arity+1
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpBranchOnFalseValue, OpPushCachedBinding, OpPushLocal, OpPushLocal,
+				OpReleaseEnvFrame, OpPullApply,
+			},
+		},
+		{
 			// Fewer than two instructions: the len(code) < 2 early return.
 			name: "code shorter than two instructions is left alone",
 			code: []Instruction{

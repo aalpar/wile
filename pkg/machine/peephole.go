@@ -664,18 +664,30 @@ func fusePromotedCompoundArgs(tpl *NativeTemplate, plan *EditPlan) {
 		return
 	}
 	targets := branchTargets(code)
+	depths := evalStackDepths(code)
 
 	for i := 0; i < len(code); i++ {
 		if code[i].Op != OpPushCachedBinding {
 			continue
 		}
 
-		// Tail position only: a callee push preceded by SaveContinuation or
-		// another push is a non-tail call or an argument, not a tail callee.
-		// The non-tail case would also need its outer SaveContinuation removed
-		// (the inline op has no continuation to restore); that is left for a
-		// follow-up. Tail covers the fib hot path.
-		if i > 0 && (code[i-1].Op == OpSaveContinuation || isPushOp(code[i-1].Op)) {
+		// Preceded by SaveContinuation: a non-tail call. Promoting it would
+		// also have to remove that SaveContinuation (the inline op has no
+		// continuation to restore), which this pass does not do. Tail covers
+		// the fib hot path.
+		if i > 0 && code[i-1].Op == OpSaveContinuation {
+			continue
+		}
+		// This push must be the CALLEE, which OpPullApply reads from the BOTTOM
+		// of the eval stack — so the stack must be empty here. The predecessor
+		// test this replaces ("not preceded by a push") asks a different
+		// question and answers it wrongly whenever an op POPS between the real
+		// callee push and this one: in `(h (begin (display "") car) n)` the
+		// `display` apply drains the group it opened, `car`'s push looked like a
+		// fresh group start, and the call was rewritten to `(car n)` — silently,
+		// with `h`'s push deleted. Passes 2 and 3 abandoned the same test for
+		// this one; see eval_depth.go.
+		if !evalStackEmptyAt(depths, i) {
 			continue
 		}
 
@@ -711,6 +723,16 @@ func fusePromotedCompoundArgs(tpl *NativeTemplate, plan *EditPlan) {
 		}
 		pullIdx := termIdx + 1
 		if pullIdx >= len(code) || code[pullIdx].Op != OpPullApply {
+			continue
+		}
+
+		// The group reaching the apply must be exactly the callee plus its
+		// promoted arity. walkCallArgs counts opcodes and structurally CANNOT
+		// see this: its own doc comment says it does not verify its terminator,
+		// and a branch INTO the argument region changes the height without
+		// changing the opcode sequence. depths is computed over the whole
+		// template and merges every incoming edge, so it does.
+		if depths[pullIdx] != promotedArity+1 {
 			continue
 		}
 

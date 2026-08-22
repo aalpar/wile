@@ -77,6 +77,92 @@ func TestCallFusionPicksTheGroupsBottom(t *testing.T) {
 	}
 }
 
+// TestPromotedCompoundArgFusionPicksTheGroupsBottom is the same defect, in the
+// pass that was written after the fix above and did not inherit it.
+//
+// fusePromotedCompoundArgs (peephole pass 4) kept the abandoned predecessor test
+// and therefore mistook a promoted primitive pushed as an ARGUMENT for a tail
+// callee, deleting the real callee's push and rewriting the apply into the
+// promoted opcode. `(h (begin (set! a 1) car) n)` ran as `(car n)` — no error,
+// no diagnostic, and the set-cdr! arm mutated a pair the program never asked it
+// to. Every arm here returns a wrong value or a wrong effect without the fix,
+// not merely a missed optimization.
+//
+// These must go through the engine, not RunSchemeCode, which skips
+// tpl.Optimize() and would pass unfixed. The opposite direction — that the
+// promotion this pass exists for did not deoptimize — is pinned structurally by
+// TestPromoteCompoundArgsFib, since no value assertion can see a deopt.
+func TestPromotedCompoundArgFusionPicksTheGroupsBottom(t *testing.T) {
+	cases := []struct {
+		name string
+		code string
+		want string
+	}{
+		{
+			// Arity 1: `car` is pushed as h's first argument, `n` follows, and
+			// the ReleaseEnvFrame proof is present — the full trigger shape.
+			// Unfixed this answers 7, the value of (car n).
+			name: "set! pops between the callee push and a unary promoted argument",
+			code: `(define (h x y) (list 'h (procedure? x) y))
+			       (define (g a n) (h (begin (set! a 1) car) n))
+			       (g 0 '(7 8))`,
+			want: "(h #t (7 8))",
+		},
+		{
+			// The same, with an apply rather than a store doing the popping.
+			// `(idl 0)` is there only for its drain.
+			name: "an apply drains the group before the promoted argument push",
+			code: `(define (h x y) (list 'h (procedure? x) y))
+			       (define (idl v) v)
+			       (define (g n) (h (begin (idl 0) car) n))
+			       (g '(7 8))`,
+			want: "(h #t (7 8))",
+		},
+		{
+			// walkCallArgs also accepts SaveContinuation..PullApply..Push blocks,
+			// so a nested-call argument is in the trigger set too.
+			name: "nested-call argument after the misidentified push",
+			code: `(define (h x y) (list 'h (procedure? x) y))
+			       (define (idl v) v)
+			       (define (g a n) (h (begin (set! a 1) car) (idl n)))
+			       (g 0 '(7 8))`,
+			want: "(h #t (7 8))",
+		},
+		{
+			// Arity 2, where the miscompile is a side effect and not only a
+			// value: the promoted `cons` consumed h3's own arguments.
+			name: "binary promoted primitive as an argument value does not run",
+			code: `(define (h3 x y z) (list 'h3 (procedure? x) y z))
+			       (define (g a p v) (h3 (begin (set! a 1) cons) p v))
+			       (g 0 1 2)`,
+			want: "(h3 #t 1 2)",
+		},
+		{
+			// Control: no pop between the callee push and the argument, so the
+			// promoted push is genuinely not a group start under either test.
+			// Without it the arms above could pass by total deoptimization.
+			name: "control: promoted primitive argument with no pop before it",
+			code: `(define (h x y) (list 'h (procedure? x) y))
+			       (define (g n) (h car n))
+			       (g '(7 8))`,
+			want: "(h #t (7 8))",
+		},
+	}
+	ctx := context.Background()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			eng, err := NewEngine(ctx)
+			qt.Assert(t, err, qt.IsNil)
+			t.Cleanup(func() {
+				_ = eng.Close()
+			})
+			v, err := eng.EvalMultiple(ctx, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, v.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
 // TestTailCallAcrossFrameReclaimInMergedLet is the value guard for the fusion
 // gate that let-slot merging made reachable.
 //
