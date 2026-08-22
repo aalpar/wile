@@ -71,6 +71,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING: Wile now requires Go 1.27.** The language directive and the build
+  toolchain had been pinned separately, with the directive kept as low as the
+  dependencies allowed so embedders were not dragged forward; they are now both
+  1.27. An embedder on an older Go release cannot build this version.
+
+  The move changes module-graph pruning, so `golang.org/x/sys` advances to 0.46.0
+  as an indirect dependency.
+
+- **BREAKING: the debugger moved to its own package, `pkg/debug`.** `Debugger`,
+  `BreakpointInfo`, `BreakAction` and its constants left `pkg/wile`;
+  `DebugContext`, `DebugCommandInfo` and `NewDebugContext` left `pkg/repl`. They
+  are the same types at `github.com/aalpar/wile/pkg/debug`, so an embedder
+  updates an import path and a qualifier — `wile.Debugger` → `debug.Debugger`,
+  `repl.NewDebugContext()` → `debug.NewDebugContext()`. `Engine.SetDebugger` now
+  takes `*debug.Debugger`, and `REPL.Debugger()` returns one.
+
+  The debugger had been split across the two packages that consume it rather than
+  living where it belongs, and the seam showed: `pkg/wile` reached into four
+  unexported `Debugger` methods, and `pkg/repl` called two unexported command
+  handlers. Both are now single exported entry points — `Debugger.Attach`, which
+  installs the debugger and arms the break boundary in one call, and the existing
+  `DebugContext.HandleDebugCommand`. `debug.Commands` exposes the command catalog
+  without handlers, for a help renderer that does not want to allocate a debugger.
+
+  `machine.Debugger` did not move: it is a `MachineContext` field dispatched in
+  the VM's `Run` loop, so extracting it would mean an interface seam in the hot
+  path. `values.DebugState`/`DebugLocation` did not move either — `pkg/machine`
+  consumes them, so a package that also wraps `machine.Debugger` would cycle.
+
 - **BREAKING (security): `FilesystemRoot` now denies every resource it does not
   model, and a spawned process is gated as a file.** Two halves of one defect.
 
