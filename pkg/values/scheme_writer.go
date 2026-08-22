@@ -213,13 +213,15 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 	}
 	switch val := v.(type) {
 	case *Pair:
-		// Walk the cdr-spine in a loop; recurse only into cars (one level deeper).
-		for cur := val; cur != nil; {
+		// Walk the cdr-spine iteratively; recurse only into cars (one level deeper).
+		var end SpineEnd
+		for cur, e := range Spine(val) {
 			_, found := p.seenPairs[cur]
 			if found {
-				// Seen before - mark as needing a label
+				// Seen before - mark as needing a label. end stays zero, so the
+				// improper-tail branch below is correctly skipped.
 				p.needsLabelPair.Add(cur)
-				return
+				break
 			}
 			// Mark as seen (with placeholder -1)
 			p.seenPairs[cur] = -1
@@ -227,17 +229,12 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 			if p.err != nil {
 				return
 			}
-			cdr := cur.Cdr()
-			nextPair, ok := cdr.(*Pair)
-			if !ok {
-				// Improper tail: a non-pair, non-empty cdr is a sibling element
-				// at the same nesting level as the cars (depth+1).
-				if cdr != nil && !IsEmptyList(cdr) {
-					p.findShared(cdr, depth+1)
-				}
-				return
-			}
-			cur = nextPair
+			end = e
+		}
+		// Improper tail: a non-pair, non-empty cdr is a sibling element at the
+		// same nesting level as the cars (depth+1).
+		if end.Improper() {
+			p.findShared(end.Tail, depth+1)
 		}
 
 	case *Vector:
@@ -380,22 +377,18 @@ func (p *circularityScan) walk(v Value) {
 		// cycle. Only car descent recurses, so the Go stack tracks nesting
 		// depth — already bounded by pass 1 — not list length.
 		spine := []*Pair{}
-		for cur := val; cur != nil; {
+		var end SpineEnd
+		for cur, e := range Spine(val) {
 			descend := p.pairs.enter(cur)
 			if !descend {
 				break
 			}
 			spine = append(spine, cur)
 			p.walk(cur.Car())
-			cdr := cur.Cdr()
-			nextPair, ok := cdr.(*Pair)
-			if !ok {
-				if cdr != nil && !IsEmptyList(cdr) {
-					p.walk(cdr)
-				}
-				break
-			}
-			cur = nextPair
+			end = e
+		}
+		if end.Improper() {
+			p.walk(end.Tail)
 		}
 		for _, pr := range spine {
 			p.pairs.leave(pr)
@@ -558,54 +551,48 @@ func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair, depth int) {
 // 2. Pointer identity tracking for back-references
 // 3. Cannot use Tuple because we need access to concrete pointer for map lookup
 func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair, depth int) {
+	// The two early returns below end the list without a terminator, so end
+	// stays zero and the improper-tail branch is correctly skipped.
+	var end SpineEnd
 	first := true
-	curr := pr
 
-	for curr != nil {
+	for cell, e := range Spine(pr) {
 		if p.err != nil {
 			return
 		}
 		if !first {
+			// A cell reached via cdr that carries a label is NOT a spine
+			// continuation: it is rendered as a dotted tail and ends this list.
+			// The checks sit here rather than one iteration earlier because Spine
+			// hands over the cell itself.
+			label, found := p.seenPairs[cell]
+			if found && label >= 0 {
+				// Back-reference in cdr position
+				sb.WriteString(" . ")
+				fmt.Fprintf(sb, "#%d#", label)
+				return
+			}
+			if p.needsLabelPair.ContainsOne(cell) {
+				// The cdr needs its own label - write as dotted pair. It is a
+				// spine element, not a car, so it stays at the current nesting
+				// level.
+				sb.WriteString(" . ")
+				p.writePair(sb, cell, depth)
+				return
+			}
 			sb.WriteString(" ")
 		}
 		first = false
 
 		// Write car
-		p.write(sb, curr.Car(), depth+1)
+		p.write(sb, cell.Car(), depth+1)
+		end = e
+	}
 
-		// Check cdr
-		cdr := curr.Cdr()
-		if cdr == nil || IsEmptyList(cdr) {
-			break
-		}
-
-		// Check if cdr is a pair - type assertion required for map lookups below
-		nextPair, ok := cdr.(*Pair)
-		if !ok {
-			// Improper list
-			sb.WriteString(" . ")
-			p.write(sb, cdr, depth+1)
-			break
-		}
-
-		// Check if the cdr pair needs special handling (shared/circular)
-		label, found := p.seenPairs[nextPair]
-		if found && label >= 0 {
-			// Back-reference in cdr position
-			sb.WriteString(" . ")
-			fmt.Fprintf(sb, "#%d#", label)
-			break
-		}
-
-		if p.needsLabelPair.ContainsOne(nextPair) {
-			// The cdr needs its own label - write as dotted pair. It is a spine
-			// element, not a car, so it stays at the current nesting level.
-			sb.WriteString(" . ")
-			p.writePair(sb, nextPair, depth)
-			break
-		}
-
-		curr = nextPair
+	// Improper list
+	if end.Improper() {
+		sb.WriteString(" . ")
+		p.write(sb, end.Tail, depth+1)
 	}
 }
 

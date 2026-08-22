@@ -81,106 +81,90 @@ func NewCons(car, cdr Value) *Pair {
 	return q
 }
 
-// Spine yields each *Pair along p's cdr chain. If the list terminates in
-// EmptyList, *improperTail is set to EmptyList. If it terminates in a
-// non-list cdr (improper list), *improperTail is set to that value.
-// improperTail may be nil if the caller does not care about the tail.
+// SpineEnd reports why a spine walk stopped. It travels with the LAST cell the
+// walk yields; every earlier cell carries the zero value.
+//
+// The zero value therefore means "this is not the last cell" — and it is also
+// exactly what a consumer that breaks out mid-walk observes, which is the
+// truthful answer: no terminator was reached, so none is reported. That is the
+// whole reason the termination facts ride on the yield rather than on an
+// out-parameter. A `*Value` written only at natural termination cannot answer
+// an abandoned walk at all, and its zero value (nil, i.e. void) is
+// indistinguishable from a real answer; consumers papered over it with an ad-hoc
+// "did I break?" flag, or silently rendered #<void> as the tail.
+//
+// There is no "cyclic" case here because Spine does not detect cycles and
+// nothing else walks a spine generically: IsList, the only caller that needs
+// Floyd, open-codes it (see there for why).
+type SpineEnd struct {
+	// Tail is the terminating cdr: EmptyList for a proper list, the trailing
+	// atom for an improper one. nil while the walk is still in progress.
+	Tail Value
+}
+
+// Proper reports whether the walk ran to a proper-list terminator.
+func (e SpineEnd) Proper() bool {
+	return e.Tail != nil && IsEmptyList(e.Tail)
+}
+
+// Improper reports whether the walk ran to a terminator that is NOT the empty
+// list — i.e. whether Tail names a value the caller must still account for.
+// False for a proper list and an abandoned walk alike, which is what lets a
+// consumer write `if end.Improper()` without a separate "did I finish?" guard.
+func (e SpineEnd) Improper() bool {
+	return e.Tail != nil && !IsEmptyList(e.Tail)
+}
+
+// Spine yields each *Pair along p's cdr chain, paired with a SpineEnd that is
+// zero on every cell but the last and carries the terminating cdr on that one.
 //
 // Spine is the catamorphism for the initial list algebra
 //
 //	List = μX. 1 + Value × X
 //
 // and is the irreducible spine-walk consumed by Pair.IsList, Length,
-// AsVector, EqualTo, and SchemeString. It does NOT detect cycles —
-// for cyclic input, use SpineWithCycleCheck.
-//
-// The yielded value pair (*Pair, struct{}) uses struct{} so consumers
-// can write either `for cell := range Spine(p, &tail)` (preferred) or
-// `for cell, _ := range Spine(p, &tail)`.
-func Spine(p *Pair, improperTail *Value) iter.Seq2[*Pair, struct{}] {
-	return func(yield func(*Pair, struct{}) bool) {
+// AsVector, EqualTo, and SchemeString. It does NOT detect cycles — it will spin
+// forever on a circular list. For cyclic input, use SpineChecked.
+func Spine(p *Pair) iter.Seq2[*Pair, SpineEnd] {
+	return func(yield func(*Pair, SpineEnd) bool) {
 		pr := p
 		for pr != nil {
-			if !yield(pr, struct{}{}) {
+			// The terminator is decided BEFORE the yield, which is what lets it
+			// travel with the cell that owns it. A consumer that breaks here has
+			// simply not seen it.
+			next, end := spineStep(pr[1])
+			if next == nil {
+				yield(pr, end)
 				return
 			}
-			cdr := pr[1]
-			if IsEmptyList(cdr) {
-				if improperTail != nil {
-					*improperTail = EmptyList
-				}
-				return
-			}
-			next, ok := cdr.(*Pair)
-			if !ok {
-				if improperTail != nil {
-					*improperTail = cdr
-				}
+			if !yield(pr, SpineEnd{}) {
 				return
 			}
 			pr = next
 		}
-		if improperTail != nil {
-			*improperTail = EmptyList
-		}
 	}
 }
 
-// SpineWithCycleCheck is Spine with Floyd's tortoise-and-hare cycle
-// detection. *cycled is set to true if a cycle is detected, false
-// otherwise. cycled may be nil if the caller does not care.
+// spineStep classifies one cell's cdr for both spine walkers: it returns the
+// next cell to walk, or nil plus the terminating SpineEnd when there is none.
 //
-// The iterator yields every cell up to (but not necessarily including)
-// the point of cycle detection, and yields every cell of a proper or
-// improper list before terminating. It does NOT report the improper
-// tail — Floyd's algorithm cannot distinguish improper-tail termination
-// from cycle detection in a single pass without an extra O(n) visited
-// set. Callers that need both should use Spine with an external visited
-// map.
-func SpineWithCycleCheck(p *Pair, cycled *bool) iter.Seq2[*Pair, struct{}] {
-	return func(yield func(*Pair, struct{}) bool) {
-		if cycled != nil {
-			*cycled = false
-		}
-		if p == nil {
-			return
-		}
-		slow, fast := p, p
-		for slow != nil {
-			if !yield(slow, struct{}{}) {
-				return
-			}
-			// Try to advance fast two cdr-steps; if either step
-			// terminates, fastAdvanced is false and we will not test
-			// for a cycle this round — but slow still keeps walking
-			// so the iteration finishes with the remaining proper or
-			// improper tail.
-			fastAdvanced := false
-			fastNext1, ok := fast[1].(*Pair)
-			if ok {
-				fast = fastNext1
-				fastNext2, ok2 := fast[1].(*Pair)
-				if ok2 {
-					fast = fastNext2
-					fastAdvanced = true
-				}
-			}
-			// Advance slow one cdr-step. If slow's cdr is not a *Pair,
-			// the list (proper or improper) is exhausted from slow's
-			// side and we are done.
-			slowNext, ok := slow[1].(*Pair)
-			if !ok {
-				return
-			}
-			slow = slowNext
-			if fastAdvanced && slow == fast {
-				if cycled != nil {
-					*cycled = true
-				}
-				return
-			}
-		}
+// A cdr that is not a live *Pair ends the spine and IS the tail. Both spellings
+// of void — an untyped nil and a (*Pair)(nil) — collapse through ValueOrVoid to
+// the Void singleton or to themselves, so Tail is never nil once a terminator is
+// reached, which is what keeps "nil Tail" unambiguously meaning "walk not
+// finished".
+//
+// Reporting void as a tail rather than as EmptyList is what makes the walkers
+// agree with the printers: the out-parameter implementation this replaced let a
+// (*Pair)(nil) cdr fall out of its `for pr != nil` loop and reported EmptyList,
+// while SchemeString's hand-rolled walk called the same cdr an improper tail and
+// printed " . #<void>" — the behaviour TestPair_SchemeString pins.
+func spineStep(cdr Value) (*Pair, SpineEnd) {
+	next, ok := cdr.(*Pair)
+	if ok && next != nil {
+		return next, SpineEnd{}
 	}
+	return nil, SpineEnd{Tail: ValueOrVoid(cdr)}
 }
 
 // Car returns the car of the Pair.
@@ -208,22 +192,48 @@ func (p *Pair) SetCdr(v Value) {
 // Returns false for circular lists per R7RS §6.4.
 // See BIBLIOGRAPHY.md "Floyd's Cycle Detection".
 //
-// Consumes SpineWithCycleCheck: a cycle short-circuits the spine, and
-// the final cell's cdr is checked for EmptyList to distinguish proper
-// from improper termination.
+// Floyd is open-coded here rather than offered as a second spine walker, and
+// that is a decision with two independent reasons. Cheapness: routing it through
+// an iter.Seq2 whose second element carries a terminator cost a measured
+// +11.5% at 10 and 100 elements against the struct{}-yielding predecessor,
+// because the wider yield is paid per cell while the answer is wanted once.
+// Safety: a shared cycle-detecting walker has to report "cyclic" through
+// something, and the out-parameter form it used to have (`cycled *bool`)
+// carried exactly the staleness SpineEnd was introduced to remove — an
+// abandoned walk read back false, a silent false negative. With one caller,
+// inlining removes the hazard instead of re-encoding it.
 func (p *Pair) IsList() bool {
 	if IsVoid(p) {
 		return false
 	}
-	var cycled bool
-	var last *Pair
-	for cell := range SpineWithCycleCheck(p, &cycled) {
-		last = cell
+	slow, fast := p, p
+	for {
+		// Advance fast two cdr-steps where it can; if either step leaves the
+		// spine, no cycle test happens this round but slow keeps walking to its
+		// own terminator.
+		fastAdvanced := false
+		fastNext, ok := fast[1].(*Pair)
+		if ok && fastNext != nil {
+			fast = fastNext
+			fastNext, ok = fast[1].(*Pair)
+			if ok && fastNext != nil {
+				fast = fastNext
+				fastAdvanced = true
+			}
+		}
+		// The cdr is classified with a bare assertion rather than through
+		// spineStep: this loop wants one bit, and spineStep's (*Pair, SpineEnd)
+		// return is three words paid per cell. Measured at +18-22% on 10- and
+		// 100-element lists when it was routed through the shared classifier.
+		slowNext, ok := slow[1].(*Pair)
+		if !ok || slowNext == nil {
+			return IsEmptyList(slow[1])
+		}
+		slow = slowNext
+		if fastAdvanced && slow == fast {
+			return false
+		}
 	}
-	if cycled {
-		return false
-	}
-	return IsEmptyList(last.Cdr())
 }
 
 // Length returns the length of the list represented by the Pair.
@@ -233,12 +243,21 @@ func (p *Pair) IsList() bool {
 // (e.g., via IsList) — a circular list will hang indefinitely because
 // Spine does not detect cycles.
 func (p *Pair) Length() int {
-	var tail Value
-	count := 0
-	for range Spine(p, &tail) {
-		count++
+	// A void pair yields no cells, so there is no yield for a SpineEnd to ride
+	// out on and end would stay zero — the one case an out-parameter could
+	// answer that a yield-carried terminator cannot. Length's answer for void is
+	// a convenience of this method (IsList calls void not-a-list, AsVector
+	// returns nil), so it belongs here rather than synthesized by the walker.
+	if p.IsVoid() {
+		return 0
 	}
-	if !IsEmptyList(tail) {
+	count := 0
+	var end SpineEnd
+	for _, e := range Spine(p) {
+		count++
+		end = e
+	}
+	if !end.Proper() {
 		panic(werr.WrapForeignErrorf(werr.ErrNotAList,
 			"Pair.Length: improper list"))
 	}
@@ -418,6 +437,12 @@ func (p *Pair) schemeStringWithVisited(visited MapSet[Value], depth int) string 
 
 	q := &strings.Builder{}
 	q.WriteString("(")
+	// Open-coded rather than consuming Spine, for the reason Pair.ForEach and
+	// syntax.walkSyntaxSpine already give: each yield goes through two function
+	// pointers. Routing this walk through Spine was measured at +20-23% across
+	// 10/100/1000-element lists, interleaved, for no behavioural gain — the
+	// terminator here is consumed one line after it is found, so the staleness
+	// SpineEnd exists to prevent cannot arise.
 	pr := p
 	i := 0
 	for pr != nil {
@@ -498,6 +523,7 @@ func (p *Pair) stringWithVisited(visited MapSet[*Pair], depth int) string {
 
 	q := &strings.Builder{}
 	q.WriteString("(")
+	// Open-coded for the same measured reason as schemeStringWithVisited above.
 	pr := p
 	i := 0
 	for pr != nil {
@@ -543,12 +569,13 @@ func (p *Pair) AsVector() *Vector {
 	if p.IsVoid() {
 		return nil
 	}
-	var tail Value
 	vs := []Value{}
-	for cell := range Spine(p, &tail) {
+	var end SpineEnd
+	for cell, e := range Spine(p) {
 		vs = append(vs, cell.Car())
+		end = e
 	}
-	if !IsEmptyList(tail) {
+	if !end.Proper() {
 		panic(werr.WrapForeignErrorf(werr.ErrNotAList,
 			"Pair.AsVector: improper list"))
 	}

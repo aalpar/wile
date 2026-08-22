@@ -635,54 +635,56 @@ func TestSpine(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			var cars []values.Value
-			var tail values.Value
-			for cell := range values.Spine(tc.input, &tail) {
+			var end values.SpineEnd
+			for cell, e := range values.Spine(tc.input) {
 				cars = append(cars, cell.Car())
+				end = e
 			}
 			qt.Assert(t, len(cars), qt.Equals, len(tc.wantCars))
 			for i, want := range tc.wantCars {
 				qt.Assert(t, cars[i], valuestest.SchemeEquals, want)
 			}
-			qt.Assert(t, tail, valuestest.SchemeEquals, tc.wantTail)
+			qt.Assert(t, end.Tail, valuestest.SchemeEquals, tc.wantTail)
 		})
 	}
 }
 
-func TestSpineWithCycleCheck(t *testing.T) {
-	// Proper list (1 2 3)
+// TestSpineEndIsZeroWhenAbandoned is the pin for the property the SpineEnd
+// redesign exists to guarantee: a consumer that breaks out of the walk observes
+// no terminator at all, rather than a stale or defaulted one. The predecessor
+// API wrote its tail through an out-parameter only at natural termination, so an
+// abandoned walk read back nil (i.e. void) and callers either grew an ad-hoc
+// "did I break?" flag or rendered #<void> as the tail.
+func TestSpineEndIsZeroWhenAbandoned(t *testing.T) {
 	a := values.NewInteger(1)
 	b := values.NewInteger(2)
 	c := values.NewInteger(3)
-	proper := values.NewCons(a, values.NewCons(b, values.NewCons(c, values.EmptyList)))
-
-	// Cycle: 1 -> 2 -> back to head
-	cycleHead := values.NewCons(a, values.EmptyList)
-	cycleSecond := values.NewCons(b, cycleHead)
-	cycleHead.SetCdr(cycleSecond)
 
 	tcs := []struct {
-		name      string
-		input     *values.Pair
-		wantCells int // -1 = don't care
-		wantCycle bool
+		name     string
+		input    *values.Pair
+		stopAt   int // break before consuming this 0-based cell
+		wantSeen int
 	}{
-		{"proper", proper, 3, false},
-		{"cycle", cycleHead, -1, true},
+		{"break-before-terminator-of-proper", values.NewCons(a, values.NewCons(b, values.NewCons(c, values.EmptyList))), 2, 2},
+		{"break-before-improper-tail", values.NewCons(a, values.NewCons(b, c)), 1, 1},
+		{"break-on-first-cell", values.NewCons(a, values.NewCons(b, values.EmptyList)), 0, 0},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			var cycled bool
-			cells := 0
-			for range values.SpineWithCycleCheck(tc.input, &cycled) {
-				cells++
-				if cells > 100 {
-					t.Fatal("infinite loop — cycle not detected")
+			var end values.SpineEnd
+			seen := 0
+			for _, e := range values.Spine(tc.input) {
+				if seen == tc.stopAt {
+					break
 				}
+				seen++
+				end = e
 			}
-			qt.Assert(t, cycled, qt.Equals, tc.wantCycle)
-			if tc.wantCells >= 0 {
-				qt.Assert(t, cells, qt.Equals, tc.wantCells)
-			}
+			qt.Assert(t, seen, qt.Equals, tc.wantSeen)
+			qt.Assert(t, end, qt.Equals, values.SpineEnd{})
+			qt.Assert(t, end.Proper(), qt.IsFalse)
+			qt.Assert(t, end.Improper(), qt.IsFalse)
 		})
 	}
 }

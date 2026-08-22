@@ -16,6 +16,7 @@ package syntax
 
 import (
 	"context"
+	"iter"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/values"
@@ -216,6 +217,90 @@ func (*SyntaxPair) IsEmptyList() bool {
 // IsVoid returns true if the pair is nil.
 func (p *SyntaxPair) IsVoid() bool {
 	return p == nil
+}
+
+// Spine yields each *SyntaxPair along p's cdr chain — the syntax-phase twin of
+// values.Spine, with the same contract: every cell carries a zero SpineEnd
+// except the last, which carries the terminating cdr. Like values.Spine it does
+// NOT detect cycles, and like values.Spine an abandoned walk observes only zero
+// ends, which is the truthful report that no terminator was reached.
+//
+// It yields CELLS where ForEach and SyntaxForEach yield cars, and that is the
+// whole reason it exists. Two shapes in the quasiquote reader are properties of
+// a cell rather than of an element, and neither can be stated over cars:
+//
+//   - Dotted unquote. `(a . ,x) parses as (a unquote x) — a bare unquote symbol
+//     in the SPINE followed by exactly one element (R7RS §4.2.8). Deciding it
+//     needs the cell's cdr while standing on the unquote, which a car-yielding
+//     callback cannot reach; restating it over cars turns a local pattern test
+//     into a stateful post-condition.
+//   - Early exit. A predicate stops at its first true. A ForEach consumer can
+//     only stop by returning an error, so it has to signal a FOUND through the
+//     error channel; a range-over-func just breaks.
+//
+// Not a replacement for SyntaxForEach, which stays open-coded for the reason its
+// own comment gives: each yield here goes through two function pointers, and the
+// equivalent rewrite of values.Pair.ForEach cost 40-56% on BenchmarkPairForEach.
+// Prefer this where the consumer needs the cell or the break, and that one where
+// it needs neither.
+func Spine(p *SyntaxPair) iter.Seq2[*SyntaxPair, SpineEnd] {
+	return func(yield func(*SyntaxPair, SpineEnd) bool) {
+		pr := p
+		for pr != nil {
+			// Decided before the yield, so the terminator travels with the cell
+			// that owns it and a consumer that breaks cannot read a stale one.
+			cdr := pr.SyntaxCdr()
+			next, ok := cdr.(*SyntaxPair)
+			if ok && next == nil {
+				// A (*SyntaxPair)(nil) cdr is malformed syntax — only
+				// NewSyntaxCons(nil, nil, nil) produces one — and it is NOT
+				// reported as a tail, because every consumer here would then
+				// dispatch into it on a nil receiver. values.Spine does report
+				// its void cdr, and the asymmetry is deliberate: on the value
+				// side void is a legitimate cdr that the writers already print.
+				yield(pr, SpineEnd{Tail: SyntaxEmptyList})
+				return
+			}
+			if !ok {
+				tail := cdr
+				if tail == nil {
+					tail = SyntaxEmptyList
+				}
+				yield(pr, SpineEnd{Tail: tail})
+				return
+			}
+			if !yield(pr, SpineEnd{}) {
+				return
+			}
+			pr = next
+		}
+	}
+}
+
+// SpineEnd is the syntax-phase twin of values.SpineEnd: it travels with the
+// last cell a Spine walk yields, and its zero value means "not the last cell",
+// which is also what a consumer that breaks out observes.
+//
+// There is no Cyclic field because there is no syntax-phase cycle-detecting
+// walker: syntax is a compile-time tree built by the reader and the expander,
+// neither of which can close a cycle (datum labels are resolved into shared,
+// acyclic structure during parsing). Add the field with the walker, not before.
+type SpineEnd struct {
+	// Tail is the terminating cdr: SyntaxEmptyList for a proper list, the
+	// trailing syntax value for an improper one. nil while walking.
+	Tail SyntaxValue
+}
+
+// Proper reports whether the walk ran to a proper-list terminator.
+func (e SpineEnd) Proper() bool {
+	return e.Tail != nil && values.IsEmptyList(e.Tail)
+}
+
+// Improper reports whether the walk ran to a terminator that is NOT the empty
+// list — i.e. whether Tail names a syntax value the caller must still account
+// for. False for a proper list and an abandoned walk alike.
+func (e SpineEnd) Improper() bool {
+	return e.Tail != nil && !values.IsEmptyList(e.Tail)
 }
 
 // walkSyntaxSpine is the shared spine-walk consumed by ForEach and

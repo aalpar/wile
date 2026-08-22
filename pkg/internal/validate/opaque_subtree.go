@@ -307,7 +307,8 @@ func forEachRawSymbolPair(p *syntax.SyntaxPair, quasi int, fn func(*syntax.Synta
 			return
 		}
 	}
-	for cur := p; cur != nil; {
+	var end syntax.SpineEnd
+	for cur, e := range syntax.Spine(p) {
 		tail, isDotted := dottedUnquoteTail(cur, quasi)
 		if isDotted {
 			// `(a . ,x): the tail is evaluated, and it is the end of the spine.
@@ -318,12 +319,13 @@ func forEachRawSymbolPair(p *syntax.SyntaxPair, quasi int, fn func(*syntax.Synta
 			return
 		}
 		forEachRawSymbol(cur.Car(), quasi, fn)
-		next, ok := cur.Cdr().(*syntax.SyntaxPair)
-		if !ok {
-			forEachRawSymbol(cur.Cdr(), quasi, fn)
-			return
-		}
-		cur = next
+		end = e
+	}
+	// The dotted-unquote arm above returns outright, so reaching here means the
+	// walk ran to a terminator. Improper() screens out the proper-list case,
+	// where the old walk handed SyntaxEmptyList to forEachRawSymbol as a no-op.
+	if end.Improper() {
+		forEachRawSymbol(end.Tail, quasi, fn)
 	}
 }
 

@@ -54,7 +54,8 @@ func (p *CompileTimeContinuation) appendConstantLiteral(v values.Value) machine.
 // CompileValidatedQuote runs over the same literal just before this. Recursing
 // per cdr made a proper list's LENGTH into Go stack depth, so a multi-million-
 // element quoted literal overflowed the host stack at compile time. Car depth
-// is nesting, which the parser already bounds.
+// is nesting, which the parser already bounds. values.Spine is that iterative
+// walk, shared rather than hand-rolled.
 //
 // Unlike the validator's, these marks are never unwound: visited is a
 // termination and de-duplication set, not a path-scoped cycle detector, so a
@@ -62,22 +63,31 @@ func (p *CompileTimeContinuation) appendConstantLiteral(v values.Value) machine.
 func markLiteralImmutable(v values.Value, visited values.MapSet[values.Value]) {
 	switch obj := v.(type) {
 	case *values.Pair:
-		cur := obj
-		for {
-			seen := visited.ContainsOne(cur)
+		// values.Spine, not Pair.ForEach, and the three reasons are each
+		// sufficient on their own. ForEach yields CARS, where visited is keyed on
+		// CELLS; ForEach ERRORS on a cycle (werr.ErrCircularList) where a cyclic
+		// literal is legal input here and this function has no error return; and
+		// Brent's detection catches only true cycles, where visited must also
+		// stop the second visit to SHARED acyclic structure. Spine yields cells,
+		// detects nothing, and reports the improper tail — which is exactly the
+		// caller its own doc comment describes.
+		var end values.SpineEnd
+		for cell, e := range values.Spine(obj) {
+			seen := visited.ContainsOne(cell)
 			if seen {
-				return
+				break
 			}
-			visited.Add(cur)
-			markLiteralImmutable(cur.Car(), visited)
-
-			next, isPair := cur.Cdr().(*values.Pair)
-			if !isPair || next == nil {
-				markLiteralImmutable(cur.Cdr(), visited)
-				return
-			}
-			cur = next
+			visited.Add(cell)
+			markLiteralImmutable(cell.Car(), visited)
+			end = e
 		}
+		// Improper() is false for a proper list, and false again when the walk
+		// broke at an already-visited cell — where the tail is not yet known and
+		// the node that owns it has been marked already anyway.
+		if end.Improper() {
+			markLiteralImmutable(end.Tail, visited)
+		}
+
 	case *values.Vector:
 		seen := visited.ContainsOne(obj)
 		if seen {
@@ -88,6 +98,7 @@ func markLiteralImmutable(v values.Value, visited values.MapSet[values.Value]) {
 		for _, elem := range obj.Elems() {
 			markLiteralImmutable(elem, visited)
 		}
+
 	case *values.ByteVector:
 		// Elements are *Byte leaves (no nested aggregates), so mark the
 		// bytevector itself without recursing. R7RS §4.1.2.

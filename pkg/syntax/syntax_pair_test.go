@@ -487,3 +487,108 @@ func TestSyntaxPair_SyntaxForEach_NilReceiver(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(tail, qt.Equals, SyntaxEmptyList)
 }
+
+// TestSpine pins the three facts that distinguish Spine from SyntaxForEach:
+// it yields CELLS, it reports the improper tail, and an abandoned walk leaves
+// that tail unwritten rather than lying about it.
+func TestSpine(t *testing.T) {
+	sym := func(s string) SyntaxValue {
+		return NewSyntaxSymbol(s, nil)
+	}
+	// SchemeString renders a syntax symbol as #'a; the spelling is what these
+	// assertions are about, so read it off the symbol.
+	key := func(v SyntaxValue) string {
+		return v.(*SyntaxSymbol).Key()
+	}
+	list := func(vs ...SyntaxValue) *SyntaxPair {
+		return SyntaxList(nil, vs...).(*SyntaxPair)
+	}
+	// (a b . c) — built directly, since SyntaxList only makes proper lists.
+	improper := NewSyntaxCons(sym("a"), NewSyntaxCons(sym("b"), sym("c"), nil), nil)
+
+	t.Run("proper list yields every cell and reports EmptyList", func(t *testing.T) {
+		c := qt.New(t)
+		var end SpineEnd
+		var cars []string
+		for cell, e := range Spine(list(sym("a"), sym("b"), sym("c"))) {
+			cars = append(cars, key(cell.SyntaxCar()))
+			end = e
+		}
+		c.Assert(cars, qt.DeepEquals, []string{"a", "b", "c"})
+		c.Assert(end.Proper(), qt.IsTrue)
+		c.Assert(IsSyntaxEmptyList(end.Tail), qt.IsTrue)
+	})
+
+	t.Run("improper list reports the trailing cdr", func(t *testing.T) {
+		c := qt.New(t)
+		var end SpineEnd
+		n := 0
+		for _, e := range Spine(improper) {
+			n++
+			end = e
+		}
+		// Two CELLS, three data — which is the whole point of yielding cells:
+		// the tail is not an element and must not be counted as one.
+		c.Assert(n, qt.Equals, 2)
+		c.Assert(end.Improper(), qt.IsTrue)
+		c.Assert(key(end.Tail), qt.Equals, "c")
+	})
+
+	t.Run("the end is zero on every cell but the last", func(t *testing.T) {
+		c := qt.New(t)
+		var ends []SpineEnd
+		for _, e := range Spine(list(sym("a"), sym("b"), sym("c"))) {
+			ends = append(ends, e)
+		}
+		c.Assert(len(ends), qt.Equals, 3)
+		c.Assert(ends[0], qt.Equals, SpineEnd{})
+		c.Assert(ends[1], qt.Equals, SpineEnd{})
+		c.Assert(ends[2].Proper(), qt.IsTrue)
+	})
+
+	t.Run("an abandoned walk observes no terminator", func(t *testing.T) {
+		c := qt.New(t)
+		end := SpineEnd{Tail: sym("sentinel")}
+		n := 0
+		for _, e := range Spine(list(sym("a"), sym("b"), sym("c"))) {
+			n++
+			end = e
+			break
+		}
+		c.Assert(n, qt.Equals, 1)
+		// The zero value, not a stale or defaulted tail: an abandoned walk does
+		// not know the terminator, and both Proper and Improper say so without
+		// the consumer needing a separate "did I finish?" flag.
+		c.Assert(end, qt.Equals, SpineEnd{})
+		c.Assert(end.Proper(), qt.IsFalse)
+		c.Assert(end.Improper(), qt.IsFalse)
+	})
+
+	t.Run("a cell's cdr is reachable, which ForEach cannot offer", func(t *testing.T) {
+		c := qt.New(t)
+		// The dotted-unquote shape: `(a . ,x) parses as (a unquote x), and
+		// recognizing it means reading the cdr of the cell whose car is
+		// `unquote`. Asserted here because it is the reason Spine exists.
+		p := list(sym("a"), sym("unquote"), sym("x"))
+		var found bool
+		for cell := range Spine(p) {
+			if key(cell.SyntaxCar()) != "unquote" {
+				continue
+			}
+			rest, ok := cell.SyntaxCdr().(*SyntaxPair)
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(IsSyntaxEmptyList(rest.SyntaxCdr()), qt.IsTrue)
+			found = true
+		}
+		c.Assert(found, qt.IsTrue)
+	})
+
+	t.Run("nil receiver is tolerated", func(t *testing.T) {
+		c := qt.New(t)
+		n := 0
+		for range Spine(nil) {
+			n++
+		}
+		c.Assert(n, qt.Equals, 0)
+	})
+}
