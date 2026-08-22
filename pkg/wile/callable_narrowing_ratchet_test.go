@@ -60,20 +60,29 @@ func TestClosureMarkerImplementorCountIsTwo(t *testing.T) {
 	root := narrowingModuleRoot(t)
 	dir := filepath.Join(root, "pkg", "machine")
 
+	// One ParseFile per .go file rather than parser.ParseDir, which is
+	// deprecated as of Go 1.25 for ignoring build tags. That caveat does not
+	// bite here — this ratchet WANTS every file in the directory counted,
+	// build-constrained or not, since a closureMarker implementor hidden
+	// behind a tag would still be one. The loop reproduces ParseDir's exact
+	// reach: non-recursive, every .go file including _test.go.
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, dir, nil, 0)
+	entries, err := os.ReadDir(dir)
 	qt.Assert(t, err, qt.IsNil)
 
 	var implementors []string
-	for _, pkg := range pkgs {
-		for _, file := range pkg.Files {
-			for _, decl := range file.Decls {
-				fn, ok := decl.(*ast.FuncDecl)
-				if !ok || fn.Recv == nil || fn.Name.Name != "closureMarker" {
-					continue
-				}
-				implementors = append(implementors, receiverTypeName(fn))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		file, parseErr := parser.ParseFile(fset, filepath.Join(dir, entry.Name()), nil, 0)
+		qt.Assert(t, parseErr, qt.IsNil)
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Recv == nil || fn.Name.Name != "closureMarker" {
+				continue
 			}
+			implementors = append(implementors, receiverTypeName(fn))
 		}
 	}
 
