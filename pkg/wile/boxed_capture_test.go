@@ -144,6 +144,96 @@ func TestBoxedCaptureIsShared(t *testing.T) {
 	}
 }
 
+// TestBoxedCaptureThroughOpaqueSubtree drives the set! the boxing pass could not
+// see at all.
+//
+// newRefIndex enumerates occurrences with validate.WalkSubExprs, which reports a
+// quasiquote template, a cond-expand and every other passthrough form CHILDLESS
+// — correctly, since they hold no VALIDATED children, but the pass then read
+// that as "nothing in there". A set! concealed by one left the binder unboxed,
+// so the flat closure copied the raw value and kept it. Silent wrong answer:
+// Chez and Racket both give the boxed one.
+//
+// All three binder spellings are here because the review's filing claimed the
+// internal-define spelling was saved by bodyBindersOfRegion's forcesBox and it
+// is not. The fourth shape is not a stale value but a hard VM error on legal
+// source — the named-let binder is set! through a quasiquote, so codegen emits a
+// free-slot store against an unboxed slot.
+func TestBoxedCaptureThroughOpaqueSubtree(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{
+			// The passthrough spelling: cond-expand's selected clause is compiled
+			// in its own unit, so its set! is invisible here.
+			name: "set! inside a cond-expand clause reaches an earlier capture",
+			code: `(define (make-counter)
+			         (let ((counter 0))
+			           (let ((get (lambda () counter)))
+			             (cond-expand (r7rs (set! counter 10)) (else (set! counter 20)))
+			             get)))
+			       ((make-counter))`,
+			want: "10",
+		},
+		{
+			// The quasiquote spelling, let binder.
+			name: "set! inside a quasiquote unquote, let binder",
+			code: `(define (mk) (let ((n 0)) (let ((f (lambda () n))) ` + "`" + `(,(set! n 99)) f)))
+			       ((mk))`,
+			want: "99",
+		},
+		{
+			// Lambda parameter, no enclosing let.
+			name: "set! inside a quasiquote unquote, lambda parameter",
+			code: `(define (mk3 n) (let ((f (lambda () n))) ` + "`" + `(,(set! n 99)) f))
+			       ((mk3 0))`,
+			want: "99",
+		},
+		{
+			// Internal define — the spelling the filing said forcesBox saved.
+			name: "set! inside a quasiquote unquote, internal define",
+			code: `(define (mk4) (let ((n 0)) (define (f) n) ` + "`" + `(,(set! n 99)) f))
+			       ((mk4))`,
+			want: "99",
+		},
+		{
+			// Not a stale value: unfixed this is
+			// "store-free: free slot 0 holds *machine.MachineClosure, not a box".
+			name: "set! of a named-let binder through a quasiquote is not a VM error",
+			code: `(let loop ((n 3))
+			         (begin ` + "`" + `(,(set! loop (lambda (k) k)))
+			                (if (= n 0) 0 (+ 0 (loop (- n 1))))))`,
+			want: "2",
+		},
+		{
+			// Control: the same set! written where the pass can see it. Without
+			// it the arms above could pass by boxing everything unconditionally.
+			name: "control: a visible set! still answers, and still boxes",
+			code: `(define (mk5) (let ((n 0)) (let ((f (lambda () n))) (set! n 99) f)))
+			       ((mk5))`,
+			want: "99",
+		},
+	}
+	ctx := context.Background()
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			engine, err := NewEngine(ctx)
+			if err != nil {
+				t.Fatalf("new engine: %v", err)
+			}
+			got, err := engine.EvalMultiple(ctx, tc.code)
+			if err != nil {
+				t.Fatalf("eval: %v", err)
+			}
+			if got.SchemeString() != tc.want {
+				t.Errorf("= %s, want %s", got.SchemeString(), tc.want)
+			}
+		})
+	}
+}
+
 // TestBoxedSlotNeverEscapesToScheme is the containment assertion. A box is a
 // first-class Scheme value (#&), so a missed unbox does not crash — it returns
 // a #<box> where the program wanted a number, and only an equality assertion on

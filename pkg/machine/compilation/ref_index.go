@@ -76,6 +76,34 @@ type refIndex map[string][]binderRef
 //
 // A set! target counts as a reference — a write reaches the same location a read
 // does, so a closure holding only a set! of the binder has still captured it.
+//
+// AN OPAQUE SUBTREE CONTRIBUTES ON BOTH AXES, and both are load-bearing.
+// isSet is the axis the defect was filed against: a set! the walk cannot see
+// leaves a captured binder unboxed, so the closure copies a raw value the set!
+// then writes past. inClosure is not merely belt-and-braces — a subtree that
+// conceals the set! can equally conceal the capturing lambda, and then
+// capturedBy is false for the same reason assignedBy was. Marking one axis and
+// not the other would fix the shapes that happen to have a VISIBLE lambda and
+// leave the general case wrong.
+//
+// The cost is over-boxing: one indirection per access and one Box per binder,
+// for binders a live symbol in the subtree actually denotes — matches still runs
+// sameBinder per occurrence, so a spelling that resolves elsewhere is not
+// affected. Over-boxing is correct and silent; under-boxing is a wrong value and
+// equally silent. This file takes the same stance validate's opaque_subtree.go
+// header states for its own consumers.
+//
+// ONE CLASSIFICATION, DELIBERATELY BROADER THAN THE MARKER'S. IsOpaqueSubtree
+// counts a define-syntax form opaque, where markOpaqueCode is not called on one
+// — that header argues macro templates are provably not runtime code here, since
+// validation runs post-expansion. So this scan marks template symbols the
+// mutation marker does not. Measured inert on the shipped corpora: every
+// define-syntax in pkg/stdlib/lib and the benchmark sources is at library-body
+// or file top level, and the regions indexed here are lambda bodies, let scopes
+// and letrec inits. Splitting the classification to recover that precision would
+// give the capture axis and the mutation axis two predicates to keep in
+// agreement, which is exactly what IsOpaqueSubtree's own comment says the
+// frame-release gates depend on not happening.
 func newRefIndex(exprs []validate.ValidatedExpr) refIndex {
 	q := refIndex{}
 	var walk func(e validate.ValidatedExpr, origin int, inClosure bool)
@@ -91,6 +119,16 @@ func newRefIndex(exprs []validate.ValidatedExpr) refIndex {
 		setBang, ok := e.(*validate.ValidatedSetBang)
 		if ok {
 			q.add(binderRef{sym: setBang.Name, origin: origin, inClosure: inClosure, isSet: true})
+		}
+		// An opaque subtree — a quasiquote template, a cond-expand, an include,
+		// a passthrough body — is reported CHILDLESS by WalkSubExprs, so the
+		// walk below would conclude "nothing in there". It is un-analysed code,
+		// not empty code: every live symbol in it is a possible set! target and a
+		// possible capture, and validate already computes exactly that set.
+		if validate.ForEachOpaqueLiveSymbol(e, func(sym *syntax.SyntaxSymbol) {
+			q.add(binderRef{sym: sym, origin: origin, inClosure: true, isSet: true})
+		}) {
+			return
 		}
 		validate.WalkSubExprs(e, func(child validate.ValidatedExpr, role validate.ChildRole) {
 			walk(child, origin, inClosure || role == validate.RoleClosureBody)

@@ -124,6 +124,56 @@ func IsOpaqueSubtree(expr ValidatedExpr) bool {
 	return ok
 }
 
+// ForEachOpaqueLiveSymbol calls fn for every symbol in a LIVE position of expr's
+// concealed syntax, and reports whether expr was opaque at all. It does NOT
+// descend into validated children: a caller that already walks the tree (every
+// caller so far does) recurses itself and asks this at each node.
+//
+// It is exported so that pkg/machine/compilation's boxing pass can ask the
+// question this package already answers, instead of concluding "nothing in
+// there" from WalkSubExprs reporting an opaque node childless. That blindness is
+// what left a `set!` inside a quasiquote or a cond-expand invisible to the ref
+// index, so a captured local was never boxed and the closure kept a stale copy —
+// (let ((n 0)) (let ((f (lambda () n))) `(,(set! n 99)) f)) returned 0.
+//
+// WHY NOT EXPORT forEachRawSymbol. Its second parameter is the entry depth, and
+// the depth differs by SHAPE: a quasiquote Template has already been stepped
+// into (quasiDepthTemplate), a passthrough form has not (quasiDepthCode).
+// Exporting the raw walker moves that choice to the call site, where getting it
+// wrong under-marks silently — the exact failure mode this file exists to
+// prevent. The classification stays here, with the switch that defines it.
+//
+// The boolean and fn answer DIFFERENT questions, per opaqueRawSyntax's contract:
+// an opaque node with a nil payload calls fn zero times and still reports true,
+// because a nil payload is when we know least.
+func ForEachOpaqueLiveSymbol(expr ValidatedExpr, fn func(*syntax.SyntaxSymbol)) bool {
+	if expr == nil {
+		return false
+	}
+	raw, opaque := opaqueRawSyntax(expr)
+	if !opaque {
+		return false
+	}
+	if raw == nil {
+		return true
+	}
+	forEachRawSymbol(raw, opaqueEntryDepth(expr), fn)
+	return true
+}
+
+// opaqueEntryDepth reports the quasiquote depth an opaque node's payload is
+// entered at. A *ValidatedQuasiquote's Template is the form's ARGUMENT, so the
+// caller has already stepped one level in; every other opaque node conceals
+// ordinary code. This is the same split markOpaqueTemplate / markOpaqueCode
+// make, in one place so a third opaque shape moves every walk at once.
+func opaqueEntryDepth(expr ValidatedExpr) int {
+	_, isQuasi := expr.(*ValidatedQuasiquote)
+	if isQuasi {
+		return quasiDepthTemplate
+	}
+	return quasiDepthCode
+}
+
 // quasiDepthCode is the entry depth for a subtree that is ordinary CODE: a
 // passthrough body, an include, a cond-expand. Every symbol in it is a live
 // reference until a quote or quasiquote says otherwise.

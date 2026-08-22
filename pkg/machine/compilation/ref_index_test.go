@@ -181,20 +181,26 @@ func TestRefIndexDiscriminatesByScopeNotSpelling(t *testing.T) {
 	refs := newRefIndex(body)
 	macroHidden := binderNamed(t, body, "hidden")
 
-	// The bucket is populated: the user DID write `hidden`, twice, inside a
-	// closure, once as a set! target. A spelling-keyed answer would be true for
-	// every one of the three questions below.
-	c.Assert(len(refs["hidden"]), qt.Equals, 2)
+	// The bucket is populated three times over: the user wrote `hidden` twice
+	// inside a closure, once as a set! target, and the define-syntax form is an
+	// opaque subtree whose template mentions it a third time. A spelling-keyed
+	// answer would be true for every one of the three questions below.
+	c.Assert(len(refs["hidden"]), qt.Equals, 3)
 
 	c.Assert(refs.capturedBy(macroHidden), qt.IsFalse)
 	c.Assert(refs.assignedBy(macroHidden), qt.IsFalse)
 	c.Assert(refs.binderIsBoxed(macroHidden), qt.IsFalse)
 
 	// And the binder really is the macro's, not a same-named user binding that
-	// happens to be unreferenced — it carries a scope the reference does not.
+	// happens to be unreferenced — it carries a scope NO occurrence carries.
+	// Asserted over the whole bucket rather than one index: the occurrences come
+	// from two walks now (the validated tree and the opaque scan), so their order
+	// is not a fact this test should depend on.
 	c.Assert(len(macroHidden.Scopes()) > 0, qt.IsTrue)
-	c.Assert(syntax.ScopesCompatible(macroHidden.Scopes(), refs["hidden"][0].sym.Scopes()),
-		qt.IsFalse)
+	for i, r := range refs["hidden"] {
+		c.Assert(syntax.ScopesCompatible(macroHidden.Scopes(), r.sym.Scopes()), qt.IsFalse,
+			qt.Commentf("occurrence %d", i))
+	}
 }
 
 // TestRefIndexIgnoresNilTargets pins that an empty region is empty rather than

@@ -125,6 +125,11 @@ func bindingOccursIn(expr ValidatedExpr, binder *syntax.SyntaxSymbol) bool {
 // exactly the quasiquote-heavy code it was written for. What IS blanket is the
 // nil payload: opaqueRawSyntax's contract makes the boolean the opacity answer
 // and the payload merely what to scan, and a nil one is when we know least.
+//
+// Same classify-and-walk as ForEachOpaqueLiveSymbol, differing in what it does
+// with the two halves: this one recurses into validated children itself, and
+// answers a question ABOUT the scan rather than reporting node opacity. The
+// entry depth is the shared decision, so both take it from opaqueEntryDepth.
 func opaqueSubtreeMentions(expr ValidatedExpr, binder *syntax.SyntaxSymbol) bool {
 	if expr == nil {
 		return false
@@ -142,16 +147,8 @@ func opaqueSubtreeMentions(expr ValidatedExpr, binder *syntax.SyntaxSymbol) bool
 	if raw == nil {
 		return true
 	}
-	// A *ValidatedQuasiquote's Template is the form's argument, so the caller
-	// has already stepped one level in; every other opaque node is ordinary
-	// code. Same split markOpaqueTemplate / markOpaqueCode make.
-	depth := quasiDepthCode
-	_, isQuasi := expr.(*ValidatedQuasiquote)
-	if isQuasi {
-		depth = quasiDepthTemplate
-	}
 	q := false
-	forEachRawSymbol(raw, depth, func(sym *syntax.SyntaxSymbol) {
+	forEachRawSymbol(raw, opaqueEntryDepth(expr), func(sym *syntax.SyntaxSymbol) {
 		if refMatchesBinder(sym, binder) {
 			q = true
 		}
