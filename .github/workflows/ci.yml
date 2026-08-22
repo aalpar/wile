@@ -24,16 +24,22 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.24"
+          go-version: "1.27"
           cache-dependency-path: go.sum
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          # Pinned to v2.11.x — v2.12.1 introduced regressions in
-          # //nolint:gocritic suppression handling and ruleguard
-          # function-body matching that break TestRuleguardRules.
-          # Unpin once upstream fixes are released.
-          version: v2.11.1
+          # v2.11.1 cannot lint a go1.27 tree at all: it pins
+          # golang.org/x/tools v0.42.0, whose importer caps at export-data
+          # version 2 while go1.27 emits version 4, so every run panics with
+          # "package requires newer Go version go1.27". Rebuilding it under
+          # go1.27 does not help — the cap is in the pinned dependency.
+          #
+          # v2.13.1 pins x/tools v0.49.0 and reads go1.27 export data. It also
+          # clears the v2.12.1 regressions this pin originally guarded against:
+          # TestRuleguardRules passes, and no gocritic finding escapes its
+          # //nolint suppression.
+          version: v2.13.1
           args: -v ./...
 
       - name: CI
