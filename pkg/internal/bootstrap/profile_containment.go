@@ -51,15 +51,23 @@ var ErrProfileWidensEngine = werr.NewStaticError("profile widens the engine's ca
 //     an embedder who installed no policy has accepted whatever Scheme can
 //     reach. There is no policy here to consult about which of them meant it,
 //     and tightening would break every un-sandboxed embedder.
+//
 //  2. Authorizer installed, profile contained in the engine's own surface —
 //     allow, without consulting the authorizer. A Console engine asking for
 //     '(wile console) or '(wile tiny) acquires nothing it did not already have,
 //     so there is no capability question to put to a policy. This is what keeps
 //     the change compatible: today's sandboxed embedders are not newly denied.
+//
 //  3. Authorizer installed, profile NOT contained — ask, as namespace:create
 //     with the profile name as target. Built-in authorizers deny unknown
 //     resources by default, so Console/ConsoleWithLoad refuse; a custom
 //     authorizer can opt in deliberately.
+//
+//     That premise is load-bearing and was FALSE until 2026-08-21: FilesystemRoot
+//     and its virtual-sources sibling had `default: return nil`, so this gate
+//     asked them and they said yes. It is now true of all nine built-ins, pinned
+//     by TestBuiltinsDenyProcessExecution — which enumerates the constructor set
+//     rather than spot-checking it, because that is the shape of the property.
 //
 // Containment is over PRIMITIVE NAMES, not extension identities, and that is
 // load-bearing rather than incidental. Console carries all.SafeExtension while

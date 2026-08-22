@@ -18,14 +18,30 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// FilesystemRoot returns an Authorizer that restricts file and code
-// operations to paths under root. Non-file/code resources are allowed.
+// FilesystemRoot returns an Authorizer that confines file and code operations
+// to paths under root, and denies every other resource it does not model.
 //
 // Containment is symlink-resolved (see containedInRoot): both root and target
 // are canonicalised, so a symlink under root that points outside it is
 // followed and rejected, while the root itself may legitimately be a symlink.
 // Paths that do not exist yet (e.g. a file about to be created) are still
 // admitted as long as their existing ancestry stays within root.
+//
+// Deny-by-default is load-bearing. Until 2026-08-21 the default arm ALLOWED,
+// which left this authorizer's one promise unenforceable through any door it
+// did not model: (system "echo x > /outside") ran, because process:exec-shell
+// fell through, and (environment '(wile kitchen-sink)) handed that same shell
+// to an engine whose own profile excluded it, because namespace:create fell
+// through too. A shell command line is not a path, so neither could be decided
+// by containment; both are decided on the resource, like code:eval below.
+//
+// ResourceStream is the one exemption, matching ReadOnly and SandboxAuthorizer:
+// the host's standard streams are handed to the engine at construction rather
+// than named by the program, so there is no path for a root to bound. It is
+// also the only arm a denial could not be walked back from — All() is an
+// intersection, so denying here would make "files confined to root, and the
+// program may still print" unexpressible from the built-ins. Compose with
+// DenyAll via All(...) to refuse the streams.
 //
 // code:eval (dynamic (eval <datum>)/(compile <datum>)) is denied outright: its
 // Target is a label, not a path, so there is nothing to confine. Use
@@ -57,8 +73,13 @@ func (p *filesystemRootAuthorizer) Authorize(req AccessRequest) error {
 	switch req.Resource {
 	case ResourceFile, ResourceCode:
 		// gate these
-	default:
+	case ResourceStream:
+		// No path to bound; see the doc comment.
 		return nil
+	default:
+		// Bare sentinel per the Authorizer wrapping convention: the reason is
+		// derivable from the resource, which CheckWithAuthorizer already attaches.
+		return ErrAccessDenied
 	}
 
 	// code:eval is decided on the ACTION, never by path containment. Its Target is

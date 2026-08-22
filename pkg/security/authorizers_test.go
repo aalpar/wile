@@ -120,8 +120,18 @@ func TestFilesystemRoot(t *testing.T) {
 		{"file outside root", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/etc/passwd"}, false},
 		{"file parent traversal", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/app/data/../secret"}, false},
 		{"file sibling", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/app/other/file"}, false},
-		{"env read (non-file)", AccessRequest{Resource: ResourceEnv, Action: ActionRead, Target: "PATH"}, true},
-		{"process exit (non-file)", AccessRequest{Resource: ResourceProcess, Action: ActionExit, Target: ""}, true},
+		{"exec inside root", AccessRequest{Resource: ResourceFile, Action: ActionExec, Target: "/app/data/tool"}, true},
+		{"exec outside root", AccessRequest{Resource: ResourceFile, Action: ActionExec, Target: "/bin/sh"}, false},
+		// Deny-by-default: an unmodelled resource is refused, not waved through.
+		// These three were the escape routes behind the old `default: return nil`.
+		{"env read (unmodelled)", AccessRequest{Resource: ResourceEnv, Action: ActionRead, Target: "PATH"}, false},
+		{"process exit (unmodelled)", AccessRequest{Resource: ResourceProcess, Action: ActionExit, Target: ""}, false},
+		{"shell exec (unmodelled)", AccessRequest{Resource: ResourceProcess, Action: ActionExecShell, Target: "echo x > /outside"}, false},
+		{"namespace create (unmodelled)", AccessRequest{Resource: ResourceNamespace, Action: ActionCreate, Target: "kitchen-sink"}, false},
+		// The one exemption: streams carry no path, and All() could never
+		// re-widen a denial here. Matches ReadOnly and SandboxAuthorizer.
+		{"stream write (exempt)", AccessRequest{Resource: ResourceStream, Action: ActionWrite, Target: StreamStdout}, true},
+		{"stream read (exempt)", AccessRequest{Resource: ResourceStream, Action: ActionRead, Target: StreamStdin}, true},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -133,6 +143,63 @@ func TestFilesystemRoot(t *testing.T) {
 					qt.Commentf("expected deny for %s", tc.name))
 			}
 		})
+	}
+}
+
+// TestBuiltinsDenyProcessExecution enumerates every built-in Authorizer
+// constructor and pins that none of them permits process execution.
+//
+// It enumerates rather than spot-checks because the property being pinned is a
+// property of the whole SET: checkProfileWidening
+// (pkg/internal/bootstrap/profile_containment.go) rests on "built-in
+// authorizers deny unknown resources by default", and until 2026-08-21 that
+// premise was false for exactly two members — FilesystemRoot and its
+// virtual-sources sibling, whose `default: return nil` let
+// KitchenSink + FilesystemRoot("/tmp") run (system "echo x > /outside")
+// directly, no (environment …) call required. A new constructor that reopens
+// the hole fails here rather than in a review two releases later.
+//
+// namespace:create and file:exec are recorded in the same table: the shell
+// escape had two routes, and both must stay shut.
+func TestBuiltinsDenyProcessExecution(t *testing.T) {
+	c := qt.New(t)
+
+	builtins := []struct {
+		name string
+		auth Authorizer
+	}{
+		{"DenyAll", DenyAll()},
+		{"ReadOnly", ReadOnly()},
+		{"ReadOnlyWithLoad", ReadOnlyWithLoad()},
+		{"FilesystemRoot", FilesystemRoot("/app/data")},
+		{"FilesystemRootWithVirtualSources", FilesystemRootWithVirtualSources("/app/data")},
+		{"ConsoleAuthorizer", ConsoleAuthorizer()},
+		{"ConsoleWithLoadAuthorizer", ConsoleWithLoadAuthorizer()},
+		{"ConsoleWithLoadAllowingVirtualSources", ConsoleWithLoadAllowingVirtualSources()},
+		{"SandboxAuthorizer", SandboxAuthorizer("WILE_")},
+	}
+
+	// Every request here names something outside any root the table constructs,
+	// so a containment authorizer denies on containment and a resource-switching
+	// one denies on the resource. Both are the answer this test wants.
+	denied := []struct {
+		name string
+		req  AccessRequest
+	}{
+		{"process:exec-shell", AccessRequest{Resource: ResourceProcess, Action: ActionExecShell, Target: "echo x > /outside"}},
+		{"process:exec", AccessRequest{Resource: ResourceProcess, Action: ActionExec, Target: "/bin/sh"}},
+		{"namespace:create", AccessRequest{Resource: ResourceNamespace, Action: ActionCreate, Target: "kitchen-sink"}},
+		{"file:exec outside root", AccessRequest{Resource: ResourceFile, Action: ActionExec, Target: "/bin/sh"}},
+	}
+
+	for _, b := range builtins {
+		for _, d := range denied {
+			t.Run(b.name+"/"+d.name, func(t *testing.T) {
+				err := b.auth.Authorize(d.req)
+				c.Assert(errors.Is(err, ErrAccessDenied), qt.IsTrue,
+					qt.Commentf("%s must deny %s, got %v", b.name, d.name, err))
+			})
+		}
 	}
 }
 
