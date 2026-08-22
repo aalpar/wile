@@ -17,7 +17,9 @@ package process
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -26,6 +28,61 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
+
+// startDirectory returns the directory a spawned child must start in, having
+// gated it as file:exec — POSIX x on a directory is traverse, and the child
+// enters this one. The caller assigns the result to cmd.Dir; gate and assignment
+// are two halves of one operation, so nothing runs in a directory the policy did
+// not see.
+//
+// Under a root-confining authorizer the child starts at the CONFINEMENT ROOT,
+// not the host's working directory. cmd.Dir defaults to the caller's cwd, so a
+// sandboxed engine whose host happens to run outside its own root would
+// otherwise hand the child a starting point the policy could never have allowed
+// — and every relative path the child opened would resolve there. Pinning makes
+// the sandbox effective rather than merely obstructive.
+//
+// With no confining authorizer the target is the cwd the child would have
+// inherited anyway, so assigning it changes nothing and keeps the gated string
+// identical to the directory that is actually used.
+func startDirectory(mc machine.CallContext, op string) (string, error) {
+	auth := mc.Authorizer()
+	q, ok := security.ConfinementRootOf(auth)
+	if !ok {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", werr.WrapForeignProcessError(err, op, ".")
+		}
+		q = wd
+	}
+	err := security.CheckWithAuthorizer(auth, security.AccessRequest{
+		Resource: security.ResourceFile,
+		Action:   security.ActionExec,
+		Target:   q,
+	})
+	if err != nil {
+		return "", err
+	}
+	return q, nil
+}
+
+// gateExecutable gates, as file:exec, the binary cmd will actually run.
+//
+// The target is what the OS executes, not what the program named. exec.Command
+// LookPath-resolves a bare name into cmd.Path, and os/exec resolves a RELATIVE
+// cmd.Path against cmd.Dir — so gating the caller's own string would authorize
+// one file and run another. Call this after cmd.Dir is set.
+func gateExecutable(mc machine.CallContext, cmd *exec.Cmd) error {
+	target := cmd.Path
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(cmd.Dir, target)
+	}
+	return security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
+		Resource: security.ResourceFile,
+		Action:   security.ActionExec,
+		Target:   target,
+	})
+}
 
 // PrimSystem implements the (system) primitive.
 // Runs a shell command via /bin/sh -c and returns the exit code.
@@ -43,6 +100,20 @@ func PrimSystem(mc machine.CallContext) error {
 		return err
 	}
 	cmd := exec.CommandContext(mc.Context(), "/bin/sh", "-c", command.Value)
+	// The shell is a host binary this primitive names on the program's behalf.
+	// process:exec-shell above answers "may it run a shell at all"; these two
+	// answer "this shell, from this directory" — the questions a path-confining
+	// authorizer can act on, and the reason (system …) can no longer reach a
+	// /bin/sh that lies outside a confinement root.
+	dir, err := startDirectory(mc, "system")
+	if err != nil {
+		return err
+	}
+	cmd.Dir = dir
+	err = gateExecutable(mc, cmd)
+	if err != nil {
+		return err
+	}
 	runErr := cmd.Run()
 	if runErr != nil {
 		var exitErr *exec.ExitError
@@ -103,6 +174,22 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 	}
 
 	cmd := exec.CommandContext(ctx, command.Value, args...)
+	// cmd.Err carries a LookPath failure (including exec.ErrDot). Report it here
+	// rather than letting Start() surface it, so the file:exec gate below is never
+	// asked about an empty or unresolved path. process:exec has already passed, so
+	// this leaks nothing a permitted caller could not learn by spawning.
+	if cmd.Err != nil {
+		return werr.WrapForeignProcessError(cmd.Err, "process-spawn", command.Value)
+	}
+	dir, err := startDirectory(mc, "process-spawn")
+	if err != nil {
+		return err
+	}
+	cmd.Dir = dir
+	err = gateExecutable(mc, cmd)
+	if err != nil {
+		return err
+	}
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {

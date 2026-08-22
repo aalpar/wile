@@ -18,11 +18,27 @@
 // opt in explicitly with WithExtension(process.Extension) or use
 // WithProfile(KitchenSink).
 //
-// Two security actions gate process creation:
-//   - security.ActionExec gates process-spawn (structured, no shell)
-//   - security.ActionExecShell gates system (shell command string)
+// Spawning asks two KINDS of question, and both must be answered before a child
+// runs.
 //
-// Both use security.ResourceProcess with the command as target.
+// The CAPABILITY question is security.ResourceProcess with the command as
+// target: ActionExec for process-spawn (structured, no shell), ActionExecShell
+// for system (shell command string). It asks whether this program may spawn a
+// subprocess at all.
+//
+// The OBJECT questions are security.ResourceFile with ActionExec — the chmod x
+// bit — asked twice: once on the binary that will actually run, and once on the
+// directory the child will start in (POSIX x on a directory is traverse). They
+// ask which binary, from where. Without them a path-confining authorizer never
+// sees either: the capability request carries a command STRING, and /bin/sh is a
+// general-purpose unconfined file accessor that no root ever bounded.
+//
+// Two details the gates depend on, both in prim_process.go:
+//   - The gated binary is cmd.Path AFTER exec.Command's LookPath resolution, not
+//     the caller's string, joined against cmd.Dir when relative — otherwise the
+//     authorized file and the executed file can differ.
+//   - The child's start directory is the authorizer's ConfinementRoot when it
+//     reports one, not the host's inherited working directory.
 //
 // # Shell Execution
 //

@@ -43,6 +43,18 @@ type AccessRequest struct {
 // Well-known resource constants. Extensions may define additional
 // resources without modifying this package.
 const (
+	// ResourceFile covers every host path the program names, under the chmod
+	// triple ActionRead / ActionWrite / ActionExec (plus ActionStat and
+	// ActionDelete). Enforce them together: they are one resource with one
+	// Target, so a single containment predicate decides all of them, and an
+	// authorizer that confines reads and writes but not exec confines nothing --
+	// an executable outside the root is a general-purpose file accessor.
+	//
+	// A primitive whose argument denotes a host path MUST file it here, whatever
+	// else it also asks. set-current-directory! files file:write on the
+	// destination rather than an opaque process request, and process-spawn files
+	// file:exec on the resolved binary, for exactly this reason: a path-confining
+	// authorizer can only confine paths it is shown.
 	ResourceFile    = "file"
 	ResourceCode    = "code"
 	ResourceEnv     = "env"
@@ -84,14 +96,20 @@ const SourceVirtualFS = "virtual-fs"
 // Well-known action constants. Extensions may define additional
 // actions without modifying this package.
 const (
-	ActionRead      = "read"
-	ActionWrite     = "write"
-	ActionDelete    = "delete"
-	ActionStat      = "stat"
-	ActionLoad      = "load" // load+run code from a resolved file path
-	ActionEval      = "eval" // compile+run code from an in-memory datum (eval/compile)
-	ActionExit      = "exit"
-	ActionExec      = "exec"       // structured process execution (process-spawn)
+	ActionRead   = "read"
+	ActionWrite  = "write"
+	ActionDelete = "delete"
+	ActionStat   = "stat"
+	ActionLoad   = "load" // load+run code from a resolved file path
+	ActionEval   = "eval" // compile+run code from an in-memory datum (eval/compile)
+	ActionExit   = "exit"
+	// ActionExec is the chmod x bit, and it asks a different question of each
+	// resource. On ResourceProcess it is the CAPABILITY: may this program spawn a
+	// subprocess at all (process-spawn). On ResourceFile it is the OBJECT: may it
+	// run THIS binary, and -- POSIX x on a directory being traverse -- may a child
+	// START in this directory. A spawn asks both, so a path-confining authorizer
+	// sees the binary and the working directory it would otherwise never be shown.
+	ActionExec      = "exec"
 	ActionExecShell = "exec-shell" // shell command execution (system)
 	ActionCreate    = "create"     // construct a capability-bearing object (namespace)
 )
