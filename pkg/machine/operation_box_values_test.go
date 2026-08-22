@@ -84,7 +84,7 @@ func TestBoxValuesLeavesSingleValueAlone(t *testing.T) {
 	// Not merely equal: the identical value, unboxed. This is the allocation
 	// the fast path exists to avoid.
 	qt.Assert(t, mc.GetValue(), qt.Equals, values.Value(v))
-	_, isCarrier := mc.GetValue().(*boxedValues)
+	_, isCarrier := mc.GetValue().(*BoxedValues)
 	qt.Assert(t, isCarrier, qt.IsFalse)
 }
 
@@ -94,7 +94,7 @@ func TestUnboxValuesDoesNotAliasTheCarrier(t *testing.T) {
 
 	_, err := (&OperationBoxValues{}).Apply(mc)
 	qt.Assert(t, err, qt.IsNil)
-	carrier, ok := mc.GetValue().(*boxedValues)
+	carrier, ok := mc.GetValue().(*BoxedValues)
 	qt.Assert(t, ok, qt.IsTrue)
 
 	_, err = (&OperationUnboxValues{}).Apply(mc)

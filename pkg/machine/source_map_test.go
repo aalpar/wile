@@ -119,7 +119,7 @@ func TestInternSource_LargeIndex(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Verify that source indices above MaxUint16 work correctly now
-	// that sourceRefs uses uint32. Fill beyond the old uint16 limit.
+	// that sourceTableRefs uses uint32. Fill beyond the old uint16 limit.
 	const count = 70000
 	for i := 1; i <= count; i++ {
 		src := &syntax.SourceContext{
@@ -218,7 +218,7 @@ func TestSourceKeyMatchesSourceEqual(t *testing.T) {
 	}
 }
 
-func TestCopy_PreservesSourceRefs(t *testing.T) {
+func TestCopy_PreservesSourceTableRefs(t *testing.T) {
 	c := qt.New(t)
 	tpl := NewNativeTemplate(0, 0, false)
 

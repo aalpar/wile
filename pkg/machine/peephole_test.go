@@ -160,7 +160,7 @@ func TestPeephole_DeadLoadVoid(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
 			tpl.code = make([]Instruction, len(tt.code))
 			copy(tpl.code, tt.code)
-			tpl.sourceRefs = make([]uint32, len(tt.code))
+			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 
 			before := len(tpl.code)
 			tpl.Optimize()
@@ -271,7 +271,7 @@ func TestPeephole_BranchOffsetFixup(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
 			tpl.code = make([]Instruction, len(tt.code))
 			copy(tpl.code, tt.code)
-			tpl.sourceRefs = make([]uint32, len(tt.code))
+			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 
 			tpl.Optimize()
 
@@ -300,7 +300,7 @@ func TestPeephole_BranchTargetSentinel(t *testing.T) {
 		{Op: OpLoadVoid},
 		{Op: OpLoadGlobal, Arg: 1},
 	}
-	tpl.sourceRefs = make([]uint32, 5)
+	tpl.sourceTableRefs = make(values.SourceTableRefs, 5)
 
 	tpl.Optimize()
 
@@ -313,7 +313,7 @@ func TestPeephole_BranchTargetSentinel(t *testing.T) {
 
 // --- Source Map ---
 
-func TestPeephole_SourceRefsParallel(t *testing.T) {
+func TestPeephole_SourceTableRefsParallel(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{
 		{Op: OpStoreGlobal, Arg: 0}, // sourceRef 1
@@ -321,13 +321,13 @@ func TestPeephole_SourceRefsParallel(t *testing.T) {
 		{Op: OpLoadLiteral, Arg: 1}, // sourceRef 3
 		{Op: OpPush},                // sourceRef 4 (fused with LoadLiteral)
 	}
-	tpl.sourceRefs = []uint32{1, 2, 3, 4}
+	tpl.sourceTableRefs = values.SourceTableRefs{1, 2, 3, 4}
 
 	tpl.Optimize()
 
-	qt.Assert(t, len(tpl.code), qt.Equals, len(tpl.sourceRefs))
+	qt.Assert(t, len(tpl.code), qt.Equals, len(tpl.sourceTableRefs))
 	// LoadVoid removed; LoadLiteral+Push fused to PushLiteral with Load's sourceRef.
-	qt.Assert(t, tpl.sourceRefs, qt.DeepEquals, []uint32{1, 3})
+	qt.Assert(t, tpl.sourceTableRefs, qt.DeepEquals, values.SourceTableRefs{1, 3})
 }
 
 // --- Edge Cases ---
@@ -341,7 +341,7 @@ func TestPeephole_EmptyCode(t *testing.T) {
 func TestPeephole_SingleInstruction(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{{Op: OpLoadVoid}}
-	tpl.sourceRefs = []uint32{0}
+	tpl.sourceTableRefs = values.SourceTableRefs{0}
 
 	tpl.Optimize()
 
@@ -356,7 +356,7 @@ func TestPeephole_Idempotent(t *testing.T) {
 		{Op: OpLoadVoid},
 		{Op: OpLoadLiteral, Arg: 1},
 	}
-	tpl.sourceRefs = []uint32{0, 0, 0}
+	tpl.sourceTableRefs = values.SourceTableRefs{0, 0, 0}
 
 	tpl.Optimize()
 	first := len(tpl.code)
@@ -372,7 +372,7 @@ func TestPeephole_NoOptimizablePatterns(t *testing.T) {
 		{Op: OpApply},
 		{Op: OpRestoreContinuation},
 	}
-	tpl.sourceRefs = []uint32{0, 0}
+	tpl.sourceTableRefs = values.SourceTableRefs{0, 0}
 
 	tpl.Optimize()
 
@@ -390,7 +390,7 @@ func TestPeephole_RecursiveSubTemplate(t *testing.T) {
 		{Op: OpLoadLiteral, Arg: 0},
 		{Op: OpRestoreContinuation},
 	}
-	sub.sourceRefs = []uint32{0, 0, 0, 0}
+	sub.sourceTableRefs = values.SourceTableRefs{0, 0, 0, 0}
 
 	// Parent template stores sub in its literals pool
 	parent := NewEmptyNativeTemplate()
@@ -398,7 +398,7 @@ func TestPeephole_RecursiveSubTemplate(t *testing.T) {
 		{Op: OpLoadLiteral, Arg: 0},
 		{Op: OpPush},
 	}
-	parent.sourceRefs = []uint32{0, 0}
+	parent.sourceTableRefs = values.SourceTableRefs{0, 0}
 	parent.literals = MultipleValues{sub}
 
 	parent.Optimize()
@@ -417,7 +417,7 @@ func TestPeephole_NonTemplateLiteralsIgnored(t *testing.T) {
 	tpl.code = []Instruction{
 		{Op: OpLoadLiteral, Arg: 0},
 	}
-	tpl.sourceRefs = []uint32{0}
+	tpl.sourceTableRefs = values.SourceTableRefs{0}
 	tpl.literals = MultipleValues{values.NewInteger(42)}
 
 	tpl.Optimize() // should not panic on non-template literal
@@ -512,7 +512,7 @@ func TestPeephole_FuseLoadPush(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
 			tpl.code = make([]Instruction, len(tt.code))
 			copy(tpl.code, tt.code)
-			tpl.sourceRefs = make([]uint32, len(tt.code))
+			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 
 			tpl.Optimize()
 
@@ -531,14 +531,14 @@ func TestPeephole_FuseLoadPush_SourceRef(t *testing.T) {
 		{Op: OpLoadLiteral, Arg: 0},
 		{Op: OpPush},
 	}
-	tpl.sourceRefs = []uint32{5, 6}
+	tpl.sourceTableRefs = values.SourceTableRefs{5, 6}
 
 	tpl.Optimize()
 
 	qt.Assert(t, len(tpl.code), qt.Equals, 1)
 	qt.Assert(t, tpl.code[0].Op, qt.Equals, OpPushLiteral)
 	// Fused instruction inherits sourceRef from the Load, not the Push.
-	qt.Assert(t, tpl.sourceRefs[0], qt.Equals, uint32(5))
+	qt.Assert(t, tpl.sourceTableRefs[0], qt.Equals, uint32(5))
 }
 
 func TestPeephole_FuseLoadPush_BranchAcrossFusion(t *testing.T) {
@@ -556,7 +556,7 @@ func TestPeephole_FuseLoadPush_BranchAcrossFusion(t *testing.T) {
 		{Op: OpLoadGlobal, Arg: 1},
 		{Op: OpApply},
 	}
-	tpl.sourceRefs = make([]uint32, 5)
+	tpl.sourceTableRefs = make(values.SourceTableRefs, 5)
 
 	tpl.Optimize()
 
@@ -585,7 +585,7 @@ func TestPeephole_FuseLoadPush_PushIsBranchTarget(t *testing.T) {
 		{Op: OpLoadLiteral, Arg: 1},
 		{Op: OpPush},
 	}
-	tpl.sourceRefs = make([]uint32, 6)
+	tpl.sourceTableRefs = make(values.SourceTableRefs, 6)
 
 	tpl.Optimize()
 
@@ -643,7 +643,7 @@ func TestPeephole_FusePullApply(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
 			tpl.code = make([]Instruction, len(tt.code))
 			copy(tpl.code, tt.code)
-			tpl.sourceRefs = make([]uint32, len(tt.code))
+			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 
 			tpl.Optimize()
 
@@ -658,14 +658,14 @@ func TestPeephole_FusePullApply_SourceRef(t *testing.T) {
 		{Op: OpPull},
 		{Op: OpApply},
 	}
-	tpl.sourceRefs = []uint32{5, 6}
+	tpl.sourceTableRefs = values.SourceTableRefs{5, 6}
 
 	tpl.Optimize()
 
 	qt.Assert(t, len(tpl.code), qt.Equals, 1)
 	qt.Assert(t, tpl.code[0].Op, qt.Equals, OpPullApply)
 	// Fused instruction inherits sourceRef from Pull, not Apply.
-	qt.Assert(t, tpl.sourceRefs[0], qt.Equals, uint32(5))
+	qt.Assert(t, tpl.sourceTableRefs[0], qt.Equals, uint32(5))
 }
 
 func TestPeephole_FusePullApply_ApplyIsBranchTarget(t *testing.T) {
@@ -680,7 +680,7 @@ func TestPeephole_FusePullApply_ApplyIsBranchTarget(t *testing.T) {
 		{Op: OpBranchOnFalseValue, Arg: 1},
 		{Op: OpApply},
 	}
-	tpl.sourceRefs = make([]uint32, 3)
+	tpl.sourceTableRefs = make(values.SourceTableRefs, 3)
 
 	tpl.Optimize()
 
@@ -886,7 +886,7 @@ func TestFuseCallForeignCached(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
 			tpl.code = make([]Instruction, len(tt.code))
 			copy(tpl.code, tt.code)
-			tpl.sourceRefs = make([]uint32, len(tt.code))
+			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 			tpl.cachedBindings = tt.cachedBindings
 
 			tpl.Optimize()
@@ -1209,7 +1209,7 @@ func TestFusePromotedCompoundArgs(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
 			tpl.code = make([]Instruction, len(tt.code))
 			copy(tpl.code, tt.code)
-			tpl.sourceRefs = make([]uint32, len(tt.code))
+			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 			tpl.cachedBindings = tt.cachedBindings
 
 			runPromotedCompoundPass(tpl)
@@ -1464,7 +1464,7 @@ func TestFuseCallGeneric(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
 			tpl.code = make([]Instruction, len(tt.code))
 			copy(tpl.code, tt.code)
-			tpl.sourceRefs = make([]uint32, len(tt.code))
+			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 			tpl.cachedBindings = tt.cachedBindings
 
 			tpl.Optimize()
@@ -1675,7 +1675,7 @@ func TestFusePromotedPrimitives(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
 			tpl.code = make([]Instruction, len(tt.code))
 			copy(tpl.code, tt.code)
-			tpl.sourceRefs = make([]uint32, len(tt.code))
+			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 			tpl.cachedBindings = tt.cachedBindings
 
 			tpl.Optimize()

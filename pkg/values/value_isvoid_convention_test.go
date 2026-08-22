@@ -80,7 +80,6 @@ var allValueExemplars = []Value{
 	voidType{},
 	eofType{},
 	emptyListType{},
-	SourceIndexes{},
 }
 
 // isVoidExceptions documents the Value types whose IsVoid() returns
@@ -90,7 +89,6 @@ var isVoidExceptions = map[string]bool{
 	"voidType":      true,  // singleton: always void
 	"eofType":       false, // singleton: never void
 	"emptyListType": false, // singleton: never void
-	"SourceIndexes": false, // value receiver: nil-pointer case N/A
 }
 
 // TestIsVoidConvention verifies that every Value implementer in the

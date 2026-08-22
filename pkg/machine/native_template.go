@@ -29,7 +29,7 @@ var (
 	_ values.Value = (*NativeTemplate)(nil)
 )
 
-type LiteralIndex int
+type LiteralIndex int32
 
 // NativeTemplate is the compiled representation of a Scheme procedure.
 // It is a trusted-producer surface: the operations are not validated, see the package doc.
@@ -58,11 +58,11 @@ type NativeTemplate struct {
 	shape *environment.EnvironmentFrame
 
 	// literals holds constant values referenced by bytecode instructions in this template.
-	literals    MultipleValues
-	sourceRefs  []uint32                // parallel to code, index into sourceTable
-	sourceTable []*syntax.SourceContext // index 0 = nil (no source)
-	name        string                  // Function name (for stack traces)
-	doc         string                  // Guile-style docstring from leading string literal in body
+	literals        MultipleValues
+	sourceTableRefs values.SourceTableRefs  // parallel to code, index into sourceTable
+	sourceTable     []*syntax.SourceContext // index 0 = nil (no source)
+	name            string                  // Function name (for stack traces)
+	doc             string                  // Guile-style docstring from leading string literal in body
 
 	// freeNames records the free-variable names in free-vector slot order, as
 	// compileClosureBody's Pass 1 computed them.
@@ -102,7 +102,7 @@ type NativeTemplate struct {
 	// literalIndex maps hash codes to literal pool indices for O(1) amortized
 	// deduplication of Hashable values. Non-hashable values fall back to
 	// linear scan. Lazily initialized on first Hashable literal.
-	literalIndex map[uint64][]int
+	literalIndex map[uint64][]LiteralIndex
 
 	// sourceIndex maps a source context's identity — sourceEqual's (file, line,
 	// column) triple, exactly — to its sourceTable slot, so interning is a map
@@ -129,7 +129,7 @@ type NativeTemplate struct {
 	executed []bool
 }
 
-// initialOpsCap is the pre-allocated capacity for the operations and sourceRefs
+// initialOpsCap is the pre-allocated capacity for the operations and sourceTableRefs
 // slices when a template is created without initial operations (the compilation
 // path). Covers simple lambda bodies without re-allocation; larger functions
 // grow normally. Kept small to avoid wasting memory on the many short templates
@@ -141,12 +141,12 @@ const initialOpsCap = 8
 // the operations are not validated, see the package doc.
 func NewNativeTemplate(pcnt int, vcnt int, vd bool, operations ...Operation) *NativeTemplate {
 	q := &NativeTemplate{
-		parameterCount: pcnt,
-		valueCount:     vcnt,
-		isVariadic:     vd,
-		sourceTable:    []*syntax.SourceContext{nil}, // index 0 = nil (no source)
-		code:           make([]Instruction, 0, initialOpsCap),
-		sourceRefs:     make([]uint32, 0, initialOpsCap),
+		parameterCount:  pcnt,
+		valueCount:      vcnt,
+		isVariadic:      vd,
+		sourceTable:     []*syntax.SourceContext{nil}, // index 0 = nil (no source)
+		code:            make([]Instruction, 0, initialOpsCap),
+		sourceTableRefs: make([]uint32, 0, initialOpsCap),
 	}
 	if len(operations) > 0 {
 		// Direct construction with initial operations (e.g., test fixtures).
@@ -317,12 +317,12 @@ func instructionToOperation(instr Instruction) Operation {
 
 // SourceAt returns the source location for the operation at pc.
 // Returns nil if pc is out of bounds or no source was recorded.
-// O(1) lookup via the parallel sourceRefs array.
+// O(1) lookup via the parallel sourceTableRefs array.
 func (p *NativeTemplate) SourceAt(pc int) *syntax.SourceContext {
-	if pc < 0 || pc >= len(p.sourceRefs) {
+	if pc < 0 || pc >= len(p.sourceTableRefs) {
 		return nil
 	}
-	return p.sourceTable[p.sourceRefs[pc]]
+	return p.sourceTable[p.sourceTableRefs[pc]]
 }
 
 // internSource deduplicates a source context and returns its index in the sourceTable.
@@ -402,7 +402,7 @@ func (p *NativeTemplate) AppendOperationsWithSource(src *syntax.SourceContext, o
 			instr = p.AppendSideTableOp(iop)
 		}
 		p.code = append(p.code, instr)
-		p.sourceRefs = append(p.sourceRefs, idx)
+		p.sourceTableRefs = append(p.sourceTableRefs, idx)
 		if p.executed != nil {
 			p.executed = append(p.executed, false)
 		}
@@ -584,23 +584,23 @@ func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
 		// been initialized yet (e.g., after Copy() which clones literals
 		// but not the index).
 		if p.literalIndex == nil {
-			p.literalIndex = make(map[uint64][]int, len(p.literals)/2+1)
+			p.literalIndex = make(map[uint64][]LiteralIndex, len(p.literals)/2+1)
 			for i, lit := range p.literals {
 				hLit, okLit := lit.(values.Hashable)
 				if okLit {
 					litHash := hLit.HashCode()
-					p.literalIndex[litHash] = append(p.literalIndex[litHash], i)
+					p.literalIndex[litHash] = append(p.literalIndex[litHash], LiteralIndex(i))
 				}
 			}
 		}
 		for _, idx := range p.literalIndex[hash] {
 			if literalIdentical(p.literals[idx], v) {
-				return LiteralIndex(idx)
+				return idx
 			}
 		}
 		l := len(p.literals)
 		p.literals = append(p.literals, v)
-		p.literalIndex[hash] = append(p.literalIndex[hash], l)
+		p.literalIndex[hash] = append(p.literalIndex[hash], LiteralIndex(l))
 		return LiteralIndex(l)
 	}
 
@@ -675,7 +675,7 @@ func (p *NativeTemplate) AppendOperations(ops ...Operation) {
 func (p *NativeTemplate) AppendInstructionWithSource(src *syntax.SourceContext, instr Instruction) {
 	idx := p.internSource(src)
 	p.code = append(p.code, instr)
-	p.sourceRefs = append(p.sourceRefs, idx)
+	p.sourceTableRefs = append(p.sourceTableRefs, idx)
 	if p.executed != nil {
 		p.executed = append(p.executed, false)
 	}
@@ -684,7 +684,7 @@ func (p *NativeTemplate) AppendInstructionWithSource(src *syntax.SourceContext, 
 // AppendInstruction appends a single instruction with no source attribution.
 func (p *NativeTemplate) AppendInstruction(instr Instruction) {
 	p.code = append(p.code, instr)
-	p.sourceRefs = append(p.sourceRefs, 0)
+	p.sourceTableRefs = append(p.sourceTableRefs, 0)
 	if p.executed != nil {
 		p.executed = append(p.executed, false)
 	}
@@ -814,11 +814,11 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 	if p == nil {
 		return nil
 	}
-	if len(p.code) != len(p.sourceRefs) {
+	if len(p.code) != len(p.sourceTableRefs) {
 		panic(werr.WrapForeignErrorf(
 			werr.ErrInvalidArgument,
-			"native_template: code/sourceRefs length invariant violated (len(code)=%d, len(sourceRefs)=%d)",
-			len(p.code), len(p.sourceRefs),
+			"native_template: code/sourceTableRefs length invariant violated (len(code)=%d, len(sourceTableRefs)=%d)",
+			len(p.code), len(p.sourceTableRefs),
 		))
 	}
 	if p.executed != nil && len(p.executed) != len(p.code) {
@@ -839,7 +839,7 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 	q.cachedBindings = slices.Clone(p.cachedBindings)
 	q.code = slices.Clone(p.code)
 	q.sideTable = slices.Clone(p.sideTable)
-	q.sourceRefs = slices.Clone(p.sourceRefs)
+	q.sourceTableRefs = slices.Clone(p.sourceTableRefs)
 	q.sourceTable = slices.Clone(p.sourceTable)
 	q.executed = slices.Clone(p.executed)
 	// freeNames describes the compiled body, like code and literals, so it is

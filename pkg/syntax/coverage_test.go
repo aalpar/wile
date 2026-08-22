@@ -53,26 +53,23 @@ func TestSourceIndexes_NewLine(t *testing.T) {
 
 func TestSourceIndexes_SchemeString(t *testing.T) {
 	sidx := NewSourceIndexes(10, 5, 2)
-	qt.Assert(t, sidx.SchemeString(), qt.Equals, "<indexes 10:5:2>")
+	qt.Assert(t, sidx.String(), qt.Equals, "<indexes 10:5:2>")
 }
 
-func TestSourceIndexes_IsVoid(t *testing.T) {
-	sidx := NewSourceIndexes(0, 0, 0)
-	qt.Assert(t, sidx.IsVoid(), qt.IsFalse)
-}
-
-func TestSourceIndexes_EqualTo(t *testing.T) {
+// TestSourceIndexes_Equality pins that == discriminates on all three fields.
+// SourceIndexes is not a Value and has no EqualTo; the comparison it needs is
+// the language's, which is why the type is kept comparable.
+func TestSourceIndexes_Equality(t *testing.T) {
 	sidx1 := NewSourceIndexes(10, 5, 2)
 	sidx2 := NewSourceIndexes(10, 5, 2)
 	sidx3 := NewSourceIndexes(11, 5, 2)
 	sidx4 := NewSourceIndexes(10, 6, 2)
 	sidx5 := NewSourceIndexes(10, 5, 3)
 
-	qt.Assert(t, sidx1.EqualTo(sidx2), qt.IsTrue)
-	qt.Assert(t, sidx1.EqualTo(sidx3), qt.IsFalse)
-	qt.Assert(t, sidx1.EqualTo(sidx4), qt.IsFalse)
-	qt.Assert(t, sidx1.EqualTo(sidx5), qt.IsFalse)
-	qt.Assert(t, sidx1.EqualTo(values.NewInteger(42)), qt.IsFalse)
+	qt.Assert(t, sidx1 == sidx2, qt.IsTrue)
+	qt.Assert(t, sidx1 == sidx3, qt.IsFalse)
+	qt.Assert(t, sidx1 == sidx4, qt.IsFalse)
+	qt.Assert(t, sidx1 == sidx5, qt.IsFalse)
 }
 
 // Test SourceContext methods
@@ -785,8 +782,8 @@ func TestSourceContext_WithOrigin(t *testing.T) {
 	// Other fields should be preserved
 	c.Assert(scWithOrigin.Text, qt.Equals, sc.Text)
 	c.Assert(scWithOrigin.File, qt.Equals, sc.File)
-	c.Assert(scWithOrigin.Start.EqualTo(sc.Start), qt.IsTrue)
-	c.Assert(scWithOrigin.End.EqualTo(sc.End), qt.IsTrue)
+	c.Assert(scWithOrigin.Start, qt.Equals, sc.Start)
+	c.Assert(scWithOrigin.End, qt.Equals, sc.End)
 }
 
 // TestSourceContext_WithOrigin_Nil tests WithOrigin on nil SourceContext.

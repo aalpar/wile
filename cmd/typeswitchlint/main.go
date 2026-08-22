@@ -111,7 +111,6 @@ var knownValueTypes = []string{
 	"*values.CompileTimeValue",
 	"*values.NativeError",
 	"*values.SourceContext",
-	"*values.SourceIndexes",
 }
 
 // switchInfo is one //exhaustive-marked type switch found during the scan:

@@ -60,8 +60,8 @@ func (p *NativeTemplate) Optimize() {
 
 	plan := NewEditPlan(p)
 	markDeadLoadVoidEdits(p.code, plan)
-	fuseLoadPush(p.code, p.sourceRefs, plan)
-	fusePullApply(p.code, p.sourceRefs, plan)
+	fuseLoadPush(p.code, p.sourceTableRefs, plan)
+	fusePullApply(p.code, p.sourceTableRefs, plan)
 	plan.Apply()
 
 	plan2 := NewEditPlan(p)
@@ -127,14 +127,14 @@ var loadToFusedPush = [opCount]OpCode{
 // the Push may be a convergence point for multiple control flow paths
 // (e.g., both branches of an `if` expression that share a Push to push
 // the result). Fusing would bind the Push to only the Load's value.
-func fuseLoadPush(code []Instruction, sourceRefs []uint32, plan *EditPlan) {
+func fuseLoadPush(code []Instruction, sourceTableRefs []uint32, plan *EditPlan) {
 	targets := branchTargets(code)
 	for i := 0; i < len(code)-1; i++ {
 		fused := loadToFusedPush[code[i].Op]
 		if fused != OpInvalid && code[i+1].Op == OpPush && !targets[i+1] {
 			plan.Replace(i, i+2,
 				[]Instruction{{Op: fused, Arg: code[i].Arg}},
-				sourceRefs[i],
+				sourceTableRefs[i],
 			)
 			i++ // skip the Push
 		}
@@ -143,13 +143,13 @@ func fuseLoadPush(code []Instruction, sourceRefs []uint32, plan *EditPlan) {
 
 // fusePullApply fuses Pull + Apply into a single OpPullApply instruction.
 // Every function call emits this pair; fusing saves one dispatch per call.
-func fusePullApply(code []Instruction, sourceRefs []uint32, plan *EditPlan) {
+func fusePullApply(code []Instruction, sourceTableRefs []uint32, plan *EditPlan) {
 	targets := branchTargets(code)
 	for i := 0; i < len(code)-1; i++ {
 		if code[i].Op == OpPull && code[i+1].Op == OpApply && !targets[i+1] {
 			plan.Replace(i, i+2,
 				[]Instruction{{Op: OpPullApply}},
-				sourceRefs[i],
+				sourceTableRefs[i],
 			)
 			i++ // skip the Apply
 		}
@@ -369,7 +369,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 				plan.Delete(i, i+2)
 				plan.Replace(pullIdx, pullIdx+1,
 					[]Instruction{{Op: promotedOp, Arg: bindingIdx}},
-					tpl.sourceRefs[pullIdx],
+					tpl.sourceTableRefs[pullIdx],
 				)
 				claimed.Set(pullIdx)
 				continue
@@ -383,7 +383,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			// Replace PullApply with OpCallForeignCached
 			plan.Replace(pullIdx, pullIdx+1,
 				[]Instruction{{Op: OpCallForeignCached, Arg: bindingIdx}},
-				tpl.sourceRefs[pullIdx],
+				tpl.sourceTableRefs[pullIdx],
 			)
 			claimed.Set(pullIdx)
 			continue
@@ -451,7 +451,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 				plan.Delete(i, i+1)
 				plan.Replace(pullIdx, pullIdx+1,
 					[]Instruction{{Op: promotedTailOp, Arg: bindingIdx}},
-					tpl.sourceRefs[pullIdx],
+					tpl.sourceTableRefs[pullIdx],
 				)
 				claimed.Set(pullIdx)
 				continue
@@ -462,7 +462,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			// Replace PullApply with OpCallForeignCachedTail
 			plan.Replace(pullIdx, pullIdx+1,
 				[]Instruction{{Op: OpCallForeignCachedTail, Arg: bindingIdx}},
-				tpl.sourceRefs[pullIdx],
+				tpl.sourceTableRefs[pullIdx],
 			)
 			claimed.Set(pullIdx)
 			continue
@@ -560,7 +560,7 @@ func fuseCallGeneric(tpl *NativeTemplate, plan *EditPlan) {
 			plan.Delete(i+1, i+2)
 			plan.Replace(pullIdx, pullIdx+1,
 				[]Instruction{{Op: calleeOp, Arg: calleeArg}},
-				tpl.sourceRefs[pullIdx],
+				tpl.sourceTableRefs[pullIdx],
 			)
 			continue
 		}
@@ -611,7 +611,7 @@ func fuseCallGeneric(tpl *NativeTemplate, plan *EditPlan) {
 		plan.Delete(i, i+1)
 		plan.Replace(pullIdx, pullIdx+1,
 			[]Instruction{{Op: calleeOp, Arg: calleeArg}},
-			tpl.sourceRefs[pullIdx],
+			tpl.sourceTableRefs[pullIdx],
 		)
 	}
 }
@@ -723,7 +723,7 @@ func fusePromotedCompoundArgs(tpl *NativeTemplate, plan *EditPlan) {
 		plan.Delete(i, i+1)
 		plan.Replace(pullIdx, pullIdx+1,
 			[]Instruction{{Op: promotedTailOp, Arg: bindingIdx}},
-			tpl.sourceRefs[pullIdx],
+			tpl.sourceTableRefs[pullIdx],
 		)
 		i = pullIdx // skip past the claimed call
 	}

@@ -24,7 +24,7 @@ import (
 
 // EditPlan collects non-overlapping bytecode edits for a NativeTemplate.
 // Edits are applied in a single pass via Apply, which rewrites code,
-// sourceRefs, and branch offsets, then garbage-collects unreferenced
+// sourceTableRefs, and branch offsets, then garbage-collects unreferenced
 // sideTable entries.
 //
 // Apply remaps these Arg categories automatically:
@@ -58,8 +58,8 @@ func NewEditPlan(tpl *NativeTemplate) *EditPlan {
 // AddLiteral adds a value to the template's literal pool, with deduplication.
 // Returns the index suitable for use in Instruction.Arg fields that reference
 // the literal pool (OpLoadLiteral, OpLoadGlobal, OpStoreGlobal).
-func (p *EditPlan) AddLiteral(v values.Value) int32 {
-	return int32(p.tpl.MaybeAppendLiteral(v))
+func (p *EditPlan) AddLiteral(v values.Value) LiteralIndex {
+	return p.tpl.MaybeAppendLiteral(v)
 }
 
 // Replace marks the range [start, end) for replacement with instrs.
@@ -92,7 +92,7 @@ func (p *EditPlan) HasEdits() bool {
 //  1. Sorts and validates edits (panics on overlap)
 //  2. Builds a PC remap from old positions to new positions
 //  3. Fixes branch offsets for surviving original instructions
-//  4. Rebuilds code + sourceRefs, splicing in replacements
+//  4. Rebuilds code + sourceTableRefs, splicing in replacements
 //  5. Garbage-collects unreferenced sideTable entries, remaps OpComplex.Arg
 //
 // Returns the net change in instruction count (negative means code shrunk).
@@ -110,7 +110,7 @@ func (p *EditPlan) Apply() int {
 
 	remap := buildEditRemap(p.edits, oldLen)
 	fixSurvivingBranches(p.tpl.code, p.edits, remap)
-	p.tpl.code, p.tpl.sourceRefs = rewriteCode(p.tpl.code, p.tpl.sourceRefs, p.edits)
+	p.tpl.code, p.tpl.sourceTableRefs = rewriteCode(p.tpl.code, p.tpl.sourceTableRefs, p.edits)
 	gcSideTable(p.tpl)
 
 	return len(p.tpl.code) - oldLen
@@ -228,9 +228,9 @@ func fixSurvivingBranches(code []Instruction, edits []edit, remap []int) {
 	}
 }
 
-// rewriteCode builds new code and sourceRefs arrays by copying surviving
+// rewriteCode builds new code and sourceTableRefs arrays by copying surviving
 // segments and splicing in replacement instructions from each edit.
-func rewriteCode(code []Instruction, sourceRefs []uint32, edits []edit) ([]Instruction, []uint32) {
+func rewriteCode(code []Instruction, sourceTableRefs values.SourceTableRefs, edits []edit) ([]Instruction, values.SourceTableRefs) {
 	// Compute new length.
 	newLen := len(code)
 	for _, e := range edits {
@@ -238,13 +238,13 @@ func rewriteCode(code []Instruction, sourceRefs []uint32, edits []edit) ([]Instr
 	}
 
 	newCode := make([]Instruction, 0, newLen)
-	newRefs := make([]uint32, 0, newLen)
+	newRefs := make(values.SourceTableRefs, 0, newLen)
 	prev := 0
 
 	for _, e := range edits {
 		// Copy surviving segment before this edit.
 		newCode = append(newCode, code[prev:e.start]...)
-		newRefs = append(newRefs, sourceRefs[prev:e.start]...)
+		newRefs = append(newRefs, sourceTableRefs[prev:e.start]...)
 
 		// Splice in replacement.
 		newCode = append(newCode, e.replace...)
@@ -256,7 +256,7 @@ func rewriteCode(code []Instruction, sourceRefs []uint32, edits []edit) ([]Instr
 
 	// Copy trailing segment after last edit.
 	newCode = append(newCode, code[prev:]...)
-	newRefs = append(newRefs, sourceRefs[prev:]...)
+	newRefs = append(newRefs, sourceTableRefs[prev:]...)
 
 	return newCode, newRefs
 }

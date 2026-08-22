@@ -19,9 +19,17 @@ import (
 	"strings"
 )
 
-var _ Value = SourceIndexes{}
-
 // SourceIndexes tracks position within a source file (index, column, line).
+//
+// It is deliberately NOT a Value. No SourceIndexes ever reaches Scheme: the
+// syntax-location accessors project an int out of one and box that
+// (registry/core/prim_syntax_loc.go), and every other holder is internal (the
+// tokenizer's cursor, SourceContext.Start/End). Implementing Value would enrol
+// it in the exhaustiveness set cmd/typeswitchlint derives from this package,
+// which enumerates the types a Scheme datum can be.
+//
+// The three int fields make it comparable, so == is the equality operator;
+// there is no EqualTo.
 type SourceIndexes struct {
 	index  int
 	column int
@@ -79,34 +87,12 @@ func (p *SourceIndexes) Tab() int {
 	return p.index
 }
 
-// SchemeString returns a string representation of the position.
-func (p SourceIndexes) SchemeString() string {
+// String renders the position for diagnostics. It is fmt.Stringer, not
+// values.Value: this text is for a Go-side reader, not a Scheme datum.
+func (p SourceIndexes) String() string {
 	q := &strings.Builder{}
 	q.WriteString("<indexes ")
 	fmt.Fprintf(q, "%d:%d:%d", p.index, p.column, p.line)
 	q.WriteString(">")
 	return q.String()
-}
-
-// IsVoid returns false; SourceIndexes is never void.
-func (p SourceIndexes) IsVoid() bool {
-	return false
-}
-
-// EqualTo returns true if the positions are equal.
-func (p SourceIndexes) EqualTo(o Value) bool {
-	v, ok := o.(SourceIndexes)
-	if !ok {
-		return false
-	}
-	if p.index != v.index {
-		return false
-	}
-	if p.column != v.column {
-		return false
-	}
-	if p.line != v.line {
-		return false
-	}
-	return true
 }

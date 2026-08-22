@@ -106,7 +106,7 @@ func (p *SourceContext) Location() string {
 
 // SchemeString returns the Scheme representation of the source context.
 func (p *SourceContext) SchemeString() string {
-	return fmt.Sprintf("<source-context %s:%s-%s>", p.File, p.Start.SchemeString(), p.End.SchemeString())
+	return fmt.Sprintf("<source-context %s:%s-%s>", p.File, p.Start, p.End)
 }
 
 // IsVoid returns true if the source context is nil.
@@ -129,10 +129,10 @@ func (p *SourceContext) EqualTo(value Value) bool {
 	if p.File != v.File {
 		return false
 	}
-	if !p.Start.EqualTo(v.Start) {
+	if p.Start != v.Start {
 		return false
 	}
-	if !p.End.EqualTo(v.End) {
+	if p.End != v.End {
 		return false
 	}
 	// Note: Not comparing scopes as they are for hygiene, not equality

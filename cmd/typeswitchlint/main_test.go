@@ -130,8 +130,20 @@ func TestKnownValueTypesMatchesSource(t *testing.T) {
 // types whose method set includes the three values.Value methods. It relies
 // on the package not using embedding to provide those methods — which holds
 // (every value type defines SchemeString/IsVoid/EqualTo directly).
+//
+// The receiver's star-ness is recorded per method, not discarded, because it
+// decides the spelling a type switch must use. Go's rule: the method set of *T
+// holds both receiver kinds, the method set of T holds only value receivers. So
+// if any of the three Value methods is declared on *T, only *T satisfies Value
+// and *values.T is the sole possible case; if all three are on T, the value form
+// satisfies it and is what a Value slot holds. Star-ness of OTHER methods is
+// irrelevant — SourceIndexes had pointer-receiver mutators (Inc/NewLine/Tab)
+// alongside value-receiver Value methods, and prepending "*" unconditionally is
+// how it sat in knownValueTypes as a case no switch could match.
 func exportedValueTypes(dir string) ([]string, error) {
 	fset := token.NewFileSet()
+	// methods[T][m] is true when m is declared on *T, false when on T. Presence
+	// is the two-value lookup; the stored bool is star-ness, not existence.
 	methods := map[string]map[string]bool{}
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
@@ -161,7 +173,7 @@ func exportedValueTypes(dir string) ([]string, error) {
 			if methods[id.Name] == nil {
 				methods[id.Name] = map[string]bool{}
 			}
-			methods[id.Name][fn.Name.Name] = true
+			methods[id.Name][fn.Name.Name] = isStar
 		}
 		return nil
 	})
@@ -174,9 +186,17 @@ func exportedValueTypes(dir string) ([]string, error) {
 		if !ast.IsExported(name) {
 			continue
 		}
-		if set["SchemeString"] && set["IsVoid"] && set["EqualTo"] {
-			out = append(out, "*values."+name)
+		ss, hasSS := set["SchemeString"]
+		iv, hasIV := set["IsVoid"]
+		eq, hasEQ := set["EqualTo"]
+		if !hasSS || !hasIV || !hasEQ {
+			continue
 		}
+		if ss || iv || eq {
+			out = append(out, "*values."+name)
+			continue
+		}
+		out = append(out, "values."+name)
 	}
 	slices.Sort(out)
 	return out, nil

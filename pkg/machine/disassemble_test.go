@@ -135,7 +135,7 @@ func TestDisassemble_SideTable(t *testing.T) {
 	scm := NewOperationSetContMark()
 	instr := tpl.AppendSideTableOp(scm)
 	tpl.code = append(tpl.code, instr)
-	tpl.sourceRefs = append(tpl.sourceRefs, 0)
+	tpl.sourceTableRefs = append(tpl.sourceTableRefs, 0)
 
 	dt := Disassemble(tpl)
 	qt.Assert(t, dt.Instructions, qt.HasLen, 1)

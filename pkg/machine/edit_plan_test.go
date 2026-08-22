@@ -29,7 +29,7 @@ import (
 func TestEditPlan_EmptyPlan(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{{Op: OpLoadVoid}, {Op: OpPush}}
-	tpl.sourceRefs = []uint32{1, 2}
+	tpl.sourceTableRefs = values.SourceTableRefs{1, 2}
 
 	plan := NewEditPlan(tpl)
 	delta := plan.Apply()
@@ -41,7 +41,7 @@ func TestEditPlan_EmptyPlan(t *testing.T) {
 func TestEditPlan_HasEdits(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{{Op: OpLoadVoid}}
-	tpl.sourceRefs = []uint32{0}
+	tpl.sourceTableRefs = values.SourceTableRefs{0}
 
 	plan := NewEditPlan(tpl)
 	qt.Assert(t, plan.HasEdits(), qt.IsFalse)
@@ -60,7 +60,7 @@ func TestEditPlan_SingleDelete(t *testing.T) {
 		{Op: OpLoadLiteral, Arg: 1},
 		{Op: OpPush},
 	}
-	tpl.sourceRefs = []uint32{1, 2, 3, 4}
+	tpl.sourceTableRefs = values.SourceTableRefs{1, 2, 3, 4}
 
 	plan := NewEditPlan(tpl)
 	plan.Delete(1, 2)
@@ -68,7 +68,7 @@ func TestEditPlan_SingleDelete(t *testing.T) {
 
 	qt.Assert(t, delta, qt.Equals, -1)
 	qt.Assert(t, opcodes(tpl), qt.DeepEquals, []OpCode{OpStoreGlobal, OpLoadLiteral, OpPush})
-	qt.Assert(t, tpl.sourceRefs, qt.DeepEquals, []uint32{1, 3, 4})
+	qt.Assert(t, tpl.sourceTableRefs, qt.DeepEquals, values.SourceTableRefs{1, 3, 4})
 }
 
 func TestEditPlan_DeleteRange(t *testing.T) {
@@ -80,14 +80,14 @@ func TestEditPlan_DeleteRange(t *testing.T) {
 		{Op: OpLoadLiteral, Arg: 1}, // 3: delete
 		{Op: OpApply},               // 4: keep
 	}
-	tpl.sourceRefs = []uint32{1, 2, 3, 4, 5}
+	tpl.sourceTableRefs = values.SourceTableRefs{1, 2, 3, 4, 5}
 
 	plan := NewEditPlan(tpl)
 	plan.Delete(1, 4)
 	plan.Apply()
 
 	qt.Assert(t, opcodes(tpl), qt.DeepEquals, []OpCode{OpStoreGlobal, OpApply})
-	qt.Assert(t, tpl.sourceRefs, qt.DeepEquals, []uint32{1, 5})
+	qt.Assert(t, tpl.sourceTableRefs, qt.DeepEquals, values.SourceTableRefs{1, 5})
 }
 
 func TestEditPlan_MultipleDeletes(t *testing.T) {
@@ -99,7 +99,7 @@ func TestEditPlan_MultipleDeletes(t *testing.T) {
 		{Op: OpLoadVoid},            // 3: delete
 		{Op: OpApply},               // 4: keep
 	}
-	tpl.sourceRefs = []uint32{1, 2, 3, 4, 5}
+	tpl.sourceTableRefs = values.SourceTableRefs{1, 2, 3, 4, 5}
 
 	plan := NewEditPlan(tpl)
 	plan.Delete(1, 2)
@@ -107,7 +107,7 @@ func TestEditPlan_MultipleDeletes(t *testing.T) {
 	plan.Apply()
 
 	qt.Assert(t, opcodes(tpl), qt.DeepEquals, []OpCode{OpLoadLiteral, OpPush, OpApply})
-	qt.Assert(t, tpl.sourceRefs, qt.DeepEquals, []uint32{1, 3, 5})
+	qt.Assert(t, tpl.sourceTableRefs, qt.DeepEquals, values.SourceTableRefs{1, 3, 5})
 }
 
 // --- Replace ---
@@ -127,19 +127,19 @@ func TestEditPlan_SingleReplace(t *testing.T) {
 		{Op: OpApply},                    // 8
 		{Op: OpPush},                     // 9: after the call
 	}
-	tpl.sourceRefs = []uint32{10, 10, 10, 10, 10, 10, 10, 10, 10, 11}
+	tpl.sourceTableRefs = values.SourceTableRefs{10, 10, 10, 10, 10, 10, 10, 10, 10, 11}
 	tpl.literals = MultipleValues{values.NewSymbol("+"), values.NewInteger(3), values.NewInteger(4)}
 
 	plan := NewEditPlan(tpl)
 	litIdx := plan.AddLiteral(values.NewInteger(7))
 	plan.Replace(0, 9, []Instruction{
-		{Op: OpLoadLiteral, Arg: litIdx},
+		{Op: OpLoadLiteral, Arg: int32(litIdx)},
 	}, 10)
 	plan.Apply()
 
 	qt.Assert(t, opcodes(tpl), qt.DeepEquals, []OpCode{OpLoadLiteral, OpPush})
-	qt.Assert(t, tpl.code[0].Arg, qt.Equals, litIdx)
-	qt.Assert(t, tpl.sourceRefs, qt.DeepEquals, []uint32{10, 11})
+	qt.Assert(t, tpl.code[0].Arg, qt.Equals, int32(litIdx))
+	qt.Assert(t, tpl.sourceTableRefs, qt.DeepEquals, values.SourceTableRefs{10, 11})
 }
 
 func TestEditPlan_ReplaceWithLarger(t *testing.T) {
@@ -149,18 +149,18 @@ func TestEditPlan_ReplaceWithLarger(t *testing.T) {
 		{Op: OpLoadVoid}, // 0: replace with 3 instrs
 		{Op: OpPush},     // 1: keep
 	}
-	tpl.sourceRefs = []uint32{1, 2}
+	tpl.sourceTableRefs = values.SourceTableRefs{1, 2}
 
 	plan := NewEditPlan(tpl)
 	plan.Replace(0, 1, []Instruction{
-		{Op: OpLoadLiteral, Arg: 0},
+		{Op: OpLoadLiteral, Arg: int32(0)},
 		{Op: OpPush},
 		{Op: OpPop},
 	}, 5)
 	plan.Apply()
 
 	qt.Assert(t, opcodes(tpl), qt.DeepEquals, []OpCode{OpLoadLiteral, OpPush, OpPop, OpPush})
-	qt.Assert(t, tpl.sourceRefs, qt.DeepEquals, []uint32{5, 5, 5, 2})
+	qt.Assert(t, tpl.sourceTableRefs, qt.DeepEquals, values.SourceTableRefs{5, 5, 5, 2})
 }
 
 // --- Insert ---
@@ -171,7 +171,7 @@ func TestEditPlan_Insert(t *testing.T) {
 		{Op: OpLoadVoid}, // 0
 		{Op: OpPush},     // 1
 	}
-	tpl.sourceRefs = []uint32{1, 2}
+	tpl.sourceTableRefs = values.SourceTableRefs{1, 2}
 
 	plan := NewEditPlan(tpl)
 	plan.Insert(1, []Instruction{
@@ -180,7 +180,7 @@ func TestEditPlan_Insert(t *testing.T) {
 	plan.Apply()
 
 	qt.Assert(t, opcodes(tpl), qt.DeepEquals, []OpCode{OpLoadVoid, OpLoadLiteral, OpPush})
-	qt.Assert(t, tpl.sourceRefs, qt.DeepEquals, []uint32{1, 3, 2})
+	qt.Assert(t, tpl.sourceTableRefs, qt.DeepEquals, values.SourceTableRefs{1, 3, 2})
 }
 
 // --- Branch Fixup ---
@@ -219,7 +219,7 @@ func TestEditPlan_BranchShrinks(t *testing.T) {
 		{Op: OpLoadLiteral, Arg: 1}, // 3
 		{Op: OpApply},               // 4
 	}
-	tpl.sourceRefs = make([]uint32, 5)
+	tpl.sourceTableRefs = make([]uint32, 5)
 
 	plan := NewEditPlan(tpl)
 	plan.Delete(2, 3)
@@ -237,7 +237,7 @@ func TestEditPlan_BranchGrows(t *testing.T) {
 		{Op: OpPush},           // 1
 		{Op: OpApply},          // 2
 	}
-	tpl.sourceRefs = make([]uint32, 3)
+	tpl.sourceTableRefs = make(values.SourceTableRefs, 3)
 
 	plan := NewEditPlan(tpl)
 	plan.Insert(1, []Instruction{
@@ -263,7 +263,7 @@ func TestEditPlan_BranchAcrossReplace(t *testing.T) {
 		{Op: OpPush},           // 5
 		{Op: OpApply},          // 6
 	}
-	tpl.sourceRefs = make([]uint32, 7)
+	tpl.sourceTableRefs = make([]uint32, 7)
 
 	plan := NewEditPlan(tpl)
 	plan.Replace(2, 5, []Instruction{
@@ -284,7 +284,7 @@ func TestEditPlan_SaveContinuationSentinel(t *testing.T) {
 		{Op: OpLoadLiteral, Arg: 0},      // 2
 		{Op: OpApply},                    // 3
 	}
-	tpl.sourceRefs = make([]uint32, 4)
+	tpl.sourceTableRefs = make([]uint32, 4)
 
 	plan := NewEditPlan(tpl)
 	plan.Delete(1, 2)
@@ -303,7 +303,7 @@ func TestEditPlan_BranchBeforeReplace_NotSpanning(t *testing.T) {
 		{Op: OpLoadVoid},        // 2: delete
 		{Op: OpApply},           // 3
 	}
-	tpl.sourceRefs = make([]uint32, 4)
+	tpl.sourceTableRefs = make([]uint32, 4)
 
 	plan := NewEditPlan(tpl)
 	plan.Delete(2, 3)
@@ -318,26 +318,26 @@ func TestEditPlan_BranchBeforeReplace_NotSpanning(t *testing.T) {
 func TestEditPlan_AddLiteral_New(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{{Op: OpLoadVoid}}
-	tpl.sourceRefs = []uint32{0}
+	tpl.sourceTableRefs = []uint32{0}
 	tpl.MaybeAppendLiteral(values.NewInteger(1))
 
 	plan := NewEditPlan(tpl)
 	idx := plan.AddLiteral(values.NewInteger(42))
 
-	qt.Assert(t, idx, qt.Equals, int32(1))
+	qt.Assert(t, idx, qt.Equals, LiteralIndex(1))
 	qt.Assert(t, len(tpl.literals), qt.Equals, 2)
 }
 
 func TestEditPlan_AddLiteral_Dedup(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{{Op: OpLoadVoid}}
-	tpl.sourceRefs = []uint32{0}
+	tpl.sourceTableRefs = []uint32{0}
 	tpl.MaybeAppendLiteral(values.NewInteger(42))
 
 	plan := NewEditPlan(tpl)
 	idx := plan.AddLiteral(values.NewInteger(42))
 
-	qt.Assert(t, idx, qt.Equals, int32(0))
+	qt.Assert(t, idx, qt.Equals, LiteralIndex(0))
 	qt.Assert(t, len(tpl.literals), qt.Equals, 1)
 }
 
@@ -354,7 +354,7 @@ func TestEditPlan_SideTableGC(t *testing.T) {
 		{Op: OpComplex, Arg: 1}, // 1: references op1 — will be deleted
 		{Op: OpComplex, Arg: 2}, // 2: references op2
 	}
-	tpl.sourceRefs = []uint32{0, 0, 0}
+	tpl.sourceTableRefs = values.SourceTableRefs{0, 0, 0}
 	tpl.sideTable = []InlinedOperation{op0, op1, op2}
 
 	plan := NewEditPlan(tpl)
@@ -378,7 +378,7 @@ func TestEditPlan_SideTableGC_NoneUnreferenced(t *testing.T) {
 		{Op: OpLoadVoid}, // delete this (doesn't reference sideTable)
 		{Op: OpLoadLiteral, Arg: 0},
 	}
-	tpl.sourceRefs = []uint32{0, 0, 0}
+	tpl.sourceTableRefs = values.SourceTableRefs{0, 0, 0}
 	tpl.sideTable = []InlinedOperation{op0}
 
 	plan := NewEditPlan(tpl)
@@ -397,7 +397,7 @@ func TestEditPlan_OverlappingEdits_Panics(t *testing.T) {
 		{Op: OpPush},
 		{Op: OpApply},
 	}
-	tpl.sourceRefs = make([]uint32, 3)
+	tpl.sourceTableRefs = make(values.SourceTableRefs, 3)
 
 	plan := NewEditPlan(tpl)
 	plan.Delete(0, 2)
@@ -409,7 +409,7 @@ func TestEditPlan_OverlappingEdits_Panics(t *testing.T) {
 func TestEditPlan_OutOfBounds_Panics(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{{Op: OpLoadVoid}}
-	tpl.sourceRefs = []uint32{0}
+	tpl.sourceTableRefs = values.SourceTableRefs{0}
 
 	plan := NewEditPlan(tpl)
 	plan.Delete(0, 5) // end > len(code)
@@ -427,7 +427,7 @@ func TestEditPlan_MixedEdits(t *testing.T) {
 		{Op: OpLoadLiteral, Arg: 0}, // 2: replace with 2 instrs
 		{Op: OpApply},               // 3: keep
 	}
-	tpl.sourceRefs = []uint32{1, 2, 3, 4}
+	tpl.sourceTableRefs = values.SourceTableRefs{1, 2, 3, 4}
 
 	plan := NewEditPlan(tpl)
 	plan.Delete(0, 1)
@@ -440,7 +440,7 @@ func TestEditPlan_MixedEdits(t *testing.T) {
 	// New: [Push, LoadGlobal, Pop, Apply]
 	qt.Assert(t, delta, qt.Equals, 0) // -1 + 1 = 0 net
 	qt.Assert(t, opcodes(tpl), qt.DeepEquals, []OpCode{OpPush, OpLoadGlobal, OpPop, OpApply})
-	qt.Assert(t, tpl.sourceRefs, qt.DeepEquals, []uint32{2, 7, 7, 4})
+	qt.Assert(t, tpl.sourceTableRefs, qt.DeepEquals, values.SourceTableRefs{2, 7, 7, 4})
 }
 
 // --- buildEditRemap ---

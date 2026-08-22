@@ -15,42 +15,40 @@
 package machine
 
 import (
-	"slices"
-
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-var _ values.Value = (*boxedValues)(nil)
+var _ values.Value = (*BoxedValues)(nil)
 
-// boxedValues is an internal carrier that collapses a zero- or many-valued
+// BoxedValues is an internal carrier that collapses a zero- or many-valued
 // value register into a SINGLE values.Value so it can be saved on the eval
 // stack as one slot. It never escapes to Scheme: it lives only on
 // the eval stack between an OperationBoxValues and its paired OperationUnboxValues
 // (currently dynamic-wind, bracketing the after-thunk call). Identified by type,
 // like noMarkSentinelType.
 //
-// It is used through a POINTER (*boxedValues), and that is load-bearing, not
+// It is used through a POINTER (*BoxedValues), and that is load-bearing, not
 // incidental. The struct holds a slice, so the bare struct type is not
 // Go-comparable; boxed into a values.Value it would fault any `==` or map-key
 // hash of the interface — values.EqIdentity (eq?) is exactly such an `==`. A
 // pointer is comparable, which is what keeps this carrier inside the Value
 // contract while it sits in the value register. See values.Value's doc comment,
 // and TestSliceCarriersAreNotValues.
-type boxedValues struct {
-	vals []values.Value
+type BoxedValues struct {
+	vals MultipleValues
 }
 
-func (*boxedValues) SchemeString() string {
+func (*BoxedValues) SchemeString() string {
 	return "#<boxed-values>"
 }
 
-func (*boxedValues) IsVoid() bool {
+func (*BoxedValues) IsVoid() bool {
 	return false
 }
 
-func (p *boxedValues) EqualTo(o values.Value) bool {
-	v, ok := o.(*boxedValues)
+func (p *BoxedValues) EqualTo(o values.Value) bool {
+	v, ok := o.(*BoxedValues)
 	return SameType(p, v, ok)
 }
 
@@ -60,7 +58,7 @@ func (p *boxedValues) EqualTo(o values.Value) bool {
 // keep a fixed one-slot footprint regardless of value count. Paired with
 // OperationUnboxValues.
 //
-// Zero or several values become a *boxedValues carrier. Exactly one value is
+// Zero or several values become a *BoxedValues carrier. Exactly one value is
 // left ALONE: it already occupies one slot, so boxing it bought nothing and
 // cost three allocations per dynamic-wind (the carrier, its slice, and the
 // Clone on the way back out). That is the overwhelmingly common case, and
@@ -92,10 +90,9 @@ func (*OperationBoxValues) Apply(mc *MachineContext) (*MachineContext, error) {
 	}
 	// Copy: GetValues returns the live multiValues slice; the box outlives the
 	// register (the bracketed call rebinds the register), so own the values.
-	boxed := &boxedValues{}
+	boxed := &BoxedValues{}
 	if len(src) > 0 {
-		boxed.vals = make([]values.Value, len(src))
-		copy(boxed.vals, src)
+		boxed.vals = src.Copy()
 	}
 	mc.SetValue(boxed)
 	mc.pc++
@@ -127,7 +124,7 @@ func NewOperationUnboxValues() *OperationUnboxValues {
 }
 
 func (*OperationUnboxValues) Apply(mc *MachineContext) (*MachineContext, error) {
-	boxed, ok := mc.GetValue().(*boxedValues)
+	boxed, ok := mc.GetValue().(*BoxedValues)
 	if !ok {
 		// The single-value fast path: OperationBoxValues declined to box, so the
 		// register holds the thunk's one value and there is nothing to expand.
@@ -152,7 +149,7 @@ func (*OperationUnboxValues) Apply(mc *MachineContext) (*MachineContext, error) 
 	// private backing array — and the same box may be unboxed again on
 	// continuation re-entry. Symmetric with the defensive copy in
 	// OperationBoxValues; cheap (dynamic-wind exit path only).
-	mc.SetValues(slices.Clone(boxed.vals)...)
+	mc.SetValues(boxed.vals.Copy()...)
 	mc.pc++
 	return mc, nil
 }
