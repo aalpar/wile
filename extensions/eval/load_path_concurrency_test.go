@@ -79,9 +79,7 @@ func TestLoadPathStack_ConcurrentChainsResolveIndependently(t *testing.T) {
 			var start sync.WaitGroup
 			start.Add(1)
 			for i, dir := range dirs {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					eng, err := wile.NewEngine(ctx, wile.WithExtension(exteval.Extension))
 					if err != nil {
 						results[i] = outcome{err: err}
@@ -93,7 +91,7 @@ func TestLoadPathStack_ConcurrentChainsResolveIndependently(t *testing.T) {
 					start.Wait()
 					val, evalErr := eng.EvalMultiple(ctx, fmt.Sprintf(`(load %q)`, main))
 					results[i] = outcome{val: val, err: evalErr}
-				}()
+				})
 			}
 			start.Done()
 			wg.Wait()

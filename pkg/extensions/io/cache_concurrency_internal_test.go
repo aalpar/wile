@@ -141,16 +141,14 @@ func TestConcurrentReadSyntaxSamePort_T1_1(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				_, err := st.readSyntaxCached(context.Background(), port, mk)
 				if err != nil {
 					return
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

@@ -154,14 +154,12 @@ func TestCopyForApplyInto_ConcurrentSourceRaceFree(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 32 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 2000 {
 				var dst LocalEnvironmentFrame
 				le.copyForApplyInto(&dst)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

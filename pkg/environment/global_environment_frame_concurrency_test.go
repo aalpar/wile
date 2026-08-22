@@ -171,13 +171,11 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		}
 
 		for range numGoroutines {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				copied := env.global.Copy()
 				c.Assert(copied, qt.Not(qt.IsNil))
 				c.Assert(len(copied.keys), qt.Equals, 10)
-			}()
+			})
 		}
 		wg.Wait()
 	})

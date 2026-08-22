@@ -59,9 +59,7 @@ func TestLibraryRegistryLookupClaimOrWait(t *testing.T) {
 	cachedHits := 0
 	waits := 0
 	for range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			cached, wait := reg.LookupClaimOrWait(name)
 			// Manual unlock (not defer) so the winner releases mu before the slow
 			// Register/FinishLoading. Every branch must unlock exactly once. Keep
@@ -85,7 +83,7 @@ func TestLibraryRegistryLookupClaimOrWait(t *testing.T) {
 				waits++
 			}
 			mu.Unlock()
-		}()
+		})
 	}
 	wg.Wait()
 

@@ -54,9 +54,7 @@ func TestBindingConcurrentGlobalReadWrite_D2(t *testing.T) {
 	stop := make(chan struct{})
 
 	// Reader: lock-free Value(), mirroring cachedBindings[i].Value().
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-stop:
@@ -71,12 +69,10 @@ func TestBindingConcurrentGlobalReadWrite_D2(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 
 	// Writer: set! under the frame lock.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer close(stop)
 		for i := range iterations {
 			v := values.Value(valA)
@@ -89,7 +85,7 @@ func TestBindingConcurrentGlobalReadWrite_D2(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 
 	wg.Wait()
 }
