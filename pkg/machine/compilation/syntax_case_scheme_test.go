@@ -15,6 +15,7 @@
 package compilation_test
 
 import (
+	"slices"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -472,6 +473,95 @@ func TestNestedMacroDoesNotCaptureOuterIntroduction(t *testing.T) {
 				(outer inner)
 				(inner 4))`,
 			Expected: values.List(values.NewInteger(4), values.NewInteger(4)),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// improperList builds (e0 e1 ... . tail). No values constructor does this —
+// values.List always terminates in EmptyList — and nesting NewCons by hand is
+// unreadable past two elements.
+func improperList(tail values.Value, elems ...values.Value) values.Value {
+	q := tail
+	for i := range slices.Backward(elems) {
+		q = values.NewCons(elems[i], q)
+	}
+	return q
+}
+
+// TestSyntaxTemplateImproperTail pins that a dotted template stays dotted.
+//
+// compileSyntaxTemplateListToOps walked the spine by hand and appended the
+// improper tail to the ELEMENT slice, so BuildSyntaxList consed it on like any
+// other element and every improper template came back proper:
+// (syntax->datum (syntax (a b . c))) answered (a b c). SyntaxForEach returns the
+// tail instead of yielding it, which is what makes the two impossible to
+// conflate; the operation now carries a Dotted flag and seeds the fold with the
+// tail rather than with the empty list.
+//
+// Every Expected below is Chez's answer, taken from petite rather than derived.
+// The proper-list rows are controls: they share the whole path and must not have
+// acquired a tail.
+func TestSyntaxTemplateImproperTail(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name:     "dotted tail after two elements",
+			Code:     `(syntax->datum (syntax (a b . c)))`,
+			Expected: improperList(values.NewSymbol("c"), values.NewSymbol("a"), values.NewSymbol("b")),
+		},
+		{
+			Name:     "dotted tail after one element",
+			Code:     `(syntax->datum (syntax (a . b)))`,
+			Expected: improperList(values.NewSymbol("b"), values.NewSymbol("a")),
+		},
+		{
+			// The dot is INSIDE, so the outer list is proper and only the nested
+			// one is dotted. A fix applied at the wrong recursion level shows up
+			// here as a properized (b c) or a dotted outer list.
+			Name: "nested dotted template inside a proper one",
+			Code: `(syntax->datum (syntax (a (b . c) d)))`,
+			Expected: values.List(
+				values.NewSymbol("a"),
+				improperList(values.NewSymbol("c"), values.NewSymbol("b")),
+				values.NewSymbol("d")),
+		},
+		{
+			// Dot notation whose tail IS a list denotes a proper list (R7RS §2.1),
+			// so this must NOT round-trip as dotted. It is the negative control
+			// for a fix that keyed on the source text rather than on the tail.
+			Name:     "control: dotted notation with a list tail is proper",
+			Code:     `(syntax->datum (syntax (a . (b c))))`,
+			Expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c")),
+		},
+		{
+			Name:     "control: proper template stays proper",
+			Code:     `(syntax->datum (syntax (a b c)))`,
+			Expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c")),
+		},
+		{
+			Name:     "control: empty template",
+			Code:     `(syntax->datum (syntax ()))`,
+			Expected: values.EmptyList,
+		},
+		{
+			// The runtime ellipsis path is a DIFFERENT expander
+			// (OperationSyntaxTemplateExpand), which already handled the tail. It
+			// is here so a later unification of the two cannot regress it
+			// unnoticed.
+			Name: "ellipsis template with a dotted tail",
+			Code: `(begin
+				(define-syntax dotted
+					(syntax-rules ()
+						((_ a b ...) (quote (a b ... . tail)))))
+				(dotted 1 2 3))`,
+			Expected: improperList(values.NewSymbol("tail"),
+				values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
 		},
 	}
 	for _, tc := range tcs {

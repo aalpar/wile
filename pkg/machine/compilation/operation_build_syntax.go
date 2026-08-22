@@ -23,10 +23,19 @@ import (
 )
 
 // OperationBuildSyntaxList builds a syntax list from elements on the eval stack.
-// n elements are popped from the stack (in reverse order) and consed into a list.
+// Count elements are popped (in reverse order) and consed into a list.
+//
+// Dotted makes the LAST of those elements the list's tail rather than its final
+// element, which is what `(a b . c)` needs. Without it every template was built
+// onto SyntaxEmptyList, so an improper template came back proper —
+// (syntax->datum (syntax (a b . c))) answered (a b c) where Chez answers
+// (a b . c). The tail rides on the stack like any other element rather than
+// getting its own operand, so the push protocol is unchanged and Count still
+// says exactly how many values this pops.
 type OperationBuildSyntaxList struct {
 	machine.OperationBase
-	Count int
+	Count  int
+	Dotted bool
 }
 
 // NewOperationBuildSyntaxList creates a new OperationBuildSyntaxList.
@@ -34,6 +43,17 @@ func NewOperationBuildSyntaxList(count int) *OperationBuildSyntaxList {
 	return &OperationBuildSyntaxList{
 		OperationBase: machine.NewOperationBaseWithGoName("operation:build-syntax-list", "BuildSyntaxList"),
 		Count:         count,
+	}
+}
+
+// NewOperationBuildDottedSyntaxList creates an OperationBuildSyntaxList whose
+// last popped element is the improper tail. count includes that tail, so a
+// template with k elements before the dot has count == k+1.
+func NewOperationBuildDottedSyntaxList(count int) *OperationBuildSyntaxList {
+	return &OperationBuildSyntaxList{
+		OperationBase: machine.NewOperationBaseWithGoName("operation:build-syntax-list", "BuildSyntaxList"),
+		Count:         count,
+		Dotted:        true,
 	}
 }
 
@@ -51,18 +71,14 @@ func (p *OperationBuildSyntaxList) Apply(mc *machine.MachineContext) (*machine.M
 	// PopN returns elements in stack order (bottom to top)
 	// We iterate backwards to build the list in reverse
 	elements := mc.Evals().PopN(p.Count)
+	if p.Dotted {
+		// Seed the fold with the tail instead of the empty list, and drop it
+		// from the elements still to be consed on.
+		result = asSyntaxValue(elements[len(elements)-1])
+		elements = elements[:len(elements)-1]
+	}
 	for i := range slices.Backward(elements) {
-		elem := elements[i]
-		// Wrap non-syntax values
-		var stx syntax.SyntaxValue
-		s, ok := elem.(syntax.SyntaxValue)
-		if ok {
-			stx = s
-		} else {
-			v := elem
-			stx = syntax.NewSyntaxObject(v, nil)
-		}
-		result = syntax.NewSyntaxCons(stx, result, nil)
+		result = syntax.NewSyntaxCons(asSyntaxValue(elements[i]), result, nil)
 	}
 
 	mc.SetValue(result)
@@ -70,10 +86,27 @@ func (p *OperationBuildSyntaxList) Apply(mc *machine.MachineContext) (*machine.M
 	return mc, nil
 }
 
+// asSyntaxValue wraps a non-syntax stack value so it can sit in a syntax list.
+func asSyntaxValue(v values.Value) syntax.SyntaxValue {
+	s, ok := v.(syntax.SyntaxValue)
+	if ok {
+		return s
+	}
+	return syntax.NewSyntaxObject(v, nil)
+}
+
+// buildSyntaxListShape is the comparable projection of the two fields that
+// decide what this operation builds. FieldMatches takes one extractor, and a
+// Count-only comparison would call a dotted build equal to a proper one.
+type buildSyntaxListShape struct {
+	count  int
+	dotted bool
+}
+
 func (p *OperationBuildSyntaxList) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationBuildSyntaxList)
 	return machine.FieldMatches(p, v, ok,
-		func(op *OperationBuildSyntaxList) int {
-			return op.Count
+		func(op *OperationBuildSyntaxList) buildSyntaxListShape {
+			return buildSyntaxListShape{count: op.Count, dotted: op.Dotted}
 		})
 }

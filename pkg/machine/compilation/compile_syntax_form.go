@@ -15,6 +15,8 @@
 package compilation
 
 import (
+	"context"
+
 	"github.com/aalpar/wile/pkg/internal/match"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/syntax"
@@ -31,7 +33,7 @@ import (
 // ellipsis patterns capture variable-length lists that must be expanded dynamically.
 //
 // (syntax template) -> syntax-object
-func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is the CDR of the form (keyword stripped by syntaxCompiler in register.go).
 	// So expr = (template)
 	template, err := formSingleArg(expr, "syntax")
@@ -57,7 +59,7 @@ func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr s
 	}
 
 	// No ellipsis - compile the template to bytecode that constructs the syntax object
-	return p.compileSyntaxTemplateToOps(template)
+	return p.compileSyntaxTemplateToOps(ctctx.Context(), template)
 }
 
 // templateContainsEllipsis checks if a syntax template contains unescaped ellipsis "...".
@@ -123,7 +125,7 @@ func isEllipsisSymbol(stx syntax.SyntaxValue) bool {
 // compileSyntaxTemplateToOps emits bytecode operations that build a syntax object.
 // Pattern variables are looked up; literals are loaded directly.
 // The result is left in the value register.
-func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(ctx context.Context, stx syntax.SyntaxValue) error {
 	switch v := stx.(type) {
 	case *syntax.SyntaxSymbol:
 		// Check if this symbol is a local binding (pattern variable)
@@ -199,12 +201,12 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 			if ok && !cdrPair.IsEmptyList() {
 				// Get the escaped template and compile it directly
 				escapedTemplate := cdrPair.SyntaxCar()
-				return p.compileSyntaxTemplateToOps(escapedTemplate)
+				return p.compileSyntaxTemplateToOps(ctx, escapedTemplate)
 			}
 		}
 
 		// Compile list elements and build a syntax list
-		return p.compileSyntaxTemplateListToOps(v)
+		return p.compileSyntaxTemplateListToOps(ctx, v)
 
 	default:
 		// Other values - load as literal
@@ -216,33 +218,33 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 
 // compileSyntaxTemplateListToOps compiles a list template to bytecode.
 // Each element is compiled and pushed to the stack, then BuildSyntaxList is called.
-func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(pair *syntax.SyntaxPair) error {
-	// First, collect all elements to count them
+//
+// SyntaxForEach rather than a hand-rolled cdr descent, and the improper tail is
+// the reason rather than the tidiness: walkSyntaxSpine RETURNS the tail instead
+// of yielding it, so the two cannot be conflated. The loop this replaces
+// appended the tail to the element slice, and BuildSyntaxList then consed it as
+// an ordinary element — (syntax->datum (syntax (a b . c))) answered (a b c),
+// where Chez answers (a b . c). The tail is still pushed like an element,
+// because the operation takes it off the stack; what changed is that the
+// operation is told it IS one.
+func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(ctx context.Context, pair *syntax.SyntaxPair) error {
 	var elements []syntax.SyntaxValue
-	current := pair
+	tail, err := pair.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
+		elements = append(elements, v)
+		return nil
+	})
+	if err != nil {
+		return p.wrapCompilationError(err)
+	}
 
-	for !syntax.IsSyntaxEmptyList(current) {
-		car := current.SyntaxCar()
-		carSyntax := car
-		elements = append(elements, carSyntax)
-		cdr := current.SyntaxCdr()
-		if syntax.IsSyntaxEmptyList(cdr) {
-			break
-		}
-		nextPair, ok := cdr.(*syntax.SyntaxPair)
-		if ok {
-			current = nextPair
-		} else {
-			// Improper list - the last cdr is not a pair
-			cdrSyntax := cdr
-			elements = append(elements, cdrSyntax)
-			break
-		}
+	dotted := !syntax.IsSyntaxEmptyList(tail)
+	if dotted {
+		elements = append(elements, tail)
 	}
 
 	// Compile each element and push to stack (in order)
 	for _, elem := range elements {
-		err := p.compileSyntaxTemplateToOps(elem)
+		err := p.compileSyntaxTemplateToOps(ctx, elem)
 		if err != nil {
 			return err
 		}
@@ -250,6 +252,10 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(pair *syntax.Sy
 	}
 
 	// Build the list
+	if dotted {
+		p.AppendOperations(NewOperationBuildDottedSyntaxList(len(elements)))
+		return nil
+	}
 	p.AppendOperations(NewOperationBuildSyntaxList(len(elements)))
 	return nil
 }

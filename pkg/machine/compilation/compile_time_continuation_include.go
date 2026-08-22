@@ -84,87 +84,76 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAPair, "include: expected a list of filenames, got %T", expr)
 	}
-	for !syntax.IsSyntaxEmptyList(rest) {
+	// SyntaxForEach rather than a hand-rolled cdr descent. The callback IS the
+	// per-iteration closure the two defers below need, so the immediately-invoked
+	// function this replaces is gone rather than merely renamed; and the improper
+	// tail arrives as a RETURN VALUE, so the "not a list" refusal is a test on it
+	// instead of a branch buried in the descent. The loop guard that went with
+	// that descent was dead either way — (*SyntaxPair).IsEmptyList() returns false
+	// unconditionally, so termination was always the cdr break.
+	tail, err := rest.SyntaxForEach(ctctx.Context(), func(_ context.Context, _ int, _ bool, car syntax.SyntaxValue) error {
 		// Get the file name
-		car := rest.SyntaxCar()
-		next := car
-		fn, ok := next.Unwrap().(*values.String)
+		fn, ok := car.Unwrap().(*values.String)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAPair, "include: expected a string but got a %T", next)
+			return werr.WrapForeignErrorf(werr.ErrNotAPair, "include: expected a string but got a %T", car)
 		}
 
-		// Process file in closure to ensure defer runs after each iteration
-		err := func() error {
-			// Find and open the file
-			file, filePath, err := findFile(p, ctctx, fn.Value)
-			if err != nil {
-				return werr.WrapForeignErrorf(err, "include")
-			}
-			defer file.Close() //nolint:errcheck
-
-			// Push to stack after successful open, pop on exit, so a nested relative
-			// path inside the included file resolves against ITS directory rather
-			// than the includer's. resolver.SelectLoadStack returns the same object
-			// the FS/OS resolvers read from, which is what keeps the push target and
-			// the read target identical.
-			//
-			// A top-level (include …) outside any load carries no stack, so this
-			// creates one and installs it on the ctx used for the rest of THIS file
-			// — the same get-or-create PrimLoad performs. Without it a chain of
-			// includes could not resolve past its first hop: the include compiler
-			// would push nowhere and the resolver would read nothing. `inner` is a
-			// copy, so the derived ctx does not escape this file's extent.
-			inner := ctctx
-			stack := resolver.SelectLoadStack(inner.ctx)
-			if stack == nil {
-				stack = sourceload.NewLoadStack()
-				inner.ctx = sourceload.WithLoadStack(inner.ctx, stack)
-			}
-			stack.Push(filePath)
-			defer stack.Pop()
-
-			// Create parser for the file
-			reader := bufio.NewReader(file)
-			fileParser := parser.NewParserWithFile(p.env, true, reader, filePath)
-			// include-ci reads the file case-insensitively (R7RS §2.1 fold-case),
-			// folding identifiers to lowercase as they are read.
-			fileParser.SetFoldCase(foldCase)
-
-			// Read all forms from the file first, then process them with letrec* semantics
-			var forms []syntax.SyntaxValue
-			for {
-				stx, readErr := fileParser.ReadSyntax(inner.ctx)
-				if readErr != nil {
-					if errors.Is(readErr, io.EOF) {
-						break
-					}
-					return werr.WrapForeignErrorf(readErr, "include: error reading %q", fn.Value)
-				}
-				forms = append(forms, stx)
-			}
-
-			// Process forms with letrec* semantics: pre-declare all bindings first
-			err = p.processFormsWithLetrecSemantics(inner, forms, "include "+fn.Value)
-			if err != nil {
-				return err
-			}
-
-			return nil
-		}()
+		// Find and open the file
+		file, filePath, err := findFile(p, ctctx, fn.Value)
 		if err != nil {
-			return err
+			return werr.WrapForeignErrorf(err, "include")
+		}
+		defer file.Close() //nolint:errcheck
+
+		// Push to stack after successful open, pop on exit, so a nested relative
+		// path inside the included file resolves against ITS directory rather
+		// than the includer's. resolver.SelectLoadStack returns the same object
+		// the FS/OS resolvers read from, which is what keeps the push target and
+		// the read target identical.
+		//
+		// A top-level (include …) outside any load carries no stack, so this
+		// creates one and installs it on the ctx used for the rest of THIS file
+		// — the same get-or-create PrimLoad performs. Without it a chain of
+		// includes could not resolve past its first hop: the include compiler
+		// would push nowhere and the resolver would read nothing. `inner` is a
+		// copy, so the derived ctx does not escape this file's extent.
+		inner := ctctx
+		stack := resolver.SelectLoadStack(inner.ctx)
+		if stack == nil {
+			stack = sourceload.NewLoadStack()
+			inner.ctx = sourceload.WithLoadStack(inner.ctx, stack)
+		}
+		stack.Push(filePath)
+		defer stack.Pop()
+
+		// Create parser for the file
+		reader := bufio.NewReader(file)
+		fileParser := parser.NewParserWithFile(p.env, true, reader, filePath)
+		// include-ci reads the file case-insensitively (R7RS §2.1 fold-case),
+		// folding identifiers to lowercase as they are read.
+		fileParser.SetFoldCase(foldCase)
+
+		// Read all forms from the file first, then process them with letrec* semantics
+		var forms []syntax.SyntaxValue
+		for {
+			stx, readErr := fileParser.ReadSyntax(inner.ctx)
+			if readErr != nil {
+				if errors.Is(readErr, io.EOF) {
+					break
+				}
+				return werr.WrapForeignErrorf(readErr, "include: error reading %q", fn.Value)
+			}
+			forms = append(forms, stx)
 		}
 
-		// Move to next filename
-		cdr := rest.SyntaxCdr()
-		nextPair, cdrOk := cdr.(*syntax.SyntaxPair)
-		if !cdrOk {
-			if syntax.IsSyntaxEmptyList(cdr) {
-				break
-			}
-			return werr.WrapForeignErrorf(werr.ErrNotAPair, "include: expected a list, got %T", cdr)
-		}
-		rest = nextPair
+		// Process forms with letrec* semantics: pre-declare all bindings first
+		return p.processFormsWithLetrecSemantics(inner, forms, "include "+fn.Value)
+	})
+	if err != nil {
+		return err
+	}
+	if !syntax.IsSyntaxEmptyList(tail) {
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "include: expected a list, got %T", tail)
 	}
 	return nil
 }

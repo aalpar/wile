@@ -46,6 +46,7 @@ const maxLocalSlots = 32767
 // reached through the many-call-site AppendOperations path and cannot return an
 // error. EncodeLocalIndex keeps its panic as an internal invariant backstop; this
 // guard is what keeps user-reachable input from ever tripping it.
+// 611: slots to int16: 32767
 func checkLocalSlotCapacity(slots int, form string) error {
 	if slots <= maxLocalSlots {
 		return nil
