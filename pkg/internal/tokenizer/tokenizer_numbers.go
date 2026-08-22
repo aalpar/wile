@@ -719,25 +719,6 @@ func (p *Tokenizer) mayReadPolarPart(r int) {
 	p.state = TokenizerStateUnsignedComplexPolar
 }
 
-func (p *Tokenizer) readBaseNInteger(r, maxn int) (int64, int) {
-	n := 0
-	sign := '+'
-	if isExplicitSign(p.curr()) {
-		sign = p.curr()
-		p.next()
-		n++
-		if p.err != nil {
-			return 0, n
-		}
-	}
-	q, n0 := p.readUnsignedBaseNInteger(r, maxn)
-	n += n0
-	if sign == '-' {
-		q = -q
-	}
-	return q, n
-}
-
 func (p *Tokenizer) readUnsignedBaseNInteger(r, maxn int) (int64, int) {
 	n := 0
 	var s strings.Builder

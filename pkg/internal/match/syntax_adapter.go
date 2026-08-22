@@ -364,12 +364,6 @@ func (p *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
 	return p.matcher.GetBindings()
 }
 
-// literalScopesMatchWithChecker is literalScopesMatchWithDef with no
-// definition-site pin: the unpinned, use-site-only comparison.
-func literalScopesMatchWithChecker(checker BindingChecker, input, pattern *syntax.SyntaxSymbol) bool {
-	return literalScopesMatchWithDef(checker, input, pattern, LiteralPin{})
-}
-
 // literalScopesMatchWithDef checks if an input symbol should match a pattern literal.
 //
 // Per R7RS §4.3.2, a subform in the input matches a literal identifier if and

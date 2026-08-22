@@ -394,11 +394,6 @@ func (p *Thread) Terminate() {
 	}
 }
 
-// Yield is a no-op placeholder. Yielding is done by the thread-yield!
-// primitive, which calls runtime.Gosched directly; nothing calls this method.
-func (p *Thread) Yield() {
-}
-
 // Sleep pauses the thread for the given duration
 func (p *Thread) Sleep(d time.Duration) {
 	p.mu.Lock()

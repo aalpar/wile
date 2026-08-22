@@ -59,7 +59,7 @@ func TestTokenizer_next(t *testing.T) {
 	qt.Check(t, p.err, qt.ErrorIs, io.EOF)
 }
 
-func TestTokenizer_scan(t *testing.T) {
+func TestTokenizer_scanWith(t *testing.T) {
 	n := 0
 	//
 	tcs := []struct {
@@ -128,7 +128,9 @@ func TestTokenizer_scan(t *testing.T) {
 			c := qt.New(t)
 			p := NewTokenizer(strings.NewReader(tc.in), false)
 			c.Check(p.err, qt.ErrorIs, tc.erris0)
-			n = p.scan([]byte(tc.scan))
+			n = p.scanWith([]byte(tc.scan), func(input, target rune) bool {
+				return input == target
+			})
 			c.Check(p.err, qt.ErrorIs, tc.erris1)
 			c.Check(n, qt.Equals, tc.nis)
 			c.Check(p.cur, qt.Equals, tc.cur, qt.Commentf("want '%c' but got '%c' instead", tc.cur, p.cur))

@@ -161,12 +161,6 @@ func (p *CompileTimeContinuation) expandQuasisyntax(ctx context.Context, stx syn
 	return p.expandQuasi(ctx, stx, depth, quasisyntaxKW, p.newQuasiDepthGuard())
 }
 
-// expandQuasisyntaxList handles list expansion for quasisyntax.
-// Delegates to the unified expandQuasiList with quasisyntax keywords.
-func (p *CompileTimeContinuation) expandQuasisyntaxList(ctx context.Context, pair *syntax.SyntaxPair, depth int) (syntax.SyntaxValue, error) {
-	return p.expandQuasiList(ctx, pair, depth, quasisyntaxKW, p.newQuasiDepthGuard())
-}
-
 // CompileUnsyntax errors - unsyntax outside of quasisyntax
 func (p *CompileTimeContinuation) CompileUnsyntax(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
 	return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unsyntax: not in quasisyntax context"))

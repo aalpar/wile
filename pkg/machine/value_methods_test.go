@@ -368,12 +368,6 @@ func TestMachineContinuation_PromptMethods(t *testing.T) {
 	tag := machine.NewPromptTag("p")
 	cont.SetPromptTag(tag)
 	c.Assert(cont.PromptTag(), qt.Equals, tag)
-
-	handler := machine.NewForeignClosure(env, 0, false, func(mc machine.CallContext) error {
-		return nil
-	})
-	cont.SetPromptHandler(handler)
-	c.Assert(cont.PromptHandler(), qt.Equals, handler)
 }
 
 func TestNewMachineContinuationWithPrompt(t *testing.T) {

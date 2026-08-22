@@ -91,8 +91,7 @@ func platformFeatures() []string {
 
 // AllFeatures returns all supported feature identifiers.
 func AllFeatures() []string {
-	features := make([]string, len(supportedFeatures))
-	copy(features, supportedFeatures)
+	features := slices.Clone(supportedFeatures)
 	features = append(features, platformFeatures()...)
 	return features
 }

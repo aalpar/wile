@@ -290,7 +290,7 @@ func TestLiteralScopesMatchWithChecker(t *testing.T) {
 			inputSym := syntax.NewSyntaxSymbol("=>", tt.inputSrcCtx)
 			patternSym := syntax.NewSyntaxSymbol("=>", tt.patternSrcCtx)
 
-			result := literalScopesMatchWithChecker(tt.bindingChecker, inputSym, patternSym)
+			result := literalScopesMatchWithDef(tt.bindingChecker, inputSym, patternSym, LiteralPin{})
 			c.Assert(result, qt.Equals, tt.expected)
 		})
 	}

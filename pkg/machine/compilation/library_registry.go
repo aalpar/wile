@@ -194,7 +194,7 @@ func NewLibraryRegistry() *LibraryRegistry {
 func (p *LibraryRegistry) SetSearchPaths(paths []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.searchPaths = append([]string(nil), paths...)
+	p.searchPaths = slices.Clone(paths)
 }
 
 // GetSearchPaths returns a copy of the current library search paths. Returning
@@ -203,7 +203,7 @@ func (p *LibraryRegistry) SetSearchPaths(paths []string) {
 func (p *LibraryRegistry) GetSearchPaths() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return append([]string(nil), p.searchPaths...)
+	return slices.Clone(p.searchPaths)
 }
 
 // PrependSearchPath adds a path to the beginning of the search path list.

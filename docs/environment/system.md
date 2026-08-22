@@ -579,7 +579,6 @@ _, err = engine.EvalMultiple(loadCtx, `(load "helper.scm")`) // resolves relativ
 
 // Query
 engine.CurrentLoadPath(loadCtx)       // "" outside a load
-engine.CurrentLoadDirectory(loadCtx)  // "" outside a load
 ```
 
 `ContextWithLoadPath` returns an error only for an empty path. The returned context carries its OWN stack, seeded from `ctx`'s if there is one, so a caller cannot leak a push into the context it was handed.

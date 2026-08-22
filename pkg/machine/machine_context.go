@@ -85,7 +85,7 @@ type MachineContext struct {
 	// never consulted. Nothing resumes from it.
 	escapeCont *MachineContinuation
 	// barrierValid moved to vmState so it rides the continuation chain (crossing
-	// detection survives capture/re-entry); BarrierValid()/SetBarrierValid promote from there.
+	// detection survives capture/re-entry); BarrierValid() promotes from there.
 	counters VMCounters // performance counters (plain uint64, single-goroutine)
 	// thread is the SRFI-18 thread object (nil = primordial thread).
 	// This is the Scheme-visible half of the thread identity split.
@@ -286,12 +286,6 @@ func (p *MachineContext) BarrierValid() *BarrierToken {
 	return p.barrierValid
 }
 
-// SetBarrierValid sets the barrier identity token on this context.
-// Called by PrimCallWithContinuationBarrier to mark the sub-context as inside a barrier.
-func (p *MachineContext) SetBarrierValid(v *BarrierToken) {
-	p.barrierValid = v
-}
-
 func (p *MachineContext) Template() *NativeTemplate {
 	return p.template
 }
@@ -381,13 +375,6 @@ func (p *MachineContext) Authorizer() security.Authorizer {
 		return p.authorizer
 	}
 	return ns.Authorizer()
-}
-
-// SetExecutingNamespace fixes the namespace this context executes in. Called by
-// the context constructors from the env they are already handed, before any
-// apply can repoint p.env.
-func (p *MachineContext) SetExecutingNamespace(ns *environment.Namespace) {
-	p.execNS = ns
 }
 
 // ExecutingNamespace returns the namespace this context is executing in, or nil

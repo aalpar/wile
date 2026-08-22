@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"slices"
+
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -31,10 +33,8 @@ type CaseLambdaClosure struct {
 }
 
 func NewCaseLambdaClosure(closures []*MachineClosure) *CaseLambdaClosure {
-	clauses := make([]*MachineClosure, len(closures))
-	copy(clauses, closures)
 	return &CaseLambdaClosure{
-		clauses: clauses,
+		clauses: slices.Clone(closures),
 	}
 }
 

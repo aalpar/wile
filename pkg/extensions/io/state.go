@@ -151,14 +151,6 @@ func (p *State) SetOutputPort(port *values.PortObject) {
 	p.outPort.SetValue(port)
 }
 
-// SetErrorPort sets this engine's base error port. Not validated here (see
-// SetInputPort); a non-textual port errors at resolve time. Its absence is what
-// made current-error-port undetachable from os.Stderr by any route, exported or
-// otherwise (reviews/2026-08-07/REVIEW.md 2.1.1).
-func (p *State) SetErrorPort(port *values.PortObject) {
-	p.errPort.SetValue(port)
-}
-
 // GetInputPort returns this engine's base input port, or a wrapped sentinel if
 // the parameter does not hold a textual input port. It serves non-VM callers
 // (tests, embedders) that read the base value directly, without going through
@@ -171,12 +163,6 @@ func (p *State) GetInputPort() (*values.PortObject, error) {
 // the parameter does not hold a textual output port.
 func (p *State) GetOutputPort() (*values.PortObject, error) {
 	return currentTextualOutputPort("current-output-port", p.outPort.Value())
-}
-
-// GetErrorPort returns this engine's base error port, or a wrapped sentinel if
-// the parameter does not hold a textual output port.
-func (p *State) GetErrorPort() (*values.PortObject, error) {
-	return currentTextualOutputPort("current-error-port", p.errPort.Value())
 }
 
 // stateFrom pulls the per-engine State off the CallContext's namespace, or

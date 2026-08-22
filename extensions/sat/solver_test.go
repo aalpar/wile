@@ -17,6 +17,7 @@ package sat
 import (
 	"context"
 	"math/rand"
+	"slices"
 	"testing"
 )
 
@@ -407,7 +408,7 @@ func TestSolve_ModelSatisfiesInput(t *testing.T) {
 		clauses, numVars := randomCNF(rng, 12, 40, 3)
 		origLits := make([][]literal, len(clauses))
 		for i, c := range clauses {
-			origLits[i] = append([]literal(nil), c.lits...)
+			origLits[i] = slices.Clone(c.lits)
 		}
 		s := newSolver(context.Background(), clauses, numVars, 100000)
 		r := s.solve()

@@ -1035,7 +1035,7 @@ func (p *Engine) AvailableLibraries(ctx context.Context) ([]LibraryName, error) 
 	}
 	q := make([]LibraryName, len(internal))
 	for i, name := range internal {
-		q[i] = LibraryName{Parts: append([]string(nil), name.Parts...)}
+		q[i] = LibraryName{Parts: slices.Clone(name.Parts)}
 	}
 	return q, nil
 }
@@ -1588,16 +1588,6 @@ func (p *Engine) CurrentLoadPath(ctx context.Context) string {
 		return ""
 	}
 	return stack.Current()
-}
-
-// CurrentLoadDirectory returns the directory of the file ctx names as currently
-// loading, or "" if ctx is not inside a load.
-func (p *Engine) CurrentLoadDirectory(ctx context.Context) string {
-	stack := sourceload.LoadStackFromContext(ctx)
-	if stack == nil {
-		return ""
-	}
-	return stack.CurrentDir()
 }
 
 // Close releases the resources this engine holds, from two sources: extensions

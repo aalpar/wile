@@ -2,6 +2,7 @@ package sat
 
 import (
 	"context"
+	"slices"
 	"testing"
 )
 
@@ -68,7 +69,7 @@ func copyClauses(cs []clause) []clause {
 		out[i] = clause{
 			learnt:   c.learnt,
 			activity: c.activity,
-			lits:     append([]literal(nil), c.lits...),
+			lits:     slices.Clone(c.lits),
 		}
 	}
 	return out

@@ -223,7 +223,7 @@ func TestBodyDefineTiers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			body := bodyOfLambda(t, tc.code)
-			got := bodyDefineTier(body, tc.index)
+			got := newLetrecRegion(bodyBindersOfRegion(body)).tier(tc.index)
 			c.Assert(got, qt.Equals, tc.want)
 		})
 	}
@@ -304,7 +304,7 @@ func TestLetrecTiers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			v := validatedLetOf(t, tc.code)
-			got := letrecBindingTier(v, tc.index)
+			got := newLetrecRegion(letBindersOfRegion(v)).tier(tc.index)
 			c.Assert(got, qt.Equals, tc.want,
 				qt.Commentf("binding %q classified %v, want %v",
 					v.Bindings[tc.index].Name.Sym.Key, got, tc.want))

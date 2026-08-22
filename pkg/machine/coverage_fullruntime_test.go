@@ -1728,7 +1728,7 @@ func TestCoverageWithSyntax(t *testing.T) {
 }
 
 // TestCoverageQuasisyntax tests quasisyntax with runtime evaluation.
-// Triggers compileQuasisyntaxTemplate, expandQuasisyntax, expandQuasisyntaxList.
+// Triggers compileQuasisyntaxTemplate, expandQuasisyntax, expandQuasiList.
 func TestCoverageQuasisyntax(t *testing.T) {
 	testCases := []struct {
 		name     string

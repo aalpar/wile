@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -158,8 +159,7 @@ func TestPeephole_DeadLoadVoid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
-			tpl.code = make([]Instruction, len(tt.code))
-			copy(tpl.code, tt.code)
+			tpl.code = slices.Clone(tt.code)
 			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 
 			before := len(tpl.code)
@@ -269,8 +269,7 @@ func TestPeephole_BranchOffsetFixup(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
-			tpl.code = make([]Instruction, len(tt.code))
-			copy(tpl.code, tt.code)
+			tpl.code = slices.Clone(tt.code)
 			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 
 			tpl.Optimize()
@@ -510,8 +509,7 @@ func TestPeephole_FuseLoadPush(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
-			tpl.code = make([]Instruction, len(tt.code))
-			copy(tpl.code, tt.code)
+			tpl.code = slices.Clone(tt.code)
 			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 
 			tpl.Optimize()
@@ -641,8 +639,7 @@ func TestPeephole_FusePullApply(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
-			tpl.code = make([]Instruction, len(tt.code))
-			copy(tpl.code, tt.code)
+			tpl.code = slices.Clone(tt.code)
 			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 
 			tpl.Optimize()
@@ -884,8 +881,7 @@ func TestFuseCallForeignCached(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
-			tpl.code = make([]Instruction, len(tt.code))
-			copy(tpl.code, tt.code)
+			tpl.code = slices.Clone(tt.code)
 			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 			tpl.cachedBindings = tt.cachedBindings
 
@@ -1253,8 +1249,7 @@ func TestFusePromotedCompoundArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
-			tpl.code = make([]Instruction, len(tt.code))
-			copy(tpl.code, tt.code)
+			tpl.code = slices.Clone(tt.code)
 			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 			tpl.cachedBindings = tt.cachedBindings
 
@@ -1508,8 +1503,7 @@ func TestFuseCallGeneric(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
-			tpl.code = make([]Instruction, len(tt.code))
-			copy(tpl.code, tt.code)
+			tpl.code = slices.Clone(tt.code)
 			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 			tpl.cachedBindings = tt.cachedBindings
 
@@ -1719,8 +1713,7 @@ func TestFusePromotedPrimitives(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tpl := NewEmptyNativeTemplate()
-			tpl.code = make([]Instruction, len(tt.code))
-			copy(tpl.code, tt.code)
+			tpl.code = slices.Clone(tt.code)
 			tpl.sourceTableRefs = make(values.SourceTableRefs, len(tt.code))
 			tpl.cachedBindings = tt.cachedBindings
 

@@ -109,9 +109,7 @@ func (p *LocalEnvironmentFrame) Bindings() []Binding {
 func (p *LocalEnvironmentFrame) Keys() map[values.Symbol][]int {
 	result := make(map[values.Symbol][]int, len(p.keys))
 	for k, v := range p.keys {
-		cp := make([]int, len(v))
-		copy(cp, v)
-		result[k] = cp
+		result[k] = slices.Clone(v)
 	}
 	return result
 }

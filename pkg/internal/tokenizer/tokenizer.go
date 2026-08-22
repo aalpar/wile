@@ -481,17 +481,6 @@ func (p *Tokenizer) scanWith(s []byte, match func(input, target rune) bool) int 
 	}
 }
 
-// scan matches bytes using either case-sensitive or case-insensitive matching.
-// Returns len(s) minus the number of runes matched (0 = complete match); all
-// call sites pass ASCII, where that is the count of unmatched bytes.
-func (p *Tokenizer) scan(s []byte) int {
-	if p.ci {
-		// Case-insensitive mode: accept if either case matches
-		return p.scanCaseInsensitive(s)
-	}
-	return p.scanWith(s, func(input, target rune) bool { return input == target })
-}
-
 // scanCaseInsensitive matches bytes case-insensitively (always, regardless of p.ci).
 // Used for R7RS-required case-insensitive tokens like booleans.
 // Returns len(s) minus the number of runes matched (0 = complete match); all

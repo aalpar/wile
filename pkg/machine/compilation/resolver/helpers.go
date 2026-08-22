@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -78,7 +79,7 @@ var libraryExtensions = []string{".sld", ".scm"}
 
 // LibraryExtensions returns a copy of the recognized Scheme library file extensions.
 func LibraryExtensions() []string {
-	return append([]string(nil), libraryExtensions...)
+	return slices.Clone(libraryExtensions)
 }
 
 // isSchemeFile reports whether the filename has a recognized Scheme file extension.

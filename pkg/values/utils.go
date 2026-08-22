@@ -505,25 +505,9 @@ func (p MapSet[T]) Add(s T) bool {
 	return !exists
 }
 
-func (p MapSet[T]) AddAll(vs ...T) int {
-	count := 0
-	for _, v := range vs {
-		if p.Add(v) {
-			count++
-		}
-	}
-	return count
-}
-
 func (p MapSet[T]) ContainsOne(s T) bool {
 	_, q := p[s]
 	return q
-}
-
-func (p MapSet[T]) UnsetAll(all ...T) {
-	for _, v := range all {
-		p.Unset(v)
-	}
 }
 
 // StringSet and IntSet are the two instantiations common enough to have earned

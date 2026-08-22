@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"slices"
+
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -121,8 +123,7 @@ func (p *MachineContext) applyCapturedContinuation(
 	// when the caller used Drain (zero-copy) args shares the eval-stack backing array,
 	// which the resume's Restore recycles. Forward ALL of them (R7RS §6.10): the
 	// captured continuation resumes with however many values it was called with.
-	vals := make([]values.Value, len(args))
-	copy(vals, args)
+	vals := slices.Clone(args)
 
 	// Decide the escalator-arm revivals HERE, against the invoking context's own
 	// chain, for the same reason SourceWinding is copied here: the trampoline hands

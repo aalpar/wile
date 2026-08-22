@@ -82,13 +82,15 @@ func mustExpandQuasisyntax(t *testing.T, ccnt *CompileTimeContinuation, stx synt
 	return v
 }
 
-// mustExpandQuasisyntaxList is the expandQuasisyntaxList counterpart of
-// mustExpandQuasisyntax.
+// mustExpandQuasisyntaxList is the list-expansion counterpart of
+// mustExpandQuasisyntax. Compilation reaches expandQuasiList through
+// expandQuasi, so the quasisyntax-keyed entry point lives here rather than in
+// the compiler.
 func mustExpandQuasisyntaxList(t *testing.T, ccnt *CompileTimeContinuation, pair *syntax.SyntaxPair, depth int) syntax.SyntaxValue {
 	t.Helper()
-	v, err := ccnt.expandQuasisyntaxList(context.Background(), pair, depth)
+	v, err := ccnt.expandQuasiList(context.Background(), pair, depth, quasisyntaxKW, ccnt.newQuasiDepthGuard())
 	if err != nil {
-		t.Fatalf("expandQuasisyntaxList: unexpected error: %v", err)
+		t.Fatalf("expandQuasiList: unexpected error: %v", err)
 	}
 	return v
 }
@@ -389,7 +391,7 @@ func TestExpandQuasisyntax_UnsyntaxSplicing(t *testing.T) {
 	c := qt.New(t)
 	ccnt, _ := newTestCompiler()
 
-	// (a #,@xs b) -> delegates to expandQuasisyntaxList which produces append form
+	// (a #,@xs b) -> delegates to expandQuasiList which produces append form
 	stx := makeTestSyntaxList(
 		makeTestSyntaxSymbol("a"),
 		makeTestUnsyntaxSplicing(makeTestSyntaxSymbol("xs")),
@@ -397,7 +399,7 @@ func TestExpandQuasisyntax_UnsyntaxSplicing(t *testing.T) {
 	)
 	expanded := mustExpandQuasisyntax(t, ccnt, stx, 1)
 
-	// Should produce append form (handled by expandQuasisyntaxList)
+	// Should produce append form (handled by expandQuasiList)
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
 	car := pair.SyntaxCar()
@@ -624,7 +626,7 @@ func TestExpandQuasisyntax_QuasisyntaxWrongArgCount(t *testing.T) {
 	c.Assert(carSym.Key(), qt.Equals, "syntax")
 }
 
-// Section 3: expandQuasisyntaxList tests
+// Section 3: expandQuasiList tests
 
 func TestExpandQuasisyntaxList_SimpleList(t *testing.T) {
 	c := qt.New(t)
@@ -956,7 +958,7 @@ func TestQuasisyntaxNeedsRuntime_ImproperList(t *testing.T) {
 	c.Assert(needs, qt.IsFalse)
 }
 
-// Section 7: Additional expandQuasisyntaxList coverage
+// Section 7: Additional expandQuasiList coverage
 
 func TestExpandQuasisyntaxList_NonPairInSpliceContext(t *testing.T) {
 	c := qt.New(t)

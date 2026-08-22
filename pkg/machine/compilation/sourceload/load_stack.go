@@ -2,6 +2,7 @@ package sourceload
 
 import (
 	"path"
+	"slices"
 	"sync"
 
 	"github.com/aalpar/wile/pkg/werr"
@@ -84,5 +85,5 @@ func (p *LoadStack) Depth() int {
 func (p *LoadStack) Paths() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return append([]string(nil), p.paths...)
+	return slices.Clone(p.paths)
 }

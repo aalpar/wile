@@ -104,9 +104,9 @@ type NativeTemplate struct {
 	// linear scan. Lazily initialized on first Hashable literal.
 	literalIndex map[uint64][]LiteralIndex
 
-	// sourceIndex maps a source context's identity — sourceEqual's (file, line,
-	// column) triple, exactly — to its sourceTable slot, so interning is a map
-	// probe rather than a scan of the table.
+	// sourceIndex maps a source context's identity — the (file, line, column)
+	// triple, exactly — to its sourceTable slot, so interning is a map probe
+	// rather than a scan of the table.
 	//
 	// The key IS the equivalence relation, so unlike literalIndex there are no
 	// collision buckets to re-check. Rebuilt lazily, because Copy clones
@@ -180,10 +180,6 @@ func (p *NativeTemplate) Shape() *environment.EnvironmentFrame {
 // (extensions/eval PrimCompile, createTransformerClosure).
 func (p *NativeTemplate) SetShape(env *environment.EnvironmentFrame) {
 	p.shape = env
-}
-
-func (p *NativeTemplate) ValueCount() int {
-	return p.valueCount
 }
 
 func (p *NativeTemplate) IsVariadic() bool {
@@ -361,8 +357,8 @@ func (p *NativeTemplate) internSource(src *syntax.SourceContext) uint32 {
 // on a freshly constructed template, and after a Copy, which clones the table
 // but not the index.
 //
-// The nil sentinel at slot 0 is skipped: sourceEqual reports nil equal to
-// nothing but nil, and internSource answers a nil source before probing.
+// The nil sentinel at slot 0 is skipped: nil has no sourceKey, and internSource
+// answers a nil source before probing.
 func (p *NativeTemplate) ensureSourceIndex() {
 	if p.sourceIndex != nil {
 		return
@@ -481,33 +477,24 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 	}
 }
 
-// sourceKey is a source context reduced to what sourceEqual compares, so that
-// map equality on the key and sourceEqual agree by construction.
-//
-// Keep the two in step: a field added to one is a field the other needs.
+// sourceKey is a source context reduced to its identity — file, line, column —
+// so that map equality on the key IS the interning relation. A field added here
+// widens that relation; there is nowhere else it also has to be added.
 type sourceKey struct {
 	file string
 	line int
 	col  int
 }
 
-// newSourceKey projects a non-nil source context onto its identity.
+// newSourceKey projects a non-nil source context onto its identity. Nil has no
+// key: it is equal to nothing but itself, which is why slot 0's sentinel never
+// interns and every caller answers nil before probing.
 func newSourceKey(src *syntax.SourceContext) sourceKey {
 	return sourceKey{
 		file: src.File,
 		line: src.Start.Line(),
 		col:  src.Start.Column(),
 	}
-}
-
-// sourceEqual compares two source contexts for equality (by location only),
-// extending sourceKey's relation to nil: nil is equal to nothing but nil, which
-// is why slot 0's sentinel never interns.
-func sourceEqual(a, b *syntax.SourceContext) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return newSourceKey(a) == newSourceKey(b)
 }
 
 func (p *NativeTemplate) Name() string {

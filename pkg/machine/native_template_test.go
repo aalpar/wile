@@ -37,11 +37,6 @@ func TestNativeTemplate_Doc(t *testing.T) {
 	qt.Assert(t, tpl.Doc(), qt.Equals, "Computes factorial.")
 }
 
-func TestNativeTemplate_ValueCount(t *testing.T) {
-	tpl := NewNativeTemplate(3, 5, false)
-	qt.Assert(t, tpl.ValueCount(), qt.Equals, 5)
-}
-
 func TestNativeTemplate_SchemeString(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	qt.Assert(t, tpl.SchemeString(), qt.Equals, "#<native-template>")

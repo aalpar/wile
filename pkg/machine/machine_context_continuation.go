@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"slices"
+
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -23,9 +25,7 @@ func cloneMarks(marks []markEntry) []markEntry {
 	if len(marks) == 0 {
 		return nil
 	}
-	q := make([]markEntry, len(marks))
-	copy(q, marks)
-	return q
+	return slices.Clone(marks)
 }
 
 func (p *MachineContext) Restore(cont *MachineContinuation) {
@@ -274,22 +274,17 @@ func GraftContinuation(segment, target *MachineContinuation) {
 	current.parent = target
 }
 
-// CaptureInterruptContinuation captures the full VM execution state at an
-// interrupt point as a deep-copied continuation chain. Unlike SliceContinuationAt,
-// this includes the live registers (template, pc, env, evals, value) that haven't
-// been saved by a SaveContinuation instruction.
+// CaptureInterruptContinuationAt captures the full VM execution state at an
+// interrupt point as a deep-copied continuation chain, delimited at boundary: it
+// slices the live chain down to (but excluding) boundary, so a timer interrupt
+// captures the suspended thunk DELIMITED at its with-timeout finalizer frame
+// (boundary), not the whole chain — the correct composable continuation to hand
+// the handler. boundary == nil captures the full chain.
 //
-// The MachineContext is not modified. The returned chain is a deep copy suitable
-// for wrapping in a ComposableContinuation.
-func (p *MachineContext) CaptureInterruptContinuation() *MachineContinuation {
-	return p.CaptureInterruptContinuationAt(nil)
-}
-
-// CaptureInterruptContinuationAt is CaptureInterruptContinuation delimited at
-// boundary: it slices the live chain down to (but excluding) boundary, so a timer
-// interrupt captures the suspended thunk DELIMITED at its with-timeout finalizer
-// frame (boundary), not the whole chain — the correct composable continuation to
-// hand the handler. boundary == nil captures the full chain (the original behavior).
+// Unlike SliceContinuationAt, this includes the live registers (template, pc, env,
+// evals, value) that haven't been saved by a SaveContinuation instruction. The
+// MachineContext is not modified; the returned chain is a deep copy suitable for
+// wrapping in a ComposableContinuation.
 //
 // It still pushes the synthetic live frame first, so the in-progress frame's
 // registers (template, pc, env, evals, value) — which no SaveContinuation has saved

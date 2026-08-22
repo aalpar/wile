@@ -232,6 +232,17 @@ func TestCopy_PreservesSourceTableRefs(t *testing.T) {
 	c.Assert(copied.SourceAt(1), qt.IsNil)
 }
 
+// sourceEqual states the interning relation the way a reader thinks of it —
+// nil equal to nothing but nil, otherwise sourceKey equality. Production probes
+// the map with a sourceKey and short-circuits nil at each call site instead, so
+// this spelling exists only to be asserted against.
+func sourceEqual(a, b *syntax.SourceContext) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return newSourceKey(a) == newSourceKey(b)
+}
+
 func TestSourceEqual(t *testing.T) {
 	c := qt.New(t)
 

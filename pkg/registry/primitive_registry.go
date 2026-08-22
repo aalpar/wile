@@ -498,16 +498,6 @@ func (p *PrimitiveRegistry) AddNamespaceInit(fn NamespaceInit) {
 	p.namespaceInits = append(p.namespaceInits, fn)
 }
 
-// NamespaceInits returns a defensive copy of the registered per-engine
-// namespace initializers.
-func (p *PrimitiveRegistry) NamespaceInits() []NamespaceInit {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	q := make([]NamespaceInit, len(p.namespaceInits))
-	copy(q, p.namespaceInits)
-	return q
-}
-
 // AddCloser registers a per-engine cleanup hook, collected by Engine.Close.
 // Extensions holding OS resources (goroutines, child processes) call it from
 // AddToRegistry, closing over the per-engine state that tracks those resources.
@@ -530,9 +520,7 @@ func (p *PrimitiveRegistry) AddCloser(fn CloseFunc) {
 func (p *PrimitiveRegistry) Closers() []CloseFunc {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	q := make([]CloseFunc, len(p.closeFuncs))
-	copy(q, p.closeFuncs)
-	return q
+	return slices.Clone(p.closeFuncs)
 }
 
 // AddDocOnlyPrimitive registers a documentation-only primitive entry.
@@ -625,18 +613,14 @@ func (p *PrimitiveRegistry) BindingCount() int {
 func (p *PrimitiveRegistry) MacroSources() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	q := make([]string, len(p.macroSources))
-	copy(q, p.macroSources)
-	return q
+	return slices.Clone(p.macroSources)
 }
 
 // ProcedureSources returns copies of procedure source strings.
 func (p *PrimitiveRegistry) ProcedureSources() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	q := make([]string, len(p.procedureSources))
-	copy(q, p.procedureSources)
-	return q
+	return slices.Clone(p.procedureSources)
 }
 
 // WithProcedureSources returns a new PrimitiveRegistry whose bootstrap procedure sources
@@ -654,9 +638,7 @@ func (p *PrimitiveRegistry) WithProcedureSources(sources []string) *PrimitiveReg
 func (p *PrimitiveRegistry) Primitives() []PrimitiveRegistration {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	q := make([]PrimitiveRegistration, len(p.primitives))
-	copy(q, p.primitives)
-	return q
+	return slices.Clone(p.primitives)
 }
 
 // Bindings returns the names of real compile-time bindings (DocOnly=false).
@@ -679,9 +661,7 @@ func (p *PrimitiveRegistry) Bindings() []string {
 func (p *PrimitiveRegistry) BindingSpecs() []BindingSpec {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	q := make([]BindingSpec, len(p.bindingSpecs))
-	copy(q, p.bindingSpecs)
-	return q
+	return slices.Clone(p.bindingSpecs)
 }
 
 // Docs returns a defensive copy of the doc-only binding specs (those
@@ -712,27 +692,21 @@ func (p *PrimitiveRegistry) Docs() []BindingSpec {
 func (p *PrimitiveRegistry) DocPrimitives() []PrimitiveSpec {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	q := make([]PrimitiveSpec, len(p.docPrimitives))
-	copy(q, p.docPrimitives)
-	return q
+	return slices.Clone(p.docPrimitives)
 }
 
 // InitFuncs returns a copy of the initialization functions.
 func (p *PrimitiveRegistry) InitFuncs() []InitFunc {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	q := make([]InitFunc, len(p.initFuncs))
-	copy(q, p.initFuncs)
-	return q
+	return slices.Clone(p.initFuncs)
 }
 
 // GlobalValues returns a copy of the global value registrations.
 func (p *PrimitiveRegistry) GlobalValues() []GlobalValue {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	q := make([]GlobalValue, len(p.globalValues))
-	copy(q, p.globalValues)
-	return q
+	return slices.Clone(p.globalValues)
 }
 
 // Clone creates a copy of the registry.
@@ -758,34 +732,18 @@ func (p *PrimitiveRegistry) deepCopy() *PrimitiveRegistry {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	q := &PrimitiveRegistry{
-		primitives:                make([]PrimitiveRegistration, len(p.primitives)),
-		bindingSpecs:              make([]BindingSpec, len(p.bindingSpecs)),
-		docPrimitives:             make([]PrimitiveSpec, len(p.docPrimitives)),
-		initFuncs:                 make([]InitFunc, len(p.initFuncs)),
-		macroSources:              make([]string, len(p.macroSources)),
-		procedureSources:          make([]string, len(p.procedureSources)),
+		primitives:                slices.Clone(p.primitives),
+		bindingSpecs:              slices.Clone(p.bindingSpecs),
+		docPrimitives:             slices.Clone(p.docPrimitives),
+		initFuncs:                 slices.Clone(p.initFuncs),
+		macroSources:              slices.Clone(p.macroSources),
+		procedureSources:          slices.Clone(p.procedureSources),
 		procedureSourceCategories: maps.Clone(p.procedureSourceCategories),
-		globalValues:              make([]GlobalValue, len(p.globalValues)),
-		namespaceInits:            make([]NamespaceInit, len(p.namespaceInits)),
-		closeFuncs:                make([]CloseFunc, len(p.closeFuncs)),
+		globalValues:              slices.Clone(p.globalValues),
+		namespaceInits:            slices.Clone(p.namespaceInits),
+		closeFuncs:                slices.Clone(p.closeFuncs),
 	}
-	copy(q.primitives, p.primitives)
-	copy(q.bindingSpecs, p.bindingSpecs)
-	copy(q.docPrimitives, p.docPrimitives)
-	copy(q.initFuncs, p.initFuncs)
-	copy(q.macroSources, p.macroSources)
-	copy(q.procedureSources, p.procedureSources)
-	copy(q.globalValues, p.globalValues)
-	copy(q.namespaceInits, p.namespaceInits)
-	copy(q.closeFuncs, p.closeFuncs)
 	return q
-}
-
-// RuntimePrimitiveNamesSince returns the names of primitives registered
-// at index >= startIndex that have PhaseSetRuntime. If startIndex is negative
-// it is treated as 0. If startIndex exceeds the primitive count, nil is returned.
-func (p *PrimitiveRegistry) RuntimePrimitiveNamesSince(startIndex int) []string {
-	return p.RuntimePrimitiveNamesRange(startIndex, -1)
 }
 
 // RuntimePrimitiveNamesRange returns the names of runtime primitives registered

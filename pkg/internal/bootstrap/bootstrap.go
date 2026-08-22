@@ -16,6 +16,7 @@ package bootstrap
 
 import (
 	"context"
+	"slices"
 
 	"github.com/aalpar/wile/extensions/algebragraph"
 	"github.com/aalpar/wile/extensions/charsets"
@@ -115,9 +116,7 @@ func ProfileExtensions(name string) ([]registry.Extension, error) {
 		}, nil
 	case "kitchen-sink":
 		// Return a copy so callers cannot mutate the underlying slice.
-		q := make([]registry.Extension, len(allExtensions))
-		copy(q, allExtensions)
-		return q, nil
+		return slices.Clone(allExtensions), nil
 	default:
 		return nil, werr.WrapForeignErrorf(ErrUnknownProfile,
 			"ProfileExtensions: unknown profile name %q", name)

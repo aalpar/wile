@@ -209,10 +209,6 @@ func (p *MachineContinuation) PromptHandler() values.Callable {
 	return p.promptHandler
 }
 
-func (p *MachineContinuation) SetPromptHandler(h values.Callable) {
-	p.promptHandler = h
-}
-
 func (p *MachineContinuation) ThreadID() uint64 {
 	return p.threadID
 }

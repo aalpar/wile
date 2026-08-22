@@ -26,11 +26,20 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func Test_newEnvironmentFrame(t *testing.T) {
-	q := NewNamespaceFrame()
-	qt.Assert(t, q, qt.Not(qt.IsNil))
-	qt.Assert(t, q.GlobalEnvironment(), qt.IsNotNil)
-	qt.Assert(t, q.LocalEnvironment(), qt.IsNil)
+// newEnvironmentFrame builds an isolated frame with no Namespace and no
+// PhaseRegistry — the shape production has no constructor for, which is why the
+// fixture lives here. AtPhase panics on the result, and the Namespace-backed
+// setters panic too; that is what the tests using it are pinning.
+func newEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironmentFrame) *EnvironmentFrame {
+	q := &EnvironmentFrame{
+		global:     global,
+		phaseLevel: PhaseRuntime,
+		phases:     nil,
+	}
+	if local != nil {
+		q.local = *local
+	}
+	return q
 }
 
 func TestNewNamespaceFrame(t *testing.T) {

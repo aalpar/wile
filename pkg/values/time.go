@@ -73,11 +73,6 @@ func (p *Time) After(other *Time) bool {
 	return p.t.After(other.t)
 }
 
-// DurationFromNow returns the duration from now until this time.
-func (p *Time) DurationFromNow() time.Duration {
-	return time.Until(p.t)
-}
-
 // Value interface implementation
 
 // IsVoid returns true if the time is nil.

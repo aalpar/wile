@@ -14,6 +14,8 @@
 
 package security
 
+import "slices"
+
 // All returns an Authorizer that requires every authorizer in the list
 // to allow the operation. The first denial short-circuits and its error
 // is returned. An empty list allows everything.
@@ -21,8 +23,7 @@ func All(authorizers ...Authorizer) Authorizer {
 	if len(authorizers) == 1 {
 		return authorizers[0]
 	}
-	cpy := make([]Authorizer, len(authorizers))
-	copy(cpy, authorizers)
+	cpy := slices.Clone(authorizers)
 	return &compositeAuthorizer{authorizers: cpy}
 }
 

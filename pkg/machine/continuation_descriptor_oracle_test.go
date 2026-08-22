@@ -28,6 +28,7 @@ package machine
 import (
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -742,7 +743,7 @@ func TestOracle_Copy(t *testing.T) {
 func TestContDescriptor_Complete(t *testing.T) {
 	vmFields := vmStateFieldNames()
 	contFields := contOnlyFieldNames()
-	union := append(append([]string{}, vmFields...), contFields...)
+	union := slices.Concat(vmFields, contFields)
 	known := make(map[string]bool, len(union))
 	for _, f := range union {
 		known[f] = true

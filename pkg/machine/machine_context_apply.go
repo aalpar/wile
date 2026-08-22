@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
@@ -637,8 +638,7 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	// and invalidating args. The copy also defends SetValues, which stores the
 	// slice by reference for N>1, and (while the intermediate-state captured path
 	// still runs this in a sub-context) must outlive that sub-context's release.
-	vals := make([]values.Value, len(args))
-	copy(vals, args)
+	vals := slices.Clone(args)
 
 	// Compose onto p.cont. Since the call/cc path now trampolines through
 	// ErrResumeContinuation, this method only ever runs directly, where

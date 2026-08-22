@@ -16,6 +16,7 @@ package validate
 
 import (
 	"context"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
@@ -183,7 +184,7 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 	// (validate/CLAUDE.local.md), emit one error
 	// per duplicate rather than stopping at the first — matches the peer
 	// paths in validate_let.go (letrec dup loop, checkDuplicateBindingNames).
-	allSyms := append([]*syntax.SyntaxSymbol{}, params.Required...)
+	allSyms := slices.Clone(params.Required)
 	if params.Rest != nil {
 		allSyms = append(allSyms, params.Rest)
 	}

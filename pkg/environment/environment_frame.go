@@ -150,24 +150,6 @@ func NewNamespaceFrame() *EnvironmentFrame {
 	return NewNamespace().Runtime()
 }
 
-// newEnvironmentFrame creates an isolated environment frame without a
-// Namespace or PhaseRegistry. Calling AtPhase() on the result
-// will panic.
-//
-// Deprecated: Use NewNamespace().Runtime() for full environments or
-// NewEnvironmentFrameWithParent() for child scopes.
-func newEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironmentFrame) *EnvironmentFrame {
-	q := &EnvironmentFrame{
-		global:     global,
-		phaseLevel: PhaseRuntime,
-		phases:     nil, // No phase registry for isolated environments
-	}
-	if local != nil {
-		q.local = *local
-	}
-	return q
-}
-
 // NewEnvironmentFrameWithParent creates a new environment frame with the given local environment frame and parent
 // environment frame.
 //

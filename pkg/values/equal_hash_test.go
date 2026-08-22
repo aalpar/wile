@@ -252,7 +252,7 @@ func TestEqualHash_WideValuesAgreePastTheBudget(t *testing.T) {
 	rt := values.NewRecordType(values.NewSymbol("wide"), fields)
 	r1, err := values.NewRecord(rt, vals)
 	qt.Assert(t, err, qt.IsNil)
-	r2, err := values.NewRecord(rt, append([]values.Value(nil), vals...))
+	r2, err := values.NewRecord(rt, slices.Clone(vals))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, values.Equal(r1, r2), qt.IsTrue)
 	qt.Assert(t, values.EqualHash(r1), qt.Equals, values.EqualHash(r2))

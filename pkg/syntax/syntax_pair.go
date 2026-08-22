@@ -73,26 +73,16 @@ func NewSyntaxCons(v0, v1 SyntaxValue, sctx *SourceContext) *SyntaxPair {
 	return q
 }
 
-// SetSyntaxCar sets the car of the pair to a syntax value.
-func (p *SyntaxPair) SetSyntaxCar(v SyntaxValue) {
-	p.Values[0] = v
-}
-
-// SetSyntaxCdr sets the cdr of the pair to a syntax value.
-func (p *SyntaxPair) SetSyntaxCdr(v SyntaxValue) {
-	p.Values[1] = v
-}
-
 // SetCar sets the car of the pair.
-// It panics if v is not a SyntaxValue; use SetSyntaxCar for the
-// statically-checked form.
+// It panics if v is not a SyntaxValue: at the syntax phase every car is
+// invariantly a SyntaxValue.
 func (p *SyntaxPair) SetCar(v values.Value) {
 	p.Values[0] = v.(SyntaxValue)
 }
 
 // SetCdr sets the cdr of the pair.
-// It panics if v is not a SyntaxValue; use SetSyntaxCdr for the
-// statically-checked form.
+// It panics if v is not a SyntaxValue: at the syntax phase every cdr is
+// invariantly a SyntaxValue.
 func (p *SyntaxPair) SetCdr(v values.Value) {
 	p.Values[1] = v.(SyntaxValue)
 }
@@ -316,8 +306,8 @@ func (e SpineEnd) Improper() bool {
 // is hot enough that the same overhead matters.
 //
 // The cdr.(SyntaxValue) assertion is deliberate: at the syntax phase
-// every cdr is invariantly a SyntaxValue (enforced by NewSyntaxCons +
-// SetSyntaxCdr), so this is a no-op cost on valid input. On misuse
+// every cdr is invariantly a SyntaxValue (enforced by NewSyntaxCons and
+// SetCdr), so this is a no-op cost on valid input. On misuse
 // (e.g. NewSyntaxCons(nil, nil, nil)) the assertion panics with
 // "interface conversion: interface is nil, not values.SyntaxValue" —
 // the sharper diagnostic pinned by TestSyntaxPair_*_NilNilPair.

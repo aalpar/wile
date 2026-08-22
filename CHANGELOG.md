@@ -615,6 +615,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **BREAKING (Go API): fourteen methods with no caller anywhere in the tree.** A
+  reference sweep across every module in the workspace — production code, tests,
+  interface declarations, method values — found these unreachable, and none of
+  them satisfies an interface:
+
+  | Type | Method |
+  |------|--------|
+  | `machine.MachineContext` | `SetWindingStack`, `SetBarrierValid`, `SetExecutingNamespace`, `CaptureInterruptContinuation` |
+  | `machine.VMCounters` | `OpcodeHistogram` |
+  | `wile.Engine` | `CurrentLoadDirectory` |
+  | `registry.PrimitiveRegistry` | `NamespaceInits`, `RuntimePrimitiveNamesSince` |
+  | `syntax.SyntaxPair` | `SetSyntaxCar`, `SetSyntaxCdr` |
+  | `values.Time` | `DurationFromNow` |
+  | `values.Thread` | `Yield` |
+  | `io.State` | `SetErrorPort`, `GetErrorPort` |
+
+  Four had doc comments naming callers that no longer exist: `SetBarrierValid`
+  claimed `PrimCallWithContinuationBarrier` called it, `SetExecutingNamespace`
+  claimed the context constructors did (they assign `execNS` directly), and
+  `SetWindingStack` and `Thread.Yield` documented their own deadness in prose.
+
+  The surviving neighbours cover every use: `NewSubContextWithWinding` for the
+  winding stack, `CaptureInterruptContinuationAt(nil)` for the full-chain
+  capture, `RuntimePrimitiveNamesRange(start, -1)` for the open-ended name range,
+  `SetCar`/`SetCdr` for syntax-pair mutation (they assert `SyntaxValue`, which was
+  the only thing the deleted pair bought statically), and `Apply` ranges
+  `namespaceInits` directly.
+
+- **BREAKING (Go API): four more methods, this time reachable only from tests.**
+  The earlier sweep found symbols nothing referenced; this one found symbols
+  nothing *but* a test referenced, which the `unused` linter cannot report
+  because it counts a test as a caller and treats every exported identifier in a
+  library package as live. Running it with tests excluded and diffing against the
+  ordinary run names them:
+
+  | Type | Method |
+  |------|--------|
+  | `machine.MachineContinuation` | `SetPromptHandler` |
+  | `machine.NativeTemplate` | `ValueCount` |
+  | `values.MapSet` | `AddAll`, `UnsetAll` |
+
+  `AddAll` and `UnsetAll` had no caller at all — they are the tail of the
+  `Add`/`Remove` → `Set`/`Unset` rename, whose call sites moved to `Set`/`SetAll`
+  and left these two behind. A prompt handler is installed by
+  `NewMachineContinuationWithPrompt`, and `valueCount` is read through `Copy` and
+  the template equality, so both survivors keep their coverage.
+
+  The same pass removed eight unexported helpers on the same footing, including
+  all of `values/numeric_scratch.go`: in-place `*BigInteger` arithmetic written
+  for a caller (weighted-bigint DAG kernels) that never arrived, benchmarked at
+  ~7× the allocating path and used by nothing. Deliberately kept, because their
+  test-only status is the design rather than an accident: `pool.go`'s
+  acquire/release pairs, whose own comment refuses a deadcode report, and
+  `exact_zero.go`'s `exactZeroRule` / `applyZeroAction`, the oracle that proves
+  the hand-written zero guards agree with the rule they replaced for ~1.5%
+  geomean on the Gabriel suite.
+
 - **BREAKING (Go API): `machine.VMCounters.KeysShared`.** It counted the same
   events as `EnvsCopied` and always held the same value. The two were
   incremented on consecutive lines, with no branch between them, at all three

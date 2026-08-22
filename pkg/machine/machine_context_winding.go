@@ -19,12 +19,6 @@ func (p *MachineContext) WindingStack() WindingStack {
 	return p.windingStack
 }
 
-// SetWindingStack sets the winding stack. Currently unused (no caller anywhere
-// in the repo); production override sites use NewSubContextWithWinding.
-func (p *MachineContext) SetWindingStack(stack WindingStack) {
-	p.windingStack = stack
-}
-
 // PushWindingFrame adds a frame to the winding stack.
 func (p *MachineContext) PushWindingFrame(frame DynamicWindFrame) {
 	p.windingStack.Push(frame)

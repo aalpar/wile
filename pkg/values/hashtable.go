@@ -15,6 +15,7 @@
 package values
 
 import (
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -490,8 +491,7 @@ func (p *Hashtable) Set(key Value, val Value) error {
 	old := p.loadBucket(h)
 	for i, e := range old {
 		if p.keyEqual(e.key, key) {
-			nb := make([]hashtableEntry, len(old))
-			copy(nb, old)
+			nb := slices.Clone(old)
 			// Overwriting a value keeps the key's original ordinal: the key was
 			// added when it was added, and re-Setting it must not move it in the
 			// rendered order.

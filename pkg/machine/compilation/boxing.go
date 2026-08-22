@@ -557,23 +557,6 @@ func regionInitIsLambda(init validate.ValidatedExpr) bool {
 	return ok
 }
 
-// letrecBindingTier classifies the i-th binding of a letrec / letrec* group.
-//
-// Single-question entry point: it builds a region index to answer one question
-// and throws it away. Compilation goes through letrecRegion directly.
-func letrecBindingTier(v *validate.ValidatedLet, i int) letrecTier {
-	if v == nil {
-		return tierBoxed
-	}
-	return newLetrecRegion(letBindersOfRegion(v)).tier(i)
-}
-
-// bodyDefineTier classifies the i-th internal define of a body — the OTHER
-// spelling of a letrec* region, and the one that occurs in practice.
-func bodyDefineTier(body []validate.ValidatedExpr, i int) letrecTier {
-	return newLetrecRegion(bodyBindersOfRegion(body)).tier(i)
-}
-
 // sameBinder reports whether ref denotes the binding introduced by binder: the
 // spelling narrows, the scope-set subset test decides.
 func sameBinder(binder, ref *syntax.SyntaxSymbol) bool {

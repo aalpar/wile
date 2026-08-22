@@ -17,6 +17,7 @@ package wile_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -396,7 +397,7 @@ func TestNoAmbientBindingsOrthogonality(t *testing.T) {
 	}
 	for _, o := range orders {
 		t.Run(o.name, func(t *testing.T) {
-			opts := append([]wile.EngineOption{}, o.opts...)
+			opts := slices.Clone(o.opts)
 			opts = append(opts, wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths())
 			eng, err := wile.NewEngine(ctx, opts...)
 			c.Assert(err, qt.IsNil)

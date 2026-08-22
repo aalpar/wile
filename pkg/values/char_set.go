@@ -131,9 +131,7 @@ func NewCharSetFromRanges(rs []CharSetRange) *CharSet {
 				i, r.Lo, i-1, rs[i-1].Hi))
 		}
 	}
-	out := make([]CharSetRange, len(rs))
-	copy(out, rs)
-	return &CharSet{ranges: out}
+	return &CharSet{ranges: slices.Clone(rs)}
 }
 
 // NewCharSetFromUnsortedRanges constructs a CharSet from arbitrary range input.
@@ -201,9 +199,7 @@ func (p *CharSet) Ranges() []CharSetRange {
 	if p == nil || len(p.ranges) == 0 {
 		return nil
 	}
-	out := make([]CharSetRange, len(p.ranges))
-	copy(out, p.ranges)
-	return out
+	return slices.Clone(p.ranges)
 }
 
 // All returns an iter.Seq that yields each canonical range in codepoint

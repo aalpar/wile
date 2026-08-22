@@ -181,38 +181,6 @@ func (p VMCounters) String() string {
 	)
 }
 
-// OpcodeHistogram returns a formatted histogram of opcode hit counts,
-// sorted by frequency (descending). Only opcodes with non-zero hits
-// are included.
-func (p VMCounters) OpcodeHistogram() string {
-	if p.opcodeHits == nil {
-		return ""
-	}
-	type entry struct {
-		name  string
-		count uint64
-	}
-	var entries []entry
-	for i := range opCount {
-		if p.opcodeHits[i] > 0 {
-			entries = append(entries, entry{
-				name:  i.String(),
-				count: p.opcodeHits[i],
-			})
-		}
-	}
-	slices.SortFunc(entries, func(a, b entry) int {
-		return cmp.Compare(b.count, a.count)
-	})
-
-	var b strings.Builder
-	for _, e := range entries {
-		pct := float64(e.count) / float64(p.OpsExecuted) * 100
-		fmt.Fprintf(&b, "  %-24s %10d  (%5.1f%%)\n", e.name, e.count, pct)
-	}
-	return b.String()
-}
-
 // CallCounts returns the per-callee call-count map for this context, or nil when
 // call counting was disabled. Keys are foreign primitive names and named Scheme
 // procedures (NativeTemplate.Name); values are invocation counts. The map is the
