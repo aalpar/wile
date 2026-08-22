@@ -38,8 +38,24 @@ var PrimEnvironmentQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // "interaction-environment" eagerly at init (engine.go), so the descriptive name
 // is already in place; labeling it lazily here raced when concurrent threads each
 // observed an empty Name and wrote it.
-func PrimInteractionEnvironment(mc machine.CallContext) error {
-	mc.SetValue(mc.EnvironmentFrame().Namespace())
+//
+// The EXECUTING namespace, not the frame's. mc.EnvironmentFrame() inside a
+// primitive is the apply frame, whose namespace is the one this primitive was
+// REGISTERED in — the engine root. Code running in a child namespace under
+// Engine.EvalIn was therefore handed the host's top level, and could
+// namespace-define! into it (and under WithMutableTopLevel redefine host
+// procedures). The frame answer remains the fallback for a context with no
+// executing namespace established.
+func PrimInteractionEnvironment(cc machine.CallContext) error {
+	mc, err := machine.RequireMachineContext(cc, "interaction-environment")
+	if err != nil {
+		return err
+	}
+	ns := mc.ExecutingNamespace()
+	if ns == nil {
+		ns = mc.EnvironmentFrame().Namespace()
+	}
+	mc.SetValue(ns)
 	return nil
 }
 

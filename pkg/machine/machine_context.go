@@ -151,11 +151,30 @@ type MachineContext struct {
 	lastBreakIDs   []BreakpointID
 
 	// authorizer is namespace-derived engine state, snapshotted so a released
-	// environment frame cannot blank it. It is a FALLBACK, never the authority:
-	// the accessor still reads p.env.Namespace() whenever it is live, so a
-	// sub-context given a different namespace's env keeps resolving against that
-	// namespace. See snapshotEngineState.
+	// environment frame cannot blank it. It is the last FALLBACK, never the
+	// authority: the accessor prefers execNS, then p.env.Namespace(). See
+	// snapshotEngineState.
 	authorizer security.Authorizer
+
+	// execNS is the namespace this context is EXECUTING in, fixed by whichever
+	// constructor built the context and never repointed by an apply.
+	//
+	// It exists because p.env is not that namespace inside a foreign primitive.
+	// applyForeign builds the apply frame from the *ForeignClosure's captured
+	// closureEnv, i.e. the namespace the primitive was REGISTERED in — the
+	// engine root, for every synthetic extension library, since those are built
+	// once at engine construction. Reading policy off p.env therefore asked the
+	// registering namespace's authorizer at all 19 gate sites, so a child
+	// sandbox reached through Engine.EvalIn was never consulted.
+	//
+	// A field rather than a repointing of the apply frame's namespace:
+	// pkg/extensions/io deliberately depends on
+	// mc.EnvironmentFrame().Namespace().IOState() resolving to the REGISTERING
+	// namespace, and moving one pointer cannot serve both readings.
+	//
+	// nil means "not established" — an expand-time or macro context with no
+	// namespace to name — and falls back, never fails open on its own.
+	execNS *environment.Namespace
 }
 
 // timerState clusters the MachineContext fields that always travel
@@ -228,6 +247,7 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 		counters: VMCounters{opcodeHits: newOpcodeHits(), callCounts: newCallCounts()},
 		pools:    newThreadPools(), // thread root: its own freelists
 	}
+	q.execNS = executingNamespaceOf(cont.env)
 	// Shallow copy: the singleValue / multiValues fields are transferred
 	// by reference, not deep-cloned — they're passed between contexts.
 	q.copyValueRegisterFrom(&cont.vmState)
@@ -347,11 +367,48 @@ func (p *MachineContext) ClosureEnv() *environment.EnvironmentFrame {
 // snapshotEngineState for why the fallback exists and why nil here is
 // dangerous rather than merely absent.
 func (p *MachineContext) Authorizer() security.Authorizer {
+	if p.execNS != nil {
+		// EffectiveAuthorizer, not Authorizer: the policy governing an operation
+		// initiated from a child namespace is root ∧ child, most-restrictive-wins
+		// — the same composition LoadLibrary already computes for a library
+		// load. Asking the child's own field alone would let a permissive child
+		// widen a strict root, which is the containment direction that holds
+		// today and must keep holding.
+		return p.execNS.EffectiveAuthorizer()
+	}
 	ns := p.env.Namespace()
 	if ns == nil {
 		return p.authorizer
 	}
 	return ns.Authorizer()
+}
+
+// SetExecutingNamespace fixes the namespace this context executes in. Called by
+// the context constructors from the env they are already handed, before any
+// apply can repoint p.env.
+func (p *MachineContext) SetExecutingNamespace(ns *environment.Namespace) {
+	p.execNS = ns
+}
+
+// ExecutingNamespace returns the namespace this context is executing in, or nil
+// when none was established.
+//
+// This is what "the current namespace" means for a primitive that TARGETS one —
+// (interaction-environment), 1-arg (eval …), (load …). Those three used to read
+// mc.EnvironmentFrame().Namespace(), which is the registering namespace, so
+// sandboxed code was handed the host's top level to define into.
+func (p *MachineContext) ExecutingNamespace() *environment.Namespace {
+	return p.execNS
+}
+
+// executingNamespaceOf returns the namespace env belongs to, for a constructor
+// establishing execNS. Detached transient frames (nil parent, nil namespace)
+// answer nil, which the accessor treats as "not established".
+func executingNamespaceOf(env *environment.EnvironmentFrame) *environment.Namespace {
+	if env == nil {
+		return nil
+	}
+	return env.Namespace()
 }
 
 // snapshotEngineState copies the namespace-derived engine state onto the

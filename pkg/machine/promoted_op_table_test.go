@@ -127,13 +127,21 @@ func TestNewSubContextCarriesEngineState(t *testing.T) {
 	defer ReleaseSubContext(sub)
 	qt.Assert(t, sub.authorizer, qt.Equals, parent.authorizer)
 
-	// The snapshot is a fallback, never the authority: a live namespace on the
-	// sub-context's own env still wins, so a sub-context handed a different
-	// namespace's environment does not inherit the parent's engine state.
+	// Repointing the ENV alone does not move the policy, and that is the
+	// contract execNS establishes: inside a primitive, mc.env is the apply frame
+	// of the namespace the primitive was REGISTERED in, so letting it decide is
+	// how a child sandbox went unconsulted.
 	other := environment.NewNamespace()
 	sub.env = other.Runtime()
+	qt.Assert(t, sub.Authorizer(), qt.Equals, security.ConsoleAuthorizer())
+
+	// Naming the namespace explicitly does move it. This is the 2-arg
+	// (eval expr ns) path: NewSubContextWithTemplate takes the env as the
+	// caller's choice of where the code runs.
+	named := parent.NewSubContextWithTemplate(NewNativeTemplate(0, 0, false), other.Runtime())
+	defer ReleaseSubContext(named)
 	var nilAuth security.Authorizer
-	qt.Assert(t, sub.Authorizer(), qt.Equals, nilAuth)
+	qt.Assert(t, named.Authorizer(), qt.Equals, nilAuth)
 }
 
 // TestPromotedOpsCoverPromotedOpcodes pins the promotedOps registry against the

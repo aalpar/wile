@@ -16,6 +16,7 @@ package compilation
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"io"
 	"io/fs"
@@ -23,13 +24,45 @@ import (
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
 	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 	"github.com/aalpar/wile/pkg/parser"
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
 func findFile(p *CompileTimeContinuation, ctctx CompileTimeCallContext, path string) (fs.File, string, error) {
-	return p.fileResolver.ResolveAndOpen(ctctx.Context(), path)
+	return p.fileResolver.ResolveAndOpen(p.includeAuthorizerContext(ctctx.Context()), path)
+}
+
+// includeAuthorizerContext installs the COMPILING namespace's effective
+// authorizer on ctx when nothing has installed one already.
+//
+// resolver.SelectAuthorizer prefers the ctx authorizer and otherwise falls back
+// to the root env the resolver captured at engine construction. LoadLibrary was
+// the only production installer, so an (include …) compiled into a child
+// namespace resolved under ROOT policy — the same substitution execNS fixes at
+// run time, at the other end of the pipeline.
+//
+// Only when ctx carries none, and that direction is load-bearing: an include
+// nested inside a library load must stay under the authorizer LoadLibrary
+// installed for that chain. Overwriting it with the compiling env's would
+// WEAKEN the policy mid-load, which is the opposite of the fix.
+func (p *CompileTimeContinuation) includeAuthorizerContext(ctx context.Context) context.Context {
+	if security.FromContext(ctx) != nil {
+		return ctx
+	}
+	if p.env == nil {
+		return ctx
+	}
+	ns := p.env.Namespace()
+	if ns == nil {
+		return ctx
+	}
+	auth := ns.EffectiveAuthorizer()
+	if auth == nil {
+		return ctx
+	}
+	return security.WithAuthorizer(ctx, auth)
 }
 
 // CompileInclude compiles an include expression.

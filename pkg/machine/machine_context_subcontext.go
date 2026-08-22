@@ -93,6 +93,12 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	// a security check consulting a nil authorizer, which fails open. See
 	// MachineContext.snapshotEngineState.
 	mc.authorizer = p.authorizer
+	// INHERITED, not re-derived from mc.env. A sub-context is created from
+	// inside a primitive, where p.env is already the apply frame of the
+	// REGISTERING namespace, so asking mc.env here would reintroduce exactly the
+	// substitution execNS exists to prevent. NewSubContextWithTemplate overrides
+	// it when the caller names a namespace explicitly (2-arg eval).
+	mc.execNS = p.execNS
 	return mc
 }
 
@@ -129,6 +135,14 @@ func (p *MachineContext) NewSubContextWithTemplate(
 	mc.template = tpl
 	mc.env = env
 	mc.debugger = p.debugger
+	// env is the caller's explicit choice of where this code runs — 2-arg
+	// (eval expr ns) names a namespace, and the code must then execute under
+	// THAT namespace's policy, not the caller's. A detached env answers nil, in
+	// which case the inherited execNS stands.
+	ns := executingNamespaceOf(env)
+	if ns != nil {
+		mc.execNS = ns
+	}
 	return mc
 }
 
@@ -141,8 +155,13 @@ func (p *MachineContext) NewSubContextWithTemplate(
 // reproduced by TestMutexAbandonedOnTermination under -race). Only values safe to
 // snapshot once at spawn time are captured here.
 type SubContextParams struct {
-	Ctx          context.Context
-	Env          *environment.EnvironmentFrame
+	Ctx context.Context
+	Env *environment.EnvironmentFrame
+	// ExecNS is the spawning context's executing namespace, carried across the
+	// goroutine boundary so a thread started from sandboxed code stays under
+	// that sandbox's policy. Env is the shared mutable runtime global and does
+	// NOT answer this — it is one object for the whole engine.
+	ExecNS       *environment.Namespace
 	EscapeCont   *MachineContinuation
 	MaxCallDepth int
 	MaxStackSize uint64
@@ -162,6 +181,7 @@ func (p *MachineContext) CaptureSubContextParams() SubContextParams {
 		// sealed base through its parent). MutableRuntime() captures that shared global;
 		// capturing the sealed base instead would corrupt shared state.
 		Env:          p.env.MutableRuntime(),
+		ExecNS:       p.execNS,
 		EscapeCont:   p.escapeCont,
 		MaxCallDepth: p.maxCallDepth,
 		MaxStackSize: p.maxStackSize,
@@ -206,6 +226,7 @@ func NewThreadSubContext(params SubContextParams, thread *values.Thread) *Machin
 		// the correct semantics (a thread's stack trace is its own, and SRFI-18
 		// parameter inheritance is a creation-time snapshot, not a live link to the
 		// concurrently-evolving parent). See SubContextParams above.
+		execNS:       params.ExecNS,
 		escapeCont:   params.EscapeCont,
 		maxCallDepth: params.MaxCallDepth,
 		maxStackSize: params.MaxStackSize,

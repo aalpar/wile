@@ -580,9 +580,17 @@ func (p *Engine) Eval(ctx context.Context, expr *Expression) (Value, error) {
 // EvalIn compiles and executes a parsed expression in the given namespace,
 // rather than the engine's own namespace.
 //
-// The target namespace's authorizer governs security checks during
-// execution. If the target namespace has no authorizer, the engine's
-// authorizer is propagated to it before evaluation.
+// Security checks during execution are decided by the intersection of the
+// engine's authorizer and the target namespace's, most-restrictive-wins, so a
+// target cannot widen the engine's policy. If the target has no authorizer of
+// its own, the engine's is propagated to it before evaluation.
+//
+// That policy follows the EXECUTING namespace, not the one a primitive was
+// registered in. The distinction is invisible until they differ, which is here
+// and nowhere else in production: a primitive reached from this namespace runs
+// on an apply frame belonging to the namespace that registered it — the engine
+// root, for every extension library — and reading policy off that frame is what
+// used to leave the target's authorizer unconsulted.
 func (p *Engine) EvalIn(ctx context.Context, expr *Expression, ns *environment.Namespace) (Value, error) {
 	if ns.Authorizer() == nil && p.namespace.Authorizer() != nil {
 		ns.SetAuthorizer(p.namespace.Authorizer())

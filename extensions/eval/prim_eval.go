@@ -33,6 +33,21 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
+// executingRuntime returns the mutable runtime global of the namespace mc is
+// EXECUTING in, falling back to the environment frame's when no executing
+// namespace was established.
+//
+// The distinction matters only inside a foreign primitive, where the frame is
+// the apply frame built from the *ForeignClosure's captured closureEnv — the
+// namespace the primitive was registered in.
+func executingRuntime(mc *machine.MachineContext) *environment.EnvironmentFrame {
+	ns := mc.ExecutingNamespace()
+	if ns == nil {
+		return mc.EnvironmentFrame().MutableRuntime()
+	}
+	return ns.Runtime()
+}
+
 // ProfileFactory is the callback used by (environment '(wile <name>)) and
 // (environment '(wile <name> <strictness>)) to construct a namespace for a named
 // Wile profile. It is set by internal/bootstrap at init time (bootstrap cannot be
@@ -91,8 +106,13 @@ func PrimEval(cc machine.CallContext) error {
 			return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "eval: expected 1 or 2 arguments")
 		}
 	} else {
-		// 1-arg form: use current namespace
-		topLevelEnv = mc.EnvironmentFrame().Namespace()
+		// 1-arg form: the EXECUTING namespace. mc.EnvironmentFrame() here is the
+		// apply frame of this primitive's REGISTERING namespace, so the 1-arg
+		// form used to evaluate sandboxed code in the engine root.
+		topLevelEnv = mc.ExecutingNamespace()
+		if topLevelEnv == nil {
+			topLevelEnv = mc.EnvironmentFrame().Namespace()
+		}
 	}
 
 	env := topLevelEnv.Runtime()
@@ -145,8 +165,10 @@ func PrimLoad(cc machine.CallContext) error {
 	}
 
 	// Loaded defines must land in the user-visible mutable global (becoming shadows of
-	// sealed-base names under the immutable default), so use MutableRuntime().
-	env := mc.EnvironmentFrame().MutableRuntime()
+	// sealed-base names under the immutable default), so use MutableRuntime() — of
+	// the EXECUTING namespace, since the frame's is this primitive's registering
+	// one and a sandboxed (load …) would otherwise define into the engine root.
+	env := executingRuntime(mc)
 
 	// Resolve and open via the shared FileResolver (same as include).
 	resolver := env.FileResolver()
@@ -154,7 +176,14 @@ func PrimLoad(cc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrFileNotFound, "load: no file resolver configured")
 	}
 
-	f, resolvedPath, err := resolver.ResolveAndOpen(mc.Context(), filename.Value)
+	// The resolver reads its authorizer off the ROOT env it captured at engine
+	// construction (resolver.SelectAuthorizer), so a caller with a stricter
+	// policy can only reach it through ctx. LoadLibrary is the only other
+	// production installer; without this one, (load …) from a sandboxed child
+	// resolved under root policy while (import …) was already correct.
+	resolveCtx := security.WithAuthorizer(mc.Context(), mc.Authorizer())
+
+	f, resolvedPath, err := resolver.ResolveAndOpen(resolveCtx, filename.Value)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "load")
 	}

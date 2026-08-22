@@ -303,6 +303,10 @@ func AcquireTopLevelContext(ctx context.Context, tpl *NativeTemplate, env *envir
 	mc.evals = mc.acquireStack()
 	mc.counters.opcodeHits = newOpcodeHits()
 	mc.counters.callCounts = newCallCounts()
+	// Fixed here, from the env the caller chose, because this is the last point
+	// at which env is the EXECUTING namespace's: the first apply of a foreign
+	// primitive repoints mc.env at that primitive's registering namespace.
+	mc.execNS = executingNamespaceOf(env)
 	return mc
 }
 
