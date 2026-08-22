@@ -63,7 +63,7 @@ An `AccessRequest` is a resource, an action, and an operation-specific target (`
 
 | Resource | Actions used at gate sites | Target |
 |----------|---------------------------|--------|
-| `file` | `read`, `write`, `delete`, `stat` | the path |
+| `file` | `read`, `write`, `exec`, `stat`, `delete` | the path |
 | `code` | `load` (run a resolved file), `eval` (compile+run an in-memory datum) | the resolved path, or `<eval>`/`<compile>` |
 | `env` | `read` | the variable name, or `*` for a whole-map read |
 | `process` | `read` (argv), `exit`, `exec`, `exec-shell` | the command, or empty |
@@ -71,6 +71,17 @@ An `AccessRequest` is a resource, an action, and an operation-specific target (`
 | `stream` | `read` (stdin), `write` (stdout, stderr) | `stdin`, `stdout`, or `stderr` |
 
 Both sets are open: an extension may define additional resources and actions without changing `pkg/security`.
+
+#### `file` is the chmod triple, and the three bits must be enforced together
+
+`read` / `write` / `exec` are one resource with one target, so a single containment predicate decides all three. Enforce them together: an authorizer that confines reads and writes but waves `exec` through confines **nothing**, because an executable outside the root is a general-purpose unconfined file accessor. That is not hypothetical — it is how `(system …)` escaped a `FilesystemRoot("/tmp")` engine before 2026-08-21.
+
+**A primitive whose argument denotes a host path files it under `file`, whatever else it also asks.** `process:exec` is a *capability* question ("may this program spawn a subprocess at all"); `file:exec` is an *object* question ("may it run **this** binary, and — POSIX x on a directory being traverse — may a child **start** in this directory"). A spawn asks both, so a path-confining authorizer sees the binary and the working directory it would otherwise never be shown. `set-current-directory!` follows the same rule for the same reason: it files `file:write` on the destination rather than an opaque `{process, write, "cwd"}` request that no containment authorizer would inspect.
+
+Two consequences worth stating outright:
+
+- **The gated binary is the *resolved* path, not the string the program wrote.** `exec.Command` LookPath-resolves a bare name, and a relative path is resolved against the child's working directory — so gating the caller's string would authorize one file and run another.
+- **A spawned child starts at the confinement root** when the authorizer reports one (`security.ConfinementRootOf`). Otherwise it would inherit the *host's* working directory, which the policy never saw and could not have allowed, and every relative path the child opened would resolve there.
 
 ### Gate sites
 
@@ -81,7 +92,7 @@ Every enforcement point calls `security.CheckWithAuthorizer(auth, req)`. `securi
 | `extensions/files`: `openFilePort`, `callWithFile`, `PrimFileExistsQ`, `PrimDeleteFile`, `PrimCreateDirectory`/`PrimDeleteDirectory`/`PrimDirectoryFiles`/`PrimCurrentDirectory`/`PrimSetCurrentDirectory`, plus `unconfinedTarget` in `confined.go` re-gating a resolved real path | `file:{read,write,delete,stat}` on the path |
 | `extensions/eval`: `PrimEval`, `PrimCompile`, `PrimExpand`, `PrimExpandOnce` | `code:eval` |
 | `extensions/system`: `PrimCommandLine`, `PrimExit`/`PrimEmergencyExit` | `process:read`, `process:exit` |
-| `extensions/process`: `PrimSystem`, `PrimProcessSpawn` (`PrimProcessWait`/`PrimProcessKill` are ungated: they act on a process handle already obtained through a gated spawn) | `process:exec-shell`, `process:exec` |
+| `extensions/process`: `PrimSystem`, `PrimProcessSpawn` (`PrimProcessWait`/`PrimProcessKill` are ungated: they act on a process handle already obtained through a gated spawn) | `process:exec-shell`, `process:exec`, then `file:exec` twice — on the resolved binary (`/bin/sh` for `system`) and on the child's start directory |
 | `pkg/internal/extensions/envvars`: `PrimGetEnvironmentVariable`, `PrimGetEnvironmentVariables` | `env:read` |
 | Source loading (`include`, `include-ci`, `load`, library `import`): `resolver.openAuthorized`, `isAuthorized`, `openUnconfined`, `FSFileResolver.ResolveAndOpen`, `OSFileResolver.ResolveAndOpen` | `code:load` on the resolved path |
 | `pkg/extensions/io`: `NewState`, once per engine when the port parameters are built | `stream:read` on `stdin`, `stream:write` on `stdout` and `stderr` |
@@ -141,7 +152,7 @@ This closes the specific hole an authorizer could not: `threads`, `gointerop`, a
 
 An optional third element narrows the constructed namespace's *visible* top level — `(environment '(wile small core))` pre-binds only the core surface, `(environment '(wile small no-bindings))` pre-binds nothing. It is not a security control and does not narrow this widening: the profile still decides what is *registered*, and the constructed environment can import its way back to all of it. See [Strict namespace](../embedding/api-design.md#strict-namespace).
 
-What the child namespace does inherit is the authorizer: `Namespace.NewChildNamespace` copies it, so gated operations (`file`, `code`, `env`, `process`) stay under the same policy no matter which profile named them. The registry layer is therefore not an authority boundary against Scheme code that holds `environment`; the authorization layer is. If you rely on an extension's *absence* for safety, do not also grant the eval extension, or install an authorizer that covers the operations you care about.
+What the child namespace does inherit is the authorizer: `Namespace.NewChildNamespace` copies it, so gated operations (`file`, `code`, `env`, `process`, `namespace`, `stream`) stay under the same policy no matter which profile named them. The registry layer is therefore not an authority boundary against Scheme code that holds `environment`; the authorization layer is. If you rely on an extension's *absence* for safety, do not also grant the eval extension, or install an authorizer that covers the operations you care about.
 
 ### Virtual environment variables
 
@@ -293,7 +304,7 @@ The result is that the registry layer costs nothing at runtime and fails at comp
 
 Without an authorizer or `WithSourceFS`, `include` is unrestricted on the OS filesystem. If you are compiling untrusted source code, either:
 - Use `WithSourceFS(fsys)` to confine source loading to a virtual filesystem.
-- Set a `WithAuthorizer` policy (e.g., `FilesystemRoot("/app/src")`) to restrict load paths.
+- Set a `WithAuthorizer` policy (e.g., `FilesystemRoot("/app/src")`) to restrict load paths. As of 2026-08-21 `FilesystemRoot` also **denies** every resource it does not model — `process`, `env`, `namespace`, and `code:eval` — so it is a usable standalone policy for untrusted source rather than a file gate with the process door left open. Its one exemption is `stream`: the program can still write to the host's stdout. Compose with `DenyAll` via `All(...)` to take that away, and note that `FilesystemRoot` still bounds only *paths* — it says nothing about CPU or memory.
 - Pre-compile trusted code and run it with `Engine.Run`.
 - Use OS-level filesystem restrictions (chroot, namespaces).
 

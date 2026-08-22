@@ -71,6 +71,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING (security): `FilesystemRoot` now denies every resource it does not
+  model, and a spawned process is gated as a file.** Two halves of one defect.
+
+  `filesystemRootAuthorizer.Authorize` ended in `default: return nil`, so an
+  authorizer whose whole purpose is path confinement waved through every resource
+  it had no opinion about. Measured against `8ac3d085`: `KitchenSink` +
+  `FilesystemRoot("/tmp")` ran `(system "echo direct > /Users/…/outside")` and the
+  file was created — no `(environment …)` call required — because
+  `process:exec-shell` fell through; `Small` + the same authorizer reached the
+  identical shell through `(environment '(wile kitchen-sink))` because
+  `namespace:create` fell through too; and `(exit 3)` killed the host process
+  because `process:exit` fell through as well. All three now deny. `ResourceStream`
+  is the one exemption, matching `ReadOnly` and `SandboxAuthorizer`: the host's
+  standard streams carry no path for a root to bound, and `All()` is an
+  intersection, so a denial there could never be composed back — "files confined
+  to root, and the program may still print" would become unexpressible from the
+  built-ins.
+
+  Embedders using `FilesystemRoot` standalone as a *file* gate while relying on
+  `env:read`, `process:exit`, or `namespace:create` will now be denied those.
+  Compose the widening explicitly, or write an authorizer.
+
+  Separately, `security.ActionExec` is now the chmod `x` bit on **both**
+  resources, and `system`/`process-spawn` ask both questions. `process:exec` is
+  the capability ("may this program spawn at all"); `file:exec` is the object
+  ("may it run *this* binary, and may a child *start* in this directory" — POSIX
+  x on a directory is traverse). Before this, the binary was invisible to the
+  policy layer: the capability request carried a command *string*, and `/bin/sh`
+  — an unconfined general-purpose file accessor — was never named in any request.
+  Two details the gate depends on: the target is `cmd.Path` **after** LookPath
+  resolution (joined against `cmd.Dir` when relative), because gating the
+  caller's string would authorize one file and run another; and the child's
+  working directory is now pinned to the authorizer's `ConfinementRoot` when it
+  reports one, instead of inheriting the host's, which no policy ever saw and
+  against which every relative path the child opened would have resolved.
+
+  `TestBuiltinsDenyProcessExecution` enumerates all nine built-in constructors
+  rather than spot-checking, because `checkProfileWidening` rests on "built-in
+  authorizers deny unknown resources by default" — a premise that was false for
+  exactly these two members.
+
 - **A continuation captured inside a `delay`/`delay-force` thunk now spans the
   rest of the program.** `force` was the last boundary running its body in a
   sub-context, so a continuation captured in a delayed thunk ended at that

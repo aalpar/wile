@@ -142,8 +142,8 @@ privileged operations at runtime. Each gated operation issues an
 `AccessRequest{Resource, Action, Target}`:
 
 - **Resources:** `file`, `code`, `env`, `process`, `namespace`, `stream`
-- **Actions:** `read`, `write`, `delete`, `stat`, `load`, `eval`, `exit`,
-  `exec`, `exec-shell`, `create`
+- **Actions:** `read`, `write`, `exec`, `stat`, `delete`, `load`, `eval`,
+  `exit`, `exec-shell`, `create`
 - **Target:** operation-specific — a file path, env-var name, or library name.
   For `code:eval` the target is the literal `<eval>` or `<compile>`: there is no
   path to inspect, so a custom Authorizer must decide on the action alone.
@@ -166,6 +166,15 @@ can refuse them.
 `code:load` (run code from a resolved file path) and `code:eval` (compile and
 run an in-memory datum, i.e. `eval`/`compile`) are **separate** actions. An
 Authorizer that gates only `code:load` leaves `(eval …)` open.
+
+`file` carries the chmod triple `read` / `write` / `exec` on one target, and a
+custom Authorizer must decide all three: confining reads and writes while
+letting `exec` through confines nothing, because a binary outside the root is a
+general-purpose unconfined file accessor. Any primitive whose argument denotes a
+host path files it under `file` whatever else it also asks — `process-spawn` and
+`system` gate `file:exec` on the resolved binary and on the child's start
+directory, on top of `process:exec`/`process:exec-shell`, and
+`set-current-directory!` gates `file:write` on its destination.
 
 Gate sites include file primitives, the system/process and eval extensions,
 `include`, and library import. Built-in authorizers include `DenyAll()`,
