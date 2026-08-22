@@ -16,7 +16,6 @@ package system
 
 import (
 	"os"
-	"slices"
 	"time"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -55,11 +54,11 @@ func PrimCommandLine(mc machine.CallContext) error {
 	if args == nil {
 		args = os.Args
 	}
-	list := values.EmptyList
-	for i := range slices.Backward(args) {
-		list = values.NewCons(values.NewString(args[i]), list)
+	strs := make([]values.Value, len(args))
+	for i, arg := range args {
+		strs[i] = values.NewString(arg)
 	}
-	mc.SetValue(list)
+	mc.SetValue(values.List(strs...))
 	return nil
 }
 

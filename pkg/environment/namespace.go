@@ -310,16 +310,20 @@ func (p *Namespace) Store() *GlobalEnvironmentFrame {
 // added. Moving any of those reads back to a wildcard silently re-opens that gap,
 // since nothing here can detect it.
 func (p *Namespace) BoundSymbolNames() values.Value {
-	var result values.Value = values.EmptyList
 	// Phase 0 only: this listing backs the value-oriented bound-names primitives,
 	// not the all-phases walk BoundNamesAcrossPhases does. The probe merges the
 	// tiers the pre-fold version had to visit as two frames (the mutable runtime
 	// and its seal) and dedupes them by construction — one name resolves to one
 	// binding — so there is no seen set here any more.
-	for _, key := range p.Store().AmbientKeysAt(PhaseRuntime) {
-		result = values.NewCons(values.NewSymbol(key.Key), result)
+	//
+	// values.List block-allocates the whole spine; the order is AmbientKeysAt's,
+	// which is Go map order and already documented as unspecified.
+	keys := p.Store().AmbientKeysAt(PhaseRuntime)
+	syms := make([]values.Value, len(keys))
+	for i, key := range keys {
+		syms[i] = values.NewSymbol(key.Key)
 	}
-	return result
+	return values.List(syms...)
 }
 
 // BoundNamesAcrossPhases returns a sorted, deduplicated list of every binding name

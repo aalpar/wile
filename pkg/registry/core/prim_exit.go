@@ -105,16 +105,9 @@ func PrimCallWithExit(cc machine.CallContext) error {
 		if err != nil {
 			return err
 		}
-		var vals []values.Value
-		current := finMC.Arg(0)
-		for !values.IsEmptyList(current) {
-			tuple, ok := current.(values.Tuple)
-			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotAList,
-					"call-with-exit: improper finalizer argument list")
-			}
-			vals = append(vals, tuple.Car())
-			current = tuple.Cdr()
+		vals, err := values.CollectList(finMC.Context(), finMC.Arg(0), "call-with-exit")
+		if err != nil {
+			return err
 		}
 		finMC.SetValues(vals...)
 		return nil

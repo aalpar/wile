@@ -124,17 +124,9 @@ func PrimAbortCurrentContinuation(mc machine.CallContext) error {
 	}
 	restVal := mc.Arg(1)
 
-	var abortValues []values.Value
-	if !values.IsEmptyList(restVal) {
-		current := restVal
-		for !values.IsEmptyList(current) {
-			tuple, ok := current.(values.Tuple)
-			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotAList, "abort-current-continuation: improper argument list")
-			}
-			abortValues = append(abortValues, tuple.Car())
-			current = tuple.Cdr()
-		}
+	abortValues, err := values.CollectList(mc.Context(), restVal, "abort-current-continuation")
+	if err != nil {
+		return err
 	}
 
 	// SourceWinding is the winding live HERE at the abort origin, which may be a

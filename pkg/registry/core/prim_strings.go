@@ -28,20 +28,14 @@ import (
 // PrimString implements the string primitive.
 // (string char ...) returns a newly allocated string composed of the given characters.
 func PrimString(mc machine.CallContext) error {
-	args := mc.Arg(0)
+	chars, err := helpers.VariadicArgs[*values.Character](mc, 1, werr.ErrNotACharacter, "string")
+	if err != nil {
+		return err
+	}
 
 	var sb strings.Builder
-	for !values.IsEmptyList(args) {
-		tuple, ok := args.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "string: expected a list of characters")
-		}
-		ch, ok := tuple.Car().(*values.Character)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotACharacter, "string: expected a character but got %T", tuple.Car())
-		}
+	for _, ch := range chars {
 		sb.WriteRune(ch.Value)
-		args = tuple.Cdr()
 	}
 
 	// R7RS §6.7: string returns a "newly allocated string"

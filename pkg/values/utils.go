@@ -208,6 +208,36 @@ func ForEachProperList(ctx context.Context, t Tuple, name string, fn ForEachFunc
 	return nil
 }
 
+// CollectList walks a proper list and returns its elements as a Go slice.
+// The empty list yields a nil slice and no error; a non-Tuple or an improper
+// tail yields a wrapped ErrNotAList naming the caller.
+//
+// This is the reification twin of List: List folds a slice into a spine,
+// CollectList unfolds a spine into a slice. Every site that drains a variadic
+// rest-argument into []Value before handing it to SetValues (or to a Go API)
+// should funnel through here — the pre-existing hand-rolled copies each
+// re-derived the improper-tail rejection and none of them detected cycles,
+// which ForEachProperList does for free.
+func CollectList(ctx context.Context, v Value, name string) ([]Value, error) {
+	t, ok := v.(Tuple)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+			"%s: expected a proper list but got %T", name, v)
+	}
+	if t.IsEmptyList() {
+		return nil, nil
+	}
+	var q []Value
+	err := ForEachProperList(ctx, t, name, func(_ context.Context, _ int, _ bool, elem Value) error {
+		q = append(q, elem)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return q, nil
+}
+
 // Uncons asserts v is a non-empty Tuple and projects (car, cdr).
 // On empty list or non-Tuple input, returns a wrapped ErrNotAList with
 // the canonical "<name>: <role>" message format. The cdr may be any

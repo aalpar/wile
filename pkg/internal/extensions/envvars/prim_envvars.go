@@ -91,15 +91,14 @@ func PrimGetEnvironmentVariables(mc machine.CallContext) error {
 		// branch returned a different order on every call within one engine
 		// (8 keys, 4 distinct orders in 6 calls), while the os.Environ branch
 		// below walks a slice and is stable by construction. One primitive must
-		// not have two stability stories. Walking backwards over the sorted keys
-		// leaves the result in ascending order, matching that branch's shape.
+		// not have two stability stories. The sorted keys are consed in order, so
+		// the result is ascending, matching that branch's shape.
 		keys := slices.Sorted(maps.Keys(envMap))
-		list := values.EmptyList
-		for i := range slices.Backward(keys) {
-			pair := values.NewCons(values.NewString(keys[i]), values.NewString(envMap[keys[i]]))
-			list = values.NewCons(pair, list)
+		pairs := make([]values.Value, len(keys))
+		for i, key := range keys {
+			pairs[i] = values.NewCons(values.NewString(key), values.NewString(envMap[key]))
 		}
-		mc.SetValue(list)
+		mc.SetValue(values.List(pairs...))
 		return nil
 	}
 
@@ -112,14 +111,13 @@ func PrimGetEnvironmentVariables(mc machine.CallContext) error {
 		return err
 	}
 	env := os.Environ()
-	list := values.EmptyList
-	for i := range slices.Backward(env) {
-		parts := strings.SplitN(env[i], "=", 2)
+	pairs := make([]values.Value, 0, len(env))
+	for _, entry := range env {
+		parts := strings.SplitN(entry, "=", 2)
 		if len(parts) == 2 {
-			pair := values.NewCons(values.NewString(parts[0]), values.NewString(parts[1]))
-			list = values.NewCons(pair, list)
+			pairs = append(pairs, values.NewCons(values.NewString(parts[0]), values.NewString(parts[1])))
 		}
 	}
-	mc.SetValue(list)
+	mc.SetValue(values.List(pairs...))
 	return nil
 }

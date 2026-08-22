@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/aalpar/wile/pkg/values"
-	"github.com/aalpar/wile/pkg/werr"
 )
 
 // RunBodyUnderTimer reifies with-timeout. It installs a wall-clock timer for the
@@ -62,16 +61,11 @@ func (p *MachineContext) RunBodyUnderTimer(
 		finMC.timer = savedTimer
 		finMC.ctx = parentCtx
 		// Forward 0/1/N values: Arg(0) is the variadic rest-list of the body's values.
-		var vals []values.Value
-		current := finMC.Arg(0)
-		for !values.IsEmptyList(current) {
-			tuple, ok := current.(values.Tuple)
-			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotAList,
-					"with-timeout: improper finalizer argument list")
-			}
-			vals = append(vals, tuple.Car())
-			current = tuple.Cdr()
+		// Collected under parentCtx, which finMC.ctx was just restored to — the
+		// body's timer context may already be cancelled.
+		vals, cerr := values.CollectList(finMC.ctx, finMC.Arg(0), "with-timeout")
+		if cerr != nil {
+			return cerr
 		}
 		finMC.SetValues(vals...)
 		return nil

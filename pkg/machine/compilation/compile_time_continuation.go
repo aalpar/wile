@@ -16,7 +16,6 @@ package compilation
 
 import (
 	"context"
-	"slices"
 
 	"github.com/aalpar/wile/pkg/machine"
 
@@ -765,11 +764,18 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 		if !changed {
 			return val, nil
 		}
-		out := tail
-		for i := range slices.Backward(spine) {
-			out = values.NewCons(cars[i], out)
+		// Rebuild as one PairBlock rather than N conses. LinkSpine terminates the
+		// last cdr with EmptyList; an improper input re-points it at the validated
+		// tail, mirroring PrimListCopy (R7RS §6.4 structure sharing).
+		n := len(cars)
+		block := make(values.PairBlock, n).LinkSpine()
+		for i, car := range cars {
+			block[i][0] = car
 		}
-		return out, nil
+		if !values.IsEmptyList(tail) {
+			block[n-1][1] = tail
+		}
+		return &block[0], nil
 	case *values.Vector:
 		if val == nil || val.Length() == 0 {
 			return val, nil

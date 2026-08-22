@@ -49,7 +49,6 @@ package match
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -345,15 +344,12 @@ func boxContentToPairChain(box *syntax.SyntaxBox) *syntax.SyntaxPair {
 	return syntax.NewSyntaxCons(content, syntax.SyntaxEmptyList, box.SourceContext())
 }
 
-// vectorElementsToPairChain converts a SyntaxVector's elements to a SyntaxPair
-// chain for pattern compilation. Used at compile time to reuse pair-based
-// compilation for vector pattern contents.
+// vectorElementsToPairChain is vectorToSyntaxPairChain narrowed to *SyntaxPair,
+// for the compile- and expand-time callers that have already established the
+// vector is non-empty. An empty vector yields SyntaxEmptyList, which is not a
+// *SyntaxPair — hence the precondition, which both callers check.
 func vectorElementsToPairChain(vec *syntax.SyntaxVector) *syntax.SyntaxPair {
-	var chain syntax.SyntaxValue = syntax.SyntaxEmptyList
-	for i := range slices.Backward(vec.Values) {
-		chain = syntax.NewSyntaxCons(vec.Values[i], chain, vec.SourceContext())
-	}
-	return chain.(*syntax.SyntaxPair)
+	return vectorToSyntaxPairChain(vec).(*syntax.SyntaxPair)
 }
 
 // compileSymbolElement handles symbol elements: ellipsis, wildcards, variables, and literals.

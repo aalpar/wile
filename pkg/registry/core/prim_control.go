@@ -243,15 +243,9 @@ func PrimValues(mc machine.CallContext) error {
 	}
 
 	// Collect all values from the list
-	var vals []values.Value
-	current := restVal
-	for !values.IsEmptyList(current) {
-		tuple, ok := current.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "values: improper argument list")
-		}
-		vals = append(vals, tuple.Car())
-		current = tuple.Cdr()
+	vals, err := values.CollectList(mc.Context(), restVal, "values")
+	if err != nil {
+		return err
 	}
 
 	mc.SetValues(vals...)

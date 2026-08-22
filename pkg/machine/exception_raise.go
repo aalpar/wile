@@ -176,16 +176,9 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 			return err
 		}
 		if arm.revived {
-			var vals []values.Value
-			current := finMC.Arg(0)
-			for !values.IsEmptyList(current) {
-				tuple, ok := current.(values.Tuple)
-				if !ok {
-					return werr.WrapForeignErrorf(werr.ErrNotAList,
-						"raise: improper handler-result list")
-				}
-				vals = append(vals, tuple.Car())
-				current = tuple.Cdr()
+			vals, err := values.CollectList(finMC.ctx, finMC.Arg(0), "raise")
+			if err != nil {
+				return err
 			}
 			finMC.SetValues(vals...)
 			return nil
