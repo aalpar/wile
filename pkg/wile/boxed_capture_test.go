@@ -176,6 +176,28 @@ func TestBoxedSlotNeverEscapesToScheme(t *testing.T) {
 			code: `(let ((x 1)) (lambda () (set! x 2)) (box? x))`,
 			want: "#f",
 		},
+		{
+			// compileSyntaxTemplateToOps emitted a bare OpLoadLocal for a local
+			// it resolves as a pattern variable, bypassing emitLocalLoad and so
+			// the unbox. The control below is the same source without the set!:
+			// it answered 5 while this one answered #&5.
+			name: "a boxed local read through a syntax template arrives unboxed",
+			code: `(syntax->datum (let ((x 5)) (lambda () (set! x 1)) (syntax x)))`,
+			want: "5",
+		},
+		{
+			name: "control: the same read with nothing to box",
+			code: `(syntax->datum (let ((x 5)) (syntax x)))`,
+			want: "5",
+		},
+		{
+			// The shape that surfaced it: a nested quasisyntax expands to a
+			// (syntax x) for the inner unsyntax's argument.
+			name: "a boxed local under a nested quasisyntax arrives unboxed",
+			code: `(syntax->datum
+			         (let ((x 5)) (lambda () (set! x 1)) (quasisyntax (quasisyntax #,x))))`,
+			want: "(quasisyntax (unsyntax 5))",
+		},
 	}
 	ctx := context.Background()
 	for _, tc := range tcs {

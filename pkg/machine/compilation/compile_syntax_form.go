@@ -166,11 +166,15 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 		li := p.env.GetLocalIndex(symVal, syntax.ScopesOf(v.Scopes()))
 		if li != nil {
 			templateLocalEmits.Add(1)
-			// This is a pattern variable - load its value. Translated for
-			// let-slot merging like every other local-index emit: the walk can
-			// cross a merged `let` frame on its way out to the pattern frame,
-			// and that frame does not exist at run time.
-			p.AppendOperations(machine.NewOperationLoadLocalByLocalIndexImmediate(p.runtimeIndex(li)))
+			// This is a pattern variable - load its value, through the shared
+			// read emitter. It is not enough to translate the index for let-slot
+			// merging and emit OpLoadLocal: the slot may hold a BOX (the binder
+			// is captured and assigned) or live in this body's free vector, and
+			// a raw load answers with the cell or with an unrelated slot.
+			// Measured on the raw emit: (let ((x 5)) (lambda () (set! x 1))
+			// (syntax->datum (syntax x))) rendered #&5 where the same source
+			// without the set! rendered 5.
+			p.emitLocalLoad(li)
 			return nil
 		}
 		// Not a pattern variable - load as syntax literal
