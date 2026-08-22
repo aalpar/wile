@@ -166,13 +166,13 @@ func (p *equalWorklist) step(a, b Value) bool {
 		return true
 	}
 	key := equalPairKey{a, b}
-	dup := p.visited.Get(key)
+	dup := p.visited.ContainsOne(key)
 	if dup {
 		return true
 	}
 	if p.visited == nil {
 		p.visited = NewMapSet[equalPairKey](0)
 	}
-	p.visited.Set(key)
+	p.visited.Add(key)
 	return da.EqualComponents(b, p.push)
 }

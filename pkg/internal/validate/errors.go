@@ -86,12 +86,12 @@ func (p *ValidationResult) markMutated(ref environment.BindingRef) {
 	if p.mutated == nil {
 		p.mutated = values.NewMapSet[environment.BindingRef](0)
 	}
-	p.mutated.Set(ref)
+	p.mutated.Add(ref)
 }
 
 // isMutated returns true if the binding named by ref was targeted by set!.
 func (p *ValidationResult) isMutated(ref environment.BindingRef) bool {
-	return p.mutated.Get(ref)
+	return p.mutated.ContainsOne(ref)
 }
 
 // recordDefinedKey counts a define of a symbol named key in the unit. Used to

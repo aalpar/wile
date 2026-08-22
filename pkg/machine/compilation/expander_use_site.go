@@ -65,7 +65,7 @@ type useSiteScopeLog struct {
 func (p *ExpanderTimeContinuation) newUseSiteScope() *syntax.Scope {
 	scope := syntax.NewScopeWithLabel("use-site")
 	if p.useSiteScopes != nil {
-		p.useSiteScopes.scopes.Set(scope)
+		p.useSiteScopes.scopes.Add(scope)
 	}
 	return scope
 }
@@ -81,7 +81,7 @@ func (p *ExpanderTimeContinuation) isUseSiteScope(scope *syntax.Scope) bool {
 	if p.useSiteScopes == nil {
 		return false
 	}
-	return p.useSiteScopes.scopes.Get(scope)
+	return p.useSiteScopes.scopes.ContainsOne(scope)
 }
 
 // pruneUseSiteScopes strips this run's use-site scopes from the binder position

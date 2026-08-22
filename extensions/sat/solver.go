@@ -551,7 +551,7 @@ func (s *solver) reduceClauseDB() {
 	for _, l := range s.trail {
 		r := s.reason[int32(l)>>1]
 		if r != noClauseRef {
-			locked.Set(r)
+			locked.Add(r)
 		}
 	}
 	type idxAct struct {
@@ -572,7 +572,7 @@ func (s *solver) reduceClauseDB() {
 	}
 	keep := len(sortable) / 2
 	for k := keep; k < len(sortable); k++ {
-		inUse := locked.Get(clauseRef(sortable[k].i))
+		inUse := locked.ContainsOne(clauseRef(sortable[k].i))
 		if !inUse {
 			s.clauses[sortable[k].i].lits = nil // tombstone
 		}

@@ -152,7 +152,7 @@ func TestExpandBoxTemplate(t *testing.T) {
 	c.Run("a pattern variable inside a box is found", func(c *qt.C) {
 		sm := newMatched(c)
 		vars := sm.findSyntaxPatternVariables(testSyntaxBox(testSyntaxSym("x")))
-		ok := vars.Get("x")
+		ok := vars.ContainsOne("x")
 		c.Assert(ok, qt.IsTrue, qt.Commentf("vars = %v", vars))
 	})
 }

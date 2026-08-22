@@ -87,24 +87,24 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 	case values.Tuple:
 		return datumListToSyntaxValue(ctx, sctx, o, v, visited, depth)
 	case *values.Box:
-		dup := visited.Get(o)
+		dup := visited.ContainsOne(o)
 		if dup {
 			return nil, circularDatumError()
 		}
-		visited.Set(o)
-		defer visited.Unset(o)
+		visited.Add(o)
+		defer visited.Remove(o)
 		inner, err := datumToSyntaxValueVisited(ctx, sctx, v.Unbox(), visited, depth+1)
 		if err != nil {
 			return nil, err
 		}
 		return syntax.NewSyntaxObject(values.NewBox(inner), sctx), nil
 	case *values.Vector:
-		dup := visited.Get(o)
+		dup := visited.ContainsOne(o)
 		if dup {
 			return nil, circularDatumError()
 		}
-		visited.Set(o)
-		defer visited.Unset(o)
+		visited.Add(o)
+		defer visited.Remove(o)
 		vt0 := syntax.NewSyntaxVector(sctx)
 		for _, elem := range v.Elems() {
 			e, err := datumToSyntaxValueVisited(ctx, sctx, elem, visited, depth+1)
@@ -135,15 +135,15 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 // already resident in memory, and the caller re-checks the deadline on the
 // very next step.
 func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o values.Value, v values.Tuple, visited values.MapSet[values.Value], depth int) (syntax.SyntaxValue, error) {
-	dup := visited.Get(o)
+	dup := visited.ContainsOne(o)
 	if dup {
 		return nil, circularDatumError()
 	}
 	spine := []values.Value{o}
-	visited.Set(o)
+	visited.Add(o)
 	defer func() {
 		for _, cell := range spine {
-			visited.Unset(cell)
+			visited.Remove(cell)
 		}
 	}()
 
@@ -166,11 +166,11 @@ func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o v
 			place.Values[1] = tail
 			return head, nil
 		}
-		dup := visited.Get(cdr)
+		dup := visited.ContainsOne(cdr)
 		if dup {
 			return nil, circularDatumError()
 		}
-		visited.Set(cdr)
+		visited.Add(cdr)
 		spine = append(spine, cdr)
 
 		cell := syntax.NewSyntaxCons(nil, nil, sctx)

@@ -367,7 +367,7 @@ func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 	// R7RS §4.3.2: The identifier _ is a wildcard that matches any input, unless
 	// it appears in the list of literals, in which case it is matched literally.
 	if sym.Key() == "_" {
-		isLiteral := vis.literals.Get(sym.Key())
+		isLiteral := vis.literals.ContainsOne(sym.Key())
 		if !isLiteral {
 			// Wildcard - matches an element without binding it. It has to emit
 			// SOMETHING: an element that produces no bytecode is invisible to
@@ -386,11 +386,11 @@ func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 
 // compileSymbolOrLiteral handles a symbol that's either a pattern variable or a literal.
 func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *syntax.SyntaxSymbol) {
-	isVar := vis.variables.Get(sym.Key())
+	isVar := vis.variables.ContainsOne(sym.Key())
 	if isVar {
 		// Pattern variable - capture it
 		vis.codes = append(vis.codes, ByteCodeCaptureCar{Binding: sym.Key()})
-		entry.variables.Set(sym.Key())
+		entry.variables.Add(sym.Key())
 	} else {
 		// Literal symbol - compare exactly
 		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbol(sym.Key(), nil)})
@@ -483,14 +483,14 @@ func collectCapturedVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEnt
 	if ok {
 		vars := vis.analysis.GetVariables(prevPair)
 		for v := range vars {
-			capturedVars.Set(v)
+			capturedVars.Add(v)
 		}
 	} else {
 		prevSym, ok := entry.lastElement.(*syntax.SyntaxSymbol)
 		if ok {
-			isVar := vis.variables.Get(prevSym.Key())
+			isVar := vis.variables.ContainsOne(prevSym.Key())
 			if isVar {
-				capturedVars.Set(prevSym.Key())
+				capturedVars.Add(prevSym.Key())
 			}
 		}
 	}
@@ -633,16 +633,16 @@ func emitImproperTailIfPresent(vis *SyntaxCompiler, entry *syntaxCompilerStackEn
 	// included — it matches the rest of the input but must not bind, so a
 	// template `_` stays a free identifier. Unless it was declared a literal, in
 	// which case it is matched literally like any other literal symbol.
-	isLiteral := vis.literals.Get(sym.Key())
+	isLiteral := vis.literals.ContainsOne(sym.Key())
 	if sym.Key() == "_" && !isLiteral {
 		vis.codes = append(vis.codes, ByteCodeDiscardCdr{})
 		return
 	}
-	isVar := vis.variables.Get(sym.Key())
+	isVar := vis.variables.ContainsOne(sym.Key())
 	if isVar {
 		// The CDR is a pattern variable - emit CaptureCdr to capture the rest
 		vis.codes = append(vis.codes, ByteCodeCaptureCdr{Binding: sym.Key()})
-		entry.variables.Set(sym.Key())
+		entry.variables.Add(sym.Key())
 		return
 	}
 	// The CDR is a literal symbol - compare it

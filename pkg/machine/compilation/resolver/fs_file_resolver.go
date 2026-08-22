@@ -201,9 +201,9 @@ func (p *FSFileResolver) buildEnumSearchDirs() []string {
 		if dir == "" {
 			continue
 		}
-		dup := seen.Get(dir)
+		dup := seen.ContainsOne(dir)
 		if !dup {
-			seen.Set(dir)
+			seen.Add(dir)
 			dirs = append(dirs, dir)
 		}
 	}

@@ -336,7 +336,7 @@ func parseIdentifierListFromDatum(ctx context.Context, expr values.Value) (value
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotASymbol, "expected identifier symbol")
 		}
-		ids.Set(idSym.Key)
+		ids.Add(idSym.Key)
 		return nil
 	})
 	if err != nil {

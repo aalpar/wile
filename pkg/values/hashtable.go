@@ -391,13 +391,13 @@ func (p *Hashtable) SchemeString() string {
 // deeper, where schemeStringChild enforces the host-safety bound. Entries are
 // siblings at one level, so table size costs no depth.
 func (p *Hashtable) schemeStringWithVisited(visited MapSet[Value], depth int) string {
-	seen := visited.Get(p)
+	seen := visited.ContainsOne(p)
 	if seen {
 		return "..."
 	}
-	visited.Set(p)
+	visited.Add(p)
 	defer func() {
-		visited.Unset(p)
+		visited.Remove(p)
 	}()
 
 	q := &strings.Builder{}

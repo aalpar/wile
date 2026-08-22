@@ -53,9 +53,9 @@ func dedupAndSort(rs runeSlice) []rune {
 	out := make([]rune, 0, len(rs))
 	seen := values.NewMapSet[rune](len(rs))
 	for _, r := range rs {
-		ok := seen.Get(r)
+		ok := seen.ContainsOne(r)
 		if !ok {
-			seen.Set(r)
+			seen.Add(r)
 			out = append(out, r)
 		}
 	}

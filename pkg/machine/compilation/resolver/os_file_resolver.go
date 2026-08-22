@@ -189,11 +189,11 @@ func (p *OSFileResolver) osAbsSearchDirs(ctx context.Context) []string {
 		if err != nil {
 			continue
 		}
-		dup := seen.Get(abs)
+		dup := seen.ContainsOne(abs)
 		if dup {
 			continue
 		}
-		seen.Set(abs)
+		seen.Add(abs)
 		q = append(q, abs)
 	}
 	return q

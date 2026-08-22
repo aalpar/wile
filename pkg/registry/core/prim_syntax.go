@@ -143,12 +143,12 @@ func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visite
 		if v.IsVoid() {
 			return syntax.NewSyntaxVector(sctx), nil
 		}
-		dup := visited.Get(datum)
+		dup := visited.ContainsOne(datum)
 		if dup {
 			return nil, circularDatumError()
 		}
-		visited.Set(datum)
-		defer visited.Unset(datum)
+		visited.Add(datum)
+		defer visited.Remove(datum)
 		elems := make([]syntax.SyntaxValue, v.Length())
 		for i, elem := range v.Elems() {
 			e, err := datumToSyntaxVisited(elem, sctx, visited, depth+1)
@@ -172,15 +172,15 @@ func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visite
 // depth does NOT advance along the spine, only into cars: a long list is not
 // a deep one, and bounding length would refuse legal data.
 func datumListToSyntax(datum values.Value, v values.Tuple, sctx *syntax.SourceContext, visited values.MapSet[values.Value], depth int) (syntax.SyntaxValue, error) {
-	dup := visited.Get(datum)
+	dup := visited.ContainsOne(datum)
 	if dup {
 		return nil, circularDatumError()
 	}
 	spine := []values.Value{datum}
-	visited.Set(datum)
+	visited.Add(datum)
 	defer func() {
 		for _, cell := range spine {
-			visited.Unset(cell)
+			visited.Remove(cell)
 		}
 	}()
 
@@ -203,11 +203,11 @@ func datumListToSyntax(datum values.Value, v values.Tuple, sctx *syntax.SourceCo
 			place.Values[1] = tail
 			return head, nil
 		}
-		dup := visited.Get(cdr)
+		dup := visited.ContainsOne(cdr)
 		if dup {
 			return nil, circularDatumError()
 		}
-		visited.Set(cdr)
+		visited.Add(cdr)
 		spine = append(spine, cdr)
 
 		cell := syntax.NewSyntaxCons(nil, nil, sctx)

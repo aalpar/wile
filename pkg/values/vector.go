@@ -183,13 +183,13 @@ func (p *Vector) SchemeString() string {
 // depth is this vector's nesting level (root = 1); elements sit one level
 // deeper (depth+1), where formatIndexable threads the host-safety bound.
 func (p *Vector) schemeStringWithVisited(visited MapSet[Value], depth int) string {
-	seen := visited.Get(p)
+	seen := visited.ContainsOne(p)
 	if seen {
 		return "..."
 	}
-	visited.Set(p)
+	visited.Add(p)
 	defer func() {
-		visited.Unset(p)
+		visited.Remove(p)
 	}()
 	return formatIndexable("#(", len(p.elems), func(i int) Value {
 		return p.elems[i]

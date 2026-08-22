@@ -1382,18 +1382,18 @@ func trackTemplateTree(col *coverage.Collector, root *machine.NativeTemplate) {
 	for len(queue) > 0 {
 		tpl := queue[0]
 		queue = queue[1:]
-		done := visited.Get(tpl)
+		done := visited.ContainsOne(tpl)
 		if done {
 			continue
 		}
-		visited.Set(tpl)
+		visited.Add(tpl)
 		col.Track(tpl)
 		for _, lit := range tpl.Literals() {
 			child, ok := lit.(*machine.NativeTemplate)
 			if !ok {
 				continue
 			}
-			seen := visited.Get(child)
+			seen := visited.ContainsOne(child)
 			if !seen {
 				queue = append(queue, child)
 			}

@@ -161,7 +161,7 @@ func (p *freeVarCollector) visit(sym *syntax.SyntaxSymbol) {
 		return
 	}
 	k := freeVarKey{slot: li.Over(), depth: li.Up()}
-	dup := p.seen.Get(k)
+	dup := p.seen.ContainsOne(k)
 	if dup {
 		return
 	}
@@ -169,7 +169,7 @@ func (p *freeVarCollector) visit(sym *syntax.SyntaxSymbol) {
 	if !ok {
 		return
 	}
-	p.seen.Set(k)
+	p.seen.Add(k)
 	p.q = append(p.q, freeVar{sym: sym, key: k, abs: abs})
 }
 

@@ -147,7 +147,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	// and ellipsis functionality is disabled for this syntax-rules form.
 	// Use "\x00" as sentinel since it cannot appear in Scheme symbols and
 	// won't be replaced with default by the match package.
-	ellipsisIsLiteral := literals.Get(ellipsis)
+	ellipsisIsLiteral := literals.ContainsOne(ellipsis)
 	if ellipsisIsLiteral {
 		ellipsis = "\x00"
 	}
@@ -428,7 +428,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 				return
 			}
 			// If it's not a pattern variable, it's a free identifier
-			isPatternVar := patternVars.Get(symVal.Key)
+			isPatternVar := patternVars.ContainsOne(symVal.Key)
 			if !isPatternVar {
 				// Resolve the free identifier to its definition-time binding.
 				// Check local binding first (for let-syntax hygiene).
@@ -554,7 +554,7 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 						syntax.ScopesMatch(litScopes, patternScopes)
 					if !scopesMatch {
 						// Same name but different scopes - treat as pattern variable
-						variables.Set(symVal.Key)
+						variables.Add(symVal.Key)
 						// Record the pattern variable's syntax for nested macro hygiene
 						if varSyntax != nil {
 							varSyntax[symVal.Key] = p
@@ -563,7 +563,7 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 					// If scopes match, it's a literal - don't add to variables
 				} else {
 					// Name not in literals - it's a pattern variable
-					variables.Set(symVal.Key)
+					variables.Add(symVal.Key)
 					// Record the pattern variable's syntax for nested macro hygiene
 					if varSyntax != nil {
 						varSyntax[symVal.Key] = p
@@ -664,7 +664,7 @@ func computePatternVarDepths(pattern syntax.SyntaxValue, variables values.String
 		if !ok {
 			return
 		}
-		isVar := variables.Get(symVal.Key)
+		isVar := variables.ContainsOne(symVal.Key)
 		if !isVar {
 			return
 		}
@@ -743,7 +743,7 @@ func collectTemplatePatternVars(tmpl syntax.SyntaxValue, variables values.String
 		if !ok || symVal.Key == ellipsis {
 			return
 		}
-		isVar := variables.Get(symVal.Key)
+		isVar := variables.ContainsOne(symVal.Key)
 		if !isVar {
 			return
 		}
@@ -906,7 +906,7 @@ func extractLiteralsWithSyntax(ctx context.Context,
 		if !ok {
 			return wrapSourcedError(literal.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASymbol, "extractLiterals: literal must be a symbol"))
 		}
-		literals.Set(symbol.Key)
+		literals.Add(symbol.Key)
 		// Store syntax symbol for scope-aware matching if map provided
 		if literalSyntax != nil {
 			literalSyntax[symbol.Key] = sym

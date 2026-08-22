@@ -218,7 +218,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 			_, found := p.seenPairs[cur]
 			if found {
 				// Seen before - mark as needing a label
-				p.needsLabelPair.Set(cur)
+				p.needsLabelPair.Add(cur)
 				return
 			}
 			// Mark as seen (with placeholder -1)
@@ -246,7 +246,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 		}
 		_, found := p.seenVectors[val]
 		if found {
-			p.needsLabelVector.Set(val)
+			p.needsLabelVector.Add(val)
 			return
 		}
 		p.seenVectors[val] = -1
@@ -263,7 +263,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 		}
 		_, found := p.seenBoxes[val]
 		if found {
-			p.needsLabelBox.Set(val)
+			p.needsLabelBox.Add(val)
 			return
 		}
 		p.seenBoxes[val] = -1
@@ -275,7 +275,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 		}
 		_, found := p.seenHashtables[val]
 		if found {
-			p.needsLabelHashtable.Set(val)
+			p.needsLabelHashtable.Add(val)
 			return
 		}
 		p.seenHashtables[val] = -1
@@ -324,23 +324,23 @@ func newDFSColors[T comparable]() dfsColors[T] {
 // also what terminates the walk on a cycle. A t already black has nothing new
 // below it. Every true return must be matched by a later leave.
 func (p *dfsColors[T]) enter(t T) bool {
-	onStack := p.onStack.Get(t)
+	onStack := p.onStack.ContainsOne(t)
 	if onStack {
-		p.circular.Set(t)
+		p.circular.Add(t)
 		return false
 	}
-	done := p.visited.Get(t)
+	done := p.visited.ContainsOne(t)
 	if done {
 		return false
 	}
-	p.visited.Set(t)
-	p.onStack.Set(t)
+	p.visited.Add(t)
+	p.onStack.Add(t)
 	return true
 }
 
 // leave pops t off the recursion path, coloring it black.
 func (p *dfsColors[T]) leave(t T) {
-	p.onStack.Unset(t)
+	p.onStack.Remove(t)
 }
 
 // circularityScan is the DFS state for one filterToCircular pass, one coloring
@@ -535,7 +535,7 @@ func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair, depth int) {
 	}
 
 	// Check if this needs a label
-	if p.needsLabelPair.Get(pr) {
+	if p.needsLabelPair.ContainsOne(pr) {
 		label := p.nextLabel
 		p.nextLabel++
 		p.seenPairs[pr] = label
@@ -597,7 +597,7 @@ func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair, depth in
 			break
 		}
 
-		if p.needsLabelPair.Get(nextPair) {
+		if p.needsLabelPair.ContainsOne(nextPair) {
 			// The cdr needs its own label - write as dotted pair. It is a spine
 			// element, not a car, so it stays at the current nesting level.
 			sb.WriteString(" . ")
@@ -625,7 +625,7 @@ func (p *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector, depth int) 
 	}
 
 	// Check if this needs a label
-	if p.needsLabelVector.Get(vec) {
+	if p.needsLabelVector.ContainsOne(vec) {
 		label := p.nextLabel
 		p.nextLabel++
 		p.seenVectors[vec] = label
@@ -661,7 +661,7 @@ func (p *SchemeWriter) writeBox(sb *strings.Builder, bx *Box, depth int) {
 		return
 	}
 
-	if p.needsLabelBox.Get(bx) {
+	if p.needsLabelBox.ContainsOne(bx) {
 		label := p.nextLabel
 		p.nextLabel++
 		p.seenBoxes[bx] = label
@@ -718,7 +718,7 @@ func (p *SchemeWriter) writeHashtable(sb *strings.Builder, h *Hashtable, depth i
 		return
 	}
 
-	if p.needsLabelHashtable.Get(h) {
+	if p.needsLabelHashtable.ContainsOne(h) {
 		label := p.nextLabel
 		p.nextLabel++
 		p.seenHashtables[h] = label

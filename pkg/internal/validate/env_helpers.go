@@ -93,12 +93,12 @@ func findDuplicateSymbols(syms []*syntax.SyntaxSymbol) []*syntax.SyntaxSymbol {
 	var dups []*syntax.SyntaxSymbol
 	for _, sym := range syms {
 		id := ScopedBindingKeyOf(sym)
-		dup := seen.Get(id)
+		dup := seen.ContainsOne(id)
 		if dup {
 			dups = append(dups, sym)
 			continue
 		}
-		seen.Set(id)
+		seen.Add(id)
 	}
 	return dups
 }

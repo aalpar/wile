@@ -173,11 +173,11 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 			if !reg.Phases.Has(pt.phase) {
 				continue
 			}
-			dup := bound.Get(reg.Spec.Name)
+			dup := bound.ContainsOne(reg.Spec.Name)
 			if dup {
 				continue
 			}
-			bound.Set(reg.Spec.Name)
+			bound.Add(reg.Spec.Name)
 			err := registerPhasePrimitive(pt.bindingEnv, pt.closureEnv, pt.phase, reg.Spec, cfg)
 			if err != nil {
 				return err

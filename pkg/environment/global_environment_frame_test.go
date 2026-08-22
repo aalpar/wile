@@ -638,9 +638,9 @@ func TestGlobalFrame_AmbientKeysExcludesMacroIntroducedBinders(t *testing.T) {
 
 	names := values.StringSet{}
 	for _, k := range ge.AmbientKeysAt(PhaseRuntime) {
-		dup := names.Get(k.Key)
+		dup := names.ContainsOne(k.Key)
 		c.Assert(dup, qt.IsFalse)
-		names.Set(k.Key)
+		names.Add(k.Key)
 	}
 
 	// The delta between the two accessors is macro-only: DeleteBinding drops the
@@ -648,13 +648,13 @@ func TestGlobalFrame_AmbientKeysExcludesMacroIntroducedBinders(t *testing.T) {
 	c.Assert(ge.keys, qt.HasLen, 3)
 	c.Assert(names, qt.HasLen, 2)
 
-	ok := names.Get("ambient")
+	ok := names.ContainsOne("ambient")
 	c.Assert(ok, qt.IsTrue)
-	ok = names.Get("mixed")
+	ok = names.ContainsOne("mixed")
 	c.Assert(ok, qt.IsTrue)
-	ok = names.Get("macro-only")
+	ok = names.ContainsOne("macro-only")
 	c.Assert(ok, qt.IsFalse)
-	ok = names.Get("deleted")
+	ok = names.ContainsOne("deleted")
 	c.Assert(ok, qt.IsFalse)
 }
 
@@ -783,20 +783,20 @@ func TestSealedSlotsFiltersByRank(t *testing.T) {
 	names := func(slots []NamedSlot) values.StringSet {
 		q := values.StringSet{}
 		for _, s := range slots {
-			q.Set(s.Name.Key)
+			q.Add(s.Name.Key)
 		}
 		return q
 	}
 
 	live := names(ns.Store().LiveSlots())
-	ok := live.Get("sealed-one")
+	ok := live.ContainsOne("sealed-one")
 	c.Assert(ok, qt.IsTrue)
-	ok = live.Get("mutable-one")
+	ok = live.ContainsOne("mutable-one")
 	c.Assert(ok, qt.IsTrue)
 
 	sealed := names(ns.Store().SealedSlots())
-	ok = sealed.Get("sealed-one")
+	ok = sealed.ContainsOne("sealed-one")
 	c.Assert(ok, qt.IsTrue)
-	ok = sealed.Get("mutable-one")
+	ok = sealed.ContainsOne("mutable-one")
 	c.Assert(ok, qt.IsFalse)
 }

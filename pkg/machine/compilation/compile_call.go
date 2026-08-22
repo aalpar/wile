@@ -245,7 +245,7 @@ func (p *CompileTimeContinuation) tryInlineCall(
 
 	// Guard against recursive inlining.
 	if p.currentlyInlining != nil {
-		inlining := p.currentlyInlining.Get(bid)
+		inlining := p.currentlyInlining.ContainsOne(bid)
 		if inlining {
 			return false, nil
 		}
@@ -290,9 +290,9 @@ func (p *CompileTimeContinuation) tryInlineCall(
 	if p.currentlyInlining == nil {
 		p.currentlyInlining = values.NewMapSet[environment.BindingID](0)
 	}
-	p.currentlyInlining.Set(bid)
+	p.currentlyInlining.Add(bid)
 	defer func() {
-		p.currentlyInlining.Unset(bid)
+		p.currentlyInlining.Remove(bid)
 	}()
 
 	return true, CompileValidatedLet(p, ctctx, syntheticLet)

@@ -64,11 +64,11 @@ func markLiteralImmutable(v values.Value, visited values.MapSet[values.Value]) {
 	case *values.Pair:
 		cur := obj
 		for {
-			seen := visited.Get(cur)
+			seen := visited.ContainsOne(cur)
 			if seen {
 				return
 			}
-			visited.Set(cur)
+			visited.Add(cur)
 			markLiteralImmutable(cur.Car(), visited)
 
 			next, isPair := cur.Cdr().(*values.Pair)
@@ -79,11 +79,11 @@ func markLiteralImmutable(v values.Value, visited values.MapSet[values.Value]) {
 			cur = next
 		}
 	case *values.Vector:
-		seen := visited.Get(obj)
+		seen := visited.ContainsOne(obj)
 		if seen {
 			return
 		}
-		visited.Set(obj)
+		visited.Add(obj)
 		values.MarkImmutable(obj)
 		for _, elem := range obj.Elems() {
 			markLiteralImmutable(elem, visited)

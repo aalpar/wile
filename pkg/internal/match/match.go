@@ -635,9 +635,9 @@ func (p *Matcher) findMatchingEllipsisIDs(vars values.StringSet, excludeIDs valu
 	sel := values.NewStringSet(len(vars))
 	for v := range vars {
 		for id := range p.ellipsisVars {
-			ok := p.ellipsisVars[id].Get(v)
+			ok := p.ellipsisVars[id].ContainsOne(v)
 			if ok {
-				sel.Set(v)
+				sel.Add(v)
 				break
 			}
 		}
@@ -667,7 +667,7 @@ func (p *Matcher) findMatchingEllipsisIDs(vars values.StringSet, excludeIDs valu
 	for _, id := range ids {
 		allFound := true
 		for v := range vars {
-			ok := p.ellipsisVars[id].Get(v)
+			ok := p.ellipsisVars[id].ContainsOne(v)
 			if !ok {
 				allFound = false
 				break
@@ -690,7 +690,7 @@ func (p *Matcher) findMatchingEllipsisIDs(vars values.StringSet, excludeIDs valu
 	var contributing []int
 	for _, id := range ids {
 		for v := range vars {
-			ok := p.ellipsisVars[id].Get(v)
+			ok := p.ellipsisVars[id].ContainsOne(v)
 			if ok {
 				contributing = append(contributing, id)
 				break

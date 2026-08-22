@@ -62,7 +62,7 @@ func analyzeRecursive(
 ) values.StringSet {
 	switch t := v.(type) {
 	case *syntax.SyntaxSymbol:
-		isVar := variables.Get(t.Key())
+		isVar := variables.ContainsOne(t.Key())
 		if !isVar {
 			return nil
 		}

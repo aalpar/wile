@@ -886,10 +886,11 @@ func (p *PrimitiveRegistry) WithoutCategory(categories ...string) *PrimitiveRegi
 	// Also drop every bootstrap procedure source declared against a removed
 	// category. Without this the primitives go and the Scheme written over them
 	// stays, so NewEngine fails to compile the orphaned source.
-	drop := values.NewStringSet(len(categories)).SetAll(categories...)
+	drop := values.NewStringSet(len(categories))
+	drop.Append(categories...)
 	q.procedureSources = slices.DeleteFunc(q.procedureSources, func(src string) bool {
 		for _, need := range q.procedureSourceCategories[src] {
-			gone := drop.Get(need)
+			gone := drop.ContainsOne(need)
 			if gone {
 				return true
 			}
@@ -902,11 +903,12 @@ func (p *PrimitiveRegistry) WithoutCategory(categories ...string) *PrimitiveRegi
 // filterPrimitives returns a new PrimitiveRegistry with primitives excluded when
 // keyFn(reg) matches any value in exclude. Non-primitive fields are copied unchanged.
 func (p *PrimitiveRegistry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegistration) string) *PrimitiveRegistry {
-	set := values.NewStringSet(len(exclude)).SetAll(exclude...)
+	set := values.NewStringSet(len(exclude))
+	set.Append(exclude...)
 
 	q := p.deepCopy()
 	q.primitives = slices.DeleteFunc(q.primitives, func(r PrimitiveRegistration) bool {
-		ok := set.Get(keyFn(r))
+		ok := set.ContainsOne(keyFn(r))
 		return ok
 	})
 	return q
@@ -923,14 +925,15 @@ func (p *PrimitiveRegistry) filterPrimitives(exclude []string, keyFn func(Primit
 // exports). Removing them would silently strip docs that the embedder
 // likely wants kept.
 func (p *PrimitiveRegistry) WithoutBindings(names ...string) *PrimitiveRegistry {
-	exclude := values.NewStringSet(len(names)).SetAll(names...)
+	exclude := values.NewStringSet(len(names))
+	exclude.Append(names...)
 
 	q := p.deepCopy()
 	q.bindingSpecs = slices.DeleteFunc(q.bindingSpecs, func(s BindingSpec) bool {
 		if s.DocOnly {
 			return false
 		}
-		ok := exclude.Get(s.Name)
+		ok := exclude.ContainsOne(s.Name)
 		return ok
 	})
 	return q

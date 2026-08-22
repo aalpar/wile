@@ -402,17 +402,17 @@ func (p *Pair) SchemeString() string {
 // — genuine nesting — passes depth+1 to schemeStringChild, where the
 // host-safety bound is enforced.
 func (p *Pair) schemeStringWithVisited(visited MapSet[Value], depth int) string {
-	seen := visited.Get(p)
+	seen := visited.ContainsOne(p)
 	if seen {
 		return "..."
 	}
 	// marked accumulates every node this call adds to the path so we can remove
 	// all of them on exit — not just the entry pair, but every spine cdrPair.
 	marked := []Value{p}
-	visited.Set(p)
+	visited.Add(p)
 	defer func() {
 		for _, m := range marked {
-			visited.Unset(m)
+			visited.Remove(m)
 		}
 	}()
 
@@ -438,12 +438,12 @@ func (p *Pair) schemeStringWithVisited(visited MapSet[Value], depth int) string 
 			}
 			break
 		}
-		seen = visited.Get(cdrPair)
+		seen = visited.ContainsOne(cdrPair)
 		if seen {
 			q.WriteString(" . ...")
 			break
 		}
-		visited.Set(cdrPair)
+		visited.Add(cdrPair)
 		marked = append(marked, cdrPair)
 		pr = cdrPair
 		i++
@@ -490,11 +490,11 @@ func (p *Pair) String() string {
 // degrading to deepMarker at DefaultMaxWriteDepth rather than overflowing the Go
 // stack. Non-pair cars route through stringValue → SchemeString, itself bounded.
 func (p *Pair) stringWithVisited(visited MapSet[*Pair], depth int) string {
-	seen := visited.Get(p)
+	seen := visited.ContainsOne(p)
 	if seen {
 		return "..."
 	}
-	visited.Set(p)
+	visited.Add(p)
 
 	q := &strings.Builder{}
 	q.WriteString("(")
@@ -522,12 +522,12 @@ func (p *Pair) stringWithVisited(visited MapSet[*Pair], depth int) string {
 			}
 			break
 		}
-		seen = visited.Get(cdrPair)
+		seen = visited.ContainsOne(cdrPair)
 		if seen {
 			q.WriteString(" . ...")
 			break
 		}
-		visited.Set(cdrPair)
+		visited.Add(cdrPair)
 		pr = cdrPair
 		i++
 	}

@@ -88,7 +88,7 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 	prims := reg.Primitives()
 	primNames := values.NewStringSet(len(prims) + 8)
 	for _, pr := range prims {
-		primNames.Set(pr.Spec.Name)
+		primNames.Add(pr.Spec.Name)
 		if matchesDoc(pr.Spec.Name, pr.Spec.Doc, pr.Spec.Category, pr.Spec.Keywords, lowerPattern) {
 			q = append(q, DocSearchResult{
 				Name:     pr.Spec.Name,
@@ -99,7 +99,7 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 		}
 	}
 	for _, dp := range reg.DocPrimitives() {
-		primNames.Set(dp.Name)
+		primNames.Add(dp.Name)
 		if matchesDoc(dp.Name, dp.Doc, dp.Category, dp.Keywords, lowerPattern) {
 			q = append(q, DocSearchResult{
 				Name:     dp.Name,
@@ -113,12 +113,12 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 	// 2. Binding specs (non-primitive docs; includes DocOnly entries).
 	seen := values.NewStringSet(0)
 	for _, r := range NonPrimitiveDocs(reg) {
-		dup := primNames.Get(r.Name) || seen.Get(r.Name)
+		dup := primNames.ContainsOne(r.Name) || seen.ContainsOne(r.Name)
 		if dup {
 			continue
 		}
 		if matchesDoc(r.Name, r.Doc, r.Category, r.Keywords, lowerPattern) {
-			seen.Set(r.Name)
+			seen.Add(r.Name)
 			q = append(q, r)
 		}
 	}
@@ -126,11 +126,11 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 	// 3. Environment bindings.
 	if env != nil {
 		for _, r := range searchEnvironmentBindings(env, lowerPattern) {
-			dup := primNames.Get(r.Name) || seen.Get(r.Name)
+			dup := primNames.ContainsOne(r.Name) || seen.ContainsOne(r.Name)
 			if dup {
 				continue
 			}
-			seen.Set(r.Name)
+			seen.Add(r.Name)
 			q = append(q, r)
 		}
 	}
@@ -138,11 +138,11 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 	// 4. Loaded libraries.
 	if libs != nil {
 		for _, r := range searchLibraries(libs, lowerPattern) {
-			dup := seen.Get(r.Name)
+			dup := seen.ContainsOne(r.Name)
 			if dup {
 				continue
 			}
-			seen.Set(r.Name)
+			seen.Add(r.Name)
 			q = append(q, r)
 		}
 	}
@@ -150,11 +150,11 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 	// 5. Unloaded library exports.
 	if exports != nil {
 		for _, r := range searchUnloadedExports(exports, libs, lowerPattern) {
-			dup := primNames.Get(r.Name) || seen.Get(r.Name)
+			dup := primNames.ContainsOne(r.Name) || seen.ContainsOne(r.Name)
 			if dup {
 				continue
 			}
-			seen.Set(r.Name)
+			seen.Add(r.Name)
 			q = append(q, r)
 		}
 	}
@@ -212,11 +212,11 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 	// audience.
 	for _, slot := range ns.Store().LiveSlots() {
 		name := slot.Name.Key
-		dup := seen.Get(name)
+		dup := seen.ContainsOne(name)
 		if dup {
 			continue
 		}
-		seen.Set(name)
+		seen.Add(name)
 
 		bnd := slot.Binding
 		doc := bnd.Doc()
@@ -284,13 +284,13 @@ func searchUnloadedExports(exports LibraryExportSearcher, libs LibrarySearcher, 
 	loaded := values.NewStringSet(0)
 	if libs != nil {
 		for _, lib := range libs.AllLibraries() {
-			loaded.Set(lib.Name)
+			loaded.Add(lib.Name)
 		}
 	}
 
 	var q []DocSearchResult
 	for _, summary := range exports.AllLibraryExports() {
-		dup := loaded.Get(summary.Name)
+		dup := loaded.ContainsOne(summary.Name)
 		if dup {
 			continue
 		}

@@ -131,13 +131,13 @@ func (p *AtomicBox) SchemeString() string {
 // depth is this atomic's nesting level (root = 1); its content sits one level
 // deeper, where schemeStringChild enforces the host-safety bound.
 func (p *AtomicBox) schemeStringWithVisited(visited MapSet[Value], depth int) string {
-	seen := visited.Get(p)
+	seen := visited.ContainsOne(p)
 	if seen {
 		return "..."
 	}
-	visited.Set(p)
+	visited.Add(p)
 	defer func() {
-		visited.Unset(p)
+		visited.Remove(p)
 	}()
 	v := p.Load()
 	if v == nil {

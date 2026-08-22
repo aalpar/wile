@@ -76,13 +76,13 @@ func (p *Box) SchemeString() string {
 // depth is this box's nesting level (root = 1); its content sits one level
 // deeper, where schemeStringChild enforces the host-safety bound.
 func (p *Box) schemeStringWithVisited(visited MapSet[Value], depth int) string {
-	seen := visited.Get(p)
+	seen := visited.ContainsOne(p)
 	if seen {
 		return "..."
 	}
-	visited.Set(p)
+	visited.Add(p)
 	defer func() {
-		visited.Unset(p)
+		visited.Remove(p)
 	}()
 	return fmt.Sprintf("#&%s", schemeStringChild(p.Value, visited, depth+1))
 }

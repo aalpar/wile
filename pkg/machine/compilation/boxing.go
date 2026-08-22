@@ -244,7 +244,7 @@ func (p *CompileTimeContinuation) markBoxedBinders(
 			continue
 		}
 		p.ensureBoxedSlots()
-		p.boxedSlots.Set(k)
+		p.boxedSlots.Add(k)
 		q = append(q, li)
 	}
 	return q
@@ -297,7 +297,7 @@ func (p *CompileTimeContinuation) maybeBoxOnDeclare(binder *syntax.SyntaxSymbol,
 		return
 	}
 	p.ensureBoxedSlots()
-	p.boxedSlots.Set(k)
+	p.boxedSlots.Add(k)
 	p.AppendOperations(machine.NewOperationBoxSlot(p.runtimeIndex(li)))
 }
 
@@ -323,7 +323,7 @@ func (p *CompileTimeContinuation) localIsBoxed(li *environment.LocalIndex) bool 
 	if !ok {
 		return false
 	}
-	return p.boxedSlots.Get(k)
+	return p.boxedSlots.ContainsOne(k)
 }
 
 // emitBoxSlots emits one OpBoxSlot per index, installing the cells before any

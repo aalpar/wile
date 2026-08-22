@@ -78,12 +78,12 @@ func VerifyCompilers() error {
 func VerifyExpanders() error {
 	expanderNames := values.NewStringSet(len(primitiveExpanderEntries))
 	for _, e := range primitiveExpanderEntries {
-		expanderNames.Set(e.Name)
+		expanderNames.Add(e.Name)
 	}
 
 	var missing []string
 	for _, e := range syntaxCompilerEntries {
-		has := expanderNames.Get(e.Name)
+		has := expanderNames.ContainsOne(e.Name)
 		if !has {
 			missing = append(missing, e.Name+": syntax compiler has no expander")
 		}

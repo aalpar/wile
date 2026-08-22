@@ -222,7 +222,7 @@ func scanFile(path string) ([]switchInfo, error) {
 	for _, group := range file.Comments {
 		for _, c := range group.List {
 			if isExhaustiveMarker(c.Text) {
-				markerLines.Set(fset.Position(c.Slash).Line)
+				markerLines.Add(fset.Position(c.Slash).Line)
 			}
 		}
 	}
@@ -234,7 +234,7 @@ func scanFile(path string) ([]switchInfo, error) {
 			return true
 		}
 		pos := fset.Position(ts.Switch)
-		marked := markerLines.Get(pos.Line) || markerLines.Get(pos.Line-1)
+		marked := markerLines.ContainsOne(pos.Line) || markerLines.ContainsOne(pos.Line-1)
 		if !marked {
 			return true
 		}

@@ -721,12 +721,12 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 		)
 		unwind := func() {
 			for _, c := range spine {
-				visited.Unset(c)
+				visited.Remove(c)
 			}
 		}
 		cur := val
 		for {
-			dup := visited.Get(cur)
+			dup := visited.ContainsOne(cur)
 			if dup {
 				unwind()
 				return nil, werr.WrapForeignErrorf(
@@ -734,7 +734,7 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 					"compile: circular datum label in quoted literal",
 				)
 			}
-			visited.Set(cur)
+			visited.Add(cur)
 			spine = append(spine, cur)
 
 			car, err := p.validateQuotedLiteralWithVisited(cur.Car(), visited)
@@ -777,14 +777,14 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 		if visited == nil {
 			visited = values.NewMapSet[values.Value](0)
 		}
-		dup := visited.Get(val)
+		dup := visited.ContainsOne(val)
 		if dup {
 			return nil, werr.WrapForeignErrorf(
 				werr.ErrInvalidSyntax,
 				"compile: circular datum label in quoted literal",
 			)
 		}
-		visited.Set(val)
+		visited.Add(val)
 		changed := false
 		newElements := make([]values.Value, val.Length())
 		for i, elem := range val.Elems() {
@@ -797,7 +797,7 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 				changed = true
 			}
 		}
-		visited.Unset(val)
+		visited.Remove(val)
 		if !changed {
 			return val, nil
 		}

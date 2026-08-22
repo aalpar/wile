@@ -46,8 +46,8 @@ var expectedPromotedMutators = values.StringSet{
 // promoted primitive cannot be added without being classified here.
 func TestPromotedOpsAreClassified(t *testing.T) {
 	for _, op := range promotedOps {
-		pure := expectedPromotedPure.Get(op.name)
-		mutator := expectedPromotedMutators.Get(op.name)
+		pure := expectedPromotedPure.ContainsOne(op.name)
+		mutator := expectedPromotedMutators.ContainsOne(op.name)
 		if pure == mutator {
 			t.Errorf("promoted op %q must be listed in exactly one of expectedPromotedPure/expectedPromotedMutators (pure=%v, mutator=%v)",
 				op.name, pure, mutator)

@@ -189,7 +189,7 @@ func coreManifestNames(t *testing.T) values.StringSet {
 		if !strings.HasPrefix(m[2], coreImplPrefix) {
 			continue
 		}
-		q.Set(m[1])
+		q.Add(m[1])
 	}
 	if len(deinlined) > 0 {
 		slices.Sort(deinlined)
@@ -234,14 +234,14 @@ func TestExtensionPrimitiveNamesIsTheCoreManifestSurface(t *testing.T) {
 	manifest := coreManifestNames(t)
 	liveOnly := []string{}
 	for name := range names {
-		ok := manifest.Get(name)
+		ok := manifest.ContainsOne(name)
 		if !ok {
 			liveOnly = append(liveOnly, name)
 		}
 	}
 	manifestOnly := []string{}
 	for name := range manifest {
-		ok := names.Get(name)
+		ok := names.ContainsOne(name)
 		if !ok {
 			manifestOnly = append(manifestOnly, name)
 		}
@@ -262,7 +262,7 @@ func TestExtensionPrimitiveNamesIsTheCoreManifestSurface(t *testing.T) {
 	// assertion as the reader-legible check: it says what this surface IS,
 	// where the difference above only says what moved.
 	for _, name := range []string{"car", "cons", "string-append", "vector-fill!", "char<?", "string<?"} {
-		ok := names.Get(name)
+		ok := names.ContainsOne(name)
 		c.Assert(ok, qt.IsTrue, qt.Commentf("core primitive %q missing from the tiny surface", name))
 	}
 }

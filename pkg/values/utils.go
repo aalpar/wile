@@ -459,70 +459,73 @@ func (p MapSet[T]) Set(s T) {
 	p[s] = struct{}{}
 }
 
-func (p MapSet[T]) SetAll(vs ...T) MapSet[T] {
+func (p MapSet[T]) SetAll(vs ...T) {
+	count := 0
 	for _, v := range vs {
 		p.Set(v)
+		count++
 	}
-	return p
 }
 
-func (p MapSet[T]) Unset(s T) {
+func (p MapSet[T]) Add(s T) bool {
+	_, exists := p[s]
+	p.Set(s)
+	return !exists
+}
+
+func (p MapSet[T]) Append(vs ...T) int {
+	count := 0
+	for _, v := range vs {
+		if p.Add(v) {
+			count++
+		}
+	}
+	return count
+}
+
+func (p MapSet[T]) Remove(s T) bool {
+	_, exists := p[s]
 	delete(p, s)
+	return exists
 }
 
-func (p MapSet[T]) Get(s T) bool {
+func (p MapSet[T]) Contains(ss ...T) bool {
+	for _, s := range ss {
+		_, exists := p[s]
+		if !exists {
+			return false
+		}
+	}
+	return true
+}
+
+func (p MapSet[T]) ContainsOne(s T) bool {
 	_, q := p[s]
 	return q
 }
 
-type StringSet MapSet[string]
+// StringSet and IntSet are the two instantiations common enough to have earned
+// a name. They are ALIASES, not defined types, which is what makes them free:
+// a defined type does not inherit MapSet's method set, so each of the five would
+// have to be restated here and kept from drifting. An alias has one method set
+// because it is one type.
+//
+// The cost, stated: aliases are interchangeable with MapSet[string] /
+// MapSet[int] everywhere, so a signature naming StringSet documents intent
+// without enforcing it, and a type switch cannot have arms for both. Neither is
+// load-bearing anywhere in the tree — nothing switches on these, and no
+// signature relies on a string set being refused where a MapSet[string] is
+// expected. If that changes, the way back is `type StringSet MapSet[string]`
+// plus five delegating methods, and the compiler will name every site.
+
+type StringSet = MapSet[string]
 
 func NewStringSet(sz int) StringSet {
 	return make(StringSet, sz)
 }
 
-func (p StringSet) Set(s string) {
-	p[s] = struct{}{}
-}
-
-func (p StringSet) SetAll(vs ...string) StringSet {
-	for _, v := range vs {
-		p.Set(v)
-	}
-	return p
-}
-
-func (p StringSet) Unset(s string) {
-	delete(p, s)
-}
-
-func (p StringSet) Get(s string) bool {
-	_, q := p[s]
-	return q
-}
-
-type IntSet MapSet[int]
+type IntSet = MapSet[int]
 
 func NewIntSet(sz int) IntSet {
 	return make(IntSet, sz)
-}
-
-func (p IntSet) Set(s int) {
-	p[s] = struct{}{}
-}
-
-func (p IntSet) SetAll(vs ...int) IntSet {
-	for _, v := range vs {
-		p.Set(v)
-	}
-	return p
-}
-
-func (p IntSet) Unset(s int) {
-	delete(p, s)
-}
-
-func (p IntSet) Get(s int) bool {
-	_, q := p[s]
-	return q
 }

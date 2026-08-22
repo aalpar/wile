@@ -62,7 +62,7 @@ func makeIsCaptureOp(env *environment.EnvironmentFrame) func(*syntax.SyntaxSymbo
 		if env == nil {
 			return false
 		}
-		named := captureOperatorNames.Get(sym.Sym.Key)
+		named := captureOperatorNames.ContainsOne(sym.Sym.Key)
 		if !named {
 			return false
 		}
