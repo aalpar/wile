@@ -362,12 +362,12 @@ func TestValidatedLet_Getters(t *testing.T) {
 	c := qt.New(t)
 	sym := syntax.NewSyntaxSymbol("x", nil)
 	init := &ValidatedLiteral{
-		validatedBase: validatedBase{formName: "@literal"},
-		Value:         syntax.NewSyntaxObject(values.NewInteger(1), nil),
+		formName: "@literal",
+		Value:    syntax.NewSyntaxObject(values.NewInteger(1), nil),
 	}
 	body := &ValidatedSymbol{
-		validatedBase: validatedBase{formName: "@symbol"},
-		Symbol:        sym,
+		formName: "@symbol",
+		Symbol:   sym,
 	}
 
 	tcs := []struct {
@@ -383,10 +383,10 @@ func TestValidatedLet_Getters(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			vl := &ValidatedLet{
-				validatedBase: validatedBase{formName: tc.form},
-				Kind:          tc.kind,
-				Bindings:      []ValidatedLetBinding{{Name: sym, Init: init}},
-				body:          []ValidatedExpr{body},
+				formName: tc.form,
+				Kind:     tc.kind,
+				Bindings: []ValidatedLetBinding{{Name: sym, Init: init}},
+				body:     []ValidatedExpr{body},
 			}
 			c.Assert(vl.FormName(), qt.Equals, tc.form)
 			c.Assert(vl.Kind, qt.Equals, tc.kind)

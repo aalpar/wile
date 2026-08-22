@@ -236,13 +236,11 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 		}
 	}
 	q := &MachineContext{
-		ctx: ctx,
-		vmState: vmState{
-			env:      cont.env,      // cannot copy environment here, it will be copied when pushed onto the stack
-			template: cont.template, // not needed to copy, templates are immutable
-			evals:    evals,
-			pc:       cont.pc,
-		},
+		ctx:      ctx,
+		env:      cont.env,      // cannot copy environment here, it will be copied when pushed onto the stack
+		template: cont.template, // not needed to copy, templates are immutable
+		evals:    evals,
+		pc:       cont.pc,
 		cont:     cont.parent,
 		counters: VMCounters{opcodeHits: newOpcodeHits(), callCounts: newCallCounts()},
 		pools:    newThreadPools(), // thread root: its own freelists

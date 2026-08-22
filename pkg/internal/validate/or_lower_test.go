@@ -26,8 +26,8 @@ import (
 // the quasiDepthTemplate entry the scan uses.
 func quasi(template values.Value) *ValidatedQuasiquote {
 	return &ValidatedQuasiquote{
-		validatedBase: validatedBase{formName: "quasiquote"},
-		Template:      makeSyntax(template),
+		formName: "quasiquote",
+		Template: makeSyntax(template),
 	}
 }
 
@@ -35,9 +35,9 @@ func quasi(template values.Value) *ValidatedQuasiquote {
 // binder and both `if` head positions spelled at the same scopes.
 func orShaped(name string, init ValidatedExpr, alt ValidatedExpr, scopes ...*syntax.Scope) *ValidatedLet {
 	v := &ValidatedLet{
-		validatedBase: validatedBase{formName: "let"},
-		Kind:          LetKindLet,
-		Bindings:      []ValidatedLetBinding{scopedBinder(name, init, scopes...)},
+		formName: "let",
+		Kind:     LetKindLet,
+		Bindings: []ValidatedLetBinding{scopedBinder(name, init, scopes...)},
 		body: []ValidatedExpr{
 			ifx(scopedSym(name, scopes...), scopedSym(name, scopes...), alt),
 		},
@@ -83,9 +83,9 @@ func TestLetIsOrShapedRefusals(t *testing.T) {
 
 	t.Run("binder set! in the alternative", func(t *testing.T) {
 		v := orShaped("t", lit(), &ValidatedSetBang{
-			validatedBase: validatedBase{formName: "set!"},
-			Name:          syntax.NewSyntaxSymbol("t", nil),
-			subExp:        lit(),
+			formName: "set!",
+			Name:     syntax.NewSyntaxSymbol("t", nil),
+			subExp:   lit(),
 		})
 		_, _, ok := LetIsOrShaped(v)
 		if ok {
@@ -112,7 +112,7 @@ func TestLetIsOrShapedRefusals(t *testing.T) {
 
 	t.Run("binder mentioned in a passthrough form", func(t *testing.T) {
 		v := orShaped("t", lit(), &ValidatedLiteral{
-			validatedBase: validatedBase{formName: "@literal"},
+			formName: "@literal",
 			Value: makeSyntax(values.List(
 				values.NewSymbol("cond-expand"),
 				values.List(values.NewSymbol("else"), values.NewSymbol("t")),
@@ -130,7 +130,7 @@ func TestLetIsOrShapedRefusals(t *testing.T) {
 	// to scan, and reporting a nil one as transparent would be backwards.
 	t.Run("quasiquote with no template", func(t *testing.T) {
 		v := orShaped("t", lit(), &ValidatedQuasiquote{
-			validatedBase: validatedBase{formName: "quasiquote"},
+			formName: "quasiquote",
 		})
 		_, _, ok := LetIsOrShaped(v)
 		if ok {
@@ -153,9 +153,9 @@ func TestLetIsOrShapedRefusals(t *testing.T) {
 	// so the register passthrough does not apply.
 	t.Run("consequent is not the binder", func(t *testing.T) {
 		v := &ValidatedLet{
-			validatedBase: validatedBase{formName: "let"},
-			Kind:          LetKindLet,
-			Bindings:      []ValidatedLetBinding{scopedBinder("t", lit())},
+			formName: "let",
+			Kind:     LetKindLet,
+			Bindings: []ValidatedLetBinding{scopedBinder("t", lit())},
 			body: []ValidatedExpr{
 				ifx(symRef("t"), call(symRef("f"), symRef("t")), lit()),
 			},
@@ -168,10 +168,10 @@ func TestLetIsOrShapedRefusals(t *testing.T) {
 
 	t.Run("test is not the binder", func(t *testing.T) {
 		v := &ValidatedLet{
-			validatedBase: validatedBase{formName: "let"},
-			Kind:          LetKindLet,
-			Bindings:      []ValidatedLetBinding{scopedBinder("t", lit())},
-			body:          []ValidatedExpr{ifx(symRef("x"), symRef("t"), lit())},
+			formName: "let",
+			Kind:     LetKindLet,
+			Bindings: []ValidatedLetBinding{scopedBinder("t", lit())},
+			body:     []ValidatedExpr{ifx(symRef("x"), symRef("t"), lit())},
 		}
 		_, _, ok := LetIsOrShaped(v)
 		if ok {
@@ -181,10 +181,10 @@ func TestLetIsOrShapedRefusals(t *testing.T) {
 
 	t.Run("no alternative", func(t *testing.T) {
 		v := &ValidatedLet{
-			validatedBase: validatedBase{formName: "let"},
-			Kind:          LetKindLet,
-			Bindings:      []ValidatedLetBinding{scopedBinder("t", lit())},
-			body:          []ValidatedExpr{ifx(symRef("t"), symRef("t"), nil)},
+			formName: "let",
+			Kind:     LetKindLet,
+			Bindings: []ValidatedLetBinding{scopedBinder("t", lit())},
+			body:     []ValidatedExpr{ifx(symRef("t"), symRef("t"), nil)},
 		}
 		_, _, ok := LetIsOrShaped(v)
 		if ok {

@@ -39,10 +39,10 @@ func variadicParams(req []string, rest string) *ValidatedParams {
 // ifx builds a ValidatedIf.
 func ifx(test, conseq, alt ValidatedExpr) *ValidatedIf {
 	return &ValidatedIf{
-		validatedBase: validatedBase{formName: "if"},
-		Test:          test,
-		Conseq:        conseq,
-		Alt:           alt,
+		formName: "if",
+		Test:     test,
+		Conseq:   conseq,
+		Alt:      alt,
 	}
 }
 
@@ -105,7 +105,7 @@ func TestBodyIsSelfTailReusable(t *testing.T) {
 				ifx(call(symRef("done?"), symRef("i")),
 					symRef("i"),
 					&ValidatedBegin{
-						validatedBase: validatedBase{formName: "begin"},
+						formName: "begin",
 						body: []ValidatedExpr{
 							call(symRef("effect"), symRef("i")),
 							call(symRef("b"), call(symRef("+"), symRef("i"), lit())),
@@ -207,7 +207,7 @@ func TestBodyIsSelfTailReusable(t *testing.T) {
 			name: "negative: self name is set! in the body (binding is mutable)",
 			proc: fnWith("loop", params("i"),
 				&ValidatedBegin{
-					validatedBase: validatedBase{formName: "begin"},
+					formName: "begin",
 					body: []ValidatedExpr{
 						setBang("loop", symRef("other")),
 						ifx(call(symRef("done?"), symRef("i")),
@@ -232,7 +232,7 @@ func TestBodyIsSelfTailReusable(t *testing.T) {
 			name: "positive: set! targets a shadowing let binding, not self",
 			proc: fnWith("s", params("i"),
 				&ValidatedBegin{
-					validatedBase: validatedBase{formName: "begin"},
+					formName: "begin",
 					body: []ValidatedExpr{
 						nestedLet([]ValidatedLetBinding{letBind("s")}, setBang("s", lit())),
 						ifx(call(symRef("done?"), symRef("i")),
@@ -436,7 +436,7 @@ func TestBodyIsSelfTailReusable_CalleeSafety(t *testing.T) {
 		ifx(call(symRef(">="), symRef("i"), symRef("n")),
 			symRef("i"),
 			&ValidatedBegin{
-				validatedBase: validatedBase{formName: "begin"},
+				formName: "begin",
 				body: []ValidatedExpr{
 					call(call(symRef("car"), symRef("fns")), symRef("i")),
 					call(symRef("loop"), call(symRef("+"), symRef("i"), lit()), symRef("n")),

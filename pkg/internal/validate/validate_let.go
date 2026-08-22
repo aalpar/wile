@@ -87,9 +87,9 @@ func validateLetCommon(
 				return nil
 			}
 			return &ValidatedLet{
-				validatedBase: validatedBase{formName: formName, source: source},
-				Kind:          kind,
-				body:          body,
+				formName: formName, source: source,
+				Kind: kind,
+				body: body,
 			}
 		}
 
@@ -138,10 +138,10 @@ func validateLetBindingsAndBody(
 	markEscapedBindings(childEnv, bindings, body, false)
 
 	return &ValidatedLet{
-		validatedBase: validatedBase{formName: formName, source: source},
-		Kind:          kind,
-		Bindings:      bindings,
-		body:          body,
+		formName: formName, source: source,
+		Kind:     kind,
+		Bindings: bindings,
+		body:     body,
 	}
 }
 
@@ -279,10 +279,10 @@ func validateLetStarFlat(
 	markEscapedBindings(childEnv, bindings, body, true)
 
 	return &ValidatedLet{
-		validatedBase: validatedBase{formName: formName, source: source},
-		Kind:          LetKindLetStar,
-		Bindings:      bindings,
-		body:          body,
+		formName: formName, source: source,
+		Kind:     LetKindLetStar,
+		Bindings: bindings,
+		body:     body,
 	}
 }
 
@@ -339,10 +339,10 @@ func validateLetStarNested(
 		markMutableBindings(vb.childEnv, bindings, result)
 		markEscapedBindings(vb.childEnv, bindings, innerBody, true)
 		node := &ValidatedLet{
-			validatedBase: validatedBase{formName: formName, source: source},
-			Kind:          LetKindLetStar,
-			Bindings:      bindings,
-			body:          innerBody,
+			formName: formName, source: source,
+			Kind:     LetKindLetStar,
+			Bindings: bindings,
+			body:     innerBody,
 		}
 		innerBody = []ValidatedExpr{node}
 	}
@@ -428,10 +428,10 @@ func validateLetrecBindingsAndBody(
 	markEscapedBindings(childEnv, bindings, body, true)
 
 	return &ValidatedLet{
-		validatedBase: validatedBase{formName: formName, source: source},
-		Kind:          kind,
-		Bindings:      bindings,
-		body:          body,
+		formName: formName, source: source,
+		Kind:     kind,
+		Bindings: bindings,
+		body:     body,
 	}
 }
 
@@ -484,10 +484,10 @@ func validateNamedLet(
 		callArgs[i] = b.Init
 	}
 	callExpr := &ValidatedCall{
-		validatedBase: validatedBase{formName: "@call", source: source},
+		formName: "@call", source: source,
 		proc: &ValidatedSymbol{
-			validatedBase: validatedBase{formName: "@symbol"},
-			Symbol:        tag,
+			formName: "@symbol",
+			Symbol:   tag,
 		},
 		args: callArgs,
 	}
@@ -498,11 +498,11 @@ func validateNamedLet(
 	markEscapedBindings(tagEnv, tagBindings, tagBody, true)
 
 	return &ValidatedLet{
-		validatedBase: validatedBase{formName: "letrec", source: source},
-		Kind:          LetKindLetrec,
-		Bindings:      tagBindings,
-		Tag:           tag,
-		body:          tagBody,
+		formName: "letrec", source: source,
+		Kind:     LetKindLetrec,
+		Bindings: tagBindings,
+		Tag:      tag,
+		body:     tagBody,
 	}
 }
 
@@ -520,11 +520,9 @@ func buildNamedLetLambda(
 		params.Required[i] = b.Name
 	}
 	return &ValidatedLambda{
-		validatedBase: validatedBase{formName: "lambda", source: source},
-		validatedProcBase: validatedProcBase{
-			params: params,
-			body:   body,
-		},
+		formName: "lambda", source: source,
+		params: params,
+		body:   body,
 	}
 }
 

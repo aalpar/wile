@@ -158,10 +158,10 @@ func TestMarkEscapedBindings_IfBothBranchesCall(t *testing.T) {
 	bindings[0].Init = lam(lit())
 	body := []ValidatedExpr{
 		&ValidatedIf{
-			validatedBase: validatedBase{formName: "if"},
-			Test:          lit(),
-			Conseq:        call(symRef("f")),
-			Alt:           call(symRef("f")),
+			formName: "if",
+			Test:     lit(),
+			Conseq:   call(symRef("f")),
+			Alt:      call(symRef("f")),
 		},
 	}
 	markEscapedBindings(env, bindings, body, false)
@@ -175,10 +175,10 @@ func TestMarkEscapedBindings_IfOneBranchNonCall(t *testing.T) {
 	bindings[0].Init = lam(lit())
 	body := []ValidatedExpr{
 		&ValidatedIf{
-			validatedBase: validatedBase{formName: "if"},
-			Test:          lit(),
-			Conseq:        symRef("f"),
-			Alt:           call(symRef("f")),
+			formName: "if",
+			Test:     lit(),
+			Conseq:   symRef("f"),
+			Alt:      call(symRef("f")),
 		},
 	}
 	markEscapedBindings(env, bindings, body, false)
@@ -234,10 +234,10 @@ func TestMarkEscapedBindings_NamedLetPattern(t *testing.T) {
 	env, bindings := makeTestEnvAndBindings("loop", "x")
 	bindings[0].Init = lam(
 		&ValidatedIf{
-			validatedBase: validatedBase{formName: "if"},
-			Test:          call(symRef("="), symRef("x"), lit()),
-			Conseq:        symRef("x"),
-			Alt:           call(symRef("loop"), call(symRef("-"), symRef("x"), lit())),
+			formName: "if",
+			Test:     call(symRef("="), symRef("x"), lit()),
+			Conseq:   symRef("x"),
+			Alt:      call(symRef("loop"), call(symRef("-"), symRef("x"), lit())),
 		},
 	)
 	body := []ValidatedExpr{call(symRef("loop"), lit())}
@@ -314,8 +314,8 @@ func TestMarkEscapedBindings_BeginSequence(t *testing.T) {
 	bindings[0].Init = lam(lit())
 	body := []ValidatedExpr{
 		&ValidatedBegin{
-			validatedBase: validatedBase{formName: "begin"},
-			body:          []ValidatedExpr{call(symRef("f")), call(symRef("f"))},
+			formName: "begin",
+			body:     []ValidatedExpr{call(symRef("f")), call(symRef("f"))},
 		},
 	}
 	markEscapedBindings(env, bindings, body, false)
@@ -330,10 +330,10 @@ func TestMarkEscapedBindings_DynamicWindCallPosition(t *testing.T) {
 	bindings[0].Init = lam(lit())
 	body := []ValidatedExpr{
 		&ValidatedDynamicWind{
-			validatedBase: validatedBase{formName: "dynamic-wind"},
-			Before:        symRef("f"),
-			Thunk:         symRef("f"),
-			After:         symRef("f"),
+			formName: "dynamic-wind",
+			Before:   symRef("f"),
+			Thunk:    symRef("f"),
+			After:    symRef("f"),
 		},
 	}
 	markEscapedBindings(env, bindings, body, false)
@@ -348,10 +348,10 @@ func TestMarkEscapedBindings_WithContinuationMark(t *testing.T) {
 	bindings[0].Init = lam(lit())
 	body := []ValidatedExpr{
 		&ValidatedWithContinuationMark{
-			validatedBase: validatedBase{formName: "with-continuation-mark"},
-			Key:           lit(),
-			Val:           lit(),
-			Body:          call(symRef("f")),
+			formName: "with-continuation-mark",
+			Key:      lit(),
+			Val:      lit(),
+			Body:     call(symRef("f")),
 		},
 	}
 	markEscapedBindings(env, bindings, body, false)

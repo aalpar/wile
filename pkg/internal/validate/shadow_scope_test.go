@@ -38,10 +38,10 @@ func walkScopes(body []ValidatedExpr) map[string]nameSet {
 // letOf builds a ValidatedLet of the given kind binding one name to one init.
 func letOf(kind LetKind, name string, init ValidatedExpr, body ...ValidatedExpr) *ValidatedLet {
 	return &ValidatedLet{
-		validatedBase: validatedBase{formName: kind.String()},
-		Kind:          kind,
-		Bindings:      []ValidatedLetBinding{{Name: syntax.NewSyntaxSymbol(name, nil), Init: init}},
-		body:          body,
+		formName: kind.String(),
+		Kind:     kind,
+		Bindings: []ValidatedLetBinding{{Name: syntax.NewSyntaxSymbol(name, nil), Init: init}},
+		body:     body,
 	}
 }
 
@@ -52,11 +52,9 @@ func lamOf(params []string, body ...ValidatedExpr) *ValidatedLambda {
 		required = append(required, syntax.NewSyntaxSymbol(p, nil))
 	}
 	return &ValidatedLambda{
-		validatedBase: validatedBase{formName: "lambda"},
-		validatedProcBase: validatedProcBase{
-			params: &ValidatedParams{Required: required},
-			body:   body,
-		},
+		formName: "lambda",
+		params:   &ValidatedParams{Required: required},
+		body:     body,
 	}
 }
 
@@ -282,9 +280,9 @@ func TestExprMutatesNameReportsThroughAmbiguousTie(t *testing.T) {
 
 	target := scopedSym("loop", a, b).Symbol
 	mutation := &ValidatedSetBang{
-		validatedBase: validatedBase{formName: "set!"},
-		Name:          target,
-		subExp:        lit(),
+		formName: "set!",
+		Name:     target,
+		subExp:   lit(),
 	}
 
 	if !exprMutatesName(mutation, "loop", set) {

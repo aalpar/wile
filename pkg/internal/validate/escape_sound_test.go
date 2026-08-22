@@ -28,8 +28,8 @@ func scopedSym(name string, scopes ...*syntax.Scope) *ValidatedSymbol {
 		sym = sym.AddScope(s).(*syntax.SyntaxSymbol)
 	}
 	return &ValidatedSymbol{
-		validatedBase: validatedBase{formName: "@symbol"},
-		Symbol:        sym,
+		formName: "@symbol",
+		Symbol:   sym,
 	}
 }
 
@@ -151,8 +151,8 @@ func TestLetBoundClosureEscapes_ScopesDiscriminate(t *testing.T) {
 	// The consing reference spells `step` too, but at {inner} — a different
 	// binding, invisible to this one.
 	v := &ValidatedLet{
-		validatedBase: validatedBase{formName: "let"},
-		Kind:          LetKindLet,
+		formName: "let",
+		Kind:     LetKindLet,
 		Bindings: []ValidatedLetBinding{
 			scopedBinder("step", lam(symRef("x")), outer),
 		},

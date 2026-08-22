@@ -71,13 +71,11 @@ func NewMachineContinuation(parent *MachineContinuation, tpl *NativeTemplate, en
 		depth = parent.callDepth + 1
 	}
 	q := &MachineContinuation{
-		vmState: vmState{
-			env:       env,
-			template:  tpl,
-			evals:     NewStack(),
-			callDepth: depth,
-		},
-		parent: parent,
+		env:       env,
+		template:  tpl,
+		evals:     NewStack(),
+		callDepth: depth,
+		parent:    parent,
 	}
 	return q
 }

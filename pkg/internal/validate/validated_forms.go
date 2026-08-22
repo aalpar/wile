@@ -199,8 +199,8 @@ type ValidatedLiteral struct {
 // passthrough form. Used by structural validators and the passthrough registry.
 func newLiteralExpr(source *syntax.SourceContext, value syntax.SyntaxValue) *ValidatedLiteral {
 	return &ValidatedLiteral{
-		validatedBase: validatedBase{formName: "@literal", source: source},
-		Value:         value,
+		formName: "@literal", source: source,
+		Value: value,
 	}
 }
 
@@ -358,10 +358,10 @@ func NewValidatedLet(
 	body []ValidatedExpr,
 ) *ValidatedLet {
 	return &ValidatedLet{
-		validatedBase: validatedBase{formName: formName, source: source},
-		Kind:          kind,
-		Bindings:      bindings,
-		body:          body,
+		formName: formName, source: source,
+		Kind:     kind,
+		Bindings: bindings,
+		body:     body,
 	}
 }
 

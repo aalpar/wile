@@ -61,8 +61,8 @@ func validateSetBang(ctx context.Context, env *environment.EnvironmentFrame, pai
 	result.markMutated(environment.GlobalRef(name.Key()))
 
 	return &ValidatedSetBang{
-		validatedBase: validatedBase{formName: "set!", source: source},
-		Name:          name,
-		subExp:        value,
+		formName: "set!", source: source,
+		Name:   name,
+		subExp: value,
 	}
 }

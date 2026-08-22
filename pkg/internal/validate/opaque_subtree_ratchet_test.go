@@ -72,7 +72,7 @@ func opaqueFixtures() []opaqueFixture {
 			// (cond-expand (else (lambda () x))) parked as a passthrough form:
 			// a non-empty syntax pair, which is what makes it code and not data.
 			opaque: &ValidatedLiteral{
-				validatedBase: validatedBase{formName: "@literal"},
+				formName: "@literal",
 				Value: makeSyntax(values.List(
 					values.NewSymbol("cond-expand"),
 					values.List(values.NewSymbol("else"), values.NewSymbol("x")),
@@ -80,8 +80,8 @@ func opaqueFixtures() []opaqueFixture {
 			},
 			// Self-evaluating data: never a syntax pair.
 			transparent: &ValidatedLiteral{
-				validatedBase: validatedBase{formName: "@literal"},
-				Value:         makeSyntax(values.NewInteger(42)),
+				formName: "@literal",
+				Value:    makeSyntax(values.NewInteger(42)),
 			},
 		},
 	}
@@ -172,7 +172,7 @@ func TestIsOpaqueSubtreeMatchesPayloadHalf(t *testing.T) {
 		symRef("x"),
 		call(symRef("f"), symRef("x")),
 		lam(symRef("x")),
-		&ValidatedQuasiquote{validatedBase: validatedBase{formName: "quasiquote"}},
+		&ValidatedQuasiquote{formName: "quasiquote"},
 	}
 	for _, f := range opaqueFixtures() {
 		exprs = append(exprs, f.opaque)
@@ -188,7 +188,7 @@ func TestIsOpaqueSubtreeMatchesPayloadHalf(t *testing.T) {
 
 	// The nil-Template quasiquote, stated as its own assertion rather than left
 	// to the loop: opaque, with nothing to scan.
-	nilTemplate := &ValidatedQuasiquote{validatedBase: validatedBase{formName: "quasiquote"}}
+	nilTemplate := &ValidatedQuasiquote{formName: "quasiquote"}
 	raw, ok := opaqueRawSyntax(nilTemplate)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(raw, qt.IsNil)

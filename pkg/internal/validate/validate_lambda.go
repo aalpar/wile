@@ -46,8 +46,8 @@ func validateLambda(ctx context.Context, env *environment.EnvironmentFrame, pair
 	docstring, body := extractDocstring(body)
 
 	return &ValidatedLambda{
-		validatedBase:     validatedBase{formName: "lambda", source: source},
-		validatedProcBase: validatedProcBase{params: params, body: body, docstring: docstring},
+		formName: "lambda", source: source,
+		params: params, body: body, docstring: docstring,
 	}
 }
 

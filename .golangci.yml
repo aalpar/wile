@@ -40,6 +40,16 @@ linters:
       disable:
         - fieldalignment
         - shadow
+    modernize:
+      disable:
+        # errorsastype rewrites `var x *T; if errors.As(err, &x)` into
+        # `if x, ok := errors.AsType[*T](err); ok` — a compound
+        # if-assignment, which CODING_STYLE.md forbids and the noCompoundIf
+        # ruleguard rule rejects. The two cannot both be satisfied by the
+        # form this check proposes. Adopting errors.AsType in its split
+        # two-statement form is a fine future change; it just isn't one this
+        # check can drive.
+        - errorsastype
     gocritic:
       enabled-tags:
         - diagnostic

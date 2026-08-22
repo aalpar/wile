@@ -37,9 +37,9 @@ func validateWithContinuationMark(ctx context.Context, env *environment.Environm
 	}
 
 	return &ValidatedWithContinuationMark{
-		validatedBase: validatedBase{formName: "with-continuation-mark", source: source},
-		Key:           key,
-		Val:           val,
-		Body:          body,
+		formName: "with-continuation-mark", source: source,
+		Key:  key,
+		Val:  val,
+		Body: body,
 	}
 }

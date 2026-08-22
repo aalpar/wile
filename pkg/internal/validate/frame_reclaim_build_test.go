@@ -360,8 +360,8 @@ func TestClassifyFrameReclaim_BeginWrappedUnit(t *testing.T) {
 		sq := defineFn("sq", call(symRef("*"), symRef("x"), symRef("x")))
 		use := defineFn("use", call(symRef("sq"), lit()))
 		begin := &ValidatedBegin{
-			validatedBase: validatedBase{formName: "begin"},
-			body:          []ValidatedExpr{sq, use},
+			formName: "begin",
+			body:     []ValidatedExpr{sq, use},
 		}
 		return []ValidatedExpr{begin}
 	}
@@ -391,7 +391,7 @@ func TestBuildReclaimGraph_QuasiquoteNotReclaimable(t *testing.T) {
 	// (define (g) `(,(...)))  — modelled as a body containing a quasiquote whose
 	// template may capture/escape/set! at runtime, unseen by the walk.
 	mkUnit := func() []ValidatedExpr {
-		g := defineFn("g", &ValidatedQuasiquote{validatedBase: validatedBase{formName: "quasiquote"}})
+		g := defineFn("g", &ValidatedQuasiquote{formName: "quasiquote"})
 		return []ValidatedExpr{g}
 	}
 
@@ -462,11 +462,9 @@ func TestClassifyFrameReclaim_LocalShadowNotReclaimable(t *testing.T) {
 
 	// (a) PARAMETER shadow: (define (use sq) (sq 3)) — sq is use's parameter.
 	useParam := &ValidatedDefine{
-		validatedBase: validatedBase{formName: "define"},
-		validatedProcBase: validatedProcBase{
-			params: &ValidatedParams{Required: []*syntax.SyntaxSymbol{syntax.NewSyntaxSymbol("sq", nil)}},
-			body:   []ValidatedExpr{call(symRef("sq"), lit())},
-		},
+		formName:   "define",
+		params:     &ValidatedParams{Required: []*syntax.SyntaxSymbol{syntax.NewSyntaxSymbol("sq", nil)}},
+		body:       []ValidatedExpr{call(symRef("sq"), lit())},
 		name:       syntax.NewSyntaxSymbol("use", nil),
 		IsFunction: true,
 	}

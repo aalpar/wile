@@ -116,7 +116,7 @@ func validateExpr(ctx context.Context, env *environment.EnvironmentFrame, expr s
 		}
 		return validateForm(ctx, env, e, result)
 	case *syntax.SyntaxSymbol:
-		return &ValidatedSymbol{validatedBase: validatedBase{formName: "@symbol", source: e.SourceContext()}, Symbol: e}
+		return &ValidatedSymbol{formName: "@symbol", source: e.SourceContext(), Symbol: e}
 	case *syntax.SyntaxObject:
 		return validateSyntaxObject(e, result)
 	default:

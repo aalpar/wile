@@ -218,8 +218,8 @@ var vmStateFieldCoverage = map[string]map[string]string{
 func testVmStateFieldCoverage(t *testing.T) {
 	typ := reflect.TypeFor[vmState]()
 	var fieldNames []string
-	for i := range typ.NumField() {
-		fieldNames = append(fieldNames, typ.Field(i).Name)
+	for field := range typ.Fields() {
+		fieldNames = append(fieldNames, field.Name)
 	}
 	slices.Sort(fieldNames)
 

@@ -43,9 +43,9 @@ func validateDynamicWind(ctx context.Context, env *environment.EnvironmentFrame,
 	}
 
 	return &ValidatedDynamicWind{
-		validatedBase: validatedBase{formName: "dynamic-wind", source: source},
-		Before:        before,
-		Thunk:         thunk,
-		After:         after,
+		formName: "dynamic-wind", source: source,
+		Before: before,
+		Thunk:  thunk,
+		After:  after,
 	}
 }

@@ -65,10 +65,10 @@ func validateDefineVariable(ctx context.Context, env *environment.EnvironmentFra
 	result.recordDefinedKey(name.Key())
 
 	return &ValidatedDefine{
-		validatedBase: validatedBase{formName: "define", source: source},
-		name:          name,
-		subExp:        value,
-		IsFunction:    false,
+		formName: "define", source: source,
+		name:       name,
+		subExp:     value,
+		IsFunction: false,
 	}
 }
 
@@ -108,10 +108,10 @@ func validateDefineFunction(ctx context.Context, env *environment.EnvironmentFra
 	result.recordDefinedKey(name.Key())
 
 	return &ValidatedDefine{
-		validatedBase:     validatedBase{formName: "define", source: source},
-		validatedProcBase: validatedProcBase{params: params, body: body, docstring: docstring},
-		name:              name,
-		IsFunction:        true,
+		formName: "define", source: source,
+		params: params, body: body, docstring: docstring,
+		name:       name,
+		IsFunction: true,
 	}
 }
 

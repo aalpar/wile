@@ -48,48 +48,44 @@ func makeTestEnvAndBindings(names ...string) (
 // symRef creates a ValidatedSymbol referencing the given name.
 func symRef(name string) *ValidatedSymbol {
 	return &ValidatedSymbol{
-		validatedBase: validatedBase{formName: "@symbol"},
-		Symbol:        syntax.NewSyntaxSymbol(name, nil),
+		formName: "@symbol",
+		Symbol:   syntax.NewSyntaxSymbol(name, nil),
 	}
 }
 
 // lit creates a ValidatedLiteral (no sub-expressions).
 func lit() *ValidatedLiteral {
 	return &ValidatedLiteral{
-		validatedBase: validatedBase{formName: "@literal"},
+		formName: "@literal",
 	}
 }
 
 // lam creates a ValidatedLambda with given body expressions and no params.
 func lam(body ...ValidatedExpr) *ValidatedLambda {
 	return &ValidatedLambda{
-		validatedBase: validatedBase{formName: "lambda"},
-		validatedProcBase: validatedProcBase{
-			params: &ValidatedParams{},
-			body:   body,
-		},
+		formName: "lambda",
+		params:   &ValidatedParams{},
+		body:     body,
 	}
 }
 
 // call creates a ValidatedCall.
 func call(proc ValidatedExpr, args ...ValidatedExpr) *ValidatedCall {
 	return &ValidatedCall{
-		validatedBase: validatedBase{formName: "@call"},
-		proc:          proc,
-		args:          args,
+		formName: "@call",
+		proc:     proc,
+		args:     args,
 	}
 }
 
 // caseLam creates a ValidatedCaseLambda with a single clause.
 func caseLam(body ...ValidatedExpr) *ValidatedCaseLambda {
 	return &ValidatedCaseLambda{
-		validatedBase: validatedBase{formName: "case-lambda"},
+		formName: "case-lambda",
 		clauses: []*ValidatedCaseLambdaClause{{
-			validatedBase: validatedBase{formName: "@clause"},
-			validatedProcBase: validatedProcBase{
-				params: &ValidatedParams{},
-				body:   body,
-			},
+			formName: "@clause",
+			params:   &ValidatedParams{},
+			body:     body,
 		}},
 	}
 }
@@ -97,11 +93,9 @@ func caseLam(body ...ValidatedExpr) *ValidatedCaseLambda {
 // defineFn creates a ValidatedDefine in function form (body at depth+1).
 func defineFn(name string, body ...ValidatedExpr) *ValidatedDefine {
 	return &ValidatedDefine{
-		validatedBase: validatedBase{formName: "define"},
-		validatedProcBase: validatedProcBase{
-			params: &ValidatedParams{},
-			body:   body,
-		},
+		formName:   "define",
+		params:     &ValidatedParams{},
+		body:       body,
 		name:       syntax.NewSyntaxSymbol(name, nil),
 		IsFunction: true,
 	}
@@ -110,10 +104,10 @@ func defineFn(name string, body ...ValidatedExpr) *ValidatedDefine {
 // defineVal creates a ValidatedDefine in value form (expr at current depth).
 func defineVal(name string, expr ValidatedExpr) *ValidatedDefine {
 	return &ValidatedDefine{
-		validatedBase: validatedBase{formName: "define"},
-		name:          syntax.NewSyntaxSymbol(name, nil),
-		subExp:        expr,
-		IsFunction:    false,
+		formName:   "define",
+		name:       syntax.NewSyntaxSymbol(name, nil),
+		subExp:     expr,
+		IsFunction: false,
 	}
 }
 
@@ -124,28 +118,28 @@ func applyExpr(
 	finalList ValidatedExpr,
 ) *ValidatedApply {
 	return &ValidatedApply{
-		validatedBase: validatedBase{formName: "apply"},
-		Proc:          proc,
-		PrefixArgs:    prefixArgs,
-		FinalList:     finalList,
+		formName:   "apply",
+		Proc:       proc,
+		PrefixArgs: prefixArgs,
+		FinalList:  finalList,
 	}
 }
 
 // nestedLet creates a ValidatedLet for nesting inside another let's body.
 func nestedLet(bindings []ValidatedLetBinding, body ...ValidatedExpr) *ValidatedLet {
 	return &ValidatedLet{
-		validatedBase: validatedBase{formName: "let"},
-		Kind:          LetKindLet,
-		Bindings:      bindings,
-		body:          body,
+		formName: "let",
+		Kind:     LetKindLet,
+		Bindings: bindings,
+		body:     body,
 	}
 }
 
 // setBang creates a ValidatedSetBang targeting the given name.
 func setBang(name string, expr ValidatedExpr) *ValidatedSetBang {
 	return &ValidatedSetBang{
-		validatedBase: validatedBase{formName: "set!"},
-		Name:          syntax.NewSyntaxSymbol(name, nil),
-		subExp:        expr,
+		formName: "set!",
+		Name:     syntax.NewSyntaxSymbol(name, nil),
+		subExp:   expr,
 	}
 }

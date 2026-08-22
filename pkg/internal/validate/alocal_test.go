@@ -30,10 +30,10 @@ func letBinds(kind LetKind, names []string, inits []ValidatedExpr, body ...Valid
 		})
 	}
 	return &ValidatedLet{
-		validatedBase: validatedBase{formName: kind.String()},
-		Kind:          kind,
-		Bindings:      bindings,
-		body:          body,
+		formName: kind.String(),
+		Kind:     kind,
+		Bindings: bindings,
+		body:     body,
 	}
 }
 
@@ -42,8 +42,8 @@ func letBinds(kind LetKind, names []string, inits []ValidatedExpr, body ...Valid
 // calls therefore sit in the binding's INIT, not in the let body.
 func namedLet(tag string, ps *ValidatedParams, loopBody []ValidatedExpr, prime ...ValidatedExpr) *ValidatedLet {
 	lambda := &ValidatedLambda{
-		validatedBase:     validatedBase{formName: "lambda"},
-		validatedProcBase: validatedProcBase{params: ps, body: loopBody},
+		formName: "lambda",
+		params:   ps, body: loopBody,
 	}
 	v := letBinds(LetKindLetrec, []string{tag}, []ValidatedExpr{lambda},
 		call(symRef(tag)))

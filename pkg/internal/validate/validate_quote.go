@@ -30,8 +30,8 @@ func validateQuote(_ context.Context, env *environment.EnvironmentFrame, pair *s
 
 	// The datum can be any syntax value - no further validation needed
 	return &ValidatedQuote{
-		validatedBase: validatedBase{formName: "quote", source: source},
-		Datum:         elements[1],
+		formName: "quote", source: source,
+		Datum: elements[1],
 	}
 }
 
@@ -51,7 +51,7 @@ func validateQuasiquote(_ context.Context, env *environment.EnvironmentFrame, pa
 	markOpaqueTemplate(env, elements[1], result)
 
 	return &ValidatedQuasiquote{
-		validatedBase: validatedBase{formName: "quasiquote", source: source},
-		Template:      elements[1],
+		formName: "quasiquote", source: source,
+		Template: elements[1],
 	}
 }

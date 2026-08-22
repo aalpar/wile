@@ -90,10 +90,10 @@ func TestWalkSubExprs_If(t *testing.T) {
 	conseq := symRef("x")
 	alt := symRef("y")
 	expr := &ValidatedIf{
-		validatedBase: validatedBase{formName: "if"},
-		Test:          test,
-		Conseq:        conseq,
-		Alt:           alt,
+		formName: "if",
+		Test:     test,
+		Conseq:   conseq,
+		Alt:      alt,
 	}
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 3)
@@ -107,8 +107,8 @@ func TestWalkSubExprs_Begin(t *testing.T) {
 	b1 := lit()
 	b2 := symRef("x")
 	expr := &ValidatedBegin{
-		validatedBase: validatedBase{formName: "begin"},
-		body:          []ValidatedExpr{b1, b2},
+		formName: "begin",
+		body:     []ValidatedExpr{b1, b2},
 	}
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 2)
@@ -142,7 +142,7 @@ func TestWalkSubExprs_Literal(t *testing.T) {
 func TestWalkSubExprs_Quote(t *testing.T) {
 	c := qt.New(t)
 	expr := &ValidatedQuote{
-		validatedBase: validatedBase{formName: "quote"},
+		formName: "quote",
 	}
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 0)
@@ -151,7 +151,7 @@ func TestWalkSubExprs_Quote(t *testing.T) {
 func TestWalkSubExprs_Quasiquote(t *testing.T) {
 	c := qt.New(t)
 	expr := &ValidatedQuasiquote{
-		validatedBase: validatedBase{formName: "quasiquote"},
+		formName: "quasiquote",
 	}
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 0)
@@ -177,10 +177,10 @@ func TestWalkSubExprs_Let(t *testing.T) {
 func TestWalkSubExprs_DynamicWind(t *testing.T) {
 	c := qt.New(t)
 	expr := &ValidatedDynamicWind{
-		validatedBase: validatedBase{formName: "dynamic-wind"},
-		Before:        symRef("a"),
-		Thunk:         symRef("b"),
-		After:         symRef("c"),
+		formName: "dynamic-wind",
+		Before:   symRef("a"),
+		Thunk:    symRef("b"),
+		After:    symRef("c"),
 	}
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 3)
@@ -192,10 +192,10 @@ func TestWalkSubExprs_DynamicWind(t *testing.T) {
 func TestWalkSubExprs_WithContinuationMark(t *testing.T) {
 	c := qt.New(t)
 	expr := &ValidatedWithContinuationMark{
-		validatedBase: validatedBase{formName: "with-continuation-mark"},
-		Key:           lit(),
-		Val:           lit(),
-		Body:          symRef("x"),
+		formName: "with-continuation-mark",
+		Key:      lit(),
+		Val:      lit(),
+		Body:     symRef("x"),
 	}
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 3)

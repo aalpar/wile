@@ -57,8 +57,8 @@ func validateCall(ctx context.Context, env *environment.EnvironmentFrame, pair *
 	}
 
 	return &ValidatedCall{
-		validatedBase: validatedBase{formName: "@call", source: source},
-		proc:          proc,
-		args:          args,
+		formName: "@call", source: source,
+		proc: proc,
+		args: args,
 	}
 }

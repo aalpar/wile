@@ -624,7 +624,7 @@ func TestInvokesProcedureGuardModulePath(t *testing.T) {
 		t.Fatalf("read go.mod: %v", err)
 	}
 	want := "module " + modulePath
-	first := strings.SplitN(strings.TrimSpace(string(b)), "\n", 2)[0]
+	first, _, _ := strings.Cut(strings.TrimSpace(string(b)), "\n")
 	if strings.TrimSpace(first) != want {
 		t.Errorf("go.mod module line = %q, want %q (update modulePath)", first, want)
 	}

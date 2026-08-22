@@ -57,9 +57,9 @@ func validateApply(ctx context.Context, env *environment.EnvironmentFrame, pair 
 	}
 
 	return &ValidatedApply{
-		validatedBase: validatedBase{formName: "apply", source: source},
-		Proc:          proc,
-		PrefixArgs:    prefixArgs,
-		FinalList:     finalList,
+		formName: "apply", source: source,
+		Proc:       proc,
+		PrefixArgs: prefixArgs,
+		FinalList:  finalList,
 	}
 }

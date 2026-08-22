@@ -43,8 +43,8 @@ func validateCaseLambda(ctx context.Context, env *environment.EnvironmentFrame, 
 	}
 
 	return &ValidatedCaseLambda{
-		validatedBase: validatedBase{formName: "case-lambda", source: source},
-		clauses:       clauses,
+		formName: "case-lambda", source: source,
+		clauses: clauses,
 	}
 }
 
@@ -89,7 +89,7 @@ func validateCaseLambdaClause(ctx context.Context, env *environment.EnvironmentF
 	docstring, body := extractDocstring(body)
 
 	return &ValidatedCaseLambdaClause{
-		validatedBase:     validatedBase{formName: "@clause", source: source},
-		validatedProcBase: validatedProcBase{params: params, body: body, docstring: docstring},
+		formName: "@clause", source: source,
+		params: params, body: body, docstring: docstring,
 	}
 }

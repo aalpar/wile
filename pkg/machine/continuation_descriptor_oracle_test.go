@@ -94,7 +94,7 @@ func buildProbe(t *testing.T, cfg probeConfig) probe {
 	mc.barrierValid = NewBarrierToken()
 	// A distinct sentinel parent, so opSave's parent DERIVE (= mc.cont) and the
 	// restore paths' mc.cont = cont.parent are observable.
-	mc.cont = &MachineContinuation{vmState: vmState{callDepth: sentinelParentDepth}}
+	mc.cont = &MachineContinuation{callDepth: sentinelParentDepth}
 
 	cont := acquireContinuation()
 	cont.env = &environment.EnvironmentFrame{}
@@ -115,7 +115,7 @@ func buildProbe(t *testing.T, cfg probeConfig) probe {
 	cont.envPooled = true // sentinel: RAR-unshared SHAREs this onto mc.envPooled
 	cont.marks = []markEntry{{key: values.NewInteger(2003), val: values.NewInteger(2004)}}
 	cont.barrierValid = NewBarrierToken()
-	cont.parent = &MachineContinuation{vmState: vmState{callDepth: 6}}
+	cont.parent = &MachineContinuation{callDepth: 6}
 	cont.promptHandler = &MachineClosure{}
 	// Seeded non-nil for the same reason as promptHandler: the opCopy SHARE check
 	// compares ref values, so a nil-vs-nil comparison would hold whether or not Copy
@@ -869,8 +869,8 @@ func assertRejects(t *testing.T, feed func(*testing.T)) {
 func vmStateFieldNames() []string {
 	typ := reflect.TypeFor[vmState]()
 	q := make([]string, 0, typ.NumField())
-	for i := range typ.NumField() {
-		q = append(q, typ.Field(i).Name)
+	for field := range typ.Fields() {
+		q = append(q, field.Name)
 	}
 	return q
 }
@@ -880,8 +880,7 @@ func vmStateFieldNames() []string {
 func contOnlyFieldNames() []string {
 	typ := reflect.TypeFor[MachineContinuation]()
 	var q []string
-	for i := range typ.NumField() {
-		f := typ.Field(i)
+	for f := range typ.Fields() {
 		if f.Anonymous && f.Name == "vmState" {
 			continue
 		}

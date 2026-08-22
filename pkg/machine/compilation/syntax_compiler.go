@@ -41,8 +41,8 @@ type SyntaxCompiler struct {
 // NewSyntaxCompiler creates a new syntax compiler.
 func NewSyntaxCompiler(name string, fn SyntaxCompilerFunc) *SyntaxCompiler {
 	return &SyntaxCompiler{
-		namedHandlerBase: namedHandlerBase{name: name, prefix: "syntax-compiler"},
-		fn:               fn,
+		name: name, prefix: "syntax-compiler",
+		fn: fn,
 	}
 }
 

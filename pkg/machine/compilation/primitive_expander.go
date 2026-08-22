@@ -45,8 +45,8 @@ type PrimitiveExpander struct {
 // NewPrimitiveExpander creates a new primitive expander.
 func NewPrimitiveExpander(name string, fn PrimitiveExpanderFunc) *PrimitiveExpander {
 	return &PrimitiveExpander{
-		namedHandlerBase: namedHandlerBase{name: name, prefix: "primitive-expander"},
-		fn:               fn,
+		name: name, prefix: "primitive-expander",
+		fn: fn,
 	}
 }
 
