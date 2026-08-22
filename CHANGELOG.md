@@ -79,6 +79,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   The move changes module-graph pruning, so `golang.org/x/sys` advances to 0.46.0
   as an indirect dependency.
 
+- **BREAKING: `ForeignFileError`, `ForeignProcessError` and `ForeignReadError`
+  embed `ForeignError` by value, not by pointer.** Only code that reached for the
+  embedded field itself (`err.ForeignError`) is affected; the promoted methods,
+  the constructors, and every `errors.Is`/`errors.As` match behave as before.
+
+  Embedding the pointer promoted `Error`, `Is`, `As` and `Cause` — all
+  pointer-receiver methods — to the method sets of *both* the value and the
+  pointer type, leaving two types satisfying `error` for one error. An
+  `errors.As` target of the value type would then silently never match, and Go
+  1.27's vet rejects `%w` on such a type outright, which is how this surfaced.
+
 - **BREAKING: the debugger moved to its own package, `pkg/debug`.** `Debugger`,
   `BreakpointInfo`, `BreakAction` and its constants left `pkg/wile`;
   `DebugContext`, `DebugCommandInfo` and `NewDebugContext` left `pkg/repl`. They
