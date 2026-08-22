@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package wile_test
+package debug_test
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/debug"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
 
@@ -56,9 +57,9 @@ func TestDebuggerReachesLoadedCode(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	hits := 0
-	dbg := wile.NewDebugger()
+	dbg := debug.NewDebugger()
 	dbg.SetBreakpoint(path, 2, 0)
-	dbg.OnBreak(func(_ values.DebugState, _ *wile.BreakpointInfo) {
+	dbg.OnBreak(func(_ values.DebugState, _ *debug.BreakpointInfo) {
 		hits++
 	})
 	eng.SetDebugger(dbg)
@@ -105,14 +106,14 @@ func TestDebuggerReachesLoadedCodeWithSuspensionArmed(t *testing.T) {
 
 	renderHits := 0
 	suspendHits := 0
-	dbg := wile.NewDebugger()
+	dbg := debug.NewDebugger()
 	dbg.SetBreakpoint(path, 2, 0)
-	dbg.OnBreak(func(_ values.DebugState, _ *wile.BreakpointInfo) {
+	dbg.OnBreak(func(_ values.DebugState, _ *debug.BreakpointInfo) {
 		renderHits++
 	})
-	dbg.OnBreakSuspend(func(_ values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+	dbg.OnBreakSuspend(func(_ values.DebugState, _ *debug.BreakpointInfo) debug.BreakAction {
 		suspendHits++
-		return wile.BreakContinue
+		return debug.BreakContinue
 	})
 	eng.SetDebugger(dbg)
 
@@ -162,15 +163,15 @@ func TestStepOverSurvivesTheRoundTrip(t *testing.T) {
 	eng, path, dbg := newDebuggedEngine(t, src)
 
 	var lines []int
-	dbg.OnBreakSuspend(func(state values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+	dbg.OnBreakSuspend(func(state values.DebugState, _ *debug.BreakpointInfo) debug.BreakAction {
 		loc := state.CurrentLocation()
 		if loc != nil {
 			lines = append(lines, loc.Line)
 		}
 		if len(lines) == 1 {
-			return wile.BreakNext
+			return debug.BreakNext
 		}
-		return wile.BreakContinue
+		return debug.BreakContinue
 	})
 	dbg.SetBreakpoint(path, 4, 0)
 
@@ -192,7 +193,7 @@ const oneLineBodySource = "(define (foo x)\n" +
 // fresh temp dir, loads it, and returns the engine, the file path, and a
 // debugger already attached. Breakpoints are set by the caller AFTER the load
 // so that defining the procedure cannot itself fire them.
-func newDebuggedEngine(t *testing.T, src string) (*wile.Engine, string, *wile.Debugger) {
+func newDebuggedEngine(t *testing.T, src string) (*wile.Engine, string, *debug.Debugger) {
 	t.Helper()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "bp.scm")
@@ -202,7 +203,7 @@ func newDebuggedEngine(t *testing.T, src string) (*wile.Engine, string, *wile.De
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
 
-	dbg := wile.NewDebugger()
+	dbg := debug.NewDebugger()
 	eng.SetDebugger(dbg)
 
 	_, err = eng.EvalMultiple(ctx, `(load "`+path+`")`)
@@ -230,9 +231,9 @@ func TestDebuggerSuspendsAndTheVerdictControlsExecution(t *testing.T) {
 	t.Run("abandon", func(t *testing.T) {
 		eng, path, dbg := newDebuggedEngine(t, oneLineBodySource)
 		fires := 0
-		dbg.OnBreakSuspend(func(_ values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+		dbg.OnBreakSuspend(func(_ values.DebugState, _ *debug.BreakpointInfo) debug.BreakAction {
 			fires++
-			return wile.BreakAbandon
+			return debug.BreakAbandon
 		})
 		dbg.SetBreakpoint(path, 2, 0)
 
@@ -257,9 +258,9 @@ func TestDebuggerSuspendsAndTheVerdictControlsExecution(t *testing.T) {
 	t.Run("continue", func(t *testing.T) {
 		eng, path, dbg := newDebuggedEngine(t, oneLineBodySource)
 		fires := 0
-		dbg.OnBreakSuspend(func(_ values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+		dbg.OnBreakSuspend(func(_ values.DebugState, _ *debug.BreakpointInfo) debug.BreakAction {
 			fires++
-			return wile.BreakContinue
+			return debug.BreakContinue
 		})
 		dbg.SetBreakpoint(path, 2, 0)
 
@@ -297,7 +298,7 @@ func TestStepOutDoesNotDegenerateIntoStepInto(t *testing.T) {
 	eng, path, dbg := newDebuggedEngine(t, src)
 
 	var lines []int
-	dbg.OnBreakSuspend(func(state values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+	dbg.OnBreakSuspend(func(state values.DebugState, _ *debug.BreakpointInfo) debug.BreakAction {
 		line := 0
 		loc := state.CurrentLocation()
 		if loc != nil {
@@ -305,9 +306,9 @@ func TestStepOutDoesNotDegenerateIntoStepInto(t *testing.T) {
 		}
 		lines = append(lines, line)
 		if len(lines) == 1 {
-			return wile.BreakFinish
+			return debug.BreakFinish
 		}
-		return wile.BreakContinue
+		return debug.BreakContinue
 	})
 	dbg.SetBreakpoint(path, 2, 0)
 
@@ -334,7 +335,7 @@ func TestBreakpointFiresOncePerSourceLine(t *testing.T) {
 	eng, path, dbg := newDebuggedEngine(t, oneLineBodySource)
 
 	fires := 0
-	dbg.OnBreak(func(_ values.DebugState, _ *wile.BreakpointInfo) {
+	dbg.OnBreak(func(_ values.DebugState, _ *debug.BreakpointInfo) {
 		fires++
 	})
 	dbg.SetBreakpoint(path, 2, 0)
@@ -363,7 +364,7 @@ func TestEveryBreakpointOnALineFires(t *testing.T) {
 	eng, path, dbg := newDebuggedEngine(t, "(define (foo x)\n  (+ (* x 2) (* x 3)))\n")
 
 	var ids []int
-	dbg.OnBreak(func(_ values.DebugState, bp *wile.BreakpointInfo) {
+	dbg.OnBreak(func(_ values.DebugState, bp *debug.BreakpointInfo) {
 		if bp != nil {
 			ids = append(ids, bp.ID)
 		}
@@ -403,8 +404,8 @@ func TestBreakSnapshotHonoursMaxDepth(t *testing.T) {
 		"      (+ 1 (deep (- n 1)))))\n"
 	eng, path, dbg := newDebuggedEngine(t, src)
 
-	dbg.OnBreakSuspend(func(_ values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
-		return wile.BreakContinue
+	dbg.OnBreakSuspend(func(_ values.DebugState, _ *debug.BreakpointInfo) debug.BreakAction {
+		return debug.BreakContinue
 	})
 	dbg.SetBreakpoint(path, 3, 0)
 
@@ -452,12 +453,12 @@ func countTraceFrames(trace string) int {
 func TestUnarmedDebuggerCostsNoFrame(t *testing.T) {
 	ctx := context.Background()
 
-	traceOf := func(t *testing.T, arm func(*wile.Debugger)) string {
+	traceOf := func(t *testing.T, arm func(*debug.Debugger)) string {
 		t.Helper()
 		eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 		qt.Assert(t, err, qt.IsNil)
 		if arm != nil {
-			dbg := wile.NewDebugger()
+			dbg := debug.NewDebugger()
 			arm(dbg)
 			eng.SetDebugger(dbg)
 		}
@@ -472,9 +473,9 @@ func TestUnarmedDebuggerCostsNoFrame(t *testing.T) {
 	qt.Assert(t, countTraceFrames(bare) > 0, qt.IsTrue,
 		qt.Commentf("the control arm must produce a trace to compare against"))
 
-	handlerOnly := traceOf(t, func(dbg *wile.Debugger) {
-		dbg.OnBreakSuspend(func(_ values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
-			return wile.BreakContinue
+	handlerOnly := traceOf(t, func(dbg *debug.Debugger) {
+		dbg.OnBreakSuspend(func(_ values.DebugState, _ *debug.BreakpointInfo) debug.BreakAction {
+			return debug.BreakContinue
 		})
 	})
 	qt.Assert(t, handlerOnly, qt.Equals, bare,
@@ -482,9 +483,9 @@ func TestUnarmedDebuggerCostsNoFrame(t *testing.T) {
 
 	// Arming a breakpoint installs the boundary, and the boundary must still not
 	// show up as a frame: it is VM scaffolding, not a call the program made.
-	armed := traceOf(t, func(dbg *wile.Debugger) {
-		dbg.OnBreakSuspend(func(_ values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
-			return wile.BreakContinue
+	armed := traceOf(t, func(dbg *debug.Debugger) {
+		dbg.OnBreakSuspend(func(_ values.DebugState, _ *debug.BreakpointInfo) debug.BreakAction {
+			return debug.BreakContinue
 		})
 		dbg.SetBreakpoint("no-such-file.scm", 1, 0)
 	})

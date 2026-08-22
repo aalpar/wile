@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //nolint:errcheck // Debug command output doesn't need error handling
-package repl
+package debug
 
 import (
 	"cmp"
@@ -22,44 +22,42 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/aalpar/wile/pkg/wile"
 )
 
 // DebugContext holds the state for debug commands. The break state itself — a
 // snapshot frozen at the most recent break, NOT a live VM context — is owned by
-// the wrapped wile.Debugger and read through p.debugger.CurrentState().
+// the wrapped Debugger and read through p.debugger.CurrentState().
 // DebugContext deliberately keeps no parallel copy, so the two can never
 // disagree. Handing back the live context instead is what made ,where and
 // ,backtrace report "No source location available": it is pool-recycled and
 // zeroed the moment the evaluation ends.
 type DebugContext struct {
-	debugger *wile.Debugger
+	debugger *Debugger
 }
 
 // NewDebugContext creates a new debug context.
 func NewDebugContext() *DebugContext {
 	return &DebugContext{
-		debugger: wile.NewDebugger(),
+		debugger: NewDebugger(),
 	}
 }
 
 // Debugger returns the debugger instance.
-func (p *DebugContext) Debugger() *wile.Debugger {
+func (p *DebugContext) Debugger() *Debugger {
 	return p.debugger
 }
 
-// debugCommandMeta is the single source of truth for debug command metadata.
-// Separated from DebugCommandInfo so init() can read metadata without
-// allocating a DebugContext (and its wile.Debugger).
-type debugCommandMeta struct {
+// CommandMeta is the static half of a debug command: everything but the bound
+// handler. Separated from DebugCommandInfo so a help renderer can list the
+// commands without allocating a DebugContext (and its Debugger).
+type CommandMeta struct {
 	Name    string
 	Aliases []string
 	Summary string
 	Detail  string
 }
 
-var debugCommandMetadata = []debugCommandMeta{
+var debugCommandMetadata = []CommandMeta{
 	{"break", []string{"b"}, "Set breakpoint at FILE:LINE[:COLUMN]",
 		"Usage: ,break FILE:LINE[:COLUMN]"},
 	{"delete", []string{"d"}, "Delete a breakpoint",
@@ -84,6 +82,12 @@ var debugCommandMetadata = []debugCommandMeta{
 		"Usage: ,where"},
 	{"help", []string{"h", "?"}, "Show available debug commands",
 		"Usage: ,help"},
+}
+
+// Commands returns the debug-command catalog with no handlers bound. Bind them
+// by taking [DebugContext.DebugCommands] instead.
+func Commands() []CommandMeta {
+	return slices.Clone(debugCommandMetadata)
 }
 
 // DebugCommandInfo describes a single debug command: its canonical name,
@@ -117,10 +121,10 @@ func (p *DebugContext) DebugCommands() []DebugCommandInfo {
 	return q
 }
 
-// canonicalDebugCommand maps a typed token (comma already stripped) to the
+// CanonicalDebugCommand maps a typed token (comma already stripped) to the
 // canonical debug command name, so alias handling lives in one table and the
 // break prompt cannot drift from ,help.
-func canonicalDebugCommand(token string) (string, bool) {
+func CanonicalDebugCommand(token string) (string, bool) {
 	for _, m := range debugCommandMetadata {
 		if token == m.Name || slices.Contains(m.Aliases, token) {
 			return m.Name, true
@@ -211,7 +215,7 @@ func (p *DebugContext) cmdList(_ []string, out io.Writer) {
 	}
 
 	// Sort by ID for consistent output
-	slices.SortFunc(bps, func(a, b wile.BreakpointInfo) int {
+	slices.SortFunc(bps, func(a, b BreakpointInfo) int {
 		return cmp.Compare(a.ID, b.ID)
 	})
 
@@ -315,6 +319,15 @@ func (p *DebugContext) cmdHelp(_ []string, out io.Writer) {
 		aliases := formatAliases(dc.Aliases)
 		fmt.Fprintf(out, "  ,%-12s %s%s\n", dc.Name, dc.Summary, aliases)
 	}
+}
+
+// formatAliases renders a command's alias list as a parenthesized suffix like
+// " (,foo, ,bar)", or "" when the command has no aliases.
+func formatAliases(aliases []string) string {
+	if len(aliases) == 0 {
+		return ""
+	}
+	return " (," + strings.Join(aliases, ", ,") + ")"
 }
 
 // parseLocation parses a location string like "file.scm:10" or "file.scm:10:5".

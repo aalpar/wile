@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package wile_test
+package debug_test
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/debug"
 	"github.com/aalpar/wile/pkg/values"
-	"github.com/aalpar/wile/pkg/wile"
 )
 
 func TestDebugger_BreakpointCRUD(t *testing.T) {
-	dbg := wile.NewDebugger()
+	dbg := debug.NewDebugger()
 
 	id := dbg.SetBreakpoint("test.scm", 10, 0)
 	qt.Assert(t, id, qt.Equals, 0)
@@ -50,16 +50,16 @@ func TestDebugger_BreakpointCRUD(t *testing.T) {
 }
 
 func TestDebugger_OnBreak(t *testing.T) {
-	dbg := wile.NewDebugger()
+	dbg := debug.NewDebugger()
 	var received bool
-	dbg.OnBreak(func(state values.DebugState, bp *wile.BreakpointInfo) {
+	dbg.OnBreak(func(state values.DebugState, bp *debug.BreakpointInfo) {
 		received = true
 	})
 	qt.Assert(t, received, qt.IsFalse)
 }
 
 func TestDebugger_StepCommands(t *testing.T) {
-	dbg := wile.NewDebugger()
+	dbg := debug.NewDebugger()
 	// These should not panic even with no active context
 	dbg.StepInto()
 	dbg.Continue()
@@ -68,6 +68,6 @@ func TestDebugger_StepCommands(t *testing.T) {
 }
 
 func TestDebugger_CurrentState_Nil(t *testing.T) {
-	dbg := wile.NewDebugger()
+	dbg := debug.NewDebugger()
 	qt.Assert(t, dbg.CurrentState(), qt.IsNil)
 }

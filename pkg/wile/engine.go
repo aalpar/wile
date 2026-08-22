@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/aalpar/wile/coverage"
+	"github.com/aalpar/wile/pkg/debug"
 	"github.com/aalpar/wile/pkg/docparse"
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/bootstrap"
@@ -64,7 +65,7 @@ type Engine struct {
 	namespace               *environment.Namespace
 	env                     *environment.EnvironmentFrame
 	registry                *registry.PrimitiveRegistry
-	debugger                *Debugger
+	debugger                *debug.Debugger
 	lastCounters            machine.VMCounters
 	closers                 []registry.CloseFunc
 	closed                  bool
@@ -954,7 +955,7 @@ func (p *Engine) BoundNames() []string {
 // SetDebugger attaches a debugger to the engine. Subsequent [Engine.Run]
 // calls will execute with the debugger active, enabling breakpoints and
 // stepping. Pass nil to detach the debugger.
-func (p *Engine) SetDebugger(d *Debugger) {
+func (p *Engine) SetDebugger(d *debug.Debugger) {
 	p.debugger = d
 }
 
@@ -1183,8 +1184,11 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 	mc.SetMaxCallDepth(p.maxCallDepth)
 	mc.SetMaxStackSize(p.maxStackSize)
 	if p.debugger != nil {
-		mc.SetDebugger(p.debugger.machineDebugger())
-		p.armBreakPrompt(mc, cc)
+		closureEnv := cc.env.MutableRuntimeOrNil()
+		if closureEnv == nil {
+			closureEnv = cc.env
+		}
+		p.debugger.Attach(mc, closureEnv)
 	}
 
 	err := mc.RunWithEscapeHandling()
@@ -1194,34 +1198,6 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 		return nil, p.wrapRuntimeError(err)
 	}
 	return wrapValue(val), nil
-}
-
-// armBreakPrompt installs the debugger's break boundary on mc when — and only
-// when — a suspension handler is registered AND the debugger has something that
-// could stop this run. Otherwise a break falls back to the render-only callback
-// and no prompt frame is pushed.
-//
-// Both conditions are load-bearing, because the boundary is not free: it is a
-// real continuation frame, so it costs one unit of the call-depth budget for the
-// whole run and changes the tail-call shape at the top level. The REPL registers
-// a suspension handler for its entire session, so without the second condition
-// every evaluation typed at the prompt paid for a debugger nobody had armed.
-//
-// The install and the handler are two calls because the handler closes over the
-// tag the install mints.
-func (p *Engine) armBreakPrompt(mc *machine.MachineContext, cc *CompiledCode) {
-	if p.debugger.onBreakSuspend == nil {
-		return
-	}
-	if !p.debugger.canStop() {
-		return
-	}
-	closureEnv := cc.env.MutableRuntimeOrNil()
-	if closureEnv == nil {
-		closureEnv = cc.env
-	}
-	tag := mc.InstallBreakPrompt(nil)
-	mc.SetBreakHandler(p.debugger.breakHandler(closureEnv, tag))
 }
 
 // LastCounters returns the VM performance counters from the most recent

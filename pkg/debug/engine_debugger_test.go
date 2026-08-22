@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package wile_test
+package debug_test
 
 import (
 	"context"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/debug"
 	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
@@ -28,7 +29,7 @@ func TestSetDebugger(t *testing.T) {
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
 
-	dbg := wile.NewDebugger()
+	dbg := debug.NewDebugger()
 	eng.SetDebugger(dbg)
 
 	// Basic eval still works with debugger attached.

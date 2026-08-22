@@ -24,6 +24,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/aalpar/wile/pkg/debug"
 	"github.com/aalpar/wile/pkg/docparse"
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
@@ -36,7 +37,7 @@ import (
 // debug commands are delegated to DebugContext.
 type MetaCommandHandler struct {
 	eng      *wile.Engine
-	debugCtx *DebugContext
+	debugCtx *debug.DebugContext
 	docProv  DocProvider
 	pager    string
 	version  string
@@ -72,7 +73,7 @@ func NewMetaCommandHandler(eng *wile.Engine, opts ...MetaOption) *MetaCommandHan
 }
 
 // SetDebugContext attaches a debug context for debug command delegation.
-func (p *MetaCommandHandler) SetDebugContext(dc *DebugContext) {
+func (p *MetaCommandHandler) SetDebugContext(dc *debug.DebugContext) {
 	p.debugCtx = dc
 }
 
@@ -201,7 +202,7 @@ var metaCommands = []commandInfo{
 
 func init() {
 	// Derive debug command entries from the canonical metadata table.
-	for _, dc := range debugCommandMetadata {
+	for _, dc := range debug.Commands() {
 		metaCommands = append(metaCommands, commandInfo{
 			name:     dc.Name,
 			aliases:  dc.Aliases,

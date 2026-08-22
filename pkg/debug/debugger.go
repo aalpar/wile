@@ -12,7 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package wile
+// Package debug is the embedder-facing debugger: breakpoints, stepping, and the
+// break-prompt command surface a REPL renders.
+//
+// It sits between the VM and its consumers. [Debugger] wraps machine.Debugger so
+// [github.com/aalpar/wile/pkg/wile.Engine] never exposes VM types, and
+// [DebugContext] binds that same debugger to the comma-prefixed commands
+// pkg/repl dispatches. Both live here so pkg/wile and pkg/repl carry no
+// debugger-specific code beyond attaching one.
+//
+// The break state a consumer reads is a snapshot frozen at the stop, not the live
+// VM context: the context is pool-recycled and zeroed once the evaluation ends.
+package debug
 
 import (
 	"github.com/aalpar/wile/pkg/environment"
@@ -202,6 +213,34 @@ func (p *Debugger) CurrentState() values.DebugState {
 	return state
 }
 
+// Attach installs this debugger on mc for the run about to start, and arms the
+// break boundary when — and only when — a suspension handler is registered AND
+// the debugger has something that could stop this run. Otherwise a break falls
+// back to the render-only callback and no prompt frame is pushed.
+//
+// Both conditions are load-bearing, because the boundary is not free: it is a
+// real continuation frame, so it costs one unit of the call-depth budget for the
+// whole run and changes the tail-call shape at the top level. The REPL registers
+// a suspension handler for its entire session, so without the second condition
+// every evaluation typed at the prompt paid for a debugger nobody had armed.
+//
+// closureEnv is the frame the break handler closes over — the caller's mutable
+// runtime environment, or its compilation environment when there is none.
+func (p *Debugger) Attach(mc *machine.MachineContext, closureEnv *environment.EnvironmentFrame) {
+	mc.SetDebugger(p.inner)
+	if p.onBreakSuspend == nil {
+		return
+	}
+	// See [machine.Debugger.CanStop] for why arming on nothing costs.
+	if !p.inner.CanStop() {
+		return
+	}
+	// The install and the handler are two calls because the handler closes over
+	// the tag the install mints.
+	tag := mc.InstallBreakPrompt(nil)
+	mc.SetBreakHandler(p.breakHandler(closureEnv, tag))
+}
+
 // breakHandler builds the callable the VM applies while suspended at a break.
 // It receives the resumable composable continuation as its single argument,
 // asks the registered verdict function what to do, and either resumes that
@@ -261,17 +300,6 @@ func (p *Debugger) armStepMode(action BreakAction, depth int) {
 	default:
 		p.inner.Continue()
 	}
-}
-
-// machineDebugger returns the wrapped machine.Debugger for Engine use.
-func (p *Debugger) machineDebugger() *machine.Debugger {
-	return p.inner
-}
-
-// canStop reports whether an enabled breakpoint or an armed step mode could stop
-// the next run. See [machine.Debugger.CanStop] for why arming on nothing costs.
-func (p *Debugger) canStop() bool {
-	return p.inner.CanStop()
 }
 
 func machineBreakpointToInfo(bp *machine.Breakpoint) *BreakpointInfo {

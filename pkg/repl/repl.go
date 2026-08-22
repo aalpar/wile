@@ -24,6 +24,7 @@ import (
 	"os/signal"
 	"strings"
 
+	"github.com/aalpar/wile/pkg/debug"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
@@ -34,7 +35,7 @@ import (
 // REPL is an interactive Read-Eval-Print Loop.
 type REPL struct {
 	eng         *wile.Engine
-	debugCtx    *DebugContext
+	debugCtx    *debug.DebugContext
 	metaHandler *MetaCommandHandler
 	completer   *Completer
 	docProvider DocProvider
@@ -109,7 +110,7 @@ func WithVersion(version string) Option {
 }
 
 // WithDebugContext sets an externally-created debug context.
-func WithDebugContext(dc *DebugContext) Option {
+func WithDebugContext(dc *debug.DebugContext) Option {
 	return func(r *REPL) {
 		r.debugCtx = dc
 	}
@@ -137,7 +138,7 @@ func New(eng *wile.Engine, opts ...Option) *REPL {
 		opt(r)
 	}
 	if r.debugCtx == nil {
-		r.debugCtx = NewDebugContext()
+		r.debugCtx = debug.NewDebugContext()
 	}
 	if r.metaHandler == nil {
 		var metaOpts []MetaOption
@@ -405,36 +406,35 @@ const breakCommandHelp = "only ,continue ,step ,next ,finish ,backtrace ,where a
 // EOF is BreakAbandon: at a break there is no further input, so the only
 // remaining choice is to discard the computation (its dynamic-wind after-thunks
 // still run) and return to the caller.
-func (p *REPL) breakVerdict(readLine func() (string, error)) func(values.DebugState, *wile.BreakpointInfo) wile.BreakAction {
-	return func(state values.DebugState, bp *wile.BreakpointInfo) wile.BreakAction {
+func (p *REPL) breakVerdict(readLine func() (string, error)) func(values.DebugState, *debug.BreakpointInfo) debug.BreakAction {
+	return func(state values.DebugState, bp *debug.BreakpointInfo) debug.BreakAction {
 		p.renderBreak(state, bp)
 		for {
 			line, err := readLine()
 			if err != nil {
 				fmt.Fprintln(p.out)
-				return wile.BreakAbandon
+				return debug.BreakAbandon
 			}
 			token := strings.TrimPrefix(strings.TrimSpace(line), ",")
-			name, known := canonicalDebugCommand(token)
+			name, known := debug.CanonicalDebugCommand(token)
 			if !known {
 				fmt.Fprintln(p.out, breakCommandHelp)
 				continue
 			}
 			switch name {
 			case "continue":
-				return wile.BreakContinue
+				return debug.BreakContinue
 			case "step":
-				return wile.BreakStep
+				return debug.BreakStep
 			case "next":
-				return wile.BreakNext
+				return debug.BreakNext
 			case "finish":
-				return wile.BreakFinish
-			case "backtrace":
-				// Both read the debugger's snapshot of this break, which is the
-				// same state this callback was handed.
-				p.debugCtx.cmdBacktrace(nil, p.out)
-			case "where":
-				p.debugCtx.cmdWhere(nil, p.out)
+				return debug.BreakFinish
+			case "backtrace", "where":
+				// Dispatched through the same table ,backtrace and ,where use at
+				// the prompt, and reading the debugger's snapshot of this break —
+				// the same state this callback was handed.
+				p.debugCtx.HandleDebugCommand(","+name, p.out)
 			default:
 				fmt.Fprintln(p.out, breakCommandHelp)
 			}
@@ -443,7 +443,7 @@ func (p *REPL) breakVerdict(readLine func() (string, error)) func(values.DebugSt
 }
 
 // renderBreak prints the one-line banner announcing a stop.
-func (p *REPL) renderBreak(state values.DebugState, bp *wile.BreakpointInfo) {
+func (p *REPL) renderBreak(state values.DebugState, bp *debug.BreakpointInfo) {
 	if bp != nil {
 		fmt.Fprintf(p.out, "\nBreakpoint %d hit", bp.ID)
 	} else {
@@ -461,7 +461,7 @@ func (p *REPL) renderBreak(state values.DebugState, bp *wile.BreakpointInfo) {
 }
 
 // Debugger returns the REPL's debugger for external configuration.
-func (p *REPL) Debugger() *wile.Debugger {
+func (p *REPL) Debugger() *debug.Debugger {
 	return p.debugCtx.Debugger()
 }
 

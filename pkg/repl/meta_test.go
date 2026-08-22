@@ -23,6 +23,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/debug"
 	"github.com/aalpar/wile/pkg/docparse"
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/stdlib"
@@ -55,7 +56,7 @@ func TestMetaCommandHandler(t *testing.T) {
 			var buf bytes.Buffer
 			h := NewMetaCommandHandler(nil)
 			if tc.debug {
-				h.SetDebugContext(NewDebugContext())
+				h.SetDebugContext(debug.NewDebugContext())
 			}
 			handled := h.Handle(context.Background(), tc.input, &buf)
 			qt.Assert(t, handled, qt.Equals, tc.handled)
@@ -313,7 +314,7 @@ func TestCmdDoc_MacroStructuredFormat(t *testing.T) {
 
 func TestMetaCommandHandlerCommands(t *testing.T) {
 	h := NewMetaCommandHandler(nil)
-	h.SetDebugContext(NewDebugContext())
+	h.SetDebugContext(debug.NewDebugContext())
 	cmds := h.Commands()
 	qt.Assert(t, len(cmds) > 0, qt.IsTrue)
 
@@ -940,7 +941,7 @@ func TestMetaHandleDebugDelegation(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			h := NewMetaCommandHandler(nil)
-			h.SetDebugContext(NewDebugContext())
+			h.SetDebugContext(debug.NewDebugContext())
 			var buf bytes.Buffer
 			handled := h.Handle(context.Background(), tc.input, &buf)
 			qt.Assert(t, handled, qt.IsTrue)

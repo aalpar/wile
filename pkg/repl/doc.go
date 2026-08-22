@@ -20,7 +20,7 @@
 //   - [REPL]: Full read-eval-print loop with readline support
 //   - [MetaCommandHandler]: Comma-prefixed commands (,doc, ,apropos, etc.)
 //   - [Completer]: Tab completion for bindings and commands
-//   - [DebugContext]: Breakpoints, stepping, backtrace
+//   - [github.com/aalpar/wile/pkg/debug.DebugContext]: breakpoints, stepping, backtrace
 //   - [DocProvider]: Documentation lookup interface
 //   - [RegistryDocProvider]: Registry-backed documentation
 //

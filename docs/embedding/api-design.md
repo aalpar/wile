@@ -453,7 +453,12 @@ Internally, each `WithSourceFS` creates an `FSFileResolver` that resolves files 
 | `stdlib.go` | `StdLibFS` (re-export of `stdlib.LibFS`) |
 | `library_info.go` | `LibraryName`, `LibraryInfo`, library introspection |
 | `disassemble.go` | `DisassembleValue`, `FormLabel` |
-| `debugger.go` | `Debugger` type (breakpoints, stepping) |
 | `compiled.go` | `CompiledCode` type |
 | `error.go` | `CompilationError`, `RuntimeError`, `IsIncompleteInput` |
 | `doc.go` | Package documentation |
+
+`Engine.SetDebugger` takes a `*debug.Debugger` from `pkg/debug`, which owns the
+whole debugger surface — the breakpoint/stepping façade over `machine.Debugger`
+and the `DebugContext` command set `pkg/repl` renders at the break prompt.
+Neither `pkg/wile` nor `pkg/repl` carries debugger-specific code beyond attaching
+one.
