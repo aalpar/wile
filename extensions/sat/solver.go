@@ -551,7 +551,7 @@ func (s *solver) reduceClauseDB() {
 	for _, l := range s.trail {
 		r := s.reason[int32(l)>>1]
 		if r != noClauseRef {
-			locked.Add(r)
+			locked.Set(r)
 		}
 	}
 	type idxAct struct {

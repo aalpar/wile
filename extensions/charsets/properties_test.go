@@ -55,7 +55,7 @@ func dedupAndSort(rs runeSlice) []rune {
 	for _, r := range rs {
 		ok := seen.ContainsOne(r)
 		if !ok {
-			seen.Add(r)
+			seen.Set(r)
 			out = append(out, r)
 		}
 	}

@@ -33,7 +33,7 @@ func TestAlgebraUmbrellaCoversLeafExports(t *testing.T) {
 	c.Assert(err, qt.IsNil, qt.Commentf("reading umbrella %s", umbrellaPath))
 
 	umbrellaSet := values.NewStringSet(len(umbrellaExports))
-	umbrellaSet.Append(umbrellaExports...)
+	umbrellaSet.SetAll(umbrellaExports...)
 
 	entries, err := os.ReadDir(leafDir)
 	c.Assert(err, qt.IsNil, qt.Commentf("listing %s", leafDir))

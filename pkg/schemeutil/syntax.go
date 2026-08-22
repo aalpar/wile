@@ -91,8 +91,8 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 		if dup {
 			return nil, circularDatumError()
 		}
-		visited.Add(o)
-		defer visited.Remove(o)
+		visited.Set(o)
+		defer visited.Unset(o)
 		inner, err := datumToSyntaxValueVisited(ctx, sctx, v.Unbox(), visited, depth+1)
 		if err != nil {
 			return nil, err
@@ -103,8 +103,8 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 		if dup {
 			return nil, circularDatumError()
 		}
-		visited.Add(o)
-		defer visited.Remove(o)
+		visited.Set(o)
+		defer visited.Unset(o)
 		vt0 := syntax.NewSyntaxVector(sctx)
 		for _, elem := range v.Elems() {
 			e, err := datumToSyntaxValueVisited(ctx, sctx, elem, visited, depth+1)
@@ -140,10 +140,10 @@ func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o v
 		return nil, circularDatumError()
 	}
 	spine := []values.Value{o}
-	visited.Add(o)
+	visited.Set(o)
 	defer func() {
 		for _, cell := range spine {
-			visited.Remove(cell)
+			visited.Unset(cell)
 		}
 	}()
 
@@ -170,7 +170,7 @@ func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o v
 		if dup {
 			return nil, circularDatumError()
 		}
-		visited.Add(cdr)
+		visited.Set(cdr)
 		spine = append(spine, cdr)
 
 		cell := syntax.NewSyntaxCons(nil, nil, sctx)

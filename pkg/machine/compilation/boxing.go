@@ -244,7 +244,7 @@ func (p *CompileTimeContinuation) markBoxedBinders(
 			continue
 		}
 		p.ensureBoxedSlots()
-		p.boxedSlots.Add(k)
+		p.boxedSlots.Set(k)
 		q = append(q, li)
 	}
 	return q
@@ -297,7 +297,7 @@ func (p *CompileTimeContinuation) maybeBoxOnDeclare(binder *syntax.SyntaxSymbol,
 		return
 	}
 	p.ensureBoxedSlots()
-	p.boxedSlots.Add(k)
+	p.boxedSlots.Set(k)
 	p.AppendOperations(machine.NewOperationBoxSlot(p.runtimeIndex(li)))
 }
 

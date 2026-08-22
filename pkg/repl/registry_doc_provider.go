@@ -128,7 +128,7 @@ func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []regi
 		lowerPattern := strings.ToLower(pattern)
 		seen := values.NewStringSet(len(q))
 		for _, r := range q {
-			seen.Add(r.Name)
+			seen.Set(r.Name)
 		}
 
 		// Loaded libraries.
@@ -140,7 +140,7 @@ func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []regi
 			}
 			if strings.Contains(strings.ToLower(lib.Name), lowerPattern) ||
 				strings.Contains(strings.ToLower(lib.Description), lowerPattern) {
-				seen.Add(lib.Name)
+				seen.Set(lib.Name)
 				q = append(q, registry.DocSearchResult{
 					Name:     lib.Name,
 					Doc:      lib.Description,
@@ -157,7 +157,7 @@ func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []regi
 			}
 			if strings.Contains(strings.ToLower(lib.Name), lowerPattern) ||
 				strings.Contains(strings.ToLower(lib.Description), lowerPattern) {
-				seen.Add(lib.Name)
+				seen.Set(lib.Name)
 				q = append(q, registry.DocSearchResult{
 					Name:     lib.Name,
 					Doc:      lib.Description,
@@ -174,7 +174,7 @@ func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []regi
 				if !strings.Contains(strings.ToLower(export), lowerPattern) {
 					continue
 				}
-				seen.Add(export)
+				seen.Set(export)
 				doc := lib.Name
 				if lib.Description != "" {
 					doc = lib.Name + " — " + lib.Description
@@ -211,12 +211,12 @@ func (p *RegistryDocProvider) Categories() []string {
 	cats := values.NewStringSet(0)
 	for _, pr := range p.reg.Primitives() {
 		if pr.Spec.Category != "" {
-			cats.Add(pr.Spec.Category)
+			cats.Set(pr.Spec.Category)
 		}
 	}
 	for _, r := range registry.NonPrimitiveDocs(p.reg) {
 		if r.Category != "" {
-			cats.Add(r.Category)
+			cats.Set(r.Category)
 		}
 	}
 
@@ -230,7 +230,7 @@ func (p *RegistryDocProvider) ByCategory(category string) []registry.DocSearchRe
 
 	byCategory := p.reg.PrimitivesByCategory()
 	for _, pr := range byCategory[category] {
-		seen.Add(pr.Spec.Name)
+		seen.Set(pr.Spec.Name)
 		results = append(results, registry.DocSearchResult{
 			Name:     pr.Spec.Name,
 			Doc:      pr.Spec.Doc,
@@ -242,7 +242,7 @@ func (p *RegistryDocProvider) ByCategory(category string) []registry.DocSearchRe
 	for _, r := range registry.NonPrimitiveDocs(p.reg) {
 		dup := seen.ContainsOne(r.Name)
 		if r.Category == category && !dup {
-			seen.Add(r.Name)
+			seen.Set(r.Name)
 			results = append(results, r)
 		}
 	}

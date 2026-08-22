@@ -187,9 +187,9 @@ func (p *Vector) schemeStringWithVisited(visited MapSet[Value], depth int) strin
 	if seen {
 		return "..."
 	}
-	visited.Add(p)
+	visited.Set(p)
 	defer func() {
-		visited.Remove(p)
+		visited.Unset(p)
 	}()
 	return formatIndexable("#(", len(p.elems), func(i int) Value {
 		return p.elems[i]

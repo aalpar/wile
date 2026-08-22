@@ -371,7 +371,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 					[]Instruction{{Op: promotedOp, Arg: bindingIdx}},
 					tpl.sourceTableRefs[pullIdx],
 				)
-				claimed.Add(pullIdx)
+				claimed.Set(pullIdx)
 				continue
 			}
 
@@ -385,7 +385,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 				[]Instruction{{Op: OpCallForeignCached, Arg: bindingIdx}},
 				tpl.sourceTableRefs[pullIdx],
 			)
-			claimed.Add(pullIdx)
+			claimed.Set(pullIdx)
 			continue
 		}
 
@@ -453,7 +453,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 					[]Instruction{{Op: promotedTailOp, Arg: bindingIdx}},
 					tpl.sourceTableRefs[pullIdx],
 				)
-				claimed.Add(pullIdx)
+				claimed.Set(pullIdx)
 				continue
 			}
 
@@ -464,7 +464,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 				[]Instruction{{Op: OpCallForeignCachedTail, Arg: bindingIdx}},
 				tpl.sourceTableRefs[pullIdx],
 			)
-			claimed.Add(pullIdx)
+			claimed.Set(pullIdx)
 			continue
 		}
 	}

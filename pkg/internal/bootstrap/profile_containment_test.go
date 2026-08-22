@@ -189,7 +189,7 @@ func coreManifestNames(t *testing.T) values.StringSet {
 		if !strings.HasPrefix(m[2], coreImplPrefix) {
 			continue
 		}
-		q.Add(m[1])
+		q.Set(m[1])
 	}
 	if len(deinlined) > 0 {
 		slices.Sort(deinlined)

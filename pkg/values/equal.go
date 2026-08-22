@@ -173,6 +173,6 @@ func (p *equalWorklist) step(a, b Value) bool {
 	if p.visited == nil {
 		p.visited = NewMapSet[equalPairKey](0)
 	}
-	p.visited.Add(key)
+	p.visited.Set(key)
 	return da.EqualComponents(b, p.push)
 }

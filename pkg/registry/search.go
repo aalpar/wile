@@ -88,7 +88,7 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 	prims := reg.Primitives()
 	primNames := values.NewStringSet(len(prims) + 8)
 	for _, pr := range prims {
-		primNames.Add(pr.Spec.Name)
+		primNames.Set(pr.Spec.Name)
 		if matchesDoc(pr.Spec.Name, pr.Spec.Doc, pr.Spec.Category, pr.Spec.Keywords, lowerPattern) {
 			q = append(q, DocSearchResult{
 				Name:     pr.Spec.Name,
@@ -99,7 +99,7 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 		}
 	}
 	for _, dp := range reg.DocPrimitives() {
-		primNames.Add(dp.Name)
+		primNames.Set(dp.Name)
 		if matchesDoc(dp.Name, dp.Doc, dp.Category, dp.Keywords, lowerPattern) {
 			q = append(q, DocSearchResult{
 				Name:     dp.Name,
@@ -118,7 +118,7 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 			continue
 		}
 		if matchesDoc(r.Name, r.Doc, r.Category, r.Keywords, lowerPattern) {
-			seen.Add(r.Name)
+			seen.Set(r.Name)
 			q = append(q, r)
 		}
 	}
@@ -130,7 +130,7 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 			if dup {
 				continue
 			}
-			seen.Add(r.Name)
+			seen.Set(r.Name)
 			q = append(q, r)
 		}
 	}
@@ -142,7 +142,7 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 			if dup {
 				continue
 			}
-			seen.Add(r.Name)
+			seen.Set(r.Name)
 			q = append(q, r)
 		}
 	}
@@ -154,7 +154,7 @@ func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs L
 			if dup {
 				continue
 			}
-			seen.Add(r.Name)
+			seen.Set(r.Name)
 			q = append(q, r)
 		}
 	}
@@ -216,7 +216,7 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 		if dup {
 			continue
 		}
-		seen.Add(name)
+		seen.Set(name)
 
 		bnd := slot.Binding
 		doc := bnd.Doc()
@@ -284,7 +284,7 @@ func searchUnloadedExports(exports LibraryExportSearcher, libs LibrarySearcher, 
 	loaded := values.NewStringSet(0)
 	if libs != nil {
 		for _, lib := range libs.AllLibraries() {
-			loaded.Add(lib.Name)
+			loaded.Set(lib.Name)
 		}
 	}
 

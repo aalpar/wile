@@ -98,7 +98,7 @@ func findDuplicateSymbols(syms []*syntax.SyntaxSymbol) []*syntax.SyntaxSymbol {
 			dups = append(dups, sym)
 			continue
 		}
-		seen.Add(id)
+		seen.Set(id)
 	}
 	return dups
 }

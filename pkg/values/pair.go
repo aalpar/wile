@@ -428,10 +428,10 @@ func (p *Pair) schemeStringWithVisited(visited MapSet[Value], depth int) string 
 	// marked accumulates every node this call adds to the path so we can remove
 	// all of them on exit — not just the entry pair, but every spine cdrPair.
 	marked := []Value{p}
-	visited.Add(p)
+	visited.Set(p)
 	defer func() {
 		for _, m := range marked {
-			visited.Remove(m)
+			visited.Unset(m)
 		}
 	}()
 
@@ -468,7 +468,7 @@ func (p *Pair) schemeStringWithVisited(visited MapSet[Value], depth int) string 
 			q.WriteString(" . ...")
 			break
 		}
-		visited.Add(cdrPair)
+		visited.Set(cdrPair)
 		marked = append(marked, cdrPair)
 		pr = cdrPair
 		i++
@@ -519,7 +519,7 @@ func (p *Pair) stringWithVisited(visited MapSet[*Pair], depth int) string {
 	if seen {
 		return "..."
 	}
-	visited.Add(p)
+	visited.Set(p)
 
 	q := &strings.Builder{}
 	q.WriteString("(")
@@ -553,7 +553,7 @@ func (p *Pair) stringWithVisited(visited MapSet[*Pair], depth int) string {
 			q.WriteString(" . ...")
 			break
 		}
-		visited.Add(cdrPair)
+		visited.Set(cdrPair)
 		pr = cdrPair
 		i++
 	}

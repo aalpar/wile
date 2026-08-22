@@ -203,7 +203,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// doesn't create a void binding for _.
 	_, wildcardIsLiteral := literalSyntax["_"]
 	if !wildcardIsLiteral {
-		patternVars.Remove("_")
+		patternVars.Unset("_")
 		delete(patternVarSyntax, "_")
 	}
 

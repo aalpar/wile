@@ -58,7 +58,7 @@ func DiscoverAvailableLibraries(res FileResolver, reg *LibraryRegistry) ([]Libra
 			key := name.Key()
 			dup := seen.ContainsOne(key)
 			if !dup {
-				seen.Add(key)
+				seen.Set(key)
 				result = append(result, name)
 			}
 		}
@@ -70,7 +70,7 @@ func DiscoverAvailableLibraries(res FileResolver, reg *LibraryRegistry) ([]Libra
 			key := name.Key()
 			dup := seen.ContainsOne(key)
 			if !dup {
-				seen.Add(key)
+				seen.Set(key)
 				result = append(result, name)
 			}
 		}

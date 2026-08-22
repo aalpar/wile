@@ -125,14 +125,14 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 	only := func(ids ...string) func(*ImportSet) {
 		return func(is *ImportSet) {
 			set := values.NewStringSet(len(ids))
-			set.Append(ids...)
+			set.SetAll(ids...)
 			is.AddOnly(set)
 		}
 	}
 	except := func(ids ...string) func(*ImportSet) {
 		return func(is *ImportSet) {
 			set := values.NewStringSet(len(ids))
-			set.Append(ids...)
+			set.SetAll(ids...)
 			is.AddExcept(set)
 		}
 	}

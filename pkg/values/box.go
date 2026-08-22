@@ -80,9 +80,9 @@ func (p *Box) schemeStringWithVisited(visited MapSet[Value], depth int) string {
 	if seen {
 		return "..."
 	}
-	visited.Add(p)
+	visited.Set(p)
 	defer func() {
-		visited.Remove(p)
+		visited.Unset(p)
 	}()
 	return fmt.Sprintf("#&%s", schemeStringChild(p.Value, visited, depth+1))
 }

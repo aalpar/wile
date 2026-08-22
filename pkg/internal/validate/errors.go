@@ -86,7 +86,7 @@ func (p *ValidationResult) markMutated(ref environment.BindingRef) {
 	if p.mutated == nil {
 		p.mutated = values.NewMapSet[environment.BindingRef](0)
 	}
-	p.mutated.Add(ref)
+	p.mutated.Set(ref)
 }
 
 // isMutated returns true if the binding named by ref was targeted by set!.

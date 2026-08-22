@@ -554,7 +554,7 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 						syntax.ScopesMatch(litScopes, patternScopes)
 					if !scopesMatch {
 						// Same name but different scopes - treat as pattern variable
-						variables.Add(symVal.Key)
+						variables.Set(symVal.Key)
 						// Record the pattern variable's syntax for nested macro hygiene
 						if varSyntax != nil {
 							varSyntax[symVal.Key] = p
@@ -563,7 +563,7 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 					// If scopes match, it's a literal - don't add to variables
 				} else {
 					// Name not in literals - it's a pattern variable
-					variables.Add(symVal.Key)
+					variables.Set(symVal.Key)
 					// Record the pattern variable's syntax for nested macro hygiene
 					if varSyntax != nil {
 						varSyntax[symVal.Key] = p
@@ -906,7 +906,7 @@ func extractLiteralsWithSyntax(ctx context.Context,
 		if !ok {
 			return wrapSourcedError(literal.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASymbol, "extractLiterals: literal must be a symbol"))
 		}
-		literals.Add(symbol.Key)
+		literals.Set(symbol.Key)
 		// Store syntax symbol for scope-aware matching if map provided
 		if literalSyntax != nil {
 			literalSyntax[symbol.Key] = sym

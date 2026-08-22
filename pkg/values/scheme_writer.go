@@ -220,7 +220,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 			if found {
 				// Seen before - mark as needing a label. end stays zero, so the
 				// improper-tail branch below is correctly skipped.
-				p.needsLabelPair.Add(cur)
+				p.needsLabelPair.Set(cur)
 				break
 			}
 			// Mark as seen (with placeholder -1)
@@ -243,7 +243,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 		}
 		_, found := p.seenVectors[val]
 		if found {
-			p.needsLabelVector.Add(val)
+			p.needsLabelVector.Set(val)
 			return
 		}
 		p.seenVectors[val] = -1
@@ -260,7 +260,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 		}
 		_, found := p.seenBoxes[val]
 		if found {
-			p.needsLabelBox.Add(val)
+			p.needsLabelBox.Set(val)
 			return
 		}
 		p.seenBoxes[val] = -1
@@ -272,7 +272,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 		}
 		_, found := p.seenHashtables[val]
 		if found {
-			p.needsLabelHashtable.Add(val)
+			p.needsLabelHashtable.Set(val)
 			return
 		}
 		p.seenHashtables[val] = -1
@@ -323,21 +323,21 @@ func newDFSColors[T comparable]() dfsColors[T] {
 func (p *dfsColors[T]) enter(t T) bool {
 	onStack := p.onStack.ContainsOne(t)
 	if onStack {
-		p.circular.Add(t)
+		p.circular.Set(t)
 		return false
 	}
 	done := p.visited.ContainsOne(t)
 	if done {
 		return false
 	}
-	p.visited.Add(t)
-	p.onStack.Add(t)
+	p.visited.Set(t)
+	p.onStack.Set(t)
 	return true
 }
 
 // leave pops t off the recursion path, coloring it black.
 func (p *dfsColors[T]) leave(t T) {
-	p.onStack.Remove(t)
+	p.onStack.Unset(t)
 }
 
 // circularityScan is the DFS state for one filterToCircular pass, one coloring

@@ -887,7 +887,7 @@ func (p *PrimitiveRegistry) WithoutCategory(categories ...string) *PrimitiveRegi
 	// category. Without this the primitives go and the Scheme written over them
 	// stays, so NewEngine fails to compile the orphaned source.
 	drop := values.NewStringSet(len(categories))
-	drop.Append(categories...)
+	drop.SetAll(categories...)
 	q.procedureSources = slices.DeleteFunc(q.procedureSources, func(src string) bool {
 		for _, need := range q.procedureSourceCategories[src] {
 			gone := drop.ContainsOne(need)
@@ -904,7 +904,7 @@ func (p *PrimitiveRegistry) WithoutCategory(categories ...string) *PrimitiveRegi
 // keyFn(reg) matches any value in exclude. Non-primitive fields are copied unchanged.
 func (p *PrimitiveRegistry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegistration) string) *PrimitiveRegistry {
 	set := values.NewStringSet(len(exclude))
-	set.Append(exclude...)
+	set.SetAll(exclude...)
 
 	q := p.deepCopy()
 	q.primitives = slices.DeleteFunc(q.primitives, func(r PrimitiveRegistration) bool {
@@ -926,7 +926,7 @@ func (p *PrimitiveRegistry) filterPrimitives(exclude []string, keyFn func(Primit
 // likely wants kept.
 func (p *PrimitiveRegistry) WithoutBindings(names ...string) *PrimitiveRegistry {
 	exclude := values.NewStringSet(len(names))
-	exclude.Append(names...)
+	exclude.SetAll(names...)
 
 	q := p.deepCopy()
 	q.bindingSpecs = slices.DeleteFunc(q.bindingSpecs, func(s BindingSpec) bool {

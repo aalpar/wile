@@ -65,7 +65,7 @@ type useSiteScopeLog struct {
 func (p *ExpanderTimeContinuation) newUseSiteScope() *syntax.Scope {
 	scope := syntax.NewScopeWithLabel("use-site")
 	if p.useSiteScopes != nil {
-		p.useSiteScopes.scopes.Add(scope)
+		p.useSiteScopes.scopes.Set(scope)
 	}
 	return scope
 }

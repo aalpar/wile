@@ -222,7 +222,7 @@ func scanFile(path string) ([]switchInfo, error) {
 	for _, group := range file.Comments {
 		for _, c := range group.List {
 			if isExhaustiveMarker(c.Text) {
-				markerLines.Add(fset.Position(c.Slash).Line)
+				markerLines.Set(fset.Position(c.Slash).Line)
 			}
 		}
 	}

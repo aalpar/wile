@@ -640,7 +640,7 @@ func TestGlobalFrame_AmbientKeysExcludesMacroIntroducedBinders(t *testing.T) {
 	for _, k := range ge.AmbientKeysAt(PhaseRuntime) {
 		dup := names.ContainsOne(k.Key)
 		c.Assert(dup, qt.IsFalse)
-		names.Add(k.Key)
+		names.Set(k.Key)
 	}
 
 	// The delta between the two accessors is macro-only: DeleteBinding drops the
@@ -783,7 +783,7 @@ func TestSealedSlotsFiltersByRank(t *testing.T) {
 	names := func(slots []NamedSlot) values.StringSet {
 		q := values.StringSet{}
 		for _, s := range slots {
-			q.Add(s.Name.Key)
+			q.Set(s.Name.Key)
 		}
 		return q
 	}

@@ -395,9 +395,9 @@ func (p *Hashtable) schemeStringWithVisited(visited MapSet[Value], depth int) st
 	if seen {
 		return "..."
 	}
-	visited.Add(p)
+	visited.Set(p)
 	defer func() {
-		visited.Remove(p)
+		visited.Unset(p)
 	}()
 
 	q := &strings.Builder{}

@@ -1386,7 +1386,7 @@ func trackTemplateTree(col *coverage.Collector, root *machine.NativeTemplate) {
 		if done {
 			continue
 		}
-		visited.Add(tpl)
+		visited.Set(tpl)
 		col.Track(tpl)
 		for _, lit := range tpl.Literals() {
 			child, ok := lit.(*machine.NativeTemplate)

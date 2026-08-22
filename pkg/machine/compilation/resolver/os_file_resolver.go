@@ -193,7 +193,7 @@ func (p *OSFileResolver) osAbsSearchDirs(ctx context.Context) []string {
 		if dup {
 			continue
 		}
-		seen.Add(abs)
+		seen.Set(abs)
 		q = append(q, abs)
 	}
 	return q

@@ -78,7 +78,7 @@ func VerifyCompilers() error {
 func VerifyExpanders() error {
 	expanderNames := values.NewStringSet(len(primitiveExpanderEntries))
 	for _, e := range primitiveExpanderEntries {
-		expanderNames.Add(e.Name)
+		expanderNames.Set(e.Name)
 	}
 
 	var missing []string

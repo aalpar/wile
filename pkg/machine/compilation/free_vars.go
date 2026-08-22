@@ -169,7 +169,7 @@ func (p *freeVarCollector) visit(sym *syntax.SyntaxSymbol) {
 	if !ok {
 		return
 	}
-	p.seen.Add(k)
+	p.seen.Set(k)
 	p.q = append(p.q, freeVar{sym: sym, key: k, abs: abs})
 }
 

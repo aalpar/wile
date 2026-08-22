@@ -30,7 +30,7 @@ import (
 func newPrunerFixture(registered ...*syntax.Scope) *ExpanderTimeContinuation {
 	log := &useSiteScopeLog{scopes: values.NewMapSet[*syntax.Scope](len(registered))}
 	for _, s := range registered {
-		log.scopes.Add(s)
+		log.scopes.Set(s)
 	}
 	return &ExpanderTimeContinuation{useSiteScopes: log}
 }

@@ -158,7 +158,7 @@ func enginePrimitiveNames(callerNS *environment.Namespace) values.StringSet {
 func primitiveNameSet(reg *registry.PrimitiveRegistry) values.StringSet {
 	q := values.NewStringSet(reg.PrimitiveCount())
 	for _, p := range reg.Primitives() {
-		q.Add(p.Spec.Name)
+		q.Set(p.Spec.Name)
 	}
 	return q
 }

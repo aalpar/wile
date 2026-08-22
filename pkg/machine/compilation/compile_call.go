@@ -290,9 +290,9 @@ func (p *CompileTimeContinuation) tryInlineCall(
 	if p.currentlyInlining == nil {
 		p.currentlyInlining = values.NewMapSet[environment.BindingID](0)
 	}
-	p.currentlyInlining.Add(bid)
+	p.currentlyInlining.Set(bid)
 	defer func() {
-		p.currentlyInlining.Remove(bid)
+		p.currentlyInlining.Unset(bid)
 	}()
 
 	return true, CompileValidatedLet(p, ctctx, syntheticLet)

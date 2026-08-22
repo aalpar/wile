@@ -77,7 +77,7 @@ func markLiteralImmutable(v values.Value, visited values.MapSet[values.Value]) {
 			if seen {
 				break
 			}
-			visited.Add(cell)
+			visited.Set(cell)
 			markLiteralImmutable(cell.Car(), visited)
 			end = e
 		}
@@ -93,7 +93,7 @@ func markLiteralImmutable(v values.Value, visited values.MapSet[values.Value]) {
 		if seen {
 			return
 		}
-		visited.Add(obj)
+		visited.Set(obj)
 		values.MarkImmutable(obj)
 		for _, elem := range obj.Elems() {
 			markLiteralImmutable(elem, visited)

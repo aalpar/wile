@@ -147,8 +147,8 @@ func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visite
 		if dup {
 			return nil, circularDatumError()
 		}
-		visited.Add(datum)
-		defer visited.Remove(datum)
+		visited.Set(datum)
+		defer visited.Unset(datum)
 		elems := make([]syntax.SyntaxValue, v.Length())
 		for i, elem := range v.Elems() {
 			e, err := datumToSyntaxVisited(elem, sctx, visited, depth+1)
@@ -177,10 +177,10 @@ func datumListToSyntax(datum values.Value, v values.Tuple, sctx *syntax.SourceCo
 		return nil, circularDatumError()
 	}
 	spine := []values.Value{datum}
-	visited.Add(datum)
+	visited.Set(datum)
 	defer func() {
 		for _, cell := range spine {
-			visited.Remove(cell)
+			visited.Unset(cell)
 		}
 	}()
 
@@ -207,7 +207,7 @@ func datumListToSyntax(datum values.Value, v values.Tuple, sctx *syntax.SourceCo
 		if dup {
 			return nil, circularDatumError()
 		}
-		visited.Add(cdr)
+		visited.Set(cdr)
 		spine = append(spine, cdr)
 
 		cell := syntax.NewSyntaxCons(nil, nil, sctx)

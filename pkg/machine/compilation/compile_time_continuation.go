@@ -719,8 +719,8 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 			changed bool
 		)
 		unwind := func() {
-			for _, c := range spine {
-				visited.Remove(c)
+			for _, cur := range spine {
+				visited.Unset(cur)
 			}
 		}
 		cur := val
@@ -733,7 +733,7 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 					"compile: circular datum label in quoted literal",
 				)
 			}
-			visited.Add(cur)
+			visited.Set(cur)
 			spine = append(spine, cur)
 
 			car, err := p.validateQuotedLiteralWithVisited(cur.Car(), visited)
@@ -790,7 +790,7 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 				"compile: circular datum label in quoted literal",
 			)
 		}
-		visited.Add(val)
+		visited.Set(val)
 		changed := false
 		newElements := make([]values.Value, val.Length())
 		for i, elem := range val.Elems() {
@@ -803,7 +803,7 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 				changed = true
 			}
 		}
-		visited.Remove(val)
+		visited.Unset(val)
 		if !changed {
 			return val, nil
 		}

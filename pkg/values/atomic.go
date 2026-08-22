@@ -135,9 +135,9 @@ func (p *AtomicBox) schemeStringWithVisited(visited MapSet[Value], depth int) st
 	if seen {
 		return "..."
 	}
-	visited.Add(p)
+	visited.Set(p)
 	defer func() {
-		visited.Remove(p)
+		visited.Unset(p)
 	}()
 	v := p.Load()
 	if v == nil {

@@ -117,7 +117,7 @@ func assertAggregateImmutable(
 		if seen {
 			return aggregateCounts{}
 		}
-		visited.Add(obj)
+		visited.Set(obj)
 		// No assertion: a pair literal is mutable, and that is the decision
 		// (a flag word is ~25% growth on the 32-byte cons cell). The recursion
 		// below is the whole reason this arm still exists.
@@ -130,7 +130,7 @@ func assertAggregateImmutable(
 		if seen {
 			return aggregateCounts{}
 		}
-		visited.Add(obj)
+		visited.Set(obj)
 		qt.Assert(t, obj.IsImmutable(), qt.IsTrue,
 			qt.Commentf("pooled vector %s is mutable", obj.SchemeString()))
 		q := aggregateCounts{inspected: 1, flaggable: 1}
@@ -143,7 +143,7 @@ func assertAggregateImmutable(
 		if seen {
 			return aggregateCounts{}
 		}
-		visited.Add(obj)
+		visited.Set(obj)
 		qt.Assert(t, obj.IsImmutable(), qt.IsTrue,
 			qt.Commentf("pooled bytevector %s is mutable", obj.SchemeString()))
 		return aggregateCounts{inspected: 1, flaggable: 1}

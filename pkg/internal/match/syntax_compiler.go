@@ -386,7 +386,7 @@ func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry
 	if isVar {
 		// Pattern variable - capture it
 		vis.codes = append(vis.codes, ByteCodeCaptureCar{Binding: sym.Key()})
-		entry.variables.Add(sym.Key())
+		entry.variables.Set(sym.Key())
 	} else {
 		// Literal symbol - compare exactly
 		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbol(sym.Key(), nil)})
@@ -479,14 +479,14 @@ func collectCapturedVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEnt
 	if ok {
 		vars := vis.analysis.GetVariables(prevPair)
 		for v := range vars {
-			capturedVars.Add(v)
+			capturedVars.Set(v)
 		}
 	} else {
 		prevSym, ok := entry.lastElement.(*syntax.SyntaxSymbol)
 		if ok {
 			isVar := vis.variables.ContainsOne(prevSym.Key())
 			if isVar {
-				capturedVars.Add(prevSym.Key())
+				capturedVars.Set(prevSym.Key())
 			}
 		}
 	}
@@ -638,7 +638,7 @@ func emitImproperTailIfPresent(vis *SyntaxCompiler, entry *syntaxCompilerStackEn
 	if isVar {
 		// The CDR is a pattern variable - emit CaptureCdr to capture the rest
 		vis.codes = append(vis.codes, ByteCodeCaptureCdr{Binding: sym.Key()})
-		entry.variables.Add(sym.Key())
+		entry.variables.Set(sym.Key())
 		return
 	}
 	// The CDR is a literal symbol - compare it

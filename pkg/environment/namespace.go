@@ -343,7 +343,7 @@ func (p *Namespace) BoundNamesAcrossPhases() []string {
 		if dup {
 			continue
 		}
-		seen.Add(s.Name.Key)
+		seen.Set(s.Name.Key)
 		names = append(names, s.Name.Key)
 	}
 	slices.Sort(names)

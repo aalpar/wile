@@ -490,20 +490,22 @@ func (p MapSet[T]) Set(s T) {
 }
 
 func (p MapSet[T]) SetAll(vs ...T) {
-	count := 0
 	for _, v := range vs {
 		p.Set(v)
-		count++
 	}
+}
+
+func (p MapSet[T]) Unset(s T) {
+	delete(p, s)
 }
 
 func (p MapSet[T]) Add(s T) bool {
 	_, exists := p[s]
-	p.Set(s)
+	p[s] = struct{}{}
 	return !exists
 }
 
-func (p MapSet[T]) Append(vs ...T) int {
+func (p MapSet[T]) AddAll(vs ...T) int {
 	count := 0
 	for _, v := range vs {
 		if p.Add(v) {
@@ -513,30 +515,20 @@ func (p MapSet[T]) Append(vs ...T) int {
 	return count
 }
 
-func (p MapSet[T]) Remove(s T) bool {
-	_, exists := p[s]
-	delete(p, s)
-	return exists
-}
-
-func (p MapSet[T]) Contains(ss ...T) bool {
-	for _, s := range ss {
-		_, exists := p[s]
-		if !exists {
-			return false
-		}
-	}
-	return true
-}
-
 func (p MapSet[T]) ContainsOne(s T) bool {
 	_, q := p[s]
 	return q
 }
 
+func (p MapSet[T]) UnsetAll(all ...T) {
+	for _, v := range all {
+		p.Unset(v)
+	}
+}
+
 // StringSet and IntSet are the two instantiations common enough to have earned
 // a name. They are ALIASES, not defined types, which is what makes them free:
-// a defined type does not inherit MapSet's method set, so each of the five would
+// a defined type does not inherit MapSet's method set, so each of the four would
 // have to be restated here and kept from drifting. An alias has one method set
 // because it is one type.
 //

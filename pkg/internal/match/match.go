@@ -637,7 +637,7 @@ func (p *Matcher) findMatchingEllipsisIDs(vars values.StringSet, excludeIDs valu
 		for id := range p.ellipsisVars {
 			ok := p.ellipsisVars[id].ContainsOne(v)
 			if ok {
-				sel.Add(v)
+				sel.Set(v)
 				break
 			}
 		}
