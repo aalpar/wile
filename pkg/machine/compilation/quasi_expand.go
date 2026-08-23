@@ -50,13 +50,19 @@ var quasisyntaxKW = quasiKeywords{
 	handleDottedUnquote: false,
 }
 
-// buildQuasiSyntaxList creates a proper list from syntax elements.
-func (p *CompileTimeContinuation) buildQuasiSyntaxList(srcCtx *syntax.SourceContext, elems ...syntax.SyntaxValue) syntax.SyntaxValue {
-	var result syntax.SyntaxValue = syntax.SyntaxEmptyList
+// buildQuasiSyntaxList creates a proper list from syntax elements, stamping
+// every pair with the SAME srcCtx. That uniformity is the difference from
+// syntax.SyntaxList, which stamps each pair with its own car's context: these
+// pairs are synthesized, so there is no per-element source to attribute them to.
+//
+// Receiver unnamed: this reads nothing from the compiler. quasiHead is the one
+// helper here that genuinely does.
+func (*CompileTimeContinuation) buildQuasiSyntaxList(srcCtx *syntax.SourceContext, elems ...syntax.SyntaxValue) syntax.SyntaxValue {
+	var q syntax.SyntaxValue = syntax.SyntaxEmptyList
 	for i := range slices.Backward(elems) {
-		result = syntax.NewSyntaxCons(elems[i], result, srcCtx)
+		q = syntax.NewSyntaxCons(elems[i], q, srcCtx)
 	}
-	return result
+	return q
 }
 
 // quasiHead builds one of the list-construction heads the quasiquote and
@@ -97,8 +103,16 @@ func (p *CompileTimeContinuation) quasiHead(name string, srcCtx *syntax.SourceCo
 	return sym.WithResolvedBinding(gi)
 }
 
-// getSymbolName returns the symbol name if the value is a symbol
-func (p *CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, bool) {
+// getSymbolName returns the symbol name if the value is a symbol.
+//
+// It compares SPELLINGS, and every caller here is right to: these walks run on
+// an unexpanded template datum before any scope-set resolution, and R7RS §4.2.6
+// defines quasiquote's recognition of unquote on the datum. This is not the
+// binding-identity rule's territory; validate/opaque_subtree.go documents the
+// same limitation for the same reason.
+//
+// Receiver unnamed: this reads nothing from the compiler.
+func (*CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, bool) {
 	s, ok := v.(*syntax.SyntaxSymbol)
 	if ok {
 		return s.Key(), true
