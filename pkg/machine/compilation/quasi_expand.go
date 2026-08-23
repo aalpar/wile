@@ -110,8 +110,36 @@ func (p *CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, b
 // quasiQuoted renders v as the dialect's quoting form — (quote v) under
 // quasiquote, (syntax v) under quasisyntax. It is the terminal case of the
 // whole expansion: everything that is not evaluated is quoted.
+//
+// Deliberately NOT routed through quasiForm: quote and syntax are special
+// forms, resolve as such, and are not hijackable. They are the negative control
+// for the head pin quasiHead describes.
 func (p *CompileTimeContinuation) quasiQuoted(kw quasiKeywords, v syntax.SyntaxValue, srcCtx *syntax.SourceContext) syntax.SyntaxValue {
 	return p.buildQuasiSyntaxList(srcCtx, syntax.NewSyntaxSymbol(kw.quoting, srcCtx), v)
+}
+
+// quasiForm builds one synthesized call — (list …), (cons …), (append …),
+// (list->vector …) — with its operator pinned by quasiHead. Every synthesized
+// call goes through here, which makes the pin a structural property of the
+// expansion rather than a discipline remembered at each construction site.
+func (p *CompileTimeContinuation) quasiForm(srcCtx *syntax.SourceContext, head string, args ...syntax.SyntaxValue) syntax.SyntaxValue {
+	return p.buildQuasiSyntaxList(srcCtx, append([]syntax.SyntaxValue{p.quasiHead(head, srcCtx)}, args...)...)
+}
+
+// consChain folds elems onto tail right to left, yielding
+// (cons e0 (cons e1 … tail)). No elements yields tail untouched, which is what
+// makes the degenerate improper list `(. ,x) render as just x.
+//
+// tail is a parameter rather than something this derives, because its two
+// callers mean different things by it: the dotted-unquote arm passes the RAW
+// tail expression, evaluated at run time, while the improper-list arm passes an
+// already-expanded datum.
+func (p *CompileTimeContinuation) consChain(srcCtx *syntax.SourceContext, elems []syntax.SyntaxValue, tail syntax.SyntaxValue) syntax.SyntaxValue {
+	q := tail
+	for i := range slices.Backward(elems) {
+		q = p.quasiForm(srcCtx, "cons", elems[i], q)
+	}
+	return q
 }
 
 // rewrapQuasiForm re-emits (keyword arg) as a form that RECONSTRUCTS itself at
@@ -245,7 +273,6 @@ func (p *CompileTimeContinuation) expandQuasiList(
 
 	// No splice path: build (list elem1 elem2 ...)
 	var elems []syntax.SyntaxValue
-	elems = append(elems, p.quasiHead("list", srcCtx))
 
 	current := pair
 	for !values.IsEmptyList(current) {
@@ -262,17 +289,9 @@ func (p *CompileTimeContinuation) expandQuasiList(
 				cdr := current.SyntaxCdr()
 				cdrPair, ok := cdr.(*syntax.SyntaxPair)
 				if ok && hasSyntaxArity(cdrPair, 1) {
-					tailExpr := cdrPair.SyntaxCar()
-					var result syntax.SyntaxValue
-					result = tailExpr
-					for i := len(elems) - 1; i >= 1; i-- {
-						result = p.buildQuasiSyntaxList(srcCtx,
-							p.quasiHead("cons", srcCtx),
-							elems[i],
-							result,
-						)
-					}
-					return result, nil
+					// Raw, not expanded: the tail expression is evaluated at
+					// run time.
+					return p.consChain(srcCtx, elems, cdrPair.SyntaxCar()), nil
 				}
 			}
 		}
@@ -292,80 +311,35 @@ func (p *CompileTimeContinuation) expandQuasiList(
 			continue
 		}
 
-		// Improper list: build nested cons from already-expanded elements + expanded tail.
-		// elems[0] is the "list" symbol; elems[1:] are the already-expanded elements.
+		// Improper list: cons the already-expanded elements onto the expanded
+		// tail. The tail is part of the template and can carry an unquote of its
+		// own, so it is expanded rather than assumed inert.
 		expandedTail, err := p.expandQuasi(ctx, cdr, depth, kw, g)
 		if err != nil {
 			return nil, err
 		}
-		result := expandedTail
-		for i := len(elems) - 1; i >= 1; i-- {
-			result = p.buildQuasiSyntaxList(srcCtx,
-				p.quasiHead("cons", srcCtx),
-				elems[i],
-				result,
-			)
-		}
-		return result, nil
+		return p.consChain(srcCtx, elems, expandedTail), nil
 	}
 
-	return p.buildQuasiSyntaxList(srcCtx, elems...), nil
-}
-
-// quasiSegmentKind distinguishes a run of literal elements from a single
-// spliced expression when expanding a quasiquoted list or vector that contains
-// unquote-splicing / unsyntax-splicing.
-type quasiSegmentKind int
-
-const (
-	quasiSegNormal quasiSegmentKind = iota
-	quasiSegSplice
-)
-
-// quasiSegment is one run of a spliced quasiquote form: either a sequence of
-// literal elements (quasiSegNormal) or a single spliced expression
-// (quasiSegSplice). The vector and list expanders accumulate these and render
-// them via segmentsToAppendArgs.
-type quasiSegment struct {
-	kind  quasiSegmentKind
-	elems []syntax.SyntaxValue // for quasiSegNormal
-	expr  syntax.SyntaxValue   // for quasiSegSplice
-}
-
-// segmentsToAppendArgs renders accumulated splice segments into the argument
-// list of an (append ...) form: each normal run becomes (list e ...), each
-// splice contributes its expression directly. The returned slice begins with
-// the `append` symbol. Shared by the list and vector quasiquote expanders.
-func (p *CompileTimeContinuation) segmentsToAppendArgs(srcCtx *syntax.SourceContext, segments []quasiSegment) []syntax.SyntaxValue {
-	appendArgs := []syntax.SyntaxValue{p.quasiHead("append", srcCtx)}
-	for _, seg := range segments {
-		switch seg.kind {
-		case quasiSegNormal:
-			listArgs := []syntax.SyntaxValue{p.quasiHead("list", srcCtx)}
-			listArgs = append(listArgs, seg.elems...)
-			appendArgs = append(appendArgs, p.buildQuasiSyntaxList(srcCtx, listArgs...))
-		case quasiSegSplice:
-			appendArgs = append(appendArgs, seg.expr)
-		}
-	}
-	return appendArgs
+	return p.quasiForm(srcCtx, "list", elems...), nil
 }
 
 // expandQuasiListWithSplice handles lists containing splicing (unquote-splicing
-// or unsyntax-splicing). It segments the list into normal and splice segments,
-// then builds (append seg1 seg2 ...).
+// or unsyntax-splicing). It accumulates the arguments of an (append …): each run
+// of ordinary elements becomes one (list e …), each splice contributes its
+// expression directly.
 func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 	ctx context.Context, pair *syntax.SyntaxPair, depth int, kw quasiKeywords, g *expandDepthGuard,
 ) (syntax.SyntaxValue, error) {
 	srcCtx := pair.SourceContext()
 
-	var segments []quasiSegment
+	var appendArgs []syntax.SyntaxValue
 	var currentElems []syntax.SyntaxValue
 	var improperTail syntax.SyntaxValue
 
 	flushNormal := func() {
 		if len(currentElems) > 0 {
-			segments = append(segments, quasiSegment{kind: quasiSegNormal, elems: currentElems})
+			appendArgs = append(appendArgs, p.quasiForm(srcCtx, "list", currentElems...))
 			currentElems = nil
 		}
 	}
@@ -412,8 +386,7 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 					currentElems = append(currentElems, expandedCar)
 				} else {
 					cdrPair := carPair.SyntaxCdr().(*syntax.SyntaxPair)
-					expr := cdrPair.SyntaxCar()
-					segments = append(segments, quasiSegment{kind: quasiSegSplice, expr: expr})
+					appendArgs = append(appendArgs, cdrPair.SyntaxCar())
 				}
 				goto next
 			}
@@ -452,10 +425,9 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 
 	flushNormal()
 
-	appendArgs := p.segmentsToAppendArgs(srcCtx, segments)
 	if improperTail != nil {
 		appendArgs = append(appendArgs, improperTail)
 	}
 
-	return p.buildQuasiSyntaxList(srcCtx, appendArgs...), nil
+	return p.quasiForm(srcCtx, "append", appendArgs...), nil
 }

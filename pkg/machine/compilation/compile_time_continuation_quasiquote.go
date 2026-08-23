@@ -108,7 +108,6 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 	if !hasSplice {
 		// Simple case: (list->vector (list elem1 elem2 ...))
 		var elems []syntax.SyntaxValue
-		elems = append(elems, p.quasiHead("list", srcCtx))
 		for _, elem := range v.Values {
 			expandedElem, err := p.expandQuasi(ctx, elem, depth, kw, g)
 			if err != nil {
@@ -116,20 +115,16 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 			}
 			elems = append(elems, expandedElem)
 		}
-		listExpr := p.buildQuasiSyntaxList(srcCtx, elems...)
-		return p.buildQuasiSyntaxList(srcCtx,
-			p.quasiHead("list->vector", srcCtx),
-			listExpr,
-		), nil
+		return p.quasiForm(srcCtx, "list->vector", p.quasiForm(srcCtx, "list", elems...)), nil
 	}
 
 	// Has splicing: (list->vector (append seg1 seg2 ...))
-	var segments []quasiSegment
+	var appendArgs []syntax.SyntaxValue
 	var currentElems []syntax.SyntaxValue
 
 	flushNormal := func() {
 		if len(currentElems) > 0 {
-			segments = append(segments, quasiSegment{kind: quasiSegNormal, elems: currentElems})
+			appendArgs = append(appendArgs, p.quasiForm(srcCtx, "list", currentElems...))
 			currentElems = nil
 		}
 	}
@@ -142,8 +137,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 				flushNormal()
 				if hasSyntaxArity(elemPair, 2) {
 					cdrPair := elemPair.SyntaxCdr().(*syntax.SyntaxPair)
-					expr := cdrPair.SyntaxCar()
-					segments = append(segments, quasiSegment{kind: quasiSegSplice, expr: expr})
+					appendArgs = append(appendArgs, cdrPair.SyntaxCar())
 				} else {
 					// Malformed - treat as normal
 					expandedElem, err := p.expandQuasi(ctx, elem, depth, kw, g)
@@ -163,11 +157,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 	}
 	flushNormal()
 
-	appendExpr := p.buildQuasiSyntaxList(srcCtx, p.segmentsToAppendArgs(srcCtx, segments)...)
-	return p.buildQuasiSyntaxList(srcCtx,
-		p.quasiHead("list->vector", srcCtx),
-		appendExpr,
-	), nil
+	return p.quasiForm(srcCtx, "list->vector", p.quasiForm(srcCtx, "append", appendArgs...)), nil
 }
 
 // quasiquoteNeedsRuntime checks if a syntax value contains unquotes that would
