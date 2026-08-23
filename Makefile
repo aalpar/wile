@@ -7,6 +7,16 @@ GO_MOD=$(GO) mod
 
 GO_BUILD_DIR=./build
 SH_TOOLS_DIR=./tools/sh
+# The tools tree carries its own Makefile; see the tools-* targets near the end
+# of this file. Recursive, not included: `build`, `test`, and `clean` exist in
+# both files and mean different things there.
+TOOLS_DIR=./tools
+# Forwarded to tools/Makefile. Defaulted here as well as there because a bare
+# `TOP=` on the sub-make command line would override the sub-make's own `?=`
+# with the empty string.
+TOP ?= 25
+ARMS ?=
+NEST_MAX ?= 6
 
 # Build prerequisites, scoped to the roots ./cmd/wile actually depends on
 # (verify with: go list -deps -f '{{.Dir}}' ./cmd/wile). Sweeping the whole
@@ -490,21 +500,16 @@ sage-snapshot: build
 	@command -v sage >/dev/null 2>&1 || { echo "sage not found on PATH; install SageMath >= 10.8 to regenerate snapshots" >&2; exit 1; }
 	WILE=$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) sage tools/sage/verify_algebra.sage --snapshot
 
-# Run golangci-lint plus the project's standalone linters on all packages.
-# These enforce conventions the gocritic/ruleguard DSL cannot express:
-#   - singlelinefunclint: the no-single-line-function rule (a positional rule).
-#   - typeswitchlint: exhaustiveness of //exhaustive-marked values.Value switches.
-#   - nestinglint: shallow-nesting rule (CODING_STYLE.md "Keep Indentation
-#     Shallow"). Gated at -max 6, the current worst depth: a regression guard
-#     that forbids anything DEEPER while the depth>=5 tail is flattened. Ratchet
-#     the number down (5, then 4) as those functions are refactored.
+# Run golangci-lint, then the project's standalone lint passes. The latter live
+# in tools/cmd and are invoked by tools/Makefile, which owns their flags (the
+# nesting ratchet in particular); see the `lint` target there for what each one
+# enforces and why the DSL cannot express it.
 #   make lint
+#   make lint NEST_MAX=5
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) -v run ./...
-	$(GO) run ./cmd/singlelinefunclint .
-	$(GO) run ./cmd/typeswitchlint .
-	$(GO) run ./cmd/nestinglint -max 6 .
+	@$(MAKE) --no-print-directory -C $(TOOLS_DIR) lint NEST_MAX=$(NEST_MAX)
 
 # Run golangci-lint with --fix to auto-correct fixable issues.
 #   make fix
@@ -696,3 +701,51 @@ docker-build:
 .PHONY: docker-shell
 docker-shell:
 	DOCKER_IMAGE=$(DOCKER_IMAGE) $(SH_TOOLS_DIR)/docker-shell.sh $(DOCKER_SHELL)
+
+# ---------------------------------------------------------------------------
+# tools/ — the Go tool binaries under tools/cmd.
+#
+# Each target below is a thin delegation to tools/Makefile, which owns the
+# recipes. Nothing here is part of `make ci`: the tools' tests already run
+# under the root's `go test ./...`, and the complexity reports are diagnostics
+# with no pass/fail, so gating on them would be gating on a ranking.
+# ---------------------------------------------------------------------------
+
+# Compile every tool under tools/cmd. Build check only; nothing is installed.
+#   make tools-build
+.PHONY: tools-build
+tools-build:
+	@$(MAKE) --no-print-directory -C $(TOOLS_DIR) build
+
+# Run the tools' own tests in isolation.
+#   make tools-test
+.PHONY: tools-test
+tools-test:
+	@$(MAKE) --no-print-directory -C $(TOOLS_DIR) test
+
+# Rank the codebase's worst functions, files, or packages by cognitive
+# complexity. See plans/2026-08-22-complexity-inventory-refactor.local.md for
+# what the numbers mean and, more usefully, what they do NOT mean: a high score
+# on a wide dispatch table is an artifact of the metric, not a finding.
+#   make complexity
+#   make complexity TOP=50
+#   make complexity-files
+#   make complexity-packages
+.PHONY: complexity
+complexity:
+	@$(MAKE) --no-print-directory -C $(TOOLS_DIR) complexity TOP=$(TOP)
+
+.PHONY: complexity-files
+complexity-files:
+	@$(MAKE) --no-print-directory -C $(TOOLS_DIR) complexity-files TOP=$(TOP)
+
+.PHONY: complexity-packages
+complexity-packages:
+	@$(MAKE) --no-print-directory -C $(TOOLS_DIR) complexity-packages TOP=$(TOP)
+
+# Re-measure one function's switch arms in isolation, to tell a wide dispatch
+# table apart from a genuinely tangled function before refactoring it.
+#   make complexity-arms ARMS=pkg/machine/machine_context.go:Run
+.PHONY: complexity-arms
+complexity-arms:
+	@$(MAKE) --no-print-directory -C $(TOOLS_DIR) complexity-arms ARMS=$(ARMS)

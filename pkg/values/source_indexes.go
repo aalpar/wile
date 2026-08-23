@@ -25,7 +25,7 @@ import (
 // syntax-location accessors project an int out of one and box that
 // (registry/core/prim_syntax_loc.go), and every other holder is internal (the
 // tokenizer's cursor, SourceContext.Start/End). Implementing Value would enrol
-// it in the exhaustiveness set cmd/typeswitchlint derives from this package,
+// it in the exhaustiveness set tools/cmd/typeswitchlint derives from this package,
 // which enumerates the types a Scheme datum can be.
 //
 // The three int fields make it comparable, so == is the equality operator;

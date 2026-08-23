@@ -31,13 +31,13 @@
 //
 // Same-line detection is a positional property the gocritic/ruleguard DSL
 // cannot express (it matches AST shape, not brace lines), so this lives as a
-// standalone go/ast pass, mirroring cmd/typeswitchlint.
+// standalone go/ast pass, mirroring tools/cmd/typeswitchlint.
 //
 // It exits non-zero when any violation is found, so it can gate `make lint`.
 //
 // Usage:
 //
-//	go run ./cmd/singlelinefunclint [dir...]
+//	go run ./tools/cmd/singlelinefunclint [dir...]
 //
 // If no directories are given, it scans the current directory recursively.
 // Test files (_test.go) are skipped, consistent with the ruleguard rules in

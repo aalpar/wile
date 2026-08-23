@@ -19,7 +19,7 @@ package values
 //
 // It is VM plumbing and deliberately NOT a Value. Nothing stores a SourceTableRefs
 // in a Value slot, and implementing Value would enrol it in the exhaustiveness
-// set cmd/typeswitchlint derives from this package (knownValueTypes), which
+// set tools/cmd/typeswitchlint derives from this package (knownValueTypes), which
 // exists to enumerate the types a Scheme datum can be.
 type SourceTableRefs []uint32
 

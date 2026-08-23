@@ -26,9 +26,9 @@ MODULE="github.com/aalpar/wile"
 # test reorganization.
 EXCLUDED_PKGS=(
 	"cmd/wile"
-	"cmd/typeswitchlint"
-	"cmd/singlelinefunclint"
-	"cmd/nestinglint"
+	"tools/cmd/typeswitchlint"
+	"tools/cmd/singlelinefunclint"
+	"tools/cmd/nestinglint"
 	"pkg/testutil"
 	"pkg/repl"
 	"pkg/registry/testhelpers"
@@ -37,6 +37,7 @@ EXCLUDED_PKGS=(
 	"examples/embedding/stack-trace"
 	"integration"
 	"tools/ruleguard"
+	"tools/cmd/cxmeasure"
 	"pkg/stdlib"
 )
 

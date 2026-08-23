@@ -50,13 +50,13 @@
 //
 // Depth is a positional/structural property that the gocritic/ruleguard DSL
 // cannot express, so this lives as a standalone go/ast pass, mirroring
-// cmd/singlelinefunclint and cmd/typeswitchlint.
+// tools/cmd/singlelinefunclint and tools/cmd/typeswitchlint.
 //
 // It exits non-zero when any violation is found, so it can gate `make lint`.
 //
 // Usage:
 //
-//	go run ./cmd/nestinglint [-max N] [dir...]
+//	go run ./tools/cmd/nestinglint [-max N] [dir...]
 //
 // If no directories are given, it scans the current directory recursively.
 // Test files (_test.go) are skipped, consistent with the other standalone

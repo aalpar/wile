@@ -960,7 +960,7 @@ that names the same probe the row does.
 
      **REVISED COST (2026-08-05).** An earlier revision proposed a fourth `BindingType` (or a
      `BindingMeta` flag) set at `RegisterPhaseBindings`, and called this the widest blast radius of
-     the three, needing an exhaustive-switch audit (`cmd/typeswitchlint`) before it could be
+     the three, needing an exhaustive-switch audit (`tools/cmd/typeswitchlint`) before it could be
      costed. Both halves fall with the correction above: **no new constant is needed**, because
      `BindingTypePrimitive` already means "compile-time handler" and nothing else (two creation
      sites, both compile-time). With no new enum case there is no exhaustive-switch obligation, and
@@ -2652,7 +2652,7 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
 ### Tech Debt Plan (remaining)
 
 - [ ] **Task 6.2: Replace `context.TODO()` in tests** [Low, S]: 431 occurrences across 39 test files. Mechanical `→ context.Background()`.
-- [x] **Task 6.4: Add `typeswitchlint` to value type guide** [Low, S, Done — `a41ec0b7`]: Resolved by a stronger mechanism than the guide comment — `a41ec0b7` made `typeswitchlint` opt-in, CI-gating, and **drift-guarded** (`cmd/typeswitchlint/main_test.go`), so `knownValueTypes` diverging from the actual value-type set now fails CI mechanically rather than relying on a human reading a comment.
+- [x] **Task 6.4: Add `typeswitchlint` to value type guide** [Low, S, Done — `a41ec0b7`]: Resolved by a stronger mechanism than the guide comment — `a41ec0b7` made `typeswitchlint` opt-in, CI-gating, and **drift-guarded** (`tools/cmd/typeswitchlint/main_test.go`), so `knownValueTypes` diverging from the actual value-type set now fails CI mechanically rather than relying on a human reading a comment.
 - [x] **Task 8.1: Extract `machine/compilation/resolver/`** [Done]: FileResolver implementations extracted. `LibraryEnumerator` replaced with `FileEnumerator.EnumerateFiles` (returns paths, not `LibraryName`). Type aliases in compilation for backward compat. `memory/2026-04-13-resolver-extraction-impl.local.md`
 - [ ] **Task 8.2: Evaluate `wile.Value` wrapper** [Low, M]: Wrapper provides minimal methods beyond `Internal()` escape hatch.
 - [ ] **Task 8.4: Make `DefaultBigFloatPrecision` configurable** [Low, M]: 256-bit precision hardcoded across 12 call sites. No engine option.
@@ -2781,6 +2781,33 @@ Open restructuring work found only in `plans/` during the 2026-07-21 triage.
 - [ ] **Staff-sweep structural residuals** [Refactor, M]: `CompileTimeContinuation` God-object,
   `engine.go` facade, "N parallel tables" (ValueType ×5, docparse ×3), parser cluster. The `[S]`
   findings + Tier-1 already shipped. `plans/2026-07-01-staff-engineer-sweep.md`.
+- [ ] **Complexity inventory (measured)** [Refactor, unscheduled]: cognitive+cyclomatic complexity over
+  all non-test functions, ranked by *density* not size. Four candidates, none started:
+  `MatchSyntaxWithLiterals` (`match.go:303`, cog 155, nesting depth 6 — the worst genuine function in
+  the tree), `CompileTimeContinuation` (**131 methods / 21 fields / 26 files**, the method count the
+  staff sweep's `[L]` row lacked), the syntax-rules/quasiquote cluster, `fuseCallForeignCached`.
+  **Read §3 first:** `MachineContext.Run` tops every raw metric (cog 305) and is **disqualified** —
+  extract its 78 arms and the total collapses to 98, 77/78 arms scoring under 5. Wide ≠ complex, and
+  §5 files the eight other non-candidates so they aren't re-derived. No forcing goal, so §0 requires
+  each item to pay rent before execution. Two corrections are recorded in the plan rather than
+  buried: C1's original "no dispatch switch" justification was **false** (it has an 18-arm switch,
+  70% of its score; it survives on the 4 arms still scoring ≥5), and the `-arms` verdict itself had a
+  defect that called `cmd/wile/main.go:main` wide off a switch worth 1% of it. Measurement tool at
+  `tools/cmd/cxmeasure` (`make complexity`, `make complexity-arms ARMS=…`), a reporter not a gate.
+  C1 is also the named blocker on the `NEST_MAX=6` ratchet in `tools/Makefile`: dropping it to 5
+  needs that function flattened. `plans/2026-08-22-complexity-inventory-refactor.local.md`.
+- [x] **Tool layout: `tools/cmd` + `tools/Makefile`** [Chore, Done 2026-08-22]: every Go tool `main`
+  package now lives under `tools/cmd/` (`cxmeasure` plus the three moved from the top-level `cmd/`:
+  `nestinglint`, `typeswitchlint`, `singlelinefunclint`), and `tools/Makefile` owns every tool
+  invocation and flag. The root delegates: `lint` runs golangci-lint then `$(MAKE) -C tools lint`;
+  `tools-build`, `tools-test`, and the four `complexity*` targets forward likewise. Recursive rather
+  than `include`d because `build`/`test`/`clean` exist in both files and mean different things.
+  Two knobs are defaulted in **both** makefiles on purpose — a bare `TOP=`/`NEST_MAX=` on a sub-make
+  command line overrides the sub-make's own `?=` with the empty string. The gates run from `$(ROOT)`
+  with `.` so a finding still cites `pkg/foo.go:42`, not `../pkg/foo.go:42`. `cmd/` now holds only
+  `wile`. The `tools/sh` script delegations deliberately stayed in the root Makefile: `ci` and `cd`
+  depend on 4 each, so moving them would make the root's entry points reach across the boundary for
+  most of their prerequisites.
 - [ ] **Unscheduled design-only notes** [Refactor/architecture]: engine-services generic keyed slot
   (`plans/2026-07-10-engine-services-generic-keyed-slot-design.local.md`), layered-environment
   architecture direction (`plans/2026-06-13-layered-environment-architecture.local.md`),
