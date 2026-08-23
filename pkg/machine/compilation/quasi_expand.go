@@ -199,10 +199,9 @@ func (p *CompileTimeContinuation) expandQuasi(
 
 	switch v := stx.(type) {
 	case *syntax.SyntaxPair:
-		if syntax.IsSyntaxEmptyList(v) {
-			return p.quasiQuoted(kw, v, srcCtx), nil
-		}
-
+		// No empty-list guard: (*SyntaxPair).IsEmptyList is an unconditional
+		// false, so this arm never holds one. () reads as SyntaxEmptyList,
+		// which is not a *SyntaxPair and lands in the default arm.
 		carSymName, ok := p.getSymbolName(v.SyntaxCar())
 		if ok {
 			switch carSymName {
@@ -274,20 +273,23 @@ func (p *CompileTimeContinuation) expandQuasiList(
 	// No splice path: build (list elem1 elem2 ...)
 	var elems []syntax.SyntaxValue
 
-	current := pair
-	for !values.IsEmptyList(current) {
-		car := current.SyntaxCar()
-		carSyntax := car
+	var end syntax.SpineEnd
+	for cell, e := range syntax.Spine(pair) {
+		// Assigned at the top so a body that breaks cannot leave end holding
+		// the PREVIOUS cell's terminator.
+		end = e
+		car := cell.SyntaxCar()
 
 		// Detect dotted-pair unquote (quasiquote only): `(a . ,x)` parses as
 		// `(a unquote x)`. When we see the bare symbol at depth 1 followed by
 		// exactly one more element, treat the remaining (unquote expr) as the
-		// tail expression per R7RS §4.2.8.
+		// tail expression per R7RS §4.2.8. This is a property of the CELL —
+		// it reads the cdr while standing on the unquote — which is why the
+		// walk yields cells rather than cars.
 		if kw.handleDottedUnquote {
-			carSymName, ok := p.getSymbolName(carSyntax)
+			carSymName, ok := p.getSymbolName(car)
 			if ok && carSymName == kw.unquote && depth == 1 {
-				cdr := current.SyntaxCdr()
-				cdrPair, ok := cdr.(*syntax.SyntaxPair)
+				cdrPair, ok := cell.SyntaxCdr().(*syntax.SyntaxPair)
 				if ok && hasSyntaxArity(cdrPair, 1) {
 					// Raw, not expanded: the tail expression is evaluated at
 					// run time.
@@ -296,25 +298,18 @@ func (p *CompileTimeContinuation) expandQuasiList(
 			}
 		}
 
-		expandedCar, err := p.expandQuasi(ctx, carSyntax, depth, kw, g)
+		expandedCar, err := p.expandQuasi(ctx, car, depth, kw, g)
 		if err != nil {
 			return nil, err
 		}
 		elems = append(elems, expandedCar)
-		cdr := current.SyntaxCdr()
-		if syntax.IsSyntaxEmptyList(cdr) {
-			break
-		}
-		nextPair, ok := cdr.(*syntax.SyntaxPair)
-		if ok {
-			current = nextPair
-			continue
-		}
+	}
 
-		// Improper list: cons the already-expanded elements onto the expanded
-		// tail. The tail is part of the template and can carry an unquote of its
-		// own, so it is expanded rather than assumed inert.
-		expandedTail, err := p.expandQuasi(ctx, cdr, depth, kw, g)
+	// Improper list: cons the already-expanded elements onto the expanded tail.
+	// The tail is part of the template and can carry an unquote of its own, so
+	// it is expanded rather than assumed inert.
+	if end.Improper() {
+		expandedTail, err := p.expandQuasi(ctx, end.Tail, depth, kw, g)
 		if err != nil {
 			return nil, err
 		}
@@ -344,27 +339,28 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 		}
 	}
 
-	current := pair
-	for !syntax.IsSyntaxEmptyList(current) {
-		car := current.SyntaxCar()
-		carSyntax := car
+	var end syntax.SpineEnd
+	for cell, e := range syntax.Spine(pair) {
+		// Assigned at the top so the dotted-unquote break below cannot leave
+		// end holding the PREVIOUS cell's terminator.
+		end = e
+		car := cell.SyntaxCar()
 
 		// Dotted-pair unquote, mirroring expandQuasiList's arm. `(a . ,x)` READS as
 		// the proper list `(a unquote x)`, so a dotted tail never arrives as a
 		// non-pair cdr — it arrives as the bare symbol `unquote` sitting on the
-		// spine, followed by exactly one element. The improper-tail branch further
-		// down therefore never fires for it, and without this check the splice path
+		// spine, followed by exactly one element. The improper-tail branch below
+		// therefore never fires for it, and without this check the splice path
 		// walked `unquote` and `x` in as ordinary elements: `(,@x . ,y) rendered as
 		// the 4-element list (1 2 unquote y). R7RS §4.2.8.
 		if kw.handleDottedUnquote {
-			carSymName, ok := p.getSymbolName(carSyntax)
+			carSymName, ok := p.getSymbolName(car)
 			if ok && carSymName == kw.unquote && depth == 1 {
-				cdr := current.SyntaxCdr()
-				cdrPair, ok := cdr.(*syntax.SyntaxPair)
+				cdrPair, ok := cell.SyntaxCdr().(*syntax.SyntaxPair)
 				if ok && hasSyntaxArity(cdrPair, 1) {
 					flushNormal()
 					// Raw, not expanded: the tail expression is evaluated at
-					// runtime, exactly as a splice segment's expr is. append with
+					// runtime, exactly as a splice's expression is. append with
 					// a non-list final argument yields the improper list.
 					improperTail = cdrPair.SyntaxCar()
 					break
@@ -372,14 +368,14 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 			}
 		}
 
-		carPair, ok := carSyntax.(*syntax.SyntaxPair)
+		carPair, ok := car.(*syntax.SyntaxPair)
 		if ok {
 			carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
 			if ok && carSymName == kw.splicing && depth == 1 {
 				flushNormal()
 				if !hasSyntaxArity(carPair, 2) {
 					// Malformed - treat as normal
-					expandedCar, err := p.expandQuasi(ctx, carSyntax, depth, kw, g)
+					expandedCar, err := p.expandQuasi(ctx, car, depth, kw, g)
 					if err != nil {
 						return nil, err
 					}
@@ -388,39 +384,28 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 					cdrPair := carPair.SyntaxCdr().(*syntax.SyntaxPair)
 					appendArgs = append(appendArgs, cdrPair.SyntaxCar())
 				}
-				goto next
+				continue
 			}
 		}
 
-		// Block-scoped so the declarations are not in scope at `next:` (a goto
-		// may not jump over an in-scope variable declaration).
-		{
-			expandedCar, err := p.expandQuasi(ctx, carSyntax, depth, kw, g)
-			if err != nil {
-				return nil, err
-			}
-			currentElems = append(currentElems, expandedCar)
+		expandedCar, err := p.expandQuasi(ctx, car, depth, kw, g)
+		if err != nil {
+			return nil, err
 		}
+		currentElems = append(currentElems, expandedCar)
+	}
 
-	next:
-		cdr := current.SyntaxCdr()
-		if syntax.IsSyntaxEmptyList(cdr) {
-			break
+	// Improper list: expand the dotted tail and preserve it as the final append
+	// argument. R7RS append with a non-list final argument produces an improper
+	// list. Improper() is false both for a proper list and for the dotted-unquote
+	// break above (whose cell's cdr is a pair by construction — hasSyntaxArity
+	// established it), so improperTail's raw value survives that path.
+	if end.Improper() {
+		expandedTail, err := p.expandQuasi(ctx, end.Tail, depth, kw, g)
+		if err != nil {
+			return nil, err
 		}
-		nextPair, ok := cdr.(*syntax.SyntaxPair)
-		if ok {
-			current = nextPair
-		} else {
-			// Improper list: expand the dotted tail and preserve it
-			// as the final append argument. R7RS append with a non-list
-			// final argument produces an improper list.
-			var err error
-			improperTail, err = p.expandQuasi(ctx, cdr, depth, kw, g)
-			if err != nil {
-				return nil, err
-			}
-			break
-		}
+		improperTail = expandedTail
 	}
 
 	flushNormal()

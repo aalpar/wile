@@ -182,9 +182,8 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntime(stx syntax.SyntaxValue,
 
 	switch v := stx.(type) {
 	case *syntax.SyntaxPair:
-		if syntax.IsSyntaxEmptyList(v) {
-			return false
-		}
+		// No empty-list guard: (*SyntaxPair).IsEmptyList is an unconditional
+		// false, so this arm never holds one.
 		// Check if this is (unquote ...) or (unquote-splicing ...) at depth 1
 		carSymName, ok := p.getSymbolName(v.SyntaxCar())
 		if ok {

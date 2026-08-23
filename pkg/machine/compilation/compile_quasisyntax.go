@@ -95,9 +95,8 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntimeGuarded(stx syntax.Synt
 
 	switch v := stx.(type) {
 	case *syntax.SyntaxPair:
-		if values.IsEmptyList(v) {
-			return false
-		}
+		// No empty-list guard: (*SyntaxPair).IsEmptyList is an unconditional
+		// false, so this arm never holds one.
 
 		// Check for unsyntax/unsyntax-splicing/quasisyntax keywords
 		carSymName, ok := p.getSymbolName(v.SyntaxCar())
