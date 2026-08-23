@@ -16,7 +16,6 @@ package compilation
 
 import (
 	"context"
-	"errors"
 	"slices"
 
 	"github.com/aalpar/wile/pkg/syntax"
@@ -242,100 +241,48 @@ func (p *CompileTimeContinuation) expandQuasi(
 	}
 }
 
-// expandQuasiList handles list expansion for both quasiquote and quasisyntax.
-// It detects splicing, dotted-pair unquote (quasiquote only), and improper lists.
+// expandQuasiList expands a list template in ONE walk, which accumulates two
+// things: a run of ordinary expanded elements, and — once a splice has been
+// seen — the argument list of an (append …). The ending picks the shape from
+// what the walk found:
+//
+//	no splice, proper spine    -> (list e …)
+//	no splice, tail            -> (cons e … tail)
+//	splice                     -> (append (list e …) spliced … tail?)
+//
+// One walk suffices even though a splice changes how the elements BEFORE it are
+// rendered, because runs are only closed when a splice is met: with no splice
+// anywhere, every element is still sitting in one run at the end. The only
+// early exit is the dotted-unquote arm, and that arm requires the cell's cdr to
+// be a one-element list, so exactly one element remains and no splice can hide
+// behind it — except as that final tail expression itself, which reaches the
+// compiler raw either way and errors identically ("unquote-splicing: not in
+// quasiquote context", at the same token).
+//
+// Two facts about the ordering here are load-bearing and neither is local:
+//
+//   - sawSplice is set BEFORE the arity test, matching the prescan this
+//     replaced, which tested the car symbol alone. Setting it after would make
+//     "a splice was seen" and "a splice argument was recorded" the same
+//     predicate, and `(a b (unquote-splicing) c) would render as
+//     ((unquote-splicing) c) — a and b silently dropped, because flushRun has
+//     already moved them into appendArgs while the ending reads only elems.
+//   - the tail is expanded BEFORE the final flushRun, matching the order the
+//     two-walk version expanded it in (at the bottom of its last iteration).
 func (p *CompileTimeContinuation) expandQuasiList(
 	ctx context.Context, pair *syntax.SyntaxPair, depth int, kw quasiKeywords, g *expandDepthGuard,
 ) (syntax.SyntaxValue, error) {
 	srcCtx := pair.SourceContext()
 
-	// Scan for splicing at depth 1
-	hasSplice := false
-	_, err := pair.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, carSyntax syntax.SyntaxValue) error {
-		carPair, ok := carSyntax.(*syntax.SyntaxPair)
-		if ok {
-			carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
-			if ok && carSymName == kw.splicing && depth == 1 {
-				hasSplice = true
-				return werr.ErrStopIteration
-			}
-		}
-		return nil
-	})
-	if err != nil && !errors.Is(err, werr.ErrStopIteration) {
-		return nil, wrapSourcedError(srcCtx, werr.WrapForeignErrorf(err, "quasi: error scanning list"))
-	}
-
-	if hasSplice {
-		return p.expandQuasiListWithSplice(ctx, pair, depth, kw, g)
-	}
-
-	// No splice path: build (list elem1 elem2 ...)
-	var elems []syntax.SyntaxValue
-
-	var end syntax.SpineEnd
-	for cell, e := range syntax.Spine(pair) {
-		// Assigned at the top so a body that breaks cannot leave end holding
-		// the PREVIOUS cell's terminator.
-		end = e
-		car := cell.SyntaxCar()
-
-		// Detect dotted-pair unquote (quasiquote only): `(a . ,x)` parses as
-		// `(a unquote x)`. When we see the bare symbol at depth 1 followed by
-		// exactly one more element, treat the remaining (unquote expr) as the
-		// tail expression per R7RS §4.2.8. This is a property of the CELL —
-		// it reads the cdr while standing on the unquote — which is why the
-		// walk yields cells rather than cars.
-		if kw.handleDottedUnquote {
-			carSymName, ok := p.getSymbolName(car)
-			if ok && carSymName == kw.unquote && depth == 1 {
-				cdrPair, ok := cell.SyntaxCdr().(*syntax.SyntaxPair)
-				if ok && hasSyntaxArity(cdrPair, 1) {
-					// Raw, not expanded: the tail expression is evaluated at
-					// run time.
-					return p.consChain(srcCtx, elems, cdrPair.SyntaxCar()), nil
-				}
-			}
-		}
-
-		expandedCar, err := p.expandQuasi(ctx, car, depth, kw, g)
-		if err != nil {
-			return nil, err
-		}
-		elems = append(elems, expandedCar)
-	}
-
-	// Improper list: cons the already-expanded elements onto the expanded tail.
-	// The tail is part of the template and can carry an unquote of its own, so
-	// it is expanded rather than assumed inert.
-	if end.Improper() {
-		expandedTail, err := p.expandQuasi(ctx, end.Tail, depth, kw, g)
-		if err != nil {
-			return nil, err
-		}
-		return p.consChain(srcCtx, elems, expandedTail), nil
-	}
-
-	return p.quasiForm(srcCtx, "list", elems...), nil
-}
-
-// expandQuasiListWithSplice handles lists containing splicing (unquote-splicing
-// or unsyntax-splicing). It accumulates the arguments of an (append …): each run
-// of ordinary elements becomes one (list e …), each splice contributes its
-// expression directly.
-func (p *CompileTimeContinuation) expandQuasiListWithSplice(
-	ctx context.Context, pair *syntax.SyntaxPair, depth int, kw quasiKeywords, g *expandDepthGuard,
-) (syntax.SyntaxValue, error) {
-	srcCtx := pair.SourceContext()
-
-	var appendArgs []syntax.SyntaxValue
-	var currentElems []syntax.SyntaxValue
+	var elems []syntax.SyntaxValue      // the run in progress
+	var appendArgs []syntax.SyntaxValue // read only when sawSplice
 	var improperTail syntax.SyntaxValue
+	sawSplice := false
 
-	flushNormal := func() {
-		if len(currentElems) > 0 {
-			appendArgs = append(appendArgs, p.quasiForm(srcCtx, "list", currentElems...))
-			currentElems = nil
+	flushRun := func() {
+		if len(elems) > 0 {
+			appendArgs = append(appendArgs, p.quasiForm(srcCtx, "list", elems...))
+			elems = nil
 		}
 	}
 
@@ -346,22 +293,23 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 		end = e
 		car := cell.SyntaxCar()
 
-		// Dotted-pair unquote, mirroring expandQuasiList's arm. `(a . ,x)` READS as
-		// the proper list `(a unquote x)`, so a dotted tail never arrives as a
-		// non-pair cdr — it arrives as the bare symbol `unquote` sitting on the
-		// spine, followed by exactly one element. The improper-tail branch below
-		// therefore never fires for it, and without this check the splice path
-		// walked `unquote` and `x` in as ordinary elements: `(,@x . ,y) rendered as
-		// the 4-element list (1 2 unquote y). R7RS §4.2.8.
+		// Dotted-pair unquote (quasiquote only). `(a . ,x) READS as the proper
+		// list (a unquote x), so a dotted tail never arrives as a non-pair cdr —
+		// it arrives as the bare symbol `unquote` sitting on the spine, followed
+		// by exactly one element. The improper-tail branch below therefore never
+		// fires for it, and without this check the walk took `unquote` and `x`
+		// in as ordinary elements: `(,@x . ,y) rendered as the 4-element list
+		// (1 2 unquote y). R7RS §4.2.8.
+		//
+		// This is a property of the CELL — it reads the cdr while standing on
+		// the unquote — which is why the walk yields cells rather than cars.
 		if kw.handleDottedUnquote {
 			carSymName, ok := p.getSymbolName(car)
 			if ok && carSymName == kw.unquote && depth == 1 {
 				cdrPair, ok := cell.SyntaxCdr().(*syntax.SyntaxPair)
 				if ok && hasSyntaxArity(cdrPair, 1) {
-					flushNormal()
-					// Raw, not expanded: the tail expression is evaluated at
-					// runtime, exactly as a splice's expression is. append with
-					// a non-list final argument yields the improper list.
+					// Raw, not expanded: the tail expression is evaluated at run
+					// time, exactly as a splice's expression is.
 					improperTail = cdrPair.SyntaxCar()
 					break
 				}
@@ -372,18 +320,20 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 		if ok {
 			carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
 			if ok && carSymName == kw.splicing && depth == 1 {
-				flushNormal()
-				if !hasSyntaxArity(carPair, 2) {
-					// Malformed - treat as normal
-					expandedCar, err := p.expandQuasi(ctx, car, depth, kw, g)
-					if err != nil {
-						return nil, err
-					}
-					currentElems = append(currentElems, expandedCar)
-				} else {
+				sawSplice = true
+				flushRun()
+				if hasSyntaxArity(carPair, 2) {
 					cdrPair := carPair.SyntaxCdr().(*syntax.SyntaxPair)
 					appendArgs = append(appendArgs, cdrPair.SyntaxCar())
+					continue
 				}
+				// Malformed: taken as an ordinary element, but the run before it
+				// is already closed, so it starts a new one.
+				expandedCar, err := p.expandQuasi(ctx, car, depth, kw, g)
+				if err != nil {
+					return nil, err
+				}
+				elems = append(elems, expandedCar)
 				continue
 			}
 		}
@@ -392,14 +342,13 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 		if err != nil {
 			return nil, err
 		}
-		currentElems = append(currentElems, expandedCar)
+		elems = append(elems, expandedCar)
 	}
 
-	// Improper list: expand the dotted tail and preserve it as the final append
-	// argument. R7RS append with a non-list final argument produces an improper
-	// list. Improper() is false both for a proper list and for the dotted-unquote
-	// break above (whose cell's cdr is a pair by construction — hasSyntaxArity
-	// established it), so improperTail's raw value survives that path.
+	// An improper tail is part of the template and can carry an unquote of its
+	// own, so it is expanded rather than assumed inert. Improper() is false both
+	// for a proper spine and after the dotted-unquote break (whose cell's cdr is
+	// a pair by construction), so improperTail's raw value survives that path.
 	if end.Improper() {
 		expandedTail, err := p.expandQuasi(ctx, end.Tail, depth, kw, g)
 		if err != nil {
@@ -408,11 +357,16 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 		improperTail = expandedTail
 	}
 
-	flushNormal()
-
-	if improperTail != nil {
-		appendArgs = append(appendArgs, improperTail)
+	if sawSplice {
+		flushRun()
+		// R7RS append with a non-list final argument produces the improper list.
+		if improperTail != nil {
+			appendArgs = append(appendArgs, improperTail)
+		}
+		return p.quasiForm(srcCtx, "append", appendArgs...), nil
 	}
-
-	return p.quasiForm(srcCtx, "append", appendArgs...), nil
+	if improperTail != nil {
+		return p.consChain(srcCtx, elems, improperTail), nil
+	}
+	return p.quasiForm(srcCtx, "list", elems...), nil
 }
