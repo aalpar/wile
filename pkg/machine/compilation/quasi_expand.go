@@ -107,6 +107,42 @@ func (p *CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, b
 	return "", false
 }
 
+// quasiQuoted renders v as the dialect's quoting form — (quote v) under
+// quasiquote, (syntax v) under quasisyntax. It is the terminal case of the
+// whole expansion: everything that is not evaluated is quoted.
+func (p *CompileTimeContinuation) quasiQuoted(kw quasiKeywords, v syntax.SyntaxValue, srcCtx *syntax.SourceContext) syntax.SyntaxValue {
+	return p.buildQuasiSyntaxList(srcCtx, syntax.NewSyntaxSymbol(kw.quoting, srcCtx), v)
+}
+
+// rewrapQuasiForm re-emits (keyword arg) as a form that RECONSTRUCTS itself at
+// run time — (list '<keyword> <arg expanded at newDepth>) — which is what an
+// unquote too deep to fire, or a nested quasiquote, has to become. A malformed
+// form (anything but exactly one argument) is quoted verbatim instead; R7RS
+// gives no error here, and `(quasiquote (unquote)) evaluates to (unquote).
+//
+// keyword is the name the caller's switch already matched, not a re-spelled
+// kw field, so a keyword cannot be paired with another keyword's depth delta.
+//
+// It does not enter the depth guard: the recursive expandQuasi call does.
+func (p *CompileTimeContinuation) rewrapQuasiForm(
+	ctx context.Context, v *syntax.SyntaxPair, keyword string, newDepth int, kw quasiKeywords, g *expandDepthGuard,
+) (syntax.SyntaxValue, error) {
+	srcCtx := v.SourceContext()
+	if !hasSyntaxArity(v, 2) {
+		return p.quasiQuoted(kw, v, srcCtx), nil
+	}
+	cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
+	arg, err := p.expandQuasi(ctx, cdr.SyntaxCar(), newDepth, kw, g)
+	if err != nil {
+		return nil, err
+	}
+	return p.buildQuasiSyntaxList(srcCtx,
+		p.quasiHead("list", srcCtx),
+		p.quasiQuoted(kw, syntax.NewSyntaxSymbol(keyword, srcCtx), srcCtx),
+		arg,
+	), nil
+}
+
 // expandQuasi transforms quasiquoted/quasisyntax syntax into equivalent Scheme code.
 // The kw parameter selects which keywords to match (unquote vs unsyntax, etc.).
 //
@@ -136,78 +172,32 @@ func (p *CompileTimeContinuation) expandQuasi(
 	switch v := stx.(type) {
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(v) {
-			quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
-			return p.buildQuasiSyntaxList(srcCtx, quoteSym, v), nil
+			return p.quasiQuoted(kw, v, srcCtx), nil
 		}
 
 		carSymName, ok := p.getSymbolName(v.SyntaxCar())
 		if ok {
 			switch carSymName {
 			case kw.unquote:
-				if depth == 1 {
-					if hasSyntaxArity(v, 2) {
-						cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-						return cdr.SyntaxCar(), nil
-					}
-				}
-				if hasSyntaxArity(v, 2) {
+				// The escape. Depth 1 is where an unquote fires, and it yields
+				// the RAW argument: `,x is x, not an expansion of x.
+				if depth == 1 && hasSyntaxArity(v, 2) {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					arg := cdr.SyntaxCar()
-					processedArg, err := p.expandQuasi(ctx, arg, depth-1, kw, g)
-					if err != nil {
-						return nil, err
-					}
-					return p.buildQuasiSyntaxList(srcCtx,
-						p.quasiHead("list", srcCtx),
-						p.buildQuasiSyntaxList(srcCtx,
-							syntax.NewSyntaxSymbol(kw.quoting, srcCtx),
-							syntax.NewSyntaxSymbol(kw.unquote, srcCtx),
-						),
-						processedArg,
-					), nil
+					return cdr.SyntaxCar(), nil
 				}
-				quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
-				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v), nil
+				return p.rewrapQuasiForm(ctx, v, carSymName, depth-1, kw, g)
 
 			case kw.splicing:
-				if depth > 1 && hasSyntaxArity(v, 2) {
-					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					arg := cdr.SyntaxCar()
-					processedArg, err := p.expandQuasi(ctx, arg, depth-1, kw, g)
-					if err != nil {
-						return nil, err
-					}
-					return p.buildQuasiSyntaxList(srcCtx,
-						p.quasiHead("list", srcCtx),
-						p.buildQuasiSyntaxList(srcCtx,
-							syntax.NewSyntaxSymbol(kw.quoting, srcCtx),
-							syntax.NewSyntaxSymbol(kw.splicing, srcCtx),
-						),
-						processedArg,
-					), nil
+				// A splice reached HERE is one no list walk claimed, so there
+				// is nothing to splice into and depth 1 does not fire: a bare
+				// `,@(list 1 2) evaluates to (unquote-splicing (list 1 2)).
+				if depth <= 1 {
+					return p.quasiQuoted(kw, v, srcCtx), nil
 				}
-				quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
-				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v), nil
+				return p.rewrapQuasiForm(ctx, v, carSymName, depth-1, kw, g)
 
 			case kw.nesting:
-				if hasSyntaxArity(v, 2) {
-					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					body := cdr.SyntaxCar()
-					processedBody, err := p.expandQuasi(ctx, body, depth+1, kw, g)
-					if err != nil {
-						return nil, err
-					}
-					return p.buildQuasiSyntaxList(srcCtx,
-						p.quasiHead("list", srcCtx),
-						p.buildQuasiSyntaxList(srcCtx,
-							syntax.NewSyntaxSymbol(kw.quoting, srcCtx),
-							syntax.NewSyntaxSymbol(kw.nesting, srcCtx),
-						),
-						processedBody,
-					), nil
-				}
-				quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
-				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v), nil
+				return p.rewrapQuasiForm(ctx, v, carSymName, depth+1, kw, g)
 			}
 		}
 
@@ -215,15 +205,13 @@ func (p *CompileTimeContinuation) expandQuasi(
 		return p.expandQuasiList(ctx, v, depth, kw, g)
 
 	case *syntax.SyntaxSymbol:
-		quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
-		return p.buildQuasiSyntaxList(srcCtx, quoteSym, v), nil
+		return p.quasiQuoted(kw, v, srcCtx), nil
 
 	case *syntax.SyntaxVector:
 		return p.expandQuasiquoteVector(ctx, v, depth, kw, g)
 
 	default:
-		quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
-		return p.buildQuasiSyntaxList(srcCtx, quoteSym, stx), nil
+		return p.quasiQuoted(kw, stx, srcCtx), nil
 	}
 }
 
