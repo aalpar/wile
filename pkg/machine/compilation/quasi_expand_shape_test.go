@@ -136,9 +136,9 @@ func TestQuasiExpandShape(t *testing.T) {
 				" (list (syntax unsyntax-splicing) (syntax x)) (syntax d))",
 		},
 		{
-			// Same split with no well-formed splice anywhere: the prescan sees
-			// the splicing symbol, so this still takes the append path even
-			// though nothing is ever spliced.
+			// Same split with no well-formed splice anywhere: sawSplice is set
+			// on the splicing SYMBOL, before the arity test, so this still takes
+			// the append path even though nothing is ever spliced.
 			name: "malformed-splice-only",
 			src:  "(a b (SPLICE) c)",
 			qq1:  "(append (list (quote a) (quote b)) (list (quote (unquote-splicing)) (quote c)))",
@@ -165,16 +165,27 @@ func TestQuasiExpandShape(t *testing.T) {
 			qs2:  "(syntax (unsyntax-splicing))",
 		},
 		{
-			// R7RS §4.2.8. `(a . ,x) READS as (a unquote x), so the dotted tail
-			// arrives as a bare symbol on the spine. quasisyntax does not
-			// implement the form (handleDottedUnquote is false), and the qs
-			// columns are what that costs: three ordinary elements.
+			// R7RS §7.1.4. `(a . ,x) READS as (a unquote x), so the dotted tail
+			// arrives as a bare symbol on the spine.
+			//
+			// The depth-2 column is a cons, not a list, and that is the whole
+			// point of pinning shapes: `(a . ,x) at depth 2 is (a unquote x)
+			// under BOTH readings, so the value is identical and only the route
+			// says whether the tail was recognized as ⟨unquotation 2⟩ (rewrapped
+			// at depth 1) or walked as two more elements.
+			//
+			// The qs columns mirror the qq columns exactly, and every dotted row
+			// below does too. That is the statement, and it is the reason
+			// dottedTailCell takes no dialect flag: the tail reading is ONE rule
+			// in two spellings, not a rule and a parallel omission. Any dotted
+			// row where the two columns stop mirroring means a dialect grew its
+			// own tail semantics.
 			name: "dotted-unquote",
 			src:  "(a UNQ x)",
 			qq1:  "(cons (quote a) x)",
-			qq2:  "(list (quote a) (quote unquote) (quote x))",
-			qs1:  "(list (syntax a) (syntax unsyntax) (syntax x))",
-			qs2:  "(list (syntax a) (syntax unsyntax) (syntax x))",
+			qq2:  "(cons (quote a) (list (quote unquote) (quote x)))",
+			qs1:  "(cons (syntax a) x)",
+			qs2:  "(cons (syntax a) (list (syntax unsyntax) (syntax x)))",
 		},
 		{
 			// The dotted tail reached through the splice walk rather than the
@@ -183,17 +194,49 @@ func TestQuasiExpandShape(t *testing.T) {
 			name: "dotted-unquote-with-splice",
 			src:  "((SPLICE x) UNQ y)",
 			qq1:  "(append x y)",
-			qq2:  "(list (list (quote unquote-splicing) (quote x)) (quote unquote) (quote y))",
-			qs1:  "(append x (list (syntax unsyntax) (syntax y)))",
-			qs2:  "(list (list (syntax unsyntax-splicing) (syntax x)) (syntax unsyntax) (syntax y))",
+			qq2:  "(cons (list (quote unquote-splicing) (quote x)) (list (quote unquote) (quote y)))",
+			qs1:  "(append x y)",
+			qs2:  "(cons (list (syntax unsyntax-splicing) (syntax x)) (list (syntax unsyntax) (syntax y)))",
 		},
 		{
 			name: "dotted-in-sublist",
 			src:  "((a . (UNQ x)))",
 			qq1:  "(list (cons (quote a) x))",
-			qq2:  "(list (list (quote a) (quote unquote) (quote x)))",
-			qs1:  "(list (list (syntax a) (syntax unsyntax) (syntax x)))",
-			qs2:  "(list (list (syntax a) (syntax unsyntax) (syntax x)))",
+			qq2:  "(list (cons (quote a) (list (quote unquote) (quote x))))",
+			qs1:  "(list (cons (syntax a) x))",
+			qs2:  "(list (cons (syntax a) (list (syntax unsyntax) (syntax x))))",
+		},
+		{
+			// The tail's OTHER keyword. `(a . `(,x)) reads as
+			// (a quasiquote ((unquote x))), so the nested quasiquote arrives as
+			// a bare symbol on the spine exactly as unquote does — and the walk
+			// recognized only unquote, so ,x fired at depth 1 instead of staying
+			// literal at depth 2. Both entry depths render the same because the
+			// nesting keyword puts the unquote out of reach either way.
+			name: "dotted-nested-quasi",
+			src:  "(a NEST (UNQ x))",
+			qq1: "(cons (quote a) (list (quote quasiquote)" +
+				" (list (quote unquote) (quote x))))",
+			qq2: "(cons (quote a) (list (quote quasiquote)" +
+				" (list (quote unquote) (quote x))))",
+			qs1: "(cons (syntax a) (list (syntax quasisyntax)" +
+				" (list (syntax unsyntax) (syntax x))))",
+			qs2: "(cons (syntax a) (list (syntax quasisyntax)" +
+				" (list (syntax unsyntax) (syntax x))))",
+		},
+		{
+			// A dotted tail that is itself an unquote, so the depth arithmetic
+			// has to run on the TAIL: at depth 1 the outer unquote fires and
+			// hands the compiler a raw (unquote x) (which is an error, and the
+			// same error Chez raises); at depth 2 it decrements and the inner
+			// one fires. The qq2 cell is where the ,, evaluation used to be lost
+			// outright.
+			name: "dotted-unquote-depth-two",
+			src:  "(a UNQ (UNQ x))",
+			qq1:  "(cons (quote a) (unquote x))",
+			qq2:  "(cons (quote a) (list (quote unquote) x))",
+			qs1:  "(cons (syntax a) (unsyntax x))",
+			qs2:  "(cons (syntax a) (list (syntax unsyntax) x))",
 		},
 		{
 			name: "improper",
@@ -280,9 +323,9 @@ func TestQuasiExpandShape(t *testing.T) {
 			name: "nested-list-under-vector",
 			src:  "#((a . (UNQ x)))",
 			qq1:  "(list->vector (list (cons (quote a) x)))",
-			qq2:  "(list->vector (list (list (quote a) (quote unquote) (quote x))))",
-			qs1:  "(list->vector (list (list (syntax a) (syntax unsyntax) (syntax x))))",
-			qs2:  "(list->vector (list (list (syntax a) (syntax unsyntax) (syntax x))))",
+			qq2:  "(list->vector (list (cons (quote a) (list (quote unquote) (quote x)))))",
+			qs1:  "(list->vector (list (cons (syntax a) x)))",
+			qs2:  "(list->vector (list (cons (syntax a) (list (syntax unsyntax) (syntax x)))))",
 		},
 		{
 			// A bare `unquote` on the VECTOR's own element sequence. A vector

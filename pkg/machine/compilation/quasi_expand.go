@@ -25,13 +25,22 @@ import (
 
 // quasiKeywords holds the keyword names that distinguish quasiquote expansion
 // from quasisyntax expansion. Both share the same structural logic; only the
-// keyword strings (and whether dotted-pair unquote is supported) differ.
+// keyword strings differ, plus the one semantic divergence below.
+//
+// There used to be a handleDottedTail bool here, false for quasisyntax, gating
+// the dotted-tail reading of R7RS §7.1.4 (dottedTailCell). It was deleted on
+// 2026-08-23 along with the divergence it held: what looked like quasisyntax
+// declining a form no spec requires was also quasisyntax reading
+// `#(a . #(b #,x)) element-wise and firing #,x one depth early, a wrong datum
+// rather than a missing feature. Chez and Racket both read the tail. Do not
+// reintroduce it as a way to give one dialect its own tail semantics — the
+// container, not the dialect, is what withholds the test (see quasiSpine), and
+// TestQuasiExpandShape's dotted rows pin the two dialects as mirror images.
 type quasiKeywords struct {
-	unquote             string // "unquote" or "unsyntax"
-	splicing            string // "unquote-splicing" or "unsyntax-splicing"
-	nesting             string // "quasiquote" or "quasisyntax"
-	quoting             string // "quote" or "syntax"
-	handleDottedUnquote bool   // true for quasiquote (R7RS §4.2.8), false for quasisyntax
+	unquote  string // "unquote" or "unsyntax"
+	splicing string // "unquote-splicing" or "unsyntax-splicing"
+	nesting  string // "quasiquote" or "quasisyntax"
+	quoting  string // "quote" or "syntax"
 
 	// nestingAlwaysRuntime forces a nested form at depth 1 onto the runtime
 	// path instead of asking whether anything inside it fires. True for
@@ -51,11 +60,10 @@ type quasiKeywords struct {
 }
 
 var quasiquoteKW = quasiKeywords{
-	unquote:             "unquote",
-	splicing:            "unquote-splicing",
-	nesting:             "quasiquote",
-	quoting:             "quote",
-	handleDottedUnquote: true,
+	unquote:  "unquote",
+	splicing: "unquote-splicing",
+	nesting:  "quasiquote",
+	quoting:  "quote",
 }
 
 var quasisyntaxKW = quasiKeywords{
@@ -63,7 +71,6 @@ var quasisyntaxKW = quasiKeywords{
 	splicing:             "unsyntax-splicing",
 	nesting:              "quasisyntax",
 	quoting:              "syntax",
-	handleDottedUnquote:  false,
 	nestingAlwaysRuntime: true,
 }
 
@@ -140,6 +147,50 @@ func getSymbolName(v syntax.SyntaxValue) (string, bool) {
 	return "", false
 }
 
+// dottedTailCell reports whether cell is the keyword form a dotted tail parses
+// into: a bare keyword symbol standing on the SPINE with exactly one element
+// after it. When it holds, the cell — and nothing after it, because there is
+// nothing after it — IS the tail template.
+//
+// R7RS §7.1.4 gives the tail of
+//
+//	⟨list qq template D⟩ -> (⟨qq template or splice D⟩+ . ⟨qq template D⟩)
+//
+// its own production, and two of that production's alternatives are keyword
+// forms the reader collapses onto the spine:
+//
+//	`(a . ,x)     reads as (a unquote x)       -> ⟨unquotation D⟩
+//	`(a . `(b))   reads as (a quasiquote (b))  -> ⟨quasiquotation D+1⟩
+//
+// The section's closing note settles the ambiguity that collapse creates: the
+// ⟨unquotation⟩ reading takes precedence over the list one. Chez and Racket
+// both read it that way.
+//
+// Deciding this needs the cell's cdr while standing on the keyword, which is
+// why both walks yield cells rather than cars. What they do NOT need is a depth
+// rule: expandQuasi and quasiNeedsRuntime already implement every depth rule
+// for a keyword-headed pair, so a caller that recognizes this shape hands them
+// the CELL and restates nothing. Both used to test depth == 1 here and so never
+// decremented a deeper tail: “(a . ,,x) answered (quasiquote (a unquote
+// (unquote x))) where the inner unquote must reach depth 0 and fire.
+//
+// Two keywords are deliberately absent.
+//
+//   - splicing, because ⟨splicing unquotation D⟩ derives only from
+//     ⟨qq template or splice D⟩ — an element, never the tail. `(a . ,@x) is
+//     three ordinary elements (Chez agrees; Racket rejects the shape outright).
+//   - quoting, because ’⟨qq template D⟩ keeps the SAME depth, so the ordinary
+//     element walk already renders it identically. That is also why neither
+//     this walk nor validate's has a quote case.
+func dottedTailCell(cell *syntax.SyntaxPair, kw quasiKeywords) bool {
+	name, ok := getSymbolName(cell.SyntaxCar())
+	if !ok || (name != kw.unquote && name != kw.nesting) {
+		return false
+	}
+	cdrPair, ok := cell.SyntaxCdr().(*syntax.SyntaxPair)
+	return ok && hasSyntaxArity(cdrPair, 1)
+}
+
 // quasiQuoted renders v as the dialect's quoting form — (quote v) under
 // quasiquote, (syntax v) under quasisyntax. It is the terminal case of the
 // whole expansion: everything that is not evaluated is quoted.
@@ -162,13 +213,18 @@ func (p *CompileTimeContinuation) quasiForm(srcCtx *syntax.SourceContext, head s
 }
 
 // consChain folds elems onto tail right to left, yielding
-// (cons e0 (cons e1 … tail)). No elements yields tail untouched, which is what
-// makes the degenerate improper list `(. ,x) render as just x.
+// (cons e0 (cons e1 … tail)).
 //
-// tail is a parameter rather than something this derives, because its two
-// callers mean different things by it: the dotted-unquote arm passes the RAW
-// tail expression, evaluated at run time, while the improper-list arm passes an
-// already-expanded datum.
+// elems is never empty at either call site: expandQuasiList runs only on a
+// spine whose first car is not a keyword (expandQuasi dispatches those itself),
+// so neither the dotted-tail arm nor the improper-list arm can fire before the
+// first element is in. A zero-length fold would return tail untouched, which is
+// well defined but unreachable, and there is no source that reaches it —
+// (. ,x) is a parse error, not a degenerate list.
+//
+// tail is a parameter rather than something this derives because it arrives
+// from two different arms; both hand over a value expandQuasi has already
+// produced, so this fold never has to know which.
 func (p *CompileTimeContinuation) consChain(srcCtx *syntax.SourceContext, elems []syntax.SyntaxValue, tail syntax.SyntaxValue) syntax.SyntaxValue {
 	q := tail
 	for i := range slices.Backward(elems) {
@@ -246,16 +302,12 @@ func quasiNeedsRuntime(stx syntax.SyntaxValue, depth int, kw quasiKeywords, g *e
 					return true
 				}
 				// ,,x at depth 2: the inner unquote is at depth 1 and fires.
-				if hasSyntaxArity(v, 2) {
-					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					return quasiNeedsRuntime(cdr.SyntaxCar(), depth-1, kw, g)
-				}
-				return false
+				return quasiNeedsRuntimeArg(v, depth-1, kw, g)
 			case kw.nesting:
 				if kw.nestingAlwaysRuntime && depth == 1 {
 					return true
 				}
-				return quasiNeedsRuntimeList(v, depth+1, kw, g)
+				return quasiNeedsRuntimeArg(v, depth+1, kw, g)
 			}
 		}
 		return quasiNeedsRuntimeList(v, depth, kw, g)
@@ -271,6 +323,24 @@ func quasiNeedsRuntime(stx syntax.SyntaxValue, depth int, kw quasiKeywords, g *e
 	default:
 		return false
 	}
+}
+
+// quasiNeedsRuntimeArg asks the single argument of a keyword form at newDepth,
+// and answers false for a malformed one.
+//
+// It is the predicate's mirror of rewrapQuasiForm, which expands that same
+// argument at that same depth and quotes a malformed form VERBATIM without
+// descending — so "no argument" means "nothing inside can fire". The nesting
+// arm used to walk the whole form as a list instead, which was merely
+// imprecise until dottedTailCell learned to recognize (nesting T): that shape
+// re-enters the list walk's tail arm, which would hand the same cell back at
+// depth+1 forever.
+func quasiNeedsRuntimeArg(v *syntax.SyntaxPair, newDepth int, kw quasiKeywords, g *expandDepthGuard) bool {
+	if !hasSyntaxArity(v, 2) {
+		return false
+	}
+	cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
+	return quasiNeedsRuntime(cdr.SyntaxCar(), newDepth, kw, g)
 }
 
 // quasiNeedsRuntimeList walks a template list for quasiNeedsRuntime.
@@ -293,19 +363,20 @@ func quasiNeedsRuntimeList(pair *syntax.SyntaxPair, depth int, kw quasiKeywords,
 		end = e
 		car := cell.SyntaxCar()
 
-		// Gated on handleDottedUnquote, not on kw.unquote alone. quasisyntax
-		// does not implement the dotted form, so answering "needs runtime"
-		// here would move #`(1 . #,x) off the literal path and onto
-		// (datum->syntax #f …) without changing its datum — a silent deopt no
-		// value assertion could see.
-		if kw.handleDottedUnquote {
-			carSymName, ok := getSymbolName(car)
-			if ok && carSymName == kw.unquote && depth == 1 {
-				cdrPair, ok := cell.SyntaxCdr().(*syntax.SyntaxPair)
-				if ok && hasSyntaxArity(cdrPair, 1) {
-					return true
-				}
-			}
+		// The dotted tail, which is the cell itself and ends the spine — so the
+		// answer for the whole remainder is the answer for this cell, and the
+		// walk returns rather than continuing past it.
+		//
+		// No quasiSpine parameter here, and it is not an omission: this walk
+		// reaches a vector through quasiNeedsRuntime's own vector arm, which
+		// visits elements one at a time and never routes them here, so the
+		// dotted test cannot see a vector's element sequence to begin with.
+		// expandQuasiList gets the same answer by refusing the test explicitly,
+		// because it DOES synthesize a spine in order to share one walk. Give
+		// this arm a spine for the same reason and it needs the same
+		// suppression.
+		if dottedTailCell(cell, kw) {
+			return quasiNeedsRuntime(cell, depth, kw, g)
 		}
 
 		if quasiNeedsRuntime(car, depth, kw, g) {
@@ -326,18 +397,20 @@ func quasiNeedsRuntimeList(pair *syntax.SyntaxPair, depth int, kw quasiKeywords,
 }
 
 // quasiSpine says which container the elements a list expansion is walking came
-// from. It is NOT a restatement of kw.handleDottedUnquote: the dotted test needs
-// BOTH the dialect to implement R7RS §4.2.8 and the container to admit a dotted
-// tail, and a vector admits none however it was written.
+// from, and since 2026-08-23 it is the ONLY thing that withholds the dotted-tail
+// test: both dialects read the tail, so what remains is the container question,
+// and a vector admits no dotted tail however it was written. (There was a
+// kw.handleDottedTail bool asking the dialect question; quasiKeywords records
+// why it went.)
 //
-// It is a parameter rather than a cleared kw field because clearing the field on
-// the by-value copy is measurably wrong, twice over. expandQuasiList forwards
-// the same kw to expandQuasi for every SUBLIST, so the suppression leaks into
-// every list nested under a vector — `#((a . ,x)) renders #((a unquote x))
-// instead of #((a . 5)). And it is separately needed for the vector's OWN
-// elements: with the test left on, `#(,y a unquote x) stops compiling, because
-// the dotted arm fires on the synthesized spine and a raw `unquote` symbol
-// reaches the compiler.
+// It has to be a parameter, and not anything carried in kw, because the
+// suppression is scoped to ONE walk rather than to the template. expandQuasiList
+// forwards the same kw to expandQuasi for every SUBLIST, so a kw-borne
+// suppression leaks into every list nested under a vector — `#((a . ,x)) renders
+// #((a unquote x)) instead of #((a . 5)). And it is separately needed for the
+// vector's OWN elements: with the test left on, `#(,y a unquote x) stops
+// compiling, because the dotted arm fires on the synthesized spine and a raw
+// `unquote` symbol reaches the compiler.
 //
 // Both were mutation-tested. Each fails exactly one row of
 // TestQuasiExpandShape (nested-list-under-vector, vector-spine-bare-unquote)
@@ -430,11 +503,12 @@ func (p *CompileTimeContinuation) expandQuasi(
 // One walk suffices even though a splice changes how the elements BEFORE it are
 // rendered, because runs are only closed when a splice is met: with no splice
 // anywhere, every element is still sitting in one run at the end. The only
-// early exit is the dotted-unquote arm, and that arm requires the cell's cdr to
-// be a one-element list, so exactly one element remains and no splice can hide
-// behind it — except as that final tail expression itself, which reaches the
-// compiler raw either way and errors identically ("unquote-splicing: not in
-// quasiquote context", at the same token).
+// early exit is the dotted-tail arm, and that arm requires the cell's cdr to be
+// a one-element list, so exactly one element remains and no splice can hide
+// behind it — except as that final tail expression itself, and there depth
+// decides: at depth 1 the unquote arm hands `(a . ,,@x)'s raw
+// (unquote-splicing x) to the compiler, which errors at that token, while
+// deeper it is rewrapped as data like any other over-deep form.
 //
 // Two facts about the ordering here are load-bearing and neither is local:
 //
@@ -465,35 +539,34 @@ func (p *CompileTimeContinuation) expandQuasiList(
 
 	var end syntax.SpineEnd
 	for cell, e := range syntax.Spine(pair) {
-		// Assigned at the top so the dotted-unquote break below cannot leave
-		// end holding the PREVIOUS cell's terminator.
+		// Assigned at the top so the dotted-tail break below cannot leave end
+		// holding the PREVIOUS cell's terminator.
 		end = e
 		car := cell.SyntaxCar()
 
-		// Dotted-pair unquote (quasiquote only). `(a . ,x) READS as the proper
-		// list (a unquote x), so a dotted tail never arrives as a non-pair cdr —
-		// it arrives as the bare symbol `unquote` sitting on the spine, followed
-		// by exactly one element. The improper-tail branch below therefore never
-		// fires for it, and without this check the walk took `unquote` and `x`
-		// in as ordinary elements: `(,@x . ,y) rendered as the 4-element list
-		// (1 2 unquote y). R7RS §4.2.8.
+		// The dotted tail (quasiquote only). `(a . ,x) READS as the proper list
+		// (a unquote x), so a dotted tail never arrives as a non-pair cdr — it
+		// arrives as a bare keyword on the spine followed by exactly one
+		// element. The improper-tail branch below therefore never fires for it,
+		// and without this check the walk took `unquote` and `x` in as ordinary
+		// elements: `(,@x . ,y) rendered as the 4-element list (1 2 unquote y).
 		//
-		// This is a property of the CELL — it reads the cdr while standing on
-		// the unquote — which is why the walk yields cells rather than cars.
+		// The cell IS the tail template, so it goes to expandQuasi whole: at
+		// depth 1 an unquote arm hands back the raw expression (the escape,
+		// evaluated at run time exactly as a splice's expression is), deeper it
+		// rewraps at depth-1, and a nesting keyword rewraps at depth+1. Not one
+		// of those rules is restated here. See dottedTailCell for which
+		// keywords qualify and why splicing and quote do not.
 		//
-		// Two independent facts gate it: the container admits a dotted tail,
-		// and the dialect implements the form.
-		if spine == spineFromPair && kw.handleDottedUnquote {
-			carSymName, ok := getSymbolName(car)
-			if ok && carSymName == kw.unquote && depth == 1 {
-				cdrPair, ok := cell.SyntaxCdr().(*syntax.SyntaxPair)
-				if ok && hasSyntaxArity(cdrPair, 1) {
-					// Raw, not expanded: the tail expression is evaluated at run
-					// time, exactly as a splice's expression is.
-					improperTail = cdrPair.SyntaxCar()
-					break
-				}
+		// Two independent facts gate it: the container admits a dotted tail
+		// (spine), and the dialect implements the form (inside dottedTailCell).
+		if spine == spineFromPair && dottedTailCell(cell, kw) {
+			expandedTail, err := p.expandQuasi(ctx, cell, depth, kw, g)
+			if err != nil {
+				return nil, err
 			}
+			improperTail = expandedTail
+			break
 		}
 
 		carPair, ok := car.(*syntax.SyntaxPair)
@@ -527,8 +600,9 @@ func (p *CompileTimeContinuation) expandQuasiList(
 
 	// An improper tail is part of the template and can carry an unquote of its
 	// own, so it is expanded rather than assumed inert. Improper() is false both
-	// for a proper spine and after the dotted-unquote break (whose cell's cdr is
-	// a pair by construction), so improperTail's raw value survives that path.
+	// for a proper spine and after the dotted-tail break (whose cell's cdr is a
+	// pair by construction), so the value that break stored is not overwritten
+	// here — the two arms are alternatives, never both.
 	if end.Improper() {
 		expandedTail, err := p.expandQuasi(ctx, end.Tail, depth, kw, g)
 		if err != nil {

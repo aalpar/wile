@@ -54,15 +54,22 @@ func TestQuasisyntaxNestingIsAlwaysRuntime(t *testing.T) {
 	c.Assert(quasiNeedsRuntime(inertQQ, 1, quasiquoteKW, ccnt.newQuasiDepthGuard()), qt.IsFalse)
 }
 
-// TestQuasiNeedsRuntimeDottedTailIsDialectGated pins that the dotted-unquote
-// spine test is gated on handleDottedUnquote rather than on kw.unquote alone.
+// TestQuasiNeedsRuntimeDottedTail pins the predicate half of dottedTailCell:
+// that the two spine shapes R7RS §7.1.4 admits in tail position are recognized
+// AS tails, and that the depth each one carries reaches this answer.
 //
-// `(1 . ,x) READS as (1 unquote x), and quasiquote must answer yes: the tail is
-// evaluated (R7RS §4.2.8). quasisyntax does not implement the form, so the same
-// spine shape is three ordinary elements there and must answer NO — answering
-// yes would move #`(1 . #,x) off the literal path onto (datum->syntax #f …)
-// without changing its datum, a deopt no value assertion could see.
-func TestQuasiNeedsRuntimeDottedTailIsDialectGated(t *testing.T) {
+// `(1 . ,x) READS as (1 unquote x), so both shapes arrive as a bare keyword on
+// the spine and the difference between "tail" and "three ordinary elements" is
+// invisible to a car-yielding walk. Under the tail reading ,x is ⟨unquotation 1⟩
+// and fires; `(1 . `(,x)) puts its ,x at depth 2 instead, so the whole template
+// is a literal and the answer inverts on a spine of the same shape.
+//
+// Both dialects read the tail — dottedTailCell takes no dialect flag — so the
+// rows below are a statement about the RULE, not about a switch: the qq and qs
+// answers agree wherever nothing else diverges. This test was named
+// …IsDialectGated while quasisyntax declined the form, and the flag it pinned
+// was deleted with the divergence on 2026-08-23.
+func TestQuasiNeedsRuntimeDottedTail(t *testing.T) {
 	c := qt.New(t)
 	ccnt, env := newTestCompiler()
 
@@ -70,5 +77,26 @@ func TestQuasiNeedsRuntimeDottedTailIsDialectGated(t *testing.T) {
 	c.Assert(quasiNeedsRuntime(qq, 1, quasiquoteKW, ccnt.newQuasiDepthGuard()), qt.IsTrue)
 
 	qs := parseSchemeExpr(t, env, "(1 unsyntax x)")
-	c.Assert(quasiNeedsRuntime(qs, 1, quasisyntaxKW, ccnt.newQuasiDepthGuard()), qt.IsFalse)
+	c.Assert(quasiNeedsRuntime(qs, 1, quasisyntaxKW, ccnt.newQuasiDepthGuard()), qt.IsTrue)
+
+	qqNest := parseSchemeExpr(t, env, "(1 quasiquote ((unquote x)))")
+	c.Assert(quasiNeedsRuntime(qqNest, 1, quasiquoteKW, ccnt.newQuasiDepthGuard()), qt.IsFalse)
+
+	// The same spine one level in, where the unquote does come back to depth 1.
+	qqNestLive := parseSchemeExpr(t, env, "(1 quasiquote ((unquote (unquote x))))")
+	c.Assert(quasiNeedsRuntime(qqNestLive, 1, quasiquoteKW, ccnt.newQuasiDepthGuard()), qt.IsTrue)
+
+	// quasisyntax answers TRUE on the shape quasiquote answers false on, and the
+	// cause is nestingAlwaysRuntime, not the tail reading — which is worth
+	// pinning because this row read `true` before the flip too, for the opposite
+	// reason (the tail was walked element-wise, so #,x sat at depth 1 and fired).
+	// The row below isolates the cause: nothing in it could fire at any depth.
+	qsNest := parseSchemeExpr(t, env, "(1 quasisyntax ((unsyntax x)))")
+	c.Assert(quasiNeedsRuntime(qsNest, 1, quasisyntaxKW, ccnt.newQuasiDepthGuard()), qt.IsTrue)
+
+	qsNestInert := parseSchemeExpr(t, env, "(1 quasisyntax ((a b)))")
+	c.Assert(quasiNeedsRuntime(qsNestInert, 1, quasisyntaxKW, ccnt.newQuasiDepthGuard()), qt.IsTrue)
+
+	qqNestInert := parseSchemeExpr(t, env, "(1 quasiquote ((a b)))")
+	c.Assert(quasiNeedsRuntime(qqNestInert, 1, quasiquoteKW, ccnt.newQuasiDepthGuard()), qt.IsFalse)
 }

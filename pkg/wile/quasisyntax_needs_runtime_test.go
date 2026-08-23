@@ -45,7 +45,8 @@ func TestQuasisyntaxNeedsRuntimeReachesVectorsAndTails(t *testing.T) {
 	tests := []struct {
 		name string
 		// qs and qq are the same template in both dialects; want is the datum
-		// both must produce.
+		// both must produce. Every row carries both — there is no shape left in
+		// this file on which the dialects legitimately answer differently.
 		qs   string
 		qq   string
 		want string
@@ -75,23 +76,29 @@ func TestQuasisyntaxNeedsRuntimeReachesVectorsAndTails(t *testing.T) {
 			want: "(quote (1 . #(5)))",
 		},
 		{
-			// The dotted form inside the vector's element is where the two
-			// dialects legitimately differ (quasisyntax does not implement
-			// R7RS §4.2.8), so want tracks quasisyntax and the qq column is
-			// left empty: this row asks only that the unsyntax FIRE.
+			// The dotted form inside the vector's element. These three rows
+			// carried no qq column while quasisyntax declined the dotted tail
+			// (want was #((1 2 unsyntax x)), tracking quasisyntax alone). Both
+			// dialects read the tail now, so the control column is available
+			// again — and these are the rows where it earns the most, since the
+			// element is a list but its container is not, which is the exact
+			// seam quasiSpine holds.
 			name: "splice and unsyntax in a dotted element under a vector",
 			qs:   "#`#((#,@xs . #,x))",
-			want: "#((1 2 unsyntax x))",
+			qq:   "`#((,@xs . ,x))",
+			want: "#((1 2 . 5))",
 		},
 		{
 			name: "two unsyntaxes in a dotted element under a vector",
 			qs:   "#`#((#,x . #,y))",
-			want: "#((5 unsyntax y))",
+			qq:   "`#((,x . ,y))",
+			want: "#((5 . 7))",
 		},
 		{
 			name: "nested vector inside a vector",
 			qs:   "#`#(#,x #((n . #,y)) #,@xs)",
-			want: "#(5 #((n unsyntax y)) 1 2)",
+			qq:   "`#(,x #((n . ,y)) ,@xs)",
+			want: "#(5 #((n . 7)) 1 2)",
 		},
 	}
 
@@ -108,9 +115,6 @@ func TestQuasisyntaxNeedsRuntimeReachesVectorsAndTails(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 			c.Assert(got.SchemeString(), qt.Equals, tc.want)
 
-			if tc.qq == "" {
-				return
-			}
 			control, err := wile.NewEngine(ctx)
 			c.Assert(err, qt.IsNil)
 			gotQQ, err := control.EvalMultiple(ctx, preamble+tc.qq)

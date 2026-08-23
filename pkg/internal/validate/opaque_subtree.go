@@ -216,6 +216,16 @@ const (
 //     inside a template — the compiler does not special-case it there, so its
 //     nested unquotes stay live (R7RS §4.2.6).
 //   - anything else: arguments stay at the current depth.
+//
+// One rule this walk does NOT match, deliberately. The compiler recognizes a
+// nested quasiquote in DOTTED-TAIL position — `(a . `(b ,x)), which reads as
+// (a quasiquote (b (unquote x))) — and takes its argument one level deeper
+// (compilation.dottedTailCell, R7RS §7.1.4). This walk has no such case: it
+// reads that spine element-wise, so ,x lands at depth 0 and x is marked live
+// where the compiler emits it as data. That is the conservative direction — a
+// withdrawn Stable stamp, not an unmarked set! — so the disagreement costs an
+// optimization and cannot miscompile. Teaching it the shape is a safe
+// narrowing, not a fix.
 func quasiHeadDepth(key string, quasi int) (argDepth int, barrier bool) {
 	switch key {
 	case quasiquoteKey:
@@ -254,9 +264,9 @@ func quasiHeadDepth(key string, quasi int) (argDepth int, barrier bool) {
 // Two traps, both live in the tests:
 //
 //   - Dotted unquote. `(a . ,x) parses as (a unquote x): a BARE unquote symbol in
-//     the spine followed by exactly one element, not a sub-pair head (R7RS §4.2.8).
-//     The compiler handles it in quasiNeedsRuntimeList; a spine walk that only
-//     inspects pair heads misses it and under-marks x.
+//     the spine followed by exactly one element, not a sub-pair head (R7RS §7.1.4).
+//     The compiler handles it in dottedTailCell; a spine walk that only inspects
+//     pair heads misses it and under-marks x.
 //   - Nested depth. `(a `(b ,,(set! x 1))) brings the inner form back to depth 0
 //     through two unquotes; one unquote leaves it at depth 1, still data.
 //
@@ -292,8 +302,8 @@ func forEachRawSymbol(v values.Value, quasi int, fn func(*syntax.SyntaxSymbol)) 
 // quasiHeadDepth before falling through to an ordinary car/cdr walk.
 //
 // Heads are matched by NAME. That is the same limitation the compiler's own walk
-// accepts (compilation.quasiNeedsRuntimeList): a program that lexically
-// shadows quote/quasiquote/unquote would be misread. Detecting that needs binding
+// accepts (compilation.getSymbolName): a program that lexically shadows
+// quote/quasiquote/unquote would be misread. Detecting that needs binding
 // information this walk does not carry.
 func forEachRawSymbolPair(p *syntax.SyntaxPair, quasi int, fn func(*syntax.SyntaxSymbol)) {
 	head, ok := p.SyntaxCar().(*syntax.SyntaxSymbol)
@@ -335,9 +345,13 @@ func forEachRawSymbolPair(p *syntax.SyntaxPair, quasi int, fn func(*syntax.Synta
 //
 // It is a spine shape, not a head shape: reached as a cdr, it never passes through
 // the keyword dispatch in forEachRawSymbolPair. The compiler detects it the same
-// way and in the same place (compilation.quasiNeedsRuntimeList). Only
-// meaningful inside a template; at quasiDepthCode a bare unquote is an ordinary
-// symbol and the ordinary spine walk already marks the tail.
+// way and in the same place (compilation.dottedTailCell, consulted from both
+// quasiNeedsRuntimeList and expandQuasiList). Only meaningful inside a template;
+// at quasiDepthCode a bare unquote is an ordinary symbol and the ordinary spine
+// walk already marks the tail.
+//
+// The compiler's version accepts a bare `quasiquote` in the same position too,
+// which this one does not; quasiHeadDepth says why that gap is safe.
 func dottedUnquoteTail(cur *syntax.SyntaxPair, quasi int) (syntax.SyntaxValue, bool) {
 	if quasi == quasiDepthCode {
 		return nil, false
