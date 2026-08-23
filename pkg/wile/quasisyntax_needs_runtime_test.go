@@ -36,7 +36,7 @@ import (
 // `default: return false`; the list walk `break`ed on a non-pair cdr, dropping
 // the improper tail. expandQuasi handles both, so only the predicate was wrong,
 // and the quasiquote twin already carries the tail fix — with a comment naming
-// this bug — in quasiquoteNeedsRuntimeList.
+// this bug — in what is now the shared quasiNeedsRuntimeList.
 //
 // The control column is the point: quasiquote answers correctly on the same
 // shapes, so each row is a divergence between two dialects of one algorithm,

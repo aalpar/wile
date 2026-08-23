@@ -55,7 +55,7 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 	g := p.newQuasiDepthGuard()
 
 	// Optimization: if no runtime evaluation needed, emit as literal
-	if !p.quasiquoteNeedsRuntime(datum, depth, g) {
+	if !p.quasiNeedsRuntime(datum, depth, quasiquoteKW, g) {
 		// Validate quoted literal for circular datum labels
 		val, err := p.validateQuotedLiteral(datum.UnwrapAll())
 		if err != nil {
@@ -158,117 +158,6 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 	flushNormal()
 
 	return p.quasiForm(srcCtx, "list->vector", p.quasiForm(srcCtx, "append", appendArgs...)), nil
-}
-
-// quasiquoteNeedsRuntime checks if a syntax value contains unquotes that would
-// be evaluated at the given depth. This is used to determine whether we can
-// emit the quasiquoted form as a compile-time literal or need runtime list construction.
-//
-// Returns true if the form contains any unquote/unquote-splicing that reaches depth 1.
-// For nested forms, it recursively adjusts the depth:
-//   - unquote/unquote-splicing at depth 1 → needs runtime (returns true)
-//   - unquote/unquote-splicing at depth > 1 → check argument at depth-1
-//   - quasiquote → check body at depth+1
-func (p *CompileTimeContinuation) quasiquoteNeedsRuntime(stx syntax.SyntaxValue, depth int, g *expandDepthGuard) bool {
-	// Bound this analysis the same way the expander is bounded. When the input
-	// is too deep to walk safely, report "needs runtime" so the depth-guarded
-	// expander runs and converts the over-depth into a catchable error rather
-	// than letting this predicate overflow the Go stack first.
-	if g.enter() {
-		g.leave()
-		return true
-	}
-	defer g.leave()
-
-	switch v := stx.(type) {
-	case *syntax.SyntaxPair:
-		// No empty-list guard: (*SyntaxPair).IsEmptyList is an unconditional
-		// false, so this arm never holds one.
-		// Check if this is (unquote ...) or (unquote-splicing ...) at depth 1
-		carSymName, ok := p.getSymbolName(v.SyntaxCar())
-		if ok {
-			switch carSymName {
-			case "unquote", "unquote-splicing":
-				if depth == 1 {
-					return true
-				}
-				// Nested unquote at depth > 1 - check if the argument needs runtime
-				// For ,,x at depth 2: the inner ,x is at depth 1 and needs eval
-				if hasSyntaxArity(v, 2) {
-					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					arg := cdr.SyntaxCar()
-					return p.quasiquoteNeedsRuntime(arg, depth-1, g)
-				}
-				return false
-			case "quasiquote":
-				// Nested quasiquote increases depth
-				return p.quasiquoteNeedsRuntimeList(v, depth+1, g)
-			}
-		}
-		// Check elements
-		return p.quasiquoteNeedsRuntimeList(v, depth, g)
-
-	case *syntax.SyntaxVector:
-		// Check vector elements
-		for _, elem := range v.Values {
-			if p.quasiquoteNeedsRuntime(elem, depth, g) {
-				return true
-			}
-		}
-		return false
-
-	default:
-		return false
-	}
-}
-
-// quasiquoteNeedsRuntimeList walks a template list, reporting whether anything
-// in it has to be built at run time rather than emitted as a literal.
-//
-// syntax.Spine rather than SyntaxForEach, and the dotted-unquote test is why:
-// `(a . ,x) parses as (a unquote x), so the shape to recognize is a bare
-// `unquote` in the SPINE followed by exactly one element (R7RS §4.2.8) — a
-// property of the CELL, decided by looking at its cdr while standing on the
-// unquote. A car-yielding walk cannot reach that cdr, and restating the test
-// over cars would replace a local pattern match with a stateful post-condition.
-// validate's forEachRawSymbolPair recognizes the same shape for the same reason
-// and takes the cell too (dottedUnquoteTail, opaque_subtree.go).
-//
-// The second reason is `return true`: this is a predicate that stops at its
-// first hit, which a range-over-func does with an ordinary return and a ForEach
-// consumer can only do by signalling through the error channel.
-func (p *CompileTimeContinuation) quasiquoteNeedsRuntimeList(pair *syntax.SyntaxPair, depth int, g *expandDepthGuard) bool {
-	var end syntax.SpineEnd
-	for cell, e := range syntax.Spine(pair) {
-		end = e
-		car := cell.SyntaxCar()
-
-		// Detect dotted-pair unquote: `(a . ,x)` parses as `(a unquote x)`.
-		// The bare symbol `unquote` followed by exactly one element signals
-		// a runtime-evaluated tail per R7RS §4.2.8.
-		carSymName, ok := p.getSymbolName(car)
-		if ok && carSymName == "unquote" && depth == 1 {
-			cdrPair, ok := cell.SyntaxCdr().(*syntax.SyntaxPair)
-			if ok && hasSyntaxArity(cdrPair, 1) {
-				return true
-			}
-		}
-
-		if p.quasiquoteNeedsRuntime(car, depth, g) {
-			return true
-		}
-	}
-	// Improper tail that is not a pair — a vector, most usefully. It is still
-	// part of the template and can carry an unquote of its own, so ASK it rather
-	// than assume it is inert. Treating it as a terminator (which is what the
-	// hand-rolled walk did) reported "no runtime needed" for `(1 . #(,x)) and
-	// emitted the whole form as a literal, so it printed (1 . #((unquote x))).
-	// Improper() is false for a proper list and for a walk that never reached a
-	// terminator, so no separate "did the loop finish?" guard is needed.
-	if end.Improper() {
-		return p.quasiquoteNeedsRuntime(end.Tail, depth, g)
-	}
-	return false
 }
 
 // CompileUnquote errors - unquote outside of quasiquote

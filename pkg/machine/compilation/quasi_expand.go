@@ -32,6 +32,22 @@ type quasiKeywords struct {
 	nesting             string // "quasiquote" or "quasisyntax"
 	quoting             string // "quote" or "syntax"
 	handleDottedUnquote bool   // true for quasiquote (R7RS §4.2.8), false for quasisyntax
+
+	// nestingAlwaysRuntime forces a nested form at depth 1 onto the runtime
+	// path instead of asking whether anything inside it fires. True for
+	// quasisyntax, and it is SEMANTICALLY LOAD-BEARING, not a conservative
+	// approximation — the two paths disagree on a bound identifier:
+	//
+	//	(let ((z 5)) #`#`(a #,z))  =>  (quasisyntax (a (unsyntax 5)))
+	//	(let ((z 5))  ``(a ,z))    =>  (quasiquote (a (unquote z)))
+	//
+	// The runtime expansion materializes (syntax z) for the inner argument,
+	// and (syntax z) on a bound local yields that local's VALUE, where the
+	// literal path would keep the symbol. Pinned by integration/
+	// quasisyntax_test.go's nested rows and by pkg/wile/boxed_capture_test.go,
+	// whose whole purpose is that the nested form takes the runtime path.
+	// Do not "clean it up".
+	nestingAlwaysRuntime bool
 }
 
 var quasiquoteKW = quasiKeywords{
@@ -43,11 +59,12 @@ var quasiquoteKW = quasiKeywords{
 }
 
 var quasisyntaxKW = quasiKeywords{
-	unquote:             "unsyntax",
-	splicing:            "unsyntax-splicing",
-	nesting:             "quasisyntax",
-	quoting:             "syntax",
-	handleDottedUnquote: false,
+	unquote:              "unsyntax",
+	splicing:             "unsyntax-splicing",
+	nesting:              "quasisyntax",
+	quoting:              "syntax",
+	handleDottedUnquote:  false,
+	nestingAlwaysRuntime: true,
 }
 
 // buildQuasiSyntaxList creates a proper list from syntax elements, stamping
@@ -182,6 +199,125 @@ func (p *CompileTimeContinuation) rewrapQuasiForm(
 		p.quasiQuoted(kw, syntax.NewSyntaxSymbol(keyword, srcCtx), srcCtx),
 		arg,
 	), nil
+}
+
+// quasiNeedsRuntime reports whether a template contains anything that has to be
+// built at run time rather than emitted as a compile-time literal — an unquote
+// or unsyntax that reaches depth 1. It is the shadow of expandQuasi and must
+// agree with it everywhere: a false answer does not merely forgo an
+// optimization, it decides that the expander never runs, so an unquote the
+// predicate cannot see simply stops happening and its keyword survives into the
+// output datum.
+//
+//   - unquote / splicing at depth 1 -> yes
+//   - unquote / splicing deeper     -> ask the argument at depth-1
+//   - nesting                       -> ask the form at depth+1
+//
+// It shares its keyword table with the expander rather than hardcoding
+// spellings, because the two spent a release out of step: the quasisyntax copy
+// never received the improper-tail fix its quasiquote twin carries, and grew a
+// vector blind spot of its own. Both are corrected in the shape below.
+//
+// Bound the same way the expander is bounded: when the input is too deep to
+// walk safely, report "needs runtime" so the depth-guarded expander converts
+// the over-depth into a catchable error rather than letting this overflow the
+// Go stack first.
+func (p *CompileTimeContinuation) quasiNeedsRuntime(stx syntax.SyntaxValue, depth int, kw quasiKeywords, g *expandDepthGuard) bool {
+	if g.enter() {
+		g.leave()
+		return true
+	}
+	defer g.leave()
+
+	switch v := stx.(type) {
+	case *syntax.SyntaxPair:
+		// No empty-list guard: (*SyntaxPair).IsEmptyList is an unconditional
+		// false, so this arm never holds one.
+		carSymName, ok := p.getSymbolName(v.SyntaxCar())
+		if ok {
+			switch carSymName {
+			case kw.unquote, kw.splicing:
+				if depth == 1 {
+					return true
+				}
+				// ,,x at depth 2: the inner unquote is at depth 1 and fires.
+				if hasSyntaxArity(v, 2) {
+					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
+					return p.quasiNeedsRuntime(cdr.SyntaxCar(), depth-1, kw, g)
+				}
+				return false
+			case kw.nesting:
+				if kw.nestingAlwaysRuntime && depth == 1 {
+					return true
+				}
+				return p.quasiNeedsRuntimeList(v, depth+1, kw, g)
+			}
+		}
+		return p.quasiNeedsRuntimeList(v, depth, kw, g)
+
+	case *syntax.SyntaxVector:
+		for _, elem := range v.Values {
+			if p.quasiNeedsRuntime(elem, depth, kw, g) {
+				return true
+			}
+		}
+		return false
+
+	default:
+		return false
+	}
+}
+
+// quasiNeedsRuntimeList walks a template list for quasiNeedsRuntime.
+//
+// syntax.Spine rather than SyntaxForEach, and the dotted-unquote test is why:
+// `(a . ,x) parses as (a unquote x), so the shape to recognize is a bare
+// `unquote` in the SPINE followed by exactly one element (R7RS §4.2.8) — a
+// property of the CELL, decided by looking at its cdr while standing on the
+// unquote. A car-yielding walk cannot reach that cdr, and restating the test
+// over cars would replace a local pattern match with a stateful post-condition.
+// validate's forEachRawSymbolPair recognizes the same shape for the same reason
+// and takes the cell too (dottedUnquoteTail, opaque_subtree.go).
+//
+// The second reason is `return true`: this is a predicate that stops at its
+// first hit, which a range-over-func does with an ordinary return and a ForEach
+// consumer can only do by signalling through the error channel.
+func (p *CompileTimeContinuation) quasiNeedsRuntimeList(pair *syntax.SyntaxPair, depth int, kw quasiKeywords, g *expandDepthGuard) bool {
+	var end syntax.SpineEnd
+	for cell, e := range syntax.Spine(pair) {
+		end = e
+		car := cell.SyntaxCar()
+
+		// Gated on handleDottedUnquote, not on kw.unquote alone. quasisyntax
+		// does not implement the dotted form, so answering "needs runtime"
+		// here would move #`(1 . #,x) off the literal path and onto
+		// (datum->syntax #f …) without changing its datum — a silent deopt no
+		// value assertion could see.
+		if kw.handleDottedUnquote {
+			carSymName, ok := p.getSymbolName(car)
+			if ok && carSymName == kw.unquote && depth == 1 {
+				cdrPair, ok := cell.SyntaxCdr().(*syntax.SyntaxPair)
+				if ok && hasSyntaxArity(cdrPair, 1) {
+					return true
+				}
+			}
+		}
+
+		if p.quasiNeedsRuntime(car, depth, kw, g) {
+			return true
+		}
+	}
+	// An improper tail that is not a pair — a vector, most usefully. It is still
+	// part of the template and can carry an unquote of its own, so ASK it rather
+	// than assume it is inert. Treating it as a terminator (which is what both
+	// hand-rolled walks did) reported "no runtime needed" for `(1 . #(,x)) and
+	// emitted the whole form as a literal, so it printed (1 . #((unquote x))).
+	// Improper() is false for a proper list and for a walk that never reached a
+	// terminator, so no separate "did the loop finish?" guard is needed.
+	if end.Improper() {
+		return p.quasiNeedsRuntime(end.Tail, depth, kw, g)
+	}
+	return false
 }
 
 // expandQuasi transforms quasiquoted/quasisyntax syntax into equivalent Scheme code.

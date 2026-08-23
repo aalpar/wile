@@ -28,7 +28,7 @@ import (
 // unquote-splicing, nested quasiquote, and vector quasiquote.
 //
 // Source: compile_time_continuation_quasiquote.go (compileQuasiquoteDatum,
-// expandQuasiquote, expandQuasiquoteVector, quasiquoteNeedsRuntime,
+// expandQuasiquote, expandQuasiquoteVector, quasiNeedsRuntime,
 // CompileUnquote, CompileUnquoteSplicing).
 func TestCompileQuasiquote(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{

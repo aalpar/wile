@@ -1942,7 +1942,7 @@ func TestCompileSetBangErrors(t *testing.T) {
 	}
 }
 
-// TestQuasiquoteNeedsRuntime tests quasiquoteNeedsRuntime paths
+// TestQuasiquoteNeedsRuntime tests quasiNeedsRuntime paths under quasiquoteKW
 func TestQuasiquoteNeedsRuntime(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 

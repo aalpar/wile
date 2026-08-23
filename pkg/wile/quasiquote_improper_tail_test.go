@@ -27,8 +27,8 @@ import (
 // SyntaxPair.Length(), which panics on an improper list, and surfaced as an
 // opaque "compile: panic recovery: internal error: SyntaxPair.Length: improper
 // list" instead of a clean compile. Both the validator (dottedUnquoteTail) and
-// the compiler (compileQuasiquoteDatum / quasiquoteNeedsRuntime /
-// quasiquoteNeedsRuntimeList) walked it; all now use a properness-safe
+// the compiler (compileQuasiquoteDatum / quasiNeedsRuntime /
+// quasiNeedsRuntimeList) walked it; all now use a properness-safe
 // IsSyntaxEmptyList check. A malformed template compiles as ordinary quasiquoted
 // data, so a clean nil error proves the safe path rather than the crash path.
 func TestQuasiquoteImproperUnquoteTail_NoPanic(t *testing.T) {

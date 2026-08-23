@@ -201,7 +201,7 @@ const (
 // barrier reports that nothing inside the form is live, so the walk skips it whole.
 //
 // This predicate is the soundness boundary of the whole file. It must agree with
-// the compiler's quasiquote walk (compilation.quasiquoteNeedsRuntime /
+// the compiler's quasiquote walk (compilation.quasiNeedsRuntime /
 // expandQuasi), because that walk is what decides which positions are actually
 // evaluated. Where they disagree in the permissive direction (this says data, the
 // compiler says live) a hidden set! goes unmarked and the inliner miscompiles
@@ -255,7 +255,7 @@ func quasiHeadDepth(key string, quasi int) (argDepth int, barrier bool) {
 //
 //   - Dotted unquote. `(a . ,x) parses as (a unquote x): a BARE unquote symbol in
 //     the spine followed by exactly one element, not a sub-pair head (R7RS §4.2.8).
-//     The compiler handles it in quasiquoteNeedsRuntimeList; a spine walk that only
+//     The compiler handles it in quasiNeedsRuntimeList; a spine walk that only
 //     inspects pair heads misses it and under-marks x.
 //   - Nested depth. `(a `(b ,,(set! x 1))) brings the inner form back to depth 0
 //     through two unquotes; one unquote leaves it at depth 1, still data.
@@ -292,7 +292,7 @@ func forEachRawSymbol(v values.Value, quasi int, fn func(*syntax.SyntaxSymbol)) 
 // quasiHeadDepth before falling through to an ordinary car/cdr walk.
 //
 // Heads are matched by NAME. That is the same limitation the compiler's own walk
-// accepts (compilation.quasiquoteNeedsRuntimeList): a program that lexically
+// accepts (compilation.quasiNeedsRuntimeList): a program that lexically
 // shadows quote/quasiquote/unquote would be misread. Detecting that needs binding
 // information this walk does not carry.
 func forEachRawSymbolPair(p *syntax.SyntaxPair, quasi int, fn func(*syntax.SyntaxSymbol)) {
@@ -335,7 +335,7 @@ func forEachRawSymbolPair(p *syntax.SyntaxPair, quasi int, fn func(*syntax.Synta
 //
 // It is a spine shape, not a head shape: reached as a cdr, it never passes through
 // the keyword dispatch in forEachRawSymbolPair. The compiler detects it the same
-// way and in the same place (compilation.quasiquoteNeedsRuntimeList). Only
+// way and in the same place (compilation.quasiNeedsRuntimeList). Only
 // meaningful inside a template; at quasiDepthCode a bare unquote is an ordinary
 // symbol and the ordinary spine walk already marks the tail.
 func dottedUnquoteTail(cur *syntax.SyntaxPair, quasi int) (syntax.SyntaxValue, bool) {

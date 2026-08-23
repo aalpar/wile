@@ -76,94 +76,10 @@ func (p *CompileTimeContinuation) compileQuasisyntaxTemplate(ctctx CompileTimeCa
 }
 
 // quasisyntaxNeedsRuntime checks if a quasisyntax template contains unsyntax at
-// the given depth. It creates a fresh recursion guard; the actual walk lives in
-// quasisyntaxNeedsRuntimeGuarded.
+// the given depth. It creates a fresh recursion guard; the walk itself is the
+// shared quasiNeedsRuntime, keyed by quasisyntaxKW.
 func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue, depth int) bool {
-	return p.quasisyntaxNeedsRuntimeGuarded(stx, depth, p.newQuasiDepthGuard())
-}
-
-func (p *CompileTimeContinuation) quasisyntaxNeedsRuntimeGuarded(stx syntax.SyntaxValue, depth int, g *expandDepthGuard) bool {
-	// Bound this analysis the same way the expander is bounded. When the input
-	// is too deep to walk safely, report "needs runtime" so the depth-guarded
-	// expander runs and converts the over-depth into a catchable error rather
-	// than letting this predicate overflow the Go stack first.
-	if g.enter() {
-		g.leave()
-		return true
-	}
-	defer g.leave()
-
-	switch v := stx.(type) {
-	case *syntax.SyntaxPair:
-		// No empty-list guard: (*SyntaxPair).IsEmptyList is an unconditional
-		// false, so this arm never holds one.
-
-		// Check for unsyntax/unsyntax-splicing/quasisyntax keywords
-		carSymName, ok := p.getSymbolName(v.SyntaxCar())
-		if ok {
-			switch carSymName {
-			case "unsyntax", "unsyntax-splicing":
-				if depth == 1 {
-					return true
-				}
-				// At depth > 1, check the argument at depth-1
-				if hasSyntaxArity(v, 2) {
-					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					arg := cdr.SyntaxCar()
-					return p.quasisyntaxNeedsRuntimeGuarded(arg, depth-1, g)
-				}
-				return false
-			case "quasisyntax":
-				// Nested quasisyntax at depth 1 always needs runtime construction
-				if depth == 1 {
-					return true
-				}
-				// At depth > 1, check body at depth+1
-				if hasSyntaxArity(v, 2) {
-					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					body := cdr.SyntaxCar()
-					return p.quasisyntaxNeedsRuntimeGuarded(body, depth+1, g)
-				}
-				return false
-			}
-		}
-
-		// Check list elements
-		var end syntax.SpineEnd
-		for cell, e := range syntax.Spine(v) {
-			end = e
-			if p.quasisyntaxNeedsRuntimeGuarded(cell.SyntaxCar(), depth, g) {
-				return true
-			}
-		}
-		// An improper tail that is not a pair — a vector, most usefully. It is
-		// still part of the template and can carry an unsyntax of its own, so
-		// ASK it rather than assume it is inert. Treating it as a terminator
-		// (which is what the hand-rolled walk did) reported "no runtime needed"
-		// for #`(1 . #(#,x)) and emitted the whole form as a literal, so it
-		// printed (1 . #((unsyntax x))). Improper() is false for a proper list
-		// and for a walk that never reached a terminator, so no separate "did
-		// the loop finish?" guard is needed.
-		if end.Improper() {
-			return p.quasisyntaxNeedsRuntimeGuarded(end.Tail, depth, g)
-		}
-		return false
-
-	case *syntax.SyntaxVector:
-		// Without this arm a vector fell to `default: return false` and
-		// #`#(1 #,x) was emitted whole as a literal, printing #(1 (unsyntax x)).
-		// expandQuasi has always dispatched vectors correctly; only the
-		// predicate deciding whether to CALL it was blind to them.
-		for _, elem := range v.Values {
-			if p.quasisyntaxNeedsRuntimeGuarded(elem, depth, g) {
-				return true
-			}
-		}
-		return false
-
-	default:
-		return false
-	}
+	return p.quasiNeedsRuntime(stx, depth, quasisyntaxKW, p.newQuasiDepthGuard())
 }
 
 // expandQuasisyntax transforms quasisyntax template into equivalent Scheme code.
