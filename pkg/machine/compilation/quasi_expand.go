@@ -320,12 +320,31 @@ func (p *CompileTimeContinuation) quasiNeedsRuntimeList(pair *syntax.SyntaxPair,
 	return false
 }
 
+// quasiSpine says which container the elements a list expansion is walking came
+// from. It is NOT a restatement of kw.handleDottedUnquote: the dotted test needs
+// BOTH the dialect to implement R7RS §4.2.8 and the container to admit a dotted
+// tail, and a vector admits none however it was written.
+//
+// It is a parameter rather than a cleared kw field because clearing the field on
+// the by-value copy is measurably wrong, twice over. expandQuasiList forwards
+// the same kw to expandQuasi for every SUBLIST, so the suppression leaks into
+// every list nested under a vector — `#((a . ,x)) renders #((a unquote x))
+// instead of #((a . 5)), 6 regressions over a 40-form corpus with the whole Go
+// suite still green. And it is separately needed for the vector's OWN elements:
+// with the test left on, `#(,y a unquote x) stops compiling, because the dotted
+// arm fires on the synthesized spine and a raw `unquote` symbol reaches the
+// compiler.
+type quasiSpine bool
+
+const (
+	spineFromVector quasiSpine = false
+	spineFromPair   quasiSpine = true
+)
+
 // expandQuasi transforms quasiquoted/quasisyntax syntax into equivalent Scheme code.
 // The kw parameter selects which keywords to match (unquote vs unsyntax, etc.).
 //
 // At depth=1, unquotes are evaluated. At depth>1, they produce literal unquote forms.
-// Vectors are handled here too, by delegating to expandQuasiquoteVector; the
-// quasiquote entry point pre-dispatches them as well, so both paths agree.
 func (p *CompileTimeContinuation) expandQuasi(
 	ctx context.Context, stx syntax.SyntaxValue, depth int, kw quasiKeywords, g *expandDepthGuard,
 ) (syntax.SyntaxValue, error) {
@@ -378,13 +397,13 @@ func (p *CompileTimeContinuation) expandQuasi(
 		}
 
 		// Regular list - delegate to list expansion
-		return p.expandQuasiList(ctx, v, depth, kw, g)
+		return p.expandQuasiList(ctx, v, depth, kw, spineFromPair, g)
 
 	case *syntax.SyntaxSymbol:
 		return p.quasiQuoted(kw, v, srcCtx), nil
 
 	case *syntax.SyntaxVector:
-		return p.expandQuasiquoteVector(ctx, v, depth, kw, g)
+		return p.expandQuasiVector(ctx, v, depth, kw, g)
 
 	default:
 		return p.quasiQuoted(kw, stx, srcCtx), nil
@@ -420,7 +439,7 @@ func (p *CompileTimeContinuation) expandQuasi(
 //   - the tail is expanded BEFORE the final flushRun, matching the order the
 //     two-walk version expanded it in (at the bottom of its last iteration).
 func (p *CompileTimeContinuation) expandQuasiList(
-	ctx context.Context, pair *syntax.SyntaxPair, depth int, kw quasiKeywords, g *expandDepthGuard,
+	ctx context.Context, pair *syntax.SyntaxPair, depth int, kw quasiKeywords, spine quasiSpine, g *expandDepthGuard,
 ) (syntax.SyntaxValue, error) {
 	srcCtx := pair.SourceContext()
 
@@ -453,7 +472,10 @@ func (p *CompileTimeContinuation) expandQuasiList(
 		//
 		// This is a property of the CELL — it reads the cdr while standing on
 		// the unquote — which is why the walk yields cells rather than cars.
-		if kw.handleDottedUnquote {
+		//
+		// Two independent facts gate it: the container admits a dotted tail,
+		// and the dialect implements the form.
+		if spine == spineFromPair && kw.handleDottedUnquote {
 			carSymName, ok := p.getSymbolName(car)
 			if ok && carSymName == kw.unquote && depth == 1 {
 				cdrPair, ok := cell.SyntaxCdr().(*syntax.SyntaxPair)
@@ -519,4 +541,31 @@ func (p *CompileTimeContinuation) expandQuasiList(
 		return p.consChain(srcCtx, elems, improperTail), nil
 	}
 	return p.quasiForm(srcCtx, "list", elems...), nil
+}
+
+// expandQuasiVector expands a vector template. A vector IS list->vector over the
+// list expansion of its elements — same runs, same splices, same (list …) /
+// (append …) choice — so it re-uses expandQuasiList over a synthesized spine
+// rather than restating the walk. What it does not share is the dotted-tail
+// test, and quasiSpine is what withholds it.
+//
+// The elements are relinked into a proper list stamped with the vector's own
+// source context, which is what expandQuasiList would have read off the
+// original pair anyway.
+func (p *CompileTimeContinuation) expandQuasiVector(
+	ctx context.Context, v *syntax.SyntaxVector, depth int, kw quasiKeywords, g *expandDepthGuard,
+) (syntax.SyntaxValue, error) {
+	srcCtx := v.SourceContext()
+
+	// buildQuasiSyntaxList of no elements is SyntaxEmptyList, not a *SyntaxPair,
+	// so an empty vector never enters the list expander.
+	spine, ok := p.buildQuasiSyntaxList(srcCtx, v.Values...).(*syntax.SyntaxPair)
+	if !ok {
+		return p.quasiForm(srcCtx, "list->vector", p.quasiForm(srcCtx, "list")), nil
+	}
+	elems, err := p.expandQuasiList(ctx, spine, depth, kw, spineFromVector, g)
+	if err != nil {
+		return nil, err
+	}
+	return p.quasiForm(srcCtx, "list->vector", elems), nil
 }

@@ -88,7 +88,7 @@ func mustExpandQuasisyntax(t *testing.T, ccnt *CompileTimeContinuation, stx synt
 // the compiler.
 func mustExpandQuasisyntaxList(t *testing.T, ccnt *CompileTimeContinuation, pair *syntax.SyntaxPair, depth int) syntax.SyntaxValue {
 	t.Helper()
-	v, err := ccnt.expandQuasiList(context.Background(), pair, depth, quasisyntaxKW, ccnt.newQuasiDepthGuard())
+	v, err := ccnt.expandQuasiList(context.Background(), pair, depth, quasisyntaxKW, spineFromPair, ccnt.newQuasiDepthGuard())
 	if err != nil {
 		t.Fatalf("expandQuasiList: unexpected error: %v", err)
 	}

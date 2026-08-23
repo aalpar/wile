@@ -15,8 +15,6 @@
 package compilation
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/pkg/machine"
 
 	"github.com/aalpar/wile/pkg/syntax"
@@ -68,96 +66,16 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 		return nil
 	}
 
-	// Transform to equivalent Scheme code and compile
-	expanded, err := p.expandQuasiquote(ctctx.ctx, datum, depth, g)
+	// Transform to equivalent Scheme code and compile. No vector pre-dispatch:
+	// expandQuasi dispatches vectors itself, and the pre-dispatch that used to
+	// sit here called the SAME function with the same arguments — a branch that
+	// was reachable, redundant, and an asymmetry with the quasisyntax entry,
+	// which never had one.
+	expanded, err := p.expandQuasi(ctctx.ctx, datum, depth, quasiquoteKW, g)
 	if err != nil {
 		return p.wrapCompilationError(err)
 	}
 	return p.CompileExpression(ctctx, expanded)
-}
-
-// expandQuasiquote transforms quasiquoted syntax into equivalent Scheme code.
-// It handles vectors directly and delegates all other cases to expandQuasi.
-func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx syntax.SyntaxValue, depth int, g *expandDepthGuard) (syntax.SyntaxValue, error) {
-	v, ok := stx.(*syntax.SyntaxVector)
-	if ok {
-		return p.expandQuasiquoteVector(ctx, v, depth, quasiquoteKW, g)
-	}
-	return p.expandQuasi(ctx, stx, depth, quasiquoteKW, g)
-}
-
-// expandQuasiquoteVector handles vector quasiquote expansion.
-// Vectors expand to (list->vector (list ...)) or (list->vector (append ...))
-// depending on whether unquote-splicing is present.
-func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v *syntax.SyntaxVector, depth int, kw quasiKeywords, g *expandDepthGuard) (syntax.SyntaxValue, error) {
-	srcCtx := v.SourceContext()
-
-	// Check if any element is unquote-splicing/unsyntax-splicing at depth 1
-	hasSplice := false
-	for _, elem := range v.Values {
-		elemPair, ok := elem.(*syntax.SyntaxPair)
-		if ok {
-			carSymName, ok := p.getSymbolName(elemPair.SyntaxCar())
-			if ok && carSymName == kw.splicing && depth == 1 {
-				hasSplice = true
-				break
-			}
-		}
-	}
-
-	if !hasSplice {
-		// Simple case: (list->vector (list elem1 elem2 ...))
-		var elems []syntax.SyntaxValue
-		for _, elem := range v.Values {
-			expandedElem, err := p.expandQuasi(ctx, elem, depth, kw, g)
-			if err != nil {
-				return nil, err
-			}
-			elems = append(elems, expandedElem)
-		}
-		return p.quasiForm(srcCtx, "list->vector", p.quasiForm(srcCtx, "list", elems...)), nil
-	}
-
-	// Has splicing: (list->vector (append seg1 seg2 ...))
-	var appendArgs []syntax.SyntaxValue
-	var currentElems []syntax.SyntaxValue
-
-	flushNormal := func() {
-		if len(currentElems) > 0 {
-			appendArgs = append(appendArgs, p.quasiForm(srcCtx, "list", currentElems...))
-			currentElems = nil
-		}
-	}
-
-	for _, elem := range v.Values {
-		elemPair, ok := elem.(*syntax.SyntaxPair)
-		if ok {
-			carSymName, ok := p.getSymbolName(elemPair.SyntaxCar())
-			if ok && carSymName == kw.splicing && depth == 1 {
-				flushNormal()
-				if hasSyntaxArity(elemPair, 2) {
-					cdrPair := elemPair.SyntaxCdr().(*syntax.SyntaxPair)
-					appendArgs = append(appendArgs, cdrPair.SyntaxCar())
-				} else {
-					// Malformed - treat as normal
-					expandedElem, err := p.expandQuasi(ctx, elem, depth, kw, g)
-					if err != nil {
-						return nil, err
-					}
-					currentElems = append(currentElems, expandedElem)
-				}
-				continue
-			}
-		}
-		expandedElem, err := p.expandQuasi(ctx, elem, depth, kw, g)
-		if err != nil {
-			return nil, err
-		}
-		currentElems = append(currentElems, expandedElem)
-	}
-	flushNormal()
-
-	return p.quasiForm(srcCtx, "list->vector", p.quasiForm(srcCtx, "append", appendArgs...)), nil
 }
 
 // CompileUnquote errors - unquote outside of quasiquote
