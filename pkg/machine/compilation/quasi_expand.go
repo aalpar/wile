@@ -329,11 +329,14 @@ func (p *CompileTimeContinuation) quasiNeedsRuntimeList(pair *syntax.SyntaxPair,
 // the by-value copy is measurably wrong, twice over. expandQuasiList forwards
 // the same kw to expandQuasi for every SUBLIST, so the suppression leaks into
 // every list nested under a vector — `#((a . ,x)) renders #((a unquote x))
-// instead of #((a . 5)), 6 regressions over a 40-form corpus with the whole Go
-// suite still green. And it is separately needed for the vector's OWN elements:
-// with the test left on, `#(,y a unquote x) stops compiling, because the dotted
-// arm fires on the synthesized spine and a raw `unquote` symbol reaches the
-// compiler.
+// instead of #((a . 5)). And it is separately needed for the vector's OWN
+// elements: with the test left on, `#(,y a unquote x) stops compiling, because
+// the dotted arm fires on the synthesized spine and a raw `unquote` symbol
+// reaches the compiler.
+//
+// Both were mutation-tested. Each fails exactly one row of
+// TestQuasiExpandShape (nested-list-under-vector, vector-spine-bare-unquote)
+// and leaves every other package green, which is why the two rows exist.
 type quasiSpine bool
 
 const (
