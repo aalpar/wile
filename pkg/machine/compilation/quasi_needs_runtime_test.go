@@ -51,7 +51,7 @@ func TestQuasisyntaxNestingIsAlwaysRuntime(t *testing.T) {
 	// quasiquote asks instead of assuming, and answers no on the same shape.
 	// This is the divergence the field exists to hold.
 	inertQQ := parseSchemeExpr(t, env, "(quasiquote (a b))")
-	c.Assert(ccnt.quasiNeedsRuntime(inertQQ, 1, quasiquoteKW, ccnt.newQuasiDepthGuard()), qt.IsFalse)
+	c.Assert(quasiNeedsRuntime(inertQQ, 1, quasiquoteKW, ccnt.newQuasiDepthGuard()), qt.IsFalse)
 }
 
 // TestQuasiNeedsRuntimeDottedTailIsDialectGated pins that the dotted-unquote
@@ -67,8 +67,8 @@ func TestQuasiNeedsRuntimeDottedTailIsDialectGated(t *testing.T) {
 	ccnt, env := newTestCompiler()
 
 	qq := parseSchemeExpr(t, env, "(1 unquote x)")
-	c.Assert(ccnt.quasiNeedsRuntime(qq, 1, quasiquoteKW, ccnt.newQuasiDepthGuard()), qt.IsTrue)
+	c.Assert(quasiNeedsRuntime(qq, 1, quasiquoteKW, ccnt.newQuasiDepthGuard()), qt.IsTrue)
 
 	qs := parseSchemeExpr(t, env, "(1 unsyntax x)")
-	c.Assert(ccnt.quasiNeedsRuntime(qs, 1, quasisyntaxKW, ccnt.newQuasiDepthGuard()), qt.IsFalse)
+	c.Assert(quasiNeedsRuntime(qs, 1, quasisyntaxKW, ccnt.newQuasiDepthGuard()), qt.IsFalse)
 }

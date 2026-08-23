@@ -67,7 +67,7 @@ func (p *CompileTimeContinuation) compileQuasisyntaxTemplate(ctctx CompileTimeCa
 	}
 
 	// Wrap: (datum->syntax #f expanded)
-	wrapped := p.buildQuasiSyntaxList(srcCtx,
+	wrapped := buildQuasiSyntaxList(srcCtx,
 		syntax.NewSyntaxSymbol("datum->syntax", srcCtx),
 		syntax.NewSyntaxObject(values.FalseValue, srcCtx),
 		expanded,
@@ -79,7 +79,7 @@ func (p *CompileTimeContinuation) compileQuasisyntaxTemplate(ctctx CompileTimeCa
 // the given depth. It creates a fresh recursion guard; the walk itself is the
 // shared quasiNeedsRuntime, keyed by quasisyntaxKW.
 func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue, depth int) bool {
-	return p.quasiNeedsRuntime(stx, depth, quasisyntaxKW, p.newQuasiDepthGuard())
+	return quasiNeedsRuntime(stx, depth, quasisyntaxKW, p.newQuasiDepthGuard())
 }
 
 // expandQuasisyntax transforms quasisyntax template into equivalent Scheme code.

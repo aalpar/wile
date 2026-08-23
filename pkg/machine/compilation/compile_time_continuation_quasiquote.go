@@ -53,7 +53,7 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 	g := p.newQuasiDepthGuard()
 
 	// Optimization: if no runtime evaluation needed, emit as literal
-	if !p.quasiNeedsRuntime(datum, depth, quasiquoteKW, g) {
+	if !quasiNeedsRuntime(datum, depth, quasiquoteKW, g) {
 		// Validate quoted literal for circular datum labels
 		val, err := p.validateQuotedLiteral(datum.UnwrapAll())
 		if err != nil {

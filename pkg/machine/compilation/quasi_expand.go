@@ -72,9 +72,14 @@ var quasisyntaxKW = quasiKeywords{
 // syntax.SyntaxList, which stamps each pair with its own car's context: these
 // pairs are synthesized, so there is no per-element source to attribute them to.
 //
-// Receiver unnamed: this reads nothing from the compiler. quasiHead is the one
-// helper here that genuinely does.
-func (*CompileTimeContinuation) buildQuasiSyntaxList(srcCtx *syntax.SourceContext, elems ...syntax.SyntaxValue) syntax.SyntaxValue {
+// A package function, not a method, and that split is the rule across this
+// file: a method reads compile-time state, a package function does not.
+// quasiHead is the only thing in the quasi cluster that genuinely reads any —
+// it consults the sealed startup set — so everything still carrying a receiver
+// does so because it reaches quasiHead, directly or through quasiForm. The
+// needs-runtime predicate reaches nothing, which is why it is a pair of package
+// functions and can be exercised without a compiler at all.
+func buildQuasiSyntaxList(srcCtx *syntax.SourceContext, elems ...syntax.SyntaxValue) syntax.SyntaxValue {
 	var q syntax.SyntaxValue = syntax.SyntaxEmptyList
 	for i := range slices.Backward(elems) {
 		q = syntax.NewSyntaxCons(elems[i], q, srcCtx)
@@ -127,9 +132,7 @@ func (p *CompileTimeContinuation) quasiHead(name string, srcCtx *syntax.SourceCo
 // defines quasiquote's recognition of unquote on the datum. This is not the
 // binding-identity rule's territory; validate/opaque_subtree.go documents the
 // same limitation for the same reason.
-//
-// Receiver unnamed: this reads nothing from the compiler.
-func (*CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, bool) {
+func getSymbolName(v syntax.SyntaxValue) (string, bool) {
 	s, ok := v.(*syntax.SyntaxSymbol)
 	if ok {
 		return s.Key(), true
@@ -143,9 +146,11 @@ func (*CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, boo
 //
 // Deliberately NOT routed through quasiForm: quote and syntax are special
 // forms, resolve as such, and are not hijackable. They are the negative control
-// for the head pin quasiHead describes.
-func (p *CompileTimeContinuation) quasiQuoted(kw quasiKeywords, v syntax.SyntaxValue, srcCtx *syntax.SourceContext) syntax.SyntaxValue {
-	return p.buildQuasiSyntaxList(srcCtx, syntax.NewSyntaxSymbol(kw.quoting, srcCtx), v)
+// for the head pin quasiHead describes — and the reason this is a package
+// function while quasiForm, three lines below it, is a method. The two differ in
+// exactly one thing: whether the head they synthesize needs pinning.
+func quasiQuoted(kw quasiKeywords, v syntax.SyntaxValue, srcCtx *syntax.SourceContext) syntax.SyntaxValue {
+	return buildQuasiSyntaxList(srcCtx, syntax.NewSyntaxSymbol(kw.quoting, srcCtx), v)
 }
 
 // quasiForm builds one synthesized call — (list …), (cons …), (append …),
@@ -153,7 +158,7 @@ func (p *CompileTimeContinuation) quasiQuoted(kw quasiKeywords, v syntax.SyntaxV
 // call goes through here, which makes the pin a structural property of the
 // expansion rather than a discipline remembered at each construction site.
 func (p *CompileTimeContinuation) quasiForm(srcCtx *syntax.SourceContext, head string, args ...syntax.SyntaxValue) syntax.SyntaxValue {
-	return p.buildQuasiSyntaxList(srcCtx, append([]syntax.SyntaxValue{p.quasiHead(head, srcCtx)}, args...)...)
+	return buildQuasiSyntaxList(srcCtx, append([]syntax.SyntaxValue{p.quasiHead(head, srcCtx)}, args...)...)
 }
 
 // consChain folds elems onto tail right to left, yielding
@@ -187,16 +192,16 @@ func (p *CompileTimeContinuation) rewrapQuasiForm(
 ) (syntax.SyntaxValue, error) {
 	srcCtx := v.SourceContext()
 	if !hasSyntaxArity(v, 2) {
-		return p.quasiQuoted(kw, v, srcCtx), nil
+		return quasiQuoted(kw, v, srcCtx), nil
 	}
 	cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 	arg, err := p.expandQuasi(ctx, cdr.SyntaxCar(), newDepth, kw, g)
 	if err != nil {
 		return nil, err
 	}
-	return p.buildQuasiSyntaxList(srcCtx,
+	return buildQuasiSyntaxList(srcCtx,
 		p.quasiHead("list", srcCtx),
-		p.quasiQuoted(kw, syntax.NewSyntaxSymbol(keyword, srcCtx), srcCtx),
+		quasiQuoted(kw, syntax.NewSyntaxSymbol(keyword, srcCtx), srcCtx),
 		arg,
 	), nil
 }
@@ -222,7 +227,7 @@ func (p *CompileTimeContinuation) rewrapQuasiForm(
 // walk safely, report "needs runtime" so the depth-guarded expander converts
 // the over-depth into a catchable error rather than letting this overflow the
 // Go stack first.
-func (p *CompileTimeContinuation) quasiNeedsRuntime(stx syntax.SyntaxValue, depth int, kw quasiKeywords, g *expandDepthGuard) bool {
+func quasiNeedsRuntime(stx syntax.SyntaxValue, depth int, kw quasiKeywords, g *expandDepthGuard) bool {
 	if g.enter() {
 		g.leave()
 		return true
@@ -233,7 +238,7 @@ func (p *CompileTimeContinuation) quasiNeedsRuntime(stx syntax.SyntaxValue, dept
 	case *syntax.SyntaxPair:
 		// No empty-list guard: (*SyntaxPair).IsEmptyList is an unconditional
 		// false, so this arm never holds one.
-		carSymName, ok := p.getSymbolName(v.SyntaxCar())
+		carSymName, ok := getSymbolName(v.SyntaxCar())
 		if ok {
 			switch carSymName {
 			case kw.unquote, kw.splicing:
@@ -243,21 +248,21 @@ func (p *CompileTimeContinuation) quasiNeedsRuntime(stx syntax.SyntaxValue, dept
 				// ,,x at depth 2: the inner unquote is at depth 1 and fires.
 				if hasSyntaxArity(v, 2) {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					return p.quasiNeedsRuntime(cdr.SyntaxCar(), depth-1, kw, g)
+					return quasiNeedsRuntime(cdr.SyntaxCar(), depth-1, kw, g)
 				}
 				return false
 			case kw.nesting:
 				if kw.nestingAlwaysRuntime && depth == 1 {
 					return true
 				}
-				return p.quasiNeedsRuntimeList(v, depth+1, kw, g)
+				return quasiNeedsRuntimeList(v, depth+1, kw, g)
 			}
 		}
-		return p.quasiNeedsRuntimeList(v, depth, kw, g)
+		return quasiNeedsRuntimeList(v, depth, kw, g)
 
 	case *syntax.SyntaxVector:
 		for _, elem := range v.Values {
-			if p.quasiNeedsRuntime(elem, depth, kw, g) {
+			if quasiNeedsRuntime(elem, depth, kw, g) {
 				return true
 			}
 		}
@@ -282,7 +287,7 @@ func (p *CompileTimeContinuation) quasiNeedsRuntime(stx syntax.SyntaxValue, dept
 // The second reason is `return true`: this is a predicate that stops at its
 // first hit, which a range-over-func does with an ordinary return and a ForEach
 // consumer can only do by signalling through the error channel.
-func (p *CompileTimeContinuation) quasiNeedsRuntimeList(pair *syntax.SyntaxPair, depth int, kw quasiKeywords, g *expandDepthGuard) bool {
+func quasiNeedsRuntimeList(pair *syntax.SyntaxPair, depth int, kw quasiKeywords, g *expandDepthGuard) bool {
 	var end syntax.SpineEnd
 	for cell, e := range syntax.Spine(pair) {
 		end = e
@@ -294,7 +299,7 @@ func (p *CompileTimeContinuation) quasiNeedsRuntimeList(pair *syntax.SyntaxPair,
 		// (datum->syntax #f …) without changing its datum — a silent deopt no
 		// value assertion could see.
 		if kw.handleDottedUnquote {
-			carSymName, ok := p.getSymbolName(car)
+			carSymName, ok := getSymbolName(car)
 			if ok && carSymName == kw.unquote && depth == 1 {
 				cdrPair, ok := cell.SyntaxCdr().(*syntax.SyntaxPair)
 				if ok && hasSyntaxArity(cdrPair, 1) {
@@ -303,7 +308,7 @@ func (p *CompileTimeContinuation) quasiNeedsRuntimeList(pair *syntax.SyntaxPair,
 			}
 		}
 
-		if p.quasiNeedsRuntime(car, depth, kw, g) {
+		if quasiNeedsRuntime(car, depth, kw, g) {
 			return true
 		}
 	}
@@ -315,7 +320,7 @@ func (p *CompileTimeContinuation) quasiNeedsRuntimeList(pair *syntax.SyntaxPair,
 	// Improper() is false for a proper list and for a walk that never reached a
 	// terminator, so no separate "did the loop finish?" guard is needed.
 	if end.Improper() {
-		return p.quasiNeedsRuntime(end.Tail, depth, kw, g)
+		return quasiNeedsRuntime(end.Tail, depth, kw, g)
 	}
 	return false
 }
@@ -373,7 +378,7 @@ func (p *CompileTimeContinuation) expandQuasi(
 		// No empty-list guard: (*SyntaxPair).IsEmptyList is an unconditional
 		// false, so this arm never holds one. () reads as SyntaxEmptyList,
 		// which is not a *SyntaxPair and lands in the default arm.
-		carSymName, ok := p.getSymbolName(v.SyntaxCar())
+		carSymName, ok := getSymbolName(v.SyntaxCar())
 		if ok {
 			switch carSymName {
 			case kw.unquote:
@@ -390,7 +395,7 @@ func (p *CompileTimeContinuation) expandQuasi(
 				// is nothing to splice into and depth 1 does not fire: a bare
 				// `,@(list 1 2) evaluates to (unquote-splicing (list 1 2)).
 				if depth <= 1 {
-					return p.quasiQuoted(kw, v, srcCtx), nil
+					return quasiQuoted(kw, v, srcCtx), nil
 				}
 				return p.rewrapQuasiForm(ctx, v, carSymName, depth-1, kw, g)
 
@@ -403,13 +408,13 @@ func (p *CompileTimeContinuation) expandQuasi(
 		return p.expandQuasiList(ctx, v, depth, kw, spineFromPair, g)
 
 	case *syntax.SyntaxSymbol:
-		return p.quasiQuoted(kw, v, srcCtx), nil
+		return quasiQuoted(kw, v, srcCtx), nil
 
 	case *syntax.SyntaxVector:
 		return p.expandQuasiVector(ctx, v, depth, kw, g)
 
 	default:
-		return p.quasiQuoted(kw, stx, srcCtx), nil
+		return quasiQuoted(kw, stx, srcCtx), nil
 	}
 }
 
@@ -479,7 +484,7 @@ func (p *CompileTimeContinuation) expandQuasiList(
 		// Two independent facts gate it: the container admits a dotted tail,
 		// and the dialect implements the form.
 		if spine == spineFromPair && kw.handleDottedUnquote {
-			carSymName, ok := p.getSymbolName(car)
+			carSymName, ok := getSymbolName(car)
 			if ok && carSymName == kw.unquote && depth == 1 {
 				cdrPair, ok := cell.SyntaxCdr().(*syntax.SyntaxPair)
 				if ok && hasSyntaxArity(cdrPair, 1) {
@@ -493,7 +498,7 @@ func (p *CompileTimeContinuation) expandQuasiList(
 
 		carPair, ok := car.(*syntax.SyntaxPair)
 		if ok {
-			carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
+			carSymName, ok := getSymbolName(carPair.SyntaxCar())
 			if ok && carSymName == kw.splicing && depth == 1 {
 				sawSplice = true
 				flushRun()
@@ -562,7 +567,7 @@ func (p *CompileTimeContinuation) expandQuasiVector(
 
 	// buildQuasiSyntaxList of no elements is SyntaxEmptyList, not a *SyntaxPair,
 	// so an empty vector never enters the list expander.
-	spine, ok := p.buildQuasiSyntaxList(srcCtx, v.Values...).(*syntax.SyntaxPair)
+	spine, ok := buildQuasiSyntaxList(srcCtx, v.Values...).(*syntax.SyntaxPair)
 	if !ok {
 		return p.quasiForm(srcCtx, "list->vector", p.quasiForm(srcCtx, "list")), nil
 	}
