@@ -667,11 +667,24 @@ that names the same probe the row does.
   3. **Reject only when the option would CHANGE something** — the narrow reading, and the one that
      separates the two callers above. The dangerous case is not "the option appears twice", it is
      "the option appears *only* at `NewEngine`", i.e. the namespace has no authorizer and the engine
-     config would produce one. **Trap:** this cannot be written as "the authorizers differ".
-     `security.AuthorizerFunc` is a func type and `security.All` returns a composite over them, so
-     `==` on two `security.Authorizer` interface values holding func types is a run-time panic, not
-     a false answer. Nil-ness is comparable and is the whole signal available; `Namespace.Authorizer()`
-     (`pkg/environment/namespace.go`) is the getter. Verify before building on it.
+     config would produce one. **Trap:** this cannot be written as "the authorizers differ", and
+     the trap has TWO arms with opposite failure modes — **MEASURED 2026-08-24**, not inferred:
+
+     | Comparison | Result |
+     |---|---|
+     | `AuthorizerFunc` vs `AuthorizerFunc` (incl. against itself) | **PANIC** `comparing uncomparable type security.AuthorizerFunc` |
+     | `All(a, b)` vs `All(a, b)` | **`false`, silently** — `All` returns `*compositeAuthorizer`, a comparable POINTER |
+     | `consoleAuthorizer` vs `consoleAuthorizer` | `true` — a comparable struct |
+     | any two DIFFERENT dynamic types, or either side nil | `false`, no panic |
+
+     Go panics only when the dynamic types are **identical and uncomparable**;
+     `AuthorizerFunc` is `func(AccessRequest) error`, so it is that case. `security.All` is
+     **not** part of the panic hazard — the earlier filing said it was. Its composite is a
+     pointer, so two structurally identical composites compare `false`, which for this test is
+     the WORSE arm: one aborts the process, the other lies quietly. (`All` with a single
+     argument returns that argument unwrapped, which is how a caller lands back on the
+     panicking arm.) Nil-ness is comparable and is the whole signal available;
+     `Namespace.Authorizer()` (`pkg/environment/namespace.go`) is the getter.
 
   **Not from the strict-namespace work** — surfaced by checking that plan's premise. Three review
   lenses argued the strict options should join `WithDialect` in the rejected set; the premise did
