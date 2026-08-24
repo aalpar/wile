@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -166,14 +167,16 @@ type sourcedError interface {
 	SourceContext() *syntax.SourceContext
 }
 
-// innermostCompileLocation returns the deepest non-empty location on err's
-// compiler chain, or "" when it carries none — which is the ordinary case for a
-// runtime failure, and the reason stamping is conditional.
+// innermostCompileLocation returns the deepest non-empty compile-time location
+// on err, or "" when it carries none — which is the ordinary case for a runtime
+// failure, and the reason stamping is conditional.
 //
 // Deepest wins because it names the sub-expression that failed rather than the
-// form enclosing it. Same rule and same walk as wile.wrapCompilationError, which
-// is what an embedder catching the compile error as a Go error already sees; this
-// is the Scheme-visible half agreeing with it.
+// form enclosing it. Same rule and same two layers as wile.wrapCompilationError,
+// which is what an embedder catching the compile error as a Go error already
+// sees; this is the Scheme-visible half agreeing with it, and the agreement is
+// the point rather than a coincidence — see
+// TestLoadParseErrorReportsReadSiteOnBothArms.
 func innermostCompileLocation(err error) string {
 	q := ""
 	var se sourcedError
@@ -181,6 +184,21 @@ func innermostCompileLocation(err error) string {
 		loc := se.SourceContext().Location()
 		if loc != "" {
 			q = loc
+		}
+	}
+	// A read failure carries its position on the offending token rather than on a
+	// sourcedError: the parser sits below the compiler and stamps nothing.
+	// Consulted only when the compiler chain came up empty, so a genuine compiler
+	// location — the more specific of the two — always wins when both are present.
+	//
+	// Without this, a parse error raised through load or read reached Scheme
+	// unstamped and took the raise site from enrichNativeError, so
+	// error-object-source named the load call while the Go embedder, which has
+	// this same fallback in wile.wrapCompilationError, named the file.
+	if q == "" {
+		var pe *parser.ParserError
+		if errors.As(err, &pe) {
+			q = pe.Location()
 		}
 	}
 	return q
