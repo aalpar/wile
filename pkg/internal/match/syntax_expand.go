@@ -337,7 +337,7 @@ func syntaxListToSlice(v syntax.SyntaxValue) ([]syntax.SyntaxValue, error) {
 // subset permits, while the outer macro's introduction leaves the pattern's
 // use-site scope off the template, which subset refuses. The ceiling, and the
 // binder-scope log that fed it, are gone — see
-// plans/2026-08-20-use-site-scopes-impl.local.md.
+// memory/2026-08-20-use-site-scopes-impl.local.md.
 func TemplateDenotesPatternVariable(templateScopes, patternScopes []*syntax.Scope) bool {
 	return syntax.ScopesMatch(templateScopes, patternScopes)
 }

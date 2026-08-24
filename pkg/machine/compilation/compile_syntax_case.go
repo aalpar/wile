@@ -405,7 +405,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 // variables were bound scopeless, cardinality 0 lost every maximal-resolution
 // argmax it entered, so an enclosing scoped lexical of the same name outranked
 // them — which is why the query was a wildcard. Either half alone is a
-// regression; see plans/2026-08-20-pattern-variables-as-bindings-impl.local.md.
+// regression; see memory/2026-08-20-pattern-variables-as-bindings-impl.local.md.
 //
 // The runtime mirror (OperationBindPatternVars.Apply) deliberately binds with
 // NO scopes. The asymmetry is correct: the compile-time frame exists to be

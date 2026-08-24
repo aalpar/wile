@@ -22,7 +22,7 @@ package compilation
 // ExpandOnce, its hand-copy) and never flipped back off, which is what makes
 // plain subset resolution refuse the nested-macro capture in
 // match.TemplateDenotesPatternVariable. See
-// plans/2026-08-20-use-site-scopes-impl.local.md.
+// memory/2026-08-20-use-site-scopes-impl.local.md.
 
 import (
 	"slices"

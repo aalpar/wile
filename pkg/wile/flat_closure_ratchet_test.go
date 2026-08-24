@@ -390,7 +390,7 @@ func TestFlatClosureRatchetCorpusStillEvaluates(t *testing.T) {
 }
 
 // letFrameCorpus is the fixture set for the let-slot merging census
-// (plans/2026-08-19-let-slot-merging-impl.local.md). Distinct from
+// (memory/2026-08-19-let-slot-merging-impl.local.md). Distinct from
 // flatClosureRatchetCorpus because the shapes it must discriminate are different:
 // where the corpus above varies whether a loop body builds a closure, this one
 // varies where a `let` sits relative to a frame that still exists at run time.
@@ -587,7 +587,7 @@ func TestLetFrameCorpusValues(t *testing.T) {
 //
 // Measured, not chosen. It is the copy-side twin of pushEnvSitesBaseline: that
 // one says the frames are gone, this one says their slots are free. Fork F4 of
-// plans/2026-08-14-oppushenv-frame-pooling-scope.local.md decided the exemption;
+// memory/2026-08-14-oppushenv-frame-pooling-scope.local.md decided the exemption;
 // dropping it leaves every value assertion in this file passing while
 // BindingsCopied/EnvsCopied climbs (measured +6.4% on schelog-zebra).
 //

@@ -424,7 +424,7 @@ rejection-by-construction) rather than a bespoke diagnostic.
 state per phase) is not implemented. This is a **capability** gap (it would
 *enable* independent per-phase mutable counters for a procedural/`syntax-parse`
 authoring pivot), not a soundness gap — there is no unsound program for it to fix,
-per Q4 above. See `plans/2026-07-10-climbing-tower-q4-mutation-boundary-note.local.md` §7
+per Q4 above. See `memory/2026-07-10-climbing-tower-q4-mutation-boundary-note.local.md` §7
 and the Tier 2 sketch in the design doc.
 
 ## Bootstrap Macros

@@ -167,7 +167,7 @@ func TestLibraryBindingsPhaseShift(t *testing.T) {
 // several phases exports as its LOWEST phase. That is the correct answer, but
 // it is delivered by probe order rather than by asking the phases apart — the
 // same "search every phase" assumption that let a library body resolve across
-// phases (plans/2026-08-04-library-phase-isolation-impl.local.md, Q2).
+// phases (memory/2026-08-04-library-phase-isolation-impl.local.md, Q2).
 //
 // Before design Phase D the probed set was a hard-wired {runtime, expand,
 // compile} literal; this pins ascending order as the tie-breaker generally,

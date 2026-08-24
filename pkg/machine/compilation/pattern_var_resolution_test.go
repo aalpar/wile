@@ -55,7 +55,7 @@ import (
 // environment at all: `captureContext.bindings` is `map[string]SyntaxValue`,
 // filled by the match VM from pattern-variable NAMES in the compiled bytecode,
 // so a lexical binder in the clause body is invisible to it. See
-// plans/2026-08-20-pattern-variables-as-bindings-impl.local.md §1 for why that
+// memory/2026-08-20-pattern-variables-as-bindings-impl.local.md §1 for why that
 // path cannot become resolution-driven without redesigning pkg/internal/match.
 //
 // If a later change makes either row agree with Chez, update the row and say so

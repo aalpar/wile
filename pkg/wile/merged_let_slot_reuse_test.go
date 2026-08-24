@@ -41,7 +41,7 @@ import (
 // standing failure mode ("every change fails toward deopt, and a total deopt
 // passes the entire value-assertion suite silently") in its dangerous direction.
 // Detail and the measurement in
-// plans/2026-08-19-let-slot-merging-impl.local.md §10.
+// memory/2026-08-19-let-slot-merging-impl.local.md §10.
 var mergedLetSlotReuseCases = []struct {
 	name string
 	code string

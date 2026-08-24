@@ -455,7 +455,7 @@ func (p *CompiledLibrary) ExportedBinding(internalName string) (*environment.Bin
 // The phase list comes from lib.Env.PresentPhases(), ascending, so a name a
 // library binds via nested begin-for-syntax at phase 3 or above is reachable
 // too; the old {runtime, expand, compile} literal truncated the tower (design
-// Phase D, closing plans/2026-08-04-library-phase-isolation-impl.local.md's Q2
+// Phase D, closing memory/2026-08-04-library-phase-isolation-impl.local.md's Q2
 // residual). Ascending order is what makes the first hit the LOWEST phase,
 // preserving runtime-first precedence when a name is bound at more than one —
 // pinned by TestFindLibraryBindingPrefersRuntimeOverExpand.

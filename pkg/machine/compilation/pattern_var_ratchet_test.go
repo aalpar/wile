@@ -153,7 +153,7 @@ var patternVarRatchetCorpus = []patternVarRatchetCase{
 }
 
 // TestPatternVarResolutionSiteCount is the deopt ratchet for the use-site-scope
-// arc (plans/2026-08-20-use-site-scopes-impl.local.md, phase 0). Every row must
+// arc (memory/2026-08-20-use-site-scopes-impl.local.md, phase 0). Every row must
 // be UNCHANGED by every phase of that arc.
 //
 // Why a count rather than the value assertions that already cover these

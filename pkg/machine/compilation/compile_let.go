@@ -163,7 +163,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 	// A PUSHING let becomes the shape for anything nested inside it, so a `let`
 	// in a `let` merges at the top level exactly as it does inside a procedure.
 	// This is what closes the larger of the two populations that kept depth != 0
-	// alive in emitted code (plans/flat-closure-baseline.local.md §7a: 81 sites of
+	// alive in emitted code (memory/flat-closure-baseline.local.md §7a: 81 sites of
 	// top-level `let` nesting plus 50 free-var pushes over such a frame).
 	//
 	// The frame width is therefore NOT known when OpPushEnv is emitted: a nested

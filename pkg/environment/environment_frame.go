@@ -1307,7 +1307,7 @@ func (p *EnvironmentFrame) PresentPhases() []Phase {
 // phase-0 code resolved a phase-1 define and phase-1 code resolved a phase-0 one,
 // where the top level refuses both — silently, producing a wrong value in the first
 // case and a #!void from a predeclared-unwritten slot in the second. See
-// plans/2026-08-04-library-phase-isolation-design.local.md §1.
+// memory/2026-08-04-library-phase-isolation-design.local.md §1.
 //
 // Reaching the library's PRIMITIVES from phase 1 is not this search's job — it
 // falls out of GetGlobalIndexWithScopes's own reach, not a mechanism this

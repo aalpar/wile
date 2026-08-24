@@ -25,8 +25,8 @@ import (
 // consistent) and nothing else, which is what gives a library body its own
 // bindings while still reaching primitives.
 //
-// See plans/2026-08-04-library-phase-isolation-impl.local.md Task 3 and
-// plans/2026-08-05-flat-binding-model-design.local.md §4.6.
+// See memory/2026-08-04-library-phase-isolation-impl.local.md Task 3 and
+// memory/2026-08-05-flat-binding-model-design.local.md §4.6.
 func TestChildRuntimeOwnsItsOwnStore(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()

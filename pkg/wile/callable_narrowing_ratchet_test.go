@@ -99,7 +99,7 @@ func TestClosureMarkerImplementorCountIsTwo(t *testing.T) {
 //
 // EXACTLY ONE, AND IT IS SCHEDULED FOR DELETION. once-do! was the twelfth
 // narrowing site and the one the original review led with; it is removed
-// wholesale by plans/2026-08-01-remove-rwmutex-once-impl.local.md, landing on
+// wholesale by memory/2026-08-01-remove-rwmutex-once-impl.local.md, landing on
 // branch refactor/remove-rwmutex-once. Item 11 deliberately did not touch it, to
 // avoid a conflict with that branch. DELETE THIS ENTRY when the removal lands —
 // the test fails loudly (below) if the file is already gone, so the exemption

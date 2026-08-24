@@ -240,7 +240,7 @@ func (p CompileTimeCallContext) WithEnclosingDefines(body []validate.ValidatedEx
 //     78.6% -> 88.8%, wall −3.5%. It does NOT explain schelog zebra's 66.9% —
 //     that harness needs a mutable top level, under which no global callee is
 //     Stable and frame reclaim arms nowhere at all. See
-//     plans/flat-closure-baseline.local.md §6.
+//     memory/flat-closure-baseline.local.md §6.
 //
 //     The peephole hazard this used to name is real but belongs to the peephole:
 //     a fusion that hoisted a PushLocal callee across the release would resolve

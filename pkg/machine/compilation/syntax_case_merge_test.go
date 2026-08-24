@@ -88,7 +88,7 @@ func countOpEverywhere(tpl *machine.NativeTemplate, op machine.OpCode) int {
 // own PatternVars list: a slot appended to the compile-time mirror had no
 // runtime counterpart, so canMergeLet had to refuse. That refusal was the last
 // closeable population of depth != 0 emit sites over the pkg/wile suite (4 hits,
-// plans/flat-closure-baseline.local.md §7a's "syntax-case clause body").
+// memory/flat-closure-baseline.local.md §7a's "syntax-case clause body").
 //
 // MergedSlots is the census. A merge that silently stopped happening would still
 // evaluate correctly — the pushing form is what it falls back to — so no value

@@ -23,7 +23,7 @@ import (
 
 // The depth axis of a LocalIndex — the "up" half of the bit-packed (slot, depth)
 // operand — is the last thing standing between the compiler and one-dimensional
-// local addressing. plans/flat-closure-baseline.local.md §7d priced its DELETION
+// local addressing. memory/flat-closure-baseline.local.md §7d priced its DELETION
 // at zero throughput and said to reopen it only for the structural collapse:
 // LocalIndex becomes a scalar, Encode/DecodeLocalIndex go away, and the frame
 // parent chain stops being a variable-lookup path.

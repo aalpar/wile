@@ -96,7 +96,7 @@ func TestEngineFootprintBaseline(t *testing.T) {
 // registry apply, and binding installation.
 //
 // It exists as a gate on the library sealed-base split
-// (plans/2026-08-04-library-phase-isolation-impl.local.md Task 3), which adds two
+// (memory/2026-08-04-library-phase-isolation-impl.local.md Task 3), which adds two
 // frames per library env and relocates where that apply lands. Neither should
 // change the apply's SIZE, so allocs/op is the assertion that matters and ns/op
 // is the corroboration.
