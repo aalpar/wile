@@ -564,7 +564,7 @@ that names the same probe the row does.
 
   <details><summary>Original filing (2026-07-29)</summary>
 
-- [ ] **Gate the profile-environment constructor** [High, M, filed from the `docs/` refresh]:
+- **Gate the profile-environment constructor** [High, M, filed from the `docs/` refresh]:
   `(environment '(wile kitchen-sink))` evaluated from a `Small` or `ConsoleWithLoad` engine
   returns a namespace carrying the *named* profile's extensions, not the engine's. The path is
   `PrimEnvironment` → `tryWileProfile` (`extensions/eval/prim_eval.go`) → `eval.ProfileFactory`
@@ -617,23 +617,26 @@ that names the same probe the row does.
   ```
 
   **Mechanism, not an oversight in the mechanism.** The authorizer is *namespace* state, and the
-  only site that installs it is inside `bootstrapNamespace` (`pkg/wile/engine.go`, the
-  `ns.SetAuthorizer(cfg.resolveAuthorizer())` / `SetEnvMap` / `SetImmutableTopLevel` trio). The
-  `WithNamespace` branch of `NewEngine` assigns `ns = cfg.namespace` and jumps straight to reading
-  the registry off it, so `resolveAuthorizer()` is never called and `cfg.sandboxAuthorizer` is
-  never read. (The other `SetAuthorizer` in the file is the library-env factory copying a parent's
-  authorizer to a child — consistent with "the authorizer travels with the namespace".)
+  only site that installs it is inside `bootstrapNamespace` (`pkg/wile/engine.go`, the guarded
+  `SetAuthorizer(cfg.resolveAuthorizer())` / `SetEnvMap` / `SetImmutableTopLevel` trio). The
+  `WithNamespace` branch of `NewEngine` rejects `WithDialect`, then assigns `ns = cfg.namespace`
+  and goes straight to reading the registry off it, so `resolveAuthorizer()` is never called and
+  `cfg.sandboxAuthorizer` is never read. (The other `SetAuthorizer` in the file is the library-env
+  factory copying a parent's authorizer to a child — consistent with "the authorizer travels with
+  the namespace".)
   `NewNamespace(ctx, WithProfile(Small), WithSandbox())` honors it correctly; the option is on the
   wrong constructor, and nothing says so.
 
-  **Scope: seven options, one exception.** `WithNamespace`'s own doc comment already enumerates
-  the set — `WithAuthorizer`, `WithSandbox`, a profile's built-in authorizer, `WithEnv`,
-  `WithEnvMap`, `WithImmutableTopLevel`/`WithMutableTopLevel` — and names `WithDialect` as "the one
-  such option NewEngine rejects outright instead of dropping". The two strict-namespace options
-  join the dropped set as of 2026-08-04. So silent-drop is the documented norm and the rejection is
-  the outlier, which is why the fix must be decided for the **family**, not for one member: singling
-  out a member would make the tree look more consistent while leaving the security-relevant one
-  silent.
+  **Scope: eight options, one exception.** `WithNamespace`'s own doc comment enumerates six —
+  `WithAuthorizer`, `WithSandbox`, a profile's built-in authorizer, `WithEnv`, `WithEnvMap`,
+  `WithImmutableTopLevel`/`WithMutableTopLevel` — and names `WithDialect` as "the one such option
+  NewEngine rejects outright instead of dropping". `WithStrictNamespace` and
+  `WithoutAmbientBindings` joined the dropped set as of 2026-08-04 (they are consumed only inside
+  `bootstrapNamespace`, which this path skips) but were **never added to that doc comment** —
+  re-check the enumeration against the code before relying on it. So silent-drop is the documented
+  norm and the rejection is the outlier, which is why the fix must be decided for the **family**,
+  not for one member: singling out a member would make the tree look more consistent while leaving
+  the security-relevant one silent.
 
   **DECIDED 2026-08-14 (maintainer): this is a programmer error, and a panic is the desirable
   answer.** That supersedes the 2026-08-04 lean toward an error return, and it removes option 2
@@ -668,7 +671,7 @@ that names the same probe the row does.
      `security.AuthorizerFunc` is a func type and `security.All` returns a composite over them, so
      `==` on two `security.Authorizer` interface values holding func types is a run-time panic, not
      a false answer. Nil-ness is comparable and is the whole signal available; `Namespace.Authorizer()`
-     (`pkg/environment/namespace.go:649`) is the getter. Verify before building on it.
+     (`pkg/environment/namespace.go`) is the getter. Verify before building on it.
 
   **Not from the strict-namespace work** — surfaced by checking that plan's premise. Three review
   lenses argued the strict options should join `WithDialect` in the rejected set; the premise did
@@ -1727,7 +1730,7 @@ Correctness work that lived only inside plan files, invisible to a TODO scan.
     deliberately decoupled from `machine/compilation`. So the options are re-couple, inject a
     resolver into `environment`, or store a `*Binding` (rejected by D2). With no defect left
     motivating it, **re-justify before starting, or drop it.**
-  - [ ] Site 3 `sameImportedBinding` (`library_bindings.go:571`) still compares `*MachineClosure`/
+  - [ ] Site 3 `sameImportedBinding` (`library_bindings.go`) still compares `*MachineClosure`/
     `*ForeignClosure` by NAME with an `EqualTo` default. **Gated, not merely unstarted** — its own
     doc comment frames the by-name conflation as a deliberate irreducible gap, and origin was
     rejected here by PR #793 for false-flagging define-over-import. The gate is re-reading #793's
