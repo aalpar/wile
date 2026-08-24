@@ -606,8 +606,10 @@ that names the same probe the row does.
 
 ### `WithNamespace` silently discards every namespace-consumed option, including `WithSandbox` (2026-08-04)
 
-- [ ] **Decide the contract for options `NewEngine` cannot apply** [High, S-M, filed 2026-08-04 from
-  the strict-namespace-levels crosscheck]: `NewEngine(WithNamespace(ns), WithSandbox())` returns a
+- [ ] **Panic on namespace-consumed options at the `WithNamespace` branch** [High, S-M, filed
+  2026-08-04 from the strict-namespace-levels crosscheck; **contract fully DECIDED 2026-08-24 —
+  this is implementation work now, both forks below are settled**]:
+  `NewEngine(WithNamespace(ns), WithSandbox())` returns a
   working engine **with no sandbox and no error**. Measured, same profile and same source in both
   arms:
 
@@ -646,25 +648,40 @@ that names the same probe the row does.
   never `panic(sentinel)` bare (see `noBareSentinelPanic` in `tools/ruleguard/rules.go` and
   `189e18b4`).
 
-  **What the decision does NOT settle: the trigger.** Options 1 and 3 differ in *when* to panic,
-  not in what to do, and the shared-slice caller below is the whole reason that still matters —
-  a blanket panic at the `WithNamespace` branch breaks the caller `NewNamespace`'s doc comment
-  explicitly invites, which is correct today. Option 3's narrow trigger ("the option appears
-  *only* at `NewEngine`") spares that caller, at the price of the nil-ness test and its
-  comparability trap. Pick one before writing code.
+  **DECIDED 2026-08-24 (maintainer): the trigger is option 1 — blanket reject at the
+  `WithNamespace` branch.** Namespace options go to `NewNamespace`, engine options to
+  `NewEngine`; separating them is the contract. Option 3 is dropped. The 2026-08-04 filing
+  argued option 1 had a real cost (it broke a caller the docs invite); that argument did not
+  survive checking, on four counts — **measured 2026-08-24**:
 
-  **The fork (mechanism now settled; read these for the trigger question only).**
+  1. `NewNamespace`'s doc comment documents tolerance in ONE direction. Verbatim: "Options are
+     shared with NewEngine: WithExtension, WithRegistry, WithoutCore, WithAuthorizer all work.
+     Engine-specific options (WithMaxCallDepth, WithLibraryPaths, etc.) are accepted but
+     ignored." That is `NewNamespace` ignoring ENGINE options. It never says `NewEngine` ignores
+     NAMESPACE options, so "symmetric ignoring is the documented story" was an inference the
+     text does not support.
+  2. That doc comment's own example is the SEPARATED pattern — namespace options to
+     `NewNamespace`, only `WithNamespace(ns)` to `NewEngine`. Which is what option 1 preserves.
+  3. No in-tree caller shares an option slice across both constructors. Every `NewNamespace`
+     call site passes literal options; every `[]EngineOption` variable in the tree is
+     engine-only. The broken caller was hypothetical.
+  4. `WithDialect` already rejects at that branch, so `engine_effective_surface_test.go`'s
+     `NewNamespace(ctx, WithProfile(KitchenSink), WithDialect(NoMutation))` ALREADY cannot
+     forward its slice. The asymmetry called "the outlier" is established precedent.
 
-  1. **Reject the family at the `WithNamespace` branch.** Matches `WithDialect`, fails loud.
-     **The cost is real and is why this is not obvious:** `NewNamespace`'s doc comment explicitly
-     invites sharing one option slice across both constructors ("Options are shared with NewEngine…
-     Engine-specific options are accepted but ignored"). Symmetric ignoring is the *documented*
-     story — each constructor drops what it cannot use — and the shared-slice caller is already
-     correct today, because `NewNamespace` applied the sandbox and `NewEngine`'s duplicate is
-     harmless. A blanket rejection breaks exactly that caller to catch a different one.
+  Residual cost, accepted: `NewEngine(WithNamespace(ns), WithSandbox())` panics even when `ns`
+  already carries that sandbox — a redundant-but-harmless call becomes fatal. That is the
+  intended reading of "programmer error", and the fix is moving one option.
+
+  **The fork (settled — kept for the rejected arms' reasoning).**
+
+  1. **Reject the family at the `WithNamespace` branch.** **CHOSEN.** Matches `WithDialect`,
+     fails loud, needs no authorizer comparison at all — which sidesteps the trap under option 3
+     entirely.
   2. **Apply them post-hoc** on the pre-built namespace. Wrong: it would let a second engine mutate
      a namespace other engines share, which is the thing `WithNamespace` exists to enable.
-  3. **Reject only when the option would CHANGE something** — the narrow reading, and the one that
+  3. **Reject only when the option would CHANGE something** — **REJECTED 2026-08-24**, kept
+     because its trap is worth not rediscovering. The narrow reading, and the one that
      separates the two callers above. The dangerous case is not "the option appears twice", it is
      "the option appears *only* at `NewEngine`", i.e. the namespace has no authorizer and the engine
      config would produce one. **Trap:** this cannot be written as "the authorizers differ", and
