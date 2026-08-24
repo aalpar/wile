@@ -788,7 +788,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- **`error-object-message` answered the whole Go wrap chain.** R7RS §6.11 splits a
+- **A parse error caught from Scheme named the call that triggered the read, not
+  the place the read failed.** `(guard (e (#t (error-object-source e))) (load
+  "bad.scm"))` on a file whose last form is an unterminated list answered
+  wherever the loader happened to be — the enclosing `load` call, or the last
+  form in the file that ran before the failure. Running the same file through the
+  Go embedder answered `bad.scm:2:9`. Same file, same error, two answers, and the
+  Scheme-visible one was the wrong half. It is now `bad.scm:2:9` on both.
+
+  A read failure carries its position on the offending token, not on the
+  compiler's `SourcedError` stamp, so the walk that pre-stamps a condition with
+  its compile-time location saw nothing and the raise site was written instead.
+  `machine.innermostCompileLocation` now consults `*parser.ParserError` when that
+  walk comes up empty — the same two layers in the same precedence the Go path
+  has used since the error-chain-losslessness fix, with a genuine compiler
+  location still winning when both exist.
+
+  `read` gets it too, since one converter builds every condition: `(read
+  (open-input-string "(1 2"))` reports `1:0`, the position in the port, where it
+  used to report the `(read …)` call — one location for every datum a loop reads,
+  and therefore no location at all. That answer has no file name, because a port
+  does not carry one; a successful `read` from a file port has always produced
+  file-less syntax for the same reason, and closing that gap is separate work.
   condition into a message and irritants, and §4.3.3 hands `syntax-error` the same
   pair by delegation. `(error "boom" 1 2)` gave `"boom"`, but a caught compile
   failure gave `"load: in synerr.scm: expansion: expand: failed to expand list
