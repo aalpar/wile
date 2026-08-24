@@ -2160,8 +2160,9 @@ stay protected inside mutable children. Design:
 
 ### A `load`-time parse error's `error-object-source` names the `load` call, not the file (2026-08-18)
 
-- [ ] **The Scheme path has no `ParserError` provenance fallback; the Go path does**
-  [Correctness/provenance, S, NOT STARTED]: `(guard (e (#t (error-object-source e)))
+- [x] **The Scheme path has no `ParserError` provenance fallback; the Go path does**
+  [Correctness/provenance, S, **SHIPPED 2026-08-24** on `fix/scheme-path-parser-error-provenance`]:
+  `(guard (e (#t (error-object-source e)))
   (load "bad_parse.scm"))` on a file whose last form is an unterminated list answers the
   location of the **`load` call** (`<eval>:1:50` when invoked with `-e`). Run the same file
   through the CLI and it answers `bad_parse.scm:2:0`. Same file, same error, two answers, and
@@ -2189,6 +2190,36 @@ stay protected inside mutable children. Design:
   `memory/2026-08-09-unified-error-representation-design.local.md` §6.4b, which sizes the
   predicate slice and records the three decisions it must make. The predicate itself stays
   behind §6.4's consumer gate and is **not** filed here.
+
+  **Shipped as filed: `innermostCompileLocation` consults `*parser.ParserError` when the
+  `sourcedError` walk comes up empty**, which is the same two layers in the same precedence
+  as `wrapCompilationError` — compiler location wins when both exist, because it is the more
+  specific. `pkg/machine` gains an import of `pkg/parser`; there is no cycle and the layering
+  sketch already places parser below machine, so nothing moved. Gate:
+  `TestLoadParseErrorReportsReadSiteOnBothArms` (`pkg/wile/compile_error_source_test.go`),
+  mutation-verified — deleting the fallback turns the Scheme-arm assertion red.
+
+  **Two corrections to this row's own measurements, both from running it.** (1) The position
+  is `bad_parse.scm:2:9`, not `2:0`: the column is the offending token's, and the token is the
+  innermost list still open at end of input, not the line start. (2) **The wrong answer is not
+  reliably the `load` call.** It is whatever source the loader last stamped, so a file whose
+  first form executes before the parse failure answers *that form's* location
+  (`bad_parse.scm:1:1`), and the `<eval>:…` form appears only when nothing in the file ran.
+  Both are the wrong half, but a gate written against the row's phrasing would test for the
+  rarer one.
+
+  **The fixture's leading form binds nothing, and that is load-bearing.** Both arms evaluate
+  the file on one engine, and the top level is immutable by default, so a `define` there makes
+  the SECOND arm fail with `cannot redefine immutable top-level binding` — stamped at the
+  define's own location, which reads exactly like a provenance answer and is not one. That
+  produced a false RED before the fix was even wrong.
+
+  **One knock-on, taken deliberately.** `ConditionFromError` is the single converter for every
+  primitive error, so the fallback also reaches `read`: a read failure now names the position
+  in the PORT rather than the `(read …)` call, which was one location for every datum a loop
+  reads and therefore no location at all. Pinned by
+  `TestReadErrorReportsPortPositionNotTheReadCall`. The answer carries no file name; that gap
+  is separate and is filed under Tier 2 below.
 
 ### `force` sub-context truncation — FIXED, at an allocation cost (2026-08-18)
 
@@ -2277,6 +2308,7 @@ The embedding experience that differentiates Wile.
   - SSL/TLS support
   - DNS resolution
 - [ ] **Module decomposition Phase 1** [Architecture]: Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.local.md`
+- [ ] **A port carries no name, so everything `read` produces is file-less** [Embedding/provenance, S–M, filed 2026-08-24]: `PrimRead` and `PrimReadSyntax` (`pkg/extensions/io/prim_read_write.go:222,286`) build their parser with `parser.NewParser`, not `NewParserWithFile`, because `values.PortObject` has nothing to hand it — `portBase` is `closed`/`clsr`/`kind`/`datum` and no factory records where the stream came from. Two consequences, and the first predates the second by a long way: **every syntax object a successful `(read p)` returns has `SourceContext.File == ""`**, even from `(open-input-file "f.scm")`, so a program that reads forms and evaluates them gets diagnostics with no file; and a read *error* now reports `2:9` where it should report `f.scm:2:9` (the position half was fixed by the Tier-1 `ParserError` fallback above, and `TestReadErrorReportsPortPositionNotTheReadCall` pins the file-less form as the current answer, so closing this item means updating that assertion on purpose). Fix is a name on `PortObject` threaded from the file-opening factories into both `mkParser` closures; a string or bytevector port has no name and correctly stays `""`. **Decide first:** whether the name is the resolved path or the argument as written (`include`/`load` use the resolver's resolved path — match them), and whether `(read (current-input-port))` names stdin or nothing.
 - [ ] **Low-level file predicate reporting *why* a stat failed** [Embedding, POSTPONED 2026-08-11]: Companion to Wave 4 item 6, which makes `file-exists?` answer `#f` for permission errors — authorizer denial and OS `EACCES`/`EPERM` alike — so "absent" and "not allowed to look" become deliberately indistinguishable at that layer (R7RS §6.14 gives the predicate a boolean and no error clause, and the indistinguishability is the confidentiality property Wave 2 item 9c buys elsewhere). An embedder that needs the reason has no way to ask. **Name, signature, error vocabulary and authorizer gating are all UNDETERMINED; design and implementation are both postponed.** Item 6 ships without it and must not block on it. Note the tension to resolve when it is designed: a call that distinguishes denial from absence hands back exactly the oracle item 6 removed, so it needs its own gate — probably a distinct `Action`, not `ActionStat`. See `plans/2026-08-07-review-wave4-embedder-contracts-design.local.md` §6 for the decided arm table.
 - [ ] **Go FFI Phase 3 — Plugin support** [Embedding]: Dynamic extension loading via registry pattern.
 - [ ] **MCP triggering rewrite (Lever A)** [Embedding, Text-only]: Rewrite `cmd/wile/mcp.go` `WithInstructions`, 9 tool descriptions, and `prompts/wile-scheme.md` to trigger LLM tool use on algebra/modular/polynomial domains. Correct misleading `libraries` description (currently claims "loaded only" but tool returns full catalog). Validation via `algebra-accuracy` benchmark: closes `powerset_lattice` regression. No code logic changes. `memory/2026-04-18-mcp-triggering-rewrite.local.md`
