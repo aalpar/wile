@@ -41,7 +41,6 @@ var errHalt = werr.NewStaticError("machine halt: no more operations to run")
 // See BIBLIOGRAPHY.md "Amortized Batch Checking".
 const contextCheckMask = 1023
 
-var ErrMachineDoNotAdvancePC = werr.NewStaticError("machine do not advance PC: operation did not advance program counter")
 var ErrInvalidProgramCounter = werr.NewStaticError("invalid program counter")
 
 // Compile-time assertion: *MachineContext must satisfy values.DebugState.

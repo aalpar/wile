@@ -24,11 +24,6 @@ import (
 	"github.com/aalpar/wile/pkg/syntax"
 )
 
-// ErrorCode is currently unused: no value is ever constructed and no error
-// carries one. TokenizerError classifies by message string instead (Is compares
-// mess).
-type ErrorCode int
-
 // TokenizerError represents an error that occurred during tokenization.
 //
 // Beyond the message it carries the scanner's state at the moment the fault was

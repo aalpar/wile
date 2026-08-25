@@ -54,9 +54,6 @@ var Builder = registry.NewRegistryBuilder(
 	addMoreChars,
 )
 
-// AddToRegistry registers all standard primitives.
-var AddToRegistry = Builder.AddToRegistry
-
 // SafeBuilder includes only the safe parts of all: records, promises, strings,
 // and characters. It excludes every sub-extension the full Builder pulls in: the
 // ambient-authority ones (files, system, eval, gointerop, threads, process,

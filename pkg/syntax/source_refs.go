@@ -17,7 +17,3 @@ package syntax
 import "github.com/aalpar/wile/pkg/values"
 
 type SourceTableRefs = values.SourceTableRefs
-
-func NewSourceTableRefs(index, column, line int) SourceTableRefs {
-	return values.NewSourceTableRefs()
-}

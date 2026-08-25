@@ -352,19 +352,6 @@ func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 	return EmptyList, nil
 }
 
-// Must panics if err is non-nil or v is not EmptyList.
-// Designed for use with ForEach on lists guaranteed to be proper:
-//
-//	Must(p.ForEach(ctx, func(...) error { ... }))
-func Must(v Value, err error) {
-	if err != nil {
-		panic(err)
-	}
-	if !IsEmptyList(v) {
-		panic(werr.WrapForeignErrorf(werr.ErrNotAList, "Must: tail is not empty list"))
-	}
-}
-
 // EqualTo checks if the Pair is equal to another Value o.
 // Delegates to Equal, which owns the iterative traversal and terminates on
 // circular lists.

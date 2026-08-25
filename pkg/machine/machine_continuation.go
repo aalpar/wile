@@ -207,10 +207,6 @@ func (p *MachineContinuation) PromptHandler() values.Callable {
 	return p.promptHandler
 }
 
-func (p *MachineContinuation) ThreadID() uint64 {
-	return p.threadID
-}
-
 // NewMachineContinuationWithPrompt creates a continuation frame that acts as
 // a continuation prompt. The tag identifies the prompt for abort/capture, and
 // the handler is invoked when an abort reaches this prompt.

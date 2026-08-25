@@ -18,13 +18,9 @@ import "context"
 
 // Prefix constants for Scheme value representations.
 const (
-	PrefixCharacter    = `#\`
-	PrefixSyntax       = `#'`
-	PrefixDirective    = `#!`
-	PrefixBox          = `#&`
-	PrefixPrimitive    = `#%`
-	PrefixBlockComment = `#|`
-	PrefixLineComment  = `;`
+	PrefixCharacter = `#\`
+	PrefixDirective = `#!`
+	PrefixBox       = `#&`
 
 	// SpecialEOF and SpecialVoid deliberately do NOT use PrefixDirective.
 	// docs/reference/scheme.md: there is no #!void or #!eof read syntax, and
@@ -320,18 +316,6 @@ func MarkImmutable(v Value) bool {
 	}
 	q.setImmutable()
 	return true
-}
-
-// ---------------------------------------------------------------------------
-// SourceLocation — source positions
-// ---------------------------------------------------------------------------
-
-// SourceLocation represents a position in source code.
-type SourceLocation interface {
-	Value
-	Index() int
-	Column() int
-	Line() int
 }
 
 // ---------------------------------------------------------------------------

@@ -32,9 +32,6 @@ import (
 	"slices"
 )
 
-// ImplementationName is the name of this Scheme implementation.
-const ImplementationName = "wile"
-
 // supportedFeatures lists the feature identifiers this implementation supports.
 // These are checked by cond-expand feature requirements.
 var supportedFeatures = []string{
