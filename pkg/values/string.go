@@ -168,13 +168,6 @@ func (p *String) Length() int {
 	return len([]rune(p.Value))
 }
 
-// Get returns the character at the given rune index as a Character value.
-//
-// R7RS §6.7: (string-ref string k) returns character k of string.
-func (p *String) Get(i int) Value {
-	return NewCharacter([]rune(p.Value)[i])
-}
-
 // Set sets the character at the given rune index from a Character value.
 // Returns an error if the string is immutable.
 //

@@ -499,12 +499,6 @@ func (p MapSet[T]) Unset(s T) {
 	delete(p, s)
 }
 
-func (p MapSet[T]) Add(s T) bool {
-	_, exists := p[s]
-	p[s] = struct{}{}
-	return !exists
-}
-
 func (p MapSet[T]) ContainsOne(s T) bool {
 	_, q := p[s]
 	return q

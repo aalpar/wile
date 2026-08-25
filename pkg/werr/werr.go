@@ -106,7 +106,6 @@ var (
 	// so a caller matching ErrFileOpen to tell a failed open from a failed probe
 	// must not see one reported as the other.
 	ErrFileStat             = NewStaticError("file stat failed")
-	ErrLibraryNotFound      = NewStaticError("library not found")
 	ErrCircularDependency   = NewStaticError("circular library dependency")
 	ErrUnexportedIdentifier = NewStaticError("identifier not exported")
 
@@ -165,14 +164,13 @@ var (
 
 	ErrEngineInit = NewStaticError("engine initialization error")
 
-	// Pipeline errors (expansion, compilation, runtime phases)
+	// Pipeline errors. Compilation failures do not have a sentinel here: they
+	// carry a *CompilationError, which is matched with errors.As.
 
-	ErrExpansion   = NewStaticError("expansion error")
-	ErrCompilation = NewStaticError("compilation error")
+	ErrExpansion = NewStaticError("expansion error")
 
 	// Environment errors (keep as panics but use sentinels)
 
-	ErrMissingNamespace     = NewStaticError("missing Namespace")
 	ErrMissingPhaseRegistry = NewStaticError("missing PhaseRegistry")
 	ErrNilParentEnvironment = NewStaticError("nil parent environment")
 
@@ -192,7 +190,6 @@ var (
 
 	ErrCannotDoubleSyntaxWrap  = NewStaticError("cannot wrap syntax value in SyntaxObject")
 	ErrNoMatchingClause        = NewStaticError("no matching clause")
-	ErrUnsupportedTransformer  = NewStaticError("unsupported transformer")
 	ErrLibraryConfiguration    = NewStaticError("library configuration error")
 	ErrLibraryFormMalformed    = NewStaticError("malformed library form")
 	ErrLibraryNameMismatch     = NewStaticError("library name mismatch")

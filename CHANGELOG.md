@@ -707,6 +707,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **BREAKING (Go API): twenty-four orphaned symbols with no reference anywhere
+  in the tree.** A whole-module reference sweep — production code and tests,
+  every package variant — found these referenced by nothing:
+
+  | Package | Symbols |
+  |---------|---------|
+  | `pkg/values` | `Must`, `(*String).Get`, `(*Thread).Context`, `(*Thread).Sleep`, `MapSet.Add`, `NewSourceTableRefs`, `SourceLocation`, `PrefixSyntax`, `PrefixPrimitive`, `PrefixBlockComment`, `PrefixLineComment`, `OriginInfo.ApplicationID`, `OriginInfo.TemplateLocation` |
+  | `pkg/werr` | `ErrLibraryNotFound`, `ErrCompilation`, `ErrMissingNamespace`, `ErrUnsupportedTransformer` |
+  | `pkg/syntax` | `NewSourceTableRefs` |
+  | `pkg/machine` | `ErrMachineDoNotAdvancePC`, `(*ComposableContinuation).ThreadID`, `(*MachineContinuation).ThreadID` |
+  | `pkg/machine/compilation` | `ImplementationName`, `(*SyntaxCompiler).Compile`, `(*ExpanderTimeContinuation).Context` |
+  | `pkg/internal/tokenizer` | `ErrorCode`, `MessageExpectingTrue`, `MessageExpectingFalse`, `MessageInvalidHexEscape` |
+
+  Two were worse than unused. `syntax.NewSourceTableRefs(index, column, line)`
+  **ignored all three arguments** and returned an empty value, so any caller
+  would have silently lost its positions. `tokenizer.ErrorCode`'s own doc
+  comment already read "currently unused: no value is ever constructed and no
+  error carries one". `MapSet.Add` was a leftover from the `Add` → `Set` rename.
+
+  `errors.Is` callers are unaffected unless they matched one of the four deleted
+  sentinels, none of which was ever returned. Compilation failures never had a
+  sentinel worth matching: they carry a `*CompilationError`, matched with
+  `errors.As`.
+
+  Deliberately NOT deleted despite being unreferenced: `pkg/repl`'s `WithPrompt`
+  / `WithHistoryFile` / `WithContinuationPrompt` / `WithDebugContext` /
+  `WithCompleter` and `(*REPL).Debugger` — the fields they set ARE consumed at
+  run time, so removing them would delete embedder capability rather than dead
+  code. Same for `pkg/registry/testhelpers`. And `(*Rational).Float64WithAccuracy`
+  stays: `CODING_STYLE.md` requires a `*Truncated` method to have a
+  `*WithAccuracy` companion on the same receiver, so it is load-bearing as a
+  contract even with no caller.
+
 - **BREAKING (Go API): fourteen methods with no caller anywhere in the tree.** A
   reference sweep across every module in the workspace — production code, tests,
   interface declarations, method values — found these unreachable, and none of

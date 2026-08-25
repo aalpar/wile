@@ -22,9 +22,3 @@ package values
 // set tools/cmd/typeswitchlint derives from this package (knownValueTypes), which
 // exists to enumerate the types a Scheme datum can be.
 type SourceTableRefs []uint32
-
-// NewSourceTableRefs creates an empty SourceTableRefs.
-func NewSourceTableRefs() SourceTableRefs {
-	q := SourceTableRefs{}
-	return q
-}

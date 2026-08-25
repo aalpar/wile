@@ -151,15 +151,6 @@ func (p *Thread) ID() uint64 {
 	return p.id
 }
 
-// Context returns the context associated with this thread.
-// Returns nil if the thread has not been started.
-//
-// Hazard: p.ctx is read without holding p.mu, while Start writes it under p.mu.
-// Calling this concurrently with Start is a data race.
-func (p *Thread) Context() context.Context {
-	return p.ctx
-}
-
 // Name returns the thread's name
 func (p *Thread) Name() string {
 	return p.name
@@ -392,21 +383,6 @@ func (p *Thread) Terminate() {
 	if ownsDone {
 		close(p.done)
 	}
-}
-
-// Sleep pauses the thread for the given duration
-func (p *Thread) Sleep(d time.Duration) {
-	p.mu.Lock()
-	p.state = ThreadBlocked
-	p.mu.Unlock()
-
-	time.Sleep(d)
-
-	p.mu.Lock()
-	if p.state == ThreadBlocked {
-		p.state = ThreadRunnable
-	}
-	p.mu.Unlock()
 }
 
 // TrackMutex adds a mutex to this thread's ownership tracking set.

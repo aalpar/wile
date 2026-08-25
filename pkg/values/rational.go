@@ -101,6 +101,12 @@ func (p *Rational) Float64Truncated() float64 {
 // direction; ±Inf overflow is reported as Above/Below relative to the
 // finite limit. See rationalToFloat64WithAccuracy for the registry-path
 // equivalent.
+//
+// No in-tree caller: this is the mandatory companion to Float64Truncated
+// under CODING_STYLE.md's pairing rule ("a *Truncated method MUST coexist
+// with a *WithAccuracy companion on the same receiver"). The truncated form
+// is the opt-out and only reads as one while the default it opts out of
+// exists. Do not delete it as dead code.
 func (p *Rational) Float64WithAccuracy() (float64, big.Accuracy) {
 	f, acc, _ := rationalToFloat64WithAccuracy(p)
 	return f, acc

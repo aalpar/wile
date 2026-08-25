@@ -25,14 +25,11 @@ var _ Value = (*SourceContext)(nil)
 // OriginInfo tracks macro expansion chains for debugging and error reporting.
 // Each OriginInfo represents one macro expansion in the chain, enabling:
 //   - Tracing generated code back to the macro that created it
-//   - Identifying which invocation (by unique ID) produced specific code
-//   - Locating the template source that was expanded
+//   - Locating where the macro was invoked
 type OriginInfo struct {
-	Identifier       string         // Macro name that caused expansion (e.g., "let", "my-macro")
-	ApplicationID    uint64         // Unique ID for this macro invocation (from intro scope)
-	Location         *SourceContext // Where the macro was invoked (use-site)
-	TemplateLocation *SourceContext // Where the macro template was defined (definition-site)
-	Parent           *OriginInfo    // Previous link in origin chain (for nested macros)
+	Identifier string         // Macro name that caused expansion (e.g., "let", "my-macro")
+	Location   *SourceContext // Where the macro was invoked (use-site)
+	Parent     *OriginInfo    // Previous link in origin chain (for nested macros)
 }
 
 // Depth returns the length of the origin chain.

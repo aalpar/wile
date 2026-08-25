@@ -46,11 +46,6 @@ func NewSyntaxCompiler(name string, fn SyntaxCompilerFunc) *SyntaxCompiler {
 	}
 }
 
-// Compile invokes the syntax compiler function.
-func (p *SyntaxCompiler) Compile(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	return p.fn(ctc, ctctx, expr)
-}
-
 // EqualTo implements values.Value interface.
 func (p *SyntaxCompiler) EqualTo(other values.Value) bool {
 	if other == nil {

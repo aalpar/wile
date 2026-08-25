@@ -99,11 +99,6 @@ func (p *ComposableContinuation) WindingStack() WindingStack {
 	return p.windingStack
 }
 
-// ThreadID returns the thread ID that captured this composable continuation.
-func (p *ComposableContinuation) ThreadID() uint64 {
-	return p.threadID
-}
-
 // BarrierValid returns the barrier identity token captured when this continuation
 // was created. Used by applyComposableContinuation to detect barrier crossings.
 func (p *ComposableContinuation) BarrierValid() *BarrierToken {

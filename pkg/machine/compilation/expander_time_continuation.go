@@ -178,11 +178,6 @@ func (p *ExpanderTimeContinuation) SetMaxDepth(n int) {
 	p.depthGuard.max = n
 }
 
-// Context returns the context associated with this expander continuation.
-func (p *ExpanderTimeContinuation) Context() context.Context {
-	return p.ctx
-}
-
 // hasLocalVariableBinding delegates to EnvironmentFrame.HasLocalVariableBinding,
 // resolving the reference hygienically against its own scope set.
 // R7RS §4.2.2: let bindings shadow outer bindings including macros.
