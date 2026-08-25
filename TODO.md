@@ -604,7 +604,13 @@ that names the same probe the row does.
 
   </details>
 
-### `WithNamespace` silently discards every namespace-consumed option, including `WithSandbox` (2026-08-04)
+### `WithNamespace` silently discards every namespace-consumed option, including `WithSandbox` (2026-08-04) — CLOSED 2026-08-24
+
+Both rows below are shipped. The section is retained for the decision trail: the fix went through
+three mechanisms in three weeks — an error return for `WithDialect` alone, then a runtime panic
+for the whole family, then the type split that deleted `WithNamespace` and made the rule a
+compile error. Plans: `plans/2026-08-24-typed-engine-options-design.local.md` (settled) and its
+`-impl` twin (shipped).
 
 - [x] **Panic on namespace-consumed options at the `WithNamespace` branch** — **SHIPPED
   2026-08-24** (`rejectNamespaceConsumedOptions`, `pkg/wile/namespace_option_rejection.go`,
@@ -632,28 +638,45 @@ that names the same probe the row does.
   implementation. Docs updated: `WithNamespace`'s doc comment (which had never gained the two
   strict options) and `docs/embedding/api-design.md`.
 
-- [ ] **`WithContractEnforcement` is SPLIT across the `WithNamespace` line, and shipped
-  unrejected** [Medium, S, found 2026-08-24 while classifying `engineConfig` for the rejection
-  above — **needs a maintainer call, do not "finish" it by adding a row**]: it is the one option
-  that is neither cleanly namespace-consumed nor cleanly engine-scoped. Three readers, measured:
+  **SUPERSEDED 2026-08-24, same day, by the type split below.** The runtime rejection described
+  above no longer exists: `rejectNamespaceConsumedOptions` and the whole file are deleted, and so
+  is `WithNamespace`. Read this row as the trail, not as current mechanism — the panic never
+  shipped in a release. `TestWithDialect_WithNamespace_Conflict` is now
+  `TestWithDialect_IsNamespaceScoped`; `TestWithNamespaceRejectionCoversEveryConsumedField` is
+  now `TestEngineConfigFieldsAreClassified`. The classification it enforces is unchanged and
+  still load-bearing; only the enforcement mechanism moved from run time to compile time.
 
-  | Reader | Runs on the `WithNamespace` path? |
+- [x] **`WithContractEnforcement` is SPLIT across the `WithNamespace` line, and shipped
+  unrejected** — **SHIPPED 2026-08-24** by
+  `plans/2026-08-24-typed-engine-options-{design,impl}.local.md`
+  (`928a74da` typed options, `f26bdcd5` `NewEngineWithNamespace`, `b2592e06` this row,
+  `d869a2fc` ratchets). Filed [Medium, S, 2026-08-24] as needing a maintainer call, which it
+  got: **Answer A — the namespace owns it.**
+
+  The three measured readers straddled the old branch:
+
+  | Reader | Ran on the `WithNamespace` path? |
   |---|---|
   | `applyOptionsFromConfig` at the `applyBaseEnvironment` call site | **no** — inside `bootstrapNamespace` |
   | `applyOptionsFromConfig` at the `setupLibrarySystem` call site | yes |
-  | `Engine.contractEnforcement`, consumed by `RegisterFunc`/`RegisterPrimitive` | yes |
+  | `Engine.contractEnforcement`, consumed by `RegisterPrimitive` | yes |
 
-  So `NewEngine(WithNamespace(ns), WithContractEnforcement())` enforces contracts on libraries
-  and on later registrations but **not on the base environment** — a partial, silent application,
-  which is the exact shape the rejection exists to stop.
+  so `NewEngine(WithNamespace(ns), WithContractEnforcement())` enforced on libraries and later
+  registrations but **not on the base environment** — partial and silent.
 
-  **Why it was not simply added to `rejectNamespaceConsumedOptions`:** rejecting does not fix it
-  either. Passing the option to `NewNamespace` covers the base environment but leaves
-  `Engine.contractEnforcement` false, so post-construction `RegisterFunc` stops enforcing —
-  partiality moved, not removed. The real fix is for the engine to recover the setting from the
-  namespace rather than from its own config, which is a wider change than the rejection was.
-  Classified as engine-only in `engineOnlyFields` to match SHIPPED behavior, with the split
-  spelled out there; the ratchet passes either way, so nothing forces this.
+  The filing's objection ("rejecting does not fix it either — partiality moves, not removes")
+  was correct and is what forced the wider change. Enforcement is a decoration baked into
+  `*ForeignClosure` values, and those live in frames the **namespace** owns, so
+  `environment.Namespace` gained `ContractEnforcement()`/`SetContractEnforcement()`,
+  `applyOptionsFromConfig` became `applyOptionsFromNamespace(ns)`, and
+  `Engine.contractEnforcement` was deleted. All three readers now agree by construction, and the
+  option is namespace-consumed, so partial application is no longer expressible rather than
+  merely prevented. `RegisterFunc` was never a reader in practice: it builds a spec with no
+  `ParamTypes`, and `BuildValidator` returns nil for those.
+
+  Pinned by `TestContractEnforcement_PreBuiltNamespace` (three arms: base environment enforced,
+  a namespace without the option does not gain it, two engines over one namespace agree),
+  mutation-verified.
 
   <details><summary>Original filing (2026-08-04) and the decision trail</summary>
 
