@@ -17,9 +17,14 @@ package wile
 import (
 	"context"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/extensions/math"
@@ -90,6 +95,171 @@ func namespaceConsumedOptions() []struct {
 		{"WithDialect", WithDialect(NoMutation)},
 		{"WithContractEnforcement", WithContractEnforcement()},
 	}
+}
+
+// engineOnlyOptions is the family NewEngine reads AFTER the namespace exists.
+// Each returns EngineOnlyOption and so is passable to NewEngineWithNamespace.
+//
+// The field is typed EngineOption, not EngineOnlyOption, deliberately: the
+// wider static type is what makes TestEngineOnlyOptionsAreEngineOnly a genuine
+// runtime check of the adapter rather than a compile-time tautology.
+func engineOnlyOptions() []struct {
+	name string
+	opt  EngineOption
+} {
+	return []struct {
+		name string
+		opt  EngineOption
+	}{
+		{"WithMaxCallDepth", WithMaxCallDepth(100)},
+		{"WithMaxParseDepth", WithMaxParseDepth(100)},
+		{"WithMaxExpandDepth", WithMaxExpandDepth(100)},
+		{"WithMaxStackSize", WithMaxStackSize(1 << 20)},
+		{"WithInlineThreshold", WithInlineThreshold(0)},
+		{"WithLibraryPaths", WithLibraryPaths(".")},
+		{"WithImportObserver", WithImportObserver(func(LibraryImportEvent) {})},
+		{"WithSourceFS", WithSourceFS(os.DirFS("."))},
+		{"WithSourceOS", WithSourceOS()},
+		{"WithCoverage", WithCoverage(nil)},
+		{"WithLossyConversionsAllowed", WithLossyConversionsAllowed()},
+	}
+}
+
+// TestNamespaceConsumedOptionsAreNotEngineOnly is the direct successor to the
+// deleted TestWithNamespaceRejectsNamespaceConsumedOptions. That test asserted a
+// panic; the panic is now a compile error, which no ordinary Go test can
+// observe. This states the same invariant in the form a test CAN read: the
+// option does not satisfy NewEngineWithNamespace's element type.
+//
+// (An external `go build` in a temp dir could assert non-compilation directly.
+// Rejected: a whole toolchain invocation per option, for an invariant one type
+// assertion states exactly.)
+func TestNamespaceConsumedOptionsAreNotEngineOnly(t *testing.T) {
+	c := qt.New(t)
+
+	for _, tt := range namespaceConsumedOptions() {
+		c.Run(tt.name, func(c *qt.C) {
+			_, ok := tt.opt.(EngineOnlyOption)
+			c.Assert(ok, qt.IsFalse,
+				qt.Commentf("%s implements EngineOnlyOption, so it can be passed to "+
+					"NewEngineWithNamespace, where nothing consumes it — it should be "+
+					"wrapped in namespaceConsumedOption, not engineOnlyOption", tt.name))
+		})
+	}
+}
+
+// TestEngineOnlyOptionsAreEngineOnly is the converse arm. Without it the test
+// above is satisfied by giving every option the namespace-consumed adapter,
+// which would make NewEngineWithNamespace take no options at all.
+func TestEngineOnlyOptionsAreEngineOnly(t *testing.T) {
+	c := qt.New(t)
+
+	for _, tt := range engineOnlyOptions() {
+		c.Run(tt.name, func(c *qt.C) {
+			_, ok := tt.opt.(EngineOnlyOption)
+			c.Assert(ok, qt.IsTrue,
+				qt.Commentf("%s does not implement EngineOnlyOption, so it cannot be "+
+					"passed to NewEngineWithNamespace even though the engine reads it "+
+					"after the namespace exists", tt.name))
+		})
+	}
+}
+
+// TestEveryOptionIsInExactlyOneTable is what closes the fail-open hole the two
+// tests above leave: they only check the options someone remembered to list.
+// Adding WithSomethingNew with the wrong adapter passes every other test in the
+// tree, because the table that would have caught it is the one that was not
+// updated.
+//
+// So this reads the SOURCE rather than the tables: every exported With*/Without*
+// in pkg/wile whose result type is EngineOption or EngineOnlyOption must appear
+// in exactly one table. It is the option-level counterpart to
+// TestEngineConfigFieldsAreClassified, which catches a new engineConfig FIELD;
+// neither subsumes the other, because a new option over an existing field is
+// invisible to the field ratchet.
+//
+// Follows the shape of callable_narrowing_ratchet_test.go: one ParseFile per
+// .go file rather than the deprecated parser.ParseDir. _test.go files are
+// included on purpose — a test-only option still has to pick an adapter.
+func TestEveryOptionIsInExactlyOneTable(t *testing.T) {
+	c := qt.New(t)
+
+	listed := make(map[string]string)
+	for _, tt := range namespaceConsumedOptions() {
+		listed[strings.TrimSuffix(strings.TrimSuffix(tt.name, "(nil)"), "(nil)")] = "namespace-consumed"
+	}
+	for _, tt := range engineOnlyOptions() {
+		_, dup := listed[tt.name]
+		c.Assert(dup, qt.IsFalse, qt.Commentf("%s is in both tables", tt.name))
+		listed[tt.name] = "engine-only"
+	}
+
+	fset := token.NewFileSet()
+	entries, err := os.ReadDir(".")
+	c.Assert(err, qt.IsNil)
+
+	var declared []string
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		file, parseErr := parser.ParseFile(fset, entry.Name(), nil, 0)
+		c.Assert(parseErr, qt.IsNil, qt.Commentf("parsing %s", entry.Name()))
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Recv != nil {
+				continue
+			}
+			if !strings.HasPrefix(fn.Name.Name, "With") && !strings.HasPrefix(fn.Name.Name, "Without") {
+				continue
+			}
+			if !fn.Name.IsExported() || !returnsAnEngineOption(fn) {
+				continue
+			}
+			declared = append(declared, fn.Name.Name)
+		}
+	}
+
+	c.Assert(len(declared) > 0, qt.IsTrue,
+		qt.Commentf("found no option constructors at all — the AST filter is broken, "+
+			"which would make this ratchet vacuously green"))
+
+	var unclassified []string
+	for _, name := range declared {
+		_, ok := listed[name]
+		if !ok {
+			unclassified = append(unclassified, name)
+		}
+	}
+	c.Assert(unclassified, qt.HasLen, 0,
+		qt.Commentf("option constructors in no table: %v — add each to "+
+			"namespaceConsumedOptions or engineOnlyOptions, and give it the matching "+
+			"adapter (namespaceConsumedOption / engineOnlyOption)", unclassified))
+
+	var stale []string
+	for name := range listed {
+		if !slices.Contains(declared, name) {
+			stale = append(stale, name)
+		}
+	}
+	slices.Sort(stale)
+	c.Assert(stale, qt.HasLen, 0,
+		qt.Commentf("tables name option constructors that no longer exist: %v", stale))
+}
+
+// returnsAnEngineOption reports whether fn's sole result is EngineOption or
+// EngineOnlyOption. Both are package-local identifiers here, so a bare *ast.Ident
+// is the only shape to match — a SandboxOption or an ApplyOption constructor
+// falls out on the name, and a multi-result function falls out on the count.
+func returnsAnEngineOption(fn *ast.FuncDecl) bool {
+	if fn.Type.Results == nil || len(fn.Type.Results.List) != 1 {
+		return false
+	}
+	ident, ok := fn.Type.Results.List[0].Type.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	return ident.Name == "EngineOption" || ident.Name == "EngineOnlyOption"
 }
 
 // TestNewEngineWithNamespaceAcceptsEngineOnlyOptions is the arm that stops the
