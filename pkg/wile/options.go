@@ -103,8 +103,14 @@ type engineConfig struct {
 
 	// profileSet records that WithProfile was called AT ALL, independent of
 	// what the profile writes. Tiny registers no extensions and no authorizer,
-	// so it leaves no other trace — without this flag rejectNamespaceConsumedOptions
-	// would refuse WithProfile(Console) and wave WithProfile(Tiny) through.
+	// so it leaves no other trace.
+	//
+	// WRITE-ONLY as of the constructor split (2026-08-24). Its only reader was
+	// rejectNamespaceConsumedOptions, which asked "was this option passed?" at
+	// run time; the compiler asks it now, so nothing consults the flag. Kept
+	// because the question it answers is not otherwise answerable, and a future
+	// reader that needs "was a profile explicitly selected?" has nowhere else to
+	// look. Same for envMapSet and topLevelMutabilitySet below.
 	profileSet bool
 
 	resolverFactories []resolverFactory // source file resolver chain (via WithSourceFS, WithSourceOS)
@@ -112,6 +118,7 @@ type engineConfig struct {
 	// envMapSet records that WithEnv/WithEnvMap was called. Distinct from
 	// envMap != nil because WithEnvMap(nil) deliberately re-nils the map,
 	// which is a REQUEST (open the sandbox), not an absence of one.
+	// Write-only since 2026-08-24 — see profileSet.
 	envMapSet bool
 
 	// contractEnforcement installs type-checking validators on primitives
@@ -139,6 +146,7 @@ type engineConfig struct {
 	// WithMutableTopLevel was called. The field above cannot report it:
 	// its default is true, so an explicit WithImmutableTopLevel() is
 	// indistinguishable from never asking.
+	// Write-only since 2026-08-24 — see profileSet.
 	topLevelMutabilitySet bool
 
 	// strictLevel selects how much of the registry the VISIBLE top-level surface

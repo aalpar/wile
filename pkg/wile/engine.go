@@ -191,10 +191,13 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 		ns.SetImmutableTopLevel(true)
 	}
 	// Unconditional, not guarded by an if: false is a real answer and the default
-	// is false, so a guard would only obscure. THIS TRIO'S POSITION IS LOAD-BEARING
-	// — applyOptionsFromNamespace below reads both flags back off ns, so moving
-	// these writes past the applyBaseEnvironment call would silently reintroduce
-	// the partial enforcement this replaced.
+	// is false, so a guard would only obscure.
+	//
+	// THE POSITION OF THIS WRITE AND THE SetImmutableTopLevel ABOVE IT IS
+	// LOAD-BEARING. applyOptionsFromNamespace reads both flags back off ns, and
+	// its first call site is the applyBaseEnvironment below — so moving either
+	// write past that call would silently reintroduce the partial enforcement
+	// this replaced, with no test to catch it.
 	ns.SetContractEnforcement(cfg.contractEnforcement)
 
 	// Strictness picks the registry the VISIBLE top level is bound from; the
@@ -312,7 +315,10 @@ func applyOptionsFromNamespace(ns *environment.Namespace) []registry.ApplyOption
 //
 //  1. Config         — build engineConfig from options
 //  2. Registry       — buildRegistry(cfg): register core + extension primitives
-//  3. Namespace      — NewNamespace() + SetRegistry + SetAuthorizer
+//  3. Namespace      — NewNamespace() + SetRegistry, then the config writes:
+//     SetAuthorizer, SetEnvMap, SetImmutableTopLevel,
+//     SetContractEnforcement. The last two must precede step 4,
+//     which reads them back via applyOptionsFromNamespace.
 //  4. Bootstrap      — applyBaseEnvironment: bind primitives, syntax compilers,
 //     expanders, bootstrap macros (uses EmbedFileResolver, NOT
 //     the runtime file resolver)
@@ -324,9 +330,10 @@ func applyOptionsFromNamespace(ns *environment.Namespace) []registry.ApplyOption
 //     and bootstrap macros (step 4) for define-library parsing.
 //
 // Steps 2-4 are exactly what NewNamespace performs, so NewEngineWithNamespace
-// skips them and trusts that the caller bootstrapped correctly. Step 5 still
-// runs there, but only if the supplied namespace has no file resolver of its
-// own; step 6 runs unconditionally.
+// skips them and trusts that the caller bootstrapped correctly. Steps 5 and 6
+// run on both paths — 5 only if the supplied namespace has no file resolver of
+// its own, 6 only if WithLibraryPaths was passed, which it can be to either
+// constructor.
 func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	cfg := newEngineConfig()
 	for _, opt := range opts {
@@ -439,8 +446,15 @@ func applyConfigDefaults(cfg *engineConfig) {
 
 // finishEngine is the tail both constructors share: steps 5 and 6 of the
 // initialization order, plus the Engine value itself. It runs after the
-// namespace exists, whoever built it, so every field it reads off cfg is
-// engine-only by construction.
+// namespace exists, whoever built it.
+//
+// One field it reads is NOT engine-only: cfg.strictLevel, forwarded to
+// setupLibrarySystem. That is safe rather than a second partial application,
+// because the branch it guards is `level > strictLevelOff && len(snapshots) > 0`
+// and snapshots is always empty on the pre-built-namespace path — so on the one
+// path where cfg.strictLevel cannot be set, it is also never consulted. If that
+// second conjunct is ever removed, strictLevel has to move onto the Namespace
+// the way contractEnforcement did.
 func finishEngine(ctx context.Context, cfg *engineConfig, ns *environment.Namespace, reg *registry.PrimitiveRegistry, snapshots []extSnapshot, closers []registry.CloseFunc) (*Engine, error) {
 	env := ns.Runtime()
 

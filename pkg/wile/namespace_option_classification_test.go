@@ -337,6 +337,19 @@ func TestPreBuiltNamespaceCarriesItsSandbox(t *testing.T) {
 		qt.Commentf("a namespace built with WithSandbox must confine the engine over it"))
 	_, statErr = os.Stat(pathB)
 	c.Assert(os.IsNotExist(statErr), qt.IsTrue, qt.Commentf("arm B wrote the file"))
+
+	// C — the discriminator. Without it, arms A and B are satisfied by a Small
+	// engine that cannot write files at all, and would stay green if WithSandbox
+	// went back to being dropped.
+	pathC := filepath.Join(dir, "c.txt")
+	openNS, err := NewNamespace(ctx, WithProfile(Small))
+	c.Assert(err, qt.IsNil)
+	engC, err := NewEngineWithNamespace(ctx, openNS)
+	c.Assert(err, qt.IsNil)
+	c.Assert(write(engC, pathC), qt.IsNil,
+		qt.Commentf("an unsandboxed Small engine must be able to write, or A and B prove nothing"))
+	_, statErr = os.Stat(pathC)
+	c.Assert(statErr, qt.IsNil, qt.Commentf("arm C did not write the file"))
 }
 
 // TestNewEngineWithNamespaceRejectsNilNamespace pins [nil means NONE]. As an

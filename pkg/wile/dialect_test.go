@@ -225,14 +225,36 @@ func TestWithDialect_IsNamespaceScoped(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	ns, err := NewNamespace(ctx, WithProfile(Small), WithDialect(removeSetBangDialect{}))
+	// The same LOCAL-binding fixture TestWithDialect_RemovesForm uses, and for the
+	// same reason: immutable-top-level is on by default, so a top-level
+	// (define x 1) (set! x 2) fails with or without the dialect and would prove
+	// nothing.
+	const src = "(let ((x 1)) (set! x 2) x)"
+
+	ns, err := NewNamespace(ctx, WithDialect(removeSetBangDialect{}))
 	c.Assert(err, qt.IsNil)
 
 	eng, err := NewEngineWithNamespace(ctx, ns)
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 
-	_, err = eng.EvalMultiple(ctx, "(define x 1) (set! x 2)")
+	_, err = eng.EvalMultiple(ctx, src)
 	c.Assert(err, qt.IsNotNil,
 		qt.Commentf("the dialect baked into the namespace must have removed set!"))
+	c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
+		qt.Commentf("removed set! must fail as an unbound reference, got %v", err))
+	c.Assert(err.Error(), qt.Contains, "set!")
+
+	// The discriminating arm: a namespace built WITHOUT the dialect still has
+	// set!, so the assertion above is not satisfied by any engine that rejects
+	// this program.
+	plainNS, err := NewNamespace(ctx)
+	c.Assert(err, qt.IsNil)
+	plain, err := NewEngineWithNamespace(ctx, plainNS)
+	c.Assert(err, qt.IsNil)
+	defer plain.Close()
+
+	result, err := plain.EvalMultiple(ctx, src)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "2")
 }
