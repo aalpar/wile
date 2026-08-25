@@ -145,7 +145,7 @@ func TestAuthorizerOptions_ExplicitBeatsProfile_OrderIndependent(t *testing.T) {
 	build := func(opts ...EngineOption) security.Authorizer {
 		cfg := newEngineConfig()
 		for _, opt := range opts {
-			opt(cfg)
+			opt.applyEngine(cfg)
 		}
 		return cfg.resolveAuthorizer()
 	}
@@ -193,7 +193,7 @@ func TestAuthorizerOptions_NilAndMultiProfile(t *testing.T) {
 	build := func(opts ...EngineOption) security.Authorizer {
 		cfg := newEngineConfig()
 		for _, opt := range opts {
-			opt(cfg)
+			opt.applyEngine(cfg)
 		}
 		return cfg.resolveAuthorizer()
 	}
@@ -221,7 +221,7 @@ func TestSandboxOption_MultipleCallsAccumulate(t *testing.T) {
 	build := func(opts ...EngineOption) security.Authorizer {
 		cfg := newEngineConfig()
 		for _, opt := range opts {
-			opt(cfg)
+			opt.applyEngine(cfg)
 		}
 		return cfg.resolveAuthorizer()
 	}
@@ -253,7 +253,7 @@ func TestSandboxOption_OrderIndependent(t *testing.T) {
 	build := func(opts ...EngineOption) security.Authorizer {
 		cfg := newEngineConfig()
 		for _, opt := range opts {
-			opt(cfg)
+			opt.applyEngine(cfg)
 		}
 		return cfg.resolveAuthorizer()
 	}

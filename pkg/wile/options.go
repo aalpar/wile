@@ -169,29 +169,65 @@ type engineConfig struct {
 // Used internally by WithSourceFS and WithSourceOS to build the resolver chain.
 type resolverFactory func(*environment.EnvironmentFrame) compilation.FileResolver
 
-// EngineOption configures an Engine.
-type EngineOption func(*engineConfig)
+// EngineOption configures an Engine. The method is unexported, so the set of
+// implementations is closed to this package — as it already effectively was,
+// since engineConfig is unexported.
+type EngineOption interface {
+	applyEngine(*engineConfig)
+}
+
+// EngineOnlyOption is the subset of EngineOption that NewEngine reads AFTER the
+// namespace exists, so it applies equally to a pre-built one. It is the element
+// type of NewEngineWithNamespace's variadic: a namespace-consumed option does
+// not implement it, so passing one there is a compile error rather than a
+// silent drop.
+//
+// Embedding EngineOption keeps every engine-only option passable to NewEngine
+// and to a []EngineOption literal.
+type EngineOnlyOption interface {
+	EngineOption
+	engineOnly()
+}
+
+// namespaceConsumedOption adapts a config mutator that only bootstrapNamespace
+// can apply. It deliberately does NOT implement EngineOnlyOption.
+type namespaceConsumedOption func(*engineConfig)
+
+func (f namespaceConsumedOption) applyEngine(cfg *engineConfig) {
+	f(cfg)
+}
+
+// engineOnlyOption adapts a config mutator NewEngine reads after the namespace
+// exists.
+type engineOnlyOption func(*engineConfig)
+
+func (f engineOnlyOption) applyEngine(cfg *engineConfig) {
+	f(cfg)
+}
+
+func (engineOnlyOption) engineOnly() {
+}
 
 // WithRegistry uses a custom registry instead of the default.
 // When set, core primitives are NOT automatically added.
 func WithRegistry(r *registry.PrimitiveRegistry) EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.registry = r
-	}
+	})
 }
 
 // WithExtension adds an extension to the engine.
 func WithExtension(ext registry.Extension) EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.extensions = append(cfg.extensions, ext)
-	}
+	})
 }
 
 // WithExtensions adds multiple extensions to the engine.
 func WithExtensions(exts ...registry.Extension) EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.extensions = append(cfg.extensions, exts...)
-	}
+	})
 }
 
 // WithContractEnforcement enables runtime type validation for primitives
@@ -203,10 +239,10 @@ func WithExtensions(exts ...registry.Extension) EngineOption {
 // extension authors — production extensions should perform their own
 // argument checks (e.g., via helpers.RequireArg) rather than depend on
 // this option, since enabling it adds a per-call validator invocation.
-func WithContractEnforcement() EngineOption {
-	return func(cfg *engineConfig) {
+func WithContractEnforcement() EngineOnlyOption {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		cfg.contractEnforcement = true
-	}
+	})
 }
 
 // WithLossyConversionsAllowed permits FFI converters to silently
@@ -226,10 +262,10 @@ func WithContractEnforcement() EngineOption {
 // closure at RegisterFunc time, so calling
 // WithLossyConversionsAllowed after some functions have already
 // registered does NOT change their behavior.
-func WithLossyConversionsAllowed() EngineOption {
-	return func(cfg *engineConfig) {
+func WithLossyConversionsAllowed() EngineOnlyOption {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		cfg.lossyConversionsAllowed = true
-	}
+	})
 }
 
 // WithMaxCallDepth sets the maximum recursion depth for the VM.
@@ -237,14 +273,14 @@ func WithLossyConversionsAllowed() EngineOption {
 // A value of 0 means unlimited (no depth check). Negative values are clamped
 // to 0 and therefore also mean unlimited (matches WithInlineThreshold). When
 // not called, the engine uses DefaultMaxCallDepth (10000).
-func WithMaxCallDepth(n int) EngineOption {
-	return func(cfg *engineConfig) {
+func WithMaxCallDepth(n int) EngineOnlyOption {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		if n < 0 {
 			n = 0
 		}
 		cfg.maxCallDepth = n
 		cfg.callDepthSet = true
-	}
+	})
 }
 
 // WithMaxParseDepth sets the maximum structural nesting depth the parser
@@ -261,14 +297,14 @@ func WithMaxCallDepth(n int) EngineOption {
 // has no channel to the engine's configured value (mirrors WithMaxExpandDepth).
 // Those paths are still protected from the fatal stack overflow by the default;
 // they are simply not retunable per-engine.
-func WithMaxParseDepth(n int) EngineOption {
-	return func(cfg *engineConfig) {
+func WithMaxParseDepth(n int) EngineOnlyOption {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		if n < 0 {
 			n = 0
 		}
 		cfg.maxParseDepth = n
 		cfg.parseDepthSet = true
-	}
+	})
 }
 
 // WithMaxExpandDepth sets the maximum structural recursion depth the macro
@@ -286,38 +322,38 @@ func WithMaxParseDepth(n int) EngineOption {
 // regardless of this option, because the primitive layer has no channel to the
 // engine's configured value. Those paths are still protected from the fatal
 // stack overflow (by the default); they are simply not retunable per-engine.
-func WithMaxExpandDepth(n int) EngineOption {
-	return func(cfg *engineConfig) {
+func WithMaxExpandDepth(n int) EngineOnlyOption {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		if n < 0 {
 			n = 0
 		}
 		cfg.maxExpandDepth = n
 		cfg.expandDepthSet = true
-	}
+	})
 }
 
 // WithMaxStackSize sets the maximum eval stack size for the VM.
 // When the eval stack exceeds this size, ErrStackOverflow is returned.
 // This is opt-in: a value of 0 means unlimited (no stack size check).
 // There is no default — when not called, the stack is unlimited.
-func WithMaxStackSize(n uint64) EngineOption {
-	return func(cfg *engineConfig) {
+func WithMaxStackSize(n uint64) EngineOnlyOption {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		cfg.maxStackSize = n
-	}
+	})
 }
 
 // WithInlineThreshold sets the maximum body length (in top-level expressions)
 // for procedure inlining. Procedures with bodies longer than this threshold
 // are not inlined. A value of 0 disables inlining entirely. When not called,
 // the engine uses compilation.DefaultInlineThreshold (5).
-func WithInlineThreshold(n int) EngineOption {
-	return func(cfg *engineConfig) {
+func WithInlineThreshold(n int) EngineOnlyOption {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		if n < 0 {
 			n = 0
 		}
 		cfg.inlineThreshold = n
 		cfg.inlineThresholdSet = true
-	}
+	})
 }
 
 // WithLibraryPaths enables the R7RS library system (define-library / import)
@@ -336,20 +372,20 @@ func WithInlineThreshold(n int) EngineOption {
 //	    wile.WithLibraryPaths("/app/libs", "./vendor"),
 //	)
 //	// search order: /app/libs, ./vendor, .
-func WithLibraryPaths(paths ...string) EngineOption {
-	return func(cfg *engineConfig) {
+func WithLibraryPaths(paths ...string) EngineOnlyOption {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		cfg.libraryEnabled = true
 		cfg.libraryPaths = paths
-	}
+	})
 }
 
 // WithImportObserver sets a callback that is invoked each time a library is
 // imported. The observer is read-only — it cannot influence the import.
 // Requires WithLibraryPaths to be effective (no libraries loaded without it).
-func WithImportObserver(obs func(LibraryImportEvent)) EngineOption {
-	return func(cfg *engineConfig) {
+func WithImportObserver(obs func(LibraryImportEvent)) EngineOnlyOption {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		cfg.importObserver = obs
-	}
+	})
 }
 
 // WithoutCore creates an engine with an empty registry — no core primitives
@@ -359,9 +395,9 @@ func WithImportObserver(obs func(LibraryImportEvent)) EngineOption {
 // This is useful for building minimal engines where only specific extensions
 // are needed, or for testing extension isolation.
 func WithoutCore() EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.registry = registry.NewRegistry()
-	}
+	})
 }
 
 // WithAuthorizer sets the Authorizer for the engine. The authorizer is
@@ -385,10 +421,10 @@ func WithoutCore() EngineOption {
 //	    wile.WithAuthorizer(security.ReadOnly()),
 //	)
 func WithAuthorizer(auth security.Authorizer) EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.explicitAuthorizer = auth
 		cfg.explicitAuthorizerSet = true
-	}
+	})
 }
 
 // resolveAuthorizer computes the engine's effective authorizer from the three
@@ -432,10 +468,10 @@ func (p *engineConfig) resolveAuthorizer() security.Authorizer {
 // programmer error, and the previous silent drop was security-relevant —
 // WithNamespace(ns) plus WithSandbox() produced a working engine with no
 // sandbox and no error.
-func WithNamespace(ns *environment.Namespace) EngineOption {
-	return func(cfg *engineConfig) {
+func WithNamespace(ns *environment.Namespace) EngineOnlyOption {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		cfg.namespace = ns
-	}
+	})
 }
 
 // WithSourceFS adds a virtual filesystem layer to the source file
@@ -459,15 +495,15 @@ func WithNamespace(ns *environment.Namespace) EngineOption {
 //	    wile.WithSourceFS(schemeFS),  // searched first
 //	    wile.WithSourceOS(),          // OS filesystem searched last
 //	)
-func WithSourceFS(fsys fs.FS) EngineOption {
+func WithSourceFS(fsys fs.FS) EngineOnlyOption {
 	if fsys == nil {
 		panic(werr.WrapForeignErrorf(werr.ErrEngineInit, "WithSourceFS: fsys must not be nil"))
 	}
-	return func(cfg *engineConfig) {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		cfg.resolverFactories = append(cfg.resolverFactories, func(env *environment.EnvironmentFrame) compilation.FileResolver {
 			return compilation.NewFSFileResolver(fsys, env)
 		})
-	}
+	})
 }
 
 // WithSourceOS adds the OS filesystem to the source file resolver chain.
@@ -482,25 +518,25 @@ func WithSourceFS(fsys fs.FS) EngineOption {
 //	    wile.WithSourceFS(embedFS),  // virtual FS first
 //	    wile.WithSourceOS(),         // OS fallback last
 //	)
-func WithSourceOS() EngineOption {
-	return func(cfg *engineConfig) {
+func WithSourceOS() EngineOnlyOption {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		cfg.resolverFactories = append(cfg.resolverFactories, func(env *environment.EnvironmentFrame) compilation.FileResolver {
 			return compilation.NewOSFileResolver(env)
 		})
-	}
+	})
 }
 
 // WithEnv adds a single virtual environment variable.
 // When any virtual env var is set, the envvars extension reads from
 // the virtual map instead of os.Getenv.
 func WithEnv(key, value string) EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.envMapSet = true
 		if cfg.envMap == nil {
 			cfg.envMap = make(map[string]string)
 		}
 		cfg.envMap[key] = value
-	}
+	})
 }
 
 // WithCoverage enables Scheme-side line coverage collection. After each
@@ -510,10 +546,10 @@ func WithEnv(key, value string) EngineOption {
 // the collector's Entries.
 //
 // Zero hot-path cost when not set (nil check in VM dispatch).
-func WithCoverage(c *coverage.Collector) EngineOption {
-	return func(cfg *engineConfig) {
+func WithCoverage(c *coverage.Collector) EngineOnlyOption {
+	return engineOnlyOption(func(cfg *engineConfig) {
 		cfg.coverageCollector = c
-	}
+	})
 }
 
 // WithImmutableTopLevel selects top-level-define immutability in the user program. A
@@ -532,10 +568,10 @@ func WithCoverage(c *coverage.Collector) EngineOption {
 // shadow rather than a rejected rebind, and user-loaded LIBRARIES stay mutable — a
 // library's cross-form (define x)/(set! x) is permitted. See docs/reference/r7rs-differences.md.
 func WithImmutableTopLevel() EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.immutableTopLevel = true
 		cfg.topLevelMutabilitySet = true
-	}
+	})
 }
 
 // WithMutableTopLevel selects strict R7RS mutable/redefinable top-level bindings,
@@ -544,10 +580,10 @@ func WithImmutableTopLevel() EngineOption {
 // the layered-environment work flips to immutable). Opting out forfeits the
 // frame-reclaim GC win for user recursion.
 func WithMutableTopLevel() EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.immutableTopLevel = false
 		cfg.topLevelMutabilitySet = true
-	}
+	})
 }
 
 // WithStrictNamespace narrows the engine's visible top-level surface to CORE
@@ -575,9 +611,9 @@ func WithMutableTopLevel() EngineOption {
 // coreless registry): strict mode derives its visible surface from the default
 // core registry, so the combination is rejected at construction.
 func WithStrictNamespace() EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.strictLevel = max(cfg.strictLevel, strictLevelCore)
-	}
+	})
 }
 
 // WithoutAmbientBindings narrows the engine's visible top-level surface all the
@@ -660,9 +696,9 @@ func WithStrictNamespace() EngineOption {
 // namespace-creation time (no effect on the WithNamespace path), and it is
 // incompatible with WithRegistry/WithoutCore. Off by default.
 func WithoutAmbientBindings() EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.strictLevel = max(cfg.strictLevel, strictLevelNoBindings)
-	}
+	})
 }
 
 // WithEnvMap sets the complete virtual environment variable map.
@@ -677,7 +713,7 @@ func WithoutAmbientBindings() EngineOption {
 // option order matters. WithProfile fills in an empty map only if envMap is
 // currently nil; a later WithEnvMap(nil) re-nils it and opens the sandbox.
 func WithEnvMap(m map[string]string) EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.envMapSet = true
 		if m == nil {
 			cfg.envMap = nil
@@ -685,5 +721,5 @@ func WithEnvMap(m map[string]string) EngineOption {
 		}
 		cfg.envMap = make(map[string]string, len(m))
 		maps.Copy(cfg.envMap, m)
-	}
+	})
 }

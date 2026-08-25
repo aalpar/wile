@@ -117,7 +117,7 @@ type extSnapshot struct {
 func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Namespace, error) {
 	cfg := newEngineConfig()
 	for _, opt := range opts {
-		opt(cfg)
+		opt.applyEngine(cfg)
 	}
 	ns, _, _, err := bootstrapNamespace(ctx, cfg)
 	if err != nil {
@@ -318,7 +318,7 @@ func applyOptionsFromConfig(cfg *engineConfig) []registry.ApplyOption {
 func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	cfg := newEngineConfig()
 	for _, opt := range opts {
-		opt(cfg)
+		opt.applyEngine(cfg)
 	}
 
 	// Apply default call depth when the caller did not set one explicitly.
