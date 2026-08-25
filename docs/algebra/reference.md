@@ -1079,10 +1079,19 @@ Multi-objective Pareto dominance and frontier computation. Mixed factor types (b
 - `(factor-leq? a b)` -- non-strict factor comparison: booleans `#f ≤ #t`, numbers `<=`
 - `(factor-less? a b)` -- strict version
 
+### Factor direction
+
+`factor-leq?` orders values; it cannot know which end of that order is an improvement. A similarity or benefit count improves upward; a parameter count, coupling count, or edge count improves downward. Both are numbers, so the value alone does not say which.
+
+- `(factor-direction directions key)` -- `'up` (the default when `key` is absent) or `'down`. A value that is neither is an error, never a silent `'up`
+- `(normalize-directions spec)` -- `spec` is either a list of factor-name symbols (documentation only, every axis `'up`) or an alist of `(name . up|down)`; returns the alist form
+
 ### Dominance and frontier
 
-- `(dominates? factors-x factors-y)` -- test Pareto dominance: X dominates Y iff Y is factor-leq to X on every key and factor-less on at least one (higher is better on every axis)
-- `(pareto-frontier candidates factor-names)` -- candidates is `((id alist) ...)`; factor-names is documentation only; returns `((frontier id ...) (dominated (dominator . dominated-ids) ...))`
+- `(dominates? factors-x factors-y [directions])` -- test Pareto dominance: X dominates Y iff X is at least as good as Y on every key and strictly better on at least one, where "better" is that key's own direction. Omit `directions` for the historical higher-is-better-on-every-axis behaviour
+- `(pareto-frontier candidates factors)` -- candidates is `((id alist) ...)`; `factors` is either a list of names (documentation only) or an alist of `(name . up|down)`, in which case it is load-bearing and is threaded into every dominance test; returns `((frontier id ...) (dominated (dominator . dominated-ids) ...))`
+
+Mixing directions in one alist without saying so is a silent misrank, not an error: an axis where fewer is better gets ranked as though more were better, and the frontier still looks like a frontier.
 
 ---
 

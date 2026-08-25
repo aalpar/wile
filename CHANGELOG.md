@@ -18,6 +18,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`(wile algebra pareto)` factors carry a direction of improvement.**
+  `factor-leq?` orders values; it could not know which end of that order was
+  better. A similarity improves upward, a parameter count improves downward,
+  and both are plain numbers, so nothing about a factor alist said which axis
+  was which. Ranking a lower-is-better axis meant the caller negating it before
+  handing it over, a convention that lived nowhere the code could check: a
+  producer reporting an honest positive count got silently ranked backwards and
+  the frontier still looked like a frontier.
+
+  `dominates?` takes an optional third argument and `pareto-frontier`'s second
+  argument now accepts either form: a list of factor-name symbols (the
+  historical documentation-only meaning, every axis `'up`) or an alist of
+  `(name . up|down)`, in which case it is load-bearing and is threaded into
+  every dominance test. `factor-direction` and `normalize-directions` are
+  exported for callers building their own comparisons. A direction that is
+  neither `'up` nor `'down` raises, rather than defaulting to `'up` — a
+  misspelling silently meaning "higher is better" is the exact failure this
+  removes.
+
+  Nothing existing changes behaviour: omit the directions, or pass the symbol
+  list, and dominance is higher-is-better on every axis as before.
+
 - **`(current-stack-trace [max-depth])` — the live stack, without needing an error
   to carry it.** Until now the only way to see a backtrace from Scheme was to
   raise and read `error-object-stack-trace` off the condition. This returns the

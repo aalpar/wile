@@ -188,6 +188,7 @@
     sort-strings
     ;; Pareto dominance
     dominates? pareto-frontier factor-leq? factor-less?
+    factor-direction normalize-directions
     ;; Interval arithmetic
     interval-lattice
     interval-add interval-sub interval-mul
