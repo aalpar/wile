@@ -54,11 +54,11 @@ func WithSandbox(opts ...SandboxOption) EngineOption {
 
 	sandboxAuth := security.SandboxAuthorizer(scfg.envPrefix)
 
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		if cfg.sandboxAuthorizer != nil {
 			cfg.sandboxAuthorizer = security.All(cfg.sandboxAuthorizer, sandboxAuth)
 			return
 		}
 		cfg.sandboxAuthorizer = sandboxAuth
-	}
+	})
 }

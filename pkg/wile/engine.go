@@ -74,7 +74,6 @@ type Engine struct {
 	maxExpandDepth          int
 	maxStackSize            uint64
 	inlineThreshold         int
-	contractEnforcement     bool // propagated to RegisterPrimitive via cfg
 	lossyConversionsAllowed bool // captured into FFI closures at RegisterFunc time
 	coverageCollector       *coverage.Collector
 
@@ -101,7 +100,7 @@ type extSnapshot struct {
 
 // NewNamespace creates a fully initialized namespace with a registry,
 // base environment bindings, syntax compilers, expanders, and bootstrap
-// macros. The namespace can be passed to NewEngine via WithNamespace.
+// macros. The namespace is then given to NewEngineWithNamespace.
 //
 // Options are shared with NewEngine: WithExtension, WithRegistry,
 // WithoutCore, WithAuthorizer all work. Engine-specific options
@@ -113,11 +112,11 @@ type extSnapshot struct {
 //	    wile.WithExtension(math.Extension),
 //	    wile.WithAuthorizer(security.ReadOnly()),
 //	)
-//	eng, err := wile.NewEngine(ctx, wile.WithNamespace(ns))
+//	eng, err := wile.NewEngineWithNamespace(ctx, ns)
 func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Namespace, error) {
 	cfg := newEngineConfig()
 	for _, opt := range opts {
-		opt(cfg)
+		opt.applyEngine(cfg)
 	}
 	ns, _, _, err := bootstrapNamespace(ctx, cfg)
 	if err != nil {
@@ -191,6 +190,15 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	if cfg.immutableTopLevel {
 		ns.SetImmutableTopLevel(true)
 	}
+	// Unconditional, not guarded by an if: false is a real answer and the default
+	// is false, so a guard would only obscure.
+	//
+	// THE POSITION OF THIS WRITE AND THE SetImmutableTopLevel ABOVE IT IS
+	// LOAD-BEARING. applyOptionsFromNamespace reads both flags back off ns, and
+	// its first call site is the applyBaseEnvironment below — so moving either
+	// write past that call would silently reintroduce the partial enforcement
+	// this replaced, with no test to catch it.
+	ns.SetContractEnforcement(cfg.contractEnforcement)
 
 	// Strictness picks the registry the VISIBLE top level is bound from; the
 	// profile's full registry (reg) stays on the namespace and backs library
@@ -243,7 +251,7 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	ns.SetEffectiveRegistry(topLevelReg)
 
 	env := ns.Runtime()
-	err = applyBaseEnvironment(ctx, env, topLevelReg, applyOptionsFromConfig(cfg)...)
+	err = applyBaseEnvironment(ctx, env, topLevelReg, applyOptionsFromNamespace(ns)...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -265,33 +273,40 @@ func coreOnlyRegistry() (*registry.PrimitiveRegistry, error) {
 	return reg, nil
 }
 
-// applyOptionsFromConfig translates engineConfig into the ApplyOption slice
-// consumed by registry.Apply. Centralizing this keeps new enforcement-style
-// toggles in one place instead of scattered across applyBaseEnvironment
-// call sites (initial bootstrap and the library env factory).
-func applyOptionsFromConfig(cfg *engineConfig) []registry.ApplyOption {
+// applyOptionsFromNamespace translates namespace state into the ApplyOption
+// slice consumed by registry.Apply. Centralizing this keeps new
+// enforcement-style toggles in one place instead of scattered across
+// applyBaseEnvironment call sites (initial bootstrap and the library env
+// factory).
+//
+// It reads the NAMESPACE rather than the engineConfig because both toggles are
+// namespace state: the bootstrap trio writes them onto ns before the first call
+// site runs, and an engine built over a pre-built namespace has no config of its
+// own to consult — that mismatch is what made enforcement partial before.
+func applyOptionsFromNamespace(ns *environment.Namespace) []registry.ApplyOption {
 	var opts []registry.ApplyOption
-	if cfg.contractEnforcement {
+	if ns.ContractEnforcement() {
 		opts = append(opts, registry.WithContractEnforcement())
 	}
 	// Under top-level immutability (the default), ambient base primitives are also
 	// stamped Stable so the frame-reclaim classifier trusts calls to them without an
 	// explicit (import (scheme base)). Threads to both the bootstrap env and the library
-	// env factory via every applyOptionsFromConfig call site.
-	if cfg.immutableTopLevel {
+	// env factory via every applyOptionsFromNamespace call site.
+	if ns.ImmutableTopLevel() {
 		opts = append(opts, registry.WithStableBasePrimitives())
 	}
 	return opts
 }
 
-// NewEngine creates a new Wile engine.
+// NewEngine creates a new Wile engine, building its own namespace.
 // By default, only core primitives are included.
 // Use WithExtension to add optional extensions.
 //
-// When WithNamespace is used, the engine uses the pre-built namespace, and
-// every option that only namespace construction can apply is REJECTED with a
-// panic rather than ignored — see WithNamespace for the list and the rationale.
-// Library paths and other engine-specific options still apply.
+// NewEngine accepts every option, namespace-consumed and engine-only alike,
+// because it performs the bootstrap that consumes the first group. To build an
+// engine over a namespace you already have, use NewEngineWithNamespace, whose
+// variadic is narrowed to EngineOnlyOption — a namespace option handed to it is
+// a compile error rather than a silent drop.
 //
 // # Initialization Order Invariant
 //
@@ -300,7 +315,10 @@ func applyOptionsFromConfig(cfg *engineConfig) []registry.ApplyOption {
 //
 //  1. Config         — build engineConfig from options
 //  2. Registry       — buildRegistry(cfg): register core + extension primitives
-//  3. Namespace      — NewNamespace() + SetRegistry + SetAuthorizer
+//  3. Namespace      — NewNamespace() + SetRegistry, then the config writes:
+//     SetAuthorizer, SetEnvMap, SetImmutableTopLevel,
+//     SetContractEnforcement. The last two must precede step 4,
+//     which reads them back via applyOptionsFromNamespace.
 //  4. Bootstrap      — applyBaseEnvironment: bind primitives, syntax compilers,
 //     expanders, bootstrap macros (uses EmbedFileResolver, NOT
 //     the runtime file resolver)
@@ -311,16 +329,94 @@ func applyOptionsFromConfig(cfg *engineConfig) []registry.ApplyOption {
 //     library env factory. Requires file resolver (step 5)
 //     and bootstrap macros (step 4) for define-library parsing.
 //
-// The WithNamespace path (pre-built namespace) skips steps 2-4 and trusts that
-// the caller bootstrapped correctly. Step 5 still runs on that path, but only
-// if the supplied namespace has no file resolver of its own; step 6 runs
-// unconditionally. NewNamespace() performs steps 2-4.
+// Steps 2-4 are exactly what NewNamespace performs, so NewEngineWithNamespace
+// skips them and trusts that the caller bootstrapped correctly. Steps 5 and 6
+// run on both paths — 5 only if the supplied namespace has no file resolver of
+// its own, 6 only if WithLibraryPaths was passed, which it can be to either
+// constructor.
 func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	cfg := newEngineConfig()
 	for _, opt := range opts {
-		opt(cfg)
+		opt.applyEngine(cfg)
+	}
+	applyConfigDefaults(cfg)
+
+	ns, snapshots, closers, err := bootstrapNamespace(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	reg := ns.Registry().(*registry.PrimitiveRegistry)
+
+	return finishEngine(ctx, cfg, ns, reg, snapshots, closers)
+}
+
+// NewEngineWithNamespace creates an engine over a namespace built by
+// NewNamespace, instead of building one. This enables sharing a namespace
+// across engines, or pre-configuring one with specific capabilities.
+//
+// The namespace is a PARAMETER, not an option, and the variadic is narrowed to
+// EngineOnlyOption. Together those make "you passed a namespace option to the
+// engine constructor" a compile error: an option only bootstrapNamespace can
+// consume (WithProfile, WithSandbox, WithAuthorizer, WithDialect, …) does not
+// implement EngineOnlyOption, so it cannot be written here at all. Pass those
+// to NewNamespace, which consumes every one of them, and give its result here.
+//
+// Example:
+//
+//	ns, err := wile.NewNamespace(ctx,
+//	    wile.WithExtension(math.Extension),
+//	    wile.WithAuthorizer(security.ReadOnly()),
+//	)
+//	eng, err := wile.NewEngineWithNamespace(ctx, ns, wile.WithLibraryPaths("."))
+//
+// A nil namespace is an error, not a request to bootstrap one: this parameter
+// names the namespace the engine is built on, and there is no engine without
+// it. Use NewEngine when you want one built for you.
+func NewEngineWithNamespace(ctx context.Context, ns *environment.Namespace, opts ...EngineOnlyOption) (*Engine, error) {
+	if ns == nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
+			"NewEngineWithNamespace: namespace must not be nil — use wile.NewNamespace(), or NewEngine to build one")
 	}
 
+	cfg := newEngineConfig()
+	for _, opt := range opts {
+		opt.applyEngine(cfg)
+	}
+	applyConfigDefaults(cfg)
+
+	reg, err := namespaceRegistry(ns)
+	if err != nil {
+		return nil, err
+	}
+
+	// snapshots and closers are both nil here: they are produced by
+	// buildRegistry, which only the bootstrap path runs. An engine over a
+	// pre-built namespace registers no extension libraries of its own and owns
+	// no close hooks — see the Engine.Close doc comment.
+	return finishEngine(ctx, cfg, ns, reg, nil, nil)
+}
+
+// namespaceRegistry extracts the primitive registry a pre-built namespace must
+// carry. Only NewEngineWithNamespace needs it; the bootstrap path sets the
+// registry itself and can type-assert unconditionally.
+func namespaceRegistry(ns *environment.Namespace) (*registry.PrimitiveRegistry, error) {
+	regAny := ns.Registry()
+	if regAny == nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
+			"NewEngineWithNamespace: namespace has no registry — use wile.NewNamespace() or SetRegistry()")
+	}
+	q, ok := regAny.(*registry.PrimitiveRegistry)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
+			"NewEngineWithNamespace: namespace registry is %T, expected *registry.Registry", regAny)
+	}
+	return q, nil
+}
+
+// applyConfigDefaults fills in the bounds the caller did not set explicitly.
+// Each has a companion set-flag because its "unlimited"/"disabled" spelling is
+// 0, which is otherwise indistinguishable from never asking.
+func applyConfigDefaults(cfg *engineConfig) {
 	// Apply default call depth when the caller did not set one explicitly.
 	// WithMaxCallDepth(0) means unlimited — callDepthSet tracks whether the
 	// caller opted in, so we don't override an explicit zero.
@@ -346,36 +442,20 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	if !cfg.inlineThresholdSet {
 		cfg.inlineThreshold = compilation.DefaultInlineThreshold
 	}
+}
 
-	var ns *environment.Namespace
-	var reg *registry.PrimitiveRegistry
-	var snapshots []extSnapshot
-	var closers []registry.CloseFunc
-
-	if cfg.namespace != nil {
-		rejectNamespaceConsumedOptions(cfg)
-		// Use pre-built namespace
-		ns = cfg.namespace
-		regAny := ns.Registry()
-		if regAny == nil {
-			return nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
-				"WithNamespace: namespace has no registry — use wile.NewNamespace() or SetRegistry()")
-		}
-		var ok bool
-		reg, ok = regAny.(*registry.PrimitiveRegistry)
-		if !ok {
-			return nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
-				"WithNamespace: namespace registry is %T, expected *registry.Registry", regAny)
-		}
-	} else {
-		var err error
-		ns, snapshots, closers, err = bootstrapNamespace(ctx, cfg)
-		if err != nil {
-			return nil, err
-		}
-		reg = ns.Registry().(*registry.PrimitiveRegistry)
-	}
-
+// finishEngine is the tail both constructors share: steps 5 and 6 of the
+// initialization order, plus the Engine value itself. It runs after the
+// namespace exists, whoever built it.
+//
+// One field it reads is NOT engine-only: cfg.strictLevel, forwarded to
+// setupLibrarySystem. That is safe rather than a second partial application,
+// because the branch it guards is `level > strictLevelOff && len(snapshots) > 0`
+// and snapshots is always empty on the pre-built-namespace path — so on the one
+// path where cfg.strictLevel cannot be set, it is also never consulted. If that
+// second conjunct is ever removed, strictLevel has to move onto the Namespace
+// the way contractEnforcement did.
+func finishEngine(ctx context.Context, cfg *engineConfig, ns *environment.Namespace, reg *registry.PrimitiveRegistry, snapshots []extSnapshot, closers []registry.CloseFunc) (*Engine, error) {
 	env := ns.Runtime()
 
 	// Forward the resolved inline threshold onto the shared EngineServices so that
@@ -395,13 +475,13 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 
 	// Set the default file resolver for runtime include/load operations.
 	// This must happen after bootstrap (which uses EmbedFileResolver).
-	// Pre-built namespaces (WithNamespace) may already have a resolver.
+	// A pre-built namespace may already have a resolver.
 	if env.FileResolver() == nil {
 		env.SetFileResolver(newFileResolver(cfg.resolverFactories, env))
 	}
 
 	if cfg.libraryEnabled {
-		err := setupLibrarySystem(ctx, cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots, applyOptionsFromConfig(cfg), cfg.strictLevel)
+		err := setupLibrarySystem(ctx, cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots, applyOptionsFromNamespace(ns), cfg.strictLevel)
 		if err != nil {
 			return nil, err
 		}
@@ -417,7 +497,6 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		maxExpandDepth:          cfg.maxExpandDepth,
 		maxStackSize:            cfg.maxStackSize,
 		inlineThreshold:         cfg.inlineThreshold,
-		contractEnforcement:     cfg.contractEnforcement,
 		lossyConversionsAllowed: cfg.lossyConversionsAllowed,
 		coverageCollector:       cfg.coverageCollector,
 	}
@@ -806,7 +885,10 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 	)
 	closure.SetName(spec.Name)
 	closure.SetDoc(spec.Doc)
-	if p.contractEnforcement {
+	// The namespace, not the engine, is the source of truth: a primitive bound
+	// here lands in a frame the namespace owns, so it must be decorated the same
+	// way the base environment's and the libraries' primitives were.
+	if p.namespace.ContractEnforcement() {
 		closure.SetValidator(registry.BuildValidator(spec))
 	}
 
@@ -979,8 +1061,9 @@ func (p *Engine) EffectiveRegistry() *registry.PrimitiveRegistry {
 	regAny := p.namespace.EffectiveRegistry()
 	reg, ok := regAny.(*registry.PrimitiveRegistry)
 	if !ok {
-		// No narrowing was recorded (a WithNamespace caller built the namespace
-		// without one, or nothing narrowed): the base is the effective surface.
+		// No narrowing was recorded (a NewEngineWithNamespace caller built the
+		// namespace without one, or nothing narrowed): the base is the effective
+		// surface.
 		return p.registry.Clone()
 	}
 	return reg.Clone()
@@ -1567,10 +1650,10 @@ func (p *Engine) CurrentLoadPath(ctx context.Context) string {
 // Errors from individual closers are collected and returned via errors.Join.
 // Calling Close on an already-closed engine returns ErrEngineClosed.
 //
-// An engine built with WithNamespace has NO closers: that path reuses a
-// pre-built namespace and never runs buildRegistry, which is where both sources
-// are collected. That is pre-existing — it was already true of registry.Closeable
-// — and unchanged here.
+// An engine built with NewEngineWithNamespace has NO closers: that path reuses
+// a pre-built namespace and never runs buildRegistry, which is where both
+// sources are collected. That is pre-existing — it was already true of
+// registry.Closeable — and unchanged here.
 func (p *Engine) Close() error {
 	if p.closed {
 		return werr.WrapForeignErrorf(ErrEngineClosed, "engine: already closed")

@@ -29,6 +29,6 @@ func TestWithStrictNamespaceSetsFlag(t *testing.T) {
 	cfg := newEngineConfig()
 	c.Assert(cfg.strictLevel, qt.Equals, strictLevelOff, qt.Commentf("default must be non-strict"))
 
-	WithStrictNamespace()(cfg)
+	WithStrictNamespace().applyEngine(cfg)
 	c.Assert(cfg.strictLevel, qt.Equals, strictLevelCore, qt.Commentf("WithStrictNamespace must select the core level"))
 }

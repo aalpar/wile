@@ -104,9 +104,9 @@ type BootstrapProcedureRewriter interface {
 // in place. If the dialect's InstallForms returns an error, NewEngine fails with
 // that error wrapped in werr.ErrEngineInit.
 func WithDialect(d Dialect) EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.dialect = d
-	}
+	})
 }
 
 // DefaultDialect is the R7RS baseline dialect, applied by every engine that does

@@ -211,27 +211,50 @@ func TestWithDialect_AddsForm(t *testing.T) {
 		qt.Commentf("default engine must not know the dialect-added when-true form"))
 }
 
-// TestWithDialect_WithNamespace_Conflict proves the combination is rejected
-// rather than silently ignored: the pre-built-namespace path skips the
+// TestWithDialect_IsNamespaceScoped proves a dialect reaches the engine only by
+// way of the namespace it customizes: the pre-built-namespace path skips the
 // forms-registry customization a dialect performs, so a silently-dropped dialect
 // would be a wrong-behavior-with-no-feedback trap.
 //
-// The rejection was an error return until 2026-08-24, when WithDialect joined
-// the rest of the namespace-consumed family under one rule and one mechanism
-// (see rejectNamespaceConsumedOptions). Two mechanisms for one condition was
-// the asymmetry that change removes, so this asserts the panic.
-func TestWithDialect_WithNamespace_Conflict(t *testing.T) {
+// The rejection was an error return until 2026-08-24, then a panic, and is now a
+// COMPILE error — WithDialect returns EngineOption, which does not implement
+// NewEngineWithNamespace's EngineOnlyOption. What remains testable is the
+// migration the compiler points at: the dialect applies when passed to
+// NewNamespace, and the resulting namespace carries it into the engine.
+func TestWithDialect_IsNamespaceScoped(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	ns, err := NewNamespace(ctx)
+	// The same LOCAL-binding fixture TestWithDialect_RemovesForm uses, and for the
+	// same reason: immutable-top-level is on by default, so a top-level
+	// (define x 1) (set! x 2) fails with or without the dialect and would prove
+	// nothing.
+	const src = "(let ((x 1)) (set! x 2) x)"
+
+	ns, err := NewNamespace(ctx, WithDialect(removeSetBangDialect{}))
 	c.Assert(err, qt.IsNil)
 
-	got := recoverEngineInit(t, func() {
-		_, _ = NewEngine(ctx, WithNamespace(ns), WithDialect(removeSetBangDialect{}))
-	})
-	c.Assert(got, qt.IsNotNil,
-		qt.Commentf("WithDialect+WithNamespace must panic, it returned normally"))
-	c.Assert(errors.Is(got, werr.ErrEngineInit), qt.IsTrue,
-		qt.Commentf("panic value must wrap ErrEngineInit, got %v", got))
+	eng, err := NewEngineWithNamespace(ctx, ns)
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	_, err = eng.EvalMultiple(ctx, src)
+	c.Assert(err, qt.IsNotNil,
+		qt.Commentf("the dialect baked into the namespace must have removed set!"))
+	c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
+		qt.Commentf("removed set! must fail as an unbound reference, got %v", err))
+	c.Assert(err.Error(), qt.Contains, "set!")
+
+	// The discriminating arm: a namespace built WITHOUT the dialect still has
+	// set!, so the assertion above is not satisfied by any engine that rejects
+	// this program.
+	plainNS, err := NewNamespace(ctx)
+	c.Assert(err, qt.IsNil)
+	plain, err := NewEngineWithNamespace(ctx, plainNS)
+	c.Assert(err, qt.IsNil)
+	defer plain.Close()
+
+	result, err := plain.EvalMultiple(ctx, src)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "2")
 }

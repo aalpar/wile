@@ -44,7 +44,7 @@ If any step fails (including bootstrap macro loading), the engine is not returne
 
 `Close()` releases resources from two sources: extensions implementing `registry.Closeable`, and per-engine hooks registered via `PrimitiveRegistry.AddCloser` from an extension's `AddToRegistry`. The shipped `threads` and `process` extensions use the second — closing an engine terminates the SRFI-18 threads it started and kills the children it spawned. Individual closer errors are joined. A second call returns `ErrEngineClosed`.
 
-`Closeable` hangs off the `Extension` value, which is a package-level var shared by every engine in the process, so it cannot express per-engine cleanup; `AddCloser` hooks receive the closing engine's runtime frame and find that engine's state on its `Namespace`. The frame is what makes them per-engine, not the registration: with a registry shared through `WithRegistry`, `Apply` binds the *first* engine's primitives in every engine, so a hook that reaped a tracker captured at registration time would reap the wrong engine's resources. An engine built with `WithNamespace` gets no closers from either source, since that path never builds a registry.
+`Closeable` hangs off the `Extension` value, which is a package-level var shared by every engine in the process, so it cannot express per-engine cleanup; `AddCloser` hooks receive the closing engine's runtime frame and find that engine's state on its `Namespace`. The frame is what makes them per-engine, not the registration: with a registry shared through `WithRegistry`, `Apply` binds the *first* engine's primitives in every engine, so a hook that reaped a tracker captured at registration time would reap the wrong engine's resources. An engine built with `NewEngineWithNamespace` gets no closers from either source, since that path never builds a registry.
 
 ### Per-Instance Isolation
 
@@ -198,11 +198,10 @@ Engine behavior can be customized via functional options:
 | `WithSourceFS(fsys)` | Add a virtual `fs.FS` layer to the source resolver chain |
 | `WithSourceOS()` | Add OS filesystem to the source resolver chain |
 | `WithLibraryPaths(paths...)` | Enable the R7RS library system (`define-library`/`import`) and set its search paths. Without it, `(import ...)` raises a configuration error |
-| `WithNamespace(ns)` | Use a pre-built namespace |
-| `WithDialect(d)` | Fork the forms registry per engine so a dialect can install, replace, or remove special forms (`DefaultDialect` is R7RS; `NoMutation` also ships). Incompatible with `WithNamespace` |
+| `WithDialect(d)` | Fork the forms registry per engine so a dialect can install, replace, or remove special forms (`DefaultDialect` is R7RS; `NoMutation` also ships). Namespace-scoped: pass it to `NewNamespace` |
 | `WithMutableTopLevel()` | Opt out of the immutable-top-level default and take strict R7RS redefinable/`set!`-able top-level bindings |
 | `WithImmutableTopLevel()` | Explicit, redundant selector for the default. Retained for source compatibility |
-| `WithContractEnforcement()` | Enable runtime enforcement of `PrimitiveSpec.ParamTypes`/`ReturnType` contracts |
+| `WithContractEnforcement()` | Enable runtime enforcement of `PrimitiveSpec.ParamTypes`/`ReturnType` contracts. Namespace-scoped; travels with the namespace, so two engines over one namespace share it |
 | `WithLossyConversionsAllowed()` | Let FFI converters truncate Scheme numerics into fixed-precision Go types instead of failing with `werr.ErrLossyConversion` |
 | `WithMaxCallDepth(n)` | Cap the continuation chain depth (default `DefaultMaxCallDepth`) |
 | `WithMaxStackSize(n)` | Cap the eval stack size. Opt-in: when not set (or set to `0`), the stack is unlimited |
@@ -216,9 +215,25 @@ Engine behavior can be customized via functional options:
 
 **Option ordering.** Authorizer selection is resolved once at construction (`resolveAuthorizer` in `options.go`) from three separate fields, so it is order-independent: an explicit `WithAuthorizer` (even `nil`) overrides a profile's authorizer, and a `WithSandbox` layer is always intersected on top via `security.All(...)`. Multiple `WithSandbox` calls accumulate, so restrictions only tighten. `WithEnv`/`WithEnvMap` is the exception that still depends on order: `WithProfile(Console*)` fills in an empty env map only when none is set, so a later `WithEnvMap(nil)` re-nils it and opens the sandbox.
 
-**`WithNamespace` rejects the options it cannot apply.** `NewEngine` skips the bootstrap step on that path, so every option only namespace construction can consume would take no effect. Rather than drop them, `NewEngine` **panics**: `WithRegistry`, `WithoutCore`, `WithExtension`, `WithExtensions`, `WithProfile`, `WithAuthorizer`, `WithSandbox`, `WithEnv`/`WithEnvMap`, `WithImmutableTopLevel`/`WithMutableTopLevel`, `WithStrictNamespace`, `WithoutAmbientBindings`, `WithDialect`. Pass them to `NewNamespace`, which consumes all of them, and give its result here; engine-scoped options (`WithLibraryPaths`, `WithMaxCallDepth`, coverage, contract enforcement) are unaffected.
+**Namespace options go to `NewNamespace`; the compiler enforces it.** There are two engine constructors, and which options each accepts is carried by the option's *type*:
 
-The panic is not catchable via `errors.Is` — passing an option to the wrong constructor is a construction-time programmer error, not a condition to branch on. Until 2026-08-24 these were silently ignored, which was security-relevant: `WithNamespace(ns)` plus `WithSandbox()` produced a working engine with **no sandbox and no error**. `WithDialect` was the sole rejection then, by error return; it now shares the one rule and the one mechanism.
+```go
+NewEngine(ctx, opts ...EngineOption)                       // builds its own namespace
+NewEngineWithNamespace(ctx, ns, opts ...EngineOnlyOption)  // uses one you built
+```
+
+`EngineOnlyOption` embeds `EngineOption`, so every engine-only option is still passable to `NewEngine` and still fits a `[]EngineOption` literal — `NewEngine` accepts everything. The 15 **namespace-consumed** options (`WithRegistry`, `WithoutCore`, `WithExtension`, `WithExtensions`, `WithProfile`, `WithAuthorizer`, `WithSandbox`, `WithEnv`/`WithEnvMap`, `WithImmutableTopLevel`/`WithMutableTopLevel`, `WithStrictNamespace`, `WithoutAmbientBindings`, `WithDialect`, `WithContractEnforcement`) return `EngineOption` only, so writing one at `NewEngineWithNamespace` **does not compile**. Migration is mechanical: namespace options to `NewNamespace`, engine options to either.
+
+```go
+ns, _ := wile.NewNamespace(ctx, wile.WithProfile(wile.Small), wile.WithSandbox())
+eng, _ := wile.NewEngineWithNamespace(ctx, ns, wile.WithLibraryPaths("."))
+```
+
+Go's variadic non-covariance is load-bearing here rather than an annoyance: a caller holding a `[]EngineOption` cannot splat it into `NewEngineWithNamespace`, because that slice may contain namespace options.
+
+**Why the rule exists.** Until 2026-08-24 these options were silently ignored on the pre-built-namespace path, which was security-relevant: `WithNamespace(ns)` plus `WithSandbox()` produced a working engine with **no sandbox and no error**. The intermediate fix that month made it a construction-time panic; the type split replaces the panic, and `WithNamespace` itself is gone. `WithDialect` had been the sole rejection before that, by error return — three mechanisms for one condition, now one.
+
+**A nil namespace is an error return**, not a panic and not a request to bootstrap one. `WithNamespace(nil)` used to mean "no namespace"; as a positional parameter nil has no such reading, and it joins the two registry checks (`namespace has no registry`, `registry is %T`) that were always error returns.
 
 Extensions implement `registry.Extension` and register primitives, macros, and compile-time definitions via `AddToRegistry`.
 
@@ -400,7 +415,7 @@ pre-bound.
 
 **Scope.** The visible surface is carved when the namespace is built, so strictness
 must be set at namespace-creation time. Like `WithRegistry`/`WithExtension`/
-`WithoutCore`, neither option has any effect on the `WithNamespace` path —
+`WithoutCore`, neither option can be passed to `NewEngineWithNamespace` at all —
 a pre-built namespace is authoritative for its own top level, so bake strictness
 in at `NewNamespace`. Both are also incompatible with `WithRegistry`/`WithoutCore`
 (which supply a custom or coreless registry): the strict levels derive the visible

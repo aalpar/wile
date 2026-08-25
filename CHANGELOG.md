@@ -93,35 +93,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **BREAKING: `NewEngine` panics when `WithNamespace` is combined with an option
-  only namespace construction can apply, instead of silently ignoring it.** The
-  pre-built-namespace path skips the bootstrap step that consumes these options,
-  so they had no way to take effect and were dropped without a word. For the
-  authorizer family that was a security defect rather than a nuisance:
+- **BREAKING: `NewEngineWithNamespace(ctx, ns, opts ...EngineOnlyOption)` replaces
+  `NewEngine(ctx, WithNamespace(ns), opts...)`, and passing a namespace option to
+  it is now a COMPILE error.** The namespace stops being an option and becomes a
+  positional parameter; `EngineOption` becomes a one-method interface, and the
+  new `EngineOnlyOption` embeds it.
 
   ```go
-  eng, err := wile.NewEngine(ctx, wile.WithNamespace(ns), wile.WithSandbox())
-  // err == nil, and eng has NO SANDBOX — a caller asking to be confined was not
+  // before
+  eng, err := wile.NewEngine(ctx, wile.WithNamespace(ns), wile.WithLibraryPaths("."))
+  // after
+  eng, err := wile.NewEngineWithNamespace(ctx, ns, wile.WithLibraryPaths("."))
   ```
 
-  The rejected set is every option that writes namespace-scoped configuration:
-  `WithRegistry`, `WithoutCore`, `WithExtension`, `WithExtensions`, `WithProfile`,
-  `WithAuthorizer`, `WithSandbox`, `WithEnv`, `WithEnvMap`,
-  `WithImmutableTopLevel`, `WithMutableTopLevel`, `WithStrictNamespace`,
-  `WithoutAmbientBindings`, `WithDialect`. Pass them to `NewNamespace`, which
-  consumes all of them, and hand its result to `WithNamespace`. Engine-scoped
-  options (`WithLibraryPaths`, `WithMaxCallDepth`, coverage, contract
-  enforcement) are unaffected.
+  The pre-built-namespace path skips the bootstrap step that consumes the
+  namespace options, so they had no way to take effect and, until 2026-08-24,
+  were dropped without a word. For the authorizer family that was a security
+  defect rather than a nuisance: `WithNamespace(ns)` plus `WithSandbox()`
+  returned `err == nil` and an engine with **no sandbox**. Make the namespace a
+  parameter and the constraint stops being a co-occurrence rule over a slice
+  (which Go cannot express) and becomes a property of the variadic's element
+  type (which it can).
 
-  A panic rather than an error return because passing an option to the wrong
-  constructor is a construction-time programmer error: there is no branch a
-  caller could usefully take, and the fix is to move one option. It is
-  deliberately not catchable via `errors.Is`.
+  The 15 namespace-consumed options — `WithRegistry`, `WithoutCore`,
+  `WithExtension`, `WithExtensions`, `WithProfile`, `WithAuthorizer`,
+  `WithSandbox`, `WithEnv`, `WithEnvMap`, `WithImmutableTopLevel`,
+  `WithMutableTopLevel`, `WithStrictNamespace`, `WithoutAmbientBindings`,
+  `WithDialect`, `WithContractEnforcement` — return `EngineOption` and are
+  rejected by the compiler at `NewEngineWithNamespace`. Pass them to
+  `NewNamespace`. The 11 engine-only options widen to `EngineOnlyOption`, which
+  is source-compatible: it embeds `EngineOption`, so they still assign to an
+  `EngineOption` variable and still fit a `[]EngineOption` literal.
 
-  `WithDialect` already rejected this combination, but by returning
-  `ErrEngineInit`; it now shares the one rule and the one mechanism. Code that
-  asserted on that error return must assert on the panic instead. No other
-  option's behavior changed for callers who were not already silently losing it.
+  A nil namespace is an **error return** wrapping `ErrEngineInit`, not a panic
+  and not a request to bootstrap one.
+
+  `WithDialect` had rejected this combination by returning `ErrEngineInit`;
+  earlier in this same unreleased cycle the whole family briefly rejected it by
+  panicking. Both are gone — three mechanisms for one condition, now one, and it
+  is the compiler's.
+
+- **BREAKING: `WithContractEnforcement` is namespace-scoped, and now covers the
+  base environment on a pre-built namespace.** The flag moves from `engineConfig`
+  and `Engine` onto `environment.Namespace`
+  (`ContractEnforcement()`/`SetContractEnforcement()`), so it travels with the
+  namespace and two engines over one namespace share it.
+
+  It had three readers straddling the old branch — the base environment
+  (**skipped** on the pre-built path), library environments (ran), and
+  `Engine.RegisterPrimitive` (ran) — so enforcement there was partial and
+  silent. All three now read the namespace and agree by construction.
+
+  Migration: `wile.NewNamespace(ctx, wile.WithContractEnforcement(), …)`.
+
+  Same change makes the immutable-top-level flag read off the namespace at the
+  library-system call site. On the pre-built path that site previously read a
+  config whose default is `true` and could no longer be overridden, so library
+  environments were stamped `Stable` even over a `WithMutableTopLevel` namespace.
+  They now match the namespace — strictly more conservative, no behavior a
+  correct program can observe.
 
 - **BREAKING: Wile now requires Go 1.27.** The language directive and the build
   toolchain had been pinned separately, with the directive kept as low as the
@@ -706,6 +736,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   run time.
 
 ### Removed
+
+- **BREAKING: `wile.WithNamespace` is deleted.** Migration is one line:
+  `NewEngine(ctx, WithNamespace(ns), …)` becomes
+  `NewEngineWithNamespace(ctx, ns, …)`. A namespace is not a configuration knob;
+  it is the thing the engine is built on, so it belongs in the signature. See the
+  Changed entry above for what the split buys.
 
 - **BREAKING (Go API): twenty-four orphaned symbols with no reference anywhere
   in the tree.** A whole-module reference sweep — production code and tests,

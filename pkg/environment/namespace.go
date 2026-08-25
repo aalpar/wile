@@ -73,7 +73,13 @@ var _ values.Value = (*Namespace)(nil)
 //
 //	Delegated to root via root() walk (the field lives only on the root
 //	namespace; children reach it through the parent chain in O(depth)):
-//	  fileResolver, scopeRegistry, immutableTopLevel
+//	  fileResolver, scopeRegistry, immutableTopLevel, contractEnforcement
+//	    Note: immutableTopLevel is delegated on the WRITE side only — its
+//	    reader short-circuits to false for any child, because interaction
+//	    and eval scratch namespaces are deliberately mutable.
+//	    contractEnforcement delegates SYMMETRICALLY: it is not a property
+//	    of the program's mutability model, and no child reads it today
+//	    (bootstrap.NewProfileEnvironment passes no ApplyOptions at all).
 //
 //	Pointer-shared via *EngineServices (allocated once in NewNamespace;
 //	every child receives the same pointer at construction — no root() walk,
@@ -131,6 +137,14 @@ type Namespace struct {
 	// compiler and validator see one engine-scoped setting.
 	immutableTopLevel bool
 
+	// contractEnforcement, when true, makes every primitive bound into this
+	// namespace carry an argument validator built from its spec's ParamTypes
+	// (registry.WithContractEnforcement). Written once during engine
+	// construction, before any thread runs — same reason Name is set eagerly —
+	// so it needs no lock. Delegated to root like immutableTopLevel, but on both
+	// sides; see the inheritance-policy block above. Off by default.
+	contractEnforcement bool
+
 	// phases is the phase registry for O(1) access to any phase environment.
 	phases *PhaseRegistry
 
@@ -177,9 +191,9 @@ type Namespace struct {
 	// registry still backs library environments and imports.
 	//
 	// Held here rather than on the Engine because a namespace built by
-	// wile.NewNamespace and handed to WithNamespace is the only carrier that
-	// survives to engine construction — the narrowing happens during bootstrap,
-	// and the local it was computed in is gone by then.
+	// wile.NewNamespace and handed to wile.NewEngineWithNamespace is the only
+	// carrier that survives to engine construction — the narrowing happens during
+	// bootstrap, and the local it was computed in is gone by then.
 	//
 	// Stored as any for the same import-cycle reason as registry. Nil when no
 	// narrowing applied; readers should fall back to registry.
@@ -511,6 +525,27 @@ func (p *Namespace) ImmutableTopLevel() bool {
 // (see ImmutableTopLevel).
 func (p *Namespace) SetImmutableTopLevel(on bool) {
 	p.root().immutableTopLevel = on
+}
+
+// ContractEnforcement reports whether primitives bound into this namespace carry
+// argument validators built from their specs' ParamTypes. It is the single
+// source of truth for all three binding sites — the base environment, library
+// environments, and post-construction Engine.RegisterPrimitive — which is what
+// keeps them from disagreeing.
+//
+// Unlike ImmutableTopLevel this delegates to root on BOTH sides: enforcement is
+// not a property of the program's mutability model, so a child has no reason to
+// answer differently from its root.
+func (p *Namespace) ContractEnforcement() bool {
+	return p.root().contractEnforcement
+}
+
+// SetContractEnforcement enables or disables argument validation for primitives
+// bound into this namespace. Set once at namespace construction
+// (wile.WithContractEnforcement); the flag then travels with the namespace, so
+// two engines over one namespace share it.
+func (p *Namespace) SetContractEnforcement(on bool) {
+	p.root().contractEnforcement = on
 }
 
 // LibraryRegistry returns the library registry for R7RS library loading.

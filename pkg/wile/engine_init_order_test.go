@@ -48,7 +48,7 @@ func TestInitOrder_UnbootstrappedNamespace(t *testing.T) {
 	// Deliberately skip applyBaseEnvironment — no syntax compilers, no
 	// primitive bindings, no bootstrap macros.
 
-	eng, err := NewEngine(ctx, WithNamespace(ns))
+	eng, err := NewEngineWithNamespace(ctx, ns)
 	c.Assert(err, qt.IsNil)
 
 	// Core forms like "if" are hardcoded in the compiler's type switch, so
@@ -98,7 +98,7 @@ func TestInitOrder_LibraryWithoutBootstrap(t *testing.T) {
 		}()
 
 		var eng *Engine
-		eng, creationErr = NewEngine(ctx, WithNamespace(ns), WithLibraryPaths("."))
+		eng, creationErr = NewEngineWithNamespace(ctx, ns, WithLibraryPaths("."))
 		if creationErr != nil {
 			return
 		}

@@ -128,7 +128,7 @@ func (p Profile) authorizer() security.Authorizer {
 // empty map when none is set. Option order matters — a later WithEnvMap(nil)
 // re-nils the map and opens the sandbox.
 func WithProfile(p Profile) EngineOption {
-	return func(cfg *engineConfig) {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.profileSet = true
 		cfg.extensions = append(cfg.extensions, p.extensions()...)
 		auth := p.authorizer()
@@ -138,5 +138,5 @@ func WithProfile(p Profile) EngineOption {
 		if (p == Console || p == ConsoleWithLoad) && cfg.envMap == nil {
 			cfg.envMap = make(map[string]string)
 		}
-	}
+	})
 }

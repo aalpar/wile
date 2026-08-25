@@ -104,19 +104,19 @@ func TestEffectiveRegistry_UnnarrowedEngineMatchesBase(t *testing.T) {
 	c.Assert(hasPrimitive(eng.EffectiveRegistry(), "set-car!"), qt.IsTrue)
 }
 
-// TestEffectiveRegistry_SurvivesWithNamespace is the reason the narrowed registry
-// is recorded on the Namespace rather than returned out of bootstrap: this path
-// hands NewEngine a pre-built namespace, so a value held only in an Engine field
-// set during bootstrap would be gone. The dialect narrowing happens inside
-// NewNamespace here, not in NewEngine.
-func TestEffectiveRegistry_SurvivesWithNamespace(t *testing.T) {
+// TestEffectiveRegistry_SurvivesPreBuiltNamespace is the reason the narrowed
+// registry is recorded on the Namespace rather than returned out of bootstrap:
+// this path hands the engine a pre-built namespace, so a value held only in an
+// Engine field set during bootstrap would be gone. The dialect narrowing happens
+// inside NewNamespace here, not in NewEngineWithNamespace.
+func TestEffectiveRegistry_SurvivesPreBuiltNamespace(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	ns, err := wile.NewNamespace(ctx, wile.WithProfile(wile.KitchenSink), wile.WithDialect(wile.NoMutation))
 	c.Assert(err, qt.IsNil)
 
-	eng, err := wile.NewEngine(ctx, wile.WithNamespace(ns))
+	eng, err := wile.NewEngineWithNamespace(ctx, ns)
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 
