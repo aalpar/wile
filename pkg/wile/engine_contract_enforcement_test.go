@@ -69,5 +69,78 @@ func TestContractEnforcement_EndToEnd(t *testing.T) {
 
 		_, err = engine.EvalMultiple(ctx, `(file-exists? 42)`)
 		c.Assert(err, qt.IsNotNil)
+		// The two rejections are distinguishable, which is what makes the
+		// pre-built-namespace test below able to tell enforcement apart from
+		// the primitive's own guard. The validator says "argument 0" (0-based,
+		// registry vocabulary) and names Scheme types; RequireArg says
+		// "argument 1" and names a Go type.
+		c.Assert(err.Error(), qt.Contains, "expected a string but got *values.Integer")
+	})
+}
+
+// TestContractEnforcement_PreBuiltNamespace closes the gap TODO.md filed under
+// "WithContractEnforcement is SPLIT across the WithNamespace line".
+//
+// Before: the flag lived on engineConfig, and the pre-built-namespace path
+// skipped bootstrapNamespace — so applyBaseEnvironment never saw it and the BASE
+// ENVIRONMENT went unenforced, while library environments and later
+// RegisterPrimitive calls were enforced. Enforcement was partial and silent.
+//
+// After: the flag lives on the Namespace, all three binding sites read it, and
+// the option is namespace-consumed — so this is the only spelling, and it covers
+// the base environment. file-exists? is a base-environment primitive here (bound
+// by applyBaseEnvironment from the files extension), which is precisely the site
+// that used to be missed.
+func TestContractEnforcement_PreBuiltNamespace(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("namespace carries enforcement into the base environment", func(t *testing.T) {
+		c := qt.New(t)
+		ns, err := NewNamespace(ctx, WithContractEnforcement(), WithExtension(files.Extension))
+		c.Assert(err, qt.IsNil)
+
+		engine, err := NewEngineWithNamespace(ctx, ns)
+		c.Assert(err, qt.IsNil)
+
+		_, err = engine.EvalMultiple(ctx, `(file-exists? 42)`)
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Contains, "file-exists?")
+		c.Assert(err.Error(), qt.Contains, "argument 0")
+		c.Assert(err.Error(), qt.Contains, "expected string, got integer")
+	})
+
+	t.Run("a namespace without enforcement does not gain it", func(t *testing.T) {
+		c := qt.New(t)
+		// The discriminating arm: without this, the assertion above would pass
+		// on any engine that rejects a wrong-typed argument at all, which every
+		// engine does via RequireArg.
+		ns, err := NewNamespace(ctx, WithExtension(files.Extension))
+		c.Assert(err, qt.IsNil)
+
+		engine, err := NewEngineWithNamespace(ctx, ns)
+		c.Assert(err, qt.IsNil)
+
+		_, err = engine.EvalMultiple(ctx, `(file-exists? 42)`)
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Contains, "expected a string but got *values.Integer")
+	})
+
+	t.Run("two engines over one namespace agree", func(t *testing.T) {
+		c := qt.New(t)
+		// The point of moving the flag off the Engine: a shared namespace is one
+		// setting, not one per engine. This was previously representable at the
+		// RegisterPrimitive site alone, and inconsistently.
+		ns, err := NewNamespace(ctx, WithContractEnforcement(), WithExtension(files.Extension))
+		c.Assert(err, qt.IsNil)
+
+		for _, name := range []string{"first", "second"} {
+			engine, engErr := NewEngineWithNamespace(ctx, ns)
+			c.Assert(engErr, qt.IsNil)
+
+			_, evalErr := engine.EvalMultiple(ctx, `(file-exists? 42)`)
+			c.Assert(evalErr, qt.IsNotNil, qt.Commentf("engine %s", name))
+			c.Assert(evalErr.Error(), qt.Contains, "expected string, got integer",
+				qt.Commentf("engine %s did not enforce", name))
+		}
 	})
 }

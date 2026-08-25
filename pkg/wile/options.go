@@ -234,12 +234,22 @@ func WithExtensions(exts ...registry.Extension) EngineOption {
 // validates its arguments against declared types before calling the
 // implementation and returns a typed error on mismatch.
 //
+// Namespace-scoped: the flag is recorded on the namespace at construction and
+// TRAVELS WITH IT, so two engines over one namespace share it, and it cannot be
+// passed to NewEngineWithNamespace — pass it to NewNamespace instead. This is
+// what makes the three binding sites agree. Enforcement is a decoration baked
+// into the *ForeignClosure values that the namespace's frames hold, and those
+// frames are filled from three places (the base environment, library
+// environments, and post-construction Engine.RegisterPrimitive); reading the
+// engine's config instead left the first of the three unenforced whenever the
+// namespace was pre-built.
+//
 // Disabled by default. Intended as a correctness-verification aid for
 // extension authors — production extensions should perform their own
 // argument checks (e.g., via helpers.RequireArg) rather than depend on
 // this option, since enabling it adds a per-call validator invocation.
-func WithContractEnforcement() EngineOnlyOption {
-	return engineOnlyOption(func(cfg *engineConfig) {
+func WithContractEnforcement() EngineOption {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.contractEnforcement = true
 	})
 }

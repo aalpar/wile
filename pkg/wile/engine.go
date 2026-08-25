@@ -74,7 +74,6 @@ type Engine struct {
 	maxExpandDepth          int
 	maxStackSize            uint64
 	inlineThreshold         int
-	contractEnforcement     bool // propagated to RegisterPrimitive via cfg
 	lossyConversionsAllowed bool // captured into FFI closures at RegisterFunc time
 	coverageCollector       *coverage.Collector
 
@@ -191,6 +190,12 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	if cfg.immutableTopLevel {
 		ns.SetImmutableTopLevel(true)
 	}
+	// Unconditional, not guarded by an if: false is a real answer and the default
+	// is false, so a guard would only obscure. THIS TRIO'S POSITION IS LOAD-BEARING
+	// — applyOptionsFromNamespace below reads both flags back off ns, so moving
+	// these writes past the applyBaseEnvironment call would silently reintroduce
+	// the partial enforcement this replaced.
+	ns.SetContractEnforcement(cfg.contractEnforcement)
 
 	// Strictness picks the registry the VISIBLE top level is bound from; the
 	// profile's full registry (reg) stays on the namespace and backs library
@@ -243,7 +248,7 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	ns.SetEffectiveRegistry(topLevelReg)
 
 	env := ns.Runtime()
-	err = applyBaseEnvironment(ctx, env, topLevelReg, applyOptionsFromConfig(cfg)...)
+	err = applyBaseEnvironment(ctx, env, topLevelReg, applyOptionsFromNamespace(ns)...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -265,20 +270,26 @@ func coreOnlyRegistry() (*registry.PrimitiveRegistry, error) {
 	return reg, nil
 }
 
-// applyOptionsFromConfig translates engineConfig into the ApplyOption slice
-// consumed by registry.Apply. Centralizing this keeps new enforcement-style
-// toggles in one place instead of scattered across applyBaseEnvironment
-// call sites (initial bootstrap and the library env factory).
-func applyOptionsFromConfig(cfg *engineConfig) []registry.ApplyOption {
+// applyOptionsFromNamespace translates namespace state into the ApplyOption
+// slice consumed by registry.Apply. Centralizing this keeps new
+// enforcement-style toggles in one place instead of scattered across
+// applyBaseEnvironment call sites (initial bootstrap and the library env
+// factory).
+//
+// It reads the NAMESPACE rather than the engineConfig because both toggles are
+// namespace state: the bootstrap trio writes them onto ns before the first call
+// site runs, and an engine built over a pre-built namespace has no config of its
+// own to consult — that mismatch is what made enforcement partial before.
+func applyOptionsFromNamespace(ns *environment.Namespace) []registry.ApplyOption {
 	var opts []registry.ApplyOption
-	if cfg.contractEnforcement {
+	if ns.ContractEnforcement() {
 		opts = append(opts, registry.WithContractEnforcement())
 	}
 	// Under top-level immutability (the default), ambient base primitives are also
 	// stamped Stable so the frame-reclaim classifier trusts calls to them without an
 	// explicit (import (scheme base)). Threads to both the bootstrap env and the library
-	// env factory via every applyOptionsFromConfig call site.
-	if cfg.immutableTopLevel {
+	// env factory via every applyOptionsFromNamespace call site.
+	if ns.ImmutableTopLevel() {
 		opts = append(opts, registry.WithStableBasePrimitives())
 	}
 	return opts
@@ -456,7 +467,7 @@ func finishEngine(ctx context.Context, cfg *engineConfig, ns *environment.Namesp
 	}
 
 	if cfg.libraryEnabled {
-		err := setupLibrarySystem(ctx, cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots, applyOptionsFromConfig(cfg), cfg.strictLevel)
+		err := setupLibrarySystem(ctx, cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots, applyOptionsFromNamespace(ns), cfg.strictLevel)
 		if err != nil {
 			return nil, err
 		}
@@ -472,7 +483,6 @@ func finishEngine(ctx context.Context, cfg *engineConfig, ns *environment.Namesp
 		maxExpandDepth:          cfg.maxExpandDepth,
 		maxStackSize:            cfg.maxStackSize,
 		inlineThreshold:         cfg.inlineThreshold,
-		contractEnforcement:     cfg.contractEnforcement,
 		lossyConversionsAllowed: cfg.lossyConversionsAllowed,
 		coverageCollector:       cfg.coverageCollector,
 	}
@@ -861,7 +871,10 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 	)
 	closure.SetName(spec.Name)
 	closure.SetDoc(spec.Doc)
-	if p.contractEnforcement {
+	// The namespace, not the engine, is the source of truth: a primitive bound
+	// here lands in a frame the namespace owns, so it must be decorated the same
+	// way the base environment's and the libraries' primitives were.
+	if p.namespace.ContractEnforcement() {
 		closure.SetValidator(registry.BuildValidator(spec))
 	}
 

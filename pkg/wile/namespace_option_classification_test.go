@@ -88,6 +88,7 @@ func namespaceConsumedOptions() []struct {
 		{"WithStrictNamespace", WithStrictNamespace()},
 		{"WithoutAmbientBindings", WithoutAmbientBindings()},
 		{"WithDialect", WithDialect(NoMutation)},
+		{"WithContractEnforcement", WithContractEnforcement()},
 	}
 }
 
@@ -200,19 +201,11 @@ var namespaceConsumedFields = []string{
 	"topLevelMutabilitySet",
 	"strictLevel",
 	"dialect",
+	"contractEnforcement",
 }
 
 // engineOnlyFields are read after the namespace exists, so they apply equally
 // to a pre-built one and are reachable from NewEngineWithNamespace.
-//
-// contractEnforcement is the uncomfortable member and is listed here only
-// because that is the SHIPPED behavior, not because the classification is
-// settled. It has three readers: applyOptionsFromConfig at the bootstrap call
-// site (engine.go, not reached on the pre-built path), the same function at the
-// setupLibrarySystem call site (runs), and the Engine's own copy consumed by
-// RegisterPrimitive (runs). So enforcement on a pre-built namespace covers
-// libraries and later registrations but NOT the base environment — a partial,
-// silent application of exactly the kind this file exists to stop. See TODO.md.
 var engineOnlyFields = []string{
 	"maxCallDepth", "callDepthSet",
 	"maxParseDepth", "parseDepthSet",
@@ -222,7 +215,6 @@ var engineOnlyFields = []string{
 	"libraryPaths", "libraryEnabled",
 	"importObserver",
 	"resolverFactories",
-	"contractEnforcement",
 	"lossyConversionsAllowed",
 	"coverageCollector",
 }
