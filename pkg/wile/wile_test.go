@@ -291,14 +291,14 @@ func TestNewNamespace(t *testing.T) {
 	c.Assert(ns.Registry(), qt.IsNotNil)
 }
 
-func TestNewEngine_WithNamespace(t *testing.T) {
+func TestNewEngineWithNamespace(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	ns, err := NewNamespace(ctx)
 	c.Assert(err, qt.IsNil)
 
-	eng, err := NewEngine(ctx, WithNamespace(ns))
+	eng, err := NewEngineWithNamespace(ctx, ns)
 	c.Assert(err, qt.IsNil)
 
 	result, err := eng.Eval(ctx, eng.MustParse(ctx, "(+ 1 2)"))
@@ -332,7 +332,7 @@ func TestNewNamespace_WithExtension(t *testing.T) {
 	ns, err := NewNamespace(ctx, WithProfile(Console))
 	c.Assert(err, qt.IsNil)
 
-	eng, err := NewEngine(ctx, WithNamespace(ns))
+	eng, err := NewEngineWithNamespace(ctx, ns)
 	c.Assert(err, qt.IsNil)
 
 	// Math extension should be available

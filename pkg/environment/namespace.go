@@ -177,9 +177,9 @@ type Namespace struct {
 	// registry still backs library environments and imports.
 	//
 	// Held here rather than on the Engine because a namespace built by
-	// wile.NewNamespace and handed to WithNamespace is the only carrier that
-	// survives to engine construction — the narrowing happens during bootstrap,
-	// and the local it was computed in is gone by then.
+	// wile.NewNamespace and handed to wile.NewEngineWithNamespace is the only
+	// carrier that survives to engine construction — the narrowing happens during
+	// bootstrap, and the local it was computed in is gone by then.
 	//
 	// Stored as any for the same import-cycle reason as registry. Nil when no
 	// narrowing applied; readers should fall back to registry.

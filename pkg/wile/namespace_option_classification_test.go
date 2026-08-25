@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/extensions/math"
@@ -33,9 +32,13 @@ import (
 )
 
 // recoverEngineInit runs fn and returns the error it panicked with, or nil if
-// it did not panic. A panic value that is not an error is re-raised: the
-// contract under test is a WRAPPED sentinel, and a bare string or sentinel
-// would otherwise pass silently.
+// it did not panic. A panic value that is not an error is re-raised: a bare
+// string or sentinel would otherwise pass silently.
+//
+// Nothing in the option family panics any more — the classification is a
+// compile-time fact. The helper survives because the tests below assert the
+// ABSENCE of a panic, and a raw panic would abort the run instead of failing
+// the case that caused it.
 func recoverEngineInit(t *testing.T, fn func()) (q error) {
 	t.Helper()
 	defer func() {
@@ -53,14 +56,14 @@ func recoverEngineInit(t *testing.T, fn func()) (q error) {
 	return nil
 }
 
-// namespaceConsumedOptions is the family NewEngine cannot apply on the
-// WithNamespace path, because that path skips bootstrapNamespace, which is
-// the only site that consumes them. Every entry must panic.
+// namespaceConsumedOptions is the family only bootstrapNamespace can apply.
+// Each returns EngineOption and NOT EngineOnlyOption, so writing one at
+// NewEngineWithNamespace does not compile.
 //
 // ADDING A NEW OPTION: if it writes a field of engineConfig that only
-// bootstrapNamespace reads, add it here AND to rejectNamespaceConsumedOptions
-// in engine.go. TestWithNamespaceRejectionCoversEveryConsumedField is the
-// ratchet that fails when the two drift.
+// bootstrapNamespace reads, wrap it in namespaceConsumedOption and add it here.
+// TestNamespaceConsumedOptionsAreNotEngineOnly checks the adapter matches this
+// table, and TestEveryOptionIsInExactlyOneTable checks the table is complete.
 func namespaceConsumedOptions() []struct {
 	name string
 	opt  EngineOption
@@ -72,6 +75,7 @@ func namespaceConsumedOptions() []struct {
 		{"WithRegistry", WithRegistry(registry.NewRegistry())},
 		{"WithoutCore", WithoutCore()},
 		{"WithExtension", WithExtension(math.Extension)},
+		{"WithExtensions", WithExtensions(math.Extension)},
 		{"WithProfile", WithProfile(Console)},
 		{"WithAuthorizer", WithAuthorizer(security.ConsoleAuthorizer())},
 		{"WithAuthorizer(nil)", WithAuthorizer(nil)},
@@ -87,51 +91,23 @@ func namespaceConsumedOptions() []struct {
 	}
 }
 
-// TestWithNamespaceRejectsNamespaceConsumedOptions is the headline gate. Each
-// option below was silently DROPPED before this change, which for the
-// authorizer family meant a caller asking for a sandbox got an engine without
-// one and no error.
-func TestWithNamespaceRejectsNamespaceConsumedOptions(t *testing.T) {
-	c := qt.New(t)
-	ctx := context.Background()
-
-	for _, tt := range namespaceConsumedOptions() {
-		c.Run(tt.name, func(c *qt.C) {
-			ns, err := NewNamespace(ctx)
-			c.Assert(err, qt.IsNil)
-
-			got := recoverEngineInit(c.TB.(*testing.T), func() {
-				_, _ = NewEngine(ctx, WithNamespace(ns), tt.opt)
-			})
-			c.Assert(got, qt.IsNotNil, qt.Commentf("expected a panic, got none"))
-			c.Assert(errors.Is(got, werr.ErrEngineInit), qt.IsTrue,
-				qt.Commentf("panic value does not wrap ErrEngineInit: %v", got))
-
-			// The diagnostic must name the offending option, or the caller
-			// cannot tell which of fifteen to move.
-			base := strings.TrimSuffix(strings.TrimSuffix(tt.name, "(nil)"), "(nil)")
-			c.Assert(strings.Contains(got.Error(), base), qt.IsTrue,
-				qt.Commentf("panic message %q does not name %q", got.Error(), base))
-		})
-	}
-}
-
-// TestWithNamespaceAcceptsEngineOnlyOptions is the other half: the rejection
-// must not swallow options NewEngine really does apply. Without this arm the
-// test above is satisfied by rejecting everything.
-func TestWithNamespaceAcceptsEngineOnlyOptions(t *testing.T) {
+// TestNewEngineWithNamespaceAcceptsEngineOnlyOptions is the arm that stops the
+// classification from degenerating to "reject everything": an option NewEngine
+// reads after the namespace exists applies equally to a pre-built one, and must
+// still be passable there.
+func TestNewEngineWithNamespaceAcceptsEngineOnlyOptions(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	cases := []struct {
 		name string
-		opts []EngineOption
+		opts []EngineOnlyOption
 	}{
 		{"no extra options", nil},
-		{"WithLibraryPaths", []EngineOption{WithLibraryPaths(".")}},
-		{"WithMaxCallDepth", []EngineOption{WithMaxCallDepth(100)}},
-		{"WithInlineThreshold", []EngineOption{WithInlineThreshold(0)}},
-		{"WithLossyConversionsAllowed", []EngineOption{WithLossyConversionsAllowed()}},
+		{"WithLibraryPaths", []EngineOnlyOption{WithLibraryPaths(".")}},
+		{"WithMaxCallDepth", []EngineOnlyOption{WithMaxCallDepth(100)}},
+		{"WithInlineThreshold", []EngineOnlyOption{WithInlineThreshold(0)}},
+		{"WithLossyConversionsAllowed", []EngineOnlyOption{WithLossyConversionsAllowed()}},
 	}
 
 	for _, tt := range cases {
@@ -139,11 +115,10 @@ func TestWithNamespaceAcceptsEngineOnlyOptions(t *testing.T) {
 			ns, err := NewNamespace(ctx, WithProfile(Small))
 			c.Assert(err, qt.IsNil)
 
-			opts := append([]EngineOption{WithNamespace(ns)}, tt.opts...)
 			var eng *Engine
 			var engErr error
 			got := recoverEngineInit(c.TB.(*testing.T), func() {
-				eng, engErr = NewEngine(ctx, opts...)
+				eng, engErr = NewEngineWithNamespace(ctx, ns, tt.opts...)
 			})
 			c.Assert(got, qt.IsNil, qt.Commentf("unexpected panic: %v", got))
 			c.Assert(engErr, qt.IsNil)
@@ -152,11 +127,17 @@ func TestWithNamespaceAcceptsEngineOnlyOptions(t *testing.T) {
 	}
 }
 
-// TestWithNamespaceSandboxNoLongerSilentlyDropped pins the exact A/B from the
-// filing. Arm A was already correct; arm B wrote the file. Arm B must now be
-// unreachable rather than merely unsandboxed — a caller cannot end up with a
-// working engine that ignored the sandbox it asked for.
-func TestWithNamespaceSandboxNoLongerSilentlyDropped(t *testing.T) {
+// TestPreBuiltNamespaceCarriesItsSandbox pins the A/B from the 2026-08-04
+// filing. Arm A was always correct. Arm B was the defect: NewEngine(
+// WithNamespace(ns), WithSandbox()) returned a working, UNSANDBOXED engine and
+// a nil error, so a caller who asked to be confined was not.
+//
+// Arm B can no longer be written — WithSandbox is not an EngineOnlyOption — so
+// what it asserts now is the MIGRATION the compiler points at: pass the sandbox
+// to NewNamespace, and the namespace carries it into the engine. That is a
+// stronger claim than the panic it replaces, because it proves the route the
+// diagnostic recommends actually confines.
+func TestPreBuiltNamespaceCarriesItsSandbox(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -175,18 +156,36 @@ func TestWithNamespaceSandboxNoLongerSilentlyDropped(t *testing.T) {
 	_, statErr := os.Stat(pathA)
 	c.Assert(os.IsNotExist(statErr), qt.IsTrue, qt.Commentf("arm A wrote the file"))
 
-	// B — previously returned a working, UNSANDBOXED engine and nil error.
-	ns, err := NewNamespace(ctx, WithProfile(Small))
+	// B — the migration. The sandbox goes to NewNamespace and travels with ns.
+	pathB := filepath.Join(dir, "b.txt")
+	ns, err := NewNamespace(ctx, WithProfile(Small), WithSandbox())
 	c.Assert(err, qt.IsNil)
-	got := recoverEngineInit(t, func() {
-		_, _ = NewEngine(ctx, WithNamespace(ns), WithSandbox())
-	})
-	c.Assert(got, qt.IsNotNil, qt.Commentf("arm B did not panic"))
-	c.Assert(errors.Is(got, werr.ErrEngineInit), qt.IsTrue)
+	engB, err := NewEngineWithNamespace(ctx, ns)
+	c.Assert(err, qt.IsNil)
+	c.Assert(write(engB, pathB), qt.IsNotNil,
+		qt.Commentf("a namespace built with WithSandbox must confine the engine over it"))
+	_, statErr = os.Stat(pathB)
+	c.Assert(os.IsNotExist(statErr), qt.IsTrue, qt.Commentf("arm B wrote the file"))
+}
+
+// TestNewEngineWithNamespaceRejectsNilNamespace pins [nil means NONE]. As an
+// option, WithNamespace(nil) meant "no namespace" and silently took the
+// bootstrap path. As a positional parameter nil has no such reading: it is the
+// same class of bad input as the two registry checks it joins, and answered the
+// same way.
+func TestNewEngineWithNamespaceRejectsNilNamespace(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := NewEngineWithNamespace(ctx, nil)
+	c.Assert(eng, qt.IsNil)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrEngineInit), qt.IsTrue,
+		qt.Commentf("nil namespace must wrap ErrEngineInit, got %v", err))
 }
 
 // namespaceConsumedFields are the engineConfig fields ONLY bootstrapNamespace
-// reads. Every one must be covered by rejectNamespaceConsumedOptions.
+// reads. Every one must be written by an option in namespaceConsumedOptions.
 var namespaceConsumedFields = []string{
 	"registry",
 	"extensions",
@@ -203,19 +202,17 @@ var namespaceConsumedFields = []string{
 	"dialect",
 }
 
-// engineOnlyFields are read by NewEngine AFTER the namespace exists, so they
-// apply equally to a pre-built one and must NOT be rejected.
+// engineOnlyFields are read after the namespace exists, so they apply equally
+// to a pre-built one and are reachable from NewEngineWithNamespace.
 //
 // contractEnforcement is the uncomfortable member and is listed here only
 // because that is the SHIPPED behavior, not because the classification is
 // settled. It has three readers: applyOptionsFromConfig at the bootstrap call
-// site (engine.go, skipped on this path), the same function at the
+// site (engine.go, not reached on the pre-built path), the same function at the
 // setupLibrarySystem call site (runs), and the Engine's own copy consumed by
-// RegisterFunc (runs). So WithContractEnforcement + WithNamespace applies to
-// libraries and later registrations but NOT to the base environment — a
-// partial, silent application of exactly the kind this file exists to stop.
-// Rejecting it does not fully fix that either: passing it to NewNamespace
-// covers the base environment but leaves the Engine's copy false. See TODO.md.
+// RegisterPrimitive (runs). So enforcement on a pre-built namespace covers
+// libraries and later registrations but NOT the base environment — a partial,
+// silent application of exactly the kind this file exists to stop. See TODO.md.
 var engineOnlyFields = []string{
 	"maxCallDepth", "callDepthSet",
 	"maxParseDepth", "parseDepthSet",
@@ -224,21 +221,19 @@ var engineOnlyFields = []string{
 	"inlineThreshold", "inlineThresholdSet",
 	"libraryPaths", "libraryEnabled",
 	"importObserver",
-	"namespace",
 	"resolverFactories",
 	"contractEnforcement",
 	"lossyConversionsAllowed",
 	"coverageCollector",
 }
 
-// TestWithNamespaceRejectionCoversEveryConsumedField is the ratchet. It does
-// not check behavior; it checks that nobody added a field to engineConfig
-// without deciding which side of the WithNamespace line it falls on. A new
-// namespace-consumed field that skips rejectNamespaceConsumedOptions would
-// otherwise reintroduce exactly the silent drop this change removes, and no
-// behavioral test would notice, because the option to trigger it would be new
-// too.
-func TestWithNamespaceRejectionCoversEveryConsumedField(t *testing.T) {
+// TestEngineConfigFieldsAreClassified is the ratchet. It does not check
+// behavior; it checks that nobody added a field to engineConfig without
+// deciding which side of the constructor split it falls on. A new
+// namespace-consumed field reachable from an EngineOnlyOption would reintroduce
+// exactly the silent partial application this split removes, and no behavioral
+// test would notice, because the option to trigger it would be new too.
+func TestEngineConfigFieldsAreClassified(t *testing.T) {
 	c := qt.New(t)
 
 	classified := make(map[string]bool, len(namespaceConsumedFields)+len(engineOnlyFields))
@@ -259,17 +254,17 @@ func TestWithNamespaceRejectionCoversEveryConsumedField(t *testing.T) {
 	}
 	c.Assert(unclassified, qt.HasLen, 0,
 		qt.Commentf("engineConfig fields not classified as namespace-consumed or engine-only: %v — "+
-			"decide which side each falls on, and if namespace-consumed, cover it in "+
-			"rejectNamespaceConsumedOptions", unclassified))
+			"decide which side each falls on, and give the writing option the matching adapter",
+			unclassified))
 
 	c.Assert(typ.NumField(), qt.Equals, len(namespaceConsumedFields)+len(engineOnlyFields),
 		qt.Commentf("a classified field no longer exists on engineConfig"))
 }
 
-// TestWithNamespaceRejectionIsNotTriggeredByNewNamespace guards the caller the
-// 2026-08-04 filing worried about. NewNamespace CONSUMES these options, so it
-// must keep accepting every one of them.
-func TestWithNamespaceRejectionIsNotTriggeredByNewNamespace(t *testing.T) {
+// TestNewNamespaceAcceptsEveryConsumedOption guards the caller the 2026-08-04
+// filing worried about. NewNamespace CONSUMES these options, so it must keep
+// accepting every one of them.
+func TestNewNamespaceAcceptsEveryConsumedOption(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 

@@ -107,9 +107,8 @@ type engineConfig struct {
 	// would refuse WithProfile(Console) and wave WithProfile(Tiny) through.
 	profileSet bool
 
-	namespace         *environment.Namespace // pre-built namespace (via WithNamespace)
-	resolverFactories []resolverFactory      // source file resolver chain (via WithSourceFS, WithSourceOS)
-	envMap            map[string]string      // virtual env vars (via WithEnv, WithEnvMap)
+	resolverFactories []resolverFactory // source file resolver chain (via WithSourceFS, WithSourceOS)
+	envMap            map[string]string // virtual env vars (via WithEnv, WithEnvMap)
 	// envMapSet records that WithEnv/WithEnvMap was called. Distinct from
 	// envMap != nil because WithEnvMap(nil) deliberately re-nils the map,
 	// which is a REQUEST (open the sandbox), not an absence of one.
@@ -446,34 +445,6 @@ func (p *engineConfig) resolveAuthorizer() security.Authorizer {
 	return security.All(base, p.sandboxAuthorizer)
 }
 
-// WithNamespace uses a pre-built namespace instead of building one from
-// extension options. This enables sharing a namespace across engines or
-// pre-configuring namespaces with specific capabilities.
-//
-// NewEngine skips the bootstrap step on this path, so every option that only
-// namespace construction can apply would take no effect. Rather than drop
-// them, NewEngine PANICS when any is present:
-//
-//	WithRegistry, WithoutCore, WithExtension, WithExtensions, WithProfile,
-//	WithAuthorizer, WithSandbox, WithEnv, WithEnvMap, WithImmutableTopLevel,
-//	WithMutableTopLevel, WithStrictNamespace, WithoutAmbientBindings,
-//	WithDialect
-//
-// Pass them to NewNamespace, which consumes all of them, and give its result
-// here. Engine-scoped options (WithLibraryPaths, WithMaxCallDepth, coverage,
-// contract enforcement, …) still apply and are unaffected.
-//
-// The panic is deliberate and deliberately not catchable via errors.Is:
-// passing an option to the wrong constructor is a construction-time
-// programmer error, and the previous silent drop was security-relevant —
-// WithNamespace(ns) plus WithSandbox() produced a working engine with no
-// sandbox and no error.
-func WithNamespace(ns *environment.Namespace) EngineOnlyOption {
-	return engineOnlyOption(func(cfg *engineConfig) {
-		cfg.namespace = ns
-	})
-}
-
 // WithSourceFS adds a virtual filesystem layer to the source file
 // resolver chain. Multiple calls add layers searched in call order.
 // When no resolver options are used, the engine defaults to the OS
@@ -605,8 +576,9 @@ func WithMutableTopLevel() EngineOption {
 //
 // The visible surface is carved when the namespace is built, so strictness must
 // be set at namespace-creation time. Like WithRegistry/WithExtension/WithoutCore,
-// this option has no effect on the WithNamespace path (a pre-built namespace is
-// authoritative for its own top level) — bake strictness in at NewNamespace.
+// this option is namespace-consumed and so cannot be passed to
+// NewEngineWithNamespace at all (a pre-built namespace is authoritative for its
+// own top level) — bake strictness in at NewNamespace.
 // It is incompatible with WithRegistry/WithoutCore (which supply a custom or
 // coreless registry): strict mode derives its visible surface from the default
 // core registry, so the combination is rejected at construction.
@@ -693,8 +665,8 @@ func WithStrictNamespace() EngineOption {
 //     configuration, but not the one the paragraph above describes.
 //
 // Carries the same constraints as WithStrictNamespace: set it at
-// namespace-creation time (no effect on the WithNamespace path), and it is
-// incompatible with WithRegistry/WithoutCore. Off by default.
+// namespace-creation time (it cannot be passed to NewEngineWithNamespace), and
+// it is incompatible with WithRegistry/WithoutCore. Off by default.
 func WithoutAmbientBindings() EngineOption {
 	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.strictLevel = max(cfg.strictLevel, strictLevelNoBindings)
