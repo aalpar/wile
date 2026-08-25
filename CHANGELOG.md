@@ -71,6 +71,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING: `NewEngine` panics when `WithNamespace` is combined with an option
+  only namespace construction can apply, instead of silently ignoring it.** The
+  pre-built-namespace path skips the bootstrap step that consumes these options,
+  so they had no way to take effect and were dropped without a word. For the
+  authorizer family that was a security defect rather than a nuisance:
+
+  ```go
+  eng, err := wile.NewEngine(ctx, wile.WithNamespace(ns), wile.WithSandbox())
+  // err == nil, and eng has NO SANDBOX — a caller asking to be confined was not
+  ```
+
+  The rejected set is every option that writes namespace-scoped configuration:
+  `WithRegistry`, `WithoutCore`, `WithExtension`, `WithExtensions`, `WithProfile`,
+  `WithAuthorizer`, `WithSandbox`, `WithEnv`, `WithEnvMap`,
+  `WithImmutableTopLevel`, `WithMutableTopLevel`, `WithStrictNamespace`,
+  `WithoutAmbientBindings`, `WithDialect`. Pass them to `NewNamespace`, which
+  consumes all of them, and hand its result to `WithNamespace`. Engine-scoped
+  options (`WithLibraryPaths`, `WithMaxCallDepth`, coverage, contract
+  enforcement) are unaffected.
+
+  A panic rather than an error return because passing an option to the wrong
+  constructor is a construction-time programmer error: there is no branch a
+  caller could usefully take, and the fix is to move one option. It is
+  deliberately not catchable via `errors.Is`.
+
+  `WithDialect` already rejected this combination, but by returning
+  `ErrEngineInit`; it now shares the one rule and the one mechanism. Code that
+  asserted on that error return must assert on the panic instead. No other
+  option's behavior changed for callers who were not already silently losing it.
+
 - **BREAKING: Wile now requires Go 1.27.** The language directive and the build
   toolchain had been pinned separately, with the directive kept as low as the
   dependencies allowed so embedders were not dragged forward; they are now both

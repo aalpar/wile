@@ -288,11 +288,10 @@ func applyOptionsFromConfig(cfg *engineConfig) []registry.ApplyOption {
 // By default, only core primitives are included.
 // Use WithExtension to add optional extensions.
 //
-// When WithNamespace is used, the engine uses the pre-built namespace
-// and ignores registry/extension/core options (they were applied when
-// the namespace was created). Library paths and other engine-specific
-// options still apply. See WithNamespace for the full list of options
-// this path silently ignores, several of them security-relevant.
+// When WithNamespace is used, the engine uses the pre-built namespace, and
+// every option that only namespace construction can apply is REJECTED with a
+// panic rather than ignored — see WithNamespace for the list and the rationale.
+// Library paths and other engine-specific options still apply.
 //
 // # Initialization Order Invariant
 //
@@ -354,16 +353,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	var closers []registry.CloseFunc
 
 	if cfg.namespace != nil {
-		// A dialect customizes the forms registry during bootstrapNamespace, which
-		// the pre-built-namespace path skips entirely — so a dialect supplied here
-		// would be silently ignored. Reject the combination rather than drop it,
-		// mirroring the WithStrictNamespace+WithRegistry conflict in
-		// bootstrapNamespace. Install the dialect's forms on the namespace before
-		// WithNamespace, or drop WithNamespace.
-		if cfg.dialect != nil {
-			return nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
-				"WithDialect is incompatible with WithNamespace: a dialect customizes the forms registry at engine origin, which the pre-built-namespace path skips")
-		}
+		rejectNamespaceConsumedOptions(cfg)
 		// Use pre-built namespace
 		ns = cfg.namespace
 		regAny := ns.Registry()

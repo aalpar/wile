@@ -101,9 +101,19 @@ type engineConfig struct {
 	explicitAuthorizerSet bool                // true once WithAuthorizer was called, even with nil
 	sandboxAuthorizer     security.Authorizer // set by WithSandbox (always composed last)
 
+	// profileSet records that WithProfile was called AT ALL, independent of
+	// what the profile writes. Tiny registers no extensions and no authorizer,
+	// so it leaves no other trace — without this flag rejectNamespaceConsumedOptions
+	// would refuse WithProfile(Console) and wave WithProfile(Tiny) through.
+	profileSet bool
+
 	namespace         *environment.Namespace // pre-built namespace (via WithNamespace)
 	resolverFactories []resolverFactory      // source file resolver chain (via WithSourceFS, WithSourceOS)
 	envMap            map[string]string      // virtual env vars (via WithEnv, WithEnvMap)
+	// envMapSet records that WithEnv/WithEnvMap was called. Distinct from
+	// envMap != nil because WithEnvMap(nil) deliberately re-nils the map,
+	// which is a REQUEST (open the sandbox), not an absence of one.
+	envMapSet bool
 
 	// contractEnforcement installs type-checking validators on primitives
 	// whose specs declare ParamTypes. Enabled via WithContractEnforcement.
@@ -126,6 +136,11 @@ type engineConfig struct {
 	// runtime, so it no longer breaks the stdlib. WithMutableTopLevel() opts out;
 	// propagated to the Namespace in NewEngine/NewNamespace.
 	immutableTopLevel bool
+	// topLevelMutabilitySet records that WithImmutableTopLevel or
+	// WithMutableTopLevel was called. The field above cannot report it:
+	// its default is true, so an explicit WithImmutableTopLevel() is
+	// indistinguishable from never asking.
+	topLevelMutabilitySet bool
 
 	// strictLevel selects how much of the registry the VISIBLE top-level surface
 	// is bound from. The profile's registry (REGISTERED) is unchanged at every
@@ -396,20 +411,27 @@ func (p *engineConfig) resolveAuthorizer() security.Authorizer {
 }
 
 // WithNamespace uses a pre-built namespace instead of building one from
-// extension options. When set, registry/extension/core options are ignored
-// by NewEngine (they were already applied when the namespace was created).
+// extension options. This enables sharing a namespace across engines or
+// pre-configuring namespaces with specific capabilities.
 //
-// This enables sharing a namespace across engines or pre-configuring
-// namespaces with specific capabilities.
+// NewEngine skips the bootstrap step on this path, so every option that only
+// namespace construction can apply would take no effect. Rather than drop
+// them, NewEngine PANICS when any is present:
 //
-// Every option consumed by namespace construction is silently ignored on this
-// path, because NewEngine skips the bootstrap step that would apply them:
-// WithAuthorizer, WithSandbox, a profile's built-in authorizer, WithEnv,
-// WithEnvMap, and WithImmutableTopLevel/WithMutableTopLevel. The omission is
-// security-relevant: WithNamespace(ns) combined with WithSandbox() yields no
-// sandbox and no error. Apply those options to NewNamespace, which runs the
-// bootstrap step, and pass its result here. (WithDialect is the one such
-// option NewEngine rejects outright instead of dropping.)
+//	WithRegistry, WithoutCore, WithExtension, WithExtensions, WithProfile,
+//	WithAuthorizer, WithSandbox, WithEnv, WithEnvMap, WithImmutableTopLevel,
+//	WithMutableTopLevel, WithStrictNamespace, WithoutAmbientBindings,
+//	WithDialect
+//
+// Pass them to NewNamespace, which consumes all of them, and give its result
+// here. Engine-scoped options (WithLibraryPaths, WithMaxCallDepth, coverage,
+// contract enforcement, …) still apply and are unaffected.
+//
+// The panic is deliberate and deliberately not catchable via errors.Is:
+// passing an option to the wrong constructor is a construction-time
+// programmer error, and the previous silent drop was security-relevant —
+// WithNamespace(ns) plus WithSandbox() produced a working engine with no
+// sandbox and no error.
 func WithNamespace(ns *environment.Namespace) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.namespace = ns
@@ -473,6 +495,7 @@ func WithSourceOS() EngineOption {
 // the virtual map instead of os.Getenv.
 func WithEnv(key, value string) EngineOption {
 	return func(cfg *engineConfig) {
+		cfg.envMapSet = true
 		if cfg.envMap == nil {
 			cfg.envMap = make(map[string]string)
 		}
@@ -511,6 +534,7 @@ func WithCoverage(c *coverage.Collector) EngineOption {
 func WithImmutableTopLevel() EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.immutableTopLevel = true
+		cfg.topLevelMutabilitySet = true
 	}
 }
 
@@ -522,6 +546,7 @@ func WithImmutableTopLevel() EngineOption {
 func WithMutableTopLevel() EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.immutableTopLevel = false
+		cfg.topLevelMutabilitySet = true
 	}
 }
 
@@ -653,6 +678,7 @@ func WithoutAmbientBindings() EngineOption {
 // currently nil; a later WithEnvMap(nil) re-nils it and opens the sandbox.
 func WithEnvMap(m map[string]string) EngineOption {
 	return func(cfg *engineConfig) {
+		cfg.envMapSet = true
 		if m == nil {
 			cfg.envMap = nil
 			return

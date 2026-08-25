@@ -606,10 +606,59 @@ that names the same probe the row does.
 
 ### `WithNamespace` silently discards every namespace-consumed option, including `WithSandbox` (2026-08-04)
 
-- [ ] **Panic on namespace-consumed options at the `WithNamespace` branch** [High, S-M, filed
-  2026-08-04 from the strict-namespace-levels crosscheck; **contract fully DECIDED 2026-08-24 —
-  this is implementation work now, both forks below are settled**]:
-  `NewEngine(WithNamespace(ns), WithSandbox())` returns a
+- [x] **Panic on namespace-consumed options at the `WithNamespace` branch** — **SHIPPED
+  2026-08-24** (`rejectNamespaceConsumedOptions`, `pkg/wile/namespace_option_rejection.go`,
+  called from `NewEngine`'s `cfg.namespace != nil` branch). Scope landed WIDER than the eight
+  filed below: the rule is **every option that writes namespace-scoped config**, which adds
+  `WithRegistry`, `WithoutCore`, `WithExtension`, `WithExtensions` and `WithProfile`. The eight
+  were not separable — "a profile's built-in authorizer" has exactly one writer, `WithProfile`,
+  and refusing it only for profiles that carry an authorizer would panic on `Console` and wave
+  `Tiny` through.
+
+  Three things the implementation had to add, each because the config could not otherwise report
+  the option:
+
+  - `profileSet` — `WithProfile(Tiny)` registers no extensions and no authorizer, so it writes
+    **nothing**; without an explicit flag it is invisible.
+  - `envMapSet` — `WithEnvMap(nil)` deliberately re-nils the map. That is a request (open the
+    sandbox), not an absence of one, and `envMap != nil` cannot tell them apart.
+  - `topLevelMutabilitySet` — `immutableTopLevel` defaults to **true**, so an explicit
+    `WithImmutableTopLevel()` is indistinguishable from never asking.
+
+  `WithDialect` converted from an error return to the same panic, so one condition has one
+  mechanism; `TestWithDialect_WithNamespace_Conflict` asserts the panic now. The ratchet is
+  `TestWithNamespaceRejectionCoversEveryConsumedField`, which reflects over `engineConfig` and
+  fails when a field is added without being classified — it caught `profileSet` during
+  implementation. Docs updated: `WithNamespace`'s doc comment (which had never gained the two
+  strict options) and `docs/embedding/api-design.md`.
+
+- [ ] **`WithContractEnforcement` is SPLIT across the `WithNamespace` line, and shipped
+  unrejected** [Medium, S, found 2026-08-24 while classifying `engineConfig` for the rejection
+  above — **needs a maintainer call, do not "finish" it by adding a row**]: it is the one option
+  that is neither cleanly namespace-consumed nor cleanly engine-scoped. Three readers, measured:
+
+  | Reader | Runs on the `WithNamespace` path? |
+  |---|---|
+  | `applyOptionsFromConfig` at the `applyBaseEnvironment` call site | **no** — inside `bootstrapNamespace` |
+  | `applyOptionsFromConfig` at the `setupLibrarySystem` call site | yes |
+  | `Engine.contractEnforcement`, consumed by `RegisterFunc`/`RegisterPrimitive` | yes |
+
+  So `NewEngine(WithNamespace(ns), WithContractEnforcement())` enforces contracts on libraries
+  and on later registrations but **not on the base environment** — a partial, silent application,
+  which is the exact shape the rejection exists to stop.
+
+  **Why it was not simply added to `rejectNamespaceConsumedOptions`:** rejecting does not fix it
+  either. Passing the option to `NewNamespace` covers the base environment but leaves
+  `Engine.contractEnforcement` false, so post-construction `RegisterFunc` stops enforcing —
+  partiality moved, not removed. The real fix is for the engine to recover the setting from the
+  namespace rather than from its own config, which is a wider change than the rejection was.
+  Classified as engine-only in `engineOnlyFields` to match SHIPPED behavior, with the split
+  spelled out there; the ratchet passes either way, so nothing forces this.
+
+  <details><summary>Original filing (2026-08-04) and the decision trail</summary>
+
+- **Decide the contract for options `NewEngine` cannot apply** [High, S-M, filed 2026-08-04 from
+  the strict-namespace-levels crosscheck]: `NewEngine(WithNamespace(ns), WithSandbox())` returns a
   working engine **with no sandbox and no error**. Measured, same profile and same source in both
   arms:
 
@@ -707,6 +756,8 @@ that names the same probe the row does.
   lenses argued the strict options should join `WithDialect` in the rejected set; the premise did
   not survive, and this is the finding underneath it. Documented as a known limitation in
   `WithNamespace`'s doc comment today, which is where the "security-relevant" wording comes from.
+
+  </details>
 
 ### Phase hermeticity does not hold inside a library body (2026-08-04)
 
