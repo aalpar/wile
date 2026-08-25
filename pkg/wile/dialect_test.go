@@ -215,6 +215,11 @@ func TestWithDialect_AddsForm(t *testing.T) {
 // rather than silently ignored: the pre-built-namespace path skips the
 // forms-registry customization a dialect performs, so a silently-dropped dialect
 // would be a wrong-behavior-with-no-feedback trap.
+//
+// The rejection was an error return until 2026-08-24, when WithDialect joined
+// the rest of the namespace-consumed family under one rule and one mechanism
+// (see rejectNamespaceConsumedOptions). Two mechanisms for one condition was
+// the asymmetry that change removes, so this asserts the panic.
 func TestWithDialect_WithNamespace_Conflict(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
@@ -222,9 +227,11 @@ func TestWithDialect_WithNamespace_Conflict(t *testing.T) {
 	ns, err := NewNamespace(ctx)
 	c.Assert(err, qt.IsNil)
 
-	eng, err := NewEngine(ctx, WithNamespace(ns), WithDialect(removeSetBangDialect{}))
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(eng, qt.IsNil)
-	c.Assert(errors.Is(err, werr.ErrEngineInit), qt.IsTrue,
-		qt.Commentf("WithDialect+WithNamespace must be a hard error, got %v", err))
+	got := recoverEngineInit(t, func() {
+		_, _ = NewEngine(ctx, WithNamespace(ns), WithDialect(removeSetBangDialect{}))
+	})
+	c.Assert(got, qt.IsNotNil,
+		qt.Commentf("WithDialect+WithNamespace must panic, it returned normally"))
+	c.Assert(errors.Is(got, werr.ErrEngineInit), qt.IsTrue,
+		qt.Commentf("panic value must wrap ErrEngineInit, got %v", got))
 }

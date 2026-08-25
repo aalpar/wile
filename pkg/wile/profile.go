@@ -129,6 +129,7 @@ func (p Profile) authorizer() security.Authorizer {
 // re-nils the map and opens the sandbox.
 func WithProfile(p Profile) EngineOption {
 	return func(cfg *engineConfig) {
+		cfg.profileSet = true
 		cfg.extensions = append(cfg.extensions, p.extensions()...)
 		auth := p.authorizer()
 		if auth != nil {
