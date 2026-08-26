@@ -139,10 +139,12 @@ type Namespace struct {
 
 	// contractEnforcement, when true, makes every primitive bound into this
 	// namespace carry an argument validator built from its spec's ParamTypes
-	// (registry.WithContractEnforcement). Written once during engine
-	// construction, before any thread runs — same reason Name is set eagerly —
-	// so it needs no lock. Delegated to root like immutableTopLevel, but on both
-	// sides; see the inheritance-policy block above. Off by default.
+	// (registry.WithContractEnforcement). Unlocked, like immutableTopLevel:
+	// the write is a construction-time step, but a *Namespace is embedder-held
+	// and this type cannot enforce that, so the constraint lives as a contract
+	// on SetContractEnforcement rather than as an invariant here. Delegated to
+	// root like immutableTopLevel, but on both sides; see the
+	// inheritance-policy block above. Off by default.
 	contractEnforcement bool
 
 	// phases is the phase registry for O(1) access to any phase environment.
@@ -181,7 +183,7 @@ type Namespace struct {
 
 	// registry is the primitive registry.
 	// Stored as any to avoid circular dependency with registry package.
-	// The concrete type is *registry.Registry.
+	// The concrete type is *registry.PrimitiveRegistry.
 	registry any
 
 	// effectiveRegistry is the narrowed registry the visible top level was
@@ -523,6 +525,9 @@ func (p *Namespace) ImmutableTopLevel() bool {
 // engine. Set once at engine construction (WithImmutableTopLevel / WithMutableTopLevel).
 // Stored on the root; child namespaces ignore it and are always mutable
 // (see ImmutableTopLevel).
+//
+// Not safe to call once the namespace is in use, for the reason spelled out on
+// SetContractEnforcement.
 func (p *Namespace) SetImmutableTopLevel(on bool) {
 	p.root().immutableTopLevel = on
 }
@@ -544,6 +549,15 @@ func (p *Namespace) ContractEnforcement() bool {
 // bound into this namespace. Set once at namespace construction
 // (wile.WithContractEnforcement); the flag then travels with the namespace, so
 // two engines over one namespace share it.
+//
+// Not safe to call once the namespace is in use. The field is unlocked and
+// ContractEnforcement is read by Engine.RegisterPrimitive, which an embedder
+// may call at any point in an engine's life, including with SRFI-18 threads
+// running; a later write is then a data race. A green -race run is not evidence
+// against this — the detector reports only the interleavings a run happens to
+// take. SetImmutableTopLevel carries the same contract. Routing both through an
+// atomic cell, as Binding.meta was, would make it enforceable rather than
+// documented.
 func (p *Namespace) SetContractEnforcement(on bool) {
 	p.root().contractEnforcement = on
 }
@@ -594,7 +608,7 @@ func (p *Namespace) SetLibraryEnvFactory(f LibraryEnvFactory) {
 }
 
 // Registry returns the primitive registry.
-// The caller must type-assert to *registry.Registry.
+// The caller must type-assert to *registry.PrimitiveRegistry.
 func (p *Namespace) Registry() any {
 	return p.registry
 }
@@ -606,7 +620,7 @@ func (p *Namespace) SetRegistry(reg any) {
 
 // EffectiveRegistry returns the narrowed registry the visible top level was bound
 // from, or nil when nothing narrowed it (in which case Registry is the effective
-// surface). The concrete type is *registry.Registry.
+// surface). The concrete type is *registry.PrimitiveRegistry.
 func (p *Namespace) EffectiveRegistry() any {
 	return p.effectiveRegistry
 }

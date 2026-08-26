@@ -54,7 +54,7 @@ type Dialect interface {
 // visible top level. The base Dialect interface is forms-only (InstallForms reaches
 // the per-engine forms registry, which the validator and compiler read); the
 // mutation procedures (set-car!, vector-set!, …) live in the separate per-engine
-// *registry.Registry and are invisible to InstallForms. A dialect that also
+// *registry.PrimitiveRegistry and are invisible to InstallForms. A dialect that also
 // implements PrimitiveRemover crosses that ceiling.
 //
 // When a dialect passed to WithDialect also implements PrimitiveRemover, the engine
@@ -101,7 +101,13 @@ type BootstrapProcedureRewriter interface {
 // WithDialect installs a Dialect on the engine, customizing its special-form
 // surface at construction time. Last-wins if supplied more than once. A nil
 // dialect (the default) applies [DefaultDialect], leaving the R7RS-default forms
-// in place. If the dialect's InstallForms returns an error, NewEngine fails with
+// in place.
+//
+// Namespace-scoped: the forms registry the dialect writes to belongs to the
+// namespace, so this option is namespace-consumed and cannot be passed to
+// NewEngineWithNamespace — pass it to NewNamespace instead. If the dialect's
+// InstallForms returns an error, whichever constructor performs the bootstrap
+// (NewNamespace, or NewEngine when it builds the namespace itself) fails with
 // that error wrapped in werr.ErrEngineInit.
 func WithDialect(d Dialect) EngineOption {
 	return namespaceConsumedOption(func(cfg *engineConfig) {
