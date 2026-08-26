@@ -772,7 +772,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **BREAKING (Go API): twenty-four orphaned symbols with no reference anywhere
   in the tree.** A whole-module reference sweep — production code and tests,
-  every package variant — found these referenced by nothing:
+  every package variant — found these referenced by nothing. The four in
+  `pkg/internal/tokenizer` are listed for completeness and are outside the
+  breaking count, which covers the public packages only:
 
   | Package | Symbols |
   |---------|---------|
@@ -958,6 +960,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and therefore no location at all. That answer has no file name, because a port
   does not carry one; a successful `read` from a file port has always produced
   file-less syntax for the same reason, and closing that gap is separate work.
+
+- **`error-object-message` answered the whole Go wrap chain.** R7RS §6.11 splits a
   condition into a message and irritants, and §4.3.3 hands `syntax-error` the same
   pair by delegation. `(error "boom" 1 2)` gave `"boom"`, but a caught compile
   failure gave `"load: in synerr.scm: expansion: expand: failed to expand list
