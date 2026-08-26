@@ -38,10 +38,34 @@
   (test 'down (factor-direction '((a . down)) 'a))
   ;; a misspelled direction is an error, never a silent 'up
   (test-error (factor-direction '((a . dwon)) 'a))
+  ;; factor-direction normalizes its own argument, so an exported caller may
+  ;; hand it either spec form
+  (test 'up (factor-direction '(a b c) 'a))
+
   ;; the documentation-only form collapses to "no directions"
   (test '() (normalize-directions '(a b c)))
   (test '((a . down)) (normalize-directions '((a . down))))
   (test '() (normalize-directions '()))
+
+  ;; The form is decided over the whole list, not its first element. A mixed
+  ;; spec is a half-finished migration; reading it as either form silently
+  ;; ranks an axis the caller meant to name, so it raises in both orders.
+  (test-error (normalize-directions '(a (b . down))))
+  (test-error (normalize-directions '((a . up) b)))
+  ;; and anything that is not a list at all is not either form
+  (test-error (normalize-directions 'down))
+  (test-error (dominates? '((a . 5)) '((a . 4)) 'down))
+
+  ;; A direction naming no factor is never consulted, so without an eager
+  ;; check a misspelled NAME is silent where a misspelled VALUE raises.
+  (test-error (dominates? '((a . 5)) '((a . 4)) '((aa . down))))
+
+  ;; One optional argument, not "one and then whatever": positional directions
+  ;; are a plausible misreading and used to run on (car opt) alone.
+  (test-error (dominates? '((a . 5)) '((a . 4)) '((a . down)) '((a . up))))
+
+  ;; The "keys in X must appear in Y" precondition is checked, not assumed
+  (test-error (dominates? '((a . 5)) '((b . 4))))
 
   ;; Omitted directions reproduce the historical higher-is-better dominance.
   (test #t (dominates? '((a . 5)) '((a . 4)) '()))
@@ -82,7 +106,13 @@
     (test '("cheap")
           (cdr (assoc 'frontier (pareto-frontier cands '((gain . up) (cost . down))))))
     (test 2
-          (length (cdr (assoc 'frontier (pareto-frontier cands '(gain cost))))))))
+          (length (cdr (assoc 'frontier (pareto-frontier cands '(gain cost))))))
+    ;; The frontier validates directions too, not just dominates?
+    (test-error (pareto-frontier cands '((gain . up) (kost . down))))
+    (test-error (pareto-frontier cands '(gain (cost . down)))))
+  ;; A one-candidate frontier calls dominates? zero times, so the check has to
+  ;; be in pareto-frontier as well or this case goes unexamined.
+  (test-error (pareto-frontier '(("only" ((a . 1)))) '((aa . down)))))
 
 (test-end)
 (test-exit)

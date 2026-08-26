@@ -196,8 +196,12 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	// THE POSITION OF THIS WRITE AND THE SetImmutableTopLevel ABOVE IT IS
 	// LOAD-BEARING. applyOptionsFromNamespace reads both flags back off ns, and
 	// its first call site is the applyBaseEnvironment below — so moving either
-	// write past that call would silently reintroduce the partial enforcement
-	// this replaced, with no test to catch it.
+	// write past that call reintroduces the partial enforcement this replaced.
+	// Both halves are pinned: moving this write reddens
+	// TestContractEnforcement_{EndToEnd,PreBuiltNamespace}, and moving the
+	// SetImmutableTopLevel above it reddens forty tests in this package, from
+	// TestStableBasePrimitivesEnforcement through the whole frame-reclaim
+	// family, which reads capture-safety off the same flag.
 	ns.SetContractEnforcement(cfg.contractEnforcement)
 
 	// Strictness picks the registry the VISIBLE top level is bound from; the
@@ -408,7 +412,7 @@ func namespaceRegistry(ns *environment.Namespace) (*registry.PrimitiveRegistry, 
 	q, ok := regAny.(*registry.PrimitiveRegistry)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
-			"NewEngineWithNamespace: namespace registry is %T, expected *registry.Registry", regAny)
+			"NewEngineWithNamespace: namespace registry is %T, expected *registry.PrimitiveRegistry", regAny)
 	}
 	return q, nil
 }

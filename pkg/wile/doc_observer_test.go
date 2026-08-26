@@ -19,7 +19,7 @@ func TestDocRegistrationObserver_ImportUpdatesLiveRegistry(t *testing.T) {
 	defer eng.Close()
 
 	liveReg, ok := eng.Environment().Namespace().Registry().(*registry.PrimitiveRegistry)
-	c.Assert(ok, qt.IsTrue, qt.Commentf("namespace registry should be *registry.Registry"))
+	c.Assert(ok, qt.IsTrue, qt.Commentf("namespace registry should be *registry.PrimitiveRegistry"))
 
 	// Before import: no algebra category.
 	byCategory := liveReg.PrimitivesByCategory()

@@ -349,7 +349,7 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 	reg, ok := eng.Environment().Namespace().Registry().(*registry.PrimitiveRegistry)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrEngineInit,
-			"namespace registry is %T, expected *registry.Registry",
+			"namespace registry is %T, expected *registry.PrimitiveRegistry",
 			eng.Environment().Namespace().Registry())
 	}
 	docProv := repl.NewRegistryDocProvider(reg, eng)

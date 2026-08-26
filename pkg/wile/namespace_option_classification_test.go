@@ -171,8 +171,8 @@ func TestEngineOnlyOptionsAreEngineOnly(t *testing.T) {
 // tree, because the table that would have caught it is the one that was not
 // updated.
 //
-// So this reads the SOURCE rather than the tables: every exported With*/Without*
-// in pkg/wile whose result type is EngineOption or EngineOnlyOption must appear
+// So this reads the SOURCE rather than the tables: every exported function in
+// pkg/wile whose result type is EngineOption or EngineOnlyOption must appear
 // in exactly one table. It is the option-level counterpart to
 // TestEngineConfigFieldsAreClassified, which catches a new engineConfig FIELD;
 // neither subsumes the other, because a new option over an existing field is
@@ -186,7 +186,7 @@ func TestEveryOptionIsInExactlyOneTable(t *testing.T) {
 
 	listed := make(map[string]string)
 	for _, tt := range namespaceConsumedOptions() {
-		listed[strings.TrimSuffix(strings.TrimSuffix(tt.name, "(nil)"), "(nil)")] = "namespace-consumed"
+		listed[strings.TrimSuffix(tt.name, "(nil)")] = "namespace-consumed"
 	}
 	for _, tt := range engineOnlyOptions() {
 		_, dup := listed[tt.name]
@@ -210,9 +210,11 @@ func TestEveryOptionIsInExactlyOneTable(t *testing.T) {
 			if !ok || fn.Recv != nil {
 				continue
 			}
-			if !strings.HasPrefix(fn.Name.Name, "With") && !strings.HasPrefix(fn.Name.Name, "Without") {
-				continue
-			}
+			// Keyed on the RETURN TYPE alone, deliberately: the invariant is
+			// "an option constructor picks an adapter", and the With*/Without*
+			// spelling is only a proxy for it. A Sandboxed() or NoCore() would
+			// slip a name filter, get no table entry, and leave this ratchet
+			// green — the one failure mode it exists to prevent.
 			if !fn.Name.IsExported() || !returnsAnEngineOption(fn) {
 				continue
 			}
