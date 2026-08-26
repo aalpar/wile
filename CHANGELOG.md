@@ -16,6 +16,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-08-25
+
+The release the Go embedding API breaks in. `wile.WithNamespace` is gone:
+`NewEngineWithNamespace(ctx, ns, opts ...EngineOnlyOption)` takes the namespace
+as a parameter, and `EngineOption` splits into an interface pair so the compiler
+refuses an option the namespace has already consumed instead of dropping it.
+Three dead-code sweeps deleted forty-two exported symbols with no caller
+anywhere in the tree, the debugger moved to its own package `pkg/debug`, and Go
+1.27 is the new floor.
+
+Scheme-side: pair literals are mutable, R6RS `(rnrs hashtables)` lands,
+`(wile algebra pareto)` factors carry a direction of improvement, an authorizer
+denial can no longer be caught by `guard`, call-site arity is checked at compile
+time, and a top-level `(begin …)` splices rather than opening a `letrec*` body.
+Twenty-eight of the seventy-two entries below are marked BREAKING; read Changed
+and Removed before upgrading.
+
 ### Added
 
 - **`(wile algebra pareto)` factors carry a direction of improvement.**
@@ -2525,7 +2542,8 @@ analysis. No language-visible semantic change.
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.19.1...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.20.0...HEAD
+[1.20.0]: https://github.com/aalpar/wile/compare/v1.19.1...v1.20.0
 [1.19.1]: https://github.com/aalpar/wile/compare/v1.19.0...v1.19.1
 [1.19.0]: https://github.com/aalpar/wile/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/aalpar/wile/compare/v1.17.0...v1.18.0
