@@ -5,6 +5,10 @@
 ;; least one. The frontier is the set of non-dominated candidates.
 ;; Pick it up when you have candidates scored along several axes
 ;; and need "the set of points no other point beats on all axes."
+;;
+;; "Better" is per axis: a speed improves upward, a price downward.
+;; Say which, or every axis is read as higher-is-better. See the last
+;; section.
 
 (import (scheme base) (wile algebra pareto))
 (include "../lib/check.scm")
@@ -56,5 +60,47 @@
 (check-true (member 'C frontier-ids)       "C is on the frontier (Pareto-optimal tradeoff)")
 (check-true (member 'D frontier-ids)       "D is on the frontier (tied with A)")
 (check-false (member 'B frontier-ids)      "B is NOT on the frontier (A dominates)")
+
+;; -- Factor direction: naming a lower-is-better axis ----------------
+;;
+;; Every axis above improves upward, so '(speed mpg) -- a plain list of
+;; names -- is documentation and nothing more. Price does not improve
+;; upward, and nothing about the number says so. Name the direction and
+;; the alist becomes load-bearing; leave it unnamed and a cheaper car is
+;; read as the worse one, with the frontier still looking like a frontier.
+
+(define car-E '((speed . 120) (price . 20000)))
+(define car-F '((speed . 100) (price . 35000)))
+
+;; Read all-up, E and F are incomparable: F "wins" on price by costing more.
+(check-false (dominates? car-E car-F)
+             "without directions, E does not dominate F (price read upward)")
+
+;; Name price as 'down and E dominates outright: faster AND cheaper.
+(check-true  (dominates? car-E car-F '((speed . up) (price . down)))
+             "with (price . down), E dominates F (faster and cheaper)")
+
+;; Per-axis lookup. An axis the spec does not name defaults to 'up.
+(check= 'down (factor-direction '((speed . up) (price . down)) 'price)
+        "price improves downward")
+(check= 'up   (factor-direction '((price . down)) 'speed)
+        "an unnamed axis defaults to 'up")
+
+;; Directions reach the frontier, not just dominates?.
+(define priced-result
+  (pareto-frontier `((E ,car-E) (F ,car-F)) '((speed . up) (price . down))))
+
+(check= '(E) (cdr (assq 'frontier priced-result))
+        "E alone is on the frontier once price is read downward")
+
+;; Every way of getting a direction wrong raises, rather than quietly
+;; meaning "higher is better" -- which is the failure the facility removes.
+
+(check-error (lambda () (dominates? car-E car-F '((price . dwon))))
+             "a misspelled direction is an error, not a silent 'up")
+(check-error (lambda () (dominates? car-E car-F '((prise . down))))
+             "a direction naming no factor is an error, not an unread entry")
+(check-error (lambda () (dominates? car-E car-F '(speed (price . down))))
+             "a spec half-migrated from names to pairs is an error")
 
 (display "pareto tour complete") (newline)

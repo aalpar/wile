@@ -32,10 +32,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   historical documentation-only meaning, every axis `'up`) or an alist of
   `(name . up|down)`, in which case it is load-bearing and is threaded into
   every dominance test. `factor-direction` and `normalize-directions` are
-  exported for callers building their own comparisons. A direction that is
-  neither `'up` nor `'down` raises, rather than defaulting to `'up` — a
-  misspelling silently meaning "higher is better" is the exact failure this
-  removes.
+  exported for callers building their own comparisons, and both accept either
+  form.
+
+  Every way of getting a direction wrong raises, rather than defaulting to
+  `'up` — a misspelling silently meaning "higher is better" is the exact
+  failure this removes, and a check that catches only some misspellings is
+  worse than none, because the half that works advertises the half that does
+  not. Three shapes, all of which used to be silent:
+
+  | Spec | Answer |
+  |------|--------|
+  | `'((gain . up) (cost . dwon))` | raises — the value is neither `'up` nor `'down` |
+  | `'((gain . up) (kost . down))` | raises — the name matches no factor, so it would never have been consulted |
+  | `'(gain (cost . down))`, `'down` | raises — neither the all-names form nor the all-pairs form |
+
+  The mixed case is the one worth naming: `'(gain (cost . down))` is the
+  natural half-migration of an existing `'(gain cost)` call, and the shape is
+  decided over the whole list rather than its first element precisely so that
+  reading it as either form cannot quietly rank `cost` the wrong way.
+
+  `dominates?` also checks its own documented precondition now — a factor
+  present in the first candidate and absent from the second used to surface as
+  `cdr: argument 1: expected a pair but got *values.Boolean`, which names a Go
+  type at a Scheme caller and, inside `pareto-frontier`, gives no way to tell
+  which of N candidates is malformed. Its optional argument is one argument
+  rather than "one and then whatever": `(dominates? x y 'up 'down)` is a caller
+  who thinks directions are positional, and it used to run on the first and
+  drop the rest.
+
+  The quick-tour example gains a priced-car section demonstrating all of it:
+  [`examples/algebra/tutorial/quick-tour/pareto.scm`](examples/algebra/tutorial/quick-tour/pareto.scm).
 
   Nothing existing changes behaviour: omit the directions, or pass the symbol
   list, and dominance is higher-is-better on every axis as before.

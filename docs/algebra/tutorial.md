@@ -87,7 +87,7 @@ One per sub-library not featured in a deep chapter, except `tree` (tree edit dis
 | [`quick-tour/graph.scm`](../../examples/algebra/tutorial/quick-tour/graph.scm) | `graph` (abstract; distinct from `combinatorial-graph`) | Boolean-semiring reachability, tropical-semiring shortest path |
 | [`quick-tour/interval.scm`](../../examples/algebra/tutorial/quick-tour/interval.scm) | `interval` | Infinity-aware arithmetic, four-corner multiplication, interval lattice with containment ordering |
 | [`quick-tour/matrix.scm`](../../examples/algebra/tutorial/quick-tour/matrix.scm) | `matrix` | 2x2 counting-semiring arithmetic, identity, powers, Boolean adjacency reachability |
-| [`quick-tour/pareto.scm`](../../examples/algebra/tutorial/quick-tour/pareto.scm) | `pareto` | Factor comparison over booleans and numbers, two-objective car dominance, frontier |
+| [`quick-tour/pareto.scm`](../../examples/algebra/tutorial/quick-tour/pareto.scm) | `pareto` | Factor comparison over booleans and numbers, two-objective car dominance, frontier, per-axis direction of improvement |
 | [`quick-tour/matching.scm`](../../examples/algebra/tutorial/quick-tour/matching.scm) | `matching` | Gale-Shapley proposer/receiver optima, stability and blocking pairs, Hungarian min-cost assignment |
 | [`quick-tour/sat.scm`](../../examples/algebra/tutorial/quick-tour/sat.scm) | `sat` | CDCL CNF and S-expression satisfiability, model extraction, SAT-backed Boolean equivalence |
 | [`quick-tour/cfl.scm`](../../examples/algebra/tutorial/quick-tour/cfl.scm) | `cfl` | CFL/Dyck reachability; interprocedural call/return matching vs plain Boolean reachability |
