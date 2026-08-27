@@ -239,6 +239,64 @@ func TestQuasiExpandShape(t *testing.T) {
 			qs2:  "(cons (syntax a) (list (syntax unsyntax) x))",
 		},
 		{
+			// `,,@x — a splice in the OPERAND of an unquote, which R7RS
+			// §7.1.4 does not derive. ⟨unquotation D⟩ takes exactly one
+			// ⟨qq template D−1⟩, and ⟨splicing unquotation⟩ is unreachable
+			// from ⟨qq template⟩: it derives only from ⟨qq template or
+			// splice⟩, which occurs only in list and vector ELEMENT
+			// positions — never an operand, never a tail. So the operand is
+			// read as an ordinary list of data and the splice inside it is
+			// INERT, which is what the depth-2 columns pin: the
+			// unquote-splicing keyword survives into the output datum
+			// instead of firing.
+			//
+			// Chez and Racket both extend unquote to splice here, and
+			// disagree with each other once the operand list has more than
+			// one element, where Racket returns Wile's answer. That
+			// disagreement is why this is a documented reading rather than
+			// a conformance gap; docs/reference/r7rs-differences.md item 18
+			// carries the grammar argument and the three-way table.
+			//
+			// Depth 1 hands the raw splice to the compiler, exactly as
+			// dotted-unquote-depth-two's qq1 hands it a raw unquote: the
+			// escape returns its operand unexpanded and the error is the
+			// compiler's, not this walk's.
+			//
+			// Mutation-tested against that extension, fired narrowly in
+			// rewrapQuasiForm for an operand of exactly (splicing E) at the
+			// depth where a splice fires: `go test ./...` over the whole
+			// tree goes red at these two rows and NOWHERE ELSE. Before them
+			// the suite could not see the reading change at all, which is
+			// what earns them their place — the coarse version of the same
+			// edit (cons over an expanded operand list) additionally moves
+			// ~20 existing depth-2 rows from list to cons at identical
+			// values, and that is the churn item 18 declines.
+			name: "operand-splice",
+			src:  "(a (UNQ (SPLICE x)))",
+			qq1:  "(list (quote a) (unquote-splicing x))",
+			qq2: "(list (quote a) (list (quote unquote)" +
+				" (quote (unquote-splicing x))))",
+			qs1: "(list (syntax a) (unsyntax-splicing x))",
+			qs2: "(list (syntax a) (list (syntax unsyntax)" +
+				" (syntax (unsyntax-splicing x))))",
+		},
+		{
+			// The same operand in TAIL position. Both arms reach the operand
+			// through rewrapQuasiForm, so only the HEAD may differ between
+			// this row and the one above (cons here, list there); the
+			// operand cell must stay byte-identical. A diff confined to the
+			// operand would mean the dotted arm had grown its own reading of
+			// what an unquote's argument is.
+			name: "operand-splice-dotted",
+			src:  "(a UNQ (SPLICE x))",
+			qq1:  "(cons (quote a) (unquote-splicing x))",
+			qq2: "(cons (quote a) (list (quote unquote)" +
+				" (quote (unquote-splicing x))))",
+			qs1: "(cons (syntax a) (unsyntax-splicing x))",
+			qs2: "(cons (syntax a) (list (syntax unsyntax)" +
+				" (syntax (unsyntax-splicing x))))",
+		},
+		{
 			name: "improper",
 			src:  "(a . b)",
 			qq1:  "(cons (quote a) (quote b))",
