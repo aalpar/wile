@@ -16,6 +16,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Documentation
+
+- **A splice in an unquote's operand (`` `,,@x` ``) is documented as staying
+  literal.** R7RS §7.1.4 gives `unquote` exactly one operand and types it
+  `⟨qq template D−1⟩`, from which `⟨splicing unquotation⟩` is unreachable: `,@`
+  derives only from `⟨qq template or splice⟩`, which occurs in list and vector
+  *element* positions and nowhere else — never an operand, never a tail. So
+  `,,@x` has no derivation as an unquotation, and the section's closing
+  precedence note either rules the form out entirely or leaves it an ordinary
+  list of data. Wile reads it the second way, and the splice inside is inert.
+
+  Chez and Racket both extend `unquote` to splice there, and disagree with each
+  other once the operand list holds more than one element, where Racket returns
+  Wile's answer. Two reference implementations disagreeing is what makes this a
+  documented reading rather than a conformance gap, so it is recorded as
+  difference 18 in `docs/reference/r7rs-differences.md` rather than changed.
+
+  `TestQuasiExpandShape` gains `operand-splice` and `operand-splice-dotted`.
+  Firing the extension narrowly as a mutation turns the whole tree red at those
+  two rows and nowhere else: the suite previously could not see the reading
+  change at all. The coarse form of the same edit additionally moves ~20
+  existing depth-2 rows from a `list` shape to a `cons` shape at identical
+  values, which is the churn the difference declines.
+
 ## [1.20.0] - 2026-08-25
 
 The release the Go embedding API breaks in. `wile.WithNamespace` is gone:

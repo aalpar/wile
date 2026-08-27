@@ -8,7 +8,7 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-17 known differences exist:
+18 known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
@@ -87,6 +87,14 @@ This document catalogs differences between the current implementation and the R7
     instance does. A modifier-free `define-record-type` is unaffected. The
     diagnostic names `record-modifier` rather than the modifier the program
     wrote.
+18. A splice in the **operand** of an over-deep `unquote` — `` ``(a ,,@x) `` —
+    stays **literal**. R7RS §7.1.4 gives `unquote` exactly one operand and types
+    it `⟨qq template D−1⟩`, from which `⟨splicing unquotation⟩` is unreachable,
+    so the form is either ungrammatical or an ordinary list of data depending on
+    how widely the section's precedence note is read; Wile takes the latter. Chez
+    and Racket both extend `unquote` to splice there, and **disagree with each
+    other** on the multi-operand case, where Racket returns Wile's answer. A
+    splice in any **element** position is unaffected and fully conforming.
 
 ---
 
@@ -439,6 +447,84 @@ runtimes (including Go's `time` package) expose Unix time, not TAI.
 (the offset cancels). Programs that need a true atomic timescale, or that compare
 `current-second` against an external TAI source, will see the fixed offset. For
 monotonic elapsed time prefer `current-jiffy` / `jiffies-per-second`.
+
+## A Splice in an Unquote's Operand (`,,@x`) Stays Literal
+
+**Affected:** a splice written in the **operand position** of an `unquote` /
+`unsyntax` that is too deep to fire — `` ``(a ,,@x) `` and its dotted, vector and
+`quasisyntax` spellings. Not affected: `,@` in any **element** position, which is
+the only place the grammar puts it, and which behaves exactly as specified.
+
+**R7RS §7.1.4 Grammar:**
+
+```
+⟨unquotation D⟩           → , ⟨qq template D−1⟩
+                          | (unquote ⟨qq template D−1⟩)
+⟨qq template or splice D⟩ → ⟨qq template D⟩
+                          | ⟨splicing unquotation D⟩
+⟨splicing unquotation D⟩  → ,@ ⟨qq template D−1⟩
+                          | (unquote-splicing ⟨qq template D−1⟩)
+```
+
+> In ⟨quasiquotation⟩s, a ⟨list qq template D⟩ can sometimes be confused with
+> either an ⟨unquotation D⟩ or a ⟨splicing unquotation D⟩. The interpretation as
+> an ⟨unquotation⟩ or ⟨splicing unquotation D⟩ takes precedence.
+
+`unquote` takes **exactly one** operand, and that operand is a
+`⟨qq template D−1⟩` — a nonterminal from which `⟨splicing unquotation⟩` is
+unreachable. `,@` derives only from `⟨qq template or splice⟩`, which occurs only
+in the element positions of `⟨list qq template⟩` and `⟨vector qq template⟩`:
+never as an operand, never as a tail. So `,,@x` has no derivation as an
+unquotation, and the precedence note settles it two ways depending on how widely
+it is read. As a global rule it forces the splicing reading, which is
+inadmissible in operand position, leaving the form **ungrammatical**. As a rule
+that applies only where the context admits both readings, the one surviving
+derivation is `(unquote-splicing x)` as an **ordinary two-element list of data**.
+
+**Wile Behavior:** the second reading. The operand is a literal list and the `,@`
+inside it is inert, so the keyword survives into the output datum.
+
+```scheme
+(define x (list 1 2))
+
+`(a ,@x)          ; => (a 1 2)          element position: fires, as specified
+`(a ,,@x)         ; => error            depth 1: the escape hands the raw
+                  ;                     splice to the compiler (all three agree)
+``(a ,,@x)        ; => (quasiquote (a (unquote (unquote-splicing x))))
+``(a . ,,@x)      ; => (quasiquote (a unquote (unquote-splicing x)))
+``#(a ,,@x)       ; => (quasiquote #(a (unquote (unquote-splicing x))))
+```
+
+Chez and Racket both implement an **extension** here, splicing into the
+reconstructed operand list, which can yield several operands or an improper tail
+(`` ``(a . ,,@x) `` with `x` bound to `5` gives `(quasiquote (a unquote . 5))`).
+The two disagree about how far it reaches, which is the clearest evidence that
+this is unspecified territory rather than a settled requirement:
+
+| Form (`x` = `(1 2)`) | Wile | Chez | Racket |
+|---|---|---|---|
+| `` ``(a ,,@x) `` | `(a (unquote (unquote-splicing x)))` | `(a (unquote 1 2))` | `(a (unquote 1 2))` |
+| `` ``(a (unquote ,@x ,@x)) `` | `(a (unquote (unquote-splicing x) (unquote-splicing x)))` | `(a (unquote 1 2 1 2))` | `(a (unquote (unquote-splicing x) (unquote-splicing x)))` |
+
+(outer `quasiquote` elided). The second row has **two** operands, so it is not an
+`⟨unquotation⟩` under any reading — only Chez extends that far, and Racket lands
+back on Wile's answer.
+
+**Why.** No conforming program can contain the form: under the strict reading it
+is ungrammatical, and under the permissive one it is inert data whose value Wile
+already produces. Adopting the extension would mean rewrapping an over-deep
+keyword form as `(cons '<keyword> …)` rather than `(list '<keyword> …)`, which
+re-shapes *every* over-deep form at identical values, and would still require
+choosing Chez's reading over Racket's on the multi-operand row. The behavior is
+documented rather than changed.
+
+**Impact.** None for portable code. A program that relies on Chez's or Racket's
+splicing here does not port to Wile, and one that relies on Wile's literal
+reading does not port to them. `quasisyntax` behaves as the mirror image
+(`` #`#`(a #,#,@x) `` yields `(quasisyntax (a (unsyntax (unsyntax-splicing x))))`)
+because both dialects share `rewrapQuasiForm`; the mirror-image property itself
+is pinned by `TestQuasiExpandShape`'s dotted rows, though no row covers this
+form specifically.
 
 ## Extensions Beyond R7RS
 
