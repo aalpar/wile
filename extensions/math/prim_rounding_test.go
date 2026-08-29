@@ -360,6 +360,28 @@ func TestRoundingEdgeCases(t *testing.T) {
 		{"floor-quotient rational", `(= (floor-quotient 7/2 1) 3)`, values.TrueValue},
 		{"truncate-quotient rational", `(= (truncate-quotient 7/2 1) 3)`, values.TrueValue},
 
+		// Integer division of a BigFloat NaN. big.Float has no NaN, so a
+		// BigFloat carries one out of band (see recoverNaN in values); an
+		// extraction that reads the payload instead answers 0.0 and silently
+		// disagrees with the Float arm two rows down. #m has no NaN literal,
+		// so the operand is built by inf - inf.
+		{
+			"floor-quotient bigfloat NaN",
+			`(nan? (floor-quotient (- (/ #m1.0 #m0.0) (/ #m1.0 #m0.0)) 2))`,
+			values.TrueValue,
+		},
+		{
+			"floor-remainder bigfloat NaN",
+			`(nan? (floor-remainder (- (/ #m1.0 #m0.0) (/ #m1.0 #m0.0)) 2))`,
+			values.TrueValue,
+		},
+		{
+			"truncate-quotient bigfloat NaN",
+			`(nan? (truncate-quotient (- (/ #m1.0 #m0.0) (/ #m1.0 #m0.0)) 2))`,
+			values.TrueValue,
+		},
+		{"floor-quotient float NaN", `(nan? (floor-quotient +nan.0 2))`, values.TrueValue},
+
 		// Numeric predicate edge cases
 		{"finite? zero", `(finite? 0)`, values.TrueValue},
 		{"finite? negative zero", `(finite? -0.0)`, values.TrueValue},

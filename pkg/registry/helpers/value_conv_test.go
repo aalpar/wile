@@ -493,6 +493,15 @@ func TestExtractReal(t *testing.T) {
 		{"big float zero", values.NewBigFloatFromFloat64(0.0), 0, false, nil},
 		{"big float positive", values.NewBigFloatFromFloat64(3.14), 3.14, false, nil},
 		{"big float negative", values.NewBigFloatFromFloat64(-2.718), -2.718, false, nil},
+		{"big float infinity", values.NewBigFloatFromFloat64(math.Inf(1)), math.Inf(1), false, nil},
+		{"big float neg infinity", values.NewBigFloatFromFloat64(math.Inf(-1)), math.Inf(-1), false, nil},
+		// NaN has no big.Float representation, so *BigFloat carries it out of
+		// band. Extracting through BigFloatValue() reads the zero payload and
+		// answers 0.0; this row is the ratchet against that regression.
+		{
+			"big float NaN", values.NewBigFloatNaN(), 0, false,
+			math.IsNaN,
+		},
 	}
 
 	for _, tc := range tcs {

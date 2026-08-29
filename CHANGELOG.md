@@ -16,6 +16,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`floor-quotient` and its four siblings answered `0.0` for a `#m` NaN.**
+  `big.Float` has no NaN, so `*values.BigFloat` carries one out of band and
+  `BigFloatValue()` hands back the zero payload. `helpers.ExtractReal` enumerated
+  the five real kinds itself and read that payload, so
+  `(floor-quotient (- (/ #m1.0 #m0.0) (/ #m1.0 #m0.0)) 2)` was `0.0` while the
+  `*Float` spelling of the same computation was `+nan.0` — master disagreed with
+  itself across its two inexact real kinds. `floor/`, `floor-remainder`,
+  `truncate-quotient` and `truncate/` shared it.
+
+  `ExtractReal` now screens through `screenReal` and converts through
+  `values.ToFloat64WithAccuracy`, the numeric registry's own per-kind conversion,
+  which knows about the flag; exactness comes from `Number.IsExact`. The
+  enumeration is gone, which is the point: it was one answer per kind restated at
+  a site that had no way to be told when a kind changed.
+
 ### Documentation
 
 - **A splice in an unquote's operand (`` `,,@x` ``) is documented as staying
