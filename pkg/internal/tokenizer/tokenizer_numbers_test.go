@@ -806,21 +806,41 @@ func TestNumbers_PureImaginary(t *testing.T) {
 // Polar complex numbers (R@theta)
 // ---------------------------------------------------------------------------
 
+// TestNumbers_PolarComplex asserts the whole token, not just its type, and that
+// the input is consumed to end of stream.
+//
+// Both are load-bearing. The type is set before the angle is scanned, so a
+// truncated or faulted angle still produces the right Type(); and Tokenizer.Next
+// reports a fault inside a token on the *following* call, so `err IsNil` on the
+// first Next() is vacuous for a lexical fault. Under the weaker assertions
+// `1@1/2` passed while tokenizing as `1@1` plus a symbol `/2`, and `1@+inf.0`
+// passed while being a read error.
 func TestNumbers_PolarComplex(t *testing.T) {
 	tcs := []struct {
-		name      string
-		input     string
-		state     TokenizerState
-		checkText bool // only verify text for simple cases
+		name  string
+		input string
+		state TokenizerState
 	}{
-		{name: "integer@integer", input: "1@2", state: TokenizerStateUnsignedComplexPolar, checkText: true},
-		{name: "decimal@decimal", input: "1.5@0.5", state: TokenizerStateUnsignedComplexPolar, checkText: true},
-		{name: "rational@integer", input: "3/4@1", state: TokenizerStateUnsignedComplexPolar, checkText: true},
-		{name: "signed positive", input: "+1@2", state: TokenizerStateSignedComplexPolar, checkText: true},
-		{name: "signed negative", input: "-1@2", state: TokenizerStateSignedComplexPolar, checkText: true},
-		// For inf/nan angles, only check token type — the text may differ from input
+		{name: "integer@integer", input: "1@2", state: TokenizerStateUnsignedComplexPolar},
+		{name: "decimal@decimal", input: "1.5@0.5", state: TokenizerStateUnsignedComplexPolar},
+		{name: "rational@integer", input: "3/4@1", state: TokenizerStateUnsignedComplexPolar},
+		{name: "signed positive", input: "+1@2", state: TokenizerStateSignedComplexPolar},
+		{name: "signed negative", input: "-1@2", state: TokenizerStateSignedComplexPolar},
 		{name: "with inf angle", input: "1@+inf.0", state: TokenizerStateUnsignedComplexPolar},
+		{name: "with negative inf angle", input: "1@-inf.0", state: TokenizerStateUnsignedComplexPolar},
 		{name: "with nan angle", input: "1@+nan.0", state: TokenizerStateUnsignedComplexPolar},
+		{name: "with negative nan angle", input: "1@-nan.0", state: TokenizerStateUnsignedComplexPolar},
+		// <ureal R> includes <uinteger>/<uinteger>, in the angle as in the magnitude.
+		{name: "integer@rational", input: "1@1/2", state: TokenizerStateUnsignedComplexPolar},
+		{name: "rational@rational", input: "1/2@3/4", state: TokenizerStateUnsignedComplexPolar},
+		{name: "signed angle rational", input: "1@-1/2", state: TokenizerStateUnsignedComplexPolar},
+		{name: "exponent angle", input: "1@1e2", state: TokenizerStateUnsignedComplexPolar},
+		{name: "dot angle", input: "1@.5", state: TokenizerStateUnsignedComplexPolar},
+		// <infnan> is a <real R>, so it is a legal magnitude too.
+		{name: "inf magnitude", input: "+inf.0@1", state: TokenizerStateSignedComplexPolar},
+		{name: "negative inf magnitude", input: "-inf.0@1", state: TokenizerStateSignedComplexPolar},
+		{name: "nan magnitude", input: "+nan.0@1", state: TokenizerStateSignedComplexPolar},
+		{name: "infnan both sides", input: "+inf.0@+inf.0", state: TokenizerStateSignedComplexPolar},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -829,9 +849,38 @@ func TestNumbers_PolarComplex(t *testing.T) {
 			token, err := tok.Next()
 			c.Assert(err, qt.IsNil)
 			c.Assert(token.Type(), qt.Equals, tc.state)
-			if tc.checkText {
-				c.Assert(token.String(), qt.Equals, tc.input)
-			}
+			c.Assert(token.String(), qt.Equals, tc.input)
+			_, err = tok.Next()
+			c.Assert(err, qt.Equals, io.EOF, qt.Commentf("input not fully consumed"))
+		})
+	}
+}
+
+// TestNumbers_PolarStateIsTheCallersChoice pins the signed/unsigned distinction
+// against the input's *suffix*. mayReadPolarPart used to end by assigning
+// TokenizerStateUnsignedComplexPolar unconditionally, so `-1@2` was signed at end
+// of input (an early return fired first) and unsigned inside a list.
+func TestNumbers_PolarStateIsTheCallersChoice(t *testing.T) {
+	tcs := []struct {
+		name  string
+		input string
+		state TokenizerState
+	}{
+		{name: "signed at eof", input: "-1@2", state: TokenizerStateSignedComplexPolar},
+		{name: "signed delimited", input: "-1@2)", state: TokenizerStateSignedComplexPolar},
+		{name: "signed delimited decimal", input: "-1@1.5)", state: TokenizerStateSignedComplexPolar},
+		{name: "signed delimited dot angle", input: "-1@.5)", state: TokenizerStateSignedComplexPolar},
+		{name: "plus signed delimited", input: "+1@2)", state: TokenizerStateSignedComplexPolar},
+		{name: "unsigned delimited", input: "1@2)", state: TokenizerStateUnsignedComplexPolar},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			tok := NewTokenizer(strings.NewReader(tc.input), false)
+			token, err := tok.Next()
+			c.Assert(err, qt.IsNil)
+			c.Assert(token.Type(), qt.Equals, tc.state)
+			c.Assert(token.String(), qt.Equals, strings.TrimSuffix(tc.input, ")"))
 		})
 	}
 }

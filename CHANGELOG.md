@@ -33,6 +33,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   enumeration is gone, which is the point: it was one answer per kind restated at
   a site that had no way to be told when a kind changed.
 
+- **Twelve R7RS §7.1.1 polar-complex rows read wrong or not at all.**
+  `⟨polar R⟩ → ⟨real R⟩ @ ⟨real R⟩`, and `⟨real R⟩` is `⟨sign⟩⟨ureal R⟩ | ⟨infnan⟩`
+  on both sides. `mayReadPolarPart` reimplemented three of the five arms of the
+  unsigned-real scanner it sits beside, omitting `⟨infnan⟩` and the `/`
+  continuation, and `readSignedInfinity`/`readSignedNan` had no `@` arm at all:
+
+  | input | before | now (= Chez petite 10 = Racket 8) |
+  |---|---|---|
+  | `1@+inf.0`, `1@-inf.0`, `1@±nan.0` | read error | `+nan.0+nan.0i` |
+  | `1@1/2` | `1@1` **plus a symbol `/2`** | `0.8775825618903728+0.479425538604203i` |
+  | `1/2@3/4` | `1/2@3` plus a symbol `/4` | `0.36584443443691045+0.34081938001166706i` |
+  | `+inf.0@1` | symbol | `+inf.0+inf.0i` |
+  | `-inf.0@1` | symbol | `-inf.0-inf.0i` |
+  | `+nan.0@1`, `-nan.0@1` | symbol | `+nan.0+nan.0i` |
+
+  The rational rows are the ones worth naming: they were a silently wrong answer,
+  not a diagnostic. The parser half was already right — `parseFloatOrInfnan`
+  handles both forms, and `TestParsePolarComplexInfNan` has always passed — so
+  every one of these was a tokenizer gap that no reader-level row looked at.
+
+  The angle now delegates to
+  `mayReadUnsignedFractionalRealNumberOrRationalRealNumber`, entered behind a
+  guard that admits the `i`/`n` arms only after a sign: `⟨infnan⟩` supplies its
+  own, so `1@inf.0` and `1@i` stay identifiers, as they are in both oracles.
+
+  `mayReadPolarPart` also no longer assigns the token state on the way out. Both
+  callers set it before calling, and the assignment overwrote the signed one, so
+  `-1@2` was `signed-complex-polar` at end of input (an early return fired first)
+  and `unsigned-complex-polar` inside a list. Invisible today only because
+  `parser.go` folds the two states into one arm.
+
+  `TestNumbers_PolarComplex` asserted the token *type* and, for the `infnan`
+  rows, explicitly not its text — and `Tokenizer.Next` reports a fault inside a
+  token on the *following* call, so its `err IsNil` was vacuous for a lexical
+  fault. It now asserts the whole token and that the stream reaches `io.EOF`.
+
 ### Documentation
 
 - **A splice in an unquote's operand (`` `,,@x` ``) is documented as staying
