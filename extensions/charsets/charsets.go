@@ -25,11 +25,10 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-func primCharSetQ(mc machine.CallContext) error {
-	_, ok := mc.Arg(0).(*values.CharSet)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+var primCharSetQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(*values.CharSet)
+	return ok
+})
 
 func primCharSetContains(mc machine.CallContext) error {
 	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "char-set-contains?")
@@ -84,17 +83,12 @@ func primEmptyCharSet(mc machine.CallContext) error {
 	return nil
 }
 
-func primCharSetCopy(mc machine.CallContext) error {
-	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "char-set-copy")
-	if err != nil {
-		return err
-	}
-	// CharSet is immutable; copy is identity at the Go level. Returning
-	// a fresh wrapper is unnecessary, but harmless if a future change adds
-	// hidden state. Identity is the cheapest correct answer.
-	mc.SetValue(cs)
-	return nil
-}
+// CharSet is immutable; copy is identity at the Go level. Returning
+// a fresh wrapper is unnecessary, but harmless if a future change adds
+// hidden state. Identity is the cheapest correct answer.
+var primCharSetCopy = helpers.MakeUnaryAccessor(werr.ErrNotACharSet, "char-set-copy", func(cs *values.CharSet) values.Value {
+	return cs
+})
 
 func primStringToCharSet(mc machine.CallContext) error {
 	str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string->char-set")
@@ -225,44 +219,29 @@ func primUcsRangeToCharSet(mc machine.CallContext) error {
 	return nil
 }
 
-func primCharSetToList(mc machine.CallContext) error {
-	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "char-set->list")
-	if err != nil {
-		return err
-	}
+var primCharSetToList = helpers.MakeUnaryAccessor(werr.ErrNotACharSet, "char-set->list", func(cs *values.CharSet) values.Value {
 	chars := make([]values.Value, 0, cs.Size())
 	for c := range cs.Codepoints() {
 		chars = append(chars, values.NewCharacter(c))
 	}
-	mc.SetValue(values.List(chars...))
-	return nil
-}
+	return values.List(chars...)
+})
 
-func primCharSetToString(mc machine.CallContext) error {
-	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "char-set->string")
-	if err != nil {
-		return err
-	}
+var primCharSetToString = helpers.MakeUnaryAccessor(werr.ErrNotACharSet, "char-set->string", func(cs *values.CharSet) values.Value {
 	runes := make([]rune, 0, cs.Size())
 	for c := range cs.Codepoints() {
 		runes = append(runes, c)
 	}
-	mc.SetValue(values.NewString(string(runes)))
-	return nil
-}
+	return values.NewString(string(runes))
+})
 
-func primCharSetRanges(mc machine.CallContext) error {
-	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "char-set-ranges")
-	if err != nil {
-		return err
-	}
+var primCharSetRanges = helpers.MakeUnaryAccessor(werr.ErrNotACharSet, "char-set-ranges", func(cs *values.CharSet) values.Value {
 	var pairs []values.Value
 	for r := range cs.All() {
 		pairs = append(pairs, values.NewCons(values.NewInteger(int64(r.Lo)), values.NewInteger(int64(r.Hi))))
 	}
-	mc.SetValue(values.List(pairs...))
-	return nil
-}
+	return values.List(pairs...)
+})
 
 // setValueFromRunesAndBase builds a char-set from runes, optionally unioned
 // with a base char-set, and stores it on the machine context.
@@ -324,14 +303,9 @@ func makeCharSetFold(name string, op func(a, b *values.CharSet) *values.CharSet)
 	}
 }
 
-func primCharSetComplement(mc machine.CallContext) error {
-	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "char-set-complement")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(complementOne(cs))
-	return nil
-}
+var primCharSetComplement = helpers.MakeUnaryAccessor(werr.ErrNotACharSet, "char-set-complement", func(cs *values.CharSet) values.Value {
+	return complementOne(cs)
+})
 
 // unionTwo computes a ∪ b via NewCharSetFromUnsortedRanges, which canonicalizes
 // (sorts + merges adjacent + drops invalid). Correct because the result is

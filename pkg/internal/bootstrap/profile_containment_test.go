@@ -92,19 +92,48 @@ const (
 	// axisBManifestPath is the checked-in per-primitive manifest, relative to the
 	// repo root. It is regenerated only under WILE_AXIS_B_UPDATE=1.
 	axisBManifestPath = "testdata/axis-b-manifest.scm"
-	// coreImplPrefix selects the manifest's core rows by their Go SYMBOL, which
-	// is not the same selector as their source file — see coreManifestNames.
-	coreImplPrefix = "github.com/aalpar/wile/pkg/registry/core."
-	// helpersImplPrefix is the counter-selector that makes coreImplPrefix
-	// falsifiable. No manifest row may carry it — see coreManifestNames.
-	helpersImplPrefix = "github.com/aalpar/wile/pkg/registry/helpers."
+	// coreFilePrefix selects the manifest's core rows by their SOURCE FILE.
+	// Unlike the Go symbol, the file survives inlining — see coreManifestNames.
+	coreFilePrefix = "pkg/registry/core/"
 )
 
+// coreHelperBuiltPrimitives is the frozen second half of the core surface: the
+// core primitives whose Impl comes from a shared constructor in
+// pkg/registry/helpers, so the manifest records that helper's file rather than a
+// file under pkg/registry/core. Sorted; kept as data because nothing in a
+// manifest row identifies the REGISTERING package of a factory-built closure.
+//
+// The only column that ever did was the Go symbol, and it did so by accident of
+// inlining: a helper constructor inlined into core's package init is attributed
+// to core, and the same constructor left alone stays in helpers. Selecting on it
+// made the derivation a property of the compiler, and it silently lost every row
+// the compiler chose not to inline. See maskGoFunctionColumn in
+// pkg/wile/audit_manifest_test.go for the measurement across three toolchains:
+// the symbol moves, the source location does not.
+//
+// TestExtensionPrimitiveNamesIsTheCoreManifestSurface is this list's ratchet. A
+// new core primitive built from a helpers constructor and not added here shows
+// up there as a liveOnly name; one removed from core but left here shows up as
+// manifestOnly. To regenerate, take every name in extensionPrimitiveNames(nil)
+// whose manifest row's source file is not under coreFilePrefix.
+var coreHelperBuiltPrimitives = []string{
+	"%parameter-raw-set!", "boolean?", "box?", "bytevector?", "char->integer",
+	"char?", "complex?", "continuation-mark-set?", "continuation-prompt-tag?",
+	"continuation?", "equal-hash", "error-context-marks", "error-context-source",
+	"error-context-stack-trace", "error-context?", "error-object-irritants",
+	"error-object-message", "error-object-source", "error-object-stack-trace",
+	"error-object?", "exact?", "file-error?", "hashtable-keys",
+	"hashtable-mutable?", "hashtable-size", "hashtable?", "inexact?", "integer?",
+	"null?", "number?", "opaque-tag", "opaque?", "pair?", "parameter?",
+	"procedure?", "rational?", "read-error?", "real?", "set-box!", "string-hash",
+	"string?", "symbol-hash", "symbol?", "unbox", "vector?", "void?",
+}
+
 // axisBManifestRow parses one manifest row: (name return-type (params…) symbol
-// source). Capture 1 is the primitive name, capture 2 its fully-qualified Go
-// symbol. The leading `\(?` absorbs the extra paren on the first row, which
-// opens the outer list.
-var axisBManifestRow = regexp.MustCompile(`^\s*\(?\("([^"]+)" "[^"]*" \([^)]*\) "([^"]*)" "[^"]*"\)`)
+// source). Capture 1 is the primitive name, capture 2 its source location. The
+// leading `\(?` absorbs the extra paren on the first row, which opens the outer
+// list.
+var axisBManifestRow = regexp.MustCompile(`^\s*\(?\("([^"]+)" "[^"]*" \([^)]*\) "[^"]*" "([^"]*)"\)`)
 
 // bootstrapRepoRoot returns the absolute path of the wile repo root, inferred
 // from this test file's location. This package lives at pkg/internal/bootstrap,
@@ -121,43 +150,27 @@ func bootstrapRepoRoot(t *testing.T) string {
 }
 
 // coreManifestNames derives the core primitive surface from the checked-in
-// axis-B manifest: every row whose Go SYMBOL is declared under
-// pkg/registry/core.
+// axis-B manifest: every row whose SOURCE FILE is under pkg/registry/core, plus
+// the frozen coreHelperBuiltPrimitives list for the ones implemented by a shared
+// constructor in pkg/registry/helpers.
 //
-// The symbol column is NOT derived from the registry spec. It is
-// runtime.FuncForPC(reflect.ValueOf(spec.Impl).Pointer()).Name(), taken at
-// generation time by resolveImpl in pkg/wile/audit_manifest_test.go — a
-// property of the compiled binary, not of the declaration. Thirty core
-// primitives get their Impl from a constructor in pkg/registry/helpers, and
-// their symbols read `…/pkg/registry/core.init.MakeTypePredicate.funcN` only
-// because the compiler INLINES that constructor into core's package init.
-// Build with -gcflags=all=-l and the same thirty rows read
-// `…/pkg/registry/helpers.MakeTypePredicate.funcN`, coreImplPrefix stops
-// matching them, and this derivation silently loses thirty names. That is why
-// the loop below refuses any row carrying helpersImplPrefix: it is the
-// falsifier for the inline attribution this selector rides on, and its
-// diagnosis ("the manifest was generated with different inlining") is the
-// opposite advice from the liveOnly comment's ("regenerate the manifest"),
-// which would only reproduce the loss.
+// The selector used to be the Go symbol column, and that was a defect: the
+// symbol is runtime.FuncForPC(reflect.ValueOf(spec.Impl).Pointer()).Name(),
+// taken at generation time by resolveImpl in pkg/wile/audit_manifest_test.go,
+// so for a factory-built closure it names whichever package the compiler chose
+// to inline the factory into. Regenerating the manifest on a toolchain that
+// declines that inline moved 46 core rows out of the selector at once. The
+// source location does not move — maskGoFunctionColumn measured both columns
+// across three toolchains — so the file is the selector, and the helper-built
+// residue is data rather than a compiler artifact.
 //
-// The two obvious alternative selectors are worse, and both gaps reconcile
-// exactly against 208 (all figures in this comment measured 2026-08-10 against
-// the committed manifest; re-derive rather than trusting them). A static count
-// of unique non-test `Name:` literals under pkg/registry/core —
+// The other obvious selector, a static count of unique non-test `Name:`
+// literals under pkg/registry/core —
 //
 //	grep -ohE 'Name:[[:space:]]+"[^"]+"' pkg/registry/core/*.go | sort -u | wc -l
 //
-// gives 198, missing the ten comparison names registered from a table rather
-// than from a per-name literal (char<?…char>=?, string<?…string>=?). The
-// manifest's *file* column —
-//
-//	grep -c '"pkg/registry/core/' testdata/axis-b-manifest.scm
-//
-// gives 178, missing exactly those thirty helpers-built rows: 19 under
-// helpers/type.go (17 through MakeTypePredicate, plus exact? and inexact?
-// through MakeNumericPredicate) and 11 under helpers/accessor.go (10 through
-// MakeUnaryAccessor, plus one MakeBinarySetter). For the manifest's own size,
-// run wc -l on it.
+// is worse still: it misses the comparison names registered from a table rather
+// than from a per-name literal (char<?…char>=?, string<?…string>=?).
 //
 // This couples the test to the manifest exactly as TestBuildAxisBManifest is
 // coupled: adding or removing a core primitive turns this red until the
@@ -173,8 +186,12 @@ func coreManifestNames(t *testing.T) values.StringSet {
 		t.Fatalf("%s: %v", axisBManifestPath, err)
 	}
 
+	helperBuilt := values.StringSet{}
+	for _, name := range coreHelperBuiltPrimitives {
+		helperBuilt.Set(name)
+	}
+
 	q := values.StringSet{}
-	deinlined := []string{}
 	for i, line := range strings.Split(string(body), "\n") {
 		if line == "" {
 			continue
@@ -183,23 +200,14 @@ func coreManifestNames(t *testing.T) values.StringSet {
 		if m == nil {
 			t.Fatalf("%s:%d does not parse as a manifest row: %s", axisBManifestPath, i+1, line)
 		}
-		if strings.HasPrefix(m[2], helpersImplPrefix) {
-			deinlined = append(deinlined, m[1])
-		}
-		if !strings.HasPrefix(m[2], coreImplPrefix) {
+		if !strings.HasPrefix(m[2], coreFilePrefix) && !helperBuilt.ContainsOne(m[1]) {
 			continue
 		}
 		q.Set(m[1])
 	}
-	if len(deinlined) > 0 {
-		slices.Sort(deinlined)
-		t.Fatalf("%s carries %d row(s) whose symbol is under %s — %v.\n"+
-			"A helper constructor's closure is attributed to its own package only when the compiler did NOT inline it into the registering package's init, so the manifest was generated under different inlining (-gcflags=all=-l, or the helper outgrew the inline budget). coreImplPrefix under-counts by exactly these rows; DO NOT regenerate with WILE_AXIS_B_UPDATE=1 — that is what produced this manifest. Regenerate with the default toolchain flags, or reselect on a property that is not an inlining artifact.",
-			axisBManifestPath, len(deinlined), helpersImplPrefix, deinlined)
-	}
 	if len(q) < 100 {
-		t.Fatalf("%s yielded only %d names under %s — the symbol column's shape has changed and the derivation is silently under-counting",
-			axisBManifestPath, len(q), coreImplPrefix)
+		t.Fatalf("%s yielded only %d names under %s — the source-location column's shape has changed and the derivation is silently under-counting",
+			axisBManifestPath, len(q), coreFilePrefix)
 	}
 	return q
 }
@@ -255,8 +263,8 @@ func TestExtensionPrimitiveNamesIsTheCoreManifestSurface(t *testing.T) {
 		qt.Commentf("registered by core but absent from %s: %v — regenerate the manifest with WILE_AXIS_B_UPDATE=1",
 			axisBManifestPath, liveOnly))
 	c.Check(manifestOnly, qt.HasLen, 0,
-		qt.Commentf("in %s under %s but no longer registered: %v",
-			axisBManifestPath, coreImplPrefix, manifestOnly))
+		qt.Commentf("in %s under %s (or in coreHelperBuiltPrimitives) but no longer registered: %v",
+			axisBManifestPath, coreFilePrefix, manifestOnly))
 
 	// A sample of names an embedder would recognise, kept below the set
 	// assertion as the reader-legible check: it says what this surface IS,

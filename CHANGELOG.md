@@ -88,6 +88,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `expandLetStarBindings` folds into `expandBindings`: `expander_let.go` loses 68
   lines and the axis stops being spelled four ways.
 
+- **Twenty-five primitives moved onto `helpers.MakeTypePredicate`,
+  `MakeUnaryAccessor` and `MakeBinarySetter`,** which 80-odd of their siblings
+  already used: `null?`, `pair?`, `void?`, `integer?`, `real?`, `rational?`,
+  `error-object?`, `read-error?`, `file-error?`, `char->integer`,
+  `%parameter-raw-set!`, the five `error-context`/`error-object` accessors, six
+  `char-set` primitives, `process?`, `textual-port?` and `binary-port?`. Every
+  error string is byte-identical — the factories call the same `RequireArg` with
+  the same sentinel, index and name — so the only visible change is that twenty-
+  five `func` declarations became `var` declarations of the same type.
+
+  `pkg/registry/core` drops 101 lines. `null?` and `pair?` are promoted opcodes,
+  so the hot path never reaches either body.
+
+- **The axis-B manifest's core-surface derivation stopped riding on inlining.**
+  `coreManifestNames` selected core rows by the manifest's Go *symbol*, which for
+  a factory-built closure names whichever package the compiler chose to inline
+  the factory into. The source location does not move across toolchains and the
+  symbol does — `maskGoFunctionColumn` measures both — so the selector is now the
+  file, plus a frozen `coreHelperBuiltPrimitives` list for the 46 core primitives
+  a shared constructor implements. The old selector lost 46 rows the moment the
+  manifest was regenerated on the toolchain CI actually uses.
+
+### Removed
+
+- **`testhelpers.EvalScheme` and `testhelpers.SetupLibraryTest`** — zero
+  references anywhere in the tree, including tests.
+
 ### Documentation
 
 - **A splice in an unquote's operand (`` `,,@x` ``) is documented as staying

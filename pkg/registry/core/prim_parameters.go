@@ -75,15 +75,9 @@ func PrimMakeParameter(cc machine.CallContext) error {
 // Sets a parameter's internal value directly, bypassing the converter.
 //
 // This is an internal primitive — not part of the public API.
-func PrimParameterRawSet(mc machine.CallContext) error {
-	param, err := helpers.RequireArg[*machine.Parameter](mc, 0, werr.ErrNotAParameter, "%parameter-raw-set!")
-	if err != nil {
-		return err
-	}
-	param.SetValue(mc.Arg(1))
-	mc.SetValue(values.Void)
-	return nil
-}
+var PrimParameterRawSet = helpers.MakeBinarySetter(werr.ErrNotAParameter, "%parameter-raw-set!", func(param *machine.Parameter, val values.Value) {
+	param.SetValue(val)
+})
 
 // PrimParameterConvert implements (%parameter-convert param val).
 // Applies the parameter's converter to val and returns the result.

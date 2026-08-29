@@ -112,12 +112,10 @@ func PrimError(cc machine.CallContext) error {
 // PrimErrorObjectQ implements the error-object? predicate.
 // Returns #t if the argument is an error object created by (error ...),
 // #f otherwise.
-func PrimErrorObjectQ(mc machine.CallContext) error {
-	obj := mc.Arg(0)
+var PrimErrorObjectQ = helpers.MakeTypePredicate(func(obj values.Value) bool {
 	_, ok := obj.(*values.NativeError)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+	return ok
+})
 
 // PrimErrorObjectMessage implements the error-object-message accessor.
 // Returns the message string from an error object.
@@ -133,18 +131,14 @@ var PrimErrorObjectIrritants = helpers.MakeUnaryAccessor(werr.ErrNotANativeError
 
 // PrimReadErrorQ implements the read-error? predicate.
 // R7RS §6.11: Returns #t if obj is an error object raised during reading.
-func PrimReadErrorQ(mc machine.CallContext) error {
-	obj := mc.Arg(0)
+var PrimReadErrorQ = helpers.MakeTypePredicate(func(obj values.Value) bool {
 	errObj, ok := obj.(*values.NativeError)
-	mc.SetValue(values.BoolToBoolean(ok && errObj.IsReadError()))
-	return nil
-}
+	return ok && errObj.IsReadError()
+})
 
 // PrimFileErrorQ implements the file-error? predicate.
 // R7RS §6.11: Returns #t if obj is an error object raised during file operations.
-func PrimFileErrorQ(mc machine.CallContext) error {
-	obj := mc.Arg(0)
+var PrimFileErrorQ = helpers.MakeTypePredicate(func(obj values.Value) bool {
 	errObj, ok := obj.(*values.NativeError)
-	mc.SetValue(values.BoolToBoolean(ok && errObj.IsFileError()))
-	return nil
-}
+	return ok && errObj.IsFileError()
+})

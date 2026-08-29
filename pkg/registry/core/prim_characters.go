@@ -23,14 +23,9 @@ import (
 
 // PrimCharToInteger implements the (char->integer) primitive.
 // Returns the Unicode code point of the character as an integer.
-func PrimCharToInteger(mc machine.CallContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "char->integer")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewInteger(int64(ch.Value)))
-	return nil
-}
+var PrimCharToInteger = helpers.MakeUnaryAccessor(werr.ErrNotACharacter, "char->integer", func(ch *values.Character) values.Value {
+	return values.NewInteger(int64(ch.Value))
+})
 
 // PrimIntegerToChar implements the (integer->char) primitive.
 // Converts a Unicode code point (integer) to a character.
