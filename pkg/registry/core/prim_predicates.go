@@ -84,80 +84,60 @@ var PrimProcedureQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	return ok
 })
 
-// Manual predicate implementations
-
 // PrimVoidQ implements the void? predicate.
 // Returns #t if the argument is the void value.
-func PrimVoidQ(mc machine.CallContext) error {
-	o := mc.Arg(0)
-	mc.SetValue(values.BoolToBoolean(o.IsVoid()))
-	return nil
-}
+var PrimVoidQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	return o.IsVoid()
+})
 
 // PrimNullQ implements the null? predicate.
 // Returns #t if the argument is the empty list '().
-func PrimNullQ(mc machine.CallContext) error {
-	o := mc.Arg(0)
-	mc.SetValue(values.BoolToBoolean(values.IsEmptyList(o)))
-	return nil
-}
+var PrimNullQ = helpers.MakeTypePredicate(values.IsEmptyList)
 
 // PrimPairQ implements the pair? predicate.
 // Returns #t if the argument is a pair (cons cell).
 // EmptyList is not a *Pair (it's a separate type), so the type assertion
 // handles (pair? '()) -> #f at the type level per R7RS §6.4.
-func PrimPairQ(mc machine.CallContext) error {
-	o := mc.Arg(0)
+var PrimPairQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*values.Pair)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+	return ok
+})
 
 // PrimIntegerQ implements the integer? predicate.
 //
 // R7RS §6.2.6: Returns #t if the argument is an integer (exact or inexact).
 // Inexact integers are floating-point numbers with zero fractional part.
-func PrimIntegerQ(mc machine.CallContext) error {
-	n, ok := mc.Arg(0).(values.Number)
-	if !ok {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-	mc.SetValue(values.BoolToBoolean(n.IsInteger()))
-	return nil
-}
+//
+// MakeNumericPredicate is deliberately NOT the factory here: it raises on a
+// non-number, and R7RS requires #f.
+var PrimIntegerQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	n, ok := o.(values.Number)
+	return ok && n.IsInteger()
+})
 
 // PrimRealQ implements the real? predicate.
 //
 // R7RS §6.2.6: Returns #t if the argument is a real number.
 // Rationals (including integers and BigInteger) are a subset of reals.
-func PrimRealQ(mc machine.CallContext) error {
-	o := mc.Arg(0)
+var PrimRealQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	switch v := o.(type) {
 	case values.RealNumber:
-		_ = v
-		mc.SetValue(values.TrueValue)
+		return true
 	case values.ComplexNumber:
-		mc.SetValue(values.BoolToBoolean(v.IsReal()))
+		return v.IsReal()
 	default:
-		mc.SetValue(values.FalseValue)
+		return false
 	}
-	return nil
-}
+})
 
 // PrimRationalQ implements the rational? predicate.
 //
 // R7RS §6.2.6: Returns #t if the argument is a rational number.
 // Integers (including BigInteger) are a subset of rationals.
-func PrimRationalQ(mc machine.CallContext) error {
-	n, ok := mc.Arg(0).(values.Number)
-	if !ok {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-	mc.SetValue(values.BoolToBoolean(n.IsRational()))
-	return nil
-}
+var PrimRationalQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	n, ok := o.(values.Number)
+	return ok && n.IsRational()
+})
 
 // PrimExactQ implements the exact? predicate.
 //

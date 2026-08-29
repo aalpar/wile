@@ -267,6 +267,12 @@ func (p *Tokenizer) readSignedInfinity(r int) bool {
 		p.mayConsumeImaginarySuffix()
 		return p.atNumberEnd()
 	}
+	if isComplexPolar(p.curr()) {
+		// +inf.0@1 — <infnan> is a <real R>, so it is a legal polar magnitude.
+		p.state = TokenizerStateSignedComplexPolar
+		p.mayReadPolarPart(r)
+		return p.atNumberEnd()
+	}
 	if p.mayConsumeImaginarySuffix() {
 		p.state = TokenizerStateSignedImaginaryInf
 	}
@@ -280,6 +286,12 @@ func (p *Tokenizer) readSignedNan(r int) bool {
 		return false
 	}
 	p.state = TokenizerStateSignedNan
+	if isComplexPolar(p.curr()) {
+		// +nan.0@1 — see readSignedInfinity.
+		p.state = TokenizerStateSignedComplexPolar
+		p.mayReadPolarPart(r)
+		return p.atNumberEnd()
+	}
 	if p.mayConsumeImaginarySuffix() {
 		p.state = TokenizerStateSignedImaginaryNan
 	}
@@ -662,10 +674,23 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(r int) {
 	p.mayConsumeImaginarySuffix()
 }
 
-// mayReadPolarPart reads an optional polar angle part for complex numbers.
-// Called when current character is '@' after reading a real number (the magnitude).
-// Handles patterns like: @1.5708, @0.785, @-1.5708
-// If successful, sets state to TokenizerStateUnsignedComplexPolar.
+// mayReadPolarPart reads the angle of a polar complex literal, entered with the
+// scanner on the '@' that follows the magnitude. Handles @1.5708, @-1.5708,
+// @1/2, @+inf.0.
+//
+// R7RS §7.1.1: <polar R> -> <real R> @ <real R>, and <real R> is
+// <sign> <ureal R> | <infnan>. Both alternatives are exactly what
+// mayReadUnsignedFractionalRealNumberOrRationalRealNumber scans, so the angle
+// delegates rather than re-deriving it. Open-coding three of that scanner's five
+// arms is what made `1@+inf.0` a read error and silently truncated `1@1/2` to
+// `1@1` plus a stray `/2` symbol — a wrong answer, not a diagnostic.
+//
+// The i/n arms are reachable only behind a consumed sign, because <infnan>
+// carries its own: `1@inf.0` and `1@i` are identifiers in Chez and Racket alike.
+//
+// The state is the caller's: both callers set it before calling (polar magnitudes
+// are signed or unsigned and only they know which), and overwriting it here made
+// the same literal tokenize two ways depending on whether it ended at EOF.
 func (p *Tokenizer) mayReadPolarPart(r int) {
 	if p.curr() != '@' {
 		return
@@ -675,48 +700,18 @@ func (p *Tokenizer) mayReadPolarPart(r int) {
 		return
 	}
 
-	// The angle can be a signed or unsigned real number
+	signed := isExplicitSign(p.curr())
 	p.mayConsumeSign()
 	if p.err != nil {
 		return
 	}
 
-	// Must have digits or a dot followed by digits
-	switch {
-	case isDot(p.curr()):
-		p.readDiv(r) //nolint:errcheck
-		if p.err != nil {
-			return
-		}
-	case isDigit(r, p.curr()):
-		p.readDigitsAndHash(r)
-		if p.err != nil {
-			return
-		}
-		if !isDot(p.curr()) {
-			break
-		}
-		hadHash := p.hashDigit
-		p.next()
-		if p.err != nil {
-			return
-		}
-		p.readOptionalDecimalPart(r, hadHash)
-		if p.err != nil {
-			return
-		}
-	default:
+	atInfnan := signed && (p.curr() == 'i' || p.curr() == 'n')
+	if !atInfnan && !isDot(p.curr()) && !isDigit(r, p.curr()) {
 		p.fail(MessageExpectingNumber)
 		return
 	}
-
-	// Check for exponent (no-op if readOptionalDecimalPart already consumed it)
-	p.mayReadExponent(r) //nolint:errcheck
-	if p.err != nil {
-		return
-	}
-
-	p.state = TokenizerStateUnsignedComplexPolar
+	p.mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r)
 }
 
 func (p *Tokenizer) readUnsignedBaseNInteger(r, maxn int) (int64, int) {

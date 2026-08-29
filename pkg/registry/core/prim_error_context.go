@@ -46,19 +46,9 @@ var PrimErrorContextQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // PrimErrorContextSource implements (error-context-source ctx).
 // Returns the source location string from the error context, or #f if
 // no source location was captured.
-func PrimErrorContextSource(mc machine.CallContext) error {
-	ctx, err := helpers.RequireArg[*machine.ErrorContext](mc, 0, werr.ErrNotAnErrorContext, "error-context-source")
-	if err != nil {
-		return err
-	}
-	loc := ctx.SourceLocation()
-	if loc == "" {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-	mc.SetValue(values.NewString(loc))
-	return nil
-}
+var PrimErrorContextSource = helpers.MakeUnaryAccessor(werr.ErrNotAnErrorContext, "error-context-source", func(ctx *machine.ErrorContext) values.Value {
+	return values.StringOrFalse(ctx.SourceLocation())
+})
 
 // PrimCurrentStackTrace implements (current-stack-trace [max-depth]).
 // Returns the live Scheme stack at the call site in the same list-of-alists
@@ -111,61 +101,40 @@ func PrimCurrentStackTrace(cc machine.CallContext) error {
 // Returns the stack trace as a list of alists, where each alist has keys
 // name, file, line, and column. Returns the empty list if no stack trace
 // was captured.
-func PrimErrorContextStackTrace(mc machine.CallContext) error {
-	ctx, err := helpers.RequireArg[*machine.ErrorContext](mc, 0, werr.ErrNotAnErrorContext, "error-context-stack-trace")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(machine.StackTraceToSchemeList(ctx.StackTraceFrames()))
-	return nil
-}
+var PrimErrorContextStackTrace = helpers.MakeUnaryAccessor(werr.ErrNotAnErrorContext, "error-context-stack-trace", func(ctx *machine.ErrorContext) values.Value {
+	return machine.StackTraceToSchemeList(ctx.StackTraceFrames())
+})
 
 // PrimErrorContextMarks implements (error-context-marks ctx).
 // Returns the continuation mark set snapshot from the raise site, or #f
 // if marks were not captured.
-func PrimErrorContextMarks(mc machine.CallContext) error {
-	ctx, err := helpers.RequireArg[*machine.ErrorContext](mc, 0, werr.ErrNotAnErrorContext, "error-context-marks")
-	if err != nil {
-		return err
-	}
+//
+// The nil check stays inside the projection: Marks() returns a
+// *ContinuationMarkSet, and returning a typed nil through the values.Value
+// result would produce a non-nil interface.
+var PrimErrorContextMarks = helpers.MakeUnaryAccessor(werr.ErrNotAnErrorContext, "error-context-marks", func(ctx *machine.ErrorContext) values.Value {
 	marks := ctx.Marks()
 	if marks == nil {
-		mc.SetValue(values.FalseValue)
-		return nil
+		return values.FalseValue
 	}
-	mc.SetValue(marks)
-	return nil
-}
+	return marks
+})
 
 // PrimErrorObjectSource implements (error-object-source err).
 // Returns the source location string from a NativeError, or #f if empty.
-func PrimErrorObjectSource(mc machine.CallContext) error {
-	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "error-object-source")
-	if err != nil {
-		return err
-	}
-	loc := errObj.SourceLocation()
-	if loc == "" {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-	mc.SetValue(values.NewString(loc))
-	return nil
-}
+var PrimErrorObjectSource = helpers.MakeUnaryAccessor(werr.ErrNotANativeError, "error-object-source", func(errObj *values.NativeError) values.Value {
+	return values.StringOrFalse(errObj.SourceLocation())
+})
 
 // PrimErrorObjectStackTrace implements (error-object-stack-trace err).
 // Returns the stack trace from a NativeError as a list of alists, or ()
 // if no stack trace has been captured.
-func PrimErrorObjectStackTrace(mc machine.CallContext) error {
-	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "error-object-stack-trace")
-	if err != nil {
-		return err
-	}
+//
+// The nil check stays inside the projection, per PrimErrorContextMarks.
+var PrimErrorObjectStackTrace = helpers.MakeUnaryAccessor(werr.ErrNotANativeError, "error-object-stack-trace", func(errObj *values.NativeError) values.Value {
 	stv := errObj.StackTraceValue()
 	if stv == nil {
-		mc.SetValue(values.EmptyList)
-		return nil
+		return values.EmptyList
 	}
-	mc.SetValue(stv)
-	return nil
-}
+	return stv
+})

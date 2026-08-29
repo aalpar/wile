@@ -16,7 +16,6 @@ package helpers
 
 import (
 	"math"
-	"math/big"
 
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -118,22 +117,21 @@ func screenReal(v values.Value) (values.Number, error) {
 // Returns the float64 value, whether the input was exact, and any error.
 //
 // R7RS §6.2.6: Division procedures work on all real numbers.
+//
+// Both halves defer to the numeric registry rather than enumerating the five
+// real kinds here. That is not only volume: a *BigFloat NaN is carried by an
+// out-of-band flag because big.Float has no NaN, so the obvious open-coded
+// BigFloatValue().Float64() reads every NaN as 0.0 — which is what this
+// function used to do, while its *Float sibling propagated NaN correctly.
 func ExtractReal(v values.Value, name string) (float64, bool, error) {
-	switch n := v.(type) {
-	case *values.Integer:
-		return float64(n.Value), true, nil
-	case *values.BigInteger:
-		f, _ := new(big.Float).SetInt(n.BigInt()).Float64()
-		return f, true, nil
-	case *values.Float:
-		return n.Value, false, nil
-	case *values.Rational:
-		f, _ := n.Rat().Float64()
-		return f, true, nil
-	case *values.BigFloat:
-		f, _ := n.BigFloatValue().Float64()
-		return f, false, nil
-	default:
-		return 0, false, werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: expected a real number but got %T", name, v)
+	n, err := screenReal(v)
+	if err != nil {
+		return 0, false, werr.WrapForeignErrorf(err, "%s", name)
 	}
+	// screenReal guarantees a non-nil real Number, so the error slot
+	// (nil-input only) and the isReal slot (complex-only) are both unreachable.
+	// The accuracy slot is discarded deliberately: an operand of an inexact
+	// division is rounded by definition, and R7RS §6.2.6 asks for no signal.
+	f, _, _, _ := values.ToFloat64WithAccuracy(n)
+	return f, n.IsExact(), nil
 }

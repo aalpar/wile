@@ -76,14 +76,6 @@ func NewTopLevelThunk(
 	return machine.NewMachineContinuation(nil, tpl, env), nil
 }
 
-// EvalScheme evaluates one or more Scheme expressions and returns the
-// last value. Fails the test on any error.
-func EvalScheme(t *testing.T, code string) values.Value {
-	t.Helper()
-	env := NewFullRuntimeEnv(t)
-	return EvalSchemeInEnv(t, env, code)
-}
-
 // EvalSchemeInEnv evaluates one or more Scheme expressions in the given
 // environment and returns the last value. Calls t.Fatal on any error.
 func EvalSchemeInEnv(t *testing.T, env *environment.EnvironmentFrame, code string) values.Value {
@@ -91,22 +83,6 @@ func EvalSchemeInEnv(t *testing.T, env *environment.EnvironmentFrame, code strin
 	result, err := evalSchemeInEnvCore(env, code)
 	qt.Assert(t, err, qt.IsNil)
 	return result
-}
-
-// SetupLibraryTest creates a test environment with library loading
-// capability, using the testdata/ directory at the given path as the
-// library search path.
-func SetupLibraryTest(t *testing.T, testdataPath string) *environment.EnvironmentFrame {
-	t.Helper()
-	env, err := bootstrap.NewNamespaceFrame(context.Background())
-	if err != nil {
-		t.Fatalf("failed to create environment: %v", err)
-	}
-	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
-	registry := compilation.NewLibraryRegistry()
-	registry.SetSearchPaths([]string{testdataPath})
-	env.SetLibraryRegistry(registry)
-	return env
 }
 
 // SetupEngineTest creates a test environment with full library loading support,

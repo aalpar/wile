@@ -316,8 +316,7 @@ func PrimProcessKill(mc machine.CallContext) error {
 }
 
 // PrimProcessQ implements the (process?) predicate.
-func PrimProcessQ(mc machine.CallContext) error {
-	_, ok := mc.Arg(0).(*values.Process)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+var PrimProcessQ = helpers.MakeTypePredicate(func(v values.Value) bool {
+	_, ok := v.(*values.Process)
+	return ok
+})

@@ -2334,6 +2334,92 @@ func TestParseImagPart(t *testing.T) {
 // Integration Tests: Polar Complex Through ReadSyntax
 // ============================================================================
 
+// polarPartEquals compares one rectangular component, treating NaN as equal to
+// NaN (Go's == does not) and matching an infinity by sign.
+func polarPartEquals(got, want float64) bool {
+	if math.IsNaN(want) {
+		return math.IsNaN(got)
+	}
+	if math.IsInf(want, 0) {
+		return math.IsInf(got, int(math.Copysign(1, want)))
+	}
+	return floatEquals(got, want, 1e-10)
+}
+
+// TestReadSyntaxPolarComplexConformance covers R7RS §7.1.1
+// <polar R> -> <real R> @ <real R> through the whole reader, where <real R> is
+// <sign> <ureal R> | <infnan> on BOTH sides. The direct parsePolarComplex tests
+// above have always passed these; the tokenizer was the gap, and it had no
+// reader-level row that would notice.
+//
+// The second ReadSyntax is the point of the exercise for the rational rows:
+// `1@1/2` used to read as `1@1` and leave `/2` in the stream as a second datum,
+// a silently wrong answer rather than a diagnostic.
+//
+// Expected values are Chez petite 10 and Racket 8, which agree on every row.
+func TestReadSyntaxPolarComplexConformance(t *testing.T) {
+	inf := math.Inf(1)
+	nan := math.NaN()
+	tcs := []struct {
+		input    string
+		wantReal float64
+		wantImag float64
+	}{
+		// <infnan> angle. cos/sin of a non-finite angle is NaN.
+		{"1@+inf.0", nan, nan},
+		{"1@-inf.0", nan, nan},
+		{"1@+nan.0", nan, nan},
+		{"1@-nan.0", nan, nan},
+		// <ureal R> includes <uinteger>/<uinteger>.
+		{"1@1/2", 0.8775825618903728, 0.479425538604203},
+		{"1@-1/2", 0.8775825618903728, -0.479425538604203},
+		{"1/2@3/4", 0.36584443443691045, 0.34081938001166706},
+		// <infnan> magnitude.
+		{"+inf.0@1", inf, inf},
+		{"-inf.0@1", -inf, -inf},
+		{"+nan.0@1", nan, nan},
+		{"-nan.0@1", nan, nan},
+		{"+inf.0@+inf.0", nan, nan},
+	}
+	for _, tc := range tcs {
+		qt.New(t).Run(tc.input, func(c *qt.C) {
+			env := environment.NewNamespace().Runtime()
+			p := NewParser(env, true, strings.NewReader(tc.input))
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+
+			z, ok := syn.UnwrapAll().(*values.Complex)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected Complex, got %T", syn.UnwrapAll()))
+			c.Assert(polarPartEquals(z.Real(), tc.wantReal), qt.IsTrue,
+				qt.Commentf("real: got %v want %v", z.Real(), tc.wantReal))
+			c.Assert(polarPartEquals(z.Imag(), tc.wantImag), qt.IsTrue,
+				qt.Commentf("imag: got %v want %v", z.Imag(), tc.wantImag))
+
+			_, err = p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.Equals, io.EOF, qt.Commentf("input left a second datum"))
+		})
+	}
+}
+
+// TestReadSyntaxPolarAngleRequiresASignedInfnan pins the other half of the
+// grammar: <infnan> supplies its own sign, so an unsigned one is not a <real R>.
+// Chez and Racket both read these as identifiers; Wile rejects them. Either way
+// they must not become numbers — that is what this asserts.
+func TestReadSyntaxPolarAngleRequiresASignedInfnan(t *testing.T) {
+	for _, input := range []string{"1@inf.0", "1@nan.0", "1@i"} {
+		qt.New(t).Run(input, func(c *qt.C) {
+			env := environment.NewNamespace().Runtime()
+			p := NewParser(env, true, strings.NewReader(input))
+			syn, err := p.ReadSyntax(context.TODO())
+			if err != nil {
+				return
+			}
+			_, ok := syn.UnwrapAll().(*values.Complex)
+			c.Assert(ok, qt.IsFalse, qt.Commentf("%s must not read as a number", input))
+		})
+	}
+}
+
 func TestReadSyntaxPolarComplex(t *testing.T) {
 	tcs := []struct {
 		input    string

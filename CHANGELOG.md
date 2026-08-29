@@ -16,6 +16,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`floor-quotient` and its four siblings answered `0.0` for a `#m` NaN.**
+  `big.Float` has no NaN, so `*values.BigFloat` carries one out of band and
+  `BigFloatValue()` hands back the zero payload. `helpers.ExtractReal` enumerated
+  the five real kinds itself and read that payload, so
+  `(floor-quotient (- (/ #m1.0 #m0.0) (/ #m1.0 #m0.0)) 2)` was `0.0` while the
+  `*Float` spelling of the same computation was `+nan.0` — master disagreed with
+  itself across its two inexact real kinds. `floor/`, `floor-remainder`,
+  `truncate-quotient` and `truncate/` shared it.
+
+  `ExtractReal` now screens through `screenReal` and converts through
+  `values.ToFloat64WithAccuracy`, the numeric registry's own per-kind conversion,
+  which knows about the flag; exactness comes from `Number.IsExact`. The
+  enumeration is gone, which is the point: it was one answer per kind restated at
+  a site that had no way to be told when a kind changed.
+
+- **Twelve R7RS §7.1.1 polar-complex rows read wrong or not at all.**
+  `⟨polar R⟩ → ⟨real R⟩ @ ⟨real R⟩`, and `⟨real R⟩` is `⟨sign⟩⟨ureal R⟩ | ⟨infnan⟩`
+  on both sides. `mayReadPolarPart` reimplemented three of the five arms of the
+  unsigned-real scanner it sits beside, omitting `⟨infnan⟩` and the `/`
+  continuation, and `readSignedInfinity`/`readSignedNan` had no `@` arm at all:
+
+  | input | before | now (= Chez petite 10 = Racket 8) |
+  |---|---|---|
+  | `1@+inf.0`, `1@-inf.0`, `1@±nan.0` | read error | `+nan.0+nan.0i` |
+  | `1@1/2` | `1@1` **plus a symbol `/2`** | `0.8775825618903728+0.479425538604203i` |
+  | `1/2@3/4` | `1/2@3` plus a symbol `/4` | `0.36584443443691045+0.34081938001166706i` |
+  | `+inf.0@1` | symbol | `+inf.0+inf.0i` |
+  | `-inf.0@1` | symbol | `-inf.0-inf.0i` |
+  | `+nan.0@1`, `-nan.0@1` | symbol | `+nan.0+nan.0i` |
+
+  The rational rows are the ones worth naming: they were a silently wrong answer,
+  not a diagnostic. The parser half was already right — `parseFloatOrInfnan`
+  handles both forms, and `TestParsePolarComplexInfNan` has always passed — so
+  every one of these was a tokenizer gap that no reader-level row looked at.
+
+  The angle now delegates to
+  `mayReadUnsignedFractionalRealNumberOrRationalRealNumber`, entered behind a
+  guard that admits the `i`/`n` arms only after a sign: `⟨infnan⟩` supplies its
+  own, so `1@inf.0` and `1@i` stay identifiers, as they are in both oracles.
+
+  `mayReadPolarPart` also no longer assigns the token state on the way out. Both
+  callers set it before calling, and the assignment overwrote the signed one, so
+  `-1@2` was `signed-complex-polar` at end of input (an early return fired first)
+  and `unsigned-complex-polar` inside a list. Invisible today only because
+  `parser.go` folds the two states into one arm.
+
+  `TestNumbers_PolarComplex` asserted the token *type* and, for the `infnan`
+  rows, explicitly not its text — and `Tokenizer.Next` reports a fault inside a
+  token on the *following* call, so its `err IsNil` was vacuous for a lexical
+  fault. It now asserts the whole token and that the stream reaches `io.EOF`.
+
+- **A malformed binding no longer loses its diagnostic to an earlier init.**
+  `(let* ((a (let-syntax ((m 1)) 2)) (b)) 1)` reported the transformer failure
+  inside init 1; Chez and Racket both report the shape of binding 2 (`at: (b)`).
+  The expander checked a binding's `(name init)` shape in the same pass that
+  expanded the inits, so binding 2 was not looked at until init 1 had already
+  raised. All five binding forms — `let`, `let*`, `letrec`, `letrec*`, named
+  `let` — are affected and all five now report the structural error.
+
+### Changed
+
+- **The four binding forms take `validate.LetKind` instead of three parameters.**
+  `expandLetCommon` was parameterized by `(label string, scopeInits, sequential
+  bool)` and dispatched to one of two binding walks. The forms differ on exactly
+  one axis — how much of the form's own binding set an init expression sees — and
+  `validate.LetKind` already names it, doc table included. The label, the scope
+  label and the scope stamp on the inits all follow from the kind, and
+  `expandLetStarBindings` folds into `expandBindings`: `expander_let.go` loses 68
+  lines and the axis stops being spelled four ways.
+
+- **Twenty-five primitives moved onto `helpers.MakeTypePredicate`,
+  `MakeUnaryAccessor` and `MakeBinarySetter`,** which 80-odd of their siblings
+  already used: `null?`, `pair?`, `void?`, `integer?`, `real?`, `rational?`,
+  `error-object?`, `read-error?`, `file-error?`, `char->integer`,
+  `%parameter-raw-set!`, the five `error-context`/`error-object` accessors, six
+  `char-set` primitives, `process?`, `textual-port?` and `binary-port?`. Every
+  error string is byte-identical — the factories call the same `RequireArg` with
+  the same sentinel, index and name — so the only visible change is that twenty-
+  five `func` declarations became `var` declarations of the same type.
+
+  `pkg/registry/core` drops 101 lines. `null?` and `pair?` are promoted opcodes,
+  so the hot path never reaches either body.
+
+- **The axis-B manifest's core-surface derivation stopped riding on inlining.**
+  `coreManifestNames` selected core rows by the manifest's Go *symbol*, which for
+  a factory-built closure names whichever package the compiler chose to inline
+  the factory into. The source location does not move across toolchains and the
+  symbol does — `maskGoFunctionColumn` measures both — so the selector is now the
+  file, plus a frozen `coreHelperBuiltPrimitives` list for the 46 core primitives
+  a shared constructor implements. The old selector lost 46 rows the moment the
+  manifest was regenerated on the toolchain CI actually uses.
+
+### Removed
+
+- **`testhelpers.EvalScheme` and `testhelpers.SetupLibraryTest`** — zero
+  references anywhere in the tree, including tests.
+
 ### Documentation
 
 - **A splice in an unquote's operand (`` `,,@x` ``) is documented as staying

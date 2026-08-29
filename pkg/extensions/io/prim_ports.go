@@ -274,33 +274,27 @@ func PrimGetOutputBytevector(mc machine.CallContext) error {
 
 // PrimTextualPortQ implements the textual-port? primitive.
 // R7RS §6.13.1: Returns #t if the port is a textual port, #f otherwise.
-func PrimTextualPortQ(mc machine.CallContext) error {
-	o := mc.Arg(0)
+var PrimTextualPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	p, ok := o.(*values.PortObject)
 	if !ok {
-		mc.SetValue(values.FalseValue)
-		return nil
+		return false
 	}
 	_, hasRR := p.AsRuneReader()
 	_, hasRW := p.AsRuneWriter()
-	mc.SetValue(values.BoolToBoolean(hasRR || hasRW))
-	return nil
-}
+	return hasRR || hasRW
+})
 
 // PrimBinaryPortQ implements the binary-port? primitive.
 // R7RS §6.13.1: Returns #t if the port is a binary port, #f otherwise.
-func PrimBinaryPortQ(mc machine.CallContext) error {
-	o := mc.Arg(0)
+var PrimBinaryPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	p, ok := o.(*values.PortObject)
 	if !ok {
-		mc.SetValue(values.FalseValue)
-		return nil
+		return false
 	}
 	_, hasBR := p.AsByteReader()
 	_, hasBW := p.AsByteWriter()
-	mc.SetValue(values.BoolToBoolean(hasBR || hasBW))
-	return nil
-}
+	return hasBR || hasBW
+})
 
 // evictPortCache removes any cached tokenizer and parser for the given port.
 // This is the single eviction choke point — all port cleanup paths
