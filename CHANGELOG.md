@@ -69,6 +69,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   token on the *following* call, so its `err IsNil` was vacuous for a lexical
   fault. It now asserts the whole token and that the stream reaches `io.EOF`.
 
+- **A malformed binding no longer loses its diagnostic to an earlier init.**
+  `(let* ((a (let-syntax ((m 1)) 2)) (b)) 1)` reported the transformer failure
+  inside init 1; Chez and Racket both report the shape of binding 2 (`at: (b)`).
+  The expander checked a binding's `(name init)` shape in the same pass that
+  expanded the inits, so binding 2 was not looked at until init 1 had already
+  raised. All five binding forms — `let`, `let*`, `letrec`, `letrec*`, named
+  `let` — are affected and all five now report the structural error.
+
+### Changed
+
+- **The four binding forms take `validate.LetKind` instead of three parameters.**
+  `expandLetCommon` was parameterized by `(label string, scopeInits, sequential
+  bool)` and dispatched to one of two binding walks. The forms differ on exactly
+  one axis — how much of the form's own binding set an init expression sees — and
+  `validate.LetKind` already names it, doc table included. The label, the scope
+  label and the scope stamp on the inits all follow from the kind, and
+  `expandLetStarBindings` folds into `expandBindings`: `expander_let.go` loses 68
+  lines and the axis stops being spelled four ways.
+
 ### Documentation
 
 - **A splice in an unquote's operand (`` `,,@x` ``) is documented as staying

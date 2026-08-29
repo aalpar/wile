@@ -127,6 +127,39 @@ func TestLetIntegration(t *testing.T) {
 	}
 }
 
+// TestLetMalformedBindingOutranksInitExpansion pins the order in which a binding
+// form reports two simultaneous faults: a later binding whose shape is wrong, and
+// an earlier init that fails to expand. The structural error wins, for all five
+// forms, as it does in Chez and Racket ("bad syntax ... at: (b)").
+//
+// The expander used to check a binding's (name init) shape in the same pass that
+// expanded the inits, so binding 2's shape was not looked at until init 1 had
+// already produced its diagnostic. Checking every shape first is what unified the
+// let and let* walks; this is the behaviour that unification settles.
+func TestLetMalformedBindingOutranksInitExpansion(t *testing.T) {
+	// The init expands to a define-syntax whose transformer is not a list, which
+	// is a failure of expansion rather than of validation — the only way to get
+	// the two faults into one form.
+	const badInit = `(let-syntax ((m 1)) 2)`
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"let", `(let ((a ` + badInit + `) (b)) 1)`},
+		{"let*", `(let* ((a ` + badInit + `) (b)) 1)`},
+		{"letrec", `(letrec ((a ` + badInit + `) (b)) 1)`},
+		{"letrec*", `(letrec* ((a ` + badInit + `) (b)) 1)`},
+		{"named let", `(let loop ((a ` + badInit + `) (b)) 1)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, err.Error(), qt.Contains, "binding must be (name init)")
+		})
+	}
+}
+
 func TestLetMacroGenerated(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "cond true", Code: `(cond (#t 42))`, Expected: values.NewInteger(42)},
