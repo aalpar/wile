@@ -38,6 +38,7 @@ EXCLUDED_PKGS=(
 	"integration"
 	"tools/ruleguard"
 	"tools/cmd/cxmeasure"
+	"tools/cmd/deadscan"
 	"pkg/stdlib"
 )
 

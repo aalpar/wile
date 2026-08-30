@@ -2967,6 +2967,19 @@ Open restructuring work found only in `plans/` during the 2026-07-21 triage.
   `tools/cmd/cxmeasure` (`make complexity`, `make complexity-arms ARMS=…`), a reporter not a gate.
   C1 is also the named blocker on the `NEST_MAX=6` ratchet in `tools/Makefile`: dropping it to 5
   needs that function flattened. `plans/2026-08-22-complexity-inventory-refactor.local.md`.
+- [x] **Dead exported-surface census: `tools/cmd/deadscan`** [Chore, Done 2026-08-29]: the exported
+  surface is the one thing nothing measures — `deadcode` does not run on this toolchain (built
+  against go1.26, tree targets go1.27) and `unused` skips exported identifiers outright. A reporter,
+  not a gate: `make deadscan`, `make deadscan-json`. It counts production references with the
+  self/cluster filter and interface mediation, then applies four PINS a reference count cannot see —
+  a `var _ I = (*T)(nil)` satisfaction assertion, an interface owned outside the module, the universe
+  `error` protocol, and anonymous-interface dispatch — and treats a pinned symbol as a live ROOT so
+  death does not propagate through one. Rows also carry `iotagroup` and `clusterwith`, because a
+  member of an iota block and a leaf reachable only from another dead symbol are not standalone
+  deletions. Current tree: 4207 exported symbols, 385 dead, 353 standalone / 2212 LOC. The earlier
+  hand-run of this analysis reported 462 dead and called 149 of them "safe to remove"; four defects
+  accounted for the gap, each with a confirmed instance in `memory/`. **Pass every workspace module**
+  or the ext column is zero and the list is overstated — the report warns when it saw only one.
 - [x] **Tool layout: `tools/cmd` + `tools/Makefile`** [Chore, Done 2026-08-22]: every Go tool `main`
   package now lives under `tools/cmd/` (`cxmeasure` plus the three moved from the top-level `cmd/`:
   `nestinglint`, `typeswitchlint`, `singlelinefunclint`), and `tools/Makefile` owns every tool

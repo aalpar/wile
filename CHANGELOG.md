@@ -16,6 +16,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`tools/cmd/deadscan`: a census of the exported surface nothing consumes.**
+  `deadcode` does not run on this toolchain and `unused` skips exported
+  identifiers outright, so 10% of the exported surface was unmeasured. A
+  reporter, not a gate — `make deadscan`, `make deadscan-json`, and neither is
+  part of `make ci`.
+
+  It counts production references with the self/cluster filter (a symbol does
+  not keep itself alive) and interface mediation (a concrete method claims calls
+  through the interface it satisfies), then applies four **pins** a reference
+  count structurally cannot see, and treats a pinned symbol as a live ROOT so
+  death does not propagate through one:
+
+  | pin | what it sees | why a count cannot |
+  |---|---|---|
+  | `assert` | `var _ I = (*T)(nil)` pins every method `I` requires of `T` | the assertion names the type, never the methods — deleting one is a compile error |
+  | `external-iface` | the receiver satisfies an interface owned outside the module | the caller is in someone else's code |
+  | `error-protocol` | `Error`/`Unwrap`/`Is`/`As` on a type implementing `error` | `error` lives in no package scope, so walking packages never finds it |
+  | `anon-iface` | `node.(interface{ AddScope(*Scope) SyntaxValue })` | deleting the method does not break the build; the assertion just stops matching |
+
+  Rows also carry `iotagroup` and `clusterwith`. A member of an `iota` block
+  renumbers its neighbours when removed, and a leaf reachable only from another
+  dead symbol cannot be deleted without its caller; neither is a standalone
+  deletion however dead it is.
+
+  Against the tree today: 4,207 exported symbols, 385 dead, 353 of them
+  standalone at 2,212 LOC. The hand-run that preceded this tool reported 462
+  dead and called 149 of them safe to remove. Four defects account for the gap,
+  and each has a confirmed instance:
+
+  - satisfaction assertions were invisible — `ExpanderContext.SetIntroductionScope`
+    and `SetUseSiteScope` were filed as a −37 LOC deletion that does not compile;
+  - death propagated through live-by-design symbols — `BindingRefInvalid` is read
+    on every `BindingRef.IsValid` call, and `NewSchemeError` is called from
+    `MachineContext.Error`;
+  - the `error` protocol was applied by hand over the output, which is where the
+    errors came from — 29 rows;
+  - the sibling workspace modules were never loaded, so `wile-goast` and
+    `wile-extension-example` contributed zero references while the census
+    reasoned about the public surface from "wile-goast builds against it".
+
+  The last one is a footgun rather than a fixed bug: pass every workspace module
+  or the ext column is zero and the dead list is overstated. The report says how
+  many modules it saw, and warns when that is one.
+
+  `classify` reads a file's position relative to its own module root rather than
+  searching the absolute path for a directory name. The earlier form matched the
+  literal string `wile-workspace/`, which in a checkout under any other name
+  classified every file as external — and so every symbol as live.
+
+  Adds one dependency, `golang.org/x/tools`, pinned to v0.47.0 to match what
+  `wile-goast` already builds against, and marked `// tooling` beside the
+  ruleguard DSL.
+
 ### Fixed
 
 - **`floor-quotient` and its four siblings answered `0.0` for a `#m` NaN.**

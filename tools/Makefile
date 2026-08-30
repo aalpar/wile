@@ -103,6 +103,28 @@ complexity-files:
 complexity-packages:
 	@$(GO) run ./cmd/cxmeasure -by pkg -top $(TOP) $(ROOT)
 
+# Report the exported symbols no production code consumes. A REPORTER, not a
+# gate — `deadcode` does not run on this toolchain and `unused` skips exported
+# identifiers, so this is the only measurement of the exported surface.
+#
+# MODULES is the list of consumers whose references count. It must name every
+# workspace module that builds against wile, or the ext column is zero and the
+# dead list is overstated; the report warns when it saw only one. Override it to
+# scope a run.
+#   make -C tools deadscan
+#   make -C tools deadscan MODULES=./pkg/environment/...
+MODULES ?= github.com/aalpar/wile/... github.com/aalpar/wile-goast/... github.com/aalpar/wile-extension-example/...
+
+.PHONY: deadscan
+deadscan:
+	@cd $(ROOT) && $(GO) run ./tools/cmd/deadscan -dir . $(MODULES)
+
+# The same scan emitted as JSON, for a script rather than a reader.
+#   make -C tools deadscan-json > syms.json
+.PHONY: deadscan-json
+deadscan-json:
+	@cd $(ROOT) && $(GO) run ./tools/cmd/deadscan -json -dir . $(MODULES)
+
 # The wide-structure test: re-measure one function's switch arms as though each
 # were already its own function. A large collapse means the function is wide
 # rather than complex, and splitting it would relocate the score without making

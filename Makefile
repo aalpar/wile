@@ -743,6 +743,21 @@ complexity-files:
 complexity-packages:
 	@$(MAKE) --no-print-directory -C $(TOOLS_DIR) complexity-packages TOP=$(TOP)
 
+# Report the exported symbols no production code consumes — the one measurement
+# of the exported surface, since `deadcode` does not run on this toolchain and
+# `unused` skips exported identifiers. A reporter, not a gate: a row is a lead,
+# and the tool says which rows are not standalone deletions.
+#   make deadscan
+#   make deadscan MODULES=./pkg/environment/...
+#   make deadscan-json > syms.json
+.PHONY: deadscan
+deadscan:
+	@$(MAKE) --no-print-directory -C $(TOOLS_DIR) deadscan $(if $(MODULES),MODULES="$(MODULES)",)
+
+.PHONY: deadscan-json
+deadscan-json:
+	@$(MAKE) --no-print-directory -C $(TOOLS_DIR) deadscan-json $(if $(MODULES),MODULES="$(MODULES)",)
+
 # Re-measure one function's switch arms in isolation, to tell a wide dispatch
 # table apart from a genuinely tangled function before refactoring it.
 #   make complexity-arms ARMS=pkg/machine/machine_context.go:Run
