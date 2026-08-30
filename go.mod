@@ -10,6 +10,7 @@ require (
 	github.com/mark3labs/mcp-go v0.45.0
 	github.com/quasilyte/go-ruleguard/dsl v0.3.23 // tooling
 	golang.org/x/text v0.39.0 // internal
+	golang.org/x/tools v0.47.0 // tooling
 )
 
 require (
@@ -24,6 +25,8 @@ require (
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	golang.org/x/mod v0.37.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect; cli
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
