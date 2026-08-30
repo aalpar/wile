@@ -71,6 +71,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `wile-goast` already builds against, and marked `// tooling` beside the
   ruleguard DSL.
 
+- **deadscan splits its out-of-module references by consuming module.** Both
+  kinds keep a symbol live — deleting it breaks that module's build either way,
+  and nothing about the dead/alive verdict changes. What they answer differently
+  is whether the symbol is *public API*, and only an independent consumer is
+  evidence that it is:
+
+  ```
+  ext consumers: 102 symbols — wile-goast 95, wile-extension-example 37 (30 shared)
+  ```
+
+  `wile-goast` is first-party: it is the static-analysis tool Wile runs on its
+  own source, so a reference from it says we use our own internals, not that an
+  embedder depends on them. The dead-export census argued SURFACE partly from
+  "wile-goast builds against it", and this is what that argument was worth —
+  subtract the overlap and the independent consumer attests **7** symbols on its
+  own, while **65** rest on first-party tooling alone.
+
+  The shared count is printed because the rows otherwise appear not to add up,
+  and because it is the number the public-API question turns on. `extby` carries
+  the per-module counts in `-json`.
+
 ### Fixed
 
 - **`floor-quotient` and its four siblings answered `0.0` for a `#m` NaN.**

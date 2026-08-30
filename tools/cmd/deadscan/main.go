@@ -28,6 +28,15 @@
 // count as live: wile-goast builds against this API, so its calls are real
 // consumers.
 //
+// Those out-of-module references are reported per consuming module, because the
+// two kinds do not mean the same thing. Both keep a symbol LIVE — deleting it
+// breaks that module's build either way. What they answer differently is
+// whether the symbol is public API, and only an INDEPENDENT consumer is
+// evidence that it is. On this tree wile-goast accounts for 95 of the 102, and
+// wile-goast is first-party: it is the analyzer Wile runs on its own source, so
+// a reference from it says we use our own internals, not that an embedder
+// depends on them. wile-extension-example, at 37, is the independent proxy.
+//
 // Two refinements are what separate this from grep. References from inside the
 // symbol's own body — and, for a type, from inside its own methods — do not
 // count, or every self-recursive function scores live. And a concrete method
@@ -160,6 +169,14 @@ type symbol struct {
 	// ExtRefs counts references from another workspace module — a real
 	// out-of-module consumer, and the strongest liveness signal there is.
 	ExtRefs int `json:"ext"`
+	// ExtBy splits ExtRefs by the consuming module, because the two kinds of
+	// consumer do not mean the same thing. Both keep the symbol LIVE — deleting
+	// it breaks that module's build either way, and nothing here changes the
+	// dead/alive verdict. What they answer differently is whether the symbol is
+	// public API: a reference from an independent embedder is evidence that it
+	// is, and a reference from first-party tooling that happens to live in
+	// another module is only evidence that we use our own internals.
+	ExtBy map[string]int `json:"extby,omitempty"`
 	// Reads and Writes are meaningful for fields only. Writes >> Reads == 0 is
 	// a field nothing consults.
 	Reads  int `json:"reads,omitempty"`
@@ -806,12 +823,21 @@ func (p *scanner) noteRef(pkg *packages.Package, fname, cls string, parent map[a
 		return
 	}
 	p.seenRef[key+"@"+site] = true
-	p.credit(s, key, fname, cls, site, parent, id)
+	p.credit(s, key, fname, cls, site, modulePath(pkg), parent, id)
+}
+
+// modulePath names the module a package belongs to, or "" for the standard
+// library, which has none.
+func modulePath(p *packages.Package) string {
+	if p.Module == nil {
+		return ""
+	}
+	return p.Module.Path
 }
 
 // credit records one reference against a symbol, applying the self/cluster
 // filter that keeps a symbol from keeping itself alive.
-func (p *scanner) credit(s *symbol, key, fname, cls, site string, parent map[ast.Node]ast.Node, id *ast.Ident) {
+func (p *scanner) credit(s *symbol, key, fname, cls, site, consumer string, parent map[ast.Node]ast.Node, id *ast.Ident) {
 	ek, ecl := "", ""
 	if cls == "prod" {
 		ek, ecl = p.enclosing(fname, id.Pos())
@@ -839,6 +865,10 @@ func (p *scanner) credit(s *symbol, key, fname, cls, site string, parent map[ast
 		}
 	case "ext":
 		s.ExtRefs++
+		if s.ExtBy == nil {
+			s.ExtBy = map[string]int{}
+		}
+		s.ExtBy[consumer]++
 		if len(s.ProdSite) < 8 {
 			s.ProdSite = append(s.ProdSite, "EXT "+site)
 		}
@@ -1104,6 +1134,15 @@ func (p *scanner) report() {
 		fmt.Println("WARNING: one module only — the ext column is zero and the dead list is overstated")
 	}
 	fmt.Printf("exported symbols: %d (%d LOC)\n", len(all), loc)
+	ext := extConsumers(all)
+	if len(ext) > 0 {
+		shared := ""
+		n := extShared(all)
+		if n > 0 {
+			shared = fmt.Sprintf(" (%d shared)", n)
+		}
+		fmt.Printf("ext consumers: %d symbols — %s%s\n", extConsumed(all), renderConsumers(ext), shared)
+	}
 	fmt.Printf("dead: %d — standalone %d (%d LOC), cluster-only %d, iota member %d\n",
 		dead, dead-cluster-positional, deadLOC, cluster, positional)
 	fmt.Printf("pins: %v\n\n", pins)
@@ -1120,6 +1159,79 @@ func (p *scanner) report() {
 				s.displayName(), s.Kind, s.ProdRefs, s.TestRefs, s.Pos)
 		}
 	}
+}
+
+// consumerCount is one module and the number of audited symbols it references.
+type consumerCount struct {
+	Module string
+	Syms   int
+}
+
+// extConsumers counts, per consuming module, how many audited symbols it
+// references, ordered by count and then by name.
+//
+// Per-module rather than one total because the two kinds of consumer answer
+// different questions. Both keep a symbol live; only an INDEPENDENT one is
+// evidence that the symbol is public API. On this tree wile-goast accounts for
+// nearly all of it, and wile-goast is first-party — it is the analyzer Wile
+// runs on its own source, so a reference from it says we use our own internals,
+// not that an embedder depends on them.
+func extConsumers(all []*symbol) []consumerCount {
+	n := map[string]int{}
+	for _, s := range all {
+		for m := range s.ExtBy {
+			n[m]++
+		}
+	}
+	q := make([]consumerCount, 0, len(n))
+	for m, c := range n {
+		q = append(q, consumerCount{Module: m, Syms: c})
+	}
+	sort.Slice(q, func(i, j int) bool {
+		if q[i].Syms != q[j].Syms {
+			return q[i].Syms > q[j].Syms
+		}
+		return q[i].Module < q[j].Module
+	})
+	return q
+}
+
+// extConsumed counts the symbols with at least one out-of-module consumer. It
+// is not the sum of extConsumers: a symbol both modules reference is one
+// symbol and two rows.
+func extConsumed(all []*symbol) int {
+	q := 0
+	for _, s := range all {
+		if s.ExtRefs > 0 {
+			q++
+		}
+	}
+	return q
+}
+
+// extShared counts the symbols more than one consuming module references. It is
+// what reconciles the per-module rows with the total, which otherwise appear not
+// to add up: on this tree 95 + 37 covers 102 symbols because 30 are in both.
+//
+// It is also the number the public-API question turns on. Subtract it and the
+// independent consumer attests only 7 symbols on its own, while 65 rest on
+// first-party tooling alone.
+func extShared(all []*symbol) int {
+	q := 0
+	for _, s := range all {
+		if len(s.ExtBy) > 1 {
+			q++
+		}
+	}
+	return q
+}
+
+func renderConsumers(cs []consumerCount) string {
+	parts := make([]string, 0, len(cs))
+	for _, c := range cs {
+		parts = append(parts, fmt.Sprintf("%s %d", c.Module, c.Syms))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func (p *symbol) displayName() string {
