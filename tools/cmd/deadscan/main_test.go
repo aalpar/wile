@@ -339,6 +339,107 @@ func TestStandalone(t *testing.T) {
 	}
 }
 
+// TestExtConsumers pins the aggregation behind the per-module split, including
+// the case that makes the two numbers disagree: a symbol both modules reference
+// is ONE consumed symbol and TWO module rows, so the rows never sum to the
+// total and reporting them as though they did would double-count.
+func TestExtConsumers(t *testing.T) {
+	const goast = "github.com/aalpar/wile-goast"
+	const example = "github.com/aalpar/wile-extension-example"
+	tcs := []struct {
+		name         string
+		syms         []*symbol
+		wantOrder    []consumerCount
+		wantConsumed int
+		wantShared   int
+		wantRender   string
+	}{
+		{
+			name:         "no external consumer",
+			syms:         []*symbol{{}, {ProdRefs: 3}},
+			wantOrder:    []consumerCount{},
+			wantConsumed: 0,
+			wantRender:   "",
+		},
+		{
+			name: "ordered by count, descending",
+			syms: []*symbol{
+				{ExtRefs: 1, ExtBy: map[string]int{example: 1}},
+				{ExtRefs: 2, ExtBy: map[string]int{goast: 2}},
+				{ExtRefs: 9, ExtBy: map[string]int{goast: 9}},
+			},
+			wantOrder:    []consumerCount{{goast, 2}, {example, 1}},
+			wantConsumed: 3,
+			wantRender:   goast + " 2, " + example + " 1",
+		},
+		{
+			name: "a shared symbol is one consumed, two rows",
+			syms: []*symbol{
+				{ExtRefs: 4, ExtBy: map[string]int{goast: 3, example: 1}},
+			},
+			wantOrder:    []consumerCount{{example, 1}, {goast, 1}},
+			wantConsumed: 1,
+			wantShared:   1,
+			wantRender:   example + " 1, " + goast + " 1",
+		},
+		{
+			name: "a tie breaks on the module name",
+			syms: []*symbol{
+				{ExtRefs: 1, ExtBy: map[string]int{goast: 1}},
+				{ExtRefs: 1, ExtBy: map[string]int{example: 1}},
+			},
+			wantOrder:    []consumerCount{{example, 1}, {goast, 1}},
+			wantConsumed: 2,
+			wantRender:   example + " 1, " + goast + " 1",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got := extConsumers(tc.syms)
+			if len(got) != len(tc.wantOrder) {
+				t.Fatalf("extConsumers = %v, want %v", got, tc.wantOrder)
+			}
+			for i, w := range tc.wantOrder {
+				if got[i] != w {
+					t.Errorf("row %d = %v, want %v", i, got[i], w)
+				}
+			}
+			if extConsumed(tc.syms) != tc.wantConsumed {
+				t.Errorf("extConsumed = %d, want %d", extConsumed(tc.syms), tc.wantConsumed)
+			}
+			if extShared(tc.syms) != tc.wantShared {
+				t.Errorf("extShared = %d, want %d", extShared(tc.syms), tc.wantShared)
+			}
+			if renderConsumers(got) != tc.wantRender {
+				t.Errorf("renderConsumers = %q, want %q", renderConsumers(got), tc.wantRender)
+			}
+		})
+	}
+}
+
+// TestExtSplitDoesNotChangeLiveness pins the property that makes the split
+// safe: both kinds of consumer root a symbol, so splitting the column is a
+// reporting change and never a dead/alive one. Dropping first-party references
+// from liveness would report symbols as dead whose deletion breaks wile-goast.
+func TestExtSplitDoesNotChangeLiveness(t *testing.T) {
+	tcs := []struct {
+		name string
+		sym  symbol
+	}{
+		{"first-party consumer", symbol{ExtRefs: 1, ExtBy: map[string]int{"github.com/aalpar/wile-goast": 1}}},
+		{"independent consumer", symbol{ExtRefs: 1, ExtBy: map[string]int{"github.com/aalpar/wile-extension-example": 1}}},
+	}
+	p := newScanner()
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			s := tc.sym
+			if !p.rooted(&s) {
+				t.Error("an out-of-module consumer must root the symbol whichever module it is")
+			}
+		})
+	}
+}
+
 func TestClusterOf(t *testing.T) {
 	tcs := []struct {
 		name                   string
