@@ -2970,7 +2970,9 @@ Open restructuring work found only in `plans/` during the 2026-07-21 triage.
 - [x] **Dead exported-surface census: `tools/cmd/deadscan`** [Chore, Done 2026-08-29]: the exported
   surface is the one thing nothing measures — `deadcode` does not run on this toolchain (built
   against go1.26, tree targets go1.27) and `unused` skips exported identifiers outright. A reporter,
-  not a gate: `make deadscan`, `make deadscan-json`. It counts production references with the
+  not a gate: `make deadscan`, `make deadscan-json`. The analysis half is the importable
+  `tools/deadscan` package (`Load` -> `Result`), so wile-goast can join the census against its
+  call-graph and CFG; `tools/cxmeasure` was split the same way. It counts production references with the
   self/cluster filter and interface mediation, then applies four PINS a reference count cannot see —
   a `var _ I = (*T)(nil)` satisfaction assertion, an interface owned outside the module, the universe
   `error` protocol, and anonymous-interface dispatch — and treats a pinned symbol as a live ROOT so

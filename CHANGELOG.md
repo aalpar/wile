@@ -92,6 +92,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and because it is the number the public-API question turns on. `extby` carries
   the per-module counts in `-json`.
 
+- **`tools/cxmeasure` and `tools/deadscan` are importable packages.** Both tools
+  were single-file `package main`, so their measurements were reachable only by
+  running a binary and parsing its output. The analysis halves now live in
+  library packages beside the commands, which keep the flags and the formatting:
+
+  | package | entry points |
+  |---|---|
+  | `tools/cxmeasure` | `ScanDir`, `ScanFile`, `Measure`, `Arms`, plus `FindFunc` / `WidestSwitch` / `MeasureArms` |
+  | `tools/deadscan` | `Load` returning a `Result`, plus `ExtConsumers` / `ExtConsumed` / `ExtShared` |
+
+  The consumer is wile-goast, which is the static-analysis tool Wile runs on its
+  own source: the census and the complexity numbers belong where its call-graph,
+  SSA and CFG analyses can join them. Verified from inside wile-goast —
+  `cxmeasure.ScanDir` measures its 18 `goastcfg` functions, and `deadscan.Load`
+  scores wile-goast as the ext consumer of 95 wile symbols.
+
+  Two behaviour changes fall out of a library not owning the caller's output.
+  `ScanDir` returns the files it could not parse as `[]SkippedFile` instead of
+  writing warnings to stderr, and `Arms` returns an `*ArmsReport` — every number
+  behind the wide-structure verdict, and the verdict itself — instead of
+  printing and calling `os.Exit`. `cxmeasure -arms` and `deadscan`'s report are
+  byte-identical to before: `MachineContext.Run` still measures cognitive 305
+  collapsing to 98 across 78 arms at a 61% share, and the census still reports
+  4,207 symbols with 385 dead.
+
 ### Fixed
 
 - **`floor-quotient` and its four siblings answered `0.0` for a `#m` NaN.**

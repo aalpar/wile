@@ -22,9 +22,14 @@ GO ?= go
 # every current tool wants; overridable to scope a run to one package.
 ROOT ?= ..
 
-# Every tool main package. Wildcards rather than an explicit list: adding a
-# directory under cmd/ should not require editing this file.
-TOOL_PKGS = ./cmd/...
+# Every Go package under tools/: the commands in ./cmd and the libraries beside
+# them. Wildcards rather than an explicit list: adding a package should not
+# require editing this file.
+#
+# The libraries (./cxmeasure, ./deadscan) are importable, and wile-goast imports
+# them — it is the static-analysis tool Wile runs on its own source, so the
+# measurements belong where its call-graph and CFG analyses can join them.
+TOOL_PKGS = ./...
 
 # cxmeasure defaults. TOP bounds every ranking; ARMS names one function for the
 # wide-structure test and has no sensible default, so its target requires it.
