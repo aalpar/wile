@@ -562,16 +562,13 @@ const (
 	tierNone          = -1   // not a candidate at the query phase at all
 )
 
-// probeRankedLocked is resolveRankedLocked's body, additionally reporting the
-// winning TIER and taking the highest tier it is allowed to consider.
-//
-// The tier answers "is this binding part of the startup set?" without a second
-// lookup — tierExactMutable is the mutable tier, everything above it is sealed —
-// which is what IsSealedBindingAt asks. minTier answers the other non-reference
-// question: tierExactSealed skips the mutable tier, asking what the startup set
-// bound a name to REGARDLESS of any user shadow (setRecognizedPrimitive's
-// fallback, which the pre-fold tree spelled as a direct read of the sealed base
-// frame).
+// probeTiersLocked is the ranked probe with the tie REPORTED rather than raised,
+// and with a tier ceiling as well as a floor: candidates are the slots whose tier
+// t satisfies minTier <= t <= maxTier. It is the one body every ranked read
+// shares; probeRankedLocked raises on ambiguous for the readers that want the
+// compile-boundary CompilationError, and ExactBindingAt / AmbientBinding return
+// it for the R7RS §4.3.2 literal pin, which carries a tie across a multi-phase
+// descent as an answer.
 //
 // The ranking is one lexicographic argmax over (tier, scope cardinality) rather
 // than a per-tier accumulator array: three scopedBestOf values are ~190 bytes to
@@ -585,17 +582,11 @@ const (
 // subsets of it, hence equal to it and to each other, which
 // CreateGlobalBindingAt's reuse rule refuses to create.
 //
-// Caller MUST hold at least a read lock on p.mu, and MUST release it via defer
-// rather than a bare RUnlock: this can panic mid-hold, on an incomparable
-// equal-cardinality tie IN THE WINNING TIER, wrapped as werr.ErrAmbiguousBinding
-// (P8).
-// It returns the winning slotRef, not a bare slot: a pin records the
-// coordinates it resolved at (GlobalIndex.phase/sealed), and recovering them
-// from the slot afterwards would mean a second scan of the name's slot list.
-func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier int) (ref slotRef, tier int, ok bool) {
+// Caller MUST hold at least a read lock on p.mu. This function does not panic.
+func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier, maxTier int) (ref slotRef, tier int, ambiguous bool, ok bool) {
 	slots := p.keys[key]
 	if len(slots) == 0 {
-		return slotRef{}, tierNone, false
+		return slotRef{}, tierNone, false, false
 	}
 	// tierOf classifies s.phase.wildcard as T3 unconditionally, without consulting
 	// s.sealed: (ANY, mutable) is unreachable here by construction, not by a
@@ -625,7 +616,7 @@ func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.S
 				continue
 			}
 			t := tierOf(s)
-			if t < minTier {
+			if t < minTier || t > maxTier {
 				continue
 			}
 			if bestTier < 0 || t < bestTier {
@@ -633,17 +624,16 @@ func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.S
 				bestRef = s
 			}
 		}
-		return bestRef, bestTier, bestTier >= 0
+		return bestRef, bestTier, false, bestTier >= 0
 	}
 	scopes := q.Scopes()
 	var bestScopes []*syntax.Scope
-	ambiguous := false
 	for _, s := range slots {
 		if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
 			continue
 		}
 		t := tierOf(s)
-		if t < minTier {
+		if t < minTier || t > maxTier {
 			continue
 		}
 		bindingScopes := p.bindings[s.slot].Scopes()
@@ -674,12 +664,23 @@ func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.S
 			ambiguous = true
 		}
 	}
+	return bestRef, bestTier, ambiguous, bestTier >= 0
+}
+
+// probeRankedLocked is probeTiersLocked over every tier, raising on an
+// incomparable tie in the winning tier as werr.ErrAmbiguousBinding (P8). Every
+// reader except the literal pin's two comes through here.
+//
+// Caller MUST hold at least a read lock on p.mu, and MUST release it via defer
+// rather than a bare RUnlock: this can panic mid-hold.
+func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier int) (ref slotRef, tier int, ok bool) {
+	ref, tier, ambiguous, ok := p.probeTiersLocked(key, q, phase, minTier, tierAmbientSealed)
 	if ambiguous {
 		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
 			"resolveRankedLocked: identifier %q resolves ambiguously among incomparable hygienic scope sets",
 			key.Key))
 	}
-	return bestRef, bestTier, bestTier >= 0
+	return ref, tier, ok
 }
 
 // resolveAtCoordsLocked resolves at EXACTLY the given coordinates — the write
@@ -791,6 +792,38 @@ func (p *GlobalEnvironmentFrame) AmbientBinding(key *values.Symbol, q syntax.Sco
 		return nil
 	}
 	return p.bindings[ref.slot]
+}
+
+// bindingWithinTiers is the locked, binding-returning form of probeTiersLocked:
+// the resolved binding among tiers minTier..maxTier at phase, or nil, and
+// whether the winning tier tied. It does not raise. ExactBindingAt and
+// AmbientBinding are its two floors.
+// Thread-safe: uses RLock for read-only access.
+func (p *GlobalEnvironmentFrame) bindingWithinTiers(key *values.Symbol, q syntax.ScopeSet, phase Phase, minTier, maxTier int) (bnd *Binding, ambiguous bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	ref, _, ambiguous, ok := p.probeTiersLocked(*key, q, phase, minTier, maxTier)
+	if ambiguous {
+		return nil, true
+	}
+	if !ok {
+		return nil, false
+	}
+	return p.bindings[ref.slot], false
+}
+
+// ExactBindingAt resolves key under q among the EXACT-phase tiers at phase —
+// (phase, mutable) over (phase, sealed) — reporting an incomparable tie as an
+// answer rather than raising it. The ambient tier is not a candidate: (nil,
+// false) means no exact-phase slot of the name resolves under q at phase, and
+// says nothing about the ambient binding, which AmbientBinding answers.
+//
+// It exists for the R7RS §4.3.2 literal pin (compilation.lookupLiteralBinding),
+// which ranks exact-phase slots at several phases above the ambient keyword and
+// carries a tie forward as an answer rather than unwinding through the descent.
+// Every other reader wants GetBinding, which raises.
+func (p *GlobalEnvironmentFrame) ExactBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) (bnd *Binding, ambiguous bool) {
+	return p.bindingWithinTiers(key, q, phase, tierExactMutable, tierExactSealed)
 }
 
 // SealedGlobalIndexAt is SealedBindingAt's PIN: the same tier-floored probe, but
