@@ -217,3 +217,53 @@ func TestLookupLiteralBindingExactTieIsRefusedEvenWithAnAmbientTie(t *testing.T)
 	qt.Assert(t, ok, qt.IsFalse)
 	qt.Assert(t, got, qt.IsNil)
 }
+
+// TestLookupLiteralBindingExactTieIsRefusedDespiteACleanLowerPhase is the case
+// TestLookupLiteralBindingExactTieIsRefusedEvenWithAnAmbientTie does not reach:
+// there, phase 0 is ALSO tied, so master's swallow-and-descend and the branch's
+// immediate refusal land on the same (nil, false) by accident. Here phase 0
+// carries one CLEAN slot instead, unscoped and so a match under any query.
+//
+// On master, probeIgnoringAmbientTie(env, s, sq, ambientTie=true) swallows the
+// phase-1 exact tie precisely because the ambient tier is ALSO tied, the
+// descent falls through to phase 0, and the clean slot answers (binding, true):
+// a live ambiguity silently resolved to an unrelated binding. On the branch,
+// env.ExactBinding at phase 1 reports the tie directly and lookupLiteralBinding
+// refuses before the descent ever reaches phase 0.
+func TestLookupLiteralBindingExactTieIsRefusedDespiteACleanLowerPhase(t *testing.T) {
+	const sym = "else"
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	query := []*syntax.Scope{scopeA, scopeB}
+
+	ns := environment.NewNamespace()
+
+	// Phase 1: an exact-tier tie ({A} and {B} are incomparable, equal-cardinality
+	// subsets of the query).
+	expand := ns.Runtime().AtPhase(environment.PhaseExpand)
+	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
+		_, created := expand.MaybeCreateOwnGlobalBinding(
+			values.NewSymbol(sym), environment.BindingTypeVariable, scopes)
+		qt.Assert(t, created, qt.IsTrue)
+	}
+
+	// Ambient tier: the same two scope sets, also tied.
+	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
+	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
+		_, created := sealedRoot.MaybeCreateOwnGlobalBinding(
+			values.NewSymbol(sym), environment.BindingTypePrimitive, scopes)
+		qt.Assert(t, created, qt.IsTrue)
+	}
+
+	// Phase 0: one clean slot, unscoped, resolving under any query.
+	idx, created := ns.Runtime().MaybeCreateOwnGlobalBinding(
+		values.NewSymbol(sym), environment.BindingTypeVariable, nil)
+	qt.Assert(t, created, qt.IsTrue)
+	clean := ns.Store().GetOwnGlobalBinding(idx)
+	qt.Assert(t, clean, qt.IsNotNil)
+
+	got, ok := lookupLiteralBinding(expand, sym, query, definitionFallbackPhases(expand))
+	qt.Assert(t, ok, qt.IsFalse,
+		qt.Commentf("a phase-1 exact tie must be refused even though a clean phase-0 slot could otherwise answer it"))
+	qt.Assert(t, got, qt.IsNil)
+}

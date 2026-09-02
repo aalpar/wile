@@ -926,4 +926,7 @@ func TestExactBindingAtReportsAnExactTie(t *testing.T) {
 		ns.Runtime().GetBinding(sym, query)
 	})
 	c.Assert(r, qt.IsNotNil)
+	err, _ := r.(error)
+	c.Assert(errors.Is(err, werr.ErrAmbiguousBinding), qt.IsTrue,
+		qt.Commentf("panic must carry ErrAmbiguousBinding, got %v", r))
 }
