@@ -768,30 +768,22 @@ func (p *GlobalEnvironmentFrame) SealedBindingAt(key *values.Symbol, q syntax.Sc
 	return p.bindings[ref.slot]
 }
 
-// AmbientBinding resolves key under q in the ambient tier ALONE: the (ANY,
-// sealed) coordinate every phase's ranked probe reaches as T3, and nowhere
-// else. nil means the name is not part of the startup set; it says nothing about
-// exact-phase slots of the name, which GetBinding answers.
+// AmbientBinding resolves key under q in the ambient tier ALONE — the (ANY,
+// sealed) coordinate every phase's ranked probe reaches as T3 — and nowhere
+// else, reporting an incomparable tie as an answer rather than raising it. (nil,
+// false) means the name is not part of the startup set; it says nothing about
+// exact-phase slots of the name, which ExactBindingAt and GetBinding answer.
 //
 // It exists for one reader: the R7RS §4.3.2 definition-site literal pin
-// (compilation.lookupLiteralBinding) must rank the ambient answer BELOW an
-// exact-phase binding at a lower phase, and the ranked probe (highest tier at
-// the query phase wins) cannot say that. Every other read wants the probe.
+// (compilation.lookupLiteralBinding) consults the ambient keyword LAST, after
+// the exact tiers at every phase of its descent, and the ranked probe — highest
+// tier at the query phase wins — cannot say that. Every other read wants the probe.
 //
-// The tier floor does the whole job. With minTier at the ambient tier, an
-// exact-phase slot at the query phase ranks above the floor and is skipped, and
-// a slot at any other phase is not a candidate at all; the phase argument is
-// therefore irrelevant, and PhaseRuntime is passed for definiteness.
-// Thread-safe: uses RLock for read-only access.
-func (p *GlobalEnvironmentFrame) AmbientBinding(key *values.Symbol, q syntax.ScopeSet) *Binding {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	ref, _, ok := p.probeRankedLocked(*key, q, PhaseRuntime, tierAmbientSealed)
-	if !ok {
-		return nil
-	}
-	return p.bindings[ref.slot]
+// The tier floor and ceiling do the whole job: with both at the ambient tier an
+// exact-phase slot at any phase is outside the range, so the phase argument is
+// irrelevant and PhaseRuntime is passed for definiteness.
+func (p *GlobalEnvironmentFrame) AmbientBinding(key *values.Symbol, q syntax.ScopeSet) (bnd *Binding, ambiguous bool) {
+	return p.bindingWithinTiers(key, q, PhaseRuntime, tierAmbientSealed, tierAmbientSealed)
 }
 
 // bindingWithinTiers is the locked, binding-returning form of probeTiersLocked:

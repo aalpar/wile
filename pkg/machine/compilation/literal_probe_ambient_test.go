@@ -186,3 +186,34 @@ func TestLookupLiteralBindingExactTieIsRefusedWithoutAnAmbientTie(t *testing.T) 
 		qt.Assert(t, got, qt.IsNil)
 	})
 }
+
+// An exact-tier tie is refused at the phase it is found, whatever the ambient
+// tier holds. Before ambiguity became a returned value the pin swallowed this
+// case (documented as a residual on probeIgnoringAmbientTie): with the ambient
+// tier ALSO tied, every ambiguity panic on the descent was recovered and the
+// exact tie at phase 0 was indistinguishable from the dead ambient one. It
+// answered (nil, false) by the accident of the ambient flag, so this is a PIN of
+// the answer and a GATE on the reason: TestLookupLiteralBindingExactTieIsRefused
+// WithoutAnAmbientTie beside it holds the other half.
+func TestLookupLiteralBindingExactTieIsRefusedEvenWithAnAmbientTie(t *testing.T) {
+	const sym = "else"
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	query := []*syntax.Scope{scopeA, scopeB}
+
+	ns := environment.NewNamespace()
+	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
+	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
+		_, created := sealedRoot.MaybeCreateOwnGlobalBinding(
+			values.NewSymbol(sym), environment.BindingTypePrimitive, scopes)
+		qt.Assert(t, created, qt.IsTrue)
+		_, created = ns.Runtime().MaybeCreateOwnGlobalBinding(
+			values.NewSymbol(sym), environment.BindingTypeVariable, scopes)
+		qt.Assert(t, created, qt.IsTrue)
+	}
+
+	env := ns.Runtime().AtPhase(environment.PhaseExpand)
+	got, ok := lookupLiteralBinding(env, sym, query, definitionFallbackPhases(env))
+	qt.Assert(t, ok, qt.IsFalse)
+	qt.Assert(t, got, qt.IsNil)
+}

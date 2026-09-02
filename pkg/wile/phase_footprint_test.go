@@ -111,7 +111,8 @@ func TestAmbientKeywordsNeverHoldAProcedure(t *testing.T) {
 				if spec.DocOnly {
 					continue
 				}
-				bnd := store.AmbientBinding(values.NewSymbol(spec.Name), values.AllScopes())
+				bnd, ambiguous := store.AmbientBinding(values.NewSymbol(spec.Name), values.AllScopes())
+				qt.Assert(t, ambiguous, qt.IsFalse, qt.Commentf("%s: ambient tie at startup", spec.Name))
 				qt.Assert(t, bnd, qt.IsNotNil, qt.Commentf("keyword %q has no ambient binding", spec.Name))
 				qt.Assert(t, bnd.BindingType(), qt.Equals, environment.BindingTypePrimitive,
 					qt.Commentf("keyword %q", spec.Name))

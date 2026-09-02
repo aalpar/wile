@@ -814,7 +814,9 @@ func TestAmbientBindingIgnoresExactPhaseSlots(t *testing.T) {
 
 	// A phase-0 mutable slot alone: nothing is ambient.
 	mustDefine(c, ns.Runtime(), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(5))
-	c.Assert(ns.Store().AmbientBinding(sym, values.EmptyScopes()), qt.IsNil)
+	bnd, ambiguous := ns.Store().AmbientBinding(sym, values.EmptyScopes())
+	c.Assert(bnd, qt.IsNil)
+	c.Assert(ambiguous, qt.IsFalse)
 
 	// The ambient slot, written the only way one can be: through the phase-0
 	// sealed-write view.
@@ -824,12 +826,37 @@ func TestAmbientBindingIgnoresExactPhaseSlots(t *testing.T) {
 	ambient := ns.Store().GetOwnGlobalBinding(ambientIdx)
 	c.Assert(ambient, qt.IsNotNil)
 
-	c.Assert(ns.Store().AmbientBinding(sym, values.EmptyScopes()), qt.Equals, ambient)
+	bnd, ambiguous = ns.Store().AmbientBinding(sym, values.EmptyScopes())
+	c.Assert(bnd, qt.Equals, ambient)
+	c.Assert(ambiguous, qt.IsFalse)
 
 	// The ranked probe at phase 0 prefers the mutable slot (T1 over T3);
 	// AmbientBinding did not. From phase 1, where no exact slot exists, both agree.
 	c.Assert(ns.Runtime().GetBinding(sym, values.EmptyScopes()), qt.Not(qt.Equals), ambient)
 	c.Assert(ns.Runtime().AtPhase(PhaseExpand).GetBinding(sym, values.EmptyScopes()), qt.Equals, ambient)
+}
+
+// A tie in the ambient tier is reported, not raised. The pin is the only reader,
+// and it refuses on it only after the exact tiers at every phase have missed.
+func TestAmbientBindingReportsATie(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	sym := values.NewSymbol("else")
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	sealedRoot := ns.Runtime().SealedWriteViewAt(PhaseRuntime)
+	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
+		_, created := sealedRoot.MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, scopes)
+		c.Assert(created, qt.IsTrue)
+	}
+	var bnd *Binding
+	var ambiguous bool
+	r := capturePanic(func() {
+		bnd, ambiguous = ns.Store().AmbientBinding(sym, syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB}))
+	})
+	c.Assert(r, qt.IsNil)
+	c.Assert(ambiguous, qt.IsTrue)
+	c.Assert(bnd, qt.IsNil)
 }
 
 // ExactBindingAt answers the exact-phase tiers at ONE phase — (phase, mutable)

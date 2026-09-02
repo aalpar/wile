@@ -49,7 +49,6 @@ package compilation
 // Reference: "Binding as Sets of Scopes" (Flatt, 2016)
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 
@@ -155,18 +154,12 @@ func definitionFallbackPhases(env *environment.EnvironmentFrame) []environment.P
 // slot exists at env's own phase or any fallback phase. When the name is not
 // ambient, ambient is nil and the comparison is the plain "first hit" it was.
 //
-// ok is false only for an ambiguous resolution. EnvironmentFrame.GetBinding
-// panics with werr.ErrAmbiguousBinding on an equal-cardinality incomparable scope
-// tie and there is no other production recover site, so the panic is converted
-// into the answer here rather than escaping through the matcher. Anything else
-// recovered is re-panicked unchanged.
-//
-// An ambient-tier tie is DEAD when any exact-phase probe hits, which is the
-// losing-tier rule probeRankedLocked states for itself ("a tie in a losing tier
-// is dead and must not panic") applied to this function's re-ranking: here the
-// ambient tier loses to every exact phase, not merely to the query phase. The
-// tie is therefore held as ambientAmbiguous rather than answered, and it becomes
-// "ambiguous" only at the final fallthrough, where nothing exact was found.
+// A tie refuses. ExactBinding and AmbientBinding report an incomparable
+// equal-cardinality tie as an answer, and the pin returns ok=false the moment
+// one is found: an exact-tier tie at env's own phase or at any fallback phase is
+// live wherever it is met, and an ambient tie counts only when nothing exact
+// exists anywhere above it. Nothing here recovers a panic; the raising readers
+// (GetBinding, SealedBindingAt) are not on this path.
 func lookupLiteralBinding(
 	env *environment.EnvironmentFrame,
 	sym string,
@@ -176,31 +169,13 @@ func lookupLiteralBinding(
 	if env == nil {
 		return nil, true
 	}
-	defer func() {
-		r := recover()
-		if r == nil {
-			return
-		}
-		rerr, isErr := r.(error)
-		if isErr && errors.Is(rerr, werr.ErrAmbiguousBinding) {
-			q = nil
-			ok = false
-			return
-		}
-		panic(r)
-	}()
-
 	s := values.NewSymbol(sym)
 	sq := syntax.ScopesOf(scopes)
-	// A detached transient frame carries no store; there is then nothing ambient.
-	var ambient *environment.Binding
-	ambientAmbiguous := false
-	store := env.GlobalEnvironment()
-	if store != nil {
-		ambient, ambientAmbiguous = ambientTierBinding(store, s, sq)
+	q, ambiguous := env.ExactBinding(s, sq)
+	if ambiguous {
+		return nil, false
 	}
-	q = probeIgnoringAmbientTie(env, s, sq, ambientAmbiguous)
-	if q != nil && q != ambient {
+	if q != nil {
 		return q, true
 	}
 	// PresentPhases is consulted only as the guard on AtPhase: a phase the owner
@@ -215,83 +190,24 @@ func lookupLiteralBinding(
 		if v == nil {
 			continue
 		}
-		q = probeIgnoringAmbientTie(v, s, sq, ambientAmbiguous)
-		if q != nil && q != ambient {
+		q, ambiguous = v.ExactBinding(s, sq)
+		if ambiguous {
+			return nil, false
+		}
+		if q != nil {
 			return q, true
 		}
 	}
-	if ambientAmbiguous {
+	// A detached transient frame carries no store; there is then nothing ambient.
+	store := env.GlobalEnvironment()
+	if store == nil {
+		return nil, true
+	}
+	q, ambiguous = store.AmbientBinding(s, sq)
+	if ambiguous {
 		return nil, false
 	}
-	return ambient, true
-}
-
-// ambientTierBinding is GlobalEnvironmentFrame.AmbientBinding with the ambient
-// tier's ambiguity reported rather than raised: (nil, true) where the probe
-// panics with werr.ErrAmbiguousBinding, (binding, false) otherwise. Anything
-// else recovered is re-panicked unchanged.
-//
-// The tier is read in isolation, so its argmax is computed before any
-// exact-phase probe has run and its tie cannot yet be known to be dead. Holding
-// the tie as a flag is what lets lookupLiteralBinding answer an exact-phase hit
-// anyway.
-func ambientTierBinding(
-	store *environment.GlobalEnvironmentFrame,
-	s *values.Symbol,
-	sq syntax.ScopeSet,
-) (q *environment.Binding, ambiguous bool) {
-	defer func() {
-		r := recover()
-		if r == nil {
-			return
-		}
-		rerr, isErr := r.(error)
-		if isErr && errors.Is(rerr, werr.ErrAmbiguousBinding) {
-			q = nil
-			ambiguous = true
-			return
-		}
-		panic(r)
-	}()
-
-	return store.AmbientBinding(s, sq), false
-}
-
-// probeIgnoringAmbientTie is one ranked probe of v, answering nil instead of
-// raising when ambientTie says the ambient tier of this name already ties under
-// sq. Without ambientTie it is v.GetBinding unchanged, panic included.
-//
-// The ranked probe flags ambiguity only against its winning tier, so at a phase
-// with no exact-phase candidate the winning tier IS the ambient one and the
-// panic is that dead tie surfacing at a phase this function has already demoted
-// it below. Swallowing it is what keeps the descent running long enough to
-// reach a lower phase's exact binding.
-//
-// The two cannot be told apart from out here: at a phase whose exact tier is
-// both non-empty and ambiguous the panic is a live exact-tier tie, and it is
-// swallowed too. That costs a refusal only in a state where the ambient tier
-// ALSO ties, which no production writer reaches: every ambient registration
-// passes nil scopes, so a name has at most one ambient slot.
-func probeIgnoringAmbientTie(
-	v *environment.EnvironmentFrame,
-	s *values.Symbol,
-	sq syntax.ScopeSet,
-	ambientTie bool,
-) (q *environment.Binding) {
-	defer func() {
-		r := recover()
-		if r == nil {
-			return
-		}
-		rerr, isErr := r.(error)
-		if isErr && ambientTie && errors.Is(rerr, werr.ErrAmbiguousBinding) {
-			q = nil
-			return
-		}
-		panic(r)
-	}()
-
-	return v.GetBinding(s, sq)
+	return q, true
 }
 
 // OperationSyntaxRulesTransform is a VM operation that performs macro expansion.
