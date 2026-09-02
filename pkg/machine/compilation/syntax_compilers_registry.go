@@ -58,7 +58,7 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 // at any level or sealed above 0, lands at an exact level
 // (EnvironmentFrame.writeCoordinates). A binding placed here is therefore
 // reachable from a frame at any level as the ranked probe's T3 tier, instead of
-// being pinned to the PhaseCompile view.
+// being pinned to one phase's view.
 //
 // This is a write COORDINATE, not a topology: phase views have no lexical parent,
 // and hermeticity is key disjointness in the one store. Comments here once said
@@ -91,18 +91,14 @@ func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
 		})
 }
 
-// LookupSyntaxCompiler looks up a syntax compiler by symbol, entering through the
-// PhaseCompile view. Returns the SyntaxCompiler if found, or nil if the symbol
-// does not name a syntax compiler. The compilers live in the ambient tier (see
-// RegisterSyntaxCompilers), which that view's ranked probe reaches as T3, so a
-// PhaseCompile shadow at T1 or T2 still takes precedence.
+// LookupSyntaxCompiler looks up a syntax compiler by symbol from env, at env's
+// own level. The compilers live in the ambient tier (RegisterSyntaxCompilers),
+// which every frame's ranked probe reaches as T3, so a same-phase user binding of
+// the name at T1 or T2 takes precedence — the order that lets user code shadow
+// car. Returns nil if the symbol does not name a syntax compiler.
 //
-// Naming PhaseCompile by constant is correct here, unlike a climb: it is a fixed
-// registry coordinate rather than a rung of the macro tower, so it does not vary
-// with the level of the frame asking. See environment.Phase.
-//
-// This function handles hygiene by using scoped lookup - it will only match
-// bindings whose scopes are a subset of the symbol's scopes.
+// Compilation dispatch does not come through here (register.go's forms registry
+// does that); this is the hygiene-aware read the registry tests pin.
 func LookupSyntaxCompiler(env *environment.EnvironmentFrame, sym *values.Symbol, scopes []*syntax.Scope) *SyntaxCompiler {
-	return LookupPhaseBinding[*SyntaxCompiler](env.Compile(), sym, scopes)
+	return LookupPhaseBinding[*SyntaxCompiler](env, sym, scopes)
 }

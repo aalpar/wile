@@ -382,13 +382,6 @@ func (p *Namespace) Expand() *EnvironmentFrame {
 	return p.AtPhase(PhaseExpand)
 }
 
-// Compile returns this namespace's PhaseCompile view, creating it if needed.
-// This is the fixed registry coordinate where syntax compilers live, not a rung
-// of the macro tower — see the Phase type.
-func (p *Namespace) Compile() *EnvironmentFrame {
-	return p.AtPhase(PhaseCompile)
-}
-
 // Phases returns the phase registry.
 func (p *Namespace) Phases() *PhaseRegistry {
 	return p.phases

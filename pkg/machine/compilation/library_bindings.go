@@ -403,7 +403,7 @@ func resolveImportSet(ctx context.Context, datum values.Value, env *environment.
 // imports share the resolution step (resolveImportSet) but use
 // copyLibraryBindingsDirect for installation.
 //
-// The phase argument is import-observer metadata only; it does NOT select the
+// The stage argument is import-observer metadata only; it does NOT select the
 // install phase. That comes from composePhaseShift below, which combines the
 // environment's own phase level with the import set's for-syntax/for-meta shift.
 func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, stage ImportStage, evaluator machine.MacroEvaluator) error {

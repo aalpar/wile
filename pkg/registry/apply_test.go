@@ -168,29 +168,6 @@ func TestApply_CompileTimeBinding(t *testing.T) {
 	}
 }
 
-// Apply with compile-only primitives (PhaseSetCompile without PhaseSetRuntime)
-
-func TestApply_CompileOnlyPrimitive(t *testing.T) {
-	c := qt.New(t)
-	reg := NewRegistry()
-	reg.AddPrimitive(PrimitiveSpec{
-		Name:       "compile-only",
-		ParamCount: 0,
-		Impl:       noopImpl,
-	}, PhaseSetCompile)
-
-	topLevel := environment.NewNamespace()
-	env := topLevel.Runtime()
-	err := reg.Apply(context.Background(), env)
-	c.Assert(err, qt.IsNil)
-
-	// Should have a compile-time binding
-	compileEnv := env.Compile()
-	sym := values.NewSymbol("compile-only")
-	binding := compileEnv.GetBinding(sym, values.AllScopes())
-	c.Assert(binding, qt.IsNotNil)
-}
-
 // Apply with init functions
 
 func TestApply_InitFunc(t *testing.T) {

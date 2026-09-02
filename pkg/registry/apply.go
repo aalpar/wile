@@ -113,18 +113,6 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 		}
 	}
 
-	// Register compile-only primitives (binding-only, no runtime value).
-	// Skipped for primitives that also have PhaseRuntime — the runtime path
-	// installs the binding via SetOwnGlobalValue.
-	for _, reg := range p.primitives {
-		if reg.Phases.Has(environment.PhaseCompile) && !reg.Phases.Has(environment.PhaseRuntime) {
-			err := registerCompileTimeBinding(env, BindingSpec{Name: reg.Spec.Name})
-			if err != nil {
-				return err
-			}
-		}
-	}
-
 	// Register runtime and expand primitives. Both create a ForeignClosure; the phase
 	// axis is iterated as data instead of replicating the loop body. Two frames matter
 	// per phase:

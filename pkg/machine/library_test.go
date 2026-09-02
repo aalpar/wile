@@ -441,7 +441,7 @@ func TestLoadLibrary_WithImports(t *testing.T) {
 	c.Assert(lib.IsExported("get-secret"), qt.IsTrue)
 
 	// Verify that the dependency was also loaded
-	registry := env.Compile().LibraryRegistry().(*compilation.LibraryRegistry)
+	registry := env.LibraryRegistry().(*compilation.LibraryRegistry)
 	simpleName := compilation.NewLibraryName("test", "simple")
 	simpleLib := registry.Lookup(simpleName)
 	c.Assert(simpleLib, qt.IsNotNil)

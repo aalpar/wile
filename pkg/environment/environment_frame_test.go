@@ -253,8 +253,8 @@ func TestEnvironmentFrame_ExpandHierarchy(t *testing.T) {
 	qt.Assert(t, expand2, qt.IsNotNil)
 	qt.Assert(t, expand2, qt.Equals, env.Expand()) // Same expand environment
 
-	// Compile is a different phase than Expand
-	qt.Assert(t, env.Compile(), qt.Not(qt.Equals), env.Expand())
+	// Phase 2 is a different phase than Expand
+	qt.Assert(t, env.AtPhase(Phase(2)), qt.Not(qt.Equals), env.Expand())
 }
 
 // TestEnvironmentFrame_MutableRuntime pins the MutableRuntime() contract: it returns
@@ -324,10 +324,10 @@ func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	qt.Assert(t, expand, qt.IsNotNil)
 	qt.Assert(t, expand.PhaseLevel(), qt.Equals, PhaseExpand)
 
-	// Compile is phase 2
-	compile := topLevel.Compile()
+	// Phase 2 is a plain rung above Expand.
+	compile := topLevel.AtPhase(Phase(2))
 	qt.Assert(t, compile, qt.IsNotNil)
-	qt.Assert(t, compile.PhaseLevel(), qt.Equals, PhaseCompile)
+	qt.Assert(t, compile.PhaseLevel(), qt.Equals, Phase(2))
 
 	// Each phase is a distinct VIEW...
 	qt.Assert(t, runtime, qt.Not(qt.Equals), expand)
@@ -353,12 +353,11 @@ func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	// Phase accessors should be cached (same instance returned)
 	qt.Assert(t, topLevel.Runtime(), qt.Equals, runtime)
 	qt.Assert(t, topLevel.Expand(), qt.Equals, expand)
-	qt.Assert(t, topLevel.Compile(), qt.Equals, compile)
 
 	// AtPhase provides direct indexed access
 	qt.Assert(t, topLevel.AtPhase(PhaseRuntime), qt.Equals, topLevel)
 	qt.Assert(t, topLevel.AtPhase(PhaseExpand), qt.Equals, expand)
-	qt.Assert(t, topLevel.AtPhase(PhaseCompile), qt.Equals, compile)
+	qt.Assert(t, topLevel.AtPhase(Phase(2)), qt.Equals, compile)
 
 	// Arbitrary phases can be created
 	phase3 := topLevel.AtPhase(3)

@@ -702,7 +702,7 @@ func TestPresentPhasesIncludesStoreOnlyPhases(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
 	sym := values.NewSymbol("meta-only")
-	mustDefine(c, ns.AtPhase(PhaseCompile), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(7))
+	mustDefine(c, ns.AtPhase(Phase(2)), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(7))
 
 	report := ns.NewSchemeReportNamespace()
 	// The copy holds the slot...
@@ -715,9 +715,9 @@ func TestPresentPhasesIncludesStoreOnlyPhases(t *testing.T) {
 	c.Assert(found, qt.IsTrue)
 	// ...its registry has no phase-2 view (only the phase-0 root and the sealed
 	// axis rows are minted at construction)...
-	c.Assert(report.phases.Get(PhaseCompile), qt.IsNil)
+	c.Assert(report.phases.Get(Phase(2)), qt.IsNil)
 	// ...and the search basis reports the phase anyway.
-	c.Assert(report.Runtime().PresentPhases(), qt.Contains, PhaseCompile)
+	c.Assert(report.Runtime().PresentPhases(), qt.Contains, Phase(2))
 	c.Assert(report.Runtime().GetGlobalIndexAcrossPhases(sym, AmbientScopes()), qt.IsNotNil)
 }
 

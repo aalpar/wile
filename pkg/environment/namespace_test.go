@@ -65,10 +65,9 @@ func TestNamespace_Phases(t *testing.T) {
 	c.Assert(expand.PhaseLevel(), qt.Equals, PhaseExpand)
 	c.Assert(topLevel.AtPhase(PhaseExpand), qt.Equals, expand)
 
-	// Compile is phase 2
-	compile := topLevel.Compile()
-	c.Assert(compile.PhaseLevel(), qt.Equals, PhaseCompile)
-	c.Assert(topLevel.AtPhase(PhaseCompile), qt.Equals, compile)
+	// Phase 2 is a plain rung above Expand.
+	compile := topLevel.AtPhase(Phase(2))
+	c.Assert(compile.PhaseLevel(), qt.Equals, Phase(2))
 
 	// All phases should share the same Namespace
 	c.Assert(runtime.Namespace(), qt.Equals, topLevel)

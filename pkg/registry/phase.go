@@ -30,7 +30,7 @@ import (
 // Registration only ever names the bottom of a tower, so the relative/absolute
 // distinction does not bite here: Apply installs into the levels of the owner it
 // is handed, and the set is built from compile-time constants naming that
-// owner's own levels 0..2. A PhaseSet is not a way to address a climbed level.
+// owner's own levels 0..1. A PhaseSet is not a way to address a climbed level.
 //
 // Representable phases are 0 ≤ phase < phaseSetBits. environment.PhaseTemplate
 // (-1) and any phase ≥ phaseSetBits are unrepresentable. With(unrepresentable)
@@ -70,7 +70,6 @@ const phaseSetBits = 8
 const (
 	PhaseSetRuntime PhaseSet = 1 << iota // matches environment.PhaseRuntime (=0)
 	PhaseSetExpand                       // matches environment.PhaseExpand  (=1)
-	PhaseSetCompile                      // matches environment.PhaseCompile (=2)
 )
 
 func init() {
@@ -85,7 +84,6 @@ func init() {
 	}{
 		{PhaseSetRuntime, environment.PhaseRuntime, "Runtime"},
 		{PhaseSetExpand, environment.PhaseExpand, "Expand"},
-		{PhaseSetCompile, environment.PhaseCompile, "Compile"},
 	}
 	for _, c := range checks {
 		if c.p < 0 || int(c.p) >= phaseSetBits {
@@ -137,7 +135,7 @@ func (s PhaseSet) With(p environment.Phase) PhaseSet {
 // or "none" if the set is empty.
 func (s PhaseSet) String() string {
 	var parts []string
-	for _, p := range []environment.Phase{environment.PhaseRuntime, environment.PhaseExpand, environment.PhaseCompile} {
+	for _, p := range []environment.Phase{environment.PhaseRuntime, environment.PhaseExpand} {
 		if s.Has(p) {
 			parts = append(parts, p.String())
 		}

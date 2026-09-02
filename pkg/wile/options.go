@@ -71,7 +71,6 @@ const (
 	PhaseTemplate = environment.PhaseTemplate
 	PhaseRuntime  = environment.PhaseRuntime
 	PhaseExpand   = environment.PhaseExpand
-	PhaseCompile  = environment.PhaseCompile
 )
 
 // newEngineConfig returns an engineConfig with the option-independent defaults that
