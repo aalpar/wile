@@ -17,7 +17,6 @@ package compilation
 import (
 	"context"
 
-	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -45,7 +44,7 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 
 	// Process each import set
 	v, err := syntax.SyntaxForEach(ctctx.ctx, importSets, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		return ResolveAndInstallImportSet(ctx, importSetExpr.UnwrapAll(), p.env, environment.PhaseCompile, p.evaluator)
+		return ResolveAndInstallImportSet(ctx, importSetExpr.UnwrapAll(), p.env, ImportStageCompile, p.evaluator)
 	})
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "import: error processing import sets"))
@@ -79,7 +78,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 			return wrapSourcedError(importSetExpr.SourceContext(), err)
 		}
 
-		fireImportObserver(p.env, res.Library, res.Bindings, lib.Name, environment.PhaseCompile)
+		fireImportObserver(p.env, res.Library, res.Bindings, lib.Name, ImportStageCompile)
 
 		err = copyLibraryBindingsDirect(res.Library, res.Bindings, lib.Env)
 		if err != nil {

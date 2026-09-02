@@ -23,6 +23,7 @@ package compilation
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"io/fs"
 	"maps"
 	"slices"
@@ -139,14 +140,45 @@ func (p *CompiledLibrary) GetInternalName(externalName string) string {
 	return p.Exports[externalName]
 }
 
+// ImportStage names which pipeline pass observed an import. A top-level
+// (import …) is seen twice — once by the expander, which resolves it so the
+// imported macros are available to expansion (expandImportForm), and once by the
+// compiler, which installs the bindings (CompileImport) — and the observer fires
+// on both. A library-body import is seen by the compiler only.
+//
+// This is not a Phase. The pass does not move along the macro tower: the
+// bindings land at env.PhaseLevel() composed with the import set's shift
+// regardless of which pass installs them (ResolveAndInstallImportSet).
+//
+// The zero value is no stage. An event a caller built without one says so
+// (String renders it import-stage(0)) rather than reading as the expander's.
+type ImportStage uint8
+
+const (
+	ImportStageExpand  ImportStage = iota + 1 // the expander's pass
+	ImportStageCompile                        // the compiler's pass
+)
+
+// String returns the pass name.
+func (s ImportStage) String() string {
+	switch s {
+	case ImportStageExpand:
+		return "expand"
+	case ImportStageCompile:
+		return "compile"
+	default:
+		return fmt.Sprintf("import-stage(%d)", uint8(s))
+	}
+}
+
 // LibraryImportEvent records what happened when a library was imported.
 type LibraryImportEvent struct {
-	Library    LibraryName       // imported library name, e.g., (scheme base)
-	SourceFile string            // path to .sld file (empty for synthetic libraries)
-	Exports    []string          // all names exported by the library
-	Imported   []string          // names that actually landed in the importer (after only/except/prefix/rename)
-	Importer   LibraryName       // importing library name (zero value for top-level import)
-	Phase      environment.Phase // pipeline phase: environment.PhaseExpand or environment.PhaseCompile
+	Library    LibraryName // imported library name, e.g., (scheme base)
+	SourceFile string      // path to .sld file (empty for synthetic libraries)
+	Exports    []string    // all names exported by the library
+	Imported   []string    // names that actually landed in the importer (after only/except/prefix/rename)
+	Importer   LibraryName // importing library name (zero value for top-level import)
+	Stage      ImportStage // which pipeline pass saw the import; see ImportStage
 }
 
 // LibraryImportObserver is called when a library is imported.
@@ -233,7 +265,7 @@ func (p *LibraryRegistry) ImportObserver() LibraryImportObserver {
 // registry stored in env. bindings maps local name -> external name
 // (as returned by ApplyToExports). importer is the importing library's
 // name, or zero value for top-level imports.
-func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary, bindings map[string]string, importer LibraryName, phase environment.Phase) {
+func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary, bindings map[string]string, importer LibraryName, stage ImportStage) {
 	regAny := env.LibraryRegistry()
 	if regAny == nil {
 		return
@@ -256,7 +288,7 @@ func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary,
 		Exports:    exports,
 		Imported:   imported,
 		Importer:   importer,
-		Phase:      phase,
+		Stage:      stage,
 	})
 }
 
