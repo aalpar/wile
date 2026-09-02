@@ -20,6 +20,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -83,6 +84,65 @@ func TestLookupLiteralBindingAmbientLast(t *testing.T) {
 		env := ns.Runtime().AtPhase(environment.PhaseExpand)
 		got, ok := lookupLiteralBinding(env, "lit", nil, definitionFallbackPhases(env))
 		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, got, qt.IsNil)
+	})
+}
+
+// An ambient-tier tie is DEAD when an exact-phase binding wins, which is
+// probeRankedLocked's own losing-tier rule ("a tie in a losing tier is dead and
+// must not panic") applied to the re-ranking lookupLiteralBinding performs: the
+// ambient tier loses to EVERY exact phase here, not merely to the query phase.
+//
+// The tier's argmax is computed in isolation and before any exact-phase probe,
+// so the tie is known before it is known to be dead. Answering it immediately
+// would flip a resolution that has an exact-phase answer into "ambiguous": an
+// unmodelled polarity change on a three-answer lookup. The tie must therefore
+// be held, and surface only where nothing exact was found.
+//
+// Latent as production stands: every ambient registration passes nil scopes, so
+// a name has at most one ambient slot and the tier cannot tie. The scoped
+// ambient slots below are built directly.
+func TestLookupLiteralBindingAmbientTieIsDeadUnderAnExactHit(t *testing.T) {
+	const sym = "else"
+	// {A} and {B} are incomparable, equal-cardinality, and both subsets of the
+	// query {A,B}: neither is THE maximal match, which is Flatt's ambiguity.
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	query := []*syntax.Scope{scopeA, scopeB}
+
+	// Two ambient slots of one name, written the only way an ambient slot can be
+	// (the phase-0 sealed-write view). CreateGlobalBindingAt reuses a slot only
+	// on EXACT scope-set equality, so distinct scope sets at (ANY, sealed) are
+	// two slots rather than one.
+	newTiedStore := func(t *testing.T) *environment.Namespace {
+		ns := environment.NewNamespace()
+		sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
+		for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
+			_, created := sealedRoot.MaybeCreateOwnGlobalBinding(
+				values.NewSymbol(sym), environment.BindingTypePrimitive, scopes)
+			qt.Assert(t, created, qt.IsTrue)
+		}
+		return ns
+	}
+
+	t.Run("a phase-0 shadow answers the phase-1 definition-site probe", func(t *testing.T) {
+		ns := newTiedStore(t)
+		idx, _ := ns.Runtime().MaybeCreateOwnGlobalBinding(
+			values.NewSymbol(sym), environment.BindingTypeVariable, nil)
+		user := ns.Store().GetOwnGlobalBinding(idx)
+		qt.Assert(t, user, qt.IsNotNil)
+
+		env := ns.Runtime().AtPhase(environment.PhaseExpand)
+		got, ok := lookupLiteralBinding(env, sym, query, definitionFallbackPhases(env))
+		qt.Assert(t, ok, qt.IsTrue,
+			qt.Commentf("the ambient tie lost to a phase-0 binding; it must not be answered"))
+		qt.Assert(t, got, qt.Equals, user)
+	})
+	t.Run("with nothing exact anywhere the tie is the answer", func(t *testing.T) {
+		ns := newTiedStore(t)
+		env := ns.Runtime().AtPhase(environment.PhaseExpand)
+		got, ok := lookupLiteralBinding(env, sym, query, definitionFallbackPhases(env))
+		qt.Assert(t, ok, qt.IsFalse)
 		qt.Assert(t, got, qt.IsNil)
 	})
 }

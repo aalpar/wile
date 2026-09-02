@@ -401,3 +401,24 @@ func TestCompiledLibrary_Methods(t *testing.T) {
 		fireImportObserver(env, lib, map[string]string{}, LibraryName{}, ImportStageExpand)
 	})
 }
+
+// The zero value is NO stage, not the expander's. An event a caller built
+// without setting Stage must say so rather than read as a real pass, which is
+// why the constants are 1-based and why String has a default arm at all.
+func TestImportStageString(t *testing.T) {
+	tests := []struct {
+		name  string
+		stage ImportStage
+		want  string
+	}{
+		{name: "zero value is no stage", stage: ImportStage(0), want: "import-stage(0)"},
+		{name: "expand", stage: ImportStageExpand, want: "expand"},
+		{name: "compile", stage: ImportStageCompile, want: "compile"},
+		{name: "unnamed value", stage: ImportStage(9), want: "import-stage(9)"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, tc.stage.String(), qt.Equals, tc.want)
+		})
+	}
+}

@@ -16,11 +16,13 @@ package wile_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/forms"
 	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
@@ -60,39 +62,89 @@ func TestStartupPresentPhasesAreZeroAndOne(t *testing.T) {
 // procedure name was registered as a keyword. TestDynamicWindIsAFirstClassProcedure
 // and TestCompiledApply are the behavioural pins; this is the ratchet that names
 // the cause before they redden.
+//
+// The two engines differ in one thing: whether removedForms is empty. Under
+// KitchenSink it is, so the walk covers only the unnarrowed installation. A
+// dialect that removes a form makes the engine narrow the top-level registry
+// with WithoutBindings before Apply, which is the second way a name can be in
+// the registry's specs and NOT be an ambient keyword; the first is DocOnly.
+// Both must leave the predicate true; only the walked set changes.
 func TestAmbientKeywordsNeverHoldAProcedure(t *testing.T) {
 	ctx := context.Background()
-	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
-	qt.Assert(t, err, qt.IsNil)
-	defer func() {
-		_ = eng.Close()
-	}()
-
-	store := eng.Environment().GlobalEnvironment()
-	qt.Assert(t, store, qt.IsNotNil)
-
-	checked := 0
-	for _, spec := range eng.EffectiveRegistry().BindingSpecs() {
-		if spec.DocOnly {
-			continue
-		}
-		bnd := store.AmbientBinding(values.NewSymbol(spec.Name), values.AllScopes())
-		qt.Assert(t, bnd, qt.IsNotNil, qt.Commentf("keyword %q has no ambient binding", spec.Name))
-		qt.Assert(t, bnd.BindingType(), qt.Equals, environment.BindingTypePrimitive,
-			qt.Commentf("keyword %q", spec.Name))
-		checked++
-
-		v := bnd.Value()
-		if v == nil || v == values.Void {
-			continue
-		}
-		_, isCompiler := v.(*compilation.SyntaxCompiler)
-		qt.Assert(t, isCompiler, qt.IsTrue,
-			qt.Commentf("keyword %q holds %s (%T) — a name that carries a runtime value "+
-				"must be a DocOnly row (procedureFormDocs), not an installed keyword",
-				spec.Name, v.SchemeString(), v))
+	tests := []struct {
+		name string
+		opts []wile.EngineOption
+		// gone is a form name the dialect removed, so its compile-time binding
+		// must be absent from the effective registry. Empty means nothing was
+		// narrowed.
+		gone string
+	}{
+		{
+			name: "KitchenSink installs every keyword",
+			opts: []wile.EngineOption{wile.WithProfile(wile.KitchenSink)},
+		},
+		{
+			name: "a dialect that removed set! narrows the keywords too",
+			opts: []wile.EngineOption{wile.WithProfile(wile.KitchenSink), wile.WithDialect(removeSetBangFormsDialect{})},
+			gone: "set!",
+		},
 	}
-	// Guard the walk itself: an empty BindingSpecs would make every assertion
-	// above vacuous.
-	qt.Assert(t, checked > 20, qt.IsTrue, qt.Commentf("only %d keywords walked", checked))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			eng, err := wile.NewEngine(ctx, tc.opts...)
+			qt.Assert(t, err, qt.IsNil)
+			defer func() {
+				_ = eng.Close()
+			}()
+
+			store := eng.Environment().GlobalEnvironment()
+			qt.Assert(t, store, qt.IsNotNil)
+			reg := eng.EffectiveRegistry()
+
+			if tc.gone != "" {
+				qt.Assert(t, slices.Contains(reg.Bindings(), tc.gone), qt.IsFalse,
+					qt.Commentf("a removed form must lose its compile-time binding, not just its form"))
+			}
+
+			checked := 0
+			for _, spec := range reg.BindingSpecs() {
+				if spec.DocOnly {
+					continue
+				}
+				bnd := store.AmbientBinding(values.NewSymbol(spec.Name), values.AllScopes())
+				qt.Assert(t, bnd, qt.IsNotNil, qt.Commentf("keyword %q has no ambient binding", spec.Name))
+				qt.Assert(t, bnd.BindingType(), qt.Equals, environment.BindingTypePrimitive,
+					qt.Commentf("keyword %q", spec.Name))
+				checked++
+
+				v := bnd.Value()
+				if v == nil || v == values.Void {
+					continue
+				}
+				_, isCompiler := v.(*compilation.SyntaxCompiler)
+				qt.Assert(t, isCompiler, qt.IsTrue,
+					qt.Commentf("keyword %q holds %s (%T): a name that carries a runtime value "+
+						"must be a DocOnly row (procedureFormDocs), not an installed keyword",
+						spec.Name, v.SchemeString(), v))
+			}
+			// Guard the walk itself: an empty BindingSpecs would make every assertion
+			// above vacuous.
+			qt.Assert(t, checked > 20, qt.IsTrue, qt.Commentf("only %d keywords walked", checked))
+		})
+	}
+}
+
+// removeSetBangFormsDialect drops set! from the per-engine forms registry. That
+// is what makes the engine compute a non-empty removedForms and reach
+// WithoutBindings; nothing else in the test suite drives that path from a
+// profile-built engine.
+type removeSetBangFormsDialect struct{}
+
+func (removeSetBangFormsDialect) Name() string {
+	return "no-set!"
+}
+
+func (removeSetBangFormsDialect) InstallForms(fr *forms.FormRegistry) error {
+	fr.Remove("set!")
+	return nil
 }

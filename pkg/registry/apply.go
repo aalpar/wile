@@ -91,6 +91,13 @@ func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
 // Apply materializes registry contents into an environment, in order: compile-time
 // bindings, runtime/expand-time primitives, global values, per-engine namespace
 // initializers, then init functions.
+//
+// env must be an owner root (the phase-0 entry of its own PhaseRegistry), as
+// LoadBootstrapCore passes for the engine root and for every library env. Any
+// other receiver makes SealedWriteViewAt fall back to that receiver's own mutable
+// view, which lands every compile-time keyword at (0, mutable) instead of the
+// ambient (ANY, sealed) coordinate; a later user define of the name would then
+// reuse the keyword's slot rather than shadow it.
 func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.EnvironmentFrame, opts ...ApplyOption) error {
 	var cfg applyConfig
 	for _, opt := range opts {
