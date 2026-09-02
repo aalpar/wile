@@ -180,14 +180,18 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 			"install dialect %q forms", dialect.Name())
 	}
 	ns.SetFormRegistry(fr)
-	// What the dialect took away, as names. A removed form must not survive as
-	// its ambient keyword: since the relocation those keywords are reachable from
-	// phase 0, so the leftover binding would answer a reference to a form this
-	// engine does not have — reporting ErrSyntacticKeywordAsVariable where the
-	// removed-form contract (dialect.go, "referencing a removed name is an
-	// unbound reference, werr.ErrNoSuchBinding") promises unbound. The narrowing
-	// itself happens at the PrimitiveRemover site below, where topLevelReg exists;
-	// PrimitiveRegistry.WithoutBindings names exactly this use.
+	// What the dialect took away, as names. Since the keywords moved to the
+	// ambient coordinate a removed form's keyword row is reachable from phase 0,
+	// so leaving it in the TOP-LEVEL registry would answer a reference to a form
+	// this engine does not have — ErrSyntacticKeywordAsVariable, where the
+	// removed-form contract (dialect.go, "an unbound reference
+	// (werr.ErrNoSuchBinding)") promises unbound. The narrowing below strips
+	// those rows from topLevelReg, and that is its whole extent. Two writers are
+	// outside the seam, by the same boundary the PrimitiveRemover narrowing it
+	// sits beside draws — dialect narrowing shrinks the VISIBLE TOP LEVEL only:
+	// RegisterSyntaxCompilers installs the ambient syntax compilers from its own
+	// fixed table rather than from a registry, and library environments are
+	// applied from the full reg, so (import …) still reaches both.
 	removedForms := removedFormNames(fr)
 	auth := cfg.resolveAuthorizer()
 	if auth != nil {
@@ -248,8 +252,9 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	}
 
 	// Drop the compile-time binding of every form the dialect removed, for the
-	// reason removedFormNames records. WithoutBindings spares DocOnly entries, so
-	// a removed form keeps its docstring and loses only its keyword.
+	// reason recorded where removedForms is computed. WithoutBindings spares
+	// DocOnly entries, so a removed form keeps its docstring and loses only its
+	// keyword.
 	if len(removedForms) > 0 {
 		topLevelReg = topLevelReg.WithoutBindings(removedForms...)
 	}

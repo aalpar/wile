@@ -265,9 +265,12 @@ func headDenotesSpecialForm(
 	if b == nil {
 		// A miss means the form. Under a registry that binds no keywords
 		// (WithoutAmbientBindings) the table is the only thing that knows these
-		// names; under the ordinary registry every special-form name is an
+		// names; under the ordinary registry most special-form names are an
 		// ambient BindingTypePrimitive keyword, and the type arm below answers
-		// it. Either way an unshadowed head is the form.
+		// it. The exception is procedureFormDocs (apply, dynamic-wind): they
+		// carry a runtime value, so they install no keyword and bind as sealed
+		// BindingTypeVariable — measured — which falls past the type arm to the
+		// SealedBindingAt arm. Either way an unshadowed head is the form.
 		return true
 	}
 	if b.BindingType() != environment.BindingTypeVariable {
