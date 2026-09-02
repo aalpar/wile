@@ -251,6 +251,7 @@ them:
 | `2026-07-29-name-keyed-identity-residuals-design.local.md` | Design **resolved**; 2 of the report's conclusions corrected |
 | `2026-07-29-name-keyed-identity-residuals-impl.local.md` | Branch A (Finding 2) **DONE** `bff525a8`; Branch B (Finding 1) not started |
 | `2026-08-01-scheme-deadline-and-cancellation-cause.local.md` | Phase 1 **impl-ready**; Phase 2 designed and **gated** on the plan's scoping decision. Exposes the ambient `context.Context`'s deadline and cancellation cause to Scheme |
+| `2026-09-01-ambient-keywords-retire-phase-compile-impl.local.md` | Keywords to the ambient coordinate; `PhaseCompile` / `PhaseSetCompile` / `Compile()` deleted; `LibraryImportEvent.Stage`. Tasks 1–6 |
 
 ### Design-only — approved or drafted, no code
 
@@ -1345,6 +1346,11 @@ compile error. Plans: `plans/2026-08-24-typed-engine-options-design.local.md` (s
   **Not urgent, but not cosmetic.** No known miscompile. The reason it is Tier 1 is that the
   model currently *claims* a property it does not have, and a future dialect or sandbox feature
   that leans on "handlers are off the value path" would be building on it.
+
+  **2026-09-01:** the keyword names are ambient now (plan
+  `2026-09-01-ambient-keywords-…`), so `(display if)` is refused by the same
+  `ErrSyntacticKeywordAsVariable` arm; the `no such binding` contrast above is
+  historical.
 
 ### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
 

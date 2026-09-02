@@ -67,7 +67,7 @@ the root are ownership-policy, not shape:
 
 ## Phase Environments
 
-Every phase VIEW — `runtime`, `expand`, `compile`, a tower phase, and each
+Every phase VIEW — `runtime`, `expand`, a tower phase (phase ≥ 2), and each
 sealed-write view — shares the SAME `*GlobalEnvironmentFrame` (`global`); they
 differ only in which `(PhaseKey, sealed)` coordinates their reads probe and
 their writes stamp (`pkg/environment/global_environment_frame.go`,
@@ -83,7 +83,7 @@ their writes stamp (`pkg/environment/global_environment_frame.go`,
 |---|---|---|---|
 | `runtime` (`Runtime()`) | (0, mutable) | T1 | (0, mutable) |
 | `expand` (`Expand()`) | (1, mutable) | T1 | (1, mutable) |
-| `compile` (`Compile()`) | (2, mutable) | T1 | (2, mutable) |
+| `tower` (`AtPhase(n)`, n ≥ 2) | (n, mutable) | T1 | (n, mutable) |
 | sealed-write root | (0, sealed) at construction | T2 at phase 0 | **(ANY, sealed)** — ambient |
 | sealed-write expand | (1, sealed) at construction | T2 at phase 1 | (1, sealed) — exact |
 
@@ -182,7 +182,7 @@ namespace's — over the library's OWN coordinates, never the root's:
 |---|---|---|
 | `libRT` (`Runtime()`) | (0, mutable) | T1 |
 | `libExp` (`Expand()`) | (1, mutable) | T1 |
-| `libCmp` (`Compile()`) | (2, mutable) | T1 |
+| `libTower` (`AtPhase(n)`, n ≥ 2) | (n, mutable) | T1 |
 | library sealed-write root | writes (ANY, sealed) | T3 at any phase |
 | library sealed-write expand | writes (1, sealed) | T2 at phase 1 |
 
@@ -249,7 +249,7 @@ CompileTimeContinuation          ExpanderTimeContinuation
 │                        │       │                        │
 │ Uses:                  │       │ Uses:                  │
 │  env ──── runtime vars │       │  env ───── arm 1 macro │
-│  env.Compile() ─── P2  │       │  env.NextPhase() arm 2 │
+│  keywords ── ambient   │       │  env.NextPhase() arm 2 │
 │  env.Expand() ──── P1  │       │  libEnv.Expand() arm 3 │
 │  env.NextPhase() P N+1 │       │                        │
 └────────────────────────┘       └────────────────────────┘
@@ -273,9 +273,10 @@ own `phaseLevel`, so a macro defined inside a transformer body lands and resolve
 at its climbed phase. At `phaseLevel 0` `NextPhase() == Expand()`, which is why
 top-level behavior is unchanged. The remaining absolute readers fall in two groups:
 
-- **Registry fixtures, absolute by design.** `LookupSyntaxCompiler` reads
-  `env.Compile()` and `LookupPrimitiveExpander` reads `env.Expand()`; both resolve
-  through the sealed axis, and neither names a user macro that could climb.
+- **Registry fixtures, absolute by design.** `LookupPrimitiveExpander` reads
+  `env.Expand()`; it resolves through the sealed axis and names no user macro
+  that could climb. Syntax compilers and auxiliary keywords are ambient and
+  need no landmark to read.
 - **Two sites that pin phase 1 regardless of the defining frame's level.**
   `CompileMeta` (the `meta` form) compiles its body against `p.env.Expand()`, and
   `er-macro-transformer` stores `env.Expand()` as the transformer's definition-site
@@ -321,8 +322,7 @@ MachineContext
 | Sealed-write root view | `ns.Runtime().SealedWriteViewAt(PhaseRuntime)` | writes land (ANY, sealed) — the ambient tier | Via Namespace | Shared | Primitives, sealed stdlib, `Stable` anchors |
 | Sealed-write expand view | `ns.Runtime().SealedWriteViewAt(PhaseExpand)` | writes land (1, sealed) | Via Namespace | Shared | Bootstrap macros, special-form expanders |
 | Expand frame | `env.Expand()` / `AtPhase(1)` | (1, mutable) tier | Via Namespace | Shared | Macro bindings |
-| Compile frame | `env.Compile()` / `AtPhase(2)` | Phase 2 global | Via Namespace | Shared | Special-form names as valueless bindings; `(for-meta 2 …)` imports |
-| Tower frame | `env.NextPhase()` / `AtPhase(n)` | Phase *n* global | Via Namespace | Shared | Nested compile-time forms at phase ≥ 3 |
+| Tower frame | `env.NextPhase()` / `AtPhase(n)` | Phase *n* global | Via Namespace | Shared | Nested compile-time forms at phase ≥ 2; `(for-meta 2 …)` imports |
 | Template frame | `AtPhase(-1)` | Phase -1 global | Via Namespace | Shared | `(for-template …)` import target; no reader |
 | Lexical child | `NewEnvironmentFrameWithParent()` | Own local, shared global | Via Namespace | Shared | `lambda`, `let`, `letrec` |
 | Library env | `ns.NewChildRuntime()` | Own global + phases | Via shared Namespace | Own registry | `(import ...)` |

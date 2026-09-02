@@ -180,6 +180,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Auxiliary keywords and special-form names are ambient.** `AddBinding` /
+  `AddBindingSpecs` registrations (`else`, `=>`, `_`, `...`, and every
+  special-form docstring carrier) now bind at the owner's `(ANY, sealed)`
+  coordinate, where the syntax compilers already lived, instead of at a phase-2
+  view. Phase 2 is an ordinary rung of the macro tower. Visible from Scheme in
+  one place: `(display if)` and `(display else)` now report `syntactic keyword
+  "if" used as a variable` rather than `no such binding`. The R7RS §4.3.2
+  definition-site literal pin ranks the ambient keyword below an exact-phase
+  binding at a lower phase, so `(define else 5)` beside a `syntax-case` macro
+  with an `else` literal still answers `(ELSE 1)`. The phase-0 reflection
+  family sees the keywords the way it already saw the syntax compilers:
+  `namespace-bound-names` / `environment-bound-names` list them,
+  `namespace-bound?` answers `#t`, `namespace-ref` / `environment-ref` return
+  the valueless binding's `#!void` rather than raising, and
+  `namespace-undefine!` refuses them as part of the startup set.
+
+- **`LibraryImportEvent.Stage`** (`compilation.ImportStage`: `ImportStageExpand`,
+  `ImportStageCompile`) replaces the `Phase`-typed field, which tagged the
+  pipeline pass rather than a tower level.
+
+- **`apply` and `dynamic-wind` stay procedures.** Both are R7RS procedures the
+  compiler also recognizes in head position, and `AddBinding` was swallowing
+  their `BindingTypeVariable` under the new ambient keyword slot. They moved to
+  a doc-only table (`procedureFormDocs` in `pkg/registry/core/specialforms.go`)
+  that installs no keyword. A startup ratchet
+  (`TestAmbientKeywordsNeverHoldAProcedure`, `pkg/wile/phase_footprint_test.go`)
+  pins that no `AddBinding` name's ambient binding ever holds a procedure: a
+  name registered with `AddBinding` is a keyword, refused in value position,
+  and a procedure name must not be registered that way.
+
+- **A dialect's removed forms stay removed at the top level.** A dialect's
+  `InstallForms` removals (e.g. `set!` in the no-mutation dialect) are now
+  stripped from the top-level registry's keyword rows at engine init
+  (`removedFormNames` + `PrimitiveRegistry.WithoutBindings` in
+  `pkg/wile/engine.go`), so the removed-form contract — an unbound reference,
+  `ErrNoSuchBinding`, at the top level — still holds. Library environments are
+  applied from the full registry by design, so inside a `define-library` body a
+  removed form now reports `syntactic keyword "set!" used as a variable` where
+  it reported `no such binding` before.
+
 - **The four binding forms take `validate.LetKind` instead of three parameters.**
   `expandLetCommon` was parameterized by `(label string, scopeInits, sequential
   bool)` and dispatched to one of two binding walks. The forms differ on exactly
@@ -212,6 +252,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   manifest was regenerated on the toolchain CI actually uses.
 
 ### Removed
+
+- **`environment.PhaseCompile`, `wile.PhaseCompile`, `registry.PhaseSetCompile`,
+  `EnvironmentFrame.Compile()`, `Namespace.Compile()`.** Nothing is bound at a
+  fixed level above the owner's first rung, so there is nothing for the constant
+  to name. `PhaseSetCompile` had no production registration; a compile-time-only
+  name is `AddBinding`. `LookupSyntaxCompiler` reads from the asking frame at its
+  own level.
 
 - **`testhelpers.EvalScheme` and `testhelpers.SetupLibraryTest`** — zero
   references anywhere in the tree, including tests.

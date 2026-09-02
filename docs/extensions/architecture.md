@@ -281,12 +281,11 @@ the `Namespace` instead of allocating a new one (`addPortState` in
 
 ```
 1. Compile-time bindings     (AddBindings)
-2. Compile-only primitives   (PhaseCompile without PhaseRuntime)
-3. Runtime primitives        (PhaseRuntime → ForeignClosure at phase 0)
-4. Expand-time primitives    (PhaseExpand → ForeignClosure at phase 1)
-5. Global values             (AddGlobalValue)
-6. Namespace initializers    (AddNamespaceInit → per-engine state)
-7. Init functions            (AddInitFunc)
+2. Runtime primitives        (PhaseRuntime → ForeignClosure at phase 0)
+3. Expand-time primitives    (PhaseExpand → ForeignClosure at phase 1)
+4. Global values             (AddGlobalValue)
+5. Namespace initializers    (AddNamespaceInit → per-engine state)
+6. Init functions            (AddInitFunc)
 ```
 
 Macro and procedure sources are loaded separately by the engine after `Apply()`.
@@ -302,12 +301,13 @@ over `environment.Phase` values, and its bits compose with `|`.
 |----------------|-----|---------------------|-------------|---------|
 | `PhaseSetRuntime` | `1` | `PhaseRuntime` (0) | Top-level (phase 0) | Normal runtime evaluation |
 | `PhaseSetExpand` | `2` | `PhaseExpand` (1) | Expand (phase 1) | Available during macro expansion |
-| `PhaseSetCompile` | `4` | `PhaseCompile` (2) | Compile (phase 2) | Binding-only, no runtime value |
 
 Most extension primitives use `PhaseSetRuntime` only. Primitives needed during
-`syntax-rules` expansion use `PhaseSetRuntime | PhaseSetExpand`. Compile-time
-bindings (auxiliary syntax keywords such as `else` and `=>`) use `PhaseSetCompile`
-or `AddBinding`.
+`syntax-rules` expansion use `PhaseSetRuntime | PhaseSetExpand`. Compile-time-only
+names — auxiliary syntax keywords such as `else` and `=>`, and special-form
+names that carry a docstring — are registered with `AddBinding` /
+`AddBindingSpecs` and land at the owner's ambient coordinate, reachable from
+every phase.
 
 Three limits on this axis, all deliberate:
 
@@ -320,10 +320,6 @@ Three limits on this axis, all deliberate:
   `phaseTargets` table (`registry/apply.go`); there is no registration path that
   installs a `ForeignClosure` at phase 2 or above. A primitive an expander needs
   at a tower phase has to reach it some other way.
-- **`PhaseSetCompile` is inert alongside `PhaseSetRuntime`.** The compile-only
-  pass is guarded by `Has(PhaseCompile) && !Has(PhaseRuntime)`, so
-  `PhaseSetRuntime|PhaseSetCompile` registers exactly what `PhaseSetRuntime`
-  alone does. Use `PhaseSetCompile` on its own, or not at all.
 
 Under the default immutable top level, `PhaseSetRuntime` primitives are bound in
 the sealed base frame rather than the mutable runtime frame, while the closure

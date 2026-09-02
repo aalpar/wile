@@ -158,8 +158,11 @@ that have names; they are not the set of phases that exist.
 | -1 | `PhaseTemplate` | `(import (for-template …))` / `(for-meta -1 …)` bindings. Nothing in Wile *reads* phase -1, so these bindings are installed and inert |
 | 0 | `PhaseRuntime` | Normal program execution; user `define`s; runtime primitives |
 | 1 | `PhaseExpand` | `define-syntax` transformers, `begin-for-syntax` / `define-for-syntax` bodies, `(import (for-syntax …))` |
-| 2 | `PhaseCompile` | Registry compile-time bindings (`AddBinding`, `PhaseSetCompile`); `(for-meta 2 …)` |
-| 3 … 127 | *(none)* | Created on demand by the macro tower: a transformer body or a nested `begin-for-syntax` at phase *N* runs its own compile-time code at *N+1* |
+| 2 … 127 | *(none)* | Created on demand by the macro tower: a transformer body or a nested `begin-for-syntax` at phase *N* runs its own compile-time code at *N+1*; `(for-meta 2 …)` imports land here |
+
+Auxiliary keywords (`else`, `=>`) and special-form names are not at any phase:
+they are ambient, `(ANY, sealed)`, reachable from every phase as the ranked
+probe's T3 (see [The Ranked Probe](#invariants) below).
 
 Phases 3 and up are not hypothetical, and the tower is observable from Scheme.
 Under `--strict=no-bindings` (nothing ambient, so every name must be imported at
@@ -218,7 +221,6 @@ env := environment.NewNamespaceFrame()
 // Absolute phase access (creates the frame on first call)
 runtime := env.AtPhase(environment.PhaseRuntime)   // same as env.Runtime()
 expand  := env.AtPhase(environment.PhaseExpand)    // same as env.Expand()
-compile := env.AtPhase(environment.PhaseCompile)   // same as env.Compile()
 tower   := env.AtPhase(7)                          // legal; created on demand
 
 // Relative phase access: what the macro tower is built on. Climbing sites
