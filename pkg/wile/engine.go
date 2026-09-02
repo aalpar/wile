@@ -180,6 +180,15 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 			"install dialect %q forms", dialect.Name())
 	}
 	ns.SetFormRegistry(fr)
+	// What the dialect took away, as names. A removed form must not survive as
+	// its ambient keyword: since the relocation those keywords are reachable from
+	// phase 0, so the leftover binding would answer a reference to a form this
+	// engine does not have — reporting ErrSyntacticKeywordAsVariable where the
+	// removed-form contract (dialect.go, "referencing a removed name is an
+	// unbound reference, werr.ErrNoSuchBinding") promises unbound. The narrowing
+	// itself happens at the PrimitiveRemover site below, where topLevelReg exists;
+	// PrimitiveRegistry.WithoutBindings names exactly this use.
+	removedForms := removedFormNames(fr)
 	auth := cfg.resolveAuthorizer()
 	if auth != nil {
 		ns.SetAuthorizer(auth)
@@ -238,6 +247,13 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 		}
 	}
 
+	// Drop the compile-time binding of every form the dialect removed, for the
+	// reason removedFormNames records. WithoutBindings spares DocOnly entries, so
+	// a removed form keeps its docstring and loses only its keyword.
+	if len(removedForms) > 0 {
+		topLevelReg = topLevelReg.WithoutBindings(removedForms...)
+	}
+
 	// A dialect may also rewrite the bootstrap procedure sources — e.g. swap the
 	// mutating vector-map/string-map for a mutation-free fragment so the mutation
 	// primitives (removed just above) leave no dangling bootstrap reference. Runs
@@ -261,6 +277,28 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	}
 
 	return ns, snapshots, closers, nil
+}
+
+// removedFormNames returns the R7RS form names the engine's dialect deleted from
+// fr: present in the shared default registry, absent from this engine's clone.
+// A dialect drops a form by calling FormRegistry.Remove inside InstallForms, so
+// the difference is the only record of what it took; there is no RemovedForms
+// capability to ask.
+//
+// Sorted, because Names() ranges a map and the result feeds a registry filter.
+func removedFormNames(fr *forms.FormRegistry) []string {
+	kept := fr.Names()
+	have := values.NewStringSet(len(kept))
+	have.SetAll(kept...)
+	q := []string{}
+	for _, name := range forms.DefaultRegistry().Names() {
+		if have.ContainsOne(name) {
+			continue
+		}
+		q = append(q, name)
+	}
+	slices.Sort(q)
+	return q
 }
 
 // coreOnlyRegistry builds a registry holding only the core primitive surface. It is

@@ -263,9 +263,11 @@ func headDenotesSpecialForm(
 	q := syntax.ScopesOf(scopes)
 	b := env.GetBinding(symVal, q)
 	if b == nil {
-		// Measured: if, lambda, quote, set!, let, begin, define and
-		// with-continuation-mark have no phase-0 binding of any kind. The table
-		// is the only thing that knows them, so a miss means the form.
+		// A miss means the form. Under a registry that binds no keywords
+		// (WithoutAmbientBindings) the table is the only thing that knows these
+		// names; under the ordinary registry every special-form name is an
+		// ambient BindingTypePrimitive keyword, and the type arm below answers
+		// it. Either way an unshadowed head is the form.
 		return true
 	}
 	if b.BindingType() != environment.BindingTypeVariable {

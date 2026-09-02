@@ -744,50 +744,38 @@ func TestLibraryRegistryRegisterAndLookupAdditional(t *testing.T) {
 	qt.Assert(t, notFound, qt.IsNil)
 }
 
-// TestCopyLibraryBindingsToEnv_CompilePhase verifies that compile-phase bindings
-// (auxiliary syntax like else, =>) are propagated to both the runtime phase and
-// the compile phase of the target environment.
-func TestCopyLibraryBindingsToEnv_CompilePhase(t *testing.T) {
+// TestCopyLibraryBindingsToEnv_AmbientKeyword: an auxiliary keyword a library
+// exports (else, =>) lives at the library env's AMBIENT coordinate, which is
+// where registry apply installs it. findLibraryBinding finds it at phase 0 —
+// ambient is a candidate at every phase and the walk is ascending — so the import
+// installs it once, at the importer's phase 0, and propagates nothing: the
+// importer gains no phase 2. Before the relocation the source sat at phase 2 and
+// the import mirrored it there.
+//
+// A PIN, not a gate: the ambient `else` is built by hand, so this passes before
+// the relocation too. It records the import path's shape for a keyword found at
+// phase 0; TestApply_CompileTimeBinding is what goes red without the move.
+func TestCopyLibraryBindingsToEnv_AmbientKeyword(t *testing.T) {
 	c := qt.New(t)
 
-	// Create source library with a compile-phase binding (auxiliary syntax)
 	srcEnv := environment.NewNamespace().Runtime()
 	libName := compilation.NewLibraryName("test", "auxlib")
 	lib := compilation.NewCompiledLibrary(libName, srcEnv)
 
-	// Register "else" in the compile environment (phase 2), mimicking
-	// how specialforms.go registers auxiliary syntax
 	elseSym := values.NewSymbol("else")
-	compileEnv := srcEnv.Compile()
-	_, _ = compileEnv.MaybeCreateOwnGlobalBinding(elseSym, environment.BindingTypeVariable, nil)
-	elseIdx := compileEnv.GetGlobalIndex(elseSym)
-	mockValue := values.NewSymbol("else-marker")
-	_ = compileEnv.SetOwnGlobalValue(elseIdx, mockValue)
+	ambient := srcEnv.SealedWriteViewAt(environment.PhaseRuntime)
+	_, _ = ambient.MaybeCreateOwnGlobalBinding(elseSym, environment.BindingTypePrimitive, nil)
 	lib.AddExport("else", "")
 
-	// Create target environment
 	targetEnv := environment.NewNamespace().Runtime()
-
-	bindings := map[string]string{
-		"else": "else",
-	}
-
-	// Copy bindings
-	err := compilation.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
+	err := compilation.CopyLibraryBindingsToEnv(lib, map[string]string{"else": "else"}, targetEnv)
 	c.Assert(err, qt.IsNil)
 
-	// Verify binding is present in runtime phase (phase 0)
-	elseTarget := values.NewSymbol("else")
-	runtimeBinding := targetEnv.GetBinding(elseTarget, values.AllScopes())
-	c.Assert(runtimeBinding, qt.IsNotNil, qt.Commentf("else should be in runtime phase"))
-	c.Assert(runtimeBinding.Value(), valuestest.SchemeEquals, mockValue)
-
-	// Verify binding is also present in compile phase (phase 2)
-	targetCompileEnv := targetEnv.AtPhase(environment.PhaseCompile)
-	elseCompileSym := values.NewSymbol("else")
-	compileBinding := targetCompileEnv.GetBinding(elseCompileSym, values.AllScopes())
-	c.Assert(compileBinding, qt.IsNotNil, qt.Commentf("else should be propagated to compile phase"))
-	c.Assert(compileBinding.Value(), valuestest.SchemeEquals, mockValue)
+	got := targetEnv.GetBinding(elseSym, values.AllScopes())
+	c.Assert(got, qt.IsNotNil)
+	c.Assert(got.BindingType(), qt.Equals, environment.BindingTypePrimitive)
+	c.Assert(got.IsImported(), qt.IsTrue)
+	c.Assert(targetEnv.PresentPhases(), qt.DeepEquals, []environment.Phase{environment.PhaseRuntime})
 }
 
 // TestLibraryForwardReferences tests that library bodies support forward references

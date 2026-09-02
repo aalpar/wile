@@ -753,8 +753,9 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 
 		// Propagate to the source phase in the target so the binding is available
 		// in the same phase it originated from. Syntax bindings (phase 1) need to
-		// be in the expand phase for macro expansion; compile-phase bindings
-		// (auxiliary syntax, phase 2) need to be in the compile phase.
+		// be in the expand phase for macro expansion; an auxiliary keyword is
+		// ambient in its library env and is found at phase 0, so it never takes
+		// this branch.
 		if sourcePhase > 0 {
 			// Phase is int8; a high for-meta target phase plus the source-phase
 			// shift can overflow (e.g. 127+1 wraps to -128) and silently route the

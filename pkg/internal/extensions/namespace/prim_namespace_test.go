@@ -130,7 +130,8 @@ func TestNamespaceUndefine(t *testing.T) {
 }
 
 // TestNamespaceUndefineSealedRejected pins A4: undefining a sealed-base binding (a
-// primitive or bootstrap procedure) is rejected rather than silently succeeding.
+// primitive, bootstrap procedure, or keyword) is rejected rather than silently
+// succeeding.
 // Post-carve those bindings live in the immutable, engine-shared sealed base, so
 // DeleteBinding on the mutable runtime removes nothing — previously the primitive
 // returned Void while the binding stayed bound (a silent no-op). caar is a bootstrap
@@ -440,4 +441,22 @@ func TestNamespaceUndefine_RemovesAmbientAndSparesMacroBinder(t *testing.T) {
 		(namespace-undefine! (interaction-environment) 'w)
 		(list (namespace-bound? (interaction-environment) 'w) (get-w))`)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "(#f 7)")
+}
+
+// Keywords are ambient, so the phase-0 reflection family sees them: listed by
+// namespace-bound-names, #t from namespace-bound?, and dereferenceable by
+// namespace-ref (to the valueless binding's value, not the default). This is the
+// behaviour the syntax compilers already had — (namespace-ref ns 'define-syntax)
+// answers the compiler object — and the relocation extends it to every AddBinding
+// name. Pinned as today's answer, not endorsed: filtering non-variable bindings
+// out of this family is a separate decision, and it would hide the compilers too.
+func TestNamespaceReflection_SeesAmbientKeywords(t *testing.T) {
+	eng := newEngine(t)
+
+	result := schemeEval(t, eng, `
+		(let ((ns (interaction-environment)))
+		  (list (if (memq 'else (namespace-bound-names ns)) 'listed 'not-listed)
+		        (namespace-bound? ns 'else)
+		        (eq? 'took-default (namespace-ref ns 'else 'took-default))))`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(listed #t #f)")
 }

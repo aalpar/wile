@@ -233,9 +233,11 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 		// So the refusal is narrowed to what it was always FOR — the startup set,
 		// which nothing user-level put there — and an import is deleted at its own
 		// coordinates. IsImported() is the discriminator: it is provenance the
-		// importer wrote, and a primitive or bootstrap procedure never carries it.
+		// importer wrote, and a primitive, bootstrap procedure or keyword never
+		// carries it.
 		// Without this branch the refusal below would also fire on an import, with a
-		// message ("a primitive or bootstrap procedure") that is simply untrue of one.
+		// message ("a primitive, bootstrap procedure, or keyword") that is simply
+		// untrue of one.
 		sealed := ns.Store().SealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime)
 		if sealed != nil && sealed.IsImported() {
 			deleted = ns.Store().DeleteBindingAt(
@@ -244,7 +246,7 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 		if !deleted {
 			return werr.WrapForeignErrorf(
 				werr.ErrImmutableBinding,
-				"namespace-undefine!: cannot undefine sealed binding %q (a primitive or bootstrap procedure)",
+				"namespace-undefine!: cannot undefine sealed binding %q (a primitive, bootstrap procedure, or keyword)",
 				sym.Key,
 			)
 		}

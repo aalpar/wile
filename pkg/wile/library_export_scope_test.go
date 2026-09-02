@@ -144,23 +144,35 @@ func TestLibraryBody_SyntacticKeywordAsVariableRefused(t *testing.T) {
 // row, a change that made the whole tree refuse keywords for some unrelated
 // reason would look like the fix.
 //
-// NAMED FOR WHAT IT PINS, which is weaker than a keyword refusal on every row.
-// The property held here is that a syntactic keyword in value position never
-// yields a VALUE at the top level; only the `define-syntax` row pins the keyword
-// refusal itself. The two sentinels differ because of the same fact
-// headDenotesSpecialForm turns on: `if` has NO phase-0 binding at all, so the top
-// level reports it unbound (ErrNoSuchBinding — a different mechanism, which
-// would keep passing if the keyword refusal were deleted from the top-level
-// path), while `define-syntax` DOES have one (measured: BindingTypePrimitive, a
-// syntax compiler) and reaches the refusal. Inside a library body both resolve,
-// through the library-scope arm, so both must reach the refusal there — that is
-// what TestLibraryBody_SyntacticKeywordAsVariableRefused asserts.
+// NAMED FOR WHAT IT PINS: a syntactic keyword in value position never yields a
+// VALUE at the top level. That property is what the name promises and it is
+// unchanged; the sentinels underneath it have moved.
+//
+// Both rows now reach the keyword refusal, and for one reason rather than two.
+// `if` and `define-syntax` are both compileTimeBindingSpecs names, so both are
+// ambient BindingTypePrimitive bindings that a phase-0 probe reaches as T3, and
+// refuseCompileTimeMeaning's type arm answers both. They differ only in what the
+// slot HOLDS — void for `if`, the compiler object for `define-syntax` — which
+// the refusal does not consult.
+//
+// Before the keywords moved to the ambient coordinate this row read
+// ErrNoSuchBinding, because `if` sat at phase 2 with no phase-0 binding at all
+// and the top level simply could not see it. That made the two rows exercise two
+// different mechanisms and gave this test a control it no longer has: a change
+// deleting the keyword refusal from the top-level path would now redden both
+// rows together. The remaining discrimination is
+// TestPhaseZeroCrossPhaseNamesStayUnbound (pkg/machine/compilation), whose
+// bootstrap- and user-macro rows still have no ambient keyword and still pin
+// ErrNoSuchBinding.
+//
+// Inside a library body both resolve through the library-scope arm and must
+// reach the refusal there too — TestLibraryBody_SyntacticKeywordAsVariableRefused.
 func TestTopLevel_KeywordInValuePositionNeverYieldsAValue(t *testing.T) {
 	cases := []struct {
 		keyword string
 		want    error
 	}{
-		{"if", werr.ErrNoSuchBinding},
+		{"if", werr.ErrSyntacticKeywordAsVariable},
 		{"define-syntax", werr.ErrSyntacticKeywordAsVariable},
 	}
 	for _, tc := range cases {

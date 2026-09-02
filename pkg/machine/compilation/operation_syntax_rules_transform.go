@@ -95,28 +95,16 @@ func (p *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *envi
 	return p.env.GetBinding(s, syntax.ScopesOf(scopes))
 }
 
-// GetLiteralBinding resolves the USE-SITE side of the R7RS §4.3.2 literal
-// comparison: the frame's own lexical chain at its own phase, then the
-// special-form registry phase, and nowhere else.
+// GetLiteralBinding resolves the use-site side of the R7RS §4.3.2 comparison:
+// the frame's own lexical chain at its own phase, and the ambient keyword of the
+// name last. No other phase: the use site's phase is a known, exact fact, and
+// another phase's binding of the name is a different program's.
 func (p *envBindingChecker) GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool) {
-	return lookupLiteralBinding(p.env, sym, scopes, useSiteFallbackPhases)
+	return lookupLiteralBinding(p.env, sym, scopes, nil)
 }
 
-// useSiteFallbackPhases is the use site's fallback set. It is exactly the
-// special-form registry phase, because the use site's phase is a known, exact
-// fact: the identifier is being read by code at env.PhaseLevel(), and any other
-// phase's binding of the name is a different program's.
-//
-// Walking every present phase instead breaks phase hermeticity on the literal
-// path, in both directions. From a transformer body (phase 1) an ascending walk
-// hits phase 0 first, so a user's top-level (define else #f) pre-empts the
-// auxiliary binding and refuses cond, case and guard inside EVERY transformer — a
-// hard compile error on programs that compiled before. From phase 0, the same
-// walk lets a (begin-for-syntax (define else #f)) reach into phase-0 code.
-var useSiteFallbackPhases = []environment.Phase{environment.PhaseCompile}
-
 // definitionFallbackPhases is the definition site's fallback set: every phase
-// BELOW env's own, descending, and then the special-form registry phase.
+// BELOW env's own, descending.
 //
 // A pattern literal is compared at the phase where the macro is USED, which is at
 // or below the phase of the form that writes the literal, and which is not known
@@ -128,20 +116,22 @@ var useSiteFallbackPhases = []environment.Phase{environment.PhaseCompile}
 // macro with an `else` literal answers (ELSE 1), the two identifiers being one
 // phase-0 binding, even though the literal is written in phase-1 code.
 //
-// The registry phase comes LAST so an ordinary binding at a lower phase wins over
-// the ambient auxiliary-syntax one. The descent stops at PhaseRuntime: negative
-// phases rank for-template bindings, a different axis rather than a lower rung of
-// this one, and PresentPhases excludes them for the same reason.
+// The ambient keywords are not in this list. lookupLiteralBinding ranks them
+// below every exact-phase hit and answers them last, so an ordinary binding at a
+// lower phase wins over the ambient auxiliary-syntax one. The descent stops at
+// PhaseRuntime: negative phases rank for-template bindings, a different axis
+// rather than a lower rung of this one, and PresentPhases excludes them for the
+// same reason.
 func definitionFallbackPhases(env *environment.EnvironmentFrame) []environment.Phase {
 	own := env.PhaseLevel()
 	if own <= environment.PhaseRuntime {
-		return useSiteFallbackPhases
+		return nil
 	}
-	q := make([]environment.Phase, 0, int(own-environment.PhaseRuntime)+1)
+	q := make([]environment.Phase, 0, int(own-environment.PhaseRuntime))
 	for phase := own - 1; phase >= environment.PhaseRuntime; phase-- {
 		q = append(q, phase)
 	}
-	return append(q, environment.PhaseCompile)
+	return q
 }
 
 // lookupLiteralBinding resolves sym for the R7RS §4.3.2 literal comparison: in
@@ -150,20 +140,20 @@ func definitionFallbackPhases(env *environment.EnvironmentFrame) []environment.P
 //
 // The own-frame probe comes first and is load-bearing on its own: a phase VIEW
 // has no lexical parent chain, so a phases-only probe cannot see a let-bound
-// shadow — it answers the phase-2 auxiliary binding for the input identifier in
+// shadow — it answers the ambient auxiliary binding for the input identifier in
 // (let ((else #f)) (cond (else 'TOOK-ELSE))), and that control regresses to
 // TOOK-ELSE.
 //
-// Ambient last is load-bearing. An ambient binding — the (ANY, sealed)
-// coordinate, which the ranked probe at ANY phase reaches as T3 — is held back
-// and returned only when no exact-phase slot of the name exists at env's own
-// phase or at any fallback phase. Without the hold-back a phase-1 probe for a
-// name that is both ambient and bound by the user at phase 0 would answer the
-// ambient binding before the descent had looked at phase 0; a syntax-case
-// macro's literal is written at phase 1 and used at phase 0, and the user's
-// phase-0 binding must win that pin (TestPatternLiteralRespectsAUseSiteShadow,
-// "syntax-case, global shadow"). When the name is not ambient, ambient is nil
-// and the comparison is the plain "first hit" it was.
+// Ambient last is load-bearing. Auxiliary syntax (else, =>) and every
+// special-form name live at the ambient coordinate (registry/apply.go
+// registerCompileTimeBinding), which the ranked probe at ANY phase reaches as
+// T3 — so a phase-1 probe for `else` would answer the keyword before the descent
+// has looked at phase 0. A syntax-case macro's literal is written at phase 1 and
+// used at phase 0, and a user (define else 5) at phase 0 must win that pin
+// (TestPatternLiteralRespectsAUseSiteShadow, "syntax-case, global shadow"). An
+// ambient answer is therefore held back and returned only when no exact-phase
+// slot exists at env's own phase or any fallback phase. When the name is not
+// ambient, ambient is nil and the comparison is the plain "first hit" it was.
 //
 // ok is false only for an ambiguous resolution. EnvironmentFrame.GetBinding
 // panics with werr.ErrAmbiguousBinding on an equal-cardinality incomparable scope

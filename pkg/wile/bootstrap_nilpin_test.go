@@ -39,7 +39,6 @@ type nilPin struct {
 	// later bootstrap define DOES bind is a load-order accident.
 	runtimeBound bool
 	expandBound  bool
-	compileBound bool
 }
 
 // TestBootstrapMacrosPinLateBoundReferents is a load-order ratchet for bootstrap macro
@@ -128,12 +127,12 @@ func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 
 	for _, p := range defects {
 		t.Errorf("macro %q pins free identifier %q as unbound, but %q IS bound after bootstrap "+
-			"(runtime=%v expand=%v compile=%v). The macro is defined before its referent loads, "+
+			"(runtime=%v expand=%v). The macro is defined before its referent loads, "+
 			"so the reference degrades to use-site resolution and a user (define %s ...) or "+
 			"(define-syntax %s ...) captures it. Move the referent's definition earlier (for a "+
 			"runtime procedure see bootstrap_macros_late.scm; for a sibling macro/expander "+
 			"reorder it above this macro, as guard-aux was above guard).",
-			p.macro, p.freeID, p.freeID, p.runtimeBound, p.expandBound, p.compileBound, p.freeID, p.freeID)
+			p.macro, p.freeID, p.freeID, p.runtimeBound, p.expandBound, p.freeID, p.freeID)
 	}
 
 	t.Logf("--- neither runtime- nor expand-bound: genuinely inert (special form handled by the " +
@@ -191,7 +190,6 @@ func collectNilPins(t *testing.T, env, expandEnv *environment.EnvironmentFrame) 
 					freeID:       name,
 					runtimeBound: env.GetGlobalIndex(values.NewSymbol(name)) != nil,
 					expandBound:  expandEnv.GetGlobalIndex(values.NewSymbol(name)) != nil,
-					compileBound: env.AtPhase(environment.PhaseCompile).GetGlobalIndex(values.NewSymbol(name)) != nil,
 				})
 			}
 		}
