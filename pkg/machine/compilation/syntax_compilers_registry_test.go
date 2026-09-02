@@ -25,9 +25,9 @@ import (
 
 func TestSyntaxCompilersRegistry(t *testing.T) {
 	// RegisterSyntaxCompilers binds SyntaxCompiler values into the taproot
-	// (the phase-0 seal). After registration, LookupSyntaxCompiler should
-	// find them by symbol with nil scopes — the compile frame reaches the taproot
-	// through its parent chain.
+	// (the phase-0 seal). After registration, the hygiene-aware read
+	// LookupPhaseBinding[*SyntaxCompiler] should find them by symbol with nil
+	// scopes — the compile frame reaches the taproot through its parent chain.
 	env := environment.NewNamespace().Runtime()
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
@@ -60,8 +60,8 @@ func TestSyntaxCompilersRegistry(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			sym := values.NewSymbol(tc.formName)
-			sc := LookupSyntaxCompiler(env, sym, nil)
-			qt.Assert(t, sc, qt.IsNotNil, qt.Commentf("LookupSyntaxCompiler(%q) returned nil", tc.formName))
+			sc := LookupPhaseBinding[*SyntaxCompiler](env, sym, nil)
+			qt.Assert(t, sc, qt.IsNotNil, qt.Commentf("LookupPhaseBinding[*SyntaxCompiler](%q) returned nil", tc.formName))
 			qt.Assert(t, sc.Name(), qt.Equals, tc.formName)
 		})
 	}
@@ -99,7 +99,7 @@ func TestSyntaxCompilersRegistryLookupMiss(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	sym := values.NewSymbol("not-a-syntax-compiler")
-	sc := LookupSyntaxCompiler(env, sym, nil)
+	sc := LookupPhaseBinding[*SyntaxCompiler](env, sym, nil)
 	qt.Assert(t, sc, qt.IsNil)
 }
 
@@ -125,7 +125,7 @@ func TestSyntaxCompilersRegistryCoreFormsNotRegistered(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			sym := values.NewSymbol(tc.formName)
-			sc := LookupSyntaxCompiler(env, sym, nil)
+			sc := LookupPhaseBinding[*SyntaxCompiler](env, sym, nil)
 			qt.Assert(t, sc, qt.IsNil, qt.Commentf("%q should not be a SyntaxCompiler", tc.formName))
 		})
 	}

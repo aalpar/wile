@@ -16,7 +16,6 @@ package compilation
 
 import (
 	"github.com/aalpar/wile/pkg/environment"
-	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -73,7 +72,8 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 //     define-syntax, etc. A NewChildRuntime library env is an island — it owns its
 //     own store, so the engine root's ambient tier is not reachable from it at any
 //     level — and special forms stay ambient-only, unchanged by this relocation.
-//  2. Scope-aware lookup via LookupSyntaxCompiler for hygiene resolution.
+//  2. Scope-aware lookup via LookupPhaseBinding[*SyntaxCompiler] for hygiene
+//     resolution.
 //
 // Compilation dispatch itself goes through the forms registry (register.go),
 // not through these bindings. Both paths are populated from
@@ -89,16 +89,4 @@ func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
 		func(name string, fn SyntaxCompilerFunc) values.Value {
 			return NewSyntaxCompiler(name, fn)
 		})
-}
-
-// LookupSyntaxCompiler looks up a syntax compiler by symbol from env, at env's
-// own level. The compilers live in the ambient tier (RegisterSyntaxCompilers),
-// which every frame's ranked probe reaches as T3, so a same-phase user binding of
-// the name at T1 or T2 takes precedence: the order that lets user code shadow
-// car. Returns nil if the symbol does not name a syntax compiler.
-//
-// Compilation dispatch does not come through here (register.go's forms registry
-// does that); this is the hygiene-aware read the registry tests pin.
-func LookupSyntaxCompiler(env *environment.EnvironmentFrame, sym *values.Symbol, scopes []*syntax.Scope) *SyntaxCompiler {
-	return LookupPhaseBinding[*SyntaxCompiler](env, sym, scopes)
 }
