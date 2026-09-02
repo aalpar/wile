@@ -800,3 +800,34 @@ func TestSealedSlotsFiltersByRank(t *testing.T) {
 	ok = sealed.ContainsOne("mutable-one")
 	c.Assert(ok, qt.IsFalse)
 }
+
+// AmbientBinding answers the ambient tier ALONE. An exact-phase slot of the name
+// at the query phase — which the ranked probe ranks ABOVE the ambient one — is
+// not an answer here, and a slot at another phase is not a candidate at all.
+// The R7RS §4.3.2 definition-site literal pin is the one reader that needs this
+// (compilation.lookupLiteralBinding): it must rank the ambient keyword below an
+// exact-phase binding at a LOWER phase, which the ranked probe cannot express.
+func TestAmbientBindingIgnoresExactPhaseSlots(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	sym := values.NewSymbol("else")
+
+	// A phase-0 mutable slot alone: nothing is ambient.
+	mustDefine(c, ns.Runtime(), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(5))
+	c.Assert(ns.Store().AmbientBinding(sym, values.EmptyScopes()), qt.IsNil)
+
+	// The ambient slot, written the only way one can be: through the phase-0
+	// sealed-write view.
+	sealedRoot := ns.Runtime().SealedWriteViewAt(PhaseRuntime)
+	ambientIdx, created := sealedRoot.MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
+	c.Assert(created, qt.IsTrue)
+	ambient := ns.Store().GetOwnGlobalBinding(ambientIdx)
+	c.Assert(ambient, qt.IsNotNil)
+
+	c.Assert(ns.Store().AmbientBinding(sym, values.EmptyScopes()), qt.Equals, ambient)
+
+	// The ranked probe at phase 0 prefers the mutable slot (T1 over T3);
+	// AmbientBinding did not. From phase 1, where no exact slot exists, both agree.
+	c.Assert(ns.Runtime().GetBinding(sym, values.EmptyScopes()), qt.Not(qt.Equals), ambient)
+	c.Assert(ns.Runtime().AtPhase(PhaseExpand).GetBinding(sym, values.EmptyScopes()), qt.Equals, ambient)
+}
