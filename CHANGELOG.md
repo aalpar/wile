@@ -180,6 +180,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The R7RS §4.3.2 literal pin reads ambiguity as a value.**
+  `GlobalEnvironmentFrame.ExactBindingAt` and `EnvironmentFrame.ExactBinding`
+  resolve the exact-phase tiers without the ambient keyword and report an
+  incomparable scope-set tie as `(nil, true)` instead of raising it;
+  `GlobalEnvironmentFrame.AmbientBinding` now returns `(binding, ambiguous)`.
+  `lookupLiteralBinding` is the plain sequence its contract states (exact at the
+  use or definition phase, exact at each lower phase, ambient last, first hit
+  wins, any tie refuses) and recovers no panic. `GetBinding`, `GetLocalIndex`,
+  and the sealed-tier readers keep raising `ErrAmbiguousBinding` for the compile
+  boundary to report.
+
 - **Auxiliary keywords and special-form names are ambient.** `AddBinding` /
   `AddBindingSpecs` registrations (`else`, `=>`, `_`, `...`, and every
   special-form docstring carrier) now bind at the owner's `(ANY, sealed)`
@@ -252,6 +263,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   manifest was regenerated on the toolchain CI actually uses.
 
 ### Removed
+
+- **`compilation.LookupSyntaxCompiler`.** No production caller; it forwarded to
+  `LookupPhaseBinding[*SyntaxCompiler]`, which the registry tests now call.
 
 - **`environment.PhaseCompile`, `wile.PhaseCompile`, `registry.PhaseSetCompile`,
   `EnvironmentFrame.Compile()`, `Namespace.Compile()`.** Nothing is bound at a
