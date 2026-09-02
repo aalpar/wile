@@ -20,8 +20,8 @@ import (
 )
 
 // Phase-dependent binding: the same symbol can bind to different values at
-// different phases (runtime, expand, compile). This follows Racket's phase
-// model. See Flatt 2002, "Composable and Compilable Macros".
+// different phases (runtime, expand, and the rungs above). This follows
+// Racket's phase model. See Flatt 2002, "Composable and Compilable Macros".
 // See BIBLIOGRAPHY.md "Composable and Compilable Macros (Flatt 2002)".
 
 // Phase is a RELATIVE index, not an absolute stage of compilation. It counts

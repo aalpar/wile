@@ -82,11 +82,11 @@ func TestLookupSyntaxCompiler(t *testing.T) {
 func TestLookupSyntaxCompiler_PhaseEnvironment(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 
-	// Register syntax compilers in the compile environment
+	// Register syntax compilers into the ambient tier
 	err := RegisterSyntaxCompilers(env) //nolint:errcheck
 	qt.Assert(t, err, qt.IsNil)
 
-	// Should find syntax compilers in the compile phase
+	// Should find syntax compilers via the ambient tier
 	defineSyntaxSym := values.NewSymbol("define-syntax")
 	defineSyntaxPc := LookupSyntaxCompiler(env, defineSyntaxSym, nil)
 	qt.Assert(t, defineSyntaxPc, qt.IsNotNil)

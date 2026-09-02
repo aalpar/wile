@@ -86,14 +86,13 @@ import (
 //	└── PhaseRegistry
 //	    ├── [0] Runtime EnvironmentFrame (normal execution)
 //	    ├── [1] Expand EnvironmentFrame (macro expansion, for-syntax)
-//	    ├── [2] Compile EnvironmentFrame (syntax compilers, for-meta 2)
-//	    ├── [3…] minted on demand as the macro tower climbs
+//	    ├── [2…] tower rungs, minted on demand (transformer bodies, for-meta N)
 //	    └── [-1] Template EnvironmentFrame (for-template, future)
 //
 // The indices are RELATIVE levels, counted from THIS owner's runtime — see the
 // Phase type. The registry is per-owner, so a library env's [1] and the
-// namespace's [1] are different frames, and the named levels are the ones the
-// top level uses rather than the ones that exist.
+// namespace's [1] are different frames. Only 0 and 1 are named levels the top
+// level uses; nothing above phase 1 is a fixed, registry-owned coordinate.
 //
 // These are VIEWS, not owners: every entry shares the one GlobalEnvironmentFrame
 // and the one Namespace. Phase separation is key disjointness in that store — a

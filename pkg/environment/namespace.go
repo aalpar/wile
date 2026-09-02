@@ -345,8 +345,9 @@ func (p *Namespace) BoundSymbolNames() values.Value {
 // BoundNamesAcrossPhases returns a sorted, deduplicated list of every binding name
 // this namespace holds anywhere: every phase, sealed and mutable alike. Unlike BoundSymbolNames —
 // which spans phase 0 only, returning a Scheme list for the bound-names primitives —
-// this also reports names bound at the expand and compile phases, so macro and
-// special-form keywords appear. It is the set a REPL wants for tab completion.
+// this also reports names bound above phase 0 — the expand phase and any higher
+// tower phase — so macro and special-form keywords appear. It is the set a REPL
+// wants for tab completion.
 // The output is sorted for determinism.
 func (p *Namespace) BoundNamesAcrossPhases() []string {
 	seen := values.StringSet{}
@@ -849,7 +850,8 @@ func WithChildAuthorizer(a security.Authorizer) NamespaceOption {
 //     the mutable user scope
 //   - GlobalEnvironmentFrame — its own store: isolated global bindings at every
 //     phase, sealed and mutable alike (define, set!, a profile's sealed apply)
-//   - PhaseRegistry — isolated phase hierarchy (expand, compile created on demand)
+//   - PhaseRegistry — isolated phase hierarchy (expand and higher rungs
+//     created on demand)
 //
 // The child's runtime EnvironmentFrame.namespace points to the child (not the
 // parent), so new global bindings created in the child are keyed against the
@@ -963,7 +965,7 @@ func WithChildAuthorizer(a security.Authorizer) NamespaceOption {
 // NewChildNamespace returns a new *Namespace that can be
 // passed as a first-class Scheme value (e.g., returned from the (environment)
 // primitive and accepted by eval). Its Runtime() returns the child's own
-// runtime frame, and its AtPhase/Expand/Compile methods create phase
+// runtime frame, and its AtPhase/Expand methods create phase
 // environments scoped to the child.
 //
 // # Usage
