@@ -146,7 +146,7 @@ func definitionFallbackPhases(env *environment.EnvironmentFrame) []environment.P
 
 // lookupLiteralBinding resolves sym for the R7RS §4.3.2 literal comparison: in
 // env's own lexical chain at env's own phase, then in each fallback phase in
-// order, returning the first hit.
+// order, then the AMBIENT binding of the name — returning the first hit.
 //
 // The own-frame probe comes first and is load-bearing on its own: a phase VIEW
 // has no lexical parent chain, so a phases-only probe cannot see a let-bound
@@ -154,13 +154,16 @@ func definitionFallbackPhases(env *environment.EnvironmentFrame) []environment.P
 // (let ((else #f)) (cond (else 'TOOK-ELSE))), and that control regresses to
 // TOOK-ELSE.
 //
-// The registry phase that both fallback sets end with is load-bearing in the same
-// way. Auxiliary syntax (else, =>) is not a rung of the macro tower: registry
-// apply installs every special form once per owner at PhaseCompile
-// (registry/apply.go registerCompileTimeBinding), ambient to code at every phase.
-// Without that probe the definition-site pin for `else` comes back nil, which is
-// no pin at all, and (define else #f) followed by (cond (else 'TOOK-ELSE)) takes
-// the else branch again.
+// Ambient last is load-bearing. An ambient binding — the (ANY, sealed)
+// coordinate, which the ranked probe at ANY phase reaches as T3 — is held back
+// and returned only when no exact-phase slot of the name exists at env's own
+// phase or at any fallback phase. Without the hold-back a phase-1 probe for a
+// name that is both ambient and bound by the user at phase 0 would answer the
+// ambient binding before the descent had looked at phase 0; a syntax-case
+// macro's literal is written at phase 1 and used at phase 0, and the user's
+// phase-0 binding must win that pin (TestPatternLiteralRespectsAUseSiteShadow,
+// "syntax-case, global shadow"). When the name is not ambient, ambient is nil
+// and the comparison is the plain "first hit" it was.
 //
 // ok is false only for an ambiguous resolution. EnvironmentFrame.GetBinding
 // panics with werr.ErrAmbiguousBinding on an equal-cardinality incomparable scope
@@ -192,8 +195,14 @@ func lookupLiteralBinding(
 
 	s := values.NewSymbol(sym)
 	sq := syntax.ScopesOf(scopes)
+	// A detached transient frame carries no store; there is then nothing ambient.
+	var ambient *environment.Binding
+	store := env.GlobalEnvironment()
+	if store != nil {
+		ambient = store.AmbientBinding(s, sq)
+	}
 	q = env.GetBinding(s, sq)
-	if q != nil {
+	if q != nil && q != ambient {
 		return q, true
 	}
 	// PresentPhases is consulted only as the guard on AtPhase: a phase the owner
@@ -209,11 +218,11 @@ func lookupLiteralBinding(
 			continue
 		}
 		q = v.GetBinding(s, sq)
-		if q != nil {
+		if q != nil && q != ambient {
 			return q, true
 		}
 	}
-	return nil, true
+	return ambient, true
 }
 
 // OperationSyntaxRulesTransform is a VM operation that performs macro expansion.
