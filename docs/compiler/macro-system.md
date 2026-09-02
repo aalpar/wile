@@ -331,8 +331,8 @@ frame's own `phaseLevel` via `EnvironmentFrame.NextPhase()`
   composes the importing frame's `env.PhaseLevel()` with the import set's shift
   via `composePhaseShift` (`library_bindings.go`).
 
-One compile-time reader deliberately stays absolute — `LookupPrimitiveExpander`
-(`env.Expand()`) — because primitive expanders are registry fixtures at
+One compile-time reader deliberately stays absolute: `LookupPrimitiveExpander`
+(`env.Expand()`), because primitive expanders are registry fixtures at
 `(1, sealed)`. Syntax compilers and auxiliary keywords are ambient, reachable
 from any frame at its own level, and read no landmark. Two more readers are
 absolute without being fixtures: `CompileMeta` and the

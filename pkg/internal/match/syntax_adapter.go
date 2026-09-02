@@ -421,7 +421,7 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 	} else if checker != nil {
 		// Unpinned: both sides through the use-site environment. Auxiliary syntax
 		// like => is ambient in every owner and arrives at a use site imported from
-		// (scheme base), so both input and pattern may have bindings — compare the
+		// (scheme base), so both input and pattern may have bindings: compare the
 		// bindings, not their existence.
 		inputBinding := checker.GetBinding(input.Key(), input.Scopes())
 		patternBinding := checker.GetBinding(pattern.Key(), pattern.Scopes())

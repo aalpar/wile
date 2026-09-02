@@ -94,7 +94,7 @@ func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
 // LookupSyntaxCompiler looks up a syntax compiler by symbol from env, at env's
 // own level. The compilers live in the ambient tier (RegisterSyntaxCompilers),
 // which every frame's ranked probe reaches as T3, so a same-phase user binding of
-// the name at T1 or T2 takes precedence — the order that lets user code shadow
+// the name at T1 or T2 takes precedence: the order that lets user code shadow
 // car. Returns nil if the symbol does not name a syntax compiler.
 //
 // Compilation dispatch does not come through here (register.go's forms registry

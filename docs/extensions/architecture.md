@@ -304,8 +304,8 @@ over `environment.Phase` values, and its bits compose with `|`.
 
 Most extension primitives use `PhaseSetRuntime` only. Primitives needed during
 `syntax-rules` expansion use `PhaseSetRuntime | PhaseSetExpand`. Compile-time-only
-names — auxiliary syntax keywords such as `else` and `=>`, and special-form
-names that carry a docstring — are registered with `AddBinding` /
+names (auxiliary syntax keywords such as `else` and `=>`, and special-form
+names that carry a docstring) are registered with `AddBinding` /
 `AddBindingSpecs` and land at the owner's ambient coordinate, reachable from
 every phase.
 

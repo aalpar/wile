@@ -802,7 +802,7 @@ func TestSealedSlotsFiltersByRank(t *testing.T) {
 }
 
 // AmbientBinding answers the ambient tier ALONE. An exact-phase slot of the name
-// at the query phase — which the ranked probe ranks ABOVE the ambient one — is
+// at the query phase, which the ranked probe ranks ABOVE the ambient one, is
 // not an answer here, and a slot at another phase is not a candidate at all.
 // The R7RS §4.3.2 definition-site literal pin is the one reader that needs this
 // (compilation.lookupLiteralBinding): it must rank the ambient keyword below an

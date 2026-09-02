@@ -94,6 +94,10 @@ import (
 // namespace's [1] are different frames. Only 0 and 1 are named levels the top
 // level uses; nothing above phase 1 is a fixed, registry-owned coordinate.
 //
+// The syntax compilers, the auxiliary keywords (else, =>) and the special-form
+// names sit at NO index above: they are ambient, (ANY, sealed), which every row
+// reaches as the ranked probe's T3.
+//
 // These are VIEWS, not owners: every entry shares the one GlobalEnvironmentFrame
 // and the one Namespace. Phase separation is key disjointness in that store — a
 // phase-N read is a candidate only against slots at exactly phase N or the

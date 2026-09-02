@@ -136,18 +136,18 @@ func definitionFallbackPhases(env *environment.EnvironmentFrame) []environment.P
 
 // lookupLiteralBinding resolves sym for the R7RS §4.3.2 literal comparison: in
 // env's own lexical chain at env's own phase, then in each fallback phase in
-// order, then the AMBIENT binding of the name — returning the first hit.
+// order, then the AMBIENT binding of the name, returning the first hit.
 //
 // The own-frame probe comes first and is load-bearing on its own: a phase VIEW
 // has no lexical parent chain, so a phases-only probe cannot see a let-bound
-// shadow — it answers the ambient auxiliary binding for the input identifier in
+// shadow: it answers the ambient auxiliary binding for the input identifier in
 // (let ((else #f)) (cond (else 'TOOK-ELSE))), and that control regresses to
 // TOOK-ELSE.
 //
 // Ambient last is load-bearing. Auxiliary syntax (else, =>) and every
 // special-form name live at the ambient coordinate (registry/apply.go
 // registerCompileTimeBinding), which the ranked probe at ANY phase reaches as
-// T3 — so a phase-1 probe for `else` would answer the keyword before the descent
+// T3, so a phase-1 probe for `else` would answer the keyword before the descent
 // has looked at phase 0. A syntax-case macro's literal is written at phase 1 and
 // used at phase 0, and a user (define else 5) at phase 0 must win that pin
 // (TestPatternLiteralRespectsAUseSiteShadow, "syntax-case, global shadow"). An

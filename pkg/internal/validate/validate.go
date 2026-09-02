@@ -269,7 +269,7 @@ func headDenotesSpecialForm(
 		// ambient BindingTypePrimitive keyword, and the type arm below answers
 		// it. The exception is procedureFormDocs (apply, dynamic-wind): they
 		// carry a runtime value, so they install no keyword and bind as sealed
-		// BindingTypeVariable — measured — which falls past the type arm to the
+		// BindingTypeVariable (measured), which falls past the type arm to the
 		// SealedBindingAt arm. Either way an unshadowed head is the form.
 		return true
 	}

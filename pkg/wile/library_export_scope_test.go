@@ -152,7 +152,7 @@ func TestLibraryBody_SyntacticKeywordAsVariableRefused(t *testing.T) {
 // `if` and `define-syntax` are both compileTimeBindingSpecs names, so both are
 // ambient BindingTypePrimitive bindings that a phase-0 probe reaches as T3, and
 // refuseCompileTimeMeaning's type arm answers both. They differ only in what the
-// slot HOLDS — void for `if`, the compiler object for `define-syntax` — which
+// slot HOLDS (void for `if`, the compiler object for `define-syntax`), which
 // the refusal does not consult.
 //
 // Before the keywords moved to the ambient coordinate this row read
@@ -166,7 +166,7 @@ func TestLibraryBody_SyntacticKeywordAsVariableRefused(t *testing.T) {
 // ErrNoSuchBinding.
 //
 // Inside a library body both resolve through the library-scope arm and must
-// reach the refusal there too — TestLibraryBody_SyntacticKeywordAsVariableRefused.
+// reach the refusal there too: TestLibraryBody_SyntacticKeywordAsVariableRefused.
 func TestTopLevel_KeywordInValuePositionNeverYieldsAValue(t *testing.T) {
 	cases := []struct {
 		keyword string

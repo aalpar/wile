@@ -79,7 +79,7 @@ func WithStableBasePrimitives() ApplyOption {
 // covers phase 0 only: expand-phase prims go to the phase-1 sealed-write view,
 // which Apply derives from env itself, and compile-time bindings land ambient
 // (registerCompileTimeBinding). Defaults to env when unset, but LoadBootstrapCore
-// always sets it, for the engine root and every library env alike — each into its OWN
+// always sets it, for the engine root and every library env alike, each into its OWN
 // phase-0 sealed-write view (SealedWriteViewAt(PhaseRuntime)); there is no
 // shared "sealed base" and no library env skips the carve.
 func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
@@ -213,8 +213,8 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 	return nil
 }
 
-// registerCompileTimeBinding installs a compile-time-only name — an auxiliary
-// keyword such as else or =>, or a special-form name carrying its docstring — as
+// registerCompileTimeBinding installs a compile-time-only name (an auxiliary
+// keyword such as else or =>, or a special-form name carrying its docstring) as
 // a valueless BindingTypePrimitive binding at the owner's AMBIENT coordinate: the
 // (ANY, sealed) write that only the phase-0 sealed-write view produces
 // (EnvironmentFrame.writeCoordinates). Ambient is what these names are: fixed,
@@ -222,13 +222,13 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 // shadowed by a same-phase user define through the same T1 > T2 > T3 order that
 // lets user code shadow car. RegisterSyntaxCompilers writes the syntax compilers
 // through the same view, so a name in both tables (define-syntax, import, …) is
-// ONE binding — created here, its compiler value written in afterwards.
+// ONE binding: created here, its compiler value written in afterwards.
 //
 // The value path refuses these on sight: refuseCompileTimeMeaning keys on
 // BindingType, so (display if) is "syntactic keyword used as a variable" rather
 // than the phase-2 era's "no such binding".
 //
-// env must be an owner root — the phase-0 entry of its own PhaseRegistry — which
+// env must be an owner root (the phase-0 entry of its own PhaseRegistry), which
 // every production Apply passes (LoadBootstrapCore). For any other receiver
 // SealedWriteViewAt falls back to the receiver's own mutable view, and the keyword
 // would land at (0, mutable), where a later user define of the name would reuse
@@ -356,15 +356,21 @@ func registerGlobalValue(env *environment.EnvironmentFrame, name string, value v
 }
 
 // ApplyDocs attaches documentation entries to existing bindings in the environment.
-// It searches all phases for each documented name and sets the doc string on every
-// matching binding. This is necessary because some names (e.g., special forms) have
-// bindings in multiple phases (expand and compile), and the REPL's ,doc command may
-// find any of them.
+// It searches every instantiated phase view for each documented name and sets the
+// doc string on every matching binding it finds.
+//
+// One name can be several bindings, so stopping at the first would leave the
+// rest undocumented and the REPL's ,doc command may reach any of them. What
+// spreads a name across views is the phase axis, not the keyword relocation: a
+// special-form name like define or syntax-case is BOTH the ambient keyword every
+// phase view reaches as T3 and a distinct phase-1 primitive expander
+// (RegisterPrimitiveExpanders), two live slots for one name. Bootstrap macros
+// bind at phase 1 the same way.
 //
 // Post-Phase-1: single walk over bindingSpecs (both real bindings with non-empty
-// Doc and DocOnly entries land here). The earlier two-source merge — `docs` slice
-// + bindingSpecs casted via DocEntry(spec) — collapsed when DocEntry was unified
-// into BindingSpec.
+// Doc and DocOnly entries land here). The earlier two-source merge (`docs` slice
+// plus bindingSpecs casted via DocEntry(spec)) collapsed when DocEntry was
+// unified into BindingSpec.
 func (p *PrimitiveRegistry) ApplyDocs(env *environment.EnvironmentFrame) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

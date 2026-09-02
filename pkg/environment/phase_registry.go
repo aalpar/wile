@@ -36,9 +36,9 @@ import (
 // definitionFallbackPhases descends from the frame's own level. The constants
 // below are the levels the TOP level occupies. There is no named constant
 // above 1: nothing lives at a fixed level above the owner's first rung. They
-// are not the set of levels that exist — GetOrCreate mints a view for any
+// are not the set of levels that exist (GetOrCreate mints a view for any
 // int8, and the macro tower climbs past 2 whenever a transformer body defines
-// a macro of its own — and they are not landmarks a climb may aim at.
+// a macro of its own), and they are not landmarks a climb may aim at.
 // Reaching for Expand() where NextPhase() belongs collapses the tower into
 // one level, and the mistake is invisible at the top level, where phaseLevel
 // is 0 and the two coincide (level-0 identity).

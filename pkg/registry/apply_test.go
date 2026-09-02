@@ -143,7 +143,7 @@ func TestApply_ExpandTimePrimitive(t *testing.T) {
 
 // A compile-time binding lands at the owner's AMBIENT coordinate: at the phase-0
 // sealed-write view's own coordinates, reachable by a ranked read from every
-// phase, and at no exact-phase coordinate — phase 2 included, which held these
+// phase, and at no exact-phase coordinate, phase 2 included, which held these
 // names before the relocation.
 func TestApply_CompileTimeBinding(t *testing.T) {
 	c := qt.New(t)

@@ -321,14 +321,14 @@ var compileTimeBindingSpecs = []nameDoc{
 }
 
 // procedureFormDocs names the R7RS procedures the compiler also recognizes in
-// head position. They hold a runtime value — apply is a runtime primitive
-// (control.go), dynamic-wind a bootstrap Scheme define — and so must bind as
+// head position. They hold a runtime value: apply is a runtime primitive
+// (control.go), dynamic-wind a bootstrap Scheme define. So they must bind as
 // BindingTypeVariable, which is what lets (procedure? dynamic-wind) and
 // (apply apply ...) work. The registry therefore installs NO keyword for them
 // and these rows are the docstring's home only: a keyword binding would occupy
 // the same ambient slot the value writer needs, and DefineOwnGlobal cannot
 // change an existing slot's type, so the procedure would be refused in value
-// position. Head dispatch is unaffected — headDenotesSpecialForm decides it
+// position. Head dispatch is unaffected: headDenotesSpecialForm decides it
 // from the sealed Variable binding, not from membership in this file's tables.
 //
 //nolint:govet

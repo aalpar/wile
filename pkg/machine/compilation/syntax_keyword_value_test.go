@@ -84,7 +84,7 @@ func TestPhaseOneHandlerValuePositionRefused(t *testing.T) {
 }
 
 // A phase-0 reference to a phase-1 meaning is refused, and WHICH sentinel it
-// gets is decided by whether the name is also an ambient keyword — not by phase
+// gets is decided by whether the name is also an ambient keyword, not by phase
 // placement alone. The two answers are the point of the table.
 //
 //   - `if` is a compileTimeBindingSpecs name, so registerCompileTimeBinding
@@ -92,8 +92,8 @@ func TestPhaseOneHandlerValuePositionRefused(t *testing.T) {
 //     reaches as T3. refuseCompileTimeMeaning's type arm answers it first:
 //     ErrSyntacticKeywordAsVariable, the more specific verdict, and the same
 //     class Chez ("invalid syntax if") and Racket give.
-//   - A bootstrap macro or a user macro has NO ambient keyword — it exists only
-//     at phase 1 — so nothing is reachable from phase 0 and the reference is
+//   - A bootstrap macro or a user macro has NO ambient keyword (it exists only
+//     at phase 1), so nothing is reachable from phase 0 and the reference is
 //     unbound. That arm still pins ErrNoSuchBinding, negative assertion included.
 //
 // The dialect removed-form contract no longer rides on the first row. Since the
@@ -121,7 +121,7 @@ func TestPhaseZeroCrossPhaseNamesStayUnbound(t *testing.T) {
 				qt.Commentf("got: %v", err))
 			if errors.Is(tc.want, werr.ErrNoSuchBinding) {
 				// The name has no ambient keyword, so the keyword refusal must not
-				// be what answered — otherwise the row would pass for the wrong
+				// be what answered; otherwise the row would pass for the wrong
 				// reason and stop discriminating the two mechanisms.
 				qt.Assert(t, errors.Is(err, werr.ErrSyntacticKeywordAsVariable), qt.IsFalse,
 					qt.Commentf("sentinel must stay ErrNoSuchBinding: %v", err))
@@ -169,8 +169,8 @@ func TestPinnedTemplateIdentifierRefusesCompileTimeMeaning(t *testing.T) {
 	}
 }
 
-// Every compile-time-only NAME — auxiliary syntax and the special forms whose
-// docstrings ride on a BindingSpec — is ambient, so a phase-0 reference in value
+// Every compile-time-only NAME (auxiliary syntax and the special forms whose
+// docstrings ride on a BindingSpec) is ambient, so a phase-0 reference in value
 // position reaches it and is refused as a keyword. Before the relocation these
 // sat at phase 2, unreachable from phase 0, and (display if) was the less
 // specific "no such binding". Chez ("invalid syntax if") and Racket give the

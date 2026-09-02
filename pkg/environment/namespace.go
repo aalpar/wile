@@ -343,11 +343,15 @@ func (p *Namespace) BoundSymbolNames() values.Value {
 }
 
 // BoundNamesAcrossPhases returns a sorted, deduplicated list of every binding name
-// this namespace holds anywhere: every phase, sealed and mutable alike. Unlike BoundSymbolNames —
-// which spans phase 0 only, returning a Scheme list for the bound-names primitives —
-// this also reports names bound above phase 0 — the expand phase and any higher
-// tower phase — so macro and special-form keywords appear. It is the set a REPL
+// this namespace holds anywhere: every phase, sealed and mutable alike. Unlike
+// BoundSymbolNames, which probes at phase 0 and returns a Scheme list for the
+// bound-names primitives, this also reports names bound ABOVE phase 0 (the expand
+// phase and any higher tower rung), so macro keywords appear. It is the set a REPL
 // wants for tab completion.
+//
+// The special-form keywords are not part of that difference: they sit at the
+// ambient coordinate, which the ranked probe reaches as T3 from phase 0 as
+// readily as from any other, so both listings carry them.
 // The output is sorted for determinism.
 func (p *Namespace) BoundNamesAcrossPhases() []string {
 	seen := values.StringSet{}
@@ -850,7 +854,7 @@ func WithChildAuthorizer(a security.Authorizer) NamespaceOption {
 //     the mutable user scope
 //   - GlobalEnvironmentFrame — its own store: isolated global bindings at every
 //     phase, sealed and mutable alike (define, set!, a profile's sealed apply)
-//   - PhaseRegistry — isolated phase hierarchy (expand and higher rungs
+//   - PhaseRegistry, an isolated phase hierarchy (expand and higher rungs
 //     created on demand)
 //
 // The child's runtime EnvironmentFrame.namespace points to the child (not the

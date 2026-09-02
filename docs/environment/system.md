@@ -447,7 +447,7 @@ These invariants must be maintained:
      |------|------------|------------------|
      | T1 | `(exact phase N, mutable)` | ordinary `define`s at phase N — user code, `define-for-syntax` bodies |
      | T2 | `(exact phase N, sealed)` | registry fixtures that must stay OFF the T1 tier for one phase only — the phase-1 sealed-write view (bootstrap macros, special-form expanders) |
-     | T3 | `(ANY, sealed)` | the ambient startup set — Go primitives, sealed stdlib procedures, optimizer `Stable` anchors, all written through the phase-0 sealed-write view |
+     | T3 | `(ANY, sealed)` | the ambient startup set: Go primitives, sealed stdlib procedures, optimizer `Stable` anchors, the syntax compilers (`RegisterSyntaxCompilers`), and the auxiliary keywords (`else`, `=>`) and special-form names (`registerCompileTimeBinding`), all written through the phase-0 sealed-write view |
 
      A slot at any OTHER exact phase is **not a candidate at all** — that is
      phase hermeticity, expressed as key disjointness rather than a missing

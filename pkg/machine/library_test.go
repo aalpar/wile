@@ -746,8 +746,8 @@ func TestLibraryRegistryRegisterAndLookupAdditional(t *testing.T) {
 
 // TestCopyLibraryBindingsToEnv_AmbientKeyword: an auxiliary keyword a library
 // exports (else, =>) lives at the library env's AMBIENT coordinate, which is
-// where registry apply installs it. findLibraryBinding finds it at phase 0 —
-// ambient is a candidate at every phase and the walk is ascending — so the import
+// where registry apply installs it. findLibraryBinding finds it at phase 0
+// (ambient is a candidate at every phase and the walk is ascending), so the import
 // installs it once, at the importer's phase 0, and propagates nothing: the
 // importer gains no phase 2. Before the relocation the source sat at phase 2 and
 // the import mirrored it there.

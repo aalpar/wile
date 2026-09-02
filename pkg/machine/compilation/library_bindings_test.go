@@ -190,7 +190,7 @@ func TestFindLibraryBindingPrefersRuntimeOverExpand(t *testing.T) {
 			wantPhase:     environment.PhaseExpand,
 		},
 		{
-			name:          "phase 2 wins over phase 3 and phase 4 — the old ceiling's top phase is no longer special",
+			name:          "phase 2 wins over phase 3 and phase 4: the old ceiling's top phase is no longer special",
 			definedPhases: []environment.Phase{environment.Phase(2), 3, 4},
 			wantPhase:     environment.Phase(2),
 		},

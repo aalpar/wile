@@ -265,7 +265,7 @@ func TestBindingModelMatrix(t *testing.T) {
 		// P7: namespace-undefine! over an IMPORT still deletes it. The import
 		// moved to the sealed tier, where the primitive's blanket refusal
 		// ("cannot undefine sealed binding … a primitive, bootstrap procedure,
-		// or keyword") would otherwise have caught it — a wrong message and a
+		// or keyword") would otherwise have caught it: a wrong message and a
 		// withdrawn capability, since building a restricted namespace by
 		// importing and then removing names is what the primitive is for.
 		// PrimNamespaceUndefine narrows the refusal with IsImported(); this row

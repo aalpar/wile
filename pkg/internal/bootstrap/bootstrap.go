@@ -355,7 +355,7 @@ func init() {
 //
 // The library gets its own:
 //   - GlobalEnvironmentFrame for bindings (isolates library definitions)
-//   - PhaseRegistry for expand/compile phases
+//   - PhaseRegistry for the expand phase and any rung above it
 //
 // But shares with caller:
 //   - Namespace (symbol and syntax interning)

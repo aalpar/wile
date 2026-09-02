@@ -27,7 +27,7 @@ import (
 // The definition-site literal pin ranks an ambient keyword BELOW an exact-phase
 // binding at a lower phase. Auxiliary syntax lives at the ambient coordinate,
 // which a probe at ANY phase reaches as T3, so a phase-1 probe for `else` would
-// otherwise answer the keyword before the descent has looked at phase 0 — and a
+// otherwise answer the keyword before the descent has looked at phase 0, and a
 // syntax-case macro's literal is written at phase 1 and used at phase 0. This is
 // the unit pin for the ordering TestPatternLiteralRespectsAUseSiteShadow
 // ("syntax-case, global shadow", pkg/wile) needs end-to-end.

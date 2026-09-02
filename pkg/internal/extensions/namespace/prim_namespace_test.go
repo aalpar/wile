@@ -446,10 +446,11 @@ func TestNamespaceUndefine_RemovesAmbientAndSparesMacroBinder(t *testing.T) {
 // Keywords are ambient, so the phase-0 reflection family sees them: listed by
 // namespace-bound-names, #t from namespace-bound?, and dereferenceable by
 // namespace-ref (to the valueless binding's value, not the default). This is the
-// behaviour the syntax compilers already had — (namespace-ref ns 'define-syntax)
-// answers the compiler object — and the relocation extends it to every AddBinding
-// name. Pinned as today's answer, not endorsed: filtering non-variable bindings
-// out of this family is a separate decision, and it would hide the compilers too.
+// behaviour the syntax compilers already had, since (namespace-ref ns
+// 'define-syntax) answers the compiler object; the relocation extends it to
+// every AddBinding name. Pinned as today's answer, not endorsed: filtering
+// non-variable bindings out of this family is a separate decision, and it
+// would hide the compilers too.
 func TestNamespaceReflection_SeesAmbientKeywords(t *testing.T) {
 	eng := newEngine(t)
 

@@ -214,8 +214,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `InstallForms` removals (e.g. `set!` in the no-mutation dialect) are now
   stripped from the top-level registry's keyword rows at engine init
   (`removedFormNames` + `PrimitiveRegistry.WithoutBindings` in
-  `pkg/wile/engine.go`), so the removed-form contract — an unbound reference,
-  `ErrNoSuchBinding`, at the top level — still holds. Library environments are
+  `pkg/wile/engine.go`), so the removed-form contract (an unbound reference,
+  `ErrNoSuchBinding`, at the top level) still holds. Library environments are
   applied from the full registry by design, so inside a `define-library` body a
   removed form now reports `syntactic keyword "set!" used as a variable` where
   it reported `no such binding` before.

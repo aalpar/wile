@@ -48,12 +48,12 @@ func TestStartupPresentPhasesAreZeroAndOne(t *testing.T) {
 
 // No keyword name holds a procedure. Every non-DocOnly BindingSpec becomes an
 // ambient BindingTypePrimitive binding, and refuseCompileTimeMeaning refuses
-// BindingTypePrimitive in value position — so a name that ALSO has to be a
+// BindingTypePrimitive in value position, so a name that ALSO has to be a
 // first-class value cannot be one of them. The two that must not regress are
 // apply (a runtime primitive) and dynamic-wind (a bootstrap Scheme define):
 // both are R7RS procedures the compiler recognizes in head position, both live
 // in procedureFormDocs as DocOnly rows, and both would break in value position
-// if an AddBinding put a keyword in the slot their value needs — the write
+// if an AddBinding put a keyword in the slot their value needs; the write
 // order is keyword-first, and DefineOwnGlobal cannot retype an existing slot.
 //
 // The gate is the VALUE, not the name: a keyword slot legitimately holds void

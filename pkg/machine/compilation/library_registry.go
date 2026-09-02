@@ -141,9 +141,9 @@ func (p *CompiledLibrary) GetInternalName(externalName string) string {
 }
 
 // ImportStage names which pipeline pass observed an import. A top-level
-// (import …) is seen twice — once by the expander, which resolves it so the
+// (import …) is seen twice: once by the expander, which resolves it so the
 // imported macros are available to expansion (expandImportForm), and once by the
-// compiler, which installs the bindings (CompileImport) — and the observer fires
+// compiler, which installs the bindings (CompileImport). The observer fires
 // on both. A library-body import is seen by the compiler only.
 //
 // This is not a Phase. The pass does not move along the macro tower: the

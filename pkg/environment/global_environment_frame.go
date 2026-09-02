@@ -767,15 +767,15 @@ func (p *GlobalEnvironmentFrame) SealedBindingAt(key *values.Symbol, q syntax.Sc
 	return p.bindings[ref.slot]
 }
 
-// AmbientBinding resolves key under q in the ambient tier ALONE — the (ANY,
-// sealed) coordinate every phase's ranked probe reaches as T3 — and nowhere
+// AmbientBinding resolves key under q in the ambient tier ALONE: the (ANY,
+// sealed) coordinate every phase's ranked probe reaches as T3, and nowhere
 // else. nil means the name is not part of the startup set; it says nothing about
 // exact-phase slots of the name, which GetBinding answers.
 //
 // It exists for one reader: the R7RS §4.3.2 definition-site literal pin
 // (compilation.lookupLiteralBinding) must rank the ambient answer BELOW an
-// exact-phase binding at a lower phase, and the ranked probe — highest tier at
-// the query phase wins — cannot say that. Every other read wants the probe.
+// exact-phase binding at a lower phase, and the ranked probe (highest tier at
+// the query phase wins) cannot say that. Every other read wants the probe.
 //
 // The tier floor does the whole job. With minTier at the ambient tier, an
 // exact-phase slot at the query phase ranks above the floor and is skipped, and

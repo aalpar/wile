@@ -67,8 +67,8 @@ the root are ownership-policy, not shape:
 
 ## Phase Environments
 
-Every phase VIEW — `runtime`, `expand`, a tower phase (phase ≥ 2), and each
-sealed-write view — shares the SAME `*GlobalEnvironmentFrame` (`global`); they
+Every phase VIEW, whether `runtime`, `expand`, a tower phase (phase ≥ 2), or a
+sealed-write view, shares the SAME `*GlobalEnvironmentFrame` (`global`); they
 differ only in which `(PhaseKey, sealed)` coordinates their reads probe and
 their writes stamp (`pkg/environment/global_environment_frame.go`,
 `environment_frame.go`). There is no parent chain to a "sealed base" any more.

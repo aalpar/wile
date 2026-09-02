@@ -35,8 +35,8 @@ type nilPin struct {
 	freeID string
 	// runtimeBound reports whether the name resolves in the RUNTIME phase once
 	// bootstrap has finished. This is the discriminator: a nil pin on a name that
-	// stays unbound is a special form (correctly nil); a nil pin on a name that a
-	// later bootstrap define DOES bind is a load-order accident.
+	// stays unbound is a name the template itself binds (correctly nil); a nil pin
+	// on a name that a later bootstrap define DOES bind is a load-order accident.
 	runtimeBound bool
 	expandBound  bool
 }
@@ -71,9 +71,10 @@ type nilPin struct {
 // discriminator lookups, or every lookup misses and the partition is vacuous), and FAILS on
 // any Global == nil && !HasLocalBinding whose bare name is bound in the runtime phase (a late
 // bootstrap procedure) OR in the expand phase (an unpinned sibling macro/expander or recursive
-// self-reference — a real capture exposure). A neither-bound nil-pin is genuinely inert (a
-// special form the expander handles, a template-introduced binder, or a syntax-rules literal
-// like else/=>).
+// self-reference, a real capture exposure). A neither-bound nil-pin is genuinely inert: a
+// template-introduced binder. Special-form names and auxiliary syntax (else, =>) are NOT in
+// that set any more, because both now hold an ambient keyword binding the phase-0 probe
+// reaches; a nil pin on one of those names is a defect like any other.
 //
 // Fixing a flagged entry: reorder the referent's definition above the referencing macro
 // (sibling macro/expander) or into an earlier bootstrap file (runtime procedure). A
@@ -109,9 +110,9 @@ func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 
 	// Partition. A nil pin on a name that a later bootstrap define binds in the
 	// runtime phase is the C6 signature. The remainder is NOT a clean bill of health:
-	// it mixes genuinely inert entries (special forms, template-introduced binders,
-	// syntax-rules literals) with expand-phase sibling references that this test
-	// cannot see and that ARE capturable — see the doc comment on guard-aux.
+	// it mixes genuinely inert entries (template-introduced binders) with
+	// expand-phase sibling references that this test cannot see and that ARE
+	// capturable; see the doc comment on guard-aux.
 	defects := make([]nilPin, 0, len(pins))
 	unchecked := make([]nilPin, 0, len(pins))
 	for _, p := range pins {
@@ -122,7 +123,7 @@ func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 		unchecked = append(unchecked, p)
 	}
 
-	t.Logf("nil-pin census: %d total, %d runtime/expand-bound (DEFECT), %d neither (inert: special form / binder / literal)",
+	t.Logf("nil-pin census: %d total, %d runtime/expand-bound (DEFECT), %d neither (inert: template-introduced binder)",
 		len(pins), len(defects), len(unchecked))
 
 	for _, p := range defects {
@@ -135,8 +136,8 @@ func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 			p.macro, p.freeID, p.freeID, p.runtimeBound, p.expandBound, p.freeID, p.freeID)
 	}
 
-	t.Logf("--- neither runtime- nor expand-bound: genuinely inert (special form handled by the " +
-		"expander, template-introduced binder, or syntax-rules literal like else/=>) ---")
+	t.Logf("--- neither runtime- nor expand-bound: genuinely inert (a binder the template " +
+		"itself introduces, which no outside definition can capture) ---")
 	byName := map[string][]string{}
 	for _, p := range unchecked {
 		byName[p.freeID] = append(byName[p.freeID], p.macro)
