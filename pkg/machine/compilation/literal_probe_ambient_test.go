@@ -146,3 +146,43 @@ func TestLookupLiteralBindingAmbientTieIsDeadUnderAnExactHit(t *testing.T) {
 		qt.Assert(t, got, qt.IsNil)
 	})
 }
+
+// The swallow in probeIgnoringAmbientTie is scoped by its ambientTie argument:
+// an exact-tier tie with NO ambient tie is a live ambiguity and must still be
+// refused. Without the `&& ambientTie` conjunct every ambiguity panic on the
+// literal-pin path would be swallowed, and this tie would answer "no binding"
+// (nil, true) instead of "ambiguous" (nil, false) — a refusal silently turned
+// into a resolution. This is the ratchet on that conjunct.
+func TestLookupLiteralBindingExactTieIsRefusedWithoutAnAmbientTie(t *testing.T) {
+	const sym = "else"
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	query := []*syntax.Scope{scopeA, scopeB}
+
+	// Two phase-0 mutable slots of one name under {A} and {B}, and no ambient
+	// slot at all.
+	newTiedRuntime := func(t *testing.T) *environment.Namespace {
+		ns := environment.NewNamespace()
+		for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
+			_, created := ns.Runtime().MaybeCreateOwnGlobalBinding(
+				values.NewSymbol(sym), environment.BindingTypeVariable, scopes)
+			qt.Assert(t, created, qt.IsTrue)
+		}
+		return ns
+	}
+
+	t.Run("own phase", func(t *testing.T) {
+		ns := newTiedRuntime(t)
+		got, ok := lookupLiteralBinding(ns.Runtime(), sym, query, nil)
+		qt.Assert(t, ok, qt.IsFalse)
+		qt.Assert(t, got, qt.IsNil)
+	})
+	t.Run("reached by the definition-site descent", func(t *testing.T) {
+		ns := newTiedRuntime(t)
+		env := ns.Runtime().AtPhase(environment.PhaseExpand)
+		got, ok := lookupLiteralBinding(env, sym, query, definitionFallbackPhases(env))
+		qt.Assert(t, ok, qt.IsFalse,
+			qt.Commentf("an exact-tier tie with no ambient tie must be refused, not swallowed"))
+		qt.Assert(t, got, qt.IsNil)
+	})
+}
