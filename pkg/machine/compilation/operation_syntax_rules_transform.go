@@ -151,8 +151,7 @@ func definitionFallbackPhases(env *environment.EnvironmentFrame) []environment.P
 // used at phase 0, and a user (define else 5) at phase 0 must win that pin
 // (TestPatternLiteralRespectsAUseSiteShadow, "syntax-case, global shadow"). An
 // ambient answer is therefore held back and returned only when no exact-phase
-// slot exists at env's own phase or any fallback phase. When the name is not
-// ambient, ambient is nil and the comparison is the plain "first hit" it was.
+// slot exists at env's own phase or any fallback phase.
 //
 // A tie refuses. ExactBinding and AmbientBinding report an incomparable
 // equal-cardinality tie as an answer, and the pin returns ok=false the moment

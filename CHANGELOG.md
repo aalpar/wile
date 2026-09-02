@@ -271,8 +271,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `EnvironmentFrame.Compile()`, `Namespace.Compile()`.** Nothing is bound at a
   fixed level above the owner's first rung, so there is nothing for the constant
   to name. `PhaseSetCompile` had no production registration; a compile-time-only
-  name is `AddBinding`. `LookupSyntaxCompiler` reads from the asking frame at its
-  own level.
+  name is `AddBinding`. `LookupPhaseBinding[*SyntaxCompiler]` reads from the
+  asking frame at its own level.
 
 - **`testhelpers.EvalScheme` and `testhelpers.SetupLibraryTest`** — zero
   references anywhere in the tree, including tests.

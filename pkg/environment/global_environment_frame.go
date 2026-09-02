@@ -570,6 +570,17 @@ const (
 // it for the R7RS §4.3.2 literal pin, which carries a tie across a multi-phase
 // descent as an answer.
 //
+// The tier answers "is this binding part of the startup set?" without a second
+// lookup (tierExactMutable is the mutable tier, everything above it is sealed),
+// which is what IsSealedBindingAt asks. minTier answers the other non-reference
+// question: tierExactSealed as the floor skips the mutable tier, asking what the
+// startup set bound a name to REGARDLESS of any user shadow
+// (setRecognizedPrimitive's fallback, which the pre-fold tree spelled as a
+// direct read of the sealed base frame). maxTier is that same question's
+// ceiling: tierExactSealed as the ceiling excludes the ambient tier, which is
+// what ExactBindingAt asks, and tierAmbientSealed as BOTH floor and ceiling
+// excludes every exact-phase tier, which is what AmbientBinding asks.
+//
 // The ranking is one lexicographic argmax over (tier, scope cardinality) rather
 // than a per-tier accumulator array: three scopedBestOf values are ~190 bytes to
 // zero on every global resolution, and this is THE global resolution. The two are
@@ -583,6 +594,9 @@ const (
 // CreateGlobalBindingAt's reuse rule refuses to create.
 //
 // Caller MUST hold at least a read lock on p.mu. This function does not panic.
+// It returns the winning slotRef, not a bare slot: a pin records the
+// coordinates it resolved at (GlobalIndex.phase/sealed), and recovering them
+// from the slot afterwards would mean a second scan of the name's slot list.
 func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier, maxTier int) (ref slotRef, tier int, ambiguous bool, ok bool) {
 	slots := p.keys[key]
 	if len(slots) == 0 {
@@ -782,6 +796,7 @@ func (p *GlobalEnvironmentFrame) SealedBindingAt(key *values.Symbol, q syntax.Sc
 // The tier floor and ceiling do the whole job: with both at the ambient tier an
 // exact-phase slot at any phase is outside the range, so the phase argument is
 // irrelevant and PhaseRuntime is passed for definiteness.
+// Thread-safe: uses RLock for read-only access (taken in bindingWithinTiers).
 func (p *GlobalEnvironmentFrame) AmbientBinding(key *values.Symbol, q syntax.ScopeSet) (bnd *Binding, ambiguous bool) {
 	return p.bindingWithinTiers(key, q, PhaseRuntime, tierAmbientSealed, tierAmbientSealed)
 }
@@ -814,6 +829,7 @@ func (p *GlobalEnvironmentFrame) bindingWithinTiers(key *values.Symbol, q syntax
 // which ranks exact-phase slots at several phases above the ambient keyword and
 // carries a tie forward as an answer rather than unwinding through the descent.
 // Every other reader wants GetBinding, which raises.
+// Thread-safe: uses RLock for read-only access (taken in bindingWithinTiers).
 func (p *GlobalEnvironmentFrame) ExactBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) (bnd *Binding, ambiguous bool) {
 	return p.bindingWithinTiers(key, q, phase, tierExactMutable, tierExactSealed)
 }

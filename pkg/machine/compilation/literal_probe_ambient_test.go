@@ -93,11 +93,12 @@ func TestLookupLiteralBindingAmbientLast(t *testing.T) {
 // must not panic") applied to the re-ranking lookupLiteralBinding performs: the
 // ambient tier loses to EVERY exact phase here, not merely to the query phase.
 //
-// The tier's argmax is computed in isolation and before any exact-phase probe,
-// so the tie is known before it is known to be dead. Answering it immediately
-// would flip a resolution that has an exact-phase answer into "ambiguous": an
-// unmodelled polarity change on a three-answer lookup. The tie must therefore
-// be held, and surface only where nothing exact was found.
+// The ambient tier is now probed dead last: store.AmbientBinding runs only
+// after env.ExactBinding at env's own phase and ExactBindingAt at every
+// fallback phase have all come back with neither a binding nor a tie. An
+// exact-phase hit returns before the ambient probe is ever reached, so this
+// test's ambient tie is never even computed when an exact phase wins; it
+// surfaces only in the "nothing exact anywhere" case below.
 //
 // Latent as production stands: every ambient registration passes nil scopes, so
 // a name has at most one ambient slot and the tier cannot tie. The scoped
@@ -147,12 +148,13 @@ func TestLookupLiteralBindingAmbientTieIsDeadUnderAnExactHit(t *testing.T) {
 	})
 }
 
-// The swallow in probeIgnoringAmbientTie is scoped by its ambientTie argument:
-// an exact-tier tie with NO ambient tie is a live ambiguity and must still be
-// refused. Without the `&& ambientTie` conjunct every ambiguity panic on the
-// literal-pin path would be swallowed, and this tie would answer "no binding"
-// (nil, true) instead of "ambiguous" (nil, false) — a refusal silently turned
-// into a resolution. This is the ratchet on that conjunct.
+// An exact-tier tie refuses at the phase it is met, whatever the ambient tier
+// holds: ExactBinding and ExactBindingAt report the tie directly, before the
+// ambient tier is ever consulted, and the ambient tier answers only after
+// every exact tier (env's own phase, then each fallback) has missed. This was
+// originally the ratchet on probeIgnoringAmbientTie's `&& ambientTie`
+// conjunct (deleted with that helper); it stays as the pin of the property
+// the conjunct existed to protect.
 func TestLookupLiteralBindingExactTieIsRefusedWithoutAnAmbientTie(t *testing.T) {
 	const sym = "else"
 	scopeA := syntax.NewScope()

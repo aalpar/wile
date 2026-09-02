@@ -80,8 +80,7 @@ func TestLookupSyntaxCompiler(t *testing.T) {
 }
 
 // The compilers live in the ambient tier, which every frame's ranked probe
-// reaches as T3. That is what the hygiene-aware read
-// LookupPhaseBinding[*SyntaxCompiler]'s doc claims, and it has two
+// reaches as T3 (RegisterSyntaxCompilers' doc, bullet 2). The property has two
 // halves: a same-phase user binding at T1 outranks the compiler FROM THAT FRAME,
 // and the shadow reaches no further, because an exact-phase slot is not a
 // candidate at any other phase at all.

@@ -73,7 +73,10 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 //     own store, so the engine root's ambient tier is not reachable from it at any
 //     level — and special forms stay ambient-only, unchanged by this relocation.
 //  2. Scope-aware lookup via LookupPhaseBinding[*SyntaxCompiler] for hygiene
-//     resolution.
+//     resolution: these bindings live in the ambient tier, which every frame's
+//     ranked probe reaches as T3, so a same-phase user binding of the name at
+//     T1 (mutable) or T2 (sealed) takes precedence. This is the order that
+//     lets user code shadow `car`.
 //
 // Compilation dispatch itself goes through the forms registry (register.go),
 // not through these bindings. Both paths are populated from
