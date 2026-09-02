@@ -601,6 +601,48 @@ func (p *EnvironmentFrame) resolveGlobal(
 	return visitor(p.global, ref)
 }
 
+// localBinding is GetBinding's lexical-chain phase with the tie REPORTED rather
+// than raised: the maximal match among the local frames (the first match under a
+// wildcard query), or nil, and whether two incomparable equal-cardinality scope
+// sets tied for it. GetBinding raises on ambiguous; ExactBinding returns it.
+func (p *EnvironmentFrame) localBinding(key *values.Symbol, q syntax.ScopeSet) (bnd *Binding, ambiguous bool) {
+	if q.IsAll() {
+		// Fast path: wildcard query — return first match
+		result := p.resolveLocal(key, q, func(binding *Binding, _ int, _ int) any {
+			return binding
+		})
+		if result == nil {
+			return nil, false
+		}
+		return result.(*Binding), false
+	}
+	// Scoped path: maximal binding resolution (Flatt model).
+	// See bestOf in best_of.go. Allocation here is trivial — the
+	// candidate is just the existing *Binding pointer — so we record
+	// unconditionally on shouldRecord = true.
+	var best scopedBestOf[*Binding]
+	target := len(q.Scopes())
+	p.resolveLocal(key, q, func(binding *Binding, _ int, _ int) any {
+		sc := binding.Scopes()
+		rec, done := best.shouldRecord(sc, target)
+		if rec {
+			best.record(binding, sc)
+		}
+		if done {
+			return true
+		}
+		return nil
+	})
+	if best.Ambiguous() {
+		return nil, true
+	}
+	item, ok := best.Result()
+	if !ok {
+		return nil, false
+	}
+	return item, false
+}
+
 // GetBinding returns the binding for the given symbol that matches the
 // provided query. It searches local bindings first (walking up the parent
 // chain), then globals.
@@ -613,42 +655,14 @@ func (p *EnvironmentFrame) resolveGlobal(
 // sets tie for the maximal match (Racket's "ambiguous binding"); the tie is
 // refused, never broken by order.
 func (p *EnvironmentFrame) GetBinding(key *values.Symbol, q syntax.ScopeSet) *Binding {
-	if q.IsAll() {
-		// Fast path: wildcard query — return first match
-		result := p.resolveLocal(key, q, func(binding *Binding, _ int, _ int) any {
-			return binding
-		})
-		if result != nil {
-			return result.(*Binding)
-		}
-	} else {
-		// Scoped path: maximal binding resolution (Flatt model).
-		// See bestOf in best_of.go. Allocation here is trivial — the
-		// candidate is just the existing *Binding pointer — so we record
-		// unconditionally on shouldRecord = true.
-		var best scopedBestOf[*Binding]
-		target := len(q.Scopes())
-		p.resolveLocal(key, q, func(binding *Binding, _ int, _ int) any {
-			sc := binding.Scopes()
-			rec, done := best.shouldRecord(sc, target)
-			if rec {
-				best.record(binding, sc)
-			}
-			if done {
-				return true
-			}
-			return nil
-		})
-
-		if best.Ambiguous() {
-			panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
-				"GetBinding: identifier %q resolves ambiguously among incomparable hygienic scope sets",
-				key.Key))
-		}
-		item, ok := best.Result()
-		if ok {
-			return item
-		}
+	bnd, ambiguous := p.localBinding(key, q)
+	if ambiguous {
+		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
+			"GetBinding: identifier %q resolves ambiguously among incomparable hygienic scope sets",
+			key.Key))
+	}
+	if bnd != nil {
+		return bnd
 	}
 
 	// The scope filter lives in the ranked probe, which both selects the maximal
@@ -664,6 +678,24 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, q syntax.ScopeSet) *Bi
 		return gResult.(*Binding)
 	}
 	return nil
+}
+
+// ExactBinding resolves key under q in this frame's lexical chain, then among the
+// EXACT-phase tiers of the store at this frame's own phase, reporting an
+// incomparable tie as an answer rather than raising it. The ambient tier is not
+// a candidate (GlobalEnvironmentFrame.ExactBindingAt). (nil, false) is "nothing
+// exact here"; (nil, true) is "ambiguous". GetBinding is the raising, all-tier
+// form every other reader wants; this one exists for the R7RS §4.3.2 literal
+// pin's multi-phase descent.
+func (p *EnvironmentFrame) ExactBinding(key *values.Symbol, q syntax.ScopeSet) (bnd *Binding, ambiguous bool) {
+	bnd, ambiguous = p.localBinding(key, q)
+	if ambiguous || bnd != nil {
+		return bnd, ambiguous
+	}
+	if p.global == nil {
+		return nil, false
+	}
+	return p.global.ExactBindingAt(key, q, p.phaseLevel)
 }
 
 // EnsureLocalBinding returns the local binding for the given key, creating it if

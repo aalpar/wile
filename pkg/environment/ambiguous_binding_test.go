@@ -146,3 +146,66 @@ func TestGetLocalIndex_PerfectMatchNotAmbiguous(t *testing.T) {
 	qt.Assert(t, idx, qt.IsNotNil)
 	qt.Assert(t, idx[0], qt.Equals, 1, qt.Commentf("the exact-match binding {A,B,C} (slot 1) wins"))
 }
+
+// ExactBinding is GetBinding's lexical phase with the tie returned instead of
+// raised, followed by the store's exact-phase tiers at the frame's own phase. The
+// three tests below are its three answers.
+func TestExactBinding_LocalTieIsReportedNotRaised(t *testing.T) {
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	scopeC := syntax.NewScope()
+
+	topEnv := NewNamespaceFrame()
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
+	sym := values.NewSymbol("x")
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeB}, nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeC}, nil)
+
+	ref := syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB, scopeC})
+	var bnd *Binding
+	var ambiguous bool
+	r := capturePanic(func() {
+		bnd, ambiguous = env.ExactBinding(sym, ref)
+	})
+	qt.Assert(t, r, qt.IsNil, qt.Commentf("ExactBinding must not raise: %v", r))
+	qt.Assert(t, ambiguous, qt.IsTrue)
+	qt.Assert(t, bnd, qt.IsNil)
+}
+
+func TestExactBinding_LocalWinsOverTheStore(t *testing.T) {
+	ns := NewNamespace()
+	sym := values.NewSymbol("x")
+	_, err := ns.Runtime().DefineOwnGlobal(sym, BindingTypeVariable, nil, values.NewInteger(1))
+	qt.Assert(t, err, qt.IsNil)
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), ns.Runtime())
+	_, ok := env.EnsureLocalBinding(sym, BindingTypeVariable)
+	qt.Assert(t, ok, qt.IsTrue)
+
+	bnd, ambiguous := env.ExactBinding(sym, values.EmptyScopes())
+	qt.Assert(t, ambiguous, qt.IsFalse)
+	qt.Assert(t, bnd, qt.IsNotNil)
+	// The same answer the raising form gives: the local, not the global.
+	qt.Assert(t, bnd, qt.Equals, env.GetBinding(sym, values.EmptyScopes()))
+	qt.Assert(t, bnd, qt.Not(qt.Equals), ns.Runtime().GetBinding(sym, values.EmptyScopes()))
+}
+
+func TestExactBinding_ReachesTheStoreButNotTheAmbientTier(t *testing.T) {
+	ns := NewNamespace()
+	sym := values.NewSymbol("else")
+	ambientIdx, created := ns.Runtime().SealedWriteViewAt(PhaseRuntime).
+		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
+	qt.Assert(t, created, qt.IsTrue)
+	ambient := ns.Store().GetOwnGlobalBinding(ambientIdx)
+
+	// GetBinding reaches the ambient keyword at T3; ExactBinding does not.
+	qt.Assert(t, ns.Runtime().GetBinding(sym, values.EmptyScopes()), qt.Equals, ambient)
+	bnd, ambiguous := ns.Runtime().ExactBinding(sym, values.EmptyScopes())
+	qt.Assert(t, ambiguous, qt.IsFalse)
+	qt.Assert(t, bnd, qt.IsNil)
+
+	// A phase-0 mutable slot is exact, and wins.
+	idx, err := ns.Runtime().DefineOwnGlobal(sym, BindingTypeVariable, nil, values.NewInteger(5))
+	qt.Assert(t, err, qt.IsNil)
+	bnd, _ = ns.Runtime().ExactBinding(sym, values.EmptyScopes())
+	qt.Assert(t, bnd, qt.Equals, ns.Store().GetOwnGlobalBinding(idx))
+}
