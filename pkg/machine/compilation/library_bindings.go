@@ -403,16 +403,16 @@ func resolveImportSet(ctx context.Context, datum values.Value, env *environment.
 // imports share the resolution step (resolveImportSet) but use
 // copyLibraryBindingsDirect for installation.
 //
-// The phase argument is import-observer metadata only; it does NOT select the
+// The stage argument is import-observer metadata only; it does NOT select the
 // install phase. That comes from composePhaseShift below, which combines the
 // environment's own phase level with the import set's for-syntax/for-meta shift.
-func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, phase environment.Phase, evaluator machine.MacroEvaluator) error {
+func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, stage ImportStage, evaluator machine.MacroEvaluator) error {
 	res, err := resolveImportSet(ctx, datum, env, evaluator)
 	if err != nil {
 		return err
 	}
 
-	fireImportObserver(env, res.Library, res.Bindings, LibraryName{}, phase)
+	fireImportObserver(env, res.Library, res.Bindings, LibraryName{}, stage)
 
 	// Compose the parsed for-syntax/for-meta shift with the current expansion
 	// phase, not a hardcoded 0: an (import (for-syntax M)) written inside a
@@ -753,8 +753,9 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 
 		// Propagate to the source phase in the target so the binding is available
 		// in the same phase it originated from. Syntax bindings (phase 1) need to
-		// be in the expand phase for macro expansion; compile-phase bindings
-		// (auxiliary syntax, phase 2) need to be in the compile phase.
+		// be in the expand phase for macro expansion; an auxiliary keyword is
+		// ambient in its library env and is found at phase 0, so it never takes
+		// this branch.
 		if sourcePhase > 0 {
 			// Phase is int8; a high for-meta target phase plus the source-phase
 			// shift can overflow (e.g. 127+1 wraps to -128) and silently route the

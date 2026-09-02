@@ -86,14 +86,17 @@ import (
 //	└── PhaseRegistry
 //	    ├── [0] Runtime EnvironmentFrame (normal execution)
 //	    ├── [1] Expand EnvironmentFrame (macro expansion, for-syntax)
-//	    ├── [2] Compile EnvironmentFrame (syntax compilers, for-meta 2)
-//	    ├── [3…] minted on demand as the macro tower climbs
+//	    ├── [2…] tower rungs, minted on demand (transformer bodies, for-meta N)
 //	    └── [-1] Template EnvironmentFrame (for-template, future)
 //
 // The indices are RELATIVE levels, counted from THIS owner's runtime — see the
 // Phase type. The registry is per-owner, so a library env's [1] and the
-// namespace's [1] are different frames, and the named levels are the ones the
-// top level uses rather than the ones that exist.
+// namespace's [1] are different frames. Only 0 and 1 are named levels the top
+// level uses; nothing above phase 1 is a fixed, registry-owned coordinate.
+//
+// The syntax compilers, the auxiliary keywords (else, =>) and the special-form
+// names sit at NO index above: they are ambient, (ANY, sealed), which every row
+// reaches as the ranked probe's T3.
 //
 // These are VIEWS, not owners: every entry shares the one GlobalEnvironmentFrame
 // and the one Namespace. Phase separation is key disjointness in that store — a
@@ -119,7 +122,7 @@ type EnvironmentFrame struct {
 	// phaseLevel is this frame's level on the macro tower, RELATIVE to the
 	// owner's own runtime (level 0). It is not an absolute compilation stage:
 	// the same number denotes different frames under different owners, and the
-	// named constants (PhaseTemplate=-1 … PhaseCompile=2) are the levels the top
+	// named constants (PhaseTemplate=-1 … PhaseExpand=1) are the levels the top
 	// level occupies, not the range. See the Phase type.
 	phaseLevel Phase
 	// sealed says which tier a write through this frame lands in. It is the same
@@ -306,9 +309,7 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 // A caller moving ALONG the tower must derive the argument from the receiver —
 // p.PhaseLevel()+1, or NextPhase(), which is that expression named. Passing a
 // constant pins the target to one level and silently collapses the tower for
-// every frame that is not already at level 0. The exception is PhaseCompile,
-// which is a fixed registry coordinate rather than a rung (see the Phase type),
-// and is correctly reached by constant.
+// every frame that is not already at level 0.
 //
 // A climb rooted at a SEALED-WRITE view stays sealed wherever the target phase has
 // a sealed-write view of its own; every other receiver, and every phase without
@@ -405,18 +406,6 @@ func (p *EnvironmentFrame) MutableRuntimeOrNil() *EnvironmentFrame {
 // established it is talking about the owner's first rung.
 func (p *EnvironmentFrame) Expand() *EnvironmentFrame {
 	return p.AtPhase(PhaseExpand)
-}
-
-// Compile returns the owner's PhaseCompile view, creating it if needed. This is
-// where registry apply installs syntax compilers and auxiliary keywords, and
-// where LookupSyntaxCompiler reads them back.
-//
-// Unlike Expand, reaching this one by constant is correct: PhaseCompile is a
-// fixed registry coordinate, not a rung of the tower a frame climbs (see the
-// Phase type). That a transformer body at level 1 also climbs to level 2 is a
-// shared number, not a shared meaning.
-func (p *EnvironmentFrame) Compile() *EnvironmentFrame {
-	return p.AtPhase(PhaseCompile)
 }
 
 // NextPhaseChecked returns the sibling frame one phase up from base. The climb

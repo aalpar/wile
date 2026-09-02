@@ -16,7 +16,7 @@
 //
 // The environment system manages the relationship between variables and values across:
 //   - Lexical scoping via parent chain traversal
-//   - Phase separation (Runtime, Expand, Compile)
+//   - Phase separation (Runtime, Expand; higher rungs are unnamed, minted on demand)
 //   - Hygienic macros via Flatt's "sets of scopes" model
 //   - Per-instance syntax interning for consistent syntax identity
 //   - R7RS library import/export mappings

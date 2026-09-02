@@ -141,6 +141,10 @@ func TestApply_ExpandTimePrimitive(t *testing.T) {
 
 // Apply with compile-time bindings
 
+// A compile-time binding lands at the owner's AMBIENT coordinate: at the phase-0
+// sealed-write view's own coordinates, reachable by a ranked read from every
+// phase, and at no exact-phase coordinate, phase 2 included, which held these
+// names before the relocation.
 func TestApply_CompileTimeBinding(t *testing.T) {
 	c := qt.New(t)
 	reg := NewRegistry()
@@ -151,34 +155,17 @@ func TestApply_CompileTimeBinding(t *testing.T) {
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
 
-	// Verify the binding exists in the compile environment
-	compileEnv := env.Compile()
 	sym := values.NewSymbol("special-form")
-	binding := compileEnv.GetBinding(sym, values.AllScopes())
-	c.Assert(binding, qt.IsNotNil)
-}
+	sealedRoot := env.SealedWriteViewAt(environment.PhaseRuntime)
+	c.Assert(sealedRoot.OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNotNil)
+	c.Assert(env.OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNil)
+	c.Assert(env.AtPhase(environment.Phase(2)).OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNil)
 
-// Apply with compile-only primitives (PhaseSetCompile without PhaseSetRuntime)
-
-func TestApply_CompileOnlyPrimitive(t *testing.T) {
-	c := qt.New(t)
-	reg := NewRegistry()
-	reg.AddPrimitive(PrimitiveSpec{
-		Name:       "compile-only",
-		ParamCount: 0,
-		Impl:       noopImpl,
-	}, PhaseSetCompile)
-
-	topLevel := environment.NewNamespace()
-	env := topLevel.Runtime()
-	err := reg.Apply(context.Background(), env)
-	c.Assert(err, qt.IsNil)
-
-	// Should have a compile-time binding
-	compileEnv := env.Compile()
-	sym := values.NewSymbol("compile-only")
-	binding := compileEnv.GetBinding(sym, values.AllScopes())
-	c.Assert(binding, qt.IsNotNil)
+	for _, phase := range []environment.Phase{environment.PhaseRuntime, environment.PhaseExpand, environment.Phase(3)} {
+		bnd := env.AtPhase(phase).GetBinding(sym, values.AllScopes())
+		c.Assert(bnd, qt.IsNotNil, qt.Commentf("phase %s", phase))
+		c.Assert(bnd.BindingType(), qt.Equals, environment.BindingTypePrimitive)
+	}
 }
 
 // Apply with init functions
@@ -262,9 +249,9 @@ func TestApplyDocs(t *testing.T) {
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
 
-	// Simulate bootstrap macro: create a binding for "and" in compile phase
-	compileEnv := env.Compile()
-	compileEnv.MaybeCreateOwnGlobalBinding(
+	// Simulate a user macro: a binding for "and" in the expand phase.
+	macroEnv := env.Expand()
+	macroEnv.MaybeCreateOwnGlobalBinding(
 		values.NewSymbol("and"), environment.BindingTypeSyntax,
 		nil,
 	)
@@ -282,7 +269,7 @@ func TestApplyDocs(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			bnd := compileEnv.GetBinding(values.NewSymbol(tc.sym), values.AllScopes())
+			bnd := macroEnv.GetBinding(values.NewSymbol(tc.sym), values.AllScopes())
 			c.Assert(bnd, qt.IsNotNil)
 			c.Assert(bnd.Doc(), qt.Equals, tc.wantDoc)
 		})

@@ -95,13 +95,11 @@ type BindingChecker interface {
 	GetBinding(sym string, scopes []*syntax.Scope) *environment.Binding
 
 	// GetLiteralBinding resolves the USE-SITE side of the R7RS §4.3.2 comparison:
-	// the frame's own lexical chain at its own phase, then the special-form
-	// registry phase, and no other phase. That second probe is what makes
-	// auxiliary syntax visible — else and => are registered at PhaseCompile,
-	// ambient to every phase, where GetBinding above (the frame's own phase only)
-	// reports them unbound. Searching further would let one phase's binding of the
-	// name decide another phase's literal. ok is false when resolution was
-	// ambiguous.
+	// the frame's own lexical chain at its own phase, then the ambient keyword of
+	// the name (else, =>, and every special-form name live at the ambient
+	// coordinate, reachable from every phase), and no other phase. Searching
+	// further would let one phase's binding of the name decide another phase's
+	// literal. ok is false when resolution was ambiguous.
 	GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool)
 }
 
@@ -421,9 +419,10 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 			return false
 		}
 	} else if checker != nil {
-		// Unpinned: both sides through the use-site environment. After library
-		// import, auxiliary syntax like => gets exported to phase 0, so both input
-		// and pattern may have bindings — compare the bindings, not their existence.
+		// Unpinned: both sides through the use-site environment. Auxiliary syntax
+		// like => is ambient in every owner and arrives at a use site imported from
+		// (scheme base), so both input and pattern may have bindings: compare the
+		// bindings, not their existence.
 		inputBinding := checker.GetBinding(input.Key(), input.Scopes())
 		patternBinding := checker.GetBinding(pattern.Key(), pattern.Scopes())
 		if inputBinding != patternBinding {
@@ -449,7 +448,7 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 // Pointer identity is the primary test, and it covers both-nil. Kind equivalence
 // on BindingTypePrimitive is a deliberate widening: each library environment mints
 // its OWN *Binding for every special form and auxiliary-syntax name (memory
-// "library envs are primitive islands"), so a bootstrap macro's pinned phase-2
+// "library envs are primitive islands"), so a bootstrap macro's pinned ambient
 // `else` and the one a library-loaded use site resolves can be different objects
 // for one ambient name.
 //

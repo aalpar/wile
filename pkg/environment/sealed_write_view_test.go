@@ -246,7 +246,7 @@ func TestSealedClimbStopsAboveExpand(t *testing.T) {
 	qt.Assert(t, sealedRoot.AtPhase(environment.PhaseExpand), qt.Equals, sealedExpand)
 
 	// Phase 1 sealed-write view climbing to phase 2: leaves the sealed axis.
-	qt.Assert(t, sealedExpand.AtPhase(environment.PhaseCompile), qt.Equals, ns.Compile())
+	qt.Assert(t, sealedExpand.AtPhase(environment.Phase(2)), qt.Equals, ns.AtPhase(environment.Phase(2)))
 
 	// The redirect is a CLIMB: it never rewrites a lookup at or below the receiver's
 	// own level, so the sealed-write root still reaches the ordinary view at phase 0.
@@ -275,8 +275,8 @@ func TestSealedWriteViewAtFallbacks(t *testing.T) {
 	qt.Assert(t, libSealedExpand, qt.Not(qt.Equals), nsSealedExpand)
 	qt.Assert(t, libSealedRoot.GlobalEnvironment(), qt.Equals, lib.GlobalEnvironment())
 	qt.Assert(t, libSealedExpand.GlobalEnvironment(), qt.Equals, lib.GlobalEnvironment())
-	qt.Assert(t, lib.SealedWriteViewAt(environment.PhaseCompile), qt.Equals, lib.Compile())
+	qt.Assert(t, lib.SealedWriteViewAt(environment.Phase(2)), qt.Equals, lib.AtPhase(environment.Phase(2)))
 
 	qt.Assert(t, nsSealedRoot.GlobalEnvironment(), qt.Equals, ns.Store())
-	qt.Assert(t, ns.Runtime().SealedWriteViewAt(environment.PhaseCompile), qt.Equals, ns.Compile())
+	qt.Assert(t, ns.Runtime().SealedWriteViewAt(environment.Phase(2)), qt.Equals, ns.AtPhase(environment.Phase(2)))
 }

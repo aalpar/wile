@@ -30,6 +30,15 @@ import (
 // See compilation.LibraryImportEvent for field documentation.
 type LibraryImportEvent = compilation.LibraryImportEvent
 
+// ImportStage names the pipeline pass an import observer event came from.
+// Re-exported from compilation; see compilation.ImportStage.
+type ImportStage = compilation.ImportStage
+
+const (
+	ImportStageExpand  = compilation.ImportStageExpand
+	ImportStageCompile = compilation.ImportStageCompile
+)
+
 // strictLevel is the monotone narrowing ladder for the engine's VISIBLE
 // top-level surface. Higher means narrower, and every option in the family
 // combines by max, so ordering options can never un-narrow a surface.
@@ -56,13 +65,12 @@ const (
 // for the full model.
 type Phase = environment.Phase
 
-// Phase constants for LibraryImportEvent.Phase and other phase-keyed APIs.
+// Phase constants for phase-keyed APIs such as (for-meta N …) placement.
 // Re-exported from environment for embedder convenience.
 const (
 	PhaseTemplate = environment.PhaseTemplate
 	PhaseRuntime  = environment.PhaseRuntime
 	PhaseExpand   = environment.PhaseExpand
-	PhaseCompile  = environment.PhaseCompile
 )
 
 // newEngineConfig returns an engineConfig with the option-independent defaults that

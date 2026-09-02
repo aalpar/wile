@@ -331,10 +331,11 @@ frame's own `phaseLevel` via `EnvironmentFrame.NextPhase()`
   composes the importing frame's `env.PhaseLevel()` with the import set's shift
   via `composePhaseShift` (`library_bindings.go`).
 
-Two compile-time readers deliberately stay absolute — `LookupSyntaxCompiler`
-(`env.Compile()`) and `LookupPrimitiveExpander` (`env.Expand()`) — because syntax
-compilers and primitive expanders are registry fixtures on the sealed axis, not
-user macros. Two more are absolute without being fixtures: `CompileMeta` and the
+One compile-time reader deliberately stays absolute: `LookupPrimitiveExpander`
+(`env.Expand()`), because primitive expanders are registry fixtures at
+`(1, sealed)`. Syntax compilers and auxiliary keywords are ambient, reachable
+from any frame at its own level, and read no landmark. Two more readers are
+absolute without being fixtures: `CompileMeta` and the
 definition-site env `er-macro-transformer` stores (`compile_er_macro.go`) both
 read `env.Expand()`, so they pin phase 1 even when the defining frame is higher.
 

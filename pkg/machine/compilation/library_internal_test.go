@@ -369,11 +369,11 @@ func TestCompiledLibrary_Methods(t *testing.T) {
 		bindings := map[string]string{"x": "x"}
 		importer := NewLibraryName("my", "app")
 
-		fireImportObserver(env, lib, bindings, importer, environment.PhaseRuntime)
+		fireImportObserver(env, lib, bindings, importer, ImportStageExpand)
 
 		qt.Assert(t, received.Library.Key(), qt.Equals, "test/fire")
 		qt.Assert(t, received.Importer.Key(), qt.Equals, "my/app")
-		qt.Assert(t, received.Phase, qt.Equals, environment.PhaseRuntime)
+		qt.Assert(t, received.Stage, qt.Equals, ImportStageExpand)
 		qt.Assert(t, received.Exports, qt.HasLen, 2)
 		qt.Assert(t, received.Imported, qt.HasLen, 1)
 		qt.Assert(t, received.Imported[0], qt.Equals, "x")
@@ -388,7 +388,7 @@ func TestCompiledLibrary_Methods(t *testing.T) {
 			NewLibraryName("test", "noop"),
 			environment.NewNamespace().Runtime(),
 		)
-		fireImportObserver(env, lib, map[string]string{}, LibraryName{}, 0)
+		fireImportObserver(env, lib, map[string]string{}, LibraryName{}, ImportStageExpand)
 	})
 
 	t.Run("fireImportObserver without registry", func(t *testing.T) {
@@ -398,6 +398,27 @@ func TestCompiledLibrary_Methods(t *testing.T) {
 			NewLibraryName("test", "noop"),
 			environment.NewNamespace().Runtime(),
 		)
-		fireImportObserver(env, lib, map[string]string{}, LibraryName{}, 0)
+		fireImportObserver(env, lib, map[string]string{}, LibraryName{}, ImportStageExpand)
 	})
+}
+
+// The zero value is NO stage, not the expander's. An event a caller built
+// without setting Stage must say so rather than read as a real pass, which is
+// why the constants are 1-based and why String has a default arm at all.
+func TestImportStageString(t *testing.T) {
+	tests := []struct {
+		name  string
+		stage ImportStage
+		want  string
+	}{
+		{name: "zero value is no stage", stage: ImportStage(0), want: "import-stage(0)"},
+		{name: "expand", stage: ImportStageExpand, want: "expand"},
+		{name: "compile", stage: ImportStageCompile, want: "compile"},
+		{name: "unnamed value", stage: ImportStage(9), want: "import-stage(9)"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, tc.stage.String(), qt.Equals, tc.want)
+		})
+	}
 }

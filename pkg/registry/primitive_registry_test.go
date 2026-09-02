@@ -203,9 +203,7 @@ func TestPhaseSet_String(t *testing.T) {
 	}{
 		{PhaseSetRuntime, "runtime"},
 		{PhaseSetExpand, "expand"},
-		{PhaseSetCompile, "compile"},
 		{PhaseSetRuntime | PhaseSetExpand, "runtime|expand"},
-		{PhaseSetRuntime | PhaseSetExpand | PhaseSetCompile, "runtime|expand|compile"},
 		{0, "none"},
 	}
 
@@ -223,7 +221,7 @@ func TestPhaseSet_Has(t *testing.T) {
 	phase := PhaseSetRuntime | PhaseSetExpand
 	c.Assert(phase.Has(environment.PhaseRuntime), qt.IsTrue)
 	c.Assert(phase.Has(environment.PhaseExpand), qt.IsTrue)
-	c.Assert(phase.Has(environment.PhaseCompile), qt.IsFalse)
+	c.Assert(phase.Has(environment.Phase(2)), qt.IsFalse)
 	c.Assert(phase.Has(environment.PhaseTemplate), qt.IsFalse)
 }
 

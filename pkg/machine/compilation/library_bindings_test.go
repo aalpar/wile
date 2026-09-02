@@ -180,19 +180,19 @@ func TestFindLibraryBindingPrefersRuntimeOverExpand(t *testing.T) {
 		wantPhase     environment.Phase   // the phase findLibraryBinding must report
 	}{
 		{
-			name:          "runtime wins over expand and compile",
-			definedPhases: []environment.Phase{environment.PhaseRuntime, environment.PhaseExpand, environment.PhaseCompile},
+			name:          "runtime wins over expand and phase 2",
+			definedPhases: []environment.Phase{environment.PhaseRuntime, environment.PhaseExpand, environment.Phase(2)},
 			wantPhase:     environment.PhaseRuntime,
 		},
 		{
-			name:          "expand wins over compile and phase 3",
-			definedPhases: []environment.Phase{environment.PhaseExpand, environment.PhaseCompile, 3},
+			name:          "expand wins over phase 2 and phase 3",
+			definedPhases: []environment.Phase{environment.PhaseExpand, environment.Phase(2), 3},
 			wantPhase:     environment.PhaseExpand,
 		},
 		{
-			name:          "compile wins over phase 3 and phase 4 — the old ceiling's top phase is no longer special",
-			definedPhases: []environment.Phase{environment.PhaseCompile, 3, 4},
-			wantPhase:     environment.PhaseCompile,
+			name:          "phase 2 wins over phase 3 and phase 4: the old ceiling's top phase is no longer special",
+			definedPhases: []environment.Phase{environment.Phase(2), 3, 4},
+			wantPhase:     environment.Phase(2),
 		},
 		{
 			name:          "phase 3 wins when it is the lowest present — beyond the old {0,1,2} ceiling",

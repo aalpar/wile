@@ -77,9 +77,9 @@ func WithStableBasePrimitives() ApplyOption {
 // into the given frame instead of env. frame is the sealed-write root view — used
 // by bootstrap to seat primitives in the immutable sealed-write view. This option
 // covers phase 0 only: expand-phase prims go to the phase-1 sealed-write view,
-// which Apply derives from env itself, and compile-time bindings stay in
-// env.Compile(). Defaults to env when unset, but LoadBootstrapCore always sets
-// it, for the engine root and every library env alike — each into its OWN
+// which Apply derives from env itself, and compile-time bindings land ambient
+// (registerCompileTimeBinding). Defaults to env when unset, but LoadBootstrapCore
+// always sets it, for the engine root and every library env alike, each into its OWN
 // phase-0 sealed-write view (SealedWriteViewAt(PhaseRuntime)); there is no
 // shared "sealed base" and no library env skips the carve.
 func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
@@ -91,6 +91,13 @@ func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
 // Apply materializes registry contents into an environment, in order: compile-time
 // bindings, runtime/expand-time primitives, global values, per-engine namespace
 // initializers, then init functions.
+//
+// env must be an owner root (the phase-0 entry of its own PhaseRegistry), as
+// LoadBootstrapCore passes for the engine root and for every library env. Any
+// other receiver makes SealedWriteViewAt fall back to that receiver's own mutable
+// view, which lands every compile-time keyword at (0, mutable) instead of the
+// ambient (ANY, sealed) coordinate; a later user define of the name would then
+// reuse the keyword's slot rather than shadow it.
 func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.EnvironmentFrame, opts ...ApplyOption) error {
 	var cfg applyConfig
 	for _, opt := range opts {
@@ -113,18 +120,6 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 		}
 	}
 
-	// Register compile-only primitives (binding-only, no runtime value).
-	// Skipped for primitives that also have PhaseRuntime — the runtime path
-	// installs the binding via SetOwnGlobalValue.
-	for _, reg := range p.primitives {
-		if reg.Phases.Has(environment.PhaseCompile) && !reg.Phases.Has(environment.PhaseRuntime) {
-			err := registerCompileTimeBinding(env, BindingSpec{Name: reg.Spec.Name})
-			if err != nil {
-				return err
-			}
-		}
-	}
-
 	// Register runtime and expand primitives. Both create a ForeignClosure; the phase
 	// axis is iterated as data instead of replicating the loop body. Two frames matter
 	// per phase:
@@ -142,10 +137,10 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 	//     view. Primitives like compile/expand/free-identifier=? resolve user-level names
 	//     through this env; capturing the sealed-write view would hide every user define.
 	//     Only the binding location is sealed for immutability — resolution stays merged.
-	// Compile-time bindings stay on env.Compile(). The expand phase always carves to
-	// its sealed-write view; the runtime phase does so only when the caller supplies
-	// WithRuntimeTarget, which LoadBootstrapCore always does and a bare reg.Apply
-	// does not.
+	// Compile-time bindings land at the ambient coordinate (registerCompileTimeBinding).
+	// The expand phase always carves to its sealed-write view; the runtime phase does
+	// so only when the caller supplies WithRuntimeTarget, which LoadBootstrapCore
+	// always does and a bare reg.Apply does not.
 	runtimeEnv := env
 	if cfg.runtimeTarget != nil {
 		runtimeEnv = cfg.runtimeTarget
@@ -218,11 +213,32 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 	return nil
 }
 
+// registerCompileTimeBinding installs a compile-time-only name (an auxiliary
+// keyword such as else or =>, or a special-form name carrying its docstring) as
+// a valueless BindingTypePrimitive binding at the owner's AMBIENT coordinate: the
+// (ANY, sealed) write that only the phase-0 sealed-write view produces
+// (EnvironmentFrame.writeCoordinates). Ambient is what these names are: fixed,
+// owner-wide, reachable from a frame at every level as the ranked probe's T3, and
+// shadowed by a same-phase user define through the same T1 > T2 > T3 order that
+// lets user code shadow car. RegisterSyntaxCompilers writes the syntax compilers
+// through the same view, so a name in both tables (define-syntax, import, …) is
+// ONE binding: created here, its compiler value written in afterwards.
+//
+// The value path refuses these on sight: refuseCompileTimeMeaning keys on
+// BindingType, so (display if) is "syntactic keyword used as a variable" rather
+// than the phase-2 era's "no such binding".
+//
+// env must be an owner root (the phase-0 entry of its own PhaseRegistry), which
+// every production Apply passes (LoadBootstrapCore). For any other receiver
+// SealedWriteViewAt falls back to the receiver's own mutable view, and the keyword
+// would land at (0, mutable), where a later user define of the name would reuse
+// its slot.
+//
 //nolint:unparam // Returns error for consistency with other register functions
 func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingSpec) error {
-	compileEnv := env.Compile()
+	ambient := env.SealedWriteViewAt(environment.PhaseRuntime)
 	sym := values.NewSymbol(spec.Name)
-	compileEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive, nil)
+	ambient.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive, nil)
 	return nil
 }
 
@@ -340,15 +356,21 @@ func registerGlobalValue(env *environment.EnvironmentFrame, name string, value v
 }
 
 // ApplyDocs attaches documentation entries to existing bindings in the environment.
-// It searches all phases for each documented name and sets the doc string on every
-// matching binding. This is necessary because some names (e.g., special forms) have
-// bindings in multiple phases (expand and compile), and the REPL's ,doc command may
-// find any of them.
+// It searches every instantiated phase view for each documented name and sets the
+// doc string on every matching binding it finds.
+//
+// One name can be several bindings, so stopping at the first would leave the
+// rest undocumented and the REPL's ,doc command may reach any of them. What
+// spreads a name across views is the phase axis, not the keyword relocation: a
+// special-form name like define or syntax-case is BOTH the ambient keyword every
+// phase view reaches as T3 and a distinct phase-1 primitive expander
+// (RegisterPrimitiveExpanders), two live slots for one name. Bootstrap macros
+// bind at phase 1 the same way.
 //
 // Post-Phase-1: single walk over bindingSpecs (both real bindings with non-empty
-// Doc and DocOnly entries land here). The earlier two-source merge — `docs` slice
-// + bindingSpecs casted via DocEntry(spec) — collapsed when DocEntry was unified
-// into BindingSpec.
+// Doc and DocOnly entries land here). The earlier two-source merge (`docs` slice
+// plus bindingSpecs casted via DocEntry(spec)) collapsed when DocEntry was
+// unified into BindingSpec.
 func (p *PrimitiveRegistry) ApplyDocs(env *environment.EnvironmentFrame) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

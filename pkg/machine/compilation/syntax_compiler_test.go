@@ -79,15 +79,30 @@ func TestLookupSyntaxCompiler(t *testing.T) {
 	qt.Assert(t, nonExistent, qt.IsNil)
 }
 
-func TestLookupSyntaxCompiler_PhaseEnvironment(t *testing.T) {
+// The compilers live in the ambient tier, which every frame's ranked probe
+// reaches as T3. That is what LookupSyntaxCompiler's doc claims, and it has two
+// halves: a same-phase user binding at T1 outranks the compiler FROM THAT FRAME,
+// and the shadow reaches no further, because an exact-phase slot is not a
+// candidate at any other phase at all.
+func TestLookupSyntaxCompiler_SamePhaseShadowOutranksAmbient(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 
-	// Register syntax compilers in the compile environment
-	err := RegisterSyntaxCompilers(env) //nolint:errcheck
+	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
-	// Should find syntax compilers in the compile phase
-	defineSyntaxSym := values.NewSymbol("define-syntax")
-	defineSyntaxPc := LookupSyntaxCompiler(env, defineSyntaxSym, nil)
-	qt.Assert(t, defineSyntaxPc, qt.IsNotNil)
+	sym := values.NewSymbol("define-syntax")
+	qt.Assert(t, LookupSyntaxCompiler(env, sym, nil), qt.IsNotNil)
+
+	// A user (define define-syntax …) at phase 0: an exact-phase MUTABLE slot,
+	// a distinct binding from the ambient one because coordinates are half of
+	// binding identity (CreateGlobalBindingAt).
+	_, created := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+	qt.Assert(t, created, qt.IsTrue)
+	qt.Assert(t, LookupSyntaxCompiler(env, sym, nil), qt.IsNil,
+		qt.Commentf("T1 outranks the ambient T3 compiler at the shadowed phase"))
+
+	// Phase 1 has no slot of the name, so the ambient compiler still answers.
+	expand := env.AtPhase(environment.PhaseExpand)
+	qt.Assert(t, LookupSyntaxCompiler(expand, sym, nil), qt.IsNotNil,
+		qt.Commentf("a phase-0 shadow is not a candidate at phase 1"))
 }

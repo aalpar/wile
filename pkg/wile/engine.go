@@ -180,6 +180,19 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 			"install dialect %q forms", dialect.Name())
 	}
 	ns.SetFormRegistry(fr)
+	// What the dialect took away, as names. Since the keywords moved to the
+	// ambient coordinate a removed form's keyword row is reachable from phase 0,
+	// so leaving it in the TOP-LEVEL registry would answer a reference to a form
+	// this engine does not have: ErrSyntacticKeywordAsVariable, where the
+	// removed-form contract (dialect.go, "an unbound reference
+	// (werr.ErrNoSuchBinding)") promises unbound. The narrowing below strips
+	// those rows from topLevelReg, and that is its whole extent. Two writers are
+	// outside the seam, by the same boundary the PrimitiveRemover narrowing it
+	// sits beside draws; dialect narrowing shrinks the VISIBLE TOP LEVEL only:
+	// RegisterSyntaxCompilers installs the ambient syntax compilers from its own
+	// fixed table rather than from a registry, and library environments are
+	// applied from the full reg, so (import …) still reaches both.
+	removedForms := removedFormNames(fr)
 	auth := cfg.resolveAuthorizer()
 	if auth != nil {
 		ns.SetAuthorizer(auth)
@@ -238,6 +251,14 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 		}
 	}
 
+	// Drop the compile-time binding of every form the dialect removed, for the
+	// reason recorded where removedForms is computed. WithoutBindings spares
+	// DocOnly entries, so a removed form keeps its docstring and loses only its
+	// keyword.
+	if len(removedForms) > 0 {
+		topLevelReg = topLevelReg.WithoutBindings(removedForms...)
+	}
+
 	// A dialect may also rewrite the bootstrap procedure sources — e.g. swap the
 	// mutating vector-map/string-map for a mutation-free fragment so the mutation
 	// primitives (removed just above) leave no dangling bootstrap reference. Runs
@@ -261,6 +282,28 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	}
 
 	return ns, snapshots, closers, nil
+}
+
+// removedFormNames returns the R7RS form names the engine's dialect deleted from
+// fr: present in the shared default registry, absent from this engine's clone.
+// A dialect drops a form by calling FormRegistry.Remove inside InstallForms, so
+// the difference is the only record of what it took; there is no RemovedForms
+// capability to ask.
+//
+// Sorted, because Names() ranges a map and the result feeds a registry filter.
+func removedFormNames(fr *forms.FormRegistry) []string {
+	kept := fr.Names()
+	have := values.NewStringSet(len(kept))
+	have.SetAll(kept...)
+	q := []string{}
+	for _, name := range forms.DefaultRegistry().Names() {
+		if have.ContainsOne(name) {
+			continue
+		}
+		q = append(q, name)
+	}
+	slices.Sort(q)
+	return q
 }
 
 // coreOnlyRegistry builds a registry holding only the core primitive surface. It is
@@ -1013,11 +1056,11 @@ func (p *Engine) Namespace() *environment.Namespace {
 }
 
 // BoundNames returns a sorted, deduplicated list of every binding name visible
-// in the engine across all phases (runtime, expand, compile) and the sealed
-// base. It includes macro and special-form keywords, not only runtime value
-// bindings, so it is broader than the (environment-bound-names) primitive — it
-// is the set a REPL wants for tab completion. Returns nil if the engine has no
-// namespace.
+// in the engine across all phases (runtime, expand, and any higher rung in use)
+// and the sealed base. It includes macro and special-form keywords, not only
+// runtime value bindings, so it is broader than the (environment-bound-names)
+// primitive: it is the set a REPL wants for tab completion. Returns nil if the
+// engine has no namespace.
 //
 // This is the stable, typed alternative to walking Environment().Namespace()
 // phase frames directly.

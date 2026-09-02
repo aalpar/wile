@@ -83,30 +83,49 @@ func TestPhaseOneHandlerValuePositionRefused(t *testing.T) {
 	}
 }
 
-// Phase-0 references to phase-1 meanings were ALREADY refused — by phase
-// placement, with ErrNoSuchBinding — and must stay exactly that (measured M3).
-// This is the corrected form of the design's "if/lambda still ErrNoSuchBinding"
-// expectation: it holds at phase 0, and Phase A must not change the sentinel
-// there (the dialect removed-form contract depends on it).
+// A phase-0 reference to a phase-1 meaning is refused, and WHICH sentinel it
+// gets is decided by whether the name is also an ambient keyword, not by phase
+// placement alone. The two answers are the point of the table.
+//
+//   - `if` is a compileTimeBindingSpecs name, so registerCompileTimeBinding
+//     installs an ambient BindingTypePrimitive binding that a phase-0 probe
+//     reaches as T3. refuseCompileTimeMeaning's type arm answers it first:
+//     ErrSyntacticKeywordAsVariable, the more specific verdict, and the same
+//     class Chez ("invalid syntax if") and Racket give.
+//   - A bootstrap macro or a user macro has NO ambient keyword (it exists only
+//     at phase 1), so nothing is reachable from phase 0 and the reference is
+//     unbound. That arm still pins ErrNoSuchBinding, negative assertion included.
+//
+// The dialect removed-form contract no longer rides on the first row. Since the
+// keywords became ambient it is carried explicitly, by WithoutBindings at engine
+// init (removedFormNames, pkg/wile/engine.go): a form the dialect removed loses
+// its keyword with it, so a reference to it is unbound rather than a keyword the
+// engine does not have. TestWithDialect_RemovesForm is that pin.
 func TestPhaseZeroCrossPhaseNamesStayUnbound(t *testing.T) {
 	tcs := []struct {
 		name string
 		code string
+		want error
 	}{
-		{"primitive expander name", `(display if)`},
-		{"bootstrap macro name", `(display when)`},
+		{"primitive expander name", `(display if)`, werr.ErrSyntacticKeywordAsVariable},
+		{"bootstrap macro name", `(display when)`, werr.ErrNoSuchBinding},
 		// begin-wrapped for the same reason as TestPhaseOneHandlerValuePositionRefused
 		// above: RunSchemeCode only reads/runs the first top-level form otherwise.
-		{"user macro name", `(begin (define-syntax m2 (syntax-rules () ((_) 1))) (display m2))`},
+		{"user macro name", `(begin (define-syntax m2 (syntax-rules () ((_) 1))) (display m2))`, werr.ErrNoSuchBinding},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
-			qt.Assert(t, errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
+			qt.Assert(t, errors.Is(err, tc.want), qt.IsTrue,
 				qt.Commentf("got: %v", err))
-			qt.Assert(t, errors.Is(err, werr.ErrSyntacticKeywordAsVariable), qt.IsFalse,
-				qt.Commentf("sentinel must stay ErrNoSuchBinding: %v", err))
+			if errors.Is(tc.want, werr.ErrNoSuchBinding) {
+				// The name has no ambient keyword, so the keyword refusal must not
+				// be what answered; otherwise the row would pass for the wrong
+				// reason and stop discriminating the two mechanisms.
+				qt.Assert(t, errors.Is(err, werr.ErrSyntacticKeywordAsVariable), qt.IsFalse,
+					qt.Commentf("sentinel must stay ErrNoSuchBinding: %v", err))
+			}
 		})
 	}
 }
@@ -116,9 +135,10 @@ func TestPhaseZeroCrossPhaseNamesStayUnbound(t *testing.T) {
 // tryResolvedBinding consumes that pin BEFORE ordinary resolution — so the tag
 // check at the ordinary site above never sees these. Its own tag check is what
 // refuses them, and it falls through rather than raising, because there the
-// caller still has ordinary resolution to try: for a phase-1 meaning named at
-// phase 0 that chain ends at ErrNoSuchBinding, the dialect removed-form
-// contract.
+// caller still has ordinary resolution to try. Where that chain ends is the same
+// split TestPhaseZeroCrossPhaseNamesStayUnbound draws: a name that is also an
+// ambient keyword (`if`) is answered by the type arm on the ordinary path, and
+// one that exists only at phase 1 (a bootstrap or user macro) ends unbound.
 //
 // Without that check the pin is emitted as a cached load and the value world
 // gets the transformer closure or the expander itself — exactly the leak the
@@ -129,20 +149,38 @@ func TestPinnedTemplateIdentifierRefusesCompileTimeMeaning(t *testing.T) {
 	tcs := []struct {
 		name string
 		code string
+		want error
 	}{
 		{"bootstrap macro in template", `(begin (define-syntax m3 (syntax-rules () ((_) (display when))))
-			(m3))`},
+			(m3))`, werr.ErrNoSuchBinding},
 		{"primitive expander in template", `(begin (define-syntax m4 (syntax-rules () ((_) (display if))))
-			(m4))`},
+			(m4))`, werr.ErrSyntacticKeywordAsVariable},
 		{"user transformer in template", `(begin (define-syntax inner (syntax-rules () ((_) 1)))
 			(define-syntax m5 (syntax-rules () ((_) (display inner))))
-			(m5))`},
+			(m5))`, werr.ErrNoSuchBinding},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
-			qt.Assert(t, errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
+			qt.Assert(t, errors.Is(err, tc.want), qt.IsTrue,
+				qt.Commentf("got: %v", err))
+		})
+	}
+}
+
+// Every compile-time-only NAME (auxiliary syntax and the special forms whose
+// docstrings ride on a BindingSpec) is ambient, so a phase-0 reference in value
+// position reaches it and is refused as a keyword. Before the relocation these
+// sat at phase 2, unreachable from phase 0, and (display if) was the less
+// specific "no such binding". Chez ("invalid syntax if") and Racket give the
+// same class of verdict.
+func TestKeywordValuePositionRefusedAtPhaseZero(t *testing.T) {
+	for _, name := range []string{"if", "define", "lambda", "else", "=>"} {
+		t.Run(name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, "(display "+name+")")
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, werr.ErrSyntacticKeywordAsVariable), qt.IsTrue,
 				qt.Commentf("got: %v", err))
 		})
 	}

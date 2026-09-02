@@ -15,14 +15,15 @@
 // Package registry provides a plugin architecture for registering Scheme primitives.
 //
 // The registry allows extensions to register primitives that are applied to
-// environments at initialization time. Primitives can be registered for different
-// phases: runtime, expand-time, and compile-time.
+// environments at initialization time. Primitives can be registered for
+// runtime and expand-time; phase 2 and above are unnamed tower rungs the
+// registry does not place primitives at.
 //
 // # Key Types
 //
 //   - [PrimitiveRegistry]: central store for primitive registrations
 //   - [PrimitiveSpec]: defines a single primitive (name, params, implementation)
-//   - [Phase]: bit flags controlling environment placement (Runtime, Expand, Compile)
+//   - [PhaseSet]: bit flags controlling environment placement (Runtime, Expand)
 //   - [Extension]: interface for modular primitive packages
 //
 // # Registration

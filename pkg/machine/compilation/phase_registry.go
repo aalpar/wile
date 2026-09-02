@@ -28,11 +28,13 @@ type PhaseEntry[F any] struct {
 }
 
 // RegisterPhaseBindings binds all entries in the target phase environment.
-// This is a generic helper for registering primitives in expand or compile phases.
+// This is a generic helper for registering primitives at the expand phase or
+// the ambient tier.
 //
 // Parameters:
-//   - phaseEnv: Accessor for the target phase (e.g., env.Expand or env.Compile).
-//     This alone determines the target; env is not consulted.
+//   - phaseEnv: Accessor for the target phase (e.g., env.Expand, or a taproot
+//     closure over env.SealedWriteViewAt(environment.PhaseRuntime) for the
+//     ambient tier). This alone determines the target; env is not consulted.
 //   - entries: Slice of (name, function) pairs to register
 //   - wrapper: Creates the values.Value wrapper from name and function
 func RegisterPhaseBindings[F any](

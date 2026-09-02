@@ -23,7 +23,8 @@ import (
 // registry.BindingSpec has a third field (DocOnly), and converting ~50
 // literals to keyed-field form would be noisy. addSpecialForms below
 // promotes each nameDoc to a registry.BindingSpec at registration time
-// (DocOnly defaults: false for compileTimeBindingSpecs, true for macroDocs).
+// (DocOnly defaults: false for compileTimeBindingSpecs, true for
+// procedureFormDocs and macroDocs).
 type nameDoc struct {
 	Name string
 	Doc  string
@@ -31,9 +32,10 @@ type nameDoc struct {
 
 // compileTimeBindingSpecs names the forms the expander recognizes as
 // primitive forms and dispatches to registered primitive expanders rather
-// than treating as applications. Most exist only at compile time; apply is
-// also registered as a runtime primitive (control.go) so it can be used as a
-// first-class value.
+// than treating as applications. Every one of them exists ONLY at compile
+// time: the registry installs each as an ambient keyword binding
+// (registerCompileTimeBinding), and a reference in value position is refused.
+// A form that also holds a runtime value belongs in procedureFormDocs below.
 //
 //nolint:govet
 var compileTimeBindingSpecs = []nameDoc{
@@ -174,20 +176,6 @@ var compileTimeBindingSpecs = []nameDoc{
 			"R7RS §4.3.1.\n" +
 			"Syntax: (syntax-error MESSAGE IRRITANT ...)\n" +
 			"Category: macros"},
-	// R7RS §6.10: dynamic-wind for control flow with cleanup handlers
-	{"dynamic-wind",
-		"Calls THUNK with BEFORE and AFTER as entry/exit guards.\n" +
-			"BEFORE is called on every entry, AFTER on every exit,\n" +
-			"including non-local exits via continuations. R7RS §6.10.\n" +
-			"Syntax: (dynamic-wind BEFORE THUNK AFTER)\n" +
-			"Category: control"},
-	// R7RS §6.10: apply for procedure application with argument list
-	{"apply",
-		"Calls PROC with the given arguments. The last argument must\n" +
-			"be a list, whose elements become the tail of the argument list.\n" +
-			"R7RS §6.10.\n" +
-			"Syntax: (apply PROC ARG1 ... ARGS)\n" +
-			"Category: control"},
 	// Racket-style continuation marks
 	{"with-continuation-mark",
 		"Evaluates EXPRESSION with KEY mapped to VALUE in the\n" +
@@ -332,6 +320,35 @@ var compileTimeBindingSpecs = []nameDoc{
 			"Category: macros"},
 }
 
+// procedureFormDocs names the R7RS procedures the compiler also recognizes in
+// head position. They hold a runtime value: apply is a runtime primitive
+// (control.go), dynamic-wind a bootstrap Scheme define. So they must bind as
+// BindingTypeVariable, which is what lets (procedure? dynamic-wind) and
+// (apply apply ...) work. The registry therefore installs NO keyword for them
+// and these rows are the docstring's home only: a keyword binding would occupy
+// the same ambient slot the value writer needs, and DefineOwnGlobal cannot
+// change an existing slot's type, so the procedure would be refused in value
+// position. Head dispatch is unaffected: headDenotesSpecialForm decides it
+// from the sealed Variable binding, not from membership in this file's tables.
+//
+//nolint:govet
+var procedureFormDocs = []nameDoc{
+	// R7RS §6.10: dynamic-wind for control flow with cleanup handlers
+	{"dynamic-wind",
+		"Calls THUNK with BEFORE and AFTER as entry/exit guards.\n" +
+			"BEFORE is called on every entry, AFTER on every exit,\n" +
+			"including non-local exits via continuations. R7RS §6.10.\n" +
+			"Syntax: (dynamic-wind BEFORE THUNK AFTER)\n" +
+			"Category: control"},
+	// R7RS §6.10: apply for procedure application with argument list
+	{"apply",
+		"Calls PROC with the given arguments. The last argument must\n" +
+			"be a list, whose elements become the tail of the argument list.\n" +
+			"R7RS §6.10.\n" +
+			"Syntax: (apply PROC ARG1 ... ARGS)\n" +
+			"Category: control"},
+}
+
 // macroDocs provides documentation for bootstrap macros defined in Scheme.
 // These macros are loaded from bootstrap_macros.scm and
 // bootstrap_macros_late.scm; their documentation is registered here so it's
@@ -467,6 +484,11 @@ func addSpecialForms(r *registry.PrimitiveRegistry) error {
 		specs[i] = registry.BindingSpec{Name: b.Name, Doc: b.Doc}
 	}
 	r.AddBindingSpecs(specs)
+	// AddDocumentation is the DocOnly=true promoter: the entry rides through
+	// ApplyDocs and SearchDoc, and Apply installs no binding for it.
+	for _, doc := range procedureFormDocs {
+		r.AddDocumentation(doc.Name, doc.Doc)
+	}
 	for _, doc := range macroDocs {
 		r.AddDocumentation(doc.Name, doc.Doc)
 	}

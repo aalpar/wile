@@ -52,9 +52,9 @@ func TestPhaseRegistry_GetOrCreate(t *testing.T) {
 	qt.Assert(t, phase1Again, qt.Equals, phase1)
 
 	// Get phase 2
-	phase2 := topLevel.phases.GetOrCreate(PhaseCompile)
+	phase2 := topLevel.phases.GetOrCreate(Phase(2))
 	qt.Assert(t, phase2, qt.IsNotNil)
-	qt.Assert(t, phase2.phaseLevel, qt.Equals, PhaseCompile)
+	qt.Assert(t, phase2.phaseLevel, qt.Equals, Phase(2))
 
 	// Get negative phase
 	phaseMinus1 := topLevel.phases.GetOrCreate(PhaseTemplate)
@@ -83,13 +83,13 @@ func TestPhaseRegistry_Phases(t *testing.T) {
 
 	// Create more phases
 	topLevel.phases.GetOrCreate(PhaseExpand)
-	topLevel.phases.GetOrCreate(PhaseCompile)
+	topLevel.phases.GetOrCreate(Phase(2))
 	topLevel.phases.GetOrCreate(PhaseTemplate)
 
 	phases = topLevel.phases.Phases()
 	slices.SortFunc(phases, Phase.Compare)
 	qt.Assert(t, len(phases), qt.Equals, 4)
-	qt.Assert(t, phases, qt.DeepEquals, []Phase{PhaseTemplate, PhaseRuntime, PhaseExpand, PhaseCompile})
+	qt.Assert(t, phases, qt.DeepEquals, []Phase{PhaseTemplate, PhaseRuntime, PhaseExpand, Phase(2)})
 }
 
 func TestPhaseRegistry_PhaseEnvIsAParentlessView(t *testing.T) {
@@ -97,7 +97,7 @@ func TestPhaseRegistry_PhaseEnvIsAParentlessView(t *testing.T) {
 	store := topLevel.Namespace().Store()
 
 	phase1 := topLevel.phases.GetOrCreate(PhaseExpand)
-	phase2 := topLevel.phases.GetOrCreate(PhaseCompile)
+	phase2 := topLevel.phases.GetOrCreate(Phase(2))
 	// Higher phases created on demand by the climbing tower.
 	phase3 := topLevel.phases.GetOrCreate(3)
 	phase5 := topLevel.phases.GetOrCreate(5)
@@ -131,7 +131,7 @@ func TestPhaseRegistry_SealedViewsShareTheStore(t *testing.T) {
 		qt.Assert(t, view, qt.Not(qt.Equals), topLevel.AtPhase(phase), qt.Commentf("phase %s", phase))
 	}
 
-	_, ok := topLevel.phases.sealedViewAt(PhaseCompile)
+	_, ok := topLevel.phases.sealedViewAt(Phase(2))
 	qt.Assert(t, ok, qt.IsFalse)
 }
 
@@ -174,7 +174,6 @@ func TestPhaseConstants(t *testing.T) {
 	qt.Assert(t, PhaseTemplate, qt.Equals, Phase(-1))
 	qt.Assert(t, PhaseRuntime, qt.Equals, Phase(0))
 	qt.Assert(t, PhaseExpand, qt.Equals, Phase(1))
-	qt.Assert(t, PhaseCompile, qt.Equals, Phase(2))
 }
 
 func TestPhaseString(t *testing.T) {
@@ -185,7 +184,7 @@ func TestPhaseString(t *testing.T) {
 		{PhaseTemplate, "template"},
 		{PhaseRuntime, "runtime"},
 		{PhaseExpand, "expand"},
-		{PhaseCompile, "compile"},
+		{Phase(2), "phase(2)"},
 		{Phase(7), "phase(7)"},
 		{Phase(-2), "phase(-2)"},
 	}
@@ -219,8 +218,8 @@ func TestNextPhaseClimbsAndGuards(t *testing.T) {
 	topLevel := NewNamespaceFrame()     // runtime frame, phaseLevel 0
 	p1 := topLevel.AtPhase(PhaseExpand) // phaseLevel 1
 	fromPhase1 := p1.NextPhase().PhaseLevel()
-	if fromPhase1 != PhaseCompile {
-		t.Fatalf("NextPhase from phase 1: got %d want %d", fromPhase1, PhaseCompile)
+	if fromPhase1 != Phase(2) {
+		t.Fatalf("NextPhase from phase 1: got %d want %d", fromPhase1, Phase(2))
 	}
 	// Level-0 identity: NextPhase() from the runtime frame equals Expand().
 	fromPhase0 := topLevel.NextPhase().PhaseLevel()

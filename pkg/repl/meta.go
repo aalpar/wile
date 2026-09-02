@@ -166,7 +166,8 @@ var metaCommands = []commandInfo{
 	{"doc", nil, "Show documentation for a Scheme binding or library",
 		"Usage: ,doc [-x] <name> or ,doc (<library-name>)\n\n" +
 			"Looks up the named binding across all phase environments\n" +
-			"(runtime, expand, compile) and displays documentation.\n" +
+			"(runtime, expand, and any higher rung in use) and displays\n" +
+			"documentation.\n" +
 			"For primitives, shows signature, description, and category.\n" +
 			"For user bindings, shows the current value and the phase it is bound in.\n" +
 			"For libraries, shows description, source, and export list.\n\n" +

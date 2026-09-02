@@ -62,7 +62,7 @@ func TestChildRuntimePhaseViewsShareItsStore(t *testing.T) {
 	lib := ns.NewChildRuntime()
 	store := lib.GlobalEnvironment()
 
-	for _, phase := range []Phase{PhaseExpand, PhaseCompile, Phase(3)} {
+	for _, phase := range []Phase{PhaseExpand, Phase(2), Phase(3)} {
 		view := lib.AtPhase(phase)
 		c.Assert(view.GlobalEnvironment(), qt.Equals, store, qt.Commentf("phase %s", phase))
 		c.Assert(view.Parent(), qt.IsNil, qt.Commentf("phase %s", phase))
@@ -72,7 +72,7 @@ func TestChildRuntimePhaseViewsShareItsStore(t *testing.T) {
 	// Same shape on the namespace side, so a divergence shows up here rather than
 	// as a library-only behaviour difference nobody thought to test for.
 	c.Assert(ns.AtPhase(PhaseExpand).GlobalEnvironment(), qt.Equals, ns.Store())
-	c.Assert(ns.AtPhase(PhaseCompile).GlobalEnvironment(), qt.Equals, ns.Store())
+	c.Assert(ns.AtPhase(Phase(2)).GlobalEnvironment(), qt.Equals, ns.Store())
 }
 
 // A library env mints the WHOLE sealed axis of sealed-write views, not a subset.
@@ -104,7 +104,7 @@ func TestChildRuntimeMirrorsTheWholeSealedAxis(t *testing.T) {
 	// Whether an expand-phase primitive lands sealed or mutable is not askable
 	// here — that placement is registry.Apply's phaseTargets (apply.go), which
 	// writes through the ordinary expand view.
-	c.Assert(lib.SealedWriteViewAt(PhaseCompile), qt.Equals, lib.Compile())
+	c.Assert(lib.SealedWriteViewAt(Phase(2)), qt.Equals, lib.AtPhase(Phase(2)))
 }
 
 // A sealed write at phase 0 lands at the AMBIENT coordinate — visible from every
@@ -151,7 +151,7 @@ func TestChildRuntimeSealedClimbReachesItsExpandView(t *testing.T) {
 	c.Assert(base.AtPhase(PhaseRuntime), qt.Equals, lib)
 	// Above the axis there is no sealed-write view, so it falls through to the
 	// ordinary phase view.
-	c.Assert(expandBase.AtPhase(PhaseCompile), qt.Equals, lib.Compile())
+	c.Assert(expandBase.AtPhase(Phase(2)), qt.Equals, lib.AtPhase(Phase(2)))
 }
 
 // SealedWriteViewAt answers only an OWNER ROOT — the phase-0 entry of its own

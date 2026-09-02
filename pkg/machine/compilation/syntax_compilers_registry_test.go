@@ -84,13 +84,13 @@ func TestSyntaxCompilersAmbientAcrossPhases(t *testing.T) {
 	qt.Assert(t, sealedRoot.OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNotNil)
 
 	// It is NOT at (2, mutable) — the leak the relocation closes.
-	qt.Assert(t, ns.Compile().OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNil)
+	qt.Assert(t, ns.AtPhase(environment.Phase(2)).OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNil)
 
 	// Ambient: reachable by a read at every phase, which is what the ANY coordinate
 	// means.
 	qt.Assert(t, ns.Runtime().GetBinding(sym, values.AllScopes()), qt.IsNotNil)
 	qt.Assert(t, ns.Expand().GetBinding(sym, values.AllScopes()), qt.IsNotNil)
-	qt.Assert(t, ns.Compile().GetBinding(sym, values.AllScopes()), qt.IsNotNil)
+	qt.Assert(t, ns.AtPhase(environment.Phase(2)).GetBinding(sym, values.AllScopes()), qt.IsNotNil)
 }
 
 func TestSyntaxCompilersRegistryLookupMiss(t *testing.T) {

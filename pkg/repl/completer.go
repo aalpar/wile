@@ -76,9 +76,10 @@ func (p *Completer) extractSymbolPrefix(line string) string {
 }
 
 // collectBindingNames returns the engine's bound names for completion: every
-// name across all phases (runtime, expand, compile) plus the sealed base and
-// sealed expand base, so macros and special-form keywords complete alongside
-// primitives and bootstrap procedures (car/caar/map/zero?/call/cc). Delegates
+// name across all phases (runtime, expand, and any higher rung a transformer
+// body has instantiated) plus the sealed base and sealed expand base, so macros
+// and special-form keywords complete alongside primitives and bootstrap
+// procedures (car/caar/map/zero?/call/cc). Delegates
 // to Engine.BoundNames so the REPL does not reach into environment internals.
 func (p *Completer) collectBindingNames() []string {
 	if p.eng == nil {

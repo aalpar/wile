@@ -20,8 +20,8 @@ import (
 )
 
 // Phase-dependent binding: the same symbol can bind to different values at
-// different phases (runtime, expand, compile). This follows Racket's phase
-// model. See Flatt 2002, "Composable and Compilable Macros".
+// different phases (runtime, expand, and the rungs above). This follows
+// Racket's phase model. See Flatt 2002, "Composable and Compilable Macros".
 // See BIBLIOGRAPHY.md "Composable and Compilable Macros (Flatt 2002)".
 
 // Phase is a RELATIVE index, not an absolute stage of compilation. It counts
@@ -34,13 +34,14 @@ import (
 // a constant: NextPhase() is phaseLevel+1, import composes env.PhaseLevel()
 // with the import set's shift (compilation.composePhaseShift), and
 // definitionFallbackPhases descends from the frame's own level. The constants
-// below are the levels the TOP level occupies. They are not the set of levels
-// that exist — GetOrCreate mints a view for any int8, and the macro tower
-// climbs past 2 whenever a transformer body defines a macro of its own — and
-// they are not landmarks a climb may aim at. Reaching for Expand() where
-// NextPhase() belongs collapses the tower into one level, and the mistake is
-// invisible at the top level, where phaseLevel is 0 and the two coincide
-// (level-0 identity).
+// below are the levels the TOP level occupies. There is no named constant
+// above 1: nothing lives at a fixed level above the owner's first rung. They
+// are not the set of levels that exist (GetOrCreate mints a view for any
+// int8, and the macro tower climbs past 2 whenever a transformer body defines
+// a macro of its own), and they are not landmarks a climb may aim at.
+// Reaching for Expand() where NextPhase() belongs collapses the tower into
+// one level, and the mistake is invisible at the top level, where phaseLevel
+// is 0 and the two coincide (level-0 identity).
 //
 // Phase indexes PhaseRegistry.envs and serves as the typed value for
 // EnvironmentFrame.phaseLevel. The companion type registry.PhaseSet
@@ -64,18 +65,7 @@ const (
 	PhaseTemplate Phase = -1 // for-template: one level BELOW the owner's runtime
 	PhaseRuntime  Phase = 0  // the owner's own runtime — the origin the rest count from
 	PhaseExpand   Phase = 1  // one level up: where a TOP-LEVEL define-syntax stores
-	PhaseCompile  Phase = 2  // the special-form registry coordinate; see below
 )
-
-// PhaseCompile is the one constant that is not a rung of the tower. Registry
-// apply installs every special form and auxiliary keyword there, once per owner
-// (registry/apply.go registerCompileTimeBinding), and the special-form lookup
-// reads it as a fixed landmark from a frame at any level
-// (compilation.LookupSyntaxCompiler, via env.Compile()). A transformer body at
-// level 1 that defines a macro of its own also climbs NextPhase() to 2, so the
-// registry coordinate and the tower's second rung share a number. Read a
-// literal PhaseCompile as "the registry"; read a computed level as "N up from
-// this frame".
 
 // String returns a human-readable name for the phase.
 func (p Phase) String() string {
@@ -86,14 +76,12 @@ func (p Phase) String() string {
 		return "runtime"
 	case PhaseExpand:
 		return "expand"
-	case PhaseCompile:
-		return "compile"
 	default:
 		return fmt.Sprintf("phase(%d)", int8(p))
 	}
 }
 
-// Compare orders two phases numerically (Template < Runtime < Expand < Compile).
+// Compare orders two phases numerically (Template < Runtime < Expand < higher rungs).
 // Suitable for slices.SortFunc.
 func (p Phase) Compare(other Phase) int {
 	return int(p) - int(other)
