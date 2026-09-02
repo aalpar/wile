@@ -688,7 +688,7 @@ func TestCondExpandRegistered(t *testing.T) {
 
 	// Check if cond-expand is registered
 	sym := values.NewSymbol("cond-expand")
-	pc := LookupSyntaxCompiler(env, sym, nil)
+	pc := LookupPhaseBinding[*SyntaxCompiler](env, sym, nil)
 	if pc == nil {
 		t.Errorf("cond-expand primitive compiler not found")
 	} else {
@@ -698,7 +698,7 @@ func TestCondExpandRegistered(t *testing.T) {
 	// Core forms like 'if' are now handled by compileValidated* methods
 	// and are NOT registered as primitive compilers. Check that 'if' is NOT registered.
 	ifSym := values.NewSymbol("if")
-	ifPc := LookupSyntaxCompiler(env, ifSym, nil)
+	ifPc := LookupPhaseBinding[*SyntaxCompiler](env, ifSym, nil)
 	if ifPc != nil {
 		t.Errorf("if should NOT be registered as primitive compiler (handled by validation)")
 	}

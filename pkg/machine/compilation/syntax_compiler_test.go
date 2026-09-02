@@ -66,21 +66,21 @@ func TestLookupSyntaxCompiler(t *testing.T) {
 
 	// Should find built-in syntax compilers
 	metaSym := values.NewSymbol("meta")
-	metaPc := LookupSyntaxCompiler(env, metaSym, nil)
+	metaPc := LookupPhaseBinding[*SyntaxCompiler](env, metaSym, nil)
 	qt.Assert(t, metaPc, qt.IsNotNil)
 
 	includeSym := values.NewSymbol("include")
-	includePc := LookupSyntaxCompiler(env, includeSym, nil)
+	includePc := LookupPhaseBinding[*SyntaxCompiler](env, includeSym, nil)
 	qt.Assert(t, includePc, qt.IsNotNil)
 
 	// Should return nil for non-existent syntax compiler
 	nonExistentSym := values.NewSymbol("nonexistent-primitive")
-	nonExistent := LookupSyntaxCompiler(env, nonExistentSym, nil)
+	nonExistent := LookupPhaseBinding[*SyntaxCompiler](env, nonExistentSym, nil)
 	qt.Assert(t, nonExistent, qt.IsNil)
 }
 
 // The compilers live in the ambient tier, which every frame's ranked probe
-// reaches as T3. That is what LookupSyntaxCompiler's doc claims, and it has two
+// reaches as T3 (RegisterSyntaxCompilers' doc, bullet 2). The property has two
 // halves: a same-phase user binding at T1 outranks the compiler FROM THAT FRAME,
 // and the shadow reaches no further, because an exact-phase slot is not a
 // candidate at any other phase at all.
@@ -91,18 +91,18 @@ func TestLookupSyntaxCompiler_SamePhaseShadowOutranksAmbient(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	sym := values.NewSymbol("define-syntax")
-	qt.Assert(t, LookupSyntaxCompiler(env, sym, nil), qt.IsNotNil)
+	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](env, sym, nil), qt.IsNotNil)
 
 	// A user (define define-syntax …) at phase 0: an exact-phase MUTABLE slot,
 	// a distinct binding from the ambient one because coordinates are half of
 	// binding identity (CreateGlobalBindingAt).
 	_, created := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 	qt.Assert(t, created, qt.IsTrue)
-	qt.Assert(t, LookupSyntaxCompiler(env, sym, nil), qt.IsNil,
+	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](env, sym, nil), qt.IsNil,
 		qt.Commentf("T1 outranks the ambient T3 compiler at the shadowed phase"))
 
 	// Phase 1 has no slot of the name, so the ambient compiler still answers.
 	expand := env.AtPhase(environment.PhaseExpand)
-	qt.Assert(t, LookupSyntaxCompiler(expand, sym, nil), qt.IsNotNil,
+	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](expand, sym, nil), qt.IsNotNil,
 		qt.Commentf("a phase-0 shadow is not a candidate at phase 1"))
 }

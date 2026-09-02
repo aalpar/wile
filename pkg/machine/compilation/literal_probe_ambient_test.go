@@ -93,11 +93,12 @@ func TestLookupLiteralBindingAmbientLast(t *testing.T) {
 // must not panic") applied to the re-ranking lookupLiteralBinding performs: the
 // ambient tier loses to EVERY exact phase here, not merely to the query phase.
 //
-// The tier's argmax is computed in isolation and before any exact-phase probe,
-// so the tie is known before it is known to be dead. Answering it immediately
-// would flip a resolution that has an exact-phase answer into "ambiguous": an
-// unmodelled polarity change on a three-answer lookup. The tie must therefore
-// be held, and surface only where nothing exact was found.
+// The ambient tier is now probed dead last: store.AmbientBinding runs only
+// after env.ExactBinding at env's own phase and ExactBindingAt at every
+// fallback phase have all come back with neither a binding nor a tie. An
+// exact-phase hit returns before the ambient probe is ever reached, so this
+// test's ambient tie is never even computed when an exact phase wins; it
+// surfaces only in the "nothing exact anywhere" case below.
 //
 // Latent as production stands: every ambient registration passes nil scopes, so
 // a name has at most one ambient slot and the tier cannot tie. The scoped
@@ -147,12 +148,13 @@ func TestLookupLiteralBindingAmbientTieIsDeadUnderAnExactHit(t *testing.T) {
 	})
 }
 
-// The swallow in probeIgnoringAmbientTie is scoped by its ambientTie argument:
-// an exact-tier tie with NO ambient tie is a live ambiguity and must still be
-// refused. Without the `&& ambientTie` conjunct every ambiguity panic on the
-// literal-pin path would be swallowed, and this tie would answer "no binding"
-// (nil, true) instead of "ambiguous" (nil, false) — a refusal silently turned
-// into a resolution. This is the ratchet on that conjunct.
+// An exact-tier tie refuses at the phase it is met, whatever the ambient tier
+// holds: ExactBinding and ExactBindingAt report the tie directly, before the
+// ambient tier is ever consulted, and the ambient tier answers only after
+// every exact tier (env's own phase, then each fallback) has missed. This was
+// originally the ratchet on probeIgnoringAmbientTie's `&& ambientTie`
+// conjunct (deleted with that helper); it stays as the pin of the property
+// the conjunct existed to protect.
 func TestLookupLiteralBindingExactTieIsRefusedWithoutAnAmbientTie(t *testing.T) {
 	const sym = "else"
 	scopeA := syntax.NewScope()
@@ -185,4 +187,85 @@ func TestLookupLiteralBindingExactTieIsRefusedWithoutAnAmbientTie(t *testing.T) 
 			qt.Commentf("an exact-tier tie with no ambient tie must be refused, not swallowed"))
 		qt.Assert(t, got, qt.IsNil)
 	})
+}
+
+// An exact-tier tie is refused at the phase it is found, whatever the ambient
+// tier holds. Before ambiguity became a returned value the pin swallowed this
+// case (documented as a residual on probeIgnoringAmbientTie): with the ambient
+// tier ALSO tied, every ambiguity panic on the descent was recovered and the
+// exact tie at phase 0 was indistinguishable from the dead ambient one. It
+// answered (nil, false) by the accident of the ambient flag, so this is a PIN of
+// the answer and a GATE on the reason: TestLookupLiteralBindingExactTieIsRefused
+// WithoutAnAmbientTie beside it holds the other half.
+func TestLookupLiteralBindingExactTieIsRefusedEvenWithAnAmbientTie(t *testing.T) {
+	const sym = "else"
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	query := []*syntax.Scope{scopeA, scopeB}
+
+	ns := environment.NewNamespace()
+	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
+	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
+		_, created := sealedRoot.MaybeCreateOwnGlobalBinding(
+			values.NewSymbol(sym), environment.BindingTypePrimitive, scopes)
+		qt.Assert(t, created, qt.IsTrue)
+		_, created = ns.Runtime().MaybeCreateOwnGlobalBinding(
+			values.NewSymbol(sym), environment.BindingTypeVariable, scopes)
+		qt.Assert(t, created, qt.IsTrue)
+	}
+
+	env := ns.Runtime().AtPhase(environment.PhaseExpand)
+	got, ok := lookupLiteralBinding(env, sym, query, definitionFallbackPhases(env))
+	qt.Assert(t, ok, qt.IsFalse)
+	qt.Assert(t, got, qt.IsNil)
+}
+
+// TestLookupLiteralBindingExactTieIsRefusedDespiteACleanLowerPhase is the case
+// TestLookupLiteralBindingExactTieIsRefusedEvenWithAnAmbientTie does not reach:
+// there, phase 0 is ALSO tied, so master's swallow-and-descend and the branch's
+// immediate refusal land on the same (nil, false) by accident. Here phase 0
+// carries one CLEAN slot instead, unscoped and so a match under any query.
+//
+// On master, probeIgnoringAmbientTie(env, s, sq, ambientTie=true) swallows the
+// phase-1 exact tie precisely because the ambient tier is ALSO tied, the
+// descent falls through to phase 0, and the clean slot answers (binding, true):
+// a live ambiguity silently resolved to an unrelated binding. On the branch,
+// env.ExactBinding at phase 1 reports the tie directly and lookupLiteralBinding
+// refuses before the descent ever reaches phase 0.
+func TestLookupLiteralBindingExactTieIsRefusedDespiteACleanLowerPhase(t *testing.T) {
+	const sym = "else"
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	query := []*syntax.Scope{scopeA, scopeB}
+
+	ns := environment.NewNamespace()
+
+	// Phase 1: an exact-tier tie ({A} and {B} are incomparable, equal-cardinality
+	// subsets of the query).
+	expand := ns.Runtime().AtPhase(environment.PhaseExpand)
+	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
+		_, created := expand.MaybeCreateOwnGlobalBinding(
+			values.NewSymbol(sym), environment.BindingTypeVariable, scopes)
+		qt.Assert(t, created, qt.IsTrue)
+	}
+
+	// Ambient tier: the same two scope sets, also tied.
+	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
+	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
+		_, created := sealedRoot.MaybeCreateOwnGlobalBinding(
+			values.NewSymbol(sym), environment.BindingTypePrimitive, scopes)
+		qt.Assert(t, created, qt.IsTrue)
+	}
+
+	// Phase 0: one clean slot, unscoped, resolving under any query.
+	idx, created := ns.Runtime().MaybeCreateOwnGlobalBinding(
+		values.NewSymbol(sym), environment.BindingTypeVariable, nil)
+	qt.Assert(t, created, qt.IsTrue)
+	clean := ns.Store().GetOwnGlobalBinding(idx)
+	qt.Assert(t, clean, qt.IsNotNil)
+
+	got, ok := lookupLiteralBinding(expand, sym, query, definitionFallbackPhases(expand))
+	qt.Assert(t, ok, qt.IsFalse,
+		qt.Commentf("a phase-1 exact tie must be refused even though a clean phase-0 slot could otherwise answer it"))
+	qt.Assert(t, got, qt.IsNil)
 }

@@ -814,7 +814,9 @@ func TestAmbientBindingIgnoresExactPhaseSlots(t *testing.T) {
 
 	// A phase-0 mutable slot alone: nothing is ambient.
 	mustDefine(c, ns.Runtime(), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(5))
-	c.Assert(ns.Store().AmbientBinding(sym, values.EmptyScopes()), qt.IsNil)
+	bnd, ambiguous := ns.Store().AmbientBinding(sym, values.EmptyScopes())
+	c.Assert(bnd, qt.IsNil)
+	c.Assert(ambiguous, qt.IsFalse)
 
 	// The ambient slot, written the only way one can be: through the phase-0
 	// sealed-write view.
@@ -824,10 +826,107 @@ func TestAmbientBindingIgnoresExactPhaseSlots(t *testing.T) {
 	ambient := ns.Store().GetOwnGlobalBinding(ambientIdx)
 	c.Assert(ambient, qt.IsNotNil)
 
-	c.Assert(ns.Store().AmbientBinding(sym, values.EmptyScopes()), qt.Equals, ambient)
+	bnd, ambiguous = ns.Store().AmbientBinding(sym, values.EmptyScopes())
+	c.Assert(bnd, qt.Equals, ambient)
+	c.Assert(ambiguous, qt.IsFalse)
 
 	// The ranked probe at phase 0 prefers the mutable slot (T1 over T3);
 	// AmbientBinding did not. From phase 1, where no exact slot exists, both agree.
 	c.Assert(ns.Runtime().GetBinding(sym, values.EmptyScopes()), qt.Not(qt.Equals), ambient)
 	c.Assert(ns.Runtime().AtPhase(PhaseExpand).GetBinding(sym, values.EmptyScopes()), qt.Equals, ambient)
+}
+
+// A tie in the ambient tier is reported, not raised. The pin is the only reader,
+// and it refuses on it only after the exact tiers at every phase have missed.
+func TestAmbientBindingReportsATie(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	sym := values.NewSymbol("else")
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	sealedRoot := ns.Runtime().SealedWriteViewAt(PhaseRuntime)
+	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
+		_, created := sealedRoot.MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, scopes)
+		c.Assert(created, qt.IsTrue)
+	}
+	var bnd *Binding
+	var ambiguous bool
+	r := capturePanic(func() {
+		bnd, ambiguous = ns.Store().AmbientBinding(sym, syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB}))
+	})
+	c.Assert(r, qt.IsNil)
+	c.Assert(ambiguous, qt.IsTrue)
+	c.Assert(bnd, qt.IsNil)
+}
+
+// ExactBindingAt answers the exact-phase tiers at ONE phase — (phase, mutable)
+// over (phase, sealed) — and nothing else: not the ambient tier, and not a slot
+// at another phase. It is the probe the R7RS §4.3.2 literal pin runs at each
+// phase of its descent before it consults the ambient keyword last.
+func TestExactBindingAtExcludesAmbientAndOtherPhases(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	sym := values.NewSymbol("else")
+	store := ns.Store()
+
+	// Ambient alone: not a candidate.
+	_, created := ns.Runtime().SealedWriteViewAt(PhaseRuntime).
+		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
+	c.Assert(created, qt.IsTrue)
+	bnd, ambiguous := store.ExactBindingAt(sym, values.EmptyScopes(), PhaseRuntime)
+	c.Assert(bnd, qt.IsNil)
+	c.Assert(ambiguous, qt.IsFalse)
+
+	// A phase-1 slot is not a candidate at phase 0, and is THE candidate at phase 1.
+	idx1 := mustDefine(c, ns.Runtime().AtPhase(PhaseExpand), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(1))
+	at1 := store.GetOwnGlobalBinding(idx1)
+	bnd, _ = store.ExactBindingAt(sym, values.EmptyScopes(), PhaseRuntime)
+	c.Assert(bnd, qt.IsNil)
+	bnd, _ = store.ExactBindingAt(sym, values.EmptyScopes(), PhaseExpand)
+	c.Assert(bnd, qt.Equals, at1)
+
+	// At one phase the mutable tier outranks the sealed tier. Phase 1 has a
+	// sealed-write view of its own (the primitive-expander coordinate), so both
+	// exact tiers can be built there.
+	sealedIdx, created := ns.Runtime().SealedWriteViewAt(PhaseExpand).
+		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
+	c.Assert(created, qt.IsTrue)
+	c.Assert(store.GetOwnGlobalBinding(sealedIdx), qt.Not(qt.Equals), at1)
+	bnd, _ = store.ExactBindingAt(sym, values.EmptyScopes(), PhaseExpand)
+	c.Assert(bnd, qt.Equals, at1)
+	c.Assert(store.SealedBindingAt(sym, values.EmptyScopes(), PhaseExpand), qt.Equals, store.GetOwnGlobalBinding(sealedIdx))
+}
+
+// An incomparable equal-cardinality tie among the exact tiers is REPORTED, not
+// raised: that is the whole reason this probe exists beside GetBinding.
+func TestExactBindingAtReportsAnExactTie(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	sym := values.NewSymbol("else")
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
+		_, created := ns.Runtime().MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, scopes)
+		c.Assert(created, qt.IsTrue)
+	}
+	query := syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB})
+
+	var bnd *Binding
+	var ambiguous bool
+	r := capturePanic(func() {
+		bnd, ambiguous = ns.Store().ExactBindingAt(sym, query, PhaseRuntime)
+	})
+	c.Assert(r, qt.IsNil, qt.Commentf("ExactBindingAt must not raise: %v", r))
+	c.Assert(ambiguous, qt.IsTrue)
+	c.Assert(bnd, qt.IsNil)
+
+	// The raising form still raises on the same store: the protocol for every
+	// other reader is untouched.
+	r = capturePanic(func() {
+		ns.Runtime().GetBinding(sym, query)
+	})
+	c.Assert(r, qt.IsNotNil)
+	err, _ := r.(error)
+	c.Assert(errors.Is(err, werr.ErrAmbiguousBinding), qt.IsTrue,
+		qt.Commentf("panic must carry ErrAmbiguousBinding, got %v", r))
 }

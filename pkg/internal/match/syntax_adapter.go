@@ -69,10 +69,11 @@ type FreeIdResolver interface {
 // The zero value is deliberately NOT a pin. A nil Binding with Ambiguous false
 // means "unbound at definition time", which is R7RS's "the two identifiers are
 // the same and both have no lexical binding" arm, and must leave the use-site-only
-// comparison verbatim — the pin tightens, it never loosens. Ambiguous records an
-// ErrAmbiguousBinding tie at definition time; a scope-aware lookup has three
-// answers, and for this consumer the conservative one is "the literal does not
-// match".
+// comparison verbatim — the pin tightens, it never loosens. Ambiguous records
+// that the definition-site probe found an incomparable, equal-cardinality
+// scope-set tie rather than a single binding (no error is raised or involved); a
+// scope-aware lookup has three answers, and for this consumer the conservative
+// one is "the literal does not match".
 type LiteralPin struct {
 	Binding   *environment.Binding
 	Ambiguous bool
