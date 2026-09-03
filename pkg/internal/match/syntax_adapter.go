@@ -148,10 +148,10 @@ type BindingChecker interface {
 // Ambiguous pin still refuses the literal.
 type SyntaxMatcher struct {
 	matcher        *Matcher
-	ellipsisID     string                          // Custom ellipsis identifier (default "...")
-	literalSyntax  map[string]*syntax.SyntaxSymbol // Pattern literals with their scopes for hygiene
-	literalDefs    map[string]LiteralPin           // Definition-site resolution of each pattern literal; absent key = no pin
-	bindingChecker BindingChecker                  // Construction-time R7RS binding lookup; nil when the caller supplies one per match instead
+	ellipsisID     string                // Custom ellipsis identifier (default "...")
+	literalSyntax  syntax.LiteralSymbols // Pattern literals with their scopes for hygiene
+	literalDefs    map[string]LiteralPin // Definition-site resolution of each pattern literal; absent key = no pin
+	bindingChecker BindingChecker        // Construction-time R7RS binding lookup; nil when the caller supplies one per match instead
 }
 
 // SyntaxMatcherOpts holds optional parameters for NewSyntaxMatcher.
@@ -160,7 +160,7 @@ type SyntaxMatcherOpts struct {
 	EllipsisVars   map[int]values.StringSet
 	EllipsisDepths map[int]int // ellipsisID -> compilation order (lower = inner)
 	EllipsisID     string
-	LiteralSyntax  map[string]*syntax.SyntaxSymbol
+	LiteralSyntax  syntax.LiteralSymbols
 	// LiteralDefs pins each pattern literal to its definition-site binding. It is
 	// optional and tightening-only: an absent or zero LiteralPin leaves the
 	// use-site-only comparison in place.
@@ -187,7 +187,7 @@ func NewSyntaxMatcher(
 		ellipsisVars   map[int]values.StringSet
 		ellipsisDepths map[int]int
 		ellipsisID     = DefaultEllipsis
-		literalSyntax  map[string]*syntax.SyntaxSymbol
+		literalSyntax  syntax.LiteralSymbols
 		literalDefs    map[string]LiteralPin
 		bindingChecker BindingChecker
 	)

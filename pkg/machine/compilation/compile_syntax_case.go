@@ -66,7 +66,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	// Extract literals list (CAR of rest)
 	literalsExpr := rest.SyntaxCar()
 
-	literalSyntax := make(map[string]*syntax.SyntaxSymbol)
+	literalSyntax := make(syntax.LiteralSymbols)
 	if !syntax.IsSyntaxEmptyList(literalsExpr) {
 		literalsPair, ok := literalsExpr.(*syntax.SyntaxPair)
 		if !ok {
@@ -176,7 +176,7 @@ type jumpPatch struct {
 func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	ctctx CompileTimeCallContext,
 	pattern, fender, body syntax.SyntaxValue,
-	literalSyntax map[string]*syntax.SyntaxSymbol,
+	literalSyntax syntax.LiteralSymbols,
 	clauseIndex int,
 	successJumps, failJumps *[]jumpPatch,
 ) error {
@@ -191,7 +191,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// scopes) so the ellipsis template-expansion path can do scope-aware
 	// substitution for nested-macro hygiene — the same data the syntax-rules
 	// path stores on SyntaxRulesClause.PatternVarSyntax.
-	patternVarSyntax := make(map[string]*syntax.SyntaxSymbol)
+	patternVarSyntax := make(syntax.PatternVarSymbols)
 	err := collectPatternVariablesWithEllipsis(pattern, literalSyntax, false, patternVars, patternVarSyntax, match.DefaultEllipsis)
 	if err != nil {
 		return err
@@ -414,7 +414,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 // so scoping one side cannot move a slot.
 func (p *CompileTimeContinuation) createPatternVarEnvironment(
 	patternVars values.StringSet,
-	patternVarSyntax map[string]*syntax.SyntaxSymbol,
+	patternVarSyntax syntax.PatternVarSymbols,
 ) *environment.EnvironmentFrame {
 	vars := slices.Sorted(maps.Keys(patternVars))
 

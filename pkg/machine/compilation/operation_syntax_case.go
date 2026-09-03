@@ -445,10 +445,10 @@ type OperationSyntaxTemplateExpand struct {
 	// identifiers resolve at the macro definition site and template-introduced
 	// binders carry a fresh intro scope rather than capturing use-site identifiers.
 	FreeIds          map[string]*FreeIdResolution
-	PatternVarSyntax map[string]*syntax.SyntaxSymbol
+	PatternVarSyntax syntax.PatternVarSymbols
 }
 
-func NewOperationSyntaxTemplateExpand(freeIds map[string]*FreeIdResolution, patternVarSyntax map[string]*syntax.SyntaxSymbol) *OperationSyntaxTemplateExpand {
+func NewOperationSyntaxTemplateExpand(freeIds map[string]*FreeIdResolution, patternVarSyntax syntax.PatternVarSymbols) *OperationSyntaxTemplateExpand {
 	return &OperationSyntaxTemplateExpand{
 		OperationBase:    machine.NewOperationBaseWithGoName("operation:syntax-template-expand", "SyntaxTemplateExpand"),
 		FreeIds:          freeIds,
