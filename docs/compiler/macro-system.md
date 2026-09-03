@@ -109,11 +109,11 @@ type SyntaxRulesClause struct {
     Bytecode         []match.SyntaxCommand
     Matcher          *match.SyntaxMatcher
     PatternVars      values.StringSet
-    PatternVarSyntax map[string]*syntax.SyntaxSymbol
+    PatternVarSyntax syntax.PatternVarSymbols
     EllipsisVars     map[int]values.StringSet
     FreeIds          map[string]*FreeIdResolution
     Ellipsis         string
-    LiteralSyntax    map[string]*syntax.SyntaxSymbol
+    LiteralSyntax    syntax.LiteralSymbols
 }
 ```
 

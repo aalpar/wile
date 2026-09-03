@@ -605,7 +605,7 @@ func TestSyntaxExpandScopeAwareSubstitution(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// When template and pattern have the same scopes, substitution occurs
-	patternVarSyntax := map[string]*syntax.SyntaxSymbol{
+	patternVarSyntax := syntax.PatternVarSymbols{
 		"x": syntax.NewSyntaxSymbol("x", nil),
 	}
 	template := syntax.NewSyntaxSymbol("x", nil)
@@ -656,7 +656,7 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 	template := syntax.NewSyntaxSymbol("x", nil)
 
 	patternCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{patternOnlyScope}}
-	patternVarSyntax := map[string]*syntax.SyntaxSymbol{
+	patternVarSyntax := syntax.PatternVarSymbols{
 		"x": syntax.NewSyntaxSymbol("x", patternCtx),
 	}
 

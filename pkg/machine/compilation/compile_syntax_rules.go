@@ -131,7 +131,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	}
 
 	literals := values.NewStringSet(0)
-	literalSyntax := make(map[string]*syntax.SyntaxSymbol)
+	literalSyntax := make(syntax.LiteralSymbols)
 
 	// Process literals list
 	literalsList, ok := literalsStx.(*syntax.SyntaxPair)
@@ -240,7 +240,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 // side does not descend; see useSiteFallbackPhases.
 //
 // Returns nil (no pins, today's behaviour verbatim) for a nil env or no literals.
-func resolveLiteralDefinitions(env *environment.EnvironmentFrame, literalSyntax map[string]*syntax.SyntaxSymbol) map[string]match.LiteralPin {
+func resolveLiteralDefinitions(env *environment.EnvironmentFrame, literalSyntax syntax.LiteralSymbols) map[string]match.LiteralPin {
 	if env == nil || len(literalSyntax) == 0 {
 		return nil
 	}
@@ -265,7 +265,7 @@ func compileClauseWithEllipsisAndLiterals(
 	env *environment.EnvironmentFrame,
 	pattern, template syntax.SyntaxValue,
 	literals values.StringSet,
-	literalSyntax map[string]*syntax.SyntaxSymbol,
+	literalSyntax syntax.LiteralSymbols,
 	ellipsis string,
 	libraryScope *syntax.Scope,
 ) (*SyntaxRulesClause, error) {
@@ -273,7 +273,7 @@ func compileClauseWithEllipsisAndLiterals(
 	// Use literalSyntax for scope-aware literal matching (R7RS bound-identifier=? semantics)
 	// Also collect pattern variable syntax for nested macro hygiene
 	variables := values.NewStringSet(0)
-	varSyntax := make(map[string]*syntax.SyntaxSymbol)
+	varSyntax := make(syntax.PatternVarSymbols)
 	err := collectPatternVariablesWithEllipsis(pattern, literalSyntax, true, variables, varSyntax, ellipsis)
 	if err != nil {
 		return nil, err
@@ -534,7 +534,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 // pattern variable. This is critical for nested macro hygiene: when an outer macro introduces
 // a symbol into an inner macro's template, the symbol's scopes distinguish it from inner
 // pattern variables.
-func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSyntax map[string]*syntax.SyntaxSymbol, isFirst bool, variables values.StringSet, varSyntax map[string]*syntax.SyntaxSymbol, ellipsis string) error {
+func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSyntax syntax.LiteralSymbols, isFirst bool, variables values.StringSet, varSyntax syntax.PatternVarSymbols, ellipsis string) error {
 	switch p := pattern.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := p.Unwrap()
@@ -892,7 +892,7 @@ func validateTemplateEllipsisDepth(tmpl syntax.SyntaxValue, variables values.Str
 func extractLiteralsWithSyntax(ctx context.Context,
 	literalsList *syntax.SyntaxPair,
 	literals values.StringSet,
-	literalSyntax map[string]*syntax.SyntaxSymbol,
+	literalSyntax syntax.LiteralSymbols,
 	ellipsis string,
 ) error {
 	v, err := literalsList.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, literal syntax.SyntaxValue) error {

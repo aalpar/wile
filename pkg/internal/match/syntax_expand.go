@@ -82,7 +82,7 @@ type ExpandOptions struct {
 	// PatternVarSyntax contains the syntax symbols from the pattern, enabling nested
 	// macro hygiene via scope comparison. When set, template symbols are only substituted
 	// if their scopes match the corresponding pattern variable's scopes.
-	PatternVarSyntax map[string]*syntax.SyntaxSymbol
+	PatternVarSyntax syntax.PatternVarSymbols
 }
 
 // FreeIdKey is the map key for a free identifier's pre-resolved binding in

@@ -300,7 +300,7 @@ type LiteralMatcher func(inputSym *syntax.SyntaxSymbol, patternLiteralKey string
 // The literalSyntax map contains pattern literals that need scope/binding checking.
 // The literalMatcher function is called for each literal comparison to check if the
 // input symbol should match (returns true) or is shadowed (returns false).
-func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.SyntaxPair, literalSyntax map[string]*syntax.SyntaxSymbol, literalMatcher LiteralMatcher) error {
+func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.SyntaxPair, literalSyntax syntax.LiteralSymbols, literalMatcher LiteralMatcher) error {
 	p.syntaxStack = []syntaxPathEntry{
 		{
 			pr: target,

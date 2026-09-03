@@ -397,7 +397,7 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		templateCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{useSite, bodyBinder}}
 		template := syntax.NewSyntaxSymbol("x", templateCtx)
 		patternCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{useSite}}
-		patternVarSyntax := map[string]*syntax.SyntaxSymbol{
+		patternVarSyntax := syntax.PatternVarSymbols{
 			"x": syntax.NewSyntaxSymbol("x", patternCtx),
 		}
 		is := syntax.NewScope()
@@ -424,7 +424,7 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		templateCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{outerScope}}
 		template := syntax.NewSyntaxSymbol("x", templateCtx)
 		patternCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{useSite}}
-		patternVarSyntax := map[string]*syntax.SyntaxSymbol{
+		patternVarSyntax := syntax.PatternVarSymbols{
 			"x": syntax.NewSyntaxSymbol("x", patternCtx),
 		}
 		is := syntax.NewScope()
@@ -449,7 +449,7 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		templateCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{templateScope}}
 		template := syntax.NewSyntaxSymbol("x", templateCtx)
 		patternCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{templateScope, patternOnly}}
-		patternVarSyntax := map[string]*syntax.SyntaxSymbol{
+		patternVarSyntax := syntax.PatternVarSymbols{
 			"x": syntax.NewSyntaxSymbol("x", patternCtx),
 		}
 		is := syntax.NewScope()

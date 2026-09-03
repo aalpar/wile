@@ -79,11 +79,11 @@ type SyntaxRulesClause struct {
 	Bytecode         []match.SyntaxCommand
 	Matcher          *match.SyntaxMatcher
 	PatternVars      values.StringSet
-	PatternVarSyntax map[string]*syntax.SyntaxSymbol
+	PatternVarSyntax syntax.PatternVarSymbols
 	EllipsisVars     map[int]values.StringSet
 	FreeIds          map[string]*FreeIdResolution
 	Ellipsis         string
-	LiteralSyntax    map[string]*syntax.SyntaxSymbol
+	LiteralSyntax    syntax.LiteralSymbols
 }
 
 // ClausesWrapper wraps a slice of SyntaxRulesClause as a values.Value
@@ -115,7 +115,7 @@ type SyntaxCaseClause struct {
 	// (it needs a non-nil literal map AND a non-nil matcher), so a syntax-case
 	// pattern literal matched a use-site identifier that shadows it — R7RS
 	// §4.3.2 requires the two to share a binding.
-	LiteralSyntax map[string]*syntax.SyntaxSymbol
+	LiteralSyntax syntax.LiteralSymbols
 	// LiteralDefs pins each pattern literal to the binding it had in the macro
 	// DEFINITION environment. It has to ride on the clause because this path
 	// builds its matcher at RUNTIME, in the use site's environment — the one

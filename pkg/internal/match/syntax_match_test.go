@@ -160,7 +160,7 @@ func TestMatchSyntaxWithLiterals(t *testing.T) {
 			ByteCodeCaptureCar{Binding: "x"},
 			ByteCodeDone{},
 		}
-		literalSyntax := map[string]*syntax.SyntaxSymbol{
+		literalSyntax := syntax.LiteralSymbols{
 			"if": ifSym,
 		}
 		literalMatcher := func(inputSym *syntax.SyntaxSymbol, patternLiteralKey string) bool {
@@ -186,7 +186,7 @@ func TestMatchSyntaxWithLiterals(t *testing.T) {
 			ByteCodeCaptureCar{Binding: "x"},
 			ByteCodeDone{},
 		}
-		literalSyntax := map[string]*syntax.SyntaxSymbol{
+		literalSyntax := syntax.LiteralSymbols{
 			"if": ifSym,
 		}
 		literalMatcher := func(inputSym *syntax.SyntaxSymbol, patternLiteralKey string) bool {
@@ -207,7 +207,7 @@ func TestMatchSyntaxWithLiterals(t *testing.T) {
 			ByteCodeCompareCar{Value: ifSym},
 			ByteCodeDone{},
 		}
-		literalSyntax := map[string]*syntax.SyntaxSymbol{
+		literalSyntax := syntax.LiteralSymbols{
 			"if": ifSym,
 		}
 		literalMatcher := func(inputSym *syntax.SyntaxSymbol, patternLiteralKey string) bool {
@@ -230,7 +230,7 @@ func TestMatchSyntaxWithLiterals(t *testing.T) {
 			ByteCodeCompareCar{Value: testSyntaxInt(10)},
 			ByteCodeDone{},
 		}
-		literalSyntax := map[string]*syntax.SyntaxSymbol{} // No literals
+		literalSyntax := syntax.LiteralSymbols{} // No literals
 		literalMatcher := func(inputSym *syntax.SyntaxSymbol, patternLiteralKey string) bool {
 			return true
 		}

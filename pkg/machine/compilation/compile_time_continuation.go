@@ -57,7 +57,7 @@ type CompileTimeContinuation struct {
 	// definition site); patternVarSyntax carries each pattern variable's scopes
 	// for nested-macro scope comparison.
 	patternVars      values.StringSet
-	patternVarSyntax map[string]*syntax.SyntaxSymbol
+	patternVarSyntax syntax.PatternVarSymbols
 	// fileResolver controls how include/load resolves files.
 	// Defaults to the resolver stored on Namespace (usually
 	// OSFileResolver); set to EmbedFileResolver for bootstrap.
