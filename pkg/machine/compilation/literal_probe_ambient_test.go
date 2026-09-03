@@ -222,16 +222,16 @@ func TestLookupLiteralBindingExactTieIsRefusedEvenWithAnAmbientTie(t *testing.T)
 
 // TestLookupLiteralBindingExactTieIsRefusedDespiteACleanLowerPhase is the case
 // TestLookupLiteralBindingExactTieIsRefusedEvenWithAnAmbientTie does not reach:
-// there, phase 0 is ALSO tied, so master's swallow-and-descend and the branch's
+// there, phase 0 is ALSO tied, so the old swallow-and-descend and the current
 // immediate refusal land on the same (nil, false) by accident. Here phase 0
 // carries one CLEAN slot instead, unscoped and so a match under any query.
 //
-// On master, probeIgnoringAmbientTie(env, s, sq, ambientTie=true) swallows the
-// phase-1 exact tie precisely because the ambient tier is ALSO tied, the
-// descent falls through to phase 0, and the clean slot answers (binding, true):
-// a live ambiguity silently resolved to an unrelated binding. On the branch,
-// env.ExactBinding at phase 1 reports the tie directly and lookupLiteralBinding
-// refuses before the descent ever reaches phase 0.
+// Before c8080848, probeIgnoringAmbientTie(env, s, sq, ambientTie=true)
+// swallowed the phase-1 exact tie precisely because the ambient tier was ALSO
+// tied, the descent fell through to phase 0, and the clean slot answered
+// (binding, true): a live ambiguity silently resolved to an unrelated binding.
+// Now env.ExactBinding at phase 1 reports the tie directly and
+// lookupLiteralBinding refuses before the descent ever reaches phase 0.
 func TestLookupLiteralBindingExactTieIsRefusedDespiteACleanLowerPhase(t *testing.T) {
 	const sym = "else"
 	scopeA := syntax.NewScope()
