@@ -1496,19 +1496,25 @@ func trackTemplateTree(col *coverage.Collector, root *machine.NativeTemplate) {
 	visited := values.NewMapSet[*machine.NativeTemplate](0)
 	queue := []*machine.NativeTemplate{root}
 	for len(queue) > 0 {
+		// Pop the next template from the queue and check if it has already been visited.
 		tpl := queue[0]
+		// Remove the template from the queue.
 		queue = queue[1:]
+		// If the template has already been visited, skip it.
 		done := visited.ContainsOne(tpl)
 		if done {
 			continue
 		}
+		// Mark the template as visited and track it in the coverage collector.
 		visited.Set(tpl)
 		col.Track(tpl)
+		// Enqueue all child templates found in the literals pool for further processing.
 		for _, lit := range tpl.Literals() {
 			child, ok := lit.(*machine.NativeTemplate)
 			if !ok {
 				continue
 			}
+			// Check if the child template has already been visited before adding it to the queue.
 			seen := visited.ContainsOne(child)
 			if !seen {
 				queue = append(queue, child)
