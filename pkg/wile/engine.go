@@ -1545,30 +1545,34 @@ func makeDocRegistrationObserver(libReg *compilation.LibraryRegistry, reg *regis
 			// lib.Env agrees only while a name has one slot per frame, so it can
 			// document a different binding than the one the import installed.
 			bnd, found := lib.ExportedBinding(internalName)
-			if !found || bnd.BindingType() != environment.BindingTypeVariable {
+			if !found {
 				continue
 			}
-
-			raw := callableDocFromValue(bnd.Value())
-			if raw == "" {
-				continue
-			}
-
-			parsed := docparse.ParseDocstring(raw)
-			if !parsed.HasStructuredMetadata() {
-				continue
-			}
-
-			reg.AddDocOnlyPrimitive(docOnlySpec(name, parsed))
+			registerDocOnlyBinding(reg, name, bnd)
 		}
 	}
 }
 
-// docOnlySpec builds a documentation-only PrimitiveSpec from a parsed
-// docstring and the binding's external name. Used by both the library-export
-// and runtime-binding docstring registration walks.
-func docOnlySpec(name string, parsed docparse.DocInfo) registry.PrimitiveSpec {
-	return registry.PrimitiveSpec{
+// registerDocOnlyBinding registers a documentation-only entry under name when
+// bnd is a variable whose value carries a structured docstring; any other
+// binding is skipped. Both docstring registration walks (library export and
+// sealed runtime bindings) funnel through here.
+func registerDocOnlyBinding(reg *registry.PrimitiveRegistry, name string, bnd *environment.Binding) {
+	if bnd.BindingType() != environment.BindingTypeVariable {
+		return
+	}
+
+	raw := callableDocFromValue(bnd.Value())
+	if raw == "" {
+		return
+	}
+
+	parsed := docparse.ParseDocstring(raw)
+	if !parsed.HasStructuredMetadata() {
+		return
+	}
+
+	reg.AddDocOnlyPrimitive(registry.PrimitiveSpec{
 		Name:       name,
 		Doc:        parsed.Doc,
 		ParamNames: parsed.ParamNames,
@@ -1577,7 +1581,7 @@ func docOnlySpec(name string, parsed docparse.DocInfo) registry.PrimitiveSpec {
 		Category:   parsed.Category,
 		Keywords:   parsed.Keywords,
 		ParamCount: len(parsed.ParamNames),
-	}
+	})
 }
 
 // registerSchemeDocstrings walks runtime bindings and registers documentation-only
@@ -1614,11 +1618,12 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.P
 	//
 	// SealedSlots() is every sealed slot at EVERY phase (the fold merged the
 	// per-phase seal frames into one store), where the pre-fold walk visited only
-	// the phase-0 seal's own slots. The BindingTypeVariable filter below therefore
-	// does NOT confine the walk to phase 0: registry.Apply's phaseTargets seals its
-	// expand-phase copies too, and those are BindingTypeVariable holding a
-	// ForeignClosure (apply.go), so the loop reaches every dual-phase primitive
-	// twice — 146 names, measured on a bootstrapped KitchenSink namespace.
+	// the phase-0 seal's own slots. The BindingTypeVariable filter in
+	// registerDocOnlyBinding therefore does NOT confine the walk to phase 0:
+	// registry.Apply's phaseTargets seals its expand-phase copies too, and those
+	// are BindingTypeVariable holding a ForeignClosure (apply.go), so the loop
+	// reaches every dual-phase primitive twice — 146 names, measured on a
+	// bootstrapped KitchenSink namespace.
 	//
 	// Harmless by construction, not by luck: AddDocOnlyPrimitive returns early on
 	// any name already in reg.primitives (primitive_registry.go), and every name
@@ -1627,23 +1632,7 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.P
 	// applyBaseEnvironment — which the IsNamespaceRuntime guard above already
 	// limits to the root.
 	for _, slot := range ns.Store().SealedSlots() {
-		sym := slot.Name
-		bnd := slot.Binding
-		if bnd.BindingType() != environment.BindingTypeVariable {
-			continue
-		}
-
-		raw := callableDocFromValue(bnd.Value())
-		if raw == "" {
-			continue
-		}
-
-		parsed := docparse.ParseDocstring(raw)
-		if !parsed.HasStructuredMetadata() {
-			continue
-		}
-
-		reg.AddDocOnlyPrimitive(docOnlySpec(sym.Key, parsed))
+		registerDocOnlyBinding(reg, slot.Name.Key, slot.Binding)
 	}
 }
 
