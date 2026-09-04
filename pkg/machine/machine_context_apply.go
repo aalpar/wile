@@ -29,7 +29,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	tpl := mcls.Template()
 	l := tpl.ParameterCount()
 
-	// Check arity before copying environment (fast-fail path).
+	// Check arity before copying the environment (fast-fail path).
 	// Wrong-arity calls are common enough (dynamic typing, variadic dispatch)
 	// that avoiding the copy overhead is worthwhile.
 	err := checkArity(l, tpl.IsVariadic(), len(vs))
@@ -408,101 +408,43 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 	}
 }
 
-// findParameterInMarks walks the continuation mark chain looking for a mark
-// keyed by the given parameter (using pointer identity).
-// Returns the mark value, or nil if no mark is found.
-//
-// This is the lookup mechanism for marks-based parameterize: each
-// (parameterize ((p val)) ...) sets a continuation mark with key=p, val=converted.
-// Parameter reads walk the chain to find the nearest binding.
-//
-// The walk spans sub-context boundaries via parentMC, mirroring how dynamic-wind
-// extents are inherited by NewSubContext. Without this, parameter bindings
-// from an outer parameterize would be invisible inside sub-contexts created by
-// call-with-continuation-prompt, apply, call-with-values, etc.
+// findParameterInMarks returns the nearest reachable mark keyed by param
+// (pointer identity), or nil. This is the lookup for marks-based parameterize:
+// each (parameterize ((p val)) ...) sets a continuation mark with key=p,
+// val=converted, and a read resolves the nearest one along
+// forEachReachableMarkFrame's walk.
 func (p *MachineContext) findParameterInMarks(param *Parameter) values.Value {
-	mc := p
-	for mc != nil {
-		// Check current frame marks.
-		for _, e := range mc.marks {
-			if values.EqIdentity(e.key, param) {
-				return e.val
-			}
-		}
-		// Walk continuation chain.
-		for c := mc.cont; c != nil; c = c.parent {
-			for _, e := range c.marks {
-				if values.EqIdentity(e.key, param) {
-					return e.val
-				}
-			}
-		}
-		// Stop if this context has isolated marks (e.g., applyCapturedContinuation
-		// sub-context running a different continuation chain).
-		if mc.isolatedMarks {
-			// isolatedMarks cut off parentMC so the invoker's marks don't bleed into
-			// a resumed call/cc continuation — but that continuation's OWN
-			// capture-time marks from ABOVE the sub-context boundary it was captured
-			// behind must still resolve. Consult the snapshot taken at capture
-			// (collectReachableMarks / SnapshotReachableMarksInto) before stopping.
-			for _, e := range mc.capturedMarks {
-				if values.EqIdentity(e.key, param) {
-					return e.val
-				}
-			}
-			break
-		}
-		mc = mc.parentMC
-	}
-	return nil
+	var q values.Value
+	p.forEachReachableMarkFrame(func(frame []markEntry) bool {
+		q = lookupMark(frame, param)
+		return q == nil
+	})
+	return q
 }
 
-// collectReachableMarks snapshots the parameter/handler mark environment reachable
-// from p — across local marks, the continuation chain, and parentMC — so a call/cc
+// collectReachableMarks snapshots the parameter/handler mark environment
+// reachable from p, one entry per key with the nearest value winning, so a call/cc
 // continuation captured here can restore it on resume. It is consulted at the
-// isolatedMarks break in findParameterInMarks, because applyCapturedContinuation sets
-// isolatedMarks and cuts the parentMC walk on resume.
+// isolatedMarks stop of forEachReachableMarkFrame, because
+// applyCapturedContinuation sets isolatedMarks and cuts the parentMC walk on resume.
 //
-// The walk starts at p, not p.parentMC: PrimCallCC slices only the continuation
-// CHAIN (p.cont) into the captured segment, while parameterize/with-continuation-mark
-// set the LIVE mc.marks of the current frame, which SliceContinuationAt does not copy.
 // Including p's own live marks is correct and future-proof: today a producer-level
 // mark is unobservable on resume anyway (re-invoking a call-with-values producer
 // truncates — the value-facet limitation tracked in the open-problem plan), but once
 // that is fixed those marks must resolve. (Redundancy with marks the segment does
-// carry, on p.cont frames, is harmless: findParameterInMarks checks the restored
-// chain first, so the segment shadows the snapshot.) For each key the nearest value
-// wins; an isolatedMarks boundary folds in that context's own snapshot so nested
-// resumes chain.
+// carry, on p.cont frames, is harmless: the restored chain is walked before the
+// snapshot, so the segment shadows it.)
 func (p *MachineContext) collectReachableMarks() []markEntry {
-	var out []markEntry
-	add := func(e markEntry) {
-		for i := range out {
-			if values.EqIdentity(out[i].key, e.key) {
-				return
+	var q []markEntry
+	p.forEachReachableMarkFrame(func(frame []markEntry) bool {
+		for _, e := range frame {
+			if markIndex(q, e.key) < 0 {
+				q = append(q, e)
 			}
 		}
-		out = append(out, e)
-	}
-	mc := p
-	for mc != nil {
-		for _, e := range mc.marks {
-			add(e)
-		}
-		for c := mc.cont; c != nil; c = c.parent {
-			for _, e := range c.marks {
-				add(e)
-			}
-		}
-		if mc.isolatedMarks {
-			for _, e := range mc.capturedMarks {
-				add(e)
-			}
-			break
-		}
-		mc = mc.parentMC
-	}
-	return out
+		return true
+	})
+	return q
 }
 
 // SnapshotReachableMarksInto attaches p's capture-time reachable marks to comp, so

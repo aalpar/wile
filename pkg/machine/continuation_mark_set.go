@@ -50,11 +50,9 @@ func (p *ContinuationMarkSet) EqualTo(o values.Value) bool {
 func (p *ContinuationMarkSet) ToList(key values.Value) values.Tuple {
 	var collected []values.Value
 	for _, frame := range p.frames {
-		for _, e := range frame {
-			if values.EqIdentity(e.key, key) {
-				collected = append(collected, e.val)
-				break
-			}
+		v := lookupMark(frame, key)
+		if v != nil {
+			collected = append(collected, v)
 		}
 	}
 	return values.List(collected...)
@@ -65,10 +63,9 @@ func (p *ContinuationMarkSet) ToList(key values.Value) values.Tuple {
 // Uses eq? semantics (values.EqIdentity) for key comparison.
 func (p *ContinuationMarkSet) First(key, defaultVal values.Value) values.Value {
 	for _, frame := range p.frames {
-		for _, e := range frame {
-			if values.EqIdentity(e.key, key) {
-				return e.val
-			}
+		v := lookupMark(frame, key)
+		if v != nil {
+			return v
 		}
 	}
 	return defaultVal
@@ -87,12 +84,10 @@ func (p *ContinuationMarkSet) ToListStar(keys []values.Value, noneVal values.Val
 		found := false
 		for i, key := range keys {
 			vec[i] = noneVal
-			for _, e := range frame {
-				if values.EqIdentity(e.key, key) {
-					vec[i] = e.val
-					found = true
-					break
-				}
+			v := lookupMark(frame, key)
+			if v != nil {
+				vec[i] = v
+				found = true
 			}
 		}
 		if found {
