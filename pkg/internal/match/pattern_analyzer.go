@@ -73,9 +73,10 @@ func analyzeRecursive(
 			return nil
 		}
 
-		varsInSubtree := values.NewStringSet(0)
-		maps.Copy(varsInSubtree, analyzeRecursive(t.SyntaxCar(), variables, analysis))
-		maps.Copy(varsInSubtree, analyzeRecursive(t.SyntaxCdr(), variables, analysis))
+		varsInSubtree := values.Union(
+			analyzeRecursive(t.SyntaxCar(), variables, analysis),
+			analyzeRecursive(t.SyntaxCdr(), variables, analysis),
+		)
 
 		hasVars := len(varsInSubtree) > 0
 		analysis.containsVariables[t] = hasVars

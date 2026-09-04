@@ -20,6 +20,7 @@ import (
 	"encoding/base32"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/werr"
@@ -481,27 +482,98 @@ func ExactInteger(v Value) (int64, bool) {
 
 type MapSet[T comparable] map[T]struct{}
 
+// NewMapSet creates a new MapSet with the given initial size.
 func NewMapSet[T comparable](sz int) MapSet[T] {
 	return make(MapSet[T], sz)
 }
 
+// Set adds the given value to the set.
 func (p MapSet[T]) Set(s T) {
 	p[s] = struct{}{}
 }
 
+// SetAll adds all the given values to the set.
 func (p MapSet[T]) SetAll(vs ...T) {
 	for _, v := range vs {
 		p.Set(v)
 	}
 }
 
+// Unset removes the given value from the set.
 func (p MapSet[T]) Unset(s T) {
 	delete(p, s)
 }
 
+// UnsetAll removes all the given values from the set.
+func (p MapSet[T]) UnsetAll(vs ...T) {
+	for _, v := range vs {
+		p.Unset(v)
+	}
+}
+
+// ContainsOne returns true if the given value is present in the set.
 func (p MapSet[T]) ContainsOne(s T) bool {
 	_, q := p[s]
 	return q
+}
+
+// ContainsAll returns true if all of the given values are present in the set.
+func (p MapSet[T]) ContainsAll(vs ...T) bool {
+	for _, v := range vs {
+		if !p.ContainsOne(v) {
+			return false
+		}
+	}
+	return true
+}
+
+// Len returns the number of elements in the set.
+func (p MapSet[T]) Len() int {
+	return len(p)
+}
+
+// Intersection returns a new set containing elements in `set` that are also in all of the `others`.
+func Intersection[T comparable](set MapSet[T], others ...MapSet[T]) MapSet[T] {
+	result := NewMapSet[T](set.Len())
+	for k := range set {
+		keep := true
+		for _, other := range others {
+			if !other.ContainsOne(k) {
+				keep = false
+				break
+			}
+		}
+		if keep {
+			result.Set(k)
+		}
+	}
+	return result
+}
+
+// Union returns a new set containing elements in `set` and all of the `others`.
+//
+// The three set operations treat a nil operand as empty and always return a
+// fresh allocated set (maps.Clone would return nil for a nil set, and a nil
+// result cannot be written to).
+func Union[T comparable](set MapSet[T], others ...MapSet[T]) MapSet[T] {
+	result := NewMapSet[T](set.Len())
+	maps.Copy(result, set)
+	for _, other := range others {
+		maps.Copy(result, other)
+	}
+	return result
+}
+
+// Difference returns a new set containing elements in `set` that are not in any of the `others`.
+func Difference[T comparable](set MapSet[T], others ...MapSet[T]) MapSet[T] {
+	result := NewMapSet[T](set.Len())
+	maps.Copy(result, set)
+	for _, other := range others {
+		for k := range other {
+			result.Unset(k)
+		}
+	}
+	return result
 }
 
 // StringSet and IntSet are the two instantiations common enough to have earned

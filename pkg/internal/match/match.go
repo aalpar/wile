@@ -38,6 +38,7 @@ package match
 
 import (
 	"context"
+	"maps"
 	"slices"
 
 	"github.com/aalpar/wile/pkg/syntax"
@@ -664,16 +665,9 @@ func (p *Matcher) findMatchingEllipsisIDs(vars values.StringSet, excludeIDs valu
 	// all vars, prefer the one with the highest compilation order (outermost).
 	bestID := -1
 	bestDepth := -1
+	varList := slices.Collect(maps.Keys(vars))
 	for _, id := range ids {
-		allFound := true
-		for v := range vars {
-			ok := p.ellipsisVars[id].ContainsOne(v)
-			if !ok {
-				allFound = false
-				break
-			}
-		}
-		if !allFound {
+		if !p.ellipsisVars[id].ContainsAll(varList...) {
 			continue
 		}
 		depth := p.ellipsisDepths[id]
