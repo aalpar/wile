@@ -119,6 +119,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`--cover` and the profiles survive an uncaught Scheme error.** The CLI's
+  `fail` called `os.Exit` directly, so a program that died of an unhandled
+  error, or failed to compile, wrote no coverage file and no profile, while
+  the same program ending in `(exit 1)` wrote both. `extensions/system` now
+  exports `Exit(code)`, the one path to `os.Exit` that runs the `SetExitHook`
+  function first; `exit` and `emergency-exit` call it, and the CLI reaches it
+  through `exitArmed`, one of two exit helpers that now own every `os.Exit`
+  in `cmd/wile`: `exitUnarmed` for the flag-parsing exits above the hook
+  registration, where nothing is open, and `exitArmed` for everything after,
+  including `fail` and `Printf`. The CLI's once-guard became a compare-and-swap:
+  a report writer that fails does so through the same hook, and a
+  `sync.Once` re-entered from inside its own call deadlocks.
+- **`make covercheck` now gates the Scheme profile too.** The 80% threshold
+  applied to the Go profile only; `build/scheme-coverage.out` was produced
+  and summarized but never checked. `covercheck.sh` now runs on both, per
+  library directory for the Scheme side, with `*-test.scm` rows skipped (a
+  suite is a coverage source, not a subject). Three directories sit below
+  the line today and are excluded by name: `chibi` (79.8%), `srfi/1`
+  (66.2%), `srfi/132` (14.2%). `cover-scm.sh` also folds the repo-absolute
+  `pkg/stdlib/lib/` prefix off rows that a suite living beside the stdlib
+  sources produced through an on-disk `(include …)`, so the same file no
+  longer appears under two keys.
 - **`--cover` now instruments imported library bodies.** A library compiled by
   `(import …)` is built by the loader, not by either program compile path, so
   its template never reached the coverage collector: a `-L` library's

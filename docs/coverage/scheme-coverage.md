@@ -60,6 +60,24 @@ By default, entries from the embedded stdlib (paths starting with
 to include them in the output — useful when debugging stdlib
 interactions, noisy otherwise.
 
+## When the profile is written
+
+The profile is written once, at the end of the run, on every way out:
+a program that returns, one that calls `(exit)` or `(emergency-exit)`,
+and one that dies of an uncaught error (the CLI's own failure exit).
+All three go through the system extension's exit hook, so a suite that
+fails part-way still reports what ran before the failure.
+
+## The `covercheck` gate
+
+`make covercheck` runs every `*-test.scm` under `--cover --cover-stdlib`
+(`tools/sh/cover-scm.sh`), merges the profiles into
+`build/scheme-coverage.out`, and holds that file to the same 80%
+threshold as the Go profile, per library directory (`srfi/1`,
+`wile/algebra`, …). The suites themselves are skipped, as `_test.go`
+is for Go; directories below the threshold are listed in
+`tools/sh/covercheck.sh` next to the Go exclusions.
+
 ## Limitations
 
 - **Peephole fusion** may drop source attribution from some

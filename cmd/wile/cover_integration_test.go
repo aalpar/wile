@@ -59,6 +59,9 @@ func exitStatus(c *qt.C, err error) int {
 // terminates through the exit primitive rather than by returning: every real
 // suite ends in (test-exit), so a profile lost on that path is a sweep of
 // nothing. The status must survive too, or a failing suite would read as green.
+// The uncaught-error row pins the CLI's own failure exit: an error the program
+// never handles ends the process through fail, which is a third route to
+// os.Exit and must flush what the run collected before it got there.
 func TestCLI_CoverFlag_WritesGoCoverFormat(t *testing.T) {
 	c := qt.New(t)
 	binPath := buildWileBinary(c, c.TempDir())
@@ -71,6 +74,7 @@ func TestCLI_CoverFlag_WritesGoCoverFormat(t *testing.T) {
 		{"program returns", "(+ 1 2)\n", 0},
 		{"program calls (exit 0)", "(+ 1 2)\n(exit 0)\n", 0},
 		{"program calls (exit 3)", "(+ 1 2)\n(exit 3)\n", 3},
+		{"program raises uncaught error", "(+ 1 2)\n(error \"boom\")\n", 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

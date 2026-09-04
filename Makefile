@@ -474,13 +474,16 @@ coverhtml:
 # cover-scm runs as a prerequisite so the Scheme-side sweep happens
 # alongside the Go suite; the two profiles are produced separately
 # (build/scheme-coverage.out vs build/coverage.out) and are not
-# merged — the 80% threshold is enforced against the Go profile only.
+# merged. Each is held to the 80% threshold on its own: per Go package
+# for the first, per library directory for the second (suites skipped;
+# exclusions listed in covercheck.sh).
 #   make covercheck
 .PHONY: covercheck
 covercheck: cover-scm
 	@mkdir -p ./build
 	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./...
 	@bash $(SH_TOOLS_DIR)/covercheck.sh 80 $(GO_BUILD_DIR)/coverage.out
+	@bash $(SH_TOOLS_DIR)/covercheck.sh 80 $(GO_BUILD_DIR)/scheme-coverage.out
 
 # Run the SageMath algebra oracle live against the built binary (both phases).
 # Requires SageMath on PATH. Deliberately NOT part of `make ci` — CI has no

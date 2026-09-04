@@ -44,12 +44,22 @@ done
 
 echo "Ran $N test file(s); $FAILED failed" >&2
 
+# A suite that lives beside the stdlib sources (pkg/stdlib/lib/**/*-test.scm)
+# has its own directory as the load path, so an embedded library's
+# (include "x.scm") can resolve to the on-disk copy and land in the profile
+# under an absolute path. That is the same file the embed FS serves as a
+# repo-relative key, so fold the prefix off and let the merge below OR the
+# two together instead of counting one file twice under two names.
+ROOT=$(pwd)
+ROOT_P=$(pwd -P)
+
 # Merge Go cover profiles (mode: set). Same position across files →
 # logical OR of counts, which falls out of "sort by count descending,
 # keep highest-count row per position".
 {
     echo "mode: set"
     find "$TMP_DIR" -name 'cov-*.out' -exec tail -q -n +2 {} + \
+        | sed -e "s|^$ROOT/pkg/stdlib/lib/||" -e "s|^$ROOT_P/pkg/stdlib/lib/||" \
         | sort -k3,3nr \
         | awk '!seen[$1]++' \
         | sort

@@ -27,7 +27,7 @@ import (
 	"runtime/debug"
 	"runtime/pprof"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/aalpar/wile/coverage"
@@ -199,14 +199,14 @@ func main() {
 	if err != nil {
 		flagsErr, ok := err.(*flags.Error)
 		if ok && flagsErr.Type == flags.ErrHelp {
-			os.Exit(0)
+			exitUnarmed(0)
 		}
-		os.Exit(1)
+		exitUnarmed(1)
 	}
 
 	if opts.Version {
 		fmt.Println(versionString())
-		os.Exit(0)
+		exitUnarmed(0)
 	}
 
 	// Handle positional argument as file if --file not specified.
@@ -234,7 +234,7 @@ func main() {
 	// --mcp is exclusive: check conflicts before any defer is registered.
 	if opts.MCP && (len(opts.Eval) > 0 || len(opts.File) > 0 || opts.Interactive || opts.Check) {
 		fmt.Fprintln(os.Stderr, "Error: --mcp cannot be combined with -e, -f, -i, or --check")
-		os.Exit(1)
+		exitUnarmed(1)
 	}
 
 	// --check means "do not execute"; -i means "execute, then hand me a REPL".
@@ -243,16 +243,16 @@ func main() {
 	if opts.Check {
 		if opts.Interactive {
 			fmt.Fprintln(os.Stderr, "Error: --check cannot be combined with -i")
-			os.Exit(1)
+			exitUnarmed(1)
 		}
 		if len(opts.File) == 0 && len(opts.Eval) == 0 {
 			fmt.Fprintln(os.Stderr, "Error: --check requires a file or -e expression")
-			os.Exit(1)
+			exitUnarmed(1)
 		}
 	}
 	if opts.MCPTimeout < 0 {
 		fmt.Fprintln(os.Stderr, "Error: --mcp-timeout must be non-negative")
-		os.Exit(1)
+		exitUnarmed(1)
 	}
 
 	// CPU profiling
@@ -290,14 +290,19 @@ func main() {
 	// ways. The deferred call covers the --mcp and --check returns. The explicit
 	// call at the bottom of main runs ahead of the deferred engine Close, so the
 	// heap snapshot still sees the engine. The system extension's exit hook
-	// covers a program that ends in (exit): that terminates through os.Exit,
-	// which skips both of the others, and every test suite ends that way. The
-	// Once makes whichever arrivals come later no-ops.
-	var finishOnce sync.Once
+	// covers every exit from here on (exitArmed): a program that ends in
+	// (exit), and the CLI's own fail, which an uncaught Scheme error reaches.
+	// Both skip the deferred call, and every test suite ends one of those two
+	// ways. The flag makes whichever arrivals come later no-ops. It is a
+	// compare-and-swap rather than a sync.Once because writeRunReports fails
+	// through exitArmed, which runs this hook again from inside the first
+	// call; a Once would deadlock there.
+	var finished atomic.Bool
 	finishRun := func() {
-		finishOnce.Do(func() {
-			writeRunReports(cpuProfile, coverageCollector)
-		})
+		if !finished.CompareAndSwap(false, true) {
+			return
+		}
+		writeRunReports(cpuProfile, coverageCollector)
 	}
 	defer finishRun()
 	system.SetExitHook(finishRun)
@@ -723,7 +728,7 @@ func runREPL(ctx context.Context, eng *wile.Engine) {
 func Printf(fmtstr string, args ...any) {
 	_, err := fmt.Fprintf(os.Stdout, fmtstr, args...)
 	if err != nil {
-		os.Exit(EX_IOERR)
+		exitArmed(EX_IOERR)
 	}
 	os.Stdout.Sync() //nolint:errcheck
 }
@@ -770,6 +775,9 @@ func Fail(err error) {
 	fail(err, "")
 }
 
+// fail terminates through exitArmed so the run's profiles and coverage are
+// written first: an uncaught Scheme error ends here, and a suite that dies
+// this way still has a sweep's worth of hits to report.
 func fail(err error, mess string) {
 	// Drop the empty parts so a bare Fail(err) never emits a dangling ": ".
 	var parts []string
@@ -781,11 +789,30 @@ func fail(err error, mess string) {
 	}
 	joined := strings.Join(parts, ": ")
 	if joined == "" {
-		os.Exit(EX_OK)
+		exitArmed(EX_OK)
 	}
 	_, err0 := fmt.Fprintf(os.Stderr, "Error: %s\n", joined)
 	if err0 != nil {
-		os.Exit(EX_IOERR)
+		exitArmed(EX_IOERR)
 	}
-	os.Exit(1)
+	exitArmed(1)
+}
+
+// exitUnarmed ends the process before main has armed the run: no profile file
+// is open, no exit hook is registered, no engine exists, so there is nothing
+// to flush and os.Exit is the whole story. The direct exits in main's flag
+// parsing use it; nothing below the SetExitHook call may.
+func exitUnarmed(code int) {
+	os.Exit(code)
+}
+
+// exitArmed ends the process once main has armed the run: system.Exit runs
+// the registered hook, which writes the profiles and coverage, before the
+// process ends. fail and Printf go through here, so every exit below the
+// SetExitHook call does. The boundary is the hook, not the engine: the CPU
+// profile is open before the engine exists. fail is also reachable from the
+// CPU-profile setup just above the hook registration; with no hook yet,
+// system.Exit is os.Exit, so that path flushes nothing and loses nothing.
+func exitArmed(code int) {
+	system.Exit(code)
 }
