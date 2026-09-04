@@ -397,11 +397,7 @@ func (p *NativeTemplate) AppendOperationsWithSource(src *syntax.SourceContext, o
 			}
 			instr = p.AppendSideTableOp(iop)
 		}
-		p.code = append(p.code, instr)
-		p.sourceTableRefs = append(p.sourceTableRefs, idx)
-		if p.executed != nil {
-			p.executed = append(p.executed, false)
-		}
+		p.pushInstruction(instr, idx)
 	}
 }
 
@@ -660,18 +656,21 @@ func (p *NativeTemplate) AppendOperations(ops ...Operation) {
 // AppendInstructionWithSource appends a single instruction to the integer-dispatch
 // bytecode and tags it with the given source context.
 func (p *NativeTemplate) AppendInstructionWithSource(src *syntax.SourceContext, instr Instruction) {
-	idx := p.internSource(src)
-	p.code = append(p.code, instr)
-	p.sourceTableRefs = append(p.sourceTableRefs, idx)
-	if p.executed != nil {
-		p.executed = append(p.executed, false)
-	}
+	p.pushInstruction(instr, p.internSource(src))
 }
 
 // AppendInstruction appends a single instruction with no source attribution.
 func (p *NativeTemplate) AppendInstruction(instr Instruction) {
+	p.pushInstruction(instr, 0)
+}
+
+// pushInstruction appends one instruction and keeps the parallel arrays in
+// step: sourceTableRefs always, executed only while coverage is enabled.
+// Every code append goes through here so the len(code)==len(executed)
+// invariant asserted by Copy holds by construction.
+func (p *NativeTemplate) pushInstruction(instr Instruction, srcIdx uint32) {
 	p.code = append(p.code, instr)
-	p.sourceTableRefs = append(p.sourceTableRefs, 0)
+	p.sourceTableRefs = append(p.sourceTableRefs, srcIdx)
 	if p.executed != nil {
 		p.executed = append(p.executed, false)
 	}
