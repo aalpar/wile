@@ -70,7 +70,7 @@ type MachineContext struct {
 	cont      *MachineContinuation // current continuation
 	expansion *expansionState      // macro-expansion-time state, nil at runtime; see expansionState
 	// capturedMarks has two producers, both pairing it with isolatedMarks so that
-	// findParameterInMarks can consult it at the isolatedMarks break instead of
+	// forEachReachableMarkFrame can consult it at the isolatedMarks stop instead of
 	// walking parentMC. ReinstallSegment copies the segment's capture-time
 	// reachable-marks snapshot (comp.capturedMarks) so a resumed continuation's
 	// outer parameter/handler marks survive resume. unwindStackTo and RewindTo
@@ -95,7 +95,7 @@ type MachineContext struct {
 	maxCallDepth int              // 0 = unlimited (default); negatives are clamped to 0 by SetMaxCallDepth
 	maxStackSize uint64           // 0 = unlimited (default), otherwise max eval stack entries
 	restArgBuf   values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
-	// isolatedMarks, when true, stops findParameterInMarks from walking parentMC.
+	// isolatedMarks, when true, stops forEachReachableMarkFrame from walking parentMC.
 	// Set by ReinstallSegment (from its isolate argument) and by the dynamic-wind
 	// thunk sub-contexts built in unwindStackTo and RewindTo.
 	isolatedMarks bool
@@ -1399,7 +1399,7 @@ const DefaultBacktraceDepth = 20
 // re-executes nothing — so spanning the boundary is both safe and desirable.
 //
 // The walk stops at a context with isolatedMarks set (a re-invoked continuation
-// running a grafted chain), mirroring findParameterInMarks: the trace then shows
+// running a grafted chain), mirroring forEachReachableMarkFrame: the trace then shows
 // the continuation's own extent, not the invoker's.
 //
 // The debugger's break-boundary frame is elided: it is VM scaffolding rather
@@ -1755,11 +1755,10 @@ func (p *MachineContext) SetThread(t *values.Thread) {
 // SetMark sets a continuation mark on the current frame using eq? semantics.
 // Updates an existing entry with the same key, or appends a new one.
 func (p *MachineContext) SetMark(key, val values.Value) {
-	for i := range p.marks {
-		if values.EqIdentity(p.marks[i].key, key) {
-			p.marks[i].val = val
-			return
-		}
+	i := markIndex(p.marks, key)
+	if i >= 0 {
+		p.marks[i].val = val
+		return
 	}
 	p.marks = append(p.marks, markEntry{key: key, val: val})
 }
@@ -1770,12 +1769,7 @@ func (p *MachineContext) SetMark(key, val values.Value) {
 // are always non-nil Scheme values (GetValue never returns nil); SetMark must
 // never be called with a nil val, as nil would be indistinguishable from absent.
 func (p *MachineContext) GetMark(key values.Value) values.Value {
-	for _, e := range p.marks {
-		if values.EqIdentity(e.key, key) {
-			return e.val
-		}
-	}
-	return nil
+	return lookupMark(p.marks, key)
 }
 
 // GetImmediateMark returns the nearest mark for key, checking the current
@@ -1786,18 +1780,14 @@ func (p *MachineContext) GetMark(key values.Value) values.Value {
 // (mc.marks); in non-tail position, SaveContinuation moves mc.marks to
 // mc.cont and nils the live frame. Both cases are handled here.
 func (p *MachineContext) GetImmediateMark(key values.Value) values.Value {
-	val := p.GetMark(key)
+	val := lookupMark(p.marks, key)
 	if val != nil {
 		return val
 	}
-	if p.cont != nil {
-		for _, e := range p.cont.marks {
-			if values.EqIdentity(e.key, key) {
-				return e.val
-			}
-		}
+	if p.cont == nil {
+		return nil
 	}
-	return nil
+	return lookupMark(p.cont.marks, key)
 }
 
 // DeleteMark removes the continuation mark for key from the current frame.
@@ -1805,16 +1795,16 @@ func (p *MachineContext) GetImmediateMark(key values.Value) values.Value {
 // Uses eq? semantics for key comparison.
 // Deletion uses swap-with-last for O(1) removal; insertion order is not preserved.
 func (p *MachineContext) DeleteMark(key values.Value) {
-	for i := range p.marks {
-		if values.EqIdentity(p.marks[i].key, key) {
-			p.marks[i] = p.marks[len(p.marks)-1]
-			p.marks[len(p.marks)-1] = markEntry{}
-			p.marks = p.marks[:len(p.marks)-1]
-			if len(p.marks) == 0 {
-				p.marks = nil
-			}
-			return
-		}
+	i := markIndex(p.marks, key)
+	if i < 0 {
+		return
+	}
+	last := len(p.marks) - 1
+	p.marks[i] = p.marks[last]
+	p.marks[last] = markEntry{}
+	p.marks = p.marks[:last]
+	if len(p.marks) == 0 {
+		p.marks = nil
 	}
 }
 

@@ -34,7 +34,7 @@ import (
 const handlerMarkPrototype = `
   ;; The handler stack rides a PARAMETER, not a raw continuation mark. This is the
   ;; load-bearing choice (step-2 finding): a parameter READ goes through
-  ;; findParameterInMarks, which HOPS parentMC (machine_context_apply.go:362-384)
+  ;; findParameterInMarks, which HOPS parentMC (forEachReachableMarkFrame)
   ;; and so spans the sub-contexts that call-with-continuation-prompt / apply /
   ;; call-with-values create. Raw current-continuation-marks does NOT hop parentMC
   ;; (continuation_mark_set.go:144) and stops at the prompt -- which is exactly why
