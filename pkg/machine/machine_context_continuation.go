@@ -28,40 +28,57 @@ func cloneMarks(marks []markEntry) []markEntry {
 	return slices.Clone(marks)
 }
 
-func (p *MachineContext) Restore(cont *MachineContinuation) {
-	p.counters.ContinuationsRestored++
-	p.env = cont.env
-	p.template = cont.template
-	p.free = cont.free
-	p.cont = cont.parent
-	p.pc = cont.pc
+// restore restores the machine context's registers from the given continuation.
+// This is the core of both Restore and RestoreAndRelease, which differ only in
+// how they handle the evals stack and the continuation frame itself.
+func restore(mc *MachineContext, cont *MachineContinuation) {
+	mc.counters.ContinuationsRestored++
+	mc.env = cont.env
+	mc.template = cont.template
+	mc.free = cont.free
+	mc.cont = cont.parent
+	mc.pc = cont.pc
 	// Restore callDepth from the continuation's cached value.
 	// Each continuation stores its ancestor count at creation time, which
-	// equals the chain length of cont.parent (which is now p.cont).
+	// equals the chain length of cont.parent (which is now mc.cont).
 	// This replaces an O(d) chain walk with an O(1) field read.
-	p.callDepth = cont.callDepth
-	// Restore is the non-consuming restore path: captured/composable segment
-	// reinstatement AND prompt-frame restores during an abort (where the frame
-	// came off the live chain via FindPrompt). The old mc.env is NOT
-	// released because it may be referenced by continuation frames still in
-	// the chain (e.g., SaveContinuation frames created before the composable
-	// continuation was invoked). Let GC collect it naturally.
+	mc.callDepth = cont.callDepth
+	// barrierValid reverts here, before the shared/unshared branch, so both normal
+	// return and resume-out restore the barrier the frame was created under.
+	mc.barrierValid = cont.barrierValid
+}
+
+// restoreEvals is the non-consuming evals restore: the continuation's saved
+// stack is left intact so the frame can be re-invoked. The inline path reuses
+// mc.evals; the stack path copies cont.evals into a fresh mc.evals. Used by
+// Restore and by RestoreAndRelease's shared-frame branch.
+func restoreEvals(mc *MachineContext, cont *MachineContinuation) {
+	if cont.evals == nil {
+		// Inline: restore from inline slots, reuse mc.evals. Don't nil the
+		// inline values — the frame may be re-invoked.
+		restoreInlineEvals(mc.evals, cont)
+	} else {
+		mc.counters.StackPoolReleases++
+		oldEvals := mc.evals
+		// Must copy evals to avoid corrupting the continuation's saved stack.
+		// Without copying, modifications to mc.evals after restoration would mutate
+		// cont.evals, breaking re-invocation of the continuation.
+		mc.evals = cont.evals.Copy()
+		mc.releaseStack(oldEvals)
+	}
+}
+
+// Restore restores the machine context's registers from the given continuation.
+// This is the non-consuming restore path: captured/composable segment reinstatement
+// AND prompt-frame restores during an abort (where the frame came off the live chain
+// via FindPrompt). The old mc.env is NOT released because it may be referenced by
+// continuation frames still in the chain (e.g., SaveContinuation frames created
+// before the composable continuation was invoked). Let GC collect it naturally.
+func (p *MachineContext) Restore(cont *MachineContinuation) {
+	restore(p, cont)
 	p.envPooled = false
 	p.marks = cloneMarks(cont.marks)
-	p.barrierValid = cont.barrierValid
-
-	if cont.evals == nil {
-		// Inline: restore from inline slots, reuse mc.evals.
-		restoreInlineEvals(p.evals, cont)
-	} else {
-		// Must copy evals to avoid corrupting the continuation's saved stack.
-		// Without copying, modifications to p.evals after restoration would mutate
-		// cont.evals, breaking re-invocation of the continuation.
-		p.counters.StackPoolReleases++
-		oldEvals := p.evals
-		p.evals = cont.evals.Copy()
-		p.releaseStack(oldEvals)
-	}
+	restoreEvals(p, cont)
 }
 
 // RestoreAndRelease is the fast path for normal function return. It transfers
@@ -80,39 +97,22 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 //  3. Nil cont.evals so releaseContinuation won't double-release it
 //  4. Pool the consumed continuation frame
 func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
-	p.counters.ContinuationsRestored++
-
 	oldEnv := p.env
 	oldEnvPooled := p.envPooled
 
-	p.env = cont.env
-	p.template = cont.template
-	p.free = cont.free
-	p.cont = cont.parent
-	p.pc = cont.pc
-	p.callDepth = cont.callDepth
-	// barrierValid reverts here, before the shared/unshared branch, so both normal
-	// return and resume-out restore the barrier the frame was created under.
-	p.barrierValid = cont.barrierValid
+	restore(p, cont)
 
 	if cont.shared {
 		// Shared frame: copy evals (preserve for re-invocation), don't pool
 		// the continuation. The restored env must not be released on future
 		// overwrites because the shared continuation may be re-invoked.
 		p.counters.SharedFrameRestores++
-		if cont.evals == nil {
-			// Inline + shared: restore from inline slots, reuse mc.evals.
-			// Don't nil inline values — shared frame may be re-invoked.
-			restoreInlineEvals(p.evals, cont)
-		} else {
-			p.counters.StackPoolReleases++
-			oldEvals := p.evals
-			// Must copy evals to avoid corrupting the continuation's saved stack.
-			// Without copying, modifications to p.evals after restoration would mutate
-			// cont.evals, breaking re-invocation of the continuation.
-			p.evals = cont.evals.Copy()
-			p.releaseStack(oldEvals)
-		}
+		// Restore evals from the continuation, copying if necessary. The shared
+		// continuation may be re-invoked, so we cannot transfer ownership of the
+		// stack to mc.evals. Instead, we copy the stack (or inline slots) into
+		// mc.evals, leaving the continuation's saved stack intact for future
+		// re-entry.
+		restoreEvals(p, cont)
 		// envPooled: shared continuation may be re-invoked; env must not be recycled.
 		p.envPooled = false
 		p.marks = cloneMarks(cont.marks)
