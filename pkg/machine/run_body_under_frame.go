@@ -234,11 +234,9 @@ func (p *MachineContext) RunBodyUnderFrame(frame *MachineContinuation, body valu
 	// %exception-handlers mark a tail-position call-with-values inherits, or the
 	// parent-handler mark RaiseInPlace installs) would be dropped at that boundary,
 	// leaving the consumer/handler unable to see the current exception handler.
-	if len(p.marks) > 0 {
-		frame.marks = cloneMarks(p.marks)
-	}
-	// The reified frame inherits the current barrier so a continuation captured in the
-	// body records it (crossing detection still fires) and the frame's restore reverts it.
+	frame.marks = cloneMarks(p.marks)
+	// The reified frame inherits the current barrier, so a continuation captured in the
+	// body records it (crossing detection still fires), and the frame's restore reverts it.
 	frame.barrierValid = p.barrierValid
 	transferEnvOwnership(p, frame)
 	p.cont = frame
@@ -327,9 +325,7 @@ func (p *MachineContext) RunBodyUnderBarrier(body values.Value, token *BarrierTo
 	if len(p.windingStack) > 0 {
 		frame.windingStack = p.windingStack.Copy()
 	}
-	if len(p.marks) > 0 {
-		frame.marks = cloneMarks(p.marks)
-	}
+	frame.marks = cloneMarks(p.marks)
 	frame.barrierValid = p.barrierValid // outer token = restore target on frame exit
 	transferEnvOwnership(p, frame)
 	p.cont = frame

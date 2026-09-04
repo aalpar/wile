@@ -168,9 +168,7 @@ func (p *MachineContext) InstallBreakPrompt(handler values.Callable) *PromptTag 
 	if len(p.windingStack) > 0 {
 		frame.windingStack = p.windingStack.Copy()
 	}
-	if len(p.marks) > 0 {
-		frame.marks = cloneMarks(p.marks)
-	}
+	frame.marks = cloneMarks(p.marks)
 	frame.barrierValid = p.barrierValid
 	p.cont = frame
 	// Pushing a frame lengthens the chain, and p.callDepth caches that length —
