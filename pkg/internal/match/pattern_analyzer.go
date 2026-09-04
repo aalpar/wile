@@ -38,7 +38,7 @@ func NewPatternAnalysis() *PatternAnalysis {
 }
 
 // AnalyzePattern analyzes a pattern and returns analysis results
-func AnalyzePattern(pattern *syntax.SyntaxPair, variables values.StringSet) *PatternAnalysis {
+func AnalyzePattern(pattern *syntax.SyntaxPair, variables syntax.PatternVarSymbols) *PatternAnalysis {
 	analysis := NewPatternAnalysis()
 	analyzeRecursive(pattern, variables, analysis)
 	return analysis
@@ -57,7 +57,7 @@ func AnalyzePattern(pattern *syntax.SyntaxPair, variables values.StringSet) *Pat
 // claim it.
 func analyzeRecursive(
 	v syntax.SyntaxValue,
-	variables values.StringSet,
+	variables syntax.PatternVarSymbols,
 	analysis *PatternAnalysis,
 ) values.StringSet {
 	switch t := v.(type) {

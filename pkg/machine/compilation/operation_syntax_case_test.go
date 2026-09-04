@@ -34,7 +34,7 @@ func TestSyntaxCaseClause_EqualTo(t *testing.T) {
 	c := qt.New(t)
 
 	clause := &SyntaxCaseClause{
-		PatternVars: values.StringSet{"x": {}},
+		PatternVarSyntax: syntax.PatternVarSymbols{"x": {}},
 	}
 
 	c.Assert(clause.EqualTo(clause), qt.IsFalse) // Always returns false
@@ -104,7 +104,7 @@ func TestOperationSyntaxCaseMatch_IsVoid(t *testing.T) {
 func TestNewOperationBindPatternVars(t *testing.T) {
 	c := qt.New(t)
 
-	vars := values.StringSet{"x": {}, "y": {}}
+	vars := syntax.PatternVarSymbols{"x": {}, "y": {}}
 	op := NewOperationBindPatternVars(vars)
 
 	c.Assert(op, qt.IsNotNil)
@@ -114,31 +114,31 @@ func TestNewOperationBindPatternVars(t *testing.T) {
 func TestOperationBindPatternVars_String(t *testing.T) {
 	c := qt.New(t)
 
-	op := NewOperationBindPatternVars(values.StringSet{"x": {}})
+	op := NewOperationBindPatternVars(syntax.PatternVarSymbols{"x": {}})
 	c.Assert(op.String(), qt.Equals, "BindPatternVars")
 }
 
 func TestOperationBindPatternVars_SchemeString(t *testing.T) {
 	c := qt.New(t)
 
-	op := NewOperationBindPatternVars(values.StringSet{"x": {}})
+	op := NewOperationBindPatternVars(syntax.PatternVarSymbols{"x": {}})
 	c.Assert(op.SchemeString(), qt.Equals, "#<operation:bind-pattern-vars>")
 }
 
 func TestOperationBindPatternVars_IsVoid(t *testing.T) {
 	c := qt.New(t)
 
-	op := NewOperationBindPatternVars(values.StringSet{"x": {}})
+	op := NewOperationBindPatternVars(syntax.PatternVarSymbols{"x": {}})
 	c.Assert(op.IsVoid(), qt.IsFalse)
 }
 
 func TestOperationBindPatternVars_EqualTo(t *testing.T) {
 	c := qt.New(t)
 
-	op1 := NewOperationBindPatternVars(values.StringSet{"x": {}})
-	op2 := NewOperationBindPatternVars(values.StringSet{"x": {}})
-	op3 := NewOperationBindPatternVars(values.StringSet{"y": {}})
-	op4 := NewOperationBindPatternVars(values.StringSet{"x": {}, "y": {}})
+	op1 := NewOperationBindPatternVars(syntax.PatternVarSymbols{"x": {}})
+	op2 := NewOperationBindPatternVars(syntax.PatternVarSymbols{"x": {}})
+	op3 := NewOperationBindPatternVars(syntax.PatternVarSymbols{"y": {}})
+	op4 := NewOperationBindPatternVars(syntax.PatternVarSymbols{"x": {}, "y": {}})
 
 	c.Assert(op1.EqualTo(op2), qt.IsTrue)
 	c.Assert(op1.EqualTo(op3), qt.IsFalse) // Different var name

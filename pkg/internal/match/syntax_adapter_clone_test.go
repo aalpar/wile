@@ -39,7 +39,7 @@ import (
 func TestSyntaxMatcher_CloneForMatchConcurrent(t *testing.T) {
 	c := qt.New(t)
 
-	variables := values.StringSet{"x": {}}
+	variables := syntax.PatternVarSymbols{"x": {}}
 	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 	compiler := NewSyntaxCompiler()
 	compiler.variables = variables

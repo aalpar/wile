@@ -49,7 +49,7 @@ func TestMatchSyntax(t *testing.T) {
 			ByteCodeDone{},
 		}
 		target := testSyntaxList(testSyntaxInt(10), testSyntaxInt(20), testSyntaxInt(30))
-		matcher := NewMatcher(values.StringSet{}, codes)
+		matcher := NewMatcher(syntax.PatternVarSymbols{}, codes)
 
 		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
@@ -67,7 +67,7 @@ func TestMatchSyntax(t *testing.T) {
 		}
 		inner := testSyntaxList(testSyntaxInt(10))
 		target := testSyntaxList(inner, testSyntaxInt(20))
-		matcher := NewMatcher(values.StringSet{}, codes)
+		matcher := NewMatcher(syntax.PatternVarSymbols{}, codes)
 
 		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
@@ -93,7 +93,7 @@ func TestMatchSyntax(t *testing.T) {
 			ByteCodeDone{},                     // 6
 		}
 		target := testSyntaxList(testSyntaxInt(1), testSyntaxInt(2), testSyntaxInt(3))
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
 		err := matcher.MatchSyntax(context.Background(), target)
@@ -119,7 +119,7 @@ func TestMatchSyntax(t *testing.T) {
 			ByteCodeDone{},
 		}
 		target := testSyntaxList(testSyntaxInt(10), testSyntaxInt(30))
-		matcher := NewMatcher(values.StringSet{}, codes)
+		matcher := NewMatcher(syntax.PatternVarSymbols{}, codes)
 
 		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.Equals, ErrNotAMatch)
@@ -135,7 +135,7 @@ func TestMatchSyntax(t *testing.T) {
 		}
 		// Create improper pair (1 . 2)
 		target := syntax.NewSyntaxCons(testSyntaxInt(1), testSyntaxInt(2), nil)
-		variables := values.StringSet{"a": {}, "rest": {}}
+		variables := syntax.PatternVarSymbols{"a": {}, "rest": {}}
 		matcher := NewMatcher(variables, codes)
 
 		err := matcher.MatchSyntax(context.Background(), target)
@@ -167,7 +167,7 @@ func TestMatchSyntaxWithLiterals(t *testing.T) {
 			return true // Always match for this test
 		}
 		target := testSyntaxList(syntax.NewSyntaxSymbol("if", nil), testSyntaxInt(42))
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
 		err := matcher.MatchSyntaxWithLiterals(context.Background(), target, literalSyntax, literalMatcher)
@@ -193,7 +193,7 @@ func TestMatchSyntaxWithLiterals(t *testing.T) {
 			return false // Scope mismatch simulation
 		}
 		target := testSyntaxList(syntax.NewSyntaxSymbol("if", nil), testSyntaxInt(42))
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
 		err := matcher.MatchSyntaxWithLiterals(context.Background(), target, literalSyntax, literalMatcher)
@@ -214,7 +214,7 @@ func TestMatchSyntaxWithLiterals(t *testing.T) {
 			return true
 		}
 		target := testSyntaxList(testSyntaxInt(42))
-		matcher := NewMatcher(values.StringSet{}, codes)
+		matcher := NewMatcher(syntax.PatternVarSymbols{}, codes)
 
 		err := matcher.MatchSyntaxWithLiterals(context.Background(), target, literalSyntax, literalMatcher)
 		c.Assert(err, qt.Equals, ErrNotAMatch)
@@ -235,7 +235,7 @@ func TestMatchSyntaxWithLiterals(t *testing.T) {
 			return true
 		}
 		target := testSyntaxList(syntax.NewSyntaxSymbol("foo", nil), testSyntaxInt(10))
-		matcher := NewMatcher(values.StringSet{}, codes)
+		matcher := NewMatcher(syntax.PatternVarSymbols{}, codes)
 
 		err := matcher.MatchSyntaxWithLiterals(context.Background(), target, literalSyntax, literalMatcher)
 		c.Assert(err, qt.IsNil)
@@ -272,7 +272,7 @@ func TestMatchSyntax_EllipsisInMiddle(t *testing.T) {
 			ByteCodeDone{},                                // 9
 		}
 		target := testSyntaxList(testSyntaxSym("b"), testSyntaxSym("c"))
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
 		err := matcher.MatchSyntax(context.Background(), target)
@@ -301,7 +301,7 @@ func TestMatchSyntax_EllipsisInMiddle(t *testing.T) {
 			testSyntaxInt(1), testSyntaxInt(2), testSyntaxInt(3),
 			testSyntaxSym("b"), testSyntaxSym("c"),
 		)
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
 		err := matcher.MatchSyntax(context.Background(), target)
@@ -327,7 +327,7 @@ func TestMatchSyntax_EllipsisInMiddle(t *testing.T) {
 			ByteCodeDone{},                                // 7
 		}
 		target := testSyntaxList(testSyntaxInt(1), testSyntaxSym("b"))
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
 		err := matcher.MatchSyntax(context.Background(), target)
@@ -357,7 +357,7 @@ func TestMatchSyntaxVectorPatterns(t *testing.T) {
 		}
 		vec := syntax.NewSyntaxVector(nil, testSyntaxInt(1), testSyntaxInt(2))
 		target := testSyntaxList(testSyntaxSym("foo"), vec)
-		variables := values.StringSet{"x": {}, "y": {}}
+		variables := syntax.PatternVarSymbols{"x": {}, "y": {}}
 		matcher := NewMatcher(variables, codes)
 
 		err := matcher.MatchSyntax(context.Background(), target)
@@ -378,7 +378,7 @@ func TestMatchSyntaxVectorPatterns(t *testing.T) {
 		}
 		vec := syntax.NewSyntaxVector(nil)
 		target := testSyntaxList(testSyntaxSym("foo"), vec)
-		matcher := NewMatcher(values.StringSet{}, codes)
+		matcher := NewMatcher(syntax.PatternVarSymbols{}, codes)
 
 		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
@@ -393,7 +393,7 @@ func TestMatchSyntaxVectorPatterns(t *testing.T) {
 			ByteCodeDone{},
 		}
 		target := testSyntaxList(testSyntaxList(testSyntaxInt(1)))
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 		matcher := NewMatcher(variables, codes)
 
 		err := matcher.MatchSyntax(context.Background(), target)
@@ -423,7 +423,7 @@ func TestMatchSyntaxVectorPatterns(t *testing.T) {
 		}
 		vec := syntax.NewSyntaxVector(nil, testSyntaxInt(1), testSyntaxInt(2), testSyntaxInt(3))
 		target := testSyntaxList(testSyntaxSym("foo"), vec)
-		variables := values.StringSet{"x": {}, "rest": {}}
+		variables := syntax.PatternVarSymbols{"x": {}, "rest": {}}
 		matcher := NewMatcher(variables, codes, WithEllipsisVars(ellipsisVars))
 
 		err := matcher.MatchSyntax(context.Background(), target)

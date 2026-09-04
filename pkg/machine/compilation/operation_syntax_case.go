@@ -224,7 +224,7 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *machine.MachineContext) (*machine.M
 	if mc.ExpanderContext() != nil && mc.ExpanderContext().Env() != nil {
 		bindingEnv = mc.ExpanderContext().Env()
 	}
-	matcher := match.NewSyntaxMatcher(clause.PatternVars, clause.Bytecode, &match.SyntaxMatcherOpts{
+	matcher := match.NewSyntaxMatcher(clause.PatternVarSyntax, clause.Bytecode, &match.SyntaxMatcherOpts{
 		EllipsisVars:   clause.EllipsisVars,
 		EllipsisDepths: clause.EllipsisDepths,
 		LiteralSyntax:  clause.LiteralSyntax,
@@ -279,7 +279,7 @@ type OperationBindPatternVars struct {
 	MergedSlots int
 }
 
-func NewOperationBindPatternVars(patternVars values.StringSet) *OperationBindPatternVars {
+func NewOperationBindPatternVars(patternVars syntax.PatternVarSymbols) *OperationBindPatternVars {
 	// Convert to a sorted list for consistent indexing
 	vars := slices.Sorted(maps.Keys(patternVars))
 	return &OperationBindPatternVars{

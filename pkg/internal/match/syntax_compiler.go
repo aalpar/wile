@@ -88,8 +88,8 @@ type SyntaxCommand interface {
 // SyntaxCompiler compiles pattern syntax into bytecode.
 type SyntaxCompiler struct {
 	codes              []SyntaxCommand
-	variables          values.StringSet
-	literals           values.StringSet         // literals to match exactly
+	variables          syntax.PatternVarSymbols
+	literals           syntax.LiteralSymbols
 	analysis           *PatternAnalysis         // pattern analysis results
 	nextEllipsisID     int                      // counter for assigning unique ellipsis IDs
 	ellipsisVars       map[int]values.StringSet // ellipsisID -> captured pattern variables
@@ -112,8 +112,8 @@ func NewSyntaxCompilerWithEllipsis(ellipsis string) *SyntaxCompiler {
 		ellipsis = DefaultEllipsis
 	}
 	q := &SyntaxCompiler{
-		variables:        values.StringSet{},
-		literals:         values.StringSet{},
+		variables:        syntax.PatternVarSymbols{},
+		literals:         syntax.LiteralSymbols{},
 		ellipsisVars:     map[int]values.StringSet{},
 		ellipsisDepths:   map[int]int{},
 		ellipsis:         ellipsis,

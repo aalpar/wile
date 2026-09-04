@@ -108,7 +108,6 @@ type SyntaxRulesClause struct {
     Template         syntax.SyntaxValue
     Bytecode         []match.SyntaxCommand
     Matcher          *match.SyntaxMatcher
-    PatternVars      values.StringSet
     PatternVarSyntax syntax.PatternVarSymbols
     EllipsisVars     map[int]values.StringSet
     FreeIds          map[string]*FreeIdResolution

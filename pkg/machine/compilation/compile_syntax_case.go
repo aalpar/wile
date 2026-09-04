@@ -74,10 +74,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		}
 		// syntax-case always uses the default ellipsis "..."
 		// Use extractLiteralsWithSyntax to enable scope-aware literal matching.
-		// Pass a non-nil literals map because extractLiteralsWithSyntax
-		// unconditionally writes to it; only literalSyntax is used downstream.
-		literals := values.NewStringSet(0)
-		err := extractLiteralsWithSyntax(ctctx.ctx, literalsPair, literals, literalSyntax, match.DefaultEllipsis)
+		err := extractLiteralsWithSyntax(ctctx.ctx, literalsPair, literalSyntax, match.DefaultEllipsis)
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "syntax-case: invalid literals list"))
 		}
@@ -186,13 +183,12 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// literalSyntax names the pattern literals, so they are excluded here; it is
 	// also stored on the clause below, which is what carries their definition-site
 	// scopes to the matcher for the R7RS §4.3.2 binding check.
-	patternVars := values.NewStringSet(0)
 	// patternVarSyntax records each pattern variable's syntax symbol (with its
 	// scopes) so the ellipsis template-expansion path can do scope-aware
 	// substitution for nested-macro hygiene — the same data the syntax-rules
 	// path stores on SyntaxRulesClause.PatternVarSyntax.
 	patternVarSyntax := make(syntax.PatternVarSymbols)
-	err := collectPatternVariablesWithEllipsis(pattern, literalSyntax, false, patternVars, patternVarSyntax, match.DefaultEllipsis)
+	err := collectPatternVariablesWithEllipsis(pattern, literalSyntax, false, patternVarSyntax, match.DefaultEllipsis)
 	if err != nil {
 		return err
 	}
@@ -201,16 +197,15 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// The pattern compiler handles _ as a non-capturing wildcard, but
 	// collectPatternVariablesWithEllipsis includes it. Remove it so BindPatternVars
 	// doesn't create a void binding for _.
-	_, wildcardIsLiteral := literalSyntax["_"]
+	wildcardIsLiteral := literalSyntax.ContainsOne("_")
 	if !wildcardIsLiteral {
-		patternVars.Unset("_")
 		delete(patternVarSyntax, "_")
 	}
 
 	// Compile the pattern to bytecode.
 	// syntax-case patterns don't have a leading macro keyword (unlike syntax-rules),
 	// so match all elements including the first.
-	compiled, err := match.CompileSyntaxPattern(ctctx.ctx, pattern, patternVars, &match.CompilePatternOpts{
+	compiled, err := match.CompileSyntaxPattern(ctctx.ctx, pattern, patternVarSyntax, &match.CompilePatternOpts{
 		MatchAllElements: true,
 	})
 	if err != nil {
@@ -222,12 +217,12 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// OperationSyntaxCaseMatch, running in the use site's environment, cannot
 	// recompute.
 	clauseWrapper := &SyntaxCaseClause{
-		Bytecode:       compiled.Codes,
-		PatternVars:    patternVars,
-		LiteralSyntax:  literalSyntax,
-		LiteralDefs:    resolveLiteralDefinitions(p.env, literalSyntax),
-		EllipsisVars:   compiled.EllipsisVars,
-		EllipsisDepths: compiled.EllipsisDepths,
+		Bytecode:         compiled.Codes,
+		PatternVarSyntax: patternVarSyntax,
+		LiteralSyntax:    literalSyntax,
+		LiteralDefs:      resolveLiteralDefinitions(p.env, literalSyntax),
+		EllipsisVars:     compiled.EllipsisVars,
+		EllipsisDepths:   compiled.EllipsisDepths,
 	}
 
 	// Store the clause in literals
@@ -257,7 +252,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	*failJumps = append(*failJumps, jumpPatch{clauseIndex, failBranchIdx})
 
 	// Create environment with pattern variables bound (shared between fender and body)
-	bodyEnv := p.createPatternVarEnvironment(patternVars, patternVarSyntax)
+	bodyEnv := p.createPatternVarEnvironment(patternVarSyntax)
 	bodyCompiler := NewCompileTimeContinuation(p.template, bodyEnv, p.evaluator)
 	bodyCompiler.SetInlineThreshold(p.inlineThreshold)
 	// Carry the clause's hygiene context into CompileSyntax so that ellipsis
@@ -265,7 +260,6 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// separate field on CompileTimeContinuation), so propagate it explicitly for
 	// cross-library free-id resolution.
 	bodyCompiler.libraryScope = p.libraryScope
-	bodyCompiler.patternVars = patternVars
 	bodyCompiler.patternVarSyntax = patternVarSyntax
 	// The merge maps are shared so a reference from this clause body out into an
 	// enclosing merged `let` translates.
@@ -297,7 +291,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// variables, and CompileSyntaxPattern refuses it today
 	// (internal/match/syntax_adapter.go gates on *syntax.SyntaxPair), so the
 	// temptation arrives with the fix for that.
-	bindVars := NewOperationBindPatternVars(patternVars)
+	bindVars := NewOperationBindPatternVars(patternVarSyntax)
 	bodyCompiler.AppendOperations(bindVars)
 
 	// Create expander for the body environment (to expand macros like let)
@@ -413,10 +407,9 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 // LoadLocal index this resolution produced. Both sides sort by name and append,
 // so scoping one side cannot move a slot.
 func (p *CompileTimeContinuation) createPatternVarEnvironment(
-	patternVars values.StringSet,
 	patternVarSyntax syntax.PatternVarSymbols,
 ) *environment.EnvironmentFrame {
-	vars := slices.Sorted(maps.Keys(patternVars))
+	vars := slices.Sorted(maps.Keys(patternVarSyntax))
 
 	// Empty, then append — see OperationBindPatternVars.Apply for why the two
 	// sides build the frame this way and why "however many appends have
@@ -425,19 +418,9 @@ func (p *CompileTimeContinuation) createPatternVarEnvironment(
 	childEnv := environment.NewEnvironmentFrameWithParent(localEnv, p.env)
 
 	// Create bindings for each pattern variable in sorted order.
-	//
-	// A name absent from patternVarSyntax binds scopeless, which is the
-	// pre-hygiene "match any" dedup key and resolves against every reference.
-	// That is the conservative direction: collectPatternVariablesWithEllipsis
-	// fills both collections from one walk, so the two agree today, and a future
-	// divergence deoptimizes rather than mis-resolves.
 	for _, varName := range vars {
 		sym := values.NewSymbol(varName)
-		var scopes []*syntax.Scope
-		patSym := patternVarSyntax[varName]
-		if patSym != nil {
-			scopes = patSym.Scopes()
-		}
+		scopes := patternVarSyntax[varName].Scopes()
 		childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, scopes, nil)
 	}
 

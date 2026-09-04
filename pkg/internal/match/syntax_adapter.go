@@ -179,7 +179,7 @@ type SyntaxMatcherOpts struct {
 // has a literal's name but has been shadowed (has additional scopes), it won't match
 // the pattern literal. R7RS §4.3.2 requires this for auxiliary syntax like => and else.
 func NewSyntaxMatcher(
-	variables values.StringSet,
+	variables syntax.PatternVarSymbols,
 	codes []SyntaxCommand,
 	opts *SyntaxMatcherOpts,
 ) *SyntaxMatcher {
@@ -299,7 +299,7 @@ type CompiledPattern struct {
 // CompilePatternOpts holds optional parameters for CompileSyntaxPattern.
 // A nil opts pointer means all defaults (no literals, default "...").
 type CompilePatternOpts struct {
-	Literals         values.StringSet
+	Literals         syntax.LiteralSymbols
 	EllipsisID       string
 	MatchAllElements bool // false (default): skip first element (R7RS syntax-rules macro keyword); true: match all elements (syntax-case)
 }
@@ -312,11 +312,11 @@ type CompilePatternOpts struct {
 func CompileSyntaxPattern(
 	ctx context.Context,
 	pattern syntax.SyntaxValue,
-	variables values.StringSet,
+	variables syntax.PatternVarSymbols,
 	opts *CompilePatternOpts,
 ) (*CompiledPattern, error) {
 	ellipsisID := DefaultEllipsis
-	var literals values.StringSet
+	var literals syntax.LiteralSymbols
 	skipKeyword := true // R7RS §4.3.2 default: first element is macro keyword
 	if opts != nil {
 		if opts.EllipsisID != "" {

@@ -105,25 +105,25 @@ func TestFindSyntaxPatternVariables(t *testing.T) {
 
 	tcs := []struct {
 		name      string
-		variables values.StringSet
+		variables syntax.PatternVarSymbols
 		template  syntax.SyntaxValue
 		expected  values.StringSet
 	}{
 		{
 			name:      "finds single variable",
-			variables: values.StringSet{"x": {}},
+			variables: syntax.PatternVarSymbols{"x": {}},
 			template:  syntax.NewSyntaxSymbol("x", nil),
 			expected:  values.StringSet{"x": {}},
 		},
 		{
 			name:      "no variables found",
-			variables: values.StringSet{"x": {}},
+			variables: syntax.PatternVarSymbols{"x": {}},
 			template:  syntax.NewSyntaxSymbol("y", nil),
 			expected:  values.StringSet{},
 		},
 		{
 			name:      "finds multiple variables in list",
-			variables: values.StringSet{"x": {}, "y": {}},
+			variables: syntax.PatternVarSymbols{"x": {}, "y": {}},
 			template: testSyntaxList(
 				syntax.NewSyntaxSymbol("x", nil),
 				syntax.NewSyntaxSymbol("y", nil),
@@ -132,7 +132,7 @@ func TestFindSyntaxPatternVariables(t *testing.T) {
 		},
 		{
 			name:      "finds variables in nested list",
-			variables: values.StringSet{"x": {}, "y": {}},
+			variables: syntax.PatternVarSymbols{"x": {}, "y": {}},
 			template: testSyntaxList(
 				testSyntaxList(syntax.NewSyntaxSymbol("x", nil)),
 				syntax.NewSyntaxSymbol("y", nil),
@@ -141,7 +141,7 @@ func TestFindSyntaxPatternVariables(t *testing.T) {
 		},
 		{
 			name:      "ignores non-variable symbols",
-			variables: values.StringSet{"x": {}},
+			variables: syntax.PatternVarSymbols{"x": {}},
 			template: testSyntaxList(
 				syntax.NewSyntaxSymbol("a", nil),
 				syntax.NewSyntaxSymbol("x", nil),
@@ -163,7 +163,7 @@ func TestFindSyntaxPatternVariables(t *testing.T) {
 func TestCapturedValueToSyntax(t *testing.T) {
 	c := qt.New(t)
 
-	sm := NewSyntaxMatcher(values.StringSet{}, []SyntaxCommand{ByteCodeDone{}}, nil)
+	sm := NewSyntaxMatcher(syntax.PatternVarSymbols{}, []SyntaxCommand{ByteCodeDone{}}, nil)
 
 	tcs := []struct {
 		name       string
@@ -268,7 +268,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
-			variables := values.StringSet{"x": {}}
+			variables := syntax.PatternVarSymbols{"x": {}}
 			pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 			compiler := NewSyntaxCompiler()
@@ -338,7 +338,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
-			variables := values.StringSet{"x": {}}
+			variables := syntax.PatternVarSymbols{"x": {}}
 			pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 			compiler := NewSyntaxCompiler()
@@ -373,7 +373,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 func TestSyntaxExpandPairTemplate(t *testing.T) {
 	c := qt.New(t)
 
-	variables := values.StringSet{"x": {}}
+	variables := syntax.PatternVarSymbols{"x": {}}
 	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
@@ -478,7 +478,7 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
-			variables := values.StringSet{"x": {}}
+			variables := syntax.PatternVarSymbols{"x": {}}
 
 			// Pattern: (_ x ...)
 			pattern := syntax.NewSyntaxCons(
@@ -524,7 +524,7 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 func TestSyntaxExpandNoContext(t *testing.T) {
 	c := qt.New(t)
 
-	sm := NewSyntaxMatcher(values.StringSet{}, []SyntaxCommand{}, nil)
+	sm := NewSyntaxMatcher(syntax.PatternVarSymbols{}, []SyntaxCommand{}, nil)
 	template := syntax.NewSyntaxSymbol("x", nil)
 
 	_, err := sm.Expand(template, ExpandOptions{})
@@ -535,7 +535,7 @@ func TestSyntaxExpandNoContext(t *testing.T) {
 func TestSyntaxExpandPreservesPatternVarScopes(t *testing.T) {
 	c := qt.New(t)
 
-	variables := values.StringSet{"x": {}}
+	variables := syntax.PatternVarSymbols{"x": {}}
 	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
@@ -582,7 +582,7 @@ func TestSyntaxExpandScopeAwareSubstitution(t *testing.T) {
 
 	// Test that pattern variable substitution respects scope compatibility
 	// when patternVarSyntax is provided.
-	variables := values.StringSet{"x": {}}
+	variables := syntax.PatternVarSymbols{"x": {}}
 	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
@@ -628,7 +628,7 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 	// (syntax ...) under a let in a clause body does — is the ordinary shape and
 	// substitutes; TestSyntaxCaseEllipsisTemplateUnderBodyBinder is its end-to-end
 	// pin.
-	variables := values.StringSet{"x": {}}
+	variables := syntax.PatternVarSymbols{"x": {}}
 	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
@@ -671,7 +671,7 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 func TestSyntaxExpandEscapedTemplate(t *testing.T) {
 	c := qt.New(t)
 
-	variables := values.StringSet{"x": {}}
+	variables := syntax.PatternVarSymbols{"x": {}}
 	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
@@ -756,7 +756,7 @@ func TestSyntaxExpandEscapedTemplate(t *testing.T) {
 func TestSyntaxExpandVectorTemplate(t *testing.T) {
 	c := qt.New(t)
 
-	variables := values.StringSet{"x": {}}
+	variables := syntax.PatternVarSymbols{"x": {}}
 	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
@@ -804,7 +804,7 @@ func TestSyntaxExpandVectorTemplate(t *testing.T) {
 func TestSyntaxExpandNilTemplate(t *testing.T) {
 	c := qt.New(t)
 
-	variables := values.StringSet{"x": {}}
+	variables := syntax.PatternVarSymbols{"x": {}}
 	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiler := NewSyntaxCompiler()
@@ -837,7 +837,7 @@ func TestExpandWithUseSite(t *testing.T) {
 	c := qt.New(t)
 
 	// Set up a simple pattern (macro x) that captures x
-	variables := values.StringSet{
+	variables := syntax.PatternVarSymbols{
 		"x": {},
 	}
 
@@ -924,7 +924,7 @@ func TestExpandWithUseSite(t *testing.T) {
 func TestExpandWithUseSite_PreservesPatternVars(t *testing.T) {
 	c := qt.New(t)
 
-	variables := values.StringSet{
+	variables := syntax.PatternVarSymbols{
 		"x": {},
 	}
 
@@ -989,7 +989,7 @@ func TestExpandWithUseSite_PreservesPatternVars(t *testing.T) {
 func TestExpandWithUseSite_NilUseSite(t *testing.T) {
 	c := qt.New(t)
 
-	variables := values.StringSet{}
+	variables := syntax.PatternVarSymbols{}
 
 	pattern := testSyntaxList(testSyntaxSym("test"))
 
@@ -1033,7 +1033,7 @@ func TestExpandWithOrigin(t *testing.T) {
 	// Set up pattern: (test)
 	pattern := testSyntaxList(testSyntaxSym("test"))
 	compiler := NewSyntaxCompiler()
-	compiler.variables = values.StringSet{}
+	compiler.variables = syntax.PatternVarSymbols{}
 	err := compiler.Compile(context.TODO(), pattern)
 	c.Assert(err, qt.IsNil)
 
@@ -1080,7 +1080,7 @@ func TestExpandWithOrigin_ChainedOrigins(t *testing.T) {
 	// Set up pattern: (test)
 	pattern := testSyntaxList(testSyntaxSym("test"))
 	compiler := NewSyntaxCompiler()
-	compiler.variables = values.StringSet{}
+	compiler.variables = syntax.PatternVarSymbols{}
 	err := compiler.Compile(context.TODO(), pattern)
 	c.Assert(err, qt.IsNil)
 
@@ -1173,7 +1173,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 	c.Run("pair template carries origin", func(c *qt.C) {
 		// Exercises: expandSyntaxValue → *SyntaxPair case
 		// Pattern: (macro x), template: (a x) → expanded pair must carry origin.
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 		pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 		compiler := NewSyntaxCompiler()
@@ -1212,7 +1212,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 
 	c.Run("vector template carries origin", func(c *qt.C) {
 		// Exercises: expandSyntaxValue → *SyntaxVector case
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 		pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 		compiler := NewSyntaxCompiler()
@@ -1251,7 +1251,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 
 	c.Run("ellipsis expansion carries origin", func(c *qt.C) {
 		// Exercises: expandSyntaxEllipsis → cons cells built for repetition
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 
 		// Pattern: (_ x ...)
 		pattern := syntax.NewSyntaxCons(
@@ -1301,7 +1301,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 
 	c.Run("escaped template carries origin", func(c *qt.C) {
 		// Exercises: expandEscapedSyntaxTemplate → *SyntaxPair case
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 		pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 		compiler := NewSyntaxCompiler()
@@ -1354,7 +1354,7 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 		testSyntaxSym("x"),
 	)
 	compiler := NewSyntaxCompiler()
-	compiler.variables = values.StringSet{"x": {}}
+	compiler.variables = syntax.PatternVarSymbols{"x": {}}
 	err := compiler.Compile(context.TODO(), pattern)
 	c.Assert(err, qt.IsNil)
 
@@ -1413,7 +1413,7 @@ func TestSyntaxExpandCrossGroupEllipsis(t *testing.T) {
 	c := qt.New(t)
 
 	c.Run("two groups zipped", func(c *qt.C) {
-		variables := values.StringSet{"a": {}, "b": {}}
+		variables := syntax.PatternVarSymbols{"a": {}, "b": {}}
 
 		// Pattern: (_ (a ...) (b ...))
 		// This has two sibling ellipsis groups.
@@ -1531,7 +1531,7 @@ func TestSyntaxExpandCrossGroupEllipsis(t *testing.T) {
 	})
 
 	c.Run("mismatched counts error", func(c *qt.C) {
-		variables := values.StringSet{"a": {}, "b": {}}
+		variables := syntax.PatternVarSymbols{"a": {}, "b": {}}
 
 		// Pattern: (_ (a ...) (b ...))
 		pattern := syntax.NewSyntaxCons(
@@ -1597,7 +1597,7 @@ func TestSyntaxExpandCrossGroupEllipsis(t *testing.T) {
 	})
 
 	c.Run("three groups zipped", func(c *qt.C) {
-		variables := values.StringSet{"a": {}, "b": {}, "c": {}}
+		variables := syntax.PatternVarSymbols{"a": {}, "b": {}, "c": {}}
 
 		// Pattern: (_ (a ...) (b ...) (c ...))
 		pattern := syntax.NewSyntaxCons(
@@ -1744,8 +1744,8 @@ func TestSyntaxExpandNestedEllipsis(t *testing.T) {
 	// This is: (cons "_" (cons (cons "a" (cons "..." nil)) (cons "..." nil)))
 	// The inner (a ...) captures a's at depth 0 within each outer repetition.
 	// The outer ... repeats the (a ...) sub-lists.
-	buildPatternAndTemplate := func(c *qt.C) (*CompiledPattern, values.StringSet) {
-		variables := values.StringSet{"a": {}}
+	buildPatternAndTemplate := func(c *qt.C) (*CompiledPattern, syntax.PatternVarSymbols) {
+		variables := syntax.PatternVarSymbols{"a": {}}
 
 		pattern := syntax.NewSyntaxCons(
 			testSyntaxSym("_"),
@@ -2005,7 +2005,7 @@ func TestSyntaxExpandDepth0Broadcast(t *testing.T) {
 	c := qt.New(t)
 
 	c.Run("depth-0 var broadcast into a depth-1 ellipsis", func(c *qt.C) {
-		variables := values.StringSet{"x": {}, "e": {}}
+		variables := syntax.PatternVarSymbols{"x": {}, "e": {}}
 
 		// Pattern: (_ x e ...) — x is depth 0, e is depth 1.
 		pattern := testSyntaxList(
@@ -2050,7 +2050,7 @@ func TestSyntaxExpandDepth0Broadcast(t *testing.T) {
 	})
 
 	c.Run("depth-0 var broadcast into a depth-2 nested ellipsis", func(c *qt.C) {
-		variables := values.StringSet{"x": {}, "e": {}}
+		variables := syntax.PatternVarSymbols{"x": {}, "e": {}}
 
 		// Pattern: (_ x (e ...) ...) — x is depth 0, e is depth 2.
 		pattern := testSyntaxList(
@@ -2101,7 +2101,7 @@ func TestSyntaxExpandDepth0Broadcast(t *testing.T) {
 		// must broadcast into each zipped iteration via the merged context's
 		// parent link. This is the only path that exercises the merged-context
 		// parent wiring — single-group tests do not reach it.
-		variables := values.StringSet{"x": {}, "a": {}, "b": {}}
+		variables := syntax.PatternVarSymbols{"x": {}, "a": {}, "b": {}}
 
 		// Pattern: (_ x (a ...) (b ...))
 		pattern := testSyntaxList(
@@ -2149,7 +2149,7 @@ func TestSyntaxExpandDepth0Broadcast(t *testing.T) {
 		// variable of the matching ellipsis depth. The filter in
 		// findMatchingEllipsisIDs must surface this as an error, not silently
 		// drop x (which is what "constant template followed by ..." does).
-		variables := values.StringSet{"x": {}, "e": {}}
+		variables := syntax.PatternVarSymbols{"x": {}, "e": {}}
 
 		// Pattern: (_ x e ...)
 		pattern := testSyntaxList(
@@ -2205,7 +2205,7 @@ func collectSyntaxInts(c *qt.C, elems []syntax.SyntaxValue) []int64 {
 func TestSyntaxExpandVectorEllipsisTemplate(t *testing.T) {
 	c := qt.New(t)
 
-	variables := values.StringSet{"x": {}}
+	variables := syntax.PatternVarSymbols{"x": {}}
 	// Pattern: (_ x ...)
 	pattern := testSyntaxList(
 		testSyntaxSym("_"),
@@ -2263,7 +2263,7 @@ func TestSyntaxExpandVectorEllipsisTemplate(t *testing.T) {
 func TestSyntaxExpandVectorEllipsisSublistTemplate(t *testing.T) {
 	c := qt.New(t)
 
-	variables := values.StringSet{"a": {}, "b": {}}
+	variables := syntax.PatternVarSymbols{"a": {}, "b": {}}
 	// Pattern: (_ (a b) ...)
 	pattern := testSyntaxList(
 		testSyntaxSym("_"),
@@ -2314,7 +2314,7 @@ func TestSyntaxExpandVectorEllipsisSublistTemplate(t *testing.T) {
 func TestSyntaxExpandEscapedVectorTemplate(t *testing.T) {
 	c := qt.New(t)
 
-	variables := values.StringSet{"x": {}}
+	variables := syntax.PatternVarSymbols{"x": {}}
 	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
 
 	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
@@ -2357,7 +2357,7 @@ func TestSyntaxExpandEscapedVectorTemplate(t *testing.T) {
 func TestSyntaxExpandVectorSubPatternUnderEllipsis(t *testing.T) {
 	c := qt.New(t)
 
-	variables := values.StringSet{"x": {}, "a": {}}
+	variables := syntax.PatternVarSymbols{"x": {}, "a": {}}
 	// Pattern: (_ (x #(a)) ...)
 	pattern := testSyntaxList(
 		testSyntaxSym("_"),
