@@ -226,3 +226,30 @@ func TestCollectContinuationMarks_SnapshotImmutability(t *testing.T) {
 	// Snapshot unaffected
 	c.Assert(cms.First(key, values.FalseValue), qt.Equals, values.NewInteger(1))
 }
+
+// CollectMarksFromContinuation shares its chain walk with CollectContinuationMarks
+// (appendChainMarks); this pins the entry that starts at a captured frame rather
+// than the live one: the live frame is excluded, the prompt frame included, and
+// frames below the prompt excluded.
+func TestCollectMarksFromContinuation_StopsAtPrompt(t *testing.T) {
+	c := qt.New(t)
+	mc := newContMarkTestContext()
+
+	key := values.NewSymbol("k")
+	tag := NewPromptTag("test")
+
+	mc.SetMark(key, values.NewInteger(1))
+	err := mc.SaveContinuation(1)
+	c.Assert(err, qt.IsNil)
+
+	mc.SetMark(key, values.NewInteger(2))
+	err = mc.SaveContinuation(1)
+	c.Assert(err, qt.IsNil)
+	mc.cont.SetPromptTag(tag)
+
+	mc.SetMark(key, values.NewInteger(3))
+
+	c.Assert(CollectMarksFromContinuation(mc.cont, tag).ToList(key).SchemeString(), qt.Equals, "(2)")
+	c.Assert(CollectMarksFromContinuation(mc.cont, DefaultPromptTag).ToList(key).SchemeString(), qt.Equals, "(2 1)")
+	c.Assert(CollectMarksFromContinuation(nil, tag).ToList(key).SchemeString(), qt.Equals, "()")
+}

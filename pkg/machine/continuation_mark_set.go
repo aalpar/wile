@@ -97,15 +97,11 @@ func (p *ContinuationMarkSet) ToListStar(keys []values.Value, noneVal values.Val
 	return values.List(collected...)
 }
 
-// CollectMarksFromContinuation walks a captured MachineContinuation chain
-// and builds a ContinuationMarkSet snapshot. Used by the (continuation-marks
-// cont) primitive to extract marks from a continuation captured via call/cc.
-//
-// Starts from cont (nearest frame) and walks parent links, stopping at the
-// first frame whose promptTag matches tag (inclusive). Pass DefaultPromptTag
-// for an unbounded walk.
-func CollectMarksFromContinuation(cont *MachineContinuation, tag *PromptTag) *ContinuationMarkSet {
-	var frames [][]markEntry
+// appendChainMarks appends a clone of every non-empty mark frame from cont
+// outward, nearest first, stopping at the first frame whose promptTag matches
+// tag (inclusive). Pass DefaultPromptTag for an unbounded walk. It is the one
+// chain walk behind both ContinuationMarkSet collectors.
+func appendChainMarks(frames [][]markEntry, cont *MachineContinuation, tag *PromptTag) [][]markEntry {
 	for c := cont; c != nil; c = c.parent {
 		if len(c.marks) > 0 {
 			frames = append(frames, cloneMarks(c.marks))
@@ -114,36 +110,30 @@ func CollectMarksFromContinuation(cont *MachineContinuation, tag *PromptTag) *Co
 			break
 		}
 	}
-	return &ContinuationMarkSet{frames: frames}
+	return frames
 }
 
-// CollectContinuationMarks walks the continuation chain and builds a
-// ContinuationMarkSet snapshot. Collects marks from the current frame
-// and all continuation frames up to and including the nearest frame
-// with a matching promptTag.
+// CollectMarksFromContinuation builds a ContinuationMarkSet snapshot from a
+// captured MachineContinuation chain, starting at cont. Used by the
+// (continuation-marks cont) primitive to extract marks from a continuation
+// captured via call/cc.
+func CollectMarksFromContinuation(cont *MachineContinuation, tag *PromptTag) *ContinuationMarkSet {
+	return &ContinuationMarkSet{frames: appendChainMarks(nil, cont, tag)}
+}
+
+// CollectContinuationMarks builds a ContinuationMarkSet snapshot from the
+// current frame's marks followed by the continuation chain.
+//
+// The MachineContext's own promptTag is NOT checked — it represents the
+// execution boundary established by call-with-continuation-prompt on a
+// sub-context, and collection is always called from within that boundary.
+// Contrast with FindPrompt, which checks p.promptTag for escape detection;
+// that check is not needed here because current-continuation-marks is only
+// callable from code already inside the prompt scope.
 func (p *MachineContext) CollectContinuationMarks(tag *PromptTag) *ContinuationMarkSet {
 	var frames [][]markEntry
-
-	// Current frame
 	if len(p.marks) > 0 {
 		frames = append(frames, cloneMarks(p.marks))
 	}
-
-	// Walk continuation chain, stopping at a frame with matching promptTag.
-	// The MachineContext's own promptTag is NOT checked — it represents the
-	// execution boundary established by call-with-continuation-prompt on a
-	// sub-context, and collection is always called from within that boundary.
-	// Contrast with FindPrompt, which checks p.promptTag for escape detection;
-	// that check is not needed here because current-continuation-marks is only
-	// callable from code already inside the prompt scope.
-	for cont := p.cont; cont != nil; cont = cont.parent {
-		if len(cont.marks) > 0 {
-			frames = append(frames, cloneMarks(cont.marks))
-		}
-		if cont.promptTag == tag {
-			break
-		}
-	}
-
-	return &ContinuationMarkSet{frames: frames}
+	return &ContinuationMarkSet{frames: appendChainMarks(frames, p.cont, tag)}
 }
