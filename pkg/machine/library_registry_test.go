@@ -177,3 +177,28 @@ func TestLibraryRegistryAllNamesEmpty(t *testing.T) {
 	names := reg.AllNames()
 	c.Assert(len(names), qt.Equals, 0)
 }
+
+// TestLibraryRegistryCompileObserver tests the compile observer mechanism,
+// the hook the engine uses to instrument a library body for coverage before
+// it executes.
+func TestLibraryRegistryCompileObserver(t *testing.T) {
+	c := qt.New(t)
+
+	registry := compilation.NewLibraryRegistry()
+
+	// No observer initially
+	c.Assert(registry.CompileObserver(), qt.IsNil)
+
+	// Set an observer
+	var called bool
+	obs := func(lib *compilation.CompiledLibrary) {
+		called = true
+	}
+	registry.SetCompileObserver(obs)
+	c.Assert(registry.CompileObserver(), qt.IsNotNil)
+
+	// Remove the observer
+	registry.SetCompileObserver(nil)
+	c.Assert(registry.CompileObserver(), qt.IsNil)
+	c.Assert(called, qt.IsFalse)
+}

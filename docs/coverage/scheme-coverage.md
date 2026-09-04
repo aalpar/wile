@@ -29,6 +29,12 @@ macro that expands to no-op bytecode will show no entries; a macro
 that expands to code appearing on a line you didn't write directly
 will show entries attributed to the macro's source location.
 
+Libraries reached through `(import …)` are covered like the program
+that imports them: the loader hands each library's compiled body to
+the collector before that body executes, so a library's definitions
+appear at count 0 until something calls them. A library compiles once
+per engine, so its entries reflect every importer in the run.
+
 ## Per-line summary output
 
 `wile --cover-summary cov.txt --file myapp.scm` produces:

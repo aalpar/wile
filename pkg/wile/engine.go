@@ -528,7 +528,7 @@ func finishEngine(ctx context.Context, cfg *engineConfig, ns *environment.Namesp
 	}
 
 	if cfg.libraryEnabled {
-		err := setupLibrarySystem(ctx, cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots, applyOptionsFromNamespace(ns), cfg.strictLevel)
+		err := setupLibrarySystem(ctx, cfg.libraryPaths, cfg.importObserver, cfg.coverageCollector, reg, env, ns, snapshots, applyOptionsFromNamespace(ns), cfg.strictLevel)
 		if err != nil {
 			return nil, err
 		}
@@ -618,6 +618,7 @@ func setupLibrarySystem(
 	ctx context.Context,
 	libraryPaths []string,
 	importObserver func(LibraryImportEvent),
+	col *coverage.Collector,
 	reg *registry.PrimitiveRegistry,
 	env *environment.EnvironmentFrame,
 	ns *environment.Namespace,
@@ -643,6 +644,16 @@ func setupLibrarySystem(
 		})
 	} else {
 		libReg.SetImportObserver(docObserver)
+	}
+
+	// Library bodies compile in the loader, not in either program compile path,
+	// so the collector has to be handed the template here. The compile observer
+	// fires before the body executes; the import observer above fires after,
+	// which is too late to record the top-level forms.
+	if col != nil {
+		libReg.SetCompileObserver(func(lib *compilation.CompiledLibrary) {
+			trackTemplateTree(col, lib.Template)
+		})
 	}
 
 	env.SetLibraryRegistry(libReg)

@@ -185,6 +185,14 @@ type LibraryImportEvent struct {
 // Observers are read-only — they cannot influence the import.
 type LibraryImportObserver func(LibraryImportEvent)
 
+// LibraryCompileObserver is called once per library, after its body has
+// compiled and before that body executes. It sees the library's Template
+// while every top-level form is still unexecuted, which is the window an
+// instrumenter (coverage) needs: instrumentation attached any later would
+// miss the definitions themselves and report every library form as never
+// run. Observers must not alter the library's bindings or exports.
+type LibraryCompileObserver func(*CompiledLibrary)
+
 // LibraryRegistry manages loaded libraries and handles library loading.
 //
 // All fields are guarded by mu so the registry is safe for concurrent use by
@@ -194,11 +202,12 @@ type LibraryImportObserver func(LibraryImportEvent)
 // locking methods while holding the lock (AllNames uses the unlocked all()
 // helper for this reason).
 type LibraryRegistry struct {
-	mu             sync.RWMutex
-	libraries      map[string]*CompiledLibrary // key: library name as "scheme/base"
-	loading        map[string]chan struct{}    // in-flight loads → latch closed on completion
-	searchPaths    []string                    // directories to search for library files
-	importObserver LibraryImportObserver       // optional: called on each library import
+	mu              sync.RWMutex
+	libraries       map[string]*CompiledLibrary // key: library name as "scheme/base"
+	loading         map[string]chan struct{}    // in-flight loads → latch closed on completion
+	searchPaths     []string                    // directories to search for library files
+	importObserver  LibraryImportObserver       // optional: called on each library import
+	compileObserver LibraryCompileObserver      // optional: called once per library, between compile and execute
 }
 
 // DefaultLibraryPaths are the default directories to search for libraries.
@@ -261,17 +270,52 @@ func (p *LibraryRegistry) ImportObserver() LibraryImportObserver {
 	return p.importObserver
 }
 
+// SetCompileObserver sets an optional observer that is called each time a
+// library body finishes compiling, before it executes. Pass nil to remove
+// the observer.
+func (p *LibraryRegistry) SetCompileObserver(obs LibraryCompileObserver) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.compileObserver = obs
+}
+
+// CompileObserver returns the current compile observer, or nil.
+func (p *LibraryRegistry) CompileObserver() LibraryCompileObserver {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.compileObserver
+}
+
+// registryOf returns the *LibraryRegistry stored on env's namespace, or nil
+// when none is configured or the stored searcher is some other type. For
+// callers that treat both cases as "no registry"; LoadLibrary reports them
+// as distinct errors and does its own lookup.
+func registryOf(env *environment.EnvironmentFrame) *LibraryRegistry {
+	reg, _ := env.LibraryRegistry().(*LibraryRegistry)
+	return reg
+}
+
+// fireCompileObserver calls the compile observer if one is set on the
+// registry stored in env.
+func fireCompileObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary) {
+	reg := registryOf(env)
+	if reg == nil {
+		return
+	}
+	obs := reg.CompileObserver()
+	if obs == nil {
+		return
+	}
+	obs(lib)
+}
+
 // fireImportObserver calls the import observer if one is set on the
 // registry stored in env. bindings maps local name -> external name
 // (as returned by ApplyToExports). importer is the importing library's
 // name, or zero value for top-level imports.
 func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary, bindings map[string]string, importer LibraryName, stage ImportStage) {
-	regAny := env.LibraryRegistry()
-	if regAny == nil {
-		return
-	}
-	reg, ok := regAny.(*LibraryRegistry)
-	if !ok {
+	reg := registryOf(env)
+	if reg == nil {
 		return
 	}
 	obs := reg.ImportObserver()

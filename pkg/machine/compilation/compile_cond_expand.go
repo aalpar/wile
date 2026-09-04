@@ -37,11 +37,7 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 		return nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of clauses"))
 	}
 
-	var registry *LibraryRegistry
-	regAny := p.env.LibraryRegistry()
-	if regAny != nil {
-		registry, _ = regAny.(*LibraryRegistry)
-	}
+	registry := registryOf(p.env)
 	resolver := p.env.FileResolver()
 
 	// A (library X) requirement is satisfied only if X actually imports, not

@@ -315,6 +315,14 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 			expectedName.SchemeString(), compiledLib.Name.SchemeString()))
 	}
 
+	// Record the source file for error messages
+	compiledLib.SourceFile = filePath
+
+	// Let the registry's compile observer see the template before any of it
+	// runs: coverage instruments here, and a hook after EvalTemplate would
+	// find every top-level library form already executed-but-unrecorded.
+	fireCompileObserver(libEnv, compiledLib)
+
 	// Execute the library's compiled template to populate bindings
 	// The library's code (begin blocks, defines) is in compiledLib.Template
 	if compiledLib.Template != nil && compiledLib.Template.CodeLen() > 0 {
@@ -323,9 +331,6 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 			return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(err, "error executing library"))
 		}
 	}
-
-	// Record the source file for error messages
-	compiledLib.SourceFile = filePath
 
 	return compiledLib, nil
 }

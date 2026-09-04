@@ -119,6 +119,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`--cover` now instruments imported library bodies.** A library compiled by
+  `(import …)` is built by the loader, not by either program compile path, so
+  its template never reached the coverage collector: a `-L` library's
+  definitions appeared nowhere in the profile, not even at count 0, and
+  `--cover-stdlib` un-filtered only the macro-template attributions that land
+  in stdlib files when a suite's `(test …)` expands. `LibraryRegistry` gained a
+  compile observer (`SetCompileObserver`, `func(*CompiledLibrary)`) that the
+  loader fires after the library compiles and before its body executes; the
+  engine installs the collector there. The seam matters: the import observer
+  fires after execution, and the VM records a hit only into a bitmap that
+  tracking allocates, so hooking there would have reported every top-level
+  library form as never run. The suite-wide Scheme sweep behind
+  `make covercheck` now spans 116 files, up from 68.
+
 - **`floor-quotient` and its four siblings answered `0.0` for a `#m` NaN.**
   `big.Float` has no NaN, so `*values.BigFloat` carries one out of band and
   `BigFloatValue()` hands back the zero payload. `helpers.ExtractReal` enumerated

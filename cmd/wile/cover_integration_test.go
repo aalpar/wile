@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -115,4 +116,116 @@ func TestCLI_CPUProfile_WrittenWhenProgramExits(t *testing.T) {
 	info, err := os.Stat(profPath)
 	c.Assert(err, qt.IsNil)
 	c.Assert(info.Size() > 0, qt.IsTrue, qt.Commentf("CPU profile is empty: StopCPUProfile never ran"))
+}
+
+// libraryCoverCounts returns, for every profile entry attributed to file,
+// the entry's start line paired with its hit count.
+func libraryCoverCounts(c *qt.C, profile, file string) map[int][]int {
+	c.Helper()
+	counts := map[int][]int{}
+	for line := range strings.SplitSeq(profile, "\n") {
+		if !strings.HasPrefix(line, file+":") {
+			continue
+		}
+		// file:startLine.startCol,endLine.endCol numStmts count
+		pos := strings.TrimPrefix(line, file+":")
+		startLine, _, ok := strings.Cut(pos, ".")
+		c.Assert(ok, qt.IsTrue, qt.Commentf("malformed entry: %s", line))
+		fields := strings.Fields(line)
+		c.Assert(len(fields), qt.Equals, 3, qt.Commentf("malformed entry: %s", line))
+		ln, err := strconv.Atoi(startLine)
+		c.Assert(err, qt.IsNil, qt.Commentf("malformed entry: %s", line))
+		count, err := strconv.Atoi(fields[2])
+		c.Assert(err, qt.IsNil, qt.Commentf("malformed entry: %s", line))
+		counts[ln] = append(counts[ln], count)
+	}
+	return counts
+}
+
+// TestCLI_CoverFlag_TracksImportedLibraryBodies pins that a library loaded by
+// (import ...) is instrumented like the program that imports it. The library
+// body is compiled by the loader, not by either program compile path, so it
+// used to reach the profile only through macro-template attributions; the
+// definitions themselves appeared nowhere, not even at count 0.
+//
+// The called definition's body must read 1 and the uncalled one's 0, which
+// also pins that instrumentation happens BEFORE the library body executes:
+// hooking the import observer, which fires after execution, would leave every
+// top-level library form reading 0.
+func TestCLI_CoverFlag_TracksImportedLibraryBodies(t *testing.T) {
+	c := qt.New(t)
+	dir := c.TempDir()
+	binPath := buildWileBinary(c, dir)
+
+	libDir := filepath.Join(dir, "lib")
+	err := os.MkdirAll(filepath.Join(libDir, "my"), 0o755)
+	c.Assert(err, qt.IsNil)
+	libPath := filepath.Join(libDir, "my", "lib.sld")
+	libSource := "(define-library (my lib)\n" +
+		"  (export called uncalled)\n" +
+		"  (import (scheme base))\n" +
+		"  (begin\n" +
+		"    (define (called) (+ 1 1))\n" + // line 5
+		"    (define (uncalled) (+ 2 2))))\n" // line 6
+	err = os.WriteFile(libPath, []byte(libSource), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	schemePath := filepath.Join(dir, "prog.scm")
+	err = os.WriteFile(schemePath, []byte("(import (my lib))\n(called)\n"), 0o644)
+	c.Assert(err, qt.IsNil)
+	covPath := filepath.Join(dir, "cov.out")
+
+	runCmd := exec.CommandContext(context.Background(), binPath, "--cover", covPath, "-L", libDir, "--file", schemePath)
+	runOut, err := runCmd.CombinedOutput()
+	c.Assert(err, qt.IsNil, qt.Commentf("run output: %s", runOut))
+
+	data, err := os.ReadFile(covPath)
+	c.Assert(err, qt.IsNil)
+	content := string(data)
+	counts := libraryCoverCounts(c, content, libPath)
+
+	c.Assert(counts[5], qt.Not(qt.HasLen), 0, qt.Commentf("called definition missing from profile: %s", content))
+	c.Assert(counts[6], qt.Not(qt.HasLen), 0, qt.Commentf("uncalled definition missing from profile: %s", content))
+	c.Assert(counts[5], qt.Not(qt.Contains), 0, qt.Commentf("called definition has an unexecuted entry: %s", content))
+	c.Assert(counts[6], qt.Contains, 0, qt.Commentf("uncalled definition body should read 0: %s", content))
+}
+
+// TestCLI_CoverStdlib_GatesEmbeddedLibraryBodies pins that an embedded stdlib
+// library body imported by the program lands in the profile, and that the
+// --cover-stdlib flag is what un-filters it: instrumenting library bodies must
+// not leak stdlib rows into the default report.
+func TestCLI_CoverStdlib_GatesEmbeddedLibraryBodies(t *testing.T) {
+	c := qt.New(t)
+	dir := c.TempDir()
+	binPath := buildWileBinary(c, dir)
+
+	schemePath := filepath.Join(dir, "prog.scm")
+	err := os.WriteFile(schemePath, []byte("(import (srfi 1))\n(first '(1 2))\n"), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	tests := []struct {
+		name       string
+		extraArgs  []string
+		wantStdlib bool
+	}{
+		{"default filters stdlib", nil, false},
+		{"--cover-stdlib includes stdlib", []string{"--cover-stdlib"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			covPath := filepath.Join(c.TempDir(), "cov.out")
+			args := append([]string{"--cover", covPath}, tt.extraArgs...)
+			args = append(args, "--file", schemePath)
+
+			runCmd := exec.CommandContext(context.Background(), binPath, args...)
+			runOut, err := runCmd.CombinedOutput()
+			c.Assert(err, qt.IsNil, qt.Commentf("run output: %s", runOut))
+
+			data, err := os.ReadFile(covPath)
+			c.Assert(err, qt.IsNil)
+			content := string(data)
+			c.Assert(strings.Contains(content, "\nsrfi/1"), qt.Equals, tt.wantStdlib, qt.Commentf("got: %s", content))
+		})
+	}
 }
