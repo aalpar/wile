@@ -78,7 +78,6 @@ type SyntaxRulesClause struct {
 	Template         syntax.SyntaxValue
 	Bytecode         []match.SyntaxCommand
 	Matcher          *match.SyntaxMatcher
-	PatternVars      values.StringSet
 	PatternVarSyntax syntax.PatternVarSymbols
 	EllipsisVars     map[int]values.StringSet
 	FreeIds          map[string]*FreeIdResolution
@@ -107,8 +106,11 @@ func (p *ClausesWrapper) SchemeString() string {
 // SyntaxCaseClause wraps compiled pattern info for a syntax-case clause.
 // Created by the compiler, consumed by OperationSyntaxCaseMatch at runtime.
 type SyntaxCaseClause struct {
-	Bytecode    []match.SyntaxCommand
-	PatternVars values.StringSet
+	Bytecode []match.SyntaxCommand
+	// PatternVarSyntax names the clause's pattern variables; the runtime matcher
+	// built by OperationSyntaxCaseMatch reads it to tell a template's pattern
+	// variables from its free identifiers.
+	PatternVarSyntax syntax.PatternVarSymbols
 	// LiteralSyntax carries each pattern literal with the scopes it had at the
 	// macro definition site, the same data SyntaxRulesClause.LiteralSyntax
 	// carries. Without it match.go's hygiene block is gated off on this path

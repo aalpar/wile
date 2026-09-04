@@ -19,6 +19,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -28,7 +29,7 @@ func TestContainsVariables(t *testing.T) {
 		testSyntaxSym("x"),
 		testSyntaxInt(42),
 	)
-	variables := values.StringSet{
+	variables := syntax.PatternVarSymbols{
 		"x": {},
 	}
 
@@ -47,7 +48,7 @@ func TestGetVariables(t *testing.T) {
 		testSyntaxSym("x"),
 		testSyntaxSym("y"),
 	)
-	variables := values.StringSet{
+	variables := syntax.PatternVarSymbols{
 		"x": {},
 		"y": {},
 	}
@@ -81,7 +82,7 @@ func TestGetVariablesVectorSubPattern(t *testing.T) {
 		sub,
 		testSyntaxSym("..."),
 	)
-	variables := values.StringSet{
+	variables := syntax.PatternVarSymbols{
 		"x": {},
 		"a": {},
 	}

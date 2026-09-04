@@ -27,7 +27,7 @@ import (
 
 func TestSyntaxMatcher(t *testing.T) {
 	t.Run("NewSyntaxMatcher", func(t *testing.T) {
-		variables := values.StringSet{
+		variables := syntax.PatternVarSymbols{
 			"x": {},
 		}
 		codes := []SyntaxCommand{
@@ -41,7 +41,7 @@ func TestSyntaxMatcher(t *testing.T) {
 	})
 
 	t.Run("NewSyntaxMatcher with ellipsis vars", func(t *testing.T) {
-		variables := values.StringSet{
+		variables := syntax.PatternVarSymbols{
 			"x": {},
 		}
 		codes := []SyntaxCommand{
@@ -58,7 +58,7 @@ func TestSyntaxMatcher(t *testing.T) {
 	})
 
 	t.Run("Match and Expand", func(t *testing.T) {
-		variables := values.StringSet{
+		variables := syntax.PatternVarSymbols{
 			"x": {},
 		}
 
@@ -98,7 +98,7 @@ func TestSyntaxMatcher(t *testing.T) {
 	})
 
 	t.Run("Match error on non-pair", func(t *testing.T) {
-		variables := values.StringSet{}
+		variables := syntax.PatternVarSymbols{}
 		codes := []SyntaxCommand{
 			ByteCodeDone{},
 		}
@@ -113,7 +113,7 @@ func TestSyntaxMatcher(t *testing.T) {
 	})
 
 	t.Run("ExpandWithIntroScope", func(t *testing.T) {
-		variables := values.StringSet{
+		variables := syntax.PatternVarSymbols{
 			"x": {},
 		}
 
@@ -166,7 +166,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 			srcCtx,
 		)
 
-		variables := values.StringSet{
+		variables := syntax.PatternVarSymbols{
 			"x": {},
 		}
 
@@ -192,7 +192,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 			srcCtx,
 		)
 
-		variables := values.StringSet{
+		variables := syntax.PatternVarSymbols{
 			"x": {},
 		}
 
@@ -207,7 +207,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
 		pattern := syntax.NewSyntaxObject(values.NewInteger(42), srcCtx)
 
-		variables := values.StringSet{}
+		variables := syntax.PatternVarSymbols{}
 
 		compiled, err := CompileSyntaxPattern(context.Background(), pattern, variables, nil)
 		qt.Assert(t, err, qt.IsNotNil)

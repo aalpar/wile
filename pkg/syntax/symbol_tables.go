@@ -11,6 +11,12 @@ package syntax
 // told apart by the scopes on the value, never by the key.
 type LiteralSymbols map[string]*SyntaxSymbol
 
+// ContainsOne reports whether name is one of the pattern literals.
+func (p LiteralSymbols) ContainsOne(name string) bool {
+	_, ok := p[name]
+	return ok
+}
+
 // PatternVarSymbols maps each pattern variable of a clause, by name, to the
 // symbol that bound it in the pattern. The value carries the variable's scopes:
 // template expansion substitutes a template symbol only when the pattern
@@ -20,3 +26,9 @@ type LiteralSymbols map[string]*SyntaxSymbol
 //
 // Like LiteralSymbols, a name table with the scopes on the value.
 type PatternVarSymbols map[string]*SyntaxSymbol
+
+// ContainsOne reports whether name is one of the pattern variables.
+func (p PatternVarSymbols) ContainsOne(name string) bool {
+	_, ok := p[name]
+	return ok
+}

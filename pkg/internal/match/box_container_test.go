@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/syntax"
-	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -42,7 +41,7 @@ func TestCompileAndMatchBoxPattern(t *testing.T) {
 
 	// Pattern: (m #&y)
 	pattern := testSyntaxList(testSyntaxSym("m"), testSyntaxBox(testSyntaxSym("y")))
-	variables := values.StringSet{"y": {}}
+	variables := syntax.PatternVarSymbols{"y": {}}
 
 	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
 	c.Assert(err, qt.IsNil)
@@ -79,7 +78,7 @@ func TestCompileAndMatchBoxUnderEllipsis(t *testing.T) {
 		testSyntaxBox(testSyntaxSym("y")),
 		testSyntaxSym("..."),
 	)
-	variables := values.StringSet{"y": {}}
+	variables := syntax.PatternVarSymbols{"y": {}}
 
 	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
 	c.Assert(err, qt.IsNil)
@@ -99,7 +98,7 @@ func TestExpandBoxTemplate(t *testing.T) {
 
 	// Pattern (m x), so `x` is captured from the input.
 	pattern := testSyntaxList(testSyntaxSym("m"), testSyntaxSym("x"))
-	variables := values.StringSet{"x": {}}
+	variables := syntax.PatternVarSymbols{"x": {}}
 	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
 	c.Assert(err, qt.IsNil)
 

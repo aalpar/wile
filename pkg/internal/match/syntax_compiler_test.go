@@ -49,12 +49,12 @@ type UtilsMatcherSuite struct{}
 
 func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 	tcs := []struct {
-		variables values.StringSet
+		variables syntax.PatternVarSymbols
 		in        *syntax.SyntaxPair
 		out       []SyntaxCommand
 	}{
 		{
-			variables: values.StringSet{
+			variables: syntax.PatternVarSymbols{
 				"a": {},
 			},
 			in: testSyntaxList(testSyntaxInt(10), testSyntaxSym("a")),
@@ -66,7 +66,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			},
 		},
 		{
-			variables: values.StringSet{},
+			variables: syntax.PatternVarSymbols{},
 			in:        testSyntaxList(testSyntaxList(testSyntaxInt(10)), testSyntaxInt(20)),
 			out: []SyntaxCommand{
 				ByteCodeVisitCar{},
@@ -77,7 +77,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			},
 		},
 		{
-			variables: values.StringSet{
+			variables: syntax.PatternVarSymbols{
 				"a": {},
 			},
 			in: testSyntaxList(testSyntaxInt(10), testSyntaxList(testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxInt(40)),
@@ -94,7 +94,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			},
 		},
 		{
-			variables: values.StringSet{},
+			variables: syntax.PatternVarSymbols{},
 			in:        testSyntaxList(testSyntaxInt(10), testSyntaxInt(20), testSyntaxInt(30)),
 			out: []SyntaxCommand{
 				ByteCodeCompareCar{Value: testSyntaxInt(10)},
@@ -110,7 +110,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			// variable-free subpattern repeats exactly as a variable-bearing one
 			// does, so this compiles to the same loop as the case below rather
 			// than to a literal compare against the ellipsis symbol.
-			variables: values.StringSet{},
+			variables: syntax.PatternVarSymbols{},
 			in: testSyntaxList(
 				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
 					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
@@ -132,7 +132,7 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			},
 		},
 		{
-			variables: values.StringSet{
+			variables: syntax.PatternVarSymbols{
 				"a": {},
 			},
 			in: testSyntaxList(
@@ -171,13 +171,13 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 
 func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 	tcs := []struct {
-		variables values.StringSet
+		variables syntax.PatternVarSymbols
 		in        *syntax.SyntaxPair
 		target    *syntax.SyntaxPair
 		matches   bool
 	}{
 		{
-			variables: values.StringSet{
+			variables: syntax.PatternVarSymbols{
 				"a": {},
 			},
 			in:      testSyntaxList(testSyntaxInt(10), testSyntaxSym("a")),
@@ -185,13 +185,13 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			matches: true,
 		},
 		{
-			variables: values.StringSet{},
+			variables: syntax.PatternVarSymbols{},
 			in:        testSyntaxList(testSyntaxList(testSyntaxInt(10)), testSyntaxInt(20)),
 			target:    testSyntaxList(testSyntaxList(testSyntaxInt(10)), testSyntaxInt(20)),
 			matches:   true,
 		},
 		{
-			variables: values.StringSet{
+			variables: syntax.PatternVarSymbols{
 				"a": {},
 			},
 			in: testSyntaxList(
@@ -207,7 +207,7 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			matches: true,
 		},
 		{
-			variables: values.StringSet{},
+			variables: syntax.PatternVarSymbols{},
 			in:        testSyntaxList(testSyntaxInt(10), testSyntaxInt(20), testSyntaxInt(30)),
 			target:    testSyntaxList(testSyntaxInt(10), testSyntaxInt(20), testSyntaxInt(30)),
 			matches:   true,
@@ -216,7 +216,7 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			// `(a b) ...` now repeats, so a literal `...` in the INPUT is no
 			// longer what satisfies it — a trailing symbol where a repetition
 			// is expected fails.
-			variables: values.StringSet{},
+			variables: syntax.PatternVarSymbols{},
 			in: testSyntaxList(
 				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
 					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
@@ -227,7 +227,7 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 		},
 		{
 			// ... and two repetitions of the variable-free subpattern match.
-			variables: values.StringSet{},
+			variables: syntax.PatternVarSymbols{},
 			in: testSyntaxList(
 				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
 					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
@@ -239,7 +239,7 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 		},
 		{
 			// ... as does zero repetitions.
-			variables: values.StringSet{},
+			variables: syntax.PatternVarSymbols{},
 			in: testSyntaxList(
 				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
 					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
@@ -247,7 +247,7 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			matches: true,
 		},
 		{
-			variables: values.StringSet{
+			variables: syntax.PatternVarSymbols{
 				"a": {},
 			},
 			in: testSyntaxList(
@@ -297,7 +297,7 @@ func TestCompileVectorPattern(t *testing.T) {
 			testSyntaxSym("foo"),
 			testSyntaxVec(testSyntaxSym("x"), testSyntaxSym("y")),
 		)
-		variables := values.StringSet{"x": {}, "y": {}}
+		variables := syntax.PatternVarSymbols{"x": {}, "y": {}}
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
 		compiler.Compile(context.TODO(), pattern) //nolint:errcheck
@@ -341,7 +341,7 @@ func TestCompileVectorPattern(t *testing.T) {
 			testSyntaxSym("foo"),
 			testSyntaxVec(testSyntaxInt(10), testSyntaxSym("x")),
 		)
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
 		compiler.Compile(context.TODO(), pattern) //nolint:errcheck
@@ -368,7 +368,7 @@ func TestCompileVectorPattern(t *testing.T) {
 			testSyntaxVec(testSyntaxSym("x"), testSyntaxSym("y")),
 			testSyntaxSym("..."),
 		)
-		variables := values.StringSet{"x": {}, "y": {}}
+		variables := syntax.PatternVarSymbols{"x": {}, "y": {}}
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
 		compiler.Compile(context.TODO(), pattern) //nolint:errcheck
@@ -407,7 +407,7 @@ func TestExecuteVectorPattern(t *testing.T) {
 			testSyntaxSym("foo"),
 			testSyntaxVec(testSyntaxSym("x"), testSyntaxSym("y")),
 		)
-		variables := values.StringSet{"x": {}, "y": {}}
+		variables := syntax.PatternVarSymbols{"x": {}, "y": {}}
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
 		compiler.Compile(context.TODO(), pattern) //nolint:errcheck
@@ -431,7 +431,7 @@ func TestExecuteVectorPattern(t *testing.T) {
 			testSyntaxSym("foo"),
 			testSyntaxVec(testSyntaxSym("x")),
 		)
-		variables := values.StringSet{"x": {}}
+		variables := syntax.PatternVarSymbols{"x": {}}
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
 		compiler.Compile(context.TODO(), pattern) //nolint:errcheck
@@ -451,7 +451,7 @@ func TestExecuteVectorPattern(t *testing.T) {
 			testSyntaxSym("foo"),
 			testSyntaxVec(testSyntaxSym("x"), testSyntaxSym("y")),
 		)
-		variables := values.StringSet{"x": {}, "y": {}}
+		variables := syntax.PatternVarSymbols{"x": {}, "y": {}}
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
 		compiler.Compile(context.TODO(), pattern) //nolint:errcheck
@@ -478,7 +478,7 @@ func TestExecuteVectorPattern(t *testing.T) {
 			testSyntaxSym("foo"),
 			testSyntaxVec(),
 		)
-		matcher := NewMatcher(values.StringSet{}, compiler.codes)
+		matcher := NewMatcher(syntax.PatternVarSymbols{}, compiler.codes)
 		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 
@@ -487,7 +487,7 @@ func TestExecuteVectorPattern(t *testing.T) {
 			testSyntaxSym("foo"),
 			testSyntaxVec(testSyntaxInt(1)),
 		)
-		matcher2 := NewMatcher(values.StringSet{}, compiler.codes)
+		matcher2 := NewMatcher(syntax.PatternVarSymbols{}, compiler.codes)
 		err = matcher2.MatchSyntax(context.Background(), target2)
 		c.Assert(err, qt.Equals, ErrNotAMatch)
 	})
@@ -499,7 +499,7 @@ func TestExecuteVectorPattern(t *testing.T) {
 			testSyntaxVec(testSyntaxSym("x"), testSyntaxSym("y")),
 			testSyntaxSym("..."),
 		)
-		variables := values.StringSet{"x": {}, "y": {}}
+		variables := syntax.PatternVarSymbols{"x": {}, "y": {}}
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
 		compiler.Compile(context.TODO(), pattern) //nolint:errcheck
@@ -532,7 +532,7 @@ func TestExecuteVectorPattern(t *testing.T) {
 			testSyntaxVec(testSyntaxSym("x"), testSyntaxSym("y")),
 			testSyntaxSym("..."),
 		)
-		variables := values.StringSet{"x": {}, "y": {}}
+		variables := syntax.PatternVarSymbols{"x": {}, "y": {}}
 		compiler := NewSyntaxCompiler()
 		compiler.variables = variables
 		compiler.Compile(context.TODO(), pattern) //nolint:errcheck
@@ -568,7 +568,7 @@ func TestCompileDottedWildcardTail(t *testing.T) {
 
 	// `_` is a pattern variable as far as the caller's variable set is concerned;
 	// the wildcard rule must win regardless.
-	variables := values.StringSet{"a": {}, "_": {}}
+	variables := syntax.PatternVarSymbols{"a": {}, "_": {}}
 
 	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
 	c.Assert(err, qt.IsNil)
@@ -620,7 +620,7 @@ func TestCompileWildcardElementEmitsDiscardCar(t *testing.T) {
 		testSyntaxList(testSyntaxSym("y")),
 		testSyntaxSym("_"),
 	)
-	variables := values.StringSet{"y": {}}
+	variables := syntax.PatternVarSymbols{"y": {}}
 
 	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
 	c.Assert(err, qt.IsNil)

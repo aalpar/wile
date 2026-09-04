@@ -72,7 +72,7 @@ const DefaultEllipsis = "..."
 // It executes compiled pattern bytecode against an input form,
 // capturing pattern variable bindings that can be used for template expansion.
 type Matcher struct {
-	variables      values.StringSet         // Known pattern variables
+	variables      syntax.PatternVarSymbols // Known pattern variables
 	codes          []SyntaxCommand          // Compiled pattern bytecode
 	captureStack   []*captureContext        // Binding capture stack (nesting for ellipsis)
 	syntaxStack    []syntaxPathEntry        // Input traversal stack (syntax-native)
@@ -133,7 +133,7 @@ func WithEllipsisID(id string) MatcherOption {
 // Defaults: ellipsisID = DefaultEllipsis ("..."); ellipsisVars / ellipsisDepths
 // nil. When ellipsisVars is supplied but ellipsisDepths is not, depths are
 // inferred from the ID values.
-func NewMatcher(variables values.StringSet, codes []SyntaxCommand, opts ...MatcherOption) *Matcher {
+func NewMatcher(variables syntax.PatternVarSymbols, codes []SyntaxCommand, opts ...MatcherOption) *Matcher {
 	q := &Matcher{
 		variables:  variables,
 		codes:      codes,
