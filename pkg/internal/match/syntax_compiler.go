@@ -473,21 +473,16 @@ func countPatternTailElements(ellipsisPair *syntax.SyntaxPair) int {
 
 // collectCapturedVariables gathers all pattern variables captured by an ellipsis pattern.
 func collectCapturedVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) values.StringSet {
-	capturedVars := values.NewStringSet(0)
-
 	prevPair, ok := entry.lastElement.(*syntax.SyntaxPair)
 	if ok {
-		vars := vis.analysis.GetVariables(prevPair)
-		for v := range vars {
-			capturedVars.Set(v)
-		}
-	} else {
-		prevSym, ok := entry.lastElement.(*syntax.SyntaxSymbol)
-		if ok {
-			isVar := vis.variables.ContainsOne(prevSym.Key())
-			if isVar {
-				capturedVars.Set(prevSym.Key())
-			}
+		return values.Union(vis.analysis.GetVariables(prevPair))
+	}
+	capturedVars := values.NewStringSet(0)
+	prevSym, ok := entry.lastElement.(*syntax.SyntaxSymbol)
+	if ok {
+		isVar := vis.variables.ContainsOne(prevSym.Key())
+		if isVar {
+			capturedVars.Set(prevSym.Key())
 		}
 	}
 	return capturedVars

@@ -648,10 +648,7 @@ func (p *SyntaxMatcher) expandEllipsisSingleGroup(
 
 	// Add this ellipsis ID to the exclude set so nested ellipsis expansions
 	// within the children select the inner ID instead of re-selecting this one.
-	innerExclude := values.NewIntSet(len(excludeEllipsisIDs) + 1)
-	for id := range excludeEllipsisIDs {
-		innerExclude.Set(id)
-	}
+	innerExclude := values.Union(excludeEllipsisIDs)
 	innerExclude.Set(ellipsisID)
 
 	results, err := p.expandEllipsisChildren(pattern, children, ellipsisVars, innerExclude, opts, patternVarsInTemplate)
@@ -721,13 +718,8 @@ func (p *SyntaxMatcher) expandEllipsisCrossGroup(
 	}
 
 	// Add all matching IDs to the exclude set for recursive expansion.
-	innerExclude := values.NewIntSet(len(excludeEllipsisIDs) + len(matchingIDs))
-	for id := range excludeEllipsisIDs {
-		innerExclude.Set(id)
-	}
-	for _, id := range matchingIDs {
-		innerExclude.Set(id)
-	}
+	innerExclude := values.Union(excludeEllipsisIDs)
+	innerExclude.SetAll(matchingIDs...)
 
 	results, err := p.expandEllipsisChildren(pattern, mergedChildren, ellipsisVars, innerExclude, opts, patternVarsInTemplate)
 	if err != nil {
@@ -749,11 +741,7 @@ func (p *SyntaxMatcher) expandEllipsisChildren(
 ) ([]syntax.SyntaxValue, error) {
 	results := make([]syntax.SyntaxValue, 0, len(children))
 	for _, childCtx := range children {
-		newEllipsisVars := values.NewStringSet(0)
-		maps.Copy(newEllipsisVars, ellipsisVars)
-		for v := range patternVarsInTemplate {
-			newEllipsisVars.Set(v)
-		}
+		newEllipsisVars := values.Union(ellipsisVars, patternVarsInTemplate)
 
 		expanded, err := p.expandSyntaxValue(pattern, childCtx, newEllipsisVars, excludeEllipsisIDs, opts)
 		if err != nil {
