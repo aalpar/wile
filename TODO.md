@@ -244,6 +244,7 @@ them:
 | `2026-07-17-review-remediation-impl.md` | Confirmed at HEAD; documented guarantee and runtime disagree |
 | `2026-07-18-bootstrap-core-unification-and-signals.md` | W1 shipped; remainder open |
 | `2026-07-19-compile-check-and-call-site-arity.md` | Design ready, **not started** |
+| `2026-09-04-registry-core-tests-to-scheme-impl.local.md` | Executes M1 of `2026-07-31-go-volume-reduction-findings`. Pilot **shipped** on `test/scheme-list-migration` (`prim_list_test.go` → `test/scheme/lists-test.scm`, −1,820 Go LOC, both drivers green). Task 0 (`covercheck` merges the in-process Scheme suite's Go coverage) is a hard prerequisite: Go-only `registry/core` coverage projects to **40.0%** after full migration, union is 90.4%. Tasks 1–17 **not started** |
 | `2026-07-20-scope-keyed-tier1-remediation.md` | **Partially implemented** (2026-07-21) |
 | `2026-07-23-scope-set-type-impl.local.md` | Impl draft on `refactor/scope-set-type` |
 | `2026-07-28-alocal-capture-safe-proof-for-locals.local.md` | Phases 1–4 **DONE** (1–3 committed on `feat/callback-conditional-capture`); 19/68 → 42/68 capture-safe stamps, reclaim verdicts unchanged at 19/68 as predicted. Phase 5 (Lever B) open. Prerequisite `47c27f72` must land first or the two conflict textually |
