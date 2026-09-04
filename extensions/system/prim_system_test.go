@@ -16,8 +16,10 @@ package system_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -282,4 +284,50 @@ func TestTimingConsistency(t *testing.T) {
 		`)
 		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 	})
+}
+
+// TestExitHook pins the seam the CLI uses to write its profiles: the function
+// registered with SetExitHook runs before the process terminates through exit
+// or emergency-exit, and the status still reaches the parent. Subprocess-driven
+// like TestExit, because both primitives end the process.
+func TestExitHook(t *testing.T) {
+	markerPath := os.Getenv("WILE_TEST_EXIT_HOOK_FILE")
+	if os.Getenv("WILE_TEST_EXIT_SUBPROCESS") == "1" && markerPath != "" {
+		extsystem.SetExitHook(func() {
+			_ = os.WriteFile(markerPath, []byte("hook ran\n"), 0o644)
+		})
+		engine, _ := wile.NewEngine(context.Background(), wile.WithExtension(extsystem.Extension))
+		_, _ = engine.EvalMultiple(context.Background(), os.Getenv("WILE_TEST_EXIT_HOOK_EXPR"))
+		return
+	}
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{"exit", `(exit 5)`},
+		{"emergency-exit", `(emergency-exit 5)`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			marker := filepath.Join(c.TempDir(), "hook-ran")
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestExitHook$")
+			cmd.Env = append(os.Environ(),
+				"WILE_TEST_EXIT_SUBPROCESS=1",
+				"WILE_TEST_EXIT_HOOK_FILE="+marker,
+				"WILE_TEST_EXIT_HOOK_EXPR="+tt.expr,
+			)
+			err := cmd.Run()
+			var exitErr *exec.ExitError
+			c.Assert(errors.As(err, &exitErr), qt.IsTrue, qt.Commentf("run error: %v", err))
+			c.Assert(exitErr.ExitCode(), qt.Equals, 5)
+
+			data, readErr := os.ReadFile(marker)
+			c.Assert(readErr, qt.IsNil, qt.Commentf("exit hook did not run before os.Exit"))
+			c.Assert(string(data), qt.Equals, "hook ran\n")
+		})
+	}
 }

@@ -27,6 +27,7 @@ import (
 	"runtime/debug"
 	"runtime/pprof"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/aalpar/wile/coverage"
@@ -255,22 +256,17 @@ func main() {
 	}
 
 	// CPU profiling
+	var cpuProfile *os.File
 	if opts.CPUProfile != "" {
 		f, err := os.Create(opts.CPUProfile)
 		if err != nil {
 			Failf(err, "Cannot create CPU profile")
 		}
-		defer func() {
-			closeErr := f.Close()
-			if closeErr != nil {
-				Failf(closeErr, "Cannot close CPU profile")
-			}
-		}()
 		err = pprof.StartCPUProfile(f)
 		if err != nil {
 			Failf(err, "Cannot start CPU profile")
 		}
-		defer pprof.StopCPUProfile()
+		cpuProfile = f
 	}
 
 	// Mutex and block profiling must be armed before any work runs: unlike CPU
@@ -284,6 +280,27 @@ func main() {
 	if opts.BlockProfile != "" {
 		goruntime.SetBlockProfileRate(1)
 	}
+
+	var coverageCollector *coverage.Collector
+	if opts.Cover != "" || opts.CoverSummary != "" {
+		coverageCollector = coverage.NewCollector()
+	}
+
+	// Every profile and report is written by writeRunReports, reached three
+	// ways. The deferred call covers the --mcp and --check returns. The explicit
+	// call at the bottom of main runs ahead of the deferred engine Close, so the
+	// heap snapshot still sees the engine. The system extension's exit hook
+	// covers a program that ends in (exit): that terminates through os.Exit,
+	// which skips both of the others, and every test suite ends that way. The
+	// Once makes whichever arrivals come later no-ops.
+	var finishOnce sync.Once
+	finishRun := func() {
+		finishOnce.Do(func() {
+			writeRunReports(cpuProfile, coverageCollector)
+		})
+	}
+	defer finishRun()
+	system.SetExitHook(finishRun)
 
 	// Cancel on SIGTERM only. SIGINT (Ctrl-C) is deliberately NOT routed into
 	// this context: the interactive REPL owns SIGINT so a Ctrl-C during eval
@@ -300,11 +317,6 @@ func main() {
 			Failf(err, "MCP server error")
 		}
 		return
-	}
-
-	var coverageCollector *coverage.Collector
-	if opts.Cover != "" || opts.CoverSummary != "" {
-		coverageCollector = coverage.NewCollector()
 	}
 
 	libPaths := buildLibraryPaths()
@@ -433,7 +445,22 @@ func main() {
 		runREPL(ctx, eng)
 	}
 
-	// Memory profiling (written at exit after all work is done)
+	finishRun()
+}
+
+// writeRunReports finalizes every profile and coverage report the flags asked
+// for, after all work is done. It is the one end-of-run writer; the finishRun
+// comment in main lists the paths that reach it. The CPU profile is stopped
+// first so the report writing is not itself sampled.
+func writeRunReports(cpuProfile *os.File, col *coverage.Collector) {
+	if cpuProfile != nil {
+		pprof.StopCPUProfile()
+		closeErr := cpuProfile.Close()
+		if closeErr != nil {
+			Failf(closeErr, "Cannot close CPU profile")
+		}
+	}
+
 	if opts.MemProfile != "" {
 		f, err := os.Create(opts.MemProfile)
 		if err != nil {
@@ -452,7 +479,6 @@ func main() {
 		}
 	}
 
-	// Mutex/block profiling (written at exit after all work is done)
 	if opts.MutexProfile != "" {
 		writeNamedProfile("mutex", opts.MutexProfile)
 	}
@@ -460,19 +486,19 @@ func main() {
 		writeNamedProfile("block", opts.BlockProfile)
 	}
 
-	// Coverage reporting (written at exit after all work is done)
-	if coverageCollector != nil {
-		if opts.Cover != "" {
-			err := writeCoverageFile(opts.Cover, coverageCollector, opts.CoverStdlib)
-			if err != nil {
-				Failf(err, "writing coverage file")
-			}
+	if col == nil {
+		return
+	}
+	if opts.Cover != "" {
+		err := writeCoverageFile(opts.Cover, col, opts.CoverStdlib)
+		if err != nil {
+			Failf(err, "writing coverage file")
 		}
-		if opts.CoverSummary != "" {
-			err := writeSummaryFile(opts.CoverSummary, coverageCollector, opts.CoverStdlib)
-			if err != nil {
-				Failf(err, "writing coverage summary")
-			}
+	}
+	if opts.CoverSummary != "" {
+		err := writeSummaryFile(opts.CoverSummary, col, opts.CoverStdlib)
+		if err != nil {
+			Failf(err, "writing coverage summary")
 		}
 	}
 }

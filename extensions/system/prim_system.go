@@ -65,7 +65,10 @@ func PrimCommandLine(mc machine.CallContext) error {
 // exitWithCode implements the shared logic for exit and emergency-exit.
 // Both first gate on process:exit via security.CheckWithAuthorizer, so a denied
 // call returns that error instead of exiting. Both then parse an optional status
-// argument (#f → 1, integer → value, default → 0) and call os.Exit.
+// argument (#f → 1, integer → value, default → 0), run the SetExitHook function
+// if one is registered, and call os.Exit. The hook is the host's, not the
+// program's, so it is not the cleanup R7RS lets emergency-exit skip (outstanding
+// dynamic-wind after thunks); both primitives run it.
 // Currently identical; the distinction exists for R7RS
 // compliance (emergency-exit should skip cleanup, which is not yet implemented).
 func exitWithCode(mc machine.CallContext) error {
@@ -98,6 +101,9 @@ func exitWithCode(mc machine.CallContext) error {
 				code = 1
 			}
 		}
+	}
+	if exitHook != nil {
+		exitHook()
 	}
 	os.Exit(code)
 	return nil
@@ -138,4 +144,18 @@ func PrimCurrentJiffy(mc machine.CallContext) error {
 func PrimJiffiesPerSecond(mc machine.CallContext) error {
 	mc.SetValue(values.NewInteger(1000000000)) // 1 billion nanoseconds per second
 	return nil
+}
+
+// exitHook is the function SetExitHook registered, or nil.
+var exitHook func()
+
+// SetExitHook registers fn to run before the process terminates through exit or
+// emergency-exit. os.Exit skips deferred functions, so a host that writes
+// something at the end of a run (the CLI's coverage report and profiles) has no
+// other way to reach the end of a program that exits. The hook is process-wide,
+// like os.Exit itself and like SetCommandLine: it belongs to the host, not to
+// an engine. It runs on the calling goroutine, which for an SRFI-18 thread is
+// not the main one. Passing nil removes the hook.
+func SetExitHook(fn func()) {
+	exitHook = fn
 }
