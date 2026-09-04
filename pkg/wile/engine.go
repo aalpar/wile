@@ -614,7 +614,17 @@ func buildRegistry(cfg *engineConfig) (*registry.PrimitiveRegistry, []extSnapsho
 // import observer, extension libraries, and the library environment factory.
 // applyOpts propagates registry.Apply toggles (e.g., contract enforcement)
 // into child library environments so they mirror the parent's configuration.
-func setupLibrarySystem(ctx context.Context, libraryPaths []string, importObserver func(LibraryImportEvent), reg *registry.PrimitiveRegistry, env *environment.EnvironmentFrame, ns *environment.Namespace, snapshots []extSnapshot, applyOpts []registry.ApplyOption, level strictLevel) error {
+func setupLibrarySystem(
+	ctx context.Context,
+	libraryPaths []string,
+	importObserver func(LibraryImportEvent),
+	reg *registry.PrimitiveRegistry,
+	env *environment.EnvironmentFrame,
+	ns *environment.Namespace,
+	snapshots []extSnapshot,
+	applyOpts []registry.ApplyOption,
+	level strictLevel,
+) error {
 	libReg := compilation.NewLibraryRegistry()
 
 	// Prepend user paths in reverse order so first path has highest priority.
@@ -1165,7 +1175,12 @@ func (p *Engine) AvailableLibraries(ctx context.Context) ([]LibraryName, error) 
 
 // registerExtensionLibraries registers each extension as a synthetic R7RS library
 // so Scheme code can selectively import extension primitives via (import (wile math)) etc.
-func registerExtensionLibraries(reg *registry.PrimitiveRegistry, env *environment.EnvironmentFrame, libReg *compilation.LibraryRegistry, snapshots []extSnapshot) error {
+func registerExtensionLibraries(
+	reg *registry.PrimitiveRegistry,
+	env *environment.EnvironmentFrame,
+	libReg *compilation.LibraryRegistry,
+	snapshots []extSnapshot,
+) error {
 	for _, snap := range snapshots {
 		names := reg.RuntimePrimitiveNamesRange(snap.startIndex, snap.endIndex)
 		if len(names) == 0 {
@@ -1289,6 +1304,8 @@ func expandAndCompileOptimized(ctx context.Context, env *environment.Environment
 	return tpl, nil
 }
 
+// compileExpr compiles a single syntax value into a CompiledCode, returning a wrapped CompilationError on failure. It
+// runs the expand → compile → optimize pipeline and tracks the template tree for coverage collection.
 func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
 	tpl, err := expandAndCompileOptimized(ctx, p.env, stx, nil, p.inlineThreshold, p.maxExpandDepth)
 	if err != nil {
@@ -1298,6 +1315,9 @@ func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*Comp
 	return &CompiledCode{template: tpl, env: p.env}, nil
 }
 
+// runCompiled executes a CompiledCode in a new top-level context, returning the result or a wrapped runtime error. It
+// sets the max call depth and stack size, attaches the debugger if present, and collects performance counters.
+// The CompiledCode's environment is used as the runtime environment for execution.
 func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, error) {
 	mc := machine.AcquireTopLevelContext(ctx, cc.template, cc.env)
 	defer machine.ReleaseTopLevelContext(mc)
@@ -1476,19 +1496,25 @@ func trackTemplateTree(col *coverage.Collector, root *machine.NativeTemplate) {
 	visited := values.NewMapSet[*machine.NativeTemplate](0)
 	queue := []*machine.NativeTemplate{root}
 	for len(queue) > 0 {
+		// Pop the next template from the queue and check if it has already been visited.
 		tpl := queue[0]
+		// Remove the template from the queue.
 		queue = queue[1:]
+		// If the template has already been visited, skip it.
 		done := visited.ContainsOne(tpl)
 		if done {
 			continue
 		}
+		// Mark the template as visited and track it in the coverage collector.
 		visited.Set(tpl)
 		col.Track(tpl)
+		// Enqueue all child templates found in the literals pool for further processing.
 		for _, lit := range tpl.Literals() {
 			child, ok := lit.(*machine.NativeTemplate)
 			if !ok {
 				continue
 			}
+			// Check if the child template has already been visited before adding it to the queue.
 			seen := visited.ContainsOne(child)
 			if !seen {
 				queue = append(queue, child)
