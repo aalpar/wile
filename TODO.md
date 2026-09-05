@@ -238,27 +238,21 @@ them:
 |---|---|
 | `2026-03-26-extension-contracts-impl.local.md` | Phase 1 + Phase 4 (runtime enforcement) shipped; Phases 2–3 annotation rollout **partial** |
 | `2026-03-26-extension-contracts-phase2-design.local.md` | Infrastructure + enforcement complete; extension annotations partial |
-| `2026-05-14-stderr-flush-on-exit.local.md` | **MOOT, archive candidate** (the plan's own header says so). Its motivating stderr loss was resolved 2026-07-21 by per-write flushing; the one `os.Exit` casualty that remained, profiles and coverage lost on `(exit)`, was fixed 2026-09-04 by `system.SetExitHook` (Tier 3), not by this plan's Change B, which was never built |
 | `2026-06-18-frame-reclaim-precision-coverage.local.md` | A/E/B/D + A-local **shipped**, only A-local converted to clock (`primes` −4.2%); B/D moved verdicts, emitted ~nothing; **C deferred** 2026-07-29 (the `or` lowering removed 340 macro frames more cheaply, but reaches a disjoint set — Appendix A); F/G open. **Phase C SHIPPED 2026-08-14.** Its inbound edge was satisfied by Wave 1 §4 (`48a52a3c`), whose fix sits at the delivery instruction rather than in `OpSelfTailCall`, so C inherited it and needed no arity work. **Three corrections to the plan's own Phase C text, all measured:** (1) Step 1's *"assert 0-alloc"* target is unreachable — a `let` frame costs 3 allocations and is not pool-owned, so the landed result is 5.0 → **3.0** for one let and 8.0 → **6.0** for two, removing the fixed 2 the leaked parameter frame cost; pooling `OpPushEnv` frames is a separate, unstarted lever. (2) Q-C1 resolved to **(a)**, a bit-packed `(argCount | popCount<<16)` where `popCount == 0` encodes byte-identically to the old operand — decided not on peephole grounds but because the pops and the rebind must be inseparable, and because `OpPopEnv` clears `envPooled` as a claim about the frame it pops TO. (3) Step 2's *"analysis returns depth"* was **not implemented and should not be**: `tailExprHasSelfCall` stopped counting depth, and the count is carried by the compile-time context at the single site that pairs 1:1 with `compileValidatedLet`'s single `OpPushEnv` — one counter instead of two that must agree, which retires A.7's coupling, and per CALL SITE rather than the per-closure max the plan specified (a procedure with self calls at two depths needs both). **Ledger:** armed sites 47 → 50 over 78 corpus files, none lost; the three are outside the Gabriel suite, which is why the interleaved A/B reads geomean +0.33% against a +0.12% A/A control. A.5's disjoint-frame-sets prediction held. Only F/G remain |
-| `2026-07-15-review-2026-07-13-sec4-remediation.md` | 22/23 closed; **AU.1 audit open** |
-| `2026-07-17-review-remediation-impl.md` | Confirmed at HEAD; documented guarantee and runtime disagree |
 | `2026-07-18-bootstrap-core-unification-and-signals.md` | W1 shipped; remainder open |
-| `2026-07-19-compile-check-and-call-site-arity.md` | Design ready, **not started** |
 | `2026-09-04-registry-core-tests-to-scheme-impl.local.md` | Executes M1 of `2026-07-31-go-volume-reduction-findings`. Pilot **shipped** on `test/scheme-list-migration` (`prim_list_test.go` → `test/scheme/lists-test.scm`, −1,820 Go LOC, both drivers green). Task 0 (`covercheck` merges the in-process Scheme suite's Go coverage) is a hard prerequisite: Go-only `registry/core` coverage projects to **40.0%** after full migration, union is 90.4%. Tasks 1–17 **not started** |
+| `2026-09-04-scheme-coverage-fidelity.local.md` | Design + plan, **not started**. Follows `fix/cover-library-bodies`: one `TemplateObserver` compile seam so `--cover` reports every Scheme template the engine compiles, attributes macro-expanded code to the template that produced it, and lands the Go-cover profile on the right bytes |
 | `2026-07-20-scope-keyed-tier1-remediation.md` | **Partially implemented** (2026-07-21) |
-| `2026-07-23-scope-set-type-impl.local.md` | Impl draft on `refactor/scope-set-type` |
 | `2026-07-28-alocal-capture-safe-proof-for-locals.local.md` | Phases 1–4 **DONE** (1–3 committed on `feat/callback-conditional-capture`); 19/68 → 42/68 capture-safe stamps, reclaim verdicts unchanged at 19/68 as predicted. Phase 5 (Lever B) open. Prerequisite `47c27f72` must land first or the two conflict textually |
 | `2026-07-29-name-keyed-identity-residuals.local.md` | Finding report; all 4 repros re-verified on `ba93c936` 2026-07-29 |
 | `2026-07-29-name-keyed-identity-residuals-design.local.md` | Design **resolved**; 2 of the report's conclusions corrected |
 | `2026-07-29-name-keyed-identity-residuals-impl.local.md` | Branch A (Finding 2) **DONE** `bff525a8`; Branch B (Finding 1) not started |
 | `2026-08-01-scheme-deadline-and-cancellation-cause.local.md` | Phase 1 **impl-ready**; Phase 2 designed and **gated** on the plan's scoping decision. Exposes the ambient `context.Context`'s deadline and cancellation cause to Scheme |
-| `2026-09-02-literal-pin-ambiguity-as-value-impl.local.md` | **SHIPPED** 2026-09-02 on `refactor/literal-pin-ambiguity-as-value`, merged `c8080848`, all 5 tasks; archived to `memory/`. Follow-on to the ambient-keywords relocation: `probeTiersLocked` reports a scope-set tie instead of raising; `ExactBindingAt` / `ExactBinding` read the exact tiers without the ambient keyword; `AmbientBinding` returns `(binding, ambiguous)`; `lookupLiteralBinding` is the plain exact-then-ambient sequence with no recovers; `LookupSyntaxCompiler` (production-dead) deleted. `GetBinding` and the sealed readers keep raising. The final review found the plan's own pin test passed on master too; `TestLookupLiteralBindingExactTieIsRefusedDespiteACleanLowerPhase` (`0e9d001d`) is the one that fails there. Closes the ambient-keywords row's defer-cost residual: the defers are gone |
 
 ### Design-only — approved or drafted, no code
 
 | Plan | Status |
 |---|---|
-| `2026-08-09-primitive-surface-panic-sweep.local.md` | **Sweep RUN 2026-08-09 against `a52c7993`; read-only, no code changed. STATUS OF THE 14, corrected 2026-08-10 — 11 are now closed:** #3 on master via `PRIM-EVAL`; #4–#10 and #12–#14 on this branch; #11 REFUTED as filed and re-filed against the engine (uninterruptibility is a documented VM-wide property of every foreign call, and a 60-character loop of `*` with no `expt` reaches 147 MB / 14 s, so a ceiling on `exptExact` alone would refuse `(expt 10 N)` while permitting its own algorithm written in Scheme) — see the "No memory or CPU custodian at the engine level" row. **#1 and #2 CLOSED 2026-08-13; all 14 are now accounted for.** They were ONE site, not two — `PrimAssv` is three lines delegating to the same `helpers.AssocLookup` as `PrimAssq` — and one guard closed both. The sweep's table renders them as two rows at two file positions and its priority list prices two edits; both were wrong. The fix is an `IsEmptyList` arm beside the existing `values.Tuple` assertion, returning `werr.ErrNotAPair`: the sweep's own shape-(2) diagnosis was exactly right, the comma-ok assertion SUCCEEDS on `'()` and the panic is in the following `Car()`. Pinned at both levels — a sentinel assertion in `TestAssocLookup_Errors` (asserting `ErrNotAPair`, not merely "an error", so a blanket VM recover could not satisfy it) and a Scheme catchability table in `TestAssocFamilyMalformedEntryIsCatchable` that keeps `assoc` as the control it was always measured against. Seven parallel finders over the whole Scheme-reachable surface plus one adversarial refuter each: 30 candidates, 15 refuted, 14 distinct defects survived, every one an uncatchable panic *today*. **Two premise corrections, and the first re-aims the sweep:** (1) shape (C) is **not** what makes these worse — everything registered through `RegisterPrimitive` already bypasses `makeWrapper`'s recover, so those panics already escape `guard` (confirmed by running `(assq 'z '(() (a . 1)))`); the narrowing changes the blast radius for exactly one population, Go functions registered via `Engine.RegisterFunc`/`RegisterFuncs`, where `guard` catches every panic today and none after. Fix the 14 regardless; do not sell them to the maintainer on Phase 8's stated grounds. (2) `noUncheckedArgCast` **matches nothing** — 137 single-value assertions tree-wide, zero with `Arg(` as receiver — so widening it is a free ratchet that will find nothing. **The load-bearing finding: ruleguard is structurally incapable of catching shape (2)**, where the exposure actually is, because the comma-ok assertion *succeeds* (`emptyListType` implements `values.Tuple`) and the panic is in the following `Car()`; catching it needs a `go/analysis` SSA pass asking whether a `values.Tuple` assertion reaches a `Car`/`Cdr` with no dominating `IsEmptyList` check. Two things the sweep did **not** settle: the 36 `pkg/machine/compilation` assertions were sampled, not read; and post-narrowing behaviour was *simulated* by routing panics through `RegisterPrimitive`, not observed on a patched wrapper |
 | `2026-04-17-mcp-server-sota-design.local.md` | Proposed, 5 phases |
 | `2026-04-21-type-constraint-extension-design.local.md` | Design draft; impl deferred to follow-ups |
 | `2026-06-04-srfi-204-match-design.local.md` | Design draft; `-impl` to follow |
@@ -268,18 +262,16 @@ them:
 | `2026-06-24-tinyclos-object-system-design.local.md` | Design proposal, opt-in object system |
 | `2026-06-24-unboxed-scalar-arithmetic-design.md` | Design **A rejected**; Design B + Phase 4 is the live plan |
 | `2026-06-26-promoted-primitive-inline-registry.local.md` | Draft v2, awaiting human review |
-| `2026-06-27-srfi18-uncaught-exception-wrapper.local.md` | Design draft, gated on Q1 |
 | `2026-07-10-climbing-tower-design.local.md` | Tier 1 **shipped** 2026-07-10 (`f92568a8`); **Tier 2 (§6) unstarted and gated** on the §9 procedural-authoring pivot plus §10 owner sign-off. The `-impl` twin is Tier-1-only and archived to `memory/` 2026-08-24 — this row is why the design is not |
 | `2026-07-10-engine-services-generic-keyed-slot-design.local.md` | Design only, not scheduled |
 | `2026-07-11-scheme-pipeline-seams-design.local.md` | `current-eval` / `current-print` / `current-read` seams |
-| `2026-07-12-numeric-zero-and-tier2-fold.local.md` | Four verified defects from the 2026-07-12 review |
 | `2026-07-24-free-identifier-origin-provenance-design.local.md` | Phase 1 + inline-HOF P2 shipped; scoping doc retained |
 | `2026-07-29-anonymous-lambda-inlining-impl.local.md` | Implementation-ready, ~25 LOC; Q1 (arity mismatch: refuse vs compile error) open |
 | `2026-08-01-srfi18-sequencer-design.local.md` | Design proposed, 6 phases, **not started**. Scoped to adversarial protocol testing (not seed-reproducible simulation); ships in production with a FIFO policy. 3 open questions |
 | `2026-08-03-algebra-egraph-design.local.md` | Design proposed, 5 phases, **not started**. Reviewed against code + live evaluator same day; 3 findings changed the design (witness-term extraction, cycle-safe semiring gate, non-hashable e-node keys). Q1 (fund Phase 4, touches shared `rewrite.scm`) and Q2 (metadata policy on congruent merge) blocking |
 | `2026-08-03-formspec-expand-consolidation-sizing.local.md` | Sizing only. **P1 shipped** (`48f6fa25`); P2–P5 deferred as marginal. §6 fork (wire expand dispatch to the field?) open, recommendation NO |
-| `2026-08-03-r6rs-hashtables-design.local.md`<br>`2026-08-03-r6rs-hashtables-impl.local.md`<br>`2026-08-03-r6rs-hashtables-baseline.local.md` | **SHIPPED** 2026-08-04 on `feat/r6rs-hashtables`, all 14 tasks; archived to `memory/`. See the closed "Hashtables → R6RS" entry under Standard Library for the six findings the plan did not predict — the ~10% benchmark gate blown by routing leaf keys through `EqualHash`, `string-ci-hash`'s x/text placement, `hashtable-update!` needing its own droppable bootstrap source, and `(rnrs hashtables)` breaking `(make-hashtable equal-hash equal?)` by re-exporting `equal-hash`. Two residuals filed as their own open items: Phase 4 (user-supplied hash/equiv, still unfunded by any benchmark) and `*RecordType` keys sharing one bucket. |
-| `2026-09-01-ambient-keywords-retire-phase-compile-impl.local.md` | **SHIPPED** 2026-09-02 on `feat/ambient-keywords`, merged `9a3fe200`, all 6 tasks; archived to `memory/`. Auxiliary keywords and special-form names bind at the ambient `(ANY, sealed)` coordinate (where the syntax compilers already lived), so phase 2 is an ordinary rung; `PhaseCompile` / `PhaseSetCompile` / `Compile()` deleted; `LibraryImportEvent.Stage` (`ImportStage`, 1-based) replaces the `Phase`-typed pass tag; the §4.3.2 literal pin ranks an ambient keyword last. Four plan defects surfaced in execution and were ruled in the SDD ledger: the ambient-last change and the relocation are mutually dependent (each alone goes red); `apply`/`dynamic-wind` are procedures and moved to a doc-only table with a ratchet; dialect-removed forms are stripped from the top-level registry via the previously uncalled `WithoutBindings`; an ambient-tier ambiguity is held back behind exact-phase hits. Follow-up `37bffaf2` ratcheted the `ambientTie` conjunct in `probeIgnoringAmbientTie` (`TestLookupLiteralBindingExactTieIsRefusedWithoutAnAmbientTie`). The one parked residual (extra defer cost on the literal-pin path) closed in `c8080848`: the defers are gone |
+| `2026-09-04-expander-in-scheme-assessment.local.md` | Assessment, no code. Answers "move all macro expansion, templates included, to Scheme": **A** (`syntax-rules` derived over `syntax-case` in `bootstrap_macros.scm`, retiring the parallel clause compiler + runtime) sized as a Tier 5 candidate, not started; **B** (core expander in Scheme, psyntax/Racket style) **DECLINED** — no image format, so bootstrap cycles and per-`wile.New()` startup pay for it, and the extension benefit is already served. Also closes chibi backlog #5 as already built |
+| `2026-09-04-scheme-specified-syntax-forms-design.local.md` | **DESIGN, direction approved 2026-09-04, not started.** Go keeps a kernel (scope sets, resolution, core forms, body scan, dispatch loop, one transformer protocol with the intro-scope flip, `quote-syntax`, `syntax-local-value`, one-level accessors); `syntax-case`, `syntax`, `with-syntax`, `quasisyntax`, `syntax-rules`, `er-macro-transformer` are specified in Scheme in two new bootstrap sources; `pkg/internal/match/` and ten `compile_syntax_*`/`operation_syntax_*`/ER files (≈6.5k Go) are deleted. Startup is a soft constraint by decision (pre-compiled bytecode later). Three of the six 2026-09-04 macro defects die with the deleted code, one (`define-syntax` head dispatch) is the P0 prerequisite, `begin-for-syntax` visibility is out of scope, and the sixth was closed on paper. Phases P0–P4 in §7; the three open questions in §8 are not blocking |
 | `ARCHITECTURE.local.md` | 1/4 sections complete |
 | `DEBUGGER.local.md` | Both proposals unstarted |
 | `MACRO_SYSTEM.local.md` | Both sections unstarted |
@@ -298,7 +290,7 @@ them:
 | `2026-04-23-docs-sweep-impl.local.md` | Planned, not started |
 | `2026-05-02-algebra-matching-many-to-many.local.md` | Gated on `(wile algebra matroid)` (§5.7 Tier C) |
 | `2026-05-05-iter-seq-cascade.local.md` | Draft; sequenced after the charsets refactor (shipped) |
-| `2026-07-11-chibi-derived-ergonomics-backlog.local.md` | Parked; neither item on a critical path |
+| `2026-07-11-chibi-derived-ergonomics-backlog.local.md` | **#5 RESOLVED 2026-09-04 — already built**, nothing to do: every primitive its "Verify first" asked about is registered in `pkg/registry/core/syntax.go` (`identifier?`, `syntax->datum`, `datum->syntax`, `generate-temporaries`, `bound-identifier=?`, `free-identifier=?`) and `er-macro-transformer` lives in `compile_er_macro.go` with `wile/er-macro-test.scm` green. #6 (chibi-ffi-style codegen) still parked |
 | `2026-07-28-callback-conditional-capture-safety.local.md`<br>`2026-07-28-callback-conditional-capture-safety-impl.local.md` | **Phase 0a SHIPPED** (`47c27f72` on `feat/callback-conditional-capture`); phases 0b onward **blocked on Q1/Q3**. Q2 answered (sealed-base only), Q4 done. The `-impl` twin is the authority on phase state. The design note's header claims this index row was added 2026-08-08 and that adding it let `make planlint` see its stale header; the row did not exist until now, so `planlint` has never had that signal for this plan |
 | `TECH-DEBT-2026-04.local.md`<br>`TECH-DEBT-2026-04-IMPL.local.md` | 25/27; only 6.2 (`context.TODO` in test files) open |
 | `PERFORMANCE.local.md` | 1 complete, 1 open (env frame slimming), 1 rejected |
@@ -310,10 +302,10 @@ them:
 | File | Kind |
 |---|---|
 | `2026-07-01-staff-engineer-sweep.md` | Whole-codebase tech-debt tracker; larger M/L findings still open |
-| `2026-07-17-review-remediation.md` | 2026-07-17 full-review fix plan (14 defects — resolved, see Tier 1) |
 | `2026-07-17-pair-gc-investigation.md` | Read-only investigation of three cons-cell GC levers |
 | `2026-07-18-scope-keyed-global-bindings-design.md` | Scope-keyed global bindings; successors transcribed into Tier 1 |
 | `2026-07-31-go-volume-reduction-discovery.local.md`<br>`2026-07-31-go-volume-reduction-findings.local.md` | Discovery/audit; the deliverable is a ranked findings inventory, not code. Phase 0 + Phase 1 **COMPLETE**, merged from `chore/volume-discovery-phase0` 2026-08-10; Phase 2 (verify) and Phase 3 (rank) **not started**, so **no finding is CONFIRMED**. M1/M3/M4 collide with the 2026-08-07 review waves — read the ordering notes in the findings file before resuming Phase 2 |
+| `2026-08-25-write-only-fields.local.md` | Report-only inventory of struct fields written but never read (AST-level sweep over the module, 6 of 34 spot-verified); nothing deleted, each field needs its own judgment |
 | `2026-06-17-inverse-verification.md` | Technique note |
 | `divergent-design-subcontext-workflow.local.md` (+ `.js`) | Technique note plus runnable harness |
 | `WORKSPACE-ROADMAP.local.md` | Living cross-project queue (`wile` ↔ `wile-goast`) |
@@ -612,7 +604,7 @@ that names the same probe the row does.
 Both rows below are shipped. The section is retained for the decision trail: the fix went through
 three mechanisms in three weeks — an error return for `WithDialect` alone, then a runtime panic
 for the whole family, then the type split that deleted `WithNamespace` and made the rule a
-compile error. Plans: `plans/2026-08-24-typed-engine-options-design.local.md` (settled) and its
+compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (settled, archived 2026-09-04) and its
 `-impl` twin (shipped).
 
 - [x] **Panic on namespace-consumed options at the `WithNamespace` branch** — **SHIPPED
@@ -651,7 +643,7 @@ compile error. Plans: `plans/2026-08-24-typed-engine-options-design.local.md` (s
 
 - [x] **`WithContractEnforcement` is SPLIT across the `WithNamespace` line, and shipped
   unrejected** — **SHIPPED 2026-08-24** by
-  `plans/2026-08-24-typed-engine-options-{design,impl}.local.md`
+  `memory/2026-08-24-typed-engine-options-{design,impl}.local.md`
   (`928a74da` typed options, `f26bdcd5` `NewEngineWithNamespace`, `b2592e06` this row,
   `d869a2fc` ratchets). Filed [Medium, S, 2026-08-24] as needing a maintainer call, which it
   got: **Answer A — the namespace owns it.**
@@ -1762,7 +1754,7 @@ Correctness work that lived only inside plan files, invisible to a TODO scan.
   implementing that design now would add redundant machinery for a data loss that no longer occurs.
   The plan was incomplete regardless — it targeted only `cmd/wile/main.go`'s `os.Exit` sites and
   missed `(exit)`/`(emergency-exit)` in `extensions/system/prim_system.go`, the bug's own canonical
-  repro. `plans/2026-05-14-stderr-flush-on-exit.local.md` is an archive candidate.
+  repro. `memory/2026-05-14-stderr-flush-on-exit.local.md`, archived 2026-09-04.
 - [x] **SRFI-18 `thread-join!` wraps an uncaught exception** [Correctness/conformance, S, Done
   2026-07-21]: implemented with Q1 = A (wrap unconditionally — strict SRFI-18; zero external
   consumers, break freely). A joined thread that died on an uncaught exception now surfaces to the
@@ -1916,7 +1908,7 @@ Closed. One line each so the fix stays findable; detail is in the cited commits 
   collision — two distinct globals with the same `Index` symbol but different `Env` deduped to one
   slot. `EqualTo` now compares `Env`.
 - [x] **2026-07-17 full-review remediation — all 14 confirmed defects** (2026-07-21; source
-  `reviews/2026-07-17/REVIEW.md`, plan `plans/2026-07-17-review-remediation.md`): twelve landed
+  `reviews/2026-07-17/REVIEW.md`, plan `memory/2026-07-17-review-remediation.md`, archived 2026-09-04): twelve landed
   across six file-disjoint PRs (#808–#813), two earlier via `1af62cd2`. Covered the SRFI-18
   condition-variable lost wakeup, a symlink-following resolver, ungated `(command-line)` argv, an
   uncatchable port-type panic plus a dead recover, case-lambda params unbound in body, `unless`
@@ -2410,6 +2402,46 @@ stay protected inside mutable children. Design:
   programs calls a boundary primitive in a loop.
 
 ---
+### Macro-system defects found 2026-09-04, owned by the Scheme-specified syntax forms design
+
+All reproduced on v1.20.0 (`8ef4c75b`). Owner for the first four:
+`plans/2026-09-04-scheme-specified-syntax-forms-design.local.md` §5; they close with its
+phases, not with point fixes, except 5.2 which is the P0 prerequisite.
+
+- [ ] **ER macros strip scopes from pass-through identifiers** [Correctness / hygiene, S, design §5.1]:
+  `invokeERTransformer` (`expander_time_continuation.go`) calls `UnwrapAll` on the input and re-wraps
+  the output with bare use-site context, so any identifier that merely passes through an ER macro
+  loses its scopes. `(define-syntax er-id (er-macro-transformer (lambda (f r c) (cadr f))))`,
+  `(define-syntax via-er (syntax-rules () ((_ e) (let ((tmp 1)) (er-id (+ tmp e))))))`, then
+  `(let ((tmp 10)) (via-er tmp))` returns **2**; the `syntax-rules` twin returns 11. The comment at
+  the site calls the asymmetry deliberate; the capture it causes was not on record. Dies with the shim
+  when ER is derived from `syntax-case` (design §3.5).
+- [ ] **`define-syntax` dispatches on the transformer's head symbol** [Conformance, S, design §5.2,
+  **P0 prerequisite**]: `compileTransformerToMachineClosure` (`compile_transformer.go`) switches on
+  `syntax-rules` / `lambda` / `er-macro-transformer` and never expands the right-hand side, so a macro
+  that expands to a transformer is refused: `(define-syntax my-er (syntax-rules () ((_ p) (lambda (stx)
+  (p stx)))))` then `(define-syntax m (my-er (lambda (stx) #'1)))` fails with "unsupported transformer
+  type". R6RS requires an expression evaluated at the next phase. Same for `let-syntax`/`letrec-syntax`.
+- [ ] **`syntax-case` rejects a lone-identifier pattern** [Conformance, XS, design §5.3]:
+  `(syntax-case stx () (x #'1))` fails "pattern must be a list" (`match.CompileSyntaxPattern`). R6RS
+  §12.4 allows any pattern. Dies with the Go `syntax-case`.
+- [ ] **Every free local referenced from a `syntax-case` or `with-syntax` body arrives boxed**
+  [Correctness, S, design §5.4]: `(let ((n 0)) (set! n 1) (syntax-case #'(a) () ((x) n)))` returns
+  `#&1`, the box; the same under `with-syntax` returns `#&1`; the same inside a plain `lambda` returns
+  `1`. An unassigned local procedure called from a clause body raises "expected a procedure, got
+  `#&#<machine-closure>`", so today's `syntax-case` cannot use a local helper at all, and no test
+  caught it. The clause-body compile path in `compile_syntax_case.go` / `compile_with_syntax.go`, not
+  the flat-closure boxing pass (the `lambda` control is fine). Dies with those files; pin it before
+  deletion so a general boxing regression cannot hide behind the rewrite.
+- [ ] **A `begin-for-syntax` define is invisible to a later transformer** [Conformance, M, **not**
+  owned by the design]: `(begin-for-syntax (define (helper x) x))` then `(define-syntax m (lambda (stx)
+  (helper #'7)))` fails "no such binding helper". The Tier 1 note above (2026-07-29, `lookupMacroBinding`
+  arm 1) says `begin-for-syntax` / `define-for-syntax` / `eval-when` "deliberately root the expander at
+  `p.env`"; that describes the lookup arms, not a decision that user-level phase-1 definitions should be
+  invisible to transformers, which is what R6RS §7 and Racket give. No stdlib file uses these forms
+  (Q1 of the phase-hermeticity item), so the gap has no in-tree consumer. Design §5.5 does not need it:
+  its helpers live in the sealed base.
+
 ## Tier 2 — Embedding API & Product Value
 
 The embedding experience that differentiates Wile.
@@ -2489,7 +2521,7 @@ rather than split across tiers.
   `runCheck` in `cmd/wile/main.go`), plus static call-site arity checking against primitives,
   imports, and same-unit defines (`pkg/machine/compilation/compile_call_arity.go`,
   `validate.UnitArityOf`). All 3 phases shipped.
-  `plans/2026-07-19-compile-check-and-call-site-arity.md`.
+  `memory/2026-07-19-compile-check-and-call-site-arity.md` (archived 2026-09-04).
   Five plan claims were wrong and are corrected in the implementation — recorded here because
   each one is a trap for anyone re-reading that plan:
   (1) compiling a `define` **does** register its binding, so the plan's "does not execute" test
@@ -2516,9 +2548,14 @@ rather than split across tiers.
 - [ ] **Bootstrap self-check diagnostics (W2/W3)** [Diagnostic/guard, S]: a load post-condition
   self-check (W2) and a nil-pin census (W3) over the bootstrap core.
   `plans/2026-07-18-bootstrap-core-unification-and-signals.md`.
-- [ ] **`er-macro-transformer`-equivalent on the sets-of-scopes core** [Macro system, M, parked]:
-  chibi-derived ergonomics backlog #5 — an explicit-renaming procedural-macro entry point plus a
-  `datum->syntax` companion. `plans/2026-07-11-chibi-derived-ergonomics-backlog.local.md`.
+- [x] **`er-macro-transformer`-equivalent on the sets-of-scopes core** [Macro system, M, RESOLVED
+  2026-09-04 — already built, no code changed]: chibi-derived ergonomics backlog #5 asked for an
+  explicit-renaming entry point plus a `datum->syntax` companion and listed both as "verify
+  first". Both exist: `er-macro-transformer` (`pkg/machine/compilation/compile_er_macro.go`,
+  exercised cross-library by `wile/er-macro-test.scm`) and, registered in
+  `pkg/registry/core/syntax.go`, `identifier?`, `syntax->datum`, `datum->syntax`,
+  `generate-temporaries`, `bound-identifier=?`, `free-identifier=?`. The row and the plan's
+  status were stale, not the code. `plans/2026-07-11-chibi-derived-ergonomics-backlog.local.md` #5.
 - [ ] **MCP LLM support / SOTA server** [Tooling, phased]: LLM-support phases
   (`plans/2026-06-05-mcp-llm-support-design.local.md`, Phase 1 impl-ready) and the bring-to-SOTA
   design (`plans/2026-04-17-mcp-server-sota-design.local.md`). Distinct from the "MCP triggering
@@ -3009,15 +3046,38 @@ Open restructuring work found only in `plans/` during the 2026-07-21 triage.
   architecture direction (`plans/2026-06-13-layered-environment-architecture.local.md`),
   data-driven promoted-primitive inline registry
   (`plans/2026-06-26-promoted-primitive-inline-registry.local.md`, DRAFT v2 awaiting review).
-- [ ] **`docs/` audit sweep + §4 review audit AU.1** [Docs/verification]: the docs-subsystem sweep
-  (`plans/2026-04-23-docs-sweep-impl.local.md`, follows algebra-docs) and the one unstarted audit
-  task in `plans/2026-07-15-review-2026-07-13-sec4-remediation.md` (22/23 closed).
+- [ ] **`docs/` audit sweep** [Docs/verification]: the docs-subsystem sweep
+  (`plans/2026-04-23-docs-sweep-impl.local.md`, follows algebra-docs). The §4 review audit AU.1
+  that shared this row was run 2026-08-09 with a negative verdict, the plan's own header says all
+  23 items are closed, and it is archived: `memory/2026-07-15-review-2026-07-13-sec4-remediation.md`.
 
-> **Stale-status housekeeping (planlint evidence).** Three sizable plans show 0/all-unchecked
-> boxes but are fully shipped — the checkboxes lie. Archive to `memory/` and stop trusting their
-> boxes: `2026-07-17-review-remediation.md` + `-impl.md` (all 14 defects landed, TODO already
-> RESOLVED) and `2026-07-12-numeric-zero-and-tier2-fold.local.md` (Tier-2 fold + exact-zero cluster
-> landed). These are exactly the drift the `make planlint` items (Top Priority + Tier 3) target.
+> **Stale-status housekeeping (planlint evidence) — DONE 2026-09-04.** Three sizable plans showed
+> 0/all-unchecked boxes while fully shipped: `2026-07-17-review-remediation.md` + `-impl.md` (all
+> 14 defects landed) and `2026-07-12-numeric-zero-and-tier2-fold.local.md` (Tier-2 fold +
+> exact-zero cluster landed). All three archived to `memory/` in the 2026-09-04 pass, each with its
+> Plan Index row moved into the file; the same pass archived eight more whose own headers said
+> shipped or complete (the `INDEX-*` rows citing 2026-09-04) and moved the lingering rows of three
+> earlier archives (r6rs hashtables, ambient keywords, literal-pin ambiguity) into their files.
+
+### `syntax-rules` derived over `syntax-case` — candidate (2026-09-04), SUPERSEDED the same day
+
+- [ ] **Derive `syntax-rules` in Scheme over `syntax-case`** [Macro system / dedup, M, **SUPERSEDED**
+  2026-09-04 by `plans/2026-09-04-scheme-specified-syntax-forms-design.local.md`, which makes this
+  its P2 and adds `syntax-case` itself; kept for the sizing]: the R6RS definition (~40 lines, core forms only) at the top of
+  `pkg/registry/core/bootstrap_macros.scm`, retiring the parallel clause compiler and runtime:
+  `operation_syntax_rules_transform.go` (358) and the syntax-rules-only parts of
+  `compile_syntax_rules.go` (934; `collectFreeIdentifiersWithEllipsis` and
+  `collectPatternVariablesWithEllipsis` are shared with `syntax-case` and `(syntax …)` and stay).
+  Template instantiation is already one path (`operation_syntax_case.go:491` and the syntax-rules
+  runtime both call `match.SyntaxMatcher.Expand`). **Two gates, neither a reason to skip:** (1)
+  reliability inversion — syntax-rules carries 13 archived fix plans and syntax-case had silent
+  failures as late as PR #732; after this every stdlib form depends on syntax-case, so verify
+  first that use-site scopes (Design B) and pattern-variables-as-bindings (Design C) apply on the
+  syntax-case path (the B impl exempted ER and says nothing about syntax-case); (2) startup — one
+  closure call + fender per clause on every derived-form expansion during engine construction,
+  against ~4.3 ms / 159k allocs, interleaved A/B on `BenchmarkEngineStartup`. First step is
+  `find_duplicates` over the two `operation_syntax_*.go` files to measure the overlap claimed.
+  `plans/2026-09-04-expander-in-scheme-assessment.local.md` §2.
 
 ---
 
@@ -3080,6 +3140,7 @@ These items were investigated and determined not to warrant changes:
 - [x] **PrimitiveRegistration/PrimitiveSpec (FCA)**: Orthogonal concerns properly separated. FCA false positive.
 - [x] **CompileTimeCallContext (FCA)**: 2-field value type parameter, not coupling. FCA false positive.
 - [x] **Opcode resource limits**: Per-category limits (match steps, expand steps, continuation copy depth). Existing mechanisms sufficient: `WithMaxCallDepth` bounds recursion, `WithMaxStackSize` bounds stack growth, `context.WithTimeout` checked every 1024 ops in VM and match loops. Deterministic per-category budgets are niche; timeout is an adequate proxy.
+- [x] **Core macro expander in Scheme (psyntax / Racket style)**: declined 2026-09-04. Wile has no image format (the stdlib recompiles on every `wile.New()`), so a Scheme-hosted expander needs template serialization first or a second, Go, bootstrap expander; expansion would run as bytecode on the embedding product's headline metric, engine startup; `*Binding` handles held from Scheme need a frame-layout change in `pkg/environment`; coverage, debugger, and provenance would see expander frames. Not smaller either (psyntax ≈10k, Racket >30k lines vs ≈5.6k Go core). The extension benefit is already served by `WithDialect` + open `FormSpec.Compile` and the registered procedural surface. The middle path, a small Go kernel with every `syntax-*` form specified in Scheme, is the live design (`plans/2026-09-04-scheme-specified-syntax-forms-design.local.md`); it is not this proposal. `plans/2026-09-04-expander-in-scheme-assessment.local.md` §3.
 
 ---
 
