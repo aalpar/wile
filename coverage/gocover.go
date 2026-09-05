@@ -50,8 +50,10 @@ func writeGoCover(w io.Writer, c *Collector, includeStdlib bool) error {
 		if !includeStdlib && isStdlibPath(e.File) {
 			continue
 		}
+		// SourceIndexes columns are 0-based; Go cover columns are 1-based
+		// (both ends exclusive). Lines are 1-based on both sides.
 		_, err = fmt.Fprintf(w, "%s:%d.%d,%d.%d 1 %d\n",
-			e.File, e.StartLine, e.StartCol, e.EndLine, e.EndCol, e.Count)
+			e.File, e.StartLine, e.StartCol+1, e.EndLine, e.EndCol+1, e.Count)
 		if err != nil {
 			return err
 		}

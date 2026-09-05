@@ -119,6 +119,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`--cover` profiles now carry 1-based columns.** `SourceIndexes` columns
+  are 0-based, the tokenizer's convention shared by every diagnostic, and the
+  Go cover writer copied them through into a format that reads columns as
+  1-based. `go tool cover -html` rendered every span one character to the
+  left: `(defin` highlighted, `e` not. `writeGoCover` adds one to both ends
+  at the export boundary; `--cover-summary` and the diagnostics are unchanged.
 - **`--cover` and the profiles survive an uncaught Scheme error.** The CLI's
   `fail` called `os.Exit` directly, so a program that died of an unhandled
   error, or failed to compile, wrote no coverage file and no profile, while

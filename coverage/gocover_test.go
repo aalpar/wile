@@ -43,7 +43,7 @@ func TestWriteGoCover_OneEntry(t *testing.T) {
 	err := WriteGoCover(&buf, col)
 
 	c.Assert(err, qt.IsNil)
-	c.Assert(buf.String(), qt.Equals, "mode: set\na.scm:1.1,1.5 1 1\n")
+	c.Assert(buf.String(), qt.Equals, "mode: set\na.scm:1.2,1.6 1 1\n")
 }
 
 func TestWriteGoCover_CountZeroForUncovered(t *testing.T) {
@@ -56,7 +56,7 @@ func TestWriteGoCover_CountZeroForUncovered(t *testing.T) {
 	err := WriteGoCover(&buf, col)
 
 	c.Assert(err, qt.IsNil)
-	c.Assert(buf.String(), qt.Equals, "mode: set\na.scm:2.1,2.10 1 0\n")
+	c.Assert(buf.String(), qt.Equals, "mode: set\na.scm:2.2,2.11 1 0\n")
 }
 
 func TestWriteGoCover_ExcludesStdlibByDefault(t *testing.T) {
@@ -74,7 +74,7 @@ func TestWriteGoCover_ExcludesStdlibByDefault(t *testing.T) {
 	err := WriteGoCover(&buf, col)
 
 	c.Assert(err, qt.IsNil)
-	c.Assert(buf.String(), qt.Equals, "mode: set\nmyapp.scm:1.1,1.5 1 1\n")
+	c.Assert(buf.String(), qt.Equals, "mode: set\nmyapp.scm:1.2,1.6 1 1\n")
 }
 
 func TestWriteGoCover_IncludeStdlibWhenRequested(t *testing.T) {
@@ -92,5 +92,25 @@ func TestWriteGoCover_IncludeStdlibWhenRequested(t *testing.T) {
 	err := WriteGoCoverIncludingStdlib(&buf, col)
 
 	c.Assert(err, qt.IsNil)
-	c.Assert(buf.String(), qt.Equals, "mode: set\nmyapp.scm:1.1,1.5 1 1\nscheme/base.sld:10.1,10.5 1 1\n")
+	c.Assert(buf.String(), qt.Equals, "mode: set\nmyapp.scm:1.2,1.6 1 1\nscheme/base.sld:10.2,10.6 1 1\n")
+}
+
+// TestWriteGoCover_ColumnsAreOneBased pins the column convention at the
+// export boundary. SourceIndexes columns are 0-based (the tokenizer's
+// convention, shared by every diagnostic); Go cover profiles are 1-based.
+// A profile that copies the 0-based value through renders every span one
+// character to the left in `go tool cover -html`.
+func TestWriteGoCover_ColumnsAreOneBased(t *testing.T) {
+	c := qt.New(t)
+	// `define` inside "(define x 1)": 0-based half-open [1, 7).
+	tpl := newTplWithSources(mkSrc("a.scm", 1, 1, 1, 7))
+	col := NewCollector()
+	col.Track(tpl)
+	tpl.Executed()[0] = true
+
+	var buf bytes.Buffer
+	err := WriteGoCover(&buf, col)
+
+	c.Assert(err, qt.IsNil)
+	c.Assert(buf.String(), qt.Equals, "mode: set\na.scm:1.2,1.8 1 1\n")
 }

@@ -96,6 +96,8 @@ func TestCLI_CoverFlag_WritesGoCoverFormat(t *testing.T) {
 			c.Assert(strings.HasPrefix(content, "mode: set\n"), qt.IsTrue, qt.Commentf("got: %s", content))
 			c.Assert(strings.Contains(content, schemePath), qt.IsTrue, qt.Commentf("got: %s", content))
 			c.Assert(strings.Contains(content, " 1 1"), qt.IsTrue, qt.Commentf("executed sexpr should have Count=1; got: %s", content))
+			// `+` sits at 0-based column 1; the profile must say 1-based 2.
+			c.Assert(strings.Contains(content, schemePath+":1.2,1.3 1 1\n"), qt.IsTrue, qt.Commentf("columns should be 1-based; got: %s", content))
 		})
 	}
 }
