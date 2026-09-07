@@ -198,12 +198,32 @@ func HasScope(scopes []*Scope, target *Scope) bool {
 	return slices.Contains(scopes, target)
 }
 
-// AddScopeToSet adds a scope to a set if not already present
+// AddScopeToSet adds a scope to a set if not already present.
+//
+// The result NEVER shares a backing array with the input. A bare
+// append(scopes, newScope) would write into the caller's array whenever it has
+// spare capacity, and RemoveScopeFromSet manufactures exactly that: it allocates
+// cap len(scopes) and fills len(scopes)-1 entries, so every scope set that has
+// ever had a scope removed carries one spare slot. Two symbols whose sets are
+// slices of one such array then clobber each other's added scope.
+//
+// That is not hypothetical. A macro template identifier reaches the expander as
+// one shared *SyntaxSymbol under the Scheme syntax layer (quote-syntax yields
+// the literal, where the Go template producer minted a fresh copy per
+// expansion), so two nested expansions of one macro flip their two DIFFERENT
+// introduction scopes into the same spare slot: the second overwrote the first
+// and the earlier expansion's binder and its own references stopped agreeing.
+// (m1 (m1 #f)) over (syntax-rules () ((_ e) (let ((zz e)) (if zz zz 9))))
+// failed with `no such binding "zz" with compatible scopes`; the binder held
+// intro_outer and the reference read intro_inner out of the shared array.
+// Pinned by TestAddScopeToSet_DoesNotAliasSpareCapacity.
 func AddScopeToSet(scopes []*Scope, newScope *Scope) []*Scope {
 	if slices.Contains(scopes, newScope) {
 		return scopes
 	}
-	return append(scopes, newScope)
+	q := make([]*Scope, len(scopes), len(scopes)+1)
+	copy(q, scopes)
+	return append(q, newScope)
 }
 
 // RemoveScopeFromSet removes a scope from a set

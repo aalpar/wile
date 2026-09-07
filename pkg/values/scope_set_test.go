@@ -100,3 +100,30 @@ func TestScopeSet_String(t *testing.T) {
 	want := "scopes{" + values.ScopeFingerprint(scopes) + "}"
 	qt.Assert(t, values.ScopesOf(scopes).String(), qt.Equals, want)
 }
+
+// TestAddScopeToSet_DoesNotAliasSpareCapacity is the pin for the aliasing
+// defect: two adds onto ONE source set must not write into one backing array.
+//
+// The source set is built the way the expander builds one — through
+// RemoveScopeFromSet, which allocates cap len(scopes) and fills len(scopes)-1,
+// leaving exactly one spare slot. A bare append would put both added scopes in
+// that slot, and the first result would silently read back the second's scope.
+// That is the shape that broke hygiene for two nested expansions of one macro
+// under the Scheme syntax layer, where a template identifier is a single shared
+// object rather than a fresh copy per expansion.
+func TestAddScopeToSet_DoesNotAliasSpareCapacity(t *testing.T) {
+	base := []*values.Scope{values.NewScopeWithLabel("a"), values.NewScopeWithLabel("b")}
+	dropped := values.RemoveScopeFromSet(base, base[1])
+	qt.Assert(t, len(dropped), qt.Equals, 1)
+	qt.Assert(t, cap(dropped) > len(dropped), qt.IsTrue,
+		qt.Commentf("the defect needs a set with spare capacity; RemoveScopeFromSet is where one comes from"))
+
+	introOuter := values.NewScopeWithLabel("intro:outer")
+	introInner := values.NewScopeWithLabel("intro:inner")
+	outer := values.AddScopeToSet(dropped, introOuter)
+	inner := values.AddScopeToSet(dropped, introInner)
+
+	qt.Assert(t, outer[len(outer)-1], qt.Equals, introOuter)
+	qt.Assert(t, inner[len(inner)-1], qt.Equals, introInner)
+	qt.Assert(t, len(dropped), qt.Equals, 1, qt.Commentf("the source set must be unchanged"))
+}
