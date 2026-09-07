@@ -90,6 +90,31 @@ func (p *ExpanderContext) MacroValue(id *syntax.SyntaxSymbol) (values.Value, boo
 	return bnd.Value(), true
 }
 
+// ResolveFreeIdentifier implements design §3.1: a ResolvedBinding pin (which
+// quote-syntax stamps on a literal) wins before any env lookup. That is
+// deliberately NOT lookupMacroBinding's D2 order, which consults the pin between
+// arms 1 and 2 so a co-introduced keyword still shadows it: free-identifier=?
+// asks what the identifier denoted where it was written, and the pin records
+// exactly that, so a use-site binder of the same spelling has no claim on it.
+// Otherwise lookupLiteralBinding resolves id in the use-site env under its own
+// scopes — the frame's own lexical chain at its own phase, the ambient keyword
+// last — which is what the Go matchers apply to a pattern literal. No fallback
+// phases: the use site's phase is a known fact, and a pinned literal never
+// reaches this arm.
+func (p *ExpanderContext) ResolveFreeIdentifier(id *syntax.SyntaxSymbol) (*environment.Binding, bool) {
+	if p == nil {
+		return nil, false
+	}
+	gi, ok := id.ResolvedBinding.(*environment.GlobalIndex)
+	if ok && gi != nil && gi.Env != nil {
+		pinned := gi.Env.GetOwnGlobalBinding(gi)
+		if pinned != nil {
+			return pinned, true
+		}
+	}
+	return lookupLiteralBinding(p.env, id.Key(), id.Scopes(), nil)
+}
+
 // IntroductionScope returns the introduction scope for the current macro expansion.
 // This scope is added to identifiers introduced by a macro and can be flipped
 // using syntax-local-introduce.

@@ -323,43 +323,69 @@ func PrimBoundIdentifierEqualQ(mc machine.CallContext) error {
 }
 
 // PrimFreeIdentifierEqualQ implements the free-identifier=? predicate (R6RS).
-// Returns #t if two identifiers would resolve to the same binding in the current environment.
-// For unbound identifiers, returns #t if they have the same name.
-func PrimFreeIdentifierEqualQ(mc machine.CallContext) error {
-	o0 := mc.Arg(0)
-	o1 := mc.Arg(1)
-
-	id0, ok0 := o0.(*syntax.SyntaxSymbol)
+// Returns #t if two identifiers would resolve to the same binding in the current
+// environment. For unbound identifiers, returns #t if they have the same name.
+//
+// INSIDE a transformer it resolves at the USE SITE, through the expander context
+// (ExpanderCtx.ResolveFreeIdentifier): the definition-site pin a quote-syntax
+// literal carries first, then the use-site frame under the identifier's own
+// scopes by the same pattern-literal rules the Go matchers apply. That is what
+// makes (free-identifier=? id #'else) answer the R7RS §4.3.2 question — does
+// the use site's `else` still denote the auxiliary keyword — rather than the
+// question the closure's own frame would answer.
+//
+// Outside expansion there is no context and the closure's own frame is the only
+// environment there is, so the original body stands.
+func PrimFreeIdentifierEqualQ(cc machine.CallContext) error {
+	mc, err := machine.RequireMachineContext(cc, "free-identifier=?")
+	if err != nil {
+		return err
+	}
+	id0, ok0 := mc.Arg(0).(*syntax.SyntaxSymbol)
 	if !ok0 {
 		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "free-identifier=?: argument 1 is not an identifier")
 	}
-	id1, ok1 := o1.(*syntax.SyntaxSymbol)
+	id1, ok1 := mc.Arg(1).(*syntax.SyntaxSymbol)
 	if !ok1 {
 		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "free-identifier=?: argument 2 is not an identifier")
+	}
+
+	ectx := mc.ExpanderContext()
+	if ectx != nil {
+		b0, resolved0 := ectx.ResolveFreeIdentifier(id0)
+		b1, resolved1 := ectx.ResolveFreeIdentifier(id1)
+		if !resolved0 || !resolved1 {
+			// A tie refuses the match, as lookupLiteralBinding's callers do.
+			mc.SetValue(values.FalseValue)
+			return nil
+		}
+		mc.SetValue(values.BoolToBoolean(sameFreeIdentifier(b0, id0, b1, id1)))
+		return nil
 	}
 
 	env := mc.EnvironmentFrame()
 	sym0 := values.NewSymbol(id0.Sym.Key)
 	sym1 := values.NewSymbol(id1.Sym.Key)
 
-	// Look up bindings for both identifiers
 	binding0 := env.GetBinding(sym0, syntax.ScopesOf(id0.Scopes()))
 	binding1 := env.GetBinding(sym1, syntax.ScopesOf(id1.Scopes()))
-
-	// Both unbound → compare names (free references to same global)
-	if binding0 == nil && binding1 == nil {
-		mc.SetValue(values.BoolToBoolean(id0.Sym.Key == id1.Sym.Key))
-		return nil
-	}
-
-	// One bound, one unbound → not equal
-	if binding0 == nil || binding1 == nil {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-
-	// Both bound → same variable? Same object, or two imports sharing one
-	// import-provenance root (renamed/re-exported aliases of one binding).
-	mc.SetValue(values.BoolToBoolean(environment.SameBinding(binding0, binding1)))
+	mc.SetValue(values.BoolToBoolean(sameFreeIdentifier(binding0, id0, binding1, id1)))
 	return nil
+}
+
+// sameFreeIdentifier is the R6RS free-identifier=? verdict over two resolutions:
+// both unbound compares names, one unbound is #f, both bound is SameBinding
+// (same object, or two imports sharing one import-provenance root — renamed or
+// re-exported aliases of one binding).
+//
+// The name comparison for two UNBOUND identifiers is R6RS §12.3's rule, not a
+// binding-identity decision, so it does not violate "never compare by spelling".
+func sameFreeIdentifier(b0 *environment.Binding, id0 *syntax.SyntaxSymbol, b1 *environment.Binding, id1 *syntax.SyntaxSymbol) bool {
+	if b0 == nil && b1 == nil {
+		return id0.Sym.Key == id1.Sym.Key
+	}
+	if b0 == nil || b1 == nil {
+		return false
+	}
+	return environment.SameBinding(b0, b1)
 }

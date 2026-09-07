@@ -89,6 +89,9 @@ var procedureInvokers = []string{
 	// %parameter-convert applies the parameter's user converter via ApplyCallable
 	// (the converter may call/cc) — the crosscheck-found omission this list now pins.
 	"%parameter-convert",
+	// %syntax-violation raises through machine.RaiseInPlace exactly as error and
+	// raise do, so the installed handler runs on the LIVE chain.
+	"%syntax-violation",
 }
 
 // nonPrimitiveProcedureInvokers are the procedureInvokers entries that no

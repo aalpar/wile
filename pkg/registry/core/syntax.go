@@ -39,6 +39,33 @@ func addSyntax(r *registry.PrimitiveRegistry) error {
 		{Name: "syntax-local-value", ParamCount: 2, IsVariadic: true, InvokesProcedure: true, Impl: PrimSyntaxLocalValue,
 			Doc: "Returns the compile-time value bound to identifier ID: a macro transformer, or any value a let-syntax or define-syntax right-hand side evaluated to. Only valid during macro expansion. With no binding, calls FAILURE-THUNK when given, else raises.\n\nExamples:\n  ;; inside a transformer:\n  ;; (syntax-local-value #'k (lambda () #f))", ParamNames: []string{"id", "failure-thunk"}, Category: "syntax",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
+
+		// The one-level accessors (design §2.4): every result stays syntax, so a
+		// Scheme syntax-case can walk a form without losing hygiene.
+		{Name: "syntax-pair?", ParamCount: 1, Impl: PrimSyntaxPairQ,
+			Doc: "Returns #t if OBJ is a non-empty syntax pair.\n\nExamples:\n  ;; (syntax-pair? #'(a b))  => #t", ParamNames: []string{"obj"}, Category: "syntax",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
+		{Name: "syntax-null?", ParamCount: 1, Impl: PrimSyntaxNullQ,
+			Doc: "Returns #t if OBJ is the empty list, as syntax or plain.\n\nExamples:\n  ;; (syntax-null? #'())  => #t", ParamNames: []string{"obj"}, Category: "syntax",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
+		{Name: "syntax-car", ParamCount: 1, Impl: PrimSyntaxCar,
+			Doc: "Returns the car of syntax pair STX, still a syntax object.\n\nExamples:\n  ;; (syntax->datum (syntax-car #'(a b)))  => a", ParamNames: []string{"stx"}, Category: "syntax",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
+		{Name: "syntax-cdr", ParamCount: 1, Impl: PrimSyntaxCdr,
+			Doc: "Returns the cdr of syntax pair STX, still a syntax object.\n\nExamples:\n  ;; (syntax->datum (syntax-cdr #'(a b)))  => (b)", ParamNames: []string{"stx"}, Category: "syntax",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
+		{Name: "syntax-vector?", ParamCount: 1, Impl: PrimSyntaxVectorQ,
+			Doc: "Returns #t if OBJ is a syntax vector.\n\nExamples:\n  ;; (syntax-vector? #'#(1 2))  => #t", ParamNames: []string{"obj"}, Category: "syntax",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
+		{Name: "syntax-vector->list", ParamCount: 1, Impl: PrimSyntaxVectorToList,
+			Doc: "Returns the elements of syntax vector STX as a syntax list, so a vector pattern reduces to the list matcher.\n\nExamples:\n  ;; (syntax->datum (syntax-vector->list #'#(a 2)))  => (a 2)", ParamNames: []string{"stx"}, Category: "syntax",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
+		{Name: "%syntax-spine", ParamCount: 1, Impl: PrimSyntaxSpine,
+			Doc: "Unwraps the pairs and vectors of STX, keeping identifiers as syntax; the form an er-macro-transformer procedure receives.\n\nExamples:\n  ;; (identifier? (car (%syntax-spine #'(a b))))  => #t", ParamNames: []string{"stx"}, Category: "syntax",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
+		{Name: "%syntax-violation", ParamCount: 3, InvokesProcedure: true, Impl: PrimSyntaxViolation,
+			Doc: "Raises a syntax error \"WHO: MESSAGE\" about form STX, carrying its source location.\n\nExamples:\n  ;; (%syntax-violation 'syntax-case \"no clause matches\" stx)", ParamNames: []string{"who", "message", "stx"}, Category: "syntax",
+			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeString, values.TypeAny}, ReturnType: values.TypeAny},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// Identifier comparison

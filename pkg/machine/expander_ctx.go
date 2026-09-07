@@ -33,6 +33,11 @@ type ExpanderCtx interface {
 	// its BindingTypeSyntax binding holds: a transformer, or a bare compile-time
 	// value. The read side of syntax-local-value.
 	MacroValue(id *syntax.SyntaxSymbol) (values.Value, bool)
+	// ResolveFreeIdentifier answers the free-identifier=? question for id at the
+	// current expansion: the definition-site pin first, then the use-site frame
+	// under id's own scopes by the pattern-literal rules. ok is false on an
+	// incomparable equal-cardinality tie.
+	ResolveFreeIdentifier(id *syntax.SyntaxSymbol) (*environment.Binding, bool)
 	IntroductionScope() *syntax.Scope
 	SetIntroductionScope(*syntax.Scope)
 	UseSiteScope() *syntax.Scope

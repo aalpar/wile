@@ -250,6 +250,12 @@ Reference for the types, primitives, and special forms in Wile. It is **not exha
 | `syntax->list` | Convert syntax pair chain to list of syntax objects, or `#f` |
 | `generate-temporaries` | Generate unique temporary identifiers |
 | `syntax-local-value` | Compile-time value bound to an identifier (a transformer, or any `define-syntax` / `let-syntax` value); optional failure thunk. Expansion-time only |
+| `syntax-pair?` | Test for a non-empty syntax pair |
+| `syntax-null?` | Test for the empty list, as syntax or plain |
+| `syntax-car` | Car of a syntax pair, still a syntax object |
+| `syntax-cdr` | Cdr of a syntax pair, still a syntax object |
+| `syntax-vector?` | Test for a syntax vector |
+| `syntax-vector->list` | Elements of a syntax vector as a syntax list |
 | `syntax-source` | Source file of syntax object, or `#f` |
 | `syntax-line` | 1-based line number, or `#f` |
 | `syntax-column` | 0-based column, or `#f` |

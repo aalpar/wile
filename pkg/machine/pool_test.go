@@ -946,6 +946,10 @@ func (p *stubExpanderCtx) MacroValue(*syntax.SyntaxSymbol) (values.Value, bool) 
 	return nil, false
 }
 
+func (p *stubExpanderCtx) ResolveFreeIdentifier(*syntax.SyntaxSymbol) (*environment.Binding, bool) {
+	return nil, false
+}
+
 func (p *stubExpanderCtx) IntroductionScope() *syntax.Scope   { return nil }
 func (p *stubExpanderCtx) SetIntroductionScope(*syntax.Scope) {}
 func (p *stubExpanderCtx) UseSiteScope() *syntax.Scope        { return nil }

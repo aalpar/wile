@@ -16,6 +16,7 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"testing/fstest"
 
@@ -488,4 +489,103 @@ func TestP03_QuoteSyntaxDefSiteLocalUnderUseSiteLet(t *testing.T) {
   (define-syntax m (lambda (stx) (quote-syntax x)))
   (let ((x 'use)) (m)))`)
 	c.Assert(got, qt.Equals, "def")
+}
+
+// TestP05_Accessors: the one-level accessors (design §2.4) and the ER spine (Q6).
+func TestP05_Accessors(t *testing.T) {
+	c := qt.New(t)
+	tests := []struct {
+		name, src, want string
+	}{
+		{"syntax-pair?", `(list (syntax-pair? #'(a b)) (syntax-pair? #'()) (syntax-pair? #'a) (syntax-pair? '(a)))`, "(#t #f #f #f)"},
+		{"syntax-null?", `(list (syntax-null? #'()) (syntax-null? (syntax-cdr (syntax-cdr #'(a b)))) (syntax-null? '()) (syntax-null? #'(a)))`, "(#t #t #t #f)"},
+		{"syntax-car keeps syntax", `(list (identifier? (syntax-car #'(a b))) (syntax->datum (syntax-car #'(a b))))`, "(#t a)"},
+		{"syntax-cdr keeps syntax", `(list (syntax-pair? (syntax-cdr #'(a b))) (syntax->datum (syntax-cdr #'(a . b))))`, "(#t b)"},
+		{"syntax-vector?", `(list (syntax-vector? #'#(1 2)) (syntax-vector? #'(1 2)))`, "(#t #f)"},
+		{"syntax-vector->list is a syntax list", `(let ((l (syntax-vector->list #'#(a 2)))) (list (syntax-pair? l) (identifier? (syntax-car l)) (syntax->datum l)))`, "(#t #t (a 2))"},
+		{"%syntax-spine: pairs and vectors unwrapped, identifiers kept", `(let ((s (%syntax-spine #'(a (b . 1) #(c) 2))))
+  (list (pair? s) (identifier? (car s)) (pair? (cadr s)) (identifier? (car (cadr s))) (cdr (cadr s))
+        (vector? (caddr s)) (identifier? (vector-ref (caddr s) 0)) (cadddr s)))`, "(#t #t #t #t 1 #t #t 2)"},
+		{"%syntax-spine: empty and improper tails", `(let ((s (%syntax-spine #'(a . b)))) (list (identifier? (car s)) (identifier? (cdr s)) (null? (%syntax-spine #'()))))`, "(#t #t #t)"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(evalSyntaxForms(t, tc.src), qt.Equals, tc.want)
+		})
+	}
+	c.Assert(evalSyntaxFormsErr(t, `(syntax-car #'())`), qt.ErrorMatches, `(?s).*syntax-car: expected a syntax pair.*`)
+}
+
+// TestP05_SyntaxViolationCarriesSource (design §6 Diagnostics): the raise helper
+// the Scheme layer uses is a catchable error object whose message and irritant
+// are readable (R7RS §6.11) and whose cause carries the form's location as a
+// real chain member.
+func TestP05_SyntaxViolationCarriesSource(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(guard (e (#t (list (error-object-message e) (error-object-irritants e))))
+  (%syntax-violation 'who "bad form" #'(x y)))`)
+	c.Assert(got, qt.Equals, `("who: bad form" ((x y)))`)
+
+	err := evalSyntaxFormsErr(t, "\n\n(%syntax-violation 'who \"bad form\" #'(x y))")
+	c.Assert(err, qt.IsNotNil)
+	var located interface {
+		SourceContext() *syntax.SourceContext
+	}
+	c.Assert(errors.As(err, &located), qt.IsTrue, qt.Commentf("%v", err))
+	c.Assert(located.SourceContext().Start.Line(), qt.Equals, 3)
+}
+
+// TestP05_FreeIdentifierEqualShadowProbe (design §3.1, measured 2026-09-05 as
+// ("else" "else") through the primitive): a use-site local shadows a literal.
+func TestP05_FreeIdentifierEqualShadowProbe(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(define-syntax m
+  (lambda (stx)
+    (let ((f (syntax->list stx)))
+      (if (free-identifier=? (cadr f) (quote-syntax else)) #''else #''not))))
+(list (m else) (let ((else 1)) (m else)))`)
+	c.Assert(got, qt.Equals, "(else not)")
+}
+
+// TestP05_DatumToSyntax pins what Q5 asked for. F6: scopes were ALREADY copied on
+// master (three probes, 2026-09-05), and no path can copy a pin either
+// (NewSyntaxSymbolForSymbol never sets ResolvedBinding), so P0.5 changes no
+// datum->syntax behaviour and every row here is a GUARD. The no-pin-copy row and
+// its Go consequence fail on master only because quote-syntax is unbound there:
+// Task 3 makes the answer observable, it does not change it.
+func TestP05_DatumToSyntax(t *testing.T) {
+	c := qt.New(t)
+	tests := []struct {
+		name, src, want string
+	}{
+		{"guard: template scopes reach a use-site local", `(let ((x 'outer))
+  (define-syntax m (lambda (stx) (datum->syntax (car (syntax->list stx)) 'x)))
+  (let ((x 'inner)) (m)))`, "inner"},
+		{"guard: #f template has no scopes", `(define zz4 'global)
+(define-syntax m4 (lambda (stx) (datum->syntax #f 'zz4)))
+(let ((zz4 'local)) (m4))`, "global"},
+		{"guard: rename of a definition-site local (referential transparency)", `(let ((helper (lambda () 'def-helper)))
+  (define-syntax m (lambda (stx) (datum->syntax #'helper (list 'helper))))
+  (let ((helper (lambda () 'use-helper))) (m)))`, "def-helper"},
+		{"guard: the pin is never copied", `(free-identifier=? (datum->syntax (quote-syntax car) 'foo) (quote-syntax car))`, "#f"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(evalSyntaxForms(t, tc.src), qt.Equals, tc.want)
+		})
+	}
+
+	// guard: datum->syntax mints a fresh symbol, so no pin reaches the result
+	// here either, on master and after P0.5 alike.
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	c.Assert(err, qt.IsNil)
+	defer func() {
+		_ = eng.Close()
+	}()
+	v, err := eng.EvalMultiple(ctx, `(datum->syntax (quote-syntax car) 'car)`)
+	c.Assert(err, qt.IsNil)
+	sym, ok := v.Internal().(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(sym.ResolvedBinding, qt.IsNil)
 }
