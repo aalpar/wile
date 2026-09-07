@@ -35,9 +35,19 @@ import (
 // may add site-specific context on top. Callers may call tpl.Optimize() on the
 // returned template if desired.
 func ExpandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int, maxExpandDepth int) (*machine.NativeTemplate, error) {
+	return expandAndCompileScoped(ctx, env, stx, resolver, inlineThreshold, maxExpandDepth, nil)
+}
+
+// expandAndCompileScoped is ExpandAndCompile with a library scope set on both
+// halves of the pipeline. A transformer right-hand side compiled inside a
+// define-library body needs it: the expander threads it to nested define-syntax
+// (expander_body.go) and the compiler to CompileSyntaxRulesExpr and, from P0.3,
+// CompileQuoteSyntax. nil is the ordinary top-level case.
+func expandAndCompileScoped(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int, maxExpandDepth int, libraryScope *syntax.Scope) (*machine.NativeTemplate, error) {
 	evaluator := machine.NewVMMacroEvaluator()
 
 	expander := NewExpanderTimeContinuation(ctx, env, evaluator)
+	expander.libraryScope = libraryScope
 	expander.SetMaxDepth(maxExpandDepth)
 	expanded, err := expander.ExpandTopLevelExpression(stx)
 	if err != nil {
@@ -47,6 +57,7 @@ func ExpandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, st
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	cctx := NewCompileTimeCallContext(ctx, false)
 	compiler := NewCompileTimeContinuation(tpl, env, evaluator)
+	compiler.libraryScope = libraryScope
 	if resolver != nil {
 		compiler.SetFileResolver(resolver)
 	}

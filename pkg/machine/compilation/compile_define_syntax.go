@@ -29,8 +29,9 @@ import (
 // definitions, define-syntax is processed entirely at compile time:
 //
 //  1. Parse the form: (define-syntax keyword (syntax-rules ...))
-//  2. Compile the syntax-rules transformer to a machine.MachineClosure
-//  3. Store the closure in the environment with BindingTypeSyntax
+//  2. Evaluate the right-hand side as an expression one phase up; the value is
+//     the transformer
+//  3. Store the transformer in the environment with BindingTypeSyntax
 //  4. Emit NO runtime operations (the binding is already established)
 //
 // The BindingTypeSyntax marker is crucial: when the expander encounters
@@ -67,19 +68,20 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 		return p.wrapCompilationError(err)
 	}
 
-	// Compile the transformer (supports syntax-rules and lambda)
-	closure, err := compileTransformerToMachineClosure(ctctx.ctx, p.env, transformerExpr, p.libraryScope, p.evaluator)
-	if err != nil {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "could not compile transformer"))
-	}
-
-	// Store the transformer one phase up from the defining frame (relative, not the
-	// absolute expand phase). R7RS requires syntax bindings to live one phase above
-	// the code that uses them; NextPhase() keeps this relative so a define-syntax
-	// inside a transformer body climbs rather than collapsing into phase 1. Lookup
-	// (expander_time_continuation.go) consults the same NextPhase() so storage and
-	// lookup stay symmetric. At phaseLevel 0 this equals Expand() (level-0 identity).
-	expandEnv := p.env.NextPhase()
+	// Store one phase up from the defining frame (relative, not the absolute
+	// expand phase; see NextPhase). R7RS requires syntax bindings to live one
+	// phase above the code that uses them; NextPhase() keeps this relative so a
+	// define-syntax inside a transformer body climbs rather than collapsing into
+	// phase 1. Lookup (expander_time_continuation.go) consults the same
+	// NextPhase() so storage and lookup stay symmetric. At phaseLevel 0 this
+	// equals Expand() (level-0 identity).
+	//
+	// The slot is created BEFORE the right-hand side compiles so a template's
+	// reference to the macro's own name resolves to a real, pinned GlobalIndex
+	// (its Env set, its value unset until the store below): the self-reference
+	// pins to it directly, which is what pinTemplateSelfReferences used to
+	// back-patch after the fact (design §2.2).
+	//
 	// The scope set is the CREATION key, not a post-stamp. Creation dedupes with
 	// scopeSetsEqual, so creating under nil compares against the EMPTY set and a
 	// macro-introduced {intro} keyword reuses — then re-stamps — a pre-existing
@@ -88,10 +90,23 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	// drift onto another slot of the same name — in particular not onto a
 	// same-named mutable entry when this view is the sealed-write one (a bootstrap
 	// macro), which would write the transformer where a user can overwrite it.
+	expandEnv := p.env.NextPhase()
 	symbolScopes := keywordSym.Scopes()
-	globalIndex, err := createPhaseBindingUnlessStable(expandEnv, keyword, environment.BindingTypeSyntax, symbolScopes, "define-syntax")
+	globalIndex, created, err := createPhaseBindingUnlessStable(expandEnv, keyword, environment.BindingTypeSyntax, symbolScopes, "define-syntax")
 	if err != nil {
 		return p.wrapCompilationError(err)
+	}
+
+	transformer, err := compileTransformerValue(ctctx.ctx, p.env, transformerExpr, p.libraryScope, p.evaluator)
+	if err != nil {
+		// A failed right-hand side must not leave the keyword bound to nothing:
+		// a later reference would reach the empty slot and fail as "not a
+		// closure". Only a slot THIS call created is removed; a redefinition
+		// that fails keeps the previous transformer.
+		if created {
+			expandEnv.DeleteOwnGlobal(keyword, symbolScopes)
+		}
+		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "could not compile transformer"))
 	}
 
 	// Provenance and docstring only — the scope set is now the creation key, not
@@ -115,17 +130,10 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 		})
 	}
 
-	err = expandEnv.SetOwnGlobalValue(globalIndex, closure)
+	err = expandEnv.SetOwnGlobalValue(globalIndex, transformer)
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-syntax: failed to store transformer for %s", keyword.Key))
 	}
-
-	// The transformer was compiled before the binding above existed, so a template
-	// reference to the macro's OWN name (a recursive macro) was snapshotted with a nil pin.
-	// Now that the binding exists, pin those self-references to it so the recursion resolves
-	// definition-site (R7RS §4.3.2) and a use-site redefinition of a private helper cannot
-	// capture it. See pinTemplateSelfReferences.
-	pinTemplateSelfReferences(closure, keyword.Key, globalIndex)
 
 	// define-syntax is compile-time only, emit no runtime operations
 	return nil
@@ -153,26 +161,31 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 // define-syntax (R7RS §5.3.1), which is what the m.Imported reset below the
 // call sites exists for. registry.Apply is the only writer of the Stable field
 // on a global, so this can only fire against a registry primitive copy.
+//
+// The second result reports whether THIS call created the slot. The two
+// define-syntax sites predeclare before compiling the right-hand side, so they
+// need it to know whether a failed right-hand side owes a DeleteOwnGlobal: a
+// failed redefinition must keep the previous transformer.
 func createPhaseBindingUnlessStable(
 	expandEnv *environment.EnvironmentFrame,
 	sym *values.Symbol,
 	bt environment.BindingType,
 	scopes []*syntax.Scope,
 	form string,
-) (*environment.GlobalIndex, error) {
+) (*environment.GlobalIndex, bool, error) {
 	gi, created := expandEnv.MaybeCreateOwnGlobalBinding(sym, bt, scopes)
 	if created {
-		return gi, nil
+		return gi, true, nil
 	}
 	b := expandEnv.GlobalEnvironment().GetOwnGlobalBinding(gi)
 	if b == nil {
-		return gi, nil
+		return gi, false, nil
 	}
 	m := b.Meta()
 	if m == nil || !m.Stable {
-		return gi, nil
+		return gi, false, nil
 	}
-	return nil, werr.WrapForeignErrorf(
+	return nil, false, werr.WrapForeignErrorf(
 		werr.ErrImmutableBinding,
 		"%s: cannot rebind stable binding %q at the defining frame's next phase",
 		form, sym.Key,

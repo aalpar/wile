@@ -71,6 +71,7 @@ func init() {
 	registerPassthrough("unsyntax")
 	registerPassthrough("unsyntax-splicing")
 	registerPassthrough("with-syntax")
+	registerPassthrough("er-macro-transformer")
 	registerPassthrough("define-for-syntax")
 	registerPassthrough("begin-for-syntax")
 	registerPassthrough("eval-when")

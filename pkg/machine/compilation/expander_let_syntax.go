@@ -200,8 +200,12 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 			transformerExpr = syntax.AddScopeToSyntax(transformerExpr, letScope)
 		}
 
-		// Compile the transformer (supports syntax-rules, lambda, er-macro-transformer)
-		closure, err := compileTransformerToMachineClosure(p.ctx, transformerEnv, transformerExpr, p.libraryScope, p.evaluator)
+		// Evaluate the transformer expression one phase up (design §2.2). For
+		// letrec-syntax the spec carries letScope and compiles against
+		// childExpandEnv, so a sibling reference in a template resolves to the
+		// pre-registered binder by subset; that resolution now happens at
+		// expansion time, not in a definition-site producer arm.
+		transformer, err := compileTransformerValue(p.ctx, transformerEnv, transformerExpr, p.libraryScope, p.evaluator)
 		if err != nil {
 			return nil, wrapSourcedError(transformerExpr.SourceContext(), werr.WrapForeignErrorf(err, "%s: could not compile transformer for %s", formName, keyword.Key))
 		}
@@ -225,7 +229,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 				"%s: failed to create binding for %s", formName, keyword.Key,
 			))
 		}
-		err = childExpandEnv.SetLocalValue(localIndex, closure)
+		err = childExpandEnv.SetLocalValue(localIndex, transformer)
 		if err != nil {
 			return nil, wrapSourcedError(keywordSym.SourceContext(), werr.WrapForeignErrorf(err, "%s: failed to store transformer for %s", formName, keyword.Key))
 		}

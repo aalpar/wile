@@ -31,13 +31,20 @@ import (
 
 // level2BoundNames is the exact visible surface at level 2 — every name
 // Engine.BoundNames() reports when the top level is bound from an empty
-// registry. 38 are phase handlers (registered by the compiler into sealed
+// registry. 39 are phase handlers (registered by the compiler into sealed
 // frames, never sourced from a registry). The other three,
 // unless/guard/guard-aux, are syntax-rules definitions in
 // core.LateBootstrapMacroSource, which LoadBootstrapCore loads UNCONDITIONALLY
 // rather than through Registry.MacroSources() — the one place a registry-borne
 // macro reaches an empty visible surface today, and the reason when and unless
 // land on opposite sides of the floor below.
+//
+// syntax-rules joined the set in P0.1: a transformer right-hand side is now
+// compiled as an EXPRESSION, so syntax-rules is a real expression-level syntax
+// compiler (CompileSyntaxRulesExpr) with a row in syntaxCompilerEntries, and
+// RegisterSyntaxCompilers therefore mints an ambient keyword for it. Before
+// that, define-syntax recognized the spelling inline and the name resolved to
+// nothing at this level.
 var level2BoundNames = []string{
 	"begin", "begin-for-syntax", "case-lambda", "cond-expand", "define",
 	"define-for-syntax", "define-library", "define-syntax",
@@ -45,8 +52,9 @@ var level2BoundNames = []string{
 	"import", "include", "include-ci", "lambda", "let", "let*", "let-syntax",
 	"letrec", "letrec*", "letrec-syntax", "library", "meta", "quasiquote",
 	"quasisyntax", "quote", "set!", "syntax", "syntax-case", "syntax-error",
-	"unless", "unquote", "unquote-splicing", "unsyntax", "unsyntax-splicing",
-	"with-binding-scope", "with-continuation-mark", "with-syntax",
+	"syntax-rules", "unless", "unquote", "unquote-splicing", "unsyntax",
+	"unsyntax-splicing", "with-binding-scope", "with-continuation-mark",
+	"with-syntax",
 }
 
 // TestNoAmbientBindingsBoundSet is the ratchet. TestNoAmbientBindingsFloor
@@ -76,15 +84,17 @@ func TestNoAmbientBindingsBoundSet(t *testing.T) {
 }
 
 // TestNoAmbientBindingsFloor explains the surface TestNoAmbientBindingsBoundSet
-// pins. BOUND and USABLE are different partitions and they cross in both
-// directions: syntax-rules is usable and is NOT in level2BoundNames
-// (define-syntax recognizes it inline rather than resolving it), while guard is
-// bound and unusable. Each column fails differently and both dead columns pin
-// their error TEXT, so a future change that moves a form between columns fails
-// loudly rather than silently swapping one unbound name for another.
+// pins. BOUND and USABLE are different partitions and they still cross, though
+// only in one direction now: guard is bound and unusable. syntax-rules used to
+// be the other direction — usable but unbound, because define-syntax recognized
+// the spelling inline — and P0.1 moved it into level2BoundNames by giving it a
+// real expression-level compiler. Each column fails differently and both dead
+// columns pin their error TEXT, so a future change that moves a form between
+// columns fails loudly rather than silently swapping one unbound name for
+// another.
 //
 // The rows are representative, not exhaustive; docs/embedding/api-design.md
-// partitions all 41 names.
+// partitions all 42 names.
 //
 //	usable            codegen emits no call
 //	resolves-unusable expansion calls a primitive the empty registry never bound

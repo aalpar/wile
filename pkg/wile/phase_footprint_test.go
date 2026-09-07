@@ -28,13 +28,23 @@ import (
 	"github.com/aalpar/wile/pkg/wile"
 )
 
-// Nothing is bound at phase 2 when an engine starts. Every fixed coordinate the
+// Nothing is BOUND at phase 2 when an engine starts. Every fixed coordinate the
 // registry writes is phase 0 (ambient or sealed), phase 1 (bootstrap macros and
-// primitive expanders), or the mutable runtime; phase 2 exists only once a
-// transformer body defines a macro of its own. This pins the retirement of the
+// primitive expanders), or the mutable runtime. This pins the retirement of the
 // phase-2 keyword coordinate: a registration that reintroduces a fixed phase-2
-// resident shows up here as a third present phase.
-func TestStartupPresentPhasesAreZeroAndOne(t *testing.T) {
+// resident shows up here as a name that resolves at that view's own
+// coordinates.
+//
+// The phase-2 FRAME is present at startup, and that is a footprint fact rather
+// than a binding one. P0.1 made a transformer right-hand side an expression
+// compiled at env.NextPhase(), so every bootstrap syntax-rules definition now
+// runs an expander rooted at phase 1, and lookupMacroBinding's arm 2 probes
+// NextPhase() of that — phase 2 — which AtPhase instantiates
+// (phases.GetOrCreate). The frame is empty; the assertion below is what says so,
+// and it is the claim this test exists to make. PresentPhases() unions
+// instantiated frames with binding-bearing coordinates, so it cannot separate
+// the two on its own.
+func TestStartupBindsNothingAtPhaseTwo(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
@@ -42,8 +52,15 @@ func TestStartupPresentPhasesAreZeroAndOne(t *testing.T) {
 		_ = eng.Close()
 	}()
 
-	got := eng.Environment().PresentPhases()
-	qt.Assert(t, got, qt.DeepEquals, []environment.Phase{environment.PhaseRuntime, environment.PhaseExpand})
+	env := eng.Environment()
+	qt.Assert(t, env.PresentPhases(), qt.DeepEquals,
+		[]environment.Phase{environment.PhaseRuntime, environment.PhaseExpand, environment.Phase(2)})
+
+	phase2 := env.AtPhase(environment.Phase(2))
+	for _, name := range eng.BoundNames() {
+		gi := phase2.OwnGlobalIndex(values.NewSymbol(name), values.AllScopes())
+		qt.Assert(t, gi, qt.IsNil, qt.Commentf("%s is bound at phase 2", name))
+	}
 }
 
 // No keyword name holds a procedure. Every non-DocOnly BindingSpec becomes an

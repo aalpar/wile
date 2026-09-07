@@ -34,93 +34,45 @@ const (
 	FormDefineSyntax = "define-syntax"
 )
 
-// compileTransformerToMachineClosure compiles a define-syntax transformer expression
-// into a values.Value for storage in the expand environment.
+// compileTransformerValue evaluates a define-syntax / let-syntax / letrec-syntax
+// right-hand side as an EXPRESSION one phase above env (R6RS §11.2.2) and admits
+// the value. Until P0.4 lifts the refusal, the value must be a machine.Closure
+// (syntax-rules, lambda, or any procedure) or an *ERMacroTransformer; anything
+// else is refused here, before a slot could hold it.
 //
-// Supports:
-//   - (syntax-rules ...) - compiled directly via CompileSyntaxRules → *machine.MachineClosure
-//   - (lambda (stx) ...) - compiled and evaluated to produce a *machine.MachineClosure
-//   - (er-macro-transformer (lambda (form rename compare) ...)) → *ERMacroTransformer
+// The head switch this replaces dispatched on the spelling of the right-hand
+// side's car and never expanded it, so a macro that EXPANDS to a transformer was
+// refused (design §5.2). syntax-rules and er-macro-transformer are now
+// expression-level syntax compilers (compile_transformer_forms.go) that yield the
+// same values the switch built.
 //
-// The env parameter is used for compilation (so transformers can see local bindings),
-// while the resulting value is intended to be stored in env.Expand().
-func compileTransformerToMachineClosure(
+// libraryScope rides into the right-hand-side unit on both the expander and the
+// compiler: the syntax-rules producer stamps it on the free template identifiers
+// it resolved at definition time (match/syntax_expand.go:457, in the globalBinding
+// arm), and after P0.3 so does quote-syntax. It is not the only route into the
+// library env — a library body is already stamped with its own scope before
+// expansion (compile_time_continuation_include.go:181, reached from
+// compileLibraryBegin) — so this thread is parity, not the load-bearing path.
+func compileTransformerValue(
 	ctx context.Context,
 	env *environment.EnvironmentFrame,
-	transformerExpr syntax.SyntaxValue,
+	rhs syntax.SyntaxValue,
 	libraryScope *syntax.Scope,
 	evaluator machine.MacroEvaluator,
 ) (values.Value, error) {
-	transformerPair, ok := transformerExpr.(*syntax.SyntaxPair)
-	if !ok {
-		return nil, wrapSourcedError(transformerExpr.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-syntax: transformer must be a list"))
-	}
-
-	car := transformerPair.SyntaxCar()
-	if car == nil {
-		return nil, wrapSourcedError(transformerExpr.SourceContext(), werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: transformer has empty car"))
-	}
-
-	sym, ok := car.(*syntax.SyntaxSymbol)
-	if !ok {
-		return nil, wrapSourcedError(transformerExpr.SourceContext(), werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer, "define-syntax: transformer must start with a symbol"))
-	}
-
-	symVal := sym.Unwrap()
-	if symVal == nil {
-		return nil, wrapSourcedError(transformerExpr.SourceContext(), werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: transformer symbol is nil"))
-	}
-
-	symbol, ok := symVal.(*values.Symbol)
-	if !ok {
-		return nil, wrapSourcedError(transformerExpr.SourceContext(), werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer, "define-syntax: transformer must start with a symbol"))
-	}
-
-	switch symbol.Key {
-	case TransformerSyntaxRules:
-		return CompileSyntaxRules(ctx, env, transformerPair, libraryScope)
-
-	case "lambda":
-		return compileAndEvalLambdaTransformer(ctx, env, transformerPair, evaluator)
-
-	case TransformerERMacro:
-		return compileERMacroTransformer(ctx, env, transformerPair, evaluator)
-
-	default:
-		return nil, wrapSourcedError(transformerExpr.SourceContext(), werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer, "define-syntax: unsupported transformer type %q (expected syntax-rules, lambda, or er-macro-transformer)", symbol.Key))
-	}
-}
-
-// compileAndEvalLambdaTransformer compiles a lambda expression and evaluates it at
-// compile time to produce a closure that can be used as a syntax transformer.
-//
-// Unlike other ExpandAndCompile callers that operate on runtime environments,
-// this function compiles the transformer against env.NextPhase() — the frame one
-// phase up from the defining frame — so transformers see expansion-time bindings,
-// not runtime bindings. The target is relative, not the absolute expand phase: a
-// transformer body defined at phaseLevel N expands as phase N+1 code, which lets
-// a macro whose transformer itself defines and uses macros climb the phase tower.
-// At the top level (phaseLevel 0) NextPhase() == Expand(), so behavior is
-// unchanged there (level-0 identity). The extra EvalTemplate step (absent from
-// ExpandAndCompile) executes the compiled lambda at compile time to produce the
-// transformer closure.
-func compileAndEvalLambdaTransformer(ctx context.Context, env *environment.EnvironmentFrame, lambdaExpr syntax.SyntaxValue, evaluator machine.MacroEvaluator) (*machine.MachineClosure, error) {
 	expandEnv := env.NextPhase()
-
-	tpl, err := ExpandAndCompile(ctx, expandEnv, lambdaExpr, nil, DefaultInlineThreshold, DefaultMaxExpandDepth)
+	tpl, err := expandAndCompileScoped(ctx, expandEnv, rhs, nil, DefaultInlineThreshold, DefaultMaxExpandDepth, libraryScope)
 	if err != nil {
-		return nil, wrapSourcedError(lambdaExpr.SourceContext(), werr.WrapForeignErrorf(err, "transformer"))
+		return nil, wrapSourcedError(rhs.SourceContext(), werr.WrapForeignErrorf(err, "transformer"))
 	}
-
 	result, err := evaluator.EvalTemplate(ctx, tpl, expandEnv)
 	if err != nil {
-		return nil, wrapSourcedError(lambdaExpr.SourceContext(), werr.WrapForeignErrorf(err, "error evaluating transformer"))
+		return nil, wrapSourcedError(rhs.SourceContext(), werr.WrapForeignErrorf(err, "error evaluating transformer"))
 	}
-
-	closure, ok := result.(*machine.MachineClosure)
-	if !ok {
-		return nil, wrapSourcedError(lambdaExpr.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotAProcedure, "define-syntax: transformer must evaluate to a procedure, got %T", result))
+	switch result.(type) {
+	case machine.Closure, *ERMacroTransformer:
+		return result, nil
 	}
-
-	return closure, nil
+	return nil, wrapSourcedError(rhs.SourceContext(), werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer,
+		"define-syntax: transformer must evaluate to a procedure, got %T", result))
 }

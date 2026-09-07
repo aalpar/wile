@@ -121,7 +121,10 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	// p.env == the owner's phase-0 seal, so NextPhase() is the sealed expand view
 	// and this create shares the registry copies' coordinate. Only there can the
 	// helper's Stable refusal fire; see createPhaseBindingUnlessStable.
-	gi, err := createPhaseBindingUnlessStable(expandEnv, nameSym, environment.BindingTypeVariable, nil, "define-for-syntax")
+	// The created flag is the two define-syntax sites' concern (they predeclare
+	// before compiling a right-hand side that may fail); this site evaluates
+	// first and stores second, so it has nothing to roll back.
+	gi, _, err := createPhaseBindingUnlessStable(expandEnv, nameSym, environment.BindingTypeVariable, nil, "define-for-syntax")
 	if err != nil {
 		return p.wrapCompilationError(err)
 	}

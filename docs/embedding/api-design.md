@@ -311,12 +311,12 @@ The last two options are not decoration. Drop `WithLibraryPaths()` and the third
 line fails instead of returning `1`; see *The import route is opt-in* below.
 
 **The floor is not the empty set, and it is not R7RS-strict.** `Engine.BoundNames()`
-reports exactly **41** names at level 2 — the same 41 on every profile, since the
+reports exactly **42** names at level 2 — the same 42 on every profile, since the
 visible surface is bound from an empty registry either way. That set is the
 complete inventory of what is *bound*, and `TestNoAmbientBindingsBoundSet` pins
 it name by name.
 
-Two mechanisms put them there. 38 are *phase handlers*: registered by the
+Two mechanisms put them there. 39 are *phase handlers*: registered by the
 compiler, held in frames that ordinary value resolution never consults, never
 sourced from a registry — so withholding the registry cannot withhold them. The
 other three, `unless` `guard` `guard-aux`, are `syntax-rules` definitions in
@@ -324,10 +324,12 @@ other three, `unless` `guard` `guard-aux`, are `syntax-rules` definitions in
 **unconditionally** instead of through `Registry.MacroSources()`. They are the
 only registry-borne macros that reach an empty visible surface today.
 
-**Bound and usable are different partitions, and they cross both ways.**
-`syntax-rules` is usable and is *not* one of the 41: `define-syntax` recognizes it
-inline rather than resolving it, so it never appears in `BoundNames()`. `guard` is
-one of the 41 and is unusable. Sorting the 41 (plus `syntax-rules`) by usability:
+**Bound and usable are different partitions, and they still cross — one way.**
+`guard` is one of the 42 and is unusable. `syntax-rules` used to be the other
+direction, usable but unbound, because `define-syntax` recognized the spelling
+inline; a transformer right-hand side is now compiled as an expression, so
+`syntax-rules` has its own expression-level compiler and an ambient keyword, and
+it is one of the 42. Sorting the 42 by usability:
 
 | | Members | Why |
 |---|---|---|

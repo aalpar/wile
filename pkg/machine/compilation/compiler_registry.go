@@ -41,9 +41,8 @@ const (
 // expand-only macros. Post-SP1 every other form carries spec.Compile, so this
 // table shrank from the former Tier-1 + expand-only mirror to expand-only alone.
 var formDispatch = map[string]dispatchKind{
-	"let-syntax":           dispatchExpandOnly,
-	"letrec-syntax":        dispatchExpandOnly,
-	TransformerSyntaxRules: dispatchExpandOnly,
+	"let-syntax":    dispatchExpandOnly,
+	"letrec-syntax": dispatchExpandOnly,
 }
 
 // VerifyCompilers checks that every registered form either carries a valid

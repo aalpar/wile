@@ -333,41 +333,6 @@ func compileClauseWithEllipsisAndLiterals(
 	}, nil
 }
 
-// pinTemplateSelfReferences fills the definition-site pin for a syntax-rules template's free
-// references to the macro BEING DEFINED. collectFreeIdentifiersWithEllipsis runs while compiling
-// the transformer, which is BEFORE CompileDefineSyntax creates the macro's own binding, so a
-// recursive self-reference (guard-aux -> guard-aux, define-record-type-impl -> itself) is
-// snapshotted with a nil Global. R7RS §4.3.2 requires that free self-reference to resolve to the
-// macro's OWN definition-site binding; without the pin it degrades to use-site resolution and a
-// user redefinition of the (private) helper captures the recursion — the reported hijack
-// generalized to any recursion-firing use (a multi-clause guard, a record with fields). Once the
-// binding exists, back-patch every nil-pinned free identifier whose name is the macro's own name
-// to that binding. This preserves the create-after-compile order (a failed transformer compile
-// still leaves no binding). No-op for a non-syntax-rules transformer (ER-macro/lambda carry no
-// ClausesWrapper) and for a nil pin.
-func pinTemplateSelfReferences(closure values.Value, macroName string, gi *environment.GlobalIndex) {
-	if gi == nil {
-		return
-	}
-	for _, clause := range ClausesFromClosure(closure) {
-		for k, res := range clause.FreeIds {
-			// Back-patch only a GENUINELY-unbound self-reference. Skip an already-resolved
-			// global (Global != nil) and — importantly — a reference that resolved to a
-			// LOCAL binding (HasLocalBinding: an enclosing local variable shadowing the
-			// macro's name; overriding it with the macro's global would break that local
-			// resolution). A nil-Global entry that merely carries a LibScope is a library
-			// macro's own self-reference and IS pinned (it should resolve to the library's
-			// own binding, which is what gi points at).
-			if res == nil || res.Global != nil || res.HasLocalBinding {
-				continue
-			}
-			if match.FreeIdName(k) == macroName {
-				res.Global = gi
-			}
-		}
-	}
-}
-
 // ClausesFromClosure recovers the syntax-rules clause set from a compiled transformer
 // closure — the *ClausesWrapper stored as the closure's template literal by
 // createTransformerClosure. Returns nil for a non-syntax-rules transformer (an ER-macro or

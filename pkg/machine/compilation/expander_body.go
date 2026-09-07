@@ -154,25 +154,36 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 		return wrapSourcedError(dsPair.SourceContext(), err)
 	}
 
-	// Compile the transformer using the full environment for free identifier resolution
-	// This allows macros to see local bindings (e.g., lambda parameters, forward references)
-	// Supports both syntax-rules and lambda (procedural) transformers
-	closure, err := compileTransformerToMachineClosure(ctx, env, transformer, libraryScope, evaluator)
-	if err != nil {
-		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(err, "define-syntax: failed to compile transformer for %s", keyword.Key))
-	}
-
 	// Store in the expand environment (for macro lookup during expansion).
+	// The slot is created BEFORE the right-hand side compiles so a template's
+	// reference to the macro's own name resolves to a real, pinned GlobalIndex
+	// (design §2.2), which is what pinTemplateSelfReferences used to back-patch.
+	//
 	// The scope set is the CREATION key, not a post-stamp: creating under nil
 	// keys the binder on the empty set, which dedupes a macro-introduced keyword
 	// onto any pre-existing same-named binding and then re-stamps it. The returned
 	// index is PINNED to the slot this call landed on, at the writing view's own
 	// coordinates, so the write below cannot drift onto another slot of the same
 	// name. Same shape as the top-level site in compile_define_syntax.go.
-	globalIndex, err := createPhaseBindingUnlessStable(expandEnv, keyword, environment.BindingTypeSyntax, symbolScopes, "define-syntax")
+	globalIndex, created, err := createPhaseBindingUnlessStable(expandEnv, keyword, environment.BindingTypeSyntax, symbolScopes, "define-syntax")
 	if err != nil {
 		return wrapSourcedError(dsPair.SourceContext(), err)
 	}
+
+	// Evaluate the right-hand side as an expression one phase up (design §2.2).
+	// env, not expandEnv: compileTransformerValue takes the DEFINING frame and
+	// climbs itself, and the full environment is what lets a transformer see
+	// local bindings (lambda parameters, forward references).
+	transformerValue, err := compileTransformerValue(ctx, env, transformer, libraryScope, evaluator)
+	if err != nil {
+		// A failed right-hand side must not leave the keyword bound to nothing;
+		// only a slot THIS call created is removed (see compile_define_syntax.go).
+		if created {
+			expandEnv.DeleteOwnGlobal(keyword, symbolScopes)
+		}
+		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(err, "define-syntax: failed to compile transformer for %s", keyword.Key))
+	}
+
 	binding := expandEnv.GlobalEnvironment().GetOwnGlobalBinding(globalIndex)
 	if binding != nil {
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
@@ -189,5 +200,5 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 			return changed
 		})
 	}
-	return expandEnv.SetOwnGlobalValue(globalIndex, closure)
+	return expandEnv.SetOwnGlobalValue(globalIndex, transformerValue)
 }

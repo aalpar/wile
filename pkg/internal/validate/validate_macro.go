@@ -57,16 +57,36 @@ func validateDefineSyntax(_ context.Context, env *environment.EnvironmentFrame, 
 	return newLiteralExpr(source, pair)
 }
 
-// validateSyntaxRules validates (syntax-rules (literals...) clause...)
+// validateSyntaxRules validates (syntax-rules (literals...) clause...) and the
+// R7RS §4.3.2 custom-ellipsis form (syntax-rules ELLIPSIS (literals...) clause...).
 // Returns a ValidatedLiteral wrapping the original form.
+//
+// The custom-ellipsis arm matters because P0.1 made this validator reachable: a
+// transformer right-hand side is now compiled as an expression, so every
+// syntax-rules form passes through here on its way to CompileSyntaxRules. The
+// ellipsis test is the same one CompileSyntaxRules applies — the first operand is
+// a symbol rather than a list — so the two cannot disagree about where the
+// literals list starts.
 func validateSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source, elements, ok := formPrologue(pair, "syntax-rules", 1, -1, result)
 	if !ok {
 		return nil
 	}
 
-	// Second element should be the literals list (could be empty)
-	literalsExpr := elements[1]
+	// A symbol in the first operand position is a custom ellipsis identifier, and
+	// the literals list is the operand after it.
+	litIdx := 1
+	_, customEllipsis := elements[1].(*syntax.SyntaxSymbol)
+	if customEllipsis {
+		if len(elements) < 3 {
+			result.addError(source, "syntax-rules", "syntax-rules: missing literals list after ellipsis identifier")
+			return nil
+		}
+		litIdx = 2
+	}
+
+	// The literals list (could be empty)
+	literalsExpr := elements[litIdx]
 	if syntax.IsSyntaxEmptyList(literalsExpr) { //nolint:revive // empty block: empty literals list is valid
 	} else {
 		literalsPair, ok := literalsExpr.(*syntax.SyntaxPair)
@@ -96,19 +116,19 @@ func validateSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame,
 	}
 
 	// Validate each clause has pattern and template
-	for i := 2; i < len(elements); i++ {
+	for i := litIdx + 1; i < len(elements); i++ {
 		clausePair, ok := elements[i].(*syntax.SyntaxPair)
 		if !ok {
-			result.addErrorf(getSourceContext(elements[i]), "syntax-rules", "clause %d must be a list", i-1)
+			result.addErrorf(getSourceContext(elements[i]), "syntax-rules", "clause %d must be a list", i-litIdx)
 			continue
 		}
 		clauseElements, improper := collectList(clausePair)
 		if improper {
-			result.addErrorf(getSourceContext(elements[i]), "syntax-rules", "clause %d must be a proper list", i-1)
+			result.addErrorf(getSourceContext(elements[i]), "syntax-rules", "clause %d must be a proper list", i-litIdx)
 			continue
 		}
 		if len(clauseElements) != 2 {
-			result.addErrorf(getSourceContext(elements[i]), "syntax-rules", "clause %d must have exactly pattern and template, got %d elements", i-1, len(clauseElements))
+			result.addErrorf(getSourceContext(elements[i]), "syntax-rules", "clause %d must have exactly pattern and template, got %d elements", i-litIdx, len(clauseElements))
 		}
 	}
 

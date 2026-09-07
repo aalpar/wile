@@ -312,6 +312,14 @@ var compileTimeBindingSpecs = []nameDoc{
 			"against its EXPRESSION and bound in BODY.\n" +
 			"Syntax: (with-syntax ((PATTERN EXPRESSION) ...) BODY)\n" +
 			"Category: macros"},
+	// er-macro-transformer (Wile extension; explicit renaming, Clinger 1991)
+	{"er-macro-transformer",
+		"Explicit-renaming macro transformer. PROC receives the macro use,\n" +
+			"a RENAME procedure giving a symbol the macro definition's lexical\n" +
+			"context, and a COMPARE procedure testing two identifiers for the\n" +
+			"same binding.\n" +
+			"Syntax: (er-macro-transformer PROC)\n" +
+			"Category: macros"},
 	// meta (phase-1 compilation)
 	{"meta",
 		"Compiles EXPRESSIONs in the expand-time (phase-1) environment.\n" +

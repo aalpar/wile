@@ -16,6 +16,7 @@ package compilation
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -23,11 +24,12 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
 
-func TestCompileTransformerToMachineClosure_SyntaxRules(t *testing.T) {
+func TestCompileTransformerValue_SyntaxRules(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
@@ -42,12 +44,13 @@ func TestCompileTransformerToMachineClosure_SyntaxRules(t *testing.T) {
 	)
 	transformerStx := mustDatumToSyntax(sctx, transformer)
 
-	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
+	result, err := compileTransformerValue(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, closure, qt.IsNotNil)
+	_, isClosure := result.(*machine.MachineClosure)
+	qt.Assert(t, isClosure, qt.IsTrue, qt.Commentf("%T", result))
 }
 
-func TestCompileTransformerToMachineClosure_Lambda(t *testing.T) {
+func TestCompileTransformerValue_Lambda(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
@@ -59,12 +62,13 @@ func TestCompileTransformerToMachineClosure_Lambda(t *testing.T) {
 	)
 	transformerStx := mustDatumToSyntax(sctx, transformer)
 
-	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
+	result, err := compileTransformerValue(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, closure, qt.IsNotNil)
+	_, isClosure := result.(*machine.MachineClosure)
+	qt.Assert(t, isClosure, qt.IsTrue, qt.Commentf("%T", result))
 }
 
-func TestCompileTransformerToMachineClosure_ERMacroTransformer(t *testing.T) {
+func TestCompileTransformerValue_ERMacroTransformer(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
@@ -79,7 +83,7 @@ func TestCompileTransformerToMachineClosure_ERMacroTransformer(t *testing.T) {
 	)
 	transformerStx := mustDatumToSyntax(sctx, transformer)
 
-	result, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
+	result, err := compileTransformerValue(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, qt.IsNotNil)
 
@@ -87,34 +91,57 @@ func TestCompileTransformerToMachineClosure_ERMacroTransformer(t *testing.T) {
 	qt.Assert(t, isER, qt.IsTrue)
 }
 
-func TestCompileTransformerToMachineClosure_UnsupportedType(t *testing.T) {
+// TestCompileTransformerValue_MacroUseExpandsToALambda is the §5.2 shape the head
+// switch refused: the right-hand side is a macro USE, and only expanding it
+// reveals the lambda underneath.
+func TestCompileTransformerValue_MacroUseExpandsToALambda(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
-	// (unsupported-keyword ...)
-	transformer := values.List(
-		values.NewSymbol("unsupported-keyword"),
-		values.NewInteger(42),
+	// (define-syntax my-er (syntax-rules () ((_) (lambda (stx) (quote 7)))))
+	// stored one phase up, so the transformer right-hand side below sees it.
+	defineSyntax := values.List(
+		values.NewSymbol("define-syntax"),
+		values.NewSymbol("my-er"),
+		values.List(
+			values.NewSymbol("syntax-rules"),
+			values.EmptyList,
+			values.List(
+				values.List(values.NewSymbol("_")),
+				values.List(
+					values.NewSymbol("lambda"),
+					values.List(values.NewSymbol("stx")),
+					values.List(values.NewSymbol("quote"), values.NewInteger(7)),
+				),
+			),
+		),
 	)
-	transformerStx := mustDatumToSyntax(sctx, transformer)
+	dsStx := mustDatumToSyntax(sctx, defineSyntax).(*syntax.SyntaxPair)
+	err := compileDefineSyntaxFromSyntax(context.Background(), env, dsStx, nil, machine.NewVMMacroEvaluator())
+	qt.Assert(t, err, qt.IsNil)
 
-	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
-	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, closure, qt.IsNil)
-	qt.Assert(t, err.Error(), qt.Contains, "unsupported transformer type")
+	// (my-er) as the transformer expression.
+	useStx := mustDatumToSyntax(sctx, values.List(values.NewSymbol("my-er")))
+	result, err := compileTransformerValue(context.Background(), env, useStx, nil, machine.NewVMMacroEvaluator())
+	qt.Assert(t, err, qt.IsNil)
+	_, isClosure := result.(*machine.MachineClosure)
+	qt.Assert(t, isClosure, qt.IsTrue, qt.Commentf("%T", result))
 }
 
-func TestCompileTransformerToMachineClosure_NotAPair(t *testing.T) {
+// TestCompileTransformerValue_NonProcedureIsRefused: P0.1's admission ladder.
+// A right-hand side that evaluates to a non-procedure is refused HERE, before a
+// slot could hold it; P0.4 lifts this and stores the value bare.
+func TestCompileTransformerValue_NonProcedureIsRefused(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
-	// Just a symbol, not a pair
-	transformerStx := mustDatumToSyntax(sctx, values.NewSymbol("not-a-list"))
+	transformerStx := mustDatumToSyntax(sctx, values.NewInteger(42))
 
-	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
+	result, err := compileTransformerValue(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, closure, qt.IsNil)
-	qt.Assert(t, err.Error(), qt.Contains, "transformer must be a list")
+	qt.Assert(t, result, qt.IsNil)
+	qt.Assert(t, errors.Is(err, werr.ErrUnexpectedTransformer), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, err.Error(), qt.Contains, "transformer must evaluate to a procedure")
 }
 
 // TestProceduralMacroExpandTimePath tests that procedural macros work through

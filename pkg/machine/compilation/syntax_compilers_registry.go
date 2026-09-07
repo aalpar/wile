@@ -29,6 +29,8 @@ import (
 var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 	{"syntax", (*CompileTimeContinuation).CompileSyntax},
 	{"syntax-case", (*CompileTimeContinuation).CompileSyntaxCase},
+	{TransformerSyntaxRules, (*CompileTimeContinuation).CompileSyntaxRulesExpr},
+	{TransformerERMacro, (*CompileTimeContinuation).CompileERMacroTransformerExpr},
 	{"meta", (*CompileTimeContinuation).CompileMeta},
 	{"include", (*CompileTimeContinuation).CompileInclude},
 	{"include-ci", (*CompileTimeContinuation).CompileIncludeCi},

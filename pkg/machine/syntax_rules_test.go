@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // Helper function to parse a string into syntax
@@ -38,9 +39,21 @@ func parseSyntax(t *testing.T, env *environment.EnvironmentFrame, input string) 
 	return stx
 }
 
-// Helper function to create a test environment
+// Helper function to create a test environment.
+//
+// The phase handlers are registered because P0.1 made a transformer right-hand
+// side an EXPRESSION: CompileDefineSyntax now runs the expand+compile pipeline
+// over it instead of dispatching on the head's spelling, so the syntax-rules
+// primitive expander (expandUnchanged) has to be present or the expander walks
+// the clauses as a procedure call. Every other env-building test helper in the
+// tree already does this (compilation's newNamespace, registry/testhelpers).
 func createTestEnv() *environment.EnvironmentFrame {
-	return environment.NewNamespace().Runtime()
+	env := environment.NewNamespace().Runtime()
+	err := compilation.RegisterAllPhaseHandlers(env)
+	if err != nil {
+		panic(werr.WrapForeignErrorf(err, "createTestEnv: failed to register phase handlers"))
+	}
+	return env
 }
 
 // Helper function to extract the args from a define-syntax form

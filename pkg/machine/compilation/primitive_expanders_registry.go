@@ -38,6 +38,7 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	{"cond-expand", (*ExpanderTimeContinuation).expandUnchanged},
 	{"syntax", (*ExpanderTimeContinuation).expandUnchanged},
 	{"syntax-case", (*ExpanderTimeContinuation).expandUnchanged},
+	{TransformerSyntaxRules, (*ExpanderTimeContinuation).expandUnchanged},
 	{TransformerERMacro, (*ExpanderTimeContinuation).expandUnchanged},
 	{"quasisyntax", (*ExpanderTimeContinuation).expandUnchanged},
 	{"unsyntax", (*ExpanderTimeContinuation).expandUnchanged},
