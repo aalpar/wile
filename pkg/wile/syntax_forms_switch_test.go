@@ -111,3 +111,148 @@ func TestP1_SwitchReachesLibraryEnvironments(t *testing.T) {
 	c.Assert(got, qt.Equals, "(5 5)")
 	c.Assert(compilation.GoSyntaxFormCompiles(), qt.Equals, before)
 }
+
+// TestP1_SchemeLayerClosesDefects: design §5.3 (lone-identifier pattern), §5.4
+// (clause-body locals arrive boxed, in a syntax-case body and a with-syntax body
+// alike), §2.3 (a clause-body `let` binder over a pattern variable name) and two
+// Go-matcher gaps (`x ... ...`, a with-syntax body template over an
+// outer pattern variable) die with the Go syntax-case. Every row fails under
+// WithGoSyntaxForms — that is the point — and moves into
+// test/scheme/syntax-case-test.scm in P3.
+func TestP1_SchemeLayerClosesDefects(t *testing.T) {
+	c := qt.New(t)
+	tests := []struct {
+		name, src, want string
+	}{
+		{
+			name: "§5.3 lone identifier pattern binds the whole form",
+			src:  `(define-syntax m (lambda (stx) (syntax-case stx () (x #'(quote x))))) (m 1 2)`,
+			want: "(m 1 2)",
+		},
+		{
+			name: "§5.4 a local helper called from a clause body is not boxed",
+			src: `(define-syntax m
+  (lambda (stx)
+    (let ((n 7))
+      (syntax-case stx ()
+        ((_) (if (box? n) #'"boxed" #'"plain"))))))
+(m)`,
+			want: `"plain"`,
+		},
+		{
+			name: "§5.4 the transformer's own parameter is usable as a datum->syntax template",
+			src: `(define-syntax m
+  (lambda (stx)
+    (syntax-case stx ()
+      ((_ v) (datum->syntax stx (list 'quote (syntax->datum #'v)))))))
+(m (a b))`,
+			want: "(a b)",
+		},
+		{
+			name: "§5.4 a with-syntax body reads its enclosing local unboxed",
+			src: `(define-syntax m
+  (lambda (stx)
+    (let ((n 7))
+      (syntax-case stx ()
+        ((_) (with-syntax ((x #'a)) (if (box? n) #'"boxed" #'"plain")))))))
+(m)`,
+			want: `"plain"`,
+		},
+		{
+			name: "§2.3 a clause-body let binder over a pattern variable name",
+			src: `(define-syntax m
+  (lambda (stx)
+    (syntax-case stx ()
+      ((_ x) (let ((x 1)) #'(quote x))))))
+(m foo)`,
+			want: "x",
+		},
+		{
+			// The Go layer answers (quasisyntax (unsyntax 5)): it evaluates an
+			// operand at quasisyntax depth 2, where R6RS §12.8 lowers the depth
+			// to 1 and leaves the form alone. petite answers (quasiquote
+			// (unquote x)) for the quasiquote twin and racket answers
+			// (quasisyntax (unsyntax x)) for this one (both measured
+			// 2026-09-06). Returns here from integration/quasisyntax_test.go in
+			// P3.
+			name: "nested quasisyntax at depth 2 does not evaluate",
+			src:  "(let ((x 5)) (syntax->datum (quasisyntax (quasisyntax #,x))))",
+			want: "(quasisyntax (unsyntax x))",
+		},
+		{
+			name: "matcher gap: x ... ... splices two ellipsis levels",
+			src:  `(define-syntax m (lambda (stx) (syntax-case stx () ((_ (x ...) ...) #'(list x ... ...))))) (m (1 2) (3))`,
+			want: "(1 2 3)",
+		},
+		{
+			name: "matcher gap: a with-syntax body template reads an outer pattern variable",
+			src: `(define-syntax m
+  (lambda (stx)
+    (syntax-case stx ()
+      ((_ v ...)
+       (with-syntax (((t ...) (generate-temporaries #'(v ...))))
+         #'(let ((t v) ...) (list t ...)))))))
+(m 1 2)`,
+			want: "(1 2)",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(evalSyntaxForms(t, tc.src, wile.WithSchemeSyntaxForms()), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestP1_SchemeLayerDiagnostics pins the Scheme layer's error TEXT. These rows
+// live here rather than in test/scheme/syntax-case-test.scm because the two
+// layers differ in where the error is raised, not just in what it says: a Go
+// syntax-case diagnostic is an expander-level Go error and never enters the VM,
+// so (guard … (eval …)) catches it, while %syntax-violation returns from a
+// primitive inside a macro transformer, the VM turns that into a raise, the
+// transformer's macro sub-context carries no handler chain, and the exception
+// escapes past any guard around the eval. (error "boom") inside a transformer is
+// equally uncatchable on the Go layer, so this is Wile's existing behaviour
+// rather than anything the layer introduces — but it means a Scheme suite that
+// must pass under both layers cannot assert on it. The Go error is read
+// directly here instead.
+//
+// The source location on these is pinned by TestP05_SyntaxViolationCarriesSource.
+func TestP1_SchemeLayerDiagnostics(t *testing.T) {
+	c := qt.New(t)
+	tests := []struct {
+		name, src, want string
+	}{
+		{
+			name: "no clause matches",
+			src:  `(define-syntax m (lambda (stx) (syntax-case stx () ((_ x) #'x)))) (m)`,
+			want: `syntax-case: no clause matches the form`,
+		},
+		{
+			name: "duplicate pattern variable",
+			src:  `(define-syntax m (lambda (stx) (syntax-case stx () ((_ x x) #'x)))) (m 1 2)`,
+			want: `syntax-case: duplicate pattern variable`,
+		},
+		{
+			name: "pattern variable used with too few ellipses",
+			src:  `(define-syntax m (lambda (stx) (syntax-case stx () ((_ x ...) #'x)))) (m 1)`,
+			want: `syntax: pattern variable used with too few ellipses`,
+		},
+		{
+			name: "unsyntax outside quasisyntax",
+			src:  `(define-syntax m (lambda (stx) #'(unsyntax 1))) (m)`,
+			want: `unsyntax: not in quasisyntax context`,
+		},
+		{
+			name: "literal is not an identifier",
+			src:  `(define-syntax m (lambda (stx) (syntax-case stx (1) ((_ x) #'x)))) (m 2)`,
+			want: `syntax-case: literal is not an identifier`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := evalSyntaxFormsErr(t, tc.src, wile.WithSchemeSyntaxForms())
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Contains, tc.want)
+		})
+	}
+}

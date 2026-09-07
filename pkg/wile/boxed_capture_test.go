@@ -243,6 +243,16 @@ func TestBoxedSlotNeverEscapesToScheme(t *testing.T) {
 		name string
 		code string
 		want string
+		// opts pins a row to one syntax layer. The three (syntax …) rows below
+		// need it: they read a runtime LOCAL through a syntax template, which the
+		// Go template compiler substitutes (that substitution is what could leak a
+		// box, and is what they were written to catch). The Scheme layer does not
+		// substitute it at all — a (syntax x) whose x is not a pattern variable is
+		// the IDENTIFIER x, which is what Racket and Chez both answer (measured
+		// 2026-09-06) — so under that layer the boxing question does not arise and
+		// the row's subject is gone. P3 deletes the Go layer and Task 11 re-derives
+		// these three.
+		opts []EngineOption
 	}{
 		{
 			name: "reading a boxed variable yields its value",
@@ -274,11 +284,13 @@ func TestBoxedSlotNeverEscapesToScheme(t *testing.T) {
 			name: "a boxed local read through a syntax template arrives unboxed",
 			code: `(syntax->datum (let ((x 5)) (lambda () (set! x 1)) (syntax x)))`,
 			want: "5",
+			opts: []EngineOption{WithGoSyntaxForms()},
 		},
 		{
 			name: "control: the same read with nothing to box",
 			code: `(syntax->datum (let ((x 5)) (syntax x)))`,
 			want: "5",
+			opts: []EngineOption{WithGoSyntaxForms()},
 		},
 		{
 			// The shape that surfaced it: a nested quasisyntax expands to a
@@ -287,12 +299,13 @@ func TestBoxedSlotNeverEscapesToScheme(t *testing.T) {
 			code: `(syntax->datum
 			         (let ((x 5)) (lambda () (set! x 1)) (quasisyntax (quasisyntax #,x))))`,
 			want: "(quasisyntax (unsyntax 5))",
+			opts: []EngineOption{WithGoSyntaxForms()},
 		},
 	}
 	ctx := context.Background()
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			engine, err := NewEngine(ctx)
+			engine, err := NewEngine(ctx, tc.opts...)
 			if err != nil {
 				t.Fatalf("new engine: %v", err)
 			}

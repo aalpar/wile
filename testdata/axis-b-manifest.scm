@@ -9,7 +9,7 @@
  ("%parameter-convert" "any" ("procedure" "any") "github.com/aalpar/wile/pkg/registry/core.PrimParameterConvert" "pkg/registry/core/prim_parameters.go:88")
  ("%parameter-raw-set!" "void" ("procedure" "any") "github.com/aalpar/wile/pkg/registry/helpers.MakeBinarySetter[...].func1" "pkg/registry/helpers/accessor.go:63")
  ("%syntax-spine" "any" ("any") "github.com/aalpar/wile/pkg/registry/core.PrimSyntaxSpine" "pkg/registry/core/prim_syntax_access.go:110")
- ("%syntax-violation" "any" ("any" "string" "any") "github.com/aalpar/wile/pkg/registry/core.PrimSyntaxViolation" "pkg/registry/core/prim_syntax_access.go:195")
+ ("%syntax-violation" "any" ("any" "string" "any") "github.com/aalpar/wile/pkg/registry/core.PrimSyntaxViolation" "pkg/registry/core/prim_syntax_access.go:221")
  ("*" "number" ("...number") "github.com/aalpar/wile/pkg/registry/core.PrimMul" "pkg/registry/core/prim_arithmetic.go:50")
  ("+" "number" ("...number") "github.com/aalpar/wile/pkg/registry/core.PrimAdd" "pkg/registry/core/prim_arithmetic.go:28")
  ("-" "number" ("number" "...number") "github.com/aalpar/wile/pkg/registry/core.PrimSub" "pkg/registry/core/prim_arithmetic.go:36")

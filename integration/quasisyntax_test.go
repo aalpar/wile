@@ -111,11 +111,17 @@ func TestQuasisyntaxIntegration(t *testing.T) {
 		},
 
 		// Nested quasisyntax
-		{
-			name:     "nested quasisyntax depth 2",
-			code:     `(let ((x 5)) (quasisyntax (quasisyntax #,x)))`,
-			expected: `(quasisyntax (unsyntax 5))`, // x's binding is captured in the syntax object
-		},
+		//
+		// The depth-2 row that stood here — (quasisyntax (quasisyntax #,x)) with
+		// x bound to 5 — pinned the Go layer's answer, (quasisyntax (unsyntax 5)),
+		// and that answer is wrong. The inner quasisyntax raises the depth to 2, so
+		// the #, lowers it to 1 rather than 0 and its operand is NOT evaluated.
+		// Chez (petite) answers (quasiquote (unquote x)) for the quasiquote twin and
+		// Racket answers (quasisyntax (unsyntax x)) for this one, both measured
+		// 2026-09-06. The Scheme syntax layer agrees with them, so the row lives in
+		// pkg/wile/syntax_forms_switch_test.go's TestP1_SchemeLayerClosesDefects
+		// until P3 deletes the Go layer, at which point it comes back here with the
+		// correct expectation.
 		{
 			name:     "nested with outer unsyntax",
 			code:     `(let ((x 5)) (quasisyntax (a #,(quasisyntax b))))`,

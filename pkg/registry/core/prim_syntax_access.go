@@ -160,14 +160,18 @@ func syntaxSpineList(sp *syntax.SyntaxPair) values.Value {
 	return head
 }
 
-// syntaxViolation carries the offending form's source as a real chain member.
-// pkg/machine reads it structurally (foreign_closure.go's sourcedError) when it
-// renders an uncaught error, and errors.As reaches it from Go. registry/core
-// cannot use compilation.SourcedError (the two are peers), so this is the same
-// shape declared here.
+// syntaxViolation is the error %syntax-violation returns. It carries three
+// things pkg/machine reads structurally, each through an interface declared
+// there because registry/core and compilation are peers and the concrete types
+// cannot cross: the offending form's source (sourcedError), and the R7RS §6.11
+// message/irritant pair (conditionError, which ConditionFromError harvests when
+// it builds the error object). errors.As reaches all of it from Go, and
+// errors.Is reaches ErrInvalidSyntax through Unwrap.
 type syntaxViolation struct {
-	src   *syntax.SourceContext
-	cause error
+	src       *syntax.SourceContext
+	message   string
+	irritants []values.Value
+	cause     error
 }
 
 func (p *syntaxViolation) Error() string {
@@ -188,15 +192,33 @@ func (p *syntaxViolation) SourceContext() *syntax.SourceContext {
 	return p.src
 }
 
-// PrimSyntaxViolation implements (%syntax-violation who message stx): raises a
-// catchable error object whose message is "who: message", whose irritant is the
-// datum of stx, and whose cause carries stx's source location (design §6
-// Diagnostics). The Scheme matcher's one raise helper.
-func PrimSyntaxViolation(cc machine.CallContext) error {
-	mc, err := machine.RequireMachineContext(cc, "%syntax-violation")
-	if err != nil {
-		return err
-	}
+// ErrorMessage and ErrorIrritants are machine's conditionError interface: they
+// name the two halves of R7RS §6.11 explicitly, so the condition built from this
+// error carries the irritant rather than a message parsed back out of text.
+func (p *syntaxViolation) ErrorMessage() string {
+	return p.message
+}
+
+func (p *syntaxViolation) ErrorIrritants() []values.Value {
+	return p.irritants
+}
+
+// PrimSyntaxViolation implements (%syntax-violation who message stx): the Scheme
+// matcher's one error helper. The condition's message is "WHO: MESSAGE", its
+// irritant is the datum of STX, and its source is STX's (design §6 Diagnostics).
+//
+// It RETURNS the error rather than raising it, and the difference is not
+// cosmetic. A Scheme raise from inside a macro transformer is not catchable: the
+// transformer runs in a macro sub-context that carries no handler chain, so
+// RaiseInPlace finds no handler and the exception escapes past any guard around
+// the (eval …) that triggered the expansion — measured, and true of (error …)
+// inside a transformer on the Go layer too, so it is Wile's existing behaviour
+// rather than anything this layer introduces. A RETURNED error propagates out of
+// InvokeTransformer as the transformer's failure, becomes a compile error, and
+// is catchable exactly where a syntax-error is. At run time it is equally
+// catchable, because a foreign function's returned error becomes an error object
+// through ConditionFromError, which is what reads the two methods above.
+func PrimSyntaxViolation(mc machine.CallContext) error {
 	who := mc.Arg(0)
 	msg, ok := mc.Arg(1).(*values.String)
 	if !ok {
@@ -211,8 +233,12 @@ func PrimSyntaxViolation(cc machine.CallContext) error {
 		irritant = sv.UnwrapAll()
 	}
 	text := fmt.Sprintf("%s: %s", who.SchemeString(), msg.Value)
-	cause := &syntaxViolation{src: src, cause: werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s", text)}
-	return machine.RaiseInPlace(mc, values.NewErrorObjectWithCause(text, cause, irritant), false)
+	return &syntaxViolation{
+		src:       src,
+		message:   text,
+		irritants: []values.Value{irritant},
+		cause:     werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s", text),
+	}
 }
 
 // firstLocatedContext returns stx's own source context, or — when the node was

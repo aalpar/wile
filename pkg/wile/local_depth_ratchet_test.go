@@ -171,16 +171,25 @@ func TestEmittedLocalDepthSurvivesOnlyOpaqueSubtrees(t *testing.T) {
 	tcs := []struct {
 		name string
 		code string
+		opts []EngineOption
 	}{
 		{
 			// A `syntax` template's pattern-variable reference. It resolves at
 			// run time through the frame BindPatternVars pushes, appears in no
 			// free layout because nothing walked the template, and the closure
 			// that holds it is one frame below.
+			//
+			// Go layer only, and the reason is the shape's own premise: under
+			// the Scheme layer syntax-case and syntax are MACROS, so the
+			// template is expanded into ordinary builder code with ordinary
+			// local reads rather than parked as an opaque subtree, and there is
+			// no unwalked template left to classify. P3 deletes the Go layer;
+			// Task 11 re-derives what this row should then pin.
 			name: "a lambda holding a syntax template inside a clause body",
 			code: `(lambda (stx)
 			         (syntax-case stx ()
 			           ((_ a) (let ((f (lambda () (syntax a)))) (f)))))`,
+			opts: []EngineOption{WithGoSyntaxForms()},
 		},
 		{
 			// A quasiquote template. Same classification, different form: its
@@ -194,7 +203,7 @@ func TestEmittedLocalDepthSurvivesOnlyOpaqueSubtrees(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			tpl := compileForDepthCensus(t, tc.code)
+			tpl := compileForDepthCensus(t, tc.code, tc.opts...)
 			got := depthSitesIn(tpl)
 			if got == 0 {
 				t.Errorf("emitted no depth != 0 instruction, want at least one; " +
@@ -212,10 +221,10 @@ func TestEmittedLocalDepthSurvivesOnlyOpaqueSubtrees(t *testing.T) {
 // counts are made by compileBody and CompileValidatedLet wiring that a direct
 // call would bypass, and the optimizer runs here (memory/runschemecode-blind-to-
 // optimizer).
-func compileForDepthCensus(t *testing.T, code string) *machine.NativeTemplate {
+func compileForDepthCensus(t *testing.T, code string, opts ...EngineOption) *machine.NativeTemplate {
 	t.Helper()
 	ctx := context.Background()
-	engine, err := NewEngine(ctx)
+	engine, err := NewEngine(ctx, opts...)
 	if err != nil {
 		t.Fatalf("new engine: %v", err)
 	}

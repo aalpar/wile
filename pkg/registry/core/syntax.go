@@ -63,7 +63,7 @@ func addSyntax(r *registry.PrimitiveRegistry) error {
 		{Name: "%syntax-spine", ParamCount: 1, Impl: PrimSyntaxSpine,
 			Doc: "Unwraps the pairs and vectors of STX, keeping identifiers as syntax; the form an er-macro-transformer procedure receives.\n\nExamples:\n  ;; (identifier? (car (%syntax-spine #'(a b))))  => #t", ParamNames: []string{"stx"}, Category: "syntax",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "%syntax-violation", ParamCount: 3, InvokesProcedure: true, Impl: PrimSyntaxViolation,
+		{Name: "%syntax-violation", ParamCount: 3, Impl: PrimSyntaxViolation,
 			Doc: "Raises a syntax error \"WHO: MESSAGE\" about form STX, carrying its source location.\n\nExamples:\n  ;; (%syntax-violation 'syntax-case \"no clause matches\" stx)", ParamNames: []string{"who", "message", "stx"}, Category: "syntax",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeString, values.TypeAny}, ReturnType: values.TypeAny},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)

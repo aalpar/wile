@@ -125,6 +125,28 @@ func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Names
 	return ns, nil
 }
 
+// schemeSyntaxLayerApplies reports whether the syntax-layer sources should be
+// prepended to reg. Two ways the answer is no, both of them reachable:
+//
+//   - reg carries no macro sources at all, which is WithoutCore. The syntax
+//     layer is written against core primitives (list, car, null?, the P0
+//     accessors), so prepending it there fails the bootstrap on "no such binding
+//     list" instead of producing a bare engine.
+//   - reg already carries them, which is Engine.Registry() fed back through
+//     WithRegistry — a documented embedder move, and the registry an engine
+//     exposes is the SWITCHED one. Prepending twice re-runs every define and the
+//     second one hits the immutable top level.
+//
+// Transitional with the switch; removed in P3, when the sources are registered
+// unconditionally by core's own addBootstrapSources.
+func schemeSyntaxLayerApplies(reg *registry.PrimitiveRegistry) bool {
+	sources := reg.MacroSources()
+	if len(sources) == 0 {
+		return false
+	}
+	return !slices.Contains(sources, core.SyntaxProceduresSource)
+}
+
 // bootstrapNamespace creates a new namespace from engine config: builds the
 // registry, creates the namespace, binds primitives, and loads bootstrap macros.
 // Returns the snapshots and closers from buildRegistry for callers that need them
@@ -159,7 +181,15 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	// registry for setupLibrarySystem, and both methods below return a deepCopy,
 	// so a reassignment of the local reg after that point never reaches the
 	// namespace. Removed with the switch in P3.
-	if cfg.schemeSyntaxForms {
+	//
+	// Gated on the registry already carrying macro sources, which is the
+	// question "is core present". The syntax layer is written against core
+	// primitives (list, car, null?, the P0 accessors), so prepending it to a
+	// WithoutCore registry fails the bootstrap on "no such binding list" rather
+	// than producing a bare engine. WithoutCore's engine has no syntax-case
+	// either way — the Go rows are registered by the compiler, not the registry,
+	// and stay.
+	if cfg.schemeSyntaxForms && schemeSyntaxLayerApplies(reg) {
 		reg = reg.WithMacroSources(append(core.SchemeSyntaxSources(), reg.MacroSources()...)).
 			WithoutPrimitiveExpanders(compilation.SchemeSyntaxFormNames()...)
 	}

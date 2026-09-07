@@ -29,17 +29,23 @@
 ;;; binder is maximal, blocks the record, and leaves (syntax x) emitting the
 ;;; identifier unsubstituted, which is Chez's shadowing rule. Task 8 Step 2 pins it.
 ;;;
-;;; The whole body is ONE (begin …) unit, and that is load-bearing rather than
-;;; cosmetic: LoadBootstrapSources compiles a bootstrap source form by form, so a
-;;; reference from one top-level define to a later one is an unbound binding at
-;;; compile time. The generators here are mutually recursive by construction —
-;;; %gen-match with %gen-match-ellipsis, %gen-template with %gen-pair,
-;;; %gen-template-ellipsis and %gen-ellipsis-map — so no ordering fixes it. A
-;;; begin body predeclares every definition before compiling any of them
-;;; (expander_body.go), which is the same reason file execution begin-wraps.
-;;; begin makes no region, so the definitions still land at top level.
+;;; Two (begin …) units wrap the two MUTUALLY RECURSIVE clusters, and nothing
+;;; else. LoadBootstrapSources compiles a bootstrap source form by form, so a
+;;; reference from one top-level define to a LATER one is an unbound binding at
+;;; compile time; a begin body predeclares every definition before compiling any
+;;; of them (expander_body.go), which is the same reason file execution
+;;; begin-wraps. begin makes no region, so the definitions still land at top
+;;; level. The clusters are %gen-match / %gen-match-ellipsis / %column-bindings,
+;;; and the six template walkers from %gen-template through %gen-vector-pair.
+;;;
+;;; Keep them SMALL. The compiler is strongly superlinear in a begin body's
+;;; size, and this file is what measured it: wrapping the whole file in one
+;;; begin cost 41.7ms and 615k allocations per engine, the two clusters cost
+;;; 8.5ms and 176k, and tightening cluster 1 to its three real members cost
+;;; 8.2ms and 174k — against a 3.7ms / 83k baseline with the layer off
+;;; (interleaved BenchmarkEngineStartup, 2026-09-07). A new mutually recursive
+;;; pair belongs in its own begin, not appended to one of these.
 
-(begin
 
 ;;; ---- the %pattern-variable record (Q4: a tagged list, stored bare) ----
 
@@ -123,6 +129,24 @@
 (define (%syntax-literal? e lit)
   (if (identifier? e) (free-identifier=? e lit) #f))
 
+;; %syntax-list->vector: list->vector over a BUILDER chain. %gen-template ends
+;; every spine it builds with a (quote-syntax ()) constant, so the chain's tail
+;; is the syntax empty list rather than (); list->vector rejects that as an
+;; improper list, and a vector template holding an unsyntax or a pattern variable
+;; is exactly the shape that reaches it.
+(define (%syntax-list->vector l)
+  (letrec ((walk (lambda (l acc)
+                   (if (pair? l)
+                       (walk (cdr l) (cons (car l) acc))
+                       (if (syntax-pair? l)
+                           ;; A constant TAIL is emitted as one quote-syntax
+                           ;; datum, so the chain is Scheme pairs down to a
+                           ;; syntax list. datum->syntax copes with that shape
+                           ;; and so must this.
+                           (walk (syntax-cdr l) (cons (syntax-car l) acc))
+                           (reverse acc))))))
+    (list->vector (walk l '()))))
+
 (define (%syntax-case-fail stx)
   (%syntax-violation 'syntax-case "no clause matches the form" stx))
 
@@ -139,7 +163,7 @@
 (define %k-car            (quote-syntax car))
 (define %k-cdr            (quote-syntax cdr))
 (define %k-append         (quote-syntax append))
-(define %k-list->vector   (quote-syntax list->vector))
+(define %k-list->vector   (quote-syntax %syntax-list->vector))
 (define %k-equal?         (quote-syntax equal?))
 (define %k-datum->syntax  (quote-syntax datum->syntax))
 (define %k-syntax->datum  (quote-syntax syntax->datum))
@@ -157,13 +181,44 @@
 (define %k-make-pv        (quote-syntax %make-pattern-variable))
 (define %k-syntax-map     (quote-syntax %syntax-map))
 (define %k-append*        (quote-syntax %syntax-append*))
-;; Bound by bootstrap_syntax.scm, after this file: nil pins, resolved by scopes.
+;; Bound by bootstrap_syntax.scm, AFTER this file. Emitted into generated code,
+;; never compared, so a pin is what they want: quote-syntax records what the name
+;; denoted here. What it denotes here is the ambient specialforms.go KEYWORD
+;; (BindingTypePrimitive), not the macro that does not exist yet — but
+;; lookupMacroBinding's definition-site arm keeps only BindingTypeSyntax, so a
+;; keyword pin falls through to the arm that finds the macro. Task 12 deletes
+;; those specialforms.go rows, after which the pin is nil and resolution is by
+;; scopes; both answers reach the same macro.
 (define %k-syntax-case    (quote-syntax syntax-case))
 (define %k-syntax-case/e  (quote-syntax %syntax-case/ellipsis))
 (define %k-syntax/e       (quote-syntax %syntax/ellipsis))
-(define %k-unsyntax       (quote-syntax unsyntax))
-(define %k-unsyntax-splicing (quote-syntax unsyntax-splicing))
-(define %k-quasisyntax    (quote-syntax quasisyntax))
+
+;; The quasisyntax keywords are COMPARED (%qs-form?), not emitted, and that
+;; reverses the rule above: they must NOT carry a pin.
+;;
+;; free-identifier=? has no BindingTypeSyntax filter to save it. A quote-syntax
+;; here pins the ambient specialforms.go keyword, because bootstrap_syntax.scm
+;; has not run; the template's own `unsyntax`, written by the reader for #, and
+;; carrying no pin, resolves at the use site — to the phase-1 MACRO when the
+;; comparison happens at phase 1, since that is where a transformer body is
+;; expanded. Two different bindings, so the comparison answered #f and every
+;; #`(… #,e …) inside a transformer body expanded its unsyntax as a macro use
+;; and raised "unsyntax outside quasisyntax". At phase 0 both sides reached the
+;; ambient keyword and it answered #t for the wrong reason, which is why the
+;; top level looked fine. Measured 2026-09-06.
+;;
+;; datum->syntax #f gives an identifier with no pin and no scopes, so both sides
+;; ask the same question — what does this name denote at the use site — which is
+;; what auxiliary-syntax recognition means, and it still respects a use-site
+;; shadow: a locally rebound unsyntax carries a scope the constant lacks and
+;; resolves to the shadow.
+(define %k-unsyntax       (datum->syntax #f 'unsyntax))
+(define %k-unsyntax-splicing (datum->syntax #f 'unsyntax-splicing))
+(define %k-quasisyntax    (datum->syntax #f 'quasisyntax))
+
+;; _ and ... are ambient (specialforms.go) and stay ambient, so their pin is
+;; correct and stable at every phase; they are compared, and quote-syntax is
+;; right for them.
 (define %k-underscore     (quote-syntax _))
 
 ;; %fresh: a temporary for generated binders. generate-temporaries mints a
@@ -268,6 +323,7 @@
 ;; %gen-match: code matching PAT against the syntax bound to temporary E,
 ;; continuing with K on success and FAIL on failure. Pure: variable depths come
 ;; from %pattern-vars/depth, so K can already carry the let-syntax records.
+(begin
 (define (%gen-match pat e lits ell k fail)
   (if (identifier? pat)
       (if (%id-member? pat lits)
@@ -322,6 +378,7 @@
                             fail))
                 fail))))
 
+
 (define (%column-bindings vars rows i)
   (if (null? vars)
       '()
@@ -330,6 +387,8 @@
 
 ;; The let-syntax records (design §2.3): each pattern variable bound a second
 ;; time, as a compile-time %pattern-variable holding its depth and identifier.
+)
+
 (define (%record-bindings vars)
   (%map1 (lambda (v) (list (car v) (list %k-make-pv (cdr v) (%const (car v))))) vars))
 
@@ -444,6 +503,7 @@
 ;; the kernel's pins and definition-site scopes apply). LEVEL counts the
 ;; ellipses enclosing this position; a variable of record depth d needs at least
 ;; d of them and is broadcast under more. QD is the quasisyntax depth or #f.
+(begin
 (define (%gen-template t ell level qd)
   (if (identifier? t)
       (let ((pv (%pv-record t)))
@@ -471,9 +531,43 @@
                           (%gen-template-ellipsis t ell level qd)
                           (%gen-pair t ell level qd)))))
           (if (syntax-vector? t)
-              (let ((l (%gen-template (syntax-vector->list t) ell level qd)))
+              (let ((l (%gen-vector-list (syntax-vector->list t) ell level qd)))
                 (if l (list %k-list->vector l) #f))
               #f))))
+
+;; %gen-vector-list walks a VECTOR's element list. It is %gen-template's list
+;; walk minus one rule: the list itself is never read as an escape form, because
+;; a vector has no tail position. #(a unsyntax x) is three elements, which is
+;; what Wile has always answered and what Chez answers for the quasiquote twin;
+;; Racket disagrees, reads the tail as an escape and then fails on the improper
+;; result (both measured 2026-09-06). R7RS is silent here, so the shipped
+;; behaviour stands and pkg/wile/quasisyntax_dotted_tail_test.go pins it.
+;;
+;; Ellipsis still applies: that is a property of an ELEMENT's position, not of
+;; the tail. A subtemplate's own `rest` goes back through %gen-template, so an
+;; escape written after an ellipsis inside a vector is read as one — an edge no
+;; oracle agrees on and nothing depends on.
+(define (%gen-vector-list t ell level qd)
+  (if (syntax-pair? t)
+      (if (%ellipsis-next? t ell '())
+          (%gen-template-ellipsis t ell level qd)
+          (%gen-vector-pair t ell level qd))
+      (%gen-template t ell level qd)))
+
+(define (%gen-vector-pair t ell level qd)
+  (let ((a (syntax-car t)) (d (syntax-cdr t)))
+    (if (%qs-form? a qd %k-unsyntax-splicing)
+        (if (eqv? qd 1)
+            (list %k-append (%qs-operand a) (%or-const (%gen-vector-list d ell level qd) d))
+            (list %k-cons
+                  (list %k-list (%const (syntax-car a))
+                        (%or-const (%gen-template (%qs-operand a) ell level (- qd 1)) (%qs-operand a)))
+                  (%or-const (%gen-vector-list d ell level qd) d)))
+        (let ((ac (%gen-template a ell level qd))
+              (dc (%gen-vector-list d ell level qd)))
+          (if ac
+              (list %k-cons ac (%or-const dc d))
+              (if dc (list %k-cons (%const a) dc) #f))))))
 
 ;; A pair whose car may be an unsyntax-splicing form.
 (define (%gen-pair t ell level qd)
@@ -520,6 +614,9 @@
 ;; wrapped (datum->syntax (quote-syntax <head>) …) so the spine carries the
 ;; template's source location (coverage attribution); existing syntax leaves pass
 ;; through the wrap and raw pairs become syntax.
+
+)
+
 (define (%syntax-transform form ell)
   (let ((parts (syntax->list form)))
     (if (if parts (if (null? (cdr parts)) #t (if (null? (cdr (cdr parts))) #f #t)) #t)
@@ -537,7 +634,7 @@
 (define (%quasisyntax-transform form)
   (let ((parts (syntax->list form)))
     (if (if parts (if (null? (cdr parts)) #t (if (null? (cdr (cdr parts))) #f #t)) #t)
-        (%syntax-violation 'quasisyntax "expected (quasisyntax template)" form)
+        (%syntax-violation 'quasisyntax "expected exactly one template: (quasisyntax TEMPLATE)" form)
         #f)
     (let* ((tmpl (car (cdr parts)))
            (code (%gen-template tmpl (quote-syntax ...) 0 1)))
@@ -571,4 +668,3 @@
                 (list %k-datum->syntax #f (cons %k-list exprs))
                 '()
                 (list pats (cons %k-let (cons '() body)))))))))
-)
