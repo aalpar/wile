@@ -63,6 +63,10 @@ var procedureInvokers = []string{
 	"call-with-composable-continuation", "with-timeout",
 	// eval extension: run / transform arbitrary code
 	"eval", "load", "expand", "expand-once", "compile",
+	// syntax-local-value applies its optional failure thunk in tail position
+	// (registry/core/prim_syntax.go). Its /immediate alias in the eval extension
+	// delegates to the same implementation and so invokes it too.
+	"syntax-local-value", "syntax-local-value/immediate",
 	// The environment/namespace constructors take import specs, and loading a
 	// library runs the transformers in its body (compilation.ImportSpecInto →
 	// LoadLibrary → invokeTransformerClosure). All three were live unannotated

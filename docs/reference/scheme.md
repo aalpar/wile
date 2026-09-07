@@ -1398,9 +1398,7 @@ Requires the eval extension:
 | `(syntax-column stx)` | 0-based column, or `#f` |
 | `(syntax-position stx)` | 0-based byte position, or `#f` |
 | `(syntax-span stx)` | Byte span (end − start), or `#f` |
-| `(syntax-local-value id)` | Get compile-time value |
 | `(syntax-local-value/immediate id)` | Like above, no rename-transformer chasing |
-| `(make-compile-time-value v)` | Create compile-time value |
 | `(syntax-local-introduce stx)` | Introduce syntax marks |
 | `(syntax-local-identifier-as-binding id)` | Convert to binding form |
 

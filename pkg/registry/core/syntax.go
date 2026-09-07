@@ -36,6 +36,9 @@ func addSyntax(r *registry.PrimitiveRegistry) error {
 		{Name: "generate-temporaries", ParamCount: 1, Impl: PrimGenerateTemporaries,
 			Doc: "Returns a list of unique temporary identifiers, one per element in STX-LIST. Used in syntax-case macros.\n\nExamples:\n  ;; (length (generate-temporaries '(a b c)))  => 3", ParamNames: []string{"stx-list"}, Category: "syntax",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeList},
+		{Name: "syntax-local-value", ParamCount: 2, IsVariadic: true, InvokesProcedure: true, Impl: PrimSyntaxLocalValue,
+			Doc: "Returns the compile-time value bound to identifier ID: a macro transformer, or any value a let-syntax or define-syntax right-hand side evaluated to. Only valid during macro expansion. With no binding, calls FAILURE-THUNK when given, else raises.\n\nExamples:\n  ;; inside a transformer:\n  ;; (syntax-local-value #'k (lambda () #f))", ParamNames: []string{"id", "failure-thunk"}, Category: "syntax",
+			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// Identifier comparison

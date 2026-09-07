@@ -86,7 +86,6 @@ Reference for the types, primitives, and special forms in Wile. It is **not exha
 |------|-------------|
 | Syntax Object | Datum with lexical context information |
 | Environment | First-class evaluation environment |
-| Compile-Time Value | Value available during macro expansion |
 | Void | Absence of a meaningful value, written `#<void>` |
 
 ## Special Forms (Compile-Time)
@@ -250,6 +249,7 @@ Reference for the types, primitives, and special forms in Wile. It is **not exha
 | `datum->syntax` | Convert datum to syntax object |
 | `syntax->list` | Convert syntax pair chain to list of syntax objects, or `#f` |
 | `generate-temporaries` | Generate unique temporary identifiers |
+| `syntax-local-value` | Compile-time value bound to an identifier (a transformer, or any `define-syntax` / `let-syntax` value); optional failure thunk. Expansion-time only |
 | `syntax-source` | Source file of syntax object, or `#f` |
 | `syntax-line` | 1-based line number, or `#f` |
 | `syntax-column` | 0-based column, or `#f` |
@@ -733,9 +733,7 @@ Reference for the types, primitives, and special forms in Wile. It is **not exha
 | `expand` | Fully expand an expression |
 | `expand-once` | Expand one level of macros |
 | `compile` | Compile an expression |
-| `syntax-local-value` | Get compile-time value of binding |
 | `syntax-local-value/immediate` | Like `syntax-local-value`, no rename-transformer chasing |
-| `make-compile-time-value` | Create a compile-time value |
 | `syntax-local-introduce` | Introduce syntax marks |
 | `syntax-local-identifier-as-binding` | Convert identifier to binding form |
 

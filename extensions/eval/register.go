@@ -95,15 +95,17 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 			ReturnType: values.TypeProcedure},
 		// Syntax-local primitives traffic in syntax objects / compile-time
 		// values; neither has a ValueType enum, so ReturnType is TypeAny.
-		{Name: "syntax-local-value", ParamCount: 1, Impl: PrimSyntaxLocalValue,
-			Doc: "Returns the compile-time value bound to identifier. Only valid during macro expansion.\n\nExamples:\n  ; inside a macro transformer:\n  ; (syntax-local-value #'my-binding)  => <compile-time value>", ParamNames: []string{"id"}, Category: "eval",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "syntax-local-value/immediate", ParamCount: 1, Impl: PrimSyntaxLocalValueImmediate,
-			Doc: "Like syntax-local-value but does not chase rename-transformers.\n\nExamples:\n  ; (syntax-local-value/immediate #'id)  => <immediate binding>", ParamNames: []string{"id"}, Category: "eval",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "make-compile-time-value", ParamCount: 1, Impl: PrimMakeCompileTimeValue,
-			Doc: "Wraps VALUE for storage as a compile-time binding via define-for-syntax.\n\nExamples:\n  (make-compile-time-value 42)  => #<compile-time-value 42>", ParamNames: []string{"value"}, Category: "eval",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
+		//
+		// syntax-local-value itself moved to pkg/registry/core (P0.4): it reads
+		// through macro dispatch, which the eval extension cannot see, and it is
+		// needed by every profile that has macros rather than only by the ones
+		// that have eval. This alias stays because there is nothing in Wile for
+		// it to diverge on yet: Wile has no rename-transformers, so "do not chase
+		// the chain" is the same walk. When they exist the two must diverge and
+		// this entry needs its own implementation.
+		{Name: "syntax-local-value/immediate", ParamCount: 2, IsVariadic: true, InvokesProcedure: true, Impl: PrimSyntaxLocalValueImmediate,
+			Doc: "Like syntax-local-value but does not chase rename-transformers.\n\nExamples:\n  ; (syntax-local-value/immediate #'id)  => <immediate binding>", ParamNames: []string{"id", "failure-thunk"}, Category: "eval",
+			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "syntax-local-introduce", ParamCount: 1, Impl: PrimSyntaxLocalIntroduce,
 			Doc: "Flips the current macro invocation's introduction scope on STX, so a macro-introduced identifier behaves as if it came from the use site (anaphoric macros). Only valid inside a procedural transformer.\n\nExamples:\n  ; inside a lambda transformer:\n  ; (syntax-local-introduce (datum->syntax #f 'it))  => it, use-site scoped", ParamNames: []string{"stx"}, Category: "eval",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},

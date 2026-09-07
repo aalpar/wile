@@ -35,10 +35,14 @@ const (
 )
 
 // compileTransformerValue evaluates a define-syntax / let-syntax / letrec-syntax
-// right-hand side as an EXPRESSION one phase above env (R6RS §11.2.2) and admits
-// the value. Until P0.4 lifts the refusal, the value must be a machine.Closure
-// (syntax-rules, lambda, or any procedure) or an *ERMacroTransformer; anything
-// else is refused here, before a slot could hold it.
+// right-hand side as an EXPRESSION one phase above env (R6RS §11.2.2).
+//
+// The value is stored bare: a procedure is a transformer, anything else is a
+// compile-time value readable by syntax-local-value and an ErrNotAClosure in
+// operator position (expandMacroInvocation). P0.4 lifted the admission switch
+// that used to refuse a non-procedure here — Q4: there is no wrapper type and
+// nothing to unwrap, so a let-syntax or define-syntax right-hand side is simply
+// an expression whose value the binding holds.
 //
 // The head switch this replaces dispatched on the spelling of the right-hand
 // side's car and never expanded it, so a macro that EXPANDS to a transformer was
@@ -69,10 +73,5 @@ func compileTransformerValue(
 	if err != nil {
 		return nil, wrapSourcedError(rhs.SourceContext(), werr.WrapForeignErrorf(err, "error evaluating transformer"))
 	}
-	switch result.(type) {
-	case machine.Closure, *ERMacroTransformer:
-		return result, nil
-	}
-	return nil, wrapSourcedError(rhs.SourceContext(), werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer,
-		"define-syntax: transformer must evaluate to a procedure, got %T", result))
+	return result, nil
 }

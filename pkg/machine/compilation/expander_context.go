@@ -18,6 +18,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // Compile-time check: ExpanderContext must satisfy machine.ExpanderCtx.
@@ -69,6 +70,24 @@ func (p *ExpanderContext) ExpandOnce(stx syntax.SyntaxValue) (syntax.SyntaxValue
 		return stx, false, nil
 	}
 	return p.expander.ExpandOnce(stx)
+}
+
+// MacroValue resolves id through lookupMacroBinding's arms — the let-syntax
+// frames under the identifier's own scopes, the definition-site pin,
+// NextPhase(), the owner's sealed phase-1 tier, the library env named by its
+// scopes — and returns the BindingTypeSyntax binding's value (design §2.3). The
+// eval extension's probe this replaces used Env().Expand(), the owner's
+// top-level phase-1 frame, so every local frame was dropped and a let-syntax
+// keyword was invisible at every phase.
+func (p *ExpanderContext) MacroValue(id *syntax.SyntaxSymbol) (values.Value, bool) {
+	if p == nil || p.expander == nil {
+		return nil, false
+	}
+	bnd := p.expander.lookupMacroBinding(id, id.Scopes())
+	if bnd == nil {
+		return nil, false
+	}
+	return bnd.Value(), true
 }
 
 // IntroductionScope returns the introduction scope for the current macro expansion.

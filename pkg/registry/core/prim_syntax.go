@@ -30,6 +30,43 @@ import (
 // gensymCounter is used to generate unique symbol names
 var gensymCounter atomic.Uint64
 
+// PrimSyntaxLocalValue implements (syntax-local-value id [failure-thunk])
+// (Racket §12.4, R6RS-compatible). id resolves as macro dispatch would
+// (ExpanderCtx.MacroValue) and the compile-time value comes back bare: a
+// transformer closure, or whatever a let-syntax / define-syntax right-hand
+// side evaluated to (design §2.3, Q4). With no binding, failure-thunk is called
+// in tail position when given; otherwise the call is an error. Outside expansion
+// it is an error regardless.
+func PrimSyntaxLocalValue(cc machine.CallContext) error {
+	mc, err := machine.RequireMachineContext(cc, "syntax-local-value")
+	if err != nil {
+		return err
+	}
+	id, ok := mc.Arg(0).(*syntax.SyntaxSymbol)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "syntax-local-value: expected an identifier, got %T", mc.Arg(0))
+	}
+	var thunk values.Value
+	rest, ok := mc.Arg(1).(values.Tuple)
+	if ok && !rest.IsEmptyList() {
+		thunk = rest.Car()
+	}
+	ectx := mc.ExpanderContext()
+	if ectx == nil {
+		return werr.WrapForeignErrorf(werr.ErrNoCaptureContext, "syntax-local-value: not in expansion context")
+	}
+	v, found := ectx.MacroValue(id)
+	if found {
+		mc.SetValue(v)
+		return nil
+	}
+	if thunk != nil {
+		_, err = mc.ApplyCallable(thunk)
+		return err
+	}
+	return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "syntax-local-value: no binding for %s", id.Key())
+}
+
 // PrimIdentifierQ implements the identifier? predicate (R6RS).
 // Returns #t if the argument is a syntax object representing an identifier.
 func PrimIdentifierQ(mc machine.CallContext) error {

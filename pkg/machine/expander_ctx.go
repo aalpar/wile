@@ -17,6 +17,7 @@ package machine
 import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // ExpanderCtx abstracts the macro expansion context so that code needing
@@ -28,6 +29,10 @@ type ExpanderCtx interface {
 	Env() *environment.EnvironmentFrame
 	Expand(syntax.SyntaxValue) (syntax.SyntaxValue, error)
 	ExpandOnce(syntax.SyntaxValue) (syntax.SyntaxValue, bool, error)
+	// MacroValue resolves id the way macro dispatch does and returns the value
+	// its BindingTypeSyntax binding holds: a transformer, or a bare compile-time
+	// value. The read side of syntax-local-value.
+	MacroValue(id *syntax.SyntaxSymbol) (values.Value, bool)
 	IntroductionScope() *syntax.Scope
 	SetIntroductionScope(*syntax.Scope)
 	UseSiteScope() *syntax.Scope

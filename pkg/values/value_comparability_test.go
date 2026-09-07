@@ -72,8 +72,8 @@ func TestDeepEqualer_ImplementorsAreGoComparable(t *testing.T) {
 				"as a visited-set key", rt))
 	}
 	// Guard against the roster silently losing every container: a green run over
-	// an empty set proves nothing. Pair, Vector, Record, Box, Hashtable,
-	// CompileTimeValue are the implementors as of this writing.
+	// an empty set proves nothing. Pair, Vector, Record, Box and Hashtable are
+	// the implementors as of this writing.
 	qt.Assert(t, seen >= 4, qt.IsTrue,
 		qt.Commentf("expected the exemplar roster to carry several DeepEqualers, found %d — "+
 			"has allValueExemplars lost its container types?", seen))

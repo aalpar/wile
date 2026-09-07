@@ -482,31 +482,6 @@ func TestExpandOnceErrors(t *testing.T) {
 }
 
 // =============================================================================
-// make-compile-time-value Tests
-// =============================================================================
-
-// TestMakeCompileTimeValue tests the make-compile-time-value primitive
-func TestMakeCompileTimeValue(t *testing.T) {
-	t.Run("make-compile-time-value wraps value", func(t *testing.T) {
-		result, err := testhelpers.RunSchemeCode(t, `(make-compile-time-value 42)`)
-		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, qt.IsNotNil)
-	})
-
-	t.Run("make-compile-time-value wraps string", func(t *testing.T) {
-		result, err := testhelpers.RunSchemeCode(t, `(make-compile-time-value "hello")`)
-		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, qt.IsNotNil)
-	})
-
-	t.Run("make-compile-time-value wraps list", func(t *testing.T) {
-		result, err := testhelpers.RunSchemeCode(t, `(make-compile-time-value '(a b c))`)
-		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, result, qt.IsNotNil)
-	})
-}
-
-// =============================================================================
 // environment Symbol Identity Tests (R7RS §6.5, §6.12)
 // =============================================================================
 

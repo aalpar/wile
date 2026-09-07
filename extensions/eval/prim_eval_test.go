@@ -379,20 +379,6 @@ func TestSyntaxLocalValue(t *testing.T) {
 	})
 }
 
-func TestMakeCompileTimeValue(t *testing.T) {
-	c := qt.New(t)
-	engine := newEngine(t)
-
-	t.Run("create compile time value", func(t *testing.T) {
-		result := eval(t, engine, `(make-compile-time-value 42)`)
-		c.Assert(result.Internal(), qt.IsNotNil)
-	})
-
-	t.Run("wrong argument count", func(t *testing.T) {
-		evalExpectError(t, engine, `(make-compile-time-value)`)
-	})
-}
-
 func TestSyntaxLocalIntroduce(t *testing.T) {
 	engine := newEngine(t)
 

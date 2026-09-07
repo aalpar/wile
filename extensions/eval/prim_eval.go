@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 	"github.com/aalpar/wile/pkg/parser"
+	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/registry/helpers"
 	"github.com/aalpar/wile/pkg/schemeutil"
 	"github.com/aalpar/wile/pkg/security"
@@ -673,85 +674,23 @@ func PrimCompile(mc machine.CallContext) error {
 	return nil
 }
 
-// PrimSyntaxLocalValue implements the syntax-local-value primitive.
-// Retrieves the compile-time value bound to an identifier in the expand phase.
-// (syntax-local-value id) -> value
+// PrimSyntaxLocalValueImmediate implements (syntax-local-value/immediate id
+// [failure-thunk]). Like syntax-local-value but does not chase
+// rename-transformer chains. Wile has no rename-transformers, so this delegates
+// to the core primitive.
 //
-// This primitive can only be called during macro expansion (when an ExpanderContext
-// is set on the MachineContext). It looks up the identifier in the expand phase
-// environment, respecting hygiene scopes.
+// When rename-transformers are implemented, this function must NOT chase the
+// transformer chain — it should return the transformer object directly. At that
+// point core.PrimSyntaxLocalValue and this must diverge.
 //
-// If the binding is a CompileTimeValue, it returns the unwrapped value.
-// This allows define-for-syntax bindings to be accessed from macro transformers.
-func PrimSyntaxLocalValue(cc machine.CallContext) error {
-	mc, err := machine.RequireMachineContext(cc, "syntax-local-value")
-	if err != nil {
-		return err
-	}
-	id := mc.Arg(0)
-
-	syntaxSym, ok := id.(*syntax.SyntaxSymbol)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "syntax-local-value: expected identifier")
-	}
-
-	expanderCtx := mc.ExpanderContext()
-	if expanderCtx == nil {
-		return werr.WrapForeignErrorf(werr.ErrNoCaptureContext, "syntax-local-value: not in expansion context")
-	}
-
-	// Look up in expand phase
-	expandEnv := expanderCtx.Env().Expand()
-	sym := syntaxSym.Datum()
-
-	binding := expandEnv.GetBinding(sym, syntax.ScopesOf(syntaxSym.Scopes()))
-	if binding == nil {
-		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "syntax-local-value: no binding for %s", sym.Key)
-	}
-
-	val := binding.Value()
-
-	// If it's a CompileTimeValue, unwrap it
-	ctv, ok := val.(*values.CompileTimeValue)
-	if ok {
-		val = ctv.Unwrap()
-	}
-
-	mc.SetValue(val)
-	return nil
-}
-
-// PrimSyntaxLocalValueImmediate implements (syntax-local-value/immediate id).
-// Like syntax-local-value but does not chase rename-transformer chains.
-// Wile does not currently have rename-transformers, so this behaves
-// identically to syntax-local-value.
-//
-// When rename-transformers are implemented, this function must NOT chase
-// the transformer chain — it should return the transformer object directly.
-// At that point, PrimSyntaxLocalValue and PrimSyntaxLocalValueImmediate
-// must diverge.
+// It stays a wrapper rather than a second registration of core's function so
+// this extension's primitives are located in this extension: the axis-b manifest
+// records runtime.FuncForPC, and the profile-containment ratchet derives "core's
+// surface" from the pkg/registry/core/ prefix in those locations.
 //
 // Racket §12.4: syntax-local-value/immediate
-func PrimSyntaxLocalValueImmediate(mc machine.CallContext) error {
-	return PrimSyntaxLocalValue(mc)
-}
-
-// PrimMakeCompileTimeValue implements the make-compile-time-value primitive.
-// Wraps a value for compile-time storage.
-// (make-compile-time-value value) -> compile-time-value
-//
-// This creates a CompileTimeValue wrapper around the given value. CompileTimeValue
-// is used to distinguish regular runtime values from values that should be stored
-// in the expand phase and accessed during macro expansion.
-//
-// When syntax-local-value retrieves a CompileTimeValue, it automatically unwraps
-// it to return the underlying value.
-func PrimMakeCompileTimeValue(mc machine.CallContext) error {
-	v := mc.Arg(0)
-
-	ctv := values.NewCompileTimeValue(v)
-	mc.SetValue(ctv)
-	return nil
+func PrimSyntaxLocalValueImmediate(cc machine.CallContext) error {
+	return core.PrimSyntaxLocalValue(cc)
 }
 
 // PrimSyntaxLocalIntroduce implements the syntax-local-introduce primitive.

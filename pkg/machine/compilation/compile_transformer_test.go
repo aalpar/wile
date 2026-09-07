@@ -16,7 +16,6 @@ package compilation
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -24,7 +23,6 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
-	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -128,20 +126,21 @@ func TestCompileTransformerValue_MacroUseExpandsToALambda(t *testing.T) {
 	qt.Assert(t, isClosure, qt.IsTrue, qt.Commentf("%T", result))
 }
 
-// TestCompileTransformerValue_NonProcedureIsRefused: P0.1's admission ladder.
-// A right-hand side that evaluates to a non-procedure is refused HERE, before a
-// slot could hold it; P0.4 lifts this and stores the value bare.
-func TestCompileTransformerValue_NonProcedureIsRefused(t *testing.T) {
+// TestCompileTransformerValue_NonProcedureIsStoredBare (Q4): P0.4 removed the
+// admission ladder P0.1 introduced. A right-hand side that evaluates to a
+// non-procedure comes back as itself, for the caller to store bare; refusing it
+// is the job of whatever tries to USE it as a transformer.
+func TestCompileTransformerValue_NonProcedureIsStoredBare(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	transformerStx := mustDatumToSyntax(sctx, values.NewInteger(42))
 
 	result, err := compileTransformerValue(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
-	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, result, qt.IsNil)
-	qt.Assert(t, errors.Is(err, werr.ErrUnexpectedTransformer), qt.IsTrue, qt.Commentf("%v", err))
-	qt.Assert(t, err.Error(), qt.Contains, "transformer must evaluate to a procedure")
+	qt.Assert(t, err, qt.IsNil)
+	n, ok := result.(*values.Integer)
+	qt.Assert(t, ok, qt.IsTrue, qt.Commentf("%T", result))
+	qt.Assert(t, n.Value, qt.Equals, int64(42))
 }
 
 // TestProceduralMacroExpandTimePath tests that procedural macros work through

@@ -30,8 +30,8 @@
 //
 //   - expand, expand-once: macro-expand a syntax object or datum
 //   - compile: compile an expression to a callable thunk
-//   - syntax-local-value, syntax-local-value/immediate
-//   - make-compile-time-value
+//   - syntax-local-value/immediate (syntax-local-value itself is a core
+//     primitive, registry/core/prim_syntax.go)
 //   - syntax-local-introduce, syntax-local-identifier-as-binding
 //
 // Use [Extension] or [AddToRegistry] to register all primitives.

@@ -942,6 +942,10 @@ func (p *stubExpanderCtx) Expand(syntax.SyntaxValue) (syntax.SyntaxValue, error)
 func (p *stubExpanderCtx) ExpandOnce(syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
 	return nil, false, nil
 }
+func (p *stubExpanderCtx) MacroValue(*syntax.SyntaxSymbol) (values.Value, bool) {
+	return nil, false
+}
+
 func (p *stubExpanderCtx) IntroductionScope() *syntax.Scope   { return nil }
 func (p *stubExpanderCtx) SetIntroductionScope(*syntax.Scope) {}
 func (p *stubExpanderCtx) UseSiteScope() *syntax.Scope        { return nil }

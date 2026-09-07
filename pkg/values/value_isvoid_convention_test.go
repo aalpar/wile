@@ -50,7 +50,6 @@ var allValueExemplars = []Value{
 	(*ByteVector)(nil),
 	(*CharSet)(nil),
 	(*Character)(nil),
-	(*CompileTimeValue)(nil),
 	(*Complex)(nil),
 	(*ConditionVariable)(nil),
 	(*Float)(nil),

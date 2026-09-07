@@ -108,7 +108,6 @@ var knownValueTypes = []string{
 	"*values.Time",
 	"*values.Process",
 	// Advanced / internal-facing
-	"*values.CompileTimeValue",
 	"*values.NativeError",
 	"*values.SourceContext",
 }

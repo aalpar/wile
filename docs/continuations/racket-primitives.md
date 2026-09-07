@@ -327,8 +327,7 @@ compile-time binding manipulation is where gaps remain.
 
 | Primitive | Category | Location |
 |-----------|----------|----------|
-| `syntax-local-value` | Compile-time lookup | `extensions/eval/prim_eval.go` |
-| `make-compile-time-value` | Compile-time values | `extensions/eval/prim_eval.go` |
+| `syntax-local-value` | Compile-time lookup | `registry/core/prim_syntax.go` |
 | `bound-identifier=?` | Scope comparison | `registry/core/syntax.go` |
 | `free-identifier=?` | Binding comparison | `registry/core/syntax.go` |
 | `identifier?` | Predicate | `registry/core/syntax.go` |

@@ -190,13 +190,110 @@ func TestP01_FailedRightHandSideLeavesNoSlot(t *testing.T) {
 	c.Assert(v.SchemeString(), qt.Equals, "ok")
 }
 
-// TestP01_NonProcedureRefusedUntilP04: P0.1 admits a closure or an ER
-// transformer and refuses anything else at the definition site (design §2.2
-// admission ladder). Task 4 flips this test's expectation.
-func TestP01_NonProcedureRefusedUntilP04(t *testing.T) {
+// TestP04_NonProcedureIsACompileTimeValue (Q4): a non-procedure right-hand side
+// is stored bare and read back by syntax-local-value; in operator position it is
+// the existing ErrNotAClosure. Fails on master at the definition site.
+//
+// This replaces TestP01_NonProcedureRefusedUntilP04, which pinned P0.1's
+// admission ladder — the refusal this phase lifts.
+func TestP04_NonProcedureIsACompileTimeValue(t *testing.T) {
 	c := qt.New(t)
-	err := evalSyntaxFormsErr(t, `(define-syntax k 42)`)
-	c.Assert(err, qt.ErrorMatches, `(?s).*transformer must evaluate to a procedure.*`)
+	got := evalSyntaxForms(t, `(define-syntax k 42)
+(define-syntax probe (lambda (stx) (datum->syntax #f (syntax-local-value #'k))))
+(probe)`)
+	c.Assert(got, qt.Equals, "42")
+	err := evalSyntaxFormsErr(t, `(define-syntax k 42) (k)`)
+	c.Assert(err, qt.ErrorMatches, `(?s).*not a closure.*`)
+}
+
+// TestP04_LetSyntaxProbeAtPhase1And2 (design §2.3, measured 2026-09-05 to fail
+// "no binding for pv" at both phases): syntax-local-value resolves through the
+// let-syntax frames the way macro dispatch does.
+func TestP04_LetSyntaxProbeAtPhase1And2(t *testing.T) {
+	c := qt.New(t)
+	tests := []struct {
+		name, src, want string
+	}{
+		{
+			// The body's value is the syntax LITERAL (probe) expands to, which
+			// evaluates to its datum; datum->syntax turns it back into what a
+			// transformer must return.
+			name: "phase 1: let-syntax keyword inside a transformer body",
+			src: `(define-syntax m
+  (lambda (stx)
+    (datum->syntax #f
+      (let-syntax ((pv (lambda (z) z)))
+        (let-syntax ((probe (lambda (w) (if (procedure? (syntax-local-value #'pv)) #'1 #'2))))
+          (probe))))))
+(m)`,
+			want: "1",
+		},
+		{
+			// inner's body is wrapped the way m's is above: the probe's
+			// expansion evaluates to the integer 7, and expandMacroInvocation
+			// refuses a non-syntax transformer result, which Task 2 keeps.
+			name: "phase 2: the same probe inside a transformer inside a transformer",
+			src: `(define-syntax outer
+  (lambda (stx)
+    (define-syntax inner
+      (lambda (s)
+        (datum->syntax #f
+          (let-syntax ((pv 7))
+            (let-syntax ((probe (lambda (w) (datum->syntax #f (syntax-local-value #'pv)))))
+              (probe))))))
+    (datum->syntax #f (inner))))
+(outer)`,
+			want: "7",
+		},
+		{
+			name: "phase 0: top-level let-syntax value",
+			src: `(let-syntax ((k 42))
+  (let-syntax ((probe (lambda (w) (datum->syntax #f (syntax-local-value #'k)))))
+    (probe)))`,
+			want: "42",
+		},
+		{
+			// The thunk's value is a symbol, so the transformer has to quote it:
+			// a bare `none` in the expansion is a variable reference and the
+			// compiler refuses it as an unbound binding.
+			name: "failure thunk",
+			src: `(define-syntax probe3
+  (lambda (w)
+    (datum->syntax #f (list 'quote (syntax-local-value #'nope (lambda () 'none))))))
+(probe3)`,
+			want: "none",
+		},
+		{
+			// expand-once takes a syntax object, not a datum: PrimExpandOnce
+			// refuses anything else before a transformer runs. Through a syntax
+			// argument the nil context ExpandOnce passed on master made this
+			// raise ErrNoCaptureContext (design §2.2); Task 2 handed it the
+			// context.
+			name: "expand-once passes the expander context",
+			src: `(define-syntax k2 42)
+(define-syntax probe2 (lambda (w) (datum->syntax #f (syntax-local-value #'k2))))
+(call-with-values (lambda () (expand-once #'(probe2)))
+  (lambda (stx ok) (syntax->datum stx)))`,
+			want: "42",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(evalSyntaxForms(t, tc.src), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestP04_CompileTimeValueWrapperIsGone: make-compile-time-value and its wrapper
+// are retired (Q4); a define-syntax value reads back bare.
+func TestP04_CompileTimeValueWrapperIsGone(t *testing.T) {
+	c := qt.New(t)
+	err := evalSyntaxFormsErr(t, `(make-compile-time-value 1)`)
+	c.Assert(err, qt.ErrorMatches, `(?s).*make-compile-time-value.*`)
+	got := evalSyntaxForms(t, `(define-syntax cv 9)
+(define-syntax probe (lambda (w) (datum->syntax #f (syntax-local-value #'cv))))
+(probe)`)
+	c.Assert(got, qt.Equals, "9")
 }
 
 // TestP02_LambdaTransformerHygiene: on master a lambda transformer's output gets

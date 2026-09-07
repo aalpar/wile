@@ -285,6 +285,11 @@ func TestLoadBootstrapMacros_EmptySources(t *testing.T) {
 
 // TestLoadBootstrapMacros_InvalidExpansion verifies that source that fails
 // during macro expansion produces an error.
+//
+// The source is a MALFORMED right-hand side, not a non-transformer one:
+// (define-syntax bad 42) became legal in P0.4, which stores a non-procedure
+// bare as a compile-time value readable by syntax-local-value (design Q4). A
+// (let) with no bindings list still fails while the right-hand side expands.
 func TestLoadBootstrapMacros_InvalidExpansion(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
@@ -292,9 +297,8 @@ func TestLoadBootstrapMacros_InvalidExpansion(t *testing.T) {
 	env, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
-	// A define-syntax with a non-transformer value should fail during expansion.
 	err = loadBootstrapMacros(ctx, env, []string{
-		`(define-syntax bad 42)`,
+		`(define-syntax bad (let))`,
 	}, nil)
 	c.Assert(err, qt.IsNotNil)
 }
