@@ -555,35 +555,56 @@ func TestSyntaxLocalValueInMacro(t *testing.T) {
 	})
 }
 
-// TestSyntaxLocalIntroduceIsNotWired pins that syntax-local-introduce FAILS, loudly,
-// because it is not wired to the expander's per-invocation introduction scopes.
+// TestSyntaxLocalIntroduceIsWired pins that syntax-local-introduce FLIPS the
+// invocation's introduction scope, and that the flip is observable rather than a
+// silent no-op.
 //
-// It used to assert the opposite — that the call "succeeds" inside a macro — and it
-// passed for the worst possible reason: nothing in production ever sets the
-// introduction scope, so the primitive read nil, handed the syntax object back
-// UNCHANGED, and reported success. A macro asking it to flip hygiene got a wrong
-// answer that looked like a right one, and the test said that was fine. An assertion
-// of "no error" on a primitive whose failure mode is "silently does nothing" cannot
-// distinguish working from broken.
+// It used to assert the opposite — that the call fails — and before that, that it
+// "succeeds", which passed for the worst possible reason: nothing in production
+// ever set the introduction scope, so the primitive read nil, handed the syntax
+// object back UNCHANGED, and reported success. An assertion of "no error" on a
+// primitive whose failure mode is "silently does nothing" cannot distinguish
+// working from broken, which is why the assertion here is on the VALUE.
 //
-// Wiring it is not a one-liner: each of the three transformer entry points mints its
-// own intro scope per invocation, so there is no single scope for the context to
-// store and flip. When that is fixed, invert this test.
-func TestSyntaxLocalIntroduceIsNotWired(t *testing.T) {
+// P0.2 moved the mint into the kernel: expandMacroInvocation and ExpandOnce mint
+// exactly one intro scope per closure-transformer invocation and put it on the
+// expander context, so there is a single scope to flip. `it` is introduced by the
+// transformer, so it carries that scope; flipping it off makes the binder
+// use-site scoped and the use-site `it` in the body resolves to it.
+func TestSyntaxLocalIntroduceIsWired(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	result, err := engine.EvalMultiple(context.Background(), `
+			(define-syntax anaphoric
+			  (lambda (stx)
+			    (let ((f (syntax->list stx)))
+			      (datum->syntax #f
+			        (list 'let (list (list (syntax-local-introduce (datum->syntax #f 'it)) (cadr f)))
+			              (caddr f))))))
+			(anaphoric 42 it)
+		`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "42",
+		qt.Commentf("without the flip the macro-introduced binder is invisible to the use-site it"))
+}
+
+// TestSyntaxLocalIntroduceRefusesOutsideAClosureTransformer: an ER transformer
+// stays outside the kernel's flip, so the context carries no intro scope and the
+// primitive refuses rather than returning its argument unchanged.
+func TestSyntaxLocalIntroduceRefusesOutsideAClosureTransformer(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
 	_, err := engine.EvalMultiple(context.Background(), `
-			(define-syntax test-introduce
-			  (lambda (stx)
-			    (let ((introduced (syntax-local-introduce (syntax x))))
-			      (syntax #t))))
-			(test-introduce)
+			(define-syntax er-introduce
+			  (er-macro-transformer
+			    (lambda (form rename compare)
+			      (syntax-local-introduce (datum->syntax #f 'it)))))
+			(er-introduce)
 		`)
-	c.Assert(err, qt.IsNotNil,
-		qt.Commentf("syntax-local-introduce must report that it cannot flip hygiene, "+
-			"not silently return its argument unchanged"))
-	c.Assert(err.Error(), qt.Contains, "not wired")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "no closure transformer is running")
 }
 
 // TestSyntaxLocalIdentifierAsBindingInMacro covers PrimSyntaxLocalIdentifierAsBinding

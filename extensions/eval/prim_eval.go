@@ -755,21 +755,18 @@ func PrimMakeCompileTimeValue(mc machine.CallContext) error {
 }
 
 // PrimSyntaxLocalIntroduce implements the syntax-local-introduce primitive.
-// (syntax-local-introduce stx) -> error
-//
-// NOT IMPLEMENTED: this primitive is registered and callable but always fails
-// with werr.ErrNotImplemented. The scope-flipping branch below is unreachable
-// because ExpanderContext.IntroductionScope() is never set — see the comment at
-// the nil check for why wiring it is not a one-liner.
-//
-// It is kept registered, rather than deleted, so that a program calling it gets
-// a diagnosis instead of an unbound-variable error, and so the intended
-// semantics stay documented in one place:
+// (syntax-local-introduce stx) -> stx with the introduction scope flipped.
 //
 // Flipping the "introduction scope" on a syntax object makes a
 // macro-introduced identifier behave as if it came from the macro use site (or
 // vice versa) — the mechanism behind anaphoric macros, use-site-visible
 // bindings, and syntax-parameterize.
+//
+// The scope it flips is the ONE the kernel mints around every closure
+// transformer invocation (expandMacroInvocation and ExpandOnce, P0.2), which is
+// what makes this wirable at all: before the flip moved into the kernel, each of
+// the three transformer entry points minted its own scope per invocation and
+// there was no single scope for the context to carry.
 func PrimSyntaxLocalIntroduce(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "syntax-local-introduce")
 	if err != nil {
@@ -789,21 +786,13 @@ func PrimSyntaxLocalIntroduce(cc machine.CallContext) error {
 
 	introScope := expanderCtx.IntroductionScope()
 	if introScope == nil {
-		// Fail loudly. Nothing in production ever calls SetIntroductionScope, so this
-		// scope is ALWAYS nil and this primitive was a silent no-op: it handed back
-		// the syntax object unchanged and reported success, so a macro relying on it
-		// to flip hygiene got a wrong answer that looked like a right one.
-		//
-		// Returning the input is the worst of the three options. Wiring the scope is
-		// not a one-liner either: each of the three transformer entry points mints its
-		// OWN intro scope per invocation (expander_time_continuation, the syntax-rules
-		// transform op, and syntax-case), so "store one scope on the context and flip
-		// it" cannot be correct — there is no single scope to store. Until the context
-		// carries the invocation's actual scope, say so instead of lying.
-		return werr.WrapForeignErrorf(werr.ErrNotImplemented,
-			"syntax-local-introduce: no introduction scope is available on the expander "+
-				"context; this primitive is not wired to the per-invocation intro scopes "+
-				"and cannot flip hygiene")
+		// A context with no intro scope means no CLOSURE transformer is running:
+		// an ER transformer, which stays outside the kernel's flip. A call from
+		// outside expansion altogether is the expanderCtx == nil arm above, not
+		// this one. Returning the input unchanged would be the wrong answer that
+		// looks like a right one, so refuse.
+		return werr.WrapForeignErrorf(werr.ErrNoCaptureContext,
+			"syntax-local-introduce: no closure transformer is running (ER transformer)")
 	}
 
 	// Flip the scope on the syntax object

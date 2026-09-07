@@ -319,10 +319,9 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *machine.MachineContext) (*mach
 		// Try to match the pattern with R7RS binding checking
 		err := matcher.MatchWithBindingChecker(mc.Context(), input, bindingChecker)
 		if err == nil {
-			// Create a fresh scope for this macro invocation
-			// This prevents variable capture between the macro and its use site
-			introScope := syntax.NewScopeWithLabel("intro")
-
+			// The intro scope is the kernel's (expandMacroInvocation, P0.2); a
+			// second one here would stack on it.
+			//
 			// Convert freeIds to match.FreeIdResolver map
 			freeIds := make(map[string]match.FreeIdResolver, len(clause.FreeIds))
 			for k, v := range clause.FreeIds {
@@ -330,7 +329,6 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *machine.MachineContext) (*mach
 			}
 
 			expanded, err := matcher.Expand(clause.Template, match.ExpandOptions{
-				IntroScope:       introScope,
 				FreeIds:          freeIds,
 				UseSiteCtx:       useSiteCtx,
 				Origin:           origin,

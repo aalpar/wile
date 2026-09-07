@@ -379,7 +379,7 @@ Syntax objects are AST nodes decorated with binding information. Each parsed for
 
 ### Alpha-Equivalence and the Variable Convention (Barendregt 1984)
 
-Wile's scope sets address the same problem as Barendregt's variable convention (choosing bound variable names to avoid capture). Where alpha-conversion renames variables, scope sets tag identifiers with their binding context. Two identifiers with the same name but different scope sets are effectively alpha-inequivalent. The bidirectional subset check in `scopesCompatibleForSubstitution` is the scope-set analog of alpha-equivalence.
+Wile's scope sets address the same problem as Barendregt's variable convention (choosing bound variable names to avoid capture). Where alpha-conversion renames variables, scope sets tag identifiers with their binding context. Two identifiers with the same name but different scope sets are effectively alpha-inequivalent. The subset check in `TemplateDenotesPatternVariable` (`pkg/internal/match/syntax_expand.go`) is the scope-set analog of alpha-equivalence.
 
 - **Book**: Henk P. Barendregt, *The Lambda Calculus: Its Syntax and Semantics*, revised edition, Studies in Logic, Vol. 103, North-Holland, 1984
 - **ISBN**: 978-0-444-87508-2

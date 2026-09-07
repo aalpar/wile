@@ -196,3 +196,110 @@ func TestP01_NonProcedureRefusedUntilP04(t *testing.T) {
 	err := evalSyntaxFormsErr(t, `(define-syntax k 42)`)
 	c.Assert(err, qt.ErrorMatches, `(?s).*transformer must evaluate to a procedure.*`)
 }
+
+// TestP02_LambdaTransformerHygiene: on master a lambda transformer's output gets
+// no intro scope at all (only the two Go transform sites and the ER rename
+// closure mint one), so a datum->syntax #f binder captures a same-named use-site
+// reference: the expected 5 comes back as #f. The kernel flip (design §2.2) is
+// what fixes it.
+func TestP02_LambdaTransformerHygiene(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(define-syntax my-or2
+  (lambda (stx)
+    (let ((f (syntax->list stx)))
+      (datum->syntax #f
+        (list 'let (list (list 'tmp (cadr f)))
+              (list 'if 'tmp 'tmp (caddr f)))))))
+(define tmp 5)
+(my-or2 #f tmp)`)
+	c.Assert(got, qt.Equals, "5")
+}
+
+// TestP02_FreshnessAcrossInvocations (design §6 Freshness): a lambda transformer
+// expanding to an internal define of a datum->syntax-made name, used twice in
+// one body, must not collide — each invocation's flip gives the binder its own
+// scope, so the two defines land in two distinct body slots. Each expansion also
+// defines a user-named getter over the binder,
+// which is what makes the collision observable: a bare `'ok` assertion passes on
+// master, because a duplicate internal define is accepted silently. On master
+// both binders are ∅-scoped, the second define wins both getters, and the answer
+// is (2 2).
+func TestP02_FreshnessAcrossInvocations(t *testing.T) {
+	c := qt.New(t)
+	src := `(define-syntax mk-def
+  (lambda (stx)
+    (let ((f (syntax->list stx)))
+      (datum->syntax #f
+        (list 'begin
+              (list 'define 'tmp (caddr f))
+              (list 'define (list (cadr f)) 'tmp))))))
+(define (body) (mk-def g1 1) (mk-def g2 2) (list (g1) (g2)))
+(body)`
+	c.Assert(evalSyntaxForms(t, src), qt.Equals, "(1 2)")
+}
+
+// TestP02_NestedMacroThroughLambdaTransformer — GUARD: a lambda transformer that
+// expands to a syntax-rules macro use; swap!'s tmp and the user's tmp stay apart
+// with the Go matcher's intro scope gone (Q9) and the kernel's in its place.
+func TestP02_NestedMacroThroughLambdaTransformer(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(define-syntax swap!
+  (syntax-rules () ((_ a b) (let ((tmp a)) (set! a b) (set! b tmp)))))
+(define-syntax swap-via
+  (lambda (stx)
+    (let ((f (syntax->list stx)))
+      (datum->syntax #f (list 'swap! (cadr f) (caddr f))))))
+(let ((tmp 1) (y 2)) (swap-via tmp y) (list tmp y))`)
+	c.Assert(got, qt.Equals, "(2 1)")
+}
+
+// TestP02_ExpandOnceMirrorsTheLoop — GUARD on the shape; the context-passing
+// half of ExpandOnce is pinned in Task 4 where it becomes observable.
+// `expand-once` rejects a non-syntax argument before any transformer runs
+// (`PrimExpandOnce`, `extensions/eval/prim_eval.go`), so the input is a
+// syntax object, not a quoted datum.
+func TestP02_ExpandOnceMirrorsTheLoop(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(define-syntax my-or2
+  (lambda (stx)
+    (let ((f (syntax->list stx)))
+      (datum->syntax #f
+        (list 'let (list (list 'tmp (cadr f)))
+              (list 'if 'tmp 'tmp (caddr f)))))))
+(call-with-values (lambda () (expand-once (datum->syntax #f '(my-or2 #f 1))))
+  (lambda (stx ok) (list (syntax->datum stx) ok)))`)
+	c.Assert(got, qt.Equals, "((let ((tmp #f)) (if tmp tmp 1)) #t)")
+}
+
+// TestP02_SyntaxLocalIntroduceIsWired: the expander context now carries the
+// invocation's intro scope, so syntax-local-introduce flips it instead of
+// raising not-implemented. Fails on master with ErrNotImplemented.
+func TestP02_SyntaxLocalIntroduceIsWired(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(define-syntax anaphoric
+  (lambda (stx)
+    (let ((f (syntax->list stx)))
+      (datum->syntax #f
+        (list 'let (list (list (syntax-local-introduce (datum->syntax #f 'it)) (cadr f)))
+              (caddr f))))))
+(anaphoric 42 it)`)
+	c.Assert(got, qt.Equals, "42")
+}
+
+// TestP02_AifSurvivesTheFlip — GUARD (§0 F6): datum->syntax already copies the
+// template's scopes on master, so a `(car f)` template puts the invocation's
+// intro scope on `it` and the flip takes it off again; the anaphoric capture
+// must come through P0.2 unchanged. Uses master primitives only, so it compiles
+// on this branch. Passes on master and must keep passing here — P0.2 is the one
+// phase that could break it, so the guard lives here rather than in Task 5.
+func TestP02_AifSurvivesTheFlip(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(define-syntax aif
+  (lambda (stx)
+    (let ((f (syntax->list stx)))
+      (datum->syntax (car f)
+        (list (datum->syntax #'aif 'let) (list (list 'it (cadr f)))
+              (list (datum->syntax #'aif 'if) 'it (caddr f) (cadddr f)))))))
+(list (aif 42 it 'no) (aif #f it 'no))`)
+	c.Assert(got, qt.Equals, "(42 no)")
+}

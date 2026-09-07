@@ -524,6 +524,25 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 	// where the scope has to come off again.
 	inputForm := p.withUseSiteScope(syntax.NewSyntaxCons(sym, expr, sym.SourceContext()))
 
+	// Flatt's introduction step (design §2.2): a fresh scope goes onto the WHOLE
+	// input, the transformer runs, and the scope is flipped on the output.
+	// Identifiers that came in through the input carry it and lose it on the
+	// flip; identifiers the transformer introduced gain it. One mechanism gives
+	// every closure transformer hygiene and per-invocation freshness of
+	// datum->syntax binders, including the Scheme-specified forms P1 adds, which
+	// manipulate no scopes themselves. From here on the Go syntax-rules and
+	// syntax-case transforms pass a nil intro scope of their own (Q9), so a
+	// closure transformer sees exactly one. ER stays outside the flip until P2:
+	// expandMacroInvocation returned into expandERMacroInvocation above, and
+	// invokeERTransformer's UnwrapAll hands back pass-through identifiers
+	// re-wrapped with the keyword's use-site context (no intro scope), which a
+	// flip would stamp.
+	//
+	// Order with use-site scopes: use-site added, intro added, invoke, intro
+	// flipped, use-site pruned.
+	introScope := syntax.NewScopeWithLabel("intro")
+	inputForm = syntax.AddScopeToSyntax(inputForm, introScope)
+
 	// Set up the expander context so the transformer can access the use-site environment.
 	// This is critical for R7RS §4.3.2 auxiliary syntax hygiene: the pattern matcher
 	// needs to check if input identifiers have lexical bindings at the use site.
@@ -531,6 +550,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 	// to see that the lambda binds => (from let expansion) to correctly
 	// determine that it shouldn't match the literal => in cond's pattern.
 	expanderCtx := NewExpanderContext(p.env, p)
+	expanderCtx.SetIntroductionScope(introScope)
 
 	mc, err := p.evaluator.InvokeTransformer(p.ctx, cls, expanderCtx, inputForm)
 	if err != nil {
@@ -550,10 +570,14 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 	// expand it.
 	stx, ok := result.(syntax.SyntaxValue)
 	if ok {
-		// Strip this run's use-site scopes from any binder the output defines,
-		// before re-expansion carries the form further. Every macro output passes
-		// this one point, so a definition that only surfaces after several
-		// expansions is pruned at its own level. Identity while nothing mints.
+		// Flip the introduction scope off everything that came in through the
+		// input and onto everything the transformer introduced (see the mint
+		// above). Then strip this run's use-site scopes from any binder the
+		// output defines, before re-expansion carries the form further. Every
+		// macro output passes this one point, so a definition that only surfaces
+		// after several expansions is pruned at its own level. Identity while
+		// nothing mints.
+		stx = syntax.FlipScope(stx, introScope)
 		stx = p.pruneUseSiteScopes(stx)
 		// Recursively expand the result to handle nested macro calls
 		return p.ExpandExpression(stx)
@@ -707,14 +731,22 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 		return nil, false, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotAClosure, "not a closure: %T", bnd.Value()))
 	}
 
-	// Stamped and pruned exactly as expandMacroInvocation does. This site is a
-	// hand-copy of that one — its own comment above records a defect from the last
-	// time the two diverged — and expand-once exists to show what one expansion
-	// step produces, so an unstamped result here would be a lie about the real
-	// path rather than a saving.
+	// Stamped, flipped and pruned exactly as expandMacroInvocation does, and
+	// handed the same context. This site is a hand-copy of that one — its own
+	// comment above records a defect from the last time the two diverged — and
+	// expand-once exists to show what one expansion step produces, so an
+	// unstamped result here would be a lie about the real path rather than a
+	// saving. After P0.4 and P0.5 a transformer reads the context from
+	// syntax-local-value and free-identifier=?, and a nil here made single-step
+	// expansion diverge from the loop.
 	inputForm := p.withUseSiteScope(syntax.NewSyntaxCons(sym, cdr, sym.SourceContext()))
+	introScope := syntax.NewScopeWithLabel("intro")
+	inputForm = syntax.AddScopeToSyntax(inputForm, introScope)
 
-	mc, err := p.evaluator.InvokeTransformer(p.ctx, cls, nil, inputForm)
+	expanderCtx := NewExpanderContext(p.env, p)
+	expanderCtx.SetIntroductionScope(introScope)
+
+	mc, err := p.evaluator.InvokeTransformer(p.ctx, cls, expanderCtx, inputForm)
 	if err != nil {
 		return nil, false, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(err, "expand-once: transformer invocation failed"))
 	}
@@ -729,7 +761,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	// Return the result WITHOUT recursive expansion
 	stx, ok := result.(syntax.SyntaxValue)
 	if ok {
-		return p.pruneUseSiteScopes(stx), true, nil
+		return p.pruneUseSiteScopes(syntax.FlipScope(stx, introScope)), true, nil
 	}
 
 	return nil, false, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxValue, "syntax transformer returned non-syntax value: %T", result))

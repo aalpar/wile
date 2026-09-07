@@ -477,19 +477,20 @@ func (p *OperationSyntaxTemplateExpand) Apply(mc *machine.MachineContext) (*mach
 	}
 
 	// Expand the template using the matcher (handles ellipsis). Mirror the
-	// syntax-rules transformer (OperationSyntaxRulesTransform.Apply): a fresh
-	// intro scope per expansion, plus the compile-time free-id and pattern-var
-	// hygiene data. This makes the ellipsis path hygienic (R7RS §4.3) — the
-	// non-ellipsis path achieves the same by emitting template symbols as
-	// def-site-scoped literals. UseSiteCtx/Origin are intentionally nil:
-	// syntax-case has no single macro-invocation use-site.
-	introScope := syntax.NewScopeWithLabel("intro")
+	// syntax-rules transformer (OperationSyntaxRulesTransform.Apply): the
+	// compile-time free-id and pattern-var hygiene data. This makes the ellipsis
+	// path hygienic (R7RS §4.3) — the non-ellipsis path achieves the same by
+	// emitting template symbols as def-site-scoped literals. UseSiteCtx/Origin
+	// are intentionally nil: syntax-case has no single macro-invocation use-site.
+	//
+	// No intro scope of its own (Q9): the enclosing transformer invocation minted
+	// one and the kernel flips it on the output (expandMacroInvocation, P0.2), so
+	// a second scope here would stack on it.
 	freeIds := make(map[string]match.FreeIdResolver, len(p.FreeIds))
 	for k, v := range p.FreeIds {
 		freeIds[k] = v
 	}
 	expanded, err := sc.matcher.Expand(template, match.ExpandOptions{
-		IntroScope:       introScope,
 		FreeIds:          freeIds,
 		PatternVarSyntax: p.PatternVarSyntax,
 	})
