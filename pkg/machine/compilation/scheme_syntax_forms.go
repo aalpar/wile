@@ -37,8 +37,11 @@ import (
 // TestSchemeSyntaxFormsCoverExpanderRows keeps the slice, the expander table,
 // and the Scheme file in step.
 //
-// P1: the six below. P2 appends "syntax-rules" and "er-macro-transformer". P3
-// deletes this file with the rows.
+// P1 took the six shape forms; P2 added the two transformer PRODUCERS, so with
+// the layer on every macro in the tree — bootstrap, stdlib and user alike —
+// expands through Scheme. That is also why the layer is still opt-in: see
+// newEngineConfig in pkg/wile/options.go for the startup cost of making it the
+// default. P3 deletes this file with the rows.
 var schemeSyntaxFormNames = []string{
 	"syntax-case",
 	"syntax",
@@ -46,6 +49,8 @@ var schemeSyntaxFormNames = []string{
 	"quasisyntax",
 	"unsyntax",
 	"unsyntax-splicing",
+	TransformerSyntaxRules,
+	TransformerERMacro,
 }
 
 // SchemeSyntaxFormNames returns a copy of the Scheme-specified form names.

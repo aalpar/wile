@@ -668,3 +668,83 @@
                 (list %k-datum->syntax #f (cons %k-list exprs))
                 '()
                 (list pats (cons %k-let (cons '() body)))))))))
+
+;;; ---- syntax-rules (R6RS §12.4 derivation; R7RS additions, design §3.4) ----
+
+;; One clause: (pattern template) => (pattern' (%syntax/ellipsis ell template)).
+;; The keyword position is replaced by _ rather than read (R7RS §4.3.2: "the
+;; keyword ... is not involved in the matching"), which is also what lets a
+;; clause name the macro, or anything else, in that slot.
+(define (%syntax-rules-clause c ell)
+  (let ((l (syntax->list c)))
+    (if (if l (eqv? (length l) 2) #f)
+        #f
+        (%syntax-violation 'syntax-rules "clause must be (pattern template)" c))
+    (let ((pat (car l)) (tmpl (car (cdr l))))
+      (if (syntax-pair? pat)
+          #f
+          (%syntax-violation 'syntax-rules "pattern must be a list" pat))
+      (list (cons %k-underscore (syntax-cdr pat))
+            (list %k-syntax/e ell tmpl)))))
+
+;; %syntax-rules-transform: (syntax-rules (lit ...) (pat tmpl) ...), and the
+;; R7RS custom-ellipsis form (syntax-rules ellipsis (lit ...) (pat tmpl) ...),
+;; to
+;;   (lambda (x)
+;;     (%syntax-case/ellipsis ellipsis x (lit ...)
+;;       (pat' (%syntax/ellipsis ellipsis tmpl)) ...))
+;;
+;; Threading the ellipsis into BOTH halves is what makes a custom ellipsis one
+;; parameter rather than a second walker (design Q7), and it is why a literal
+;; `...` under a custom ellipsis needs no (... ...) escape.
+(define (%syntax-rules-transform form)
+  (let ((parts (syntax->list form)))
+    (if (if parts (null? (cdr parts)) #t)
+        (%syntax-violation 'syntax-rules "expected (syntax-rules (literal ...) (pattern template) ...)" form)
+        #f)
+    (let* ((custom? (identifier? (car (cdr parts))))
+           (ell (if custom? (car (cdr parts)) (quote-syntax ...)))
+           (rest (if custom? (cdr (cdr parts)) (cdr parts)))
+           (x (%fresh)))
+      (if (null? rest)
+          (%syntax-violation 'syntax-rules "missing literals list after the ellipsis identifier" form)
+          #f)
+      (datum->syntax form
+        (list %k-lambda (list x)
+              (cons %k-syntax-case/e
+                    (cons ell
+                          (cons x
+                                (cons (car rest)
+                                      (%map1 (lambda (c) (%syntax-rules-clause c ell))
+                                             (cdr rest)))))))))))
+
+
+;;; ---- er-macro-transformer support (design §3.5) ----
+
+;; %er-proc: the checked PROC of an (er-macro-transformer PROC), returned so the
+;; shim can bind it in a let. Two jobs the Go path did at the DEFINITION site
+;; and the shim would otherwise defer to the macro's first use
+;; (compile_transformer_forms.go: the *MachineClosure cast, then
+;; AcceptsArity(3)) — refuse a non-procedure, and refuse one that cannot be
+;; called as (form rename compare). Binding the result is the second half: the
+;; operand is then evaluated once, when the transformer is built, rather than on
+;; every invocation, which is what the Go path did and what a PROC with an
+;; effect or captured state needs.
+;;
+;; procedure-arity reports three shapes: an exact integer for a fixed arity, an
+;; improper (MIN . #f) for a variadic one, and a PROPER list of clause arities
+;; for a case-lambda. The first two answer the question; a case-lambda is
+;; accepted whatever its clauses, which is the lenient direction and the one
+;; that cannot refuse a working macro. The two are told apart by the cdr: #f for
+;; the variadic shape, a list — () included, which is true — for the other.
+(define (%er-proc p stx)
+  (if (procedure? p)
+      #f
+      (%syntax-violation 'er-macro-transformer "expected a procedure" stx))
+  (let ((a (procedure-arity p)))
+    (if (if (pair? a)
+            (if (cdr a) #t (<= (car a) 3))
+            (if (integer? a) (eqv? a 3) #t))
+        p
+        (%syntax-violation 'er-macro-transformer
+                           "PROC must accept 3 arguments (form rename compare)" stx))))

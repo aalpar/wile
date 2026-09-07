@@ -9,7 +9,13 @@
           (list (rename 'if) #f #f)
           (let ((clause (cadr form))
                 (rest (cddr form)))
-            (if (and (symbol? (car clause))
+            ;; The clause head is an identifier under the Scheme syntax layer
+            ;; (the ER form is a spine: pairs plain, identifiers kept) and a
+            ;; plain symbol under the Go one, so neither predicate alone holds
+            ;; on both. The gate is load-bearing either way: a non-identifier
+            ;; head (#t in (#t 'first)) must not reach compare, which requires
+            ;; two identifiers.
+            (if (and (or (symbol? (car clause)) (identifier? (car clause)))
                      (compare (car clause) (rename 'else)))
                 ;; else clause: (begin body ...)
                 (cons (rename 'begin) (cdr clause))

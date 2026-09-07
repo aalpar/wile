@@ -154,5 +154,44 @@
       (let ((and x))
         and))))
 
+;; ── syntax-rules surface beyond the R6RS derivation ──────────────
+;; R7RS §4.3.2 adds four shapes to the R6RS syntax-rules: a custom ellipsis
+;; identifier, `...` as a pattern LITERAL, `_` as a wildcard, and the
+;; (... TEMPLATE) escape. The keyword position being ignored is §4.3.2 as well.
+;; These are conformance rows, not layer rows: they hold under both the Go and
+;; the Scheme syntax layers, and Wile's syntax-rules is specified in Scheme
+;; (pkg/registry/core/bootstrap_syntax*.scm) under WILE_SYNTAX_FORMS=scheme.
+
+(test-group "syntax-rules surface (R7RS 4.3.2)"
+  ;; custom ellipsis, and ... as an ordinary identifier under it
+  (test '(1 2 3 ...)
+    (let ()
+      (define-syntax m-ell (syntax-rules ::: () ((_ x :::) (list x ::: '...))))
+      (m-ell 1 2 3)))
+
+  ;; ... in the literals list is a literal, not the ellipsis
+  (test '(1 2)
+    (let ()
+      (define-syntax m-lit-ell (syntax-rules (...) ((_ ...) 1) ((_ x) 2)))
+      (list (m-lit-ell ...) (m-lit-ell 5))))
+
+  ;; _ matches without binding
+  (test 2
+    (let ()
+      (define-syntax m-under (syntax-rules () ((_ _ x _) x)))
+      (m-under 1 2 3)))
+
+  ;; (... ...) escapes an ellipsis in a template
+  (test '(a ...)
+    (let ()
+      (define-syntax m-esc (syntax-rules () ((_ x) '(x (... ...)))))
+      (m-esc a)))
+
+  ;; the pattern's first element is ignored — it need not name the macro
+  (test 'ok
+    (let ()
+      (define-syntax m-kw (syntax-rules () ((anything-here) 'ok)))
+      (m-kw))))
+
 (test-end)
 (test-exit)

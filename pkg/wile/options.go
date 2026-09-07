@@ -85,12 +85,21 @@ func newEngineConfig() *engineConfig {
 		// The syntax-layer default comes from the environment so a whole test
 		// suite can be run both ways without touching a call site; read once
 		// per engine, and removed with the switch in P3.
+		//
+		// The Scheme layer stays OPT-IN through P2. Flipping it costs 31x
+		// startup — 5.96 ms/engine and 87k allocations become 186 ms and 1.9M,
+		// because every macro in the tree then compiles a generated matcher at
+		// bootstrap, ~1 ms per syntax-rules CLAUSE (measured 2026-09-07,
+		// interleaved BenchmarkEngineStartup). The flip is one character here;
+		// what it waits on is a cheaper pattern representation or a
+		// pre-compiled bootstrap, not more of this arc.
 		schemeSyntaxForms: os.Getenv(schemeSyntaxFormsEnv) == "scheme",
 	}
 }
 
 // schemeSyntaxFormsEnv names the transitional environment variable that selects
-// the syntax layer: "scheme" or "go". Removed with the switch in P3.
+// the syntax layer: "scheme" or "go", defaulting to "go". Removed with the
+// switch in P3.
 const schemeSyntaxFormsEnv = "WILE_SYNTAX_FORMS"
 
 type engineConfig struct {
@@ -596,11 +605,12 @@ func WithMutableTopLevel() EngineOption {
 }
 
 // WithSchemeSyntaxForms selects the Scheme-specified syntax forms (syntax-case,
-// syntax, with-syntax, quasisyntax, unsyntax, unsyntax-splicing; from P2 also
-// syntax-rules and er-macro-transformer) in place of their Go implementations:
-// the two bootstrap_syntax*.scm sources load first and the Go expander rows for
-// those names are skipped, on the NAMESPACE's registry so library environments
-// follow. Transitional (P1-P3). The default comes from WILE_SYNTAX_FORMS
+// syntax, with-syntax, quasisyntax, unsyntax, unsyntax-splicing, syntax-rules
+// and er-macro-transformer) in place of their Go implementations: the two
+// bootstrap_syntax*.scm sources load first and the Go expander rows for those
+// names are skipped, on the NAMESPACE's registry so library environments
+// follow. Opt-in through P2 — see newEngineConfig for the startup cost that
+// keeps it so. Transitional (P1-P3). The default comes from WILE_SYNTAX_FORMS
 // (scheme | go), read once per NewEngine.
 func WithSchemeSyntaxForms() EngineOption {
 	return namespaceConsumedOption(func(cfg *engineConfig) {
@@ -609,7 +619,8 @@ func WithSchemeSyntaxForms() EngineOption {
 }
 
 // WithGoSyntaxForms selects the Go syntax forms; the inverse of
-// WithSchemeSyntaxForms.
+// WithSchemeSyntaxForms, and the default. The Go implementations are deleted in
+// P3, which takes this option with them.
 func WithGoSyntaxForms() EngineOption {
 	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.schemeSyntaxForms = false

@@ -28,3 +28,18 @@
       (if (compare (cadr form) (rename 'magic))
           (list (rename 'quote) 'found-magic)
           (list (rename 'quote) 'not-magic)))))
+
+;; er-contract: reports (identifier? symbol?) of the first form element, so a
+;; caller can read what shape the proc receives across a LIBRARY boundary — the
+;; one path on which the form leaves the engine's own namespace.
+;;
+;; The answer is layer-specific: (#t #f) under the Scheme syntax forms, where the
+;; form is a spine with identifier leaves kept (design Q6), and (#f #t) under the
+;; Go ones, which hand the proc a fully unwrapped s-expression. So the assertion
+;; is TestP2_ERContractCrossLibrary in pkg/wile, which selects the layer, and not
+;; a row in integration/testdata/er_macro_cross_library.scm, which must stay green
+;; under both.
+(define-syntax er-contract
+  (er-macro-transformer
+    (lambda (form rename compare)
+      (list (rename 'list) (identifier? (cadr form)) (symbol? (cadr form))))))

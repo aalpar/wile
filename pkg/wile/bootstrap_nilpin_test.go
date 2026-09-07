@@ -82,9 +82,21 @@ type nilPin struct {
 // under a fuller profile) must be narrow and commented, not a broad skip.
 //
 // Run with -v to see the full census, including the inert entries.
+// The layer is pinned to Go because the census reads a Go artifact:
+// ClausesFromClosure recovers clauses only from a closure carrying a
+// *ClausesWrapper literal, which is what the Go syntax-rules producer builds.
+// Under WithSchemeSyntaxForms every bootstrap transformer is an ordinary
+// MachineClosure, the walk finds nothing, and macroCount == 0 trips the Fatalf
+// below — correctly, since there is then no free-identifier snapshot to certify.
+// The Scheme layer's hygiene rests on a DIFFERENT mechanism (quote-syntax
+// constants pinned in bootstrap_syntax_procedures.scm), and the property this
+// census exists to protect — R7RS §4.3.2, a use-site redefinition must not
+// capture a bootstrap template's referent — is certified for both layers by
+// TestBootstrapMacrosResistUseSiteCapture. Retire this census with the Go
+// producer in P3, not before.
 func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 	ctx := context.Background()
-	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithGoSyntaxForms())
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
@@ -201,4 +213,48 @@ func collectNilPins(t *testing.T, env, expandEnv *environment.EnvironmentFrame) 
 		t.Fatalf("no syntax-rules macros found — the walk is broken, not the bootstrap")
 	}
 	return q
+}
+
+// TestBootstrapMacrosResistUseSiteCapture is the behaviour twin of the census
+// above, and unlike the census it holds on BOTH syntax layers: each row names a
+// bootstrap macro and the late-bound referent its template pins (unless -> not,
+// guard -> guard-aux / with-exception-handler, case -> memv, define-record-type
+// -> define-record-type-impl). A use-site redefinition of the referent must not
+// capture it (R7RS §4.3.2). WithMutableTopLevel so the redefinition is legal.
+//
+// The guard-aux row is multi-clause on purpose: with a single (#t …) clause the
+// guard-aux self-reference sits in the dead else branch of the expansion and the
+// row cannot see a captured self-reference — the shape that masked the gap the
+// free-template-id back-patch closed (memory free-template-id-hygiene-shipped,
+// trap 2). Do not re-simplify it.
+func TestBootstrapMacrosResistUseSiteCapture(t *testing.T) {
+	tests := []struct {
+		name, src, want string
+	}{
+		{"unless -> not", `(define (not x) 'captured) (unless #f 'ok)`, "ok"},
+		{"case -> memv", `(define (memv . a) 'captured) (case 1 ((1) 'one) (else 'other))`, "one"},
+		{"guard -> guard-aux", `(define-syntax guard-aux (syntax-rules () ((_ . a) 'hijacked)))
+(guard (e ((eq? e 'y) 'wrong) (#t 'caught)) (raise 'x))`, "caught"},
+		{"guard -> with-exception-handler", `(define (with-exception-handler . a) 'captured)
+(guard (e (#t 'caught)) (raise 'x))`, "caught"},
+		{"define-record-type -> define-record-type-impl", `(define-syntax define-record-type-impl (syntax-rules () ((_ . a) (define hijacked 1))))
+(define-record-type p (mk x) p? (x px))
+(px (mk 4))`, "4"},
+	}
+	for _, tc := range tests {
+		for _, layer := range []struct {
+			name string
+			opt  wile.EngineOption
+		}{
+			{"go", wile.WithGoSyntaxForms()},
+			{"scheme", wile.WithSchemeSyntaxForms()},
+		} {
+			t.Run(tc.name+"/"+layer.name, func(t *testing.T) {
+				got := evalSyntaxForms(t, tc.src, wile.WithMutableTopLevel(), layer.opt)
+				if got != tc.want {
+					t.Errorf("got %s, want %s", got, tc.want)
+				}
+			})
+		}
+	}
 }

@@ -4,9 +4,17 @@
 ;;; One-line shells over the generators in bootstrap_syntax_procedures.scm. Each
 ;;; form carries a docstring derived from its specialforms.go row (prose extended
 ;;; to the shapes the Scheme layer adds; the two %…/ellipsis forms have no row
-;;; and get a new docstring in the same shape);
-;;; ,doc reads it from the binding (BindingMeta.Doc), so the rows go in P4. Loaded as the
-;;; second macro source, before bootstrap_macros.scm.
+;;; and get a new docstring in the same shape). Loaded as the second macro
+;;; source, before bootstrap_macros.scm.
+;;;
+;;; ,doc does NOT yet read these: measured 2026-09-07 under the layer,
+;;; `,doc syntax-rules` prints the specialforms.go text, because cmdDoc reaches
+;;; the registry row for a name that has one and the row wins. The docstrings
+;;; here become visible when P4 deletes the eight rows — which is also when a
+;;; row's ApplyDocs pass would otherwise overwrite the macro's own docstring.
+;;; Six of the eight are still accurate for the DEFAULT layer, so nothing
+;;; user-visible is wrong today; er-macro-transformer's row describes the Go
+;;; form contract, which is the one the default serves.
 
 (define-syntax syntax-case
   "Pattern-matching macro transformer (R6RS §12.4). Each clause is
@@ -106,3 +114,46 @@ Syntax: (unsyntax-splicing EXPRESSION) or #,@EXPRESSION
 Category: macros"
   (lambda (x)
     (%syntax-violation 'unsyntax-splicing "not in quasisyntax context" x)))
+
+(define-syntax syntax-rules
+  "Defines a pattern-based macro transformer: each clause is (PATTERN TEMPLATE)
+and the first pattern matching the macro use selects its template. The
+pattern's first element is ignored. Identifiers in the LITERAL list match by
+free-identifier=?; _ matches anything; ... (or ELLIPSIS when given) marks
+repetition; (... ...) escapes an ellipsis in a template. R7RS §4.3.2.
+Syntax: (syntax-rules (LITERAL ...) CLAUSE ...) or (syntax-rules ELLIPSIS (LITERAL ...) CLAUSE ...)
+Category: macros
+
+Examples:
+  (define-syntax my-if
+    (syntax-rules (then else)
+      ((my-if test then c else a) (if test c a))))"
+  (lambda (x)
+    (%syntax-rules-transform x)))
+
+(define-syntax er-macro-transformer
+  "Explicit-renaming macro transformer (Clinger 1991). PROC receives the macro
+use as a form whose pairs and vectors are plain and whose identifiers stay
+syntax objects (identifier? is the test), a RENAME procedure giving a symbol
+the macro definition's context, and a COMPARE procedure (free-identifier=?)
+testing two identifiers for the same binding; both COMPARE arguments must be
+identifiers, a bare symbol is an error. A symbol PROC introduces without
+renaming takes the use site's context. Wile extension.
+Syntax: (er-macro-transformer PROC)
+Category: macros
+
+Examples:
+  (define-syntax swap!
+    (er-macro-transformer
+      (lambda (form rename compare)
+        (let ((a (cadr form)) (b (caddr form)) (tmp (rename 'tmp)))
+          `(,(rename 'let) ((,tmp ,a)) (,(rename 'set!) ,a ,b) (,(rename 'set!) ,b ,tmp))))))"
+  (lambda (x)
+    (syntax-case x ()
+      ((k proc)
+       #'(let ((p (%er-proc proc #'k)))
+           (lambda (stx)
+             (datum->syntax (syntax-car stx)
+               (p (%syntax-spine stx)
+                  (lambda (sym) (datum->syntax #'k sym))
+                  free-identifier=?))))))))

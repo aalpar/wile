@@ -256,3 +256,167 @@ func TestP1_SchemeLayerDiagnostics(t *testing.T) {
 		})
 	}
 }
+
+// TestP2_SyntaxRulesAndERAreScheme: the Go compilers for both transformer
+// producers are unreachable under the Scheme layer, and the answers agree
+// except where the ER contract deliberately changed (identifier? on a form leaf).
+func TestP2_SyntaxRulesAndERAreScheme(t *testing.T) {
+	c := qt.New(t)
+	src := `(define-syntax sr (syntax-rules () ((_ x) (list x x))))
+(define-syntax er (er-macro-transformer (lambda (f r c) (list (r 'quote) (identifier? (cadr f))))))
+(list (sr 1) (er zz))`
+	before := compilation.GoSyntaxFormCompiles()
+	c.Assert(evalSyntaxForms(t, src, wile.WithSchemeSyntaxForms()), qt.Equals, "((1 1) #t)")
+	c.Assert(compilation.GoSyntaxFormCompiles(), qt.Equals, before)
+	c.Assert(evalSyntaxForms(t, src, wile.WithGoSyntaxForms()), qt.Equals, "((1 1) #f)")
+	c.Assert(compilation.GoSyntaxFormCompiles() > before, qt.IsTrue)
+}
+
+// TestP2_ERPassThroughKeepsScopes closes design §5.1: an identifier that merely
+// passes through an ER macro keeps its scopes, so the syntax-rules twin and the
+// ER twin agree. On the Go layer the ER path answers 2 (the user's tmp is
+// captured by the macro's binder).
+func TestP2_ERPassThroughKeepsScopes(t *testing.T) {
+	c := qt.New(t)
+	src := `(define-syntax er-id (er-macro-transformer (lambda (f r c) (cadr f))))
+(define-syntax via-er (syntax-rules () ((_ e) (let ((tmp 1)) (er-id (+ tmp e))))))
+(let ((tmp 10)) (via-er tmp))`
+	c.Assert(evalSyntaxForms(t, src, wile.WithSchemeSyntaxForms()), qt.Equals, "11")
+}
+
+// TestP2_ERContract (Q6): the proc receives the spine with identifier leaves
+// intact — identifier? is the test, compare the equality; symbol? is #f.
+func TestP2_ERContract(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(define-syntax er-probe
+  (er-macro-transformer
+    (lambda (f r c)
+      (list (r 'list)
+            (identifier? (cadr f)) (symbol? (cadr f))
+            (c (cadr f) (r 'magic)) (pair? (caddr f)) (cadddr f)))))
+(er-probe magic (a b) 3)`, wile.WithSchemeSyntaxForms())
+	c.Assert(got, qt.Equals, "(#t #f #t #t 3)")
+}
+
+// TestP2_ERContractCrossLibrary is the same contract read across a library
+// boundary — the only path on which the form leaves the engine's own namespace.
+// er-contract is exported from (wile er-macro-test); the assertion is
+// layer-specific, so it lives here rather than in
+// integration/testdata/er_macro_cross_library.scm, which must stay green under
+// both layers (the Go ER hands the proc raw symbols and answers (#f #t)).
+func TestP2_ERContractCrossLibrary(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(import (wile er-macro-test)) (er-contract x)`,
+		wile.WithSchemeSyntaxForms(), wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths())
+	c.Assert(got, qt.Equals, "(#t #f)")
+}
+
+// TestP2_ERRenameIsFreshPerInvocation is a guard: two uses of an ER macro that
+// renames tmp nest without collision, and a rename of a top-level
+// definition-site binding resolves there. It passes on master; the flip must
+// keep it passing, so it runs on whichever layer the suite selects.
+func TestP2_ERRenameIsFreshPerInvocation(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(define (helper) 'def)
+(define-syntax er-or
+  (er-macro-transformer
+    (lambda (f r c)
+      (list (r 'let) (list (list (r 'tmp) (cadr f)))
+            (list (r 'if) (r 'tmp) (r 'tmp) (caddr f))))))
+(define-syntax er-h (er-macro-transformer (lambda (f r c) (list (r 'helper)))))
+(let ((helper (lambda () 'use)) (tmp 'user))
+  (list (er-or #f (er-or #f tmp)) (er-h)))`)
+	c.Assert(got, qt.Equals, "(user def)")
+}
+
+// TestP2_ERRenameResolvesAtDefinitionSite is the pin for design §3.5's rename
+// contract on a definition-site LOCAL: the renamed identifier carries #'k's
+// scopes, so the macro's own binder wins over a use-site binder of the same
+// name. On the Go layer the rename is empty+intro scoped and this is a compile
+// error (`no such binding "helper" with compatible scopes`).
+func TestP2_ERRenameResolvesAtDefinitionSite(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(let ((helper (lambda () 'def)))
+  (define-syntax er-h (er-macro-transformer (lambda (f r c) (list (r 'helper)))))
+  (let ((helper (lambda () 'use))) (er-h)))`, wile.WithSchemeSyntaxForms())
+	c.Assert(got, qt.Equals, "def")
+}
+
+// TestP2_ERCompareRequiresIdentifiers pins the compare contract (design §3.5):
+// the shim passes `free-identifier=?`, which takes two identifiers. The Go layer
+// widened it to accept a raw symbol (er_macro_compare.go's *values.Symbol arm);
+// the Scheme layer raises instead. Every in-tree ER macro compares a form leaf
+// against (rename 'x) — (cadr form) in literal-check and er_macro_compare.scm,
+// (car clause) in er_macro_cond.scm — and under the spine contract those leaves
+// are identifiers, so nothing depends on the widening.
+func TestP2_ERCompareRequiresIdentifiers(t *testing.T) {
+	c := qt.New(t)
+	err := evalSyntaxFormsErr(t, `(define-syntax er-cmp
+  (er-macro-transformer (lambda (f r c) (list (r 'quote) (c 'magic (cadr f))))))
+(er-cmp magic)`, wile.WithSchemeSyntaxForms())
+	c.Assert(err, qt.ErrorMatches, `(?s).*free-identifier=\?: argument 1 is not an identifier.*`)
+}
+
+// TestP2_NestedExpansionsOfOneMacroDoNotShareScopes is the regression pin for
+// the scope-set aliasing defect the Scheme layer exposed
+// (values.AddScopeToSet). A template identifier is ONE shared *SyntaxSymbol
+// here, where the Go producer minted a fresh copy per expansion, so two nested
+// expansions flip two different introduction scopes into the same spare slot of
+// one backing array. The outer binder kept its own intro scope while the outer
+// body's references read the inner one, and the form failed to compile with
+// `no such binding "zz" with compatible scopes`.
+//
+// (or (or #f #f) #t) is the shape that found it: every bootstrap `or` beyond
+// the first operand is one of these, and (wile algebra interval) failed to load.
+func TestP2_NestedExpansionsOfOneMacroDoNotShareScopes(t *testing.T) {
+	c := qt.New(t)
+	tests := []struct {
+		name, src, want string
+	}{
+		{"or nested in its own first operand", `(or (or #f #f) #t)`, "#t"},
+		{
+			name: "a user macro nested in its own let init",
+			src: `(define-syntax m1 (syntax-rules () ((_ e) (let ((zz e)) (if zz zz 9)))))
+(m1 (m1 #f))`,
+			want: "9",
+		},
+		{
+			name: "the same shape through syntax-case",
+			src: `(define-syntax m1 (lambda (s) (syntax-case s () ((_ e) #'(let ((zz e)) (if zz zz 9))))))
+(m1 (m1 #f))`,
+			want: "9",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(evalSyntaxForms(t, tc.src, wile.WithSchemeSyntaxForms()), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestP2_SyntaxRulesSurface covers the R7RS §4.3.2 shapes beyond the R6RS
+// derivation (design §3.4). Every row holds on both layers, so it runs on
+// whichever the suite selects; it is the P2 shape gate, not a pin.
+func TestP2_SyntaxRulesSurface(t *testing.T) {
+	c := qt.New(t)
+	tests := []struct {
+		name, src, want string
+	}{
+		{"custom ellipsis, and ... as an ordinary identifier under it",
+			`(define-syntax m-ell (syntax-rules ::: () ((_ x :::) (list x ::: '...)))) (m-ell 1 2 3)`,
+			"(1 2 3 ...)"},
+		{"... in the literals list is a literal",
+			`(define-syntax m-lit-ell (syntax-rules (...) ((_ ...) 1) ((_ x) 2))) (list (m-lit-ell ...) (m-lit-ell 5))`,
+			"(1 2)"},
+		{"_ in patterns", `(define-syntax m-under (syntax-rules () ((_ _ x _) x))) (m-under 1 2 3)`, "2"},
+		{"(... ...) escapes an ellipsis in a template",
+			`(define-syntax m-esc (syntax-rules () ((_ x) '(x (... ...))))) (m-esc a)`, "(a ...)"},
+		{"the keyword position is ignored",
+			`(define-syntax m-kw (syntax-rules () ((anything-here) 'ok))) (m-kw)`, "ok"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(evalSyntaxForms(t, "(let () "+tc.src+")"), qt.Equals, tc.want)
+		})
+	}
+}

@@ -36,6 +36,7 @@ import (
 //
 // Deleted in P3 with the Go syntax-rules.
 func (p *CompileTimeContinuation) CompileSyntaxRulesExpr(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	goSyntaxFormCompiles.Add(1)
 	src := expr.SourceContext()
 	form := syntax.NewSyntaxCons(syntax.NewSyntaxSymbol(TransformerSyntaxRules, src), expr, src)
 	closure, err := CompileSyntaxRules(ctctx.Context(), p.env, form, p.libraryScope)
@@ -57,6 +58,7 @@ func (p *CompileTimeContinuation) CompileSyntaxRulesExpr(ctctx CompileTimeCallCo
 //
 // Deleted in P3 with the Go ER path.
 func (p *CompileTimeContinuation) CompileERMacroTransformerExpr(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	goSyntaxFormCompiles.Add(1)
 	lambdaExpr, err := formSingleArg(expr, TransformerERMacro)
 	if err != nil {
 		return p.wrapCompilationError(err)
