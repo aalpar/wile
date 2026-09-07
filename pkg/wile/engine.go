@@ -152,6 +152,18 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 		return nil, nil, nil, err
 	}
 
+	// The syntax-layer switch (design Q1, impl F9) rewrites the registry every
+	// environment bootstraps from — the top level AND the library environments
+	// backed by the namespace's registry — so one engine runs one layer. It has
+	// to happen BEFORE ns.SetRegistry: NewEngine re-reads the namespace's
+	// registry for setupLibrarySystem, and both methods below return a deepCopy,
+	// so a reassignment of the local reg after that point never reaches the
+	// namespace. Removed with the switch in P3.
+	if cfg.schemeSyntaxForms {
+		reg = reg.WithMacroSources(append(core.SchemeSyntaxSources(), reg.MacroSources()...)).
+			WithoutPrimitiveExpanders(compilation.SchemeSyntaxFormNames()...)
+	}
+
 	ns := environment.NewNamespace()
 	// Name the engine's top level eagerly so (interaction-environment) is a pure
 	// read. The introspection primitive previously labeled this shared namespace

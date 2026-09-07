@@ -34,6 +34,7 @@ import (
 // Like quasiquote, unsyntax only evaluates when depth reaches 0.
 // The result is a syntax object, not a raw datum.
 func (p *CompileTimeContinuation) CompileQuasisyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	goSyntaxFormCompiles.Add(1)
 	// expr is the CDR of the form (keyword stripped by syntaxCompiler in
 	// register.go). So expr = (template) — exactly one element.
 	template, err := formSingleArg(expr, "quasisyntax")

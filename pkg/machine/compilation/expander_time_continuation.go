@@ -324,13 +324,15 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syn
 
 // lookupMacroBinding resolves the reference sym to a macro (syntax) binding, or nil.
 //
-// Four probes, in order: (arm 1) the local env (let-syntax / letrec-syntax), scope-precise;
+// Five probes, in order: (arm 1) the local env (let-syntax / letrec-syntax), scope-precise;
 // (D2) the definition-site pin sym carries as a free template identifier — consulted between
 // arms 1 and 2 so a co-introduced keyword still shadows it but a use-site define-syntax
 // cannot capture it; (arm 2) the expand phase one step up from the expanding frame (the
 // symmetric counterpart of define-syntax storage — expanding phase-N code reads macros at
 // phase N+1, so a macro defined inside a transformer body resolves at its climbed phase; at
-// phaseLevel 0, NextPhase() == Expand()); and (arm 3) the library env named by any scope the
+// phaseLevel 0, NextPhase() == Expand()); (arm 2b) the owner's SEALED phase-1 tier, from
+// phase 2 and above, which is how the startup set's macros stay reachable from a
+// transformer nested in a transformer; and (arm 3) the library env named by any scope the
 // symbol carries, which is how a library macro reaches an UNEXPORTED helper macro of its own
 // library.
 //
@@ -413,6 +415,30 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 	bnd = expandEnv.GetBinding(sym0, syntax.ScopesOf(symbolScopes))
 	if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
 		return bnd
+	}
+
+	// ARM 2b: the owner's SEALED phase-1 tier, from phase 2 and above. A
+	// bootstrap define-syntax writes at (phase 1, sealed), an exact-phase
+	// coordinate, so a transformer nested in a transformer (phase-2 code) cannot
+	// reach `and` — or, once they are macros, syntax-case and syntax-rules —
+	// through arms 1 and 2. The Go syntax forms those macros replace were
+	// reachable from every phase: syntax compilers sit at the ambient coordinate
+	// and LookupPrimitiveExpander reads env.Expand(), the owner's first rung,
+	// from any level. This arm gives the startup set's macros the same reach.
+	//
+	// The sealed tier, not the whole phase-1 frame: the expander read it mirrors
+	// goes through LookupPhaseBinding, which accepts only BindingTypePrimitive,
+	// so it never exposed a user macro either, and a user (define-syntax …)
+	// writes at (1, mutable), which stays phase-sealed — visibility follows
+	// mutability (memory 2026-07-10-hermetic-phases-mutability-visibility).
+	if p.env.PhaseLevel() > environment.PhaseExpand {
+		ge := p.env.GlobalEnvironment()
+		if ge != nil {
+			bnd = ge.SealedBindingAt(sym0, syntax.ScopesOf(symbolScopes), environment.PhaseExpand)
+			if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
+				return bnd
+			}
+		}
 	}
 
 	// ARM 3: library-scope (unexported helper macro of the symbol's own library).

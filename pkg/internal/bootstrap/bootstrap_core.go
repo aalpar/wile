@@ -71,7 +71,11 @@ func LoadBootstrapCore(ctx context.Context, env *environment.EnvironmentFrame, r
 		return nil, werr.WrapForeignErrorf(err, "LoadBootstrapCore: apply registry")
 	}
 
-	err = compilation.RegisterAllPhaseHandlers(env)
+	// The registry names the primitive-expander rows to omit (empty in the
+	// ordinary case). Under the P1-P3 syntax-layer switch those rows would
+	// otherwise occupy the (phase 1, sealed) coordinate the Scheme
+	// define-syntax needs; see compilation.SchemeSyntaxFormNames.
+	err = compilation.RegisterAllPhaseHandlersWithout(env, reg.ExcludedPrimitiveExpanders())
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "LoadBootstrapCore: register phase handlers")
 	}

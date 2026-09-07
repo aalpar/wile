@@ -17,6 +17,7 @@ package wile
 import (
 	"io/fs"
 	"maps"
+	"os"
 
 	"github.com/aalpar/wile/coverage"
 	"github.com/aalpar/wile/pkg/environment"
@@ -81,8 +82,16 @@ const (
 func newEngineConfig() *engineConfig {
 	return &engineConfig{
 		immutableTopLevel: true,
+		// The syntax-layer default comes from the environment so a whole test
+		// suite can be run both ways without touching a call site; read once
+		// per engine, and removed with the switch in P3.
+		schemeSyntaxForms: os.Getenv(schemeSyntaxFormsEnv) == "scheme",
 	}
 }
+
+// schemeSyntaxFormsEnv names the transitional environment variable that selects
+// the syntax layer: "scheme" or "go". Removed with the switch in P3.
+const schemeSyntaxFormsEnv = "WILE_SYNTAX_FORMS"
 
 type engineConfig struct {
 	registry           *registry.PrimitiveRegistry
@@ -96,9 +105,12 @@ type engineConfig struct {
 	maxStackSize       uint64
 	inlineThreshold    int
 	inlineThresholdSet bool // true if WithInlineThreshold was explicitly called
-	libraryPaths       []string
-	libraryEnabled     bool // true when WithLibraryPaths was called
-	importObserver     func(LibraryImportEvent)
+	// schemeSyntaxForms selects the Scheme-specified syntax layer over the Go
+	// one. Transitional (P1-P3); see WithSchemeSyntaxForms.
+	schemeSyntaxForms bool
+	libraryPaths      []string
+	libraryEnabled    bool // true when WithLibraryPaths was called
+	importObserver    func(LibraryImportEvent)
 
 	// Authorizer accumulation is split across three intent-specific fields
 	// resolved once, order-independently, by resolveAuthorizer. A single
@@ -580,6 +592,27 @@ func WithMutableTopLevel() EngineOption {
 	return namespaceConsumedOption(func(cfg *engineConfig) {
 		cfg.immutableTopLevel = false
 		cfg.topLevelMutabilitySet = true
+	})
+}
+
+// WithSchemeSyntaxForms selects the Scheme-specified syntax forms (syntax-case,
+// syntax, with-syntax, quasisyntax, unsyntax, unsyntax-splicing; from P2 also
+// syntax-rules and er-macro-transformer) in place of their Go implementations:
+// the two bootstrap_syntax*.scm sources load first and the Go expander rows for
+// those names are skipped, on the NAMESPACE's registry so library environments
+// follow. Transitional (P1-P3). The default comes from WILE_SYNTAX_FORMS
+// (scheme | go), read once per NewEngine.
+func WithSchemeSyntaxForms() EngineOption {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
+		cfg.schemeSyntaxForms = true
+	})
+}
+
+// WithGoSyntaxForms selects the Go syntax forms; the inverse of
+// WithSchemeSyntaxForms.
+func WithGoSyntaxForms() EngineOption {
+	return namespaceConsumedOption(func(cfg *engineConfig) {
+		cfg.schemeSyntaxForms = false
 	})
 }
 

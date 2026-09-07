@@ -90,6 +90,8 @@ func namespaceConsumedOptions() []struct {
 		{"WithEnvMap(nil)", WithEnvMap(nil)},
 		{"WithImmutableTopLevel", WithImmutableTopLevel()},
 		{"WithMutableTopLevel", WithMutableTopLevel()},
+		{"WithSchemeSyntaxForms", WithSchemeSyntaxForms()},
+		{"WithGoSyntaxForms", WithGoSyntaxForms()},
 		{"WithStrictNamespace", WithStrictNamespace()},
 		{"WithoutAmbientBindings", WithoutAmbientBindings()},
 		{"WithDialect", WithDialect(NoMutation)},
@@ -387,6 +389,9 @@ var namespaceConsumedFields = []string{
 	"strictLevel",
 	"dialect",
 	"contractEnforcement",
+	// Read in bootstrapNamespace, before ns.SetRegistry: the switch rewrites the
+	// registry every environment bootstraps from, including the library ones.
+	"schemeSyntaxForms",
 }
 
 // engineOnlyFields are read after the namespace exists, so they apply equally

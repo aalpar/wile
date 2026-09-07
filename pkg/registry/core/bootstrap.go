@@ -78,6 +78,23 @@ var HashtableUpdateSource string
 //go:embed bootstrap_macros_late.scm
 var LateBootstrapMacroSource string
 
+// SyntaxProceduresSource and SyntaxFormsSource are the Scheme-specified syntax
+// layer (plans/2026-09-04-scheme-specified-syntax-forms-design): the runtime
+// helpers and the %pattern-variable record, then the forms themselves. Loaded
+// as the FIRST macro sources when the layer is on (WithSchemeSyntaxForms), so
+// the helpers sit in the sealed base below bootstrap_macros.scm.
+//
+//go:embed bootstrap_syntax_procedures.scm
+var SyntaxProceduresSource string
+
+//go:embed bootstrap_syntax.scm
+var SyntaxFormsSource string
+
+// SchemeSyntaxSources returns the syntax-layer sources in load order.
+func SchemeSyntaxSources() []string {
+	return []string{SyntaxProceduresSource, SyntaxFormsSource}
+}
+
 // addBootstrapSources registers bootstrap_macros.scm (define-syntax forms) as a macro
 // source and bootstrap_procedures.scm (define forms) as a procedure source. The split
 // is the phase boundary: macros load into the mutable expand frame, procedures into the

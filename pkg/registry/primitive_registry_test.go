@@ -923,6 +923,7 @@ func TestDeepCopyTouchesEverySliceField(t *testing.T) {
 	p.bindingSpecs = append(p.bindingSpecs, BindingSpec{})
 	p.docPrimitives = append(p.docPrimitives, PrimitiveSpec{})
 	p.initFuncs = append(p.initFuncs, nil)
+	p.excludedExpanders = append(p.excludedExpanders, "syntax-case")
 	p.macroSources = append(p.macroSources, "m")
 	p.procedureSources = append(p.procedureSources, "s")
 	p.globalValues = append(p.globalValues, GlobalValue{})

@@ -223,7 +223,12 @@ type PrimitiveRegistry struct {
 	// (those are real-primitives-only).
 	docPrimitives []PrimitiveSpec
 	initFuncs     []InitFunc
-	macroSources  []string
+	// excludedExpanders names primitive-expander rows the bootstrap must NOT
+	// register (compilation.RegisterAllPhaseHandlersWithout). Transitional: the
+	// P1-P3 syntax-layer switch, where a Scheme define-syntax has to occupy the
+	// (phase 1, sealed) coordinate a Go expander row would otherwise hold.
+	excludedExpanders []string
+	macroSources      []string
 	// procedureSources holds runtime-procedure source (define forms) to be loaded
 	// into the sealed-base frame, separate from macroSources (define-syntax forms)
 	// which load into the mutable expand frame. The file boundary is the phase boundary.
@@ -634,6 +639,30 @@ func (p *PrimitiveRegistry) WithProcedureSources(sources []string) *PrimitiveReg
 	return q
 }
 
+// WithMacroSources returns a copy whose bootstrap macro sources are replaced,
+// the macro-side twin of WithProcedureSources.
+func (p *PrimitiveRegistry) WithMacroSources(sources []string) *PrimitiveRegistry {
+	q := p.deepCopy()
+	q.macroSources = slices.Clone(sources)
+	return q
+}
+
+// WithoutPrimitiveExpanders returns a copy that asks the bootstrap to skip the
+// named primitive-expander rows (compilation.RegisterAllPhaseHandlersWithout).
+// The P1-P3 syntax-layer switch; see compilation.SchemeSyntaxFormNames.
+func (p *PrimitiveRegistry) WithoutPrimitiveExpanders(names ...string) *PrimitiveRegistry {
+	q := p.deepCopy()
+	q.excludedExpanders = append(q.excludedExpanders, names...)
+	return q
+}
+
+// ExcludedPrimitiveExpanders returns a copy of the excluded expander names.
+func (p *PrimitiveRegistry) ExcludedPrimitiveExpanders() []string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return slices.Clone(p.excludedExpanders)
+}
+
 // Primitives returns a copy of the primitive registrations.
 func (p *PrimitiveRegistry) Primitives() []PrimitiveRegistration {
 	p.mu.RLock()
@@ -736,6 +765,7 @@ func (p *PrimitiveRegistry) deepCopy() *PrimitiveRegistry {
 		bindingSpecs:              slices.Clone(p.bindingSpecs),
 		docPrimitives:             slices.Clone(p.docPrimitives),
 		initFuncs:                 slices.Clone(p.initFuncs),
+		excludedExpanders:         slices.Clone(p.excludedExpanders),
 		macroSources:              slices.Clone(p.macroSources),
 		procedureSources:          slices.Clone(p.procedureSources),
 		procedureSourceCategories: maps.Clone(p.procedureSourceCategories),

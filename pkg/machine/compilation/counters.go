@@ -40,3 +40,21 @@ var templateLocalEmits atomic.Uint64
 func TemplateLocalEmits() uint64 {
 	return templateLocalEmits.Load()
 }
+
+// goSyntaxFormCompiles counts entries into the Go compilers of the forms the
+// Scheme layer replaces (syntax, syntax-case, with-syntax, quasisyntax; from P2
+// syntax-rules and er-macro-transformer). Under WithSchemeSyntaxForms it must
+// not move: TestP1_SwitchSelectsTheLayer is the unreachability pin design §7
+// P1 asks for, and it is a COUNTER rather than a value because the interim
+// failure mode is silent — an unexcluded Scheme define-syntax lands in the
+// Primitive-typed slot, the Go compiler runs anyway, and every value assertion
+// stays green.
+//
+// Deleted in P3 with the compilers.
+var goSyntaxFormCompiles atomic.Uint64
+
+// GoSyntaxFormCompiles reports the process-global count; ratchet on a
+// difference across a known unit of work.
+func GoSyntaxFormCompiles() uint64 {
+	return goSyntaxFormCompiles.Load()
+}

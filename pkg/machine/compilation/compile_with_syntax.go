@@ -30,6 +30,7 @@ import (
 //
 // For now, this implements a simple transformation approach.
 func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	goSyntaxFormCompiles.Add(1)
 	// expr is the CDR of the form (keyword stripped by syntaxCompiler in register.go).
 	// So expr = (((pattern expr) ...) body ...)
 	argsPair, err := formArgs(expr, "with-syntax", "bindings and body")

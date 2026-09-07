@@ -90,23 +90,44 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 //   - lambda, case-lambda: expand body expressions
 //   - syntax-case, cond-expand: return unchanged (compile-time forms)
 func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
-	// Sealed, so a user (define-syntax let-syntax …) creates a distinct shadowing binding
-	// in the mutable child instead of overwriting this slot in place — CreateGlobalBindingAt
-	// dedups by scopeSetsEqual AND coordinate equality (phase, sealed), ignoring BindingType;
-	// a mutable-tier shadow sits at different coordinates, so it is always a new slot, which
-	// is the point of the rename. SetOwnGlobalValue would instead overwrite the
-	// Primitive-typed slot's value, which every lookup then rejects (let-syntax, having no
-	// Tier-1 fallback, dies). Lookup still reaches these: LookupPrimitiveExpander resolves
-	// env.Expand() through the ranked probe, whose T3 tier is exactly this ambient sealed set.
-	//
-	// The PHASE is what keeps this out of the value world. A phase-0 registration
-	// would land on the runtime value-resolution path, leaking a dialect-removed
-	// form's #<primitive-expander:…> into the value world; registering at phase 1
-	// instead puts it behind the expand-phase seal, off that path entirely.
+	return registerPrimitiveExpandersWithout(env, nil)
+}
+
+// registerPrimitiveExpandersWithout registers every entry of
+// primitiveExpanderEntries except the excluded names; see schemeSyntaxFormNames.
+//
+// Sealed, so a user (define-syntax let-syntax …) creates a distinct shadowing binding
+// in the mutable child instead of overwriting this slot in place — CreateGlobalBindingAt
+// dedups by scopeSetsEqual AND coordinate equality (phase, sealed), ignoring BindingType;
+// a mutable-tier shadow sits at different coordinates, so it is always a new slot, which
+// is the point of the rename. SetOwnGlobalValue would instead overwrite the
+// Primitive-typed slot's value, which every lookup then rejects (let-syntax, having no
+// Tier-1 fallback, dies). Lookup still reaches these: LookupPrimitiveExpander resolves
+// env.Expand() through the ranked probe, whose T3 tier is exactly this ambient sealed set.
+//
+// The same dedup is why an EXCLUSION is needed rather than letting the Scheme
+// define-syntax shadow the row: a bootstrap macro writes to that same (phase 1,
+// sealed) coordinate, so it would land in the Primitive-typed slot instead of a
+// new one.
+//
+// The PHASE is what keeps this out of the value world. A phase-0 registration
+// would land on the runtime value-resolution path, leaking a dialect-removed
+// form's #<primitive-expander:…> into the value world; registering at phase 1
+// instead puts it behind the expand-phase seal, off that path entirely.
+func registerPrimitiveExpandersWithout(env *environment.EnvironmentFrame, exclude []string) error {
+	skip := values.NewStringSet(len(exclude))
+	skip.SetAll(exclude...)
+	entries := make([]PhaseEntry[PrimitiveExpanderFunc], 0, len(primitiveExpanderEntries))
+	for _, e := range primitiveExpanderEntries {
+		if skip.ContainsOne(e.Name) {
+			continue
+		}
+		entries = append(entries, e)
+	}
 	taproot := func() *environment.EnvironmentFrame {
 		return env.SealedWriteViewAt(environment.PhaseExpand)
 	}
-	return RegisterPhaseBindings(env, taproot, primitiveExpanderEntries,
+	return RegisterPhaseBindings(env, taproot, entries,
 		func(name string, fn PrimitiveExpanderFunc) values.Value {
 			return NewPrimitiveExpander(name, fn)
 		})
