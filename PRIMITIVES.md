@@ -123,6 +123,7 @@ Reference for the types, primitives, and special forms in Wile. It is **not exha
 | `syntax-error` | Signal compile-time error |
 | `syntax-case` | Pattern matching with fenders and arbitrary body (R6RS) |
 | `syntax` | Construct syntax object from template |
+| `quote-syntax` | Template as a syntax object with its definition-site lexical context; no pattern-variable substitution |
 | `with-syntax` | Bind pattern variables and expand body |
 | `quasisyntax` | Template with unsyntax escapes |
 | `unsyntax` | Escape from quasisyntax |

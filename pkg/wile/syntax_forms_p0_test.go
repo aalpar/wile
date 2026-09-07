@@ -21,7 +21,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -302,4 +304,91 @@ func TestP02_AifSurvivesTheFlip(t *testing.T) {
               (list (datum->syntax #'aif 'if) 'it (caddr f) (cadddr f)))))))
 (list (aif 42 it 'no) (aif #f it 'no))`)
 	c.Assert(got, qt.Equals, "(42 no)")
+}
+
+// TestP03_QuoteSyntaxPinIsTheTemplatePin (F7): the binding quote-syntax's pin
+// dereferences to is the one the Go syntax template producer stamps on the same
+// free identifier at the same frame (applyHygieneToSymbol, the ellipsis path,
+// reached here through a top-level syntax-case). GlobalIndex values are minted
+// per query, so the comparison is on the *environment.Binding both reach.
+func TestP03_QuoteSyntaxPinIsTheTemplatePin(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	c.Assert(err, qt.IsNil)
+	defer func() {
+		_ = eng.Close()
+	}()
+
+	quoted, err := eng.EvalMultiple(ctx, `(quote-syntax car)`)
+	c.Assert(err, qt.IsNil)
+	qsym, ok := quoted.Internal().(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("%T", quoted.Internal()))
+	qgi, ok := qsym.ResolvedBinding.(*environment.GlobalIndex)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("quote-syntax stamped %T", qsym.ResolvedBinding))
+
+	expanded, err := eng.EvalMultiple(ctx, `(syntax-case #'(1 2) () ((x ...) (syntax (car x ...))))`)
+	c.Assert(err, qt.IsNil)
+	pair, ok := expanded.Internal().(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("%T", expanded.Internal()))
+	tsym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	tgi, ok := tsym.ResolvedBinding.(*environment.GlobalIndex)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("template producer stamped %T", tsym.ResolvedBinding))
+
+	c.Assert(qgi.Env.GetOwnGlobalBinding(qgi), qt.Equals, tgi.Env.GetOwnGlobalBinding(tgi))
+}
+
+// TestP03_QuoteSyntaxSkipsThePinUnderALocal: no global pin where a
+// definition-site local of the name resolves.
+func TestP03_QuoteSyntaxSkipsThePinUnderALocal(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	c.Assert(err, qt.IsNil)
+	defer func() {
+		_ = eng.Close()
+	}()
+	v, err := eng.EvalMultiple(ctx, `(let ((car 1)) (quote-syntax car))`)
+	c.Assert(err, qt.IsNil)
+	sym, ok := v.Internal().(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("%T", v.Internal()))
+	c.Assert(sym.ResolvedBinding, qt.IsNil)
+}
+
+// qLibFS: mac's output names the library-private helper, defined AFTER mac, through
+// quote-syntax. helper is predeclared before mac compiles, so the pin is non-nil,
+// and the library body already carries the library scope (design §2.1 item 2); a
+// use-site helper must not capture either. This pins that quote-syntax reaches a
+// library-private binding at all — it does not discriminate the
+// AddScope(p.libraryScope) line, which is a no-op for a template read in the body.
+var qLibFS = fstest.MapFS{
+	"qlib.sld": &fstest.MapFile{
+		Data: []byte(`(define-library (qlib)
+  (import (scheme base))
+  (export mac)
+  (begin
+    (define-syntax mac
+      (lambda (stx) (datum->syntax #f (list (quote-syntax helper) 1))))
+    (define (helper x) (list 'lib x))))`),
+	},
+}
+
+func TestP03_QuoteSyntaxCarriesTheLibraryScope(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(import (qlib))
+(define (helper x) (list 'user x))
+(mac)`, wile.WithSourceFS(stdlib.FS), wile.WithSourceFS(qLibFS), wile.WithLibraryPaths())
+	c.Assert(got, qt.Equals, "(lib 1)")
+}
+
+// TestP03_QuoteSyntaxDefSiteLocalUnderUseSiteLet (design §2.1 item 3): the
+// identifier keeps its read scopes, so the definition-site x resolves by subset
+// through the whole macro and the use-site x cannot capture it.
+func TestP03_QuoteSyntaxDefSiteLocalUnderUseSiteLet(t *testing.T) {
+	c := qt.New(t)
+	got := evalSyntaxForms(t, `(let ((x 'def))
+  (define-syntax m (lambda (stx) (quote-syntax x)))
+  (let ((x 'use)) (m)))`)
+	c.Assert(got, qt.Equals, "def")
 }

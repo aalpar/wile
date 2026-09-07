@@ -1058,7 +1058,7 @@ func TestStructuralSharing_PartialChange(t *testing.T) {
 	c.Assert(resultPair.Values[1], qt.Not(qt.Equals), SyntaxValue(sym2))
 }
 
-// TestMapSyntaxTreeStructuralSharing verifies that mapSyntaxTree returns the
+// TestMapSyntaxTreeStructuralSharing verifies that MapSyntaxTree returns the
 // original pair pointer when children are unchanged (structural sharing).
 func TestMapSyntaxTreeStructuralSharing(t *testing.T) {
 	c := qt.New(t)

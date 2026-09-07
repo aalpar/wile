@@ -289,6 +289,17 @@ var compileTimeBindingSpecs = []nameDoc{
 			"for syntax objects (R6RS).\n" +
 			"Syntax: (syntax TEMPLATE)\n" +
 			"Category: macros"},
+	{"quote-syntax",
+		"Returns TEMPLATE as a syntax object with the lexical context it was\n" +
+			"written in: every identifier keeps its scopes and carries its\n" +
+			"definition-site binding, so a macro that emits it refers to what\n" +
+			"the macro's author could see. No pattern-variable substitution;\n" +
+			"that is (syntax TEMPLATE). Racket Reference,\n" +
+			"Syntax Quoting: quote-syntax.\n" +
+			"Syntax: (quote-syntax TEMPLATE)\n" +
+			"Category: macros\n\n" +
+			"Examples:\n" +
+			"  (syntax->datum (quote-syntax (a b)))  => (a b)"},
 	// Quasisyntax forms (R6RS / Wile extension)
 	{"quasisyntax",
 		"Like quasiquote but for syntax objects. unsyntax and\n" +

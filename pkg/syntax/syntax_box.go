@@ -54,7 +54,7 @@ func (p *SyntaxBox) AddScope(scope *Scope) SyntaxValue {
 	if p == nil || p.Value == nil {
 		return p
 	}
-	inner := mapSyntaxTree(p.Value, func(node SyntaxValue) SyntaxValue {
+	inner := MapSyntaxTree(p.Value, func(node SyntaxValue) SyntaxValue {
 		adder, ok := node.(interface {
 			AddScope(*Scope) SyntaxValue
 		})

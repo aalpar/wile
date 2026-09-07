@@ -40,6 +40,11 @@ func init() {
 	registerValidator("case-lambda", validateCaseLambda)
 	registerValidator("set!", validateSetBang)
 	registerValidator("quote", validateQuote)
+	// quote-syntax is registered the way quote is, NOT as a passthrough:
+	// registerPassthrough calls markOpaqueCode, which records every name the
+	// form mentions as a possible set! target by spelling. A quote-syntax
+	// template is data, not code.
+	registerValidator("quote-syntax", validateQuoteSyntax)
 	registerValidator("begin", validateBegin)
 	registerValidator("quasiquote", validateQuasiquote)
 	registerValidator("dynamic-wind", validateDynamicWind)

@@ -61,13 +61,12 @@ func EmptyScopes() ScopeSet {
 }
 
 // FlipScopeInSet toggles the presence of a scope in a set.
-// It is the set-level half of FlipScope, whose only intended consumer
-// (syntax-local-introduce) is not wired; see FlipScope.
+// It is the set-level half of FlipScope; see FlipScope.
 func FlipScopeInSet(scopes []*Scope, target *Scope) []*Scope {
 	return values.FlipScopeInSet(scopes, target)
 }
 
-// mapSyntaxTree recursively transforms a syntax tree.
+// MapSyntaxTree recursively transforms a syntax tree.
 // The function fn is applied to each node bottom-up: children are transformed first,
 // then the parent is constructed with the transformed children.
 //
@@ -76,8 +75,13 @@ func FlipScopeInSet(scopes []*Scope, target *Scope) []*Scope {
 // 2. Create new pair with transformed children
 // 3. fn is NOT called on the pair itself (only on leaf nodes like symbols)
 //
-// This is the shared traversal logic used by both AddScope and FlipScope.
-func mapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValue {
+// This is the shared traversal logic used by AddScope and FlipScope. Exported for
+// compilation.CompileQuoteSyntax, which stamps pins on a template's identifiers.
+//
+// It recurses into pairs and vectors only. A SyntaxBox reaches fn whole, through
+// the default arm, so a caller that needs to descend into a box must handle that
+// case itself (SyntaxBox.AddScope does; so does CompileQuoteSyntax).
+func MapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValue {
 	if stx == nil {
 		return nil
 	}
@@ -91,10 +95,10 @@ func mapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValu
 		// Recursively transform car and cdr
 		var newCar, newCdr SyntaxValue
 		if s.Values[0] != nil {
-			newCar = mapSyntaxTree(s.Values[0], fn)
+			newCar = MapSyntaxTree(s.Values[0], fn)
 		}
 		if s.Values[1] != nil {
-			newCdr = mapSyntaxTree(s.Values[1], fn)
+			newCdr = MapSyntaxTree(s.Values[1], fn)
 		}
 
 		// Structural sharing: when a tree transformation leaves children unchanged,
@@ -121,7 +125,7 @@ func mapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValu
 		changed := false
 		for i, elem := range s.Values {
 			if elem != nil {
-				newValues[i] = mapSyntaxTree(elem, fn)
+				newValues[i] = MapSyntaxTree(elem, fn)
 				if newValues[i] != elem {
 					changed = true
 				}
@@ -147,16 +151,17 @@ func mapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValu
 
 // FlipScope toggles the presence of a scope on a syntax object.
 // Returns a new syntax object with the scope flipped.
-// Intended for syntax-local-introduce, which is currently NOT wired: the
-// expander context never carries an introduction scope, so that primitive
-// raises werr.ErrNotImplemented and this function has no live production
-// caller.
+//
+// Two production callers: the kernel flips each closure-transformer invocation's
+// introduction scope on the transformer's output (expandMacroInvocation and
+// ExpandOnce), which is Flatt's introduction step, and syntax-local-introduce
+// flips that same scope on a syntax object the transformer chooses.
 func FlipScope(stx SyntaxValue, scope *Scope) SyntaxValue {
 	if stx == nil || scope == nil {
 		return stx
 	}
 
-	return mapSyntaxTree(stx, func(node SyntaxValue) SyntaxValue {
+	return MapSyntaxTree(stx, func(node SyntaxValue) SyntaxValue {
 		switch s := node.(type) {
 		case *SyntaxSymbol:
 			return flipScopeOnSymbol(s, scope)

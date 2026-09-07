@@ -311,12 +311,12 @@ The last two options are not decoration. Drop `WithLibraryPaths()` and the third
 line fails instead of returning `1`; see *The import route is opt-in* below.
 
 **The floor is not the empty set, and it is not R7RS-strict.** `Engine.BoundNames()`
-reports exactly **42** names at level 2 — the same 42 on every profile, since the
+reports exactly **43** names at level 2 — the same 43 on every profile, since the
 visible surface is bound from an empty registry either way. That set is the
 complete inventory of what is *bound*, and `TestNoAmbientBindingsBoundSet` pins
 it name by name.
 
-Two mechanisms put them there. 39 are *phase handlers*: registered by the
+Two mechanisms put them there. 40 are *phase handlers*: registered by the
 compiler, held in frames that ordinary value resolution never consults, never
 sourced from a registry — so withholding the registry cannot withhold them. The
 other three, `unless` `guard` `guard-aux`, are `syntax-rules` definitions in
@@ -325,15 +325,15 @@ other three, `unless` `guard` `guard-aux`, are `syntax-rules` definitions in
 only registry-borne macros that reach an empty visible surface today.
 
 **Bound and usable are different partitions, and they still cross — one way.**
-`guard` is one of the 42 and is unusable. `syntax-rules` used to be the other
+`guard` is one of the 43 and is unusable. `syntax-rules` used to be the other
 direction, usable but unbound, because `define-syntax` recognized the spelling
 inline; a transformer right-hand side is now compiled as an expression, so
 `syntax-rules` has its own expression-level compiler and an ambient keyword, and
-it is one of the 42. Sorting the 42 by usability:
+it is one of the 43. Sorting the 43 by usability:
 
 | | Members | Why |
 |---|---|---|
-| **Usable** | `lambda` `if` `quote` `define` `begin` `set!` `let` `let*` `letrec` `letrec*` named `let` `define-syntax` `let-syntax` `letrec-syntax` `syntax-rules` `cond-expand` `case-lambda` `define-library` `library` `import` `syntax` `syntax-case` (inside a `lambda` transformer) `er-macro-transformer` `begin-for-syntax` `define-for-syntax` `eval-when` `meta` `syntax-error` `with-continuation-mark`, and `quasiquote`/`quasisyntax` over a **constant** template | codegen emits no call |
+| **Usable** | `lambda` `if` `quote` `define` `begin` `set!` `let` `let*` `letrec` `letrec*` named `let` `define-syntax` `let-syntax` `letrec-syntax` `syntax-rules` `quote-syntax` `cond-expand` `case-lambda` `define-library` `library` `import` `syntax` `syntax-case` (inside a `lambda` transformer) `er-macro-transformer` `begin-for-syntax` `define-for-syntax` `eval-when` `meta` `syntax-error` `with-continuation-mark`, and `quasiquote`/`quasisyntax` over a **constant** template | codegen emits no call |
 | **Resolves, unusable** | `quasiquote` *with* an `unquote` (emits `list`), `quasisyntax` *with* an `unsyntax` (needs `datum->syntax`), `with-syntax` (needs `list`), `unless` (needs `not`), `guard` (needs `call-with-exit`) | expansion calls a primitive nothing bound |
 | **Resolves, wants a resolver** | `include` `include-ci` | reads a file; what it needs is a `FileResolver`, not the registry — a different axis from this option |
 | **Auxiliary keywords** | `unquote` `unquote-splicing` `unsyntax` `unsyntax-splicing` `export` `guard-aux` `with-binding-scope` | bound so the expander recognizes them positionally inside another form; an error standalone |

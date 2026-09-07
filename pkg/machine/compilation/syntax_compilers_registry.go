@@ -28,6 +28,7 @@ import (
 // pick it up automatically.
 var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 	{"syntax", (*CompileTimeContinuation).CompileSyntax},
+	{"quote-syntax", (*CompileTimeContinuation).CompileQuoteSyntax},
 	{"syntax-case", (*CompileTimeContinuation).CompileSyntaxCase},
 	{TransformerSyntaxRules, (*CompileTimeContinuation).CompileSyntaxRulesExpr},
 	{TransformerERMacro, (*CompileTimeContinuation).CompileERMacroTransformerExpr},

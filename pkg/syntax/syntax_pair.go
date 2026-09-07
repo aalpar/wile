@@ -51,9 +51,9 @@ type SyntaxPair struct {
 //
 // Only symbols store scopes for hygiene resolution. Pairs just propagate.
 func (p *SyntaxPair) AddScope(scope *Scope) SyntaxValue {
-	// Use the generic mapSyntaxTree traversal to add scope to all nested nodes.
-	// mapSyntaxTree handles pair recursion internally and calls the function only on leaf nodes (symbols, etc.).
-	return mapSyntaxTree(p, func(node SyntaxValue) SyntaxValue {
+	// Use the generic MapSyntaxTree traversal to add scope to all nested nodes.
+	// MapSyntaxTree handles pair recursion internally and calls the function only on leaf nodes (symbols, etc.).
+	return MapSyntaxTree(p, func(node SyntaxValue) SyntaxValue {
 		// Try to call AddScope on nodes that support it (symbols, etc.)
 		adder, ok := node.(interface{ AddScope(*Scope) SyntaxValue })
 		if ok {

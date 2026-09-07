@@ -35,6 +35,19 @@ func validateQuote(_ context.Context, env *environment.EnvironmentFrame, pair *s
 	}
 }
 
+// validateQuoteSyntax validates (quote-syntax template). The template is a datum:
+// nothing in it is ever evaluated, so unlike registerPassthrough it must not
+// markOpaqueCode — that would withdraw top-level immutability, inlining and
+// frame-reclaim arming from every keyword and helper name the Scheme syntax
+// layer's generated code quotes.
+func validateQuoteSyntax(_ context.Context, _ *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+	_, _, ok := formPrologue(pair, "quote-syntax", 1, 1, result)
+	if !ok {
+		return nil
+	}
+	return newLiteralExpr(pair.SourceContext(), pair)
+}
+
 // validateQuasiquote validates (quasiquote template)
 // Note: The template is not deeply validated here because quasiquote
 // has complex runtime semantics with nested unquote/unquote-splicing

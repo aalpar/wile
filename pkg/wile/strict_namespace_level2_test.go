@@ -31,7 +31,7 @@ import (
 
 // level2BoundNames is the exact visible surface at level 2 — every name
 // Engine.BoundNames() reports when the top level is bound from an empty
-// registry. 39 are phase handlers (registered by the compiler into sealed
+// registry. 40 are phase handlers (registered by the compiler into sealed
 // frames, never sourced from a registry). The other three,
 // unless/guard/guard-aux, are syntax-rules definitions in
 // core.LateBootstrapMacroSource, which LoadBootstrapCore loads UNCONDITIONALLY
@@ -44,17 +44,18 @@ import (
 // compiler (CompileSyntaxRulesExpr) with a row in syntaxCompilerEntries, and
 // RegisterSyntaxCompilers therefore mints an ambient keyword for it. Before
 // that, define-syntax recognized the spelling inline and the name resolved to
-// nothing at this level.
+// nothing at this level. quote-syntax joined in P0.3, as a new core form with
+// its own compiler row.
 var level2BoundNames = []string{
 	"begin", "begin-for-syntax", "case-lambda", "cond-expand", "define",
 	"define-for-syntax", "define-library", "define-syntax",
 	"er-macro-transformer", "eval-when", "export", "guard", "guard-aux", "if",
 	"import", "include", "include-ci", "lambda", "let", "let*", "let-syntax",
 	"letrec", "letrec*", "letrec-syntax", "library", "meta", "quasiquote",
-	"quasisyntax", "quote", "set!", "syntax", "syntax-case", "syntax-error",
-	"syntax-rules", "unless", "unquote", "unquote-splicing", "unsyntax",
-	"unsyntax-splicing", "with-binding-scope", "with-continuation-mark",
-	"with-syntax",
+	"quasisyntax", "quote", "quote-syntax", "set!", "syntax", "syntax-case",
+	"syntax-error", "syntax-rules", "unless", "unquote", "unquote-splicing",
+	"unsyntax", "unsyntax-splicing", "with-binding-scope",
+	"with-continuation-mark", "with-syntax",
 }
 
 // TestNoAmbientBindingsBoundSet is the ratchet. TestNoAmbientBindingsFloor
@@ -94,7 +95,7 @@ func TestNoAmbientBindingsBoundSet(t *testing.T) {
 // another.
 //
 // The rows are representative, not exhaustive; docs/embedding/api-design.md
-// partitions all 42 names.
+// partitions all 43 names.
 //
 //	usable            codegen emits no call
 //	resolves-unusable expansion calls a primitive the empty registry never bound
@@ -187,6 +188,15 @@ func TestNoAmbientBindingsFloor(t *testing.T) {
 			name: "begin-for-syntax and meta",
 			src:  `(begin-for-syntax (define x 1)) (meta (define y 2)) 3`,
 			want: "3",
+		},
+		{
+			// quote-syntax (P0.3) compiles to one load-literal, so it needs
+			// nothing the empty registry withheld. syntax->datum would, which is
+			// why the assertion is on the printed syntax object — a syntax pair
+			// of two syntax symbols, each rendered with its #' prefix.
+			name: "quote-syntax",
+			src:  `(quote-syntax (a b))`,
+			want: `#'(#'a #'b)`,
 		},
 		{
 			name: "with-continuation-mark",
