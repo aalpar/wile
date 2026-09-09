@@ -103,7 +103,17 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 // is the point of the rename. SetOwnGlobalValue would instead overwrite the
 // Primitive-typed slot's value, which every lookup then rejects (let-syntax, having no
 // Tier-1 fallback, dies). Lookup still reaches these: LookupPrimitiveExpander resolves
-// env.Expand() through the ranked probe, whose T3 tier is exactly this ambient sealed set.
+// env.Expand() through the ranked probe, and these slots are its T2 tier — (ExactPhase(1),
+// sealed), NOT the ambient T3 set. SealedWriteViewAt(PhaseExpand) yields a view whose
+// phaseLevel is 1, and writeCoordinates (environment_frame.go) routes to AnyPhase() only
+// for a sealed write at phase 0, so an expander is an exact-phase-1 binding.
+//
+// A full engine muddies this by name: syntax-rules, quote, and import ALSO carry an
+// ambient slot, minted by registry/core/specialforms.go's keyword rows so a library can
+// export the name (that file says so). Those are separate slots that merely share a
+// spelling. let-syntax and when have no keyword row and are exact-phase-1 only, which is
+// what discriminates the two sources. Pinned by TestPrimitiveExpandersLandAtExactPhaseOne
+// here and by pkg/wile/binding_tier_census_test.go.
 //
 // The same dedup is why an EXCLUSION is needed rather than letting the Scheme
 // define-syntax shadow the row: a bootstrap macro writes to that same (phase 1,
