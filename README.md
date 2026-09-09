@@ -146,6 +146,23 @@ call graph, lint) have been extracted to
 - [R7RS-small](https://small.r7rs.org/) — Language specification
 - [SRFI-18](https://srfi.schemers.org/srfi-18/) — Multithreading
 
+## AI Tools
+
+The maintainer wrote the original R7RS small Scheme implementation.  That includes
+VM, compiler, environment system, hygiene, and macro system. (without libraries or
+extensions).
+
+AI tools have been used extensively beyond that core. Claude (Anthropic) has
+written most of the extensions and some of the improvements. Google Gemini for
+design input, GitHub Copilot code review, and JetBrains AI Assistant have supported
+new features, code review, and the documentation.  Maintainer's AI tools have
+been configured specifically for this project. This includes custom MCP servers,
+Claude Code plugins, and custom prompts.
+
+Individual commits carry no AI attribution. Every change was reviewed and
+committed by the maintainer, who is accountable for what ships; where a change
+needs explaining, the explanation is in its commit message.
+
 ## Contributing
 
 Contributions are welcome. Useful areas:
