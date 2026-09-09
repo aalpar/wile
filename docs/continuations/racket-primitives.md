@@ -535,9 +535,15 @@ see the expander's internal decisions in real time.
 
 ### Wile Status: Phase Introspection
 
-Wile has a two-phase system (0 = runtime, 1 = compile-time via `define-for-syntax` /
-`begin-for-syntax`). It does not have Racket's arbitrary integer phase levels, nor
-does it enforce strict phase separation — phase-1 code can reference phase-0 bindings.
+Wile has arbitrary integer phase levels, like Racket's: `Phase` is an `int8` and
+`PhaseRegistry.GetOrCreate` (`pkg/environment/phase_registry.go`) mints a view for any
+of them on demand, so the macro tower climbs past 2 whenever a transformer body defines
+its own macro. Phase 0 is runtime and phase 1 is compile-time (`define-for-syntax` /
+`begin-for-syntax`), but they are not the only two.
+
+What Wile does not do is enforce strict phase separation: phase-1 code can reference
+phase-0 bindings, because the sealed startup set is installed at a wildcard coordinate
+visible from every phase.
 
 **Already implemented:** none. `syntax-local-introduce` is registered but always
 raises `werr.ErrNotImplemented` (see §3).
@@ -551,10 +557,26 @@ raises `werr.ErrNotImplemented` (see §3).
 | `syntax-transforming?` | Trivial | Boolean: are we inside a syntax transformer? |
 | `syntax-local-name` | Low | Inferred name for the current binding position (e.g., "this lambda is being bound to `foo`"). |
 
-Phase-shifting require forms (`for-syntax`, `for-template`, `for-meta`) are part of
-Racket's multi-phase module system. Wile's library system uses `define-for-syntax`
-for phase-1 bindings. Full phase-shifting imports would require a multi-phase module
-loader — significant architecture work but no runtime cost for phase-0 code.
+**Phase-shifting imports are implemented.** `(import (for-syntax <import-set>))`,
+`(import (for-template <import-set>))` and `(import (for-meta <n> <import-set>))` all
+parse and install at the shifted phase: `ParseImportSetFromDatum`
+(`pkg/machine/compilation/import_set_datum.go`) records the shift on
+`ImportSet.PhaseShift`, and `ResolveAndInstallImportSet`
+(`pkg/machine/compilation/library_bindings.go`) composes it with the importing
+environment's own level via `composePhaseShift` before installing. So
+
+```scheme
+(import (for-syntax (scheme base)))
+(define-syntax m (er-macro-transformer (lambda (form rename compare) (cadr form))))
+(m 42 99)   ;; => 42
+```
+
+works, and `(for-meta 2 …)` reaches phase 2.
+
+**One caveat:** inside a `define-library` body the shift is currently dropped —
+`processLibraryImport` installs through `copyLibraryBindingsDirect`, which takes no
+phase — so a library-body `(import (for-syntax X))` binds at phase 0 instead. Tracked;
+use a top-level import until it is fixed.
 
 ## 6. Runtime Infrastructure Primitives
 

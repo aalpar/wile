@@ -99,9 +99,9 @@ There used to be a second kind table, `comparisonTable`, sending exact × `Float
 
 ### Hot-Loop Allocation Reduction (`BigInteger` only)
 
-For Go-side callers operating on `*BigInteger` in tight loops — e.g., counting-semiring path queries on DAGs — `pkg/values/numeric_scratch.go` provides unexported in-place arithmetic helpers (`addBigIntInPlace`, `subBigIntInPlace`, `mulBigIntInPlace`, `negateBigIntInPlace`). These reuse the destination's existing `[]Word` backing rather than allocating a fresh `*BigInteger` + `*big.Int` + `[]Word` per op (the path through `(*BigInteger).Add`).
+**Removed.** `pkg/values/numeric_scratch.go` once provided unexported in-place `*BigInteger` helpers (`addBigIntInPlace`, `subBigIntInPlace`, `mulBigIntInPlace`, `negateBigIntInPlace`) that reused the destination's `[]Word` backing instead of allocating a fresh `*BigInteger` + `*big.Int` + `[]Word` per op. The file is gone: the helpers were written for a caller that never arrived and were used by nothing (see CHANGELOG). Anything reaching for them today should either compute on raw `*big.Int` directly — which is what `extensions/algebra/graph.CountPathsInDAG` does — or re-derive them with a real consumer in hand.
 
-The public `(*BigInteger).Add` etc. remain immutable per R7RS Number semantics; the in-place API is for library-internal Go callers only. The motivating consumer is `extensions/algebra/graph.CountPathsInDAG`, which the `(wile algebra graph)` library dispatches to when a semiring declares `(carrier . big-int)`. The helpers' contract (aliasing rules, storage reuse) is documented on the declarations in `pkg/values/numeric_scratch.go`.
+The public `(*BigInteger).Add` etc. remain immutable per R7RS Number semantics, and that is now the only arithmetic API on the type. `extensions/algebra/graph.CountPathsInDAG` — cited here as the motivating consumer, and the one the `(wile algebra graph)` library dispatches to when a semiring declares `(carrier . big-int)` — operates on raw `*big.Int` and never routed through a values-level in-place API.
 
 The fast path applies only to `*BigInteger`. The other carriers — `*BigFloat`, `*Rational`, `*BigComplex` — have similar shapes but no in-place helpers: they are out of scope for the counting-semiring workload that motivated these.
 
@@ -356,5 +356,5 @@ go test -v ./pkg/values/ -run "TestNumericTower|TestLattice"
 - R7RS §6.2.1 — Numerical types (tower definition)
 - R7RS §6.2.2 — Exactness (contagion rules)
 - R7RS §6.2.3 — Implementation restrictions
-- `pkg/values/` — package sources: `numeric_kind.go` (the `NumericKind` enum and the "adding a new numeric type" checklist), `promotion.go` (tables and dispatch generators), `numeric_registry.go` (per-kind `NumericTypeSpec`), `numeric_scratch.go` (in-place helpers)
+- `pkg/values/` — package sources: `numeric_kind.go` (the `NumericKind` enum and the "adding a new numeric type" checklist), `promotion.go` (tables and dispatch generators), `numeric_registry.go` (per-kind `NumericTypeSpec`)
 - Design rationale: Unified tower dispatch was prototyped and abandoned (see "Why This Instead of a Unified Tower" above)

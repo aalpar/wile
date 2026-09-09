@@ -105,9 +105,11 @@ func float64FromBigInt(bi *big.Int) float64 {
 // here would allocate for all of them to protect against the rare mutator. A
 // caller that intends to mutate owns the copy: new(big.Int).Set(v.BigInt()).
 //
-// The in-place scratch operations in numeric_scratch.go are the mutators this
-// contract is aimed at. They are safe only on a big.Int the caller allocated;
-// none may be pointed at a *BigInteger's storage obtained here.
+// There are no in-place mutators in the tree today — numeric_scratch.go, whose
+// helpers this contract was aimed at, was deleted after shipping with no caller.
+// The rule still binds anything that reintroduces them: an in-place operation is
+// safe only on a big.Int the caller allocated, and none may be pointed at a
+// *BigInteger's storage obtained here.
 func (p *BigInteger) BigInt() *big.Int {
 	return p.value
 }

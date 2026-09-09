@@ -181,8 +181,8 @@ type checkFunc func(Value) (any, bool, error)
 //
 // The empty-list singleton (emptyListType) is resolved via IsEmptyList
 // in SchemeTypeName. Other Value-implementing types that are neither
-// in this map nor in the explicit switch (Thread, Channel, EOF, port
-// types, closures, etc.) fall through to fmt.Sprintf("%T", v) — a
+// in this map nor in the explicit switch (Thread, Channel, EOF,
+// closures, etc.) fall through to fmt.Sprintf("%T", v) — a
 // pre-existing leak documented as Opportunity 1 of the same plan, to
 // be closed via a roster-completeness test in a follow-up.
 var goTypeToValueType map[reflect.Type]ValueType
