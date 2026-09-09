@@ -1448,6 +1448,37 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   `library_bindings.go:860-893`, which is a deliberate `placementInPlace` refusal. Read that
   before collapsing the two.
 
+### `set!`'s two immutable-binding refusals report a stale location (2026-09-09)
+
+- [ ] **Stamp the identifier on the `ErrImmutableBinding` arms, as the arm above them
+  already does** [Medium, S, filed 2026-09-09 by the pre-commit review of Flatt Stage A
+  Task 1 (`plans/2026-09-08-flatt-binding-model-a-impl`), which touched the stamped
+  sibling and found the two unstamped ones beside it]: in `CompileValidatedSetBang`
+  (`pkg/machine/compilation/compile_validated.go`) the `ErrNoSuchBinding` arm wraps
+  `wrapSourcedError(v.Name.SourceContext(), …)` — its own comment says the stamp exists
+  "so the reported location is the offending name rather than the enclosing top-level
+  form". The two `ErrImmutableBinding` arms below it (`:344` *cannot mutate imported
+  binding*, `:365` *cannot mutate immutable top-level binding*) return a bare
+  `werr.WrapForeignErrorf` with no `SourcedError` at all, so `wrapCompilationError` falls
+  back to whatever located cause is left in the chain — which is a different form.
+
+  **Measured 2026-09-09**, four-line files, one stamped and one not:
+
+  | Program | Offending line | Reported |
+  |---|---|---|
+  | `(import (scheme base))` … `(set! car 1)` on line 4 | 4 | `ti.scm:1:0` — the **import** form |
+  | `;; pad` ×2 … `(set! nope 5)` on line 3 | 3 | `tf.scm:3:6` — the identifier |
+
+  This is the violation REVIEW.md → "Error Chain Losslessness" names: source location must
+  ride on the cause that owns it, not be dropped when wrapping. The fix is to wrap both in
+  `wrapSourcedError(v.Name.SourceContext(), …)`, the same call the arm above already makes;
+  the error values are otherwise correct. A third unstamped raise in the same function
+  (`:393`, *internal error: binding found but no index*) has the same gap but is an
+  internal-invariant path, so it is lower value.
+
+  Not fixed with Task 1 deliberately: it is pre-existing, and folding an unrelated bugfix
+  into a per-task branch breaks that plan's one-task-per-branch discipline.
+
 ### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
 
 - [x] **Fixed at the cause, not by erroring** [Medium, S, Done 2026-07-21, approach 1a per

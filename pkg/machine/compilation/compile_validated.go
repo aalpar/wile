@@ -332,7 +332,8 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 		// assigned, so the reported location is the offending name rather
 		// than the enclosing top-level form.
 		return wrapSourcedError(v.Name.SourceContext(),
-			werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key))
+			werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
+				"no such binding %q with compatible scopes for set!%s", sym.Key, p.phaseSuffix()))
 	}
 
 	// R7RS §5.2: reject set! on imported bindings. Under WithMutableTopLevel()
