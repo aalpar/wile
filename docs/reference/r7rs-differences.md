@@ -700,6 +700,52 @@ one, so there is nothing to consult. Programs that must forbid it can disable
 `set-box!` outright — it is already a member of the no-mutation dialect
 (`pkg/wile/dialect_nomutation.go`).
 
+### Syntax Objects and the Procedural Macro Layer
+
+R7RS-small's macro system is `syntax-rules` alone (§4.3), and it specifies hygiene
+*behaviourally*: the report says renaming happens and never exposes a syntax object.
+Wile also implements the R6RS §12 procedural layer, so syntax objects are a first-class
+value here.
+
+Bound beyond R7RS-small:
+
+| Names | Origin |
+|-------|--------|
+| `syntax-case`, `syntax` (`#'`), `with-syntax` | R6RS §12.4, §12.8 |
+| `quasisyntax` (`` #` ``), `unsyntax` (`#,`), `unsyntax-splicing` (`#,@`) | R6RS §12.8 |
+| `identifier?`, `datum->syntax`, `syntax->datum`, `generate-temporaries`, `free-identifier=?`, `bound-identifier=?` | R6RS §12.5, §12.6 |
+| `quote-syntax`, `syntax-local-value`, `syntax-local-introduce`, `syntax->list` | Racket |
+| `er-macro-transformer` | Clinger 1991 explicit renaming; the spelling is Chibi's |
+| `syntax-pair?`, `syntax-null?`, `syntax-car`, `syntax-cdr`, `syntax-vector?`, `syntax-vector->list` | Wile |
+| `syntax-source`, `syntax-line`, `syntax-column`, `syntax-position`, `syntax-span` | Wile |
+
+`syntax-rules` itself is R7RS §4.3.2 and not an extension, custom-ellipsis form
+included.
+
+Three points a reader porting code should know.
+
+**`syntax-violation` is not bound.** R6RS §12.9 specifies it; Wile has an internal
+`%syntax-violation` used by the Scheme-specified syntax layer and no public
+equivalent. Raise with `error` instead.
+
+**The one-level accessors are Wile's, not Racket's `syntax-e`.** `syntax-car` and
+`syntax-cdr` unwrap exactly one level and leave their result a syntax object, which is
+what lets a matcher written in Scheme walk a form without losing hygiene.
+`syntax-vector->list` returns a syntax *list* carrying the vector's context, so a
+vector pattern reduces to the list case.
+
+**`er-macro-transformer` hands its procedure a spine.** Pairs and vectors are plain all
+the way down; identifier leaves stay syntax objects. So `identifier?` is the test on a
+form element and `symbol?` answers `#f`. The `compare` argument is `free-identifier=?`
+and requires two identifiers.
+
+Hygiene is Flatt's sets-of-scopes model (2016), as Racket's is, rather than R6RS's
+mark-and-substitution. That is invisible through `syntax-rules` and observable through
+this layer only in corner cases where the two models are known to disagree.
+
+The phase forms `define-for-syntax`, `begin-for-syntax`, `meta` and `eval-when` are
+also beyond R7RS-small and are documented with the environment system rather than here.
+
 ### Process-Global Working Directory
 
 **Primitive:** `set-current-directory!`
