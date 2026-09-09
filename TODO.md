@@ -273,6 +273,8 @@ them:
 | `2026-09-04-expander-in-scheme-assessment.local.md` | Assessment, no code. Answers "move all macro expansion, templates included, to Scheme": **A** (`syntax-rules` derived over `syntax-case` in `bootstrap_macros.scm`, retiring the parallel clause compiler + runtime) sized as a Tier 5 candidate, not started; **B** (core expander in Scheme, psyntax/Racket style) **DECLINED** — no image format, so bootstrap cycles and per-`wile.New()` startup pay for it, and the extension benefit is already served. Also closes chibi backlog #5 as already built |
 | `2026-09-04-scheme-specified-syntax-forms-design.local.md` | **DESIGN, direction approved 2026-09-04, not started.** Go keeps a kernel (scope sets, resolution, core forms, body scan, dispatch loop, one transformer protocol with the intro-scope flip, `quote-syntax`, `syntax-local-value`, one-level accessors); `syntax-case`, `syntax`, `with-syntax`, `quasisyntax`, `syntax-rules`, `er-macro-transformer` are specified in Scheme in two new bootstrap sources; `pkg/internal/match/` and ten `compile_syntax_*`/`operation_syntax_*`/ER files (≈6.5k Go) are deleted. Startup is a soft constraint by decision (pre-compiled bytecode later). Three of the six 2026-09-04 macro defects die with the deleted code, one (`define-syntax` head dispatch) is the P0 prerequisite, `begin-for-syntax` visibility is out of scope, and the sixth was closed on paper. Phases P0–P4 in §7; the three open questions in §8 are not blocking. Revised 2026-09-06: 40 verified findings from the adversarial review folded in place (§2.1 item 2's library-scope premise, §2.2 ER pass-through scoping, §3.5 ER `compare` evidence, §3.6 ratchets, §4 inventory, §6 pin-fidelity timing, §7 P0.3/P0.5 pins); author decisions marked in place as `> **Open (2026-09-06 review, …)**` |
 | `2026-09-05-scheme-specified-syntax-forms-impl.local.md` | **IMPL PLAN 2026-09-05. Tasks 1-10 of 12 shipped** (P0.1-P0.5, P1, P2), branch per phase. P2 landed 2026-09-07 WITHOUT its default flip: `syntax-rules` and `er-macro-transformer` are specified in Scheme, but making the Scheme layer the default costs **31x startup** — 5.96 ms/engine and 87k allocations become 186 ms and 1.9M, at ~1 ms per `syntax-rules` clause over bootstrap's ~90 (F15). Both layers stay in the binary behind `WILE_SYNTAX_FORMS` / `WithSchemeSyntaxForms()`, default Go. **P3 (deletion) is blocked on the flip**, and the flip on a cheaper pattern representation or a pre-compiled bootstrap. Executing P2 also found a latent **P1** hygiene defect: `values.AddScopeToSet` aliased the caller's backing array, so two nested expansions of one macro clobbered each other's introduction scope — `(or (or #f #f) #t)` failed to compile and `(wile algebra interval)` was unloadable (F16). Twelve tasks over the design's P0.1–P0.5 and P1–P4, one branch per phase, 62 checkbox steps. §0 carries fourteen corrections to the design: the five review findings of 2026-09-05 (F1 the exclusion set is eight expander rows, ratcheted; F2 the Go producer's definition-site local arm dies at P0.1; F3 `define-syntax` docstrings exist and `,doc` reads them, so the seven `specialforms.go` rows go in P4; F4 the full deletion inventory; F5 `unsyntax`/`unsyntax-splicing` as violation-raising macros) and five measured while planning (F6 `datum->syntax` already copies the template's scopes, only the pin is at stake; F7 `GlobalIndex` is minted per query, so the P0.3 pin compares bindings; F8 P1 must take `with-syntax`/`quasisyntax` with `syntax`; F9 `WILE_SYNTAX_FORMS` as the both-ways default; F10 bootstrap macros are invisible from phase ≥ 2, closed by a kernel arm 2b). Four more (F11–F14) came from the adversarial review of 2026-09-06, folded 2026-09-06: F11 a library body is already stamped with its own scope, so §2.1 item 2's premise was false; F12 `bootstrap_nilpin_test.go` is replaced in P2, not deleted in P3; F13 `chibi/optional.sld`'s ER arm is behind a `cond-expand` Wile never selects; F14 `syntax-local-introduce` wiring belongs to P0.2, forced by `TestSyntaxLocalIntroduceIsNotWired`. That review also fixed four blocking defects: every `EvalMultiple` result in the P0 pin files asserted a `pkg/syntax` type directly on the `wile.Value` wrapper, which does not compile. Six more (F15-F20) came from EXECUTING Task 10 on 2026-09-07: F15 the startup measurement that deferred the flip; F16 the `AddScopeToSet` aliasing defect; F17 the plan's `er-contract` row cannot live in a script that must be green on both layers; F18 the nil-pin census is kept and pinned to the Go layer rather than replaced, with the behaviour rows added alongside; F19 the ER shim needs `%er-proc` to keep the definition-site arity refusal and to evaluate PROC once; F20 `pkg/registry/core/bootstrap.scm` is not executed, so editing its load-order comment fixes nothing; **F21 the `WILE_SYNTAX_FORMS=scheme` leg is no longer green** — 61 minutes for `pkg/wile` alone and seven failures in five classes, the worst being that the Scheme generators compute with USER-REPLACEABLE primitives, so `reg.Without("+")` plus an embedder's own `+` cannot load bootstrap. Nothing reaches the default; all of it is owed before the flip, and that class outranks the startup number |
+| `2026-09-08-flatt-binding-model-a-design.local.md` | **DESIGN APPROVED 2026-09-08, AMENDED 2026-09-09, not started.** Stage A of moving Wile to Racket's binding model: delete the ambient `(ANY, sealed)` tier so every binding becomes a per-phase row supplied by a Dialect-declared initial import (new optional `LanguageProvider` capability), installed as a **bulk row** (one entry per import, not one per exported name, per Racket's `bulk-binding-at` in `syntax/binding-table.rkt`). Phase-distinctness break ACCEPTED: a procedural transformer must declare `(import (for-syntax …))`. Resolution keeps its argmax but loses `tierAmbientSealed`; `PhaseKey` collapses to a bare `Phase`; a winning bulk row **materializes** a slot so `GlobalIndex` is unchanged. Ships with a **site-count ratchet** (§6.3) because the change fails toward the old behaviour and the old behaviour is green; `bench-gabriel` is explicitly NOT the gate (zero `define-syntax` across all 16). Stage B (phase into the scope set) and Stage C (serializable scope identity for pre-compiled binaries) are follow-ons, constrained in §7–§8 but not specified. **A 13-dimension review on 2026-09-08/09 (109 raw findings, 84 refuted) added §0 rows A9–A19 and reversed one decision.** **D7 WITHDRAWN [A9]:** `LookupPrimitiveExpander`'s absolute `env.Expand()` is *correct*, not a Tier 1 residual — the expander table has one write site and nothing installs an expander above phase 1, so a phase-2 body finds its expanders *because* the read is absolute; the proposed `NextPhase()` change breaks bootstrap loading, measured. **D12:** the `placementShadowable` collision (A1) is fixed by routing per-name imports through bulk rows and deleting it — the alternative, a distinguishing import scope, is refuted by measurement (7 matrix subtests; `ScopesCompatible` is *binding ⊆ use*, so a scoped import becomes unreachable, not higher-ranked). **D13:** A branches from `master` after a prep task ports the review's evidence there; `bootstrap_syntax{,_procedures}.scm` and `WILE_SYNTAX_FORMS` do not exist on `master`, which closes §9 Q1's residual by its own else-branch — their `for-syntax` migration is now a named obligation on the syntax-forms flip. **D14 (was Q4):** procedural transformers declare `(import (for-syntax (scheme base)))`, adding `(scheme cxr)` where needed; the base keeps no importable name, so §4.1 stands. **Q1 settled as D9: A lands first.** **Q3/Q3a settled as D10/D11:** whole-store base source, one `BulkSource` per (store, phase), `PhasedImport.Phase` documented as the INSTALL phase. **Q2 remains the only open question** (phase-1 vocabulary membership, pinned against the Go layer and layer-dependent). Two measurement corrections worth carrying: the ambient tier is ~309 slots (default) / 560 (KitchenSink), not "order 2-3k" [A14]; and the migration is ~13 files, not one [A15] — but note **(i) was chosen *before* that census ran**, against a pessimistic 136-file estimate, so correcting the number does not reopen D4. |
+| `2026-09-08-flatt-binding-model-a-impl.local.md` | **IMPL PLAN 2026-09-08, REVIEWED 2026-09-09. NOT STARTED.** Eleven numbered slots, ten live (`feat/flatt-a-00`…`-11`, each from `master`): a prep task ports the review's evidence to `master` (D13); then the phase-naming unbound diagnostic and the RED pin file (the §6.3 argument — this change fails toward the old behaviour and the old behaviour is green, so the gate precedes the mechanism); then `BulkSource` and `LanguageProvider`; then the fused landing (Task 5 Steps 1–4 + Task 6 on ONE branch — neither can precede the other, so the A1 collision never exists in a merged tree); then the ambient deletion, migration, Q2's ratchet, and closure. **Slot 8 is WITHDRAWN** (D7). §0 carries **nineteen corrections to the design (A1–A19)**, all folded back into the design file on 2026-09-09. The blocking one is **A1**: §4.2's "everything else is consequence" is false — `(ExactPhase(0), sealed)` is already the library import path's coordinate, and `installImportedBinding`'s own doc says it is safe *because it is empty*, so under A an import would reuse each base slot and overwrite the sealed base in place, engine-wide, silently. Others worth knowing before reading the design: **A4/A14** the ambient tier is ~309 slots, not 2-3k, and D3's real cost is the stdlib Scheme layer plus 63 runtime-only primitives; **A5** primitive expanders are already exact-phase-1 and A does not move them; **A6** the "34-row matrix" is 56 subtests — count it; **A11/A12** materialization needs a store constructor that does not exist, and `bulkRef` does NOT mirror `slotRef` (which has no `scopes` field), weakening §7's fold obligation to Stage B; **A13** §3.3's "one runtime `GetBinding` caller" is four, two of them core primitives; **A15** the migration is ~13 files including `integration/testdata`, which Task 7's own `covercheck` gate executes; **A18** `GlobalEnvironmentFrame.Copy` would silently drop bulk rows, the same defect its own comment records for `exactPhases`; **A19** the predicted startup reduction has no mechanism except under D12. All four review forks are answered — D7 withdrawn, D12, D13, D14. **One filed defect gates Task 9:** a library body's `(import (for-syntax …))` silently drops the phase shift, and the primary migration target is a library body. |
 | `ARCHITECTURE.local.md` | 1/4 sections complete |
 | `DEBUGGER.local.md` | Both proposals unstarted |
 | `MACRO_SYSTEM.local.md` | Both sections unstarted |
@@ -1346,6 +1348,105 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   `2026-09-01-ambient-keywords-…`), so `(display if)` is refused by the same
   `ErrSyntacticKeywordAsVariable` arm; the `no such binding` contrast above is
   historical.
+
+### `findLibraryBinding` exports the wrong phase for a two-phase name (2026-09-08)
+
+- [ ] **Make the export walk pick the phase the importer needs, not the lowest one**
+  [High, M, filed 2026-09-08 while checking whether an importable `syntax-rules` is possible
+  for the Flatt Stage A design (`plans/2026-09-08-flatt-binding-model-a-design`, §9 Q3)]:
+  `findLibraryBinding` (`pkg/machine/compilation/library_bindings.go`) walks
+  `lib.Env.PresentPhases()` and returns the **first** hit. `PresentPhases`
+  (`pkg/environment/environment_frame.go`) sorts ascending and trims below `PhaseRuntime`,
+  measured as `[runtime expand phase(2)]`, so **phase 0 always wins**. For a name bound at
+  two phases the export takes the phase-0 binding, which is not the one an importer of a
+  syntactic name needs.
+
+  **Measured, round-tripped through a real library** (`(export (rename X Y))`, then import
+  and use). Pinned by `pkg/wile/library_export_phase_order_test.go`:
+
+  | Exported | Import lands as | Usable |
+  |---|---|---|
+  | `let-syntax` (phase 1 only) | `*compilation.PrimitiveExpander` at exact@1 and exact@0 | yes — the renamed name expands, `(my-let-syntax ((m (syntax-rules () ((_) 42)))) (m))` is 42 |
+  | `syntax-rules` (phase-0 `SyntaxCompiler` **and** phase-1 `PrimitiveExpander`) | `*compilation.SyntaxCompiler` at exact@0 only | no — `(define-syntax two (my-sr () ((_) 2)))` raises `no such local or global binding "my-sr"` |
+  | `...` (ambient keyword row only) | `values.voidType` at exact@0 | no, and ellipsis is name-keyed in the matcher anyway (`match.DefaultEllipsis`) |
+
+  **The failure is silent.** All three pass `validateLibraryExports`
+  (`pkg/machine/compilation/compile_library_forms.go`), which asks only whether *some*
+  binding is reachable via `findLibraryBinding` — the same first-hit walk. So export
+  validation passing is not evidence the export is usable, and a library can ship an
+  export that resolves to nothing at the use site.
+
+  **Why it matters beyond the bug.** Stage A's §9 Q3 (does a `BulkSource` expose the whole
+  store or a curated export list?) inherits this: a whole-store source must answer "which
+  phase's slot does this name supply?", and "the lowest present one" is the wrong answer.
+  A per-phase curated export list sidesteps it. It also blocks the idea of moving
+  `syntax-rules` into an importable library so the phase-1 vocabulary is declared rather
+  than hardcoded — the one name that motivates it is the failing row.
+
+  **Open fork, not decided.** Either (a) `findLibraryBinding` takes the requesting phase and
+  prefers a match there, falling back to lower phases, or (b) it returns every phase's
+  binding and the install site picks. (b) is closer to what a bulk row wants but touches
+  `importConflicts`, which currently compares one binding to one binding. Related:
+  §4.6 of the Stage A design asserts the walk "probes phases for a *definition*" — true, but
+  it does not say which definition wins, which is the whole defect.
+
+### A library body's `(import (for-syntax …))` silently drops the phase shift (2026-09-09)
+
+- [ ] **Route the library-body import path through the phase-composing install**
+  [High, S, filed 2026-09-09 while pricing the Flatt Stage A migration
+  (`plans/2026-09-08-flatt-binding-model-a-impl`, §0.1 Fork 4)]: inside a
+  `define-library`, `(import (for-syntax X))`, `(import (for-template X))` and
+  `(import (for-meta n X))` are parsed, accepted, and then **installed at phase 0 as if
+  the modifier were not there**. At top level the same forms work correctly.
+
+  **The two paths diverge in one call.** `processLibraryImport`
+  (`pkg/machine/compilation/compile_import.go:64`) ends at
+
+      err = copyLibraryBindingsDirect(res.Library, res.Bindings, lib.Env)
+
+  which takes no phase argument and never reads `res.ImportSet.PhaseShift`. The top-level
+  path, `ResolveAndInstallImportSet` (`pkg/machine/compilation/library_bindings.go:423-428`),
+  does the opposite:
+
+      targetPhase, err := composePhaseShift("import", env.PhaseLevel(), res.ImportSet.PhaseShift)
+      err = CopyLibraryBindingsToEnvAtPhase(res.Library, res.Bindings, env, targetPhase)
+
+  `ImportSet.PhaseShift` (`library_bindings.go:188-192`) is populated by the parser either
+  way — `import_set_datum.go:154-158` handles all three modifiers — so the shift is
+  computed and then discarded.
+
+  **Measured.** A library `(helper)` exporting `my-helper`, and:
+
+      (define-library (user)
+        (export probe)
+        (import (scheme base))
+        (import (for-syntax (helper)))     ; shift requested
+        (begin (define (probe) (my-helper 1))))
+
+  compiles and `(probe)` prints `101` — `my-helper` resolved at **phase 0**, where a
+  correctly shifted import would leave it unbound. The identical import at top level does
+  leave it unbound at phase 0.
+
+  **The failure is silent both ways.** A body that *wanted* the shift gets a phase-0
+  binding it did not ask for; a body that relies on the shift for hygiene gets none, and
+  nothing reports it. There is no diagnostic, and `for-template`'s −1 shift is dropped
+  identically, so a negative shift is indistinguishable from no modifier.
+
+  **Why it matters now.** Flatt Stage A's D4 requires every procedural transformer to
+  declare `(import (for-syntax …))`, and Fork 4 answered (4a) — migrate to
+  `(scheme base)` + `(scheme cxr)`. The primary migration target is a **library body**:
+  `pkg/stdlib/lib/wile/er-macro-test.sld` `(include "er-macro-test.scm")`. So Stage A's
+  Task 9 cannot land until this is fixed — the edit it makes would be a no-op. Every
+  other Fork 4 option that migrates files has the same dependency; only (4d) does not.
+
+  **Fix shape, not decided.** Either give `copyLibraryBindingsDirect` a phase parameter and
+  compose the shift the way `ResolveAndInstallImportSet` does, or route
+  `processLibraryImport` through `ResolveAndInstallImportSet` outright. The second is
+  smaller but changes which env the install targets (`lib.Env` vs `p.env`), and
+  `copyLibraryBindingsDirect` exists precisely because a library body's macro shadowing
+  differs from a top-level import's — see its doc comment at
+  `library_bindings.go:860-893`, which is a deliberate `placementInPlace` refusal. Read that
+  before collapsing the two.
 
 ### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
 
