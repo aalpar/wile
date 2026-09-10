@@ -72,9 +72,15 @@ type BulkSource interface {
 // not one identity, so Stage C has to serialize a row whose source no file
 // names.
 //
-// A datum, not a Go pointer, for the reason SourceName gives.
+// A datum, not a Go pointer, for the reason SourceName gives — and ONE datum,
+// not a fresh one per call: two rows over the base must compare equal so
+// conflict detection and Stage C's serialization see one identity, not N.
+// The spelling is not a legal library name, so no .sld can claim it.
+var baseSourceName = values.NewSymbol("#%wile-base")
+
+// BaseSourceName returns that datum.
 func BaseSourceName() values.Value {
-	return values.NewSymbol("#%wile-base")
+	return baseSourceName
 }
 
 // storeBulkSource is a BulkSource over one owner's store at one phase.

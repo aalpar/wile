@@ -15,7 +15,9 @@
 package wile
 
 import (
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/forms"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // Dialect customizes an engine's special-form surface. At engine construction
@@ -137,4 +139,92 @@ func (r7rsDialect) Name() string {
 
 func (r7rsDialect) InstallForms(_ *forms.FormRegistry) error {
 	return nil
+}
+
+// PhasedImport is one initial import a dialect declares: a library, and the
+// phase the engine installs it AT.
+//
+// Phase is the INSTALL phase, not the source's. The two coincide for the default
+// dialect and diverge under for-syntax, which is exactly why the field needs a
+// name. A source's own phase lives in its BulkSource identity, one source per
+// (store, phase) — see environment.BulkSource, whose interface deliberately
+// takes no phase argument for the same reason.
+type PhasedImport struct {
+	// Library names the source. For the engine's own base this is
+	// environment.BaseSourceName(), which is a reserved datum rather than an
+	// importable library name: design section 4.1 declines to create a
+	// (wile base) .sld, so origin and import denote different things.
+	Library values.Value
+	// Phase is where the row is INSTALLED in the importing store.
+	Phase environment.Phase
+}
+
+// LanguageProvider is an optional capability a Dialect may implement to declare
+// the engine's INITIAL IMPORTS: which library supplies which names, at which
+// phase, before any user code runs.
+//
+// It crosses the ceiling that PrimitiveRemover and BootstrapProcedureRewriter
+// left standing. Those two shape WHAT the base contains; this one states WHERE
+// the base's names are visible from. Before it, the answer was "everywhere",
+// because the sealed base occupied the ambient (ANY, sealed) coordinate that
+// every phase's read reached. A declared initial import replaces that wildcard
+// with a per-phase row, so the phase a name is visible at becomes a property of
+// the dialect rather than of the store's coordinate space.
+//
+// When a dialect passed to WithDialect also implements LanguageProvider, the
+// engine installs one bulk row per declaration into the namespace's store at
+// engine origin, BEFORE the base is written. That ordering is safe, and load
+// bearing: a bulk row is a live reference to the source store, not a snapshot,
+// so a row installed at step 0 resolves the names steps 3 to 5 add afterwards.
+// It is also what makes the import edge order-independent.
+//
+// Boundary: this declares the engine's own initial imports. A user's
+// (import ...) is a separate mechanism reaching the same rows; a dialect that
+// declares nothing gets today's behaviour, since the absent capability means
+// "the default declaration", not "no imports".
+type LanguageProvider interface {
+	// InitialImports returns the dialect's declared initial imports. It should
+	// return a fresh slice each call, as callers may retain it.
+	InitialImports() []PhasedImport
+}
+
+// defaultInitialImports is the declaration every engine gets when its dialect
+// does not implement LanguageProvider.
+//
+// Two rows. The base at phase 0 is the whole of what the ambient tier used to
+// supply, relocated onto one coordinate. The phase-1 row is the DECLARATIVE
+// vocabulary: the names a syntax-rules macro needs without any import of its
+// own, which is Racket's rule (i) and the reason a declarative macro survives
+// Stage A untouched while a procedural one must declare
+// (import (for-syntax (scheme base))).
+//
+// The phase-1 membership is design section 9's Q2 and is pinned by
+// TestPhase1VocabularyMembership rather than argued here. Two measurements
+// constrain what the ratchet may claim, and both cut against the obvious
+// justification: the ellipsis and underscore identifiers do NOT need a phase-1
+// binding, because pkg/internal/match/syntax_compiler.go matches them by NAME
+// (under WithoutAmbientBindings they hold zero slots anywhere and still expand);
+// and syntax-rules holds an exact-phase-1 slot from the primitive-expander
+// registration that deleting the ambient tier does not remove. So the
+// declaration is right for a future scope-aware matcher and for stating the
+// vocabulary explicitly, not because anything would break without it today.
+func defaultInitialImports() []PhasedImport {
+	return []PhasedImport{
+		{Library: environment.BaseSourceName(), Phase: environment.PhaseRuntime},
+		{Library: environment.BaseSourceName(), Phase: environment.PhaseExpand},
+	}
+}
+
+// initialImportsFor returns the declaration the engine should install for a
+// dialect: the dialect's own if it provides them, else the default.
+//
+// An absent capability means "the default declaration", never "no imports" — a
+// dialect that wanted an empty base would have to say so by returning an empty
+// slice, and no dialect does.
+func initialImportsFor(d Dialect) []PhasedImport {
+	provider, ok := d.(LanguageProvider)
+	if !ok {
+		return defaultInitialImports()
+	}
+	return provider.InitialImports()
 }

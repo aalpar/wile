@@ -318,12 +318,49 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	ns.SetEffectiveRegistry(topLevelReg)
 
 	env := ns.Runtime()
+
+	// Install the dialect's declared initial imports BEFORE the base is written.
+	//
+	// The ordering is not merely allowed, it is the point. A bulk row is a LIVE
+	// REFERENCE to its source store, not a snapshot, so a row installed here —
+	// with the store still empty — resolves every name applyBaseEnvironment adds
+	// afterwards. That is what makes the import edge order-independent by
+	// construction rather than by a rule someone has to remember, and it is the
+	// property environment.TestBulkRowIsLiveNotSnapshot exists to keep.
+	//
+	// The base's rows are self-referential: the source reads the very store the
+	// row is installed in. That is design section 4.1's decision that there is no
+	// (wile base) .sld — LoadBootstrapCore writes the base directly, so the base
+	// STORE is the source. GlobalEnvironmentFrame.Copy re-points such a row at
+	// the copy, so a scheme-report-environment does not alias its parent.
+	installInitialImports(ns, initialImportsFor(dialect))
+
 	err = applyBaseEnvironment(ctx, env, topLevelReg, applyOptionsFromNamespace(ns)...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	return ns, snapshots, closers, nil
+}
+
+// installInitialImports installs one bulk row per declared import into the
+// namespace's store.
+//
+// Exactly one row per declaration, which is what the origin ratchet
+// (TestInitialImportsMatchDialectDeclaration, design section 6.3 half one)
+// asserts as an EQUALITY rather than a lower bound. A change that installed rows
+// and never consulted them, or consulted them and silently fell back to eager
+// per-name copying, passes every behavioural test in the suite; the counter is
+// what catches it.
+//
+// Rows carry the empty scope set and sealed=true: the base is not
+// macro-introduced, and it is not user-writable.
+func installInitialImports(ns *environment.Namespace, imports []PhasedImport) {
+	store := ns.Runtime().GlobalEnvironment()
+	for _, imp := range imports {
+		src := environment.NewStoreBulkSource(store, imp.Phase, imp.Library)
+		store.InstallBulkRow(src, nil, environment.ExactPhase(imp.Phase), true)
+	}
 }
 
 // removedFormNames returns the R7RS form names the engine's dialect deleted from
