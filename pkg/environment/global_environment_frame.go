@@ -242,6 +242,16 @@ type GlobalEnvironmentFrame struct {
 	// whatever phase is already being searched. Negative phases are not tracked
 	// because PresentPhases excludes them by contract.
 	exactPhases [2]uint64
+	// bulkRows holds this owner's installed bulk rows: each one a single
+	// resolution candidate standing for every name some other store supplies at
+	// some phase. See bulk_source.go.
+	//
+	// It is the store's FOURTH piece of state, and Copy must carry it — leaving
+	// exactPhases empty was the defect that made a copied namespace's phase-2
+	// bindings unreachable, and a dropped bulk row is the same defect with a
+	// larger blast radius, since a report env would lose every bulk-supplied
+	// name at once.
+	bulkRows []bulkRef
 }
 
 // NewGlobalEnvironmentFrame creates a new, empty owner store.
@@ -336,6 +346,31 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 	// higher cost; leaving it empty was the defect that made a copied namespace's
 	// phase-2 bindings unreachable to every cross-phase search.
 	q.exactPhases = p.exactPhases
+
+	// Bulk rows are carried, with self-referential rows RE-POINTED at the copy.
+	//
+	// Both halves are forced. Dropping the rows would cost a report env every
+	// bulk-supplied name, which after Stage A is the entire base — the matrix's
+	// report-env row is pinned on cond, which has a per-symbol phase-1 slot and
+	// could not tell. Copying a row verbatim keeps the edge pointing at the
+	// SOURCE store, which is right for a genuine import: an exporting library is
+	// shared by every importer on master too, and R7RS section 5.2 refuses set!
+	// on an imported binding, so the sharing is not observable as mutation.
+	//
+	// A row whose src is THIS store is the case that would break
+	// NewSchemeReportNamespace's contract that "q aliases nothing": resolving it
+	// in the copy would materialize a slot holding the ORIGINAL's *Binding, and a
+	// set! through the copy would reach the parent. Re-pointing is the fix, and
+	// it is cheap because a source knows the store it reads.
+	q.bulkRows = make([]bulkRef, len(p.bulkRows))
+	for i, row := range p.bulkRows {
+		q.bulkRows[i] = row
+		src, ok := row.src.(*storeBulkSource)
+		if !ok || src.store != p {
+			continue
+		}
+		q.bulkRows[i].src = NewStoreBulkSource(q, src.phase, src.name)
+	}
 	return q
 }
 
