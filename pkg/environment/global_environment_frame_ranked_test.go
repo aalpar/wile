@@ -156,17 +156,26 @@ func TestResolveRankedCrossPhaseNeedsABulkRow(t *testing.T) {
 // errors.Is on the sentinel, not the panic text: a message-only assertion would
 // keep passing even if the sentinel choice changed underneath it, which is
 // exactly the identity the house error-handling rule protects.
-func TestCreateGlobalBindingAtRefusesAnyMutable(t *testing.T) {
-	g := NewGlobalEnvironmentFrame()
+//
+// WIDENED by Stage A: the refusal now covers the wildcard coordinate outright,
+// sealed and mutable alike. writeCoordinates produces no wildcard key for any
+// view and tierOf classifies one as tierNone, so accepting a sealed one would
+// leave a slot nothing ranks and nothing can read. Both rows are asserted so a
+// narrowing back to the mutable half alone fails here.
+func TestCreateGlobalBindingAtRefusesAnyPhase(t *testing.T) {
 	sym := values.NewSymbol("v")
 
-	r := capturePanic(func() {
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, AnyPhase(), false)
-	})
-	qt.Assert(t, r, qt.IsNotNil)
-	err, ok := r.(error)
-	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
+	for _, sealed := range []bool{false, true} {
+		g := NewGlobalEnvironmentFrame()
+		r := capturePanic(func() {
+			g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, AnyPhase(), sealed)
+		})
+		qt.Assert(t, r, qt.IsNotNil, qt.Commentf("sealed=%t", sealed))
+		err, ok := r.(error)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
+			qt.Commentf("sealed=%t", sealed))
+	}
 }
 
 // A tie in a LOSING tier must not panic: rank decides first, ambiguity is only
@@ -205,9 +214,13 @@ func TestResolveRankedAmbiguityScopedToWinningTier(t *testing.T) {
 // equally what makes a define-for-syntax over the registry's (1, sealed) expand
 // copy a shadow.
 func TestCreateMatchesCoordinatesAndScopes(t *testing.T) {
+	// The wildcard row this used to open with is gone: Stage A refuses that
+	// coordinate at the write API, so the two coordinates that differ meaningfully
+	// now are (0, sealed) and (0, mutable) — which is the pair the doc above is
+	// actually about, since it is a phase-0 define shadowing the sealed entry.
 	sym := values.NewSymbol("v")
 	g := NewGlobalEnvironmentFrame()
-	_, created := g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, AnyPhase(), true)
+	_, created := g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), true)
 	qt.Assert(t, created, qt.IsTrue)
 	// Same scopes (∅), different coordinates: a NEW slot.
 	_, created = g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false)
@@ -253,16 +266,18 @@ func TestResolveRankedWildcard(t *testing.T) {
 	sym := values.NewSymbol("v")
 
 	t.Run("tier order", func(t *testing.T) {
+		// Two tiers now, not three: T3 was the ambient coordinate, and Stage A
+		// deleted it. T1 must still outrank T2, which is what makes a phase-0
+		// define shadow the sealed base rather than assign through it.
 		g := NewGlobalEnvironmentFrame()
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, AnyPhase(), true)     // slot 0: T3
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), true)  // slot 1: T2
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false) // slot 2: T1
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), true)  // slot 0: T2
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false) // slot 1: T1
 
 		g.mu.RLock()
 		defer g.mu.RUnlock()
 		ref, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, ref.slot, qt.Equals, 2)
+		qt.Assert(t, ref.slot, qt.Equals, 1)
 	})
 
 	t.Run("other exact phase is not a candidate", func(t *testing.T) {

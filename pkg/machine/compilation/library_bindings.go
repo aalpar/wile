@@ -621,25 +621,44 @@ const (
 // not an import and is left to shadow" — that sentence was FALSE, and moving the
 // base install to T2 is what makes it true.
 //
-// placementShadowable therefore writes (ExactPhase(0), sealed), bypassing the
-// view, because no view can produce that coordinate: writeCoordinates maps
-// sealed-at-phase-0 to AnyPhase() (T3, the ambient startup set). T1 mutable
-// outranks T2 sealed, so a define shadows while the import stays visible when no
-// define exists.
+// placementShadowable therefore writes (ExactPhase(0), sealed) directly rather
+// than through the view. T1 mutable outranks T2 sealed, so a define shadows
+// while the import stays visible when no define exists.
 //
 // # THE HAZARD, and why only ONE site takes the shadowable tier
 //
-// (ExactPhase(0), sealed) is an EMPTY coordinate — that is the whole reason it is
-// safe. (ExactPhase(1), sealed) is NOT: bootstrap macros and primitive expanders
-// live there (primitive_expanders_registry.go registers through
+// This doc used to argue that (ExactPhase(0), sealed) is safe BECAUSE IT IS
+// EMPTY, and that no view could produce it since writeCoordinates mapped a
+// sealed phase-0 write to AnyPhase(). Stage A falsified both halves: the ambient
+// tier is deleted, writeCoordinates produces (ExactPhase(0), sealed) for exactly
+// that write, and the sealed base now lives at this very coordinate. The
+// coordinate is the most crowded one in the store.
+//
+// What makes it safe NOW is a predicate, not emptiness. The engine's own base
+// row is a SEALED, OWN-INSTALLS-ONLY BulkSource (environment.NewSealedStoreBulkSource):
+// it refuses to supply any binding carrying Imported meta, which is the same
+// fact importConflicts keys on. So an import landing beside a base slot at this
+// coordinate cannot be mistaken for the base by anything that reads the base,
+// and the base cannot be mistaken for an import. The two coexist because they
+// are distinguishable, not because one of them is absent.
+//
+// The plan's D12 proposed instead routing every import through a bulk row of its
+// own and deleting this placement. That was not taken: a library's exports are
+// resolved with the LIBRARY's scope in the query (findLibraryBinding), so an
+// import row needs a library-scoped source plus per-source-phase grouping —
+// strictly more machinery for the same separation the predicate already gives.
+// Recorded in the plan's Task 11.
+//
+// (ExactPhase(1), sealed) is still NOT available: bootstrap macros and primitive
+// expanders live there (primitive_expanders_registry.go registers through
 // SealedWriteViewAt(PhaseExpand); `when` is present in SealedSlots()). Relocating
 // a phase-1 install would land an imported macro on exactly a bootstrap macro's
 // coordinates with the same ambient scope set, so CreateGlobalBindingAt REUSES
 // the slot, created == false, importConflicts returns false (the bootstrap macro
-// is not IsImported()), and SetOwnGlobalValue overwrites the sealed ambient
-// transformer IN PLACE, ENGINE-WIDE — then markBindingImported stamps the startup
-// set as imported. Every compiled pin to it would then see the import's value,
-// and no test would name it: from the outside, the import "works".
+// is not IsImported()), and SetOwnGlobalValue overwrites the sealed transformer
+// IN PLACE, ENGINE-WIDE — then markBindingImported stamps the startup set as
+// imported. Every compiled pin to it would then see the import's value, and no
+// test would name it: from the outside, the import "works".
 //
 // So the phase is re-checked here rather than trusted from the call site: a
 // placementShadowable install at any phase but 0 falls back to the view. A

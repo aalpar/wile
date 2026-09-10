@@ -105,7 +105,7 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 // Tier-1 fallback, dies). Lookup still reaches these: LookupPrimitiveExpander resolves
 // env.Expand() through the ranked probe, and these slots are its T2 tier — (ExactPhase(1),
 // sealed), NOT the ambient T3 set. SealedWriteViewAt(PhaseExpand) yields a view whose
-// phaseLevel is 1, and writeCoordinates (environment_frame.go) routes to AnyPhase() only
+// phaseLevel is 1, and writeCoordinates (environment_frame.go) used to route to AnyPhase() only
 // for a sealed write at phase 0, so an expander is an exact-phase-1 binding.
 //
 // A full engine muddies this by name: syntax-rules, quote, and import ALSO carry an

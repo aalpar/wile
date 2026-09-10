@@ -1106,9 +1106,23 @@ func (p *GlobalEnvironmentFrame) IsSealedBindingAt(key *values.Symbol, q syntax.
 // bare-name index it cannot drift onto a different slot of the same name. See
 // the history note below for why it was deferred until 2026-08-06.
 func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase PhaseKey, sealed bool) (*GlobalIndex, bool) {
-	if phase.wildcard && !sealed {
+	// The wildcard coordinate is refused outright now, not just its mutable half.
+	//
+	// Stage A deleted the ambient tier: writeCoordinates produces no wildcard key
+	// for any view, tierOf classifies one as tierNone, and no production path
+	// mints one. Continuing to ACCEPT it here would leave a slot nothing ranks
+	// and nothing can read — and, before tierOf regained its explicit wildcard
+	// arm, one that silently aliased phase 0, because a wildcard key's level is
+	// the zero value. Refusing the write is what makes "the tier is gone" a
+	// property of the store rather than a convention.
+	//
+	// PhaseKey itself survives, along with AnyPhase, AmbientBinding and
+	// AmbientKeysAt. They now answer nothing, and collapsing PhaseKey to a bare
+	// Phase belongs to Stage B's fold of the phase INTO the scope set, where the
+	// whole coordinate shape changes at once rather than twice.
+	if phase.wildcard {
 		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"CreateGlobalBindingAt: (ANY, mutable) is not a modeled coordinate for %q", key.Key))
+			"CreateGlobalBindingAt: the ANY phase coordinate was deleted with the ambient tier; %q must name an exact phase", key.Key))
 	}
 	// Use full Lock (not RLock) for check-then-write pattern to prevent TOCTOU
 	p.mu.Lock()
