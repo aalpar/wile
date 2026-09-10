@@ -253,6 +253,15 @@ type GlobalEnvironmentFrame struct {
 	// larger blast radius, since a report env would lose every bulk-supplied
 	// name at once.
 	bulkRows []bulkRef
+	// macroPhaseRows holds row TEMPLATES to install at every macro phase the
+	// owner mints a view for. See InstallMacroPhaseRow for why the tower's
+	// laziness forces this shape rather than an enumeration or a wildcard.
+	macroPhaseRows []bulkRef
+	// macroPhasesSeen is the set of macro phases already carrying the templates.
+	macroPhasesSeen map[Phase]struct{}
+	// macroPhaseSeenBits mirrors macroPhasesSeen as a lock-free bitset, so the
+	// per-AtPhase check costs one atomic load rather than a read lock.
+	macroPhaseSeenBits [2]atomic.Uint64
 	// bulkResolutions counts resolutions a bulk row answered.
 	//
 	// Design section 6.3 half two: the count must be non-zero and within a pinned
@@ -623,7 +632,7 @@ func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax
 	// consulted per FAILED resolution, not per resolution, and probeBulkLocked's
 	// per-row lookup is lock-free because the caller already holds this store's
 	// read lock.
-	bulkRow, bulkBnd, _, bulkOk := p.probeBulkLocked(key, q, phase, tierExactMutable, tierAmbientSealed)
+	bulkRow, bulkBnd, bulkOk := p.probeBulkLocked(key, q, phase, tierExactMutable, tierAmbientSealed)
 	if !bulkOk {
 		return ref, false
 	}
@@ -729,16 +738,22 @@ func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.Sc
 	if len(slots) == 0 {
 		return slotRef{}, tierNone, false, false
 	}
-	// tierOf classifies s.phase.wildcard as T3 unconditionally, without consulting
-	// s.sealed: (ANY, mutable) is unreachable here by construction, not by a
-	// check in this function. CreateGlobalBindingAt is the ONE enforcement
-	// point — it panics on (ANY, mutable) at write time — so every ANY slot
-	// this ever sees is sealed. Do not add a defensive branch for a state
-	// nothing can produce; this runs on the hot resolution path.
+	// tierOf has NO ambient arm: Stage A deleted that tier, and writeCoordinates
+	// no longer produces the wildcard coordinate for any view.
+	//
+	// The explicit wildcard arm below is NOT dead defensiveness. PhaseKey's
+	// wildcard field is separate from its level, and a wildcard key's level is
+	// the ZERO value — so without this arm `s.phase.level != phase` is false at a
+	// phase-0 query and an (ANY, sealed) slot would silently rank as an ordinary
+	// phase-0 sealed candidate. Nothing writes one today, but
+	// CreateGlobalBindingAt still ACCEPTS the coordinate and Copy still carries
+	// it, so a hand-built slot would alias phase 0 rather than being ignored.
+	// bulkTierOf refuses the wildcard for exactly this reason; the two must
+	// agree. Deleting PhaseKey outright is Stage B.
 	tierOf := func(s slotRef) int {
 		switch {
 		case s.phase.wildcard:
-			return tierAmbientSealed
+			return tierNone
 		case s.phase.level != phase:
 			return tierNone
 		case s.sealed:
@@ -835,7 +850,7 @@ func bulkTierOf(row bulkRef, phase Phase) int {
 // import path asks BulkRowSupplying first and refuses, per R7RS section 5.6.
 //
 // Caller MUST hold at least a read lock on p.mu.
-func (p *GlobalEnvironmentFrame) probeBulkLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier, maxTier int) (row bulkRef, bnd *Binding, tier int, ok bool) {
+func (p *GlobalEnvironmentFrame) probeBulkLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier, maxTier int) (row bulkRef, bnd *Binding, ok bool) {
 	bestTier := tierNone
 	var bestScopes []*syntax.Scope
 	for _, r := range p.bulkRows {
@@ -844,6 +859,21 @@ func (p *GlobalEnvironmentFrame) probeBulkLocked(key values.Symbol, q syntax.Sco
 			continue
 		}
 		if !q.IsAll() && !syntax.ScopesCompatible(r.scopes, q.Scopes()) {
+			continue
+		}
+		// A row over THIS store whose source phase is the query phase cannot add
+		// anything: the per-symbol probe just looked at exactly those slots and
+		// missed. Skipping it is not an optimization on the margin — the default
+		// dialect declares the base at phase 0 over its own store, so EVERY
+		// phase-0 miss would otherwise pay a full nested probe of the same store
+		// at the same phase, guaranteed to miss again. Measured at +6% engine
+		// startup before this check.
+		//
+		// The row still earns its place as a DECLARATION — it is what says the
+		// base is the language at phase 0, and the origin ratchet counts it — it
+		// simply has nothing to contribute to a resolution that already failed.
+		src, srcPhase, isSelf := selfStore(r.src)
+		if isSelf && src == p && srcPhase == phase {
 			continue
 		}
 		b, found := lookupExportSameStore(r.src, key)
@@ -857,7 +887,7 @@ func (p *GlobalEnvironmentFrame) probeBulkLocked(key values.Symbol, q syntax.Sco
 			bestScopes = r.scopes
 		}
 	}
-	return row, bnd, bestTier, bestTier >= 0
+	return row, bnd, bestTier >= 0
 }
 
 // probeRankedLocked is probeTiersLocked over every tier, raising on an

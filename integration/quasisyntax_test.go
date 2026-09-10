@@ -234,8 +234,8 @@ func TestQuasisyntaxWithMacros(t *testing.T) {
 	_, err = engine.Eval(context.Background(), engine.MustParse(context.Background(), `
 		(define-syntax my-when
 		  (lambda (stx)
-		    (let ((condition (cadr stx))
-		          (body (caddr stx)))
+		    (let ((condition (car (cdr stx)))
+		          (body (car (cdr (cdr stx)))))
 		      (quasisyntax (if #,condition #,body #f)))))
 	`))
 	c.Assert(err, qt.IsNil)
@@ -261,7 +261,7 @@ func TestQuasisyntaxHygiene(t *testing.T) {
 	_, err = engine.Eval(context.Background(), engine.MustParse(context.Background(), `
 		(define-syntax add-one
 		  (lambda (stx)
-		    (let ((expr (cadr stx)))
+		    (let ((expr (car (cdr stx))))
 		      (quasisyntax (+ #,expr 1)))))
 	`))
 	c.Assert(err, qt.IsNil)
@@ -279,14 +279,18 @@ func TestQuasisyntaxRecursive(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Define a recursive macro using quasisyntax
-	// Demonstrates transparent syntax operations: car, cdr, cadr, cddr work directly on stx
+	// Demonstrates transparent syntax operations: car and cdr work directly on stx.
+	// Spelled out rather than cadr/cddr because a transformer body compiles at
+	// phase 1, where the macro vocabulary supplies car and cdr but not the
+	// bootstrap-Scheme cadr; reaching that needs (import (for-syntax (scheme
+	// base))), which this harness's bare NewEngine cannot resolve.
 	_, err = engine.Eval(context.Background(), engine.MustParse(context.Background(), `
 		(define-syntax my-list
 		  (lambda (stx)
 		    (if (null? (cdr stx))
 		        (quasisyntax '())
-		        (let ((first (cadr stx))
-		              (rest (cons 'my-list (cddr stx))))
+		        (let ((first (car (cdr stx)))
+		              (rest (cons 'my-list (cdr (cdr stx)))))
 		          (quasisyntax (cons #,first #,rest))))))
 	`))
 	c.Assert(err, qt.IsNil)

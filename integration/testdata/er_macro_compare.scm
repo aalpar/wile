@@ -1,6 +1,14 @@
 ;; ER macro compare tests — literal matching via compare closure
 
 ;; Simple conditional macro
+;; A procedural transformer body compiles at phase 1, where the dialect
+;; declares only the macro-writing vocabulary. cadr and its siblings are
+;; bootstrap Scheme definitions and must be imported for-syntax to be
+;; reachable from a transformer body.
+(import (for-syntax (scheme base)))
+;; caddr/cadddr/cdddr live in cxr.sld, not base.sld.
+(import (for-syntax (scheme cxr)))
+
 (define-syntax my-if
   (er-macro-transformer
     (lambda (form rename compare)

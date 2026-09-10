@@ -107,11 +107,15 @@ func TestChildRuntimeMirrorsTheWholeSealedAxis(t *testing.T) {
 	c.Assert(lib.SealedWriteViewAt(Phase(2)), qt.Equals, lib.AtPhase(Phase(2)))
 }
 
-// A sealed write at phase 0 lands at the AMBIENT coordinate — visible from every
-// phase — while every other sealed write is exact-phase. That single branch in
-// writeCoordinates is where the pre-fold topology went: the phase-0 seal's global
-// was ambient because every phase frame's parent chain ran through it, and the
-// phase-1 seal's was exact because none ran through that one.
+// EVERY write lands at (ExactPhase(the writing view's phase), the view's sealed
+// flag) — the phase-0 sealed write included. Stage A deleted writeCoordinates'
+// one special arm, which used to send a sealed phase-0 write to AnyPhase() so
+// that every phase's read reached it. Cross-phase visibility is now a property
+// of the dialect's declared initial imports, carried by a bulk row over the
+// store, not of a wildcard coordinate baked into the write.
+//
+// The phase axis is therefore the ONLY thing that separates the phase-0 and
+// phase-1 sealed-write views: they no longer differ in reach.
 func TestSealedWriteCoordinates(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
@@ -122,7 +126,7 @@ func TestSealedWriteCoordinates(t *testing.T) {
 
 	phase, sealed = ns.Runtime().SealedWriteViewAt(PhaseRuntime).writeCoordinates()
 	c.Assert(sealed, qt.IsTrue)
-	c.Assert(phase, qt.Equals, AnyPhase())
+	c.Assert(phase, qt.Equals, ExactPhase(PhaseRuntime))
 
 	phase, sealed = ns.Runtime().SealedWriteViewAt(PhaseExpand).writeCoordinates()
 	c.Assert(sealed, qt.IsTrue)

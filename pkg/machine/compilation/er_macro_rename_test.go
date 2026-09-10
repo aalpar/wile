@@ -16,6 +16,7 @@ package compilation_test
 
 import (
 	"testing"
+	"testing/fstest"
 
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 	"github.com/aalpar/wile/pkg/values"
@@ -27,11 +28,21 @@ import (
 // TestErMacroRename tests the ER macro rename closure via Scheme-level tests.
 // The rename closure ensures that renamed identifiers resolve to definition-site
 // bindings, providing hygiene for ER macros.
+//
+// Every program declares (for-syntax (scheme base)) and (for-syntax (scheme cxr)).
+// An er-macro-transformer body is PROCEDURAL: it runs at phase 1, and since the
+// sealed base stopped being ambient nothing reaches phase 1 that the program did
+// not import. cadr/caddr/cadddr/cddr are bootstrap Scheme definitions with no
+// phase-1 slot of their own, so they are exactly the names that go missing; cxr
+// is a second import because caddr and cadddr live in cxr.sld, not base.sld. A
+// syntax-rules macro needs no import — its template expands into the use site,
+// which is phase 0.
 func TestErMacroRename(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "rename provides hygienic if",
 			Code: `(begin
+			  (import (for-syntax (scheme base)) (for-syntax (scheme cxr)))
 			  (define-syntax my-if
 			    (er-macro-transformer
 			      (lambda (form rename compare)
@@ -45,6 +56,7 @@ func TestErMacroRename(t *testing.T) {
 		{
 			Name: "rename provides hygienic if false branch",
 			Code: `(begin
+			  (import (for-syntax (scheme base)) (for-syntax (scheme cxr)))
 			  (define-syntax my-if
 			    (er-macro-transformer
 			      (lambda (form rename compare)
@@ -58,6 +70,7 @@ func TestErMacroRename(t *testing.T) {
 		{
 			Name: "rename provides hygienic let and set",
 			Code: `(begin
+			  (import (for-syntax (scheme base)) (for-syntax (scheme cxr)))
 			  (define-syntax my-swap!
 			    (er-macro-transformer
 			      (lambda (form rename compare)
@@ -75,6 +88,7 @@ func TestErMacroRename(t *testing.T) {
 		{
 			Name: "rename tmp does not capture user tmp",
 			Code: `(begin
+			  (import (for-syntax (scheme base)) (for-syntax (scheme cxr)))
 			  (define-syntax my-swap!
 			    (er-macro-transformer
 			      (lambda (form rename compare)
@@ -93,6 +107,7 @@ func TestErMacroRename(t *testing.T) {
 		{
 			Name: "rename provides hygienic list constructor",
 			Code: `(begin
+			  (import (for-syntax (scheme base)) (for-syntax (scheme cxr)))
 			  (define-syntax make-triple
 			    (er-macro-transformer
 			      (lambda (form rename compare)
@@ -110,6 +125,7 @@ func TestErMacroRename(t *testing.T) {
 		{
 			Name: "rename or macro falsy path",
 			Code: `(begin
+			  (import (for-syntax (scheme base)) (for-syntax (scheme cxr)))
 			  (define-syntax my-or
 			    (er-macro-transformer
 			      (lambda (form rename compare)
@@ -123,6 +139,7 @@ func TestErMacroRename(t *testing.T) {
 		{
 			Name: "rename or macro truthy path",
 			Code: `(begin
+			  (import (for-syntax (scheme base)) (for-syntax (scheme cxr)))
 			  (define-syntax my-or
 			    (er-macro-transformer
 			      (lambda (form rename compare)
@@ -136,7 +153,14 @@ func TestErMacroRename(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
-			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			// SetupEngineTest, not RunSchemeCode: the programs now (import ...),
+			// and bootstrap.NewNamespaceFrame alone configures no library
+			// registry ("load-library: no library registry configured"). The
+			// empty MapFS contributes no user libraries; SetupEngineTest chains
+			// stdlib.FS behind it, which is where (scheme base) and (scheme cxr)
+			// come from.
+			env := testhelpers.SetupEngineTest(t, fstest.MapFS{})
+			result, err := testhelpers.RunSchemeCodeWithEnv(t, env, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})

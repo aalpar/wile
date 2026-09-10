@@ -39,10 +39,16 @@ func erSelfOriginLibFS() fstest.MapFS {
   (begin
     (define foo car)
     (define baz car)
+    ;; (car (cdr form)), not (cadr form): a transformer body compiles at phase 1,
+    ;; where the dialect's macro vocabulary supplies car and cdr but not the
+    ;; bootstrap-Scheme cadr. The alternative — (import (for-syntax (scheme
+    ;; base))) — is NOT usable here, because a phase-1 base import was measured
+    ;; to move where an ER rename resolves, and rename's definition-site
+    ;; resolution is exactly this test's subject. Filed in TODO.md.
     (define-syntax is-foo?
       (er-macro-transformer
         (lambda (form rename compare)
-          (if (compare (cadr form) (rename 'foo))
+          (if (compare (car (cdr form)) (rename 'foo))
               (list (rename 'quote) 'yes)
               (list (rename 'quote) 'no)))))))
 `)},

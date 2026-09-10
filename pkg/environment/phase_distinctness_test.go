@@ -24,9 +24,10 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// This file is the RED half of design §6.1's fifth row, written before any
-// Stage A mechanism (plans/2026-09-08-flatt-binding-model-a-impl, Task 2).
-// Task 7 deletes the skip.
+// This file is design §6.1's fifth row. It was written RED, before any Stage A
+// mechanism (plans/2026-09-08-flatt-binding-model-a-impl, Task 2); Task 7
+// deleted the ambient write arm and with it the skip, so it is now the gate that
+// keeps the coordinate from coming back.
 //
 // It is INTERNAL (package environment, not environment_test) for the reason
 // A7/A17 gives: PhaseKey, ExactPhase, AnyPhase, AmbientBinding and AmbientKeysAt
@@ -39,7 +40,7 @@ import (
 // ambientSlotCensus lists every LIVE slot in the store whose phase coordinate is
 // the ANY wildcard, rendered "name@(phase,sealed)" and sorted. A test-file method
 // rather than a production accessor: nothing outside this package needs the
-// coordinate, and Task 7 deletes the field this reads.
+// coordinate, and Stage B deletes the field this reads.
 func (p *GlobalEnvironmentFrame) ambientSlotCensus() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -61,8 +62,13 @@ func (p *GlobalEnvironmentFrame) ambientSlotCensus() []string {
 }
 
 // TestNoAmbientCoordinateExists pins that no slot in a populated store carries
-// the ANY phase coordinate. RED on master; GREEN after Task 7 deletes the
-// ambient tier and PhaseKey becomes a bare Phase.
+// the ANY phase coordinate. writeCoordinates lost its sealed-at-phase-0 arm, so
+// every write now stamps ExactPhase(the writing view's phase).
+//
+// PhaseKey and AnyPhase() still EXIST — collapsing PhaseKey to a bare Phase is
+// Stage B — so the census reads a field CreateGlobalBindingAt can still be
+// handed. That is exactly why the test keeps running: the coordinate is
+// reachable and simply no longer written.
 //
 // A fully BOOTSTRAPPED store is out of reach here: bootstrapping runs through
 // pkg/internal/bootstrap and pkg/wile, both of which import this package, so a
@@ -79,8 +85,6 @@ func (p *GlobalEnvironmentFrame) ambientSlotCensus() []string {
 // Every owner KIND is covered because SealedWriteViewAt is per-owner: a fix that
 // only re-coordinated the namespace root would leave library envs ambient.
 func TestNoAmbientCoordinateExists(t *testing.T) {
-	t.Skip("RED pin for plans/2026-09-08-flatt-binding-model-a-impl Task 2; Task 7 deletes this skip")
-
 	ns := NewNamespace()
 	owners := map[string]*EnvironmentFrame{
 		"namespace":   ns.Runtime(),

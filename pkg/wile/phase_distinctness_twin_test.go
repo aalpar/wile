@@ -53,8 +53,6 @@ import (
 // (for-syntax (scheme base))" is false and this test, not the vocabulary, is
 // what has to change.
 func TestPhase1DoesNotReachPhase0Sealed(t *testing.T) {
-	t.Skip("RED pin for plans/2026-09-08-flatt-binding-model-a-impl Task 2; Task 7 deletes this skip")
-
 	eng, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
 

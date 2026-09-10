@@ -2,6 +2,20 @@
 ;; These macros use rename and compare to verify hygiene
 ;; works correctly when the macro is used from a different module.
 
+;; A procedural transformer body compiles at phase 1, where the dialect declares
+;; only the macro-writing vocabulary — car and cdr, not the bootstrap-Scheme
+;; cadr/caddr/cdddr/cadddr these bodies use. So the accessors must be imported
+;; for-syntax; (scheme cxr) is the second import because caddr and cadddr live
+;; there rather than in base.sld.
+;;
+;; The import goes in the INCLUDED BODY, not beside the (import (scheme base))
+;; in the .sld. Measured: a for-syntax import in a define-library's declaration
+;; position silently drops the phase shift, while the same form inside the body
+;; composes it correctly. Filed in TODO.md; moving this line into the .sld makes
+;; every macro below unbound again, with no diagnostic naming the move.
+(import (for-syntax (scheme base)))
+(import (for-syntax (scheme cxr)))
+
 ;; my-or: uses rename for let/if/tmp to ensure hygiene across libraries
 (define-syntax my-or
   (er-macro-transformer

@@ -561,13 +561,20 @@ func TestSyntaxLocalIntroduceIsWired(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
+	// car/cdr rather than cadr/caddr, deliberately. A transformer body compiles
+	// at phase 1, where the macro vocabulary supplies car and cdr but NOT cadr —
+	// cadr is a bootstrap Scheme definition and reaching it needs
+	// (import (for-syntax (scheme base))), which newEngine's harness cannot
+	// resolve because it configures no library path. Spelling the accessor out
+	// keeps this test's subject the syntax-local-introduce flip rather than the
+	// import. Do not "simplify" it back.
 	result, err := engine.EvalMultiple(context.Background(), `
 			(define-syntax anaphoric
 			  (lambda (stx)
 			    (let ((f (syntax->list stx)))
 			      (datum->syntax #f
-			        (list 'let (list (list (syntax-local-introduce (datum->syntax #f 'it)) (cadr f)))
-			              (caddr f))))))
+			        (list 'let (list (list (syntax-local-introduce (datum->syntax #f 'it)) (car (cdr f))))
+			              (car (cdr (cdr f))))))))
 			(anaphoric 42 it)
 		`)
 	c.Assert(err, qt.IsNil)

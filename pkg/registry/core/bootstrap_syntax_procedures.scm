@@ -205,7 +205,9 @@
 ;; #`(… #,e …) inside a transformer body expanded its unsyntax as a macro use
 ;; and raised "unsyntax outside quasisyntax". At phase 0 both sides reached the
 ;; ambient keyword and it answered #t for the wrong reason, which is why the
-;; top level looked fine. Measured 2026-09-06.
+;; top level looked fine. Measured 2026-09-06, against the ambient (ANY, sealed)
+;; tier; that tier is gone, and its absence only strengthens the conclusion.
+;; See %k-underscore below for the coordinate that replaced it.
 ;;
 ;; datum->syntax #f gives an identifier with no pin and no scopes, so both sides
 ;; ask the same question — what does this name denote at the use site — which is
@@ -216,10 +218,28 @@
 (define %k-unsyntax-splicing (datum->syntax #f 'unsyntax-splicing))
 (define %k-quasisyntax    (datum->syntax #f 'quasisyntax))
 
-;; _ and ... are ambient (specialforms.go) and stay ambient, so their pin is
-;; correct and stable at every phase; they are compared, and quote-syntax is
-;; right for them.
-(define %k-underscore     (quote-syntax _))
+;; _ and ... are auxiliary syntax and fall under the rule above, not the one
+;; before it: they are COMPARED, never emitted, so they must carry no pin.
+;;
+;; quote-syntax was right for them only while the sealed base sat at the ambient
+;; (ANY, sealed) coordinate, where one binding answered at every phase. It no
+;; longer does. The base sits at (0, sealed) and a phase-1 read reaches it through
+;; a dialect-declared bulk row, which MATERIALIZES a separate phase-1 slot; a pin
+;; taken in a transformer body is therefore a different binding from the one a
+;; pattern's `...` resolves to, free-identifier=? answers #f, and every `...`
+;; degrades into an ordinary pattern variable. Two of them in one pattern then
+;; raise "duplicate pattern variable", which is how bootstrap_macros.scm stopped
+;; loading under this layer. Measured 2026-09-09.
+;;
+;; datum->syntax #f carries no pin and no scopes, so both sides ask the use site
+;; the same question at whatever phase the comparison runs; two unbound spellings
+;; still compare equal (R6RS 12.3), and a use-site binder of `...` or `_` carries
+;; a scope the constant lacks, so it still shadows.
+(define %k-underscore     (datum->syntax #f '_))
+
+;; %k-ellipsis is the default ellipsis identifier, threaded as ELL wherever
+;; syntax-rules did not supply a custom one. Unpinned for the reason above.
+(define %k-ellipsis       (datum->syntax #f '...))
 
 ;; %fresh: a temporary for generated binders. generate-temporaries mints a
 ;; process-unique name, so nested generated lets never shadow each other by
@@ -637,7 +657,7 @@
         (%syntax-violation 'quasisyntax "expected exactly one template: (quasisyntax TEMPLATE)" form)
         #f)
     (let* ((tmpl (car (cdr parts)))
-           (code (%gen-template tmpl (quote-syntax ...) 0 1)))
+           (code (%gen-template tmpl %k-ellipsis 0 1)))
       (datum->syntax form
         (list %k-datum->syntax (%const (%template-head tmpl)) (%or-const code tmpl))))))
 
@@ -703,7 +723,7 @@
         (%syntax-violation 'syntax-rules "expected (syntax-rules (literal ...) (pattern template) ...)" form)
         #f)
     (let* ((custom? (identifier? (car (cdr parts))))
-           (ell (if custom? (car (cdr parts)) (quote-syntax ...)))
+           (ell (if custom? (car (cdr parts)) %k-ellipsis))
            (rest (if custom? (cdr (cdr parts)) (cdr parts)))
            (x (%fresh)))
       (if (null? rest)

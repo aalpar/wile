@@ -189,21 +189,31 @@ func TestExactBinding_LocalWinsOverTheStore(t *testing.T) {
 	qt.Assert(t, bnd, qt.Not(qt.Equals), ns.Runtime().GetBinding(sym, values.EmptyScopes()))
 }
 
-func TestExactBinding_ReachesTheStoreButNotTheAmbientTier(t *testing.T) {
+// What ExactBinding excludes is another PHASE, not a tier at its own phase.
+// Before Stage A a sealed phase-0 write landed at (ANY, sealed), which the
+// ranked probe reached and ExactBinding deliberately did not; the write now
+// lands at (ExactPhase(0), sealed), so the two agree on it and the only thing
+// left outside ExactBinding's reach is a slot at a different phase.
+func TestExactBinding_ReachesTheStoresExactTiers(t *testing.T) {
 	ns := NewNamespace()
 	sym := values.NewSymbol("else")
-	ambientIdx, created := ns.Runtime().SealedWriteViewAt(PhaseRuntime).
+	sealedIdx, created := ns.Runtime().SealedWriteViewAt(PhaseRuntime).
 		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
 	qt.Assert(t, created, qt.IsTrue)
-	ambient := ns.Store().GetOwnGlobalBinding(ambientIdx)
+	sealed := ns.Store().GetOwnGlobalBinding(sealedIdx)
 
-	// GetBinding reaches the ambient keyword at T3; ExactBinding does not.
-	qt.Assert(t, ns.Runtime().GetBinding(sym, values.EmptyScopes()), qt.Equals, ambient)
+	qt.Assert(t, ns.Runtime().GetBinding(sym, values.EmptyScopes()), qt.Equals, sealed)
 	bnd, ambiguous := ns.Runtime().ExactBinding(sym, values.EmptyScopes())
+	qt.Assert(t, ambiguous, qt.IsFalse)
+	qt.Assert(t, bnd, qt.Equals, sealed)
+
+	// One phase up, the same store has no candidate at all until an initial
+	// import declares one as a bulk row.
+	bnd, ambiguous = ns.Runtime().AtPhase(PhaseExpand).ExactBinding(sym, values.EmptyScopes())
 	qt.Assert(t, ambiguous, qt.IsFalse)
 	qt.Assert(t, bnd, qt.IsNil)
 
-	// A phase-0 mutable slot is exact, and wins.
+	// A phase-0 mutable slot outranks the sealed one at the same phase.
 	idx, err := ns.Runtime().DefineOwnGlobal(sym, BindingTypeVariable, nil, values.NewInteger(5))
 	qt.Assert(t, err, qt.IsNil)
 	bnd, _ = ns.Runtime().ExactBinding(sym, values.EmptyScopes())

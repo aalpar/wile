@@ -141,10 +141,23 @@ func TestApply_ExpandTimePrimitive(t *testing.T) {
 
 // Apply with compile-time bindings
 
-// A compile-time binding lands at the owner's AMBIENT coordinate: at the phase-0
-// sealed-write view's own coordinates, reachable by a ranked read from every
-// phase, and at no exact-phase coordinate, phase 2 included, which held these
-// names before the relocation.
+// A compile-time binding (a special-form or auxiliary keyword: registerCompileTimeBinding,
+// writing through SealedWriteViewAt(PhaseRuntime)) lands at (ExactPhase(0), sealed) — the
+// phase-0 sealed-write view's own coordinates — and at no other coordinate: not at
+// (0, mutable), where a user define lands and therefore shadows, and not at any higher
+// exact phase.
+//
+// (0, sealed) is now an ORDINARY exact-phase coordinate. It used to be the ambient
+// (ANY, sealed) tier, which probeTiersLocked ranked as a candidate for a reader at every
+// phase; that tier is gone, and the probe now admits only slots whose phase equals the
+// reader's. So a ranked read reaches this keyword from phase 0 and from nowhere above it.
+// What restores a base name at a higher phase is a dialect's initial-import bulk row,
+// which the engine installs at origin and a bare reg.Apply does not — hence the misses
+// below rather than a bug.
+//
+// This is the tier that MOVED. Ordinary primitives did not: Apply's phaseTargets loop
+// registers a PhaseSetRuntime|PhaseSetExpand spec at both phases, so such a name keeps an
+// exact-phase-1 slot of its own regardless (TestApply_MultiPhasePrimitive pins that).
 func TestApply_CompileTimeBinding(t *testing.T) {
 	c := qt.New(t)
 	reg := NewRegistry()
@@ -161,10 +174,16 @@ func TestApply_CompileTimeBinding(t *testing.T) {
 	c.Assert(env.OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNil)
 	c.Assert(env.AtPhase(environment.Phase(2)).OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNil)
 
-	for _, phase := range []environment.Phase{environment.PhaseRuntime, environment.PhaseExpand, environment.Phase(3)} {
-		bnd := env.AtPhase(phase).GetBinding(sym, values.AllScopes())
-		c.Assert(bnd, qt.IsNotNil, qt.Commentf("phase %s", phase))
-		c.Assert(bnd.BindingType(), qt.Equals, environment.BindingTypePrimitive)
+	bnd := env.AtPhase(environment.PhaseRuntime).GetBinding(sym, values.AllScopes())
+	c.Assert(bnd, qt.IsNotNil)
+	c.Assert(bnd.BindingType(), qt.Equals, environment.BindingTypePrimitive)
+
+	for _, phase := range []environment.Phase{environment.PhaseExpand, environment.Phase(3)} {
+		c.Assert(
+			env.AtPhase(phase).GetBinding(sym, values.AllScopes()),
+			qt.IsNil,
+			qt.Commentf("phase %s", phase),
+		)
 	}
 }
 
@@ -258,18 +277,26 @@ func TestApplyDocs(t *testing.T) {
 
 	reg.ApplyDocs(env)
 
+	// ApplyDocs walks every instantiated phase view, so a doc entry lands on
+	// whichever view actually holds the name — which is the subject here, and the
+	// reason each case names the view it reads from rather than reading all three
+	// from macroEnv. Since the ambient tier was removed, a compile-time keyword's
+	// (0, sealed) slot is reachable only from phase 0, so "if" and "else" read
+	// through env; "and" exists solely as the (1, mutable) binding created above,
+	// so it reads through macroEnv.
 	tcs := []struct {
 		name    string
+		readEnv *environment.EnvironmentFrame
 		sym     string
 		wantDoc string
 	}{
-		{"BindingSpec with doc", "if", "Conditional expression."},
-		{"DocEntry on pre-existing binding", "and", "Short-circuit conjunction."},
-		{"BindingSpec without doc unchanged", "else", ""},
+		{"BindingSpec with doc", env, "if", "Conditional expression."},
+		{"DocEntry on pre-existing binding", macroEnv, "and", "Short-circuit conjunction."},
+		{"BindingSpec without doc unchanged", env, "else", ""},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			bnd := macroEnv.GetBinding(values.NewSymbol(tc.sym), values.AllScopes())
+			bnd := tc.readEnv.GetBinding(values.NewSymbol(tc.sym), values.AllScopes())
 			c.Assert(bnd, qt.IsNotNil)
 			c.Assert(bnd.Doc(), qt.Equals, tc.wantDoc)
 		})

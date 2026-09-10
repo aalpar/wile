@@ -17,6 +17,7 @@ package compilation_test
 import (
 	"errors"
 	"testing"
+	"testing/fstest"
 
 	qt "github.com/frankban/quicktest"
 
@@ -51,28 +52,54 @@ func TestSyntaxCompilerValuePositionRefused(t *testing.T) {
 // phase up (measured M2: when leaked its transformer, if leaked its expander).
 // The control row pins that a phase-1 VARIABLE — the expand-phase registry
 // copy of car (M7) — still loads.
+//
+// Every row now declares (for-syntax (scheme base)), because the reference under
+// test is written as an argument to display, and display is not reachable from
+// phase 1 without it: the sealed base stopped being ambient, so a phase-1 body
+// sees only what the program imported. car (the control row) is registered as a
+// Go primitive at BOTH phases and keeps its own exact-phase-1 slot, so it is
+// still the registry copy that answers it, not the imported row — the import
+// only restores the display around it.
+//
+// The import does not soften any verdict: the refusal keys on the BindingType
+// tag at the reaching site, so a phase-1 name that denotes a transformer or an
+// expander is refused whether the program reached it by import or otherwise.
+// Measured — all five rows answer exactly as they did when the base was ambient.
 func TestPhaseOneHandlerValuePositionRefused(t *testing.T) {
+	// Prefix, not a wrapper: RunSchemeCodeWithEnv reads a single top-level form
+	// (Parser.ReadSyntax reads one datum per call; see pkg/parser/CLAUDE.local.md
+	// and the MEMORY.md gotcha on EvalMultipleWithSource), so a bare two-form
+	// string would silently drop the second form with no error. begin-wrapping is
+	// the established fix elsewhere in this package's tests (e.g.
+	// pkg/internal/validate/validate_define_test.go).
+	const forSyntaxBase = `(import (for-syntax (scheme base)))`
 	tcs := []struct {
 		name    string
 		code    string
 		wantErr error // nil means must succeed
 	}{
-		{"bootstrap macro transformer", `(begin-for-syntax (display when))`, werr.ErrSyntacticKeywordAsVariable},
-		{"primitive expander", `(begin-for-syntax (display if))`, werr.ErrSyntacticKeywordAsVariable},
-		// RunSchemeCode reads a single top-level form (Parser.ReadSyntax reads one
-		// datum per call; see pkg/parser/CLAUDE.local.md and the MEMORY.md gotcha on
-		// EvalMultipleWithSource): a bare two-form string silently drops the second
-		// form with no error. begin-wrapping is the established fix elsewhere in
-		// this package's tests (e.g. pkg/internal/validate/validate_define_test.go).
-		{"user transformer at its own phase", `(begin (define-syntax m (syntax-rules () ((_) 1)))
+		{"bootstrap macro transformer", `(begin ` + forSyntaxBase + `
+			(begin-for-syntax (display when)))`, werr.ErrSyntacticKeywordAsVariable},
+		{"primitive expander", `(begin ` + forSyntaxBase + `
+			(begin-for-syntax (display if)))`, werr.ErrSyntacticKeywordAsVariable},
+		{"user transformer at its own phase", `(begin ` + forSyntaxBase + `
+			(define-syntax m (syntax-rules () ((_) 1)))
 			(begin-for-syntax (display m)))`, werr.ErrSyntacticKeywordAsVariable},
-		{"expand-phase primitive is a variable", `(begin-for-syntax (display car))`, nil},
-		{"define-for-syntax value is a variable", `(begin (define-for-syntax fv 41)
+		{"expand-phase primitive is a variable", `(begin ` + forSyntaxBase + `
+			(begin-for-syntax (display car)))`, nil},
+		{"define-for-syntax value is a variable", `(begin ` + forSyntaxBase + `
+			(define-for-syntax fv 41)
 			(begin-for-syntax (display fv)))`, nil},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := testhelpers.RunSchemeCode(t, tc.code)
+			// SetupEngineTest, not RunSchemeCode: bootstrap.NewNamespaceFrame alone
+			// configures no library registry, so (import ...) fails there with
+			// "load-library: no library registry configured". The empty MapFS adds
+			// no user libraries; SetupEngineTest chains stdlib.FS behind it, which
+			// is where (scheme base) comes from.
+			env := testhelpers.SetupEngineTest(t, fstest.MapFS{})
+			_, err := testhelpers.RunSchemeCodeWithEnv(t, env, tc.code)
 			if tc.wantErr == nil {
 				qt.Assert(t, err, qt.IsNil)
 				return
@@ -84,23 +111,30 @@ func TestPhaseOneHandlerValuePositionRefused(t *testing.T) {
 }
 
 // A phase-0 reference to a phase-1 meaning is refused, and WHICH sentinel it
-// gets is decided by whether the name is also an ambient keyword, not by phase
-// placement alone. The two answers are the point of the table.
+// gets is decided by whether the name ALSO has a keyword binding at phase 0, not
+// by phase placement alone. The two answers are the point of the table.
 //
 //   - `if` is a compileTimeBindingSpecs name, so registerCompileTimeBinding
-//     installs an ambient BindingTypePrimitive binding that a phase-0 probe
-//     reaches as T3. refuseCompileTimeMeaning's type arm answers it first:
+//     installs a valueless BindingTypePrimitive binding through the sealed
+//     phase-0 write view, which a phase-0 probe reaches as T2 (exact phase,
+//     sealed). refuseCompileTimeMeaning's type arm answers it first:
 //     ErrSyntacticKeywordAsVariable, the more specific verdict, and the same
 //     class Chez ("invalid syntax if") and Racket give.
-//   - A bootstrap macro or a user macro has NO ambient keyword (it exists only
+//   - A bootstrap macro or a user macro has NO phase-0 keyword (it exists only
 //     at phase 1), so nothing is reachable from phase 0 and the reference is
 //     unbound. That arm still pins ErrNoSuchBinding, negative assertion included.
 //
-// The dialect removed-form contract no longer rides on the first row. Since the
-// keywords became ambient it is carried explicitly, by WithoutBindings at engine
-// init (removedFormNames, pkg/wile/engine.go): a form the dialect removed loses
-// its keyword with it, so a reference to it is unbound rather than a keyword the
-// engine does not have. TestWithDialect_RemovesForm is that pin.
+// The keyword coordinate is (ExactPhase(0), sealed), not the (ANY, sealed)
+// ambient slot it used to be: writeCoordinates lost its wildcard arm when the
+// ambient tier was deleted. Phase 0 is where these are USED, so the rows below
+// answer the same as before; what changed is that the keyword no longer follows
+// the reference to an arbitrary phase.
+//
+// The dialect removed-form contract no longer rides on the first row. It is
+// carried explicitly, by WithoutBindings at engine init (removedFormNames,
+// pkg/wile/engine.go): a form the dialect removed loses its keyword with it, so a
+// reference to it is unbound rather than a keyword the engine does not have.
+// TestWithDialect_RemovesForm is that pin.
 func TestPhaseZeroCrossPhaseNamesStayUnbound(t *testing.T) {
 	tcs := []struct {
 		name string
@@ -170,11 +204,16 @@ func TestPinnedTemplateIdentifierRefusesCompileTimeMeaning(t *testing.T) {
 }
 
 // Every compile-time-only NAME (auxiliary syntax and the special forms whose
-// docstrings ride on a BindingSpec) is ambient, so a phase-0 reference in value
-// position reaches it and is refused as a keyword. Before the relocation these
-// sat at phase 2, unreachable from phase 0, and (display if) was the less
-// specific "no such binding". Chez ("invalid syntax if") and Racket give the
-// same class of verdict.
+// docstrings ride on a BindingSpec) has a sealed binding at phase 0, so a
+// phase-0 reference in value position reaches it and is refused as a keyword.
+// Before the relocation these sat at phase 2, unreachable from phase 0, and
+// (display if) was the less specific "no such binding". Chez ("invalid syntax
+// if") and Racket give the same class of verdict.
+//
+// "At phase 0", not "at every phase": these were written to (ANY, sealed) while
+// the ambient tier existed, and the tier's deletion moved them to
+// (ExactPhase(0), sealed). Phase 0 is the phase this test asks about, so the
+// verdicts are unchanged.
 func TestKeywordValuePositionRefusedAtPhaseZero(t *testing.T) {
 	for _, name := range []string{"if", "define", "lambda", "else", "=>"} {
 		t.Run(name, func(t *testing.T) {

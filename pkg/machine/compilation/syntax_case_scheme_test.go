@@ -17,6 +17,7 @@ package compilation_test
 import (
 	"slices"
 	"testing"
+	"testing/fstest"
 
 	qt "github.com/frankban/quicktest"
 
@@ -25,6 +26,14 @@ import (
 	"github.com/aalpar/wile/pkg/values/valuestest"
 )
 
+// The two FENDER programs declare (import (for-syntax (scheme base))); the other
+// six declare nothing. A syntax-case fender is ordinary procedural code that runs
+// in the transformer body at phase 1, so it reaches only what phase 1 supplies,
+// and the sealed base stopped being ambient: `positive?` has no phase-1 slot of
+// its own and now needs the import. `syntax->datum` and `syntax` in the same
+// fenders need no import — they are registered at phase 1 in their own right.
+// The template halves of the other clauses expand into the USE site, which is
+// phase 0, so they never ask phase 1 for anything.
 func TestSyntaxCaseHappyPaths(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
@@ -62,6 +71,7 @@ func TestSyntaxCaseHappyPaths(t *testing.T) {
 		{
 			Name: "fender true selects first clause",
 			Code: `(begin
+				(import (for-syntax (scheme base)))
 				(define-syntax check-positive
 					(lambda (stx)
 						(syntax-case stx ()
@@ -75,6 +85,7 @@ func TestSyntaxCaseHappyPaths(t *testing.T) {
 		{
 			Name: "fender false falls through to next clause",
 			Code: `(begin
+				(import (for-syntax (scheme base)))
 				(define-syntax check-positive
 					(lambda (stx)
 						(syntax-case stx ()
@@ -119,7 +130,14 @@ func TestSyntaxCaseHappyPaths(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
-			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			// SetupEngineTest, not RunSchemeCode: the fender programs (import ...),
+			// and bootstrap.NewNamespaceFrame alone configures no library registry
+			// ("load-library: no library registry configured"). The empty MapFS
+			// contributes no user libraries; SetupEngineTest chains stdlib.FS
+			// behind it, which is where (scheme base) comes from. The programs
+			// that import nothing run identically either way.
+			env := testhelpers.SetupEngineTest(t, fstest.MapFS{})
+			result, err := testhelpers.RunSchemeCodeWithEnv(t, env, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})

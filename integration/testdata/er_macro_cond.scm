@@ -1,14 +1,26 @@
 ;; my-cond: a real-world ER macro pattern using compare for literal matching.
 ;; Tests recursive ER self-invocation and compare-based dispatch on 'else'.
 
+;; Accessors are spelled out with car/cdr rather than imported for-syntax.
+;;
+;; A transformer body compiles at phase 1, where the dialect declares only the
+;; macro-writing vocabulary — car and cdr are in it, the bootstrap-Scheme
+;; cadr/caddr/cdddr/cadddr are not. The obvious migration,
+;; (import (for-syntax (scheme base))), is NOT usable in this file: measured, a
+;; phase-1 base import is not behaviour-neutral here. It makes this file's
+;; syntax-rules macros fail to compile ("not a closure: values.voidType") and
+;; makes `else` in an ER-built cond clause compile as a variable. Filed in
+;; TODO.md; until that is fixed, spelling the accessor out is the migration that
+;; keeps these fixtures testing ER macros rather than the import.
+
 (define-syntax my-cond
   (er-macro-transformer
     (lambda (form rename compare)
       (if (null? (cdr form))
           ;; No clauses — unspecified
           (list (rename 'if) #f #f)
-          (let ((clause (cadr form))
-                (rest (cddr form)))
+          (let ((clause (car (cdr form)))
+                (rest (cdr (cdr form))))
             ;; The clause head is an identifier under the Scheme syntax layer
             ;; (the ER form is a spine: pairs plain, identifiers kept) and a
             ;; plain symbol under the Go one, so neither predicate alone holds

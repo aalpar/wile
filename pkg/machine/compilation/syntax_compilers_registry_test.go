@@ -67,11 +67,22 @@ func TestSyntaxCompilersRegistry(t *testing.T) {
 	}
 }
 
-func TestSyntaxCompilersAmbientAcrossPhases(t *testing.T) {
-	// Table-off-axis invariant: syntax compilers register into the AMBIENT tier,
-	// NOT at phase 2, so they are reachable uniformly from every phase.
-	// Pre-relocation they lived only in Compile(), so the expand phase could not see
-	// them and only the phase-2 frame held them.
+// Syntax compilers reach the phase they were REGISTERED at, plus whatever a bulk
+// row supplies — not every phase. The ambient (ANY, sealed) tier they used to
+// occupy is gone: RegisterSyntaxCompilers writes through the level-0 sealed-write
+// view, and EnvironmentFrame.writeCoordinates now lands every write at
+// (ExactPhase(view's phase), view's sealed), so the compilers sit at
+// (ExactPhase(0), sealed) and phase 1 is a foreign coordinate to them.
+//
+// Measured on a bare namespace, symbol "syntax-case": reachable at phase 0 only;
+// phases -1, 1, 2 and 3 all resolve nil. Installing the row the default dialect
+// declares for phase 1 (PhasedImport{BaseSourceName, PhaseExpand}, engine.go) adds
+// phase 1 and nothing else — phase 2 stays nil, because the dialect declares the
+// base at phases 0 and 1 and no higher.
+//
+// The pre-relocation leak this test was written for is still checked: the
+// compilers must not be at (2, mutable).
+func TestSyntaxCompilersReachTheirOwnPhasePlusBulkRowPhases(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
@@ -79,18 +90,36 @@ func TestSyntaxCompilersAmbientAcrossPhases(t *testing.T) {
 	ns := env.Namespace()
 	sym := values.NewSymbol("syntax-case")
 
-	// The compiler binding sits at the ambient (sealed) coordinate.
+	// The compiler binding sits at the level-0 SEALED coordinate — an exact
+	// phase now, not the ambient one.
 	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
 	qt.Assert(t, sealedRoot.OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNotNil)
 
 	// It is NOT at (2, mutable) — the leak the relocation closes.
 	qt.Assert(t, ns.AtPhase(environment.Phase(2)).OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNil)
 
-	// Ambient: reachable by a read at every phase, which is what the ANY coordinate
-	// means.
+	// Exact phase 0, so a read at phase 0 answers and a read at any other phase
+	// does not. Phase 1 going nil here IS the user-visible break: a procedural
+	// transformer body reaches the base only through a declared import.
 	qt.Assert(t, ns.Runtime().GetBinding(sym, values.AllScopes()), qt.IsNotNil)
-	qt.Assert(t, ns.Expand().GetBinding(sym, values.AllScopes()), qt.IsNotNil)
-	qt.Assert(t, ns.AtPhase(environment.Phase(2)).GetBinding(sym, values.AllScopes()), qt.IsNotNil)
+	qt.Assert(t, ns.Expand().GetBinding(sym, values.AllScopes()), qt.IsNil)
+	qt.Assert(t, ns.AtPhase(environment.Phase(2)).GetBinding(sym, values.AllScopes()), qt.IsNil)
+
+	// A bulk row is what restores phase-1 reach: one resolution candidate at
+	// phase 1 standing for every name the store supplies at phase 0. This is the
+	// shape wile.NewEngine installs for each of the default dialect's declared
+	// initial imports.
+	store := ns.Store()
+	src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, environment.BaseSourceName())
+	store.InstallBulkRow(src, nil, environment.ExactPhase(environment.PhaseExpand), true)
+
+	qt.Assert(t, ns.Expand().GetBinding(sym, values.AllScopes()), qt.IsNotNil,
+		qt.Commentf("the phase-1 row supplies what the ambient tier used to"))
+	qt.Assert(t, store.BulkResolutionCount() > 0, qt.IsTrue,
+		qt.Commentf("the answer must come THROUGH the row, not from a per-symbol slot"))
+
+	// The row is declared at phase 1 alone, so it widens nothing above it.
+	qt.Assert(t, ns.AtPhase(environment.Phase(2)).GetBinding(sym, values.AllScopes()), qt.IsNil)
 }
 
 func TestSyntaxCompilersRegistryLookupMiss(t *testing.T) {

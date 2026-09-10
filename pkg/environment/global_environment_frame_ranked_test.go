@@ -26,9 +26,15 @@ import (
 )
 
 // The ranked probe over a hand-built mixed store (design §4.3): tier T1
-// (exact phase, mutable) > T2 (exact phase, sealed) > T3 (ANY, sealed); a slot
-// at any OTHER exact phase is not a candidate at all; maximal scope cardinality
-// ranks within the winning tier only.
+// (exact phase, mutable) > T2 (exact phase, sealed); a slot at any OTHER exact
+// phase is not a candidate at all; maximal scope cardinality ranks within the
+// winning tier only.
+//
+// The two exact tiers at the query phase are now the WHOLE candidate set. Stage
+// A deleted the ambient (ANY, sealed) tier, so this table's third case,
+// "ambient visible from every phase", has no subject; the property that
+// replaced it — cross-phase visibility supplied by a bulk row — is
+// TestResolveRankedCrossPhaseNeedsABulkRow below.
 func TestResolveRankedTiers(t *testing.T) {
 	sym := values.NewSymbol("v")
 	mk := func(entries []struct {
@@ -54,18 +60,19 @@ func TestResolveRankedTiers(t *testing.T) {
 		}
 		probes []probe
 	}{
-		{name: "T1 beats T2 beats T3",
+		{name: "T1 beats T2",
 			entries: []struct {
 				phase  PhaseKey
 				sealed bool
 			}{
-				{AnyPhase(), true},     // slot 0: T3
-				{ExactPhase(0), true},  // slot 1: T2 at 0
-				{ExactPhase(0), false}, // slot 2: T1 at 0
+				{ExactPhase(0), true},  // slot 0: T2 at 0
+				{ExactPhase(0), false}, // slot 1: T1 at 0
 			},
 			probes: []probe{
-				{phase: 0, wantSlot: 2, wantOK: true},
-				{phase: 1, wantSlot: 0, wantOK: true}, // only T3 is a candidate at 1
+				{phase: 0, wantSlot: 1, wantOK: true},
+				// Neither slot is a candidate one phase up: a sealed write is
+				// exact-phase like any other, so it no longer leaks upward.
+				{phase: 1, wantOK: false},
 			}},
 		{name: "other exact phase is no candidate",
 			entries: []struct {
@@ -78,18 +85,6 @@ func TestResolveRankedTiers(t *testing.T) {
 				{phase: 0, wantOK: false},
 				{phase: 1, wantSlot: 0, wantOK: true},
 				{phase: 2, wantOK: false},
-			}},
-		{name: "ambient visible from every phase",
-			entries: []struct {
-				phase  PhaseKey
-				sealed bool
-			}{
-				{AnyPhase(), true},
-			},
-			probes: []probe{
-				{phase: -1, wantSlot: 0, wantOK: true},
-				{phase: 0, wantSlot: 0, wantOK: true},
-				{phase: 3, wantSlot: 0, wantOK: true},
 			}},
 	}
 	for _, tc := range tcs {
@@ -113,6 +108,47 @@ func TestResolveRankedTiers(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Cross-phase visibility is a BULK ROW's property now, not a coordinate's, and
+// this is what TestResolveRankedTiers' "ambient visible from every phase" case
+// became. Before Stage A a sealed phase-0 write landed at (ANY, sealed) and
+// every phase's probe reached it; it now lands at (ExactPhase(0), sealed), and
+// phase 1 reaches it only because the dialect declared the base at phase 1,
+// which installs a row over the same store at (ExactPhase(1), sealed).
+//
+// The probe BEFORE the row is installed is the control: resolveRankedLocked
+// consults rows only on a per-symbol miss, so a pass without that leg would not
+// distinguish the row doing the work from the coordinate still doing it.
+func TestResolveRankedCrossPhaseNeedsABulkRow(t *testing.T) {
+	sym := values.NewSymbol("v")
+	g := NewGlobalEnvironmentFrame()
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), true)
+
+	// Anonymous function per probe so the RUnlock fires at the end of THIS
+	// probe: resolveRankedLocked's own doc requires defer release (it can panic
+	// mid-hold), and InstallBulkRow between two probes takes the write lock.
+	probeAt := func(phase Phase) (slotRef, bool) {
+		g.mu.RLock()
+		defer g.mu.RUnlock()
+		return g.resolveRankedLocked(*sym, syntax.EmptyScopes(), phase)
+	}
+
+	ref, ok := probeAt(PhaseRuntime)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, ref.slot, qt.Equals, 0)
+	_, ok = probeAt(PhaseExpand)
+	qt.Assert(t, ok, qt.IsFalse,
+		qt.Commentf("a sealed phase-0 slot must not be reachable from phase 1 on its own"))
+
+	g.InstallBulkRow(NewSealedStoreBulkSource(g, PhaseRuntime, BaseSourceName()),
+		nil, ExactPhase(PhaseExpand), true)
+
+	ref, ok = probeAt(PhaseExpand)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, ref.slot, qt.Equals, 0,
+		qt.Commentf("the row must resolve to the phase-0 slot ITSELF; a copy would fork later writes"))
+	qt.Assert(t, g.BulkResolutionCount(), qt.Equals, int64(1))
 }
 
 // (ANY, mutable) is forbidden: no population produces it, so the write API
@@ -183,20 +219,24 @@ func TestCreateMatchesCoordinatesAndScopes(t *testing.T) {
 
 // Copy's per-slot coordinate carry-forward is production-live: it is the whole
 // of NewSchemeReportNamespace, which builds its store by copying the parent's
-// rather than minting fresh. Silently dropping the stamps would turn every
-// sealed entry in a scheme-report namespace from (AnyPhase, sealed) — ambient at
-// every phase — into the zero value (ExactPhase(0), mutable), which starts
-// colliding with real phase-0 user defines instead of being shadowed by them.
+// rather than minting fresh. Silently dropping the stamps would collapse every
+// sealed entry in a scheme-report namespace onto the zero value
+// (ExactPhase(0), mutable), where it starts colliding with real phase-0 user
+// defines instead of being shadowed by them.
+//
+// The two slots below are the two coordinates a write path actually mints at
+// phase 0 since Stage A — sealed and mutable — rather than the ambient one this
+// test used to open with, which nothing writes any more.
 func TestCopyPreservesCoordinates(t *testing.T) {
 	sym := values.NewSymbol("v")
 	g := NewGlobalEnvironmentFrame()
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, AnyPhase(), true)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), true)
 	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
 
 	c := g.Copy()
 
 	qt.Assert(t, len(c.keys[*sym]), qt.Equals, 2)
-	qt.Assert(t, c.keys[*sym][0].phase, qt.Equals, AnyPhase())
+	qt.Assert(t, c.keys[*sym][0].phase, qt.Equals, ExactPhase(PhaseRuntime))
 	qt.Assert(t, c.keys[*sym][0].sealed, qt.IsTrue)
 	qt.Assert(t, c.keys[*sym][1].phase, qt.Equals, ExactPhase(PhaseRuntime))
 	qt.Assert(t, c.keys[*sym][1].sealed, qt.IsFalse)

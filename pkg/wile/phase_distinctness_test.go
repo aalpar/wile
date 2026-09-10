@@ -25,10 +25,13 @@ package wile_test
 // Two labels, and the difference is the whole point (memory:
 // plan-pin-tests-must-fail-on-master):
 //
-//   - RED pins FAIL on master. They carry a t.Skip naming Task 7, so the branch
-//     is mergeable and the tests are visible; Task 7 deletes the skips. Each
-//     one's RED state was measured with the skip stripped, in an isolated
-//     worktree, and is recorded in its comment.
+//   - RED pins FAILED on master. They carried a t.Skip naming Task 7 while the
+//     mechanism was being built, so the branch stayed mergeable and the tests
+//     stayed visible; Task 7 deleted the skips and they are live now. Each one's
+//     RED state was measured with the skip stripped, in an isolated worktree,
+//     and is recorded in its comment — that measurement is the evidence the pin
+//     records a CHANGE rather than an answer, and it cannot be re-taken once the
+//     mechanism has landed.
 //   - GUARDs PASS on both sides. They are NOT skipped — a skipped guard would
 //     run for the first time only after Task 7 landed, which is exactly when it
 //     was supposed to be protecting something.
@@ -119,8 +122,6 @@ const phase1TransformerCadrSrc = `(define-syntax pick
 // Design section 6.1's car row is wrong rather than imprecise, and Task 11 owes
 // it a correction. The design's own A4 census already contained the refutation.
 func TestPhase1_ProceduralTransformerUnboundWithoutImport(t *testing.T) {
-	t.Skip("RED until Task 7 of plans/2026-09-08-flatt-binding-model-a-impl.local.md deletes the ambient tier")
-
 	eng := phaseDistinctnessEngine(t)
 	_, err := eng.EvalMultiple(context.Background(), phase1TransformerCadrSrc)
 
@@ -289,8 +290,6 @@ func transformerAtPhase(n int, prologue string) string {
 // it carries an exact-phase-1 slot but none at phase 2, so a car-based pin
 // would assert phase 2 DIFFERING from phase 1, the opposite of this test.
 func TestPhase2_UniformRule(t *testing.T) {
-	t.Skip("RED until Task 7 of plans/2026-09-08-flatt-binding-model-a-impl.local.md deletes the ambient tier")
-
 	t.Run("a name the dialect supplies only at phase 0 is unbound at every higher rung", func(t *testing.T) {
 		for _, n := range []int{1, 2} {
 			t.Run(fmt.Sprintf("phase %d", n), func(t *testing.T) {

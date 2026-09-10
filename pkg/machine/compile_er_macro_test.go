@@ -20,18 +20,36 @@ import (
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
 
+// erTransformerImports are the initial imports every procedural transformer
+// body below needs. A procedural transformer runs at phase 1, and the sealed
+// base now sits at an exact phase 0 rather than at every phase at once, so a
+// phase-1 body reaches a bootstrap-Scheme procedure only through an import that
+// names phase 1. cadr/caddr are bootstrap Scheme, not Go primitives, so both
+// libraries are required: cadr comes from (scheme base) and caddr from
+// (scheme cxr).
+//
+// A syntax-rules macro needs none of this: its template expands into the use
+// site, which is phase 0.
+const erTransformerImports = `(import (for-syntax (scheme base))
+                                      (for-syntax (scheme cxr)))`
+
 // TestCompileErMacro tests ER macro transformer compilation and round-trip
 // usage through the full pipeline.
 //
 // Source: compile_er_macro.go (compileERMacroTransformer).
 //
-// Uses the two-step pattern because define-syntax is a top-level form.
+// Uses the two-step pattern because define-syntax is a top-level form, preceded
+// by the phase-1 imports the transformer bodies depend on. The environment comes
+// from SetupEngineTest rather than NewFullRuntimeEnv because only the former
+// wires a library registry and file resolver, without which (import ...) cannot
+// resolve anything.
 func TestCompileErMacro(t *testing.T) {
 	tcs := []struct {
 		Name     string
@@ -69,13 +87,22 @@ func TestCompileErMacro(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
-			env := testhelpers.NewFullRuntimeEnv(t)
+			env := testhelpers.SetupEngineTest(t, stdlib.FS)
 
-			// Step 1: Define the ER macro
-			sv := testhelpers.ParseSchemeExpr(t, env, tc.MacroDef)
+			// Step 0: make the bootstrap-Scheme procedures the transformer
+			// bodies call available at the phase they are called from.
+			sv := testhelpers.ParseSchemeExpr(t, env, erTransformerImports)
 			cont, err := testhelpers.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc := machine.NewMachineContext(context.Background(), cont)
+			err = mc.Run()
+			qt.Assert(t, err, qt.IsNil)
+
+			// Step 1: Define the ER macro
+			sv = testhelpers.ParseSchemeExpr(t, env, tc.MacroDef)
+			cont, err = testhelpers.NewTopLevelThunk(sv, env)
+			qt.Assert(t, err, qt.IsNil)
+			mc = machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
 

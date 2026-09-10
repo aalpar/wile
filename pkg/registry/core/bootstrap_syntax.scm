@@ -32,7 +32,7 @@ Examples:
       (syntax-case stx ()
         ((_ a b) #'(let ((t a)) (set! a b) (set! b t))))))"
   (lambda (x)
-    (%syntax-case-transform x (quote-syntax ...))))
+    (%syntax-case-transform x %k-ellipsis)))
 
 (define-syntax %syntax-case/ellipsis
   "syntax-case with an explicit ellipsis identifier; what syntax-rules threads
@@ -58,7 +58,7 @@ Category: macros
 Examples:
   (syntax-case #'(1 2) () ((a b) #'(b a)))  ; => syntax for (2 1)"
   (lambda (x)
-    (%syntax-transform x (quote-syntax ...))))
+    (%syntax-transform x %k-ellipsis)))
 
 (define-syntax %syntax/ellipsis
   "syntax with an explicit ellipsis identifier; what syntax-rules threads its

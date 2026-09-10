@@ -1390,7 +1390,33 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   §4.6 of the Stage A design asserts the walk "probes phases for a *definition*" — true, but
   it does not say which definition wins, which is the whole defect.
 
-### A library body's `(import (for-syntax …))` silently drops the phase shift (2026-09-09)
+### A library DECLARATION's `(import (for-syntax …))` silently drops the phase shift (2026-09-09)
+
+> **POLARITY CORRECTED 2026-09-09**, by measurement during the Stage A migration.
+> This was filed as "a library BODY drops the shift". It is the other way round:
+> the shift is dropped in the `define-library` DECLARATION position and composed
+> correctly inside the body.
+>
+> ```scheme
+> (define-library (plib)
+>   (import (scheme base))
+>   (import (for-syntax (scheme base)))   ; declaration position — shift DROPPED
+>   ...)
+>
+> (define-library (plib2)
+>   (import (scheme base))
+>   (begin
+>     (import (for-syntax (scheme base))) ; inside the body — WORKS
+>     (define-syntax pm (er-macro-transformer (lambda (f r c) ... (cadr f) ...)))))
+> ```
+>
+> The correction matters because the workaround depends on it:
+> `pkg/stdlib/lib/wile/er-macro-test.scm` carries its for-syntax imports in the
+> INCLUDED BODY, and moving them up into the `.sld` beside the plain
+> `(import (scheme base))` makes every macro in the file unbound again, with no
+> diagnostic naming the move. The original text is kept below; read it with the
+> two positions swapped.
+
 
 - [ ] **Route the library-body import path through the phase-composing install**
   [High, S, filed 2026-09-09 while pricing the Flatt Stage A migration
@@ -1447,6 +1473,46 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   differs from a top-level import's — see its doc comment at
   `library_bindings.go:860-893`, which is a deliberate `placementInPlace` refusal. Read that
   before collapsing the two.
+
+### A phase-1 `(import (for-syntax (scheme base)))` is not behaviour-neutral (2026-09-09)
+
+- [ ] **Find why a phase-1 base import moves scope resolution, then fix it**
+  [High, M, filed 2026-09-09 while migrating transformer bodies for Flatt Stage A
+  (`plans/2026-09-08-flatt-binding-model-a-impl`, Task 9)]: adding
+  `(import (for-syntax (scheme base)))` to a program changes four things that have
+  nothing to do with the names it supplies. Measured by varying ONLY the prologue on
+  an otherwise identical program, engine `KitchenSink` + `stdlib.FS` +
+  `WithLibraryPaths()`:
+
+  | prologue | `expand-once` 2nd value | free-id shadow probe | ER `(r 'helper)` | Go syntax forms compiled under `WithSchemeSyntaxForms` |
+  |---|---|---|---|---|
+  | none | `#t` | `(else not)` | `(user def)` | 0 |
+  | `(import (scheme base))` | `#t` | `(else not)` | `(user def)` | 0 |
+  | `(import (for-syntax (scheme base)))` | **`#f`** | **`(else else)`** | **`(user use)`** | **1** |
+  | `(import (for-syntax (scheme cxr)))` | `#t` | `(else not)` | `(user def)` | 0 |
+
+  Every right column is correct in row 1 and wrong in row 3. Read individually:
+  `free-identifier=?` stops seeing a use-site shadow, so `(let ((else 1)) (m else))`
+  answers `else` instead of `not` — the use-site identifier looks to be resolved at
+  the transformer's phase rather than its own; an ER `rename` stops resolving at the
+  definition site, which is the contract `TestP2_ERRenameResolvesAtDefinitionSite`
+  pins; `expand-once`'s second value flips while its datum stays right; and the
+  for-syntax install path compiles one Go syntax form even under the Scheme layer,
+  which is the F9 "the switch must reach library environments" hole on that path.
+
+  Only `(scheme base)` at phase 1 triggers all four and `(scheme cxr)` at phase 1
+  triggers none, so this is about what the base's rows do to the importing unit, not
+  about for-syntax imports as such.
+
+  **It is currently worked around, not fixed.** Several migrated transformer bodies
+  spell `cadr` as `(car (cdr f))` — `car` and `cdr` are in the macro vocabulary, so
+  no import is needed — with a comment at each site saying why. Every one of those
+  comments has to be revisited when this is fixed, and the sites are findable by
+  grepping for "not behaviour-neutral". Affected files include
+  `pkg/wile/syntax_forms_{p0,switch}_test.go`,
+  `pkg/wile/er_compare_self_origin_test.go`,
+  `integration/testdata/er_macro_{cond,mixed}.scm`,
+  `integration/quasisyntax_test.go` and `extensions/eval/prim_eval_test.go`.
 
 ### `set!`'s two immutable-binding refusals report a stale location (2026-09-09)
 

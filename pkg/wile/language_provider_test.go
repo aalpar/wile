@@ -31,6 +31,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/forms"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
@@ -50,11 +51,20 @@ func TestInitialImportsMatchDialectDeclaration(t *testing.T) {
 	defer eng.Close()
 
 	declared := initialImportsFor(DefaultDialect)
-	got := eng.Namespace().Runtime().GlobalEnvironment().BulkRowCount()
-	qt.Assert(t, got, qt.Equals, len(declared),
-		qt.Commentf("origin installed %d rows for %d declarations", got, len(declared)))
-	qt.Assert(t, got > 0, qt.IsTrue,
-		qt.Commentf("a zero count would make this ratchet vacuous"))
+	store := eng.Namespace().Runtime().GlobalEnvironment()
+	got := store.BulkRowCount()
+
+	// Rows = the PhasedImport declarations, plus one macro-vocabulary row per
+	// macro phase the engine has minted a view for. The second term is not slack
+	// in the ratchet: MacroPhasesWithRows reports exactly which phases were
+	// reached, so the identity below still pins the count on both sides.
+	phases := store.MacroPhasesWithRows()
+	qt.Assert(t, got, qt.Equals, len(declared)+phases,
+		qt.Commentf("origin installed %d rows for %d declarations plus %d macro phases", got, len(declared), phases))
+	qt.Assert(t, len(declared) > 0, qt.IsTrue,
+		qt.Commentf("a zero declaration count would make this ratchet vacuous"))
+	qt.Assert(t, phases > 0, qt.IsTrue,
+		qt.Commentf("no macro phase carries the vocabulary; every transformer body would be starved"))
 }
 
 // phasedImportDialect is a LanguageProvider that declares exactly what it is
@@ -93,7 +103,8 @@ func TestLanguageProviderOverridesTheDefaultDeclaration(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	defer eng.Close()
 
-	got := eng.Namespace().Runtime().GlobalEnvironment().BulkRowCount()
+	store := eng.Namespace().Runtime().GlobalEnvironment()
+	got := store.BulkRowCount() - store.MacroPhasesWithRows()
 	qt.Assert(t, got, qt.Equals, 3,
 		qt.Commentf("the dialect's three declarations must install three rows"))
 	qt.Assert(t, got, qt.Not(qt.Equals), len(defaultInitialImports()),
@@ -126,11 +137,21 @@ func TestAbsentLanguageProviderMeansTheDefault(t *testing.T) {
 // environment.BulkSource takes no phase argument.
 func TestPhasedImportPhaseIsTheInstallPhase(t *testing.T) {
 	declared := defaultInitialImports()
-	qt.Assert(t, declared, qt.HasLen, 2)
-	qt.Assert(t, declared[0].Phase, qt.Equals, environment.PhaseRuntime)
-	qt.Assert(t, declared[1].Phase, qt.Equals, environment.PhaseExpand)
-	// Both rows name the SAME source. Two rows over one source at two install
-	// phases is the shape a single Phase field would be ambiguous about, and it
-	// is the default dialect's actual declaration.
-	qt.Assert(t, declared[0].Library, qt.Equals, declared[1].Library)
+	qt.Assert(t, declared, qt.HasLen, 1)
+	qt.Assert(t, declared[0].Phase, qt.Equals, environment.PhaseRuntime,
+		qt.Commentf("the base is declared at phase 0 only; phase 1 and above get the macro VOCABULARY, which is a strict subset"))
+
+	// The install phase and the source phase are different, and that is the whole
+	// of D11. installInitialImports builds every source at PhaseRuntime — where
+	// LoadBootstrapCore writes — while installing the row at the declared phase.
+	// Conflating them was measured: the phase-1 row then looked for base names at
+	// phase 1, found nothing, and supplied nothing while still installing and
+	// ranking.
+	eng, err := NewEngine(context.Background(), WithProfile(KitchenSink))
+	qt.Assert(t, err, qt.IsNil)
+	defer eng.Close()
+	root := eng.Namespace().Runtime()
+	sym := values.NewSymbol("syntax-rules")
+	qt.Assert(t, root.AtPhase(environment.PhaseExpand).GetBinding(sym, syntax.EmptyScopes()), qt.IsNotNil,
+		qt.Commentf("a vocabulary name must reach phase 1 through the row whose SOURCE is phase 0"))
 }

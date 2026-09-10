@@ -801,44 +801,56 @@ func TestSealedSlotsFiltersByRank(t *testing.T) {
 	c.Assert(ok, qt.IsFalse)
 }
 
-// AmbientBinding answers the ambient tier ALONE. An exact-phase slot of the name
-// at the query phase, which the ranked probe ranks ABOVE the ambient one, is
-// not an answer here, and a slot at another phase is not a candidate at all.
-// The R7RS §4.3.2 definition-site literal pin is the one reader that needs this
-// (compilation.lookupLiteralBinding): it must rank the ambient keyword below an
-// exact-phase binding at a LOWER phase, which the ranked probe cannot express.
-func TestAmbientBindingIgnoresExactPhaseSlots(t *testing.T) {
+// AmbientBinding survives as API and can no longer answer ANYTHING. It probes
+// the (ANY, sealed) coordinate alone, and Stage A deleted the writeCoordinates
+// arm that was the only way to mint a slot there: a sealed phase-0 write now
+// lands at (ExactPhase(0), sealed) like every other write, and ExactBindingAt at
+// phase 0 is what resolves it.
+//
+// Its one production reader, the R7RS §4.3.2 definition-site literal pin
+// (compilation.lookupLiteralBinding), consults it LAST, after the exact tiers at
+// every phase of its descent, so a fallback that finds nothing is a fallback
+// that changes no answer.
+func TestAmbientBindingHasNoSlotToAnswer(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
 	sym := values.NewSymbol("else")
 
-	// A phase-0 mutable slot alone: nothing is ambient.
-	mustDefine(c, ns.Runtime(), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(5))
+	// A phase-0 mutable slot: not ambient, and never was.
+	mutableIdx := mustDefine(c, ns.Runtime(), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(5))
 	bnd, ambiguous := ns.Store().AmbientBinding(sym, values.EmptyScopes())
 	c.Assert(bnd, qt.IsNil)
 	c.Assert(ambiguous, qt.IsFalse)
 
-	// The ambient slot, written the only way one can be: through the phase-0
-	// sealed-write view.
+	// The phase-0 sealed-write view — the path that USED to be the only way to
+	// mint an ambient slot.
 	sealedRoot := ns.Runtime().SealedWriteViewAt(PhaseRuntime)
-	ambientIdx, created := sealedRoot.MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
+	sealedIdx, created := sealedRoot.MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
 	c.Assert(created, qt.IsTrue)
-	ambient := ns.Store().GetOwnGlobalBinding(ambientIdx)
-	c.Assert(ambient, qt.IsNotNil)
+	c.Assert(ns.Store().GetOwnGlobalBinding(sealedIdx), qt.IsNotNil)
 
 	bnd, ambiguous = ns.Store().AmbientBinding(sym, values.EmptyScopes())
-	c.Assert(bnd, qt.Equals, ambient)
+	c.Assert(bnd, qt.IsNil, qt.Commentf("no write path carries the wildcard coordinate any more"))
 	c.Assert(ambiguous, qt.IsFalse)
 
-	// The ranked probe at phase 0 prefers the mutable slot (T1 over T3);
-	// AmbientBinding did not. From phase 1, where no exact slot exists, both agree.
-	c.Assert(ns.Runtime().GetBinding(sym, values.EmptyScopes()), qt.Not(qt.Equals), ambient)
-	c.Assert(ns.Runtime().AtPhase(PhaseExpand).GetBinding(sym, values.EmptyScopes()), qt.Equals, ambient)
+	// Both slots are exact phase-0 candidates, and the mutable tier outranks the
+	// sealed one — which is the same answer the ranked probe gives.
+	bnd, _ = ns.Store().ExactBindingAt(sym, values.EmptyScopes(), PhaseRuntime)
+	c.Assert(bnd, qt.Equals, ns.Store().GetOwnGlobalBinding(mutableIdx))
+	c.Assert(ns.Runtime().GetBinding(sym, values.EmptyScopes()), qt.Equals, bnd)
+
+	// Phase 1 reaches neither: cross-phase reach is a bulk row's job now, and a
+	// bare namespace has declared no initial import.
+	c.Assert(ns.Runtime().AtPhase(PhaseExpand).GetBinding(sym, values.EmptyScopes()), qt.IsNil)
 }
 
-// A tie in the ambient tier is reported, not raised. The pin is the only reader,
-// and it refuses on it only after the exact tiers at every phase have missed.
-func TestAmbientBindingReportsATie(t *testing.T) {
+// A tie among incomparable SEALED writes is reported, not raised. That is the
+// property this test has always protected; what moved is the tier it happens
+// in. The two writes below used to land at (ANY, sealed) and tie there, so
+// AmbientBinding was the probe that saw it; they now land at
+// (ExactPhase(0), sealed), so ExactBindingAt is — and AmbientBinding, having no
+// slot at all, cannot even tie.
+func TestSealedWriteTieIsReportedInTheExactSealedTier(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
 	sym := values.NewSymbol("else")
@@ -849,39 +861,56 @@ func TestAmbientBindingReportsATie(t *testing.T) {
 		_, created := sealedRoot.MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, scopes)
 		c.Assert(created, qt.IsTrue)
 	}
+	query := syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB})
+
 	var bnd *Binding
 	var ambiguous bool
 	r := capturePanic(func() {
-		bnd, ambiguous = ns.Store().AmbientBinding(sym, syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB}))
+		bnd, ambiguous = ns.Store().ExactBindingAt(sym, query, PhaseRuntime)
 	})
 	c.Assert(r, qt.IsNil)
 	c.Assert(ambiguous, qt.IsTrue)
 	c.Assert(bnd, qt.IsNil)
+
+	r = capturePanic(func() {
+		bnd, ambiguous = ns.Store().AmbientBinding(sym, query)
+	})
+	c.Assert(r, qt.IsNil)
+	c.Assert(ambiguous, qt.IsFalse,
+		qt.Commentf("nothing carries the wildcard coordinate, so the ambient tier has nothing to tie"))
+	c.Assert(bnd, qt.IsNil)
 }
 
 // ExactBindingAt answers the exact-phase tiers at ONE phase — (phase, mutable)
-// over (phase, sealed) — and nothing else: not the ambient tier, and not a slot
-// at another phase. It is the probe the R7RS §4.3.2 literal pin runs at each
-// phase of its descent before it consults the ambient keyword last.
-func TestExactBindingAtExcludesAmbientAndOtherPhases(t *testing.T) {
+// over (phase, sealed) — and a slot at another phase is not a candidate. Since
+// Stage A that is the whole candidate set at a phase: the ambient tier this test
+// used to exclude no longer exists, so a sealed phase-0 write is now one of the
+// two tiers here rather than something outside them.
+//
+// It is the probe the R7RS §4.3.2 literal pin runs at each phase of its descent.
+func TestExactBindingAtExcludesOtherPhases(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
 	sym := values.NewSymbol("else")
 	store := ns.Store()
 
-	// Ambient alone: not a candidate.
-	_, created := ns.Runtime().SealedWriteViewAt(PhaseRuntime).
+	// A sealed phase-0 write is an exact phase-0 candidate (T2)...
+	sealed0Idx, created := ns.Runtime().SealedWriteViewAt(PhaseRuntime).
 		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
 	c.Assert(created, qt.IsTrue)
+	sealed0 := store.GetOwnGlobalBinding(sealed0Idx)
 	bnd, ambiguous := store.ExactBindingAt(sym, values.EmptyScopes(), PhaseRuntime)
-	c.Assert(bnd, qt.IsNil)
+	c.Assert(bnd, qt.Equals, sealed0)
 	c.Assert(ambiguous, qt.IsFalse)
+	// ...and is not a candidate one phase up, exactly as a mutable slot is not.
+	bnd, _ = store.ExactBindingAt(sym, values.EmptyScopes(), PhaseExpand)
+	c.Assert(bnd, qt.IsNil)
 
 	// A phase-1 slot is not a candidate at phase 0, and is THE candidate at phase 1.
 	idx1 := mustDefine(c, ns.Runtime().AtPhase(PhaseExpand), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(1))
 	at1 := store.GetOwnGlobalBinding(idx1)
 	bnd, _ = store.ExactBindingAt(sym, values.EmptyScopes(), PhaseRuntime)
-	c.Assert(bnd, qt.IsNil)
+	c.Assert(bnd, qt.Equals, sealed0)
 	bnd, _ = store.ExactBindingAt(sym, values.EmptyScopes(), PhaseExpand)
 	c.Assert(bnd, qt.Equals, at1)
 

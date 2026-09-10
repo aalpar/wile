@@ -333,7 +333,7 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	// (wile base) .sld — LoadBootstrapCore writes the base directly, so the base
 	// STORE is the source. GlobalEnvironmentFrame.Copy re-points such a row at
 	// the copy, so a scheme-report-environment does not alias its parent.
-	installInitialImports(ns, initialImportsFor(dialect))
+	installInitialImports(env, initialImportsFor(dialect))
 
 	err = applyBaseEnvironment(ctx, env, topLevelReg, applyOptionsFromNamespace(ns)...)
 	if err != nil {
@@ -355,8 +355,8 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 //
 // Rows carry the empty scope set and sealed=true: the base is not
 // macro-introduced, and it is not user-writable.
-func installInitialImports(ns *environment.Namespace, imports []PhasedImport) {
-	store := ns.Runtime().GlobalEnvironment()
+func installInitialImports(owner *environment.EnvironmentFrame, imports []PhasedImport) {
+	store := owner.GlobalEnvironment()
 	for _, imp := range imports {
 		// D11, and the two phases really are different here. The SOURCE phase is
 		// PhaseRuntime, because that is where LoadBootstrapCore writes the base
@@ -369,6 +369,20 @@ func installInitialImports(ns *environment.Namespace, imports []PhasedImport) {
 		src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, imp.Library)
 		store.InstallBulkRow(src, nil, environment.ExactPhase(imp.Phase), true)
 	}
+
+	// The macro vocabulary is declared at EVERY macro phase, not at an enumerated
+	// few: the tower is lazy and unbounded, so the row is a template the store
+	// installs as each phase view appears. It is a strict subset of the base —
+	// widening it to the whole base is how D4's phase-distinctness break gets
+	// quietly undone, because a procedural transformer would then reach cadr
+	// again with no import.
+	vocab := environment.NewFilteredBulkSource(
+		environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, MacroVocabularyName()),
+		macroVocabularyAdmits,
+		defaultMacroVocabulary(),
+		MacroVocabularyName(),
+	)
+	store.InstallMacroPhaseRow(vocab, nil, true)
 }
 
 // removedFormNames returns the R7RS form names the engine's dialect deleted from
@@ -615,7 +629,7 @@ func finishEngine(ctx context.Context, cfg *engineConfig, ns *environment.Namesp
 	}
 
 	if cfg.libraryEnabled {
-		err := setupLibrarySystem(ctx, cfg.libraryPaths, cfg.importObserver, cfg.coverageCollector, reg, env, ns, snapshots, applyOptionsFromNamespace(ns), cfg.strictLevel)
+		err := setupLibrarySystem(ctx, cfg.libraryPaths, cfg.importObserver, cfg.coverageCollector, reg, env, ns, snapshots, applyOptionsFromNamespace(ns), cfg.strictLevel, initialImportsFor(cfg.dialect))
 		if err != nil {
 			return nil, err
 		}
@@ -712,6 +726,7 @@ func setupLibrarySystem(
 	snapshots []extSnapshot,
 	applyOpts []registry.ApplyOption,
 	level strictLevel,
+	initialImports []PhasedImport,
 ) error {
 	libReg := compilation.NewLibraryRegistry()
 
@@ -759,6 +774,7 @@ func setupLibrarySystem(
 	synthEnv := env
 	if level > strictLevelOff && len(snapshots) > 0 {
 		synthEnv = ns.NewChildRuntime()
+		installInitialImports(synthEnv, initialImports)
 		applyErr := applyBaseEnvironment(ctx, synthEnv, reg, applyOpts...)
 		if applyErr != nil {
 			return applyErr
@@ -779,6 +795,17 @@ func setupLibrarySystem(
 		}
 
 		libEnv := callerTopLevel.NewChildRuntime()
+
+		// A library env is a full OWNER: its own store, its own phase views, its
+		// own sealed base written by applyBaseEnvironment below. So it needs its
+		// own initial-import rows too, and for the same reason the namespace does
+		// — without them the library's phase-1 code cannot reach the base, and
+		// LoadBootstrapCore fails inside the library env itself on the first
+		// bootstrap macro that names a phase-1 vocabulary word.
+		//
+		// Before applyBaseEnvironment, not after: the rows are live references, so
+		// installing them into an empty store is the point rather than a hazard.
+		installInitialImports(libEnv, initialImports)
 
 		applyErr := applyBaseEnvironment(ctx, libEnv, reg, applyOpts...)
 		if applyErr != nil {

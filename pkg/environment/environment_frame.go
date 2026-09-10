@@ -898,17 +898,19 @@ func (p *EnvironmentFrame) SetLocalValueBySlotDepth(slot, depth int, v values.Va
 }
 
 // writeCoordinates derives the store coordinates a write through this view lands
-// at: a sealed write at phase 0 is the ambient set — (ANY, sealed), the startup
-// bindings every phase reaches — and every other write is exact-phase at the
-// view's rank.
+// at: exact-phase at the view's rank, sealed or not as the view is.
 //
-// This is where the pre-fold topology went. The phase-0 seal's global was minted
-// ambient and the phase-1 seal's exact, because a phase frame's parent chain ran
-// through the phase-0 seal and no further; the same fact is now one branch here.
+// There is no longer an arm for the ambient set. A sealed write at phase 0 used
+// to land at (ANY, sealed) — visible from every phase — which is the tier Stage
+// A deletes: a binding's phase visibility is now a property of the DIALECT's
+// declared initial imports, expressed as bulk rows, not of a wildcard coordinate
+// every read reached. The base still lands at phase 0; what changed is that
+// phase 1 sees it only because a row says so.
+//
+// This is where the pre-fold topology went, and now it is gone entirely. The
+// phase-0 seal's global was minted ambient and the phase-1 seal's exact, because
+// a phase frame's parent chain ran through the phase-0 seal and no further.
 func (p *EnvironmentFrame) writeCoordinates() (PhaseKey, bool) {
-	if p.sealed && p.phaseLevel == PhaseRuntime {
-		return AnyPhase(), true
-	}
 	return ExactPhase(p.phaseLevel), p.sealed
 }
 

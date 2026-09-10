@@ -194,24 +194,43 @@ func TestPhaseString(t *testing.T) {
 	}
 }
 
+// Phase 1 is hermetic against phase 0 for EVERYTHING phase 0 holds, the sealed
+// base included. Stage A deleted the ambient coordinate, so there is no longer a
+// tier a phase-0 write can land in that every phase's read reaches; hermeticity
+// is plain key disjointness.
+//
+// What restores the base at phase 1 is the dialect declaring it there, which
+// installs a bulk row over the same store at (ExactPhase(1), sealed). The row is
+// built by hand here because the dialect lives in pkg/wile, which imports this
+// package; the assertion is the same property either way.
 func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
 	topLevel := NewNamespaceFrame() // ns.runtime — phase 0, mutable
 	ns := topLevel.Namespace()
 	expand := ns.Expand() // phase 1 (lazily created here)
 
-	// A user define lands in the mutable runtime frame (phase 0).
+	// A user define lands at (ExactPhase(0), mutable).
 	userSym := values.NewSymbol("user-x")
 	ns.Runtime().MaybeCreateOwnGlobalBinding(userSym, BindingTypeVariable, nil)
 
-	// A startup binding lands in the ambient (sealed) tier, written through the
-	// sealed-write root view.
+	// A startup binding lands sealed at the SAME phase: (ExactPhase(0), sealed).
 	baseSym := values.NewSymbol("base-y")
 	ns.Runtime().SealedWriteViewAt(PhaseRuntime).MaybeCreateOwnGlobalBinding(baseSym, BindingTypeVariable, nil)
 
-	// Hermeticity: phase 1 must NOT see the phase-0 user define...
+	// Phase 1 is a candidate only against slots at exactly phase 1, so it sees
+	// NEITHER — the base is no more visible across the phase boundary than the
+	// user define is.
 	qt.Assert(t, expand.GetBinding(userSym, values.AllScopes()), qt.IsNil)
-	// ...but MUST still see the shared taproot base binding.
+	qt.Assert(t, expand.GetBinding(baseSym, values.AllScopes()), qt.IsNil)
+
+	// Declaring the base at phase 1 supplies it there, and supplies the base
+	// ALONE: the row probes the sealed tier only, so the phase-0 user define
+	// does not ride across with it.
+	store := ns.Store()
+	store.InstallBulkRow(
+		NewSealedStoreBulkSource(store, PhaseRuntime, BaseSourceName()),
+		nil, ExactPhase(PhaseExpand), true)
 	qt.Assert(t, expand.GetBinding(baseSym, values.AllScopes()), qt.Not(qt.IsNil))
+	qt.Assert(t, expand.GetBinding(userSym, values.AllScopes()), qt.IsNil)
 }
 
 func TestNextPhaseClimbsAndGuards(t *testing.T) {

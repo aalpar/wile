@@ -1,6 +1,14 @@
 ;; Basic ER macro tests
 
 ;; Identity macro — returns the second element of the form
+;; A procedural transformer body compiles at phase 1, where the dialect
+;; declares only the macro-writing vocabulary. cadr and its siblings are
+;; bootstrap Scheme definitions and must be imported for-syntax to be
+;; reachable from a transformer body.
+(import (for-syntax (scheme base)))
+;; caddr/cadddr/cdddr live in cxr.sld, not base.sld.
+(import (for-syntax (scheme cxr)))
+
 (define-syntax my-id
   (er-macro-transformer
     (lambda (form rename compare)

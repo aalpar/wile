@@ -26,6 +26,7 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
 
@@ -2563,17 +2564,25 @@ func TestCoverageIncludeError(t *testing.T) {
 }
 
 // TestCoverageSyntaxCaseFender tests syntax-case with fender (guard).
-// TestCoverageSyntaxCaseFender tests syntax-case with fender (guard).
 // Exercises compileSyntaxCaseClause fender path including branch patching logic:
 // - BranchOnFalseValue for fender test (line 2650)
 // - Branch for fender cleanup block to next clause
 // - Multiple clauses with overlapping patterns requiring correct offset patching
 // This test provides regression coverage for the jumpPatch refactoring (PR #285)
 // that eliminated redundant branch type inspection by storing branch type in the patch struct.
+//
+// The transformer here is procedural (a bare lambda), so its body runs at phase
+// 1. The sealed base now sits at an exact phase 0 rather than at every phase at
+// once, so positive? reaches the fender only through an import naming phase 1.
+// That is also why the environment comes from SetupEngineTest: NewFullRuntimeEnv
+// wires no library registry, so (import ...) cannot resolve there at all.
 func TestCoverageSyntaxCaseFender(t *testing.T) {
-	env := testhelpers.NewFullRuntimeEnv(t)
+	env := testhelpers.SetupEngineTest(t, stdlib.FS)
 
-	_, err := runSchemeExpr(t, env, `(define-syntax check-positive
+	_, err := runSchemeExpr(t, env, `(import (for-syntax (scheme base)))`)
+	qt.Assert(t, err, qt.IsNil)
+
+	_, err = runSchemeExpr(t, env, `(define-syntax check-positive
 		(lambda (stx)
 			(syntax-case stx ()
 				((_ x) (positive? (syntax->datum (syntax x)))

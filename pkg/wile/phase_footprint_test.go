@@ -29,11 +29,16 @@ import (
 )
 
 // Nothing is BOUND at phase 2 when an engine starts. Every fixed coordinate the
-// registry writes is phase 0 (ambient or sealed), phase 1 (bootstrap macros and
+// registry writes is (ExactPhase(0), sealed), phase 1 (bootstrap macros and
 // primitive expanders), or the mutable runtime. This pins the retirement of the
 // phase-2 keyword coordinate: a registration that reintroduces a fixed phase-2
 // resident shows up here as a name that resolves at that view's own
 // coordinates.
+//
+// Stage A of the Flatt binding model removed the fourth possibility, the
+// ambient (ANY-phase, sealed) coordinate: a sealed phase-0 write now lands at
+// ExactPhase(0), and a phase-2 view reaches phase-0 names only if the dialect
+// declares an initial import at that phase, which none does.
 //
 // The phase-2 FRAME is present at startup, and that is a footprint fact rather
 // than a binding one. P0.1 made a transformer right-hand side an expression
@@ -63,8 +68,8 @@ func TestStartupBindsNothingAtPhaseTwo(t *testing.T) {
 	}
 }
 
-// No keyword name holds a procedure. Every non-DocOnly BindingSpec becomes an
-// ambient BindingTypePrimitive binding, and refuseCompileTimeMeaning refuses
+// No keyword name holds a procedure. Every non-DocOnly BindingSpec becomes a
+// BindingTypePrimitive binding, and refuseCompileTimeMeaning refuses
 // BindingTypePrimitive in value position, so a name that ALSO has to be a
 // first-class value cannot be one of them. The two that must not regress are
 // apply (a runtime primitive) and dynamic-wind (a bootstrap Scheme define):
@@ -72,6 +77,14 @@ func TestStartupBindsNothingAtPhaseTwo(t *testing.T) {
 // in procedureFormDocs as DocOnly rows, and both would break in value position
 // if an AddBinding put a keyword in the slot their value needs; the write
 // order is keyword-first, and DefineOwnGlobal cannot retype an existing slot.
+//
+// The coordinate the walk reads is (ExactPhase(0), sealed), and Stage A of the
+// Flatt binding model is why: a keyword row is a sealed write from a phase-0
+// view, which used to be diverted to the ambient (ANY-phase) tier and is now
+// left where it was written. The probe moved with it; the claim did not. Read
+// at phase 0 rather than through the engine frame deliberately — the frame
+// would also answer from the dialect's bulk rows, and a keyword that had lost
+// its own slot would still look present.
 //
 // The gate is the VALUE, not the name: a keyword slot legitimately holds void
 // (auxiliary syntax, the compiled forms) or the syntax compiler for names in
@@ -84,9 +97,9 @@ func TestStartupBindsNothingAtPhaseTwo(t *testing.T) {
 // KitchenSink it is, so the walk covers only the unnarrowed installation. A
 // dialect that removes a form makes the engine narrow the top-level registry
 // with WithoutBindings before Apply, which is the second way a name can be in
-// the registry's specs and NOT be an ambient keyword; the first is DocOnly.
+// the registry's specs and NOT hold a keyword slot; the first is DocOnly.
 // Both must leave the predicate true; only the walked set changes.
-func TestAmbientKeywordsNeverHoldAProcedure(t *testing.T) {
+func TestKeywordSlotsNeverHoldAProcedure(t *testing.T) {
 	ctx := context.Background()
 	tests := []struct {
 		name string
@@ -128,9 +141,11 @@ func TestAmbientKeywordsNeverHoldAProcedure(t *testing.T) {
 				if spec.DocOnly {
 					continue
 				}
-				bnd, ambiguous := store.AmbientBinding(values.NewSymbol(spec.Name), values.AllScopes())
-				qt.Assert(t, ambiguous, qt.IsFalse, qt.Commentf("%s: ambient tie at startup", spec.Name))
-				qt.Assert(t, bnd, qt.IsNotNil, qt.Commentf("keyword %q has no ambient binding", spec.Name))
+				bnd, ambiguous := store.ExactBindingAt(values.NewSymbol(spec.Name),
+					values.AllScopes(), environment.PhaseRuntime)
+				qt.Assert(t, ambiguous, qt.IsFalse, qt.Commentf("%s: phase-0 tie at startup", spec.Name))
+				qt.Assert(t, bnd, qt.IsNotNil,
+					qt.Commentf("keyword %q has no (ExactPhase(0), sealed) binding", spec.Name))
 				qt.Assert(t, bnd.BindingType(), qt.Equals, environment.BindingTypePrimitive,
 					qt.Commentf("keyword %q", spec.Name))
 				checked++

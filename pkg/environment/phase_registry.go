@@ -143,6 +143,17 @@ func (p *PhaseRegistry) Get(phase Phase) *EnvironmentFrame {
 // returning a stable pointer per (owner, phase) because local expand envs chain
 // off these frames and code compares frames by pointer.
 func (p *PhaseRegistry) GetOrCreate(phase Phase) *EnvironmentFrame {
+	// A macro phase carries the dialect's declared macro vocabulary, installed as
+	// the view is first ASKED FOR rather than enumerated in advance: the tower is
+	// lazy and unbounded, so there is no set of phases to iterate and no wildcard
+	// coordinate left to hang one on.
+	//
+	// On BOTH paths, not just the creating one. newPhaseRegistry mints the phase-0
+	// and phase-1 views eagerly, so a hook on creation alone never fires for phase
+	// 1 — the rung every transformer body compiles at. EnsureMacroPhaseRows is a
+	// cheap set membership after the first call.
+	p.runtime.global.EnsureMacroPhaseRows(phase)
+
 	// Fast path: check with read lock
 	p.mu.RLock()
 	env := p.envs[phase]

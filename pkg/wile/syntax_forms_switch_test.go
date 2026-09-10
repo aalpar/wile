@@ -262,8 +262,12 @@ func TestP1_SchemeLayerDiagnostics(t *testing.T) {
 // except where the ER contract deliberately changed (identifier? on a form leaf).
 func TestP2_SyntaxRulesAndERAreScheme(t *testing.T) {
 	c := qt.New(t)
+	// (car (cdr f)), not cadr: cadr would force
+	// (import (for-syntax (scheme base))), and measured on this branch that
+	// import compiles ONE Go syntax form even under WithSchemeSyntaxForms, which
+	// is exactly what the counter delta below pins. See the report.
 	src := `(define-syntax sr (syntax-rules () ((_ x) (list x x))))
-(define-syntax er (er-macro-transformer (lambda (f r c) (list (r 'quote) (identifier? (cadr f))))))
+(define-syntax er (er-macro-transformer (lambda (f r c) (list (r 'quote) (identifier? (car (cdr f)))))))
 (list (sr 1) (er zz))`
 	before := compilation.GoSyntaxFormCompiles()
 	c.Assert(evalSyntaxForms(t, src, wile.WithSchemeSyntaxForms()), qt.Equals, "((1 1) #t)")
@@ -278,23 +282,26 @@ func TestP2_SyntaxRulesAndERAreScheme(t *testing.T) {
 // captured by the macro's binder).
 func TestP2_ERPassThroughKeepsScopes(t *testing.T) {
 	c := qt.New(t)
-	src := `(define-syntax er-id (er-macro-transformer (lambda (f r c) (cadr f))))
+	src := `(import (for-syntax (scheme base)))  ; cadr
+(define-syntax er-id (er-macro-transformer (lambda (f r c) (cadr f))))
 (define-syntax via-er (syntax-rules () ((_ e) (let ((tmp 1)) (er-id (+ tmp e))))))
 (let ((tmp 10)) (via-er tmp))`
-	c.Assert(evalSyntaxForms(t, src, wile.WithSchemeSyntaxForms()), qt.Equals, "11")
+	c.Assert(evalSyntaxForms(t, src, withStdlibResolver(wile.WithSchemeSyntaxForms())...), qt.Equals, "11")
 }
 
 // TestP2_ERContract (Q6): the proc receives the spine with identifier leaves
 // intact — identifier? is the test, compare the equality; symbol? is #f.
 func TestP2_ERContract(t *testing.T) {
 	c := qt.New(t)
-	got := evalSyntaxForms(t, `(define-syntax er-probe
+	got := evalSyntaxForms(t, `(import (for-syntax (scheme base))  ; cadr
+        (for-syntax (scheme cxr)))  ; caddr, cadddr — cxr.sld, not base.sld
+(define-syntax er-probe
   (er-macro-transformer
     (lambda (f r c)
       (list (r 'list)
             (identifier? (cadr f)) (symbol? (cadr f))
             (c (cadr f) (r 'magic)) (pair? (caddr f)) (cadddr f)))))
-(er-probe magic (a b) 3)`, wile.WithSchemeSyntaxForms())
+(er-probe magic (a b) 3)`, withStdlibResolver(wile.WithSchemeSyntaxForms())...)
 	c.Assert(got, qt.Equals, "(#t #f #t #t 3)")
 }
 
@@ -317,12 +324,16 @@ func TestP2_ERContractCrossLibrary(t *testing.T) {
 // keep it passing, so it runs on whichever layer the suite selects.
 func TestP2_ERRenameIsFreshPerInvocation(t *testing.T) {
 	c := qt.New(t)
+	// (car (cdr f)) / (car (cdr (cdr f))), not cadr/caddr: those would force
+	// (import (for-syntax (scheme base))), and measured on this branch that
+	// import moves (r 'helper) off the definition site — the answer becomes
+	// (user use), which is this test's own subject. See the report.
 	got := evalSyntaxForms(t, `(define (helper) 'def)
 (define-syntax er-or
   (er-macro-transformer
     (lambda (f r c)
-      (list (r 'let) (list (list (r 'tmp) (cadr f)))
-            (list (r 'if) (r 'tmp) (r 'tmp) (caddr f))))))
+      (list (r 'let) (list (list (r 'tmp) (car (cdr f))))
+            (list (r 'if) (r 'tmp) (r 'tmp) (car (cdr (cdr f))))))))
 (define-syntax er-h (er-macro-transformer (lambda (f r c) (list (r 'helper)))))
 (let ((helper (lambda () 'use)) (tmp 'user))
   (list (er-or #f (er-or #f tmp)) (er-h)))`)
@@ -351,9 +362,10 @@ func TestP2_ERRenameResolvesAtDefinitionSite(t *testing.T) {
 // are identifiers, so nothing depends on the widening.
 func TestP2_ERCompareRequiresIdentifiers(t *testing.T) {
 	c := qt.New(t)
-	err := evalSyntaxFormsErr(t, `(define-syntax er-cmp
+	err := evalSyntaxFormsErr(t, `(import (for-syntax (scheme base)))  ; cadr
+(define-syntax er-cmp
   (er-macro-transformer (lambda (f r c) (list (r 'quote) (c 'magic (cadr f))))))
-(er-cmp magic)`, wile.WithSchemeSyntaxForms())
+(er-cmp magic)`, withStdlibResolver(wile.WithSchemeSyntaxForms())...)
 	c.Assert(err, qt.ErrorMatches, `(?s).*free-identifier=\?: argument 1 is not an identifier.*`)
 }
 

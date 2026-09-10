@@ -285,6 +285,43 @@ func (p *GlobalEnvironmentFrame) BulkResolutionCount() int64 {
 	return p.bulkResolutions.Load()
 }
 
+// BulkBindingAt resolves key through this store's BULK ROWS ALONE at phase,
+// consulting no per-symbol slot.
+//
+// It is the row-only counterpart of AmbientBinding, and it exists for the one
+// reader that needs the tiers separated: lookupLiteralBinding's descent probes
+// its own phase, then descending phases, then — last — whatever the language
+// itself supplies. That ordering is load-bearing for auxiliary syntax, because a
+// phase-1 probe for else must not answer the keyword before the descent has
+// looked at phase 0 for a use-site shadow. Ambient used to be the last step;
+// after Stage A the rows are.
+//
+// Reports a tie as an ANSWER rather than raising it, matching AmbientBinding:
+// this reader carries ambiguity across a multi-phase descent instead of failing
+// the compile at the first incomparable pair.
+func (p *GlobalEnvironmentFrame) BulkBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) (bnd *Binding, ambiguous bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	_, b, ok := p.probeBulkLocked(*key, q, phase, tierExactMutable, tierAmbientSealed)
+	if !ok {
+		return nil, false
+	}
+	return b, false
+}
+
+// MacroPhasesWithRows reports how many macro phases carry the vocabulary rows.
+//
+// The origin ratchet needs it to state its identity exactly: total rows equals
+// declarations plus one vocabulary row per macro phase reached. Without it the
+// ratchet would have to become a lower bound, and a lower bound would pass the
+// per-exported-name install that bulk rows exist to replace.
+func (p *GlobalEnvironmentFrame) MacroPhasesWithRows() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return len(p.macroPhasesSeen) * len(p.macroPhaseRows)
+}
+
 // BulkRowCount reports how many bulk rows this store holds.
 //
 // It exists for the origin ratchet (design section 6.3, half one): the number
@@ -356,6 +393,8 @@ func lookupExportSameStore(src BulkSource, name values.Symbol) (*Binding, bool) 
 		return v.lookupExportLocked(name)
 	case *renamedBulkSource:
 		return v.lookupExportLocked(name)
+	case *filteredBulkSource:
+		return v.lookupExportLocked(name)
 	default:
 		return src.LookupExport(name)
 	}
@@ -396,6 +435,8 @@ func selfStore(src BulkSource) (*GlobalEnvironmentFrame, Phase, bool) {
 		return v.store, v.phase, true
 	case *renamedBulkSource:
 		return selfStore(v.inner)
+	case *filteredBulkSource:
+		return selfStore(v.inner)
 	default:
 		return nil, 0, false
 	}
@@ -430,4 +471,161 @@ func (p *GlobalEnvironmentFrame) BulkRowSupplying(name values.Symbol, phase Phas
 		return row.src.SourceName(), true
 	}
 	return nil, false
+}
+
+// filteredBulkSource admits only the names in a set.
+//
+// It is how a dialect declares a VOCABULARY rather than a whole store: the
+// phase-1 and higher rows carry the macro-writing kernel, not the base, which is
+// what makes D4's break real. A source that carried everything at phase 1 would
+// install, rank, win — and leave the phase-distinctness break unobservable,
+// which is the failure design section 6.3 says this change defaults to.
+type filteredBulkSource struct {
+	inner BulkSource
+	// admits decides membership. A predicate rather than a set because the
+	// vocabulary has an open arm — the bootstrap layer's %-prefixed private
+	// helpers, which no import could reach and which move with their file.
+	admits func(string) bool
+	// enumerable is the closed part, for ExportNames. The open arm cannot be
+	// enumerated, so a diagnostic that walks this sees the named members only,
+	// which is the honest answer rather than a wrong one.
+	enumerable map[string]struct{}
+	name       values.Value
+}
+
+// NewFilteredBulkSource wraps inner so it supplies only names admits accepts.
+// enumerable is what ExportNames yields; neither may be mutated afterwards.
+func NewFilteredBulkSource(inner BulkSource, admits func(string) bool, enumerable map[string]struct{}, name values.Value) BulkSource {
+	q := &filteredBulkSource{
+		inner:      inner,
+		admits:     admits,
+		enumerable: enumerable,
+		name:       name,
+	}
+	return q
+}
+
+// LookupExport answers only for an admitted name.
+func (p *filteredBulkSource) LookupExport(name values.Symbol) (*Binding, bool) {
+	if !p.admits(name.Key) {
+		return nil, false
+	}
+	return p.inner.LookupExport(name)
+}
+
+// lookupExportLocked is LookupExport for a caller holding the inner source's
+// store lock. See storeBulkSource.lookupExportLocked.
+func (p *filteredBulkSource) lookupExportLocked(name values.Symbol) (*Binding, bool) {
+	if !p.admits(name.Key) {
+		return nil, false
+	}
+	return lookupExportSameStore(p.inner, name)
+}
+
+// ExportNames yields the admitted names the inner source can actually supply.
+func (p *filteredBulkSource) ExportNames() iter.Seq[values.Symbol] {
+	return func(yield func(values.Symbol) bool) {
+		for k := range p.enumerable {
+			sym := *values.NewSymbol(k)
+			_, ok := p.LookupExport(sym)
+			if !ok {
+				continue
+			}
+			if !yield(sym) {
+				return
+			}
+		}
+	}
+}
+
+// SourceName returns the vocabulary's own identity, not the store's.
+func (p *filteredBulkSource) SourceName() values.Value {
+	return p.name
+}
+
+// InstallMacroPhaseRow records a row TEMPLATE installed at every macro phase
+// (phase >= 1) the owner ever mints a view for, as it mints it.
+//
+// The tower is lazy and unbounded — Phase is an int8 and GetOrCreate makes a
+// view for any of them — so "declare this at every macro phase" cannot be an
+// enumeration and must not be a wildcard coordinate, which is the tier this
+// stage deleted. Installing per view as the view appears is the third answer:
+// every row that exists carries an EXACT phase, and the set of phases that exist
+// is exactly the set the program reached.
+func (p *GlobalEnvironmentFrame) InstallMacroPhaseRow(src BulkSource, scopes []*syntax.Scope, sealed bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.macroPhaseRows = append(p.macroPhaseRows, bulkRef{
+		scopes: scopes,
+		sealed: sealed,
+		src:    src,
+	})
+	for phase := range p.macroPhasesSeen {
+		p.installMacroRowLocked(phase, len(p.macroPhaseRows)-1)
+	}
+}
+
+// EnsureMacroPhaseRows installs every recorded macro-phase template at phase, if
+// it has not been installed there already. Called when a phase view is minted.
+func (p *GlobalEnvironmentFrame) EnsureMacroPhaseRows(phase Phase) {
+	if phase < PhaseExpand {
+		return
+	}
+	// Lock-free fast path. Every AtPhase reaches here, and AtPhase sits on the
+	// macro-compilation path, so taking even a read lock per call is a real cost:
+	// measured, an RLock-and-map-probe here was a large share of a +7% startup
+	// regression. The bitmask is one atomic load in the steady state, and a
+	// non-negative Phase is an int8 so the whole domain is two words.
+	if p.macroPhaseBits(phase) {
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	_, seen := p.macroPhasesSeen[phase]
+	if seen {
+		return
+	}
+	if p.macroPhasesSeen == nil {
+		p.macroPhasesSeen = map[Phase]struct{}{}
+	}
+	p.macroPhasesSeen[phase] = struct{}{}
+	for i := range p.macroPhaseRows {
+		p.installMacroRowLocked(phase, i)
+	}
+	p.setMacroPhaseBit(phase)
+}
+
+// macroPhaseBits reports whether phase already carries the macro rows, without
+// taking a lock. Negative phases are never recorded, matching the guard above.
+func (p *GlobalEnvironmentFrame) macroPhaseBits(phase Phase) bool {
+	if phase < 0 {
+		return false
+	}
+	word := p.macroPhaseSeenBits[phase>>6].Load()
+	return word&(1<<(uint(phase)&63)) != 0
+}
+
+// setMacroPhaseBit records phase in the lock-free set. Caller MUST hold the
+// write lock, so the read-modify-write cannot lose an update.
+func (p *GlobalEnvironmentFrame) setMacroPhaseBit(phase Phase) {
+	if phase < 0 {
+		return
+	}
+	i := phase >> 6
+	p.macroPhaseSeenBits[i].Store(p.macroPhaseSeenBits[i].Load() | 1<<(uint(phase)&63))
+}
+
+// installMacroRowLocked materializes template i as a real row at phase.
+// Caller MUST hold the write lock.
+func (p *GlobalEnvironmentFrame) installMacroRowLocked(phase Phase, i int) {
+	tpl := p.macroPhaseRows[i]
+	p.bulkRows = append(p.bulkRows, bulkRef{
+		scopes: tpl.scopes,
+		phase:  ExactPhase(phase),
+		sealed: tpl.sealed,
+		src:    tpl.src,
+	})
 }

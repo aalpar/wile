@@ -49,6 +49,17 @@ func evalSyntaxForms(t *testing.T, src string, opts ...wile.EngineOption) string
 	return v.SchemeString()
 }
 
+// withStdlibResolver prepends the stdlib source resolver to opts. Every source
+// in these two files that carries an (import (for-syntax …)) declaration needs
+// it: the sealed base is no longer visible from phase 1, so a procedural
+// transformer body reaches (scheme base) / (scheme cxr) by importing them, and
+// an import loads a real library — which the bare KitchenSink engine
+// evalSyntaxForms builds has no resolver for.
+func withStdlibResolver(opts ...wile.EngineOption) []wile.EngineOption {
+	q := []wile.EngineOption{wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths()}
+	return append(q, opts...)
+}
+
 // evalSyntaxFormsErr is evalSyntaxForms for a source expected to fail.
 func evalSyntaxFormsErr(t *testing.T, src string, opts ...wile.EngineOption) error {
 	t.Helper()
@@ -304,14 +315,16 @@ func TestP04_CompileTimeValueWrapperIsGone(t *testing.T) {
 // what fixes it.
 func TestP02_LambdaTransformerHygiene(t *testing.T) {
 	c := qt.New(t)
-	got := evalSyntaxForms(t, `(define-syntax my-or2
+	got := evalSyntaxForms(t, `(import (for-syntax (scheme base))  ; cadr
+        (for-syntax (scheme cxr)))  ; caddr — cxr.sld, not base.sld
+(define-syntax my-or2
   (lambda (stx)
     (let ((f (syntax->list stx)))
       (datum->syntax #f
         (list 'let (list (list 'tmp (cadr f)))
               (list 'if 'tmp 'tmp (caddr f)))))))
 (define tmp 5)
-(my-or2 #f tmp)`)
+(my-or2 #f tmp)`, withStdlibResolver()...)
 	c.Assert(got, qt.Equals, "5")
 }
 
@@ -326,7 +339,9 @@ func TestP02_LambdaTransformerHygiene(t *testing.T) {
 // is (2 2).
 func TestP02_FreshnessAcrossInvocations(t *testing.T) {
 	c := qt.New(t)
-	src := `(define-syntax mk-def
+	src := `(import (for-syntax (scheme base))  ; cadr
+        (for-syntax (scheme cxr)))  ; caddr — cxr.sld, not base.sld
+(define-syntax mk-def
   (lambda (stx)
     (let ((f (syntax->list stx)))
       (datum->syntax #f
@@ -335,7 +350,7 @@ func TestP02_FreshnessAcrossInvocations(t *testing.T) {
               (list 'define (list (cadr f)) 'tmp))))))
 (define (body) (mk-def g1 1) (mk-def g2 2) (list (g1) (g2)))
 (body)`
-	c.Assert(evalSyntaxForms(t, src), qt.Equals, "(1 2)")
+	c.Assert(evalSyntaxForms(t, src, withStdlibResolver()...), qt.Equals, "(1 2)")
 }
 
 // TestP02_NestedMacroThroughLambdaTransformer — GUARD: a lambda transformer that
@@ -343,13 +358,15 @@ func TestP02_FreshnessAcrossInvocations(t *testing.T) {
 // with the Go matcher's intro scope gone (Q9) and the kernel's in its place.
 func TestP02_NestedMacroThroughLambdaTransformer(t *testing.T) {
 	c := qt.New(t)
-	got := evalSyntaxForms(t, `(define-syntax swap!
+	got := evalSyntaxForms(t, `(import (for-syntax (scheme base))  ; cadr
+        (for-syntax (scheme cxr)))  ; caddr — cxr.sld, not base.sld
+(define-syntax swap!
   (syntax-rules () ((_ a b) (let ((tmp a)) (set! a b) (set! b tmp)))))
 (define-syntax swap-via
   (lambda (stx)
     (let ((f (syntax->list stx)))
       (datum->syntax #f (list 'swap! (cadr f) (caddr f))))))
-(let ((tmp 1) (y 2)) (swap-via tmp y) (list tmp y))`)
+(let ((tmp 1) (y 2)) (swap-via tmp y) (list tmp y))`, withStdlibResolver()...)
 	c.Assert(got, qt.Equals, "(2 1)")
 }
 
@@ -360,12 +377,16 @@ func TestP02_NestedMacroThroughLambdaTransformer(t *testing.T) {
 // syntax object, not a quoted datum.
 func TestP02_ExpandOnceMirrorsTheLoop(t *testing.T) {
 	c := qt.New(t)
+	// Spelled out of car/cdr rather than cadr/caddr, which would force
+	// (import (for-syntax (scheme base))): measured on this branch, that import
+	// flips expand-once's second value from #t to #f, which is this test's own
+	// subject. See the report.
 	got := evalSyntaxForms(t, `(define-syntax my-or2
   (lambda (stx)
     (let ((f (syntax->list stx)))
       (datum->syntax #f
-        (list 'let (list (list 'tmp (cadr f)))
-              (list 'if 'tmp 'tmp (caddr f)))))))
+        (list 'let (list (list 'tmp (car (cdr f))))
+              (list 'if 'tmp 'tmp (car (cdr (cdr f)))))))))
 (call-with-values (lambda () (expand-once (datum->syntax #f '(my-or2 #f 1))))
   (lambda (stx ok) (list (syntax->datum stx) ok)))`)
 	c.Assert(got, qt.Equals, "((let ((tmp #f)) (if tmp tmp 1)) #t)")
@@ -376,13 +397,15 @@ func TestP02_ExpandOnceMirrorsTheLoop(t *testing.T) {
 // raising not-implemented. Fails on master with ErrNotImplemented.
 func TestP02_SyntaxLocalIntroduceIsWired(t *testing.T) {
 	c := qt.New(t)
-	got := evalSyntaxForms(t, `(define-syntax anaphoric
+	got := evalSyntaxForms(t, `(import (for-syntax (scheme base))  ; cadr
+        (for-syntax (scheme cxr)))  ; caddr — cxr.sld, not base.sld
+(define-syntax anaphoric
   (lambda (stx)
     (let ((f (syntax->list stx)))
       (datum->syntax #f
         (list 'let (list (list (syntax-local-introduce (datum->syntax #f 'it)) (cadr f)))
               (caddr f))))))
-(anaphoric 42 it)`)
+(anaphoric 42 it)`, withStdlibResolver()...)
 	c.Assert(got, qt.Equals, "42")
 }
 
@@ -394,13 +417,15 @@ func TestP02_SyntaxLocalIntroduceIsWired(t *testing.T) {
 // phase that could break it, so the guard lives here rather than in Task 5.
 func TestP02_AifSurvivesTheFlip(t *testing.T) {
 	c := qt.New(t)
-	got := evalSyntaxForms(t, `(define-syntax aif
+	got := evalSyntaxForms(t, `(import (for-syntax (scheme base))  ; cadr
+        (for-syntax (scheme cxr)))  ; caddr, cadddr — cxr.sld, not base.sld
+(define-syntax aif
   (lambda (stx)
     (let ((f (syntax->list stx)))
       (datum->syntax (car f)
         (list (datum->syntax #'aif 'let) (list (list 'it (cadr f)))
               (list (datum->syntax #'aif 'if) 'it (caddr f) (cadddr f)))))))
-(list (aif 42 it 'no) (aif #f it 'no))`)
+(list (aif 42 it 'no) (aif #f it 'no))`, withStdlibResolver()...)
 	c.Assert(got, qt.Equals, "(42 no)")
 }
 
@@ -539,10 +564,15 @@ func TestP05_SyntaxViolationCarriesSource(t *testing.T) {
 // ("else" "else") through the primitive): a use-site local shadows a literal.
 func TestP05_FreeIdentifierEqualShadowProbe(t *testing.T) {
 	c := qt.New(t)
+	// (car (cdr f)), NOT cadr: car and cdr are in the phase-1 macro vocabulary
+	// and cadr is not, so the cadr spelling would force
+	// (import (for-syntax (scheme base))) — and that import, measured on this
+	// branch, changes this test's own subject from (else not) to (else else).
+	// Keep the accessor spelled out until that is fixed; see the report.
 	got := evalSyntaxForms(t, `(define-syntax m
   (lambda (stx)
     (let ((f (syntax->list stx)))
-      (if (free-identifier=? (cadr f) (quote-syntax else)) #''else #''not))))
+      (if (free-identifier=? (car (cdr f)) (quote-syntax else)) #''else #''not))))
 (list (m else) (let ((else 1)) (m else)))`)
 	c.Assert(got, qt.Equals, "(else not)")
 }

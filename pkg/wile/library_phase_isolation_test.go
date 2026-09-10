@@ -163,6 +163,13 @@ func TestLibraryPhaseOneSeesItsOwnPhaseOneDefines(t *testing.T) {
 // too, and raises if the resolved value is wrong — the only way to observe a
 // phase-3-only value from Scheme without smuggling it through a chain of
 // macro relays that would exercise machinery this test isn't about.
+//
+// (for-meta 3 (scheme base)) is what supplies = and error to that body, and it
+// is scaffolding rather than subject. Since Stage A of the Flatt binding model
+// deleted the ambient tier, the base reaches a phase only where something
+// declares it: the default dialect declares phases 0 and 1, so a phase-3 body
+// must ask. Dropping the import would redden this test on = being unbound,
+// which says nothing about whether the phase-3 EXPORT resolved.
 func TestLibraryExportsPhaseThreeBinding(t *testing.T) {
 	ctx := context.Background()
 	eng := phaseIsolationEngine(t, fstest.MapFS{
@@ -180,6 +187,7 @@ func TestLibraryExportsPhaseThreeBinding(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	_, err = eng.EvalMultiple(ctx, `
+		(import (for-meta 3 (scheme base)))
 		(begin-for-syntax
 		  (begin-for-syntax
 		    (begin-for-syntax

@@ -197,12 +197,26 @@ func lookupLiteralBinding(
 			return q, true
 		}
 	}
-	// A detached transient frame carries no store; there is then nothing ambient.
+	// LAST: what the LANGUAGE supplies, through the dialect's declared rows.
+	//
+	// This step used to read the ambient tier, and it moved with that tier rather
+	// than being deleted with it — the ORDER is what matters here, not which
+	// store structure answers. An auxiliary keyword like else is supplied by the
+	// dialect at every macro phase, so a phase-1 probe would answer the keyword
+	// immediately if this ran first; running it last is what lets the descent
+	// find a use-site shadow at phase 0 before the language's own answer.
+	//
+	// It must be a ROW-ONLY read. The steps above use ExactBinding, which
+	// consults per-symbol slots alone, so an ordinary GetBinding here would
+	// re-probe those slots at this phase and collapse the ordering the descent
+	// exists to impose.
+	//
+	// A detached transient frame carries no store; there is then nothing to ask.
 	store := env.GlobalEnvironment()
 	if store == nil {
 		return nil, true
 	}
-	q, ambiguous = store.AmbientBinding(s, sq)
+	q, ambiguous = store.BulkBindingAt(s, sq, env.PhaseLevel())
 	if ambiguous {
 		return nil, false
 	}

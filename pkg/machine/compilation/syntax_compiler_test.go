@@ -79,12 +79,21 @@ func TestLookupSyntaxCompiler(t *testing.T) {
 	qt.Assert(t, nonExistent, qt.IsNil)
 }
 
-// The compilers live in the ambient tier, which every frame's ranked probe
-// reaches as T3 (RegisterSyntaxCompilers' doc, bullet 2). The property has two
-// halves: a same-phase user binding at T1 outranks the compiler FROM THAT FRAME,
-// and the shadow reaches no further, because an exact-phase slot is not a
-// candidate at any other phase at all.
-func TestLookupSyntaxCompiler_SamePhaseShadowOutranksAmbient(t *testing.T) {
+// A user binding of a compiler's name at the SAME phase outranks the compiler,
+// and the shadow reaches no further than that phase.
+//
+// Both halves changed shape when the ambient tier was deleted, and neither
+// changed answer. The compiler now sits at (ExactPhase(0), sealed) rather than at
+// (ANY, sealed), so the contest at phase 0 is T1 (mutable) over T2 (sealed) at one
+// coordinate instead of T1 over the ambient T3. And a phase-0 slot was never a
+// candidate at phase 1; what changed is that the compiler is not one either, so a
+// bare phase-1 probe now finds NOTHING rather than the compiler.
+//
+// What restores the compiler at phase 1 is a bulk row, and the row is sealed-tier
+// restricted (NewSealedStoreBulkSource), so it carries the compiler up without
+// carrying the user's mutable shadow with it. That is the replacement for
+// "ambient, minus whatever the local phase shadows".
+func TestLookupSyntaxCompiler_SamePhaseShadowOutranksTheSealedCompiler(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 
 	err := RegisterSyntaxCompilers(env)
@@ -94,15 +103,24 @@ func TestLookupSyntaxCompiler_SamePhaseShadowOutranksAmbient(t *testing.T) {
 	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](env, sym, nil), qt.IsNotNil)
 
 	// A user (define define-syntax …) at phase 0: an exact-phase MUTABLE slot,
-	// a distinct binding from the ambient one because coordinates are half of
+	// a distinct binding from the sealed one because coordinates are half of
 	// binding identity (CreateGlobalBindingAt).
 	_, created := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 	qt.Assert(t, created, qt.IsTrue)
 	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](env, sym, nil), qt.IsNil,
-		qt.Commentf("T1 outranks the ambient T3 compiler at the shadowed phase"))
+		qt.Commentf("T1 outranks the T2 compiler at the shadowed phase"))
 
-	// Phase 1 has no slot of the name, so the ambient compiler still answers.
+	// Phase 1 reaches neither: the shadow is a phase-0 slot, and so is the
+	// compiler.
 	expand := env.AtPhase(environment.PhaseExpand)
+	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](expand, sym, nil), qt.IsNil,
+		qt.Commentf("nothing is ambient any more, so phase 1 supplies nothing of its own"))
+
+	// The phase-1 bulk row supplies the SEALED compiler and leaves the mutable
+	// shadow at phase 0 where it was written.
+	store := env.Namespace().Store()
+	src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, environment.BaseSourceName())
+	store.InstallBulkRow(src, nil, environment.ExactPhase(environment.PhaseExpand), true)
 	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](expand, sym, nil), qt.IsNotNil,
-		qt.Commentf("a phase-0 shadow is not a candidate at phase 1"))
+		qt.Commentf("the row is sealed-tier restricted, so a phase-0 mutable shadow does not ride it up"))
 }
