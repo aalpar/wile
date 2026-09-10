@@ -246,3 +246,70 @@ func TestBaseSourceNameIsReservedAndUnimportable(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue, qt.Commentf("the base's identity must be a datum, not a pointer"))
 	qt.Assert(t, sym.Key, qt.Equals, "#%wile-base")
 }
+
+// TestBulkRowsCarryTheEmptyScopeSet pins the premise the resolution fast path
+// rests on.
+//
+// resolveRankedLocked consults bulk rows only when the per-symbol probe MISSES.
+// That is the tie-break rule exactly — a row is sealed, hence T2, so a T1 slot
+// outranks it; a T2 slot ties on tier and, with both scope sets empty, the
+// tie-break awards the slot; and no slot loses on cardinality to an empty set —
+// but ONLY while every installed row carries the empty scope set. A row with a
+// non-empty set could outrank a slot on cardinality, and the miss-only shape
+// would silently never let it.
+//
+// So the premise is a gate, not a comment. Stage B's move of the phase INTO the
+// scope set is what would create the first non-empty row; when it does, this
+// test is the thing that says the fast path has to become the full argmax.
+func TestBulkRowsCarryTheEmptyScopeSet(t *testing.T) {
+	ns := NewNamespace()
+	store := ns.Runtime().GlobalEnvironment()
+	src := NewSealedStoreBulkSource(store, PhaseRuntime, BaseSourceName())
+	store.InstallBulkRow(src, nil, ExactPhase(PhaseExpand), true)
+
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	for i, row := range store.bulkRows {
+		qt.Assert(t, row.scopes, qt.HasLen, 0,
+			qt.Commentf("row %d carries %d scopes; resolveRankedLocked's miss-only fast path is then unsound", i, len(row.scopes)))
+	}
+}
+
+// TestSealedBaseSourceExcludesImports pins the predicate that separates the
+// base from an import when the two share a coordinate.
+//
+// They do share one: an import installs at (ExactPhase(0), sealed), which is
+// exactly where the base's own writes land once the ambient branch is gone, and
+// there is no third coordinate to move either onto. So the base source draws the
+// line on Imported meta instead — the same fact importConflicts keys on.
+//
+// Without it a library-private name imported at phase 0 resolves inside a
+// transformer body, measured.
+func TestSealedBaseSourceExcludesImports(t *testing.T) {
+	ns := NewNamespace()
+	owner := ns.Runtime()
+	store := owner.GlobalEnvironment()
+
+	ownInstall := sealAt(t, owner, PhaseRuntime, "engine-own", values.NewInteger(1))
+	qt.Assert(t, ownInstall.IsImported(), qt.IsFalse)
+
+	imported := sealAt(t, owner, PhaseRuntime, "looks-imported", values.NewInteger(2))
+	imported.UpdateMeta(func(m *BindingMeta) bool {
+		m.Imported = true
+		return true
+	})
+	qt.Assert(t, imported.IsImported(), qt.IsTrue)
+
+	base := NewSealedStoreBulkSource(store, PhaseRuntime, BaseSourceName())
+
+	_, ok := base.LookupExport(*values.NewSymbol("engine-own"))
+	qt.Assert(t, ok, qt.IsTrue, qt.Commentf("the base source must supply what the engine installed"))
+	_, ok = base.LookupExport(*values.NewSymbol("looks-imported"))
+	qt.Assert(t, ok, qt.IsFalse, qt.Commentf("the base source must NOT supply an imported binding"))
+
+	// The unrestricted form is the foreign-store shape and supplies both, which
+	// is why the two constructors exist.
+	foreign := NewStoreBulkSource(store, PhaseRuntime, values.NewSymbol("lib"))
+	_, ok = foreign.LookupExport(*values.NewSymbol("looks-imported"))
+	qt.Assert(t, ok, qt.IsTrue)
+}

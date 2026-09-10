@@ -19,6 +19,7 @@ import (
 	"math/bits"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -252,6 +253,17 @@ type GlobalEnvironmentFrame struct {
 	// larger blast radius, since a report env would lose every bulk-supplied
 	// name at once.
 	bulkRows []bulkRef
+	// bulkResolutions counts resolutions a bulk row answered.
+	//
+	// Design section 6.3 half two: the count must be non-zero and within a pinned
+	// bound over a fixed representative program. Both directions are failures.
+	// Without it, "rows installed but never consulted" and "silent fallback to
+	// eager per-name copying" each leave the whole suite green — the change fails
+	// toward the old behaviour and the old behaviour passes.
+	//
+	// Atomic because it is incremented under the store's READ lock, where a plain
+	// field write would race two concurrent compiles.
+	bulkResolutions atomic.Int64
 }
 
 // NewGlobalEnvironmentFrame creates a new, empty owner store.
@@ -585,7 +597,87 @@ func (p *GlobalEnvironmentFrame) healWriteLocked(gi *GlobalIndex) (int, bool) {
 // with an equal scope set at identical coordinates.
 func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase) (slotRef, bool) {
 	ref, _, ok := p.probeRankedLocked(key, q, phase, tierExactMutable)
-	return ref, ok
+	if ok || len(p.bulkRows) == 0 {
+		return ref, ok
+	}
+	// THE ONE NEW RULE (design section 3.1, from Racket's
+	// syntax/binding-table.rkt): a per-symbol slot and a bulk row at EQUAL tier
+	// and EQUAL scope set resolve to the per-symbol SLOT. Differing scope sets
+	// fall back to plain maximality. It is a TIE-BREAK, not a precedence layer —
+	// a row that always lost, or always won, is a third ranking axis wearing a
+	// tie-break's name, and removing the third axis is the point of this stage.
+	//
+	// Consulting rows only on a per-symbol MISS implements that rule exactly,
+	// given one measured premise: every row this tree installs carries the EMPTY
+	// scope set. A row is sealed, hence T2, so a T1 slot outranks it; a T2 slot
+	// ties it on tier and, with both scope sets empty, the tie-break awards the
+	// slot; and no slot can lose on cardinality to an empty row set. So a row can
+	// win only where there is no candidate slot at all, which is this branch.
+	//
+	// The premise is load-bearing, so it is pinned rather than assumed:
+	// TestBulkRowsCarryTheEmptyScopeSet. A row with a non-empty scope set would
+	// need the full argmax below, and it does not exist yet — Stage B's move of
+	// the phase INTO the scope set is what creates one.
+	//
+	// The miss-only shape is also why the hot path is untouched. Rows are
+	// consulted per FAILED resolution, not per resolution, and probeBulkLocked's
+	// per-row lookup is lock-free because the caller already holds this store's
+	// read lock.
+	bulkRow, bulkBnd, _, bulkOk := p.probeBulkLocked(key, q, phase, tierExactMutable, tierAmbientSealed)
+	if !bulkOk {
+		return ref, false
+	}
+	materialized, mok := p.materializeBulkLocked(key, bulkRow, bulkBnd)
+	if !mok {
+		return ref, false
+	}
+	p.bulkResolutions.Add(1)
+	return materialized, true
+}
+
+// materializeBulkLocked turns a winning bulk row into an ordinary slotRef, so
+// every caller downstream of resolution keeps seeing a slot and a GlobalIndex is
+// unchanged (D6).
+//
+// It has NO write path, and that is a deliberate narrowing of the design's D6
+// rather than an omission. Every row Stage A installs reads THIS store — the
+// base's rows are self-referential, because design section 4.1 keeps
+// LoadBootstrapCore writing the base directly, so the base STORE is the source.
+// For such a row the binding is already a slot here: the row exists only to
+// widen which PHASE can see it, so resolution can return the source's own
+// slotRef and there is nothing to copy, nothing to allocate, and no RLock to
+// upgrade.
+//
+// That also makes the row live past resolution, not merely at it: a phase-1 read
+// and a phase-0 read reach the very same *Binding, so a later write through
+// either is seen by both. A materializing copy would have silently forked them.
+//
+// A row over a FOREIGN store — an import routed through bulk rows, which is
+// Task 6 — cannot take this path: there is no slot here to return, so it needs a
+// slot minted in this store, which needs the write lock and the re-check the
+// design describes. That work is NOT done here, and no row in the tree reaches
+// it: the false return is the honest answer for a source this cannot serve, and
+// resolution falls back to the per-symbol probe.
+//
+// Caller MUST hold at least a read lock on p.mu.
+func (p *GlobalEnvironmentFrame) materializeBulkLocked(key values.Symbol, row bulkRef, bnd *Binding) (slotRef, bool) {
+	store, sourcePhase, ok := selfStore(row.src)
+	if !ok || store != p {
+		return slotRef{}, false
+	}
+	for _, s := range p.keys[key] {
+		if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
+			continue
+		}
+		if s.phase.wildcard || s.phase.level != sourcePhase {
+			continue
+		}
+		if p.bindings[s.slot] != bnd {
+			continue
+		}
+		return s, true
+	}
+	return slotRef{}, false
 }
 
 // The probe's tiers, highest-ranked FIRST (lowest number wins). They are the
@@ -714,6 +806,58 @@ func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.Sc
 		}
 	}
 	return bestRef, bestTier, ambiguous, bestTier >= 0
+}
+
+// bulkTierOf classifies a bulk row at the query phase, exactly as tierOf does a
+// slot — minus the wildcard arm, because a row has no ambient coordinate to
+// carry. Deleting the ambient tier is what this stage is for; a row must not
+// reintroduce it under another name.
+func bulkTierOf(row bulkRef, phase Phase) int {
+	switch {
+	case row.phase.wildcard:
+		return tierNone
+	case row.phase.level != phase:
+		return tierNone
+	case row.sealed:
+		return tierExactSealed
+	default:
+		return tierExactMutable
+	}
+}
+
+// probeBulkLocked finds the best bulk row supplying key at phase, under the same
+// (tier, scope cardinality) argmax the per-symbol probe uses.
+//
+// Among rows at equal tier and equal scope set the LAST INSTALLED wins, which is
+// what preserves master's behaviour that an explicit (import (scheme base))
+// shadows the language's own initial import of the same name. A conflict between
+// two DIFFERENT libraries at that coordinate is not left to this ordering: the
+// import path asks BulkRowSupplying first and refuses, per R7RS section 5.6.
+//
+// Caller MUST hold at least a read lock on p.mu.
+func (p *GlobalEnvironmentFrame) probeBulkLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier, maxTier int) (row bulkRef, bnd *Binding, tier int, ok bool) {
+	bestTier := tierNone
+	var bestScopes []*syntax.Scope
+	for _, r := range p.bulkRows {
+		t := bulkTierOf(r, phase)
+		if t < minTier || t > maxTier {
+			continue
+		}
+		if !q.IsAll() && !syntax.ScopesCompatible(r.scopes, q.Scopes()) {
+			continue
+		}
+		b, found := lookupExportSameStore(r.src, key)
+		if !found {
+			continue
+		}
+		if bestTier < 0 || t < bestTier || (t == bestTier && len(r.scopes) >= len(bestScopes)) {
+			row = r
+			bnd = b
+			bestTier = t
+			bestScopes = r.scopes
+		}
+	}
+	return row, bnd, bestTier, bestTier >= 0
 }
 
 // probeRankedLocked is probeTiersLocked over every tier, raising on an

@@ -96,6 +96,43 @@ type storeBulkSource struct {
 	store *GlobalEnvironmentFrame
 	phase Phase
 	name  values.Value
+	// minTier is the tier FLOOR the source's lookup probes at, and it is what
+	// makes "the base" mean the base.
+	//
+	// The engine's own base source must be SEALED-ONLY. Its store is the
+	// namespace's own, whose phase-0 mutable tier holds the user's top-level
+	// defines and its phase-0 imports; a source probing from tierExactMutable
+	// would make every one of those visible at phase 1 through the row, which is
+	// not "the base at another phase" but the collapse of phase hermeticity. It
+	// was measured: with the floor at tierExactMutable a library-private name
+	// imported at phase 0 resolved inside a transformer body, and both
+	// TestPhase1_ProceduralTransformerBoundWithImport and
+	// TestDeclarativeMacroNeedsNoImport went red.
+	//
+	// A source over a FOREIGN store — a library's exports — wants the full range,
+	// because a library's own defines land in its mutable tier.
+	minTier int
+	// ownInstallsOnly excludes IMPORTED bindings from what the source supplies.
+	//
+	// It is what makes "the base" separable from "an import" when the two share a
+	// coordinate, and they do: an import installs at (ExactPhase(0), sealed),
+	// which is exactly where the base's own writes land once the ambient branch
+	// is gone. There is no third coordinate to move either onto — after the
+	// relocation the candidates at a phase-0 query are exactly
+	// {(0,mutable), (0,sealed)}, and the mutable one is the user-define tier
+	// whose reuse is the pre-2026 supersede bug.
+	//
+	// So the distinction is drawn by PREDICATE rather than by coordinate, on the
+	// same fact importConflicts already keys on: an imported binding carries
+	// Imported meta and the engine's own base does not. The alternative was
+	// routing every import through a bulk row of its own, which needs a
+	// library-SCOPED source (findLibraryBinding queries with the library's scope
+	// in the set) plus per-source-phase grouping — strictly more machinery for
+	// the same separation.
+	//
+	// Measured: without this, a library-private name imported at phase 0 resolves
+	// inside a transformer body, because the phase-1 base row supplies it.
+	ownInstallsOnly bool
 }
 
 // NewStoreBulkSource mints the source for one (store, phase).
@@ -107,9 +144,26 @@ type storeBulkSource struct {
 // concurrent library loading reaches, and buy nothing.
 func NewStoreBulkSource(store *GlobalEnvironmentFrame, phase Phase, name values.Value) BulkSource {
 	q := &storeBulkSource{
-		store: store,
-		phase: phase,
-		name:  name,
+		store:   store,
+		phase:   phase,
+		name:    name,
+		minTier: tierExactMutable,
+	}
+	return q
+}
+
+// NewSealedStoreBulkSource is NewStoreBulkSource restricted to the SEALED tier:
+// the shape the engine's own base takes.
+//
+// Use it for any source whose store is also the importing store. See
+// storeBulkSource.minTier for what the unrestricted form leaks there.
+func NewSealedStoreBulkSource(store *GlobalEnvironmentFrame, phase Phase, name values.Value) BulkSource {
+	q := &storeBulkSource{
+		store:           store,
+		phase:           phase,
+		name:            name,
+		minTier:         tierExactSealed,
+		ownInstallsOnly: true,
 	}
 	return q
 }
@@ -123,8 +177,22 @@ func NewStoreBulkSource(store *GlobalEnvironmentFrame, phase Phase, name values.
 func (p *storeBulkSource) LookupExport(name values.Symbol) (*Binding, bool) {
 	p.store.mu.RLock()
 	defer p.store.mu.RUnlock()
+	return p.lookupExportLocked(name)
+}
 
-	ref, _, ok := p.store.probeRankedLocked(name, syntax.EmptyScopes(), p.phase, tierExactMutable)
+// lookupExportLocked is LookupExport for a caller that already holds a read lock
+// on THIS source's store.
+//
+// The split is not an optimization. Resolution consults rows while holding the
+// importing store's read lock, and every row Stage A installs reads that same
+// store, so the plain entry point would RLock a mutex the caller already holds.
+// Go documents recursive read locking as forbidden — it deadlocks whenever a
+// writer is queued between the two acquisitions — and the failure is
+// load-dependent, so it would not show up reliably in a test run.
+//
+// Caller MUST hold at least a read lock on the source store's mu.
+func (p *storeBulkSource) lookupExportLocked(name values.Symbol) (*Binding, bool) {
+	ref, _, ok := p.store.probeRankedLocked(name, syntax.EmptyScopes(), p.phase, p.minTier)
 	if !ok {
 		return nil, false
 	}
@@ -133,6 +201,9 @@ func (p *storeBulkSource) LookupExport(name values.Symbol) (*Binding, bool) {
 	}
 	q := p.store.bindings[ref.slot]
 	if q == nil {
+		return nil, false
+	}
+	if p.ownInstallsOnly && q.IsImported() {
 		return nil, false
 	}
 	return q, true
@@ -208,6 +279,12 @@ func (p *GlobalEnvironmentFrame) InstallBulkRow(src BulkSource, scopes []*syntax
 	})
 }
 
+// BulkResolutionCount reports how many resolutions a bulk row has answered.
+// See the field's comment for why it is a gate.
+func (p *GlobalEnvironmentFrame) BulkResolutionCount() int64 {
+	return p.bulkResolutions.Load()
+}
+
 // BulkRowCount reports how many bulk rows this store holds.
 //
 // It exists for the origin ratchet (design section 6.3, half one): the number
@@ -219,4 +296,138 @@ func (p *GlobalEnvironmentFrame) BulkRowCount() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return len(p.bulkRows)
+}
+
+// renamedBulkSource maps the importing unit's spellings onto the source's own.
+//
+// An import set is not always name-preserving: (rename ...), (prefix ...),
+// (only ...) and (except ...) all mean the row must answer for a name the
+// exporter never declared. Wrapping rather than teaching storeBulkSource about
+// renaming keeps the live-reference property intact — the inner source still
+// reads through to its store on every lookup — while making the mapping ONE
+// per-import table rather than one slot per name, which is the whole point of a
+// bulk row.
+type renamedBulkSource struct {
+	inner BulkSource
+	// localToSource maps a local spelling to the exporter's internal name. It
+	// also DELIMITS the row: a name absent from the map is not supplied, which
+	// is how (only ...) and (except ...) are expressed.
+	localToSource map[string]string
+	name          values.Value
+}
+
+// NewRenamedBulkSource wraps inner so it answers under the importing unit's
+// spellings. localToSource must not be mutated afterwards; the row keeps it.
+func NewRenamedBulkSource(inner BulkSource, localToSource map[string]string, name values.Value) BulkSource {
+	q := &renamedBulkSource{
+		inner:         inner,
+		localToSource: localToSource,
+		name:          name,
+	}
+	return q
+}
+
+// LookupExport translates name and delegates.
+func (p *renamedBulkSource) LookupExport(name values.Symbol) (*Binding, bool) {
+	src, ok := p.localToSource[name.Key]
+	if !ok {
+		return nil, false
+	}
+	return p.inner.LookupExport(*values.NewSymbol(src))
+}
+
+// lookupExportLocked is LookupExport for a caller holding the inner source's
+// store lock. See storeBulkSource.lookupExportLocked for why the split exists.
+func (p *renamedBulkSource) lookupExportLocked(name values.Symbol) (*Binding, bool) {
+	src, ok := p.localToSource[name.Key]
+	if !ok {
+		return nil, false
+	}
+	return lookupExportSameStore(p.inner, *values.NewSymbol(src))
+}
+
+// lookupExportSameStore dispatches to the lock-free lookup when src is one of
+// the two in-tree sources over this store, and falls back to the locking entry
+// point otherwise. A foreign source's store is a DIFFERENT mutex, so locking it
+// is correct there.
+func lookupExportSameStore(src BulkSource, name values.Symbol) (*Binding, bool) {
+	switch v := src.(type) {
+	case *storeBulkSource:
+		return v.lookupExportLocked(name)
+	case *renamedBulkSource:
+		return v.lookupExportLocked(name)
+	default:
+		return src.LookupExport(name)
+	}
+}
+
+// ExportNames yields the LOCAL spellings, which is what a caller asking "what
+// does this row supply?" means. Each is filtered through LookupExport so the
+// sequence cannot over-report a name whose source binding has gone.
+func (p *renamedBulkSource) ExportNames() iter.Seq[values.Symbol] {
+	return func(yield func(values.Symbol) bool) {
+		for local := range p.localToSource {
+			sym := *values.NewSymbol(local)
+			_, ok := p.LookupExport(sym)
+			if !ok {
+				continue
+			}
+			if !yield(sym) {
+				return
+			}
+		}
+	}
+}
+
+// SourceName returns the importing form's library name, not the inner store's:
+// the R7RS section 5.6 diagnostics must name the library the program wrote.
+func (p *renamedBulkSource) SourceName() values.Value {
+	return p.name
+}
+
+// selfStore reports the store a source reads, when it reads exactly one.
+//
+// Materialization needs it to tell the two cases apart: a row over THIS store
+// has nothing to materialize, because the binding is already a slot here and
+// the row exists only to widen which phase can see it.
+func selfStore(src BulkSource) (*GlobalEnvironmentFrame, Phase, bool) {
+	switch v := src.(type) {
+	case *storeBulkSource:
+		return v.store, v.phase, true
+	case *renamedBulkSource:
+		return selfStore(v.inner)
+	default:
+		return nil, 0, false
+	}
+}
+
+// BulkRowSupplying reports whether an installed row already supplies name at
+// the given coordinate, and under which source name.
+//
+// It is the eager half of D5's conflict detection: two rows supplying one name
+// at equal tier and equal scope set is a conflict, and the import path asks this
+// BEFORE installing rather than letting resolution raise later. The
+// resolution-time ErrAmbiguousBinding raise stays as a backstop, because a row
+// can still collide with a slot installed by a path that never went through the
+// import machinery.
+func (p *GlobalEnvironmentFrame) BulkRowSupplying(name values.Symbol, phase PhaseKey, sealed bool, scopes []*syntax.Scope) (values.Value, bool) {
+	p.mu.RLock()
+	rows := make([]bulkRef, len(p.bulkRows))
+	copy(rows, p.bulkRows)
+	p.mu.RUnlock()
+
+	for _, row := range rows {
+		if row.phase != phase || row.sealed != sealed {
+			continue
+		}
+		if !scopeSetsEqual(row.scopes, scopes) {
+			continue
+		}
+		_, ok := row.src.LookupExport(name)
+		if !ok {
+			continue
+		}
+		return row.src.SourceName(), true
+	}
+	return nil, false
 }

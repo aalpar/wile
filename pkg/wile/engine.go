@@ -358,7 +358,15 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 func installInitialImports(ns *environment.Namespace, imports []PhasedImport) {
 	store := ns.Runtime().GlobalEnvironment()
 	for _, imp := range imports {
-		src := environment.NewStoreBulkSource(store, imp.Phase, imp.Library)
+		// D11, and the two phases really are different here. The SOURCE phase is
+		// PhaseRuntime, because that is where LoadBootstrapCore writes the base
+		// and where a base name therefore lives. The INSTALL phase is imp.Phase,
+		// which is where a reference may see it from. Using imp.Phase for both
+		// makes the phase-1 row look for base names at phase 1 and find nothing,
+		// so the row installs, ranks, and supplies nothing — which is precisely
+		// the "installed but never wins" failure design section 6.3 says this
+		// change defaults to.
+		src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, imp.Library)
 		store.InstallBulkRow(src, nil, environment.ExactPhase(imp.Phase), true)
 	}
 }
