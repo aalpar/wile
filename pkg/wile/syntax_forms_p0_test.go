@@ -377,18 +377,15 @@ func TestP02_NestedMacroThroughLambdaTransformer(t *testing.T) {
 // syntax object, not a quoted datum.
 func TestP02_ExpandOnceMirrorsTheLoop(t *testing.T) {
 	c := qt.New(t)
-	// Spelled out of car/cdr rather than cadr/caddr, which would force
-	// (import (for-syntax (scheme base))): measured on this branch, that import
-	// flips expand-once's second value from #t to #f, which is this test's own
-	// subject. See the report.
-	got := evalSyntaxForms(t, `(define-syntax my-or2
+	got := evalSyntaxForms(t, `(import (for-syntax (scheme base)) (for-syntax (scheme cxr)))  ; cadr / caddr
+(define-syntax my-or2
   (lambda (stx)
     (let ((f (syntax->list stx)))
       (datum->syntax #f
-        (list 'let (list (list 'tmp (car (cdr f))))
-              (list 'if 'tmp 'tmp (car (cdr (cdr f)))))))))
+        (list 'let (list (list 'tmp (cadr f)))
+              (list 'if 'tmp 'tmp (caddr f)))))))
 (call-with-values (lambda () (expand-once (datum->syntax #f '(my-or2 #f 1))))
-  (lambda (stx ok) (list (syntax->datum stx) ok)))`)
+  (lambda (stx ok) (list (syntax->datum stx) ok)))`, withStdlibResolver()...)
 	c.Assert(got, qt.Equals, "((let ((tmp #f)) (if tmp tmp 1)) #t)")
 }
 
@@ -564,16 +561,12 @@ func TestP05_SyntaxViolationCarriesSource(t *testing.T) {
 // ("else" "else") through the primitive): a use-site local shadows a literal.
 func TestP05_FreeIdentifierEqualShadowProbe(t *testing.T) {
 	c := qt.New(t)
-	// (car (cdr f)), NOT cadr: car and cdr are in the phase-1 macro vocabulary
-	// and cadr is not, so the cadr spelling would force
-	// (import (for-syntax (scheme base))) — and that import, measured on this
-	// branch, changes this test's own subject from (else not) to (else else).
-	// Keep the accessor spelled out until that is fixed; see the report.
-	got := evalSyntaxForms(t, `(define-syntax m
+	got := evalSyntaxForms(t, `(import (for-syntax (scheme base)))  ; cadr
+(define-syntax m
   (lambda (stx)
     (let ((f (syntax->list stx)))
-      (if (free-identifier=? (car (cdr f)) (quote-syntax else)) #''else #''not))))
-(list (m else) (let ((else 1)) (m else)))`)
+      (if (free-identifier=? (cadr f) (quote-syntax else)) #''else #''not))))
+(list (m else) (let ((else 1)) (m else)))`, withStdlibResolver()...)
 	c.Assert(got, qt.Equals, "(else not)")
 }
 

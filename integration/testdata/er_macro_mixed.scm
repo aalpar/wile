@@ -3,17 +3,11 @@
 
 ;; --- syntax-rules macros ---
 
-;; Accessors are spelled out with car/cdr rather than imported for-syntax.
-;;
 ;; A transformer body compiles at phase 1, where the dialect declares only the
-;; macro-writing vocabulary — car and cdr are in it, the bootstrap-Scheme
-;; cadr/caddr/cdddr/cadddr are not. The obvious migration,
-;; (import (for-syntax (scheme base))), is NOT usable in this file: measured, a
-;; phase-1 base import is not behaviour-neutral here. It makes this file's
-;; syntax-rules macros fail to compile ("not a closure: values.voidType") and
-;; makes `else` in an ER-built cond clause compile as a variable. Filed in
-;; TODO.md; until that is fixed, spelling the accessor out is the migration that
-;; keeps these fixtures testing ER macros rather than the import.
+;; macro-writing vocabulary, so the accessors this file needs are imported
+;; rather than assumed. (scheme cxr) is required alongside base: caddr and
+;; cadddr are cxr names, not base ones.
+(import (for-syntax (scheme base)) (for-syntax (scheme cxr)))
 
 (define-syntax sr-add1
   (syntax-rules ()
@@ -31,8 +25,8 @@
 (define-syntax er-or
   (er-macro-transformer
     (lambda (form rename compare)
-      (let ((a (car (cdr form)))
-            (b (car (cdr (cdr form)))))
+      (let ((a (cadr form))
+            (b (caddr form)))
         (list (rename 'let) (list (list (rename 'tmp) a))
               (list (rename 'if) (rename 'tmp) (rename 'tmp) b))))))
 
@@ -40,7 +34,7 @@
 (define-syntax er-add2
   (er-macro-transformer
     (lambda (form rename compare)
-      (let ((x (car (cdr form))))
+      (let ((x (cadr form)))
         ;; Expands to (sr-add1 (sr-add1 x))
         (list 'sr-add1 (list 'sr-add1 x))))))
 
@@ -78,9 +72,9 @@
 (define-syntax er-rotate3!
   (er-macro-transformer
     (lambda (form rename compare)
-      (let ((a (car (cdr form)))
-            (b (car (cdr (cdr form))))
-            (c (car (cdr (cdr (cdr form))))))
+      (let ((a (cadr form))
+            (b (caddr form))
+            (c (cadddr form)))
         ;; Rotates a b c by doing two swaps: swap a b, then swap b c
         ;; Uses syntax-rules sr-swap! from ER expansion
         (list (rename 'begin)
@@ -106,8 +100,8 @@
 (define-syntax er-double-or
   (er-macro-transformer
     (lambda (form rename compare)
-      (let ((a (car (cdr form)))
-            (b (car (cdr (cdr form)))))
+      (let ((a (cadr form))
+            (b (caddr form)))
         ;; (sr-double (er-or a b))
         (list 'sr-double (list 'er-or a b))))))
 

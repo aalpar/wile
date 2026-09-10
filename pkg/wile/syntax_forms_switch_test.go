@@ -262,17 +262,18 @@ func TestP1_SchemeLayerDiagnostics(t *testing.T) {
 // except where the ER contract deliberately changed (identifier? on a form leaf).
 func TestP2_SyntaxRulesAndERAreScheme(t *testing.T) {
 	c := qt.New(t)
-	// (car (cdr f)), not cadr: cadr would force
-	// (import (for-syntax (scheme base))), and measured on this branch that
-	// import compiles ONE Go syntax form even under WithSchemeSyntaxForms, which
-	// is exactly what the counter delta below pins. See the report.
-	src := `(define-syntax sr (syntax-rules () ((_ x) (list x x))))
-(define-syntax er (er-macro-transformer (lambda (f r c) (list (r 'quote) (identifier? (car (cdr f)))))))
+	// The for-syntax import is the subject as much as the accessor is: it used to
+	// compile ONE Go syntax form even under WithSchemeSyntaxForms, which is the
+	// counter delta below. TestPhase1BaseImportDoesNotReviveTheGoSyntaxRules pins
+	// that directly; this row keeps it honest on the two-layer path.
+	src := `(import (for-syntax (scheme base)))  ; cadr
+(define-syntax sr (syntax-rules () ((_ x) (list x x))))
+(define-syntax er (er-macro-transformer (lambda (f r c) (list (r 'quote) (identifier? (cadr f))))))
 (list (sr 1) (er zz))`
 	before := compilation.GoSyntaxFormCompiles()
-	c.Assert(evalSyntaxForms(t, src, wile.WithSchemeSyntaxForms()), qt.Equals, "((1 1) #t)")
+	c.Assert(evalSyntaxForms(t, src, withStdlibResolver(wile.WithSchemeSyntaxForms())...), qt.Equals, "((1 1) #t)")
 	c.Assert(compilation.GoSyntaxFormCompiles(), qt.Equals, before)
-	c.Assert(evalSyntaxForms(t, src, wile.WithGoSyntaxForms()), qt.Equals, "((1 1) #f)")
+	c.Assert(evalSyntaxForms(t, src, withStdlibResolver(wile.WithGoSyntaxForms())...), qt.Equals, "((1 1) #f)")
 	c.Assert(compilation.GoSyntaxFormCompiles() > before, qt.IsTrue)
 }
 
@@ -324,19 +325,20 @@ func TestP2_ERContractCrossLibrary(t *testing.T) {
 // keep it passing, so it runs on whichever layer the suite selects.
 func TestP2_ERRenameIsFreshPerInvocation(t *testing.T) {
 	c := qt.New(t)
-	// (car (cdr f)) / (car (cdr (cdr f))), not cadr/caddr: those would force
-	// (import (for-syntax (scheme base))), and measured on this branch that
-	// import moves (r 'helper) off the definition site — the answer becomes
-	// (user use), which is this test's own subject. See the report.
-	got := evalSyntaxForms(t, `(define (helper) 'def)
+	// The for-syntax import is part of the subject: it used to move (r 'helper)
+	// off the definition site, answering (user use). A rename now resolves at the
+	// OUTPUT phase (TestERRenameDenotesTheOutputPhase), so the import supplies
+	// cadr to the transformer body and moves nothing.
+	got := evalSyntaxForms(t, `(import (for-syntax (scheme base)) (for-syntax (scheme cxr)))  ; cadr / caddr
+(define (helper) 'def)
 (define-syntax er-or
   (er-macro-transformer
     (lambda (f r c)
-      (list (r 'let) (list (list (r 'tmp) (car (cdr f))))
-            (list (r 'if) (r 'tmp) (r 'tmp) (car (cdr (cdr f))))))))
+      (list (r 'let) (list (list (r 'tmp) (cadr f)))
+            (list (r 'if) (r 'tmp) (r 'tmp) (caddr f))))))
 (define-syntax er-h (er-macro-transformer (lambda (f r c) (list (r 'helper)))))
 (let ((helper (lambda () 'use)) (tmp 'user))
-  (list (er-or #f (er-or #f tmp)) (er-h)))`)
+  (list (er-or #f (er-or #f tmp)) (er-h)))`, withStdlibResolver()...)
 	c.Assert(got, qt.Equals, "(user def)")
 }
 
