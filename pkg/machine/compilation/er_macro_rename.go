@@ -23,15 +23,22 @@ import (
 )
 
 // NewERRenameClosure creates the `rename` closure for an ER macro invocation.
-// defExpandEnv is the definition-site expand environment.
+//
+// defEnv is the definition-site environment AT THE PHASE THE OUTPUT LANDS IN,
+// which invokeERTransformer derives from the expansion under way. It is not the
+// frame the transformer body compiled in: that frame is one rung up the tower,
+// and reading a rename there asks the transformer's implementation language what
+// a name means. See invokeERTransformer for the contract and what the phase-up
+// read was measured to do.
+//
 // introScope is a fresh scope unique to this macro invocation, used to ensure
-// that renamed symbols not found in the definition-site env (e.g., temporary
-// names like 'tmp') get a unique identity that prevents variable capture.
+// that renamed symbols not found in defEnv (e.g., temporary names like 'tmp)
+// get a unique identity that prevents variable capture.
 // The returned closure accepts a single symbol argument and returns a
 // SyntaxSymbol that resolves to the definition-site binding.
 // Results are cached per symbol name so that (eq? (rename 'x) (rename 'x)) is #t.
 func NewERRenameClosure(
-	defExpandEnv *environment.EnvironmentFrame,
+	defEnv *environment.EnvironmentFrame,
 	introScope *syntax.Scope,
 ) *machine.ForeignClosure {
 	cache := make(map[string]*syntax.SyntaxSymbol)
@@ -51,14 +58,14 @@ func NewERRenameClosure(
 		}
 
 		sym := values.NewSymbol(key)
-		result := resolveRenamedSymbol(defExpandEnv, sym, introScope)
+		result := resolveRenamedSymbol(defEnv, sym, introScope)
 
 		cache[key] = result
 		mc.SetValue(result)
 		return nil
 	}
 
-	cls := machine.NewForeignClosure(defExpandEnv, 1, false, fn)
+	cls := machine.NewForeignClosure(defEnv, 1, false, fn)
 	cls.SetName("er-rename")
 	return cls
 }
@@ -68,16 +75,27 @@ func NewERRenameClosure(
 // For symbols not found in any definition-site environment, the introScope
 // is added to ensure the renamed identifier is distinct from any use-site
 // binding with the same name, preventing variable capture.
-func resolveRenamedSymbol(defExpandEnv *environment.EnvironmentFrame, sym *values.Symbol, introScope *syntax.Scope) *syntax.SyntaxSymbol {
-	// Definition-site lookup. defExpandEnv's ranked probe reaches base bindings via
-	// the ambient T3 tier; level-0 user/import bindings are intentionally invisible,
-	// because a read at this level is a candidate only against slots at exactly this
-	// level or the ambient coordinate. Hermeticity is that key disjointness, not a
-	// parent link — createPhaseEnv (environment/phase_registry.go) mints a view with
-	// no lexical parent at all.
-	bnd := defExpandEnv.GetBinding(sym, syntax.AllScopes())
+func resolveRenamedSymbol(defEnv *environment.EnvironmentFrame, sym *values.Symbol, introScope *syntax.Scope) *syntax.SyntaxSymbol {
+	// Definition-site lookup, at defEnv's own phase — the phase the output lands
+	// in. The ranked probe is a candidate only against slots at exactly that
+	// phase; hermeticity is that key disjointness, not a parent link —
+	// createPhaseEnv (environment/phase_registry.go) mints a view with no lexical
+	// parent at all.
+	//
+	// The comment this replaces was wrong on both halves, and both were measured.
+	// It said the probe reaches base bindings "via the ambient T3 tier": Stage A
+	// deleted that tier (probeTiersLocked's tierOf has no ambient arm), and the
+	// base is reached through a BULK ROW instead, which resolves to the phase-0
+	// slot's own *Binding rather than to a copy. And it said level-0 user and
+	// import bindings are "intentionally invisible": true of the frame the caller
+	// used to pass (a phase-0 (define (helper) 'def) probed nil from phase 1, and
+	// the ER test that looked like a counterexample was reaching the global through
+	// the intro-scope branch below, not through this one), but the invisibility was
+	// the defect rather than the design — a rename of a phase-0 name is meant to
+	// find it.
+	bnd := defEnv.GetBinding(sym, syntax.AllScopes())
 	if bnd != nil {
-		return symbolWithBindingScopes(sym.Key, bnd, defExpandEnv)
+		return symbolWithBindingScopes(sym.Key, bnd, defEnv)
 	}
 
 	// Not found — return symbol with the intro scope. This ensures that

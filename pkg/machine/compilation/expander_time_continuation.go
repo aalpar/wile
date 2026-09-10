@@ -431,7 +431,33 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 	// so it never exposed a user macro either, and a user (define-syntax …)
 	// writes at (1, mutable), which stays phase-sealed — visibility follows
 	// mutability (memory 2026-07-10-hermetic-phases-mutability-visibility).
-	if p.env.PhaseLevel() > environment.PhaseExpand {
+	//
+	// The phase-2 rung is no longer the only way in. The arm also runs from phase
+	// 0 and 1 when ARM 2 resolved to something that is NOT a macro, because that
+	// is the second face of the phase-shifted-import defect LookupPhaseBinding
+	// documents: an (import (for-syntax (scheme base))) installs base's exported
+	// `syntax-rules` — a phase-0 *SyntaxCompiler, BindingTypePrimitive — at
+	// (ExactPhase(1), MUTABLE), where it out-ranks the Scheme-layer macro sitting
+	// at (1, sealed). ARM 2 then declines it on type, the head is left unexpanded,
+	// and the COMPILER dispatches the Go form silently, which is the "one Go
+	// syntax form compiled under WithSchemeSyntaxForms" column of that defect.
+	//
+	// Gating on a BindingTypePrimitive answer, rather than on the phase, keeps the
+	// narrowing to the mask case: a macro answer has already returned from ARM 2,
+	// an ARM 2 miss (nil) leaves the phase-2 rule exactly as it was, and a user's
+	// own BindingTypeVariable binding of the name still shadows. Only a
+	// registry-minted row — a primitive expander, a syntax compiler, a value-less
+	// keyword, or an import that copied one — gets looked past. Same discriminator,
+	// and same reason, as LookupPhaseBinding.
+	//
+	// It is the compile-time HANDLER that masks here, not the import's own slot:
+	// measured, ARM 2's winner for `syntax-rules` under the Scheme layer is the
+	// sealed Go *SyntaxCompiler, carrying no Imported meta. The import is what
+	// routes the lookup here at all — with `define-syntax` masked at phase 1 the
+	// form takes a different path — so this arm and LookupPhaseBinding's fallback
+	// are two faces of one defect, and neither alone closes it.
+	masked := bnd != nil && bnd.BindingType() == environment.BindingTypePrimitive
+	if p.env.PhaseLevel() > environment.PhaseExpand || masked {
 		ge := p.env.GlobalEnvironment()
 		if ge != nil {
 			bnd = ge.SealedBindingAt(sym0, syntax.ScopesOf(symbolScopes), environment.PhaseExpand)
@@ -652,8 +678,42 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// (like temporary names) get this scope to prevent variable capture.
 	introScope := syntax.NewScope()
 
-	// Create rename closure (captures definition-site expand env + intro scope)
-	renameCls := NewERRenameClosure(erTransformer.DefEnv(), introScope)
+	// Create rename closure. It reads the DEFINITION-SITE store — that is what
+	// makes a rename denote at the definition site and not here — but at the
+	// phase the OUTPUT lands in, which is this expansion's own phase, not the
+	// phase the transformer BODY runs at.
+	//
+	// DefEnv() is the frame the transformer's right-hand side compiled in, one
+	// rung UP the tower (compileTransformerValue's env.NextPhase()). Reading the
+	// rename there asks the transformer's IMPLEMENTATION environment what a name
+	// means, and the output is not written in that language. Design §3.5 pins the
+	// contract as (datum->syntax #'k sym), where `k` is the er-macro-transformer
+	// keyword as written at the user's define-syntax — a phase-0 identifier in a
+	// phase-0 program — so the renamed identifier is an identifier of the output's
+	// phase. Racket, whose explicit phasing this tree copies, answers the same way:
+	// a template identifier resolves at the phase of use while the transformer
+	// body's reference to that name resolves one phase up, and a for-syntax-only
+	// import leaves the template identifier unbound. (Chez says otherwise and is
+	// not the oracle: it implements R6RS implicit phasing and collapses the tower.)
+	//
+	// Measured, the phase-up read was doing two wrong things. It let an
+	// (import (for-syntax …)) mint a phase-1 slot that out-ranked the phase-0
+	// binding the use site reaches, so `compare` reported two spellings of one
+	// keyword as different bindings and an ER-built cond stopped recognizing
+	// `else`; and it let a rename SMUGGLE a phase-1-only import into phase-0
+	// output, where a plain reference to that name is a compile error.
+	//
+	// Where the old read was RIGHT it was right by way of the base's bulk row,
+	// which hands a phase-1 query the very same *Binding object the phase-0 slot
+	// holds (materializeBulkLocked returns the source's own slotRef). So for every
+	// name that resolved correctly before, this reads the identical pointer; the
+	// only queries whose answer moves are the ones where phase 1 owns a slot of
+	// its own, and those are exactly the ones that must not be visible here.
+	//
+	// p.env.PhaseLevel() rather than a constant: a macro defined at phase 0 and
+	// used inside a transformer body emits phase-1 code, and the rename follows
+	// the use.
+	renameCls := NewERRenameClosure(erTransformer.DefEnv().AtPhase(p.env.PhaseLevel()), introScope)
 
 	// Create compare closure (captures use-site env)
 	compareCls := NewERCompareClosure(p.env)

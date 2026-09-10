@@ -66,22 +66,90 @@ func RegisterPhaseBindings[F any](
 //
 // This function handles hygiene by using scoped lookup - it will only match
 // bindings whose scopes are a subset of the symbol's scopes.
+//
+// The ranked answer wins whenever it type-checks, which is what keeps a
+// legitimately renamed export of a phase row reachable. A wrong-typed
+// BindingTypePrimitive winner is the one case that falls through to a second
+// probe, and it is not hypothetical:
+// a phase-shifted import installs at (ExactPhase(N>0), MUTABLE) — installImportedBinding's
+// shadowable arm is guarded on PhaseRuntime — while every phase row is written
+// sealed at its phase (RegisterPhaseBindings above, through SealedWriteViewAt).
+// tierExactMutable outranks tierExactSealed and both carry the empty scope set,
+// so an (import (for-syntax (scheme base))) puts base's value-less compile-time
+// keywords — let, if, lambda, quote, define-syntax — on top of the primitive
+// expanders that share their names. Taking the ranked miss as final made `let`
+// stop being a core form for the expander, which is the whole of the "a phase-1
+// base import is not behaviour-neutral" defect.
+//
+// The sealed row is out-ranked, never overwritten, so the fallback is a tier
+// floor rather than a repair: ask what the startup set bound this name to at
+// this phase, the same question validate.go's unshadowed-head arm asks and the
+// same reader (SealedBindingAt). A name the dialect never registered has no
+// sealed row, so an omitted or Scheme-layer-replaced form cannot be resurrected
+// by it.
+//
+// THE BINDING TYPE, not the failed assertion alone, is the discriminator, and
+// the difference is load-bearing. A user (define define-syntax …) is a mutable
+// same-phase BindingTypeVariable that also fails the assertion, and it MUST keep
+// masking the compiler — TestLookupSyntaxCompiler_SamePhaseShadowOutranksTheSealedCompiler
+// pins exactly that, and it is the ordinary meaning of shadowing. So the guard
+// below is the pre-existing `!= BindingTypePrimitive` test, moved rather than
+// removed: everything it used to reject it still rejects, and the ONLY new
+// behaviour is that a Primitive-typed winner holding the wrong value looks past
+// itself.
+//
+// BindingTypePrimitive is not a user denotation. Registries mint it (the phase
+// rows here, the syntax compilers, the value-less keywords), user code writes
+// Variable or Syntax, and an import merely copies whatever the exporting library
+// had. So the rule reads: a REGISTRY row of this name, or an import of one,
+// cannot demote the registry row it collides with; anything the user wrote can.
+//
+// Import provenance was the other candidate and it is too narrow: measured, the
+// row that masks `syntax-rules` under WithSchemeSyntaxForms carries no Imported
+// meta at all (it is the sealed Go *SyntaxCompiler, reached from a phase above),
+// so an IsImported() gate fixes three of the defect's four columns and leaves the
+// fourth silently red.
+//
+// This is a READER-side repair of a WRITER-side defect: the masking slot
+// survives. There is no safe writer coordinate today — (ExactPhase(1), sealed)
+// would land an imported macro on a bootstrap transformer's exact coordinates
+// and overwrite it engine-wide (installImportedBinding's own doc says so) — so
+// the writer-side question is filed against Stage B, not fixed here.
 func LookupPhaseBinding[T any](
 	phaseEnv *environment.EnvironmentFrame,
 	sym *values.Symbol,
 	scopes []*syntax.Scope,
 ) T {
 	var zero T
-	bnd := phaseEnv.GetBinding(sym, syntax.ScopesOf(scopes))
+	q := syntax.ScopesOf(scopes)
+	bnd := phaseEnv.GetBinding(sym, q)
 	if bnd == nil {
 		return zero
 	}
+	if bnd.BindingType() == environment.BindingTypePrimitive {
+		val, ok := bnd.Value().(T)
+		if ok {
+			return val
+		}
+	}
+	// The winner is not a phase row of type T. Only a registry-minted row gets
+	// looked past; a user's own shadow of the name stands.
 	if bnd.BindingType() != environment.BindingTypePrimitive {
 		return zero
 	}
-	val, ok := bnd.Value().(T)
-	if ok {
-		return val
+	// Probe the tier the row would have been written at. An identical pointer
+	// means the sealed row IS the winner and already failed the assertion above,
+	// so there is nothing underneath it.
+	sealed := phaseEnv.GlobalEnvironment().SealedBindingAt(sym, q, phaseEnv.PhaseLevel())
+	if sealed == nil || sealed == bnd {
+		return zero
 	}
-	return zero
+	if sealed.BindingType() != environment.BindingTypePrimitive {
+		return zero
+	}
+	val, ok := sealed.Value().(T)
+	if !ok {
+		return zero
+	}
+	return val
 }

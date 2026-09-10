@@ -23,9 +23,14 @@ import (
 var _ values.Value = (*ERMacroTransformer)(nil)
 
 // ERMacroTransformer wraps a 3-arg machine.MachineClosure to identify it as an
-// explicit-renaming transformer in expandMacroInvocation. The defEnv
-// captures the expand-time environment at the macro definition site,
-// used by the rename closure to resolve definition-site bindings.
+// explicit-renaming transformer in expandMacroInvocation. defEnv captures the
+// frame the transformer's right-hand side compiled in, which identifies the
+// definition-site STORE (a library's own environment, or the namespace's).
+//
+// Its PHASE is not the one a rename reads at: the right-hand side compiles one
+// rung up the tower, and the output lands one rung down. invokeERTransformer
+// re-phases it to the expansion under way before handing it to the rename
+// closure.
 type ERMacroTransformer struct {
 	closure *machine.MachineClosure
 	defEnv  *environment.EnvironmentFrame
