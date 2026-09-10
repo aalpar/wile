@@ -852,15 +852,43 @@ func ImportSpecInto(ctx context.Context, specVal values.Value, callerEnv, target
 	return nil
 }
 
-// copyLibraryBindingsDirect installs bindings from lib into targetEnv without
-// AtPhase routing. This is used for library-internal imports where targetEnv
-// is a child runtime frame whose AtPhase() would route to the parent's phase
-// registry rather than the library's own environment.
+// copyLibraryBindingsDirect installs bindings from lib into targetEnv at
+// targetPhase. It is the DECLARATION-position install inside a define-library;
+// the top-level path is ResolveAndInstallImportSet.
 //
-// Imported syntax (macro) bindings install into targetEnv.Expand() only;
-// variable bindings install into targetEnv (the runtime frame). See the phase
-// selection below.
-func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame) error {
+// Imported syntax (macro) bindings install one phase above targetPhase; variable
+// bindings install at targetPhase itself. See the phase selection below.
+//
+// targetPhase composes the import set's for-syntax/for-template/for-meta shift
+// with the library env's own phase, exactly as ResolveAndInstallImportSet does.
+// It used to take no phase at all: ImportSet.PhaseShift was parsed, accepted and
+// then read nowhere on this path, so every shift collapsed to 0 and a
+// declaration-position (import (for-syntax (helper))) bound helper's exports at
+// PHASE 0 — where a correctly shifted import leaves them unbound — while the
+// phase that asked for them stayed empty. for-template's -1 was dropped
+// identically, making a negative shift indistinguishable from no modifier, and
+// nothing reported any of it. Filed 2026-09-09; the body position, which routes
+// through ResolveAndInstallImportSet, was always correct.
+//
+// WHY NOT just call ResolveAndInstallImportSet here. Not because of the env:
+// lib.Env.AtPhase(n) is the LIBRARY's own phase-n frame — Namespace.NewChildRuntime
+// wires a registry onto the child precisely so it is not the parent's — and this
+// function's syntax arm has always gone through AtPhase via Expand(). (An earlier
+// version of this comment claimed the opposite; it was measurably false.) The real
+// reason is the PLACEMENT TIER. CopyLibraryBindingsToEnvAtPhase installs
+// placementShadowable, which would give a library env a sealed phase-0 answer,
+// and TestBindingModelMatrix/imported_rename_shadows_set!_special_form pins that
+// a library env is deliberately a flat island with no sealed tier of its own.
+// Collapsing the two paths takes that decision as a silent side effect.
+func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
+	// A syntax binding is an expand-phase concept RELATIVE to the phase the
+	// import lands on, so it is targetPhase+1, not a hardcoded 1. Composed
+	// through the same int8 guard the propagation install uses, so a for-meta
+	// near the ceiling is refused rather than wrapping negative.
+	syntaxPhase, err := composePhaseShift("import", targetPhase, environment.PhaseExpand)
+	if err != nil {
+		return err
+	}
 	for localName, externalName := range bindings {
 		internalName := lib.GetInternalName(externalName)
 		if internalName == "" {
@@ -889,11 +917,11 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 		// libraries with different bindings for one name is rejected per R7RS §5.6,
 		// not just a top-level program import.
 		localSym := values.NewSymbol(localName)
-		installEnv := targetEnv
-		phaseNote := ""
+		installEnv := targetEnv.AtPhase(targetPhase)
+		phaseNote := " at phase " + targetPhase.String()
 		if importedBinding.BindingType() == environment.BindingTypeSyntax {
-			installEnv = targetEnv.Expand()
-			phaseNote = " in expand phase"
+			installEnv = targetEnv.AtPhase(syntaxPhase)
+			phaseNote = " in expand phase " + syntaxPhase.String()
 		}
 		// DELIBERATELY placementInPlace for BOTH arms, and this is a REFUSAL.
 		//
@@ -910,7 +938,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 		// tier change (the comment above says so). Moving it would change a working
 		// resolution for no stated defect, and split one function's two arms across
 		// two tiers on no principle. It is a separate decision.
-		err := installImportedBinding(installEnv, localSym, importedBinding.BindingType(),
+		err = installImportedBinding(installEnv, localSym, importedBinding.BindingType(),
 			importedBinding, externalName, internalName, lib.Name, phaseNote,
 			placementInPlace)
 		if err != nil {

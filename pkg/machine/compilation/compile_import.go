@@ -80,7 +80,16 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 
 		fireImportObserver(p.env, res.Library, res.Bindings, lib.Name, ImportStageCompile)
 
-		err = copyLibraryBindingsDirect(res.Library, res.Bindings, lib.Env)
+		// Compose the parsed for-syntax/for-meta shift with the library env's own
+		// phase, the same composition ResolveAndInstallImportSet performs at top
+		// level. Based on lib.Env rather than p.env because lib.Env is the frame
+		// the install targets, so the base and the target cannot drift apart.
+		targetPhase, err := composePhaseShift("import", lib.Env.PhaseLevel(), res.ImportSet.PhaseShift)
+		if err != nil {
+			return wrapSourcedError(importSetExpr.SourceContext(), err)
+		}
+
+		err = copyLibraryBindingsDirect(res.Library, res.Bindings, lib.Env, targetPhase)
 		if err != nil {
 			return wrapSourcedError(importSetExpr.SourceContext(), err)
 		}
