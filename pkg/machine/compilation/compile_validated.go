@@ -341,11 +341,17 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 	// (R7RS §4.1.6). Under the engine default (WithImmutableTopLevel) the
 	// IsStable() check below also fires, on a defined-once top-level variable.
 	if binding.IsImported() {
-		return werr.WrapForeignErrorf(
+		// Stamped for the same reason the ErrNoSuchBinding arm above is: the
+		// location must ride on the cause that owns it. Unstamped, this returned a
+		// bare wrap and wrapCompilationError fell back to whatever located cause
+		// was left in the chain — measured, a four-line file with (import (scheme
+		// base)) on line 1 and (set! car 1) on line 4 reported line 1, naming the
+		// import three lines away. REVIEW.md "Error Chain Losslessness".
+		return wrapSourcedError(v.Name.SourceContext(), werr.WrapForeignErrorf(
 			werr.ErrImmutableBinding,
 			"set!: cannot mutate imported binding %q",
 			sym.Key,
-		)
+		))
 	}
 
 	// Reject set! on a rebind-stable binding. A Stable binding is a frame-reclaim
@@ -362,11 +368,11 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 	// is finalized at the define, so this always sees the final value — no runtime
 	// trap needed. The imported clause above already covers imports.
 	if binding.IsStable() {
-		return werr.WrapForeignErrorf(
+		return wrapSourcedError(v.Name.SourceContext(), werr.WrapForeignErrorf(
 			werr.ErrImmutableBinding,
 			"set!: cannot mutate immutable top-level binding %q",
 			sym.Key,
-		)
+		))
 	}
 
 	// Check if it's a local binding
@@ -390,7 +396,13 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 		// user's variable instead.
 		gi := p.env.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
 		if gi == nil {
-			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "internal error: binding found but no index for %q", sym.Key)
+			// Stamped with its two siblings above for consistency, but UNTESTED and
+			// deliberately unpinned: reaching it needs GetBinding to resolve while
+			// GetGlobalIndexWithScopes returns nil, i.e. the frame's name table and
+			// index table disagreeing, which has no constructible reproducer. Do not
+			// read the stamp as coverage.
+			return wrapSourcedError(v.Name.SourceContext(),
+				werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "internal error: binding found but no index for %q", sym.Key))
 		}
 		liti := p.template.MaybeAppendLiteral(gi)
 		p.AppendOperations(
