@@ -274,7 +274,8 @@ them:
 | `2026-09-04-scheme-specified-syntax-forms-design.local.md` | **DESIGN, direction approved 2026-09-04, not started.** Go keeps a kernel (scope sets, resolution, core forms, body scan, dispatch loop, one transformer protocol with the intro-scope flip, `quote-syntax`, `syntax-local-value`, one-level accessors); `syntax-case`, `syntax`, `with-syntax`, `quasisyntax`, `syntax-rules`, `er-macro-transformer` are specified in Scheme in two new bootstrap sources; `pkg/internal/match/` and ten `compile_syntax_*`/`operation_syntax_*`/ER files (≈6.5k Go) are deleted. Startup is a soft constraint by decision (pre-compiled bytecode later). Three of the six 2026-09-04 macro defects die with the deleted code, one (`define-syntax` head dispatch) is the P0 prerequisite, `begin-for-syntax` visibility is out of scope, and the sixth was closed on paper. Phases P0–P4 in §7; the three open questions in §8 are not blocking. Revised 2026-09-06: 40 verified findings from the adversarial review folded in place (§2.1 item 2's library-scope premise, §2.2 ER pass-through scoping, §3.5 ER `compare` evidence, §3.6 ratchets, §4 inventory, §6 pin-fidelity timing, §7 P0.3/P0.5 pins); author decisions marked in place as `> **Open (2026-09-06 review, …)**` |
 | `2026-09-05-scheme-specified-syntax-forms-impl.local.md` | **IMPL PLAN 2026-09-05. Tasks 1-10 of 12 shipped** (P0.1-P0.5, P1, P2), branch per phase. P2 landed 2026-09-07 WITHOUT its default flip: `syntax-rules` and `er-macro-transformer` are specified in Scheme, but making the Scheme layer the default costs **31x startup** — 5.96 ms/engine and 87k allocations become 186 ms and 1.9M, at ~1 ms per `syntax-rules` clause over bootstrap's ~90 (F15). Both layers stay in the binary behind `WILE_SYNTAX_FORMS` / `WithSchemeSyntaxForms()`, default Go. **P3 (deletion) is blocked on the flip**, and the flip on a cheaper pattern representation or a pre-compiled bootstrap. Executing P2 also found a latent **P1** hygiene defect: `values.AddScopeToSet` aliased the caller's backing array, so two nested expansions of one macro clobbered each other's introduction scope — `(or (or #f #f) #t)` failed to compile and `(wile algebra interval)` was unloadable (F16). Twelve tasks over the design's P0.1–P0.5 and P1–P4, one branch per phase, 62 checkbox steps. §0 carries fourteen corrections to the design: the five review findings of 2026-09-05 (F1 the exclusion set is eight expander rows, ratcheted; F2 the Go producer's definition-site local arm dies at P0.1; F3 `define-syntax` docstrings exist and `,doc` reads them, so the seven `specialforms.go` rows go in P4; F4 the full deletion inventory; F5 `unsyntax`/`unsyntax-splicing` as violation-raising macros) and five measured while planning (F6 `datum->syntax` already copies the template's scopes, only the pin is at stake; F7 `GlobalIndex` is minted per query, so the P0.3 pin compares bindings; F8 P1 must take `with-syntax`/`quasisyntax` with `syntax`; F9 `WILE_SYNTAX_FORMS` as the both-ways default; F10 bootstrap macros are invisible from phase ≥ 2, closed by a kernel arm 2b). Four more (F11–F14) came from the adversarial review of 2026-09-06, folded 2026-09-06: F11 a library body is already stamped with its own scope, so §2.1 item 2's premise was false; F12 `bootstrap_nilpin_test.go` is replaced in P2, not deleted in P3; F13 `chibi/optional.sld`'s ER arm is behind a `cond-expand` Wile never selects; F14 `syntax-local-introduce` wiring belongs to P0.2, forced by `TestSyntaxLocalIntroduceIsNotWired`. That review also fixed four blocking defects: every `EvalMultiple` result in the P0 pin files asserted a `pkg/syntax` type directly on the `wile.Value` wrapper, which does not compile. Six more (F15-F20) came from EXECUTING Task 10 on 2026-09-07: F15 the startup measurement that deferred the flip; F16 the `AddScopeToSet` aliasing defect; F17 the plan's `er-contract` row cannot live in a script that must be green on both layers; F18 the nil-pin census is kept and pinned to the Go layer rather than replaced, with the behaviour rows added alongside; F19 the ER shim needs `%er-proc` to keep the definition-site arity refusal and to evaluate PROC once; F20 `pkg/registry/core/bootstrap.scm` is not executed, so editing its load-order comment fixes nothing; **F21 the `WILE_SYNTAX_FORMS=scheme` leg is no longer green** — 61 minutes for `pkg/wile` alone and seven failures in five classes, the worst being that the Scheme generators compute with USER-REPLACEABLE primitives, so `reg.Without("+")` plus an embedder's own `+` cannot load bootstrap. Nothing reaches the default; all of it is owed before the flip, and that class outranks the startup number |
 | `2026-09-08-flatt-binding-model-a-design.local.md` | **DESIGN APPROVED 2026-09-08, IMPLEMENTED 2026-09-09.** Stage A of moving Wile to Racket's binding model: the ambient `(ANY, sealed)` tier is DELETED, and what a phase can see is DECLARED by the Dialect (`LanguageProvider`, `PhasedImport`) as **bulk rows** rather than inherited from a wildcard coordinate. Phase-distinctness break SHIPPED: a procedural transformer must write `(import (for-syntax (scheme base)))`; a `syntax-rules` macro needs nothing, because its template expands into the phase-0 use site. **Three corrections the implementation forced, each of which the design got wrong:** (1) §6.1's exemplar `car` is NOT discriminating — it carries an exact-phase-1 slot from `phaseTargets`, so a pin on it could never go green; the pins use `cadr`/`assoc`. (2) The phase-1 vocabulary is NOT `{syntax-rules, ..., _}` — it is ~45 names plus every `%`-prefixed bootstrap helper, because the syntax layer's private machinery and the syntax-introspection primitives have no import route at all. (3) `AmbientBinding`/`PhaseKey`/`AnyPhase`/`tierAmbientSealed` still EXIST and now answer nothing; collapsing `PhaseKey` is Stage B's fold, not Stage A's. §7-§8 (Stage B/C) unchanged. |
-| `2026-09-08-flatt-binding-model-a-impl.local.md` | **IMPL PLAN 2026-09-08. SHIPPED 2026-09-09**, branches `feat/flatt-a-01`…`-11`. Task 0 needed no branch (the P2 merge carried its evidence to `master`); Tasks 1–5, 7, 9, 10, 11 landed; Task 8 was withdrawn (D7). **Two deviations from the plan, both deliberate and both recorded in code:** (a) **D12 was NOT taken.** Imports still use `placementShadowable`; the A1 collision at `(ExactPhase(0), sealed)` is resolved by a PREDICATE instead — the base's `BulkSource` is sealed-only and own-installs-only, so it refuses any binding carrying `Imported` meta, the same fact `importConflicts` keys on. Routing imports through rows needs a library-SCOPED source (`findLibraryBinding` queries with the library's scope) plus per-source-phase grouping: strictly more machinery for the same separation. (b) **Materialization has no write path.** Every row Stage A installs reads the importing store, so the binding is already a slot there and resolution returns the source's own `slotRef` — no copy, no lock upgrade, and phase-0 and phase-1 reads reach the SAME `*Binding`, which a materializing copy would have forked. Task 5 Step 4's `RLock`→`Lock` audit is therefore moot as written. **Fork 3's else-branch never fired:** the P2 arc merged before execution, so `WILE_SYNTAX_FORMS` and `bootstrap_syntax{,_procedures}.scm` ARE on `master` and Task 9 Steps 1/3 were done rather than deferred. **Startup:** +4.8–6.1% at first, traced by profiling to `macroVocabularyAdmits` rebuilding a 60-name map per NAME LOOKUP; sharing one read-only set brings it to −0.1%/+1.1% with allocations at parity. **Two defects filed, not fixed:** a phase-1 `(scheme base)` import is not behaviour-neutral (it moves `free-identifier=?`, ER `rename`, `expand-once`'s second value and the syntax-forms switch), and the library `for-syntax` phase-shift defect's polarity was backwards — it is the DECLARATION position that drops the shift, not the body. |
+| `2026-09-09-flatt-binding-model-b-design.local.md` | **DESIGN 2026-09-09. RECOMMENDS AGAINST Stage B as §7 sketches it.** Four measurements kill the fold: (B1) **797 of 797** live global slots carry the EMPTY scope set — base, imports and user `define` alike — so §7's "the base's bindings carry fewer scopes than a user shadow" is 0 vs 0 and the difference would have to be MANUFACTURED, which means stamping a top-level scope on every binder AND every reference and deleting `ScopesCompatible`'s empty-set short-circuit; leave that short-circuit in and every binding becomes visible from every phase, i.e. the ambient tier restored under a new name with no test that can see it. (B2) Phase is a dense small-integer BIT INDEX in four places (`exactPhases[phase>>6]`, `macroPhaseSeenBits` ×2, `PhaseSet`) and an arithmetic operand in ~8 more; **Racket keeps the integer too** — `shifted-multi-scope` carries an integer delta and `resolve` takes phase as a PARAMETER that only builds the query scope set. (B3) Racket has **no SEALED analogue**; its phase 1 starts empty. (B4) Stage C gets WORSE, not better: today a serialized row is `(∅, int8, libraryName)`, two of three fields already process-stable. Replacement program, four independently shippable slices: **S0 repair Stage A** (the `(import (scheme base))` regression filed above — blocks everything), **S1 collapse the dead coordinate** (zero live `AnyPhase`/`AmbientBinding` callers; takes the OPPOSITE position from `global_environment_frame.go`'s "defer to Stage B" comment, because deferring a fold that is not happening is deferring forever), **S2 one argmax** (`probeTiersLocked` uses `>` and raises on ambiguity, `probeBulkLocked` uses `>=` and never computes it — a row-vs-row tie is broken by install order and reported as success), **S3 sealed becomes an explicit origin** (ratchet is the DELETION of the three `BindingTypePrimitive` reader gates). Also corrects two Stage A records: the impl plan's "nothing keys on `phaseLevel` in a way a representative scope could not replace" is false ON `EnsureMacroPhaseRows` ITSELF, and §7's "representative scope" names a shape that cannot express `for-meta n`. Eight fail-open blind spots catalogued, one of them (`resolveNodeByScopes`' subset guard, disable it and `./pkg/internal/validate/` + `./pkg/wile/` are BOTH green) live today and unrelated to B. |
+| `2026-09-08-flatt-binding-model-a-impl.local.md` | **IMPL PLAN 2026-09-08. SHIPPED 2026-09-09**, branches `feat/flatt-a-01`…`-11`. Task 0 needed no branch (the P2 merge carried its evidence to `master`); Tasks 1–5, 7, 9, 10, 11 landed; Task 8 was withdrawn (D7). **Two deviations from the plan, both deliberate and both recorded in code:** (a) **D12 was NOT taken.** Imports still use `placementShadowable`; the A1 collision at `(ExactPhase(0), sealed)` is resolved by a PREDICATE instead — the base's `BulkSource` is sealed-only and own-installs-only, so it refuses any binding carrying `Imported` meta, the same fact `importConflicts` keys on. Routing imports through rows needs a library-SCOPED source (`findLibraryBinding` queries with the library's scope) plus per-source-phase grouping: strictly more machinery for the same separation. (b) **Materialization has no write path.** Every row Stage A installs reads the importing store, so the binding is already a slot there and resolution returns the source's own `slotRef` — no copy, no lock upgrade, and phase-0 and phase-1 reads reach the SAME `*Binding`, which a materializing copy would have forked. Task 5 Step 4's `RLock`→`Lock` audit is therefore moot as written. **Fork 3's else-branch never fired:** the P2 arc merged before execution, so `WILE_SYNTAX_FORMS` and `bootstrap_syntax{,_procedures}.scm` ARE on `master` and Task 9 Steps 1/3 were done rather than deferred. **Startup:** +4.8–6.1% at first, traced by profiling to `macroVocabularyAdmits` rebuilding a 60-name map per NAME LOOKUP; sharing one read-only set brings it to −0.1%/+1.1% with allocations at parity. **Two defects filed, and both FIXED 2026-09-09 on `fix/phase1-import-neutrality`** together with a third (`set!`'s unstamped refusals): the phase-1 `(scheme base)` import was not behaviour-neutral, and the library `for-syntax` phase shift was dropped in the DECLARATION position, not the body. The first turned out to be ONE writer-side cause — a phase-shifted import installs at `(ExactPhase(N>0), MUTABLE)`, which outranks the SEALED phase rows — with THREE readers failing closed on it (`LookupPhaseBinding`, `lookupMacroBinding` ARM 2b, and the ER rename closure's phase). The discriminator is `BindingTypePrimitive`, NOT import provenance: the row masking `syntax-rules` under the Scheme layer carries no `Imported` meta. All three fixes are reader-side; **the writer-side slot survives and is filed against Stage B**. Details, gates, and the corrected workaround inventory in the two closed TODO.md entries. |
 | `ARCHITECTURE.local.md` | 1/4 sections complete |
 | `DEBUGGER.local.md` | Both proposals unstarted |
 | `MACRO_SYSTEM.local.md` | Both sections unstarted |
@@ -1417,8 +1418,45 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
 > diagnostic naming the move. The original text is kept below; read it with the
 > two positions swapped.
 
+- [x] **FIXED 2026-09-09, branch `fix/phase1-import-neutrality`.** `processLibraryImport`
+  (`pkg/machine/compilation/compile_import.go`) now composes
+  `composePhaseShift("import", lib.Env.PhaseLevel(), res.ImportSet.PhaseShift)` and threads
+  the result into `copyLibraryBindingsDirect`, which gained a `targetPhase` parameter and
+  installs a variable at `AtPhase(targetPhase)` and a syntax binding at
+  `AtPhase(composePhaseShift("import", targetPhase, PhaseExpand))` — relative, so a
+  `for-meta` near the ceiling is refused through the same int8 guard rather than wrapping
+  negative. At shift 0 it is bit-for-bit today's behaviour: `AtPhase(0)` is the frame
+  itself and `Expand()` is `AtPhase(1)` by definition.
 
-- [ ] **Route the library-body import path through the phase-composing install**
+  **The other candidate — route the declaration path through `ResolveAndInstallImportSet` —
+  was REJECTED on evidence, not taste.** Its stated cost in the filing below ("changes which
+  env is targeted, `lib.Env` vs `p.env`") is vacuous; they are one pointer. The real cost is
+  the PLACEMENT TIER: `CopyLibraryBindingsToEnvAtPhase` passes `placementShadowable`, which
+  would give a library env a sealed phase-0 answer, and
+  `TestBindingModelMatrix/imported_rename_shadows_set!_special_form` fails on it — a row
+  whose own comment pins that a library env is deliberately a flat island with no sealed
+  tier of its own. Collapsing the two paths takes that decision as a silent side effect.
+
+  `copyLibraryBindingsDirect`'s doc comment was also rewritten, because its stated reason
+  was **measurably false**: `lib.Env.AtPhase(n)` is the LIBRARY's own phase-n frame, not the
+  parent's — `Namespace.NewChildRuntime` wires a registry onto the child precisely so it is
+  not — and the function's syntax arm already went through `AtPhase` via `Expand()`. Leaving
+  that sentence standing invites exactly the rejected alternative again.
+
+  `TestLibraryDeclarationImportComposesPhaseShift`: four ratchet rows (declaration-position
+  `for-syntax` leaves phase 0 unbound AND binds at phase 1; `for-template` and `for-meta 3`
+  leave phase 0 unbound) plus an overflow refusal, all RED before. Three rows are labelled
+  GUARDS and pass on both sides — the shift-0 no-op, and the two BODY-position twins, which
+  is what `pkg/stdlib/lib/wile/er-macro-test.scm` depends on. The point of the pair is that
+  after the fix the two positions give the SAME two answers; before it, the body raised and
+  its declaration twin returned 101.
+
+  Blast radius was empty by measurement: no declaration-position shifted import existed
+  anywhere in the tree.
+
+- [ ] ~~**Route the library-body import path through the phase-composing install**~~ — the
+  original filing, kept for its measurements; read it with the two positions swapped per
+  the correction above
   [High, S, filed 2026-09-09 while pricing the Flatt Stage A migration
   (`plans/2026-09-08-flatt-binding-model-a-impl`, §0.1 Fork 4)]: inside a
   `define-library`, `(import (for-syntax X))`, `(import (for-template X))` and
@@ -1516,76 +1554,184 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   helpers live in the base store and no `.sld` exports one or could, so no import
   could reach them. If the flip makes those importable, the arm can narrow.
 
+### `(import (scheme base))` damages the engine: Stage A regression (2026-09-09)
+
+- [ ] **A plain phase-0 import reuses the base's own slot and restamps it `Imported`**
+  [**High**, M, filed 2026-09-09 while researching the Stage B design
+  (`plans/2026-09-09-flatt-binding-model-b-design`, §1 = slice S0); bisected to
+  `183171a1` "delete the ambient tier"]: this is a REGRESSION against `master`, verified by
+  building both binaries (`git worktree` + `GOWORK=off go build`) and running the same
+  files through each. It is not one of the two defects Stage A filed, and it is reachable
+  from the most common line in Scheme.
+
+  | Program | `master` | Stage A branch |
+  |---|---|---|
+  | `(import (scheme base))` then `(begin-for-syntax (define a (not #f)))` | `ok2` | **`no such local or global binding "not" at phase 1 of this unit's macro tower`** |
+  | `(import (scheme base))`, `namespace-undefine!` `caar`, then `namespace-bound?` | `#t` | **`#f`** |
+
+  Remove the import and the branch is green on both. Narrow it and the damage narrows with
+  it: `(import (only (scheme base) car))` leaves `not` reachable at phase 1. **A phase-0
+  import strips exactly the names it covers out of the phase-1 macro vocabulary**, and
+  makes every base primitive it covers user-deletable where `namespace-undefine!`'s own
+  docstring promises a refusal.
+
+  **Mechanism, measured rather than inferred.** A Go probe over the store, before and after
+  `(import (scheme base))`, for the name `not`:
+
+      PRE   ptr=0x66b876f14660 imported=false
+      POST  ptr=0x66b876f14660 imported=true  samePointer=true
+      TOTAL slots named `not`: 1
+
+  ONE slot. `installImportedBinding` writes `(ExactPhase(0), sealed)` with
+  `ambient := []*syntax.Scope{}`; the base's own slot is at `(ExactPhase(0), sealed)` with
+  `nil` scopes; `scopeSetsEqual(nil, [])` is true and the coordinates match, so
+  `CreateGlobalBindingAt`'s reuse loop returns `created == false` and `markBindingImported`
+  stamps `Imported = true` on **the startup set's own binding**.
+  `storeBulkSource.ownInstallsOnly` then refuses to supply that binding through the base
+  and macro-vocabulary rows, which is both observables.
+
+  **The doc comment that asserts this cannot happen is the thing to fix first.**
+  `installImportedBinding` (`pkg/machine/compilation/library_bindings.go`) says "an import
+  landing beside a base slot at this coordinate cannot be mistaken for the base … The two
+  coexist because they are distinguishable, not because one of them is absent." **There is
+  no "beside".** The same comment describes the identical hazard correctly for
+  `(ExactPhase(1), sealed)` — reuse, `created == false`, a silent in-place stamp — and
+  asserts it does not apply at phase 0. It applies.
+
+  **Two tests photograph the bug rather than gating it**, and must be re-read against the
+  corrected model rather than preserved: `TestImportedBindingTakesTheSealedPhaseZeroTier`
+  asserts `post.IsImported() == true` and reads it as "the import reached the sealed tier",
+  when what it observes is the base's own binding being restamped; and
+  `TestStringHashSRFI13StillShadows` passes by supersede-in-place.
+
+  **Order of work** (design §1.3): write the two RED pins FIRST — neither exists, both are
+  green on `master`, which is what makes them ratchets and not photographs. Then a third
+  asking whether the base's VALUE survives the import's `SetOwnGlobalValue`; if it does not,
+  `set!`-after-import and every compiled pin to the base are also implicated and the fix is
+  larger than a stamp refusal. The minimal fix refuses the stamp on a reused base slot; the
+  right fix stops the import taking the per-symbol path onto the base's coordinate at all,
+  which is design §6's slice S3.
+
 ### A phase-1 `(import (for-syntax (scheme base)))` is not behaviour-neutral (2026-09-09)
 
-- [ ] **Find why a phase-1 base import moves scope resolution, then fix it**
-  [High, M, filed 2026-09-09 while migrating transformer bodies for Flatt Stage A
-  (`plans/2026-09-08-flatt-binding-model-a-impl`, Task 9)]: adding
-  `(import (for-syntax (scheme base)))` to a program changes four things that have
-  nothing to do with the names it supplies. Measured by varying ONLY the prologue on
-  an otherwise identical program, engine `KitchenSink` + `stdlib.FS` +
-  `WithLibraryPaths()`:
+- [x] **Fixed at three reader sites, 2026-09-09, branch `fix/phase1-import-neutrality`.**
+  ONE writer-side cause, THREE readers that failed closed on it.
 
-  | prologue | `expand-once` 2nd value | free-id shadow probe | ER `(r 'helper)` | Go syntax forms compiled under `WithSchemeSyntaxForms` |
-  |---|---|---|---|---|
-  | none | `#t` | `(else not)` | `(user def)` | 0 |
-  | `(import (scheme base))` | `#t` | `(else not)` | `(user def)` | 0 |
-  | `(import (for-syntax (scheme base)))` | **`#f`** | **`(else else)`** | **`(user use)`** | **1** |
-  | `(import (for-syntax (scheme cxr)))` | `#t` | `(else not)` | `(user def)` | 0 |
+  **The cause.** `installImportedBinding`'s shadowable arm is guarded
+  `env.PhaseLevel() == PhaseRuntime` (`library_bindings.go`), so a phase-SHIFTED import
+  falls through to `MaybeCreateOwnGlobalBinding` and lands at `(ExactPhase(N>0), MUTABLE)`
+  = T1. Every phase row — primitive expanders, syntax compilers, bootstrap macros — is
+  written SEALED at its phase = T2. `tierExactMutable` outranks `tierExactSealed`, both
+  carry the empty scope set, so the import wins every top-level query. The sealed row is
+  out-ranked, never overwritten: two distinct `*Binding` pointers, measured.
+  `(scheme base)` exports 20 of the 40 phase-1 expander names as value-less compile-time
+  keywords, so the import blanked the binding-form machinery.
+  **The auxiliary-keyword reading was REFUTED**: `(only (scheme base) let)` reproduces it
+  alone and `(only (scheme base) else)` reproduces nothing; the trigger is the collision
+  set, and `(scheme cxr)` at phase 1 shares no name and moves nothing.
 
-  Every right column is correct in row 1 and wrong in row 3. Read individually:
-  `free-identifier=?` stops seeing a use-site shadow, so `(let ((else 1)) (m else))`
-  answers `else` instead of `not` — the use-site identifier looks to be resolved at
-  the transformer's phase rather than its own; an ER `rename` stops resolving at the
-  definition site, which is the contract `TestP2_ERRenameResolvesAtDefinitionSite`
-  pins; `expand-once`'s second value flips while its datum stays right; and the
-  for-syntax install path compiles one Go syntax form even under the Scheme layer,
-  which is the F9 "the switch must reach library environments" hole on that path.
+  **The three readers, each fixed where it failed:**
 
-  Only `(scheme base)` at phase 1 triggers all four and `(scheme cxr)` at phase 1
-  triggers none, so this is about what the base's rows do to the importing unit, not
-  about for-syntax imports as such.
+  1. `LookupPhaseBinding` (`phase_registry.go`) took one ranked answer and returned the
+     zero value on a type mismatch. It now falls back to
+     `SealedBindingAt(sym, q, phaseEnv.PhaseLevel())` — the same reader `validate.go`'s
+     unshadowed-head arm uses. Victims: `let`, `quote`, `define-syntax`, 17 more.
+  2. `lookupMacroBinding` ARM 2b (`expander_time_continuation.go`) was gated
+     `PhaseLevel() > PhaseExpand`; the gate now also opens on a wrong-typed ARM 2 answer.
+     Victim: `syntax-rules` under `WithSchemeSyntaxForms`, where a phase-0 `*SyntaxCompiler`
+     lifted to phase 1 out-ranked the Scheme macro and the compiler dispatched the Go form
+     in silence.
+  3. `invokeERTransformer` (`expander_time_continuation.go`) built the rename closure over
+     `erTransformer.DefEnv()` — the frame the transformer BODY compiled in, one rung up. It
+     now re-phases to the expansion under way: `DefEnv().AtPhase(p.env.PhaseLevel())`. Prior
+     art is `GetGlobalIndexFromLibraryScopes`, which already reads another owner's store
+     `AtPhase(p.phaseLevel)` for the same reason.
 
-  **It is currently worked around, not fixed.** Several migrated transformer bodies
-  spell `cadr` as `(car (cdr f))` — `car` and `cdr` are in the macro vocabulary, so
-  no import is needed — with a comment at each site saying why. Every one of those
-  comments has to be revisited when this is fixed, and the sites are findable by
-  grepping for "not behaviour-neutral". Affected files include
-  `pkg/wile/syntax_forms_{p0,switch}_test.go`,
-  `pkg/wile/er_compare_self_origin_test.go`,
-  `integration/testdata/er_macro_{cond,mixed}.scm`,
-  `integration/quasisyntax_test.go` and `extensions/eval/prim_eval_test.go`.
+  **The discriminator is `BindingTypePrimitive`, not import provenance.** An `IsImported()`
+  gate was tried and fails: measured, the row masking `syntax-rules` carries no `Imported`
+  meta at all — it is the sealed Go `*SyntaxCompiler` reached from a phase above — so
+  provenance closes three of the four columns and leaves the fourth silently red. The
+  binding-type rule is also the pre-existing guard moved rather than removed, so a user
+  `(define define-syntax …)` (a `BindingTypeVariable`) still shadows:
+  `TestLookupSyntaxCompiler_SamePhaseShadowOutranksTheSealedCompiler` caught the wider
+  version.
+
+  **Reader 3 was NOT import-specific**, and the filing's third column understated it: a
+  bare `(define list 5)` plus an ER macro renaming `list` splits the same way with no
+  import anywhere. Baseline's rename was the only reference form in the language immune to
+  a definition-site top-level redefinition, and it was immune only because it read the
+  wrong phase. The fix also closes a leak the filing did not name — a rename could smuggle
+  a phase-1-ONLY import into phase-0 output, where a plain reference to that name is a
+  compile error. Racket answers "unbound identifier" for the analogous template; Chez
+  answers otherwise and is not the oracle, because it implements R6RS implicit phasing.
+
+  **Gates.** `TestPhase1BaseImportIsBehaviourNeutral` (6 rows, each asserting the imported
+  arm EQUALS the bare arm, so it cannot be satisfied by making both equally wrong),
+  `TestPhase1BaseImportMasksNoPhaseRow` (the site-count ratchet: it DERIVES the name set
+  from `SealedSlots()` rather than listing it, so a fix narrowed to one name fails naming
+  the other nineteen — 20 of 40 masked before), `TestPhase1BaseImportDoesNotReviveTheGoSyntaxRules`
+  (a COUNTER, because the value assertion passes either way), and
+  `TestERRenameDenotesTheOutputPhase`.
+  **A black-box "do the core forms still work?" table was tried as the ratchet and
+  REJECTED: it passes on the unfixed tree**, because a masked head still reaches the
+  compiler's own syntax-form dispatch, so the answer is right and only the expander stopped
+  seeing the form. It pinned an answer, not the change.
+
+  **The workarounds are reverted.** `TODO.md`'s own instruction to find them by grepping
+  "not behaviour-neutral" was WRONG — the phrase occurred in two source files, and the five
+  Go-side comment blocks used five different wordings. The real set was five files, seven
+  sites: `integration/testdata/er_macro_{cond,mixed}.scm`,
+  `pkg/wile/er_compare_self_origin_test.go`, `pkg/wile/syntax_forms_p0_test.go` (×2),
+  `pkg/wile/syntax_forms_switch_test.go` (×2). Two entries in the old list were NOT
+  D-A workarounds and stay as they are, their comments already saying so correctly:
+  `integration/quasisyntax_test.go` and `extensions/eval/prim_eval_test.go` are blocked by
+  their own harness (a bare `NewEngine` with no source FS resolves no import of any kind),
+  which is a one-line cleanup available today and independent of this defect.
+  `caddr`/`cadddr` are `(scheme cxr)` names, not `(scheme base)` ones, so three of the
+  reverted sites need both imports. `pkg/stdlib/lib/chibi/optional.sld`'s `cadr` uses sit
+  under `(cond-expand (chibi …))`, and `chibi` is in neither `supportedFeatures` nor
+  `platformFeatures` (`pkg/machine/compilation/features.go`) — measured, not assumed — so
+  that arm is dead here and is not an eighth site.
+
+- [ ] **RESIDUAL: the writer-side defect survives, and it belongs to Stage B**
+  [Medium, M, filed 2026-09-09 by the fix above]: all three repairs are reader-side. The
+  bad `(ExactPhase(N>0), mutable)` slot is still created, so any OTHER phase-N reader of
+  that name still sees the import first. It is filed rather than fixed because there is no
+  safe writer coordinate today: `installImportedBinding`'s own doc explains that
+  `(ExactPhase(1), sealed)` would land an imported macro on exactly a bootstrap macro's
+  coordinates with the same ambient scope set, so `CreateGlobalBindingAt` REUSES the slot,
+  `created == false`, `importConflicts` returns false (the bootstrap macro is not
+  `IsImported()`), and `SetOwnGlobalValue` overwrites the sealed transformer IN PLACE,
+  ENGINE-WIDE — "from the outside, the import works". Stage A's D12 (route every import
+  through a bulk row of its own) was declined in that same comment. Reopening it is a
+  design decision, not a bugfix.
+  The Stage-B-shaped question underneath: should `else` at phase 1 come from an IMPORT at
+  all, or from the dialect's declared initial-import rows? `pkg/machine/compilation/er_macro_compare_test.go`
+  currently depends on the import supplying it, which is what killed the writer-side variant.
+  A cheap partial gate in the meantime: no import may land at T1 above a sealed phase row.
 
 ### `set!`'s two immutable-binding refusals report a stale location (2026-09-09)
 
-- [ ] **Stamp the identifier on the `ErrImmutableBinding` arms, as the arm above them
-  already does** [Medium, S, filed 2026-09-09 by the pre-commit review of Flatt Stage A
-  Task 1 (`plans/2026-09-08-flatt-binding-model-a-impl`), which touched the stamped
-  sibling and found the two unstamped ones beside it]: in `CompileValidatedSetBang`
-  (`pkg/machine/compilation/compile_validated.go`) the `ErrNoSuchBinding` arm wraps
-  `wrapSourcedError(v.Name.SourceContext(), …)` — its own comment says the stamp exists
-  "so the reported location is the offending name rather than the enclosing top-level
-  form". The two `ErrImmutableBinding` arms below it (`:344` *cannot mutate imported
-  binding*, `:365` *cannot mutate immutable top-level binding*) return a bare
-  `werr.WrapForeignErrorf` with no `SourcedError` at all, so `wrapCompilationError` falls
-  back to whatever located cause is left in the chain — which is a different form.
+- [x] **Fixed 2026-09-09, branch `fix/phase1-import-neutrality`.** All three unstamped
+  returns in `CompileValidatedSetBang` (`pkg/machine/compilation/compile_validated.go`) now
+  wrap `wrapSourcedError(v.Name.SourceContext(), …)`, the same call the `ErrNoSuchBinding`
+  arm above them already made. `wrapSourcedError` returns its argument unchanged when
+  either side is nil and its `Unwrap` returns the cause, so `errors.Is(err,
+  werr.ErrImmutableBinding)` is unaffected — asserted directly in the pin.
 
-  **Measured 2026-09-09**, four-line files, one stamped and one not:
+  Measured through the Go API before the fix: `pin.scm:4:1`, the enclosing `set!` FORM,
+  against the identifier's `4:6`. The filing's own measurement, taken through the CLI,
+  reported `ti.scm:1:0` — the import form on another line entirely, because the CLI wraps a
+  file in `(begin …)` so the nearest located cause it falls back to is further away. Same
+  defect, two distances.
 
-  | Program | Offending line | Reported |
-  |---|---|---|
-  | `(import (scheme base))` … `(set! car 1)` on line 4 | 4 | `ti.scm:1:0` — the **import** form |
-  | `;; pad` ×2 … `(set! nope 5)` on line 3 | 3 | `tf.scm:3:6` — the identifier |
-
-  This is the violation REVIEW.md → "Error Chain Losslessness" names: source location must
-  ride on the cause that owns it, not be dropped when wrapping. The fix is to wrap both in
-  `wrapSourcedError(v.Name.SourceContext(), …)`, the same call the arm above already makes;
-  the error values are otherwise correct. A third unstamped raise in the same function
-  (`:393`, *internal error: binding found but no index*) has the same gap but is an
-  internal-invariant path, so it is lower value.
-
-  Not fixed with Task 1 deliberately: it is pre-existing, and folding an unrelated bugfix
-  into a per-task branch breaks that plan's one-task-per-branch discipline.
+  `TestSetBangRefusalLocatesTheIdentifier` asserts the full `file:line:col` rather than a
+  substring. Two ratchet rows (imported, immutable-top-level) plus one labelled CONTROL —
+  the already-stamped unbound arm — which passes on both sides and is what says `4:6` is
+  that arm's own answer rather than an invented number. The third raise (`internal error:
+  binding found but no index`) is stamped with its siblings but explicitly UNPINNED and
+  commented as such: reaching it needs the frame's name table and index table to disagree,
+  which has no constructible reproducer, and the stamp must not read as coverage.
 
 ### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
 
