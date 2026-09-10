@@ -128,36 +128,57 @@ func TestImportedBindingTakesTheSealedPhaseZeroTier(t *testing.T) {
 	store := eng.Environment().Namespace().Store()
 	sym := values.NewSymbol("list-copy")
 
-	// Before any import, list-copy resolves to the ambient startup set (T3).
-	// SealedBindingAt cannot distinguish T2 from T3, so the discriminator is the
-	// import provenance, which only an import carries.
-	pre := store.SealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime)
-	qt.Assert(t, pre, qt.IsNotNil)
-	qt.Assert(t, pre.IsImported(), qt.IsFalse)
+	// Before any import, list-copy is the startup set's own binding: sealed at
+	// phase 0, and not the imported tier.
+	base := store.SealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime)
+	qt.Assert(t, base, qt.IsNotNil)
+	qt.Assert(t, base.IsImported(), qt.IsFalse)
+	qt.Assert(t, store.IsImportedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime),
+		qt.IsFalse)
+	baseValue := base.Value()
 
 	_, err := eng.EvalMultiple(ctx, `(import (scheme base))`)
 	qt.Assert(t, err, qt.IsNil)
 
-	// The import now OUTRANKS the ambient primitive, so the sealed probe answers
-	// with it. That is T2 beating T3, which is only possible at (ExactPhase(0),
-	// sealed) — the coordinate the relocation targets.
-	post := store.SealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime)
-	qt.Assert(t, post, qt.IsNotNil)
-	qt.Assert(t, post.IsImported(), qt.IsTrue,
-		qt.Commentf("the import did not reach the sealed tier at phase 0; the base install "+
+	// The import outranks the startup set, which is only possible because it took
+	// a sealed-coordinate slot of its OWN: tierExactImported sits between the
+	// user's mutable tier and the startup set's.
+	qt.Assert(t, store.IsImportedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime),
+		qt.IsTrue,
+		qt.Commentf("the import did not reach the imported tier at phase 0; the base install "+
 			"is back on T1 and a later define would assign through it"))
 
-	// ...and a top-level define outranks BOTH, from T1.
+	// ...and the startup set is still there UNDERNEATH, untouched. This pair is
+	// what the test asserts now and could not before.
+	//
+	// It used to read the sealed probe and assert the answer IsImported(), i.e.
+	// two bits standing in for one coordinate. That could not tell "the import
+	// took a slot above the base" from "the import landed ON the base and stamped
+	// it", and the second is what was actually happening: one slot, same pointer,
+	// the base's value replaced by the library env's copy. The test passed
+	// THROUGH the defect. See TestImportDoesNotMutateTheBaseBinding.
+	stillBase := store.SealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime)
+	qt.Assert(t, stillBase, qt.IsNotNil)
+	qt.Assert(t, stillBase.IsImported(), qt.IsFalse,
+		qt.Commentf("the import stamped the startup set's own binding instead of taking its own slot"))
+	qt.Assert(t, stillBase.Value() == baseValue, qt.IsTrue,
+		qt.Commentf("the import overwrote the startup set's value in place"))
+
+	// ...and a top-level define outranks BOTH, from the mutable tier.
 	v, err := eng.EvalMultiple(ctx, `(define list-copy 7) list-copy`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, v.Internal().SchemeString(), qt.Equals, "7")
 
-	// The import is shadowed, not replaced: its slot is still there, still
-	// imported. This is the assertion that separates "define shadows" from
+	// The import is shadowed, not replaced: its slot is still there, still the
+	// imported tier. This is the assertion that separates "define shadows" from
 	// "define superseded in place", which read identically from Scheme.
-	still := store.SealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime)
-	qt.Assert(t, still, qt.IsNotNil)
-	qt.Assert(t, still.IsImported(), qt.IsTrue,
+	//
+	// The FLOORED probe, not the ranked one: after the define, what the name
+	// DENOTES is the define, so IsImportedBindingAt is false here and would be
+	// false for both outcomes. ImportedBindingAt skips the mutable tier and asks
+	// what is underneath.
+	qt.Assert(t, store.ImportedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime),
+		qt.IsNotNil,
 		qt.Commentf("the define reached the import's slot — that is the assignment this "+
 			"relocation exists to prevent"))
 }

@@ -693,10 +693,32 @@ func (p *GlobalEnvironmentFrame) materializeBulkLocked(key values.Symbol, row bu
 // layers the pre-fold parent-chain walk visited, in the order it visited them.
 const (
 	tierExactMutable  = iota // T1: the query phase, mutable
-	tierExactSealed          // T2: the query phase, sealed
-	tierAmbientSealed        // T3: the ambient startup set
+	tierExactImported        // T2: the query phase, sealed, INSTALLED BY AN IMPORT
+	tierExactSealed          // T3: the query phase, sealed, the startup set
+	tierAmbientSealed        // T4: the ambient startup set
 	tierNone          = -1   // not a candidate at the query phase at all
 )
+
+// tierExactImported is the coordinate `storeBulkSource.ownInstallsOnly` was
+// standing in for, and adding it is what makes the base separable from an import
+// by COORDINATE rather than by predicate.
+//
+// Stage A relocated imports onto (ExactPhase(0), sealed), which is exactly where
+// the base's own writes land once the ambient branch is gone, and recorded that
+// "there is no third coordinate to move either onto". There was not; this is it.
+// Drawing the line by predicate instead left the WRITE path sharing one slot:
+// CreateGlobalBindingAt's reuse rule matches on (phase, sealed, scopes) and an
+// import agrees with the base on all three, so `created == false`,
+// SetOwnGlobalValue replaced the startup set's value in place and
+// markBindingImported stamped the startup set as imported — after which
+// ownInstallsOnly refused THE BASE. Measured 2026-09-09: one slot, same pointer,
+// and `(import (scheme base))` alone stripped `not` from the phase-1 macro
+// vocabulary and made every base primitive it covered user-deletable.
+//
+// With the tier, the base's source floors at tierExactSealed and an import is
+// simply below the floor, so ownInstallsOnly is now redundant rather than
+// load-bearing. It is kept: it is a second, independent reason for the same
+// answer, and the cost is one predicate on a miss path.
 
 // probeTiersLocked is the ranked probe with the tie REPORTED rather than raised,
 // and with a tier ceiling as well as a floor: candidates are the slots whose tier
@@ -756,10 +778,16 @@ func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.Sc
 			return tierNone
 		case s.phase.level != phase:
 			return tierNone
-		case s.sealed:
-			return tierExactSealed
-		default:
+		case !s.sealed:
 			return tierExactMutable
+		case s.slot < len(p.bindings) && p.bindings[s.slot] != nil && p.bindings[s.slot].IsImported():
+			// A sealed slot an import created. It outranks the startup set at the
+			// same coordinate, which is what makes (import (rename …)) shadow a base
+			// name, and it is BELOW the base's own source floor, which is what keeps
+			// the base's bulk row supplying the base rather than the import.
+			return tierExactImported
+		default:
+			return tierExactSealed
 		}
 	}
 	bestRef := slotRef{}
@@ -1074,6 +1102,45 @@ func (p *GlobalEnvironmentFrame) SealedGlobalIndexAt(key *values.Symbol, q synta
 // set", which is what refusing to undefine a primitive asks. False covers both
 // "resolves to a mutable slot" and "resolves to nothing".
 // Thread-safe: uses RLock for read-only access.
+// ImportedBindingAt returns the binding key resolves to under q at phase when the
+// MUTABLE tier is skipped and the answer is an IMPORT: what an import bound this
+// name to, regardless of any user shadow above it. nil means NONE.
+//
+// It is SealedBindingAt's sibling, one tier down, and the pair is the reason the
+// imported tier exists as a coordinate rather than as a meta bit: "the startup
+// set's binding of this name" and "an import's binding of this name" are two
+// questions with two answers, and before the split they had to share one probe
+// and be told apart afterwards by reading Meta.Imported off whatever came back.
+// Thread-safe: uses RLock for read-only access.
+func (p *GlobalEnvironmentFrame) ImportedBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) *Binding {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	ref, tier, ok := p.probeRankedLocked(*key, q, phase, tierExactImported)
+	if !ok || tier != tierExactImported {
+		return nil
+	}
+	return p.bindings[ref.slot]
+}
+
+// IsImportedBindingAt reports whether a read of key under q at phase resolves to
+// the IMPORTED tier: sealed-coordinate, but installed by an import rather than by
+// the startup set.
+//
+// It is the tier form of a question the tree used to ask as
+// SealedBindingAt(...).IsImported(), which stopped working the moment the sealed
+// floor started excluding imports — and which was never quite the same question,
+// because it asked about whatever the SEALED probe returned rather than about
+// what the name actually denotes here.
+// Thread-safe: uses RLock for read-only access.
+func (p *GlobalEnvironmentFrame) IsImportedBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	_, tier, ok := p.probeRankedLocked(*key, q, phase, tierExactMutable)
+	return ok && tier == tierExactImported
+}
+
 func (p *GlobalEnvironmentFrame) IsSealedBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -1106,6 +1173,34 @@ func (p *GlobalEnvironmentFrame) IsSealedBindingAt(key *values.Symbol, q syntax.
 // bare-name index it cannot drift onto a different slot of the same name. See
 // the history note below for why it was deferred until 2026-08-06.
 func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase PhaseKey, sealed bool) (*GlobalIndex, bool) {
+	return p.createGlobalBindingAt(key, bt, scopes, phase, sealed, false)
+}
+
+// CreateImportedGlobalBindingAt is CreateGlobalBindingAt for an IMPORT's install:
+// the created slot is stamped Imported before it is published, and the reuse rule
+// refuses to hand back a slot the import did not create.
+//
+// Both halves are load-bearing and neither is an optimization.
+//
+// The reuse refusal is the S0 repair. An import writes (ExactPhase(0), sealed)
+// with an EMPTY scope set; the startup set's own binding sits at that coordinate
+// with NIL scopes; scopeSetsEqual(nil, []) is true, so the plain form returned
+// the BASE's slot with created == false and the caller then wrote its value and
+// its provenance onto the startup set. Measured: `(import (scheme base))` left
+// one slot per name, replaced the base's value with the library env's copy, and
+// stamped the engine-shared base as imported.
+//
+// The pre-publication stamp is what makes the refusal stable. tierOf reads
+// IsImported() to rank, so a slot that is created now and stamped later is a slot
+// that ranks as the startup set in between. Nothing reads it in that window
+// today, but the window has no reason to exist.
+func (p *GlobalEnvironmentFrame) CreateImportedGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase PhaseKey, sealed bool) (*GlobalIndex, bool) {
+	return p.createGlobalBindingAt(key, bt, scopes, phase, sealed, true)
+}
+
+// createGlobalBindingAt is the shared body. imported selects both the reuse
+// predicate and the created slot's provenance stamp, so the two cannot disagree.
+func (p *GlobalEnvironmentFrame) createGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase PhaseKey, sealed bool, imported bool) (*GlobalIndex, bool) {
 	// The wildcard coordinate is refused outright now, not just its mutable half.
 	//
 	// Stage A deleted the ambient tier: writeCoordinates produces no wildcard key
@@ -1135,6 +1230,25 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt Bi
 		if s.phase != phase || s.sealed != sealed {
 			continue
 		}
+		// Provenance is half of the coordinate AT THE SEALED TIER ONLY: an import
+		// and the startup set share (phase, sealed, scopes) at phase 0 and must not
+		// share a slot.
+		//
+		// The mutable tier is deliberately exempt, and the exemption is not a
+		// concession — reuse there IS the supersede rule. A define-syntax that
+		// supersedes an imported macro reuses the import's (phase 1, mutable) slot
+		// and clears its provenance (R7RS §5.3.1,
+		// TestDefineSyntaxSupersedesImportClearsImported), and a second import of a
+		// name reuses the first's so the last import wins
+		// (TestImportedMacroDocTracksTheWinningValue). Both go red if this refusal
+		// reaches the mutable tier, because a refusal to reuse mints a second slot
+		// and the ranking then keeps the FIRST at equal tier.
+		//
+		// Nothing the startup set writes is mutable, so at the mutable tier there is
+		// no base to be confused with and the distinction buys nothing.
+		if sealed && p.bindings[s.slot].IsImported() != imported {
+			continue
+		}
 		if scopeSetsEqual(p.bindings[s.slot].Scopes(), scopes) {
 			q := newScopeKeyedGlobalIndex(key, p, s, syntax.ScopesOf(scopes))
 			return q, false
@@ -1148,7 +1262,18 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt Bi
 	}
 	// append the new binding at index i. Global bindings carry an atomicCell so
 	// they can be read lock-free from other threads (see binding.go atomicCell).
-	p.bindings = append(p.bindings, newGlobalBinding(values.Void, bt, scopes))
+	bnd := newGlobalBinding(values.Void, bt, scopes)
+	if imported {
+		// Stamped BEFORE publication: tierOf ranks on this, so the slot must never
+		// be visible carrying the wrong tier. The caller's markBindingImported
+		// still runs and adds the origin and export names; this sets only the bit
+		// the coordinate depends on.
+		bnd.UpdateMeta(func(m *BindingMeta) bool {
+			m.Imported = true
+			return true
+		})
+	}
+	p.bindings = append(p.bindings, bnd)
 	q := newScopeKeyedGlobalIndex(key, p, ref, syntax.ScopesOf(scopes))
 	return q, true
 }

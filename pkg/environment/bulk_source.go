@@ -114,21 +114,21 @@ type storeBulkSource struct {
 	minTier int
 	// ownInstallsOnly excludes IMPORTED bindings from what the source supplies.
 	//
-	// It is what makes "the base" separable from "an import" when the two share a
-	// coordinate, and they do: an import installs at (ExactPhase(0), sealed),
-	// which is exactly where the base's own writes land once the ambient branch
-	// is gone. There is no third coordinate to move either onto — after the
-	// relocation the candidates at a phase-0 query are exactly
-	// {(0,mutable), (0,sealed)}, and the mutable one is the user-define tier
-	// whose reuse is the pre-2026 supersede bug.
+	// It is REDUNDANT as of 2026-09-09 and kept deliberately. What it was standing
+	// in for is now a coordinate: tierExactImported.
 	//
-	// So the distinction is drawn by PREDICATE rather than by coordinate, on the
-	// same fact importConflicts already keys on: an imported binding carries
-	// Imported meta and the engine's own base does not. The alternative was
-	// routing every import through a bulk row of its own, which needs a
-	// library-SCOPED source (findLibraryBinding queries with the library's scope
-	// in the set) plus per-source-phase grouping — strictly more machinery for
-	// the same separation.
+	// This comment used to say "there is no third coordinate to move either onto",
+	// and drew the base/import distinction by PREDICATE instead — an imported
+	// binding carries Imported meta and the engine's own base does not. The
+	// predicate was sound; the premise was not. Both landed on ONE slot, because
+	// CreateGlobalBindingAt's reuse rule matched them on (phase, sealed, scopes)
+	// and the import then stamped Imported onto the base's own binding, at which
+	// point this predicate refused the base. See CreateImportedGlobalBindingAt.
+	//
+	// With the tier, minTier = tierExactSealed already excludes every import, so
+	// this predicate can only ever agree with the floor. It stays because it is a
+	// second, independent reason for the same answer and costs one field read on a
+	// miss path; deleting it belongs with the rest of the origin work.
 	//
 	// Measured: without this, a library-private name imported at phase 0 resolves
 	// inside a transformer body, because the phase-1 base row supplies it.

@@ -634,13 +634,32 @@ const (
 // that write, and the sealed base now lives at this very coordinate. The
 // coordinate is the most crowded one in the store.
 //
-// What makes it safe NOW is a predicate, not emptiness. The engine's own base
-// row is a SEALED, OWN-INSTALLS-ONLY BulkSource (environment.NewSealedStoreBulkSource):
-// it refuses to supply any binding carrying Imported meta, which is the same
-// fact importConflicts keys on. So an import landing beside a base slot at this
-// coordinate cannot be mistaken for the base by anything that reads the base,
-// and the base cannot be mistaken for an import. The two coexist because they
-// are distinguishable, not because one of them is absent.
+// What makes it safe NOW is a THIRD TIER, and this paragraph used to say
+// something else that was measurably false.
+//
+// It said a predicate did the job: the engine's own base row is a SEALED,
+// OWN-INSTALLS-ONLY BulkSource that refuses any binding carrying Imported meta,
+// "so an import landing BESIDE a base slot at this coordinate cannot be mistaken
+// for the base … The two coexist because they are distinguishable, not because
+// one of them is absent."
+//
+// There was no beside. A predicate can only separate two slots, and the WRITE
+// path was producing one: CreateGlobalBindingAt's reuse rule matches on
+// (phase, sealed, scopes), an import writes an EMPTY scope set where the base
+// carries NIL, and scopeSetsEqual(nil, []) is true. So `created == false`, the
+// SetOwnGlobalValue below replaced the startup set's value with the library
+// env's copy, and markBindingImported stamped the engine-shared base as
+// imported — after which the own-installs-only predicate refused THE BASE.
+// Measured 2026-09-09 (verified against master, bisected to 183171a1): one slot,
+// same pointer, and `(import (scheme base))` alone stripped `not` from the
+// phase-1 macro vocabulary and made every base primitive it covered
+// user-deletable.
+//
+// environment.tierExactImported is the third coordinate the old paragraph said
+// did not exist. An import now takes a slot of its OWN at this coordinate via
+// CreateImportedGlobalBindingAt, ranks between the user's mutable tier and the
+// startup set's, and the base's row floors above it. The predicate survives as a
+// second, independent reason for the same answer rather than as the only one.
 //
 // The plan's D12 proposed instead routing every import through a bulk row of its
 // own and deleting this placement. That was not taken: a library's exports are
@@ -689,7 +708,12 @@ func installImportedBinding(
 	var idx *environment.GlobalIndex
 	var created bool
 	if placement == placementShadowable && env.PhaseLevel() == environment.PhaseRuntime {
-		idx, created = env.GlobalEnvironment().CreateGlobalBindingAt(
+		// CreateImportedGlobalBindingAt, not the plain form: the base's own
+		// binding sits at exactly this coordinate with an equal scope set, so the
+		// plain reuse rule hands back the STARTUP SET's slot and this function then
+		// writes its value and its provenance onto the base. See that method's doc
+		// for the measurement.
+		idx, created = env.GlobalEnvironment().CreateImportedGlobalBindingAt(
 			localSym, bt, ambient, environment.ExactPhase(env.PhaseLevel()), true)
 	} else {
 		idx, created = env.MaybeCreateOwnGlobalBinding(localSym, bt, ambient)

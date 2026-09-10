@@ -1556,7 +1556,63 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
 
 ### `(import (scheme base))` damages the engine: Stage A regression (2026-09-09)
 
-- [ ] **A plain phase-0 import reuses the base's own slot and restamps it `Imported`**
+- [x] **FIXED 2026-09-10, branch `fix/import-reuses-base-slot`: a third tier.**
+  `environment.tierExactImported` sits between the user's mutable tier and the startup
+  set's, and an import takes a slot of its OWN there via `CreateImportedGlobalBindingAt`.
+  The old comment's "there is no third coordinate to move either onto" was the premise that
+  failed, not the predicate built on it.
+
+  **Three things the fix had to get right, each found by a test going red:**
+
+  1. **The reuse refusal is SEALED-TIER ONLY.** At the mutable tier, reuse IS the supersede
+     rule: a `define-syntax` superseding an imported macro reuses the import's
+     `(phase 1, mutable)` slot and clears its provenance (R7RS §5.3.1), and a second import
+     of a name reuses the first's so the last import wins. A blanket refusal mints a second
+     slot and the ranking then keeps the FIRST at equal tier —
+     `TestDefineSyntaxSupersedesImportClearsImported` and
+     `TestImportedMacroDocTracksTheWinningValue` both went red and are the gate.
+  2. **The slot is stamped `Imported` BEFORE publication.** `tierOf` ranks on it, so a slot
+     created now and stamped later ranks as the startup set in between.
+  3. **`namespace-undefine!` asks the TIER, not the meta.** It read
+     `SealedBindingAt(...).IsImported()`, which stopped answering the moment the sealed floor
+     began excluding imports — and was never quite the same question, since it asked about
+     whatever the sealed probe returned rather than about what the name denotes. It now asks
+     `IsImportedBindingAt`. That is the "two bits pretending to be one" fix landing exactly
+     where the surrounding comment complains about it. The documented capability
+     (`(namespace-undefine! (environment '(scheme base)) 'car)`, `docs/environment/system.md`)
+     is preserved, verified against `master`.
+
+  **New store API, two questions that used to share one probe:** `IsImportedBindingAt`
+  (ranked — "does this name DENOTE an import here") and `ImportedBindingAt` (floored,
+  `SealedBindingAt`'s sibling — "what did an import bind here, regardless of a user shadow
+  above it"). The distinction is load-bearing: after `(define list-copy 7)` the first is
+  false and the second is not, and only the second can tell "the define shadowed the import"
+  from "the define assigned through it".
+
+  **`TestImportedBindingTakesTheSealedPhaseZeroTier` is rewritten, not preserved.** It
+  asserted `SealedBindingAt(...).IsImported()` and read that as "the import reached the
+  sealed tier", which could not distinguish "the import took a slot above the base" from
+  "the import landed ON the base and stamped it" — and the second was what happened, so the
+  test passed THROUGH the defect. It now asserts both halves: the import wins the tier AND
+  the startup set is still underneath with its original value.
+
+  **Both false doc claims corrected in place**, since each is the reason its defect went
+  unseen: `installImportedBinding`'s "the two coexist because they are distinguishable, not
+  because one of them is absent", and `storeBulkSource.ownInstallsOnly`'s "there is no third
+  coordinate". `ownInstallsOnly` is now redundant — `minTier = tierExactSealed` already
+  excludes every import — and is kept as a second independent reason for the same answer.
+
+  Gates: `TestImportDoesNotMutateTheBaseBinding` (the structural pin, and the one that names
+  the cause: it holds the base's binding OBJECT across the import and asks whether it was
+  mutated, so it is independent of the fix's shape), `TestImportDoesNotStripThePhase1Vocabulary`,
+  `TestImportDoesNotMakeABasePrimitiveDeletable`. All five subject rows RED on the branch tip
+  and GREEN on `master` before the fix — measured both ways, not assumed.
+
+  Blast radius was four tests in one package. `make build && go test ./... && make lint &&
+  make covercheck` all green; the axis-B manifest regenerated for line drift only (two
+  primitives moved five lines by a comment edit).
+
+- [x] ~~**A plain phase-0 import reuses the base's own slot and restamps it `Imported`**~~
   [**High**, M, filed 2026-09-09 while researching the Stage B design
   (`plans/2026-09-09-flatt-binding-model-b-design`, §1 = slice S0); bisected to
   `183171a1` "delete the ambient tier"]: this is a REGRESSION against `master`, verified by

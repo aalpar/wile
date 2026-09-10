@@ -232,14 +232,19 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 		//
 		// So the refusal is narrowed to what it was always FOR — the startup set,
 		// which nothing user-level put there — and an import is deleted at its own
-		// coordinates. IsImported() is the discriminator: it is provenance the
-		// importer wrote, and a primitive, bootstrap procedure or keyword never
-		// carries it.
+		// coordinates. The TIER is the discriminator: an import installs at the
+		// imported tier, which sits between the user's mutable tier and the startup
+		// set's, and a primitive, bootstrap procedure or keyword never reaches it.
 		// Without this branch the refusal below would also fire on an import, with a
 		// message ("a primitive, bootstrap procedure, or keyword") that is simply
 		// untrue of one.
-		sealed := ns.Store().SealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime)
-		if sealed != nil && sealed.IsImported() {
+		//
+		// This used to read SealedBindingAt(...).IsImported(), which was two bits
+		// standing in for one coordinate and stopped answering once the sealed floor
+		// began excluding imports. It also asked a subtly different question — about
+		// whatever the sealed probe returned, rather than about what the name
+		// denotes here.
+		if ns.Store().IsImportedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime) {
 			deleted = ns.Store().DeleteBindingAt(
 				sym, environment.AmbientScopes(), environment.ExactPhase(environment.PhaseRuntime), true)
 		}
