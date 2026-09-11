@@ -1855,24 +1855,51 @@ pass because it was found while planning Stage B, not by a gate.
 
 ### Ordinal tier labels ("T2", "T3") in prose are known-dirty (2026-09-11)
 
-- [ ] **Sweep the ~100 ordinal tier labels, or stop using them** [Low, M, filed 2026-09-11
+- [ ] **Sweep the 8 sweepable binding-tier ordinal labels, or stop using them** [Low, M, filed 2026-09-11
   after Stage B S1]: inserting `tierExactImported` between `tierExactMutable` and
   `tierExactSealed` renumbered every tier below it, and **every "(T2)" / "(T3)" in prose
   silently changed referent with no test going red**. A label is a second, unchecked copy of
   the ordering; an identifier moves with the constant.
 
   **This is a KNOWN-DIRTY baseline, not a "probably fine" one.** Four labels were checked
-  against the enum at `39f289eb`, 2026-09-11, and **all four were wrong**:
+  against the enum at `39f289eb`, 2026-09-11, and filed here as "all four wrong". **Two of
+  the four were re-checked by reading the write path, 2026-09-11, and the entry's verdict on
+  them was itself wrong** — which is the same defect class, one level up:
 
-  | Site | Says | Enum at HEAD |
+  | Site | Says | Verdict, re-checked at `51738df5` |
   |---|---|---|
-  | `pkg/machine/compilation/library_bindings.go` (`importConflicts` doc) | "the base install moved to T2" | the base install is sealed = `tierExactSealed` = **T3** |
-  | `pkg/machine/compilation/library_bindings.go` (`placementShadowable` doc) | "T1 mutable outranks T2 sealed" | sealed is **T3**; T2 is `tierExactImported` |
-  | `pkg/registry/apply.go` (`registerCompileTimeBinding` doc) | "the same T1 > T2 order" | same error |
-  | `pkg/registry/apply.go` (same doc) | the ambient tier as "the ranked probe's T3" | the ambient tier is DELETED, and **T3 now names a live tier that is not the one meant** — the worst of the four |
+  | `pkg/machine/compilation/library_bindings.go` (`importConflicts` doc) | "the base install moved to T2" | **CORRECT, left alone.** `placementShadowable` at `PhaseRuntime` routes through `CreateImportedGlobalBindingAt`, and `tierOf`'s third arm ranks that `tierExactImported` = **T2**. This entry's "sealed = T3" read the coordinate and not the stamp |
+  | `pkg/machine/compilation/library_bindings.go` (`placementShadowable` doc) | "T1 mutable outranks T2 sealed" | **CORRECT, left alone.** Same reason: the sealed slot in question is the import's, `tierExactImported` |
+  | `pkg/registry/apply.go` (`registerCompileTimeBinding` doc) | "the same T1 > T2 order" | **WRONG — FIXED in `51738df5`** (names `tierExactMutable > tierExactSealed`) |
+  | `pkg/registry/apply.go` (same doc) | the ambient tier as "the ranked probe's T3" | **WRONG — FIXED in `51738df5`.** The ambient tier is DELETED and T3 now names a live tier that is not the one meant |
 
-  4 of 4 is not plausibly unlucky, so treat the remaining population as wrong until read.
-  Population at `39f289eb`, and the command, because this entry argues a correction owes one:
+  So the rate is 2 of 4, not 4 of 4, and the inference that drew on it ("not plausibly
+  unlucky") does not carry. The operative lesson is narrower and survives: **a coordinate
+  is not a tier.** Both false verdicts came from reading `(phase, sealed)` and skipping the
+  `Imported` stamp, which is exactly the distinction `tierExactImported` was inserted to
+  express. Read the write path, not the coordinate.
+
+  `51738df5` also corrected six labels in `literal_probe_ambient_test.go`,
+  `syntax_compiler_test.go`, `syntax_keyword_value_test.go` and `apply.go`, all of which
+  meant `tierExactSealed`. Population and split after it, with the commands, because this
+  entry argues that a correction owes one:
+
+      grep -rEoh '\bT[123]\b' --include=*.go pkg/ | wc -l          # 81
+      grep -rEoh '\bT[123]\.[0-9]' --include=*.go pkg/ | wc -l     # 11
+
+  **81 occurrences: 18 binding-tier (7 files), 47 closure tiers, 16 architectural review.**
+  Only 8 of the 18 are sweepable; the other 10 quote replaced text or state the convention.
+
+  **Filed, not fixed — `pkg/wile/library_export_scope_test.go:153`.** "ambient
+  `BindingTypePrimitive` bindings that a phase-0 probe reaches as T3". The ORDINAL is
+  correct (`if` and `define-syntax` take the unstamped sealed phase-0 write, so T3 =
+  `tierExactSealed`), so it is outside the finding-1 sweep and no renumbering can corrupt
+  it — but **"ambient" names a tier deleted in Stage A**, identical in kind to the two
+  `apply.go` sites that were fixed. Sweep it with the rest.
+
+  The ORIGINAL population figure, kept because it is what this entry's retired "~100" claim
+  came from and because its command is deliberately wider (it matches `T1.5` and an
+  identifier's neighbours), measured at `39f289eb`:
 
       git grep -oE '[^A-Za-z_]T[0-9]' 39f289eb -- '*.go'
 

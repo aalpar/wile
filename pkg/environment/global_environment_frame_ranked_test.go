@@ -320,10 +320,24 @@ func TestResolveRankedCardinalityWithinTier(t *testing.T) {
 // enforcement behind the "name a tier by its identifier, never by an ordinal"
 // convention stated at the tier enum.
 //
-// Roughly a hundred comments across the tree still label tiers "T1"/"T2"/"T3".
-// Each is an unchecked second copy of this enum's ordering: inserting
-// tierExactImported renumbered everything below it, and every one of those
-// labels silently changed referent with no test going red.
+// Eighteen comments across the tree still label THESE tiers "T1"/"T2"/"T3", in
+// seven files — eight of them live labels, the other ten quotations of the wrong
+// text they replaced or the convention statement itself. Each live one is an
+// unchecked second copy of this enum's ordering: inserting tierExactImported
+// renumbered everything below it, and every one of those labels silently changed
+// referent with no test going red.
+//
+// Eighteen, not the "roughly a hundred" this doc claimed until 2026-09-11. That
+// figure was unmeasured and counted two unrelated namespaces that share the
+// spelling. Measured, 2026-09-11 —
+//
+//	grep -rEoh '\bT[123]\b' --include=*.go pkg/ | wc -l    # 81
+//
+// — of which forty-seven are the CLOSURE tiers of design section 5.3.1
+// (boxing.go, compile_closure.go, operations_closure.go,
+// flat_closure_ratchet_test.go) and sixteen belong to the architectural review.
+// Those are correct where they stand; see the RED instruction at the bottom of
+// this doc before acting on the grep.
 //
 // A site-COUNT ratchet would not have caught that and is the wrong shape here —
 // the population does not change when a tier is inserted, so a count stays green
@@ -385,9 +399,17 @@ func TestResolveRankedCardinalityWithinTier(t *testing.T) {
 // named further down.
 //
 // IF THIS TEST IS RED because you added, removed or reordered a tier: that is
-// the test working, not a stale expectation. Every "T<n>" in a comment now
-// denotes a different constant. Rewrite them to name the identifier (preferred —
-// see the enum's doc for why), or renumber them, then update the table here.
+// the test working, not a stale expectation. Every ordinal label FOR THESE TIERS
+// now denotes a different constant. Rewrite them to name the identifier
+// (preferred — see the enum's doc for why), or renumber them, then update the
+// table here.
+//
+// The labels this means are the EIGHTEEN counted above, not every `\bT[123]\b`
+// in the tree: `grep -rEoh '\bT[123]\b' --include=*.go pkg/` also returns the
+// closure tiers and the review item IDs, and rewriting those would corrupt
+// correct comments. Start from the files that name a tier IDENTIFIER
+// (tierExactMutable / tierExactImported / tierExactSealed) or resolveRankedLocked
+// in the same paragraph; nothing here is a substitute for reading each site.
 func TestTierOrdinalsHaveNotRenumbered(t *testing.T) {
 	tcs := []struct {
 		name    string
@@ -401,7 +423,9 @@ func TestTierOrdinalsHaveNotRenumbered(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			qt.Assert(t, tc.tier, qt.Equals, tc.ordinal-1,
-				qt.Commentf("comments across the tree call tier %d %q; it is now a different constant",
+				qt.Commentf("BINDING-tier comments call tier %d %q; it is now a different constant. "+
+					"Rewrite those labels only — the closure tiers (boxing.go and neighbours) and the "+
+					"architectural-review item IDs spell themselves the same way and are correct",
 					tc.ordinal, tc.name))
 		})
 	}

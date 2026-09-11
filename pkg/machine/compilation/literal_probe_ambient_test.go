@@ -30,7 +30,8 @@ import (
 // (phase 0, sealed) — an ordinary rung of the descent, not a tier standing
 // outside every phase. The ordering the pin needs is unchanged and now falls out
 // of the ordinary tier rule: a user (define else 5) at phase 0 is a MUTABLE slot
-// at that same coordinate, so T1 beats T2 on the rung the descent stops at. This
+// at that same coordinate, so tierExactMutable beats tierExactSealed on the rung
+// the descent stops at. This
 // is the unit pin for the ordering TestPatternLiteralRespectsAUseSiteShadow
 // ("syntax-case, global shadow", pkg/wile) needs end-to-end.
 func TestLookupLiteralBindingDescendsPhasesFromItsOwn(t *testing.T) {
@@ -58,7 +59,7 @@ func TestLookupLiteralBindingDescendsPhasesFromItsOwn(t *testing.T) {
 		got, ok := lookupLiteralBinding(env, sym, nil, definitionFallbackPhases(env))
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, got, qt.Equals, user,
-			qt.Commentf("both are at phase 0 now, so the mutable T1 slot outranks the sealed T2 keyword"))
+			qt.Commentf("both are at phase 0 now, so the tierExactMutable slot outranks the tierExactSealed keyword"))
 	})
 	t.Run("definition site at phase 1, no shadow anywhere: the keyword", func(t *testing.T) {
 		ns, keyword := newStore()
@@ -132,7 +133,8 @@ func TestLookupLiteralBindingDescendsPhasesFromItsOwn(t *testing.T) {
 // the current best, which is always in the winning tier. With the ambient tier
 // deleted this plays out inside ONE phase rather than across the phase axis —
 // the sealed slots that used to sit at (ANY, sealed) are now at (0, sealed), so
-// a mutable phase-0 slot beats them at T1 and their tie is never scored.
+// a mutable phase-0 slot beats them at tierExactMutable and their tie is never
+// scored.
 //
 // Latent as production stands: every sealed registration passes nil scopes, so a
 // name has at most one sealed slot per phase and the tier cannot tie. The scoped
@@ -236,7 +238,8 @@ func TestLookupLiteralBindingMutableTieIsRefusedWithNothingSealed(t *testing.T) 
 //
 // Post-deletion the two ties are at ONE coordinate pair, (0, mutable) and
 // (0, sealed), rather than at a phase and outside every phase. The winning tier
-// is T1, so it is the mutable tie that is scored and the sealed one that is dead.
+// is tierExactMutable, so it is the mutable tie that is scored and the sealed one
+// that is dead.
 func TestLookupLiteralBindingMutableTieIsRefusedBesideASealedTie(t *testing.T) {
 	const sym = "else"
 	scopeA := syntax.NewScope()

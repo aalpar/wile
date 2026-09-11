@@ -220,12 +220,14 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 // produces (EnvironmentFrame.writeCoordinates).
 //
 // Until Stage A that write went to the ambient (ANY, sealed) coordinate and these
-// names were reachable from a frame at EVERY level as the ranked probe's T3. The
-// tier is gone: a keyword is now a phase-0 binding like any other, and a
+// names were reachable from a frame at EVERY level through the ranked probe's
+// AMBIENT tier. That tier is gone — and the ordinal it used to be spelled with
+// now denotes tierExactSealed, a live tier, which is why it is named here and not
+// numbered. A keyword is now a phase-0 binding like any other, and a
 // transformer body reaches it only because the dialect declares the macro
 // vocabulary at every macro phase (pkg/wile/dialect.go). What did not change is
-// that a same-phase user define shadows it, through the same T1 > T2 order that
-// lets user code shadow car.
+// that a same-phase user define shadows it, through the same
+// tierExactMutable > tierExactSealed order that lets user code shadow car.
 //
 // RegisterSyntaxCompilers writes the syntax compilers through the same view, so a
 // name in both tables (define-syntax, import, …) is ONE binding: created here,

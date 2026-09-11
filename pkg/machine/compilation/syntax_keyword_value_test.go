@@ -116,8 +116,8 @@ func TestPhaseOneHandlerValuePositionRefused(t *testing.T) {
 //
 //   - `if` is a compileTimeBindingSpecs name, so registerCompileTimeBinding
 //     installs a valueless BindingTypePrimitive binding through the sealed
-//     phase-0 write view, which a phase-0 probe reaches as T2 (exact phase,
-//     sealed). refuseCompileTimeMeaning's type arm answers it first:
+//     phase-0 write view, which a phase-0 probe reaches as tierExactSealed
+//     (exact phase, sealed). refuseCompileTimeMeaning's type arm answers it first:
 //     ErrSyntacticKeywordAsVariable, the more specific verdict, and the same
 //     class Chez ("invalid syntax if") and Racket give.
 //   - A bootstrap macro or a user macro has NO phase-0 keyword (it exists only

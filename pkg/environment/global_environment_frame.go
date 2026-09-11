@@ -783,7 +783,28 @@ func (p *GlobalEnvironmentFrame) materializeBulkLocked(key values.Symbol, row bu
 // referent with no test going red. An identifier moves with the constant; an
 // ordinal is a second, unchecked copy of the ordering.
 //
-// About a hundred ordinal labels still exist and are NOT swept.
+// EIGHTEEN ordinal labels for THESE tiers still exist, over seven files. Eight
+// are live labels left unswept; the other ten are quotations of the wrong text
+// they replaced, or this convention statement itself, and cannot be swept.
+//
+// The figure read "about a hundred" until 2026-09-11, and it was unmeasured: it
+// counted the whole `\bT[123]\b` population, whose spelling three unrelated
+// namespaces share. Measured, 2026-09-11:
+//
+//	grep -rEoh '\bT[123]\b' --include=*.go pkg/ | wc -l    # 81
+//
+// Of those 81, forty-seven are the CLOSURE tiers (design section 5.3.1's boxed /
+// self-patch / mutual, in boxing.go, compile_closure.go, operations_closure.go
+// and their tests) and sixteen belong to the architectural review. Both are
+// correct where they stand and have nothing to do with this enum: a sweep driven
+// by the bare grep would corrupt them. That is why the count above is stated for
+// the binding tiers specifically and never for the pattern. The review sixteen
+// do NOT share one spelling — eleven carry a dotted item number
+// (grep -rEoh '\bT[123]\.[0-9]' --include=*.go pkg/ | wc -l, 11), three name
+// "architectural review" in the same sentence, and the last two are subtest case
+// labels in scope_resolution_test.go, which are not item IDs at all. "Has a dot"
+// is therefore NOT a usable discriminator; read the sentence.
+//
 // TestTierOrdinalsHaveNotRenumbered is a tripwire on the values below: it goes
 // red on exactly the event that moves a label's referent, and its failure
 // message says to rewrite the labels rather than to update the test. A
@@ -1168,9 +1189,37 @@ func bulkTierOf(row bulkRef, phase Phase) int {
 // pinned by TestBulkRowsCarryTheEmptyScopeSet in pkg/wile — and the row that
 // breaks the premise is the one that will have to settle it.
 //
-// Caller MUST hold at least a read lock on p.mu. This function does not panic;
-// resolveRankedLocked raises the tie it reports, as probeRankedLocked does for
-// slots, and BulkBindingAt returns it as an answer.
+// The WALK reports its own tie rather than raising it, which is what lets the
+// two callers answer it differently: resolveRankedLocked raises, as
+// probeRankedLocked does for slots, and BulkBindingAt returns it as an answer.
+//
+// The walk is not the whole function, though, and the doc here said "does not
+// panic" until 2026-09-11, copied off probeTiersLocked where it was true. The
+// per-row lookup CAN raise: lookupExportSameStore reaches
+// storeBulkSource.lookupExportLocked, which probes the SOURCE store through
+// probeRankedLocked — the raising reader. What forecloses it is not a guarantee
+// of this function but the ARGUMENT that lookup hard-codes: lookupExportLocked
+// asks with syntax.EmptyScopes(), so ScopesCompatible admits an empty-scoped
+// slot alone, every surviving candidate has cardinality 0, and
+// rankedArgmax.consider's `len(scopes) > 0` conjunct can never score a tie among
+// them.
+//
+// So SCOPED slots in the source store arm nothing: they fail the compatibility
+// filter and never reach consider. That is not a hypothetical reassurance — a
+// library store's slots carry non-empty scope sets today, as
+// resolveRankedLocked's own doc records, with nothing armed here.
+//
+// The one edit that WOULD arm it is passing a scoped query from
+// lookupExportLocked. Relaxing CreateGlobalBindingAt's equal-scope-set refusal
+// is not a second one: the guard keys on the CANDIDATE's cardinality, so two
+// empty-scoped slots at one coordinate still tie at zero and still do not raise.
+// This is unrelated to the row-scope premise above — that one is over
+// bulkRef.scopes, this one over a hard-coded argument — and arming it would
+// break BulkBindingAt's contract (the tie is an ANSWER) and
+// lookupLiteralBinding's ("nothing here recovers a panic") in the same step.
+//
+// Caller MUST hold at least a read lock on p.mu, and — for that reason — MUST
+// release it via defer rather than a bare RUnlock.
 func (p *GlobalEnvironmentFrame) probeBulkLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier int) (row bulkRef, bnd *Binding, ambiguous bool, ok bool) {
 	best := newRankedArgmax()
 	for _, r := range p.bulkRows {

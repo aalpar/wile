@@ -34,6 +34,7 @@ package environment
 // pkg/wile/report_env_macro_vocabulary_test.go.
 
 import (
+	"reflect"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -276,4 +277,47 @@ func TestCopyCarriesMacroPhaseTemplatesWithoutDuplicating(t *testing.T) {
 
 	// The parent is untouched by any of it.
 	qt.Assert(t, store.BulkRowCount(), qt.Equals, 1)
+}
+
+// TestRepointCarriesEveryStoreBulkSourceField is a FIELD ratchet on
+// storeBulkSource, and it exists because repoint rebuilds the struct by literal.
+//
+// A copy that rebuilds by literal drops any field added after it was written,
+// silently — which is the defect TestCopiedSealedRowKeepsItsRestrictions and
+// TestCopiedBulkRowAnswersInTheCopy were written for, one layer up. The argument
+// that retired ownInstallsOnly ("one field cannot drift from itself") covers the
+// two fields that were coupled; it says nothing about a FIFTH field, and repoint
+// would carry that one only if whoever adds it remembers to.
+//
+// It pins the NAMES rather than a count, so a rename trips it too and the
+// failure can say which field is unaccounted for. The carry assertions below it
+// are what make the test's name true today: minTier and store are also covered
+// by TestCopiedSealedRowKeepsItsRestrictions, phase and name by nothing else.
+func TestRepointCarriesEveryStoreBulkSourceField(t *testing.T) {
+	typ := reflect.TypeFor[storeBulkSource]()
+	names := make([]string, 0, typ.NumField())
+	for f := range typ.Fields() {
+		names = append(names, f.Name)
+	}
+	qt.Assert(t, names, qt.DeepEquals, []string{"store", "phase", "name", "minTier"},
+		qt.Commentf("storeBulkSource's fields changed: repoint rebuilds this struct by literal, "+
+			"so a field it does not name is dropped from every copied row. Carry the new field "+
+			"there, then update this list"))
+
+	parent := NewNamespace().Runtime().GlobalEnvironment()
+	target := NewNamespace().Runtime().GlobalEnvironment()
+	name := vocabularySourceName()
+	src := &storeBulkSource{
+		store:   parent,
+		phase:   PhaseExpand,
+		name:    name,
+		minTier: tierExactSealed,
+	}
+
+	got := unwrapStoreSource(t, src.repoint(target))
+	qt.Assert(t, got.store == target, qt.IsTrue,
+		qt.Commentf("store is the one field repoint is FOR"))
+	qt.Assert(t, got.phase, qt.Equals, src.phase)
+	qt.Assert(t, got.name == name, qt.IsTrue)
+	qt.Assert(t, got.minTier, qt.Equals, src.minTier)
 }

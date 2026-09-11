@@ -111,6 +111,10 @@ func BaseSourceName() values.Value {
 // what makes the import edge order-independent. TestBulkRowIsLiveNotSnapshot
 // pins it, because on a tree with no bulk rows a snapshot and a live reference
 // are indistinguishable and the property would otherwise ship untested.
+//
+// ADDING A FIELD: repoint rebuilds this struct by literal, so a field it does
+// not name is dropped from every copied row. TestRepointCarriesEveryStoreBulkSourceField
+// is the ratchet.
 type storeBulkSource struct {
 	store *GlobalEnvironmentFrame
 	phase Phase
@@ -336,6 +340,13 @@ type bulkRef struct {
 // origin is a PARAMETER rather than something the row derives, because it is a
 // fact about this install and not about src: the same source can be declared by
 // the language and reached again by an import. See BulkOrigin.
+//
+// Installing a BulkOriginImport row, or a row with a NON-EMPTY scope set, breaks
+// resolveRankedLocked's miss-only bulk consultation and owes the full argmax
+// described there — see its "THE ONE NEW RULE" paragraph. This method and
+// BulkOrigin are exported while both ratchets
+// (TestEveryOriginRowIsLanguageDeclared, TestBulkRowsCarryTheEmptyScopeSet) are
+// in-tree, so an out-of-tree caller can arm that with nothing going red.
 func (p *GlobalEnvironmentFrame) InstallBulkRow(src BulkSource, scopes []*syntax.Scope, phase Phase, sealed bool, origin BulkOrigin) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

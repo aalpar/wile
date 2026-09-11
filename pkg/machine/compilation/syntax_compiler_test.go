@@ -84,8 +84,9 @@ func TestLookupSyntaxCompiler(t *testing.T) {
 //
 // Both halves changed shape when the ambient tier was deleted, and neither
 // changed answer. The compiler now sits at (phase 0, sealed) rather than at
-// (ANY, sealed), so the contest at phase 0 is T1 (mutable) over T2 (sealed) at one
-// coordinate instead of T1 over the ambient T3. And a phase-0 slot was never a
+// (ANY, sealed), so the contest at phase 0 is tierExactMutable over
+// tierExactSealed at one coordinate instead of tierExactMutable over the deleted
+// ambient tier. And a phase-0 slot was never a
 // candidate at phase 1; what changed is that the compiler is not one either, so a
 // bare phase-1 probe now finds NOTHING rather than the compiler.
 //
@@ -108,7 +109,7 @@ func TestLookupSyntaxCompiler_SamePhaseShadowOutranksTheSealedCompiler(t *testin
 	_, created := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 	qt.Assert(t, created, qt.IsTrue)
 	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](env, sym, nil), qt.IsNil,
-		qt.Commentf("T1 outranks the T2 compiler at the shadowed phase"))
+		qt.Commentf("tierExactMutable outranks the tierExactSealed compiler at the shadowed phase"))
 
 	// Phase 1 reaches neither: the shadow is a phase-0 slot, and so is the
 	// compiler.
