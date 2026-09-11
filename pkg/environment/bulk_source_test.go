@@ -247,32 +247,43 @@ func TestBaseSourceNameIsReservedAndUnimportable(t *testing.T) {
 	qt.Assert(t, sym.Key, qt.Equals, "#%wile-base")
 }
 
-// TestBulkRowsCarryTheEmptyScopeSet pins the premise the resolution fast path
-// rests on.
+// TestBulkRowsInstallWithTheScopeSetGiven is the UNIT CONTROL for the premise
+// resolveRankedLocked's miss-only bulk consultation rests on. It is not the
+// gate — a hand-built namespace carries exactly the rows this test installs
+// into it, so it can only restate its own setup.
 //
-// resolveRankedLocked consults bulk rows only when the per-symbol probe MISSES.
-// That is the tie-break rule exactly — a row is sealed, hence T2, so a T1 slot
-// outranks it; a T2 slot ties on tier and, with both scope sets empty, the
-// tie-break awards the slot; and no slot loses on cardinality to an empty set —
-// but ONLY while every installed row carries the empty scope set. A row with a
-// non-empty set could outrank a slot on cardinality, and the miss-only shape
-// would silently never let it.
+// The gate is TestBulkRowsCarryTheEmptyScopeSet in pkg/wile, over a real,
+// library-bearing engine, where the rows are whatever origin and the library
+// env factory actually installed. It lives there because that is where the
+// premise could be false: a compiled library gets its OWN store, and a library
+// store DOES hold non-empty scope sets on its SLOTS (measured 2026-09-10: 5
+// slots at one scope, 1 at two, against an engine control of 781/781 empty).
+// Rows are a different object from slots, so that census does not refute the
+// premise — but a ratchet that only looks where the premise was never in doubt
+// is not a ratchet.
 //
-// So the premise is a gate, not a comment. Stage B's move of the phase INTO the
-// scope set is what would create the first non-empty row; when it does, this
-// test is the thing that says the fast path has to become the full argmax.
-func TestBulkRowsCarryTheEmptyScopeSet(t *testing.T) {
+// What this one still does: it pins that InstallBulkRow stores the scope set it
+// is given rather than normalizing it, which is what makes the pkg/wile gate's
+// reading meaningful.
+func TestBulkRowsInstallWithTheScopeSetGiven(t *testing.T) {
 	ns := NewNamespace()
 	store := ns.Runtime().GlobalEnvironment()
 	src := NewSealedStoreBulkSource(store, PhaseRuntime, BaseSourceName())
 	store.InstallBulkRow(src, nil, PhaseExpand, true)
 
-	store.mu.RLock()
-	defer store.mu.RUnlock()
-	for i, row := range store.bulkRows {
-		qt.Assert(t, row.scopes, qt.HasLen, 0,
-			qt.Commentf("row %d carries %d scopes; resolveRankedLocked's miss-only fast path is then unsound", i, len(row.scopes)))
-	}
+	sc := syntax.NewScope()
+	store.InstallBulkRow(src, []*syntax.Scope{sc}, PhaseExpand, true)
+
+	got := [][]*syntax.Scope{}
+	store.EachBulkRow(func(scopes []*syntax.Scope, _ Phase, _ bool) bool {
+		got = append(got, scopes)
+		return true
+	})
+	qt.Assert(t, got, qt.HasLen, 2)
+	qt.Assert(t, got[0], qt.HasLen, 0)
+	qt.Assert(t, got[1], qt.HasLen, 1)
+	qt.Assert(t, got[1][0] == sc, qt.IsTrue,
+		qt.Commentf("a row must keep the scope set it was installed with, or the pkg/wile gate reads a normalized value"))
 }
 
 // TestSealedBaseSourceExcludesImports pins the predicate that separates the

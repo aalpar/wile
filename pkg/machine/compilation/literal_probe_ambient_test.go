@@ -313,3 +313,51 @@ func TestLookupLiteralBindingExactTieIsRefusedDespiteACleanLowerPhase(t *testing
 		qt.Commentf("a phase-1 exact tie must be refused even though a clean phase-0 slot could otherwise answer it"))
 	qt.Assert(t, got, qt.IsNil)
 }
+
+// TestLookupLiteralBindingRowTieIsRefused pins the descent's LAST step against
+// the tie BulkBindingAt only started reporting on 2026-09-10.
+//
+// The branch has been written since the ambient tier moved into bulk rows —
+// `if ambiguous { return nil, false }` after the row read — and it was dead:
+// probeBulkLocked computed no ambiguity, so BulkBindingAt returned a literal
+// false and the branch could not be reached. Unifying the slot and row argmax
+// made it live, and this is the first test that enters it.
+//
+// The answer it pins is REFUSE, not raise. A row-level tie means the language
+// supplies this name under two incomparable scope sets, and the conservative
+// answer for a §4.3.2 literal is "this identifier does not pin" — the descent
+// carries the tie out as ok=false, the way a per-symbol tie at any rung above
+// already does (TestLookupLiteralBindingExactTieIsRefusedDespiteACleanLowerPhase).
+// Nothing here recovers a panic, so a raising row read would take down the
+// compile instead.
+func TestLookupLiteralBindingRowTieIsRefused(t *testing.T) {
+	const sym = "else"
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	query := []*syntax.Scope{scopeA, scopeB}
+
+	ns := environment.NewNamespace()
+	store := ns.Store()
+
+	// The name the rows supply: one unscoped sealed slot at phase 0, which is
+	// what a sealed store source reads.
+	_, created := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime).
+		MaybeCreateOwnGlobalBinding(values.NewSymbol(sym), environment.BindingTypePrimitive, nil)
+	qt.Assert(t, created, qt.IsTrue)
+
+	// Two rows at the query phase under incomparable one-element scope sets:
+	// each compatible with the query, tied on tier and on cardinality.
+	for _, sc := range []*syntax.Scope{scopeA, scopeB} {
+		src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime,
+			values.NewSymbol("lang-"+sc.String()))
+		store.InstallBulkRow(src, []*syntax.Scope{sc}, environment.PhaseExpand, true)
+	}
+
+	// fallbacks nil, so the descent has exactly two steps: the phase-1 per-symbol
+	// probe (a miss — the only slot is at phase 0) and the row read.
+	expand := ns.Runtime().AtPhase(environment.PhaseExpand)
+	got, ok := lookupLiteralBinding(expand, sym, query, nil)
+	qt.Assert(t, ok, qt.IsFalse,
+		qt.Commentf("two incomparable rows supplying the name must refuse the literal pin, not answer with one of them"))
+	qt.Assert(t, got, qt.IsNil)
+}

@@ -687,15 +687,27 @@ func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax
 	// not numbered.
 	//
 	// The premise is load-bearing, so it is pinned rather than assumed:
-	// TestBulkRowsCarryTheEmptyScopeSet. A row with a non-empty scope set would
-	// need the full argmax below, and it does not exist yet — Stage B's move of
-	// the phase INTO the scope set is what creates one.
+	// TestBulkRowsCarryTheEmptyScopeSet, which lives in pkg/wile and runs over a
+	// LIBRARY-BEARING engine. It moved there on 2026-09-10: a library store's
+	// SLOTS do carry non-empty scope sets, so a ratchet over a bare namespace was
+	// looking only where the premise was never in doubt. A row with a non-empty
+	// scope set would need the full argmax below, and it does not exist yet —
+	// Stage B's move of the phase INTO the scope set is what creates one.
 	//
 	// The miss-only shape is also why the hot path is untouched. Rows are
 	// consulted per FAILED resolution, not per resolution, and probeBulkLocked's
 	// per-row lookup is lock-free because the caller already holds this store's
 	// read lock.
-	bulkRow, bulkBnd, bulkOk := p.probeBulkLocked(key, q, phase, tierExactMutable, tierExactSealed)
+	bulkRow, bulkBnd, bulkAmbiguous, bulkOk := p.probeBulkLocked(key, q, phase, tierExactMutable)
+	if bulkAmbiguous {
+		// The same answer the per-symbol probe gives the same configuration.
+		// Consulting rows on its MISS must not resolve where it would have
+		// refused — that is the divergence Task 5 closed, and returning the
+		// first-seen row here would re-open it one layer down.
+		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
+			"resolveRankedLocked: identifier %q is supplied by incomparable hygienic scope sets across bulk rows",
+			key.Key))
+	}
 	if !bulkOk {
 		return ref, false
 	}
@@ -779,8 +791,148 @@ const (
 	tierExactMutable  = iota // the query phase, mutable
 	tierExactImported        // the query phase, sealed, INSTALLED BY AN IMPORT
 	tierExactSealed          // the query phase, sealed, the startup set
+	tierCount                // NOT a tier: one past the last, so tierHighest tracks the enum
 	tierNone          = -1   // not a candidate at the query phase at all
 )
+
+// tierHighest is the last ranked tier — the ceiling both probes apply.
+//
+// Derived from the enum rather than written as tierExactSealed, and that is the
+// whole point of it existing. Until 2026-09-10 the ceiling was a `maxTier`
+// PARAMETER, and all four ranked readers passed the literal tierExactSealed:
+// probeRankedLocked, resolveRankedLocked, ExactBindingAt and BulkBindingAt. So
+// APPENDING a tier was a silent defect — the new tier failed `t > maxTier` in
+// every reader and resolved nothing, with no test red.
+// TestTierOrdinalsHaveNotRenumbered says so in its own doc and cannot catch it,
+// because appending renumbers nothing.
+//
+// With the ceiling derived from iota, appending a tier extends it, and the new
+// tier is reachable the moment it exists. The parameter is gone: it had exactly
+// one value at every call site, which is the same fact from the other side.
+const tierHighest = tierCount - 1
+
+// rankedArgmax is the lexicographic argmax over (tier, scope cardinality) that
+// decides BOTH halves of a resolution: the per-symbol slots probeTiersLocked
+// walks and the bulk rows probeBulkLocked walks.
+//
+// One body, because it is one RULE. Until 2026-09-10 it was two. The slot walk
+// broke an equal-tier tie with `>` — the FIRST maximal candidate wins — and
+// reported an incomparable equal-cardinality tie as ambiguous. The row walk
+// broke it with `>=` — the LAST maximal candidate wins — and computed no
+// ambiguity at all, so a reference that the per-symbol probe would have refused
+// got an answer as soon as a row supplied it.
+//
+// Nothing made the divergence visible: flipping the slot side's `>` to `>=`
+// left the entire suite green, so the tie-break OPERATOR was untested, not just
+// the ambiguity half. TestBulkRowTieRanksLikeASlotTie is the pin.
+//
+// `>` over `>=` is justified on the SAME-STORE fact, not on the row walk's old
+// comment about install order shadowing. Every live row is a storeBulkSource
+// over one store at PhaseRuntime, so two rows that tie here return the
+// IDENTICAL *Binding from lookupExportSameStore and the winner's identity is
+// discarded by materializeBulkLocked, which keys on selfStore rather than on
+// the row. Choosing first-seen therefore changes no answer today, and it makes
+// the two walks agree, which is the point.
+//
+// It is NOT scopedBestOf, and not for its ambiguity polarity — that agrees,
+// since two candidates passing ScopesCompatible at equal cardinality forces set
+// equality. It is the PERFECT-MATCH EARLY EXIT: scopedBestOf returns done on
+// `weight > 0 && weight == target` and every caller breaks, while a tiered walk
+// must not stop, because a perfect match in one tier says nothing about a
+// higher tier later in the list.
+//
+// It is a plain struct held in a local and mutated in place. A []candidate, an
+// append-built list, or an interface-typed candidate would each spend the whole
+// win: this is THE global resolution path, and it is 0 B/op, 0 allocs/op.
+// BenchmarkBulkRowResolution is the gate — it is the only benchmark that reaches
+// this body per iteration, since BenchmarkGlobalLookup reads a PINNED index and
+// never resolves at all. The slot walk shares the body, so the gate covers it.
+//
+// consider does NOT inline: the slice-header store plus the ScopesMatch call put
+// it at cost 126 against the inliner's budget of 80. Measured, interleaved, ten
+// rounds, against c02f8a3c: BenchmarkGlobalLookup (a pinned index, which never
+// reaches here) -0.92%, BenchmarkEngineStartup and ...WithImport between -0.31%
+// and +0.43% against a same-binary drift floor of +/-1.3%, and
+// BenchmarkBulkRowResolution +8.4% at one row to +13.4% at sixteen. That last is
+// a microbenchmark of a path an engine walks 77 times over at most three rows —
+// under a microsecond per engine, which is why it does not reach the end-to-end
+// figure. Part of it is not the call but the RULE: under the old `>=` every
+// equal-cardinality row recorded, and under `>` all but the first fall through
+// to the tie test. A //go:noinline split of the ScopesMatch half was tried and
+// recovered about a quarter of it; it was dropped as an unprecedented directive
+// bought with an unmeasurable win.
+//
+// WHAT IT DOES NOT MERGE. This rule — maximal-cardinality scope-subset match,
+// incomparable tie is ambiguous — is written SEVEN times in this tree. Two of
+// them are this body's callers. The other five are NOT unified, and a reader who
+// changes the rule here must change them by hand:
+//
+//   - probeTiersLocked's own q.IsAll() branch, immediately below. Deliberate,
+//     and its comment says why: a wildcard has no scope set to be maximal
+//     against, so tier-only first-live is a different rule, not a lazy copy.
+//   - resolveAtCoordsLocked, the WRITE path's exact-coordinate question.
+//   - EnvironmentFrame.localBinding (environment_frame.go), the local half of
+//     GetBinding, which ranks over the lexical parent chain rather than tiers.
+//   - EnvironmentFrame.GetLocalIndex (environment_frame.go), same chain,
+//     returning an index instead of a binding.
+//   - nameSet.shadowLookup (pkg/internal/validate/frame_reclaim_build.go), which
+//     re-implements it by hand, NAME-KEYED, with a tri-state verdict, because a
+//     compile-time analysis must not panic on the tie.
+//
+// The three middle ones use scopedBestOf, and so inherit its perfect-match early
+// exit — correct for them, because none of the three is tiered. shadowLookup
+// does not, and the wildcard branch has no accumulator at all. Merging any of
+// them is not this type's job and is not implied by its existence.
+type rankedArgmax struct {
+	tier      int
+	scopes    []*syntax.Scope
+	ambiguous bool
+}
+
+// newRankedArgmax returns an accumulator with no candidate recorded.
+func newRankedArgmax() rankedArgmax {
+	return rankedArgmax{tier: tierNone}
+}
+
+// consider ranks one candidate that has already passed the tier range and the
+// scope filter, and reports whether it is the new best. The caller records its
+// own candidate identity — a slotRef, or a bulkRef plus the binding it
+// supplied — only when this returns true, so neither walk builds a candidate it
+// then discards.
+func (p *rankedArgmax) consider(tier int, scopes []*syntax.Scope) bool {
+	if p.tier < 0 || tier < p.tier || (tier == p.tier && len(scopes) > len(p.scopes)) {
+		p.tier = tier
+		p.scopes = scopes
+		// A recorded tie is dead the moment a strictly better candidate appears:
+		// ambiguity is asked only of the WINNING tier and cardinality, so a tie in
+		// a losing tier must not raise.
+		p.ambiguous = false
+		return true
+	}
+	// Equal tier and equal cardinality with a different set: neither is a subset
+	// of the other, so neither is THE maximal match (Flatt's ambiguity).
+	// ScopesMatch(a, b) reports b ⊆ a; at equal cardinality that holds iff the
+	// sets are equal, so its negation is exactly "different set".
+	//
+	// The len-as-cardinality comparison rests on scope sets being duplicate-free:
+	// a *Scope appearing twice would make len overstate the set's true
+	// cardinality and flag an ambiguity that is not one. Every mutation path is
+	// values.AddScopeToSet, which no-ops on a scope already present (scope.go).
+	// `len(scopes) > 0` is not a second rule, it is ScopesMatch's answer for the
+	// case it covers: the empty set is unique, so two candidates at cardinality
+	// zero are the SAME set and ∅ ⊆ ∅ holds. Every bulk row and every unscoped
+	// slot takes it, so it skips the call on the common path.
+	if tier == p.tier && len(scopes) == len(p.scopes) && len(scopes) > 0 &&
+		!syntax.ScopesMatch(scopes, p.scopes) {
+		p.ambiguous = true
+	}
+	return false
+}
+
+// found reports whether any candidate was recorded.
+func (p *rankedArgmax) found() bool {
+	return p.tier >= 0
+}
 
 // tierExactImported is the coordinate `storeBulkSource.ownInstallsOnly` was
 // standing in for, and adding it is what makes the base separable from an import
@@ -803,9 +955,9 @@ const (
 // load-bearing. It is kept: it is a second, independent reason for the same
 // answer, and the cost is one predicate on a miss path.
 
-// probeTiersLocked is the ranked probe with the tie REPORTED rather than raised,
-// and with a tier ceiling as well as a floor: candidates are the slots whose tier
-// t satisfies minTier <= t <= maxTier. It is the one body every ranked read
+// probeTiersLocked is the ranked probe over this store's PER-SYMBOL slots, with
+// the tie REPORTED rather than raised: candidates are the slots whose tier t
+// satisfies minTier <= t <= tierHighest. It is the one body every ranked read
 // shares; probeRankedLocked raises on ambiguous for the readers that want the
 // compile-boundary CompilationError, and ExactBindingAt returns it for the R7RS
 // §4.3.2 literal pin, which carries a tie across a multi-phase descent as an
@@ -819,16 +971,15 @@ const (
 // import), since both rank below it — setRecognizedPrimitive's fallback, which
 // the pre-fold tree spelled as a direct read of the sealed base frame.
 //
-// maxTier is that same question's ceiling, and with the ambient tier deleted
-// every caller now passes the same value: tierExactSealed is the LAST tier, so
-// the ceiling excludes nothing. It is kept for one more slice rather than
-// dropped here — the next step rewrites this signature and probeBulkLocked's
-// together — and until then it is an always-constant parameter, not a knob with
-// a second setting.
+// The ceiling is tierHighest, which is the enum's own last tier rather than a
+// parameter. Until 2026-09-10 it was a `maxTier` argument and all four ranked
+// readers passed the literal tierExactSealed; see tierHighest for why a
+// constant derived from iota is not the same thing as the literal it replaces.
 //
-// The ranking is one lexicographic argmax over (tier, scope cardinality) rather
-// than a per-tier accumulator array: three scopedBestOf values are ~190 bytes to
-// zero on every global resolution, and this is THE global resolution. The two are
+// The ranking is one lexicographic argmax over (tier, scope cardinality) —
+// rankedArgmax, shared with probeBulkLocked — rather than a per-tier
+// accumulator array: three scopedBestOf values are ~190 bytes to zero on every
+// global resolution, and this is THE global resolution. The two forms are
 // equivalent. Per-tier argmax then "first non-empty tier wins" is exactly
 // lexicographic (tier major, cardinality minor), and ambiguity is flagged only
 // against the current best, which is always in the winning tier — a tie in a
@@ -838,11 +989,13 @@ const (
 // subsets of it, hence equal to it and to each other, which
 // CreateGlobalBindingAt's reuse rule refuses to create.
 //
+// There is no perfect-match early exit and must not be: see rankedArgmax.
+//
 // Caller MUST hold at least a read lock on p.mu. This function does not panic.
 // It returns the winning slotRef, not a bare slot: a pin records the
 // coordinates it resolved at (GlobalIndex.phase/sealed), and recovering them
 // from the slot afterwards would mean a second scan of the name's slot list.
-func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier, maxTier int) (ref slotRef, tier int, ambiguous bool, ok bool) {
+func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier int) (ref slotRef, tier int, ambiguous bool, ok bool) {
 	slots := p.keys[key]
 	if len(slots) == 0 {
 		return slotRef{}, tierNone, false, false
@@ -870,72 +1023,74 @@ func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.Sc
 			return tierExactSealed
 		}
 	}
-	bestRef := slotRef{}
-	bestTier := tierNone
 	if q.IsAll() {
-		// Wildcard: the highest tier's first live slot, matching the old walk's
-		// layer-major first-live behavior.
+		// The QUERY wildcard, and it is deliberately NOT routed through
+		// rankedArgmax. A wildcard expresses no scope constraint, so there is no
+		// subset relation to maximise and "the maximal match" names nothing:
+		// ranking by cardinality here would prefer a more-scoped binding for a
+		// reference that asked for none, and an equal-cardinality tie would start
+		// raising ErrAmbiguousBinding on the path that mints EVERY GlobalIndex
+		// pin (NewGlobalIndex / newResolvedGlobalIndex above). Highest tier, first
+		// live slot, never ambiguous is a DIFFERENT rule that happens to live in
+		// the same function, and it is the pre-fold walk's layer-major
+		// first-live behavior. TestResolveRankedWildcard pins it.
+		bestTier := tierNone
 		for _, s := range slots {
 			if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
 				continue
 			}
 			t := tierOf(s)
-			if t < minTier || t > maxTier {
+			if t < minTier || t > tierHighest {
 				continue
 			}
 			if bestTier < 0 || t < bestTier {
 				bestTier = t
-				bestRef = s
+				ref = s
 			}
 		}
-		return bestRef, bestTier, false, bestTier >= 0
+		return ref, bestTier, false, bestTier >= 0
 	}
 	scopes := q.Scopes()
-	var bestScopes []*syntax.Scope
+	best := newRankedArgmax()
 	for _, s := range slots {
 		if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
 			continue
 		}
 		t := tierOf(s)
-		if t < minTier || t > maxTier {
+		if t < minTier || t > tierHighest {
 			continue
 		}
 		bindingScopes := p.bindings[s.slot].Scopes()
 		if !syntax.ScopesCompatible(bindingScopes, scopes) {
 			continue
 		}
-		if bestTier < 0 || t < bestTier || (t == bestTier && len(bindingScopes) > len(bestScopes)) {
-			bestRef = s
-			bestTier = t
-			bestScopes = bindingScopes
-			ambiguous = false
-			continue
-		}
-		// Equal tier and equal cardinality with a different set: neither is a
-		// subset of the other, so neither is THE maximal match (Flatt's ambiguity,
-		// per scopedBestOf). ScopesMatch(a, b) reports b ⊆ a; at equal cardinality
-		// that holds iff the sets are equal, so its negation is "different set".
-		//
-		// This len-as-cardinality comparison rests on scope sets being
-		// duplicate-free: a *Scope appearing twice would make len overstate the
-		// set's true cardinality, which could flag ambiguity here that the
-		// scopedBestOf array form (per-tier, deduped only by that form's own
-		// comparisons) would have resolved. The premise holds because every
-		// mutation path is values.AddScopeToSet, which no-ops on a scope already
-		// present (scope.go) — no constructor in this tree appends a duplicate.
-		if t == bestTier && len(bindingScopes) == len(bestScopes) &&
-			!syntax.ScopesMatch(bindingScopes, bestScopes) {
-			ambiguous = true
+		if best.consider(t, bindingScopes) {
+			ref = s
 		}
 	}
-	return bestRef, bestTier, ambiguous, bestTier >= 0
+	return ref, best.tier, best.ambiguous, best.found()
 }
 
-// bulkTierOf classifies a bulk row at the query phase, exactly as tierOf does a
-// slot. A row is declared at ONE phase and is a candidate there alone: a row
-// that answered at every phase would be the deleted ambient tier under another
-// name, which is the thing this stage exists to prevent, and cross-phase reach
-// is expressed by declaring a row at each phase that should have it.
+// bulkTierOf classifies a bulk row at the query phase, as probeTiersLocked's
+// tierOf does a slot. A row is declared at ONE phase and is a candidate there
+// alone: a row that answered at every phase would be the deleted ambient tier
+// under another name, which is the thing this stage exists to prevent, and
+// cross-phase reach is expressed by declaring a row at each phase that should
+// have it.
+//
+// The classifier stays split by KIND while rankedArgmax ranks what it returns.
+// The two agree on every tier they can both produce, and diverge on exactly one:
+// a row cannot rank tierExactImported. That tier is a per-slot PROVENANCE stamp
+// (Binding.IsImported), and a bulkRef has no origin field to read it from, so
+// the arm would have nothing to test. The divergence is therefore a missing
+// FACT, not a missing branch, and it is behaviourally inert today because every
+// production row is sealed=true.
+//
+// The row origin that would close it — and with it an import routed through a
+// row rather than through per-name slots — is a later task. Until then: a new
+// tier added to the enum must either be derivable from a bulkRef's own fields or
+// be documented here as unreachable for rows, or the two walks silently start
+// ranking the same candidate differently again.
 func bulkTierOf(row bulkRef, phase Phase) int {
 	switch {
 	case row.phase != phase:
@@ -948,11 +1103,19 @@ func bulkTierOf(row bulkRef, phase Phase) int {
 }
 
 // probeBulkLocked finds the best bulk row supplying key at phase, under the same
-// (tier, scope cardinality) argmax the per-symbol probe uses.
+// (tier, scope cardinality) argmax the per-symbol probe uses — literally the
+// same, since 2026-09-10: rankedArgmax is one body, and an incomparable
+// equal-cardinality tie among rows is now reported as ambiguous exactly as it is
+// among slots.
 //
-// Among rows at equal tier and equal scope set the LAST INSTALLED wins, which is
-// what preserves master's behaviour that an explicit (import (scheme base))
-// shadows the language's own initial import of the same name.
+// Among rows at equal tier and equal scope set the FIRST INSTALLED wins. It used
+// to be the last, on the argument that install order let an explicit
+// (import (scheme base)) shadow the language's own initial import of the same
+// name; that argument does not survive inspection, because every live row is a
+// storeBulkSource over ONE store at PhaseRuntime, so two tying rows return the
+// identical *Binding from lookupExportSameStore and materializeBulkLocked keys
+// on selfStore rather than on the winning row. The order was therefore never
+// observable, and first-installed is what the slot walk does.
 //
 // That ordering is NOT the R7RS section 5.6 conflict rule, and does not pretend
 // to be. Conflict detection runs on the per-symbol install path
@@ -965,13 +1128,21 @@ func bulkTierOf(row bulkRef, phase Phase) int {
 // order here rather than refused — an import routed through rows is Task 6's
 // work, and the check belongs with it.
 //
-// Caller MUST hold at least a read lock on p.mu.
-func (p *GlobalEnvironmentFrame) probeBulkLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier, maxTier int) (row bulkRef, bnd *Binding, ok bool) {
-	bestTier := tierNone
-	var bestScopes []*syntax.Scope
+// The QUERY wildcard skips the scope FILTER but not the cardinality ranking,
+// which is the one place this walk still differs from probeTiersLocked's: the
+// slot walk answers a wildcard with tier alone (see its q.IsAll() branch). The
+// divergence is unobservable while every row carries the empty scope set —
+// pinned by TestBulkRowsCarryTheEmptyScopeSet in pkg/wile — and the row that
+// breaks the premise is the one that will have to settle it.
+//
+// Caller MUST hold at least a read lock on p.mu. This function does not panic;
+// resolveRankedLocked raises the tie it reports, as probeRankedLocked does for
+// slots, and BulkBindingAt returns it as an answer.
+func (p *GlobalEnvironmentFrame) probeBulkLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier int) (row bulkRef, bnd *Binding, ambiguous bool, ok bool) {
+	best := newRankedArgmax()
 	for _, r := range p.bulkRows {
 		t := bulkTierOf(r, phase)
-		if t < minTier || t > maxTier {
+		if t < minTier || t > tierHighest {
 			continue
 		}
 		if !q.IsAll() && !syntax.ScopesCompatible(r.scopes, q.Scopes()) {
@@ -996,14 +1167,12 @@ func (p *GlobalEnvironmentFrame) probeBulkLocked(key values.Symbol, q syntax.Sco
 		if !found {
 			continue
 		}
-		if bestTier < 0 || t < bestTier || (t == bestTier && len(r.scopes) >= len(bestScopes)) {
+		if best.consider(t, r.scopes) {
 			row = r
 			bnd = b
-			bestTier = t
-			bestScopes = r.scopes
 		}
 	}
-	return row, bnd, bestTier >= 0
+	return row, bnd, best.ambiguous, best.found()
 }
 
 // probeRankedLocked is probeTiersLocked over every tier, raising on an
@@ -1013,7 +1182,7 @@ func (p *GlobalEnvironmentFrame) probeBulkLocked(key values.Symbol, q syntax.Sco
 // Caller MUST hold at least a read lock on p.mu, and MUST release it via defer
 // rather than a bare RUnlock: this can panic mid-hold.
 func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier int) (ref slotRef, tier int, ok bool) {
-	ref, tier, ambiguous, ok := p.probeTiersLocked(key, q, phase, minTier, tierExactSealed)
+	ref, tier, ambiguous, ok := p.probeTiersLocked(key, q, phase, minTier)
 	if ambiguous {
 		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
 			"resolveRankedLocked: identifier %q resolves ambiguously among incomparable hygienic scope sets",
@@ -1100,10 +1269,13 @@ func (p *GlobalEnvironmentFrame) setValueAtCoords(key *values.Symbol, q syntax.S
 // regardless of any user shadow AND regardless of any import. nil means NONE —
 // the startup set holds no binding of that name visible from phase.
 //
-// The floor is tierExactSealed and probeRankedLocked's ceiling is the same tier,
-// so the admitted range is exactly ONE tier. That skips more than the mutable
-// one: tierExactImported is below the floor too, so an import of the name is not
-// a candidate here. Callers that want "whatever this namespace binds the name
+// The floor is tierExactSealed and the ranked ceiling, tierHighest, is that
+// same tier today, so the admitted range is exactly ONE tier. That skips more
+// than the mutable one: tierExactImported is below the floor too, so an import
+// of the name is not a candidate here. Note which half is load-bearing: the
+// FLOOR is this reader's question, the ceiling merely happens to coincide with
+// it, so a tier appended to the enum widens this probe and whoever appends it
+// must decide whether that is wanted. Callers that want "whatever this namespace binds the name
 // to", imports included, want GetBinding's full ranked probe instead — see
 // setRecognizedPrimitive (registry/core/prim_hashtables.go), which runs both and
 // depends on the difference.
@@ -1124,14 +1296,14 @@ func (p *GlobalEnvironmentFrame) SealedBindingAt(key *values.Symbol, q syntax.Sc
 }
 
 // bindingWithinTiers is the locked, binding-returning form of probeTiersLocked:
-// the resolved binding among tiers minTier..maxTier at phase, or nil, and
+// the resolved binding among tiers minTier..tierHighest at phase, or nil, and
 // whether the winning tier tied. It does not raise. ExactBindingAt is its one
 // caller.
 // Thread-safe: uses RLock for read-only access.
-func (p *GlobalEnvironmentFrame) bindingWithinTiers(key *values.Symbol, q syntax.ScopeSet, phase Phase, minTier, maxTier int) (bnd *Binding, ambiguous bool) {
+func (p *GlobalEnvironmentFrame) bindingWithinTiers(key *values.Symbol, q syntax.ScopeSet, phase Phase, minTier int) (bnd *Binding, ambiguous bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	ref, _, ambiguous, ok := p.probeTiersLocked(*key, q, phase, minTier, maxTier)
+	ref, _, ambiguous, ok := p.probeTiersLocked(*key, q, phase, minTier)
 	if ambiguous {
 		return nil, true
 	}
@@ -1159,7 +1331,7 @@ func (p *GlobalEnvironmentFrame) bindingWithinTiers(key *values.Symbol, q syntax
 // Every other reader wants GetBinding, which raises.
 // Thread-safe: uses RLock for read-only access (taken in bindingWithinTiers).
 func (p *GlobalEnvironmentFrame) ExactBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) (bnd *Binding, ambiguous bool) {
-	return p.bindingWithinTiers(key, q, phase, tierExactMutable, tierExactSealed)
+	return p.bindingWithinTiers(key, q, phase, tierExactMutable)
 }
 
 // SealedGlobalIndexAt is SealedBindingAt's PIN: the same tier-floored probe, but

@@ -339,11 +339,23 @@ func (p *GlobalEnvironmentFrame) BulkResolutionCount() int64 {
 // Reports a tie as an ANSWER rather than raising it, matching ExactBindingAt:
 // this reader carries ambiguity across a multi-phase descent instead of failing
 // the compile at the first incomparable pair.
+//
+// Until 2026-09-10 the doc above said that and the body returned a literal
+// false, because probeBulkLocked computed no ambiguity at all. The doc was the
+// spec and the body was the defect: two rows at equal tier and equal
+// cardinality with incomparable scope sets resolved to whichever was installed
+// last, silently, where two SLOTS in the identical configuration raise.
+// TestBulkRowTieRanksLikeASlotTie pins it.
 func (p *GlobalEnvironmentFrame) BulkBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) (bnd *Binding, ambiguous bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	_, b, ok := p.probeBulkLocked(*key, q, phase, tierExactMutable, tierExactSealed)
+	_, b, ambiguous, ok := p.probeBulkLocked(*key, q, phase, tierExactMutable)
+	if ambiguous {
+		// nil alongside true, as bindingWithinTiers does: a tie has no winner to
+		// report, and a binding beside the flag invites a caller to use it.
+		return nil, true
+	}
 	if !ok {
 		return nil, false
 	}
@@ -373,6 +385,33 @@ func (p *GlobalEnvironmentFrame) BulkRowCount() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return len(p.bulkRows)
+}
+
+// EachBulkRow calls fn once per installed row, in install order, with that row's
+// resolution coordinates and its scope set. fn returns false to stop the walk.
+//
+// It exists so a ratchet OUTSIDE this package can state the premise
+// resolveRankedLocked's miss-only bulk consultation rests on — every installed
+// row carries the empty scope set — over a real engine rather than over a bare
+// namespace, which is the only place the premise was ever in doubt.
+// TestBulkRowsCarryTheEmptyScopeSet (pkg/wile) is that ratchet.
+//
+// Snapshot, then walk: fn runs with no lock held, so it may call back into this
+// store, and it never sees p.bulkRows itself. scopes is the caller's own slice,
+// handed back for inspection — treat it as read-only; mutating it would mutate
+// the installed row.
+func (p *GlobalEnvironmentFrame) EachBulkRow(fn func(scopes []*syntax.Scope, phase Phase, sealed bool) bool) {
+	p.mu.RLock()
+	rows := make([]bulkRef, len(p.bulkRows))
+	copy(rows, p.bulkRows)
+	p.mu.RUnlock()
+
+	for _, row := range rows {
+		cont := fn(row.scopes, row.phase, row.sealed)
+		if !cont {
+			return
+		}
+	}
 }
 
 // renamedBulkSource maps the importing unit's spellings onto the source's own.

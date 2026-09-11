@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -156,6 +157,51 @@ func BenchmarkApplyFrameCopyCost(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				env.InitApplyFrame(dst)
+			}
+		})
+	}
+}
+
+// BenchmarkBulkRowResolution is the row half of the resolution path's
+// allocation gate, and it exists because BenchmarkGlobalLookup never reaches it.
+//
+// BenchmarkGlobalLookup resolves a name the per-symbol probe HITS, so
+// resolveRankedLocked returns before ever looking at a bulk row: it gates the
+// slot walk at 0 B/op and says nothing about the row walk. This one queries at a
+// phase where no slot of the name is a candidate, so every iteration misses the
+// per-symbol probe, walks every installed row, and materializes the winner.
+//
+// The row count is engine-shaped rather than 1: a store carries one row per
+// dialect declaration plus one macro-vocabulary row per macro phase reached, and
+// the walk is linear in that. The sizes bracket what an engine actually holds.
+//
+// The gate is 0 allocs/op. A []candidate accumulator, an append-built candidate
+// list, or an interface-typed candidate in the shared argmax would each show up
+// here and nowhere else in the suite.
+func BenchmarkBulkRowResolution(b *testing.B) {
+	for _, rows := range []int{1, 4, 16} {
+		b.Run(fmt.Sprintf("rows=%d", rows), func(b *testing.B) {
+			g := NewGlobalEnvironmentFrame()
+			sym := values.NewSymbol("bulk-only")
+			// The one slot lives at phase 0; the query below is at phase 1, so the
+			// per-symbol probe misses and only a row can answer.
+			g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, true)
+			for i := range rows {
+				src := NewSealedStoreBulkSource(g, PhaseRuntime, values.NewSymbol(fmt.Sprintf("src%d", i)))
+				g.InstallBulkRow(src, nil, PhaseExpand, true)
+			}
+			q := syntax.EmptyScopes()
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				// Anonymous function per iteration: resolveRankedLocked's doc
+				// requires the read lock be released via defer, since it can panic
+				// mid-hold on an ambiguous tie.
+				func() {
+					g.mu.RLock()
+					defer g.mu.RUnlock()
+					g.resolveRankedLocked(*sym, q, PhaseExpand)
+				}()
 			}
 		})
 	}

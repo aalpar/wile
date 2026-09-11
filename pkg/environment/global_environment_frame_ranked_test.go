@@ -345,18 +345,44 @@ func TestResolveRankedCardinalityWithinTier(t *testing.T) {
 //     Values are all it compares.
 //   - APPENDING a tier after tierExactSealed correctly does not redden it: no
 //     existing ordinal moves, so no existing label changes referent. That is the
-//     test working, not a gap — but do NOT read it as "appending is safe". It is
-//     label-safe and REACHABILITY-unsafe. Every ranked ceiling in the tree is the
-//     literal tierExactSealed — probeRankedLocked's call to probeTiersLocked,
-//     resolveRankedLocked's and BulkBindingAt's calls to probeBulkLocked, and
-//     ExactBindingAt's to bindingWithinTiers — so a tier appended past it fails
-//     probeTiersLocked's `t > maxTier` filter for every reader and resolves
-//     nothing, silently and with no test red. Whoever appends the next tier must
-//     move those ceilings too, and nothing but this sentence will say so.
+//     test working, not a gap. It used to be label-safe and REACHABILITY-unsafe
+//     as well — every ranked ceiling was the literal tierExactSealed passed as a
+//     maxTier argument, so an appended tier failed `t > maxTier` in every reader
+//     and resolved nothing, silently. That half is closed: the ceiling is
+//     tierHighest, derived from the enum's own tierCount, so appending a tier
+//     extends it. What an append still needs a human for is the FLOORS —
+//     SealedBindingAt and SealedGlobalIndexAt floor at tierExactSealed, and
+//     whether a newly appended tier belongs above that floor is a question the
+//     enum cannot answer.
 //
 // It catches insertion, reorder and mid-enum removal — the ways an ordinal's
 // referent actually moves — and a rename or an outright removal breaks the
 // build here instead.
+//
+// It also guards tierCount's POSITION, which is a second job and a newer one.
+// Since 2026-09-10 the ranked ceiling is tierHighest = tierCount - 1 rather than
+// the literal tierExactSealed passed as a maxTier argument, which is what makes
+// appending a tier extend the ceiling instead of leaving the new tier dead. That
+// derivation is only as good as where tierCount sits: a tier declared AFTER the
+// sentinel leaves tierHighest at tierExactSealed and re-opens the very defect,
+// moving no ordinal and reddening nothing the ordinal loop checks.
+//
+// So the position is asserted against the TABLE, not against tierExactSealed.
+// The obvious form, tierCount == tierExactSealed+1, is green in exactly the case
+// it is there to catch (verified by appending a tier past the sentinel and
+// watching it pass), because moving the sentinel is not what goes wrong —
+// declaring a tier past it is. tierCount == len(tcs) catches that, and it
+// inherits the ordinal loop's one dependency: the table has to name every tier.
+// That dependency is the residual. If you append a tier and update NOTHING here,
+// both halves stay green and your tier resolves nothing; the doc block below is
+// the only thing that tells you so. The position-independent alternative — delete
+// the ceiling comparison entirely, since after the maxTier parameter went away no
+// reader wants a ceiling below the top — was considered and not taken, because
+// the fold-in asked for a named constant.
+//
+// HOW TO APPEND A TIER: declare it BEFORE tierCount, add a row to the table
+// below, and re-read the sealed FLOORS (SealedBindingAt, SealedGlobalIndexAt)
+// named further down.
 //
 // IF THIS TEST IS RED because you added, removed or reordered a tier: that is
 // the test working, not a stale expectation. Every "T<n>" in a comment now
@@ -381,4 +407,90 @@ func TestTierOrdinalsHaveNotRenumbered(t *testing.T) {
 	}
 	qt.Assert(t, tierNone, qt.Equals, -1,
 		qt.Commentf("tierNone must stay outside the ordinal range, or a floor/ceiling test admits it"))
+
+	// tierCount's POSITION, against the table as the enumeration of real tiers.
+	// tierHighest is tierCount-1 and is the ceiling every ranked reader applies,
+	// so where the sentinel sits IS the ceiling; a tier declared after it is
+	// unreachable through every ranked reader, silently, with no ordinal moved
+	// for the loop above to catch.
+	//
+	// Comparing tierCount against tierExactSealed+1 does NOT catch that — checked,
+	// not assumed: append a tier after the sentinel and tierCount is still
+	// tierExactSealed+1, so the comparison stays green while tierHighest stays at
+	// 2. Comparing it against the TABLE does, because the table has to name every
+	// real tier and a fourth tier makes len(tcs) 4 while tierCount is still 3.
+	qt.Assert(t, tierCount, qt.Equals, len(tcs),
+		qt.Commentf("tierCount (%d) must be one past the LAST tier, and the table must name all %d of them; a tier declared after the sentinel is excluded by every ranked ceiling", tierCount, len(tcs)))
+	qt.Assert(t, tierHighest, qt.Equals, tcs[len(tcs)-1].tier,
+		qt.Commentf("the ranked ceiling must admit the highest tabled tier"))
+}
+
+// TestBulkRowTieRanksLikeASlotTie is Task 5's RED pin: a bulk row and a
+// per-symbol slot must decide an incomparable equal-cardinality tie the SAME
+// way, because it is one rule.
+//
+// Before the merge it was two. Two SLOTS carrying {s1} and {s2} under a query of
+// {s1, s2} raise ErrAmbiguousBinding — that is
+// TestResolveRankedAmbiguityScopedToWinningTier, and the third subtest below
+// restates it so the two answers sit in one file. Two ROWS in the IDENTICAL
+// configuration computed no ambiguity at all: probeBulkLocked had no ambiguity
+// arm, and its equal-cardinality comparison was `>=` rather than `>`, so the
+// resolution silently went to whichever row was installed LAST.
+//
+// Nothing made that visible. Flipping the slot side's `>` to `>=` left the
+// entire suite green, so the tie-break OPERATOR was untested, not merely the
+// ambiguity half — which is why this pin asserts the ambiguous ANSWER rather
+// than which of the two rows wins.
+func TestBulkRowTieRanksLikeASlotTie(t *testing.T) {
+	sym := values.NewSymbol("v")
+	sc1 := syntax.NewScope()
+	sc2 := syntax.NewScope()
+	query := syntax.ScopesOf([]*syntax.Scope{sc1, sc2})
+
+	// Two rows over THIS store's phase-0 sealed slot, installed at phase 1 under
+	// incomparable one-element scope sets. Each is compatible with the query
+	// ({s1} ⊆ {s1,s2} and {s2} ⊆ {s1,s2}), they tie on tier (both sealed at the
+	// query phase) and on cardinality, and neither set is a subset of the other.
+	mk := func() *GlobalEnvironmentFrame {
+		q := NewGlobalEnvironmentFrame()
+		q.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, true)
+		q.InstallBulkRow(NewSealedStoreBulkSource(q, PhaseRuntime, values.NewSymbol("srcA")),
+			[]*syntax.Scope{sc1}, PhaseExpand, true)
+		q.InstallBulkRow(NewSealedStoreBulkSource(q, PhaseRuntime, values.NewSymbol("srcB")),
+			[]*syntax.Scope{sc2}, PhaseExpand, true)
+		return q
+	}
+
+	t.Run("rows report the tie", func(t *testing.T) {
+		g := mk()
+		bnd, ambiguous := g.BulkBindingAt(sym, query, PhaseExpand)
+		qt.Assert(t, ambiguous, qt.IsTrue,
+			qt.Commentf("two incomparable rows of equal cardinality are Flatt-ambiguous; the row walk reported the last-installed one instead"))
+		qt.Assert(t, bnd, qt.IsNil,
+			qt.Commentf("BulkBindingAt's doc already specifies the tie as an ANSWER; a binding alongside it is the tie being swallowed"))
+	})
+
+	t.Run("ranked resolution raises the tie", func(t *testing.T) {
+		g := mk()
+		qt.Assert(t, func() {
+			g.mu.RLock()
+			defer g.mu.RUnlock()
+			g.resolveRankedLocked(*sym, query, PhaseExpand)
+		}, qt.PanicMatches, ".*ambiguous.*",
+			qt.Commentf("the per-symbol probe raises this tie; consulting rows on its miss must not answer where it would have refused"))
+	})
+
+	t.Run("slots in the identical configuration", func(t *testing.T) {
+		// The control, and the reason the two subtests above are a defect rather
+		// than a preference: same scope sets, same query, same phase, slots
+		// instead of rows.
+		g := NewGlobalEnvironmentFrame()
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc1}, PhaseExpand, true)
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc2}, PhaseExpand, true)
+		qt.Assert(t, func() {
+			g.mu.RLock()
+			defer g.mu.RUnlock()
+			g.resolveRankedLocked(*sym, query, PhaseExpand)
+		}, qt.PanicMatches, ".*ambiguous.*")
+	})
 }
