@@ -232,12 +232,22 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 		//
 		// So the refusal is narrowed to what it was always FOR — the startup set,
 		// which nothing user-level put there — and an import is deleted at its own
-		// coordinates. The TIER is the discriminator: an import installs at the
-		// imported tier, which sits between the user's mutable tier and the startup
-		// set's, and a primitive, bootstrap procedure or keyword never reaches it.
-		// Without this branch the refusal below would also fire on an import, with a
-		// message ("a primitive, bootstrap procedure, or keyword") that is simply
-		// untrue of one.
+		// TIER. The tier is the discriminator on both sides, ask and act: an import
+		// installs at the imported tier, which sits between the user's mutable tier
+		// and the startup set's, and a primitive, bootstrap procedure or keyword
+		// never reaches it. Without this branch the refusal below would also fire on
+		// an import, with a message ("a primitive, bootstrap procedure, or keyword")
+		// that is simply untrue of one.
+		//
+		// The delete is DeleteImportedBindingAt and not DeleteBindingAt at
+		// (ExactPhase(0), sealed), because a COORDINATE does not name the import's
+		// slot: the startup set sits at the same one, and the coordinate-addressed
+		// resolve took whichever came first in the name's slot list, which is the
+		// base's. Measured: one undefine of an imported `car` destroyed the startup
+		// set and left the import, invisibly — namespace-bound? stayed #t because the
+		// survivor answered it — after which a SECOND undefine unbound a name one
+		// undefine on a fresh engine refuses (TestUndefineOfAnImportLeavesTheStartupSetIntact,
+		// TestUndefineTwiceCannotUnbindAStartupSetName).
 		//
 		// This used to read SealedBindingAt(...).IsImported(), which was two bits
 		// standing in for one coordinate and stopped answering once the sealed floor
@@ -245,8 +255,8 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 		// whatever the sealed probe returned, rather than about what the name
 		// denotes here.
 		if ns.Store().IsImportedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime) {
-			deleted = ns.Store().DeleteBindingAt(
-				sym, environment.AmbientScopes(), environment.ExactPhase(environment.PhaseRuntime), true)
+			deleted = ns.Store().DeleteImportedBindingAt(
+				sym, values.EmptyScopes(), environment.PhaseRuntime)
 		}
 		if !deleted {
 			return werr.WrapForeignErrorf(

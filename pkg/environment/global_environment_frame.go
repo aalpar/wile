@@ -1097,11 +1097,6 @@ func (p *GlobalEnvironmentFrame) SealedGlobalIndexAt(key *values.Symbol, q synta
 	return newScopeKeyedGlobalIndex(key, p, ref, q)
 }
 
-// IsSealedBindingAt reports whether a read of key under q at phase resolves to a
-// SEALED-tier slot — "the binding this name denotes here is part of the startup
-// set", which is what refusing to undefine a primitive asks. False covers both
-// "resolves to a mutable slot" and "resolves to nothing".
-// Thread-safe: uses RLock for read-only access.
 // ImportedBindingAt returns the binding key resolves to under q at phase when the
 // MUTABLE tier is skipped and the answer is an IMPORT: what an import bound this
 // name to, regardless of any user shadow above it. nil means NONE.
@@ -1141,6 +1136,11 @@ func (p *GlobalEnvironmentFrame) IsImportedBindingAt(key *values.Symbol, q synta
 	return ok && tier == tierExactImported
 }
 
+// IsSealedBindingAt reports whether a read of key under q at phase resolves to a
+// SEALED-tier slot — "the binding this name denotes here is part of the startup
+// set", which is what refusing to undefine a primitive asks. False covers both
+// "resolves to a mutable slot" and "resolves to nothing".
+// Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) IsSealedBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -1429,6 +1429,27 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 // top-level REPL/eval bindings, not for bindings referenced by compiled
 // bytecode.
 //
+// At a SEALED coordinate it is provenance-BLIND: an import and the startup set
+// share (phase, sealed, scopes) at phase 0, and this picks whichever the name's
+// slot list holds first, which is the base's. "Remove the import" is
+// DeleteImportedBindingAt, the tier-addressed sibling.
+//
+// Two of the three DeleteOwnGlobal callers DO arrive here sealed, and the
+// blindness is inert at the coordinate they reach. The transformer rollbacks
+// (compile_define_syntax.go, expander_body.go) delete through p.env.NextPhase(),
+// which AtPhase's §4.5 inheritance arm resolves to the phase-1 SEALED-WRITE view
+// whenever the defining view is sealed — a bootstrap macro whose right-hand side
+// failed to compile — so they address (ExactPhase(1), sealed). The third,
+// namespace-undefine!, goes through Runtime(), the mutable phase-0 root, and
+// never arrives sealed at all.
+//
+// Nothing an import owns sits at (ExactPhase(1), sealed) today. Every install
+// above phase 0 takes the importing VIEW's own coordinates — placementInPlace on
+// both propagation paths, and placementShadowable's non-phase-0 fallback — so an
+// import lands sealed there only if the IMPORTING view is itself sealed-write.
+// Whether one ever is was NOT established; if it can be, this needs the
+// provenance axis its sibling has.
+//
 // It does not refuse a sealed coordinate, and nothing downstream depends on its
 // declining to reach one. The write-side self-heal re-resolves at the PIN's own
 // coordinates (healWriteLocked), so the worst a sealed delete can do is re-heal
@@ -1446,6 +1467,53 @@ func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes []*s
 	if !ok {
 		return false
 	}
+	p.removeSlotLocked(*sym, i)
+	return true
+}
+
+// DeleteImportedBindingAt removes the binding AN IMPORT installed for key under q
+// at phase, and never the startup set's at the same coordinate. Returns true if
+// one was found and removed.
+//
+// It is DeleteBindingAt's provenance-aware sibling, and it exists because
+// (phase, sealed, scopes) stopped naming one slot when imports got a tier of
+// their own. DeleteBindingAt resolves through resolveAtCoordsLocked, which
+// filters on (phase, sealed) alone; an import and the startup set agree on both,
+// their scope sets are both empty, so the scoped walk returns whichever sits
+// FIRST in p.keys[key] — the base's, created at bootstrap. Measured: undefining
+// an imported `car` nil'd the startup set's slot and left the import standing, so
+// a second undefine then unbound a name a single one refuses.
+//
+// The axis is sealed-tier-only, exactly as in createGlobalBindingAt: this is the
+// delete counterpart of CreateImportedGlobalBindingAt, not a general third
+// coordinate. At the mutable tier there is no base to be confused with, and reuse
+// there IS the R7RS §5.3.1 supersede rule.
+//
+// Resolution is the ranked probe floored at tierExactImported — ImportedBindingAt's
+// probe, which is the one that can tell the two sealed slots apart — pinned to a
+// winner AT that tier. The floor plus the pin is what keeps this a provenance
+// filter rather than the ranked delete DeleteBindingAt's doc refuses: a mutable
+// shadow is below the floor, and the startup set and the ambient tier are above
+// the pin, so no reachable answer here is anything but an import.
+// Thread-safe: uses full Lock for write access.
+func (p *GlobalEnvironmentFrame) DeleteImportedBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	ref, tier, ok := p.probeRankedLocked(*key, q, phase, tierExactImported)
+	if !ok || tier != tierExactImported {
+		return false
+	}
+	p.removeSlotLocked(*key, ref.slot)
+	return true
+}
+
+// removeSlotLocked is the removal half every coordinate- or tier-addressed delete
+// shares, once its own resolution has named a slot: nil the slot, prune the dead
+// index, drop the name when it owns no more.
+//
+// Caller MUST hold the write lock on p.mu.
+func (p *GlobalEnvironmentFrame) removeSlotLocked(sym values.Symbol, i int) {
 	// Nil out the slot so a re-resolving GlobalIndex reference (OpLoadGlobal /
 	// OpPushGlobal) sees nil, caught by resolveGlobal, instead of the old value.
 	// NOTE: this does NOT reach compiled code that captured the *Binding pointer
@@ -1461,18 +1529,17 @@ func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes []*s
 	// corrupt a lookup — but an unpruned list grows without bound across repeated
 	// delete/redefine cycles, and every one of those walkers rescans the whole
 	// list. Pruning keeps it sized to the name's LIVE slots.
-	slots := p.keys[*sym]
+	slots := p.keys[sym]
 	for j, s := range slots {
 		if s.slot != i {
 			continue
 		}
-		p.keys[*sym] = append(slots[:j], slots[j+1:]...)
+		p.keys[sym] = append(slots[:j], slots[j+1:]...)
 		break
 	}
 	// Drop the name once it owns no slots, so a future lookup on it is a plain
 	// map miss and AmbientKeysAt / LiveSlots / SealedSlots stop enumerating it.
-	if len(p.keys[*sym]) == 0 {
-		delete(p.keys, *sym)
+	if len(p.keys[sym]) == 0 {
+		delete(p.keys, sym)
 	}
-	return true
 }
