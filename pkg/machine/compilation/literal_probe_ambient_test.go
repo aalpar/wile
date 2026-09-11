@@ -106,7 +106,7 @@ func TestLookupLiteralBindingDescendsPhasesFromItsOwn(t *testing.T) {
 		// collapse the ordering.
 		store := ns.Store()
 		src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, environment.BaseSourceName())
-		store.InstallBulkRow(src, nil, environment.PhaseExpand, true)
+		store.InstallBulkRow(src, nil, environment.PhaseExpand, true, environment.BulkOriginLanguage)
 
 		qt.Assert(t, env.GetBinding(values.NewSymbol(sym), values.EmptyScopes()), qt.Equals, keyword,
 			qt.Commentf("the row is sealed-tier restricted, so it supplies the keyword and not the user shadow"))
@@ -350,7 +350,7 @@ func TestLookupLiteralBindingRowTieIsRefused(t *testing.T) {
 	for _, sc := range []*syntax.Scope{scopeA, scopeB} {
 		src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime,
 			values.NewSymbol("lang-"+sc.String()))
-		store.InstallBulkRow(src, []*syntax.Scope{sc}, environment.PhaseExpand, true)
+		store.InstallBulkRow(src, []*syntax.Scope{sc}, environment.PhaseExpand, true, environment.BulkOriginLanguage)
 	}
 
 	// fallbacks nil, so the descent has exactly two steps: the phase-1 per-symbol

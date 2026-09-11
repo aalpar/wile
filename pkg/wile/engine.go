@@ -354,7 +354,11 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 // what catches it.
 //
 // Rows carry the empty scope set and sealed=true: the base is not
-// macro-introduced, and it is not user-writable.
+// macro-introduced, and it is not user-writable. They also carry
+// BulkOriginLanguage, and that holds for every row here despite the capability
+// being named InitialImports: these are what the DIALECT declares. A program's
+// own (import ...) is a different path entirely — installImportedBinding's
+// per-symbol slots — and installs no row at all.
 func installInitialImports(owner *environment.EnvironmentFrame, imports []PhasedImport) {
 	store := owner.GlobalEnvironment()
 	for _, imp := range imports {
@@ -367,7 +371,7 @@ func installInitialImports(owner *environment.EnvironmentFrame, imports []Phased
 		// the "installed but never wins" failure design section 6.3 says this
 		// change defaults to.
 		src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, imp.Library)
-		store.InstallBulkRow(src, nil, imp.Phase, true)
+		store.InstallBulkRow(src, nil, imp.Phase, true, environment.BulkOriginLanguage)
 	}
 
 	// The macro vocabulary is declared at EVERY macro phase, not at an enumerated
@@ -382,7 +386,7 @@ func installInitialImports(owner *environment.EnvironmentFrame, imports []Phased
 		defaultMacroVocabulary(),
 		MacroVocabularyName(),
 	)
-	store.InstallMacroPhaseRow(vocab, nil, true)
+	store.InstallMacroPhaseRow(vocab, nil, true, environment.BulkOriginLanguage)
 }
 
 // removedFormNames returns the R7RS form names the engine's dialect deleted from

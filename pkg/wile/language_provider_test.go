@@ -224,7 +224,7 @@ func TestBulkRowsCarryTheEmptyScopeSet(t *testing.T) {
 
 	for store, name := range stores {
 		rows := 0
-		store.EachBulkRow(func(scopes []*syntax.Scope, phase environment.Phase, sealed bool) bool {
+		store.EachBulkRow(func(scopes []*syntax.Scope, phase environment.Phase, sealed bool, _ environment.BulkOrigin) bool {
 			qt.Assert(t, scopes, qt.HasLen, 0,
 				qt.Commentf("%s store: row %d at (phase %d, sealed=%v) carries %d scopes; resolveRankedLocked's miss-only consultation is then unsound",
 					name, rows, phase, sealed, len(scopes)))
@@ -288,4 +288,73 @@ func TestBulkResolutionCountIsInBand(t *testing.T) {
 		qt.Commentf("no macro phase carries the vocabulary row; every transformer body would be starved"))
 	qt.Assert(t, got > int64(rows), qt.IsTrue,
 		qt.Commentf("%d resolutions over %d rows: a row that answers at most one name is a per-name install wearing a row's name", got, rows))
+}
+
+// TestEveryOriginRowIsLanguageDeclared is design section 6.3's counter ratchet
+// extended to the row's ORIGIN, and it is the second premise
+// resolveRankedLocked's miss-only bulk consultation rests on.
+//
+// Every row installed at engine origin is BulkOriginLanguage, whatever the
+// capability is called: InitialImports declares the LANGUAGE. A program's own
+// (import ...) reaches per-symbol slots (installImportedBinding) and installs no
+// row, so a BulkOriginImport row does not exist in production — and must not
+// start existing unnoticed, because such a row ranks tierExactImported and would
+// OUTRANK a sealed slot, which miss-only consultation never gives it the chance
+// to do. This going red is the signal that the miss-only fast path has to become
+// the full argmax, exactly as TestBulkRowsCarryTheEmptyScopeSet is for the scope
+// half.
+//
+// Shaped after TestLanguageProviderOverridesTheDefaultDeclaration rather than
+// after the count ratchet above, because the count ratchet cannot see this: it
+// asserts a NUMBER of rows and stays green with the origin field added, removed
+// or set wrongly. A custom dialect is what makes "the capability was read" and
+// "its rows were classified" one assertion instead of two.
+//
+// GUARD, not a pin: the property it asserts holds trivially before origins
+// exist. Not "it passes on master" — it cannot compile there, since BulkOrigin
+// arrived with it. What it defends is the future install that forgets.
+func TestEveryOriginRowIsLanguageDeclared(t *testing.T) {
+	d := phasedImportDialect{
+		imports: []PhasedImport{
+			{Library: environment.BaseSourceName(), Phase: environment.PhaseRuntime},
+			{Library: environment.BaseSourceName(), Phase: environment.PhaseExpand},
+			{Library: values.NewSymbol("#%probe-extra"), Phase: environment.PhaseExpand},
+		},
+	}
+	eng, err := NewEngine(context.Background(), WithProfile(KitchenSink), WithDialect(d))
+	qt.Assert(t, err, qt.IsNil)
+	defer eng.Close()
+
+	store := eng.Namespace().Runtime().GlobalEnvironment()
+	language := 0
+	other := 0
+	store.EachBulkRow(func(_ []*syntax.Scope, phase environment.Phase, sealed bool, origin environment.BulkOrigin) bool {
+		// The OTHER half of the same premise, and the worse half to lose. The
+		// premise is "sealed AND language-declared, hence tierExactSealed"; an
+		// unsealed row ranks tierExactMutable and would outrank EVERY slot, where
+		// an import row merely outranks a sealed one.
+		qt.Check(t, sealed, qt.IsTrue,
+			qt.Commentf("row at phase %d is not sealed; it ranks tierExactMutable and outranks every slot, which miss-only consultation never lets it do", phase))
+		if origin == environment.BulkOriginLanguage {
+			language++
+			return true
+		}
+		other++
+		qt.Check(t, origin, qt.Equals, environment.BulkOriginLanguage,
+			qt.Commentf("row at (phase %d, sealed=%v) was installed as origin %d; nothing at engine origin is an import", phase, sealed, origin))
+		return true
+	})
+	qt.Assert(t, other, qt.Equals, 0)
+
+	// The capability half: the rows counted are the DIALECT's three declarations
+	// plus one vocabulary row per macro phase, not the default's one. A wiring bug
+	// that ignored the capability would satisfy the origin assertion above while
+	// installing something else entirely.
+	declared := language - store.MacroPhasesWithRows()
+	qt.Assert(t, declared, qt.Equals, 3,
+		qt.Commentf("the dialect's three declarations must install three language rows"))
+	qt.Assert(t, declared, qt.Not(qt.Equals), len(defaultInitialImports()),
+		qt.Commentf("a count equal to the default's would not prove the capability was read"))
+	qt.Assert(t, store.MacroPhasesWithRows() > 0, qt.IsTrue,
+		qt.Commentf("no macro phase carries the vocabulary row, so its origin went unexamined"))
 }

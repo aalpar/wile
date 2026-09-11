@@ -26,9 +26,9 @@ package environment
 // into a slot of the copy, and resolution falls through to a miss. Only asking
 // whether a name RESOLVES through a copied row can see that.
 //
-// In-package because bulkRef, storeBulkSource's restriction fields and the
-// store's row slices are unexported, and because two of the three properties
-// (the carried minTier, the carried templates) are structural.
+// In-package because bulkRef, storeBulkSource's minTier and the store's row
+// slices are unexported, and because two of the three properties (the carried
+// minTier, the carried templates) are structural.
 //
 // The Scheme-level face of the same three defects is
 // pkg/wile/report_env_macro_vocabulary_test.go.
@@ -50,8 +50,8 @@ func vocabularySourceName() values.Value {
 }
 
 // vocabularyRow builds the SHAPE engine.go's installInitialImports installs at
-// every macro phase: a sealed store source — restricted to the sealed tier and
-// to the owner's own installs — wrapped in a name filter.
+// every macro phase: a sealed store source — restricted to the sealed tier —
+// wrapped in a name filter.
 //
 // The wrapper is not decoration. It is the half Copy's *storeBulkSource type
 // assertion skipped, so a pin built on a bare storeBulkSource would pass
@@ -123,7 +123,7 @@ func TestCopiedBulkRowAnswersInTheCopy(t *testing.T) {
 	store := owner.GlobalEnvironment()
 
 	own := sealAt(t, owner, PhaseRuntime, "vocab-name", values.NewInteger(1))
-	store.InstallBulkRow(vocabularyRow(store, "vocab-name"), nil, PhaseExpand, true)
+	store.InstallBulkRow(vocabularyRow(store, "vocab-name"), nil, PhaseExpand, true, BulkOriginLanguage)
 
 	// The control: the parent answers at phase 1 through the row, since the name
 	// has no phase-1 slot of its own.
@@ -145,19 +145,22 @@ func TestCopiedBulkRowAnswersInTheCopy(t *testing.T) {
 	qt.Assert(t, copyBnd.Value(), qt.Equals, own.Value())
 }
 
-// TestCopiedSealedRowKeepsItsRestrictions is the Step 5 ratchet: BOTH fields
-// that make a sealed source mean "the base" survive the copy.
+// TestCopiedSealedRowKeepsItsRestrictions is the Step 5 ratchet: the field that
+// makes a sealed source mean "the base" survives the copy.
 //
-// The two arms are not equally discriminating today, and saying so is part of
-// the pin. minTier is observable: reconstructing the source through
+// It was TWO fields until 2026-09-10, and the second is why this doc is worth
+// reading. minTier is observable: reconstructing the source through
 // NewStoreBulkSource floors it at tierExactMutable, and a phase-0 MUTABLE name
-// then leaks into phase 1 through the row. ownInstallsOnly is NOT separately
-// observable — an imported binding ranks at tierExactImported, which is already
-// below the tierExactSealed floor, so the behavioural arm below is refused
-// twice over. That redundancy is the field's stated reason for still existing
-// (see storeBulkSource.ownInstallsOnly), and it is why the field is pinned
-// STRUCTURALLY as well. Task 6 deletes the field; when it does, the structural
-// assertion and the imported arm's second reason go with it.
+// then leaks into phase 1 through the row. ownInstallsOnly was not separately
+// observable — an imported binding ranks tierExactImported, already below the
+// tierExactSealed floor — so it was pinned STRUCTURALLY here, by reading the
+// field off the copied source. That structural assertion was the whole coupling:
+// it asserted the field survived repoint, not that the floor did, and repoint
+// carried the two independently. Deleting the field is what makes the coupling
+// impossible rather than merely unobserved.
+//
+// The "ratchet-imported" row below is what the field used to deliver, and it now
+// rests on the floor alone.
 func TestCopiedSealedRowKeepsItsRestrictions(t *testing.T) {
 	ns := NewNamespace()
 	owner := ns.Runtime()
@@ -169,8 +172,7 @@ func TestCopiedSealedRowKeepsItsRestrictions(t *testing.T) {
 	_, err := owner.DefineOwnGlobal(values.NewSymbol("ratchet-mutable"), BindingTypeVariable, nil, values.NewInteger(2))
 	qt.Assert(t, err, qt.IsNil)
 
-	// A phase-0 IMPORTED binding: ranks at tierExactImported, also below the
-	// floor, and carries the Imported meta ownInstallsOnly refuses.
+	// A phase-0 IMPORTED binding: ranks at tierExactImported, below the floor.
 	gi, created := store.CreateImportedGlobalBindingAt(values.NewSymbol("ratchet-imported"),
 		BindingTypeVariable, nil, PhaseRuntime, true)
 	qt.Assert(t, created, qt.IsTrue)
@@ -180,7 +182,7 @@ func TestCopiedSealedRowKeepsItsRestrictions(t *testing.T) {
 
 	store.InstallBulkRow(
 		vocabularyRow(store, "ratchet-own", "ratchet-mutable", "ratchet-imported"),
-		nil, PhaseExpand, true)
+		nil, PhaseExpand, true, BulkOriginLanguage)
 
 	cp := store.Copy()
 	qt.Assert(t, cp.BulkRowCount(), qt.Equals, 1)
@@ -194,8 +196,6 @@ func TestCopiedSealedRowKeepsItsRestrictions(t *testing.T) {
 		qt.Commentf("the re-point must reach THROUGH the filter to the store source"))
 	qt.Assert(t, inner.minTier, qt.Equals, tierExactSealed,
 		qt.Commentf("minTier must be CARRIED; reconstructing through NewStoreBulkSource floors it at tierExactMutable"))
-	qt.Assert(t, inner.ownInstallsOnly, qt.IsTrue,
-		qt.Commentf("ownInstallsOnly must be carried too, until Task 6 proves it dead and deletes it"))
 
 	rows := []struct {
 		name string
@@ -237,7 +237,7 @@ func TestCopyCarriesMacroPhaseTemplatesWithoutDuplicating(t *testing.T) {
 	store := owner.GlobalEnvironment()
 
 	own := sealAt(t, owner, PhaseRuntime, "tower-name", values.NewInteger(7))
-	store.InstallMacroPhaseRow(vocabularyRow(store, "tower-name"), nil, true)
+	store.InstallMacroPhaseRow(vocabularyRow(store, "tower-name"), nil, true, BulkOriginLanguage)
 
 	// Minting the phase-1 view materializes the template there.
 	owner.AtPhase(PhaseExpand)

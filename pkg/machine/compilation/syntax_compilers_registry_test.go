@@ -111,7 +111,7 @@ func TestSyntaxCompilersReachTheirOwnPhasePlusBulkRowPhases(t *testing.T) {
 	// initial imports.
 	store := ns.Store()
 	src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, environment.BaseSourceName())
-	store.InstallBulkRow(src, nil, environment.PhaseExpand, true)
+	store.InstallBulkRow(src, nil, environment.PhaseExpand, true, environment.BulkOriginLanguage)
 
 	qt.Assert(t, ns.Expand().GetBinding(sym, values.AllScopes()), qt.IsNotNil,
 		qt.Commentf("the phase-1 row supplies what the ambient tier used to"))

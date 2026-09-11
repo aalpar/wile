@@ -130,28 +130,17 @@ type storeBulkSource struct {
 	//
 	// A source over a FOREIGN store — a library's exports — wants the full range,
 	// because a library's own defines land in its mutable tier.
+	//
+	// It is the ONLY restriction a source carries, and that is deliberate. Until
+	// 2026-09-10 a second field, ownInstallsOnly, refused a binding carrying
+	// Imported meta — the same answer by PREDICATE that tierExactImported now
+	// gives by COORDINATE, since an imported slot ranks BELOW this floor and is
+	// excluded before the predicate could be reached. Two independent reasons for
+	// one answer read as belt-and-braces and were really a coupling: the proof
+	// that the predicate was dead held only because one constructor set both
+	// fields in one struct literal, and repoint carried them separately. One
+	// field cannot drift from itself.
 	minTier int
-	// ownInstallsOnly excludes IMPORTED bindings from what the source supplies.
-	//
-	// It is REDUNDANT as of 2026-09-09 and kept deliberately. What it was standing
-	// in for is now a coordinate: tierExactImported.
-	//
-	// This comment used to say "there is no third coordinate to move either onto",
-	// and drew the base/import distinction by PREDICATE instead — an imported
-	// binding carries Imported meta and the engine's own base does not. The
-	// predicate was sound; the premise was not. Both landed on ONE slot, because
-	// CreateGlobalBindingAt's reuse rule matched them on (phase, sealed, scopes)
-	// and the import then stamped Imported onto the base's own binding, at which
-	// point this predicate refused the base. See CreateImportedGlobalBindingAt.
-	//
-	// With the tier, minTier = tierExactSealed already excludes every import, so
-	// this predicate can only ever agree with the floor. It stays because it is a
-	// second, independent reason for the same answer and costs one field read on a
-	// miss path; deleting it belongs with the rest of the origin work.
-	//
-	// Measured: without this, a library-private name imported at phase 0 resolves
-	// inside a transformer body, because the phase-1 base row supplies it.
-	ownInstallsOnly bool
 }
 
 // NewStoreBulkSource mints the source for one (store, phase).
@@ -178,11 +167,10 @@ func NewStoreBulkSource(store *GlobalEnvironmentFrame, phase Phase, name values.
 // storeBulkSource.minTier for what the unrestricted form leaks there.
 func NewSealedStoreBulkSource(store *GlobalEnvironmentFrame, phase Phase, name values.Value) BulkSource {
 	q := &storeBulkSource{
-		store:           store,
-		phase:           phase,
-		name:            name,
-		minTier:         tierExactSealed,
-		ownInstallsOnly: true,
+		store:   store,
+		phase:   phase,
+		name:    name,
+		minTier: tierExactSealed,
 	}
 	return q
 }
@@ -222,9 +210,6 @@ func (p *storeBulkSource) lookupExportLocked(name values.Symbol) (*Binding, bool
 	if q == nil {
 		return nil, false
 	}
-	if p.ownInstallsOnly && q.IsImported() {
-		return nil, false
-	}
 	return q, true
 }
 
@@ -260,26 +245,62 @@ func (p *storeBulkSource) SourceName() values.Value {
 	return p.name
 }
 
-// repoint returns this source over store, CARRYING minTier and ownInstallsOnly
-// rather than reconstructing them.
+// repoint returns this source over store, CARRYING minTier rather than
+// reconstructing it.
 //
 // Reconstructing is what Copy used to do, through NewStoreBulkSource — the
 // unrestricted constructor. Measured on a report environment: the parent's row
-// 0 (minTier=tierExactSealed, ownInstallsOnly=true, the shape
-// NewSealedStoreBulkSource mints) came out as minTier=tierExactMutable,
-// ownInstallsOnly=false. A source that is supposed to mean "the base" then
+// 0 (minTier=tierExactSealed, the shape NewSealedStoreBulkSource mints) came out
+// as minTier=tierExactMutable. A source that is supposed to mean "the base" then
 // supplies the copy's phase-0 MUTABLE tier at every macro phase, which is
 // exactly the leak minTier's comment records as measured.
 func (p *storeBulkSource) repoint(store *GlobalEnvironmentFrame) BulkSource {
 	q := &storeBulkSource{
-		store:           store,
-		phase:           p.phase,
-		name:            p.name,
-		minTier:         p.minTier,
-		ownInstallsOnly: p.ownInstallsOnly,
+		store:   store,
+		phase:   p.phase,
+		name:    p.name,
+		minTier: p.minTier,
 	}
 	return q
 }
+
+// BulkOrigin says WHO installed a row: the language itself, or an import
+// written in the unit the row is installed into.
+//
+// It is the row's half of the base/import separation the per-symbol path draws
+// with tierExactImported, and it is what lets bulkTierOf classify a row by the
+// same rule tierOf classifies a slot. A row cannot derive it: a BulkSource is a
+// supplier, and the SAME supplier can be reached both ways — the default dialect
+// declares the base as an initial import (defaultInitialImports), so
+// SourceName() == BaseSourceName() answers "is this the base?", which is a
+// different question from "did an import put this row here?".
+//
+// Immutable after install. It rides in the bulkRef the three install paths build
+// and there is no setter, deliberately: Binding.Imported is the other half of
+// this distinction and is MUTABLE — the R7RS §5.3.1 supersede rule clears it —
+// and a ranking input that a later compile can flip is exactly the hazard this
+// coordinate must not inherit.
+type BulkOrigin uint8
+
+const (
+	// BulkOriginLanguage is the dialect's own declaration: the base row and the
+	// macro-vocabulary row installInitialImports installs at engine origin.
+	//
+	// The zero value, and a deliberate departure from "nil means NONE": there is
+	// no unset origin to encode, because both installers take it as a required
+	// positional parameter, and a fourth BulkOriginUnset would have no
+	// conservative answer in bulkTierOf — tierNone would make the row inert in
+	// silence. What the zero value buys instead is the safe direction: a bulkRef
+	// literal that omits the field ranks tierExactSealed, the LOWEST of the three
+	// and the tier every row had before origins existed.
+	BulkOriginLanguage BulkOrigin = iota
+	// BulkOriginImport is an (import ...) written in the importing unit. No
+	// production path installs one yet: R7RS imports still take per-symbol slots
+	// (installImportedBinding), and routing them through rows was settled
+	// against. The coordinate exists so the two classifiers agree on every tier,
+	// rather than diverging on one a bulkRef could not express.
+	BulkOriginImport
+)
 
 // bulkRef is one installed bulk row: a resolution candidate standing for many
 // names.
@@ -298,6 +319,10 @@ type bulkRef struct {
 	scopes []*syntax.Scope
 	phase  Phase
 	sealed bool
+	// origin is the row's provenance: bulkTierOf ranks by it, EachBulkRow hands
+	// it out for the ratchet, and nothing writes it after the install that
+	// creates the row.
+	origin BulkOrigin
 	src    BulkSource
 }
 
@@ -307,7 +332,11 @@ type bulkRef struct {
 // source, then or ever. Rows are installed at engine origin, before the base is
 // written, which is only correct because the row reads through to the source
 // live.
-func (p *GlobalEnvironmentFrame) InstallBulkRow(src BulkSource, scopes []*syntax.Scope, phase Phase, sealed bool) {
+//
+// origin is a PARAMETER rather than something the row derives, because it is a
+// fact about this install and not about src: the same source can be declared by
+// the language and reached again by an import. See BulkOrigin.
+func (p *GlobalEnvironmentFrame) InstallBulkRow(src BulkSource, scopes []*syntax.Scope, phase Phase, sealed bool, origin BulkOrigin) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -315,6 +344,7 @@ func (p *GlobalEnvironmentFrame) InstallBulkRow(src BulkSource, scopes []*syntax
 		scopes: scopes,
 		phase:  phase,
 		sealed: sealed,
+		origin: origin,
 		src:    src,
 	})
 }
@@ -388,26 +418,29 @@ func (p *GlobalEnvironmentFrame) BulkRowCount() int {
 }
 
 // EachBulkRow calls fn once per installed row, in install order, with that row's
-// resolution coordinates and its scope set. fn returns false to stop the walk.
+// resolution coordinates, its scope set and its origin. fn returns false to stop
+// the walk.
 //
-// It exists so a ratchet OUTSIDE this package can state the premise
+// It exists so a ratchet OUTSIDE this package can state the TWO premises
 // resolveRankedLocked's miss-only bulk consultation rests on — every installed
-// row carries the empty scope set — over a real engine rather than over a bare
-// namespace, which is the only place the premise was ever in doubt.
-// TestBulkRowsCarryTheEmptyScopeSet (pkg/wile) is that ratchet.
+// row carries the empty scope set, and every installed row is
+// BulkOriginLanguage — over a real engine rather than over a bare namespace,
+// which is the only place either was ever in doubt.
+// TestBulkRowsCarryTheEmptyScopeSet and TestEveryOriginRowIsLanguageDeclared
+// (both pkg/wile) are those ratchets.
 //
 // Snapshot, then walk: fn runs with no lock held, so it may call back into this
 // store, and it never sees p.bulkRows itself. scopes is the caller's own slice,
 // handed back for inspection — treat it as read-only; mutating it would mutate
 // the installed row.
-func (p *GlobalEnvironmentFrame) EachBulkRow(fn func(scopes []*syntax.Scope, phase Phase, sealed bool) bool) {
+func (p *GlobalEnvironmentFrame) EachBulkRow(fn func(scopes []*syntax.Scope, phase Phase, sealed bool, origin BulkOrigin) bool) {
 	p.mu.RLock()
 	rows := make([]bulkRef, len(p.bulkRows))
 	copy(rows, p.bulkRows)
 	p.mu.RUnlock()
 
 	for _, row := range rows {
-		cont := fn(row.scopes, row.phase, row.sealed)
+		cont := fn(row.scopes, row.phase, row.sealed, row.origin)
 		if !cont {
 			return
 		}
@@ -615,13 +648,14 @@ func (p *filteredBulkSource) repoint(store *GlobalEnvironmentFrame) BulkSource {
 // stage deleted. Installing per view as the view appears is the third answer:
 // every row that exists carries an EXACT phase, and the set of phases that exist
 // is exactly the set the program reached.
-func (p *GlobalEnvironmentFrame) InstallMacroPhaseRow(src BulkSource, scopes []*syntax.Scope, sealed bool) {
+func (p *GlobalEnvironmentFrame) InstallMacroPhaseRow(src BulkSource, scopes []*syntax.Scope, sealed bool, origin BulkOrigin) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	p.macroPhaseRows = append(p.macroPhaseRows, bulkRef{
 		scopes: scopes,
 		sealed: sealed,
+		origin: origin,
 		src:    src,
 	})
 	for phase := range p.macroPhasesSeen {
@@ -689,6 +723,7 @@ func (p *GlobalEnvironmentFrame) installMacroRowLocked(phase Phase, i int) {
 		scopes: tpl.scopes,
 		phase:  phase,
 		sealed: tpl.sealed,
+		origin: tpl.origin,
 		src:    tpl.src,
 	})
 }

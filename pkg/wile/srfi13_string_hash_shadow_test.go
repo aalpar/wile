@@ -32,9 +32,20 @@ import (
 // It lives in pkg/wile rather than beside the other string-hash tests in
 // pkg/registry/core because that package's test harness has no library registry,
 // so (import (srfi 13)) cannot resolve there — on master as well as here.
+//
+// A FRESH ENGINE PER ROW, and the "without the import" rows are why. An import
+// mutates engine state, so rows sharing one engine are not independent: they run
+// in table order, and a row whose precondition is "nothing has imported (srfi
+// 13)" is falsified by any earlier row that did. Until 2026-09-10 all six shared
+// an engine built outside the loop, so "base form unbounded without the import"
+// ran third, AFTER two rows had imported — and asserted only
+// (exact-integer? ...), which both forms satisfy, so it passed while measuring
+// the SRFI-13 procedure it claimed to exclude. The assertion is now the one that
+// discriminates: measured 2026-09-10, the base hash of "abc" is
+// 1876933714763452203 and SRFI-13's is 96354, four orders of magnitude below the
+// 2^22 bound the library reduces modulo.
 func TestStringHashSRFI13StillShadows(t *testing.T) {
 	c := qt.New(t)
-	eng := newSRFITestEngine(t)
 
 	cases := []struct {
 		name string
@@ -43,7 +54,7 @@ func TestStringHashSRFI13StillShadows(t *testing.T) {
 	}{
 		{"srfi-13 bounded form still binds", `(begin (import (srfi 13)) (< (string-hash "abcdefghij" 16) 16))`, `#t`},
 		{"srfi-13 one-arg form still bounded", `(begin (import (srfi 13)) (< (string-hash "abc") 4194304))`, `#t`},
-		{"base form unbounded without the import", `(exact-integer? (string-hash "abc"))`, `#t`},
+		{"base form unbounded without the import", `(> (string-hash "abc") 4194304)`, `#t`},
 		// The R6RS names the base ships alongside it, reachable without any import.
 		{"base equal-hash without an import", `(= (equal-hash '(1 2)) (equal-hash (list 1 2)))`, `#t`},
 		{"base symbol-hash without an import", `(= (symbol-hash 'foo) (symbol-hash 'foo))`, `#t`},
@@ -51,6 +62,10 @@ func TestStringHashSRFI13StillShadows(t *testing.T) {
 	}
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
+			// c, not t: the helper can fail, and failing the PARENT from inside a
+			// subtest aborts the wrong test. evalSRFI below already scoped it right,
+			// which is what made the mismatch visible.
+			eng := newSRFITestEngine(c)
 			got := evalSRFI(c, eng, tc.expr)
 			c.Assert(got, qt.Equals, tc.want)
 		})

@@ -88,7 +88,8 @@ func TestImportDoesNotMutateTheBaseBinding(t *testing.T) {
 
 			c.Assert(base.IsImported(), qt.IsFalse,
 				qt.Commentf("the import stamped the STARTUP SET's own binding of %q as imported, "+
-					"which is what makes the base's bulk row (ownInstallsOnly) refuse to supply it", name))
+					"which drops it to tierExactImported — below the base bulk row's "+
+					"tierExactSealed floor, so the row stops supplying it", name))
 			c.Assert(base.Value() == baseValue, qt.IsTrue,
 				qt.Commentf("the import overwrote the startup set's own %q IN PLACE with the "+
 					"library env's copy; every compiled pin to the base now reads the import's value", name))
@@ -100,8 +101,8 @@ func TestImportDoesNotMutateTheBaseBinding(t *testing.T) {
 // an ordinary program hits. `not` is in the phase-1 macro vocabulary, so a
 // transformer body may use it without importing anything — until a PHASE-0 import
 // of an unrelated library covers the same name, at which point the base's bulk
-// row stops supplying it (ownInstallsOnly refuses a binding carrying Imported
-// meta, and the reused slot now carries it).
+// row stops supplying it (a slot carrying Imported meta ranks tierExactImported,
+// below the row's tierExactSealed floor, and the reused slot now carries it).
 //
 // Green on master. The narrowing row is what says the damage tracks the import's
 // coverage rather than being a blanket effect.

@@ -670,8 +670,9 @@ func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax
 	// tie-break's name, and removing the third axis is the point of this stage.
 	//
 	// Consulting rows only on a per-symbol MISS implements that rule exactly,
-	// given one measured premise: every row this tree installs carries the EMPTY
-	// scope set. A row is sealed, so bulkTierOf puts it at tierExactSealed: a
+	// given TWO measured premises: every row this tree installs carries the EMPTY
+	// scope set, and every one is BulkOriginLanguage. A row is sealed and
+	// language-declared, so bulkTierOf puts it at tierExactSealed: a
 	// tierExactMutable slot outranks it and so does a tierExactImported one; a
 	// tierExactSealed slot ties it on tier and, with both scope sets empty, the
 	// tie-break awards the slot; and no slot can lose on cardinality to an empty
@@ -685,6 +686,15 @@ func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax
 	// miss" — but the premise a later rework of this consultation would have
 	// started from was off by a tier, which is why the tiers are named here and
 	// not numbered.
+	//
+	// The origin premise arrived with bulkRef.origin on 2026-09-10 and is the one
+	// to watch: a BulkOriginImport row ranks tierExactImported and would OUTRANK
+	// a tierExactSealed slot, which this branch never gives it the chance to do.
+	// The first such row therefore breaks miss-only exactly as the first
+	// non-empty row set does, and needs the full argmax below rather than a
+	// widened tie-break. No production path installs one — imports take
+	// per-symbol slots — so the premise holds; it is pinned, not assumed, by
+	// TestEveryOriginRowIsLanguageDeclared (pkg/wile).
 	//
 	// The premise is load-bearing, so it is pinned rather than assumed:
 	// TestBulkRowsCarryTheEmptyScopeSet, which lives in pkg/wile and runs over a
@@ -951,9 +961,17 @@ func (p *rankedArgmax) found() bool {
 // vocabulary and made every base primitive it covered user-deletable.
 //
 // With the tier, the base's source floors at tierExactSealed and an import is
-// simply below the floor, so ownInstallsOnly is now redundant rather than
-// load-bearing. It is kept: it is a second, independent reason for the same
-// answer, and the cost is one predicate on a miss path.
+// simply below the floor. ownInstallsOnly was kept for a day as a second,
+// independent reason for the same answer, then deleted on 2026-09-10: the two
+// reasons were not independent. The predicate was provably dead only because ONE
+// constructor set the floor and the predicate in one struct literal, while
+// storeBulkSource.repoint copied them as separate fields — so a source floored
+// at tierExactMutable with the predicate still set would have survived a Copy
+// and refused imports the floor admitted. A proof resting on an uncoupled
+// coincidence is not a proof, and deleting the second field is what couples it.
+//
+// A row draws the same line with bulkRef.origin, which is the coordinate rather
+// than a predicate over the binding a row happens to supply. See BulkOrigin.
 
 // probeTiersLocked is the ranked probe over this store's PER-SYMBOL slots, with
 // the tie REPORTED rather than raised: candidates are the slots whose tier t
@@ -1078,27 +1096,40 @@ func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.Sc
 // cross-phase reach is expressed by declaring a row at each phase that should
 // have it.
 //
-// The classifier stays split by KIND while rankedArgmax ranks what it returns.
-// The two agree on every tier they can both produce, and diverge on exactly one:
-// a row cannot rank tierExactImported. That tier is a per-slot PROVENANCE stamp
-// (Binding.IsImported), and a bulkRef has no origin field to read it from, so
-// the arm would have nothing to test. The divergence is therefore a missing
-// FACT, not a missing branch, and it is behaviourally inert today because every
-// production row is sealed=true.
+// The classifier stays split by KIND while rankedArgmax ranks what it returns,
+// and since 2026-09-10 the two produce the SAME three tiers. They used to
+// diverge on one: a row could not rank tierExactImported, because that tier read
+// a per-slot provenance stamp (Binding.IsImported) and a bulkRef carried no
+// provenance for the arm to test. The divergence was a missing FACT, not a
+// missing branch, and bulkRef.origin is that fact.
 //
-// The row origin that would close it — and with it an import routed through a
-// row rather than through per-name slots — is a later task. Until then: a new
-// tier added to the enum must either be derivable from a bulkRef's own fields or
-// be documented here as unreachable for rows, or the two walks silently start
-// ranking the same candidate differently again.
+// The two classifiers still ask provenance differently, and the difference is
+// not an accident to be unified away. tierOf reads a MUTABLE bit off the winning
+// binding, which the R7RS §5.3.1 supersede rule clears; origin is fixed at
+// install. A row stands for many bindings and cannot read any one of their
+// stamps, so provenance has to be the ROW's own.
+//
+// No production row is BulkOriginImport today — imports take per-symbol slots —
+// so the new arm is reachable only from a test. It is not dead: the arm is what
+// makes "a row ranks like the slot it stands for" true by construction rather
+// than by the coincidence that every row happened to be the language's.
+//
+// A new tier added to the enum must still be derivable from a bulkRef's own
+// fields or be documented here as unreachable for rows, or the two walks
+// silently start ranking the same candidate differently again. A new BulkOrigin
+// needs the same care from the other side: the default arm swallows every origin
+// it does not name, so a third one ranks tierExactSealed until an arm says
+// otherwise.
 func bulkTierOf(row bulkRef, phase Phase) int {
 	switch {
 	case row.phase != phase:
 		return tierNone
-	case row.sealed:
-		return tierExactSealed
-	default:
+	case !row.sealed:
 		return tierExactMutable
+	case row.origin == BulkOriginImport:
+		return tierExactImported
+	default:
+		return tierExactSealed
 	}
 }
 
@@ -1125,8 +1156,10 @@ func bulkTierOf(row bulkRef, phase Phase) int {
 // one was written, never wired to a caller, and deleted rather than left
 // standing as a claim nothing honoured. Two rows from DIFFERENT libraries
 // supplying one name at one coordinate would therefore be resolved by install
-// order here rather than refused — an import routed through rows is Task 6's
-// work, and the check belongs with it.
+// order here rather than refused. That case does not arise: routing an import
+// through a row was settled against on 2026-09-10, so no row is ever a library's
+// import and every row is the language's own declaration. A future change that
+// installs an import as a row (BulkOriginImport) owes the check.
 //
 // The QUERY wildcard skips the scope FILTER but not the cardinality ranking,
 // which is the one place this walk still differs from probeTiersLocked's: the

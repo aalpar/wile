@@ -167,3 +167,99 @@ func TestImportedBindingStableFlag(t *testing.T) {
 	c.Assert(binding.IsImported(), qt.IsTrue, qt.Commentf("cons should be marked imported"))
 	c.Assert(binding.IsStable(), qt.IsTrue, qt.Commentf("cons should be marked stable"))
 }
+
+// TestSupersedeClearsImportedOnlyAtAMutableCoordinate is the missing half of the
+// two supersede tests above: WHERE the cleared binding sits, not just that it
+// was cleared.
+//
+// Imported is not only provenance — it is a RANKING INPUT. tierOf reads it to
+// separate tierExactImported from tierExactSealed at one and the same (phase,
+// sealed) coordinate, so clearing it on a SEALED slot would silently promote
+// that slot from the import tier into the startup set's. The R7RS §5.3.1
+// supersede rule clears it at exactly two sites (compile_define.go,
+// compile_define_syntax.go), and both are safe only because they write through
+// MUTABLE coordinates, where the tier is tierExactMutable regardless of the
+// flag. Nothing said so.
+//
+// The two existing tests each pin half and neither pins this:
+// TestDefineSyntaxSupersedesImportClearsImported asserts pointer identity and
+// the flag; TestImportedBindingTakesTheSealedPhaseZeroTier asserts the import's
+// sealed slot survives a define. Neither asserts that the slot the WRITE landed
+// on is mutable, which is the property that makes the clear tier-neutral.
+//
+// GUARD, not a pin: the property holds on master, and there is no build on which
+// it does not — a test that could go red here would be one where the supersede
+// had already moved to a sealed coordinate. It is here so that move fails loudly
+// instead of re-tiering a slot in silence. It carries no claim that the clear
+// sites were ever wrong.
+//
+// Both top-level modes, because the two clear sites run under both and the
+// immutable default routes the variable path through an extra guard
+// (declareDefineBinding's immTop branch) that the mutable one skips.
+func TestSupersedeClearsImportedOnlyAtAMutableCoordinate(t *testing.T) {
+	modes := []struct {
+		name string
+		opt  wile.EngineOption
+	}{
+		{name: "immutable top level (default)", opt: wile.WithImmutableTopLevel()},
+		{name: "mutable top level", opt: wile.WithMutableTopLevel()},
+	}
+	for _, mode := range modes {
+		t.Run(mode.name, func(t *testing.T) {
+			c := qt.New(t)
+			ctx := context.Background()
+			eng, err := wile.NewEngine(ctx,
+				wile.WithProfile(wile.KitchenSink),
+				wile.WithSourceFS(stdlib.FS),
+				wile.WithLibraryPaths("."),
+				mode.opt,
+			)
+			c.Assert(err, qt.IsNil)
+			defer func() {
+				_ = eng.Close()
+			}()
+			store := eng.Environment().Namespace().Store()
+
+			_, err = eng.EvalMultiple(ctx, `(import (scheme base))`)
+			c.Assert(err, qt.IsNil)
+
+			// The VARIABLE path (compile_define.go). The define takes a slot of its
+			// own in the mutable tier, so the clear runs on a binding that was never
+			// imported; the import's sealed slot is left carrying its stamp.
+			varSym := values.NewSymbol("list-copy")
+			c.Assert(store.IsImportedBindingAt(varSym, values.EmptyScopes(), environment.PhaseRuntime),
+				qt.IsTrue, qt.Commentf("premise: the import holds the phase-0 imported tier"))
+
+			_, err = eng.EvalMultiple(ctx, `(define list-copy 7)`)
+			c.Assert(err, qt.IsNil)
+			c.Assert(store.IsSealedBindingAt(varSym, values.EmptyScopes(), environment.PhaseRuntime),
+				qt.IsFalse,
+				qt.Commentf("the define's slot is SEALED: clearing Imported on it moves it from "+
+					"tierExactImported to tierExactSealed, above the import it was meant to shadow"))
+			c.Assert(store.ImportedBindingAt(varSym, values.EmptyScopes(), environment.PhaseRuntime),
+				qt.IsNotNil,
+				qt.Commentf("the import's own slot lost its stamp, which is the same re-tiering seen from underneath"))
+
+			// The SYNTAX path (compile_define_syntax.go). This one really does
+			// supersede IN PLACE — pointer identity below — so the coordinate it
+			// writes through is the coordinate the clear lands on, directly.
+			synSym := values.NewSymbol("when")
+			before := eng.Namespace().Expand().GetBinding(synSym, values.AllScopes())
+			c.Assert(before, qt.IsNotNil)
+			c.Assert(before.IsImported(), qt.IsTrue,
+				qt.Commentf("premise: the import outranks bootstrap's sealed when at phase 1"))
+
+			_, err = eng.EvalMultiple(ctx, `(define-syntax when (syntax-rules () ((_ x) (quote user-when))))`)
+			c.Assert(err, qt.IsNil)
+
+			after := eng.Namespace().Expand().GetBinding(synSym, values.AllScopes())
+			c.Assert(after, qt.Equals, before,
+				qt.Commentf("premise: define-syntax supersedes in place, so the clear landed HERE"))
+			c.Assert(after.IsImported(), qt.IsFalse)
+			c.Assert(store.IsSealedBindingAt(synSym, values.AllScopes(), environment.PhaseExpand),
+				qt.IsFalse,
+				qt.Commentf("the superseded transformer sits at a SEALED phase-1 coordinate; the clear "+
+					"just moved it out of the import tier and into the startup set's"))
+		})
+	}
+}

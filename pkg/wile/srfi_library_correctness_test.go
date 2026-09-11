@@ -27,7 +27,20 @@ import (
 // libraries (SRFI-1/13/14, chibi test) resolve: WithSourceFS(stdlib.FS) supplies
 // the embedded library tree, WithLibraryPaths() registers the default search
 // paths, and WithSourceOS() appends the OS filesystem as a fallback resolver.
-func newSRFITestEngine(t *testing.T) *Engine {
+//
+// testing.TB, not *testing.T, so a caller inside a c.Run can hand over the
+// SUBTEST's own handle — the scoping evalSRFI beside it already has. A helper
+// given the PARENT's handle calls FailNow from a goroutine that is not running
+// that test, which testing documents as incorrect and which aborts the wrong
+// test.
+//
+// The engine is closed by t.Cleanup rather than left to the caller: none of the
+// callers disposes of one, and the per-ROW shape is now common enough (six in
+// this package's string-hash shadow gate alone) that the leak is no longer a
+// single engine. Cleanup registers on the handle PASSED, so a caller that builds
+// one engine on the parent's handle and shares it across subtests keeps it alive
+// exactly as long as it did before.
+func newSRFITestEngine(t testing.TB) *Engine {
 	t.Helper()
 	eng, err := NewEngine(context.Background(),
 		WithProfile(KitchenSink),
@@ -36,6 +49,9 @@ func newSRFITestEngine(t *testing.T) *Engine {
 		WithSourceOS(),
 	)
 	qt.Assert(t, err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = eng.Close()
+	})
 	return eng
 }
 

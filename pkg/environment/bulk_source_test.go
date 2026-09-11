@@ -179,13 +179,13 @@ func TestCopyCarriesBulkRowsAndRepointsSelfReferential(t *testing.T) {
 
 	// A self-referential row: the source reads the very store being copied.
 	selfSrc := NewStoreBulkSource(store, PhaseRuntime, values.NewSymbol("self"))
-	store.InstallBulkRow(selfSrc, nil, PhaseRuntime, true)
+	store.InstallBulkRow(selfSrc, nil, PhaseRuntime, true, BulkOriginLanguage)
 
 	// A foreign row: the source reads a DIFFERENT owner's store, which is what a
 	// genuine library import looks like.
 	other := ns.NewChildRuntime()
 	foreignSrc := NewStoreBulkSource(other.GlobalEnvironment(), PhaseRuntime, values.NewSymbol("other"))
-	store.InstallBulkRow(foreignSrc, nil, PhaseRuntime, true)
+	store.InstallBulkRow(foreignSrc, nil, PhaseRuntime, true, BulkOriginLanguage)
 
 	qt.Assert(t, store.BulkRowCount(), qt.Equals, 2)
 
@@ -220,7 +220,7 @@ func TestBulkRefCarriesItsOwnScopes(t *testing.T) {
 
 	scope := syntax.NewScope()
 	src := NewStoreBulkSource(store, PhaseRuntime, values.NewSymbol("s"))
-	store.InstallBulkRow(src, []*syntax.Scope{scope}, PhaseRuntime, true)
+	store.InstallBulkRow(src, []*syntax.Scope{scope}, PhaseRuntime, true, BulkOriginLanguage)
 
 	store.mu.RLock()
 	defer store.mu.RUnlock()
@@ -269,13 +269,13 @@ func TestBulkRowsInstallWithTheScopeSetGiven(t *testing.T) {
 	ns := NewNamespace()
 	store := ns.Runtime().GlobalEnvironment()
 	src := NewSealedStoreBulkSource(store, PhaseRuntime, BaseSourceName())
-	store.InstallBulkRow(src, nil, PhaseExpand, true)
+	store.InstallBulkRow(src, nil, PhaseExpand, true, BulkOriginLanguage)
 
 	sc := syntax.NewScope()
-	store.InstallBulkRow(src, []*syntax.Scope{sc}, PhaseExpand, true)
+	store.InstallBulkRow(src, []*syntax.Scope{sc}, PhaseExpand, true, BulkOriginLanguage)
 
 	got := [][]*syntax.Scope{}
-	store.EachBulkRow(func(scopes []*syntax.Scope, _ Phase, _ bool) bool {
+	store.EachBulkRow(func(scopes []*syntax.Scope, _ Phase, _ bool, _ BulkOrigin) bool {
 		got = append(got, scopes)
 		return true
 	})
@@ -286,16 +286,26 @@ func TestBulkRowsInstallWithTheScopeSetGiven(t *testing.T) {
 		qt.Commentf("a row must keep the scope set it was installed with, or the pkg/wile gate reads a normalized value"))
 }
 
-// TestSealedBaseSourceExcludesImports pins the predicate that separates the
-// base from an import when the two share a coordinate.
+// TestSealedBaseSourceExcludesImports pins what separates the base from an
+// import when the two share a coordinate — and it is the whole ratchet behind
+// deleting storeBulkSource.ownInstallsOnly on 2026-09-10.
 //
-// They do share one: an import installs at (phase 0, sealed), which is
-// exactly where the base's own writes land once the ambient branch is gone, and
-// there is no third coordinate to move either onto. So the base source draws the
-// line on Imported meta instead — the same fact importConflicts keys on.
+// They do share a coordinate: an import installs at (phase 0, sealed), which is
+// exactly where the base's own writes land once the ambient branch is gone. What
+// separates them is the TIER, not a predicate over the binding: a sealed slot
+// carrying Imported meta ranks tierExactImported, strictly below the sealed
+// source's tierExactSealed floor, so it is never a candidate. The field that
+// used to refuse the same binding a second time by reading IsImported() is gone;
+// this test asserts the floor still delivers its answer, unchanged.
 //
-// Without it a library-private name imported at phase 0 resolves inside a
-// transformer body, measured.
+// GUARD, not a pin: the property held before the deletion too, because both
+// reasons were live. Nothing could make it fail on master, which is exactly why
+// the deletion carries no ratchet of its own and this one cannot be credited as
+// proving the field dead. What proves it dead is that the floor is checked
+// FIRST, in probeRankedLocked, and the refused slot never reaches a predicate.
+//
+// Without the exclusion a library-private name imported at phase 0 resolves
+// inside a transformer body, measured.
 func TestSealedBaseSourceExcludesImports(t *testing.T) {
 	ns := NewNamespace()
 	owner := ns.Runtime()

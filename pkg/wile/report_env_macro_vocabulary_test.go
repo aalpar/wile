@@ -32,9 +32,9 @@ package wile_test
 // the vocabulary row is wrapped in a filteredBulkSource, which Copy's
 // *storeBulkSource type assertion skipped, so the row stayed pointed at the
 // PARENT store and materializeBulkLocked (which requires store == p) made it
-// INERT; the sealed source's minTier/ownInstallsOnly were reconstructed rather
-// than carried; and the macro-phase templates were dropped, so a phase the
-// report env reaches for the first time gets no row at all. The store-level
+// INERT; the sealed source's minTier was reconstructed rather than carried; and
+// the macro-phase templates were dropped, so a phase the report env reaches for
+// the first time gets no row at all. The store-level
 // pins for each live in pkg/environment/bulk_row_copy_test.go.
 
 import (

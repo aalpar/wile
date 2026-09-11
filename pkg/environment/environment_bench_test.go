@@ -188,7 +188,7 @@ func BenchmarkBulkRowResolution(b *testing.B) {
 			g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, true)
 			for i := range rows {
 				src := NewSealedStoreBulkSource(g, PhaseRuntime, values.NewSymbol(fmt.Sprintf("src%d", i)))
-				g.InstallBulkRow(src, nil, PhaseExpand, true)
+				g.InstallBulkRow(src, nil, PhaseExpand, true, BulkOriginLanguage)
 			}
 			q := syntax.EmptyScopes()
 			b.ReportAllocs()

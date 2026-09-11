@@ -120,7 +120,7 @@ func TestLookupSyntaxCompiler_SamePhaseShadowOutranksTheSealedCompiler(t *testin
 	// shadow at phase 0 where it was written.
 	store := env.Namespace().Store()
 	src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, environment.BaseSourceName())
-	store.InstallBulkRow(src, nil, environment.PhaseExpand, true)
+	store.InstallBulkRow(src, nil, environment.PhaseExpand, true, environment.BulkOriginLanguage)
 	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](expand, sym, nil), qt.IsNotNil,
 		qt.Commentf("the row is sealed-tier restricted, so a phase-0 mutable shadow does not ride it up"))
 }

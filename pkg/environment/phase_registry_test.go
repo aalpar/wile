@@ -228,7 +228,7 @@ func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
 	store := ns.Store()
 	store.InstallBulkRow(
 		NewSealedStoreBulkSource(store, PhaseRuntime, BaseSourceName()),
-		nil, PhaseExpand, true)
+		nil, PhaseExpand, true, BulkOriginLanguage)
 	qt.Assert(t, expand.GetBinding(baseSym, values.AllScopes()), qt.Not(qt.IsNil))
 	qt.Assert(t, expand.GetBinding(userSym, values.AllScopes()), qt.IsNil)
 }

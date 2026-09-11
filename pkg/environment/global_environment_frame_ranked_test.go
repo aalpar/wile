@@ -143,7 +143,7 @@ func TestResolveRankedCrossPhaseNeedsABulkRow(t *testing.T) {
 		qt.Commentf("a sealed phase-0 slot must not be reachable from phase 1 on its own"))
 
 	g.InstallBulkRow(NewSealedStoreBulkSource(g, PhaseRuntime, BaseSourceName()),
-		nil, PhaseExpand, true)
+		nil, PhaseExpand, true, BulkOriginLanguage)
 
 	ref, ok = probeAt(PhaseExpand)
 	qt.Assert(t, ok, qt.IsTrue)
@@ -455,9 +455,9 @@ func TestBulkRowTieRanksLikeASlotTie(t *testing.T) {
 		q := NewGlobalEnvironmentFrame()
 		q.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, true)
 		q.InstallBulkRow(NewSealedStoreBulkSource(q, PhaseRuntime, values.NewSymbol("srcA")),
-			[]*syntax.Scope{sc1}, PhaseExpand, true)
+			[]*syntax.Scope{sc1}, PhaseExpand, true, BulkOriginLanguage)
 		q.InstallBulkRow(NewSealedStoreBulkSource(q, PhaseRuntime, values.NewSymbol("srcB")),
-			[]*syntax.Scope{sc2}, PhaseExpand, true)
+			[]*syntax.Scope{sc2}, PhaseExpand, true, BulkOriginLanguage)
 		return q
 	}
 
@@ -493,4 +493,78 @@ func TestBulkRowTieRanksLikeASlotTie(t *testing.T) {
 			g.resolveRankedLocked(*sym, query, PhaseExpand)
 		}, qt.PanicMatches, ".*ambiguous.*")
 	})
+}
+
+// TestBulkTierOfClassifiesByOrigin is the classifier half of Task 6 Step 3: a
+// row is ranked by the same three-way rule a slot is, with bulkRef.origin
+// standing where tierOf reads Binding.IsImported().
+//
+// RED before the origin arm: every sealed row answered tierExactSealed, so the
+// import row and the language row were indistinguishable and the "row" column
+// of the tier table had no entry at all.
+func TestBulkTierOfClassifiesByOrigin(t *testing.T) {
+	tcs := []struct {
+		name   string
+		sealed bool
+		origin BulkOrigin
+		want   int
+	}{
+		{name: "mutable row", sealed: false, origin: BulkOriginLanguage, want: tierExactMutable},
+		{name: "sealed language row", sealed: true, origin: BulkOriginLanguage, want: tierExactSealed},
+		{name: "sealed import row", sealed: true, origin: BulkOriginImport, want: tierExactImported},
+		// A mutable row is already the lowest tier, so the origin cannot lower it
+		// further. Stated as a row rather than left implicit: the arm is guarded
+		// on sealed, and dropping that guard would rank a mutable import row
+		// ABOVE a mutable slot.
+		{name: "mutable import row stays mutable", sealed: false, origin: BulkOriginImport, want: tierExactMutable},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			row := bulkRef{phase: PhaseExpand, sealed: tc.sealed, origin: tc.origin}
+			qt.Assert(t, bulkTierOf(row, PhaseExpand), qt.Equals, tc.want)
+			qt.Assert(t, bulkTierOf(row, PhaseRuntime), qt.Equals, tierNone,
+				qt.Commentf("a row is a candidate at its declared phase alone, whatever its origin"))
+		})
+	}
+}
+
+// TestImportedRowOutranksALanguageRow is the behavioural half: when two rows
+// supply one name at one coordinate, the IMPORT row wins — not the row that
+// happened to be installed first.
+//
+// RED before the origin arm, and red for a reason worth stating: the two rows
+// then tie at tierExactSealed, rankedArgmax breaks an equal-cardinality tie by
+// FIRST INSTALLED, and the language row is installed first here deliberately. So
+// the pin fails with the language row's value rather than with a miss, which is
+// the failure a future revert would produce.
+//
+// Both rows read THIS store at phase 0 and are installed at phase 1, because
+// materializeBulkLocked refuses a foreign store (store != p) and a same-store
+// row at the query phase is skipped as having nothing to add. They supply
+// DIFFERENT bindings because their tier FLOORS differ: the sealed source reaches
+// the sealed slot, the unrestricted one reaches the mutable slot that outranks
+// it. That is the only in-tree way to make two rows over one store disagree,
+// and disagreeing is what makes the winner observable.
+func TestImportedRowOutranksALanguageRow(t *testing.T) {
+	ns := NewNamespace()
+	owner := ns.Runtime()
+	store := owner.GlobalEnvironment()
+
+	sealed := sealAt(t, owner, PhaseRuntime, "contested", values.NewInteger(1))
+	_, err := owner.DefineOwnGlobal(values.NewSymbol("contested"), BindingTypeVariable, nil, values.NewInteger(2))
+	qt.Assert(t, err, qt.IsNil)
+
+	store.InstallBulkRow(
+		NewSealedStoreBulkSource(store, PhaseRuntime, values.NewSymbol("#%lang")),
+		nil, PhaseExpand, true, BulkOriginLanguage)
+	store.InstallBulkRow(
+		NewStoreBulkSource(store, PhaseRuntime, values.NewSymbol("#%imported-lib")),
+		nil, PhaseExpand, true, BulkOriginImport)
+
+	got, ok := resolveThroughRows(t, store, "contested", PhaseExpand)
+	qt.Assert(t, ok, qt.IsTrue,
+		qt.Commentf("neither row answered; the pin measures nothing"))
+	qt.Assert(t, got != sealed, qt.IsTrue,
+		qt.Commentf("the language row won: a sealed import row must outrank a sealed language row, as tierExactImported outranks tierExactSealed for slots"))
+	qt.Assert(t, got.Value().SchemeString(), qt.Equals, "2")
 }
