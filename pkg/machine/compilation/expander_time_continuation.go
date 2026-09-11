@@ -456,6 +456,21 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 	// routes the lookup here at all — with `define-syntax` masked at phase 1 the
 	// form takes a different path — so this arm and LookupPhaseBinding's fallback
 	// are two faces of one defect, and neither alone closes it.
+	//
+	// The gate STAYS, and LookupPhaseBinding's doc carries the settled reason:
+	// R7RS-small has no phased imports to conform to, Racket shadows a LANGUAGE
+	// binding at a shifted phase and refuses only require-vs-require, and Wile's
+	// residual is that the import supplies a DIFFERENT OBJECT for a re-exported
+	// name rather than that it out-ranks. Sharing binding identity across the
+	// import edge is what removes both gates.
+	//
+	// The two are independently observable, which is why they are two gates and
+	// not one. Reverting this one alone leaves every value assertion green and
+	// moves only compilation.GoSyntaxFormCompiles(), by +1, in
+	// TestPhase1BaseImportDoesNotReviveTheGoSyntaxRules and
+	// TestP2_SyntaxRulesAndERAreScheme; reverting LookupPhaseBinding's alone
+	// leaves those two green and reddens five value tests plus an integration
+	// program. Measured 2026-09-10; the partition is in TODO.md.
 	masked := bnd != nil && bnd.BindingType() == environment.BindingTypePrimitive
 	if p.env.PhaseLevel() > environment.PhaseExpand || masked {
 		ge := p.env.GlobalEnvironment()

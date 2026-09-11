@@ -111,10 +111,44 @@ func RegisterPhaseBindings[F any](
 // fourth silently red.
 //
 // This is a READER-side repair of a WRITER-side defect: the masking slot
-// survives. There is no safe writer coordinate today — (phase 1, sealed)
-// would land an imported macro on a bootstrap transformer's exact coordinates
-// and overwrite it engine-wide (installImportedBinding's own doc says so) — so
-// the writer-side question is filed against Stage B, not fixed here.
+// survives. There is still no safe writer coordinate — (phase 1, sealed) would
+// land an imported macro on a bootstrap transformer's exact coordinates and
+// overwrite it engine-wide (installImportedBinding's own doc says so) — but the
+// gate stays for a stronger reason than that, settled 2026-09-10 and recorded
+// here so it is not rediscovered as a mystery. It is NOT that the ranking is
+// wrong.
+//
+// R7RS-small has no answer, structurally. Its <import set> grammar (§5.6) admits
+// five forms — <library name>, only, except, prefix, rename — and the tokens
+// for-syntax, for-meta, for-template, phase and meta level appear NOWHERE in the
+// library section. for-syntax is R6RS/Racket. The collision is about a construct
+// the standard does not have, so there is no conformance answer to appeal to.
+//
+// The two reference implementations disagree, and neither does what a rank
+// shuffle would do. Chez (R6RS (for … expand)) is SILENT, first-listed-wins —
+// measured non-vacuously, with a library exporting lambda as car. Racket REFUSES
+// require-vs-require ("identifier already required for syntax") but SHADOWS
+// require-vs-language, and (begin-for-syntax (define lambda 7)) is accepted. So
+// Racket's hierarchy is definition > require > language, and the discriminator
+// is WHAT KIND the collidee is, not what phase it sits at.
+//
+// Wile's collidee is the LANGUAGE at phase 1 — RegisterPhaseBindings' rows, the
+// analogue of #lang, not of a require — so under Racket's own rule it is
+// shadowable and the import out-ranking it is RIGHT. Racket's raise-already-bound
+// answers require-vs-require, a different relation, and one Wile already ships
+// (importConflicts).
+//
+// What is left is an IDENTITY defect, not a rank defect. An import supplies a
+// DIFFERENT OBJECT for a re-exported name: the winner passes
+// BindingType() == BindingTypePrimitive while its VALUE is not a
+// *PrimitiveExpander, which is the whole reason a reader has to look past it.
+// Each library environment mints its own *Binding per re-exported name (memory
+// "library envs are primitive islands"; sameLiteralBinding in
+// internal/match/syntax_adapter.go widens for the same fact). Sharing binding
+// identity across the import edge, or giving the base its own store, is what
+// makes this gate removable, and it is the only thing that does; filed in
+// TODO.md. Until then the gate is the cheap statement of the same fact, and
+// reverting it alone is measured: TODO.md carries the per-gate partition.
 func LookupPhaseBinding[T any](
 	phaseEnv *environment.EnvironmentFrame,
 	sym *values.Symbol,

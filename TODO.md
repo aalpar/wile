@@ -1766,6 +1766,85 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   currently depends on the import supplying it, which is what killed the writer-side variant.
   A cheap partial gate in the meantime: no import may land at T1 above a sealed phase row.
 
+- [x] **The two reader gates STAY, and the reason is recorded in their own doc
+  blocks** [settled 2026-09-10, Stage B Task 7, fork A answered A2]. The earlier
+  filing above assumed the gates were a workaround for a RANKING error that Stage
+  B would close. They are not, and four measurements say so:
+
+  1. **R7RS-small has no answer, structurally.** The `<import set>` grammar (§5.6)
+     admits five forms — `<library name>`, `only`, `except`, `prefix`, `rename` —
+     and the tokens `for-syntax`, `for-meta`, `for-template`, `phase` and
+     `meta level` appear nowhere in the library section. `for-syntax` is
+     R6RS/Racket. The collision is about a construct the standard does not have.
+  2. **The two reference implementations disagree, and neither does what the
+     design proposed.** Chez (R6RS `(for … expand)`) is SILENT, first-listed-wins
+     — measured non-vacuously, with a library exporting `lambda` as `car`. Racket
+     REFUSES require-vs-require (`identifier already required for syntax`) but
+     SHADOWS require-vs-language, and `(begin-for-syntax (define lambda 7))` is
+     accepted. Racket's hierarchy is definition > require > language, and its
+     discriminator is WHAT KIND the collidee is, not what phase it sits at.
+  3. **Wile's collidee is the LANGUAGE at phase 1** — `RegisterPhaseBindings`'
+     expander rows, the analogue of `#lang`, not of a `require` — so under
+     Racket's own rule it is shadowable and the import out-ranking it is RIGHT.
+     The design cited Racket's `raise-already-bound`, which answers
+     require-vs-require: a different relation, and one Wile already ships
+     (`importConflicts`).
+  4. **So the residual is an IDENTITY defect, not a rank defect.** An import
+     supplies a DIFFERENT OBJECT for a re-exported name: the winner passes
+     `BindingType() == BindingTypePrimitive` while its VALUE is not a
+     `*PrimitiveExpander`, which is exactly why a reader must look past it to the
+     sealed row. Each library env mints its own `*Binding` per re-exported name
+     (memory "library envs are primitive islands"); `sameLiteralBinding`
+     (`pkg/internal/match/syntax_adapter.go`) widens on `BindingTypePrimitive` for
+     the same fact.
+
+- [ ] **FOLLOW-ON: share binding identity across the import edge** [Medium, L,
+  filed 2026-09-10]: give a re-exported name ONE `*Binding` across the import,
+  or give the base its own store so an import and the language never share a
+  name table. **That** is what makes the two reader gates removable, and it is
+  the only thing that does — a rank change cannot, because the ranking is already
+  correct (see above). Blast radius reaches `findLibraryBinding`,
+  `CopyLibraryBindingsToEnvAtPhase`/`copyLibraryBindingsDirect`
+  (`pkg/machine/compilation/library_bindings.go`), and every `eq?`-across-import
+  answer. Until it lands the gates are the cheap statement of the same fact.
+
+- [x] **The per-gate failure partition, measured 2026-09-10** (scratch worktree at
+  `ef92becc`, `GOWORK=off`, `make build` first so `integration/` is not testing a
+  stale `dist/`). Recorded so the follow-on inherits its sensors rather than
+  re-deriving them. Each gate reverted ALONE, everything else at HEAD:
+
+  | Gate | Site | Reverting it alone reddens |
+  |---|---|---|
+  | 1 | `LookupPhaseBinding` (`pkg/machine/compilation/phase_registry.go`) | `TestPhase1BaseImportIsBehaviourNeutral` (6/6 subtests), `TestPhase1BaseImportMasksNoPhaseRow` ("20 of 40 phase-1 expander rows were masked by the import: [begin case-lambda cond-expand define define-syntax if include include-ci lambda let let\* letrec letrec\* quasiquote quote set! syntax-error syntax-rules unquote unquote-splicing]"), `TestP02_ExpandOnceMirrorsTheLoop`, `TestP05_FreeIdentifierEqualShadowProbe`, `TestP2_ERRenameIsFreshPerInvocation`, and `integration/TestERMacro_Mixed` (`not a closure: values.voidType`) |
+  | 2 | `lookupMacroBinding` ARM 2b's `masked` gate (`pkg/machine/compilation/expander_time_continuation.go`) | `TestPhase1BaseImportDoesNotReviveTheGoSyntaxRules` (96757 vs 96756) and `TestP2_SyntaxRulesAndERAreScheme` (112536 vs 112535). Both are `compilation.GoSyntaxFormCompiles()` COUNTER deltas of +1; every value assertion in the tree stays green |
+  | 3 | the ER rename closure's `.AtPhase(p.env.PhaseLevel())` (same file) | `TestERRenameDenotesTheOutputPhase` (2/3 subtests) and `integration/TestERMacro_Cond` |
+
+  The three partitions are DISJOINT — no test appears in two rows — which is why
+  they are three gates and not one, and why a half-fix leaves exactly one red
+  whose failure text names which.
+  **The earlier filing's partition was wrong in both directions**: it listed three
+  extra `pkg/wile` tests and one integration program too few for gate 1
+  (`TestP02_ExpandOnceMirrorsTheLoop`, `TestP05_FreeIdentifierEqualShadowProbe`,
+  `TestP2_ERRenameIsFreshPerInvocation` each carry
+  `(import (for-syntax (scheme base)))` in their own source, so they are the same
+  blast family), and missed `TestP2_SyntaxRulesAndERAreScheme` for gate 2.
+  **Do not delete `phase_registry.go`'s `bnd.BindingType() != BindingTypePrimitive`
+  guard when the gate finally goes.** It PREDATES the fix — `git blame` puts it on
+  `0d1204c6` ("release 0.7", 2026-01-09), while every other line of the gate is
+  `e61a3e37` (2026-09-10) — and it is the ratchet keeping
+  `TestLookupSyntaxCompiler_SamePhaseShadowOutranksTheSealedCompiler` green.
+
+- [x] **`TestPhase1BaseImportMasksNoPhaseRow`'s non-vacuity floor has 20 names of
+  headroom** [measured 2026-09-10]: `len(before)` is **40** at `ef92becc` (read by
+  raising the assertion to `> 1000000` in a scratch worktree and reading the
+  failure's own `got %d names`), against a floor of `> 20`. The floor and the
+  ratchet mean DIFFERENT things and the distinction is the point: the floor asks
+  "is this test looking at anything at all", the `masked` assertion asks "did the
+  import move any of them". A future change that halves the expander table still
+  clears the floor and the test keeps reporting green while sensing half as much.
+  If `SealedSlots()` ever shrinks past 20, that must surface as an assertion
+  failure, not as a silently narrower population.
+
 ### `set!`'s two immutable-binding refusals report a stale location (2026-09-09)
 
 - [x] **Fixed 2026-09-09, branch `fix/phase1-import-neutrality`.** All three unstamped
