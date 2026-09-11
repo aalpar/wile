@@ -15,6 +15,8 @@
 package validate
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -155,6 +157,62 @@ func TestResolveNodeByScopes_AmbiguousMaxRefusesToGuess(t *testing.T) {
 	}
 }
 
+// TestResolveNodeByScopes_NonSubsetNodeIsNotACandidate is a GUARD, not a pin: it
+// passes on master and exists to watch the WIDENING direction, which nothing
+// else in the tree watches. Deleting resolveNodeByScopes' subset test
+// (syntax.ScopesMatch(refScopes, n.scopes)) leaves every package green,
+// ./integration/ included.
+//
+// resolveNodeByScopes is the frame-reclaim authority: whichever node it returns
+// donates its capture facts to the reference's edge, and a false positive here
+// reclaims a frame that is still reachable. A node whose define-site scopes are
+// NOT a subset of the reference's scopes is a DIFFERENT binding — under Flatt
+// resolution it is not a candidate at all, and it is not merely an extra
+// candidate the argmax would discard: because non-subset commonly means strict
+// SUPERSET, it carries the larger scope set and an ungated argmax PREFERS it.
+// TestResolveNodeByScopes_AmbiguousMaxRefusesToGuess cannot see this — every
+// candidate it builds already subset-matches.
+func TestResolveNodeByScopes_NonSubsetNodeIsNotACandidate(t *testing.T) {
+	sa := syntax.NewScope()
+	sb := syntax.NewScope()
+
+	// outer's {sa,sb} ⊄ {sa}: a binder nested strictly deeper than the reference.
+	outer := &reclaimNode{label: "f", scopes: []*syntax.Scope{sa, sb}}
+	// inner's {sa} ⊆ {sa}: the binding a reference at {sa} actually resolves to.
+	inner := &reclaimNode{label: "f", scopes: []*syntax.Scope{sa}}
+
+	keyed := func(ns ...*reclaimNode) map[ScopedBindingKey]*reclaimNode {
+		m := make(map[ScopedBindingKey]*reclaimNode, len(ns))
+		for _, n := range ns {
+			m[ScopedBindingKey{Key: n.label, ScopeKey: syntax.ScopeFingerprint(n.scopes)}] = n
+		}
+		return m
+	}
+
+	// Sole candidate is non-subset ⇒ "no same-unit define", the caller's cue to
+	// fall through to the capture-safe-primitive path (and then to unsafe).
+	got := resolveNodeByScopes(keyed(outer), "f", []*syntax.Scope{sa})
+	if got != nil {
+		t.Fatalf("a node whose scopes {sa,sb} are not a subset of the reference's {sa} must not resolve; got scopes %v", got.scopes)
+	}
+
+	// Both present: the non-subset node has the LARGER scope set, so an argmax
+	// without the gate returns it in place of the correct binding.
+	both := keyed(outer, inner)
+	got = resolveNodeByScopes(both, "f", []*syntax.Scope{sa})
+	if got != inner {
+		t.Fatalf("a reference at {sa} must resolve to the {sa} node, not the larger non-subset {sa,sb} one; got scopes %v", got)
+	}
+
+	// Control: widen the reference to {sa,sb} and outer becomes a legitimate —
+	// and now unique — maximum. Passes with the gate and without it, so it says
+	// the assertions above are about the subset test and not about arity.
+	got = resolveNodeByScopes(both, "f", []*syntax.Scope{sa, sb})
+	if got != outer {
+		t.Fatalf("a reference at {sa,sb} must resolve to the maximal subset-matching node {sa,sb}; got %v", got)
+	}
+}
+
 func TestBuildReclaimGraph_DetectsCallCC(t *testing.T) {
 	env := envWithImported(t, "call/cc")
 	// (define (bad k) (call/cc k)) — references the capture primitive, no
@@ -266,7 +324,7 @@ func TestClassifyFrameReclaim_SelfRecursiveTopLevel(t *testing.T) {
 	}
 }
 
-// TestClassifyFrameReclaim_TwiceDefinedNotReclaimable pins the defined-once
+// TestClassifyFrameReclaim_NonStableNameNotReclaimable pins the defined-once
 // soundness gap (plan Finding 2 / Task 1). A name defined twice in a unit is
 // genuinely rebindable: the producer's StableInUnit = (definedKeyCount==1 ∧
 // ¬mutated) drops it ⇒ no Stable binding ⇒ a later set!/redefine is permitted.
@@ -276,11 +334,18 @@ func TestClassifyFrameReclaim_SelfRecursiveTopLevel(t *testing.T) {
 // exactly the continuation-corruption class the design exists to avoid.
 //
 // Modelled discriminatingly: the same self-recursive f, classified against a
-// Stable-stamped control env (reclaimable) and a non-stamped twice-defined env
-// (NOT reclaimable). The discriminating power requires one binding stamped and
-// the other not — a non-compiled env alone would make everything non-reclaimable
+// Stable-stamped control env (reclaimable) and a non-stamped env (NOT
+// reclaimable). The discriminating power requires one binding stamped and the
+// other not — a non-compiled env alone would make everything non-reclaimable
 // and pass vacuously (Task 1 CROSSCHECK).
-func TestClassifyFrameReclaim_TwiceDefinedNotReclaimable(t *testing.T) {
+//
+// NAMING, because the old name (…_TwiceDefinedNotReclaimable) read as coverage
+// it does not have: the unit here is ONE define, and "twice-defined" is modelled
+// by WITHHOLDING the producer's StableInUnit mark. So this exercises the
+// rebindStable path — the node's in-edges — and `dup` is never true, which means
+// it cannot see `collided` at all. The genuine two-defines case is
+// TestBuildReclaimGraph_CollidedIsScopeKeyed.
+func TestClassifyFrameReclaim_NonStableNameNotReclaimable(t *testing.T) {
 	mkUnit := func() []ValidatedExpr {
 		f := defineFn("f", call(symRef("f"), call(symRef("-"), symRef("n"), lit())))
 		return []ValidatedExpr{f}
@@ -300,6 +365,143 @@ func TestClassifyFrameReclaim_TwiceDefinedNotReclaimable(t *testing.T) {
 	if reclaimNames(mkUnit(), twiceDefined)["f"] {
 		t.Fatalf("twice-defined (non-Stable f): a rebindable name must NOT be reclaimable")
 	}
+}
+
+// TestBuildReclaimGraph_CollidedIsScopeKeyed is a GUARD on reclaimNode.collided
+// (it passes on master; it watches a future widening). Hard-wiring
+// `collided: false` in buildReclaimGraph leaves the whole tree green, and the
+// direction it fails in is FAIL-OPEN: the survivor of a same-scope redefinition
+// flips from non-reclaimable to reclaimable.
+//
+// Two independent facts, because each is invisible to the other's mutant.
+//
+// (1) collided is load-bearing for the node's OWN verdict, and StableInUnit does
+// not stand in for it. byIdent is last-wins, so the unit below keeps define #2,
+// whose body is a literal: nothing in referencesCapture, createsEscaping or the
+// edge set knocks it out, and nodeSafe never reads rebindStable (its only
+// production reader is classifyCallee, which folds the CALLEE's copy into an
+// edge). So collided is the only thing standing between a twice-defined name and
+// a reclaimed frame, while define #1's escaping closure is still live.
+//
+// (2) collided is keyed on the SCOPE SET, not on the spelling — and asserting
+// only "duplicates are still caught" is blind to how that key is computed. A
+// uniform transformation of every ScopeKey (appending a constant, say) preserves
+// the partition ScopedBindingKeyOf induces and so passes every such assertion;
+// measured, it is invisible to all four existing collapse ratchets. This one
+// therefore asserts the key SET against fingerprints computed here, independently
+// of ScopedBindingKeyOf, and exercises BOTH halves of the partition: equal scope
+// sets must merge into one colliding node, unequal ones must stay two
+// non-colliding bindings that keep their own verdicts.
+func TestBuildReclaimGraph_CollidedIsScopeKeyed(t *testing.T) {
+	sa := syntax.NewScope()
+	sb := syntax.NewScope()
+
+	// Computed from syntax.ScopeFingerprint directly, NOT from ScopedBindingKeyOf:
+	// the producer under test must not also supply the expected answer.
+	keyOf := func(scopes ...*syntax.Scope) ScopedBindingKey {
+		return ScopedBindingKey{Key: "f", ScopeKey: syntax.ScopeFingerprint(scopes)}
+	}
+
+	byKey := func(k ScopedBindingKey) string {
+		return k.Key + "@" + k.ScopeKey
+	}
+
+	tests := []struct {
+		name         string
+		first        []*syntax.Scope
+		second       []*syntax.Scope
+		wantKeys     []ScopedBindingKey
+		wantCollided map[ScopedBindingKey]bool
+		wantReclaim  map[ScopedBindingKey]bool
+		why          string
+	}{
+		{
+			name:         "equal scope sets are one binding, defined twice",
+			first:        []*syntax.Scope{sa},
+			second:       []*syntax.Scope{sa},
+			wantKeys:     []ScopedBindingKey{keyOf(sa)},
+			wantCollided: map[ScopedBindingKey]bool{keyOf(sa): true},
+			wantReclaim:  map[ScopedBindingKey]bool{keyOf(sa): false},
+			why: "a genuine same-scope redefinition: #1's facts never reach the fixpoint, " +
+				"so the survivor must be forced unsafe",
+		},
+		{
+			name:         "unequal scope sets are two bindings that happen to share a spelling",
+			first:        []*syntax.Scope{sa},
+			second:       []*syntax.Scope{sb},
+			wantKeys:     []ScopedBindingKey{keyOf(sa), keyOf(sb)},
+			wantCollided: map[ScopedBindingKey]bool{keyOf(sa): false, keyOf(sb): false},
+			wantReclaim:  map[ScopedBindingKey]bool{keyOf(sa): false, keyOf(sb): true},
+			why: "hygiene-distinct binders: neither collides, and each keeps its own verdict — " +
+				"#1 escapes, #2 is a safe leaf",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := envWithImported(t)
+			// #1 returns an escaping closure; #2 is a safe leaf. Ordering matters:
+			// last-wins keeps #2, so any unsafe verdict on the survivor of row 1 is
+			// attributable to collided alone.
+			f1 := scopedDefineFn("f", tt.first, lam(lit()))
+			f2 := scopedDefineFn("f", tt.second, lit())
+			unit := []ValidatedExpr{f1, f2}
+
+			_, byIdent := buildReclaimGraph(unit, env)
+
+			gotKeys := make([]ScopedBindingKey, 0, len(byIdent))
+			for k := range byIdent {
+				gotKeys = append(gotKeys, k)
+			}
+			cmpKey := func(a, b ScopedBindingKey) int {
+				if a.Key != b.Key {
+					return strings.Compare(a.Key, b.Key)
+				}
+				return strings.Compare(a.ScopeKey, b.ScopeKey)
+			}
+			slices.SortFunc(gotKeys, cmpKey)
+			wantKeys := slices.Clone(tt.wantKeys)
+			slices.SortFunc(wantKeys, cmpKey)
+			if !slices.Equal(gotKeys, wantKeys) {
+				t.Fatalf("%s: graph keys %v, want %v (the partition ScopedBindingKeyOf induces, and its key content)",
+					tt.why, mapKeyNames(gotKeys, byKey), mapKeyNames(wantKeys, byKey))
+			}
+
+			for _, k := range tt.wantKeys {
+				n := byIdent[k]
+				if n == nil {
+					t.Fatalf("no node at %s", byKey(k))
+				}
+				// Errorf, not Fatalf: the flag is the mechanism and the verdict below
+				// is the consequence, and a mutant that breaks the flag should show
+				// BOTH — the point of the guard is the fail-open verdict flip, not
+				// the struct field.
+				if n.collided != tt.wantCollided[k] {
+					t.Errorf("%s: node %s collided=%v, want %v", tt.why, byKey(k), n.collided, tt.wantCollided[k])
+				}
+			}
+
+			verdict := ClassifyFrameReclaim(unit, env)
+			for _, k := range tt.wantKeys {
+				got, ok := verdict[k]
+				if !ok {
+					t.Fatalf("no verdict at %s", byKey(k))
+				}
+				if got != tt.wantReclaim[k] {
+					t.Fatalf("%s: %s reclaimable=%v, want %v", tt.why, byKey(k), got, tt.wantReclaim[k])
+				}
+			}
+		})
+	}
+}
+
+// mapKeyNames renders a key slice through render, for failure messages.
+func mapKeyNames(keys []ScopedBindingKey, render func(ScopedBindingKey) string) []string {
+	out := make([]string, len(keys))
+	for i, k := range keys {
+		out[i] = render(k)
+	}
+	return out
 }
 
 // TestClassifyFrameReclaim_MutualRecursionPair hardens the which-env claim

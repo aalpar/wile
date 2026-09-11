@@ -52,8 +52,15 @@ type reclaimNode struct {
 	// last such define survives in byIdent, so the earlier ones' capture facts never
 	// reach the fixpoint; forcing the survivor unsafe is the conservative resolution,
 	// and the only direction this classifier may err in (frame_reclaim.go mayCapture).
-	// A name defined twice at one scope already forfeits StableInUnit, so this costs
-	// no reclamation a sound analysis kept.
+	// StableInUnit does NOT already cover this, and the earlier claim that it did
+	// was wrong on the SELF side. A twice-defined name forfeits StableInUnit, but
+	// rebindStable has exactly one production reader — classifyCallee, which folds
+	// the CALLEE's copy into reclaimEdge.immutable. nodeSafe never reads
+	// n.rebindStable, so the forfeit constrains this node's CALLERS and leaves its
+	// own verdict untouched: a twice-defined define nobody calls is Safe on its own
+	// facts, and collided is the only thing that knocks it out. Deleting collided on
+	// the strength of "StableInUnit covers it" is therefore FAIL-OPEN, not a
+	// precision trade. Guarded by TestBuildReclaimGraph_CollidedIsScopeKeyed.
 	collided bool
 }
 

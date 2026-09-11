@@ -1819,6 +1819,53 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   same argmax over a Go *map*, so its tie is non-deterministic rather than first-wins. Unreachable
   in the corpus, but it is the one site where a tie would resolve non-deterministically — a
   determinism follow-up, not gated on this item.
+
+### Two fail-open guards in the frame-reclaim analyser were unpinned (2026-09-10)
+
+Found while auditing for Stage B (`2026-09-09-flatt-binding-model-b-design.local.md` §8.2
+item 1); neither is Stage B work and neither is a live bug. Both are places where the
+analyser is currently CORRECT and nothing in the tree would notice it being widened. The
+frame-reclaim classifier is the one analysis in this package whose false positive is a
+use-after-release, so an unwatched widening direction here is the expensive kind.
+
+- [x] **`resolveNodeByScopes`' subset guard had no witness** [Medium, S, Guarded 2026-09-10,
+  `pkg/internal/validate/frame_reclaim_build.go`]. Deleting `if !syntax.ScopesMatch(refScopes,
+  n.scopes) { continue }` leaves the WHOLE TREE green, `./integration/` included after a `make
+  build`. Re-measured on `a60f7895`: `./pkg/internal/validate/` and `./pkg/wile/` are both green
+  without it. `TestResolveNodeByScopes_AmbiguousMaxRefusesToGuess` cannot see it — every
+  candidate it builds already subset-matches, so the guard is never the thing that rejects one.
+  And the failure is worse than "one extra candidate": non-subset commonly means strict
+  SUPERSET, which carries the LARGER scope set, so an ungated argmax *prefers* the wrong node
+  rather than merely admitting it.
+  Guard: `TestResolveNodeByScopes_NonSubsetNodeIsNotACandidate` — a reference at `{sa}` against
+  nodes `f@{sa,sb}` and `f@{sa}`, asserting the `{sa}` node wins, plus a control at `{sa,sb}`
+  that resolves to `f@{sa,sb}` and passes with the guard and without it.
+
+- [x] **`collided` had no witness, and its absence is FAIL-OPEN** [Medium, S, Guarded
+  2026-09-10, same file]. Hard-wiring `collided: false` on the `reclaimNode` literal also yields
+  zero failures tree-wide. Two same-name/same-scope top-level defines flip the survivor's
+  `frameReclaimable` false → true while define #1's escaping closure is still live — the
+  dangerous polarity, not a forgone optimization.
+  `TestClassifyFrameReclaim_TwiceDefinedNotReclaimable` cannot see it, and its NAME was the
+  trap: its unit is a SINGLE define, so `dup` is never true, and "twice defined" there meant
+  "`StableInUnit` withheld". Renamed `…_NonStableNameNotReclaimable`, with the distinction
+  spelled out in its doc comment.
+  The `collided` doc comment claimed `StableInUnit` already covered the case. **Verified false
+  and corrected**: `rebindStable` has exactly one production reader — `classifyCallee`, folding
+  the CALLEE's copy into `reclaimEdge.immutable` — and `nodeSafe` never reads `n.rebindStable`,
+  so forfeiting `StableInUnit` constrains a node's CALLERS and leaves its own verdict untouched.
+  A later step deleting `collided` on the strength of that sentence would have shipped the
+  soundness bug.
+  Guard: `TestBuildReclaimGraph_CollidedIsScopeKeyed`, and it is deliberately
+  **scope-content-specific**. "Duplicates are still caught" is not enough: measured, a uniform
+  constant suffix appended to every `ScopeKey` in `ScopedBindingKeyOf` is invisible to every
+  existing collapse ratchet, because it preserves the partition. So the guard asserts the
+  graph's key SET against fingerprints computed from `syntax.ScopeFingerprint` directly — the
+  producer under test does not also supply the expected answer — and exercises both halves of
+  the partition: equal scope sets must merge into one colliding node, unequal ones must stay two
+  non-colliding bindings that keep their own verdicts. Re-measured: the suffix mutation reddens
+  it, and nothing else in the package.
+
 ### Name-keyed identity survives in consumers of scope-keyed bindings (2026-07-19)
 
 Consequences of `8afeb66a`/`a60e32e1` making one name own several slots. Each lived only inside a

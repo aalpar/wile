@@ -101,6 +101,21 @@ func defineFn(name string, body ...ValidatedExpr) *ValidatedDefine {
 	}
 }
 
+// scopedDefineFn is defineFn's hygiene-aware twin: the DEFINE NAME carries the
+// given scopes, so two same-spelling defines collide under ScopedBindingKeyOf
+// exactly when their scope sets are equal. defineFn's names carry no scopes at
+// all, which makes every same-name pair collide and so cannot discriminate the
+// two halves of that partition.
+func scopedDefineFn(name string, scopes []*syntax.Scope, body ...ValidatedExpr) *ValidatedDefine {
+	q := defineFn(name, body...)
+	sym := q.name
+	for _, s := range scopes {
+		sym = sym.AddScope(s).(*syntax.SyntaxSymbol)
+	}
+	q.name = sym
+	return q
+}
+
 // defineVal creates a ValidatedDefine in value form (expr at current depth).
 func defineVal(name string, expr ValidatedExpr) *ValidatedDefine {
 	return &ValidatedDefine{
