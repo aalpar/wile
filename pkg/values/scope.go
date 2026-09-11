@@ -178,8 +178,22 @@ func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
 // reference with useScopes. A binding with no scopes (top-level / pre-hygiene)
 // matches any reference.
 //
-// Both the environment's resolveLocal and the validator's duplicate-binding
-// detection use this single function so scope resolution cannot diverge.
+// It is the single entry point for every consumer that matches a REFERENCE
+// against a candidate BINDER, so scope resolution cannot diverge. This comment
+// used to name two of them; measured 2026-09-10 there are NINE call sites in
+// three packages — environment's resolveLocal, probeTiersLocked, probeBulkLocked
+// and resolveAtCoordsLocked; validate's letBoundClosureEscapes, refMatchesBinder
+// and nameSet.shadowLookup; compilation's sameBinder and
+// freeVarCollector.boundInside.
+//
+// The empty-set arm below is a SHORT-CIRCUIT, not the rule. ScopesMatch already
+// answers true for an empty binding set — its length guard cannot fire when
+// len(bindingScopes) is 0, and its loop is then vacuous — so deleting the arm
+// changes no answer for any input, verified by reading and by a green
+// `go test ./...` without it. The rule that ∅ matches every reference lives in
+// ScopesMatch, and THAT is what a change to the scope-set encoding has to
+// preserve; a task phrased as "keep this short-circuit" names the wrong artifact
+// and an implementer who deletes it sees green and distrusts the rest.
 //
 // Note: nil useScopes does NOT mean "match any" here. A nil reference scope
 // set means "this reference has no scopes" and behaves like an empty set —

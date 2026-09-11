@@ -1945,6 +1945,156 @@ use-after-release, so an unwatched widening direction here is the expensive kind
   non-colliding bindings that keep their own verdicts. Re-measured: the suffix mutation reddens
   it, and nothing else in the package.
 
+### Stage B S4 is STRUCK — the price, and what would have to be true first (2026-09-10)
+
+S4 was "fold phase into the scope set as a representative scope, so
+`probeTiersLocked` loses its `phase` parameter". It is not happening. This entry
+records the price so it is not re-derived, and refiles the design's two remaining
+§8.2 blind spots as its preconditions. **Every number below was re-measured at
+`ef92becc`**; where the design or the impl plan carried a figure, both values are
+given, because several of them had already rotted.
+
+- [x] **Q4 — "can the phase registry be removed?" — answers NO.** Four structural
+  blockers, each verified in source:
+
+  1. **`sealedViews` has no substitute.** `PhaseRegistry.sealedViews`
+     (`pkg/environment/phase_registry.go`) is the sole backing for
+     `SealedWriteViewAt`, which has **5** production call sites
+     (`internal/bootstrap/bootstrap_core.go`, `compilation/syntax_compilers_registry.go`,
+     `compilation/primitive_expanders_registry.go`, `registry/apply.go` ×2), and for
+     `AtPhase`'s sealed climb. `Namespace.sealedWriteRoot` is a named alias into it.
+  2. **`GetOrCreate` is the ONLY `EnsureMacroPhaseRows` hook** — measured, exactly one
+     caller tree-wide. The macro tower is lazy and unbounded, so there is no set of
+     phases to enumerate in advance and (since Stage A) no wildcard coordinate to hang
+     an install on. Delete the registry and the macro-phase rows have no trigger.
+  3. **`AtPhase` raises without it**: `topLevel.phases == nil` panics with
+     `ErrMissingPhaseRegistry` (`environment_frame.go`, the `AtPhase` body).
+  4. **The stable-pointer contract lives in `GetOrCreate`'s own doc**, not
+     `createPhaseEnv`'s: "AtPhase must keep returning a stable pointer per (owner,
+     phase) because local expand envs chain off these frames and code compares frames
+     by pointer." A coordinate-keyed store has no such object to be stable.
+
+  **Do NOT scope any step as "rewrite the two `Phases()` consumers".** They are
+  `registry/apply.go`'s `ApplyDocs` and `repl/meta.go`'s `firstPhaseBinding`, and both
+  are rewritable today — but the rewrite is self-undermining, because `PresentPhases`
+  itself calls `p.phases.appendPhases` (`environment_frame.go`, inside
+  `PresentPhases`). Verified against the source: freeing the two exported consumers
+  frees nothing. The design's §7 claim "frame-per-phase dissolves" is struck.
+
+- [x] **The S4 inventory, as a price rather than a plan.** The impl plan's figures are
+  all low; measured at `ef92becc`, non-test, tree-wide:
+
+  | Item | Plan said | Measured |
+  |---|---|---|
+  | phase-VALUE comparison bodies | 8 | **16** tree-wide, **10** in `pkg/environment` |
+  | struct fields typed `Phase` (incl. `map[Phase]…`) | 3 | **12** (11 named structs + 1 anonymous table struct); **8** in `pkg/environment` |
+  | signatures mentioning `Phase` | ~24 | **61** (63 `func` lines match; 2 are `Complex.Phase()` / `BigComplex.Phase()`, an unrelated argument-of-a-complex-number) |
+  | distinct WIDTHS to reconcile | 3 | **4** |
+
+  The four widths: `Phase int8`; `exactPhases [2]uint64` (128 bits, non-negative
+  phases only); `macroPhaseSeenBits [2]atomic.Uint64` (a second, independent 128-bit
+  mirror); and `phaseSetBits = 8` over `registry.PhaseSet uint8`, whose `init()`
+  asserts bit position == `int(Phase)`. Three of the four are dense-small-integer
+  assumptions in TYPE form and are unreachable by grepping for `>>6`.
+
+  `appendExactPhases` (`global_environment_frame.go`) is the **reverse** mapping —
+  `bits.TrailingZeros64` back to `Phase(i*64+bit)` — and `PresentPhases` loses the
+  store's phases without it, which is the defect a copied namespace already hit once.
+  `PresentPhases` is sort + compact + trim, three coupled operations, so a fold that
+  loses the ORDER loses the DEDUP with it.
+
+  **Two of the plan's read-side citations no longer hold.** `healReadLocked` has NO
+  phase comparison at all now — it delegates to `probeRankedLocked` — so it is not
+  "unreachable from `probeTiersLocked`", it is gone. And the write-side provenance arm
+  is `createGlobalBindingAt`'s `if sealed && p.bindings[s.slot].IsImported() != imported`,
+  not the cited line, which at HEAD is `resolveAtCoordsLocked`'s `matchAny` early
+  return. Of the 10 `pkg/environment` comparisons, three are on the ranked-read path
+  (`probeTiersLocked`, `bulkTierOf`, `probeBulkLocked`) and the rest are not
+  (`EnsureMacroPhaseRows`, `AtPhase`, `WritesOwnerRootCoordinates`, `unsealedTargetAt`,
+  `materializeBulkLocked`, `resolveAtCoordsLocked`, `createGlobalBindingAt`), so a
+  read-side inventory finds under a third of them.
+
+- [x] **The design's `ScopesCompatible` warning names the WRONG ARTIFACT, and the
+  correction is now in the code.** "Do not delete `ScopesCompatible`'s empty-set
+  short-circuit" is advice about a **no-op**. `ScopesCompatible(b, u)` short-circuits
+  `len(b) == 0 → true`; `ScopesMatch(u, b)` already returns true for an empty `b`,
+  because `0 > len(u)` is false for every `u` and the loop over `b` never runs — and
+  `ScopesMatch`'s own comment says so. The two agree on **every** input. Verified both
+  ways: by reading, and by deleting the arm in a scratch worktree and running
+  `go test ./...`, which exits 0. **An implementer told to preserve it deletes it, sees
+  green, and stops trusting the rest of the document.**
+
+  The rule a fold WOULD break is `∅ ⊆ X` inside `ScopesMatch`. Reach, measured:
+  **12 direct `ScopesMatch` calls on 10 lines in 5 packages** (`internal/validate`,
+  `internal/match`, `machine/compilation`, `registry/core`, `environment`), plus the
+  **9 `ScopesCompatible` call sites in 3 packages** that delegate to it — 21 calls on
+  19 lines across 6 packages once `pkg/values`' own delegation is counted. Two of the
+  `ScopesMatch` sites (`match/syntax_adapter.go`, `match/syntax_expand.go`) are
+  syntax-matching paths `ScopesCompatible` never touches.
+  `pkg/values/scope.go`'s doc, which claimed two consumers, now names all nine and
+  says the short-circuit is not the rule.
+
+- [ ] **PRECONDITION 1 for any future S4: `ScopedBindingKeyOf`'s split is only half
+  pinned** [Low, S, filed 2026-09-10]: the collapse direction has four ratchets
+  (setting `ScopeKey := ""` reddens `validate_test.go`,
+  `lambda_formals_hygiene_test.go` ×2, `framereclaim_scope_collision_test.go`), so
+  `findDuplicateSymbols` is NOT unpinned. The frame-reclaim direction was fail-open and
+  is now guarded by `TestBuildReclaimGraph_CollidedIsScopeKeyed`
+  (`pkg/internal/validate/frame_reclaim_build_test.go`, landed `f382e772`), which is
+  deliberately **scope-CONTENT-specific** — a uniform constant suffix appended to every
+  `ScopeKey` preserves the partition and is invisible to a "duplicates are still caught"
+  assertion. What remains open is that any S4 changing what a scope set CONTAINS must
+  re-derive the expected key set from `syntax.ScopeFingerprint` rather than from the
+  producer under test, or the ratchet stops discriminating.
+
+- [ ] **PRECONDITION 2: `GlobalIndex.EqualTo` and `MaybeAppendLiteral` disagree about
+  what a pin IS** [Low, S, filed 2026-09-10]: `EqualTo`
+  (`pkg/environment/global_environment_frame.go`) compares `Index`, `Env` and `Slot`
+  and deliberately ignores `query`, `phase` and `sealed`; the literal pool dedups
+  through it (`pkg/machine/native_template.go` `MaybeAppendLiteral` → `literalIdentical`,
+  the linear arm, since `*GlobalIndex` is not `Hashable`). So two pins that differ only
+  in their re-resolution coordinates merge into one literal. The fields exist precisely
+  to survive slot DEATH, which is after the merge has happened.
+
+  **Widening `EqualTo` is not obviously free, and the usual objection is measured
+  away.** The fear is that including the fields makes two pins to one LIVE slot
+  distinct literals. Measured: widening `EqualTo` to compare `phase`, `sealed` and
+  `query` moves the literal pool by **0 entries** — 9599 appends / 1809 `*GlobalIndex`
+  literals, identical before and after, over a KitchenSink engine plus a program
+  importing 14 libraries and defining three macros. The structural reason is in
+  `GlobalIndex`'s own field doc: while a slot lives it is named by exactly one
+  `slotRef`, so `(Env, Slot)` already determines `(phase, sealed)` and those two can
+  never discriminate. Only `query` can differ for one live slot, and it did not occur.
+  One test does go red, `TestCompileContext_CompileSetBang`, and it is a
+  test-construction artifact: it builds an expected `*GlobalIndex` by hand, so its
+  coordinates are zero values. Cost of the fix is therefore that one test, not pool
+  growth — but re-measure on the workload of the day rather than trusting this line.
+
+- [x] **`FreeIdKey`'s blast radius, and the encoding invariant any S4 must prove.**
+  Measured: **3 production call sites** — producers `compile_syntax_rules.go` ×2,
+  consumer `syntax_expand.go` — plus the definition, plus the inverse `FreeIdName`
+  (`syntax_expand.go`), which has **zero** production callers and exactly one test
+  caller (`pkg/wile/bootstrap_nilpin_test.go`). Test-side `FreeIdKey` call sites: **14**
+  (10 in `internal/match/syntax_expand_test.go`, 4 in `internal/match/literal_match_test.go`).
+  The actual contract pin is `TestFreeIdKey_DiscriminatesScopeAndName`
+  (`internal/match/syntax_expand_test.go`), which the design's ratchet list omits.
+
+  **The "nine failures across four packages" figure is PROVENANCE, not a current
+  fact.** It comes from `plans/2026-07-18-scope-keyed-global-bindings-design.md` and
+  was not re-run here; cite it as history ([[freeids-collapse-is-wrong-pin-not-keying]])
+  and never as a measurement of today's tree.
+
+  **The invariant:** `FreeIdKey` is `ScopeFingerprint(scopes) + "|" + name`, and
+  `FreeIdName` recovers the name with `strings.Cut(key, "|")` — the FIRST `|`, which is
+  unambiguous only because the fingerprint holds `[0-9,]` alone
+  (`ScopeFingerprint` joins `strconv.FormatUint` decimals with commas,
+  `pkg/values/scope.go`). A name may itself contain `|`; the last row of the pin asserts
+  exactly that. **Any slice that puts a phase into the fingerprint must prove no `|`
+  enters it, or `FreeIdName` silently truncates every key and the failure surfaces as a
+  wrong self-reference, not as a parse error.** A negative phase would also put `-` in
+  the fingerprint, which the cut survives but the documented charset does not — move the
+  doc with the encoding.
+
 ### Name-keyed identity survives in consumers of scope-keyed bindings (2026-07-19)
 
 Consequences of `8afeb66a`/`a60e32e1` making one name own several slots. Each lived only inside a
