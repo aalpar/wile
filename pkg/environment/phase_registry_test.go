@@ -200,7 +200,7 @@ func TestPhaseString(t *testing.T) {
 // is plain key disjointness.
 //
 // What restores the base at phase 1 is the dialect declaring it there, which
-// installs a bulk row over the same store at (ExactPhase(1), sealed). The row is
+// installs a bulk row over the same store at (phase 1, sealed). The row is
 // built by hand here because the dialect lives in pkg/wile, which imports this
 // package; the assertion is the same property either way.
 func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
@@ -208,11 +208,11 @@ func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
 	ns := topLevel.Namespace()
 	expand := ns.Expand() // phase 1 (lazily created here)
 
-	// A user define lands at (ExactPhase(0), mutable).
+	// A user define lands at (phase 0, mutable).
 	userSym := values.NewSymbol("user-x")
 	ns.Runtime().MaybeCreateOwnGlobalBinding(userSym, BindingTypeVariable, nil)
 
-	// A startup binding lands sealed at the SAME phase: (ExactPhase(0), sealed).
+	// A startup binding lands sealed at the SAME phase: (phase 0, sealed).
 	baseSym := values.NewSymbol("base-y")
 	ns.Runtime().SealedWriteViewAt(PhaseRuntime).MaybeCreateOwnGlobalBinding(baseSym, BindingTypeVariable, nil)
 
@@ -228,7 +228,7 @@ func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
 	store := ns.Store()
 	store.InstallBulkRow(
 		NewSealedStoreBulkSource(store, PhaseRuntime, BaseSourceName()),
-		nil, ExactPhase(PhaseExpand), true)
+		nil, PhaseExpand, true)
 	qt.Assert(t, expand.GetBinding(baseSym, values.AllScopes()), qt.Not(qt.IsNil))
 	qt.Assert(t, expand.GetBinding(userSym, values.AllScopes()), qt.IsNil)
 }

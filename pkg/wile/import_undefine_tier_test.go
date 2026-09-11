@@ -28,7 +28,7 @@ import (
 // half of the S0 defect that the create-path repair left behind.
 //
 // namespace-undefine! asks IsImportedBindingAt — a TIER question, and the right
-// one — and then deletes with DeleteBindingAt at (ExactPhase(0), sealed), which
+// one — and then deletes with DeleteBindingAt at (phase 0, sealed), which
 // is COORDINATE-addressed. resolveAtCoordsLocked filters only on
 // (phase, sealed); the imported tier is invisible to it, so with the base and
 // the import both at cardinality 0 the walk returns the FIRST slot in

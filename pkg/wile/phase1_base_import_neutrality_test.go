@@ -37,8 +37,8 @@ const phase1BasePrologue = "(import (for-syntax (scheme base)))\n"
 //
 // One cause, two readers. (scheme base) exports 21 of the phase-1 machinery's
 // names as value-less compile-time keywords, and a phase-shifted import installs
-// them at (ExactPhase(1), MUTABLE) — installImportedBinding's shadowable arm is
-// guarded on PhaseRuntime — where tierExactMutable out-ranks the (ExactPhase(1),
+// them at (phase 1, MUTABLE) — installImportedBinding's shadowable arm is
+// guarded on PhaseRuntime — where tierExactMutable out-ranks the (phase 1,
 // SEALED) rows the primitive expanders and bootstrap macros live at. Both
 // candidates carry the empty scope set, so the import wins every top-level
 // query. LookupPhaseBinding and lookupMacroBinding then FAILED CLOSED on the
@@ -190,7 +190,7 @@ func TestPhase1BaseImportMasksNoPhaseRow(t *testing.T) {
 // TestPhase1BaseImportDoesNotReviveTheGoSyntaxRules is the fourth column, and it
 // is a COUNTER assertion because the value assertion passes either way: under
 // WithSchemeSyntaxForms the imported `syntax-rules` is a phase-0 *SyntaxCompiler
-// lifted to (ExactPhase(1), mutable), where it out-ranks the Scheme macro at
+// lifted to (phase 1, mutable), where it out-ranks the Scheme macro at
 // (1, sealed). lookupMacroBinding's ARM 2 declined it on type, left the head
 // unexpanded, and the COMPILER dispatched the Go form — same answer, wrong layer.
 // Only compilation.GoSyntaxFormCompiles() can see that, which is why the delta,

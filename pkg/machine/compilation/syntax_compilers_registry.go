@@ -54,13 +54,17 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 
 // RegisterSyntaxCompilers binds all syntax compilers through the level-0
 // SEALED-WRITE view, which every owner of a sealed axis has: the main
-// namespace's, or a NewChildRuntime library env's own. Unlike the primitive
-// expanders, these WANT the level-0 seal, because that is the one write whose
-// coordinate is the ambient (AnyPhase, sealed) one — every other write, mutable
-// at any level or sealed above 0, lands at an exact level
-// (EnvironmentFrame.writeCoordinates). A binding placed here is therefore
-// reachable from a frame at any level as the ranked probe's T3 tier, instead of
-// being pinned to one phase's view.
+// namespace's, or a NewChildRuntime library env's own. The write lands at
+// (phase 0, sealed), like every other write through a sealed view at phase 0
+// (EnvironmentFrame.writeCoordinates).
+//
+// This doc used to say these WANT the level-0 seal because it was the one write
+// routed to the phase-blind ambient coordinate, making the binding reachable
+// from a frame at any level. Both halves are dead: the coordinate is gone, and a
+// phase-0 slot is a candidate at phase 0 alone. What carries a compiler to a
+// higher phase now is a declared bulk row over this store, which is also what
+// keeps it SEALED-tier on the way up — see
+// TestLookupSyntaxCompiler_SamePhaseShadowOutranksTheSealedCompiler.
 //
 // This is a write COORDINATE, not a topology: phase views have no lexical parent,
 // and hermeticity is key disjointness in the one store. Comments here once said
@@ -73,13 +77,12 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 //     the levels the library's own registry has instantiated (PresentPhases) to
 //     locate syntax compilers when exporting or importing forms like syntax-case,
 //     define-syntax, etc. A NewChildRuntime library env is an island — it owns its
-//     own store, so the engine root's ambient tier is not reachable from it at any
-//     level — and special forms stay ambient-only, unchanged by this relocation.
+//     own store, so the engine root's sealed base is not reachable from it at any
+//     level — and it registers its own compilers through its own sealed axis.
 //  2. Scope-aware lookup via LookupPhaseBinding[*SyntaxCompiler] for hygiene
-//     resolution: these bindings live in the ambient tier, which every frame's
-//     ranked probe reaches as T3, so a same-phase user binding of the name at
-//     T1 (mutable) or T2 (sealed) takes precedence. This is the order that
-//     lets user code shadow `car`.
+//     resolution: these bindings sit at tierExactSealed at phase 0, so a
+//     same-phase user binding of the name at tierExactMutable takes precedence.
+//     This is the order that lets user code shadow `car`.
 //
 // Compilation dispatch itself goes through the forms registry (register.go),
 // not through these bindings. Both paths are populated from

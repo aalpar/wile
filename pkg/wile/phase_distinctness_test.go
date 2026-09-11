@@ -109,7 +109,7 @@ const phase1TransformerCadrSrc = `(define-syntax pick
 // exact@1=true, because registry/apply.go's phaseTargets loop registers 155 of
 // 218 core primitives at both phases while writeCoordinates
 // (pkg/environment/environment_frame.go) diverts only the SEALED PHASE-0 write
-// to AnyPhase(). Stage A moves that write to ExactPhase(0) and leaves the
+// to the ANY coordinate. Stage A moves that write to phase 0 and leaves the
 // phase-1 sealed slot alone, so car keeps resolving at phase 1 after A and a
 // pin written on it could never go green. cadr is DEFINED in bootstrap Scheme
 // (pkg/registry/core/bootstrap_procedures.scm) — a phase-0 sealed write — so it
@@ -427,7 +427,7 @@ func TestDeclarativeMacroNeedsNoImport(t *testing.T) {
 // DESCENT would take — turns this red with "USER-CAR", because a
 // tierExactMutable phase-0 slot outranks the phase-1 sealed base. That is
 // precisely the regression Task 7 could introduce while relocating the sealed
-// base onto (ExactPhase(0), sealed).
+// base onto (phase 0, sealed).
 //
 // ORDER IS LOAD-BEARING. The define must stay ABOVE the import: both the user's
 // phase-0 slot and the for-syntax import's phase-1 slot are tierExactMutable

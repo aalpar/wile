@@ -211,13 +211,14 @@ func TestBindingModelMatrix(t *testing.T) {
 		// THE MECHANISM CHANGED AND THIS BLOCK USED TO DESCRIBE THE OLD ONE. It
 		// read "define supersedes an import IN PLACE and drops the import
 		// provenance". That was accurate while imports installed at
-		// (ExactPhase(0), mutable) — the same coordinates a top-level define
+		// (phase 0, mutable) — the same coordinates a top-level define
 		// writes — so the two shared one slot and define was an ASSIGNMENT
 		// through the import, with compile_define.go clearing m.Imported to
 		// re-permit set!.
 		//
-		// Imports now install at (ExactPhase(0), sealed) (T2), so the define gets
-		// its OWN (ExactPhase(0), mutable) T1 slot and SHADOWS the import. The
+		// Imports now install at (phase 0, sealed) stamped Imported, which ranks
+		// tierExactImported, so the define gets its OWN (phase 0, mutable)
+		// tierExactMutable slot and SHADOWS the import. The
 		// import's provenance is not dropped because it is not touched; set! is
 		// permitted because the slot being set was never imported. `want: "10"`
 		// is unchanged and PASSED THROUGHOUT — which is exactly why the stale

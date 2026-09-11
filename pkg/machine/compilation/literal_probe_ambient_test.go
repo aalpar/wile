@@ -27,7 +27,7 @@ import (
 // The definition-site literal pin descends from its own phase and takes the
 // first hit. Auxiliary syntax (else, =>) is written through the phase-0
 // sealed-write view, which since the ambient tier's deletion lands at
-// (ExactPhase(0), sealed) — an ordinary rung of the descent, not a tier standing
+// (phase 0, sealed) — an ordinary rung of the descent, not a tier standing
 // outside every phase. The ordering the pin needs is unchanged and now falls out
 // of the ordinary tier rule: a user (define else 5) at phase 0 is a MUTABLE slot
 // at that same coordinate, so T1 beats T2 on the rung the descent stops at. This
@@ -106,7 +106,7 @@ func TestLookupLiteralBindingDescendsPhasesFromItsOwn(t *testing.T) {
 		// collapse the ordering.
 		store := ns.Store()
 		src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, environment.BaseSourceName())
-		store.InstallBulkRow(src, nil, environment.ExactPhase(environment.PhaseExpand), true)
+		store.InstallBulkRow(src, nil, environment.PhaseExpand, true)
 
 		qt.Assert(t, env.GetBinding(values.NewSymbol(sym), values.EmptyScopes()), qt.Equals, keyword,
 			qt.Commentf("the row is sealed-tier restricted, so it supplies the keyword and not the user shadow"))

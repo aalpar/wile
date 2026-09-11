@@ -222,25 +222,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`GlobalEnvironmentFrame.AmbientKeysAt` is `UnscopedKeysAt`.** "Ambient" named
+  two unrelated things — an empty SCOPE set and the deleted ANY-phase
+  COORDINATE — and this method only ever meant the first. `AmbientScopes` keeps
+  its name for the same reason: it names the empty scope set, a hygiene concept
+  that is still live.
+
 - **The R7RS §4.3.2 literal pin reads ambiguity as a value.**
   `GlobalEnvironmentFrame.ExactBindingAt` and `EnvironmentFrame.ExactBinding`
-  resolve the exact-phase tiers without the ambient keyword and report an
-  incomparable scope-set tie as `(nil, true)` instead of raising it;
-  `GlobalEnvironmentFrame.AmbientBinding` now returns `(binding, ambiguous)`.
-  `lookupLiteralBinding` is the plain sequence its contract states (exact at the
-  use or definition phase, exact at each lower phase, ambient last, first hit
-  wins, any tie refuses) and recovers no panic. `GetBinding`, `GetLocalIndex`,
-  and the sealed-tier readers keep raising `ErrAmbiguousBinding` for the compile
-  boundary to report.
+  resolve the query phase's own slots, without consulting bulk rows, and report
+  an incomparable scope-set tie as `(nil, true)` instead of raising it;
+  `GlobalEnvironmentFrame.BulkBindingAt` is the row-only half and does the same.
+  `lookupLiteralBinding` is the plain sequence its contract states (the use or
+  definition phase's own slots, then each lower phase's, then what the LANGUAGE
+  supplies through the dialect's declared rows, first hit wins, any tie refuses)
+  and recovers no panic. `GetBinding`, `GetLocalIndex`, and the sealed-tier
+  readers keep raising `ErrAmbiguousBinding` for the compile boundary to report.
 
-- **Auxiliary keywords and special-form names are ambient.** `AddBinding` /
-  `AddBindingSpecs` registrations (`else`, `=>`, `_`, `...`, and every
-  special-form docstring carrier) now bind at the owner's `(ANY, sealed)`
-  coordinate, where the syntax compilers already lived, instead of at a phase-2
-  view. Phase 2 is an ordinary rung of the macro tower. Visible from Scheme in
-  one place: `(display if)` and `(display else)` now report `syntactic keyword
-  "if" used as a variable` rather than `no such binding`. The R7RS §4.3.2
-  definition-site literal pin ranks the ambient keyword below an exact-phase
+  Mid-cycle this last step read an ambient `(ANY, sealed)` tier through a
+  `GlobalEnvironmentFrame.AmbientBinding` probe. Neither ships: see the Removed
+  entry for the coordinate. The ORDER is what was load-bearing, and it survived
+  the move from that tier to the rows.
+
+- **Auxiliary keywords and special-form names moved off phase 2 onto the
+  startup set.** `AddBinding` / `AddBindingSpecs` registrations (`else`, `=>`,
+  `_`, `...`, and every special-form docstring carrier) now bind at the owner's
+  `(phase 0, sealed)` coordinate, where the syntax compilers already lived,
+  instead of at a phase-2 view. Phase 2 is an ordinary rung of the macro tower.
+  A higher phase reaches these names through the dialect's declared bulk rows,
+  not by the coordinate being phase-blind — mid-cycle the target was the
+  `(ANY, sealed)` coordinate, which does not ship (see Removed). Visible from
+  Scheme in one place: `(display if)` and `(display else)` now report `syntactic
+  keyword "if" used as a variable` rather than `no such binding`. The R7RS
+  §4.3.2 definition-site literal pin ranks the keyword below a per-symbol
   binding at a lower phase, so `(define else 5)` beside a `syntax-case` macro
   with an `else` literal still answers `(ELSE 1)`. The phase-0 reflection
   family sees the keywords the way it already saw the syntax compilers:
@@ -255,11 +269,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **`apply` and `dynamic-wind` stay procedures.** Both are R7RS procedures the
   compiler also recognizes in head position, and `AddBinding` was swallowing
-  their `BindingTypeVariable` under the new ambient keyword slot. They moved to
+  their `BindingTypeVariable` under the new keyword slot. They moved to
   a doc-only table (`procedureFormDocs` in `pkg/registry/core/specialforms.go`)
   that installs no keyword. A startup ratchet
   (`TestAmbientKeywordsNeverHoldAProcedure`, `pkg/wile/phase_footprint_test.go`)
-  pins that no `AddBinding` name's ambient binding ever holds a procedure: a
+  pins that no `AddBinding` name's unscoped binding ever holds a procedure: a
   name registered with `AddBinding` is a keyword, refused in value position,
   and a procedure name must not be registered that way.
 
@@ -305,6 +319,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   manifest was regenerated on the toolchain CI actually uses.
 
 ### Removed
+
+- **The ANY-phase binding coordinate, and everything that only existed to
+  express it.** Gone from the released surface: `environment.PhaseKey` (now a
+  plain `Phase` on `slotRef`, `bulkRef` and `GlobalIndex`), its constructors
+  `ExactPhase` and `AnyPhase`, and its `String` method. Also gone, but added and
+  removed within this same unreleased cycle so no release ever carried them:
+  `GlobalEnvironmentFrame.AmbientBinding`, which read the ambient tier alone, and
+  the unexported `tierAmbientSealed` it read.
+
+  Stage A had already stopped WRITING the coordinate: `writeCoordinates` sent
+  every sealed phase-0 write to `(phase 0, sealed)`, `tierOf` classified a
+  wildcard slot as no candidate, and `CreateGlobalBindingAt` panicked on one. So
+  nothing here changes an answer — `tierOf` never returned `tierAmbientSealed`
+  and no probe could rank into it, which is why the two binding-model matrices
+  move zero of their 56 rows. What changes is that the coordinate is no longer
+  CONSTRUCTIBLE: the invariant is carried by the type rather than by a runtime
+  refusal, so `createGlobalBindingAt`'s panic and `probeTiersLocked`'s explicit
+  wildcard arm are both deleted with nothing replacing them.
+
+  Two tests go with it and nothing replaces either, because each pinned a
+  property that is now a type-level impossibility:
+  `TestCreateGlobalBindingAtRefusesAnyPhase` (there is no argument left to pass)
+  and `pkg/environment/phase_distinctness_test.go`'s census of slots at the ANY
+  coordinate (its assertion degenerates to `0 == 0`). The behavioural twin
+  `TestPhase1DoesNotReachPhase0Sealed` (`pkg/wile`) states the same property
+  through public API and is now the ratchet.
+
+  One user-visible consequence, accepted: `SetOwnGlobalValue`'s and
+  `setValueAtCoords`' "no global binding" errors rendered the coordinate through
+  `PhaseKey.String`, which printed the bare number. They now render
+  `Phase.String`, which prints the name — "at phase runtime" rather than "at
+  phase 0". Nothing asserts on that text.
+
+- **`GlobalEnvironmentFrame.BulkRowSupplying`** — added and removed within this
+  same unreleased cycle, so no release carried it. Zero callers since it was
+  written, and its doc claimed a role it never had — that the import path asks it
+  before installing a row, per R7RS §5.6. Import-conflict detection runs on the
+  per-symbol install path (`installImportedBinding`'s `importConflicts`); there
+  is no eager row-level check, and `probeBulkLocked`'s doc now says so instead of
+  citing this.
 
 - **`compilation.LookupSyntaxCompiler`.** No production caller; it forwarded to
   `LookupPhaseBinding[*SyntaxCompiler]`, which the registry tests now call.

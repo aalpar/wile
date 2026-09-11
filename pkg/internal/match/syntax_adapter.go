@@ -96,11 +96,15 @@ type BindingChecker interface {
 	GetBinding(sym string, scopes []*syntax.Scope) *environment.Binding
 
 	// GetLiteralBinding resolves the USE-SITE side of the R7RS §4.3.2 comparison:
-	// the frame's own lexical chain at its own phase, then the ambient keyword of
-	// the name (else, =>, and every special-form name live at the ambient
-	// coordinate, reachable from every phase), and no other phase. Searching
+	// the frame's own lexical chain at its own phase, then what the LANGUAGE
+	// supplies there (else, =>, and every special-form name sit at (phase 0,
+	// sealed); a higher phase reaches them through the dialect's declared bulk
+	// rows, not through a phase-blind coordinate), and no other phase. Searching
 	// further would let one phase's binding of the name decide another phase's
 	// literal. ok is false when resolution was ambiguous.
+	//
+	// The implementation is compilation.lookupLiteralBinding; its doc carries the
+	// ordering argument and must agree with this one.
 	GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool)
 }
 
@@ -389,7 +393,7 @@ func (p *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
 //
 //	(let ((=> #f)) (cond (#t => 'ok)))
 //
-// cond's `=>` IS pinned (to the ambient auxiliary-syntax binding), so this takes
+// cond's `=>` IS pinned (to the sealed auxiliary-syntax binding), so this takes
 // the PINNED branch, and the operative reason is that the use site resolves `=>`
 // to the let-bound local: a non-primitive, non-imported binding, which
 // literalNotShadowed refuses. It is not the unpinned arm's "one is bound and one
@@ -421,9 +425,9 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 		}
 	} else if checker != nil {
 		// Unpinned: both sides through the use-site environment. Auxiliary syntax
-		// like => is ambient in every owner and arrives at a use site imported from
-		// (scheme base), so both input and pattern may have bindings: compare the
-		// bindings, not their existence.
+		// like => is part of every owner's startup set and arrives at a use site
+		// imported from (scheme base), so both input and pattern may have
+		// bindings: compare the bindings, not their existence.
 		inputBinding := checker.GetBinding(input.Key(), input.Scopes())
 		patternBinding := checker.GetBinding(pattern.Key(), pattern.Scopes())
 		if inputBinding != patternBinding {
@@ -449,15 +453,15 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 // Pointer identity is the primary test, and it covers both-nil. Kind equivalence
 // on BindingTypePrimitive is a deliberate widening: each library environment mints
 // its OWN *Binding for every special form and auxiliary-syntax name (memory
-// "library envs are primitive islands"), so a bootstrap macro's pinned ambient
-// `else` and the one a library-loaded use site resolves can be different objects
-// for one ambient name.
+// "library envs are primitive islands"), so a bootstrap macro's pinned `else`
+// and the one a library-loaded use site resolves can be different objects for one
+// name.
 //
 // Reachability, measured rather than asserted: NO test in this repo reaches the
 // widening. Instrumenting the arm and running `go test ./pkg/... ./integration/...
 // ./extensions/...` plus `make cover-scm` (64 Scheme files) prints it zero times —
 // the two-distinct-primitives shape never arises, because a library-resolved
-// ambient name arrives IMPORTED and literalNotShadowed's rider takes it first. An
+// auxiliary name arrives IMPORTED and literalNotShadowed's rider takes it first. An
 // earlier revision of this comment named TestChibiTestComparator and the SRFI
 // library tests as observing the widening; re-measurement refutes that, and
 // ablating the widening leaves every one of those suites green.

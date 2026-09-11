@@ -192,7 +192,7 @@ func TestExactBinding_LocalWinsOverTheStore(t *testing.T) {
 // What ExactBinding excludes is another PHASE, not a tier at its own phase.
 // Before Stage A a sealed phase-0 write landed at (ANY, sealed), which the
 // ranked probe reached and ExactBinding deliberately did not; the write now
-// lands at (ExactPhase(0), sealed), so the two agree on it and the only thing
+// lands at (phase 0, sealed), so the two agree on it and the only thing
 // left outside ExactBinding's reach is a slot at a different phase.
 func TestExactBinding_ReachesTheStoresExactTiers(t *testing.T) {
 	ns := NewNamespace()

@@ -89,13 +89,16 @@ func TestPrimitiveExpandersRegistryLookupMiss(t *testing.T) {
 }
 
 // TestPrimitiveExpandersLandAtExactPhaseOne pins WHERE registerPrimitiveExpandersWithout
-// writes: (ExactPhase(1), sealed), the ranked probe's T2, never the ambient T3 set.
+// writes: (phase 1, sealed), tierExactSealed at the expand phase.
 //
 // This is an ANSWER pin, not a change pin: it passes today and is here because the
 // function's own comment asserted the opposite for as long as it did without anything
-// contradicting it. It is also a ratchet for the Flatt Stage A work, which deletes the
-// ambient tier — under A the expected answer here does not move (these slots are already
-// exact-phase), and a diff that makes it move means A routed expanders somewhere new.
+// contradicting it. It was also a ratchet for the Flatt Stage A work, which deleted the
+// ambient tier — the expected answer did not move (these slots were already
+// exact-phase), and a diff that made it move would have meant A routed expanders
+// somewhere new. The ambient assertion that stood alongside these rows is gone with the
+// coordinate it read; what pins the same property now is the pair below, since a name
+// with a phase-1 slot and no phase-0 one cannot be reached from a phase-blind tier.
 //
 // Deliberately uses a BARE namespace: a full engine adds keyword slots for some of these
 // names from a different source. pkg/wile/binding_tier_census_test.go covers that.
@@ -111,15 +114,10 @@ func TestPrimitiveExpandersLandAtExactPhaseOne(t *testing.T) {
 	for _, name := range []string{"syntax-rules", "quote", "let-syntax", "import", "lambda"} {
 		t.Run(name, func(t *testing.T) {
 			sym := values.NewSymbol(name)
-			amb, ambTie := g.AmbientBinding(sym, syntax.EmptyScopes())
-			qt.Assert(t, ambTie, qt.IsFalse)
-			qt.Assert(t, amb, qt.IsNil,
-				qt.Commentf("%q must not occupy the ambient tier", name))
-
 			ex1, ex1Tie := g.ExactBindingAt(sym, syntax.EmptyScopes(), environment.PhaseExpand)
 			qt.Assert(t, ex1Tie, qt.IsFalse)
 			qt.Assert(t, ex1, qt.IsNotNil,
-				qt.Commentf("%q must resolve at (ExactPhase(1), sealed)", name))
+				qt.Commentf("%q must resolve at (phase 1, sealed)", name))
 
 			ex0, _ := g.ExactBindingAt(sym, syntax.EmptyScopes(), environment.PhaseRuntime)
 			qt.Assert(t, ex0, qt.IsNil,

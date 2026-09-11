@@ -142,7 +142,7 @@ func TestApply_ExpandTimePrimitive(t *testing.T) {
 // Apply with compile-time bindings
 
 // A compile-time binding (a special-form or auxiliary keyword: registerCompileTimeBinding,
-// writing through SealedWriteViewAt(PhaseRuntime)) lands at (ExactPhase(0), sealed) — the
+// writing through SealedWriteViewAt(PhaseRuntime)) lands at (phase 0, sealed) — the
 // phase-0 sealed-write view's own coordinates — and at no other coordinate: not at
 // (0, mutable), where a user define lands and therefore shadows, and not at any higher
 // exact phase.

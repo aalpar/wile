@@ -15,30 +15,31 @@
 package environment
 
 import (
-	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
-	"github.com/aalpar/wile/pkg/werr"
 )
 
-// The ranked probe over a hand-built mixed store (design §4.3): tier T1
-// (exact phase, mutable) > T2 (exact phase, sealed); a slot at any OTHER exact
-// phase is not a candidate at all; maximal scope cardinality ranks within the
-// winning tier only.
+// The ranked probe over a hand-built mixed store (design §4.3):
+// tierExactMutable outranks the sealed tiers at the SAME phase; a slot at any
+// OTHER phase is not a candidate at all; maximal scope cardinality ranks within
+// the winning tier only.
 //
-// The two exact tiers at the query phase are now the WHOLE candidate set. Stage
-// A deleted the ambient (ANY, sealed) tier, so this table's third case,
-// "ambient visible from every phase", has no subject; the property that
-// replaced it — cross-phase visibility supplied by a bulk row — is
+// The query phase's own slots are now the WHOLE candidate set. Stage A deleted
+// the phase-blind ambient tier and Stage B the coordinate itself, so this
+// table's third case, "ambient visible from every phase", has no subject; the
+// property that replaced it — cross-phase visibility supplied by a bulk row — is
 // TestResolveRankedCrossPhaseNeedsABulkRow below.
+//
+// Every sealed slot below is created UNSTAMPED, so it ranks tierExactSealed, not
+// tierExactImported. Only CreateImportedGlobalBindingAt reaches the latter.
 func TestResolveRankedTiers(t *testing.T) {
 	sym := values.NewSymbol("v")
 	mk := func(entries []struct {
-		phase  PhaseKey
+		phase  Phase
 		sealed bool
 	}) *GlobalEnvironmentFrame {
 		q := NewGlobalEnvironmentFrame()
@@ -55,18 +56,18 @@ func TestResolveRankedTiers(t *testing.T) {
 	tcs := []struct {
 		name    string
 		entries []struct {
-			phase  PhaseKey
+			phase  Phase
 			sealed bool
 		}
 		probes []probe
 	}{
-		{name: "T1 beats T2",
+		{name: "mutable beats sealed",
 			entries: []struct {
-				phase  PhaseKey
+				phase  Phase
 				sealed bool
 			}{
-				{ExactPhase(0), true},  // slot 0: T2 at 0
-				{ExactPhase(0), false}, // slot 1: T1 at 0
+				{0, true},  // slot 0: tierExactSealed at 0
+				{0, false}, // slot 1: tierExactMutable at 0
 			},
 			probes: []probe{
 				{phase: 0, wantSlot: 1, wantOK: true},
@@ -76,10 +77,10 @@ func TestResolveRankedTiers(t *testing.T) {
 			}},
 		{name: "other exact phase is no candidate",
 			entries: []struct {
-				phase  PhaseKey
+				phase  Phase
 				sealed bool
 			}{
-				{ExactPhase(1), false},
+				{1, false},
 			},
 			probes: []probe{
 				{phase: 0, wantOK: false},
@@ -113,9 +114,9 @@ func TestResolveRankedTiers(t *testing.T) {
 // Cross-phase visibility is a BULK ROW's property now, not a coordinate's, and
 // this is what TestResolveRankedTiers' "ambient visible from every phase" case
 // became. Before Stage A a sealed phase-0 write landed at (ANY, sealed) and
-// every phase's probe reached it; it now lands at (ExactPhase(0), sealed), and
+// every phase's probe reached it; it now lands at (phase 0, sealed), and
 // phase 1 reaches it only because the dialect declared the base at phase 1,
-// which installs a row over the same store at (ExactPhase(1), sealed).
+// which installs a row over the same store at (phase 1, sealed).
 //
 // The probe BEFORE the row is installed is the control: resolveRankedLocked
 // consults rows only on a per-symbol miss, so a pass without that leg would not
@@ -123,7 +124,7 @@ func TestResolveRankedTiers(t *testing.T) {
 func TestResolveRankedCrossPhaseNeedsABulkRow(t *testing.T) {
 	sym := values.NewSymbol("v")
 	g := NewGlobalEnvironmentFrame()
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), true)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, true)
 
 	// Anonymous function per probe so the RUnlock fires at the end of THIS
 	// probe: resolveRankedLocked's own doc requires defer release (it can panic
@@ -142,40 +143,13 @@ func TestResolveRankedCrossPhaseNeedsABulkRow(t *testing.T) {
 		qt.Commentf("a sealed phase-0 slot must not be reachable from phase 1 on its own"))
 
 	g.InstallBulkRow(NewSealedStoreBulkSource(g, PhaseRuntime, BaseSourceName()),
-		nil, ExactPhase(PhaseExpand), true)
+		nil, PhaseExpand, true)
 
 	ref, ok = probeAt(PhaseExpand)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, ref.slot, qt.Equals, 0,
 		qt.Commentf("the row must resolve to the phase-0 slot ITSELF; a copy would fork later writes"))
 	qt.Assert(t, g.BulkResolutionCount(), qt.Equals, int64(1))
-}
-
-// (ANY, mutable) is forbidden: no population produces it, so the write API
-// refuses it rather than modeling a row nothing means (design §4.1). Pinned via
-// errors.Is on the sentinel, not the panic text: a message-only assertion would
-// keep passing even if the sentinel choice changed underneath it, which is
-// exactly the identity the house error-handling rule protects.
-//
-// WIDENED by Stage A: the refusal now covers the wildcard coordinate outright,
-// sealed and mutable alike. writeCoordinates produces no wildcard key for any
-// view and tierOf classifies one as tierNone, so accepting a sealed one would
-// leave a slot nothing ranks and nothing can read. Both rows are asserted so a
-// narrowing back to the mutable half alone fails here.
-func TestCreateGlobalBindingAtRefusesAnyPhase(t *testing.T) {
-	sym := values.NewSymbol("v")
-
-	for _, sealed := range []bool{false, true} {
-		g := NewGlobalEnvironmentFrame()
-		r := capturePanic(func() {
-			g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, AnyPhase(), sealed)
-		})
-		qt.Assert(t, r, qt.IsNotNil, qt.Commentf("sealed=%t", sealed))
-		err, ok := r.(error)
-		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
-			qt.Commentf("sealed=%t", sealed))
-	}
 }
 
 // A tie in a LOSING tier must not panic: rank decides first, ambiguity is only
@@ -185,11 +159,11 @@ func TestResolveRankedAmbiguityScopedToWinningTier(t *testing.T) {
 	sc1 := syntax.NewScope()
 	sc2 := syntax.NewScope()
 	g := NewGlobalEnvironmentFrame()
-	// Two incomparable T2 candidates...
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc1}, ExactPhase(0), true)
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc2}, ExactPhase(0), true)
-	// ...and one T1 winner.
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false)
+	// Two incomparable tierExactSealed candidates...
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc1}, 0, true)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc2}, 0, true)
+	// ...and one tierExactMutable winner.
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, false)
 
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -197,10 +171,10 @@ func TestResolveRankedAmbiguityScopedToWinningTier(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, ref.slot, qt.Equals, 2)
 
-	// With the T1 winner gone, the T2 tie is the winning tier and must panic.
+	// With the mutable winner gone, the sealed tie is the winning tier and must panic.
 	g2 := NewGlobalEnvironmentFrame()
-	g2.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc1}, ExactPhase(0), true)
-	g2.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc2}, ExactPhase(0), true)
+	g2.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc1}, 0, true)
+	g2.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc2}, 0, true)
 	qt.Assert(t, func() {
 		g2.mu.RLock()
 		defer g2.mu.RUnlock()
@@ -220,13 +194,13 @@ func TestCreateMatchesCoordinatesAndScopes(t *testing.T) {
 	// actually about, since it is a phase-0 define shadowing the sealed entry.
 	sym := values.NewSymbol("v")
 	g := NewGlobalEnvironmentFrame()
-	_, created := g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), true)
+	_, created := g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, true)
 	qt.Assert(t, created, qt.IsTrue)
 	// Same scopes (∅), different coordinates: a NEW slot.
-	_, created = g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false)
+	_, created = g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, false)
 	qt.Assert(t, created, qt.IsTrue)
 	// Same scopes, same coordinates: reuse.
-	_, created = g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false)
+	_, created = g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, false)
 	qt.Assert(t, created, qt.IsFalse)
 }
 
@@ -234,7 +208,7 @@ func TestCreateMatchesCoordinatesAndScopes(t *testing.T) {
 // of NewSchemeReportNamespace, which builds its store by copying the parent's
 // rather than minting fresh. Silently dropping the stamps would collapse every
 // sealed entry in a scheme-report namespace onto the zero value
-// (ExactPhase(0), mutable), where it starts colliding with real phase-0 user
+// (phase 0, mutable), where it starts colliding with real phase-0 user
 // defines instead of being shadowed by them.
 //
 // The two slots below are the two coordinates a write path actually mints at
@@ -243,15 +217,15 @@ func TestCreateMatchesCoordinatesAndScopes(t *testing.T) {
 func TestCopyPreservesCoordinates(t *testing.T) {
 	sym := values.NewSymbol("v")
 	g := NewGlobalEnvironmentFrame()
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), true)
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, true)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
 
 	c := g.Copy()
 
 	qt.Assert(t, len(c.keys[*sym]), qt.Equals, 2)
-	qt.Assert(t, c.keys[*sym][0].phase, qt.Equals, ExactPhase(PhaseRuntime))
+	qt.Assert(t, c.keys[*sym][0].phase, qt.Equals, PhaseRuntime)
 	qt.Assert(t, c.keys[*sym][0].sealed, qt.IsTrue)
-	qt.Assert(t, c.keys[*sym][1].phase, qt.Equals, ExactPhase(PhaseRuntime))
+	qt.Assert(t, c.keys[*sym][1].phase, qt.Equals, PhaseRuntime)
 	qt.Assert(t, c.keys[*sym][1].sealed, qt.IsFalse)
 }
 
@@ -266,12 +240,12 @@ func TestResolveRankedWildcard(t *testing.T) {
 	sym := values.NewSymbol("v")
 
 	t.Run("tier order", func(t *testing.T) {
-		// Two tiers now, not three: T3 was the ambient coordinate, and Stage A
-		// deleted it. T1 must still outrank T2, which is what makes a phase-0
-		// define shadow the sealed base rather than assign through it.
+		// The ambient tier is gone, so these two are the whole order here.
+		// tierExactMutable must still outrank tierExactSealed, which is what makes
+		// a phase-0 define shadow the sealed base rather than assign through it.
 		g := NewGlobalEnvironmentFrame()
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), true)  // slot 0: T2
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false) // slot 1: T1
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, true)  // slot 0: tierExactSealed
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, false) // slot 1: tierExactMutable
 
 		g.mu.RLock()
 		defer g.mu.RUnlock()
@@ -282,7 +256,7 @@ func TestResolveRankedWildcard(t *testing.T) {
 
 	t.Run("other exact phase is not a candidate", func(t *testing.T) {
 		g := NewGlobalEnvironmentFrame()
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(1), false)
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 1, false)
 
 		g.mu.RLock()
 		defer g.mu.RUnlock()
@@ -298,7 +272,7 @@ func TestResolveRankedWildcard(t *testing.T) {
 
 	t.Run("nil'd slot is skipped", func(t *testing.T) {
 		g := NewGlobalEnvironmentFrame()
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false)
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, false)
 		// A live key pointing at a nil binding — the pre-fold wildcard path
 		// guarded exactly this state (a slot DeleteBinding emptied); the ranked
 		// probe's wildcard branch must guard it identically.
@@ -331,13 +305,80 @@ func TestResolveRankedCardinalityWithinTier(t *testing.T) {
 	scA := syntax.NewScope()
 	scB := syntax.NewScope()
 	g := NewGlobalEnvironmentFrame()
-	// Both T1 (exact phase 0, mutable); {scA} subset {scA, scB}.
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{scA}, ExactPhase(0), false)
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{scA, scB}, ExactPhase(0), false)
+	// Both tierExactMutable at phase 0; {scA} subset {scA, scB}.
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{scA}, 0, false)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{scA, scB}, 0, false)
 
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	ref, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf([]*syntax.Scope{scA, scB}), 0)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, ref.slot, qt.Equals, 1) // the wider {scA, scB} slot wins
+}
+
+// TestTierOrdinalsHaveNotRenumbered is a TRIPWIRE, and it is the only
+// enforcement behind the "name a tier by its identifier, never by an ordinal"
+// convention stated at the tier enum.
+//
+// Roughly a hundred comments across the tree still label tiers "T1"/"T2"/"T3".
+// Each is an unchecked second copy of this enum's ordering: inserting
+// tierExactImported renumbered everything below it, and every one of those
+// labels silently changed referent with no test going red.
+//
+// A site-COUNT ratchet would not have caught that and is the wrong shape here —
+// the population does not change when a tier is inserted, so a count stays green
+// through exactly the event that breaks the labels. It guards against new labels
+// being written, which is not the failure that happened. This pins the ORDINALS
+// instead, so it fails on the event that moves a label's referent.
+//
+// WHAT IT DOES NOT DO, stated so nobody mistakes its green for more than it is:
+//
+//   - It pins the ENUM, never the labels. It certifies only that no label's
+//     referent has moved SINCE THIS BASELINE. It cannot tell you whether the
+//     labels were right when the baseline was taken, and it froze a baseline it
+//     never validated. That is not hypothetical: resolveRankedLocked's
+//     bulk-consultation tie-break premise, which sits above the tier enum in
+//     global_environment_frame.go, said "hence T2 … a T2 slot ties it" about a
+//     tierExactSealed row, and sat green under this very test until it was read
+//     by hand.
+//   - A tier that keeps its VALUE but changes its meaning does not redden it.
+//     Values are all it compares.
+//   - APPENDING a tier after tierExactSealed correctly does not redden it: no
+//     existing ordinal moves, so no existing label changes referent. That is the
+//     test working, not a gap — but do NOT read it as "appending is safe". It is
+//     label-safe and REACHABILITY-unsafe. Every ranked ceiling in the tree is the
+//     literal tierExactSealed — probeRankedLocked's call to probeTiersLocked,
+//     resolveRankedLocked's and BulkBindingAt's calls to probeBulkLocked, and
+//     ExactBindingAt's to bindingWithinTiers — so a tier appended past it fails
+//     probeTiersLocked's `t > maxTier` filter for every reader and resolves
+//     nothing, silently and with no test red. Whoever appends the next tier must
+//     move those ceilings too, and nothing but this sentence will say so.
+//
+// It catches insertion, reorder and mid-enum removal — the ways an ordinal's
+// referent actually moves — and a rename or an outright removal breaks the
+// build here instead.
+//
+// IF THIS TEST IS RED because you added, removed or reordered a tier: that is
+// the test working, not a stale expectation. Every "T<n>" in a comment now
+// denotes a different constant. Rewrite them to name the identifier (preferred —
+// see the enum's doc for why), or renumber them, then update the table here.
+func TestTierOrdinalsHaveNotRenumbered(t *testing.T) {
+	tcs := []struct {
+		name    string
+		tier    int
+		ordinal int
+	}{
+		{"tierExactMutable", tierExactMutable, 1},
+		{"tierExactImported", tierExactImported, 2},
+		{"tierExactSealed", tierExactSealed, 3},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, tc.tier, qt.Equals, tc.ordinal-1,
+				qt.Commentf("comments across the tree call tier %d %q; it is now a different constant",
+					tc.ordinal, tc.name))
+		})
+	}
+	qt.Assert(t, tierNone, qt.Equals, -1,
+		qt.Commentf("tierNone must stay outside the ordinal range, or a floor/ceiling test admits it"))
 }

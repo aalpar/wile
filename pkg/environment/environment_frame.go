@@ -95,13 +95,15 @@ import (
 // level uses; nothing above phase 1 is a fixed, registry-owned coordinate.
 //
 // The syntax compilers, the auxiliary keywords (else, =>) and the special-form
-// names sit at NO index above: they are ambient, (ANY, sealed), which every row
-// reaches as the ranked probe's T3.
+// names sit at index 0, sealed. They were once written to a phase-blind ANY
+// coordinate every index reached; a higher index sees them now only because the
+// dialect declares a bulk row that says so.
 //
 // These are VIEWS, not owners: every entry shares the one GlobalEnvironmentFrame
 // and the one Namespace. Phase separation is key disjointness in that store — a
-// phase-N read is a candidate only against slots at exactly phase N or the
-// ambient coordinate — not a per-phase store and not a parent link.
+// phase-N read is a candidate only against slots at exactly phase N, plus
+// whatever the dialect's declared rows supply there — not a per-phase store and
+// not a parent link.
 //
 // # Binding Lookup
 //
@@ -681,9 +683,9 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, q syntax.ScopeSet) *Bi
 }
 
 // ExactBinding resolves key under q in this frame's lexical chain, then among the
-// EXACT-phase tiers of the store at this frame's own phase, reporting an
-// incomparable tie as an answer rather than raising it. The ambient tier is not
-// a candidate (GlobalEnvironmentFrame.ExactBindingAt). (nil, false) is "nothing
+// PER-SYMBOL slots of the store at this frame's own phase, reporting an
+// incomparable tie as an answer rather than raising it. Bulk rows are not
+// candidates (GlobalEnvironmentFrame.ExactBindingAt). (nil, false) is "nothing
 // exact here"; (nil, true) is "ambiguous". GetBinding is the raising, all-tier
 // form every other reader wants; this one exists for the R7RS §4.3.2 literal
 // pin's multi-phase descent.
@@ -910,8 +912,8 @@ func (p *EnvironmentFrame) SetLocalValueBySlotDepth(slot, depth int, v values.Va
 // This is where the pre-fold topology went, and now it is gone entirely. The
 // phase-0 seal's global was minted ambient and the phase-1 seal's exact, because
 // a phase frame's parent chain ran through the phase-0 seal and no further.
-func (p *EnvironmentFrame) writeCoordinates() (PhaseKey, bool) {
-	return ExactPhase(p.phaseLevel), p.sealed
+func (p *EnvironmentFrame) writeCoordinates() (Phase, bool) {
+	return p.phaseLevel, p.sealed
 }
 
 // MaybeCreateOwnGlobalBinding creates a new global binding in the owner store at
@@ -994,7 +996,7 @@ func (p *EnvironmentFrame) DeleteOwnGlobal(sym *values.Symbol, scopes []*syntax.
 // reach this branch), so the restriction stays as the fail-closed answer either
 // way.
 func (p *EnvironmentFrame) SetDeferredGlobalValue(gi *GlobalIndex, v values.Value) error {
-	return p.global.setValueAtCoords(gi.Index, gi.query, ExactPhase(p.phaseLevel), false, v)
+	return p.global.setValueAtCoords(gi.Index, gi.query, p.phaseLevel, false, v)
 }
 
 // IsOwnerRoot reports whether this frame is one of its NAMESPACE's own root
@@ -1040,9 +1042,10 @@ func (p *EnvironmentFrame) IsOwnerRoot() bool {
 // Note that the fix is deliberately NOT to change `sealed` on a lexical child.
 // It is left false on purpose (see NewEnvironmentFrameWithParent), and that is
 // exactly what makes writeCoordinates resolve to
-// (ExactPhase(0), mutable) and the write land on the runtime root's slot.
-// Setting it true would redirect the write to (ANY, sealed) — a
-// strictly worse outcome, and it would break the write this guard is protecting.
+// (phase 0, mutable) and the write land on the runtime root's slot.
+// Setting it true would redirect the write to (phase 0, sealed) — the startup
+// set's own coordinate, a strictly worse outcome, and it would break the write
+// this guard is protecting.
 func (p *EnvironmentFrame) WritesOwnerRootCoordinates() bool {
 	if p.namespace == nil {
 		return false
@@ -1336,8 +1339,8 @@ func (p *EnvironmentFrame) PresentPhases() []Phase {
 // falls out of GetGlobalIndexWithScopes's own reach, not a mechanism this
 // function adds. A library env (NewChildRuntime) shares its store across every
 // phase view, and GetGlobalIndexWithScopes's ranked probe (resolveGlobal →
-// resolveRankedLocked) already includes tiers T2/T3 (sealed, at the referring
-// phase and ambient) at every call — there is no parent walk post-fold, one
+// resolveRankedLocked) already includes the sealed tiers at the referring phase
+// at every call — there is no parent walk post-fold, one
 // store answers for all of a library's phase views. Before the store fold this
 // same reach came from the phase frame's PARENT LINK to the library's own
 // sealed base; the fold changed the mechanism (link → tier) without changing

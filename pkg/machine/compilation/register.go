@@ -22,8 +22,8 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// RegisterAllPhaseHandlers registers both syntax compilers (ambient tier)
-// and primitive expanders (expand phase) in the correct order. Use this
+// RegisterAllPhaseHandlers registers both syntax compilers (phase 0, sealed)
+// and primitive expanders (phase 1, sealed) in the correct order. Use this
 // instead of calling RegisterSyntaxCompilers and RegisterPrimitiveExpanders
 // separately at engine/bootstrap/test init sites.
 func RegisterAllPhaseHandlers(env *environment.EnvironmentFrame) error {

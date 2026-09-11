@@ -71,8 +71,8 @@ func TestSyntaxCompilersRegistry(t *testing.T) {
 // row supplies — not every phase. The ambient (ANY, sealed) tier they used to
 // occupy is gone: RegisterSyntaxCompilers writes through the level-0 sealed-write
 // view, and EnvironmentFrame.writeCoordinates now lands every write at
-// (ExactPhase(view's phase), view's sealed), so the compilers sit at
-// (ExactPhase(0), sealed) and phase 1 is a foreign coordinate to them.
+// (phase = view's phase, view's sealed), so the compilers sit at
+// (phase 0, sealed) and phase 1 is a foreign coordinate to them.
 //
 // Measured on a bare namespace, symbol "syntax-case": reachable at phase 0 only;
 // phases -1, 1, 2 and 3 all resolve nil. Installing the row the default dialect
@@ -111,7 +111,7 @@ func TestSyntaxCompilersReachTheirOwnPhasePlusBulkRowPhases(t *testing.T) {
 	// initial imports.
 	store := ns.Store()
 	src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, environment.BaseSourceName())
-	store.InstallBulkRow(src, nil, environment.ExactPhase(environment.PhaseExpand), true)
+	store.InstallBulkRow(src, nil, environment.PhaseExpand, true)
 
 	qt.Assert(t, ns.Expand().GetBinding(sym, values.AllScopes()), qt.IsNotNil,
 		qt.Commentf("the phase-1 row supplies what the ambient tier used to"))

@@ -83,7 +83,7 @@ func TestLookupSyntaxCompiler(t *testing.T) {
 // and the shadow reaches no further than that phase.
 //
 // Both halves changed shape when the ambient tier was deleted, and neither
-// changed answer. The compiler now sits at (ExactPhase(0), sealed) rather than at
+// changed answer. The compiler now sits at (phase 0, sealed) rather than at
 // (ANY, sealed), so the contest at phase 0 is T1 (mutable) over T2 (sealed) at one
 // coordinate instead of T1 over the ambient T3. And a phase-0 slot was never a
 // candidate at phase 1; what changed is that the compiler is not one either, so a
@@ -114,13 +114,13 @@ func TestLookupSyntaxCompiler_SamePhaseShadowOutranksTheSealedCompiler(t *testin
 	// compiler.
 	expand := env.AtPhase(environment.PhaseExpand)
 	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](expand, sym, nil), qt.IsNil,
-		qt.Commentf("nothing is ambient any more, so phase 1 supplies nothing of its own"))
+		qt.Commentf("no coordinate is phase-blind any more, so phase 1 supplies nothing of its own"))
 
 	// The phase-1 bulk row supplies the SEALED compiler and leaves the mutable
 	// shadow at phase 0 where it was written.
 	store := env.Namespace().Store()
 	src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, environment.BaseSourceName())
-	store.InstallBulkRow(src, nil, environment.ExactPhase(environment.PhaseExpand), true)
+	store.InstallBulkRow(src, nil, environment.PhaseExpand, true)
 	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](expand, sym, nil), qt.IsNotNil,
 		qt.Commentf("the row is sealed-tier restricted, so a phase-0 mutable shadow does not ride it up"))
 }

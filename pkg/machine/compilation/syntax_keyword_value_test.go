@@ -124,7 +124,7 @@ func TestPhaseOneHandlerValuePositionRefused(t *testing.T) {
 //     at phase 1), so nothing is reachable from phase 0 and the reference is
 //     unbound. That arm still pins ErrNoSuchBinding, negative assertion included.
 //
-// The keyword coordinate is (ExactPhase(0), sealed), not the (ANY, sealed)
+// The keyword coordinate is (phase 0, sealed), not the (ANY, sealed)
 // ambient slot it used to be: writeCoordinates lost its wildcard arm when the
 // ambient tier was deleted. Phase 0 is where these are USED, so the rows below
 // answer the same as before; what changed is that the keyword no longer follows
@@ -212,7 +212,7 @@ func TestPinnedTemplateIdentifierRefusesCompileTimeMeaning(t *testing.T) {
 //
 // "At phase 0", not "at every phase": these were written to (ANY, sealed) while
 // the ambient tier existed, and the tier's deletion moved them to
-// (ExactPhase(0), sealed). Phase 0 is the phase this test asks about, so the
+// (phase 0, sealed). Phase 0 is the phase this test asks about, so the
 // verdicts are unchanged.
 func TestKeywordValuePositionRefusedAtPhaseZero(t *testing.T) {
 	for _, name := range []string{"if", "define", "lambda", "else", "=>"} {

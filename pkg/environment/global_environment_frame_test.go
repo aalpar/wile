@@ -57,7 +57,7 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, gi1, qt.IsNil)
 
 	// Test adding a binding
-	gi0, ok := env.CreateGlobalBindingAt(sym0, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
+	gi0, ok := env.CreateGlobalBindingAt(sym0, BindingTypeVariable, nil, PhaseRuntime, false)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi0.Index.EqualTo(values.NewSymbol("testVar0")), qt.IsTrue)
 
@@ -68,7 +68,7 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Adding a new binding should create a new index
-	gi1, ok = env.CreateGlobalBindingAt(sym1, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
+	gi1, ok = env.CreateGlobalBindingAt(sym1, BindingTypeVariable, nil, PhaseRuntime, false)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi1.Index.EqualTo(values.NewSymbol("testVar1")), qt.IsTrue)
 
@@ -87,7 +87,7 @@ func TestGlobalEnvironmentFrame_Copy(t *testing.T) {
 	env := newTestGlobalEnvFrame()
 
 	sym := values.NewSymbol("test")
-	env.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
+	env.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
 
 	copied := env.Copy()
 	qt.Assert(t, copied, qt.Not(qt.IsNil))
@@ -111,7 +111,7 @@ func TestGlobalEnvironmentFrame_DeleteBinding(t *testing.T) {
 	c.Assert(b, qt.IsNotNil)
 
 	// Delete it
-	deleted := env.GlobalEnvironment().DeleteBindingAt(sym, AmbientScopes(), ExactPhase(PhaseRuntime), false)
+	deleted := env.GlobalEnvironment().DeleteBindingAt(sym, AmbientScopes(), PhaseRuntime, false)
 	c.Assert(deleted, qt.IsTrue)
 
 	// Verify binding is gone via key lookup
@@ -119,7 +119,7 @@ func TestGlobalEnvironmentFrame_DeleteBinding(t *testing.T) {
 	c.Assert(gi, qt.IsNil)
 
 	// Deleting non-existent binding returns false
-	deleted = env.GlobalEnvironment().DeleteBindingAt(values.NewSymbol("nonexistent"), AmbientScopes(), ExactPhase(PhaseRuntime), false)
+	deleted = env.GlobalEnvironment().DeleteBindingAt(values.NewSymbol("nonexistent"), AmbientScopes(), PhaseRuntime, false)
 	c.Assert(deleted, qt.IsFalse)
 }
 
@@ -201,11 +201,11 @@ func TestGlobalFrame_VacuousScopesAreSingleSlot(t *testing.T) {
 	names := []string{"x", "y", "z"}
 	for _, n := range names {
 		sym := values.NewSymbol(n)
-		_, created := ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
+		_, created := ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
 		c.Assert(created, qt.IsTrue, qt.Commentf("first create of %s", n))
 
 		// Redefinition of the same variable reuses the slot — R7RS §5.3.1.
-		_, created = ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
+		_, created = ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
 		c.Assert(created, qt.IsFalse, qt.Commentf("redefine of %s must reuse", n))
 	}
 
@@ -253,13 +253,13 @@ func TestGlobalFrame_ScopeSetsSeparateBindings(t *testing.T) {
 	n := syntax.NewScope()
 
 	// user-written binder: empty scope set
-	_, created := ge.CreateGlobalBindingAt(x, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
+	_, created := ge.CreateGlobalBindingAt(x, BindingTypeVariable, nil, PhaseRuntime, false)
 	c.Assert(created, qt.IsTrue)
 
 	// macro-introduced binder: scope set {m}. Creation compares scope sets by
 	// EXACT equality, so this must NOT reuse the user's slot — compatibility
 	// would have, since an empty binding scope set matches anything.
-	_, created = ge.CreateGlobalBindingAt(x, BindingTypeVariable, []*syntax.Scope{m}, ExactPhase(PhaseRuntime), false)
+	_, created = ge.CreateGlobalBindingAt(x, BindingTypeVariable, []*syntax.Scope{m}, PhaseRuntime, false)
 	c.Assert(created, qt.IsTrue)
 	c.Assert(len(ge.keys[*x]), qt.Equals, 2)
 
@@ -300,8 +300,8 @@ func TestGlobalIndex_EqualToDiscriminatesSlot(t *testing.T) {
 	x := values.NewSymbol("x")
 	m := syntax.NewScope()
 
-	ge.CreateGlobalBindingAt(x, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
-	ge.CreateGlobalBindingAt(x, BindingTypeVariable, []*syntax.Scope{m}, ExactPhase(PhaseRuntime), false)
+	ge.CreateGlobalBindingAt(x, BindingTypeVariable, nil, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(x, BindingTypeVariable, []*syntax.Scope{m}, PhaseRuntime, false)
 
 	user := owner.GetGlobalIndexWithScopes(x, values.EmptyScopes())
 	macro := owner.GetGlobalIndexWithScopes(x, syntax.ScopesOf([]*syntax.Scope{m}))
@@ -327,12 +327,12 @@ func TestGlobalFrame_PinnedIndexSurvivesDelete(t *testing.T) {
 	owner := ns.Runtime()
 	sym := values.NewSymbol("x")
 
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
 	gi := owner.GetGlobalIndexWithScopes(sym, values.EmptyScopes())
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Env, qt.Equals, ge)
 
-	c.Assert(ge.DeleteBindingAt(sym, AmbientScopes(), ExactPhase(PhaseRuntime), false), qt.IsTrue)
+	c.Assert(ge.DeleteBindingAt(sym, AmbientScopes(), PhaseRuntime, false), qt.IsTrue)
 
 	// No panic, and the same error master produced.
 	err := ge.SetOwnGlobalValue(gi, values.NewInteger(5))
@@ -340,7 +340,7 @@ func TestGlobalFrame_PinnedIndexSurvivesDelete(t *testing.T) {
 	c.Assert(ge.GetOwnGlobalBinding(gi), qt.IsNil)
 
 	// Redefine: the stale pinned index must re-resolve onto the new binding.
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
 	c.Assert(ge.GetOwnGlobalBinding(gi), qt.IsNotNil)
 	c.Assert(ge.SetOwnGlobalValue(gi, values.NewInteger(7)), qt.IsNil)
 	c.Assert(ge.GetOwnGlobalBinding(gi).Value(), valuestest.SchemeEquals, values.NewInteger(7))
@@ -409,8 +409,9 @@ func TestGlobalFrame_StalePinDoesNotHealOntoSealedSlot(t *testing.T) {
 
 	// Pin an index at the mutable slot, the way a compiled set!'s
 	// EnvironmentFrame.GetGlobalIndexWithScopes re-resolve does: tier-aware
-	// (resolveGlobal's ranked probe), so it lands on T1 (mutable), not T3
-	// (ambient sealed), even though both slots share the empty scope set.
+	// (resolveGlobal's ranked probe), so it lands on tierExactMutable, not on
+	// tierExactSealed, even though both slots share the empty scope set and the
+	// same phase.
 	gi := ns.runtime.GetGlobalIndexWithScopes(sym, values.EmptyScopes())
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Env, qt.Equals, store)
@@ -446,8 +447,8 @@ func TestGlobalFrame_WildcardSkipsDeletedSlot(t *testing.T) {
 	owner := ns.Runtime()
 	sym := values.NewSymbol("x")
 
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
-	c.Assert(ge.DeleteBindingAt(sym, AmbientScopes(), ExactPhase(PhaseRuntime), false), qt.IsTrue)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+	c.Assert(ge.DeleteBindingAt(sym, AmbientScopes(), PhaseRuntime, false), qt.IsTrue)
 	c.Assert(owner.GetGlobalIndex(sym), qt.IsNil)
 }
 
@@ -478,8 +479,8 @@ func TestGlobalFrame_DeleteClearsMultiSlotNameOneScopeSetAtATime(t *testing.T) {
 
 	// A user-written binder (empty set) and a macro-introduced one (intro scope)
 	// are distinct bindings sharing a name.
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, introScopes, ExactPhase(PhaseRuntime), false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, introScopes, PhaseRuntime, false)
 
 	ambient := owner.GetGlobalIndexWithScopes(sym, values.EmptyScopes())
 	introduced := owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes))
@@ -488,14 +489,14 @@ func TestGlobalFrame_DeleteClearsMultiSlotNameOneScopeSetAtATime(t *testing.T) {
 	c.Assert(ambient.Slot, qt.Not(qt.Equals), introduced.Slot)
 
 	// The ambient delete takes its own slot and leaves the name in the frame.
-	c.Assert(ge.DeleteBindingAt(sym, AmbientScopes(), ExactPhase(PhaseRuntime), false), qt.IsTrue)
+	c.Assert(ge.DeleteBindingAt(sym, AmbientScopes(), PhaseRuntime, false), qt.IsTrue)
 	c.Assert(ge.GetOwnGlobalBinding(ambient), qt.IsNil)
 	c.Assert(owner.GetGlobalIndexWithScopes(sym, values.EmptyScopes()), qt.IsNil)
 	c.Assert(owner.GetGlobalIndex(sym), qt.IsNotNil)
 
 	// Deleting under the intro scope set takes the last slot, and only now does
 	// the name stop being reported at all.
-	c.Assert(ge.DeleteBindingAt(sym, introScopes, ExactPhase(PhaseRuntime), false), qt.IsTrue)
+	c.Assert(ge.DeleteBindingAt(sym, introScopes, PhaseRuntime, false), qt.IsTrue)
 	c.Assert(ge.GetOwnGlobalBinding(introduced), qt.IsNil)
 	c.Assert(owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes)), qt.IsNil)
 	c.Assert(owner.GetGlobalIndex(sym), qt.IsNil)
@@ -517,15 +518,15 @@ func TestGlobalFrame_DeleteRemovesOnlyTheScopeMatchedSlot(t *testing.T) {
 	sym := values.NewSymbol("counter")
 	introScopes := []*syntax.Scope{syntax.NewScope()}
 
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, introScopes, ExactPhase(PhaseRuntime), false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, introScopes, PhaseRuntime, false)
 
 	introduced := owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes))
 	c.Assert(introduced, qt.IsNotNil)
 
 	// Delete under the ambient (empty) scope set, which is what the namespace
 	// read surface resolves under.
-	c.Assert(ge.DeleteBindingAt(sym, AmbientScopes(), ExactPhase(PhaseRuntime), false), qt.IsTrue)
+	c.Assert(ge.DeleteBindingAt(sym, AmbientScopes(), PhaseRuntime, false), qt.IsTrue)
 
 	// The ambient binding is gone...
 	c.Assert(owner.GetGlobalIndexWithScopes(sym, values.EmptyScopes()), qt.IsNil)
@@ -552,11 +553,11 @@ func TestGlobalFrame_DeleteOfMacroOnlyNameUnderAmbientScopesIsNoOp(t *testing.T)
 	sym := values.NewSymbol("counter")
 	introScopes := []*syntax.Scope{syntax.NewScope()}
 
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, introScopes, ExactPhase(PhaseRuntime), false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, introScopes, PhaseRuntime, false)
 	introduced := owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes))
 	c.Assert(introduced, qt.IsNotNil)
 
-	c.Assert(ge.DeleteBindingAt(sym, AmbientScopes(), ExactPhase(PhaseRuntime), false), qt.IsFalse)
+	c.Assert(ge.DeleteBindingAt(sym, AmbientScopes(), PhaseRuntime, false), qt.IsFalse)
 	c.Assert(ge.GetOwnGlobalBinding(introduced), qt.IsNotNil)
 }
 
@@ -592,16 +593,16 @@ func TestGlobalFrame_StaleIndexMustNotCrossScopeSets(t *testing.T) {
 	aScopes := []*syntax.Scope{syntax.NewScope()}
 	bScopes := []*syntax.Scope{syntax.NewScope()}
 
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, aScopes, ExactPhase(PhaseRuntime), false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, aScopes, PhaseRuntime, false)
 	aIndex := owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(aScopes))
 	c.Assert(aIndex, qt.IsNotNil)
 
 	// Delete under A's own scope set: the name has no ambient binding, so an
 	// ambient delete would correctly be a no-op (#805) and leave A's slot alive.
-	c.Assert(ge.DeleteBindingAt(sym, aScopes, ExactPhase(PhaseRuntime), false), qt.IsTrue)
+	c.Assert(ge.DeleteBindingAt(sym, aScopes, PhaseRuntime, false), qt.IsTrue)
 
 	// A different binder, whose scope set is incompatible with A's, takes the name.
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, bScopes, ExactPhase(PhaseRuntime), false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, bScopes, PhaseRuntime, false)
 	bBinding := ge.GetOwnGlobalBinding(owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(bScopes)))
 	c.Assert(bBinding, qt.IsNotNil)
 
@@ -612,14 +613,14 @@ func TestGlobalFrame_StaleIndexMustNotCrossScopeSets(t *testing.T) {
 	c.Assert(bBinding.Value(), qt.Not(valuestest.SchemeEquals), values.NewInteger(42))
 }
 
-// TestGlobalFrame_AmbientKeysExcludesMacroIntroducedBinders pins what separates
-// AmbientKeys from the raw keys map. The keys map answers "what names does this
-// frame hold"; the bound-names primitives need "what names can a reference
+// TestGlobalFrame_UnscopedKeysExcludesMacroIntroducedBinders pins what separates
+// UnscopedKeysAt from the raw keys map. The keys map answers "what names does
+// this frame hold"; the bound-names primitives need "what names can a reference
 // reach", and a binder a macro template introduced is reachable from neither
 // source nor any scoped read. The mixed name is the discriminating case:
 // dropping the name outright would be as wrong as listing it, since the user's
 // own binding of it is reachable.
-func TestGlobalFrame_AmbientKeysExcludesMacroIntroducedBinders(t *testing.T) {
+func TestGlobalFrame_UnscopedKeysExcludesMacroIntroducedBinders(t *testing.T) {
 	c := qt.New(t)
 	ge := NewGlobalEnvironmentFrame()
 	m := []*syntax.Scope{syntax.NewScope()}
@@ -629,15 +630,15 @@ func TestGlobalFrame_AmbientKeysExcludesMacroIntroducedBinders(t *testing.T) {
 	mixed := values.NewSymbol("mixed")
 	deleted := values.NewSymbol("deleted")
 
-	ge.CreateGlobalBindingAt(ambient, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
-	ge.CreateGlobalBindingAt(macroOnly, BindingTypeVariable, m, ExactPhase(PhaseRuntime), false)
-	ge.CreateGlobalBindingAt(mixed, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
-	ge.CreateGlobalBindingAt(mixed, BindingTypeVariable, m, ExactPhase(PhaseRuntime), false)
-	ge.CreateGlobalBindingAt(deleted, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
-	c.Assert(ge.DeleteBindingAt(deleted, AmbientScopes(), ExactPhase(PhaseRuntime), false), qt.IsTrue)
+	ge.CreateGlobalBindingAt(ambient, BindingTypeVariable, nil, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(macroOnly, BindingTypeVariable, m, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(mixed, BindingTypeVariable, nil, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(mixed, BindingTypeVariable, m, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(deleted, BindingTypeVariable, nil, PhaseRuntime, false)
+	c.Assert(ge.DeleteBindingAt(deleted, AmbientScopes(), PhaseRuntime, false), qt.IsTrue)
 
 	names := values.StringSet{}
-	for _, k := range ge.AmbientKeysAt(PhaseRuntime) {
+	for _, k := range ge.UnscopedKeysAt(PhaseRuntime) {
 		dup := names.ContainsOne(k.Key)
 		c.Assert(dup, qt.IsFalse)
 		names.Set(k.Key)
@@ -801,55 +802,11 @@ func TestSealedSlotsFiltersByRank(t *testing.T) {
 	c.Assert(ok, qt.IsFalse)
 }
 
-// AmbientBinding survives as API and can no longer answer ANYTHING. It probes
-// the (ANY, sealed) coordinate alone, and Stage A deleted the writeCoordinates
-// arm that was the only way to mint a slot there: a sealed phase-0 write now
-// lands at (ExactPhase(0), sealed) like every other write, and ExactBindingAt at
-// phase 0 is what resolves it.
-//
-// Its one production reader, the R7RS §4.3.2 definition-site literal pin
-// (compilation.lookupLiteralBinding), consults it LAST, after the exact tiers at
-// every phase of its descent, so a fallback that finds nothing is a fallback
-// that changes no answer.
-func TestAmbientBindingHasNoSlotToAnswer(t *testing.T) {
-	c := qt.New(t)
-	ns := NewNamespace()
-	sym := values.NewSymbol("else")
-
-	// A phase-0 mutable slot: not ambient, and never was.
-	mutableIdx := mustDefine(c, ns.Runtime(), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(5))
-	bnd, ambiguous := ns.Store().AmbientBinding(sym, values.EmptyScopes())
-	c.Assert(bnd, qt.IsNil)
-	c.Assert(ambiguous, qt.IsFalse)
-
-	// The phase-0 sealed-write view — the path that USED to be the only way to
-	// mint an ambient slot.
-	sealedRoot := ns.Runtime().SealedWriteViewAt(PhaseRuntime)
-	sealedIdx, created := sealedRoot.MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
-	c.Assert(created, qt.IsTrue)
-	c.Assert(ns.Store().GetOwnGlobalBinding(sealedIdx), qt.IsNotNil)
-
-	bnd, ambiguous = ns.Store().AmbientBinding(sym, values.EmptyScopes())
-	c.Assert(bnd, qt.IsNil, qt.Commentf("no write path carries the wildcard coordinate any more"))
-	c.Assert(ambiguous, qt.IsFalse)
-
-	// Both slots are exact phase-0 candidates, and the mutable tier outranks the
-	// sealed one — which is the same answer the ranked probe gives.
-	bnd, _ = ns.Store().ExactBindingAt(sym, values.EmptyScopes(), PhaseRuntime)
-	c.Assert(bnd, qt.Equals, ns.Store().GetOwnGlobalBinding(mutableIdx))
-	c.Assert(ns.Runtime().GetBinding(sym, values.EmptyScopes()), qt.Equals, bnd)
-
-	// Phase 1 reaches neither: cross-phase reach is a bulk row's job now, and a
-	// bare namespace has declared no initial import.
-	c.Assert(ns.Runtime().AtPhase(PhaseExpand).GetBinding(sym, values.EmptyScopes()), qt.IsNil)
-}
-
 // A tie among incomparable SEALED writes is reported, not raised. That is the
 // property this test has always protected; what moved is the tier it happens
-// in. The two writes below used to land at (ANY, sealed) and tie there, so
-// AmbientBinding was the probe that saw it; they now land at
-// (ExactPhase(0), sealed), so ExactBindingAt is — and AmbientBinding, having no
-// slot at all, cannot even tie.
+// in. The two writes below used to land at the deleted ambient coordinate and
+// tie there, under a probe that read that tier alone; they now land at
+// (phase 0, sealed), so ExactBindingAt is the probe that sees it.
 func TestSealedWriteTieIsReportedInTheExactSealedTier(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
@@ -871,14 +828,6 @@ func TestSealedWriteTieIsReportedInTheExactSealedTier(t *testing.T) {
 	c.Assert(r, qt.IsNil)
 	c.Assert(ambiguous, qt.IsTrue)
 	c.Assert(bnd, qt.IsNil)
-
-	r = capturePanic(func() {
-		bnd, ambiguous = ns.Store().AmbientBinding(sym, query)
-	})
-	c.Assert(r, qt.IsNil)
-	c.Assert(ambiguous, qt.IsFalse,
-		qt.Commentf("nothing carries the wildcard coordinate, so the ambient tier has nothing to tie"))
-	c.Assert(bnd, qt.IsNil)
 }
 
 // ExactBindingAt answers the exact-phase tiers at ONE phase — (phase, mutable)
@@ -894,7 +843,8 @@ func TestExactBindingAtExcludesOtherPhases(t *testing.T) {
 	sym := values.NewSymbol("else")
 	store := ns.Store()
 
-	// A sealed phase-0 write is an exact phase-0 candidate (T2)...
+	// A sealed phase-0 write is an exact phase-0 candidate (tierExactSealed —
+	// unstamped, so not tierExactImported)...
 	sealed0Idx, created := ns.Runtime().SealedWriteViewAt(PhaseRuntime).
 		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
 	c.Assert(created, qt.IsTrue)

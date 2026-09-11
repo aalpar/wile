@@ -71,7 +71,7 @@ func RegisterPhaseBindings[F any](
 // legitimately renamed export of a phase row reachable. A wrong-typed
 // BindingTypePrimitive winner is the one case that falls through to a second
 // probe, and it is not hypothetical:
-// a phase-shifted import installs at (ExactPhase(N>0), MUTABLE) — installImportedBinding's
+// a phase-shifted import installs at (phase N>0, MUTABLE) — installImportedBinding's
 // shadowable arm is guarded on PhaseRuntime — while every phase row is written
 // sealed at its phase (RegisterPhaseBindings above, through SealedWriteViewAt).
 // tierExactMutable outranks tierExactSealed and both carry the empty scope set,
@@ -111,7 +111,7 @@ func RegisterPhaseBindings[F any](
 // fourth silently red.
 //
 // This is a READER-side repair of a WRITER-side defect: the masking slot
-// survives. There is no safe writer coordinate today — (ExactPhase(1), sealed)
+// survives. There is no safe writer coordinate today — (phase 1, sealed)
 // would land an imported macro on a bootstrap transformer's exact coordinates
 // and overwrite it engine-wide (installImportedBinding's own doc says so) — so
 // the writer-side question is filed against Stage B, not fixed here.

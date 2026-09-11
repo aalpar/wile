@@ -45,7 +45,7 @@ The environment system has four key types organized in a hierarchy:
 │                           │    │                                        │
 │  keys ── map[Symbol][]int │    │  keys ── map[Symbol][]slotRef          │
 │  bindings ── []Binding    │    │  bindings ──── []*Binding              │
-│                           │    │  slotRef: {slot, phase PhaseKey,       │
+│                           │    │  slotRef: {slot, phase Phase,          │
 │                           │    │            sealed bool}                │
 └───────────────────────────┘    └────────────────────────────────────────┘
 ```
@@ -86,15 +86,16 @@ Four constructors, and the differences between them are not cosmetic:
 | `NewChildRuntime()` | own store, own sealed tier | is itself | not first-class — library loading only |
 
 The empty sealed tier under `NewChildNamespace` is what splits the two
-`(environment …)` forms apart. An import-spec environment installs the imported
-bindings at `(ExactPhase(0), sealed)`, the **T2** coordinate, which no view can
-write and which nothing else occupies; a profile environment routes a curated
-registry apply through the child's **sealed-write view**
-(`NewProfileEnvironment`, `pkg/internal/bootstrap/bootstrap.go`), landing those
-bindings in the **ambient** sealed tier, T3.
+`(environment …)` forms apart. Both land at the same `(phase 0, sealed)`
+coordinate and are separated by PROVENANCE, not by coordinate: an import-spec
+environment installs the imported bindings stamped `Imported`, which
+`tierExactImported` ranks above the startup set; a profile environment routes a
+curated registry apply through the child's **sealed-write view**
+(`NewProfileEnvironment`, `pkg/internal/bootstrap/bootstrap.go`), which lands
+unstamped, in `tierExactSealed`.
 
-Both are "sealed", and they are still not the same thing. T1 mutable outranks
-T2, so a user `define` gets its own slot and **shadows** an import — it does not
+Both are "sealed", and they are still not the same thing. The mutable tier
+outranks both, so a user `define` gets its own slot and **shadows** an import — it does not
 assign through it, which is what sharing one mutable slot used to mean. And
 `namespace-undefine!` distinguishes them by import *provenance*, not by rank, so
 an import is removable and a profile's primitive is not:
@@ -160,9 +161,10 @@ that have names; they are not the set of phases that exist.
 | 1 | `PhaseExpand` | `define-syntax` transformers, `begin-for-syntax` / `define-for-syntax` bodies, `(import (for-syntax …))` |
 | 2 … 127 | *(none)* | Created on demand by the macro tower: a transformer body or a nested `begin-for-syntax` at phase *N* runs its own compile-time code at *N+1*; `(for-meta 2 …)` imports land here |
 
-Auxiliary keywords (`else`, `=>`) and special-form names are not at any phase:
-they are ambient, `(ANY, sealed)`, reachable from every phase as the ranked
-probe's T3 (see [The Ranked Probe](#invariants) below).
+Auxiliary keywords (`else`, `=>`) and special-form names sit at `(phase 0,
+sealed)` like the rest of the startup set. A higher phase reaches them only
+because the dialect declares a bulk row that supplies them there (see [The Ranked
+Probe](#invariants) below).
 
 Phases 3 and up are not hypothetical, and the tower is observable from Scheme.
 Under `--strict=no-bindings` (nothing ambient, so every name must be imported at
@@ -433,34 +435,35 @@ These invariants must be maintained:
      (`EnvironmentFrame.AtPhase` / `SealedWriteViewAt`) are thin views over that
      same store, distinguished only by which coordinates their reads probe and
      their writes stamp. What used to be "does frame A's parent chain reach
-     frame B" is now "does slot X's `(PhaseKey, sealed)` pair make it a
+     frame B" is now "does slot X's `(phase, sealed)` pair make it a
      candidate for this read".
-   - **Every slot carries a coordinate.** `PhaseKey` is an exact phase
-     (`ExactPhase(n)`) or the ambient wildcard (`AnyPhase()`); `sealed` is a bool.
-     `(ANY, mutable)` is refused at the write API (`CreateGlobalBindingAt`
-     panics) — nothing populates it, so the ranked probe below never has to
-     consider it.
-   - **A read is a ranked probe over three tiers**, highest wins
-     (`resolveRankedLocked` / `probeRankedLocked`, `global_environment_frame.go`):
+   - **Every slot carries a coordinate.** `phase` is a plain `Phase` and `sealed`
+     is a bool. There is no phase-blind coordinate: a slot names exactly one
+     phase and is a candidate at that phase alone, which is what makes phase
+     hermeticity a property of the key space rather than a convention.
+   - **A read is a ranked probe over three tiers of the query phase's own
+     slots**, highest wins (`resolveRankedLocked` / `probeRankedLocked`,
+     `global_environment_frame.go`), with the store's declared BULK ROWS
+     consulted only on a miss:
 
      | Tier | Coordinate | What lands here |
      |------|------------|------------------|
-     | T1 | `(exact phase N, mutable)` | ordinary `define`s at phase N — user code, `define-for-syntax` bodies |
-     | T2 | `(exact phase N, sealed)` | registry fixtures that must stay OFF the T1 tier for one phase only — the phase-1 sealed-write view (bootstrap macros, special-form expanders) |
-     | T3 | `(ANY, sealed)` | the ambient startup set: Go primitives, sealed stdlib procedures, optimizer `Stable` anchors, the syntax compilers (`RegisterSyntaxCompilers`), and the auxiliary keywords (`else`, `=>`) and special-form names (`registerCompileTimeBinding`), all written through the phase-0 sealed-write view |
+     | `tierExactMutable` | `(phase N, mutable)` | ordinary `define`s at phase N — user code, `define-for-syntax` bodies |
+     | `tierExactImported` | `(phase N, sealed)`, stamped `Imported` | what an `(import …)` installs, which therefore shadows a base name of the same spelling rather than overwriting it |
+     | `tierExactSealed` | `(phase N, sealed)`, unstamped | the startup set: Go primitives, sealed stdlib procedures, optimizer `Stable` anchors, the syntax compilers (`RegisterSyntaxCompilers`) and the auxiliary keywords and special-form names (`registerCompileTimeBinding`) at phase 0; the bootstrap macros and special-form expanders at phase 1 |
 
-     A slot at any OTHER exact phase is **not a candidate at all** — that is
+     A slot at any OTHER phase is **not a candidate at all** — that is
      phase hermeticity, expressed as key disjointness rather than a missing
      parent link. Within the winning tier, maximal scope cardinality ranks as
      usual; an incomparable equal-cardinality tie panics with a wrapped
      `werr.ErrAmbiguousBinding`.
    - **Write coordinates come from the writing VIEW, not from an argument**
-     (`EnvironmentFrame.writeCoordinates`): a sealed write at phase 0 derives
-     `(ANY, sealed)` — the ambient set every other phase's T3 reaches — and every
-     other write (mutable at any phase, or sealed at any phase above 0) derives
-     `(ExactPhase(view's phase), sealed)`. This is why the phase-0 sealed-write
-     view and the phase-1 one differ in REACH even though both carry
-     `rank == writeRankSealed`: only the phase-0 one's writes are ambient.
+     (`EnvironmentFrame.writeCoordinates`): every write, sealed or not, derives
+     `(the view's phase, the view's sealed flag)`. The phase-0 sealed-write view
+     once had a special arm that sent its writes to a phase-blind coordinate
+     every other phase reached; that arm and that coordinate are both gone, so
+     the phase-0 and phase-1 sealed-write views differ only in PHASE. What
+     carries the base to another phase is a declared bulk row.
    - **`sealedAxis` names which phases own a sealed-write view at all**
      (`sealed_write_view.go`): `{PhaseRuntime, PhaseExpand}`, in construction
      order. Every owner's `PhaseRegistry` mints every row (`newPhaseRegistry`);
@@ -497,14 +500,14 @@ These invariants must be maintained:
      bootstrap `foo` at `(1, sealed)`, both in the same store.
    - **Why the phase-1 sealed-write view is distinct from the phase-0 one, not a
      reuse.** A compile-time handler (a bootstrap macro, `BindingTypeSyntax`, or
-     a special-form expander, `BindingTypePrimitive`) written at the phase-0
-     `(ANY, sealed)` coordinate would be reachable by **runtime value
-     resolution** — every phase-0 read's T3 tier is exactly that ambient set.
+     a special-form expander, `BindingTypePrimitive`) written at `(phase 0,
+     sealed)` would be reachable by **runtime value resolution** — that is
+     exactly the tier a phase-0 read ranks last and still reaches.
      That is a phase confusion: a dialect that removes a form
      (`Dialect.Forms().Remove`) would then leak the form's
      `#<primitive-expander:…>` into the value world instead of the name being
      unbound. Landing it at `(1, sealed)` instead keeps it off every phase-0
-     probe entirely — it is a candidate only for a phase-1 read's T2 tier.
+     probe entirely — it is a candidate only for a phase-1 read.
    - **Enumeration must span the whole store, not one view.** `LiveSlots()` /
      `SealedSlots()` (`GlobalEnvironmentFrame`) snapshot every live slot at any
      phase and rank in ONE map walk; `BoundNamesAcrossPhases` and `,apropos` use

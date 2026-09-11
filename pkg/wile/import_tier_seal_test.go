@@ -32,20 +32,30 @@ import (
 // compilation.installImportedBinding's two placementInPlace call sites checkable
 // rather than merely commented.
 //
-// Imports install at T2, (ExactPhase(0), sealed), so a user top-level define
-// SHADOWS an import instead of assigning through it. That is safe only because
-// (ExactPhase(0), sealed) is an EMPTY coordinate: EnvironmentFrame's
-// writeCoordinates maps a sealed write at phase 0 to AnyPhase(), so no view can
-// produce it and nothing was ever there.
+// Imports install at (phase 0, sealed) stamped Imported — tierExactImported —
+// so a user top-level define SHADOWS an import instead of assigning through it.
 //
-// (ExactPhase(1), sealed) is NOT empty. Bootstrap macros and primitive expanders
-// live there. If the PROPAGATED install (the phase-1 half of a macro import) or
-// the library-internal expand install took the same tier, an imported macro
-// would land on exactly a bootstrap macro's coordinates under the same ambient
-// scope set — so CreateGlobalBindingAt REUSES the slot, `created` is false,
-// importConflicts returns false (a bootstrap macro is not IsImported()),
-// SetOwnGlobalValue overwrites the sealed ambient transformer IN PLACE and
-// ENGINE-WIDE, and markBindingImported then stamps the startup set as imported.
+// WHAT MAKES THAT SAFE IS THE TIER, NOT AN EMPTY COORDINATE, and this paragraph
+// used to say the opposite. It argued that (phase 0, sealed) was safe BECAUSE
+// nothing else was there: writeCoordinates sent a sealed phase-0 write to the
+// phase-blind ANY coordinate, so no view could produce the exact one. Stage A
+// falsified that — the base's own writes land at (phase 0, sealed), which
+// library_bindings.go's installImportedBinding doc calls "the most crowded
+// coordinate in the store". The separation is the Imported STAMP:
+// CreateImportedGlobalBindingAt mints a slot of the import's own and
+// tierExactImported ranks it between the user's mutable tier and the startup
+// set's. See that doc for the measurement that killed the emptiness argument.
+//
+// (phase 1, sealed) is a DIFFERENT matter, and the hazard below is real.
+// Bootstrap macros and primitive expanders live there UNSTAMPED, in
+// tierExactSealed. If the PROPAGATED install (the phase-1 half of a macro
+// import) or the library-internal expand install took the same tier, an
+// imported macro would land on exactly a bootstrap macro's coordinates under
+// the same ambient scope set — so CreateGlobalBindingAt REUSES the slot,
+// `created` is false, importConflicts returns false (a bootstrap macro is not
+// IsImported()), SetOwnGlobalValue overwrites the sealed transformer IN PLACE
+// and ENGINE-WIDE, and markBindingImported then stamps the startup set as
+// imported.
 //
 // The failure is invisible from Scheme: the import "works", and every program
 // that used the bootstrap macro silently gets the imported one. Nothing else in
@@ -118,7 +128,7 @@ func TestImportDoesNotOverwriteSealedBootstrapMacro(t *testing.T) {
 }
 
 // TestImportedBindingTakesTheSealedPhaseZeroTier pins the positive half: the
-// BASE install really does land on (ExactPhase(0), sealed), and a top-level
+// BASE install really does land on (phase 0, sealed), and a top-level
 // define really does get its own T1 slot above it. Without this, the refusal
 // gate above would still pass on a build where the relocation had been reverted
 // wholesale.

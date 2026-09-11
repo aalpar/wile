@@ -81,7 +81,7 @@ func TestERRenameDenotesTheOutputPhase(t *testing.T) {
 	})
 
 	// The reported symptom. `else` is an auxiliary keyword the phase-1 import
-	// re-slots at (ExactPhase(1), mutable); the use site's `else` is the phase-0
+	// re-slots at (phase 1, mutable); the use site's `else` is the phase-0
 	// keyword. Resolving the rename at the OUTPUT phase makes both sides read
 	// the same slot, so the import stops being observable here.
 	//

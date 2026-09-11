@@ -253,8 +253,9 @@ accumulates across evaluations. Mutation and introspection are `namespace?`,
 a library's bindings into an existing namespace after the fact.
 
 The two constructor shapes are not interchangeable. An import-spec form,
-`(environment '(scheme base))`, installs the imported bindings at the T2
-coordinate `(ExactPhase(0), sealed)`, below the mutable tier a `define` writes:
+`(environment '(scheme base))`, installs the imported bindings at
+`(phase 0, sealed)` stamped `Imported` — `tierExactImported` — below the mutable
+tier a `define` writes:
 a definition of the same name **shadows** the import rather than overwriting it,
 and `namespace-undefine!` can still remove the import, which it recognises by
 import provenance rather than by rank. A profile form,

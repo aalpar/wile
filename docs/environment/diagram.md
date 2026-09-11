@@ -39,10 +39,10 @@ See [system.md](system.md) for detailed API documentation.
 │                                                                               │
 │  envs (mutable-rank views,        sealedViews (sealed-rank views, one per     │
 │  any int8 phase, lazy):           sealedAxis row):                            │
-│    0 → runtime   (T1 writes)        0 → sealed-write root                     │
-│    1 → expand    (T1 writes)          (writes land AMBIENT (ANY,sealed))      │
-│    2 → compile   (T1 writes)        1 → sealed-write expand                   │
-│   -1 → template                        (writes land (exact 1, sealed))        │
+│    0 → runtime   (mutable writes)   0 → sealed-write root                     │
+│    1 → expand    (mutable writes)     (writes land (phase 0, sealed))         │
+│    2 → compile   (mutable writes)   1 → sealed-write expand                   │
+│   -1 → template                       (writes land (phase 1, sealed))         │
 │    N → tower phase, on demand                                                 │
 │                                                                               │
 │  sealedAxis = {PhaseRuntime, PhaseExpand} — every owner mints both rows;      │
@@ -69,7 +69,7 @@ the root are ownership-policy, not shape:
 
 Every phase VIEW, whether `runtime`, `expand`, a tower phase (phase ≥ 2), or a
 sealed-write view, shares the SAME `*GlobalEnvironmentFrame` (`global`); they
-differ only in which `(PhaseKey, sealed)` coordinates their reads probe and
+differ only in which `(phase, sealed)` coordinates their reads probe and
 their writes stamp (`pkg/environment/global_environment_frame.go`,
 `environment_frame.go`). There is no parent chain to a "sealed base" any more.
 
@@ -81,24 +81,23 @@ their writes stamp (`pkg/environment/global_environment_frame.go`,
 
 | View | Coordinate | Read tier | Write lands at |
 |---|---|---|---|
-| `runtime` (`Runtime()`) | (0, mutable) | T1 | (0, mutable) |
-| `expand` (`Expand()`) | (1, mutable) | T1 | (1, mutable) |
-| `tower` (`AtPhase(n)`, n ≥ 2) | (n, mutable) | T1 | (n, mutable) |
-| sealed-write root | (0, sealed) at construction | T2 at phase 0 | **(ANY, sealed)** — ambient |
-| sealed-write expand | (1, sealed) at construction | T2 at phase 1 | (1, sealed) — exact |
+| `runtime` (`Runtime()`) | (0, mutable) | `tierExactMutable` | (0, mutable) |
+| `expand` (`Expand()`) | (1, mutable) | `tierExactMutable` | (1, mutable) |
+| `tower` (`AtPhase(n)`, n ≥ 2) | (n, mutable) | `tierExactMutable` | (n, mutable) |
+| sealed-write root | (0, sealed) at construction | sealed tiers at phase 0 | (0, sealed) |
+| sealed-write expand | (1, sealed) at construction | sealed tiers at phase 1 | (1, sealed) |
 
-Every read also considers the ambient `(ANY, sealed)` tier (T3) regardless of
-which exact phase it targets — that row is what makes primitives and sealed
-stdlib procedures visible from every phase.
+There is no phase-blind tier. A phase-*N* read is a candidate only for slots at
+exactly phase *N* — never any OTHER phase. That disjointness IS hermeticity: a
+phase-1 read cannot see a phase-0 user define, and vice versa. What makes
+primitives and sealed stdlib procedures visible from a phase that holds no slot
+of its own for them is a declared BULK ROW, consulted only when the per-symbol
+probe misses (`pkg/environment/bulk_source.go`).
 
-A phase-*N* read is a candidate only for slots at exactly phase *N* (tier T1
-mutable, T2 sealed) or the ambient `(ANY, sealed)` coordinate (tier T3) — never
-any OTHER exact phase. That disjointness IS hermeticity: a phase-1 read cannot
-see a phase-0 user define, and vice versa, while both still reach the ambient
-startup set. The split into two sealed tiers (T2 exact, T3 ambient) is what
-makes a top-level `define-syntax` shadow a bootstrap macro in the mutable
-expand view rather than overwrite it in place — they are different SLOTS at
-different coordinates in the same map.
+The split between the mutable tier and the sealed ones is what makes a top-level
+`define-syntax` shadow a bootstrap macro in the mutable expand view rather than
+overwrite it in place — they are different SLOTS at different coordinates in the
+same map.
 
 The set of views is open-ended, not five fixed ones. `PhaseRegistry.GetOrCreate`
 mints an ordinary view for any `int8` phase on first access, and
@@ -180,11 +179,11 @@ namespace's — over the library's OWN coordinates, never the root's:
 
 | View | Coordinate | Read tier |
 |---|---|---|
-| `libRT` (`Runtime()`) | (0, mutable) | T1 |
-| `libExp` (`Expand()`) | (1, mutable) | T1 |
-| `libTower` (`AtPhase(n)`, n ≥ 2) | (n, mutable) | T1 |
-| library sealed-write root | writes (ANY, sealed) | T3 at any phase |
-| library sealed-write expand | writes (1, sealed) | T2 at phase 1 |
+| `libRT` (`Runtime()`) | (0, mutable) | `tierExactMutable` |
+| `libExp` (`Expand()`) | (1, mutable) | `tierExactMutable` |
+| `libTower` (`AtPhase(n)`, n ≥ 2) | (n, mutable) | `tierExactMutable` |
+| library sealed-write root | writes (0, sealed) | sealed tiers at phase 0 |
+| library sealed-write expand | writes (1, sealed) | sealed tiers at phase 1 |
 
 So the isolation a library env provides is both *lateral* (its store is not the
 engine's, so nothing reaches the engine's bindings at any phase) and *vertical*
@@ -319,7 +318,7 @@ MachineContext
 | Profile Namespace | `bootstrap.NewProfileEnvironment()` | Own store; a curated registry apply fills the child's sealed tier | Delegates to parent | Own registry | `(environment '(wile <profile> [<strictness>]))` |
 | Report Namespace | `NewSchemeReportNamespace()` | Own store, **copied** from the parent's | Delegates to parent | Own registry | `(scheme-report-environment)` |
 | Runtime frame | `ns.Runtime()` | (0, mutable) tier of the store — the ROOT VIEW | Via Namespace | Shared | Normal execution |
-| Sealed-write root view | `ns.Runtime().SealedWriteViewAt(PhaseRuntime)` | writes land (ANY, sealed) — the ambient tier | Via Namespace | Shared | Primitives, sealed stdlib, `Stable` anchors |
+| Sealed-write root view | `ns.Runtime().SealedWriteViewAt(PhaseRuntime)` | writes land (0, sealed) — the startup set | Via Namespace | Shared | Primitives, sealed stdlib, `Stable` anchors |
 | Sealed-write expand view | `ns.Runtime().SealedWriteViewAt(PhaseExpand)` | writes land (1, sealed) | Via Namespace | Shared | Bootstrap macros, special-form expanders |
 | Expand frame | `env.Expand()` / `AtPhase(1)` | (1, mutable) tier | Via Namespace | Shared | Macro bindings |
 | Tower frame | `env.NextPhase()` / `AtPhase(n)` | Phase *n* global | Via Namespace | Shared | Nested compile-time forms at phase ≥ 2; `(for-meta 2 …)` imports |

@@ -123,7 +123,7 @@ func TestCopiedBulkRowAnswersInTheCopy(t *testing.T) {
 	store := owner.GlobalEnvironment()
 
 	own := sealAt(t, owner, PhaseRuntime, "vocab-name", values.NewInteger(1))
-	store.InstallBulkRow(vocabularyRow(store, "vocab-name"), nil, ExactPhase(PhaseExpand), true)
+	store.InstallBulkRow(vocabularyRow(store, "vocab-name"), nil, PhaseExpand, true)
 
 	// The control: the parent answers at phase 1 through the row, since the name
 	// has no phase-1 slot of its own.
@@ -172,7 +172,7 @@ func TestCopiedSealedRowKeepsItsRestrictions(t *testing.T) {
 	// A phase-0 IMPORTED binding: ranks at tierExactImported, also below the
 	// floor, and carries the Imported meta ownInstallsOnly refuses.
 	gi, created := store.CreateImportedGlobalBindingAt(values.NewSymbol("ratchet-imported"),
-		BindingTypeVariable, nil, ExactPhase(PhaseRuntime), true)
+		BindingTypeVariable, nil, PhaseRuntime, true)
 	qt.Assert(t, created, qt.IsTrue)
 	err = store.SetOwnGlobalValue(gi, values.NewInteger(3))
 	qt.Assert(t, err, qt.IsNil)
@@ -180,7 +180,7 @@ func TestCopiedSealedRowKeepsItsRestrictions(t *testing.T) {
 
 	store.InstallBulkRow(
 		vocabularyRow(store, "ratchet-own", "ratchet-mutable", "ratchet-imported"),
-		nil, ExactPhase(PhaseExpand), true)
+		nil, PhaseExpand, true)
 
 	cp := store.Copy()
 	qt.Assert(t, cp.BulkRowCount(), qt.Equals, 1)

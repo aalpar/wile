@@ -38,7 +38,7 @@ import (
 // model (plans/2026-09-08-flatt-binding-model-a-design).
 //
 // First, the ambient (ANY-phase, sealed) tier was deleted: writeCoordinates
-// sends every sealed phase-0 write to ExactPhase(0) instead of AnyPhase(), and
+// sends every sealed phase-0 write to phase 0 instead of the ANY coordinate, and
 // probeTiersLocked no longer has a wildcard arm. "Ambient" is therefore
 // uniformly false, and the original two-column census would read as a row of
 // zeroes.
@@ -61,7 +61,9 @@ import (
 // write (import (for-syntax (scheme base))).
 
 // tierFootprint is where one name lands, in the three coordinates Stage A left
-// behind:
+// behind. There is no ambient column: the coordinate is deleted, not merely
+// unpopulated, so a column for it would read as a row of zeroes rather than as a
+// measurement. The three that remain are:
 //
 //   - exactPhase0 — a slot the store itself owns at phase 0, i.e. the sealed base;
 //   - exactPhase1 — a SECOND registration giving the name a slot of its own at
@@ -100,18 +102,15 @@ func censusEngine(t *testing.T) *wile.Engine {
 // ExactBindingAt never does. A name the frame answers at phase 1 and
 // ExactBindingAt does not is therefore a name a row supplied.
 //
-// The ambient assertion is a ratchet, not a measurement: the tier is gone, so
-// every name must answer nil there. A non-nil answer means the tier came back,
-// and every row below would then be measuring the old mechanism under a new name.
+// The ambient ratchet that used to open this function is gone: Stage B deleted
+// the coordinate, so there is no probe left to ask and no answer to assert. What
+// keeps the measurement honest in its place is the exactPhase0/exactPhase1 pair
+// itself — a phase-blind tier coming back would show up as a name answering at
+// both phases that today answers at one.
 func footprintOfName(t *testing.T, eng *wile.Engine, name string) tierFootprint {
 	t.Helper()
 	sym := values.NewSymbol(name)
 	store := eng.Environment().GlobalEnvironment()
-
-	amb, ambTie := store.AmbientBinding(sym, syntax.EmptyScopes())
-	qt.Assert(t, ambTie, qt.IsFalse, qt.Commentf("%q ties in the ambient tier", name))
-	qt.Assert(t, amb, qt.IsNil,
-		qt.Commentf("%q answers in the ambient tier, which Stage A deleted", name))
 
 	ex0, ex0Tie := store.ExactBindingAt(sym, syntax.EmptyScopes(), environment.PhaseRuntime)
 	qt.Assert(t, ex0Tie, qt.IsFalse, qt.Commentf("%q ties at exact phase 0", name))
@@ -138,7 +137,7 @@ func footprintOfName(t *testing.T, eng *wile.Engine, name string) tierFootprint 
 //
 // Stage A moved the keyword row without changing which registration owns it.
 // The row was a sealed phase-0 write, so it used to land ambient and now lands
-// at ExactPhase(0) — the two-slot claim is unchanged, the coordinate of the
+// at phase 0 — the two-slot claim is unchanged, the coordinate of the
 // first slot is not. Every name here owns a phase-1 slot outright, so the
 // narrowing of the phase-1 row to the macro vocabulary cannot reach them.
 func TestKeywordSlotIsNotTheExpanderSlot(t *testing.T) {

@@ -221,7 +221,7 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 		// An IMPORT is sealed-tier but is not the startup set, and it is deletable.
 		//
 		// Imports used to live at (phase 0, mutable) and the DeleteOwnGlobal above
-		// removed them directly. They now install at (ExactPhase(0), sealed) so that
+		// removed them directly. They now install at (phase 0, sealed) so that
 		// a user top-level define SHADOWS an import instead of assigning through it
 		// (library_bindings.go installImportedBinding). That tier move is about the
 		// define/import interaction and must not quietly withdraw a documented
@@ -240,7 +240,7 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 		// that is simply untrue of one.
 		//
 		// The delete is DeleteImportedBindingAt and not DeleteBindingAt at
-		// (ExactPhase(0), sealed), because a COORDINATE does not name the import's
+		// (phase 0, sealed), because a COORDINATE does not name the import's
 		// slot: the startup set sits at the same one, and the coordinate-addressed
 		// resolve took whichever came first in the name's slot list, which is the
 		// base's. Measured: one undefine of an imported `car` destroyed the startup

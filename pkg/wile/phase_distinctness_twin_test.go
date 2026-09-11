@@ -26,12 +26,17 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestPhase1DoesNotReachPhase0Sealed is the behavioural twin of
-// TestNoAmbientCoordinateExists (pkg/environment/phase_distinctness_test.go),
-// design §6.1 row five. The internal test reads the slot's phase coordinate,
-// which Task 7 deletes along with PhaseKey; this one states the same property in
-// terms the public API can still express afterwards, so the property outlives
-// the field.
+// TestPhase1DoesNotReachPhase0Sealed IS design §6.1 row five — no longer the
+// behavioural twin of one.
+//
+// The internal test it twinned (TestNoAmbientCoordinateExists, in
+// pkg/environment) censused every slot whose phase coordinate was the ANY
+// wildcard. Stage B collapsed the coordinate to a bare Phase, so that census
+// reads a field that no longer exists and its assertion degenerates to 0 == 0.
+// It was deleted rather than rewritten: nothing replaces it, because "no slot
+// carries the ANY coordinate" is now a type-level impossibility with no argument
+// left to pass. This test states the same property in terms the public API can
+// still express, which is why it is the one that survived.
 //
 // It is a STORE-reachability assertion, not a compilation one: it asks the
 // engine root's frame at phase 1 for a name directly, with no transformer, no

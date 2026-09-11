@@ -214,7 +214,7 @@ type Namespace struct {
 
 	// sealedWriteRoot is this namespace's phase-0 SEALED-WRITE view: the same store
 	// as runtime, at the same phase, sealed, so a write through it
-	// lands at the ambient (ANY, sealed) coordinate that every phase reaches. It is
+	// lands at (phase 0, sealed) — the startup set's coordinate. It is
 	// what bootstrap and registry application register through, and — with runtime —
 	// what IsOwnerRoot recognizes, so the immutable-top-level define gate fires for
 	// bootstrap compilation and stamps the optimizer's Stable anchors.
@@ -318,7 +318,7 @@ func (p *Namespace) Store() *GlobalEnvironmentFrame {
 // must be included or primitives like `car` vanish from the result. Iteration order
 // is unspecified.
 //
-// AmbientKeysAt, not Keys: the listing reports only names resolvable under the
+// UnscopedKeysAt, not Keys: the listing reports only names resolvable under the
 // ambient (empty) scope set, which is what both read families this listing serves
 // look up — environment-ref/environment-bound? and namespace-ref/namespace-bound?
 // all pass AmbientScopes. Listing a macro-introduced binder would break the
@@ -332,9 +332,9 @@ func (p *Namespace) BoundSymbolNames() values.Value {
 	// and its seal) and dedupes them by construction — one name resolves to one
 	// binding — so there is no seen set here any more.
 	//
-	// values.List block-allocates the whole spine; the order is AmbientKeysAt's,
+	// values.List block-allocates the whole spine; the order is UnscopedKeysAt's,
 	// which is Go map order and already documented as unspecified.
-	keys := p.Store().AmbientKeysAt(PhaseRuntime)
+	keys := p.Store().UnscopedKeysAt(PhaseRuntime)
 	syms := make([]values.Value, len(keys))
 	for i, key := range keys {
 		syms[i] = values.NewSymbol(key.Key)
@@ -349,9 +349,9 @@ func (p *Namespace) BoundSymbolNames() values.Value {
 // phase and any higher tower rung), so macro keywords appear. It is the set a REPL
 // wants for tab completion.
 //
-// The special-form keywords are not part of that difference: they sit at the
-// ambient coordinate, which the ranked probe reaches as T3 from phase 0 as
-// readily as from any other, so both listings carry them.
+// The special-form keywords are not part of that difference: they sit at
+// (phase 0, sealed), which this all-phases walk and the phase-0 listing both
+// reach, so both listings carry them.
 // The output is sorted for determinism.
 func (p *Namespace) BoundNamesAcrossPhases() []string {
 	seen := values.StringSet{}

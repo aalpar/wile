@@ -367,7 +367,7 @@ func installInitialImports(owner *environment.EnvironmentFrame, imports []Phased
 		// the "installed but never wins" failure design section 6.3 says this
 		// change defaults to.
 		src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, imp.Library)
-		store.InstallBulkRow(src, nil, environment.ExactPhase(imp.Phase), true)
+		store.InstallBulkRow(src, nil, imp.Phase, true)
 	}
 
 	// The macro vocabulary is declared at EVERY macro phase, not at an enumerated
@@ -1733,7 +1733,7 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.P
 	// (G2).
 	//
 	// The sealed tier is no longer only the startup set: imports install at
-	// (ExactPhase(0), sealed) so a user define shadows them rather than assigning
+	// (phase 0, sealed) so a user define shadows them rather than assigning
 	// through them (compilation.installImportedBinding). SealedSlots() therefore
 	// yields imported bindings too, and since this runs once per applyBaseEnvironment
 	// an imported Scheme procedure's structured docstring now gets a doc-only entry.

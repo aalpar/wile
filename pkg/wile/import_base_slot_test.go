@@ -47,7 +47,7 @@ func baseSlotEngine(t *testing.T) *wile.Engine {
 // TestImportDoesNotMutateTheBaseBinding is the structural pin, and it is the one
 // that names the cause rather than a consequence.
 //
-// A phase-0 import writes (ExactPhase(0), sealed) with an EMPTY scope set. The
+// A phase-0 import writes (phase 0, sealed) with an EMPTY scope set. The
 // startup set's own binding sits at that coordinate with NIL scopes, and
 // scopeSetsEqual(nil, []) is true, so CreateGlobalBindingAt's reuse loop returns
 // created == false and the import lands ON the base's binding rather than beside

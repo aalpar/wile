@@ -179,13 +179,13 @@ func TestCopyCarriesBulkRowsAndRepointsSelfReferential(t *testing.T) {
 
 	// A self-referential row: the source reads the very store being copied.
 	selfSrc := NewStoreBulkSource(store, PhaseRuntime, values.NewSymbol("self"))
-	store.InstallBulkRow(selfSrc, nil, ExactPhase(PhaseRuntime), true)
+	store.InstallBulkRow(selfSrc, nil, PhaseRuntime, true)
 
 	// A foreign row: the source reads a DIFFERENT owner's store, which is what a
 	// genuine library import looks like.
 	other := ns.NewChildRuntime()
 	foreignSrc := NewStoreBulkSource(other.GlobalEnvironment(), PhaseRuntime, values.NewSymbol("other"))
-	store.InstallBulkRow(foreignSrc, nil, ExactPhase(PhaseRuntime), true)
+	store.InstallBulkRow(foreignSrc, nil, PhaseRuntime, true)
 
 	qt.Assert(t, store.BulkRowCount(), qt.Equals, 2)
 
@@ -220,14 +220,14 @@ func TestBulkRefCarriesItsOwnScopes(t *testing.T) {
 
 	scope := syntax.NewScope()
 	src := NewStoreBulkSource(store, PhaseRuntime, values.NewSymbol("s"))
-	store.InstallBulkRow(src, []*syntax.Scope{scope}, ExactPhase(PhaseRuntime), true)
+	store.InstallBulkRow(src, []*syntax.Scope{scope}, PhaseRuntime, true)
 
 	store.mu.RLock()
 	defer store.mu.RUnlock()
 	qt.Assert(t, store.bulkRows, qt.HasLen, 1)
 	qt.Assert(t, store.bulkRows[0].scopes, qt.HasLen, 1)
 	qt.Assert(t, store.bulkRows[0].scopes[0], qt.Equals, scope)
-	qt.Assert(t, store.bulkRows[0].phase, qt.Equals, ExactPhase(PhaseRuntime))
+	qt.Assert(t, store.bulkRows[0].phase, qt.Equals, PhaseRuntime)
 	qt.Assert(t, store.bulkRows[0].sealed, qt.IsTrue)
 }
 
@@ -265,7 +265,7 @@ func TestBulkRowsCarryTheEmptyScopeSet(t *testing.T) {
 	ns := NewNamespace()
 	store := ns.Runtime().GlobalEnvironment()
 	src := NewSealedStoreBulkSource(store, PhaseRuntime, BaseSourceName())
-	store.InstallBulkRow(src, nil, ExactPhase(PhaseExpand), true)
+	store.InstallBulkRow(src, nil, PhaseExpand, true)
 
 	store.mu.RLock()
 	defer store.mu.RUnlock()
@@ -278,7 +278,7 @@ func TestBulkRowsCarryTheEmptyScopeSet(t *testing.T) {
 // TestSealedBaseSourceExcludesImports pins the predicate that separates the
 // base from an import when the two share a coordinate.
 //
-// They do share one: an import installs at (ExactPhase(0), sealed), which is
+// They do share one: an import installs at (phase 0, sealed), which is
 // exactly where the base's own writes land once the ambient branch is gone, and
 // there is no third coordinate to move either onto. So the base source draws the
 // line on Imported meta instead — the same fact importConflicts keys on.

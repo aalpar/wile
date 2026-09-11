@@ -343,20 +343,30 @@ func setRecognizedPrimitive(mc machine.CallContext, identity *machine.PrimitiveI
 	// mutable tier to the sealed one.
 	q := recognizedBinding(runtime, sym, identity)
 	if q == nil && runtime != nil {
-		// Reached only when the mutable tier holds something that is NOT this
-		// primitive — a user shadow. Ask the SEALED tiers directly so the shadow
+		// Reached only when the probe above found something that is NOT this
+		// primitive — a user shadow. Ask the STARTUP SET directly so the shadow
 		// cannot suppress the real answer.
 		//
-		// "Sealed tiers" now includes IMPORTS, which install at (ExactPhase(0),
-		// sealed) and outrank the ambient startup set, so this probe can answer with
-		// an import where it used to answer with the primitive. That is not a
-		// fail-open widening, because name only LOCATES here and identity DECIDES: a
-		// genuine re-export carries the same PrimitiveIdentity and gives the same
-		// answer, while a library that binds this name to something else fails
-		// recognizedValue and lands on the refusal below. The direction of the
-		// change is therefore fail-CLOSED, and it answers the more honest question —
-		// what does THIS namespace bind the name to — than reaching past an import
-		// to the startup set would.
+		// THIS PROBE REACHES PAST ANY IMPORT, by construction rather than by
+		// luck. SealedBindingAt floors probeRankedLocked at tierExactSealed, whose
+		// ceiling is that same tier, so the admitted range is exactly one tier. An
+		// import ranks tierExactImported, BELOW the floor, so it is not a candidate
+		// here at all.
+		//
+		// That loses nothing, because the two probes are layered rather than
+		// alternative. recognizedBinding above goes through GetBinding — the FULL
+		// ranked probe — so an imported re-export of this name is found there,
+		// before this branch is reached. By the time control arrives here the
+		// question has narrowed to "what did the startup set bind it to", which is
+		// the one tier this asks. recognizedValue still gates on PrimitiveIdentity,
+		// so a startup-set entry holding something else lands on the refusal below.
+		//
+		// This paragraph used to claim the opposite — that the sealed range "now
+		// includes IMPORTS", so the probe could answer with one, fail-closed
+		// because identity decides. That was true while an import and the base
+		// shared ONE sealed tier at (phase 0, sealed); inserting tierExactImported
+		// below the floor ended it, and the comment did not follow. It is the
+		// silent-referent drift the tier enum's own doc warns about, in the wild.
 		sealed := runtime.Namespace().Store().SealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime)
 		q = recognizedValue(sealed, identity)
 	}

@@ -96,7 +96,7 @@ func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
 // LoadBootstrapCore passes for the engine root and for every library env. Any
 // other receiver makes SealedWriteViewAt fall back to that receiver's own mutable
 // view, which lands every compile-time keyword at (0, mutable) instead of the
-// sealed (ExactPhase(0), sealed) coordinate; a later user define of the name
+// sealed (phase 0, sealed) coordinate; a later user define of the name
 // would then reuse the keyword's slot rather than shadow it.
 func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.EnvironmentFrame, opts ...ApplyOption) error {
 	var cfg applyConfig
@@ -216,7 +216,7 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 // registerCompileTimeBinding installs a compile-time-only name (an auxiliary
 // keyword such as else or =>, or a special-form name carrying its docstring) as
 // a valueless BindingTypePrimitive binding at the owner's SEALED PHASE-0
-// coordinate, (ExactPhase(0), sealed), which the phase-0 sealed-write view
+// coordinate, (phase 0, sealed), which the phase-0 sealed-write view
 // produces (EnvironmentFrame.writeCoordinates).
 //
 // Until Stage A that write went to the ambient (ANY, sealed) coordinate and these

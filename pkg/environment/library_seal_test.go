@@ -107,10 +107,10 @@ func TestChildRuntimeMirrorsTheWholeSealedAxis(t *testing.T) {
 	c.Assert(lib.SealedWriteViewAt(Phase(2)), qt.Equals, lib.AtPhase(Phase(2)))
 }
 
-// EVERY write lands at (ExactPhase(the writing view's phase), the view's sealed
+// EVERY write lands at (phase = the writing view's phase, the view's sealed
 // flag) — the phase-0 sealed write included. Stage A deleted writeCoordinates'
-// one special arm, which used to send a sealed phase-0 write to AnyPhase() so
-// that every phase's read reached it. Cross-phase visibility is now a property
+// one special arm, which used to send a sealed phase-0 write to a phase-blind
+// ANY coordinate so that every phase's read reached it. Cross-phase visibility is now a property
 // of the dialect's declared initial imports, carried by a bulk row over the
 // store, not of a wildcard coordinate baked into the write.
 //
@@ -122,19 +122,19 @@ func TestSealedWriteCoordinates(t *testing.T) {
 
 	phase, sealed := ns.Runtime().writeCoordinates()
 	c.Assert(sealed, qt.IsFalse)
-	c.Assert(phase, qt.Equals, ExactPhase(PhaseRuntime))
+	c.Assert(phase, qt.Equals, PhaseRuntime)
 
 	phase, sealed = ns.Runtime().SealedWriteViewAt(PhaseRuntime).writeCoordinates()
 	c.Assert(sealed, qt.IsTrue)
-	c.Assert(phase, qt.Equals, ExactPhase(PhaseRuntime))
+	c.Assert(phase, qt.Equals, PhaseRuntime)
 
 	phase, sealed = ns.Runtime().SealedWriteViewAt(PhaseExpand).writeCoordinates()
 	c.Assert(sealed, qt.IsTrue)
-	c.Assert(phase, qt.Equals, ExactPhase(PhaseExpand))
+	c.Assert(phase, qt.Equals, PhaseExpand)
 
 	phase, sealed = ns.AtPhase(PhaseExpand).writeCoordinates()
 	c.Assert(sealed, qt.IsFalse)
-	c.Assert(phase, qt.Equals, ExactPhase(PhaseExpand))
+	c.Assert(phase, qt.Equals, PhaseExpand)
 }
 
 // A bootstrap macro compiled against a library's phase-0 sealed-write view must

@@ -437,7 +437,7 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 	// is the second face of the phase-shifted-import defect LookupPhaseBinding
 	// documents: an (import (for-syntax (scheme base))) installs base's exported
 	// `syntax-rules` — a phase-0 *SyntaxCompiler, BindingTypePrimitive — at
-	// (ExactPhase(1), MUTABLE), where it out-ranks the Scheme-layer macro sitting
+	// (phase 1, MUTABLE), where it out-ranks the Scheme-layer macro sitting
 	// at (1, sealed). ARM 2 then declines it on type, the head is left unexpanded,
 	// and the COMPILER dispatches the Go form silently, which is the "one Go
 	// syntax form compiled under WithSchemeSyntaxForms" column of that defect.

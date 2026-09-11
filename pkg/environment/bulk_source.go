@@ -296,7 +296,7 @@ type bulkRef struct {
 	// scopes is the scope set a reference must be compatible with to resolve
 	// through this row: the row's own axis, not read off any binding.
 	scopes []*syntax.Scope
-	phase  PhaseKey
+	phase  Phase
 	sealed bool
 	src    BulkSource
 }
@@ -307,7 +307,7 @@ type bulkRef struct {
 // source, then or ever. Rows are installed at engine origin, before the base is
 // written, which is only correct because the row reads through to the source
 // live.
-func (p *GlobalEnvironmentFrame) InstallBulkRow(src BulkSource, scopes []*syntax.Scope, phase PhaseKey, sealed bool) {
+func (p *GlobalEnvironmentFrame) InstallBulkRow(src BulkSource, scopes []*syntax.Scope, phase Phase, sealed bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -328,22 +328,22 @@ func (p *GlobalEnvironmentFrame) BulkResolutionCount() int64 {
 // BulkBindingAt resolves key through this store's BULK ROWS ALONE at phase,
 // consulting no per-symbol slot.
 //
-// It is the row-only counterpart of AmbientBinding, and it exists for the one
-// reader that needs the tiers separated: lookupLiteralBinding's descent probes
-// its own phase, then descending phases, then — last — whatever the language
-// itself supplies. That ordering is load-bearing for auxiliary syntax, because a
-// phase-1 probe for else must not answer the keyword before the descent has
-// looked at phase 0 for a use-site shadow. Ambient used to be the last step;
-// after Stage A the rows are.
+// It is ExactBindingAt's other half, and it exists for the one reader that needs
+// the two separated: lookupLiteralBinding's descent probes its own phase, then
+// descending phases, then — last — whatever the language itself supplies. That
+// ordering is load-bearing for auxiliary syntax, because a phase-1 probe for
+// else must not answer the keyword before the descent has looked at phase 0 for
+// a use-site shadow, and the ranked probe cannot express an ordering that spans
+// phases. The ambient tier used to be that last step; the rows are.
 //
-// Reports a tie as an ANSWER rather than raising it, matching AmbientBinding:
+// Reports a tie as an ANSWER rather than raising it, matching ExactBindingAt:
 // this reader carries ambiguity across a multi-phase descent instead of failing
 // the compile at the first incomparable pair.
 func (p *GlobalEnvironmentFrame) BulkBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) (bnd *Binding, ambiguous bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	_, b, ok := p.probeBulkLocked(*key, q, phase, tierExactMutable, tierAmbientSealed)
+	_, b, ok := p.probeBulkLocked(*key, q, phase, tierExactMutable, tierExactSealed)
 	if !ok {
 		return nil, false
 	}
@@ -488,37 +488,6 @@ func selfStore(src BulkSource) (*GlobalEnvironmentFrame, Phase, bool) {
 	default:
 		return nil, 0, false
 	}
-}
-
-// BulkRowSupplying reports whether an installed row already supplies name at
-// the given coordinate, and under which source name.
-//
-// It is the eager half of D5's conflict detection: two rows supplying one name
-// at equal tier and equal scope set is a conflict, and the import path asks this
-// BEFORE installing rather than letting resolution raise later. The
-// resolution-time ErrAmbiguousBinding raise stays as a backstop, because a row
-// can still collide with a slot installed by a path that never went through the
-// import machinery.
-func (p *GlobalEnvironmentFrame) BulkRowSupplying(name values.Symbol, phase PhaseKey, sealed bool, scopes []*syntax.Scope) (values.Value, bool) {
-	p.mu.RLock()
-	rows := make([]bulkRef, len(p.bulkRows))
-	copy(rows, p.bulkRows)
-	p.mu.RUnlock()
-
-	for _, row := range rows {
-		if row.phase != phase || row.sealed != sealed {
-			continue
-		}
-		if !scopeSetsEqual(row.scopes, scopes) {
-			continue
-		}
-		_, ok := row.src.LookupExport(name)
-		if !ok {
-			continue
-		}
-		return row.src.SourceName(), true
-	}
-	return nil, false
 }
 
 // filteredBulkSource admits only the names in a set.
@@ -679,7 +648,7 @@ func (p *GlobalEnvironmentFrame) installMacroRowLocked(phase Phase, i int) {
 	tpl := p.macroPhaseRows[i]
 	p.bulkRows = append(p.bulkRows, bulkRef{
 		scopes: tpl.scopes,
-		phase:  ExactPhase(phase),
+		phase:  phase,
 		sealed: tpl.sealed,
 		src:    tpl.src,
 	})

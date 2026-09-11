@@ -74,7 +74,7 @@ type GlobalIndex struct {
 	Env    *GlobalEnvironmentFrame
 	Slot   int
 	query  syntax.ScopeSet
-	phase  PhaseKey
+	phase  Phase
 	sealed bool
 }
 
@@ -153,49 +153,13 @@ func (p *GlobalIndex) EqualTo(value values.Value) bool {
 	return v.Index.EqualTo(p.Index)
 }
 
-// PhaseKey is a Phase plus an explicit ANY wildcard. Phase is a full int8
-// domain (GetOrCreate mints any value; the tower climbs to 127), so there is no
-// free in-band value to steal, and per [nil means NONE] the wildcard is a named
-// value, never a sentinel.
-//
-// The fields are unexported and the two constructors are the only way to build
-// one. PhaseKey is compared with ==, so an exported level alongside an exported
-// wildcard would make {level: 3, wildcard: true} constructible — a key that
-// AnyPhase() would never equal, and that every == in this file would therefore
-// read as a phase-3 exact key while tierOf classified it as ambient. Keeping the
-// denormalized state unrepresentable is cheaper than checking for it.
-type PhaseKey struct {
-	level    Phase
-	wildcard bool
-}
-
-// ExactPhase returns the key for an exact phase.
-func ExactPhase(phase Phase) PhaseKey {
-	return PhaseKey{level: phase}
-}
-
-// AnyPhase returns the ambient wildcard key: visible from every phase. Only
-// sealed entries may carry it — see CreateGlobalBindingAt.
-func AnyPhase() PhaseKey {
-	return PhaseKey{wildcard: true}
-}
-
-// String renders the key for diagnostics. Errors that name a coordinate print
-// this, so the ambient key must not read as phase 0.
-func (p PhaseKey) String() string {
-	if p.wildcard {
-		return "ANY"
-	}
-	return fmt.Sprintf("%d", p.level)
-}
-
 // slotRef locates one binding of a name and carries its resolution coordinates
 // (design §4.1). slot indexes bindings, as the bare int did; phase and sealed
 // are resolution coordinates — nothing after resolution needs them, which is
 // why they live here and not on BindingMeta (design Q1).
 type slotRef struct {
 	slot   int
-	phase  PhaseKey
+	phase  Phase
 	sealed bool
 }
 
@@ -240,9 +204,16 @@ type GlobalEnvironmentFrame struct {
 	// It GROWS ONLY: a delete does not retract a phase. Over-approximating is
 	// harmless — a search of a phase with no slots misses — while
 	// under-approximating is the defect this closes, so the cheap direction is
-	// also the safe one. AnyPhase adds nothing: an ambient slot is a candidate at
-	// whatever phase is already being searched. Negative phases are not tracked
-	// because PresentPhases excludes them by contract.
+	// also the safe one.
+	//
+	// EVERY created slot notes its phase, with no exemption. There used to be
+	// one: a slot at the ambient coordinate was skipped, on the argument that it
+	// was a candidate at whatever phase was already being searched and so added
+	// nothing here. Deleting that coordinate removed the only slot whose phase
+	// was not the phase it was searchable at, and with it the argument for a
+	// gated write. Negative phases are still not in the set, because
+	// PresentPhases excludes them by contract; noteExactPhaseLocked drops them
+	// rather than each caller testing first.
 	exactPhases [2]uint64
 	// bulkRows holds this owner's installed bulk rows: each one a single
 	// resolution candidate standing for every name some other store supplies at
@@ -474,13 +445,24 @@ func (p *GlobalEnvironmentFrame) Bindings() []*Binding {
 // values.Symbol carries no scope set, so when several hygiene-distinct bindings
 // share a name a wildcard resolves by slot order — an expansion-order artifact,
 // not an answer to the caller's question.
+//
+// It KEEPS the name "ambient" where AmbientKeysAt lost it. This one names the
+// empty scope set, a hygiene concept that is still live and still called that;
+// the other named the deleted ANY-phase coordinate. Two senses of one word, and
+// only one of them was deleted.
 func AmbientScopes() []*syntax.Scope {
 	return []*syntax.Scope{}
 }
 
-// AmbientKeysAt returns the names holding a live binding under the ambient
-// (empty) scope set AT phase: the names a reference written outside any macro
-// expansion, in phase-N code, resolves.
+// UnscopedKeysAt returns the names holding a live binding under the EMPTY scope
+// set AT phase: the names a reference written outside any macro expansion, in
+// phase-N code, resolves.
+//
+// It was AmbientKeysAt, and the rename is the point: "ambient" named two
+// unrelated things, an empty SCOPE set and the deleted ANY-phase COORDINATE, and
+// this method only ever meant the first. The coordinate is gone; keeping its
+// adjective on a scope-set query would leave the one surviving sense reading as
+// a reference to the dead one.
 //
 // Enumeration goes through the same ranked probe a single read makes, so the
 // listing cannot drift from what the read finds. A raw range over p.keys would
@@ -500,7 +482,7 @@ func AmbientScopes() []*syntax.Scope {
 // consumer, BoundSymbolNames, is a REPL-completion path, not a hot one; not
 // restructured here.
 // Thread-safe: uses RLock for read-only access.
-func (p *GlobalEnvironmentFrame) AmbientKeysAt(phase Phase) []values.Symbol {
+func (p *GlobalEnvironmentFrame) UnscopedKeysAt(phase Phase) []values.Symbol {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -587,10 +569,16 @@ func scopeSetsEqual(a, b []*syntax.Scope) bool {
 // so the probe keeps its full tier order rather than being pinned to the tier the
 // dead slot sat in.
 //
-// A pin at the AMBIENT coordinate is the one case the ranked probe cannot answer:
-// (ANY, sealed) is visible from every phase and names none, so there is no phase
-// to probe at, and probing at 0 would let a phase-0 user shadow answer for it.
-// That case re-resolves at its own coordinate instead.
+// RANKED-HEAL IS THE SEMANTICS FOR EVERY PIN, including one minted at exact
+// coordinates, and nothing here is a fallback from a narrower rule. The
+// coordinate-addressed arm this used to carry existed for the ambient key alone,
+// whose premise was that it named no phase and so gave the ranked probe nothing
+// to probe at. Collapsing the coordinate did not choose between two live
+// behaviours: the arm was already unreachable, because createGlobalBindingAt
+// refused the ambient key outright, so no slotRef — and therefore no pin, which
+// copies its coordinates off one — could carry it. Every pin this store has ever
+// handed out names an exact phase, and the paragraph above is the whole rule for
+// all of them.
 //
 // Returns false for a DEFERRED index (Env == nil, or another owner's store):
 // there are no coordinates to re-resolve at, and "resolve against whatever
@@ -603,10 +591,7 @@ func (p *GlobalEnvironmentFrame) healReadLocked(gi *GlobalIndex) (int, bool) {
 	if gi.Env != p {
 		return 0, false
 	}
-	if gi.phase.wildcard {
-		return p.resolveAtCoordsLocked(*gi.Index, gi.query, gi.phase, gi.sealed)
-	}
-	ref, _, ok := p.probeRankedLocked(*gi.Index, gi.query, gi.phase.level, tierExactMutable)
+	ref, _, ok := p.probeRankedLocked(*gi.Index, gi.query, gi.phase, tierExactMutable)
 	return ref.slot, ok
 }
 
@@ -625,6 +610,18 @@ func (p *GlobalEnvironmentFrame) healReadLocked(gi *GlobalIndex) (int, bool) {
 // Returns false for a DEFERRED index, for healReadLocked's reason;
 // EnvironmentFrame.SetDeferredGlobalValue is that index's write path.
 //
+// KNOWN AND DELIBERATELY NOT CLOSED HERE: at a SEALED coordinate this is
+// provenance-blind, for the same reason DeleteBindingAt was. (phase 0, sealed)
+// holds the startup set's slot and an import's; resolveAtCoordsLocked filters on
+// (phase, sealed) alone, so a sealed pin whose slot died can re-heal onto the
+// other one. Closing it needs the provenance axis DeleteImportedBindingAt has —
+// the imported bit threaded onto the pin and into resolveAtCoordsLocked — which
+// is a change to the coordinate SHAPE and does not belong inside the collapse of
+// the phase coordinate. It is latent rather than live: the base's own slot now
+// survives a delete (CreateImportedGlobalBindingAt's reuse refusal), so a base
+// pin no longer falls through to heal at all, and no caller was found that
+// reaches here sealed with both slots present. Recorded, not fixed.
+//
 // Caller MUST hold the write lock on p.mu, via defer: resolveAtCoordsLocked can
 // panic mid-hold on an ambiguous tie (P8). Before that was fixed (round 2
 // review), a bare Unlock before each return left the lock held across the panic —
@@ -638,10 +635,10 @@ func (p *GlobalEnvironmentFrame) healWriteLocked(gi *GlobalIndex) (int, bool) {
 }
 
 // resolveRankedLocked is the flat model's one resolution rule (design §4.3):
-// a slot is a candidate iff its scopes are compatible AND its coordinates admit
-// the query phase — tier T1 (exact phase, mutable), T2 (exact phase, sealed),
-// T3 (ANY, sealed); any OTHER exact phase is not a candidate at all, which is
-// phase hermeticity as key disjointness (P5). The highest non-empty tier wins;
+// a slot is a candidate iff its scopes are compatible AND its phase IS the query
+// phase — tierExactMutable, then the two sealed tiers; any OTHER phase is not a
+// candidate at all, which is phase hermeticity as key disjointness (P5). The
+// highest non-empty tier wins;
 // maximal scope cardinality ranks within it (rank-major, cardinality-minor —
 // the ordering the frame walk this replaces already had: first-frame-wins
 // across layers, maximal-cardinality within one).
@@ -674,10 +671,20 @@ func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax
 	//
 	// Consulting rows only on a per-symbol MISS implements that rule exactly,
 	// given one measured premise: every row this tree installs carries the EMPTY
-	// scope set. A row is sealed, hence T2, so a T1 slot outranks it; a T2 slot
-	// ties it on tier and, with both scope sets empty, the tie-break awards the
-	// slot; and no slot can lose on cardinality to an empty row set. So a row can
-	// win only where there is no candidate slot at all, which is this branch.
+	// scope set. A row is sealed, so bulkTierOf puts it at tierExactSealed: a
+	// tierExactMutable slot outranks it and so does a tierExactImported one; a
+	// tierExactSealed slot ties it on tier and, with both scope sets empty, the
+	// tie-break awards the slot; and no slot can lose on cardinality to an empty
+	// row set. So a row can win only where there is no candidate slot at all,
+	// which is this branch.
+	//
+	// This paragraph read "hence T2 … a T2 slot ties it" until 2026-09-10, and
+	// both counts were wrong: inserting tierExactImported moved the sealed tier
+	// from second to third and nothing went red. The conclusion was unaffected —
+	// the new tier outranks a row, which only strengthens "a row wins only on a
+	// miss" — but the premise a later rework of this consultation would have
+	// started from was off by a tier, which is why the tiers are named here and
+	// not numbered.
 	//
 	// The premise is load-bearing, so it is pinned rather than assumed:
 	// TestBulkRowsCarryTheEmptyScopeSet. A row with a non-empty scope set would
@@ -688,7 +695,7 @@ func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax
 	// consulted per FAILED resolution, not per resolution, and probeBulkLocked's
 	// per-row lookup is lock-free because the caller already holds this store's
 	// read lock.
-	bulkRow, bulkBnd, bulkOk := p.probeBulkLocked(key, q, phase, tierExactMutable, tierAmbientSealed)
+	bulkRow, bulkBnd, bulkOk := p.probeBulkLocked(key, q, phase, tierExactMutable, tierExactSealed)
 	if !bulkOk {
 		return ref, false
 	}
@@ -734,7 +741,7 @@ func (p *GlobalEnvironmentFrame) materializeBulkLocked(key values.Symbol, row bu
 		if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
 			continue
 		}
-		if s.phase.wildcard || s.phase.level != sourcePhase {
+		if s.phase != sourcePhase {
 			continue
 		}
 		if p.bindings[s.slot] != bnd {
@@ -747,11 +754,31 @@ func (p *GlobalEnvironmentFrame) materializeBulkLocked(key values.Symbol, row bu
 
 // The probe's tiers, highest-ranked FIRST (lowest number wins). They are the
 // layers the pre-fold parent-chain walk visited, in the order it visited them.
+//
+// A comment names a tier by its IDENTIFIER, never by an ordinal ("T2"). Nothing
+// ties an ordinal in prose to this enum, so inserting tierExactImported
+// renumbered everything below it and every "T2" in the tree silently changed
+// referent with no test going red. An identifier moves with the constant; an
+// ordinal is a second, unchecked copy of the ordering.
+//
+// About a hundred ordinal labels still exist and are NOT swept.
+// TestTierOrdinalsHaveNotRenumbered is a tripwire on the values below: it goes
+// red on exactly the event that moves a label's referent, and its failure
+// message says to rewrite the labels rather than to update the test. A
+// site-count ratchet would be the wrong shape here — the population does not
+// change when a tier is inserted, so a count stays green through the failure it
+// would be there to catch.
+//
+// It pins THIS ENUM, not those labels, so it certifies only that no referent has
+// moved since its baseline — and it froze that baseline without validating it. A
+// label that was already wrong stays wrong and stays green. The worked example is
+// resolveRankedLocked's bulk-consultation tie-break premise, above this enum in
+// this file; the test's own doc carries that case and two more limits, including
+// why appending a tier here is label-safe but not reachability-safe.
 const (
-	tierExactMutable  = iota // T1: the query phase, mutable
-	tierExactImported        // T2: the query phase, sealed, INSTALLED BY AN IMPORT
-	tierExactSealed          // T3: the query phase, sealed, the startup set
-	tierAmbientSealed        // T4: the ambient startup set
+	tierExactMutable  = iota // the query phase, mutable
+	tierExactImported        // the query phase, sealed, INSTALLED BY AN IMPORT
+	tierExactSealed          // the query phase, sealed, the startup set
 	tierNone          = -1   // not a candidate at the query phase at all
 )
 
@@ -759,7 +786,7 @@ const (
 // standing in for, and adding it is what makes the base separable from an import
 // by COORDINATE rather than by predicate.
 //
-// Stage A relocated imports onto (ExactPhase(0), sealed), which is exactly where
+// Stage A relocated imports onto (phase 0, sealed), which is exactly where
 // the base's own writes land once the ambient branch is gone, and recorded that
 // "there is no third coordinate to move either onto". There was not; this is it.
 // Drawing the line by predicate instead left the WRITE path sharing one slot:
@@ -780,20 +807,24 @@ const (
 // and with a tier ceiling as well as a floor: candidates are the slots whose tier
 // t satisfies minTier <= t <= maxTier. It is the one body every ranked read
 // shares; probeRankedLocked raises on ambiguous for the readers that want the
-// compile-boundary CompilationError, and ExactBindingAt / AmbientBinding return
-// it for the R7RS §4.3.2 literal pin, which carries a tie across a multi-phase
-// descent as an answer.
+// compile-boundary CompilationError, and ExactBindingAt returns it for the R7RS
+// §4.3.2 literal pin, which carries a tie across a multi-phase descent as an
+// answer.
 //
 // The tier answers "is this binding part of the startup set?" without a second
 // lookup (tierExactMutable is the mutable tier, everything above it is sealed),
 // which is what IsSealedBindingAt asks. minTier answers the other non-reference
-// question: tierExactSealed as the floor skips the mutable tier, asking what the
-// startup set bound a name to REGARDLESS of any user shadow
-// (setRecognizedPrimitive's fallback, which the pre-fold tree spelled as a
-// direct read of the sealed base frame). maxTier is that same question's
-// ceiling: tierExactSealed as the ceiling excludes the ambient tier, which is
-// what ExactBindingAt asks, and tierAmbientSealed as BOTH floor and ceiling
-// excludes every exact-phase tier, which is what AmbientBinding asks.
+// question: tierExactSealed as the floor asks what the STARTUP SET bound a name
+// to, skipping both the mutable tier (a user shadow) and tierExactImported (an
+// import), since both rank below it — setRecognizedPrimitive's fallback, which
+// the pre-fold tree spelled as a direct read of the sealed base frame.
+//
+// maxTier is that same question's ceiling, and with the ambient tier deleted
+// every caller now passes the same value: tierExactSealed is the LAST tier, so
+// the ceiling excludes nothing. It is kept for one more slice rather than
+// dropped here — the next step rewrites this signature and probeBulkLocked's
+// together — and until then it is an always-constant parameter, not a knob with
+// a second setting.
 //
 // The ranking is one lexicographic argmax over (tier, scope cardinality) rather
 // than a per-tier accumulator array: three scopedBestOf values are ~190 bytes to
@@ -816,23 +847,16 @@ func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.Sc
 	if len(slots) == 0 {
 		return slotRef{}, tierNone, false, false
 	}
-	// tierOf has NO ambient arm: Stage A deleted that tier, and writeCoordinates
-	// no longer produces the wildcard coordinate for any view.
-	//
-	// The explicit wildcard arm below is NOT dead defensiveness. PhaseKey's
-	// wildcard field is separate from its level, and a wildcard key's level is
-	// the ZERO value — so without this arm `s.phase.level != phase` is false at a
-	// phase-0 query and an (ANY, sealed) slot would silently rank as an ordinary
-	// phase-0 sealed candidate. Nothing writes one today, but
-	// CreateGlobalBindingAt still ACCEPTS the coordinate and Copy still carries
-	// it, so a hand-built slot would alias phase 0 rather than being ignored.
-	// bulkTierOf refuses the wildcard for exactly this reason; the two must
-	// agree. Deleting PhaseKey outright is Stage B.
+	// tierOf has NO ambient arm, and no longer needs one to say so. The
+	// coordinate it used to refuse was a wildcard FLAG alongside the phase, whose
+	// level was the zero value — so a missing arm would have let an ambient slot
+	// alias phase 0 rather than being ignored, and the arm was the thing standing
+	// between "the tier is deleted" and "the tier is spelled 0". With the flag
+	// gone there is no denormalized state left to refuse: a slot carries a phase
+	// and nothing else, and a phase either is the query's or is not.
 	tierOf := func(s slotRef) int {
 		switch {
-		case s.phase.wildcard:
-			return tierNone
-		case s.phase.level != phase:
+		case s.phase != phase:
 			return tierNone
 		case !s.sealed:
 			return tierExactMutable
@@ -908,14 +932,13 @@ func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.Sc
 }
 
 // bulkTierOf classifies a bulk row at the query phase, exactly as tierOf does a
-// slot — minus the wildcard arm, because a row has no ambient coordinate to
-// carry. Deleting the ambient tier is what this stage is for; a row must not
-// reintroduce it under another name.
+// slot. A row is declared at ONE phase and is a candidate there alone: a row
+// that answered at every phase would be the deleted ambient tier under another
+// name, which is the thing this stage exists to prevent, and cross-phase reach
+// is expressed by declaring a row at each phase that should have it.
 func bulkTierOf(row bulkRef, phase Phase) int {
 	switch {
-	case row.phase.wildcard:
-		return tierNone
-	case row.phase.level != phase:
+	case row.phase != phase:
 		return tierNone
 	case row.sealed:
 		return tierExactSealed
@@ -929,9 +952,18 @@ func bulkTierOf(row bulkRef, phase Phase) int {
 //
 // Among rows at equal tier and equal scope set the LAST INSTALLED wins, which is
 // what preserves master's behaviour that an explicit (import (scheme base))
-// shadows the language's own initial import of the same name. A conflict between
-// two DIFFERENT libraries at that coordinate is not left to this ordering: the
-// import path asks BulkRowSupplying first and refuses, per R7RS section 5.6.
+// shadows the language's own initial import of the same name.
+//
+// That ordering is NOT the R7RS section 5.6 conflict rule, and does not pretend
+// to be. Conflict detection runs on the per-symbol install path
+// (installImportedBinding's importConflicts, machine/compilation/library_bindings.go),
+// where an import that would collide with a different existing binding of the
+// name is refused before the slot is written. There is no eager row-level check:
+// one was written, never wired to a caller, and deleted rather than left
+// standing as a claim nothing honoured. Two rows from DIFFERENT libraries
+// supplying one name at one coordinate would therefore be resolved by install
+// order here rather than refused — an import routed through rows is Task 6's
+// work, and the check belongs with it.
 //
 // Caller MUST hold at least a read lock on p.mu.
 func (p *GlobalEnvironmentFrame) probeBulkLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier, maxTier int) (row bulkRef, bnd *Binding, ok bool) {
@@ -981,7 +1013,7 @@ func (p *GlobalEnvironmentFrame) probeBulkLocked(key values.Symbol, q syntax.Sco
 // Caller MUST hold at least a read lock on p.mu, and MUST release it via defer
 // rather than a bare RUnlock: this can panic mid-hold.
 func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier int) (ref slotRef, tier int, ok bool) {
-	ref, tier, ambiguous, ok := p.probeTiersLocked(key, q, phase, minTier, tierAmbientSealed)
+	ref, tier, ambiguous, ok := p.probeTiersLocked(key, q, phase, minTier, tierExactSealed)
 	if ambiguous {
 		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
 			"resolveRankedLocked: identifier %q resolves ambiguously among incomparable hygienic scope sets",
@@ -997,7 +1029,7 @@ func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.S
 //
 // Caller MUST hold at least a read lock on p.mu, via defer: this can panic
 // mid-hold on an ambiguous tie.
-func (p *GlobalEnvironmentFrame) resolveAtCoordsLocked(key values.Symbol, q syntax.ScopeSet, phase PhaseKey, sealed bool) (int, bool) {
+func (p *GlobalEnvironmentFrame) resolveAtCoordsLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, sealed bool) (int, bool) {
 	slots := p.keys[key]
 	if len(slots) == 0 {
 		return 0, false
@@ -1038,8 +1070,17 @@ func (p *GlobalEnvironmentFrame) resolveAtCoordsLocked(key values.Symbol, q synt
 // setValueAtCoords writes v to the binding of key that resolves under q at
 // EXACTLY (phase, sealed). It is the store primitive behind every write whose
 // target is derived from the writing VIEW rather than from a pinned index.
+//
+// It is provenance-blind at the sealed tier, exactly as healWriteLocked is, and
+// for this caller set that is the RIGHT answer rather than a known gap: its two
+// callers are SetDeferredGlobalValue, which passes sealed == false and so never
+// reaches the tier where the base and an import share a coordinate, and
+// SetOwnGlobalValue's deferred arm, which takes the WRITING view's coordinates —
+// and the view that writes sealed at phase 0 is the base's own writer, which is
+// the slot it should reach. An import writes through the pin
+// CreateImportedGlobalBindingAt hands back, never through here.
 // Thread-safe: uses full Lock for write access.
-func (p *GlobalEnvironmentFrame) setValueAtCoords(key *values.Symbol, q syntax.ScopeSet, phase PhaseKey, sealed bool, v values.Value) error {
+func (p *GlobalEnvironmentFrame) setValueAtCoords(key *values.Symbol, q syntax.ScopeSet, phase Phase, sealed bool, v values.Value) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -1055,10 +1096,17 @@ func (p *GlobalEnvironmentFrame) setValueAtCoords(key *values.Symbol, q syntax.S
 	return nil
 }
 
-// SealedBindingAt returns the binding key resolves to under q at phase when the
-// MUTABLE tier is skipped: what the startup set bound this name to, regardless
-// of any user shadow. nil means NONE — no sealed-tier binding of that name is
-// visible from phase.
+// SealedBindingAt returns what the STARTUP SET bound key to under q at phase,
+// regardless of any user shadow AND regardless of any import. nil means NONE —
+// the startup set holds no binding of that name visible from phase.
+//
+// The floor is tierExactSealed and probeRankedLocked's ceiling is the same tier,
+// so the admitted range is exactly ONE tier. That skips more than the mutable
+// one: tierExactImported is below the floor too, so an import of the name is not
+// a candidate here. Callers that want "whatever this namespace binds the name
+// to", imports included, want GetBinding's full ranked probe instead — see
+// setRecognizedPrimitive (registry/core/prim_hashtables.go), which runs both and
+// depends on the difference.
 //
 // It is the store form of the pre-fold "read the sealed base frame directly"
 // fallback (setRecognizedPrimitive): with one merged store there is no narrower
@@ -1075,29 +1123,10 @@ func (p *GlobalEnvironmentFrame) SealedBindingAt(key *values.Symbol, q syntax.Sc
 	return p.bindings[ref.slot]
 }
 
-// AmbientBinding resolves key under q in the ambient tier ALONE — the (ANY,
-// sealed) coordinate every phase's ranked probe reaches as T3 — and nowhere
-// else, reporting an incomparable tie as an answer rather than raising it. (nil,
-// false) means the name is not part of the startup set; it says nothing about
-// exact-phase slots of the name, which ExactBindingAt and GetBinding answer.
-//
-// It exists for one reader: the R7RS §4.3.2 definition-site literal pin
-// (compilation.lookupLiteralBinding) consults the ambient keyword LAST, after
-// the exact tiers at every phase of its descent, and the ranked probe — highest
-// tier at the query phase wins — cannot say that. Every other read wants the probe.
-//
-// The tier floor and ceiling do the whole job: with both at the ambient tier an
-// exact-phase slot at any phase is outside the range, so the phase argument is
-// irrelevant and PhaseRuntime is passed for definiteness.
-// Thread-safe: uses RLock for read-only access (taken in bindingWithinTiers).
-func (p *GlobalEnvironmentFrame) AmbientBinding(key *values.Symbol, q syntax.ScopeSet) (bnd *Binding, ambiguous bool) {
-	return p.bindingWithinTiers(key, q, PhaseRuntime, tierAmbientSealed, tierAmbientSealed)
-}
-
 // bindingWithinTiers is the locked, binding-returning form of probeTiersLocked:
 // the resolved binding among tiers minTier..maxTier at phase, or nil, and
-// whether the winning tier tied. It does not raise. ExactBindingAt and
-// AmbientBinding are its two floors.
+// whether the winning tier tied. It does not raise. ExactBindingAt is its one
+// caller.
 // Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) bindingWithinTiers(key *values.Symbol, q syntax.ScopeSet, phase Phase, minTier, maxTier int) (bnd *Binding, ambiguous bool) {
 	p.mu.RLock()
@@ -1112,15 +1141,21 @@ func (p *GlobalEnvironmentFrame) bindingWithinTiers(key *values.Symbol, q syntax
 	return p.bindings[ref.slot], false
 }
 
-// ExactBindingAt resolves key under q among the EXACT-phase tiers at phase —
-// (phase, mutable) over (phase, sealed) — reporting an incomparable tie as an
-// answer rather than raising it. The ambient tier is not a candidate: (nil,
-// false) means no exact-phase slot of the name resolves under q at phase, and
-// says nothing about the ambient binding, which AmbientBinding answers.
+// ExactBindingAt resolves key under q among this store's OWN slots at phase —
+// (phase, mutable), then the two sealed tiers — reporting an incomparable tie as
+// an answer rather than raising it. Bulk rows are not candidates: (nil, false)
+// means no slot of the name resolves under q at phase, and says nothing about
+// what a row supplies there, which BulkBindingAt answers.
 //
 // It exists for the R7RS §4.3.2 literal pin (compilation.lookupLiteralBinding),
-// which ranks exact-phase slots at several phases above the ambient keyword and
-// carries a tie forward as an answer rather than unwinding through the descent.
+// and the SEPARATION is the whole reason it is not GetBinding. The pin's descent
+// ranks per-symbol slots at several phases above whatever the language itself
+// supplies, because a phase-1 probe for `else` must not answer the keyword
+// before the descent has looked at phase 0 for a use-site shadow. The ranked
+// probe — highest tier at the query phase wins, rows consulted on a miss at that
+// same phase — cannot express an ordering that spans phases, so the pin runs the
+// two halves itself and this is the first of them. It also carries a tie forward
+// as an answer rather than unwinding the descent at the first incomparable pair.
 // Every other reader wants GetBinding, which raises.
 // Thread-safe: uses RLock for read-only access (taken in bindingWithinTiers).
 func (p *GlobalEnvironmentFrame) ExactBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) (bnd *Binding, ambiguous bool) {
@@ -1220,15 +1255,15 @@ func (p *GlobalEnvironmentFrame) IsSealedBindingAt(key *values.Symbol, q syntax.
 // the same reason, at the phase above. Scope equality alone was sufficient only
 // while coordinates were frame identity.
 //
-// (ANY, mutable) is refused: no population produces it (design §4.1), and
-// modeling it would give the wildcard a mutable row that outranked nothing.
+// There is no phase-blind coordinate to refuse any more: phase is a bare Phase,
+// so every write names one phase and is a candidate at that phase alone.
 //
 // The returned index is PINNED to the slot this call landed on, created or
 // reused, carrying the creation scope set as its re-resolution query. Callers
 // may write through it directly: it needs no paired re-resolve, and unlike a
 // bare-name index it cannot drift onto a different slot of the same name. See
 // the history note below for why it was deferred until 2026-08-06.
-func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase PhaseKey, sealed bool) (*GlobalIndex, bool) {
+func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase Phase, sealed bool) (*GlobalIndex, bool) {
 	return p.createGlobalBindingAt(key, bt, scopes, phase, sealed, false)
 }
 
@@ -1238,7 +1273,7 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt Bi
 //
 // Both halves are load-bearing and neither is an optimization.
 //
-// The reuse refusal is the S0 repair. An import writes (ExactPhase(0), sealed)
+// The reuse refusal is the S0 repair. An import writes (phase 0, sealed)
 // with an EMPTY scope set; the startup set's own binding sits at that coordinate
 // with NIL scopes; scopeSetsEqual(nil, []) is true, so the plain form returned
 // the BASE's slot with created == false and the caller then wrote its value and
@@ -1250,31 +1285,24 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt Bi
 // IsImported() to rank, so a slot that is created now and stamped later is a slot
 // that ranks as the startup set in between. Nothing reads it in that window
 // today, but the window has no reason to exist.
-func (p *GlobalEnvironmentFrame) CreateImportedGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase PhaseKey, sealed bool) (*GlobalIndex, bool) {
+func (p *GlobalEnvironmentFrame) CreateImportedGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase Phase, sealed bool) (*GlobalIndex, bool) {
 	return p.createGlobalBindingAt(key, bt, scopes, phase, sealed, true)
 }
 
 // createGlobalBindingAt is the shared body. imported selects both the reuse
 // predicate and the created slot's provenance stamp, so the two cannot disagree.
-func (p *GlobalEnvironmentFrame) createGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase PhaseKey, sealed bool, imported bool) (*GlobalIndex, bool) {
-	// The wildcard coordinate is refused outright now, not just its mutable half.
+func (p *GlobalEnvironmentFrame) createGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase Phase, sealed bool, imported bool) (*GlobalIndex, bool) {
+	// There is no runtime refusal of the ambient coordinate here any more, and
+	// nothing replaces it.
 	//
-	// Stage A deleted the ambient tier: writeCoordinates produces no wildcard key
-	// for any view, tierOf classifies one as tierNone, and no production path
-	// mints one. Continuing to ACCEPT it here would leave a slot nothing ranks
-	// and nothing can read — and, before tierOf regained its explicit wildcard
-	// arm, one that silently aliased phase 0, because a wildcard key's level is
-	// the zero value. Refusing the write is what makes "the tier is gone" a
-	// property of the store rather than a convention.
+	// Stage A deleted the ambient tier and this function grew a panic to keep the
+	// deletion a property of the STORE rather than a convention: the coordinate
+	// was still constructible, so a caller could still mint a slot nothing ranked
+	// and nothing could read. Stage B removed the coordinate itself — phase is a
+	// bare Phase — so the refusal became a check against a value that cannot be
+	// built, with no argument left to pass. The invariant it guarded is now
+	// carried by the type, which is why it is gone rather than reworded.
 	//
-	// PhaseKey itself survives, along with AnyPhase, AmbientBinding and
-	// AmbientKeysAt. They now answer nothing, and collapsing PhaseKey to a bare
-	// Phase belongs to Stage B's fold of the phase INTO the scope set, where the
-	// whole coordinate shape changes at once rather than twice.
-	if phase.wildcard {
-		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"CreateGlobalBindingAt: the ANY phase coordinate was deleted with the ambient tier; %q must name an exact phase", key.Key))
-	}
 	// Use full Lock (not RLock) for check-then-write pattern to prevent TOCTOU
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -1313,9 +1341,7 @@ func (p *GlobalEnvironmentFrame) createGlobalBindingAt(key *values.Symbol, bt Bi
 	i := len(p.bindings)
 	ref := slotRef{slot: i, phase: phase, sealed: sealed}
 	p.keys[*key] = append(p.keys[*key], ref)
-	if !phase.wildcard {
-		p.noteExactPhaseLocked(phase.level)
-	}
+	p.noteExactPhaseLocked(phase)
 	// append the new binding at index i. Global bindings carry an atomicCell so
 	// they can be read lock-free from other threads (see binding.go atomicCell).
 	bnd := newGlobalBinding(values.Void, bt, scopes)
@@ -1466,7 +1492,7 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 // from the view.
 //
 // Resolution goes through resolveAtCoordsLocked with a scoped (never wildcard)
-// query — the literal call AmbientKeysAt and GetGlobalIndexWithScopes make — so
+// query — the literal call UnscopedKeysAt and GetGlobalIndexWithScopes make — so
 // delete cannot drift from the read surface at those coordinates. It removes
 // exactly the binding a scoped read there would have returned, and deleting a
 // name owned only by a macro-introduced binder is a no-op rather than the
@@ -1495,11 +1521,11 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 // (compile_define_syntax.go, expander_body.go) delete through p.env.NextPhase(),
 // which AtPhase's §4.5 inheritance arm resolves to the phase-1 SEALED-WRITE view
 // whenever the defining view is sealed — a bootstrap macro whose right-hand side
-// failed to compile — so they address (ExactPhase(1), sealed). The third,
+// failed to compile — so they address (phase 1, sealed). The third,
 // namespace-undefine!, goes through Runtime(), the mutable phase-0 root, and
 // never arrives sealed at all.
 //
-// Nothing an import owns sits at (ExactPhase(1), sealed) today. Every install
+// Nothing an import owns sits at (phase 1, sealed) today. Every install
 // above phase 0 takes the importing VIEW's own coordinates — placementInPlace on
 // both propagation paths, and placementShadowable's non-phase-0 fallback — so an
 // import lands sealed there only if the IMPORTING view is itself sealed-write.
@@ -1515,7 +1541,7 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 // coordinate" premise to stay off the sealed tier. That filter is gone.
 //
 // Thread-safe: uses full Lock for write access.
-func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes []*syntax.Scope, phase PhaseKey, sealed bool) bool {
+func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes []*syntax.Scope, phase Phase, sealed bool) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -1549,8 +1575,8 @@ func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes []*s
 // probe, which is the one that can tell the two sealed slots apart — pinned to a
 // winner AT that tier. The floor plus the pin is what keeps this a provenance
 // filter rather than the ranked delete DeleteBindingAt's doc refuses: a mutable
-// shadow is below the floor, and the startup set and the ambient tier are above
-// the pin, so no reachable answer here is anything but an import.
+// shadow is below the floor and the startup set is above the pin, so no
+// reachable answer here is anything but an import.
 // Thread-safe: uses full Lock for write access.
 func (p *GlobalEnvironmentFrame) DeleteImportedBindingAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) bool {
 	p.mu.Lock()
@@ -1594,7 +1620,7 @@ func (p *GlobalEnvironmentFrame) removeSlotLocked(sym values.Symbol, i int) {
 		break
 	}
 	// Drop the name once it owns no slots, so a future lookup on it is a plain
-	// map miss and AmbientKeysAt / LiveSlots / SealedSlots stop enumerating it.
+	// map miss and UnscopedKeysAt / LiveSlots / SealedSlots stop enumerating it.
 	if len(p.keys[sym]) == 0 {
 		delete(p.keys, sym)
 	}

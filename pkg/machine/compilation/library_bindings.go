@@ -511,7 +511,7 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 //   - a pre-existing user definition is not an import and is left to shadow.
 //
 // The second bullet was FALSE until the base install moved to T2: the define and
-// the import shared one (ExactPhase(0), mutable) slot, so the import assigned
+// the import shared one (phase 0, mutable) slot, so the import assigned
 // through the define instead of being shadowed by it — measured, (define map 1)
 // then (import (scheme base)) left one slot whose value went 1 ->
 // #<case-lambda-closure> and whose meta went imported=false -> imported=true, and
@@ -590,12 +590,13 @@ func sameImportedBinding(a, b values.Value) bool {
 type importPlacement int
 
 const (
-	// placementShadowable puts the import at T2, (ExactPhase(0), sealed), where a
-	// user top-level define's own (ExactPhase(0), mutable) T1 slot outranks it. A
+	// placementShadowable puts the import at (phase 0, sealed) stamped Imported,
+	// so it ranks tierExactImported, where a user top-level define's own
+	// (phase 0, mutable) tierExactMutable slot outranks it. A
 	// define then shadows the import instead of assigning through it.
 	placementShadowable importPlacement = iota
-	// placementInPlace keeps the historical T1 coordinates,
-	// (ExactPhase(N), mutable), where a same-name define shares the slot and
+	// placementInPlace keeps the historical mutable-tier coordinates,
+	// (phase N, mutable), where a same-name define shares the slot and
 	// supersedes the import by assignment.
 	placementInPlace
 )
@@ -613,7 +614,7 @@ const (
 //
 // Historically every install went through the view, i.e.
 // MaybeCreateOwnGlobalBinding, whose writeCoordinates yield
-// (ExactPhase(N), mutable) — T1, the same coordinates a user top-level define
+// (phase N, mutable) — tierExactMutable, the same coordinates a user top-level define
 // writes. Sharing the slot made a define an ASSIGNMENT through the import, which
 // is how (define map 1) followed by (import (scheme base)) silently clobbered the
 // define: one slot, value 1 -> #<case-lambda-closure>, meta imported false ->
@@ -621,16 +622,16 @@ const (
 // not an import and is left to shadow" — that sentence was FALSE, and moving the
 // base install to T2 is what makes it true.
 //
-// placementShadowable therefore writes (ExactPhase(0), sealed) directly rather
+// placementShadowable therefore writes (phase 0, sealed) directly rather
 // than through the view. T1 mutable outranks T2 sealed, so a define shadows
 // while the import stays visible when no define exists.
 //
 // # THE HAZARD, and why only ONE site takes the shadowable tier
 //
-// This doc used to argue that (ExactPhase(0), sealed) is safe BECAUSE IT IS
+// This doc used to argue that (phase 0, sealed) is safe BECAUSE IT IS
 // EMPTY, and that no view could produce it since writeCoordinates mapped a
-// sealed phase-0 write to AnyPhase(). Stage A falsified both halves: the ambient
-// tier is deleted, writeCoordinates produces (ExactPhase(0), sealed) for exactly
+// sealed phase-0 write to the ANY coordinate. Stage A falsified both halves: the ambient
+// tier is deleted, writeCoordinates produces (phase 0, sealed) for exactly
 // that write, and the sealed base now lives at this very coordinate. The
 // coordinate is the most crowded one in the store.
 //
@@ -668,7 +669,7 @@ const (
 // strictly more machinery for the same separation the predicate already gives.
 // Recorded in the plan's Task 11.
 //
-// (ExactPhase(1), sealed) is still NOT available: bootstrap macros and primitive
+// (phase 1, sealed) is still NOT available: bootstrap macros and primitive
 // expanders live there (primitive_expanders_registry.go registers through
 // SealedWriteViewAt(PhaseExpand); `when` is present in SealedSlots()). Relocating
 // a phase-1 install would land an imported macro on exactly a bootstrap macro's
@@ -714,7 +715,7 @@ func installImportedBinding(
 		// writes its value and its provenance onto the base. See that method's doc
 		// for the measurement.
 		idx, created = env.GlobalEnvironment().CreateImportedGlobalBindingAt(
-			localSym, bt, ambient, environment.ExactPhase(env.PhaseLevel()), true)
+			localSym, bt, ambient, env.PhaseLevel(), true)
 	} else {
 		idx, created = env.MaybeCreateOwnGlobalBinding(localSym, bt, ambient)
 	}
@@ -780,10 +781,13 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 		if !skipBase {
 			// Create binding in the target at the base phase. This is the ONE site
 			// that takes the shadowable tier: at targetPhase 0 it resolves to
-			// (ExactPhase(0), sealed), an empty coordinate, so a user top-level
-			// define gets its own T1 slot and shadows rather than assigning through
-			// the import. At any other targetPhase installImportedBinding falls back
-			// to the view — see the hazard in its doc.
+			// (phase 0, sealed) stamped Imported, which is tierExactImported — NOT
+			// an empty coordinate, the startup set is at the same (phase, sealed)
+			// pair and is separated by the stamp alone. A user top-level define
+			// gets its own tierExactMutable slot above both and shadows rather than
+			// assigning through the import. At any other targetPhase
+			// installImportedBinding falls back to the view — see the hazard in its
+			// doc, which is where the "empty coordinate" argument was falsified.
 			phaseEnv := targetEnv.AtPhase(targetPhase)
 			localSym := values.NewSymbol(localName)
 			err := installImportedBinding(phaseEnv, localSym, libBinding.BindingType(),
@@ -819,8 +823,8 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			// DELIBERATELY placementInPlace, and this is a REFUSAL, not an omission.
 			//
 			// The whole point of the propagation is that propagatePhase > 0, so the
-			// shadowable tier would resolve to (ExactPhase(1), sealed) — which, unlike
-			// (ExactPhase(0), sealed), is NOT an empty coordinate. Bootstrap macros
+			// shadowable tier would resolve to (phase 1, sealed) — which, unlike
+			// (phase 0, sealed), is NOT an empty coordinate. Bootstrap macros
 			// and primitive expanders live there (`when` is in SealedSlots()). An
 			// imported macro of the same name would land on exactly those coordinates
 			// with the same ambient scope set, so CreateGlobalBindingAt REUSES the
@@ -950,7 +954,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 		// DELIBERATELY placementInPlace for BOTH arms, and this is a REFUSAL.
 		//
 		// The syntax arm installs into targetEnv.Expand(), so it carries exactly the
-		// (ExactPhase(1), sealed) hazard spelled out at the propagated install above:
+		// (phase 1, sealed) hazard spelled out at the propagated install above:
 		// an imported macro would overwrite a same-named bootstrap transformer in the
 		// sealed startup set, engine-wide and silently.
 		//

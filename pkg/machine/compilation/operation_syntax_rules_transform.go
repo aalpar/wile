@@ -135,30 +135,31 @@ func definitionFallbackPhases(env *environment.EnvironmentFrame) []environment.P
 
 // lookupLiteralBinding resolves sym for the R7RS §4.3.2 literal comparison: in
 // env's own lexical chain at env's own phase, then in each fallback phase in
-// order, then the AMBIENT binding of the name, returning the first hit.
+// order, then in what the LANGUAGE supplies through the dialect's bulk rows,
+// returning the first hit.
 //
 // The own-frame probe comes first and is load-bearing on its own: a phase VIEW
 // has no lexical parent chain, so a phases-only probe cannot see a let-bound
-// shadow: it answers the ambient auxiliary binding for the input identifier in
-// (let ((else #f)) (cond (else 'TOOK-ELSE))), and that control regresses to
+// shadow: it answers the language's auxiliary binding for the input identifier
+// in (let ((else #f)) (cond (else 'TOOK-ELSE))), and that control regresses to
 // TOOK-ELSE.
 //
-// Ambient last is load-bearing. Auxiliary syntax (else, =>) and every
-// special-form name live at the ambient coordinate (registry/apply.go
-// registerCompileTimeBinding), which the ranked probe at ANY phase reaches as
-// T3, so a phase-1 probe for `else` would answer the keyword before the descent
-// has looked at phase 0. A syntax-case macro's literal is written at phase 1 and
-// used at phase 0, and a user (define else 5) at phase 0 must win that pin
-// (TestPatternLiteralRespectsAUseSiteShadow, "syntax-case, global shadow"). An
-// ambient answer is therefore held back and returned only when no exact-phase
+// The LANGUAGE step last is load-bearing. Auxiliary syntax (else, =>) and every
+// special-form name is supplied at every macro phase — once by a phase-blind
+// ambient coordinate, now by a declared row — so a phase-1 probe for `else`
+// would answer the keyword before the descent has looked at phase 0. A
+// syntax-case macro's literal is written at phase 1 and used at phase 0, and a
+// user (define else 5) at phase 0 must win that pin
+// (TestPatternLiteralRespectsAUseSiteShadow, "syntax-case, global shadow"). The
+// language's answer is therefore held back and returned only when no per-symbol
 // slot exists at env's own phase or any fallback phase.
 //
-// A tie refuses. ExactBinding and AmbientBinding report an incomparable
+// A tie refuses. ExactBinding and BulkBindingAt report an incomparable
 // equal-cardinality tie as an answer, and the pin returns ok=false the moment
-// one is found: an exact-tier tie at env's own phase or at any fallback phase is
-// live wherever it is met, and an ambient tie counts only when nothing exact
-// exists anywhere above it. Nothing here recovers a panic; the raising readers
-// (GetBinding, SealedBindingAt) are not on this path.
+// one is found: a per-symbol tie at env's own phase or at any fallback phase is
+// live wherever it is met, and a row-level tie counts only when nothing
+// per-symbol exists anywhere above it. Nothing here recovers a panic; the
+// raising readers (GetBinding, SealedBindingAt) are not on this path.
 func lookupLiteralBinding(
 	env *environment.EnvironmentFrame,
 	sym string,
