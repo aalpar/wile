@@ -178,13 +178,21 @@ func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
 // reference with useScopes. A binding with no scopes (top-level / pre-hygiene)
 // matches any reference.
 //
-// It is the single entry point for every consumer that matches a REFERENCE
-// against a candidate BINDER, so scope resolution cannot diverge. This comment
-// used to name two of them; measured 2026-09-10 there are NINE call sites in
-// three packages — environment's resolveLocal, probeTiersLocked, probeBulkLocked
-// and resolveAtCoordsLocked; validate's letBoundClosureEscapes, refMatchesBinder
-// and nameSet.shadowLookup; compilation's sameBinder and
+// It is the entry point MOST consumers matching a REFERENCE against a candidate
+// BINDER share, so scope resolution cannot diverge across them. This comment used
+// to name two; measured 2026-09-10 there are NINE call sites in three packages —
+// environment's resolveLocal, probeTiersLocked, probeBulkLocked and
+// resolveAtCoordsLocked; validate's letBoundClosureEscapes, refMatchesBinder and
+// nameSet.shadowLookup; compilation's sameBinder and
 // freeVarCollector.boundInside.
+//
+// It is NOT every such consumer, and the exception is worth knowing:
+// validate.resolveNodeByScopes (frame_reclaim_build.go) does a reference-vs-binder
+// match and calls ScopesMatch DIRECTLY, spelling the subset out in its own comment.
+// It is the frame-reclaim authority — its false positive is corruption, not a lost
+// optimization — so a change to the relation has to reach it explicitly; it will
+// not arrive by editing this function. (The two internal/match sites are different:
+// they compare a pattern's scopes to a template's, not a reference to a binder.)
 //
 // The empty-set arm below is a SHORT-CIRCUIT, not the rule. ScopesMatch already
 // answers true for an empty binding set — its length guard cannot fire when

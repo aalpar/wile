@@ -125,8 +125,11 @@ func RegisterPhaseBindings[F any](
 // the standard does not have, so there is no conformance answer to appeal to.
 //
 // The two reference implementations disagree, and neither does what a rank
-// shuffle would do. Chez (R6RS (for … expand)) is SILENT, first-listed-wins —
-// measured non-vacuously, with a library exporting lambda as car. Racket REFUSES
+// shuffle would do. Four-way, per the house rule — master and this branch beside
+// petite (Chez) and racket, one program per arm, so a Wile answer is never read
+// as a deviation without knowing what both oracles say. Chez (R6RS (for … expand))
+// is SILENT, first-listed-wins — measured non-vacuously, with a library exporting
+// lambda as car. Racket REFUSES
 // require-vs-require ("identifier already required for syntax") but SHADOWS
 // require-vs-language, and (begin-for-syntax (define lambda 7)) is accepted. So
 // Racket's hierarchy is definition > require > language, and the discriminator

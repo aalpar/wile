@@ -1777,8 +1777,11 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
      `meta level` appear nowhere in the library section. `for-syntax` is
      R6RS/Racket. The collision is about a construct the standard does not have.
   2. **The two reference implementations disagree, and neither does what the
-     design proposed.** Chez (R6RS `(for … expand)`) is SILENT, first-listed-wins
-     — measured non-vacuously, with a library exporting `lambda` as `car`. Racket
+     design proposed.** Four-way per the house rule — **master** and **this
+     branch** beside **`petite`** (Chez) and **`racket`**, one program per arm, so
+     neither oracle's answer is read as Wile's deviation without knowing what the
+     other says. Chez (R6RS `(for … expand)`) is SILENT, first-listed-wins —
+     measured non-vacuously, with a library exporting `lambda` as `car`. Racket
      REFUSES require-vs-require (`identifier already required for syntax`) but
      SHADOWS require-vs-language, and `(begin-for-syntax (define lambda 7))` is
      accepted. Racket's hierarchy is definition > require > language, and its
@@ -1840,10 +1843,11 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   failure's own `got %d names`), against a floor of `> 20`. The floor and the
   ratchet mean DIFFERENT things and the distinction is the point: the floor asks
   "is this test looking at anything at all", the `masked` assertion asks "did the
-  import move any of them". A future change that halves the expander table still
-  clears the floor and the test keeps reporting green while sensing half as much.
-  If `SealedSlots()` ever shrinks past 20, that must surface as an assertion
-  failure, not as a silently narrower population.
+  import move any of them". The boundary exactly: anything down to **21** names
+  still clears `> 20`, so a change dropping the expander table from 40 to 21 —
+  nearly half of it gone — keeps reporting green while sensing half as much, and
+  only 20 or fewer trips the floor. A population that narrows must surface as an
+  assertion failure, not as a quietly smaller universe the `masked` loop walks.
 
 ### `set!`'s two immutable-binding refusals report a stale location (2026-09-09)
 
@@ -1986,16 +1990,21 @@ given, because several of them had already rotted.
 
   | Item | Plan said | Measured |
   |---|---|---|
-  | phase-VALUE comparison bodies | 8 | **16** tree-wide, **10** in `pkg/environment` |
+  | phase-VALUE comparison bodies | 8 | **16** tree-wide, **10** in `pkg/environment` — definition below; a looser sweep reaches 18-19 |
   | struct fields typed `Phase` (incl. `map[Phase]…`) | 3 | **12** (11 named structs + 1 anonymous table struct); **8** in `pkg/environment` |
   | signatures mentioning `Phase` | ~24 | **61** (63 `func` lines match; 2 are `Complex.Phase()` / `BigComplex.Phase()`, an unrelated argument-of-a-complex-number) |
-  | distinct WIDTHS to reconcile | 3 | **4** |
+  | distinct widths | 3 | **3** — confirmed; but **4 declarations** carry them |
 
-  The four widths: `Phase int8`; `exactPhases [2]uint64` (128 bits, non-negative
-  phases only); `macroPhaseSeenBits [2]atomic.Uint64` (a second, independent 128-bit
-  mirror); and `phaseSetBits = 8` over `registry.PhaseSet uint8`, whose `init()`
-  asserts bit position == `int(Phase)`. Three of the four are dense-small-integer
-  assumptions in TYPE form and are unreachable by grepping for `>>6`.
+  The widths are three — `Phase int8`, the 128-bit bitset domain, and
+  `phaseSetBits = 8` over `registry.PhaseSet uint8` whose `init()` asserts bit
+  position == `int(Phase)` — and the plan's figure of three is RIGHT. What it
+  undercounts is the DECLARATIONS: `exactPhases [2]uint64`
+  (`global_environment_frame.go`) and `macroPhaseSeenBits [2]atomic.Uint64` are two
+  independent arrays at the same 128-bit width, so a fold has four sites to
+  reconcile, not three. All three bitset declarations — the two `[2]`-arrays and
+  `PhaseSet uint8` — are dense-small-integer assumptions in TYPE form, and none of
+  them is reachable by grepping for `>>6`; only `Phase int8` itself is a plain
+  scalar domain.
 
   `appendExactPhases` (`global_environment_frame.go`) is the **reverse** mapping —
   `bits.TrailingZeros64` back to `Phase(i*64+bit)` — and `PresentPhases` loses the
@@ -2014,6 +2023,19 @@ given, because several of them had already rotted.
   `materializeBulkLocked`, `resolveAtCoordsLocked`, `createGlobalBindingAt`), so a
   read-side inventory finds under a third of them.
 
+  **The comparison count is definition-sensitive; here is the definition.** 16 =
+  every binary comparison (`==` `!=` `<` `<=` `>` `>=`) in non-test Go under
+  `pkg extensions cmd tools test integration` with at least one `Phase`-typed
+  operand, comment lines excluded, and excluding nil tests against the
+  `*PhaseRegistry` pointer (`p.phases == nil`) and against `macroPhasesSeen`, which
+  are not phase-value comparisons at all. That total INCLUDES three sites that are
+  not resolution-key comparisons — `definitionFallbackPhases`' descending loop
+  bound, `CopyLibraryBindingsToEnvAtPhase`'s `phaseSum > math.MaxInt8` overflow
+  guard, and `registry/phase.go`'s `init()` bit-position assertion — and a sweep
+  that also counts `<`/`>` on phase-DERIVED ints reaches 18-19. Do not quote a
+  bare number: the DIRECTION is the finding, and it is not in doubt — the plan's 8
+  is low under every definition tried.
+
 - [x] **The design's `ScopesCompatible` warning names the WRONG ARTIFACT, and the
   correction is now in the code.** "Do not delete `ScopesCompatible`'s empty-set
   short-circuit" is advice about a **no-op**. `ScopesCompatible(b, u)` short-circuits
@@ -2028,9 +2050,17 @@ given, because several of them had already rotted.
   **12 direct `ScopesMatch` calls on 10 lines in 5 packages** (`internal/validate`,
   `internal/match`, `machine/compilation`, `registry/core`, `environment`), plus the
   **9 `ScopesCompatible` call sites in 3 packages** that delegate to it — 21 calls on
-  19 lines across 6 packages once `pkg/values`' own delegation is counted. Two of the
-  `ScopesMatch` sites (`match/syntax_adapter.go`, `match/syntax_expand.go`) are
-  syntax-matching paths `ScopesCompatible` never touches.
+  19 lines across 6 packages once `pkg/values`' own delegation is counted.
+  **Three of the `ScopesMatch` sites are not reachable by editing
+  `ScopesCompatible`, and they are not all the same kind.** Two
+  (`match/syntax_adapter.go`, `match/syntax_expand.go`) compare a PATTERN's scopes
+  to a TEMPLATE's, a different relation. The third,
+  `validate/resolveNodeByScopes` (`frame_reclaim_build.go`), is a genuine
+  reference-vs-binder match that calls `ScopesMatch` DIRECTLY — and it is the
+  frame-reclaim authority, whose false positive is corruption rather than a lost
+  optimization, so any change to the relation must reach it on purpose.
+  `pkg/values/scope.go`'s doc now names it as the exception rather than claiming
+  `ScopesCompatible` is the single entry point, which it is not.
   `pkg/values/scope.go`'s doc, which claimed two consumers, now names all nine and
   says the short-circuit is not the rule.
 
