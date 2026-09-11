@@ -41,7 +41,13 @@ import (
 
 // TestInitialImportsMatchDialectDeclaration is design section 6.3, half one:
 // the number of bulk rows installed at engine origin EQUALS the dialect's
-// declaration count.
+// declaration count PLUS one vocabulary row per macro phase reached.
+//
+// The second term is not decoration in this sentence. The assertion below is an
+// equality whose right-hand side is a PRODUCT of two measured quantities, so a
+// wrong row count can be masked by a wrong phase count; a reader who takes the
+// header as "rows == declarations" misreads what the green means. The two
+// non-vacuity assertions after it are what keep each factor honest.
 //
 // Exact equality, not a lower bound. A lower bound would pass a change that
 // installed a row per exported NAME, which is the eager per-name shape bulk

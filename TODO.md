@@ -276,6 +276,7 @@ them:
 | `2026-09-08-flatt-binding-model-a-design.local.md` | **DESIGN APPROVED 2026-09-08, IMPLEMENTED 2026-09-09.** Stage A of moving Wile to Racket's binding model: the ambient `(ANY, sealed)` tier is DELETED, and what a phase can see is DECLARED by the Dialect (`LanguageProvider`, `PhasedImport`) as **bulk rows** rather than inherited from a wildcard coordinate. Phase-distinctness break SHIPPED: a procedural transformer must write `(import (for-syntax (scheme base)))`; a `syntax-rules` macro needs nothing, because its template expands into the phase-0 use site. **Three corrections the implementation forced, each of which the design got wrong:** (1) §6.1's exemplar `car` is NOT discriminating — it carries an exact-phase-1 slot from `phaseTargets`, so a pin on it could never go green; the pins use `cadr`/`assoc`. (2) The phase-1 vocabulary is NOT `{syntax-rules, ..., _}` — it is ~45 names plus every `%`-prefixed bootstrap helper, because the syntax layer's private machinery and the syntax-introspection primitives have no import route at all. (3) `AmbientBinding`/`PhaseKey`/`AnyPhase`/`tierAmbientSealed` still EXIST and now answer nothing; collapsing `PhaseKey` is Stage B's fold, not Stage A's. §7-§8 (Stage B/C) unchanged. |
 | `2026-09-09-flatt-binding-model-b-design.local.md` | **DESIGN 2026-09-09. RECOMMENDS AGAINST Stage B as §7 sketches it.** Four measurements kill the fold: (B1) **797 of 797** live global slots carry the EMPTY scope set — base, imports and user `define` alike — so §7's "the base's bindings carry fewer scopes than a user shadow" is 0 vs 0 and the difference would have to be MANUFACTURED, which means stamping a top-level scope on every binder AND every reference and deleting `ScopesCompatible`'s empty-set short-circuit; leave that short-circuit in and every binding becomes visible from every phase, i.e. the ambient tier restored under a new name with no test that can see it. (B2) Phase is a dense small-integer BIT INDEX in four places (`exactPhases[phase>>6]`, `macroPhaseSeenBits` ×2, `PhaseSet`) and an arithmetic operand in ~8 more; **Racket keeps the integer too** — `shifted-multi-scope` carries an integer delta and `resolve` takes phase as a PARAMETER that only builds the query scope set. (B3) Racket has **no SEALED analogue**; its phase 1 starts empty. (B4) Stage C gets WORSE, not better: today a serialized row is `(∅, int8, libraryName)`, two of three fields already process-stable. Replacement program, four independently shippable slices: **S0 repair Stage A** (the `(import (scheme base))` regression filed above — blocks everything), **S1 collapse the dead coordinate** (zero live `AnyPhase`/`AmbientBinding` callers; takes the OPPOSITE position from `global_environment_frame.go`'s "defer to Stage B" comment, because deferring a fold that is not happening is deferring forever), **S2 one argmax** (`probeTiersLocked` uses `>` and raises on ambiguity, `probeBulkLocked` uses `>=` and never computes it — a row-vs-row tie is broken by install order and reported as success), **S3 sealed becomes an explicit origin** (ratchet is the DELETION of the three `BindingTypePrimitive` reader gates). Also corrects two Stage A records: the impl plan's "nothing keys on `phaseLevel` in a way a representative scope could not replace" is false ON `EnsureMacroPhaseRows` ITSELF, and §7's "representative scope" names a shape that cannot express `for-meta n`. Eight fail-open blind spots catalogued, one of them (`resolveNodeByScopes`' subset guard, disable it and `./pkg/internal/validate/` + `./pkg/wile/` are BOTH green) live today and unrelated to B. |
 | `2026-09-08-flatt-binding-model-a-impl.local.md` | **IMPL PLAN 2026-09-08. SHIPPED 2026-09-09**, branches `feat/flatt-a-01`…`-11`. Task 0 needed no branch (the P2 merge carried its evidence to `master`); Tasks 1–5, 7, 9, 10, 11 landed; Task 8 was withdrawn (D7). **Two deviations from the plan, both deliberate and both recorded in code:** (a) **D12 was NOT taken.** Imports still use `placementShadowable`; the A1 collision at `(ExactPhase(0), sealed)` is resolved by a PREDICATE instead — the base's `BulkSource` is sealed-only and own-installs-only, so it refuses any binding carrying `Imported` meta, the same fact `importConflicts` keys on. Routing imports through rows needs a library-SCOPED source (`findLibraryBinding` queries with the library's scope) plus per-source-phase grouping: strictly more machinery for the same separation. (b) **Materialization has no write path.** Every row Stage A installs reads the importing store, so the binding is already a slot there and resolution returns the source's own `slotRef` — no copy, no lock upgrade, and phase-0 and phase-1 reads reach the SAME `*Binding`, which a materializing copy would have forked. Task 5 Step 4's `RLock`→`Lock` audit is therefore moot as written. **Fork 3's else-branch never fired:** the P2 arc merged before execution, so `WILE_SYNTAX_FORMS` and `bootstrap_syntax{,_procedures}.scm` ARE on `master` and Task 9 Steps 1/3 were done rather than deferred. **Startup:** +4.8–6.1% at first, traced by profiling to `macroVocabularyAdmits` rebuilding a 60-name map per NAME LOOKUP; sharing one read-only set brings it to −0.1%/+1.1% with allocations at parity. **Two defects filed, and both FIXED 2026-09-09 on `fix/phase1-import-neutrality`** together with a third (`set!`'s unstamped refusals): the phase-1 `(scheme base)` import was not behaviour-neutral, and the library `for-syntax` phase shift was dropped in the DECLARATION position, not the body. The first turned out to be ONE writer-side cause — a phase-shifted import installs at `(ExactPhase(N>0), MUTABLE)`, which outranks the SEALED phase rows — with THREE readers failing closed on it (`LookupPhaseBinding`, `lookupMacroBinding` ARM 2b, and the ER rename closure's phase). The discriminator is `BindingTypePrimitive`, NOT import provenance: the row masking `syntax-rules` under the Scheme layer carries no `Imported` meta. All three fixes are reader-side; **the writer-side slot survives and is filed against Stage B**. Details, gates, and the corrected workaround inventory in the two closed TODO.md entries. |
+| `2026-09-10-flatt-binding-model-b-impl.local.md` | **IMPL PLAN 2026-09-10. ALL NINE TASKS SHIPPED 2026-09-11** on `feat/flatt-binding-model-b`, off `91bbe8a1` (per-slice commits below; the branch tip is deliberately not cited, since a row that names its own tip goes stale on the next commit to it): `6829f3be` delete an import by TIER not by coordinate · `a60f7895` `Copy` carries what it claims to copy · `f382e772` ratchet the two unwatched frame-reclaim guards · `c02f8a3c` **S1** collapse `PhaseKey` to `Phase`, delete the ambient tier · `66d6ee64` **S2** one argmax ranks slots and rows alike · `ef92becc` **S3a** give a bulk row its origin, delete `ownInstallsOnly` · `2274728c` **S3b** record why the two reader gates stay · `c78474c2` **S4 struck**, its price and preconditions filed · `39f289eb` + this task, the record corrections. **S4 struck** (Fork G: Q4 answers NO, so "frame-per-phase dissolves" is false; the residue re-measured at 16 comparison bodies + 12 `Phase`-typed fields + 61 signatures, against the plan's 8 / 3 / ~24 — **every one of those three low**. The widths figure is the exception and is called out because it runs the other way: the plan's **three** distinct widths was RIGHT, and what it undercounts is the **four declarations** carrying them — a correction that was itself wrong and was corrected back in `39f289eb`). Written after a seventeen-agent verification pass carrying **thirty corrections** to the design (§0.1). **Three findings reordered the work, two of which did not exist when the design was written.** (1) **S0 introduced a live defect**: `namespace-undefine!` over an imported name deletes the STARTUP SET's slot and leaves the import alive, because `DeleteBindingAt` is coordinate-addressed and `resolveAtCoordsLocked` has no tier arm; invisible from Scheme (the import answers `namespace-bound?`), and the nearest gate passes through it. Task 1, before S1. (2) **`GlobalEnvironmentFrame.Copy` has a reproducing symptom today**: the phase-1 macro vocabulary is entirely absent from a `scheme-report-environment`. Three faults; the filtered vocabulary row is left INERT, not aliasing. Task 2, before S3. (3) **S3's headline mechanism does not exist**: `BulkRowSupplying`, which §6 calls the "shipped R7RS §5.6 conflict check", has ZERO callers and its own doc sentence is false. **Fork A settled against the spec and BOTH reference implementations, measured four ways: R7RS-small has NO answer** (the `<import set>` grammar has five forms and the tokens `for-syntax`/`for-meta`/`for-template`/`phase`/`meta level` appear NOWHERE in the library section; `for-syntax` is R6RS/Racket), **Chez is silent and FIRST-listed-wins**, and **Racket REFUSES require-vs-require but SHADOWS require-vs-language** (`(begin-for-syntax (define lambda 7))` is `ok`). Wile's row (c) collidee is `RegisterPhaseBindings`' phase-1 rows, i.e. the LANGUAGE, so §6's `raise-already-bound` citation answers a different relation, and the design's own origin bullet names the right analogue (`can-be-shadowed?`). **(c) is therefore an IDENTITY defect, not a rank defect**: `LookupPhaseBinding` shows the import's winner is `BindingTypePrimitive` while its VALUE is not a `*PrimitiveExpander` ([[library-envs-are-primitive-islands]]). **(A2): do not close (c); the reader gates stay and Task 7 records why; the follow-on is sharing binding identity across the import edge.** Other settled forks: **(C2)** unify the two argmax bodies and KEEP `resolveRankedLocked`'s miss-only gate (which IS the slot/row tie-break rule, not an optimization; the +6% in the file belongs to a different guard and the gate's own cost is unmeasured); **(D)** rename `AmbientKeysAt`→`UnscopedKeysAt`, `AmbientScopes` keeps its name (it names the empty scope set, a hygiene concept, not the deleted tier); **(E)** Racket's empty phase 1 DECLINED, because zero does not route around the identity defect but makes it load-bearing, and because §9 names two of what turned out to be FOUR population mechanisms — see finding (v) below; **(F)** `findLibraryBinding` takes the requesting phase, stays a TODO.md item. Other load-bearing corrections: `AnyPhase` has ONE live caller not zero; `ExactPhase(` is **153 lines in 35 files**, not ~89; `tierAmbientSealed` is already UNINHABITED so the three ceiling rewrites are provable no-ops; the store-level invariant §4 asks for **already exists and becomes a tautology**; **three** tie rules in the pair S2 merges, not two, and S2's 0-alloc gate never enters the loop it edits; **two** reader gates not three, and `phase_registry.go:137` predates the fix and must be KEPT; extending `tierExactImported` to shifted phases is arithmetically insufficient for (c) (1 outranks 2), filed as an explicit NON-GOAL; §7's "do not delete `ScopesCompatible`'s empty-set short-circuit" names the wrong artifact (deleting it is a **no-op**; the real rule is `∅ ⊆ X` in `ScopesMatch`); Q5's 239/22 are the PRE-IMPORT census, the collision is **134 moved / 7 unrecoverable / 95% fallback coverage**. B1's 797/797 reproduces only on the pre-S0 tree (HEAD: 1028/1028; fresh KitchenSink 777/777), with the 100%-empty ratio holding in 14 of 14 configurations. **What execution added to the record.** (i) **The `tierExactImported` axis now carries TWO premises, not one.** `resolveRankedLocked`'s miss-only bulk consultation was justified by "every installed row carries the empty scope set"; since `ef92becc` it also requires "every installed row is `BulkOriginLanguage`", because a `BulkOriginImport` row ranks `tierExactImported` and would **OUTRANK a sealed slot**, which miss-only never gives it the chance to do. The first such row breaks the gate exactly as the first non-empty row set does. Documented in four places (`resolveRankedLocked`, `bulkTierOf`, `BulkOriginImport`, and the ratchet `TestEveryOriginRowIsLanguageDeclared`) and pinned; `TestBulkRowsCarryTheEmptyScopeSet` moved to `pkg/wile` and to a library-bearing engine in the same commit. (ii) **The matrix sensitivity method in the design does not work.** Instrumenting the sealed arms and counting rows that reach one SATURATES — all 56 subtests reach `tierExactSealed`; the arm that discriminates is `tierExactImported`, **10 rows**, all in the first matrix. The deleted tier was **uninhabited**, so S1's expected matrix delta was **zero rows**. Caveat carried forward: **reachability is not sensitivity** — only a mutation experiment says which rows would FLIP. (iii) **B1 needs a quantifier, and it is not "the engine store".** Re-measured at `39f289eb`: fresh KitchenSink **777/777** at ∅, after `(import (scheme base))` + a define **1028/1028**; but a **macro-introduced top-level binder lands at `{intro}` in the ENGINE store**, and a compiled library store is **1025 at ∅ / 6 at `{libScope}` / 1 at `{libScope, intro}`**. So §2 row (d)'s existence proof for a cardinality difference is measured, and does not even need a library. (v) **Fork E's mechanism table did not add up, and closing it found a fifth thing.** Three filed mechanisms summed to 193 against **217** exact phase-1 slots on KitchenSink. Probing the store resolved the 24 as two independent errors: the primitive-expander table is **40** rows, not 38, because two name their form through a CONSTANT rather than a string literal and a grep missed them; and a **fourth mechanism** was unnamed — a `define-syntax` evaluated during bootstrap or extension load, **22** slots (20 core, 2 from `extensions/files`). 155 + 40 + 22 = 217, and the three buckets are a PARTITION by binding type, so the sum cannot double-count. **Mechanism 4 is the one that deters a reopener, and not because of any count**: `(*PrimitiveRegistry).AddMacroSource` is EXPORTED, so any third-party extension takes the same phase-1 write with no table for a deletion step to find. Deleting the vocabulary row and the expander registration leaves **177** standing, not 155. Counts by profile: default **226** reachable / **215** exact; KitchenSink **239** / **217**. (iv) **The plan's own B26 premise was FALSE**: `examples/` imports only `pkg/values`, `pkg/werr`, `pkg/wile` — zero `pkg/environment` hits — so no changed signature could break it; the conclusion (gate S1 on `make ci`) survives for the **doc** half instead, since `readme-check`/`check-docs-orphans` are the only gates that see `docs/` and `covercheck` cannot. |
 | `ARCHITECTURE.local.md` | 1/4 sections complete |
 | `DEBUGGER.local.md` | Both proposals unstarted |
 | `MACRO_SYSTEM.local.md` | Both sections unstarted |
@@ -1384,12 +1385,115 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   `syntax-rules` into an importable library so the phase-1 vocabulary is declared rather
   than hardcoded — the one name that motivates it is the failing row.
 
-  **Open fork, not decided.** Either (a) `findLibraryBinding` takes the requesting phase and
+  ~~**Open fork, not decided.**~~ **DECIDED (a), 2026-09-10** (Stage B impl fork F). Either
+  (a) `findLibraryBinding` takes the requesting phase and
   prefers a match there, falling back to lower phases, or (b) it returns every phase's
   binding and the install site picks. (b) is closer to what a bulk row wants but touches
   `importConflicts`, which currently compares one binding to one binding. Related:
   §4.6 of the Stage A design asserts the walk "probes phases for a *definition*" — true, but
   it does not say which definition wins, which is the whole defect.
+
+  **Why (a), and what changed the answer.** Stage B settled fork A as **A2** — the phase-1
+  reader gates STAY and imports are NOT routed through bulk rows — which removed (b)'s stated
+  justification twice over. "(b) is closer to what a bulk row wants" is moot when there is no
+  bulk row, and (b) would additionally have widened `importConflicts` from
+  one-binding-vs-one-binding to set-vs-set for no remaining benefit. This stays a TODO.md item;
+  **it is not Stage B work and nothing in Stage B depended on it.**
+
+  **The obligation that rides with (a), and it is the half that will be forgotten.**
+  `validateLibraryExports` uses the **same first-hit walk**, so **export validation passing is
+  not evidence the export is usable**. Fixing `findLibraryBinding` alone leaves the false green
+  standing: validation would keep certifying an export that resolves to nothing at the use
+  site. The validator must ask the SAME widened question, in the same change.
+
+  **Link to the phase-1 population question, in both directions** (Stage B fork E, declined
+  below and in the design's §9 Q1): an importable `syntax-rules` is the motivating name here,
+  and it is also the thing that would let the phase-1 vocabulary be **declared** rather than
+  hardcoded. The recorded sequence is: identity fix across the import edge → **this item** →
+  vocabulary becomes declarable → only then is Racket's empty phase 1 reachable. Doing them out
+  of order does not work.
+
+### Should Wile's phase 1 start EMPTY, like Racket's? DECLINED (2026-09-10)
+
+Recorded rather than left open, and recorded with its numbers, because the cheap version of
+this idea — "just delete the vocabulary row" — is wrong in a way that looks right.
+
+- [x] **DECLINED as a product decision, 2026-09-10** (Stage B impl fork E; design §9 Q1).
+  Racket's phase 1 is **0 names**: without `(require (for-syntax racket/base))` a transformer
+  body gets `datum->syntax: unbound identifier; also, no #%app syntax transformer is bound in
+  the transformer phase`. Wile's is **226** on a default engine, of which **215** hold their own
+  exact-phase-1 slot, and **239** on KitchenSink, of which **217** do. (The often-quoted 217 is
+  KitchenSink's figure; the table below gives both and attributes the difference.)
+
+  **There are FOUR population mechanisms. The design names two, the impl plan found a third,
+  and the table did not add up until the fourth was found.** Re-measured at `39f289eb`,
+  2026-09-11, by enumerating `UnscopedKeysAt(PhaseExpand)` and asking
+  `ExactBindingAt(name, ∅, PhaseExpand)` for each. On KitchenSink: 239 reachable,
+  **217 exact slots** (155 `BindingTypeVariable` + 40 `BindingTypePrimitive` + 22
+  `BindingTypeSyntax`), 22 row-only. **The three buckets are a PARTITION by binding type, so
+  the sum cannot double-count** — which is what makes the accounting below a closure rather
+  than a coincidence:
+
+  | | mechanism | contribution | binding type |
+  |---|---|---|---|
+  | 1 | `pkg/registry/apply.go`'s `phaseTargets` — every primitive whose `reg.Phases.Has(PhaseExpand)` | **155** | `Variable` |
+  | 2 | `primitiveExpanderEntries`, through `SealedWriteViewAt(PhaseExpand)` | **40** (not 38 — see below) | `Primitive` |
+  | 4 | **a `define-syntax` evaluated during bootstrap or extension load** — 20 in `pkg/registry/core/bootstrap_macros{,_late}.scm`, 2 in `extensions/files/with_file_macros.scm` | **22** | `Syntax` |
+  | | | **155 + 40 + 22 = 217** ✅ | |
+  | 3 | `pkg/wile/engine.go`'s `InstallMacroPhaseRow`, the filtered vocabulary row | 11 (default) / 22 (KitchenSink) | **row-only**, no slot |
+
+  **Mechanism 2's "38" was itself an undercount, and the cause is instructive**: two rows of
+  `primitiveExpanderEntries` name their form through a CONSTANT (`TransformerSyntaxRules`,
+  `TransformerERMacro`) rather than a string literal, so a grep for `{"…"` misses them. The
+  table has **40** rows and all 40 are live phase-1 slots — verified by set-differencing the
+  parsed table against the probe's `Primitive` set, which leaves both sides empty.
+
+  **Mechanism 4 was unattributed, and it is the one that should worry a reopener**, because it
+  is **open-ended**: it is not a fixed table at all. Any `define-syntax` evaluated while the
+  sealed base is being built lands at the phase-1 sealed write view
+  (`bootstrap_core.go` loads `reg.MacroSources()` at the phase-0 seal;
+  `compile_define_syntax.go` writes at `NextPhase()` with `BindingTypeSyntax`), and
+  **`(*PrimitiveRegistry).AddMacroSource` is EXPORTED** — it is exactly how
+  `extensions/files/register.go` injects its two — so **any third-party extension gets the same
+  phase-1 write, with no table for a deletion step to find.** That, not any count, is why
+  mechanism 4 cannot be enumerated away.
+
+  **The counts, both profiles, and the gap attributed** (same probe, both engines in one run):
+
+  | | reachable | exact slots | m1 `Variable` | m2 `Primitive` | m4 `Syntax` | m3 row-only |
+  |---|---|---|---|---|---|---|
+  | default | **226** | **215** | 155 | 40 | 20 | 11 |
+  | KitchenSink | **239** | **217** | 155 | 40 | 22 | 22 |
+
+  So the **217** above is KitchenSink's; a default engine's is **215**. And of the 13-name gap
+  between the profiles, **mechanism 4 supplies only 2** — the other **11** are mechanism 3's
+  larger vocabulary row. KitchenSink exceeding the default is therefore only **part** evidence
+  for open-endedness, and the weaker part; the exported `AddMacroSource` is the whole of it.
+
+  Mechanism 1 is **plain procedures** — `car` and `string-append` ARE at phase 1; `cadr`,
+  `map`, `assoc` are not. **A step that deletes only the vocabulary row and the expander
+  registration leaves 177 slots standing** (155 + 22), not 155: the bootstrap and extension
+  macros survive it too. That is precisely the shape this gets re-opened in. Anyone re-opening
+  it must start from mechanisms 1 and 4, and mechanism 4 has no table to delete.
+
+  **The case FOR zero is stronger than the design makes it**, and that is why it is written
+  down: it would make the phase-shifted-import collision IMPOSSIBLE rather than masked,
+  retiring the two reader gates, and it is the endpoint of `183171a1`'s own direction ("the
+  dialect declares what each phase sees").
+
+  **The case against is decisive: zero does not route around the identity defect, it makes
+  that defect load-bearing.** The phase-1 expanders ARE mechanism 2. Empty phase 1 and
+  `LookupPrimitiveExpander` has nothing to find, so the expanders must arrive through
+  `(import (for-syntax …))` — and an import today supplies a DIFFERENT OBJECT for a
+  re-exported name (`BindingTypePrimitive` whose value is not a `*PrimitiveExpander`; see the
+  reader-gates entry below). **Racket's zero requires the identity fix FIRST, not instead of
+  it.** It also moves R7RS conformance results, and it is orthogonal to everything Stage B
+  shipped.
+
+  **The sequence, recorded for whoever re-opens it:** identity fix across the import edge →
+  `findLibraryBinding` takes the requesting phase (the entry above, answered (a)), which is
+  what makes `syntax-rules` importable → the phase-1 vocabulary becomes DECLARABLE rather than
+  hardcoded → only then is zero reachable.
 
 ### A library DECLARATION's `(import (for-syntax …))` silently drops the phase shift (2026-09-09)
 
@@ -1667,6 +1771,123 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   larger than a stamp refusal. The minimal fix refuses the stamp on a reused base slot; the
   right fix stops the import taking the per-symbol path onto the base's coordinate at all,
   which is design §6's slice S3.
+
+### `namespace-undefine!` over an import destroyed the base (2026-09-10)
+
+Introduced by the S0 repair above, and invisible from Scheme. Filed and fixed in the same
+pass because it was found while planning Stage B, not by a gate.
+
+- [x] **Deleting an import deleted the STARTUP SET's slot and left the import standing**
+  [**High**, M, filed and fixed 2026-09-10, `6829f3be` on `feat/flatt-binding-model-b`]:
+  S0 gave an import its own sealed slot beside the base's and fixed the CREATE path. The
+  DELETE path still thought `(phase, sealed, scopes)` named one slot. `namespace-undefine!`
+  asks `IsImportedBindingAt` — a TIER question, the right one — and then deleted through
+  `DeleteBindingAt` at `(ExactPhase(0), sealed)`, which resolves by COORDINATE. With both
+  scope sets empty that walk returns the FIRST slot in the name's list, which is the base's,
+  created at bootstrap.
+
+  Measured, two independent traces (`car`, `list-copy`):
+
+      PRE   base=0x…4e10  imported=0x0
+      POST  base=0x…4e10  imported=0x…dda0     (after (import (scheme base)))
+      DEL   base=0x0      imported=0x…dda0     (after (namespace-undefine! … 'car))
+
+  `(car '(9 8))` still evaluates afterwards, through the surviving import.
+
+  **Why no gate caught it.** A Scheme-level assertion cannot see this: `namespace-bound?`
+  answers `#t` after the delete because the survivor answers it, which is exactly how
+  `TestImportDoesNotMakeABasePrimitiveDeletable` passed straight THROUGH the bug. The
+  observable that does discriminate is a sequence: **two consecutive undefines unbind a name
+  that a single undefine on a fresh engine refuses.** Both new tests are pins — red on
+  `91bbe8a1`, green after.
+
+  **The fix, and the shape worth reusing.** `DeleteImportedBindingAt` resolves through
+  `ImportedBindingAt`'s ranked probe, floored at `tierExactImported`, and pins the winner to
+  that tier: a mutable shadow is below the floor, the startup set above the pin. The axis is
+  **sealed-tier-only**, exactly as in `createGlobalBindingAt` — at the mutable tier reuse IS
+  the R7RS §5.3.1 supersede rule. Two named entry points sharing `removeSlotLocked`, mirroring
+  `CreateGlobalBindingAt` / `CreateImportedGlobalBindingAt`, rather than threading a provenance
+  parameter through `resolveAtCoordsLocked`, whose `healWriteLocked` caller would then need a
+  policy this change had no mandate for.
+
+  **The general lesson, and the reason this is filed rather than folded into S0's entry:**
+  **adding a ranking axis leaves every COORDINATE-addressed operation behind, and nothing
+  types the gap.** `createGlobalBindingAt` learned the axis; `resolveAtCoordsLocked` did not.
+  Any future axis owes the same sweep.
+
+  **The two sibling coordinate-addressed callers were audited, and the finding is recorded in
+  code rather than fixed** (Task 1 Step 5): `setValueAtCoords` is provenance-blind at the
+  sealed tier and that is the RIGHT answer for its caller set — one passes `sealed == false`
+  and never reaches the shared coordinate, the other takes the WRITING view's coordinates, and
+  the view that writes sealed at phase 0 is the base's own writer. Its doc now says so.
+  `OwnGlobalIndex` is the remaining one whose doc explains the coordinate-vs-ranked choice but
+  does not separately address the import tier; it is the write path's "the binding I just
+  created here" re-resolve, so the question does not arise for its callers today. **Not
+  separately pinned.**
+
+### `GlobalEnvironmentFrame.Copy` dropped three things it claims to carry (2026-09-10)
+
+- [x] **`(scheme-report-environment 7)` had no phase-1 macro vocabulary at all** [**High**,
+  M, filed and fixed 2026-09-10, `a60f7895` on `feat/flatt-binding-model-b`]: filed as Stage B
+  design §8.2 item 8 ("three untested defects"), and it had a reproducing user-visible symptom
+  the whole time. A transformer body calling `(not #f)` returns `#t` under
+  `(interaction-environment)` and raised ``no such binding "not" … at phase 1 of this unit's
+  macro tower`` under `(scheme-report-environment 7)`. The two programs differ by the
+  environment argument alone, which is what makes the failure attributable to `Copy` rather
+  than to `er-macro-transformer`, to `eval`, or to the vocabulary row.
+
+  | # | Fault | Measured |
+  |---|---|---|
+  | 1 | the re-point ran through the UNRESTRICTED source constructor | parent row 0 `minTier=tierExactSealed ownInstallsOnly=true` became `minTier=tierExactMutable ownInstallsOnly=false` — a source meaning "the base" supplying the copy's phase-0 MUTABLE tier at every macro phase |
+  | 2 | the re-point type-asserted the concrete `*storeBulkSource`, so the filtered vocabulary row and any renamed import row were skipped | such a row is not merely shared with the parent, it is **INERT**: materialization requires `store == p`, so the lookup finds the parent's `*Binding` and resolution reports a miss |
+  | 3 | `macroPhaseRows`, `macroPhasesSeen` and `macroPhaseSeenBits` were dropped | a phase the copy reached first got no vocabulary row at all |
+
+  **`BulkRowCount` is EQUAL (2 vs 2) across the defect**, so a count ratchet could never have
+  seen it. The pins assert on ANSWERS: a resolution through a copied row must succeed.
+
+  **Two shape decisions worth keeping.** `repoint` went on the `BulkSource` **interface**, not
+  on the concrete type, so the wrappers forward to their inner source and the compiler
+  enforces it — the two package-level type switches over the same three types are the shape
+  that produced fault 2 in the first place; and it **carries** `minTier`/`ownInstallsOnly`
+  rather than reconstructing them. The three macro fields are carried **together with** the
+  already-materialized rows, because the installer appends unconditionally: carrying the
+  templates while zeroing the seen-set trades a missing row for a duplicated one.
+
+### Ordinal tier labels ("T2", "T3") in prose are known-dirty (2026-09-11)
+
+- [ ] **Sweep the ~100 ordinal tier labels, or stop using them** [Low, M, filed 2026-09-11
+  after Stage B S1]: inserting `tierExactImported` between `tierExactMutable` and
+  `tierExactSealed` renumbered every tier below it, and **every "(T2)" / "(T3)" in prose
+  silently changed referent with no test going red**. A label is a second, unchecked copy of
+  the ordering; an identifier moves with the constant.
+
+  **This is a KNOWN-DIRTY baseline, not a "probably fine" one.** Four labels were checked
+  against the enum at `39f289eb`, 2026-09-11, and **all four were wrong**:
+
+  | Site | Says | Enum at HEAD |
+  |---|---|---|
+  | `pkg/machine/compilation/library_bindings.go` (`importConflicts` doc) | "the base install moved to T2" | the base install is sealed = `tierExactSealed` = **T3** |
+  | `pkg/machine/compilation/library_bindings.go` (`placementShadowable` doc) | "T1 mutable outranks T2 sealed" | sealed is **T3**; T2 is `tierExactImported` |
+  | `pkg/registry/apply.go` (`registerCompileTimeBinding` doc) | "the same T1 > T2 order" | same error |
+  | `pkg/registry/apply.go` (same doc) | the ambient tier as "the ranked probe's T3" | the ambient tier is DELETED, and **T3 now names a live tier that is not the one meant** — the worst of the four |
+
+  4 of 4 is not plausibly unlucky, so treat the remaining population as wrong until read.
+  Population at `39f289eb`, and the command, because this entry argues a correction owes one:
+
+      git grep -oE '[^A-Za-z_]T[0-9]' 39f289eb -- '*.go'
+
+  **102 occurrences across 34 Go files.** The leading non-word class is load-bearing: the naive
+  `T[0-9]` reports 118 across 37, over-counting by matching inside identifiers. 102 is still a
+  SUPERSET of the binding-tier labels, since the same shorthand also names the boxing tiers
+  (`boxing.go`), architectural-review item numbers, and `T1.5` — which is why a mechanical
+  sweep is not safe either, and why this is filed as reading work rather than as a `sed`.
+
+  **A tripwire exists and does NOT validate the baseline.** `TestTierOrdinalsHaveNotRenumbered`
+  pins the enum values, so it goes red on exactly the event that moves a label's referent, and
+  its failure message says to rewrite the labels rather than to update the test. But it froze
+  its baseline **without validating it**: a label that was already wrong stays wrong and stays
+  green. A site-count ratchet would be the wrong shape — the population does not change when a
+  tier is inserted, so a count stays green through the failure it exists to catch.
 
 ### A phase-1 `(import (for-syntax (scheme base)))` is not behaviour-neutral (2026-09-09)
 
@@ -1957,6 +2178,22 @@ records the price so it is not re-derived, and refiles the design's two remainin
 §8.2 blind spots as its preconditions. **Every number below was re-measured at
 `ef92becc`**; where the design or the impl plan carried a figure, both values are
 given, because several of them had already rotted.
+
+> **The rot has a direction, and that is itself the finding** [recorded 2026-09-11, Stage B
+> closure]. Across the Stage B record tasks **sixteen** of the briefs' figures were
+> re-measured and **sixteen were wrong, every one LOW** — a gate's failure partition is 6
+> tests not 2; `Phase` signatures 61 not ~24; `Phase`-typed struct fields 12 not 3; phase
+> comparisons 16 not 8; and one cited comparison had ceased to exist. A count taken once and
+> then carried forward decays in one direction, because code accretes; so **a stale count
+> systematically UNDER-states the work**, and a plan sized off one is systematically
+> optimistic.
+>
+> One "correction" was itself wrong and was corrected back in `39f289eb`: a record task
+> reported "four widths" where the design's **three** was right — what it undercounted was the
+> number of DECLARATIONS carrying those widths, not the number of distinct widths. That is the
+> expected failure mode of a re-measurement pass, and the reason a correction has to record
+> the command that produced it just as much as the figure it corrects. **Re-run any figure in
+> the Stage B documents before relying on it.**
 
 - [x] **Q4 — "can the phase registry be removed?" — answers NO.** Four structural
   blockers, each verified in source:

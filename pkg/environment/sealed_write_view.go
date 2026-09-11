@@ -35,10 +35,24 @@ package environment
 // WithRuntimeTarget, which LoadBootstrapCore always supplies and a bare
 // reg.Apply does not — see apply.go's phaseTargets bullet.)
 //
-// The rows are ONE ambient set, not a hierarchy of phases: no phase ever
-// resolves into the phase below it. Phases at or above 2 have no sealed-write
-// view: a define-syntax inside a transformer body climbs off the sealed axis
-// into the mutable phase-2 view.
+// The rows are ONE FLAT set, not a hierarchy of phases: no phase ever resolves
+// into the phase below it. Phases at or above 2 have no sealed-write view: a
+// define-syntax inside a transformer body climbs off the sealed axis into the
+// mutable phase-2 view.
+//
+// "Flat" rather than "ambient", deliberately, and the claim is about PHASE
+// STRUCTURE: these are sealedAxis's phase rows, and no phase resolves into the
+// one below it. It is not a claim about scope cardinality, and it is not a claim
+// about bulk rows.
+//
+// The word was doing double duty here. The paragraph below retires the AMBIENT
+// COORDINATE — the phase-blind (ANY, sealed) tier every phase once reached — so
+// reading "ambient set" as that coordinate said the opposite of what the
+// paragraph below says. A third, unrelated sense is still live elsewhere in this
+// package: AmbientScopes names the EMPTY SCOPE SET, a hygiene concept, which
+// Stage B fork D deliberately kept while renaming AmbientKeysAt → UnscopedKeysAt.
+// This sentence is about none of that. Do not read it as saying the coordinate
+// survives.
 //
 // The FIRST entry must be PhaseRuntime because that is where the base is
 // written, not because the coordinate is special: writeCoordinates once mapped a
