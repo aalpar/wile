@@ -52,6 +52,25 @@ type BulkSource interface {
 	// SourceName identifies the source for diagnostics and for Stage C's
 	// serialization.
 	SourceName() values.Value
+	// repoint returns this source reading store instead of the store it was
+	// minted over, carrying every restriction across rather than rebuilding it.
+	// GlobalEnvironmentFrame.Copy is the only caller.
+	//
+	// It is on the INTERFACE, not on *storeBulkSource, because a source is
+	// wrapped as often as it is bare: the macro-vocabulary row is a filter over
+	// a sealed store source, and a renaming import set is a rename over one.
+	// Copy's re-point used to be a `row.src.(*storeBulkSource)` type assertion,
+	// which silently skipped both wrappers and left a report environment's
+	// vocabulary row pointed at the PARENT — installed, ranked, and INERT,
+	// because materializeBulkLocked requires store == p. Dispatch makes
+	// forwarding the compiler's obligation rather than the next wrapper
+	// author's; the two package-level type switches over the same three types
+	// (selfStore, lookupExportSameStore) are the shape that produced that bug.
+	//
+	// Unexported, which closes BulkSource to out-of-package implementations. All
+	// three implementations are here, and a fourth that could not be re-pointed
+	// would be a row Copy aliased in silence.
+	repoint(store *GlobalEnvironmentFrame) BulkSource
 }
 
 // BaseSourceName is the reserved library-name datum the engine's own base
@@ -241,6 +260,27 @@ func (p *storeBulkSource) SourceName() values.Value {
 	return p.name
 }
 
+// repoint returns this source over store, CARRYING minTier and ownInstallsOnly
+// rather than reconstructing them.
+//
+// Reconstructing is what Copy used to do, through NewStoreBulkSource — the
+// unrestricted constructor. Measured on a report environment: the parent's row
+// 0 (minTier=tierExactSealed, ownInstallsOnly=true, the shape
+// NewSealedStoreBulkSource mints) came out as minTier=tierExactMutable,
+// ownInstallsOnly=false. A source that is supposed to mean "the base" then
+// supplies the copy's phase-0 MUTABLE tier at every macro phase, which is
+// exactly the leak minTier's comment records as measured.
+func (p *storeBulkSource) repoint(store *GlobalEnvironmentFrame) BulkSource {
+	q := &storeBulkSource{
+		store:           store,
+		phase:           p.phase,
+		name:            p.name,
+		minTier:         p.minTier,
+		ownInstallsOnly: p.ownInstallsOnly,
+	}
+	return q
+}
+
 // bulkRef is one installed bulk row: a resolution candidate standing for many
 // names.
 //
@@ -424,6 +464,14 @@ func (p *renamedBulkSource) SourceName() values.Value {
 	return p.name
 }
 
+// repoint rebuilds the wrapper around a re-pointed inner source. The mapping and
+// the row's identity belong to the importing unit and do not move with the
+// store, so they are shared rather than cloned — both are already documented as
+// immutable after construction.
+func (p *renamedBulkSource) repoint(store *GlobalEnvironmentFrame) BulkSource {
+	return NewRenamedBulkSource(p.inner.repoint(store), p.localToSource, p.name)
+}
+
 // selfStore reports the store a source reads, when it reads exactly one.
 //
 // Materialization needs it to tell the two cases apart: a row over THIS store
@@ -541,6 +589,13 @@ func (p *filteredBulkSource) ExportNames() iter.Seq[values.Symbol] {
 // SourceName returns the vocabulary's own identity, not the store's.
 func (p *filteredBulkSource) SourceName() values.Value {
 	return p.name
+}
+
+// repoint rebuilds the wrapper around a re-pointed inner source. The admission
+// predicate and its enumerable half are the VOCABULARY, which is the dialect's
+// and not the store's, so they are shared.
+func (p *filteredBulkSource) repoint(store *GlobalEnvironmentFrame) BulkSource {
+	return NewFilteredBulkSource(p.inner.repoint(store), p.admits, p.enumerable, p.name)
 }
 
 // InstallMacroPhaseRow records a row TEMPLATE installed at every macro phase

@@ -16,6 +16,7 @@ package environment
 
 import (
 	"fmt"
+	"maps"
 	"math/bits"
 	"slices"
 	"sync"
@@ -383,16 +384,71 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 	// in the copy would materialize a slot holding the ORIGINAL's *Binding, and a
 	// set! through the copy would reach the parent. Re-pointing is the fix, and
 	// it is cheap because a source knows the store it reads.
-	q.bulkRows = make([]bulkRef, len(p.bulkRows))
-	for i, row := range p.bulkRows {
-		q.bulkRows[i] = row
-		src, ok := row.src.(*storeBulkSource)
-		if !ok || src.store != p {
-			continue
-		}
-		q.bulkRows[i].src = NewStoreBulkSource(q, src.phase, src.name)
+	//
+	// moved is shared by both calls below so that a macro-phase TEMPLATE and the
+	// rows installMacroRowLocked already materialized from it keep sharing ONE
+	// source in the copy, as they share one in the original.
+	moved := map[BulkSource]BulkSource{}
+	q.bulkRows = p.carryBulkRows(q, p.bulkRows, moved)
+
+	// The macro-phase state is THREE fields and they are carried TOGETHER.
+	//
+	// Splitting them trades a missing row for a duplicate one in either
+	// direction. installMacroRowLocked appends UNCONDITIONALLY, so carrying the
+	// templates while zeroing the seen set makes the copy's first
+	// EnsureMacroPhaseRows re-install a template at a phase whose materialized
+	// row q.bulkRows already holds; carrying the seen set while dropping the
+	// templates leaves every phase the copy reaches FIRST with no vocabulary row
+	// at all. Dropping all three — which is what Copy did — is the second of
+	// those: measured, parent macroPhaseRows=1 macroPhasesSeen=1 became copy
+	// macroPhaseRows=0 macroPhasesSeen=0.
+	//
+	// The bitset is the lock-free mirror of the seen set, so it is carried for
+	// the same reason and by the same rule; it cannot be assigned as an array,
+	// since copying an atomic.Uint64 is what go vet's copylocks refuses.
+	q.macroPhaseRows = p.carryBulkRows(q, p.macroPhaseRows, moved)
+	if p.macroPhasesSeen != nil {
+		q.macroPhasesSeen = maps.Clone(p.macroPhasesSeen)
+	}
+	for i := range p.macroPhaseSeenBits {
+		q.macroPhaseSeenBits[i].Store(p.macroPhaseSeenBits[i].Load())
 	}
 	return q
+}
+
+// carryBulkRows clones rows for the copy q, re-pointing every row whose source
+// reads p — and only those — at q.
+//
+// selfStore rather than a type assertion on *storeBulkSource: the row that
+// carries the macro vocabulary is a filteredBulkSource, and a renaming import
+// set is a renamedBulkSource, so an assertion on the bare type re-points neither
+// and leaves both reading the parent. A row left pointing at the parent is not
+// merely shared, it is INERT — materializeBulkLocked requires store == p, so the
+// lookup finds the parent's *Binding and resolution then reports a miss.
+//
+// A row over a FOREIGN store is carried verbatim, which is right for a genuine
+// import: the exporting library is shared by every importer on master too.
+//
+// moved memoizes by source, so one source re-pointed for several rows stays one
+// source in the copy.
+//
+// Caller MUST hold at least a read lock on p.mu.
+func (p *GlobalEnvironmentFrame) carryBulkRows(q *GlobalEnvironmentFrame, rows []bulkRef, moved map[BulkSource]BulkSource) []bulkRef {
+	out := make([]bulkRef, len(rows))
+	for i, row := range rows {
+		out[i] = row
+		src, _, ok := selfStore(row.src)
+		if !ok || src != p {
+			continue
+		}
+		repointed, hit := moved[row.src]
+		if !hit {
+			repointed = row.src.repoint(q)
+			moved[row.src] = repointed
+		}
+		out[i].src = repointed
+	}
+	return out
 }
 
 // Bindings returns a copy of the bindings slice.
