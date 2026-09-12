@@ -15,12 +15,15 @@
 package environment
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // The ranked probe over a hand-built mixed store (design §4.3):
@@ -561,6 +564,78 @@ func TestBulkTierOfClassifiesByOrigin(t *testing.T) {
 			qt.Assert(t, bulkTierOf(row, PhaseRuntime), qt.Equals, tierNone,
 				qt.Commentf("a row is a candidate at its declared phase alone, whatever its origin"))
 		})
+	}
+}
+
+// TestBulkRowInstallersRefuseUnknownOrigin is the successor to
+// TestCreateGlobalBindingAtRefusesAnyPhase, which commit ce0ffe88 deleted.
+//
+// WHAT IT RESTORES: the invariant, not the assertion. The deleted test pinned
+// that CreateGlobalBindingAt REFUSES the wildcard phase coordinate rather than
+// modeling a slot nothing ranks — a coordinate value that means nothing, kept
+// out at the create path. BulkOriginUnknown is now the only such value in this
+// package, so the same rule is asserted against the two row installers.
+//
+// WHAT IT CANNOT RESTORE, and this is not a continuity claim: the wildcard
+// coordinate is gone for good. AnyPhase does not exist, Phase has no wildcard
+// inhabitant, and there is no value left to hand CreateGlobalBindingAt, so the
+// original assertion cannot be written at all — not weakened, not ported.
+// This is the successor invariant over a different subject.
+//
+// PIN, not a guard: it fails with the refusal removed. Verified by deleting the
+// BulkOriginUnknown arm from both installers, at which point all four subtests
+// fail on the capturePanic assertion with "got nil value but want non-nil".
+//
+// Asserted with errors.Is on the SENTINEL, never on the panic text, which is
+// the deleted test's own reasoning carried over verbatim: a message-only
+// assertion keeps passing if the sentinel changes underneath it, and the
+// sentinel is the identity the house error rule protects. Both sealed values
+// are asserted for the deleted test's reason too — a narrowing back to one half
+// must fail here.
+func TestBulkRowInstallersRefuseUnknownOrigin(t *testing.T) {
+	installers := []struct {
+		name    string
+		install func(g *GlobalEnvironmentFrame, src BulkSource, sealed bool)
+	}{
+		{
+			name: "InstallBulkRow",
+			install: func(g *GlobalEnvironmentFrame, src BulkSource, sealed bool) {
+				g.InstallBulkRow(src, nil, PhaseExpand, sealed, BulkOriginUnknown)
+			},
+		},
+		{
+			// The template path is the worse one to lose: installMacroRowLocked
+			// copies the template's origin into a real row at every macro phase
+			// the store ever reaches, so an unrankable origin accepted here is
+			// replicated rather than isolated.
+			name: "InstallMacroPhaseRow",
+			install: func(g *GlobalEnvironmentFrame, src BulkSource, sealed bool) {
+				g.InstallMacroPhaseRow(src, nil, sealed, BulkOriginUnknown)
+			},
+		},
+	}
+	for _, tc := range installers {
+		for _, sealed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/sealed=%t", tc.name, sealed), func(t *testing.T) {
+				g := NewGlobalEnvironmentFrame()
+				src := NewSealedStoreBulkSource(g, PhaseRuntime, values.NewSymbol("#%probe"))
+				r := capturePanic(func() {
+					tc.install(g, src, sealed)
+				})
+				qt.Assert(t, r, qt.IsNotNil,
+					qt.Commentf("%s accepted BulkOriginUnknown; bulkTierOf then has to invent a tier for a row whose provenance is unstated", tc.name))
+				err, ok := r.(error)
+				qt.Assert(t, ok, qt.IsTrue,
+					qt.Commentf("panicked with %T, not an error; the house rule is a WRAPPED sentinel, never a bare one and never a string", r))
+				qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
+					qt.Commentf("panic does not carry ErrInvalidArgument: %v", err))
+				// The refusal has to be a refusal, not a complaint: a row appended
+				// before the panic would leave the store holding what the panic
+				// says it rejected.
+				qt.Assert(t, g.BulkRowCount(), qt.Equals, 0,
+					qt.Commentf("%s installed the row anyway", tc.name))
+			})
+		}
 	}
 }
 
