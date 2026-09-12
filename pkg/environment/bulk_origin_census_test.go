@@ -59,9 +59,10 @@ import (
 //
 // Neither covers one residual, and it is named rather than left implicit: an
 // origin ADDED to the enum and forgotten in bulkTierOf is valid, so it passes
-// both the door and this census, and ranks tierNone by that classifier's
-// default arm. Inert rather than wrong, which is the shape that default was
-// changed to on 2026-09-11 precisely so this residual would be survivable.
+// both the door and this census. bulkTierOf ranks it tierNone — inert rather
+// than wrong, at BOTH values of sealed, which is what asking the origin before
+// asking row.sealed buys. TestEveryDeclaredOriginIsClassified is the test that
+// actually catches the omission; this census only declines to hide it.
 
 // invalidOriginRowCensus lists every installed bulk row whose origin is not one
 // this package declares, rendered "(origin,phase,sealed)" and sorted.

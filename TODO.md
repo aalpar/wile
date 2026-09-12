@@ -1962,17 +1962,26 @@ the reversal and are not re-discovered as novel.
   will serialize a row, so a renumbering is wire-visible, and that ratchet is the only thing
   watching it.
 
-  **The reversal opened a hole, closed in the same pass.** `BulkOrigin` is exported and both
-  installers take it positionally, so an out-of-tree caller can construct `BulkOrigin(99)`;
-  refusing only the zero value let that through, and `bulkTierOf`'s `default:` arm ranked an
-  unrecognised origin `tierExactSealed` — silently **language-declared**, a wrong answer
-  rather than an inert one, breaking the miss-only bulk consultation's second premise with
-  every ratchet green. It was unreachable before: the type was exported then too, but the
-  zero value was `BulkOriginLanguage`, so the only value a caller reached by accident was
-  benign. Opening the interface and renumbering the enum in one pass is what made it
-  reachable. The door is now `BulkOrigin.valid` (`> Unknown && < bulkOriginCount`), and
-  `bulkTierOf` names `BulkOriginLanguage` explicitly so its `default:` answers `tierNone`:
-  an origin added to the enum and forgotten in the classifier is inert, not promoted.
+  **A standing hole was closed in the same pass, and the reversal added one case to it.**
+  `BulkOrigin` is exported and both installers take it positionally, so an out-of-tree
+  caller can construct `BulkOrigin(99)`; `bulkTierOf`'s `default:` arm ranked an unrecognised
+  origin `tierExactSealed` — silently **language-declared**, a wrong answer rather than an
+  inert one, breaking the miss-only bulk consultation's second premise with every ratchet
+  green.
+
+  **That was NOT created by this branch, and an earlier revision of this entry said it
+  was.** Checked at `ff7f8534`: the type was already exported, `InstallBulkRow` already
+  exported, and the `default:` arm already answered `tierExactSealed`, so the out-of-range
+  case had been live all along; opening the `BulkSource` interface contributed nothing to
+  it. What the renumbering **did** add is the **zero-value** case, because before it the
+  value a caller reached by omission was `BulkOriginLanguage`, a real origin.
+
+  The door is now `BulkOrigin.valid` (`> Unknown && < bulkOriginCount`), which closes both,
+  and `bulkTierOf` asks the ORIGIN before it asks `sealed` so an origin nobody classified is
+  inert **unconditionally** — asking `sealed` first ranked an unclassified unsealed row
+  `tierExactMutable`, the highest tier. `TestEveryDeclaredOriginIsClassified` sweeps the whole
+  `uint8` domain and is what goes red the moment an origin is appended without a classifier
+  arm.
 
 - [x] **The two tests `ce0ffe88` deleted are re-implemented against the new subject**
   [`db9e9c0b`]: `TestCreateGlobalBindingAtRefusesAnyPhase` and all of

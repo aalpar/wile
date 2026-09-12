@@ -1139,37 +1139,49 @@ func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.Sc
 // fields or be documented here as unreachable for rows, or the two walks
 // silently start ranking the same candidate differently again. A new BulkOrigin
 // needs the same care from the other side, and since 2026-09-11 the failure it
-// defaults to is INERT rather than wrong: every origin is named by an arm, and
-// the default answers tierNone, so an origin added to the enum and forgotten
-// here loses every comparison instead of quietly ranking tierExactSealed as
-// though the language had declared it.
+// defaults to is INERT rather than wrong, UNCONDITIONALLY: an origin this
+// classifier has no arm for ranks tierNone at either value of row.sealed, so
+// forgetting to classify a newly declared origin loses every comparison instead
+// of winning one. TestEveryDeclaredOriginIsClassified is the ratchet, and it is
+// the one thing that catches the omission at the moment it is made.
+//
+// THE ORDER OF THE TWO QUESTIONS IS THE WHOLE FIX. Asking row.sealed first, as
+// this did until 2026-09-11, makes an unclassified origin rank tierExactMutable
+// whenever the row is unsealed — the HIGHEST tier, outranking every slot, which
+// is the loudest wrong answer available and the exact opposite of inert. Hoisting
+// only the undeclared-origin test above row.sealed fixed half of that and left
+// the declared-but-unclassified half behind; asking the origin FIRST, for its
+// whole answer, is what makes the property unconditional.
 func bulkTierOf(row bulkRef, phase Phase) int {
-	switch {
-	case row.phase != phase:
-		return tierNone
-	// The door's answer, restated so the classifier does not depend on the door
-	// having been walked through. InstallBulkRow and InstallMacroPhaseRow refuse
-	// every origin outside the declared set, so no INSTALLED row reaches this
-	// arm and TestNoInstalledRowHasAnInvalidOrigin says so; a bulkRef literal
-	// written inside this package is now the only way one gets here, because a
-	// literal is the only construction that bypasses an installer.
-	case !row.origin.valid():
-		return tierNone
-	case !row.sealed:
-		return tierExactMutable
-	case row.origin == BulkOriginImport:
-		return tierExactImported
-	case row.origin == BulkOriginLanguage:
-		return tierExactSealed
-	// UNREACHABLE while the arms above name every declared origin, which is what
-	// makes naming BulkOriginLanguage explicitly worth the line: an origin that
-	// is valid (inside the enum) but has no arm is a classifier that was not
-	// updated, and tierNone is the conservative answer for it. It used to be
-	// tierExactSealed, which silently promoted such a row to language-declared
-	// and broke resolveRankedLocked's second premise with nothing going red.
-	default:
+	if row.phase != phase {
 		return tierNone
 	}
+
+	// The origin is asked first, and what it yields is the tier a SEALED row of
+	// that origin ranks at. tierNone from this switch means "no arm here", which
+	// covers all three ways an origin can fail to name one: the zero value (the
+	// field nobody set), a value outside the declared set (which the installers
+	// refuse, so only an in-package bulkRef literal can produce it), and a
+	// declared origin nobody classified.
+	atSealed := tierNone
+	switch row.origin {
+	case BulkOriginLanguage:
+		atSealed = tierExactSealed
+	case BulkOriginImport:
+		atSealed = tierExactImported
+	}
+	if atSealed == tierNone {
+		return tierNone
+	}
+
+	// Below the sealed tier the origin makes no difference, and that is not an
+	// omission: a mutable row already ranks the LOWEST tier, so an import cannot
+	// be lowered further. Guarding it the other way — letting an import raise a
+	// mutable row — would rank it above a mutable slot.
+	if !row.sealed {
+		return tierExactMutable
+	}
+	return atSealed
 }
 
 // probeBulkLocked finds the best bulk row supplying key at phase, under the same

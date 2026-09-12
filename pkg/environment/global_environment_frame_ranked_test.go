@@ -602,10 +602,13 @@ func TestBulkRowTieRanksLikeASlotTie(t *testing.T) {
 // import row and the language row were indistinguishable and the "row" column
 // of the tier table had no entry at all.
 //
-// The BulkOriginUnknown rows are a GUARD on an arm the installers make
+// The BulkOriginUnknown rows are a GUARD on an answer the installers make
 // unreachable — they refuse that origin — so what they defend is a bulkRef
 // literal written inside this package, which is exactly what the table below
-// builds.
+// builds. Both sealed values are tabled for them because bulkTierOf asks the
+// ORIGIN before it asks row.sealed: an unclassified origin is inert either way,
+// and a reordering that put row.sealed first would rank the unsealed one
+// tierExactMutable.
 func TestBulkTierOfClassifiesByOrigin(t *testing.T) {
 	tcs := []struct {
 		name   string
@@ -639,6 +642,44 @@ func TestBulkTierOfClassifiesByOrigin(t *testing.T) {
 	}
 }
 
+// TestEveryDeclaredOriginIsClassified sweeps the WHOLE uint8 domain and pins the
+// two halves of "the origin decides whether a row ranks at all":
+//
+//   - every origin the package declares (BulkOrigin.valid) must rank SOMETHING,
+//     at both values of sealed. A declared origin passes the installers' door, so
+//     a row carrying it can exist; one that ranks tierNone is a row that is
+//     installed, counted, and permanently invisible.
+//   - every origin it does not declare must rank tierNone, at both values of
+//     sealed. This is the half that used to be conditional: bulkTierOf asked
+//     row.sealed before the origin, so an unrankable origin on an UNSEALED row
+//     came out tierExactMutable, the highest tier, outranking every slot.
+//
+// It is the residual-closing half of the pair that TestBulkOriginValuesHaveNotRenumbered
+// opens. That one catches an appended constant; this one catches an appended
+// constant nobody wrote a bulkTierOf arm for — the case a hand-written table
+// cannot see, because the table author is the same person who forgot the arm.
+// Append BulkOriginFoo and this goes RED immediately, naming the origin.
+//
+// GUARD today: bulkOriginCount is 3, both non-zero origins are classified, and
+// the sweep passes. It has no red state to demonstrate without adding a constant,
+// which is precisely the event it exists to catch.
+func TestEveryDeclaredOriginIsClassified(t *testing.T) {
+	for i := range 256 {
+		origin := BulkOrigin(i)
+		for _, sealed := range []bool{false, true} {
+			row := bulkRef{phase: PhaseExpand, sealed: sealed, origin: origin}
+			got := bulkTierOf(row, PhaseExpand)
+			if !origin.valid() {
+				qt.Check(t, got, qt.Equals, tierNone,
+					qt.Commentf("origin %d (undeclared, sealed=%t) ranks tier %d; an origin no arm names must be inert whether or not the row is sealed", origin, sealed, got))
+				continue
+			}
+			qt.Check(t, got != tierNone, qt.IsTrue,
+				qt.Commentf("origin %d (declared, sealed=%t) ranks tierNone: the installers admit it, so a row can carry it, and bulkTierOf has no arm for it — that row would install, count, and never win a comparison", origin, sealed))
+		}
+	}
+}
+
 // TestBulkRowInstallersRefuseAnUndeclaredOrigin is the successor to
 // TestCreateGlobalBindingAtRefusesAnyPhase, which commit ce0ffe88 deleted.
 //
@@ -655,13 +696,14 @@ func TestBulkTierOfClassifiesByOrigin(t *testing.T) {
 // original assertion cannot be written at all — not weakened, not ported.
 // This is the successor invariant over a different subject.
 //
-// THREE undeclared values, not one, and the second two are the reason this test
-// was widened on 2026-09-11. BulkOrigin is exported and both installers take it
-// positionally, so an out-of-tree caller can construct BulkOrigin(99); before
-// the enum was renumbered that mattered less, because the value a caller reached
-// by accident (zero) was BulkOriginLanguage and benign. bulkOriginCount itself
-// is asserted as the exclusive upper bound, which is the boundary an off-by-one
-// in valid would move.
+// THREE undeclared values, not one. BulkOrigin is exported and both installers
+// take it positionally, so an out-of-tree caller can construct BulkOrigin(99) —
+// which was true before this branch as well as after, and was ranked
+// tierExactSealed the whole time; the widening on 2026-09-11 closed a standing
+// hole rather than one the branch opened. What the branch DID add is the
+// zero-value row: before the renumbering, the value a caller reached by omission
+// was BulkOriginLanguage. bulkOriginCount is tabled as the exclusive upper bound,
+// which is the boundary an off-by-one in valid would move.
 //
 // PIN, not a guard: it fails with the refusal removed. Verified twice —
 // deleting the arm from both installers fails all twelve subtests, and

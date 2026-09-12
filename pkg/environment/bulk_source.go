@@ -81,6 +81,33 @@ type BulkSource interface {
 	// resolution reports a miss. Nothing panics and no count changes —
 	// BulkRowCount was equal across the Copy defect this method was added to
 	// fix — so the failure surfaces only as a name that stopped resolving.
+	//
+	// READ THIS BEFORE WRITING ONE. Honouring the obligation above is NOT
+	// sufficient for an out-of-package source, and today it is not even
+	// consulted. Two package-level type switches decide what happens to a row,
+	// and both fall to a default arm for a type declared elsewhere:
+	//
+	//   - selfStore recognises the three in-tree types alone, so carryBulkRows
+	//     answers "not a self-store row" for yours and SKIPS it: Copy aliases the
+	//     row and never calls your Repoint at all. materializeBulkLocked gates on
+	//     the same selfStore, so the aliased row then materializes nothing. A row
+	//     an out-of-tree source backs over THIS store is therefore inert in every
+	//     copy, however correctly Repoint is written. (A row over a FOREIGN store
+	//     is unaffected — carrying it verbatim is right for a genuine import.)
+	//   - lookupExportSameStore falls back to the LOCKING LookupExport for a type
+	//     it does not know. That is correct only when the source reads a different
+	//     store, which was true of every implementation while this interface was
+	//     sealed. A source that reads the store being probed takes p.mu.RLock
+	//     while probeBulkLocked already holds it for reading — a recursive read
+	//     lock, which Go documents as deadlocking once a writer queues between the
+	//     two acquisitions, and which the SRFI-18 thread model makes reachable.
+	//     The same fallback also bypasses probeBulkLocked's self-store skip, the
+	//     guard behind a measured +6% startup.
+	//
+	// So: an out-of-tree source over a FOREIGN store is supported. One over the
+	// probing store is not, and neither limitation is enforced by a compile
+	// error — the seal that used to enforce both was removed deliberately on
+	// 2026-09-11.
 	Repoint(store *GlobalEnvironmentFrame) BulkSource
 }
 
@@ -348,10 +375,15 @@ const (
 // breaks the second premise resolveRankedLocked's miss-only bulk consultation
 // rests on (every installed row is language-origin) with every ratchet green.
 //
-// Reachable only since 2026-09-11. The type was exported before that too, but
-// the zero value was BulkOriginLanguage, so the one value a caller could produce
-// by accident was benign. Opening the BulkSource interface and renumbering the
-// enum in the same pass is what made the out-of-range case worth a door.
+// THE OUT-OF-RANGE CASE IS NOT NEW, and an earlier draft of this comment said it
+// was. Checked at ff7f8534, before any of the 2026-09-11 commits: BulkOrigin was
+// already exported, InstallBulkRow already exported, and bulkTierOf's default arm
+// already answered tierExactSealed — so BulkOrigin(99) could be constructed and
+// ranked as language-declared the whole time. Opening the BulkSource interface
+// contributed nothing to it. What the renumbering DID add is the zero-value case:
+// before it, the value a caller reached by omission was BulkOriginLanguage, which
+// is a real origin and benign. This door closes both, and only one of the two is
+// this branch's doing.
 func (p BulkOrigin) valid() bool {
 	return p > BulkOriginUnknown && p < bulkOriginCount
 }
@@ -570,9 +602,24 @@ func (p *renamedBulkSource) lookupExportLocked(name values.Symbol) (*Binding, bo
 }
 
 // lookupExportSameStore dispatches to the lock-free lookup when src is one of
-// the two in-tree sources over this store, and falls back to the locking entry
+// the three in-tree sources over this store, and falls back to the locking entry
 // point otherwise. A foreign source's store is a DIFFERENT mutex, so locking it
 // is correct there.
+//
+// THE DEFAULT ARM'S JUSTIFICATION IS NARROWER THAN IT READS, since BulkSource
+// was opened on 2026-09-11. "A foreign source's store is a different mutex" was
+// a fact about the closed set of implementations, not a fact about the interface:
+// an out-of-package source is free to read the store being probed. Every caller
+// reaches here under that store's p.mu held for reading, and storeBulkSource's
+// plain LookupExport takes p.mu.RLock again — a recursive read lock, which Go
+// documents as deadlocking as soon as a writer queues between the two
+// acquisitions. It is load-dependent, so it would not surface reliably in a test
+// run, and SRFI-18 threads make the queued writer reachable. The same arm also
+// bypasses probeBulkLocked's same-store skip, which is the measured guard behind
+// a +6% startup regression.
+//
+// There is no unbounded recursion here: lookupExportLocked bottoms out in
+// probeTiersLocked, which consults slots alone and never re-enters a source.
 func lookupExportSameStore(src BulkSource, name values.Symbol) (*Binding, bool) {
 	switch v := src.(type) {
 	case *storeBulkSource:
@@ -623,6 +670,21 @@ func (p *renamedBulkSource) Repoint(store *GlobalEnvironmentFrame) BulkSource {
 // Materialization needs it to tell the two cases apart: a row over THIS store
 // has nothing to materialize, because the binding is already a slot here and
 // the row exists only to widen which phase can see it.
+//
+// IT RECOGNISES THE THREE IN-TREE TYPES ONLY, and that became a limitation
+// rather than an implementation detail on 2026-09-11, when Repoint was exported
+// and BulkSource opened. An out-of-package source falls to the default arm, so
+// every caller that gates on this treats it as reading no store of ours:
+// carryBulkRows skips the row, meaning Copy aliases it and never calls its
+// Repoint; materializeBulkLocked then refuses it for the same reason. A row an
+// out-of-tree source backs over THIS store is consequently inert in every copy,
+// no matter how its Repoint is written — the answer does not depend on Repoint
+// being reached, because it is not reached.
+//
+// Whether this should become an interface method — the way Repoint did, and for
+// the identical reason: a type switch over a set that is no longer closed — is
+// an open product decision, not an oversight. Do not change it here without
+// that decision; BulkSource.Repoint's doc states the limitation to implementors.
 func selfStore(src BulkSource) (*GlobalEnvironmentFrame, Phase, bool) {
 	switch v := src.(type) {
 	case *storeBulkSource:
