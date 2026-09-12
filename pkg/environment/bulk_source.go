@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // BulkSource is one supplier of many names, seen by resolution as a SINGLE
@@ -279,7 +280,8 @@ func (p *storeBulkSource) Repoint(store *GlobalEnvironmentFrame) BulkSource {
 }
 
 // BulkOrigin says WHO installed a row: the language itself, or an import
-// written in the unit the row is installed into.
+// written in the unit the row is installed into. Its zero value names NEITHER,
+// and both installers refuse it — see BulkOriginUnknown.
 //
 // It is the row's half of the base/import separation the per-symbol path draws
 // with tierExactImported, and it is what lets bulkTierOf classify a row by the
@@ -297,17 +299,27 @@ func (p *storeBulkSource) Repoint(store *GlobalEnvironmentFrame) BulkSource {
 type BulkOrigin uint8
 
 const (
+	// BulkOriginUnknown is the ZERO VALUE and names no origin at all: a row that
+	// carries it was never told who installed it.
+	//
+	// It is "nil means NONE" applied to an enum. The alternative — start the
+	// enumeration at a real origin — makes the zero value a CLAIM, and a bulkRef
+	// literal that forgets the field then asserts that claim silently. The claim
+	// it used to assert was BulkOriginLanguage, which ranks tierExactSealed; that
+	// is the lowest of the three tiers and so fails safe, but it fails safe by
+	// answering a question nobody asked, and there is no test that can tell a
+	// forgotten field from a deliberate one.
+	//
+	// Nothing can rank it, and nothing has to. InstallBulkRow and
+	// InstallMacroPhaseRow REFUSE it at the door, which is what keeps bulkTierOf
+	// from having to invent a tier for a row whose provenance is unstated: the
+	// installers own the question, so the classifier never meets it. Refusing at
+	// install turns a silent misranking into a panic at the call site that
+	// omitted the argument, one stack frame from the mistake.
+	BulkOriginUnknown BulkOrigin = iota
 	// BulkOriginLanguage is the dialect's own declaration: the base row and the
 	// macro-vocabulary row installInitialImports installs at engine origin.
-	//
-	// The zero value, and a deliberate departure from "nil means NONE": there is
-	// no unset origin to encode, because both installers take it as a required
-	// positional parameter, and a fourth BulkOriginUnset would have no
-	// conservative answer in bulkTierOf — tierNone would make the row inert in
-	// silence. What the zero value buys instead is the safe direction: a bulkRef
-	// literal that omits the field ranks tierExactSealed, the LOWEST of the three
-	// and the tier every row had before origins existed.
-	BulkOriginLanguage BulkOrigin = iota
+	BulkOriginLanguage
 	// BulkOriginImport is an (import ...) written in the importing unit. No
 	// production path installs one yet: R7RS imports still take per-symbol slots
 	// (installImportedBinding), and routing them through rows was settled
@@ -357,7 +369,17 @@ type bulkRef struct {
 // BulkOrigin are exported while both ratchets
 // (TestEveryOriginRowIsLanguageDeclared, TestBulkRowsCarryTheEmptyScopeSet) are
 // in-tree, so an out-of-tree caller can arm that with nothing going red.
+//
+// PANICS on BulkOriginUnknown. A row nobody can rank is a programming error at
+// the call site, not a state the store should hold: bulkTierOf would have to
+// invent a tier for it, and every answer it could invent is wrong in silence.
+// Refusing here reports it one frame from the omission.
 func (p *GlobalEnvironmentFrame) InstallBulkRow(src BulkSource, scopes []*syntax.Scope, phase Phase, sealed bool, origin BulkOrigin) {
+	if origin == BulkOriginUnknown {
+		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"InstallBulkRow: origin is BulkOriginUnknown; name the installer (BulkOriginLanguage or BulkOriginImport)"))
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -669,7 +691,17 @@ func (p *filteredBulkSource) Repoint(store *GlobalEnvironmentFrame) BulkSource {
 // stage deleted. Installing per view as the view appears is the third answer:
 // every row that exists carries an EXACT phase, and the set of phases that exist
 // is exactly the set the program reached.
+//
+// PANICS on BulkOriginUnknown, for InstallBulkRow's reason and one more of its
+// own: the template is copied into a row at every macro phase the store ever
+// reaches, so an unrankable origin installed here is replicated rather than
+// isolated.
 func (p *GlobalEnvironmentFrame) InstallMacroPhaseRow(src BulkSource, scopes []*syntax.Scope, sealed bool, origin BulkOrigin) {
+	if origin == BulkOriginUnknown {
+		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"InstallMacroPhaseRow: origin is BulkOriginUnknown; name the installer (BulkOriginLanguage or BulkOriginImport)"))
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

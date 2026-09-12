@@ -1139,11 +1139,20 @@ func (p *GlobalEnvironmentFrame) probeTiersLocked(key values.Symbol, q syntax.Sc
 // fields or be documented here as unreachable for rows, or the two walks
 // silently start ranking the same candidate differently again. A new BulkOrigin
 // needs the same care from the other side: the default arm swallows every origin
-// it does not name, so a third one ranks tierExactSealed until an arm says
+// it does not name, so a NEW one ranks tierExactSealed until an arm says
 // otherwise.
 func bulkTierOf(row bulkRef, phase Phase) int {
 	switch {
 	case row.phase != phase:
+		return tierNone
+	// UNREACHABLE, and defensive rather than the guard. The guard is at the
+	// door: InstallBulkRow and InstallMacroPhaseRow refuse BulkOriginUnknown, so
+	// no installed row carries it and TestNoInstalledRowHasAnUnknownOrigin says
+	// so over a real engine. The arm exists because a bulkRef is a plain struct
+	// — a literal inside this package can still zero the field — and tierNone is
+	// the one honest answer for a row whose provenance is unstated: an unranked
+	// candidate loses every comparison instead of winning one by accident.
+	case row.origin == BulkOriginUnknown:
 		return tierNone
 	case !row.sealed:
 		return tierExactMutable

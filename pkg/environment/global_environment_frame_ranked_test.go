@@ -526,6 +526,11 @@ func TestBulkRowTieRanksLikeASlotTie(t *testing.T) {
 // RED before the origin arm: every sealed row answered tierExactSealed, so the
 // import row and the language row were indistinguishable and the "row" column
 // of the tier table had no entry at all.
+//
+// The BulkOriginUnknown rows are a GUARD on an arm the installers make
+// unreachable — they refuse that origin — so what they defend is a bulkRef
+// literal written inside this package, which is exactly what the table below
+// builds.
 func TestBulkTierOfClassifiesByOrigin(t *testing.T) {
 	tcs := []struct {
 		name   string
@@ -541,6 +546,13 @@ func TestBulkTierOfClassifiesByOrigin(t *testing.T) {
 		// on sealed, and dropping that guard would rank a mutable import row
 		// ABOVE a mutable slot.
 		{name: "mutable import row stays mutable", sealed: false, origin: BulkOriginImport, want: tierExactMutable},
+		// The unknown-origin arm, both ways round. It is checked BEFORE the
+		// sealed arm, so it has to be pinned on an unsealed row too: without that
+		// ordering a zero-valued literal would rank tierExactMutable and outrank
+		// every slot, which is the loudest possible wrong answer for a row whose
+		// provenance is unstated.
+		{name: "sealed unknown row ranks nowhere", sealed: true, origin: BulkOriginUnknown, want: tierNone},
+		{name: "mutable unknown row ranks nowhere", sealed: false, origin: BulkOriginUnknown, want: tierNone},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

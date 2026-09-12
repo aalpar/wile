@@ -319,6 +319,11 @@ func TestBulkResolutionCountIsInBand(t *testing.T) {
 // GUARD, not a pin: the property it asserts holds trivially before origins
 // exist. Not "it passes on master" — it cannot compile there, since BulkOrigin
 // arrived with it. What it defends is the future install that forgets.
+//
+// Since BulkOriginUnknown became the zero value, the `other` bucket below also
+// catches a row whose origin was never set. That is belt over braces — the two
+// installers refuse that origin outright — and the assertion here is the
+// stronger one either way: language-declared, not merely rankable.
 func TestEveryOriginRowIsLanguageDeclared(t *testing.T) {
 	d := phasedImportDialect{
 		imports: []PhasedImport{
