@@ -1845,7 +1845,7 @@ pass because it was found while planning Stage B, not by a gate.
   **`BulkRowCount` is EQUAL (2 vs 2) across the defect**, so a count ratchet could never have
   seen it. The pins assert on ANSWERS: a resolution through a copied row must succeed.
 
-  **Two shape decisions worth keeping.** `repoint` went on the `BulkSource` **interface**, not
+  **Two shape decisions worth keeping.** `Repoint` went on the `BulkSource` **interface**, not
   on the concrete type, so the wrappers forward to their inner source and the compiler
   enforces it — the two package-level type switches over the same three types are the shape
   that produced fault 2 in the first place; and it **carries** `minTier`/`ownInstallsOnly`

@@ -52,7 +52,7 @@ type BulkSource interface {
 	// SourceName identifies the source for diagnostics and for Stage C's
 	// serialization.
 	SourceName() values.Value
-	// repoint returns this source reading store instead of the store it was
+	// Repoint returns this source reading store instead of the store it was
 	// minted over, carrying every restriction across rather than rebuilding it.
 	// GlobalEnvironmentFrame.Copy is the only caller.
 	//
@@ -67,10 +67,20 @@ type BulkSource interface {
 	// author's; the two package-level type switches over the same three types
 	// (selfStore, lookupExportSameStore) are the shape that produced that bug.
 	//
-	// Unexported, which closes BulkSource to out-of-package implementations. All
-	// three implementations are here, and a fourth that could not be re-pointed
-	// would be a row Copy aliased in silence.
-	repoint(store *GlobalEnvironmentFrame) BulkSource
+	// IMPLEMENTOR'S OBLIGATION, and it is not optional: return a source that
+	// reads the GIVEN store and carries every field that affects ranking or
+	// admission — a tier floor, a rename table, an admission predicate, the
+	// source's phase and its name. A wrapper forwards to its inner source and
+	// rebuilds itself around the result.
+	//
+	// An implementation that returns the receiver unchanged, or that drops a
+	// restriction, is not merely imprecise: the row it belongs to goes SILENTLY
+	// INERT in the copied store, because materializeBulkLocked requires
+	// store == p, so the lookup finds the ORIGINAL store's *Binding and
+	// resolution reports a miss. Nothing panics and no count changes —
+	// BulkRowCount was equal across the Copy defect this method was added to
+	// fix — so the failure surfaces only as a name that stopped resolving.
+	Repoint(store *GlobalEnvironmentFrame) BulkSource
 }
 
 // BaseSourceName is the reserved library-name datum the engine's own base
@@ -112,7 +122,7 @@ func BaseSourceName() values.Value {
 // pins it, because on a tree with no bulk rows a snapshot and a live reference
 // are indistinguishable and the property would otherwise ship untested.
 //
-// ADDING A FIELD: repoint rebuilds this struct by literal, so a field it does
+// ADDING A FIELD: Repoint rebuilds this struct by literal, so a field it does
 // not name is dropped from every copied row. TestRepointCarriesEveryStoreBulkSourceField
 // is the ratchet.
 type storeBulkSource struct {
@@ -142,7 +152,7 @@ type storeBulkSource struct {
 	// excluded before the predicate could be reached. Two independent reasons for
 	// one answer read as belt-and-braces and were really a coupling: the proof
 	// that the predicate was dead held only because one constructor set both
-	// fields in one struct literal, and repoint carried them separately. One
+	// fields in one struct literal, and Repoint carried them separately. One
 	// field cannot drift from itself.
 	minTier int
 }
@@ -249,7 +259,7 @@ func (p *storeBulkSource) SourceName() values.Value {
 	return p.name
 }
 
-// repoint returns this source over store, CARRYING minTier rather than
+// Repoint returns this source over store, CARRYING minTier rather than
 // reconstructing it.
 //
 // Reconstructing is what Copy used to do, through NewStoreBulkSource — the
@@ -258,7 +268,7 @@ func (p *storeBulkSource) SourceName() values.Value {
 // as minTier=tierExactMutable. A source that is supposed to mean "the base" then
 // supplies the copy's phase-0 MUTABLE tier at every macro phase, which is
 // exactly the leak minTier's comment records as measured.
-func (p *storeBulkSource) repoint(store *GlobalEnvironmentFrame) BulkSource {
+func (p *storeBulkSource) Repoint(store *GlobalEnvironmentFrame) BulkSource {
 	q := &storeBulkSource{
 		store:   store,
 		phase:   p.phase,
@@ -547,12 +557,12 @@ func (p *renamedBulkSource) SourceName() values.Value {
 	return p.name
 }
 
-// repoint rebuilds the wrapper around a re-pointed inner source. The mapping and
+// Repoint rebuilds the wrapper around a re-pointed inner source. The mapping and
 // the row's identity belong to the importing unit and do not move with the
 // store, so they are shared rather than cloned — both are already documented as
 // immutable after construction.
-func (p *renamedBulkSource) repoint(store *GlobalEnvironmentFrame) BulkSource {
-	return NewRenamedBulkSource(p.inner.repoint(store), p.localToSource, p.name)
+func (p *renamedBulkSource) Repoint(store *GlobalEnvironmentFrame) BulkSource {
+	return NewRenamedBulkSource(p.inner.Repoint(store), p.localToSource, p.name)
 }
 
 // selfStore reports the store a source reads, when it reads exactly one.
@@ -643,11 +653,11 @@ func (p *filteredBulkSource) SourceName() values.Value {
 	return p.name
 }
 
-// repoint rebuilds the wrapper around a re-pointed inner source. The admission
+// Repoint rebuilds the wrapper around a re-pointed inner source. The admission
 // predicate and its enumerable half are the VOCABULARY, which is the dialect's
 // and not the store's, so they are shared.
-func (p *filteredBulkSource) repoint(store *GlobalEnvironmentFrame) BulkSource {
-	return NewFilteredBulkSource(p.inner.repoint(store), p.admits, p.enumerable, p.name)
+func (p *filteredBulkSource) Repoint(store *GlobalEnvironmentFrame) BulkSource {
+	return NewFilteredBulkSource(p.inner.Repoint(store), p.admits, p.enumerable, p.name)
 }
 
 // InstallMacroPhaseRow records a row TEMPLATE installed at every macro phase

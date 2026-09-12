@@ -414,7 +414,7 @@ func (p *GlobalEnvironmentFrame) carryBulkRows(q *GlobalEnvironmentFrame, rows [
 		}
 		repointed, hit := moved[row.src]
 		if !hit {
-			repointed = row.src.repoint(q)
+			repointed = row.src.Repoint(q)
 			moved[row.src] = repointed
 		}
 		out[i].src = repointed
@@ -986,7 +986,7 @@ func (p *rankedArgmax) found() bool {
 // independent reason for the same answer, then deleted on 2026-09-10: the two
 // reasons were not independent. The predicate was provably dead only because ONE
 // constructor set the floor and the predicate in one struct literal, while
-// storeBulkSource.repoint copied them as separate fields — so a source floored
+// storeBulkSource.Repoint copied them as separate fields — so a source floored
 // at tierExactMutable with the predicate still set would have survived a Copy
 // and refused imports the floor admitted. A proof resting on an uncoupled
 // coincidence is not a proof, and deleting the second field is what couples it.

@@ -156,7 +156,7 @@ func TestCopiedBulkRowAnswersInTheCopy(t *testing.T) {
 // observable — an imported binding ranks tierExactImported, already below the
 // tierExactSealed floor — so it was pinned STRUCTURALLY here, by reading the
 // field off the copied source. That structural assertion was the whole coupling:
-// it asserted the field survived repoint, not that the floor did, and repoint
+// it asserted the field survived Repoint, not that the floor did, and Repoint
 // carried the two independently. Deleting the field is what makes the coupling
 // impossible rather than merely unobserved.
 //
@@ -280,13 +280,13 @@ func TestCopyCarriesMacroPhaseTemplatesWithoutDuplicating(t *testing.T) {
 }
 
 // TestRepointCarriesEveryStoreBulkSourceField is a FIELD ratchet on
-// storeBulkSource, and it exists because repoint rebuilds the struct by literal.
+// storeBulkSource, and it exists because Repoint rebuilds the struct by literal.
 //
 // A copy that rebuilds by literal drops any field added after it was written,
 // silently — which is the defect TestCopiedSealedRowKeepsItsRestrictions and
 // TestCopiedBulkRowAnswersInTheCopy were written for, one layer up. The argument
 // that retired ownInstallsOnly ("one field cannot drift from itself") covers the
-// two fields that were coupled; it says nothing about a FIFTH field, and repoint
+// two fields that were coupled; it says nothing about a FIFTH field, and Repoint
 // would carry that one only if whoever adds it remembers to.
 //
 // It pins the NAMES rather than a count, so a rename trips it too and the
@@ -300,7 +300,7 @@ func TestRepointCarriesEveryStoreBulkSourceField(t *testing.T) {
 		names = append(names, f.Name)
 	}
 	qt.Assert(t, names, qt.DeepEquals, []string{"store", "phase", "name", "minTier"},
-		qt.Commentf("storeBulkSource's fields changed: repoint rebuilds this struct by literal, "+
+		qt.Commentf("storeBulkSource's fields changed: Repoint rebuilds this struct by literal, "+
 			"so a field it does not name is dropped from every copied row. Carry the new field "+
 			"there, then update this list"))
 
@@ -314,9 +314,9 @@ func TestRepointCarriesEveryStoreBulkSourceField(t *testing.T) {
 		minTier: tierExactSealed,
 	}
 
-	got := unwrapStoreSource(t, src.repoint(target))
+	got := unwrapStoreSource(t, src.Repoint(target))
 	qt.Assert(t, got.store == target, qt.IsTrue,
-		qt.Commentf("store is the one field repoint is FOR"))
+		qt.Commentf("store is the one field Repoint is FOR"))
 	qt.Assert(t, got.phase, qt.Equals, src.phase)
 	qt.Assert(t, got.name == name, qt.IsTrue)
 	qt.Assert(t, got.minTier, qt.Equals, src.minTier)
