@@ -1916,6 +1916,66 @@ pass because it was found while planning Stage B, not by a gate.
   green. A site-count ratchet would be the wrong shape — the population does not change when a
   tier is inserted, so a count stays green through the failure it exists to catch.
 
+### Three Stage B decisions reversed on request (2026-09-11)
+
+Not defects. Each shipped deliberately, was argued and reviewed, and was then reversed
+because the maintainer changed his mind about the trade-off. Filed so the arguments survive
+the reversal and are not re-discovered as novel.
+
+- [x] **The `BulkSource` seal is gone: `repoint` is now the exported `Repoint`** [reversed
+  2026-09-11, `458828c7`]: the method was **deliberately unexported on an exported
+  interface**, which closed `BulkSource` to out-of-package implementations. The reason was
+  structural rather than stylistic: a fourth implementation that could not be re-pointed
+  would be a row `GlobalEnvironmentFrame.Copy` **aliased in silence**. Such a row is not
+  merely shared with the parent, it is **INERT** — `materializeBulkLocked` requires
+  `store == p`, so the lookup finds the parent's `*Binding` and resolution reports a miss,
+  with no panic and no count change (`BulkRowCount` was **equal, 2 vs 2**, across the Copy
+  defect that produced the method; see the section above). The seal made that failure
+  unconstructable.
+
+  **Reversed on request** — the maintainer wants the interface open to embedders. The
+  obligation the seal enforced by construction now lives in `Repoint`'s doc as a contract an
+  implementor must honour **voluntarily**: return a source reading the GIVEN store, carrying
+  every field that affects ranking or admission (tier floor, rename table, admission
+  predicate, phase, name). Nothing enforces it. There is no ratchet that can, either: the
+  failing implementation would live outside this repository.
+
+  **Do NOT re-seal.** If the seal is ever wanted back, it is a deliberate API break with a
+  named consumer cost, not a tidy-up. What survives unchanged is the *other* shape decision
+  from that work — `Repoint` on the **interface** rather than on `*storeBulkSource`, so the
+  wrappers forward and the compiler enforces the forwarding. That one is orthogonal to the
+  seal and is still right; it is recorded in the Copy section above.
+
+- [x] **`BulkOrigin`'s zero value is `BulkOriginUnknown`, not `BulkOriginLanguage`**
+  [reversed 2026-09-11, `2a63ccfd`]: the original encoding put `BulkOriginLanguage` at
+  `iota` and argued the departure from "nil means NONE" explicitly — both installers take
+  origin as a required positional parameter, so there was held to be no unset origin to
+  encode, and an omitted field ranked `tierExactSealed`, the lowest of the three tiers and
+  the tier every row had before origins existed. Fail-safe, and silent.
+
+  **Reversed on request**: zero now means "nobody said". The consequence is the point —
+  `InstallBulkRow` and `InstallMacroPhaseRow` **panic** on it (wrapped
+  `werr.ErrInvalidArgument`), and `bulkTierOf` gains a defensive `tierNone` arm placed
+  *before* the sealed arm, documented as unreachable **because** the installers refuse.
+  Pinned by `TestBulkRowInstallersRefuseUnknownOrigin` and, for the integers themselves, by
+  `TestBulkOriginValuesHaveNotRenumbered` — the enum is exported and Stage C will serialize
+  a row, so a renumbering is wire-visible, and that ratchet is the only thing watching it.
+
+- [x] **The two tests `ce0ffe88` deleted are re-implemented against the new subject**
+  [`db9e9c0b`]: `TestCreateGlobalBindingAtRefusesAnyPhase` and all of
+  `phase_distinctness_test.go` were deleted correctly — their subject was the wildcard phase
+  coordinate, which Stage B removed, leaving no argument to pass and a census that degenerated
+  to `0 == 0`. `BulkOriginUnknown` recreates the *condition* they pinned (a coordinate value
+  that means nothing, refused at the create path rather than modelled), so both are
+  re-implemented against it: the refusal as `TestBulkRowInstallersRefuseUnknownOrigin`, the
+  census as `TestNoInstalledRowHasAnUnknownOrigin` in `bulk_origin_census_test.go`.
+
+  **Not a restoration, and the docs say so.** `AnyPhase` does not exist and `Phase` has no
+  wildcard inhabitant, so the original assertions cannot be written at all — not weakened,
+  not ported. A slot census and a row census walk different structures. The new file is
+  deliberately **not** named `phase_distinctness_test.go`: reusing the name would overclaim
+  continuity.
+
 ### A phase-1 `(import (for-syntax (scheme base)))` is not behaviour-neutral (2026-09-09)
 
 - [x] **Fixed at three reader sites, 2026-09-09, branch `fix/phase1-import-neutrality`.**

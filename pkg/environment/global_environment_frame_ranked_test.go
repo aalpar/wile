@@ -452,6 +452,78 @@ func TestTierOrdinalsHaveNotRenumbered(t *testing.T) {
 		qt.Commentf("the ranked ceiling must admit the highest tabled tier"))
 }
 
+// TestBulkOriginValuesHaveNotRenumbered is TestTierOrdinalsHaveNotRenumbered's
+// sibling over the other enum this file ranks by, and it guards an INTENT, not
+// an implementation detail.
+//
+// The intent: BulkOriginUnknown is the zero value BY DECISION. Until 2026-09-11
+// BulkOriginLanguage was zero and the zero value carried meaning BY ACCIDENT —
+// a bulkRef literal that omitted the field claimed to be language-declared, and
+// ranked tierExactSealed on the strength of a claim nobody made. Which integer
+// means "nobody said" is the entire content of the change this ratchet
+// protects, and an iota reshuffle or an inserted constant reverts it with the
+// rest of the suite still green: nothing else in the tree reads these integers,
+// so nothing else can notice.
+//
+// The OUT-OF-TREE half matters more than the in-tree half. BulkOrigin is
+// exported and InstallBulkRow takes it positionally, so a caller outside this
+// repository may hold a stored 0. On 2026-09-11 that 0 stopped meaning "the
+// language declared this row" and started meaning "nobody said" — and
+// BulkSource.SourceName's doc commits Stage C to serializing a row. A
+// renumbering is therefore wire-visible, and this test is the only thing
+// watching it.
+//
+// TWO assertions, and the tier ratchet's reason for both. The value rows catch
+// an INSERTION, because every constant after the insertion point shifts. They
+// cannot catch an APPEND, because nothing shifts; bulkOriginCount against the
+// table length is what catches that, exactly as tierCount does for tiers. The
+// residual is the same one too: append an origin and update NOTHING here and
+// both halves stay green — the table has to name every origin, and this
+// paragraph is the only thing that says so.
+//
+// PIN, both halves verified RED separately, because a single mutation cannot
+// exercise both. Declaring a constant AHEAD of BulkOriginUnknown fails all
+// three value subtests (0/1/2 read back as 1/2/3) and then the zero-value
+// assertion, which aborts before the count is reached. APPENDING one after
+// BulkOriginImport leaves every value row green and fails the count alone,
+// bulkOriginCount(4) against a table of 3 — which is the case the count exists
+// for, and the reason it is not redundant with the rows above it.
+//
+// IF THIS TEST IS RED because you added or reordered an origin: read
+// bulkTierOf's closing paragraph before renumbering anything. Its default arm
+// swallows every origin it does not name, so a new one ranks tierExactSealed
+// until an arm says otherwise, and moving BulkOriginUnknown off zero silently
+// restores the accident this ratchet exists to prevent.
+func TestBulkOriginValuesHaveNotRenumbered(t *testing.T) {
+	tcs := []struct {
+		name   string
+		origin BulkOrigin
+		value  uint8
+	}{
+		{"BulkOriginUnknown", BulkOriginUnknown, 0},
+		{"BulkOriginLanguage", BulkOriginLanguage, 1},
+		{"BulkOriginImport", BulkOriginImport, 2},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, uint8(tc.origin), qt.Equals, tc.value,
+				qt.Commentf("%s is no longer %d; an out-of-tree caller holding a stored origin now means something else by it", tc.name, tc.value))
+		})
+	}
+
+	// The load-bearing property, asserted through the Go zero value rather than
+	// through the literal 0. It is not a restatement of the first table row: the
+	// row says where the constant sits, this says what an UNSET field gets, and
+	// the second is what a struct literal and a var declaration actually
+	// exercise.
+	var unset BulkOrigin
+	qt.Assert(t, unset, qt.Equals, BulkOriginUnknown,
+		qt.Commentf("the zero value must be the origin nothing can rank; an omitted field that lands on a REAL origin is the accident this ratchet reverses"))
+
+	qt.Assert(t, int(bulkOriginCount), qt.Equals, len(tcs),
+		qt.Commentf("bulkOriginCount (%d) must be one past the LAST origin, and the table must name all %d of them; an appended origin shifts nothing and the value rows above cannot see it", bulkOriginCount, len(tcs)))
+}
+
 // TestBulkRowTieRanksLikeASlotTie is Task 5's RED pin: a bulk row and a
 // per-symbol slot must decide an incomparable equal-cardinality tie the SAME
 // way, because it is one rule.

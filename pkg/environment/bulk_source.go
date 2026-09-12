@@ -326,6 +326,13 @@ const (
 	// against. The coordinate exists so the two classifiers agree on every tier,
 	// rather than diverging on one a bulkRef could not express.
 	BulkOriginImport
+	// bulkOriginCount is one past the last origin. It exists for the renumbering
+	// ratchet and has no other reader: TestBulkOriginValuesHaveNotRenumbered's
+	// value rows catch an INSERTION, because every later constant shifts, and
+	// cannot catch an APPEND, because nothing shifts. A constant that moves is
+	// the only thing that can. tierCount plays exactly this part for the tier
+	// enum.
+	bulkOriginCount
 )
 
 // bulkRef is one installed bulk row: a resolution candidate standing for many
