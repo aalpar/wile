@@ -882,7 +882,7 @@ const tierHighest = tierCount - 1
 // consider does NOT inline: the slice-header store plus the ScopesMatch call put
 // it at cost 123 against the inliner's budget of 80, on the go1.27 CI pins.
 //
-// Measured, interleaved, ten rounds, against c02f8a3c: BenchmarkGlobalLookup (a
+// Measured, interleaved, ten rounds, against ce0ffe88: BenchmarkGlobalLookup (a
 // pinned index, which never reaches here) -0.92%, BenchmarkEngineStartup and
 // ...WithImport between -0.31% and +0.43% against a same-binary drift floor of
 // +/-1.3%, and BenchmarkBulkRowResolution +8.4% at one row to +13.4% at sixteen.
@@ -892,7 +892,7 @@ const tierHighest = tierCount - 1
 //
 // The CALL is the whole cost and the RULE is free — re-measured 2026-09-12 at the
 // probe itself, four variants in ONE binary (shipped, consider hand-inlined,
-// c02f8a3c's `>=`-without-ambiguity walk, and a //go:noinline split of the tie
+// ce0ffe88's `>=`-without-ambiguity walk, and a //go:noinline split of the tie
 // test), fourteen interleaved rounds at 1, 4 and 16 rows. Hand-inlining consider
 // lands within +/-1% of the old walk at every row count. The two rules trade
 // evenly: the old `>=` re-stored four fields on every tying row, `>` does two
