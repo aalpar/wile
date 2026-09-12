@@ -1957,9 +1957,22 @@ the reversal and are not re-discovered as novel.
   `InstallBulkRow` and `InstallMacroPhaseRow` **panic** on it (wrapped
   `werr.ErrInvalidArgument`), and `bulkTierOf` gains a defensive `tierNone` arm placed
   *before* the sealed arm, documented as unreachable **because** the installers refuse.
-  Pinned by `TestBulkRowInstallersRefuseUnknownOrigin` and, for the integers themselves, by
-  `TestBulkOriginValuesHaveNotRenumbered` — the enum is exported and Stage C will serialize
-  a row, so a renumbering is wire-visible, and that ratchet is the only thing watching it.
+  Pinned by `TestBulkRowInstallersRefuseAnUndeclaredOrigin` and, for the integers
+  themselves, by `TestBulkOriginValuesHaveNotRenumbered` — the enum is exported and Stage C
+  will serialize a row, so a renumbering is wire-visible, and that ratchet is the only thing
+  watching it.
+
+  **The reversal opened a hole, closed in the same pass.** `BulkOrigin` is exported and both
+  installers take it positionally, so an out-of-tree caller can construct `BulkOrigin(99)`;
+  refusing only the zero value let that through, and `bulkTierOf`'s `default:` arm ranked an
+  unrecognised origin `tierExactSealed` — silently **language-declared**, a wrong answer
+  rather than an inert one, breaking the miss-only bulk consultation's second premise with
+  every ratchet green. It was unreachable before: the type was exported then too, but the
+  zero value was `BulkOriginLanguage`, so the only value a caller reached by accident was
+  benign. Opening the interface and renumbering the enum in one pass is what made it
+  reachable. The door is now `BulkOrigin.valid` (`> Unknown && < bulkOriginCount`), and
+  `bulkTierOf` names `BulkOriginLanguage` explicitly so its `default:` answers `tierNone`:
+  an origin added to the enum and forgotten in the classifier is inert, not promoted.
 
 - [x] **The two tests `ce0ffe88` deleted are re-implemented against the new subject**
   [`db9e9c0b`]: `TestCreateGlobalBindingAtRefusesAnyPhase` and all of
@@ -1967,8 +1980,8 @@ the reversal and are not re-discovered as novel.
   coordinate, which Stage B removed, leaving no argument to pass and a census that degenerated
   to `0 == 0`. `BulkOriginUnknown` recreates the *condition* they pinned (a coordinate value
   that means nothing, refused at the create path rather than modelled), so both are
-  re-implemented against it: the refusal as `TestBulkRowInstallersRefuseUnknownOrigin`, the
-  census as `TestNoInstalledRowHasAnUnknownOrigin` in `bulk_origin_census_test.go`.
+  re-implemented against it: the refusal as `TestBulkRowInstallersRefuseAnUndeclaredOrigin`,
+  the census as `TestNoInstalledRowHasAnInvalidOrigin` in `bulk_origin_census_test.go`.
 
   **Not a restoration, and the docs say so.** `AnyPhase` does not exist and `Phase` has no
   wildcard inhabitant, so the original assertions cannot be written at all — not weakened,

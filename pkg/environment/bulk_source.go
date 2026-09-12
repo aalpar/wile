@@ -311,11 +311,12 @@ const (
 	// forgotten field from a deliberate one.
 	//
 	// Nothing can rank it, and nothing has to. InstallBulkRow and
-	// InstallMacroPhaseRow REFUSE it at the door, which is what keeps bulkTierOf
-	// from having to invent a tier for a row whose provenance is unstated: the
-	// installers own the question, so the classifier never meets it. Refusing at
-	// install turns a silent misranking into a panic at the call site that
-	// omitted the argument, one stack frame from the mistake.
+	// InstallMacroPhaseRow REFUSE it at the door — along with every other value
+	// outside the declared set, see BulkOrigin.valid — which is what keeps
+	// bulkTierOf from having to invent a tier for a row whose provenance is
+	// unstated: the installers own the question, so the classifier never meets
+	// it. Refusing at install turns a silent misranking into a panic at the call
+	// site that omitted the argument, one stack frame from the mistake.
 	BulkOriginUnknown BulkOrigin = iota
 	// BulkOriginLanguage is the dialect's own declaration: the base row and the
 	// macro-vocabulary row installInitialImports installs at engine origin.
@@ -326,14 +327,34 @@ const (
 	// against. The coordinate exists so the two classifiers agree on every tier,
 	// rather than diverging on one a bulkRef could not express.
 	BulkOriginImport
-	// bulkOriginCount is one past the last origin. It exists for the renumbering
-	// ratchet and has no other reader: TestBulkOriginValuesHaveNotRenumbered's
-	// value rows catch an INSERTION, because every later constant shifts, and
-	// cannot catch an APPEND, because nothing shifts. A constant that moves is
-	// the only thing that can. tierCount plays exactly this part for the tier
-	// enum.
+	// bulkOriginCount is one past the last origin. It is the exclusive upper
+	// bound BulkOrigin.valid reads, which is what the two installers refuse on,
+	// and it is also what the renumbering ratchet counts against:
+	// TestBulkOriginValuesHaveNotRenumbered's value rows catch an INSERTION,
+	// because every later constant shifts, and cannot catch an APPEND, because
+	// nothing shifts. A constant that moves is the only thing that can.
+	// tierCount plays exactly this part for the tier enum.
 	bulkOriginCount
 )
+
+// valid reports whether p is one of the origins this package declares: strictly
+// above the zero value, strictly below the count.
+//
+// It exists because BulkOrigin is EXPORTED and both installers take it
+// positionally, so an out-of-tree caller can hand over BulkOrigin(99). Refusing
+// only the zero value would let that through, and bulkTierOf's default arm used
+// to rank an unrecognised origin tierExactSealed — silently treating it as
+// language-declared, which is a WRONG answer rather than an inert one, and which
+// breaks the second premise resolveRankedLocked's miss-only bulk consultation
+// rests on (every installed row is language-origin) with every ratchet green.
+//
+// Reachable only since 2026-09-11. The type was exported before that too, but
+// the zero value was BulkOriginLanguage, so the one value a caller could produce
+// by accident was benign. Opening the BulkSource interface and renumbering the
+// enum in the same pass is what made the out-of-range case worth a door.
+func (p BulkOrigin) valid() bool {
+	return p > BulkOriginUnknown && p < bulkOriginCount
+}
 
 // bulkRef is one installed bulk row: a resolution candidate standing for many
 // names.
@@ -377,14 +398,17 @@ type bulkRef struct {
 // (TestEveryOriginRowIsLanguageDeclared, TestBulkRowsCarryTheEmptyScopeSet) are
 // in-tree, so an out-of-tree caller can arm that with nothing going red.
 //
-// PANICS on BulkOriginUnknown. A row nobody can rank is a programming error at
-// the call site, not a state the store should hold: bulkTierOf would have to
-// invent a tier for it, and every answer it could invent is wrong in silence.
-// Refusing here reports it one frame from the omission.
+// PANICS on any origin outside the declared set (BulkOrigin.valid): the zero
+// value, which is the field nobody set, and an out-of-range value, which an
+// out-of-tree caller can construct because the type is exported. A row nobody
+// can rank is a programming error at the call site, not a state the store should
+// hold: bulkTierOf would have to invent a tier for it, and every answer it could
+// invent is wrong in silence. Refusing here reports it one frame from the
+// mistake.
 func (p *GlobalEnvironmentFrame) InstallBulkRow(src BulkSource, scopes []*syntax.Scope, phase Phase, sealed bool, origin BulkOrigin) {
-	if origin == BulkOriginUnknown {
+	if !origin.valid() {
 		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"InstallBulkRow: origin is BulkOriginUnknown; name the installer (BulkOriginLanguage or BulkOriginImport)"))
+			"InstallBulkRow: origin %d is not a declared BulkOrigin; name the installer (BulkOriginLanguage or BulkOriginImport)", origin))
 	}
 
 	p.mu.Lock()
@@ -699,14 +723,14 @@ func (p *filteredBulkSource) Repoint(store *GlobalEnvironmentFrame) BulkSource {
 // every row that exists carries an EXACT phase, and the set of phases that exist
 // is exactly the set the program reached.
 //
-// PANICS on BulkOriginUnknown, for InstallBulkRow's reason and one more of its
-// own: the template is copied into a row at every macro phase the store ever
+// PANICS on an undeclared origin, for InstallBulkRow's reason and one more of
+// its own: the template is copied into a row at every macro phase the store ever
 // reaches, so an unrankable origin installed here is replicated rather than
 // isolated.
 func (p *GlobalEnvironmentFrame) InstallMacroPhaseRow(src BulkSource, scopes []*syntax.Scope, sealed bool, origin BulkOrigin) {
-	if origin == BulkOriginUnknown {
+	if !origin.valid() {
 		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"InstallMacroPhaseRow: origin is BulkOriginUnknown; name the installer (BulkOriginLanguage or BulkOriginImport)"))
+			"InstallMacroPhaseRow: origin %d is not a declared BulkOrigin; name the installer (BulkOriginLanguage or BulkOriginImport)", origin))
 	}
 
 	p.mu.Lock()

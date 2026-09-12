@@ -639,14 +639,15 @@ func TestBulkTierOfClassifiesByOrigin(t *testing.T) {
 	}
 }
 
-// TestBulkRowInstallersRefuseUnknownOrigin is the successor to
+// TestBulkRowInstallersRefuseAnUndeclaredOrigin is the successor to
 // TestCreateGlobalBindingAtRefusesAnyPhase, which commit ce0ffe88 deleted.
 //
 // WHAT IT RESTORES: the invariant, not the assertion. The deleted test pinned
 // that CreateGlobalBindingAt REFUSES the wildcard phase coordinate rather than
 // modeling a slot nothing ranks — a coordinate value that means nothing, kept
-// out at the create path. BulkOriginUnknown is now the only such value in this
-// package, so the same rule is asserted against the two row installers.
+// out at the create path. BulkOrigin's undeclared values are now the only such
+// values in this package, so the same rule is asserted against the two row
+// installers.
 //
 // WHAT IT CANNOT RESTORE, and this is not a continuity claim: the wildcard
 // coordinate is gone for good. AnyPhase does not exist, Phase has no wildcard
@@ -654,9 +655,18 @@ func TestBulkTierOfClassifiesByOrigin(t *testing.T) {
 // original assertion cannot be written at all — not weakened, not ported.
 // This is the successor invariant over a different subject.
 //
-// PIN, not a guard: it fails with the refusal removed. Verified by deleting the
-// BulkOriginUnknown arm from both installers, at which point all four subtests
-// fail on the capturePanic assertion with "got nil value but want non-nil".
+// THREE undeclared values, not one, and the second two are the reason this test
+// was widened on 2026-09-11. BulkOrigin is exported and both installers take it
+// positionally, so an out-of-tree caller can construct BulkOrigin(99); before
+// the enum was renumbered that mattered less, because the value a caller reached
+// by accident (zero) was BulkOriginLanguage and benign. bulkOriginCount itself
+// is asserted as the exclusive upper bound, which is the boundary an off-by-one
+// in valid would move.
+//
+// PIN, not a guard: it fails with the refusal removed. Verified twice —
+// deleting the arm from both installers fails all twelve subtests, and
+// narrowing it back to `origin == BulkOriginUnknown` fails the eight
+// out-of-range ones while the four zero-value ones stay green.
 //
 // Asserted with errors.Is on the SENTINEL, never on the panic text, which is
 // the deleted test's own reasoning carried over verbatim: a message-only
@@ -664,15 +674,26 @@ func TestBulkTierOfClassifiesByOrigin(t *testing.T) {
 // sentinel is the identity the house error rule protects. Both sealed values
 // are asserted for the deleted test's reason too — a narrowing back to one half
 // must fail here.
-func TestBulkRowInstallersRefuseUnknownOrigin(t *testing.T) {
+func TestBulkRowInstallersRefuseAnUndeclaredOrigin(t *testing.T) {
+	origins := []struct {
+		name   string
+		origin BulkOrigin
+	}{
+		{name: "zero value", origin: BulkOriginUnknown},
+		// The exclusive upper bound, asserted as a value rather than trusted as
+		// a bound: valid reads `< bulkOriginCount`, and an off-by-one there
+		// admits exactly this one.
+		{name: "one past the last declared", origin: bulkOriginCount},
+		{name: "far out of range", origin: BulkOrigin(99)},
+	}
 	installers := []struct {
 		name    string
-		install func(g *GlobalEnvironmentFrame, src BulkSource, sealed bool)
+		install func(g *GlobalEnvironmentFrame, src BulkSource, sealed bool, origin BulkOrigin)
 	}{
 		{
 			name: "InstallBulkRow",
-			install: func(g *GlobalEnvironmentFrame, src BulkSource, sealed bool) {
-				g.InstallBulkRow(src, nil, PhaseExpand, sealed, BulkOriginUnknown)
+			install: func(g *GlobalEnvironmentFrame, src BulkSource, sealed bool, origin BulkOrigin) {
+				g.InstallBulkRow(src, nil, PhaseExpand, sealed, origin)
 			},
 		},
 		{
@@ -681,32 +702,34 @@ func TestBulkRowInstallersRefuseUnknownOrigin(t *testing.T) {
 			// the store ever reaches, so an unrankable origin accepted here is
 			// replicated rather than isolated.
 			name: "InstallMacroPhaseRow",
-			install: func(g *GlobalEnvironmentFrame, src BulkSource, sealed bool) {
-				g.InstallMacroPhaseRow(src, nil, sealed, BulkOriginUnknown)
+			install: func(g *GlobalEnvironmentFrame, src BulkSource, sealed bool, origin BulkOrigin) {
+				g.InstallMacroPhaseRow(src, nil, sealed, origin)
 			},
 		},
 	}
-	for _, tc := range installers {
-		for _, sealed := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/sealed=%t", tc.name, sealed), func(t *testing.T) {
-				g := NewGlobalEnvironmentFrame()
-				src := NewSealedStoreBulkSource(g, PhaseRuntime, values.NewSymbol("#%probe"))
-				r := capturePanic(func() {
-					tc.install(g, src, sealed)
+	for _, org := range origins {
+		for _, tc := range installers {
+			for _, sealed := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/sealed=%t", org.name, tc.name, sealed), func(t *testing.T) {
+					g := NewGlobalEnvironmentFrame()
+					src := NewSealedStoreBulkSource(g, PhaseRuntime, values.NewSymbol("#%probe"))
+					r := capturePanic(func() {
+						tc.install(g, src, sealed, org.origin)
+					})
+					qt.Assert(t, r, qt.IsNotNil,
+						qt.Commentf("%s accepted origin %d; bulkTierOf then has to invent a tier for a row whose provenance is unstated", tc.name, org.origin))
+					err, ok := r.(error)
+					qt.Assert(t, ok, qt.IsTrue,
+						qt.Commentf("panicked with %T, not an error; the house rule is a WRAPPED sentinel, never a bare one and never a string", r))
+					qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
+						qt.Commentf("panic does not carry ErrInvalidArgument: %v", err))
+					// The refusal has to be a refusal, not a complaint: a row
+					// appended before the panic would leave the store holding what
+					// the panic says it rejected.
+					qt.Assert(t, g.BulkRowCount(), qt.Equals, 0,
+						qt.Commentf("%s installed the row anyway", tc.name))
 				})
-				qt.Assert(t, r, qt.IsNotNil,
-					qt.Commentf("%s accepted BulkOriginUnknown; bulkTierOf then has to invent a tier for a row whose provenance is unstated", tc.name))
-				err, ok := r.(error)
-				qt.Assert(t, ok, qt.IsTrue,
-					qt.Commentf("panicked with %T, not an error; the house rule is a WRAPPED sentinel, never a bare one and never a string", r))
-				qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
-					qt.Commentf("panic does not carry ErrInvalidArgument: %v", err))
-				// The refusal has to be a refusal, not a complaint: a row appended
-				// before the panic would leave the store holding what the panic
-				// says it rejected.
-				qt.Assert(t, g.BulkRowCount(), qt.Equals, 0,
-					qt.Commentf("%s installed the row anyway", tc.name))
-			})
+			}
 		}
 	}
 }

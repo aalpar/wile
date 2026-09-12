@@ -31,8 +31,14 @@ import (
 // WHAT IT RESTORES: the SHAPE and the invariant. That file censused every live
 // slot carrying the ANY phase coordinate and asserted the census empty — a
 // coordinate value that means nothing must not exist in a populated store. This
-// file censuses every installed bulk row carrying BulkOriginUnknown and asserts
-// the same thing about the same kind of value.
+// file censuses every installed bulk row whose origin is outside the declared
+// set and asserts the same thing about the same kind of value.
+//
+// The subject WIDENED on 2026-09-11 from BulkOriginUnknown alone to
+// BulkOrigin.valid. BulkOrigin is exported and the installers take it
+// positionally, so the zero value is not the only meaningless one a caller can
+// produce; a census narrower than the door it mirrors would pass a row the door
+// refuses.
 //
 // WHAT IT CANNOT RESTORE: the subject. The wildcard coordinate is gone for good
 // — Stage B collapsed PhaseKey to a bare Phase, so there is no wildcard field
@@ -50,35 +56,48 @@ import (
 // weaker, longer-lived property over every OWNER KIND, and it is the one that
 // survives the day a genuine BulkOriginImport row ships and sends the stronger
 // ratchet red by design.
+//
+// Neither covers one residual, and it is named rather than left implicit: an
+// origin ADDED to the enum and forgotten in bulkTierOf is valid, so it passes
+// both the door and this census, and ranks tierNone by that classifier's
+// default arm. Inert rather than wrong, which is the shape that default was
+// changed to on 2026-09-11 precisely so this residual would be survivable.
 
-// unknownOriginRowCensus lists every installed bulk row whose origin is the
-// zero value, rendered "(phase,sealed)" and sorted.
+// invalidOriginRowCensus lists every installed bulk row whose origin is not one
+// this package declares, rendered "(origin,phase,sealed)" and sorted.
 //
 // A test-file method rather than a production accessor, as ambientSlotCensus
 // was: nothing outside this package needs to ask, and the answer is supposed to
 // be the empty list forever.
-func (p *GlobalEnvironmentFrame) unknownOriginRowCensus() []string {
+//
+// It renders the ORIGIN as well as the coordinate, which ambientSlotCensus had
+// no need to: the wildcard coordinate was one value, while an undeclared origin
+// can be any integer, and a failure that does not name which one leaves the
+// reader guessing between "the field was never set" and "a caller passed
+// something".
+func (p *GlobalEnvironmentFrame) invalidOriginRowCensus() []string {
 	q := []string{}
 	p.EachBulkRow(func(_ []*syntax.Scope, phase Phase, sealed bool, origin BulkOrigin) bool {
-		if origin != BulkOriginUnknown {
+		if origin.valid() {
 			return true
 		}
-		q = append(q, fmt.Sprintf("(phase=%s,sealed=%t)", phase, sealed))
+		q = append(q, fmt.Sprintf("(origin=%d,phase=%s,sealed=%t)", origin, phase, sealed))
 		return true
 	})
 	sort.Strings(q)
 	return q
 }
 
-// TestNoInstalledRowHasAnUnknownOrigin pins that no row in a populated store
-// carries an origin nothing can rank.
+// TestNoInstalledRowHasAnInvalidOrigin pins that no row in a populated store
+// carries an origin outside the declared set.
 //
-// GUARD, not a pin: with the installers refusing BulkOriginUnknown the property
-// holds by construction, and TestBulkRowInstallersRefuseUnknownOrigin is what
-// goes red if that refusal is removed. What this defends is the OTHER way in —
-// a future install path that appends a bulkRef directly, or an origin field
-// added to a struct literal and left unset, neither of which passes through an
-// installer for the refusal to catch.
+// GUARD, not a pin: with the installers refusing every undeclared origin the
+// property holds by construction, and
+// TestBulkRowInstallersRefuseAnUndeclaredOrigin is what goes red if that
+// refusal is removed. What this defends is the OTHER way in — a future install
+// path that appends a bulkRef directly, or an origin field added to a struct
+// literal and left unset, neither of which passes through an installer for the
+// refusal to catch.
 //
 // Every owner KIND is censused because the row installers are per-store: a
 // change that only wired the namespace root correctly would leave library envs
@@ -89,7 +108,7 @@ func (p *GlobalEnvironmentFrame) unknownOriginRowCensus() []string {
 // after it, so installMacroRowLocked's copy of the template is enumerated too.
 // Without that the test would have the degenerate pass the deleted one warned
 // about: a census that is empty because nothing was ever installed.
-func TestNoInstalledRowHasAnUnknownOrigin(t *testing.T) {
+func TestNoInstalledRowHasAnInvalidOrigin(t *testing.T) {
 	owners := []struct {
 		name string
 		make func(ns *Namespace) *EnvironmentFrame
@@ -149,7 +168,7 @@ func TestNoInstalledRowHasAnUnknownOrigin(t *testing.T) {
 			qt.Assert(t, store.BulkRowCount(), qt.Equals, before+3,
 				qt.Commentf("the census must have rows to walk: two direct installs plus one materialized macro-phase template"))
 
-			census := store.unknownOriginRowCensus()
+			census := store.invalidOriginRowCensus()
 			qt.Assert(t, census, qt.HasLen, 0,
 				qt.Commentf("store holds bulk rows nothing can rank: %v", census))
 		})
