@@ -35,7 +35,7 @@ import (
 // contradicting it.
 //
 // The question they answer has CHANGED TWICE under Stage A of the Flatt binding
-// model (plans/2026-09-08-flatt-binding-model-a-design).
+// model (memory/2026-09-08-flatt-binding-model-a-design).
 //
 // First, the ambient (ANY-phase, sealed) tier was deleted: writeCoordinates
 // sends every sealed phase-0 write to phase 0 instead of the ANY coordinate, and

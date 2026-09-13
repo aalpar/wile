@@ -754,7 +754,7 @@ func TestScopeResolution_GlobalShadowsIntroducedBinder(t *testing.T) {
 // discriminates, which is why the last case below is a two-unit split rather than
 // a reordering.
 //
-// See plans/2026-07-29-name-keyed-identity-residuals-design.local.md Finding 2.
+// See memory/2026-07-29-name-keyed-identity-residuals-design.local.md Finding 2.
 func TestScopeResolution_CoIntroducedGlobalShadowsPin(t *testing.T) {
 	// mkdef introduces a top-level (define (rec i) …) AND names it from a second
 	// introduced define. `rec` is therefore BOUND by the template, not free, but

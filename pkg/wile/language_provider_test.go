@@ -16,7 +16,7 @@ package wile
 
 // LanguageProvider, and the first half of design section 6.3's counter ratchet.
 //
-// Plan: plans/2026-09-08-flatt-binding-model-a-impl.local.md, Task 3.
+// Plan: memory/2026-09-08-flatt-binding-model-a-impl.local.md, Task 3.
 //
 // Internal (package wile, not wile_test) because installInitialImports and
 // initialImportsFor are unexported and the ratchet counts what they did, not

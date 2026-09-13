@@ -16,7 +16,7 @@ package wile_test
 
 // An unbound-binding diagnostic must name the PHASE it failed at.
 //
-// Plan: plans/2026-09-08-flatt-binding-model-a-impl.local.md, Task 1;
+// Plan: memory/2026-09-08-flatt-binding-model-a-impl.local.md, Task 1;
 // design §6.6. Stage A makes "bound at phase 0, referenced at phase 1" a
 // ROUTINE failure for code that reads as correct — a procedural transformer
 // body that calls cadr is the canonical case — so a message carrying only the

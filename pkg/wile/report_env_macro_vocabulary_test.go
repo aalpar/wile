@@ -17,7 +17,7 @@ package wile_test
 // The user-visible face of GlobalEnvironmentFrame.Copy dropping what it claims
 // to carry: a report environment loses the phase-1 macro vocabulary entirely.
 //
-// Plan: plans/2026-09-10-flatt-binding-model-b-impl.local.md, Task 2.
+// Plan: memory/2026-09-10-flatt-binding-model-b-impl.local.md, Task 2.
 //
 // RED on master, measured: the report-env row fails with
 //

@@ -16,7 +16,7 @@ package wile_test
 
 // Phase distinctness: the behavioural gate for Flatt binding model Stage A.
 //
-// Plan: plans/2026-09-08-flatt-binding-model-a-impl.local.md, Task 2; design
+// Plan: memory/2026-09-08-flatt-binding-model-a-impl.local.md, Task 2; design
 // section 6.1. Written BEFORE any mechanism, on purpose: a change of this shape
 // fails toward the old behaviour, and the old behaviour is green. If bulk rows
 // were installed but never won a resolution, every other test in the suite

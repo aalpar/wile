@@ -16,7 +16,7 @@ package environment
 
 // Store-level pins for what GlobalEnvironmentFrame.Copy must carry.
 //
-// Plan: plans/2026-09-10-flatt-binding-model-b-impl.local.md, Task 2.
+// Plan: memory/2026-09-10-flatt-binding-model-b-impl.local.md, Task 2.
 //
 // These are ANSWER pins, not count pins, and the distinction is the whole
 // reason the file exists. BulkRowCount is EQUAL across the defect — measured,

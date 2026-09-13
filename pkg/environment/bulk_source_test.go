@@ -16,7 +16,7 @@ package environment
 
 // Unit pins for BulkSource and the bulk row.
 //
-// Plan: plans/2026-09-08-flatt-binding-model-a-impl.local.md, Task 4.
+// Plan: memory/2026-09-08-flatt-binding-model-a-impl.local.md, Task 4.
 // These are internal (package environment) because bulkRef, its fields and the
 // store's bulkRows slice are unexported, and because the properties under test
 // are structural rather than behavioural.

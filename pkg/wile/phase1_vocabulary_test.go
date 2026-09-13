@@ -16,7 +16,7 @@ package wile
 
 // The macro vocabulary: which base names a transformer body sees for free.
 //
-// Plan: plans/2026-09-08-flatt-binding-model-a-impl.local.md, Task 10; design
+// Plan: memory/2026-09-08-flatt-binding-model-a-impl.local.md, Task 10; design
 // section 9's Q2, which said explicitly to pin this with a ratchet during
 // implementation rather than guess it in the design.
 //
