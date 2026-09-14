@@ -14,7 +14,7 @@ This restriction is **transitive**: when the library system is enabled (`WithLib
 
 | Category | Extensions | Package | Risk |
 |----------|-----------|---------|------|
-| **Safe** | core | `registry/core` | None. Pure computation. |
+| **Safe** | core | `pkg/registry/core` | None. Pure computation. |
 | **Safe** | io | `pkg/extensions/io` | Host stdio, gated. `current-{input,output,error}-port` are opened over the process's `stdin`/`stdout`/`stderr` at engine construction, each gated by `stream:{read,write}`; a refusal binds a closed in-memory port instead. Everything else is in-memory or caller-provided ports. No filesystem access. |
 | **Safe** | math | `extensions/math` | None. `sqrt`, `sin`, `cos`, transcendental functions. |
 | **Safe** | introspection | `extensions/introspection` | None on its own. `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?`, `features`, `available-libraries`. Read-only: it observes an environment, it cannot add bindings to one. Note `environment-ref` returns the *value* of a binding, so any environment object handed to it yields the capabilities that environment holds. |

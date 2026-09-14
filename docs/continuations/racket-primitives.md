@@ -88,24 +88,24 @@ continuation primitives follow Flatt et al. (2007).
 
 | Primitive | Location |
 |-----------|----------|
-| `call/cc` / `call-with-current-continuation` | `registry/core/prim_control.go` |
-| `call-with-composable-continuation` | `registry/core/prim_prompt.go` |
-| `call-with-continuation-prompt` | `registry/core/prim_prompt.go` |
-| `abort-current-continuation` | `registry/core/prim_prompt.go` |
-| `make-continuation-prompt-tag` | `registry/core/prim_prompt.go` |
-| `default-continuation-prompt-tag` | `registry/core/prim_prompt.go` |
-| `continuation-prompt-tag?` | `registry/core/prim_prompt.go` |
-| `continuation?` | `registry/core/prim_cont_marks.go` |
-| `call-with-exit` (≈ `call/ec`) | `registry/core/prim_exit.go` |
-| `call-with-continuation-barrier` | `registry/core/prim_barrier.go` |
-| `with-continuation-barrier` | Macro over the above, `registry/core/bootstrap_macros.scm` |
+| `call/cc` / `call-with-current-continuation` | `pkg/registry/core/prim_control.go` |
+| `call-with-composable-continuation` | `pkg/registry/core/prim_prompt.go` |
+| `call-with-continuation-prompt` | `pkg/registry/core/prim_prompt.go` |
+| `abort-current-continuation` | `pkg/registry/core/prim_prompt.go` |
+| `make-continuation-prompt-tag` | `pkg/registry/core/prim_prompt.go` |
+| `default-continuation-prompt-tag` | `pkg/registry/core/prim_prompt.go` |
+| `continuation-prompt-tag?` | `pkg/registry/core/prim_prompt.go` |
+| `continuation?` | `pkg/registry/core/prim_cont_marks.go` |
+| `call-with-exit` (≈ `call/ec`) | `pkg/registry/core/prim_exit.go` |
+| `call-with-continuation-barrier` | `pkg/registry/core/prim_barrier.go` |
+| `with-continuation-barrier` | Macro over the above, `pkg/registry/core/bootstrap_macros.scm` |
 
 **Added in PR #547:**
 
 | Primitive | Location |
 |-----------|----------|
 | `call-with-escape-continuation` / `call/ec` | `(wile control)` — alias for `call-with-exit` |
-| `continuation-prompt-available?` | `registry/core/prim_prompt.go` |
+| `continuation-prompt-available?` | `pkg/registry/core/prim_prompt.go` |
 | `shift` / `reset` and all `racket/control` operators | `(wile control)` — Scheme macros over existing primitives |
 
 **Could add without regressing existing code:**
@@ -223,19 +223,19 @@ object pointer, the mark value is the pre-converted parameter value. The VM's
 
 | Primitive | Location |
 |-----------|----------|
-| `with-continuation-mark` | Special form; compiler in `machine/compilation/compile_validated.go` |
-| `current-continuation-marks` | `registry/core/prim_cont_marks.go` |
-| `continuation-marks` (from captured cont) | `registry/core/prim_cont_marks.go` |
-| `continuation-mark-set->list` | `registry/core/prim_cont_marks.go` |
-| `continuation-mark-set-first` | `registry/core/prim_cont_marks.go` |
-| `call-with-immediate-continuation-mark` | `registry/core/prim_cont_marks.go` |
-| `continuation-mark-set?` | `registry/core/prim_cont_marks.go` |
+| `with-continuation-mark` | Special form; compiler in `pkg/machine/compilation/compile_validated.go` |
+| `current-continuation-marks` | `pkg/registry/core/prim_cont_marks.go` |
+| `continuation-marks` (from captured cont) | `pkg/registry/core/prim_cont_marks.go` |
+| `continuation-mark-set->list` | `pkg/registry/core/prim_cont_marks.go` |
+| `continuation-mark-set-first` | `pkg/registry/core/prim_cont_marks.go` |
+| `call-with-immediate-continuation-mark` | `pkg/registry/core/prim_cont_marks.go` |
+| `continuation-mark-set?` | `pkg/registry/core/prim_cont_marks.go` |
 
 **Added in PR #547:**
 
 | Primitive | Location |
 |-----------|----------|
-| `continuation-mark-set->list*` | `registry/core/prim_cont_marks.go` + `machine/continuation_mark_set.go` |
+| `continuation-mark-set->list*` | `pkg/registry/core/prim_cont_marks.go` + `pkg/machine/continuation_mark_set.go` |
 | `continuation-mark-set->iterator` | `(wile control)` — Scheme closure over `->list*` |
 | `continuation-mark-set->context` | `(wile control)` — reads `'wile/source-location` key |
 
@@ -327,18 +327,18 @@ compile-time binding manipulation is where gaps remain.
 
 | Primitive | Category | Location |
 |-----------|----------|----------|
-| `syntax-local-value` | Compile-time lookup | `registry/core/prim_syntax.go` |
-| `bound-identifier=?` | Scope comparison | `registry/core/syntax.go` |
-| `free-identifier=?` | Binding comparison | `registry/core/syntax.go` |
-| `identifier?` | Predicate | `registry/core/syntax.go` |
-| `syntax->datum` | Unwrap | `registry/core/syntax.go` |
-| `datum->syntax` | Wrap | `registry/core/syntax.go` |
-| `generate-temporaries` | Fresh identifiers | `registry/core/syntax.go` |
+| `syntax-local-value` | Compile-time lookup | `pkg/registry/core/prim_syntax.go` |
+| `bound-identifier=?` | Scope comparison | `pkg/registry/core/syntax.go` |
+| `free-identifier=?` | Binding comparison | `pkg/registry/core/syntax.go` |
+| `identifier?` | Predicate | `pkg/registry/core/syntax.go` |
+| `syntax->datum` | Unwrap | `pkg/registry/core/syntax.go` |
+| `datum->syntax` | Wrap | `pkg/registry/core/syntax.go` |
+| `generate-temporaries` | Fresh identifiers | `pkg/registry/core/syntax.go` |
 | `eval` | Runtime eval | `extensions/eval/prim_eval.go` |
 | `environment` | Create env from library specs | `extensions/eval/prim_eval.go` |
 | `interaction-environment` | REPL env | Introspection extension |
 | `environment?` / `environment-bound-names` / `environment-ref` / `environment-bound?` | Env introspection | Introspection extension |
-| `namespace?` / `namespace-name` / `make-namespace` / `namespace-derive` / `namespace-define!` / `namespace-ref` / `namespace-bound?` / `namespace-undefine!` / `namespace-bound-names` / `namespace-require` | First-class namespaces | `internal/extensions/namespace/prim_namespace.go` |
+| `namespace?` / `namespace-name` / `make-namespace` / `namespace-derive` / `namespace-define!` / `namespace-ref` / `namespace-bound?` / `namespace-undefine!` / `namespace-bound-names` / `namespace-require` | First-class namespaces | `pkg/internal/extensions/namespace/prim_namespace.go` |
 
 **Added in PR #547 (compile-time):**
 
@@ -366,8 +366,8 @@ than an unbound-variable error, but neither does its job today):
 **Added in PR #547 (syntax accessors):**
 
 Source location data already exists on every syntax object via `SourceContext`
-(`syntax/source_context.go`). These are now exposed as primitives
-in `registry/core/prim_syntax_loc.go`:
+(`pkg/syntax/source_context.go`). These are now exposed as primitives
+in `pkg/registry/core/prim_syntax_loc.go`:
 
 | Primitive | Maps to |
 |-----------|---------|
@@ -659,12 +659,12 @@ and `extensions/eval/`. Derived Scheme forms are in `(wile control)`.
 |------|--------|----------|
 | `call/ec` / `call-with-escape-continuation` | ✅ Done | `(wile control)` — alias for `call-with-exit` |
 | `shift` / `reset` and all `racket/control` operators | ✅ Done | `(wile control)` — 27 exported bindings, tagged variants included |
-| `continuation-prompt-available?` | ✅ Done | `registry/core/prim_prompt.go` |
-| `continuation-mark-set->list*` | ✅ Done | `registry/core/prim_cont_marks.go` |
+| `continuation-prompt-available?` | ✅ Done | `pkg/registry/core/prim_prompt.go` |
+| `continuation-mark-set->list*` | ✅ Done | `pkg/registry/core/prim_cont_marks.go` |
 | `continuation-mark-set->iterator` | ✅ Done | `(wile control)` — Scheme closure over `->list*` |
 | `continuation-mark-set->context` | ✅ Done | `(wile control)` — reads `'wile/source-location` key |
-| `syntax-source` / `syntax-line` / `syntax-column` / `syntax-position` / `syntax-span` | ✅ Done | `registry/core/prim_syntax_loc.go` |
-| `syntax->list` | ✅ Done | `registry/core/prim_syntax_loc.go` |
+| `syntax-source` / `syntax-line` / `syntax-column` / `syntax-position` / `syntax-span` | ✅ Done | `pkg/registry/core/prim_syntax_loc.go` |
+| `syntax->list` | ✅ Done | `pkg/registry/core/prim_syntax_loc.go` |
 | `syntax-local-value/immediate` | ✅ Done | `extensions/eval/prim_eval.go` |
 
 **Tier 2 — Compile-time only** (expander work, zero runtime cost):
@@ -702,7 +702,7 @@ and `extensions/eval/`. Derived Scheme forms are in `(wile control)`.
 |------------|-------------------|-----------|
 | Coroutines / generators | `shift`/`reset` | **Done** — `(wile control)` |
 | Custom control operators | `call-in-continuation` | **Tier 3** |
-| Source location accessors | `syntax-source` etc. | **Done** — `registry/core/prim_syntax_loc.go` |
+| Source location accessors | `syntax-source` etc. | **Done** — `pkg/registry/core/prim_syntax_loc.go` |
 | Macros that analyze expanded code | `local-expand` | **Tier 2** |
 | Contract systems | `local-expand` + `syntax-property` | **Tier 2 + Tier 4** |
 | Language-as-library (`#lang`) | `#%` interposition | **Tier 4** |

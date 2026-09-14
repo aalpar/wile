@@ -62,7 +62,7 @@ The diagram below shows the allocation flow for a single closure call:
 
 ## Optimization 1: LocalIndex Value Type
 
-**Files:** `environment/environment_frame.go`, `machine/machine_context.go`
+**Files:** `pkg/environment/environment_frame.go`, `pkg/machine/machine_context.go`
 **Allocation saved:** 1.8 GB, 110.7M allocations
 
 ### Problem
@@ -81,7 +81,7 @@ Added `GetLocalBindingBySlotDepth(slot, depth int)` and `SetLocalValueBySlotDept
 
 ## Optimization 2: Value-Type Bindings
 
-**Files:** `environment/local_environment_frame.go`
+**Files:** `pkg/environment/local_environment_frame.go`
 **Allocation saved:** 1.3 GB, 113.1M allocations
 
 ### Problem
@@ -100,7 +100,7 @@ All binding access uses `&p.bindings[i]` rather than `p.bindings[i]`. This is de
 
 ## Optimization 3: EnvironmentFrame Struct Fusion
 
-**Files:** `environment/environment_frame.go`, `machine/machine_context_apply.go`
+**Files:** `pkg/environment/environment_frame.go`, `pkg/machine/machine_context_apply.go`
 **Allocation saved:** 1.6 GB, 113.1M allocations (exactly matching `closures_applied`)
 
 ### Problem
@@ -143,7 +143,7 @@ The `copyForApplyInto(dst *LocalEnvironmentFrame)` method copies bindings into a
 
 ## Optimization 4: Stack Backing Array Retention
 
-**Files:** `machine/stack.go`
+**Files:** `pkg/machine/stack.go`
 **Allocation saved:** 4.5 GB, 192.7M allocations
 
 ### Problem
@@ -186,7 +186,7 @@ The `copyForApplyInto(dst *LocalEnvironmentFrame)` method copies bindings into a
 
 ## Optimization 5: Shared-Flag Continuation Optimization
 
-**Files:** `machine/machine_continuation.go`, `machine/machine_context_continuation.go`, `machine/pool.go`
+**Files:** `pkg/machine/machine_continuation.go`, `pkg/machine/machine_context_continuation.go`, `pkg/machine/pool.go`
 **Allocation saved:** 3.8 GB, 52.8M allocations
 
 This is the most architecturally significant optimization and the one most likely to be misunderstood.
@@ -264,7 +264,7 @@ Where `call/cc` now sits in this protocol: since the capture became delimited, `
 > two-word `values.Value` interface. Apply now always acquires a fresh env frame
 > from the pool (except for parentless top-level thunks with no parameters).
 
-**Files (historical):** `machine/native_template.go`, `machine/machine_context.go`, `machine/compile_validated.go`
+**Files (historical):** `pkg/machine/native_template.go`, `pkg/machine/machine_context.go`, `machine/compile_validated.go`
 **Allocation saved (historical):** 1.8 GB, 24.6M allocations
 
 ### Historical: How it worked (pre-PR #561)
@@ -397,9 +397,9 @@ reads — one thread's type pointer with another's data pointer.
 
 ## References
 
-- `machine/pool.go` — Continuation and stack pooling
-- `machine/machine_context_continuation.go` — `RestoreAndRelease` with shared-flag branching
-- `machine/machine_context_apply.go` — Apply always-copy path (nil-parent exception)
-- `machine/machine_continuation.go` — `MarkChainShared` with early exit
-- `environment/environment_frame.go` — `NewApplyFrame` fused allocation
-- `machine/stack.go` — `PopAll` with backing array retention
+- `pkg/machine/pool.go` — Continuation and stack pooling
+- `pkg/machine/machine_context_continuation.go` — `RestoreAndRelease` with shared-flag branching
+- `pkg/machine/machine_context_apply.go` — Apply always-copy path (nil-parent exception)
+- `pkg/machine/machine_continuation.go` — `MarkChainShared` with early exit
+- `pkg/environment/environment_frame.go` — `NewApplyFrame` fused allocation
+- `pkg/machine/stack.go` — `PopAll` with backing array retention

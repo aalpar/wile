@@ -190,9 +190,9 @@ additively, so `(for-syntax (for-syntax lib))` is the same as `(for-meta 2 lib)`
 and a shift that leaves `int8` is rejected (`for-meta: phase 200 out of range
 [-128, 127]`).
 
-`GetGlobalIndexAcrossPhases` (`environment/environment_frame.go`, the R7RS §4.3
+`GetGlobalIndexAcrossPhases` (`pkg/environment/environment_frame.go`, the R7RS §4.3
 macro-generating-macro carve-out for free template identifiers) and
-`findLibraryBinding` (`machine/compilation/library_bindings.go`, which decides
+`findLibraryBinding` (`pkg/machine/compilation/library_bindings.go`, which decides
 what a library can export) both derive their probe set from
 `EnvironmentFrame.PresentPhases()`, ascending, `PhaseTemplate` excluded. Neither
 is hard-wired to `{0, 1, 2}` — a name a library binds at phase 3 or above is
@@ -538,7 +538,7 @@ A `*LoadStack` is created per load chain and carried on the context by whichever
 
 ### Resolution Strategy
 
-Filename resolution goes through the `FileResolver` interface (`environment/file_resolver.go`). Concrete implementations live in `machine/compilation/resolver/` (`os_file_resolver.go`, `fs_file_resolver.go`, `embed_file_resolver.go`, `chain_file_resolver.go`), backed by `sourceload.Finder` for file search. The load stack's current directory is consulted as the relative base:
+Filename resolution goes through the `FileResolver` interface (`pkg/environment/file_resolver.go`). Concrete implementations live in `machine/compilation/resolver/` (`os_file_resolver.go`, `fs_file_resolver.go`, `embed_file_resolver.go`, `chain_file_resolver.go`), backed by `sourceload.Finder` for file search. The load stack's current directory is consulted as the relative base:
 
 ```
 1. Absolute path     → use as-is (authorizer-gated)
@@ -555,8 +555,8 @@ All three file-loading operations get-or-create the chain's stack and push/pop o
 | Operation | Location | Phase |
 |-----------|----------|-------|
 | `load` | `extensions/eval/prim_eval.go` | Runtime |
-| `include` | `machine/compilation/compile_time_continuation_include.go` | Compile-time |
-| `import` (library loading) | `machine/compilation/library_loader.go` | Compile-time |
+| `include` | `pkg/machine/compilation/compile_time_continuation_include.go` | Compile-time |
+| `import` (library loading) | `pkg/machine/compilation/library_loader.go` | Compile-time |
 
 Each finds the stack with `resolver.SelectLoadStack(ctx)`, and creates one — installing it on the context it passes downward — when there is none. That get-or-create is what makes the outermost of the three own the chain while the inner ones nest inside it.
 

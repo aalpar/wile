@@ -6,7 +6,7 @@ This document describes implementation choices that differ from canonical R7RS r
 
 ## `let` / `let*` / `letrec` / `letrec*` as Core Compiled Forms
 
-**Files:** `internal/validate/register.go` (validator registration), `machine/compilation/compile_let.go`, `machine/compilation/expander_let.go`, `machine/compilation/compile_validated.go`.
+**Files:** `pkg/internal/validate/register.go` (validator registration), `pkg/machine/compilation/compile_let.go`, `pkg/machine/compilation/expander_let.go`, `pkg/machine/compilation/compile_validated.go`.
 
 **R7RS Specification (§4.2.2):**
 
@@ -40,7 +40,7 @@ Treating them as core forms eliminates an entire layer of macro expansion and le
 
 - `let` — parallel binding; inits evaluated in an outer scope, then `OpPushEnv` allocates the frame and `StoreLocal` stores each value into the body scope.
 - `let*` — sequential binding; `OpPushEnv` first, then each init is compiled followed by its `StoreLocal`, so each later init sees the prior vars.
-- `letrec` / `letrec*` — `OpPushEnv` first so all slots exist before any init is evaluated. `letrec*` then compiles each init followed immediately by its `StoreLocal`, satisfying R7RS §4.2.2's strict left-to-right requirement; `letrec` compiles all inits onto the stack first and stores them in reverse, which meets the weaker R7RS guarantee. See the comment summary on `CompileValidatedLet` (`machine/compilation/compile_let.go`) for the opcode sequence per form.
+- `letrec` / `letrec*` — `OpPushEnv` first so all slots exist before any init is evaluated. `letrec*` then compiles each init followed immediately by its `StoreLocal`, satisfying R7RS §4.2.2's strict left-to-right requirement; `letrec` compiles all inits onto the stack first and stores them in reverse, which meets the weaker R7RS guarantee. See the comment summary on `CompileValidatedLet` (`pkg/machine/compilation/compile_let.go`) for the opcode sequence per form.
 
 **Reference:** R7RS §4.2.2 (Binding constructs), `docs/compiler/core-let.md`.
 
@@ -48,7 +48,7 @@ Treating them as core forms eliminates an entire layer of macro expansion and le
 
 ## Derived Forms Still Implemented as Macros
 
-Not every R7RS derived form is core-compiled. The following remain `define-syntax` entries in `registry/core/bootstrap_macros.scm`, faithful to the R7RS §7.3 reference implementations except where noted. A macro whose template references a bootstrap *procedure* rather than a Go primitive lives instead in `registry/core/bootstrap_macros_late.scm`, which loads after `bootstrap_procedures.scm` so that free identifier pins to the sealed base at macro-definition time (R7RS §4.3.2).
+Not every R7RS derived form is core-compiled. The following remain `define-syntax` entries in `pkg/registry/core/bootstrap_macros.scm`, faithful to the R7RS §7.3 reference implementations except where noted. A macro whose template references a bootstrap *procedure* rather than a Go primitive lives instead in `pkg/registry/core/bootstrap_macros_late.scm`, which loads after `bootstrap_procedures.scm` so that free identifier pins to the sealed base at macro-definition time (R7RS §4.3.2).
 
 | Form | Notes |
 |------|-------|

@@ -45,7 +45,7 @@ Re-invoking `saved-k` later re-enters the callback at `x=2` but cannot resume th
 
 ### The general pattern
 
-Any Go primitive that calls a Scheme closure in a sub-context creates a boundary that truncates continuations. This affected `map`, `for-each`, `apply`, and `call-with-values`. The two remedies below were the first; the general one arrived later, when every such boundary was *reified* as a continuation chain frame that the body runs under inline (`RunBodyUnderFrame` and friends in `machine/run_body_under_frame.go`): `call-with-values` now pushes a consumer frame, `call-with-exit` a finalizer frame, `call-with-continuation-prompt` a transparent prompt frame. A continuation captured inside the body spans those frames instead of stopping at them.
+Any Go primitive that calls a Scheme closure in a sub-context creates a boundary that truncates continuations. This affected `map`, `for-each`, `apply`, and `call-with-values`. The two remedies below were the first; the general one arrived later, when every such boundary was *reified* as a continuation chain frame that the body runs under inline (`RunBodyUnderFrame` and friends in `pkg/machine/run_body_under_frame.go`): `call-with-values` now pushes a consumer frame, `call-with-exit` a finalizer frame, `call-with-continuation-prompt` a transparent prompt frame. A continuation captured inside the body spans those frames instead of stopping at them.
 
 ## The Solution: Two Complementary Changes
 
@@ -78,7 +78,7 @@ The accumulate-and-reverse shape is load-bearing, not a stylistic choice. The st
 
 The multi-list case uses `any-null?` (a named-let helper) to check if any input list is exhausted, matching R7RS's behavior of stopping at the shortest list.
 
-The definitions live in `registry/core/bootstrap_procedures.scm`, alongside `vector-map`, `vector-for-each`, `string-map`, `string-for-each`, `member`, and `assoc`, all moved to Scheme for the same reason.
+The definitions live in `pkg/registry/core/bootstrap_procedures.scm`, alongside `vector-map`, `vector-for-each`, `string-map`, `string-for-each`, `member`, and `assoc`, all moved to Scheme for the same reason.
 
 ### 2. Add delimited continuations
 
@@ -109,7 +109,7 @@ Earlier versions ran the prompt thunk in a sub-context and used `SetPromptTag` t
 
 ### Error propagation
 
-Two control signals, both declared in `machine/prompt_abort.go`, ride the VM's ordinary `return err` plumbing:
+Two control signals, both declared in `pkg/machine/prompt_abort.go`, ride the VM's ordinary `return err` plumbing:
 
 ```
         abort-current-continuation       call/cc continuation invoked
@@ -311,26 +311,26 @@ Creates an independent copy of an entire continuation chain. Every frame is `Cop
 
 | File | Contents |
 |------|----------|
-| `machine/prompt_tag.go` | `PromptTag` type, `DefaultPromptTag` |
-| `machine/composable_continuation.go` | `ComposableContinuation` callable value, `AcquireSegment` |
-| `machine/prompt_abort.go` | `ErrPromptAbort`, `ErrResumeContinuation` |
-| `machine/dynamic_wind.go` | `DynamicWindFrame`, `WindingStack`, `FindCommonWindingPrefix` |
-| `machine/machine_continuation.go` | `promptTag`/`promptHandler` fields, `DeepCopy()` |
-| `machine/barrier_token.go` | `BarrierToken` opaque barrier identity |
-| `machine/machine_context.go` | `RunResumable`, `RunWithEscapeHandling`, `RunWithinBoundary`, `resolveAbort` |
-| `machine/run_body_under_frame.go` | `RunBodyUnderPrompt` and the other reified-boundary constructors |
-| `machine/machine_context_continuation.go` | `FindPrompt`, `SliceContinuationAt`, `GraftContinuation` |
-| `machine/machine_context_winding.go` | `RestoreWithWindingFrom` |
-| `machine/machine_context_apply.go` | `ReinstallSegment`, `applyComposableContinuation` |
-| `machine/foreign_closure.go` | `applyCallableError` (control-signal passthrough) |
-| `machine/machine_context_apply.go` | `bridgeForeignError` (the only wrapper around it) |
-| `registry/core/prim_prompt.go` | Prompt primitive implementations |
-| `machine/captured_continuation.go` | `CapturedContinuation` and `applyCapturedContinuation`: the call/cc escape value |
-| `registry/core/prim_control.go` | `PrimCallCC` |
-| `registry/core/prim_barrier.go` | `PrimCallWithContinuationBarrier` |
-| `registry/core/prim_exit.go` | `PrimCallWithExit` (reified exit frame) |
-| `registry/core/prompts.go` | Primitive registration |
-| `registry/core/bootstrap_procedures.scm` | Scheme `map`/`for-each` definitions |
+| `pkg/machine/prompt_tag.go` | `PromptTag` type, `DefaultPromptTag` |
+| `pkg/machine/composable_continuation.go` | `ComposableContinuation` callable value, `AcquireSegment` |
+| `pkg/machine/prompt_abort.go` | `ErrPromptAbort`, `ErrResumeContinuation` |
+| `pkg/machine/dynamic_wind.go` | `DynamicWindFrame`, `WindingStack`, `FindCommonWindingPrefix` |
+| `pkg/machine/machine_continuation.go` | `promptTag`/`promptHandler` fields, `DeepCopy()` |
+| `pkg/machine/barrier_token.go` | `BarrierToken` opaque barrier identity |
+| `pkg/machine/machine_context.go` | `RunResumable`, `RunWithEscapeHandling`, `RunWithinBoundary`, `resolveAbort` |
+| `pkg/machine/run_body_under_frame.go` | `RunBodyUnderPrompt` and the other reified-boundary constructors |
+| `pkg/machine/machine_context_continuation.go` | `FindPrompt`, `SliceContinuationAt`, `GraftContinuation` |
+| `pkg/machine/machine_context_winding.go` | `RestoreWithWindingFrom` |
+| `pkg/machine/machine_context_apply.go` | `ReinstallSegment`, `applyComposableContinuation` |
+| `pkg/machine/foreign_closure.go` | `applyCallableError` (control-signal passthrough) |
+| `pkg/machine/machine_context_apply.go` | `bridgeForeignError` (the only wrapper around it) |
+| `pkg/registry/core/prim_prompt.go` | Prompt primitive implementations |
+| `pkg/machine/captured_continuation.go` | `CapturedContinuation` and `applyCapturedContinuation`: the call/cc escape value |
+| `pkg/registry/core/prim_control.go` | `PrimCallCC` |
+| `pkg/registry/core/prim_barrier.go` | `PrimCallWithContinuationBarrier` |
+| `pkg/registry/core/prim_exit.go` | `PrimCallWithExit` (reified exit frame) |
+| `pkg/registry/core/prompts.go` | Primitive registration |
+| `pkg/registry/core/bootstrap_procedures.scm` | Scheme `map`/`for-each` definitions |
 
 ## References
 

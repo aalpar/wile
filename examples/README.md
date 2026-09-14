@@ -93,7 +93,7 @@ File operations, string ports, and binary I/O.
 
 ### Concurrency
 
-Threading, synchronization, and message passing backed by Go's runtime.
+Threading and synchronization backed by Go's runtime.
 
 | File | Description |
 |------|-------------|
@@ -101,7 +101,7 @@ Threading, synchronization, and message passing backed by Go's runtime.
 | [mutex.scm](concurrency/mutex.scm) | Mutual exclusion, critical sections, race prevention |
 | [parallel-map.scm](concurrency/parallel-map.scm) | Parallel computation and thread pools |
 
-**Key Feature**: Wile threads map directly to Go goroutines. Channels provide CSP-style message passing. Mutexes prevent race conditions on shared state.
+**Key Feature**: Wile threads map directly to Go goroutines. SRFI-18 mutexes and condition variables, plus the atomic boxes in `(wile gointerop)`, coordinate shared state.
 
 ### Algebra
 
@@ -164,7 +164,7 @@ Standard Scheme benchmarks from the Gabriel suite and others.
 | [ackermann.scm](benchmarks/ackermann.scm) | Ackermann function (deep recursion) |
 | [sieve.scm](benchmarks/sieve.scm) | Sieve of Eratosthenes (allocation) |
 
-**23 benchmarks** covering recursion, allocation, floating-point, list processing, and more. See [benchmarks/README.md](benchmarks/README.md) for the complete list and cross-implementation comparison scripts.
+**26 benchmark programs** covering recursion, allocation, floating-point, list processing, and more. See [benchmarks/README.md](benchmarks/README.md) for the complete list and cross-implementation comparison scripts.
 
 ## Running Examples
 

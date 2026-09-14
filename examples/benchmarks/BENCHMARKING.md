@@ -278,35 +278,19 @@ provenance line.
 
 Wile is a bytecode interpreter optimized for correctness, simplicity, and embeddability.
 
-### Expected Performance Tier
+### Expected Performance
 
-Wile is a **bytecode interpreter**. When comparing against native-code compilers:
+Measured 2026-09-14 on darwin/arm64, `tak(18, 12, 6)` per iteration:
 
-```
-┌─────────────────────────────────┬────────────┐
-│ Native Code Compilers           │  1x        │ (Chez Scheme, Gambit)
-├─────────────────────────────────┼────────────┤
-│ JIT Compilers                   │  5-10x     │ (Racket with JIT)
-├─────────────────────────────────┼────────────┤
-│ Bytecode Interpreters           │  50-2000x  │ (Wile, Guile, Chibi)
-├─────────────────────────────────┼────────────┤
-│ Tree-Walking Interpreters       │  100-5000x │
-└─────────────────────────────────┴────────────┘
-```
+| Implementation | Per iteration | Relative to Wile |
+|---|---|---|
+| Wile | 10.0 ms | 1× |
+| Chez Scheme 10.4.1 | 0.057 ms | ~176× faster |
+| Racket 9.2 CS | 0.053 ms | ~190× faster |
 
-**Wile at 1,000-2,000x slower than Chez is completely normal.** This is the architectural tradeoff of bytecode interpretation vs. native compilation. It's like comparing Python to C - different tools for different jobs.
+One benchmark on one machine: read the ratio as an order of magnitude, not a constant. Guile, Chibi and Gambit were not measured. Racket CS compiles through Chez's native backend, so the old "Racket with JIT" tier no longer describes current Racket.
 
-### Real-World Example
-
-```
-Benchmark: tak(18, 12, 6) × 10 iterations
-
-Chez Scheme:    0.00073s  (native code)
-Wile:           1.15500s  (bytecode)
-Ratio:          ~1,580x slower
-
-This is expected and acceptable for Wile's use cases.
-```
+An earlier measurement of the same benchmark recorded Wile at 1.155 s for 10 iterations against Chez's 0.00073 s (~1,580×). The ratio has since dropped by roughly an order of magnitude. The two Chez figures are within 30% of each other while Wile's moved 11×, so most of the change is Wile's; the earlier machine is not recorded.
 
 ### What Matters
 

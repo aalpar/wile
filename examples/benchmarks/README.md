@@ -88,27 +88,7 @@ Wile is a bytecode interpreter. For compute-intensive inner loops, use Wile as a
 
 ### Expected Performance vs. Native Compilers
 
-When comparing against native-code compilers like Chez Scheme:
-
-- **Chez Scheme:** Compiles to native x86/ARM machine code with aggressive optimizations
-- **Wile:** Compiles to bytecode, interprets on a virtual machine
-- **Expected ratio:** 1,000-2,000x slower than Chez
-
-**This is completely normal and expected.** It's the architectural tradeoff of a bytecode interpreter vs. a native compiler - like comparing Python to C.
-
-### Performance Tier Positioning
-
-```
-┌─────────────────────────────────┬──────────┐
-│ Native Code (Chez, Gambit)      │   1x     │
-├─────────────────────────────────┼──────────┤
-│ JIT (Racket with JIT)           │   5-10x  │
-├─────────────────────────────────┼──────────┤
-│ Bytecode (Wile, Guile, Chibi)   │  50-500x │ ← Wile is here
-├─────────────────────────────────┼──────────┤
-│ Tree-walking interpreters       │ 100-1000x│
-└─────────────────────────────────┴──────────┘
-```
+On `tak(18, 12, 6)` Wile measures roughly 180× slower than Chez Scheme and Racket CS; the table and its caveats are in [BENCHMARKING.md](BENCHMARKING.md#expected-performance).
 
 ### What Matters for Wile
 

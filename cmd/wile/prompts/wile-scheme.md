@@ -1,7 +1,7 @@
 # Wile Scheme Evaluator
 
 Use the `eval` tool to run Scheme code in a persistent session and the
-companion tools (`doc`, `apropos`, `topics`, `topic`, `libraries`) to
+companion tools (`doc`, `apropos`, `topics`, `topic`, `libraries`, `disassemble`) to
 discover what's available before writing code.
 
 ## Your Task
@@ -57,11 +57,12 @@ Before writing code, use the documentation tools:
 | `doc (<lib>)` | Library info: description and export list |
 | `apropos <pattern>` | Search by name, doc text, or category |
 | `libraries` | List all currently loaded Scheme libraries |
+| `disassemble <name>` | Bytecode listing of a defined procedure |
 | `set-timeout` | Change the eval timeout for this session |
 
 ## Timeout
 
-Eval has a **server-configured default timeout** (typically 30 seconds). For long-running computations,
+Eval has a **server-configured default timeout** (30 seconds unless the server was started with a different `--mcp-timeout`). For long-running computations,
 pass the `timeout` parameter:
 
 ```json
@@ -74,11 +75,11 @@ To change the session default, use the `set-timeout` tool:
 {"seconds": 120}
 ```
 
-Use `0` to disable the timeout entirely.
+`0` removes the caller-supplied deadline, but the server still caps a single eval at 10 minutes.
 
 ## Importing Libraries
 
-Libraries load on demand with `(import ...)`. Core forms are always available:
+Libraries load on demand with `(import ...)`. The session starts with the full primitive set already bound, so `define`, `display`, and arithmetic work before any import:
 
 ```scheme
 (import (scheme base))           ; core: define, if, let, lambda, lists, arithmetic
@@ -89,20 +90,20 @@ Libraries load on demand with `(import ...)`. Core forms are always available:
 (import (scheme eval))           ; eval, environment, interaction-environment
 (import (scheme lazy))           ; delay, force, make-promise
 (import (scheme char))           ; char-alphabetic?, char-upcase, etc.
-(import (scheme string))         ; string-copy, string-map, etc.
-(import (scheme vector))         ; vector-copy, vector-fill!, etc.
+(import (scheme inexact))        ; finite?, nan?, sqrt, exp, log, sin, ...
+(import (scheme cxr))            ; caddr, cdddr, ...
 (import (scheme r5rs))           ; R5RS compatibility
 
 (import (srfi 1))                ; list library: iota, fold, filter, append-map, ...
 (import (chibi test))            ; test framework: test, test-group, test-end
 
-(import (wile files))            ; filesystem: read-directory, file-stat, path-join, ...
-(import (wile math))             ; extended math: floor-quotient, etc.
-(import (wile system))           ; getenv, setenv, system
-(import (wile process))          ; process spawning
+(import (wile files))            ; filesystem: directory-files, create-directory, current-directory, ...
+(import (wile math))             ; extended math: exact-integer-sqrt, inexact-accuracy, trig, logarithms
+(import (wile system))           ; command-line, exit, current-second, current-jiffy
+(import (wile process))          ; system, process-spawn, process-wait, process-kill
 (import (wile threads))          ; SRFI-18: make-thread, thread-start!, mutex-lock!, ...
 (import (wile gointerop))        ; Go FFI: opaque values, type tags
-(import (wile introspection))    ; procedure-documentation, apropos, doc-topics, ...
+(import (wile introspection))    ; disassemble, environment-bound-names, available-libraries, ...
 (import (wile algebra))          ; lattices, semirings, monoids, groups, fields
 ```
 
@@ -117,7 +118,7 @@ name (e.g. `(wile files)`) to see what it exports.
 (display "result: ") (display value) (newline)
 
 ; Error handling
-(guard (exn (#t (display (condition/report-string exn)) (newline)))
+(guard (e ((error-object? e) (display (error-object-message e)) (newline)))
   (some-expression-that-may-fail))
 
 ; List processing (srfi 1)

@@ -15,7 +15,7 @@ composable capture delimited at the default prompt plus an abort to that prompt:
 
 That is the *semantics*. The *mechanism* is the resume trampoline. Call/cc
 returns a `CapturedContinuation` value (defined in
-`machine/captured_continuation.go`), which wraps the `ComposableContinuation`
+`pkg/machine/captured_continuation.go`), which wraps the `ComposableContinuation`
 rather than building a Go closure directly. When invoked,
 `applyCapturedContinuation` does not run the captured chain: it checks thread
 and barrier identity and then *returns* an `ErrResumeContinuation` carrying the
@@ -105,14 +105,14 @@ rootless.
 
 | Component | File |
 |-----------|------|
-| `PrimCallCC` | `registry/core/prim_control.go` |
-| `NewCapturedContinuation`, `applyCapturedContinuation`, `CapturedContinuation` | `machine/captured_continuation.go` |
-| `ComposableContinuation`, `AcquireSegment` | `machine/composable_continuation.go` |
-| `ErrResumeContinuation`, `ErrPromptAbort` | `machine/prompt_abort.go` |
-| `BarrierToken` | `machine/barrier_token.go` |
-| `ReinstallSegment`, `applyComposableContinuation` | `machine/machine_context_apply.go` |
-| `RunResumable`, `RunWithEscapeHandling`, `resolveAbort` | `machine/machine_context.go` |
-| `RestoreWithWindingFrom` | `machine/machine_context_winding.go` |
+| `PrimCallCC` | `pkg/registry/core/prim_control.go` |
+| `NewCapturedContinuation`, `applyCapturedContinuation`, `CapturedContinuation` | `pkg/machine/captured_continuation.go` |
+| `ComposableContinuation`, `AcquireSegment` | `pkg/machine/composable_continuation.go` |
+| `ErrResumeContinuation`, `ErrPromptAbort` | `pkg/machine/prompt_abort.go` |
+| `BarrierToken` | `pkg/machine/barrier_token.go` |
+| `ReinstallSegment`, `applyComposableContinuation` | `pkg/machine/machine_context_apply.go` |
+| `RunResumable`, `RunWithEscapeHandling`, `resolveAbort` | `pkg/machine/machine_context.go` |
+| `RestoreWithWindingFrom` | `pkg/machine/machine_context_winding.go` |
 
 For operational details (error propagation paths, driver pseudocode, end-to-end
 examples), see [`prompt-abort.md`](prompt-abort.md). For the resume mechanism

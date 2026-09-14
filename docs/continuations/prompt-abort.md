@@ -20,7 +20,7 @@ are VM *control signals* rather than failures:
   **unrun**, the resume values, and `SourceWinding`. Emitted only by invoking a
   `call/cc` continuation. See [`resume-trampoline.md`](resume-trampoline.md).
 
-Both are declared in `machine/prompt_abort.go`.
+Both are declared in `pkg/machine/prompt_abort.go`.
 
 ```
       ┌──────────────────────────────────────────────────────────────┐
@@ -62,7 +62,7 @@ Both are declared in `machine/prompt_abort.go`.
 
 ### Error priority in applyCallableError
 
-`applyCallableError` (`machine/foreign_closure.go`) has a strict order:
+`applyCallableError` (`pkg/machine/foreign_closure.go`) has a strict order:
 
 ```go
 // 1. ErrPromptAbort          (errors.As) → pass through unchanged
@@ -90,7 +90,7 @@ per invocation. It is no longer caught by a Go-stack `errors.As` in
 
 ## RunResumable
 
-`machine/machine_context.go`. `RunWithEscapeHandling` is a one-line delegation
+`pkg/machine/machine_context.go`. `RunWithEscapeHandling` is a one-line delegation
 to it, kept as the name embedders and thread roots call.
 
 This is the driver loop under the default prompt. It installs `DefaultPromptTag`
@@ -182,7 +182,7 @@ and does no panic handling; those belong to the one top-level `RunResumable`.
 
 ## RestoreWithWindingFrom
 
-`machine/machine_context_winding.go`
+`pkg/machine/machine_context_winding.go`
 
 The central dynamic-wind transition function. Reached from `ReinstallSegment`
 (both composable and call/cc resume) and from `resolveAbort`.
@@ -207,7 +207,7 @@ common prefix uniquely identifies the shared ancestor.
 
 ## PrimCallCC: capture once, one apply seam
 
-`registry/core/prim_control.go`
+`pkg/registry/core/prim_control.go`
 
 `call/cc` is implemented using the Racket model where a call/cc escape
 is equivalent to:
@@ -280,7 +280,7 @@ chain, so call/cc works in contexts that would otherwise call `Run()` directly.
 
 ## call/cc escape value
 
-`machine/captured_continuation.go`: `CapturedContinuation`,
+`pkg/machine/captured_continuation.go`: `CapturedContinuation`,
 `applyCapturedContinuation`
 
 Invoking a `CapturedContinuation`:
@@ -296,10 +296,10 @@ makes resume cost O(1) Go frames and reconcile dynamic-wind exactly once; see
 
 ## PrimCallWithContinuationPrompt
 
-`registry/core/prim_prompt.go`
+`pkg/registry/core/prim_prompt.go`
 
 The prompt is a continuation **chain frame**, not a sub-context. `RunBodyUnderPrompt`
-(`machine/run_body_under_frame.go`) pushes a transparent prompt frame carrying
+(`pkg/machine/run_body_under_frame.go`) pushes a transparent prompt frame carrying
 the tag and handler onto `mc.cont`, then inline-applies the thunk on the live
 chain.
 
@@ -325,7 +325,7 @@ inside the thunk *spans* the prompt frame (the old sub-context truncated it), an
 
 ## Composable continuation application
 
-`machine/machine_context_apply.go`: `applyComposableContinuation`
+`pkg/machine/machine_context_apply.go`: `applyComposableContinuation`
 
 ```
 applyComposableContinuation(cc, args)
@@ -367,38 +367,38 @@ re-invocation copy, a second resume would corrupt the shared frames.
 
 | Type | File | Purpose |
 |------|------|---------|
-| `PromptTag` | `machine/prompt_tag.go` | Opaque identity, pointer equality, atomic ID |
-| `ErrPromptAbort` | `machine/prompt_abort.go` | Abort carrier: tag, values, SourceWinding |
-| `ErrResumeContinuation` | `machine/prompt_abort.go` | Resume signal: tag, unrun segment, values, SourceWinding |
-| `BarrierToken` | `machine/barrier_token.go` | Opaque barrier identity, pointer equality |
-| `ComposableContinuation` | `machine/composable_continuation.go` | Callable delimited continuation segment |
-| `CapturedContinuation` | `machine/captured_continuation.go` | call/cc escape value wrapping a `ComposableContinuation` |
-| `DynamicWindFrame` | `machine/dynamic_wind.go` | Before/after thunks + atomic ID |
-| `WindingStack` | `machine/dynamic_wind.go` | `[]DynamicWindFrame` slice (frames by value) |
+| `PromptTag` | `pkg/machine/prompt_tag.go` | Opaque identity, pointer equality, atomic ID |
+| `ErrPromptAbort` | `pkg/machine/prompt_abort.go` | Abort carrier: tag, values, SourceWinding |
+| `ErrResumeContinuation` | `pkg/machine/prompt_abort.go` | Resume signal: tag, unrun segment, values, SourceWinding |
+| `BarrierToken` | `pkg/machine/barrier_token.go` | Opaque barrier identity, pointer equality |
+| `ComposableContinuation` | `pkg/machine/composable_continuation.go` | Callable delimited continuation segment |
+| `CapturedContinuation` | `pkg/machine/captured_continuation.go` | call/cc escape value wrapping a `ComposableContinuation` |
+| `DynamicWindFrame` | `pkg/machine/dynamic_wind.go` | Before/after thunks + atomic ID |
+| `WindingStack` | `pkg/machine/dynamic_wind.go` | `[]DynamicWindFrame` slice (frames by value) |
 
 ### Functions
 
 | Function | File | Purpose |
 |----------|------|---------|
-| `RunResumable` | `machine/machine_context.go` | The DefaultPromptTag driver loop |
-| `RunWithEscapeHandling` | `machine/machine_context.go` | Delegates to `RunResumable` |
-| `RunWithinBoundary` | `machine/machine_context.go` | Sub-context driver for reified boundaries on its own chain |
-| `resolveAbort` | `machine/machine_context.go` | Shared abort arm of both drivers |
-| `applyCallableError` | `machine/foreign_closure.go` | Control-signal passthrough vs. `RaiseInPlace` |
-| `FindPrompt` | `machine/machine_context_continuation.go` | Walk continuation chain + check context tag |
-| `SliceContinuationAt` | `machine/machine_context_continuation.go` | Deep-copy continuation segment to prompt |
-| `GraftContinuation` | `machine/machine_context_continuation.go` | Splice segment onto target chain |
-| `RestoreWithWindingFrom` | `machine/machine_context_winding.go` | Unwind/rewind + restore continuation |
-| `FindCommonWindingPrefix` | `machine/dynamic_wind.go` | Common ancestor of two winding stacks |
-| `ReinstallSegment` | `machine/machine_context_apply.go` | The single resume primitive (abortive + composable) |
-| `applyComposableContinuation` | `machine/machine_context_apply.go` | Apply composable continuation value |
-| `applyCapturedContinuation` | `machine/captured_continuation.go` | Return the resume signal (checks thread + barrier) |
-| `RunBodyUnderPrompt` | `machine/run_body_under_frame.go` | Push a transparent prompt frame, inline-apply the body |
-| `PrimCallCC` | `registry/core/prim_control.go` | call/cc primitive (inline + sub-context) |
-| `NewCapturedContinuation` | `machine/captured_continuation.go` | Build the call/cc escape value |
-| `PrimCallWithContinuationPrompt` | `registry/core/prim_prompt.go` | Install prompt frame, run thunk |
-| `PrimAbortCurrentContinuation` | `registry/core/prim_prompt.go` | Return ErrPromptAbort |
-| `PrimCallWithComposableContinuation` | `registry/core/prim_prompt.go` | Capture composable continuation |
+| `RunResumable` | `pkg/machine/machine_context.go` | The DefaultPromptTag driver loop |
+| `RunWithEscapeHandling` | `pkg/machine/machine_context.go` | Delegates to `RunResumable` |
+| `RunWithinBoundary` | `pkg/machine/machine_context.go` | Sub-context driver for reified boundaries on its own chain |
+| `resolveAbort` | `pkg/machine/machine_context.go` | Shared abort arm of both drivers |
+| `applyCallableError` | `pkg/machine/foreign_closure.go` | Control-signal passthrough vs. `RaiseInPlace` |
+| `FindPrompt` | `pkg/machine/machine_context_continuation.go` | Walk continuation chain + check context tag |
+| `SliceContinuationAt` | `pkg/machine/machine_context_continuation.go` | Deep-copy continuation segment to prompt |
+| `GraftContinuation` | `pkg/machine/machine_context_continuation.go` | Splice segment onto target chain |
+| `RestoreWithWindingFrom` | `pkg/machine/machine_context_winding.go` | Unwind/rewind + restore continuation |
+| `FindCommonWindingPrefix` | `pkg/machine/dynamic_wind.go` | Common ancestor of two winding stacks |
+| `ReinstallSegment` | `pkg/machine/machine_context_apply.go` | The single resume primitive (abortive + composable) |
+| `applyComposableContinuation` | `pkg/machine/machine_context_apply.go` | Apply composable continuation value |
+| `applyCapturedContinuation` | `pkg/machine/captured_continuation.go` | Return the resume signal (checks thread + barrier) |
+| `RunBodyUnderPrompt` | `pkg/machine/run_body_under_frame.go` | Push a transparent prompt frame, inline-apply the body |
+| `PrimCallCC` | `pkg/registry/core/prim_control.go` | call/cc primitive (inline + sub-context) |
+| `NewCapturedContinuation` | `pkg/machine/captured_continuation.go` | Build the call/cc escape value |
+| `PrimCallWithContinuationPrompt` | `pkg/registry/core/prim_prompt.go` | Install prompt frame, run thunk |
+| `PrimAbortCurrentContinuation` | `pkg/registry/core/prim_prompt.go` | Return ErrPromptAbort |
+| `PrimCallWithComposableContinuation` | `pkg/registry/core/prim_prompt.go` | Capture composable continuation |
 
 ## End-to-end example: call/cc escape through dynamic-wind
 

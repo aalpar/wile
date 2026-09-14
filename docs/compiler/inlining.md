@@ -105,7 +105,7 @@ If `square` can be reassigned, inlining it is unsound — the inlined body might
 
 `BindingType` (`Variable`, `Syntax`, `Primitive`, `Unknown`) does not carry this, and `CompileValidatedSetBang` does not mark its target: it emits a `StoreLocal` or `StoreGlobal` and moves on.
 
-**Shipped:** the validator answers it instead, at `let` scope. `markMutableBindings` (`internal/validate/validate_let.go`) walks the body for `ValidatedSetBang` targets and sets `ValidatedLetBinding.Mutable`; the inline predicate rejects a mutable binding. This is per-`let`, not whole-module, which is exactly as far as the shipped inliner reaches.
+**Shipped:** the validator answers it instead, at `let` scope. `markMutableBindings` (`pkg/internal/validate/validate_let.go`) walks the body for `ValidatedSetBang` targets and sets `ValidatedLetBinding.Mutable`; the inline predicate rejects a mutable binding. This is per-`let`, not whole-module, which is exactly as far as the shipped inliner reaches.
 
 > Note: R7RS primitive bindings are a special case. Bindings like `+`, `car`, `cons` are `BindingTypePrimitive` and are never `set!`-able (the language guarantees this). The existing `CallForeignCached` optimization already exploits this — it resolves the binding at compile time and emits a direct call. Inlining extends this: instead of calling `+`, emit `Add` directly. The opcode promotion system already does this for the 11 hottest primitives. Inlining user-defined procedures is the generalization.
 
@@ -133,7 +133,7 @@ The cost model doesn't need to be sophisticated. Chez Scheme's initial heuristic
 
 `add5` holds a closure returned by `make-adder`. The closure captures `n`. To inline `(add5 3)`, we'd need to know *which* closure `add5` holds and what `n` was bound to. This requires escape analysis and interprocedural constant propagation — well beyond what a simple inlining pass can do.
 
-**Shipped:** `markEscapedBindings` (`internal/validate/validate_escape.go`) sets `ValidatedLetBinding.Escapes` when the binding is referenced anywhere but the operator position of a call, and the inline predicate rejects it. Escape and mutation are orthogonal (each carries information the other does not), so both flags are checked.
+**Shipped:** `markEscapedBindings` (`pkg/internal/validate/validate_escape.go`) sets `ValidatedLetBinding.Escapes` when the binding is referenced anywhere but the operator position of a call, and the inline predicate rejects it. Escape and mutation are orthogonal (each carries information the other does not), so both flags are checked.
 
 The call-site side is tighter still. `tryInlineCall` inlines only when the binding resolves (by `BindingID`, not by name) to a registered candidate *and* `p.env` is the same compile-time environment the candidate was registered in, so a nested scope that might shadow a free variable the lambda captured cannot inline. Candidates are unregistered when the `let` scope exits, and a re-entrant call to the same binding is refused via `currentlyInlining`.
 

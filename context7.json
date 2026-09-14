@@ -1,0 +1,14 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "Wile",
+  "description": "Embeddable R7RS Scheme for Go: hygienic macros, first-class continuations, a full numeric tower, and a capability sandbox. Pure Go, no CGo.",
+  "branch": "master",
+  "excludeFiles": ["TODO.md", "CODING_STYLE.md", "CONTRIBUTING.md"],
+  "excludeFolders": ["docs/dev", "scripts", "tools", ".github", "test"],
+  "rules": [
+    "A wile.Engine is not safe for concurrent use; give each goroutine its own Engine or synchronize externally.",
+    "Engine.Parse accepts exactly one expression and rejects trailing input; use Engine.EvalMultiple to evaluate several.",
+    "(import (scheme base)) needs WithProfile(wile.Small) or larger AND WithSourceFS(wile.StdLibFS) plus WithLibraryPaths(\"lib\"). The Tiny profile cannot load it.",
+    "Phase-shifted imports are written (for-syntax (scheme base)), not the R6RS form (for (scheme base) expand)."
+  ]
+}

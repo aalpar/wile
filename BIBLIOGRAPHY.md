@@ -367,7 +367,7 @@ The procedural escape hatch beside `syntax-rules`. An `er-macro-transformer` rec
 
 - **Paper**: William Clinger, "Hygienic Macros Through Explicit Renaming", ACM SIGPLAN Lisp Pointers, Vol. IV, No. 4, 1991
 - **DOI**: https://doi.org/10.1145/1317265.1317269
-- **Location**: `pkg/machine/compilation/compile_er_macro.go` (TransformerERMacro), `pkg/machine/compilation/compile_transformer.go`
+- **Location**: `pkg/machine/compilation/er_macro_transformer.go`, `er_macro_rename.go`, `er_macro_compare.go`; `TransformerERMacro` in `pkg/machine/compilation/compile_transformer.go`
 
 ### Syntax Objects (Dybvig, Hieb & Bruggeman 1993)
 

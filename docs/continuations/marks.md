@@ -86,7 +86,7 @@ No cleanup thunks. No global state. The mark's lifetime is the frame's lifetime.
 
 Here's where it gets interesting. (In the examples below, `current-marks`
 is pedagogical shorthand for `(continuation-mark-set->list
-(current-continuation-marks) 'k)` — the real R7RS entry point.) Consider:
+(current-continuation-marks) 'k)`, the real entry point. Continuation marks come from Racket and SRFI 157; R7RS-small has none.) Consider:
 
 ```scheme
 (with-continuation-mark 'k 1
@@ -150,7 +150,7 @@ leak that defeats the purpose of tail-call optimization.
 ## Collecting Marks: Walking the Chain
 
 To collect marks, you walk the continuation chain — the same linked list that
-`CaptureStackTrace` (`machine/machine_context.go`) already walks:
+`CaptureStackTrace` (`pkg/machine/machine_context.go`) already walks:
 
 ```go
 // CaptureStackTrace walks mc.cont chain for error reporting.
@@ -175,7 +175,7 @@ for cont != nil {
 }
 ```
 
-The real implementation (`CollectContinuationMarks` in `machine/continuation_mark_set.go`) does this in the opposite order — builds a `frames` slice with the current frame's marks appended first, then walks the chain — and returns a `ContinuationMarkSet` rather than a raw list. Same invariant either way: current frame first, innermost-to-outermost. Its sibling `CollectMarksFromContinuation` runs the same walk over a *captured* chain, which is what `(continuation-marks k)` uses.
+The real implementation (`CollectContinuationMarks` in `pkg/machine/continuation_mark_set.go`) does this in the opposite order — builds a `frames` slice with the current frame's marks appended first, then walks the chain — and returns a `ContinuationMarkSet` rather than a raw list. Same invariant either way: current frame first, innermost-to-outermost. Its sibling `CollectMarksFromContinuation` runs the same walk over a *captured* chain, which is what `(continuation-marks k)` uses.
 
 The walk produces a list of values for a given key, ordered from innermost
 (current frame) to outermost (top-level). This is a `ContinuationMarkSet` —
@@ -199,7 +199,7 @@ marks below the prompt boundary are invisible.
 ```
 
 Collection does its own walk rather than calling `FindPrompt(tag)`
-(`machine/machine_context_continuation.go`): it stops at the first *frame*
+(`pkg/machine/machine_context_continuation.go`): it stops at the first *frame*
 whose `promptTag` matches and deliberately does not consult the context's own
 `promptTag`, since `current-continuation-marks` is only reachable from inside
 that boundary anyway.
@@ -220,7 +220,7 @@ before/after thunks can clobber an unrelated `parameterize` extent when a
 composable continuation is spliced in.
 
 Wile's `parameterize` is a mark form instead. The macro
-(`registry/core/bootstrap_macros.scm`) evaluates each parameter object and its
+(`pkg/registry/core/bootstrap_macros.scm`) evaluates each parameter object and its
 converted value in the *outer* dynamic extent, per R7RS §4.2.6, then nests one
 `with-continuation-mark` per binding:
 
@@ -230,7 +230,7 @@ converted value in the *outer* dynamic extent, per R7RS §4.2.6, then nests one
 ```
 
 Reading the parameter means "find the nearest mark for this key"
-(`findParameterInMarks` in `machine/machine_context_apply.go`, falling back to
+(`findParameterInMarks` in `pkg/machine/machine_context_apply.go`, falling back to
 the parameter's base value). No thunks, no entry/exit overhead, and composing a
 captured continuation carries its parameter bindings automatically because the
 marks ride the frames. This is how Racket implements parameters, and it's why
@@ -261,7 +261,7 @@ invoked multiple times, need the whole chain, so `AcquireSegment` uses
 
 **Slice, not map.** The `marks` field is a slice of `(key, val)` entries,
 not a Go map. Keys are compared with `eq?` via `values.EqIdentity`
-(`values/utils.go`): pointer equality for most values, but *symbols
+(`pkg/values/utils.go`): pointer equality for most values, but *symbols
 compare by name* (`sa.Key == sb.Key`) — symbol interning was removed in
 PR #529, so two `'foo` symbol values may be distinct pointers that must
 still compare equal. A Go map keyed by `values.Value` can't express that at
@@ -286,7 +286,7 @@ frames is well-defined: the chain walk produces innermost-first values.)
 `mc.marks` to the new frame: the slice header moves over (`q.marks = mc.marks`
 in `NewMachineContinuationFromMachineContext`) and then `SaveContinuation`
 nils `mc.marks`, so the callee starts clean (see the `marks` comment on
-`vmState` in `machine/vm_state.go`). This is a move, not a copy: the backing
+`vmState` in `pkg/machine/vm_state.go`). This is a move, not a copy: the backing
 array is shared until `cloneMarks` duplicates it, which `Copy`, `Restore`, and
 `RestoreAndRelease`'s shared branch all do, since a chain that may be
 re-invoked cannot share mutable mark storage with the live context. On normal
@@ -296,7 +296,7 @@ skip `SaveContinuation` and just overwrite the current frame's entry.
 
 **Tail-position detection.** The compiler must know whether the body of
 `with-continuation-mark` is in tail position
-(`CompileValidatedWithContinuationMark`, `machine/compilation/compile_validated.go`),
+(`CompileValidatedWithContinuationMark`, `pkg/machine/compilation/compile_validated.go`),
 using the same tail-position tracking (`CompileTimeCallContext.inTail`) that
 governs whether function calls are optimized. In tail position it emits a bare
 `SetContMark` and compiles the body in tail: the mark lands on the current

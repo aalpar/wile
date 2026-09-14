@@ -72,7 +72,7 @@ type SyntaxSymbol struct {
 }
 ```
 
-### Scopes (`values/scope.go`, re-exported as `syntax.Scope`)
+### Scopes (`pkg/values/scope.go`, re-exported as `syntax.Scope`)
 
 A scope is a unique identifier created at specific points:
 
@@ -89,7 +89,7 @@ type Scope struct {
 }
 ```
 
-### Transformer Closure (`machine/compilation/compile_syntax_rules.go`)
+### Transformer Closure (`pkg/machine/compilation/compile_syntax_rules.go`)
 
 `CompileSyntaxRules` turns a `syntax-rules` form into a `MachineClosure` whose
 template literals carry a `*ClausesWrapper`, holding one clause per
@@ -99,7 +99,7 @@ template literals carry a `*ClausesWrapper`, holding one clause per
 - **Literals set**: Symbols that match literally, not as pattern variables
 - **Free identifiers**: Template symbols resolved at macro-definition time
 
-The clause type lives in `machine/compilation/syntax_bridge_types.go` (the
+The clause type lives in `pkg/machine/compilation/syntax_bridge_types.go` (the
 compiler writes it, `OperationSyntaxRulesTransform` reads it at expansion
 time, so its fields are exported):
 
@@ -159,19 +159,19 @@ The binding's scope set must be a **subset** of the reference's scope set.
 
 ### Implementation in Code
 
-**Scope creation** (`machine/compilation/operation_syntax_rules_transform.go`):
+**Scope creation** (`pkg/machine/compilation/operation_syntax_rules_transform.go`):
 ```go
 introScope := syntax.NewScopeWithLabel("intro")
 ```
 
-**Scope addition** (`applyHygieneToSymbol`, `internal/match/syntax_expand.go`):
+**Scope addition** (`applyHygieneToSymbol`, `pkg/internal/match/syntax_expand.go`):
 ```go
 if opts.IntroScope != nil {
     newSym = newSym.AddScope(opts.IntroScope).(*syntax.SyntaxSymbol)
 }
 ```
 
-**Scope matching** (`values/scope.go`; `syntax.ScopesMatch` wraps it, and
+**Scope matching** (`pkg/values/scope.go`; `syntax.ScopesMatch` wraps it, and
 `ScopesCompatible` is the entry point resolution actually calls, since a binding
 with no scopes matches any reference):
 ```go
@@ -231,7 +231,7 @@ Each iteration's captures are stored in child contexts, enabling template expans
 
 The adapter bridges syntax objects and the unhygienic VM. The conceptual
 operations below describe the role; the concrete implementation lives in
-`internal/match/syntax_expand.go` (with helpers in `syntax_compiler.go`
+`pkg/internal/match/syntax_expand.go` (with helpers in `syntax_compiler.go`
 and pattern-capture storage in `SyntaxMatcher`).
 
 ### Key Operations
@@ -244,7 +244,7 @@ SyntaxObject → underlying value
 ```
 
 **Re-wrap expanded values with syntax** (`SyntaxMatcher.capturedValueToSyntax`,
-`internal/match/syntax_expand.go`):
+`pkg/internal/match/syntax_expand.go`):
 ```go
 values.Pair → SyntaxPair (with intro scope)
 values.Symbol → SyntaxSymbol (with intro scope, unless free identifier)
@@ -256,7 +256,7 @@ When a pattern variable is captured, the adapter stores a mapping from the raw v
 
 ## Macro Expansion (Layer 3)
 
-### Expander Flow (`machine/compilation/expander_time_continuation.go`)
+### Expander Flow (`pkg/machine/compilation/expander_time_continuation.go`)
 
 1. **Check for macro**: Is the head symbol bound to a `BindingTypeSyntax`?
 2. **Check for shadowing**: Does a local variable shadow the macro? (R7RS §4.2.2)
@@ -316,7 +316,7 @@ transformer *expression* is compiled and run at phase *N+1*. When that transform
 body itself defines and uses macros, those climb to *N+1*, *N+2*, … The climb is
 realized by making six call sites, in four roles, *relative* to the expanding
 frame's own `phaseLevel` via `EnvironmentFrame.NextPhase()`
-(`environment/environment_frame.go`), rather than the absolute `Expand()`:
+(`pkg/environment/environment_frame.go`), rather than the absolute `Expand()`:
 
 - transformer-body compilation (`compile_transformer.go`);
 - `define-syntax` storage — both the top-level path (`compile_define_syntax.go`)
@@ -429,7 +429,7 @@ and the Tier 2 sketch in the design doc.
 
 ## Bootstrap Macros
 
-R7RS derived expressions are implemented as macros loaded during bootstrap. The sources are embedded in `registry/core/bootstrap.go` and loaded by `internal/bootstrap/bootstrap.go`. Binding forms (`let`, `let*`, `letrec`, `letrec*`) are *not* listed here — they are core compiled forms handled by the expander/validator/compiler pipeline; see [`core-let.md`](core-let.md) for the design.
+R7RS derived expressions are implemented as macros loaded during bootstrap. The sources are embedded in `pkg/registry/core/bootstrap.go` and loaded by `pkg/internal/bootstrap/bootstrap.go`. Binding forms (`let`, `let*`, `letrec`, `letrec*`) are *not* listed here — they are core compiled forms handled by the expander/validator/compiler pipeline; see [`core-let.md`](core-let.md) for the design.
 
 There are two macro sources, and the split is load order. `bootstrap_macros.scm` loads first; `bootstrap_macros_late.scm` (`unless`, `guard`, `guard-aux`) loads *after* `bootstrap_procedures.scm`, because those templates reference bootstrap procedures (`not`, `with-exception-handler`) rather than Go primitives. Loading them early would leave those free identifiers with a nil definition-time pin, which a use-site redefinition could then capture.
 
@@ -454,20 +454,20 @@ These are loaded during environment initialization and use the same macro system
 
 | File | Purpose |
 |------|---------|
-| `internal/match/match.go` | Pattern matching VM |
-| `internal/match/syntax_compiler.go` | Pattern → bytecode compiler |
-| `internal/match/syntax_adapter.go` | Syntax ↔ value conversion |
-| `internal/match/syntax_expand.go` | Template expansion, hygiene, free-identifier resolution |
-| `values/scope.go` | `Scope` type, `ScopesMatch` / `ScopesCompatible`, `ScopeSet` |
-| `syntax/scope_utils.go` | Re-exports of the above, syntax-tree scope operations |
-| `syntax/syntax_symbol.go` | Symbol with scopes |
-| `syntax/syntax_pair.go` | Pair with recursive scope propagation |
-| `machine/compilation/compile_syntax_rules.go` | `syntax-rules` compilation |
-| `machine/compilation/syntax_bridge_types.go` | `SyntaxRulesClause`, `FreeIdResolution`, `ClausesWrapper` |
-| `machine/compilation/operation_syntax_rules_transform.go` | Runtime macro expansion |
-| `machine/compilation/expander_time_continuation.go` | Expansion-phase walker |
-| `registry/core/bootstrap.go` | Embeds `bootstrap_macros.scm` and `bootstrap_macros_late.scm` |
-| `internal/bootstrap/bootstrap.go` | Bootstrap load order |
+| `pkg/internal/match/match.go` | Pattern matching VM |
+| `pkg/internal/match/syntax_compiler.go` | Pattern → bytecode compiler |
+| `pkg/internal/match/syntax_adapter.go` | Syntax ↔ value conversion |
+| `pkg/internal/match/syntax_expand.go` | Template expansion, hygiene, free-identifier resolution |
+| `pkg/values/scope.go` | `Scope` type, `ScopesMatch` / `ScopesCompatible`, `ScopeSet` |
+| `pkg/syntax/scope_utils.go` | Re-exports of the above, syntax-tree scope operations |
+| `pkg/syntax/syntax_symbol.go` | Symbol with scopes |
+| `pkg/syntax/syntax_pair.go` | Pair with recursive scope propagation |
+| `pkg/machine/compilation/compile_syntax_rules.go` | `syntax-rules` compilation |
+| `pkg/machine/compilation/syntax_bridge_types.go` | `SyntaxRulesClause`, `FreeIdResolution`, `ClausesWrapper` |
+| `pkg/machine/compilation/operation_syntax_rules_transform.go` | Runtime macro expansion |
+| `pkg/machine/compilation/expander_time_continuation.go` | Expansion-phase walker |
+| `pkg/registry/core/bootstrap.go` | Embeds `bootstrap_macros.scm` and `bootstrap_macros_late.scm` |
+| `pkg/internal/bootstrap/bootstrap.go` | Bootstrap load order |
 
 ## References
 

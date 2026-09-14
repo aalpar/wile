@@ -409,19 +409,19 @@ lambda bodies). Non-template literals are skipped.
 
 | Component | File |
 |-----------|------|
-| `Optimize()` entry point | `machine/peephole.go` |
-| `EditPlan` abstraction | `machine/edit_plan.go` |
-| `Instruction` type | `machine/instruction.go` |
-| Opcode constants + metadata | `machine/opcode.go` |
-| `NativeTemplate` | `machine/native_template.go` |
-| Promoted opcode execution | `machine/call_promoted.go` |
-| Promoted arithmetic | `machine/call_promoted_arithmetic.go` |
-| `callForeignCached` (fused runtime) | `machine/call_foreign_cached.go` |
-| `applyForeign` (unfused runtime) | `machine/machine_context_apply.go` |
-| `promotedOpForIdentity` mapping | `machine/call_promoted.go` |
-| Peephole tests | `machine/peephole_test.go` |
-| Opcode fusion integration tests | `wile/opcode_fusion_test.go` |
-| call/cc regression tests | `wile/callcc_engine_test.go` |
+| `Optimize()` entry point | `pkg/machine/peephole.go` |
+| `EditPlan` abstraction | `pkg/machine/edit_plan.go` |
+| `Instruction` type | `pkg/machine/instruction.go` |
+| Opcode constants + metadata | `pkg/machine/opcode.go` |
+| `NativeTemplate` | `pkg/machine/native_template.go` |
+| Promoted opcode execution | `pkg/machine/call_promoted.go` |
+| Promoted arithmetic | `pkg/machine/call_promoted_arithmetic.go` |
+| `callForeignCached` (fused runtime) | `pkg/machine/call_foreign_cached.go` |
+| `applyForeign` (unfused runtime) | `pkg/machine/machine_context_apply.go` |
+| `promotedOpForIdentity` mapping | `pkg/machine/call_promoted.go` |
+| Peephole tests | `pkg/machine/peephole_test.go` |
+| Opcode fusion integration tests | `pkg/wile/opcode_fusion_test.go` |
+| call/cc regression tests | `pkg/wile/callcc_engine_test.go` |
 
 ## References
 

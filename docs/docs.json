@@ -1,0 +1,211 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Wile",
+  "description": "An embeddable R7RS Scheme for Go: hygienic macros, first-class continuations, a full numeric tower, and a capability-based sandbox. Pure Go, no CGo.",
+  "colors": {
+    "primary": "#7c3aed",
+    "light": "#c4b5fd",
+    "dark": "#4c1d95"
+  },
+  "appearance": {
+    "default": "system"
+  },
+  "icons": {
+    "library": "fontawesome"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Learn",
+            "icon": "graduation-cap",
+            "pages": [
+              "learn/macro-system",
+              "learn/scheme-debugging-primitives",
+              "learn/python-vs-scheme-for-algebra"
+            ]
+          },
+          {
+            "group": "Embedding",
+            "icon": "plug",
+            "pages": [
+              "embedding/api-design",
+              "embedding/source-loading",
+              "embedding/mcp"
+            ]
+          },
+          {
+            "group": "Extensions",
+            "icon": "puzzle-piece",
+            "pages": [
+              "extensions/architecture",
+              "extensions/libraries"
+            ]
+          },
+          {
+            "group": "Security",
+            "icon": "shield-halved",
+            "pages": [
+              "security/sandboxing",
+              "security/blog-sandboxing"
+            ]
+          },
+          {
+            "group": "Algebra",
+            "icon": "sigma",
+            "pages": [
+              "algebra/overview",
+              "algebra/reference",
+              "algebra/tutorial"
+            ]
+          },
+          {
+            "group": "Coverage",
+            "icon": "chart-simple",
+            "pages": [
+              "coverage/scheme-coverage"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Reference",
+            "icon": "book",
+            "pages": [
+              "reference/scheme",
+              "reference/cli-and-repl",
+              "reference/r7rs-differences",
+              "reference/implementation-notes"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Internals",
+        "groups": [
+          {
+            "group": "Compiler",
+            "icon": "gears",
+            "pages": [
+              "compiler/macro-system",
+              "compiler/peephole-optimizer",
+              "compiler/core-let",
+              "compiler/inlining",
+              "compiler/ssa",
+              "compiler/anf-and-cps"
+            ]
+          },
+          {
+            "group": "Continuations",
+            "icon": "arrows-turn-right",
+            "pages": [
+              "continuations/concepts",
+              "continuations/marks",
+              "continuations/implementation",
+              "continuations/delimited",
+              "continuations/escape-design",
+              "continuations/prompt-abort",
+              "continuations/resume-trampoline",
+              "continuations/optimizations",
+              "continuations/racket-primitives"
+            ]
+          },
+          {
+            "group": "Environment",
+            "icon": "sitemap",
+            "pages": [
+              "environment/system",
+              "environment/diagram",
+              "environment/frame-allocation",
+              "environment/racket-namespaces"
+            ]
+          },
+          {
+            "group": "Numeric",
+            "icon": "calculator",
+            "pages": [
+              "numeric/tower",
+              "numeric/precision-guarantees",
+              "numeric/nan-boxing"
+            ]
+          },
+          {
+            "group": "Types",
+            "icon": "shapes",
+            "pages": [
+              "types/records-as-formal-types",
+              "types/abstract-data-types",
+              "types/scheme-types-records-mop",
+              "types/racket-structs"
+            ]
+          },
+          {
+            "group": "Concurrency",
+            "icon": "bolt",
+            "pages": [
+              "concurrency/cancellation"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Contributing",
+        "groups": [
+          {
+            "group": "Developer Guides",
+            "icon": "screwdriver-wrench",
+            "pages": [
+              "dev/debug-methodology",
+              "dev/foreign-closure-design",
+              "dev/iteration-idioms",
+              "dev/pooling",
+              "dev/project-board-setup"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "type": "github",
+        "href": "https://github.com/aalpar/wile",
+        "label": "GitHub"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get started",
+      "href": "/reference/cli-and-repl"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/aalpar/wile"
+    }
+  },
+  "search": {
+    "prompt": "Search the Wile docs"
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "claude",
+      "mcp"
+    ]
+  },
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/reference/scheme"
+    }
+  ]
+}

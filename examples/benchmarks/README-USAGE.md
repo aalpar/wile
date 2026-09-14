@@ -35,6 +35,8 @@ cd examples/benchmarks
 
 By default, this runs a few quick benchmarks (tak, fib, deriv, peval) on all installed Schemes.
 
+**Currently only the Wile column succeeds.** The benchmark files call `current-jiffy` without importing `(scheme time)` and carry no module header, so Chez fails with `variable current-jiffy is not bound` and Racket with `expected a 'module' declaration`.
+
 To compare more benchmarks:
 
 ```bash
@@ -71,12 +73,7 @@ The **Total time** is what matters for comparison.
 
 ## Expected Performance
 
-Wile is a bytecode interpreter. When comparing against native compilers:
-- **1,000-2,000x slower** than native compilers (Chez Scheme, Gambit)
-- **10-50x slower** than JIT compilers (Racket with JIT)
-- **Similar to** other bytecode interpreters (Guile, Chibi)
-
-This is the architectural tradeoff of bytecode interpretation vs. native compilation. For compute-intensive inner loops, use Wile as a control layer with performance-critical code in Go via the FFI.
+Wile is a bytecode interpreter. On `tak(18, 12, 6)` Wile measures roughly 180× slower than Chez Scheme and Racket CS; the table and its caveats are in [BENCHMARKING.md](BENCHMARKING.md#expected-performance). For compute-intensive inner loops, use Wile as a control layer with performance-critical code in Go via the FFI.
 
 ## Tracking Performance Over Time
 
@@ -92,7 +89,7 @@ After making changes:
 
 ```bash
 ./run-canonical.sh
-# Compare the new results-*.csv against baseline.csv
+# Compare the new canonical-results-*.csv against baseline.csv
 ```
 
 ## Detailed Comparison Guide

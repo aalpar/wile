@@ -312,12 +312,12 @@ every phase.
 Three limits on this axis, all deliberate:
 
 - **`PhaseSet` is narrower than `Phase`.** It is a `uint8` covering phase indices
-  0..7 (`phaseSetBits`, `registry/phase.go`). `PhaseTemplate` (-1) and every macro
+  0..7 (`phaseSetBits`, `pkg/registry/phase.go`). `PhaseTemplate` (-1) and every macro
   tower phase ≥ 8 are unrepresentable: `With` panics on them, `Has` returns false.
   Registration is a compile-time-constant API, so a programmer error there fails
   loudly rather than silently shifting past the bitset width.
 - **Only phases 0 and 1 receive values.** `Apply` iterates a two-row
-  `phaseTargets` table (`registry/apply.go`); there is no registration path that
+  `phaseTargets` table (`pkg/registry/apply.go`); there is no registration path that
   installs a `ForeignClosure` at phase 2 or above. A primitive an expander needs
   at a tower phase has to reach it some other way.
 

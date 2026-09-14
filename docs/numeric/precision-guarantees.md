@@ -94,7 +94,7 @@ None currently filed.
 
 ### Settled: exact→inexact targets `Float`, not `BigFloat`
 
-`numberToInexact` and `makeInexact` (`pkg/parser/parser_number.go`, the `#i` reader prefix) convert BigInteger and Rational to `Float`, not to the 256-bit `BigFloat`. This was once filed here as a P1 bug on the ground that BigFloat preserves ~77 decimal digits against Float's ~15. It is **not** a bug, and the entry is retained only so the argument is not re-litigated:
+`makeInexact` (`pkg/parser/parser_number.go`, the `#i` reader prefix) delegates to `MakeInexactNumber` (`pkg/parser/number_string.go`), which converts BigInteger and Rational to `Float`, not to the 256-bit `BigFloat`. This was once filed here as a P1 bug on the ground that BigFloat preserves ~77 decimal digits against Float's ~15. It is **not** a bug, and the entry is retained only so the argument is not re-litigated:
 
 - R7RS §6.2.6 sanctions the loss: `inexact` may return any inexact representation, and both types are inexact.
 - `float64` is the system-wide inexact target. The runtime `exact->inexact` agrees, and the whole `inexact-accuracy` / `inexact-lossless?` family (`extensions/math/prim_conversion.go`) is defined *in terms of* the float64 boundary. Changing only the reader would split the two paths.
@@ -213,7 +213,7 @@ Sites are pinned as `file` + symbol, never `file:LINE` — a line number rots in
 - [ ] `pkg/values/promotion.go` `NumberToFloat64` — Tier 3 helper for lossy `float64` conversion at machine/FFI boundaries; verify all precision-dropping call paths are intentional
 - [ ] `pkg/values/promotion.go` `NumberToComplex128Lossy` — Tier 3 helper for lossy `complex128` conversion at machine/FFI boundaries; verify all precision-dropping call paths are intentional
 - [x] ~~`pkg/values/big_complex.go` `toExactPart`~~ — **FIXED**. `toExactPart` delegates to `(*BigFloat).ToExact`, which calls `p.value.Rat(nil)` directly (`pkg/values/big_float.go`); no `.Float64()` roundtrip remains.
-- [x] ~~`pkg/parser/parser_number.go` `numberToInexact` / `makeInexact` — **BUG** (Float instead of BigFloat)~~ — **NOT A BUG.** See "Settled: exact→inexact targets `Float`" above.
+- [x] ~~`pkg/parser/parser_number.go` `makeInexact` / `pkg/parser/number_string.go` `MakeInexactNumber` — **BUG** (Float instead of BigFloat)~~ — **NOT A BUG.** See "Settled: exact→inexact targets `Float`" above.
 - [ ] `pkg/registry/helpers/value_conv.go` `ExtractReal` — Tier 3, verify callers use exactness bool correctly
 - [ ] `pkg/registry/helpers/value_conv.go` `ToFloat64` / `ToFloat64Lossy` — Tier 3
 - [ ] `pkg/registry/helpers/value_conv.go` `ToComplex128` — Tier 3

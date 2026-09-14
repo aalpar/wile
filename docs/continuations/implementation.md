@@ -20,7 +20,7 @@ Three types form the core of the system. Each one has a distinct role.
 
 ### vmState: The Frozen Moment
 
-Every saveable VM state shares the same shape, defined as `vmState` in `machine/vm_state.go`. The load-bearing fields:
+Every saveable VM state shares the same shape, defined as `vmState` in `pkg/machine/vm_state.go`. The load-bearing fields:
 
 ```go
 type vmState struct {
@@ -48,7 +48,7 @@ Both `MachineContext` (the running VM) and `MachineContinuation` (a saved frame)
 
 ### MachineContinuation: A Linked List of Saved Frames
 
-Defined as `MachineContinuation` in `machine/machine_continuation.go`:
+Defined as `MachineContinuation` in `pkg/machine/machine_continuation.go`:
 
 ```go
 type MachineContinuation struct {
@@ -119,7 +119,7 @@ If `cont` is nil, there's nothing to return to — execution is done.
 
 ## How call/cc Works
 
-The implementation lives in `PrimCallCC` in `registry/core/prim_control.go`. Here's the sequence:
+The implementation lives in `PrimCallCC` in `pkg/registry/core/prim_control.go`. Here's the sequence:
 
 **1. Capture the continuation chain.** `SliceContinuationAt` deep-copies every frame from `mc.cont` down to the nearest `DefaultPromptTag`. Each frame is individually copied so that future mutations to the live chain don't affect the captured one.
 
@@ -134,7 +134,7 @@ capt := machine.NewCapturedContinuation(comp, mc.ThreadID(), mc.BarrierValid())
 
 The capture is **delimited**, not absolute. `FindPrompt(DefaultPromptTag)` returns `(nil, true)` at the top-level context boundary — `SliceContinuationAt(nil)` then grabs the whole chain — or a chain *frame* when the `call/cc` sits inside a `call-with-continuation-prompt` reusing the default tag, in which case only the segment down to that prompt is captured. Capturing more would loop forever: the chain above the prompt includes the re-invocation site itself.
 
-**2. Build the captured continuation value.** `call/cc` does not return a Go closure. It returns a `CapturedContinuation` (`machine/captured_continuation.go`) — a value that is both *callable* (invoking it resumes the captured point) and *introspectable* (`continuation-marks` can read its chain). The escape logic — thread-ID check, barrier check, and the resume itself — lives in `applyCapturedContinuation`, not inside a closure.
+**2. Build the captured continuation value.** `call/cc` does not return a Go closure. It returns a `CapturedContinuation` (`pkg/machine/captured_continuation.go`) — a value that is both *callable* (invoking it resumes the captured point) and *introspectable* (`continuation-marks` can read its chain). The escape logic — thread-ID check, barrier check, and the resume itself — lives in `applyCapturedContinuation`, not inside a closure.
 
 When the value is invoked with `v`, `applyCapturedContinuation` checks the thread ID (no cross-thread jumps) and barrier token (no crossing `with-continuation-barrier`), then **returns the segment unrun** as an `ErrResumeContinuation` control signal. It does *not* run the captured chain on the spot. The nearest `DefaultPromptTag` driver reinstalls it — the [resume trampoline](resume-trampoline.md).
 
