@@ -2162,30 +2162,128 @@ the reversal and are not re-discovered as novel.
      (`pkg/internal/match/syntax_adapter.go`) widens on `BindingTypePrimitive` for
      the same fact.
 
-- [ ] **FOLLOW-ON: share binding identity across the import edge** [Medium, L,
-  filed 2026-09-10]: give a re-exported name ONE `*Binding` across the import,
-  or give the base its own store so an import and the language never share a
-  name table. **That** is what makes the two reader gates removable, and it is
-  the only thing that does — a rank change cannot, because the ranking is already
-  correct (see above). Blast radius reaches `findLibraryBinding`,
-  `CopyLibraryBindingsToEnvAtPhase`/`copyLibraryBindingsDirect`
-  (`pkg/machine/compilation/library_bindings.go`), and every `eq?`-across-import
-  answer. Until it lands the gates are the cheap statement of the same fact.
+- [ ] **FOLLOW-ON: share binding identity across the import edge** [filed
+  2026-09-10; **its stated MECHANISM STRUCK 2026-09-13, its PURPOSE reassigned**]:
+  give a re-exported name ONE `*Binding` across the import, or give the base its
+  own store so an import and the language never share a name table.
 
-- [x] **The per-gate failure partition, measured 2026-09-10** (scratch worktree at
+  ~~**That** is what makes the two reader gates removable, and it is the only
+  thing that does.~~ **MEASURABLY FALSE, and it is the sentence that mis-scoped
+  every attempt to act on this item.** Neither gate's predicate can see pointer
+  identity. Gate 1 tests `bnd.BindingType() == BindingTypePrimitive` then
+  `bnd.Value().(T)` (`pkg/machine/compilation/phase_registry.go:166-170`); gate 2
+  tests `bnd != nil && bnd.BindingType() == BindingTypePrimitive`
+  (`pkg/machine/compilation/expander_time_continuation.go:476`). The import
+  already supplies both inputs verbatim: `installImportedBinding` takes
+  `libBinding.BindingType()` as its create argument and writes `source.Value()`
+  at the sole value-write site on any import path
+  (`pkg/machine/compilation/library_bindings.go:736`). Make the pointer identical
+  and both predicates evaluate exactly as they do today. The two production doc
+  blocks that asserted the same thing are corrected in the same pass.
+
+  **What the gates are actually caused by, and what to do instead.**
+  `findLibraryBinding` walks `lib.Env.PresentPhases()` ASCENDING and returns the
+  first hit, so the LOWEST phase wins regardless of the phase the import will
+  install at (`library_bindings.go:481-503`, pinned by
+  `TestFindLibraryBindingPrefersRuntimeOverExpand`). `(scheme base)` holds
+  `syntax-rules` at phase 0 as a `*SyntaxCompiler` and at phase 1 as a
+  `*PrimitiveExpander`; the export walk hands a for-syntax import the phase-0
+  one, which then fails gate 1's type assertion at the importer's phase 1. That
+  is fork (a) above, already decided and unshipped, and it is the item that
+  should carry this work. Its rider stands: `validateLibraryExports`
+  (`compile_library_forms.go:300-312`) makes the SAME first-hit call and
+  discards both returns, so fixing the walk alone leaves the false green.
+
+  **Three mechanisms for fork (a) were designed and all three took a fatal on
+  adversarial review (2026-09-13, 20 agents).** Recorded so they are not
+  re-proposed as novel: (i) a `targetPhase`-gated selector re-looks-up the NAME
+  in the library env at another phase, where `ScopesCompatible(∅, {libScope})`
+  is unconditionally true, so it substitutes a library's private
+  `begin-for-syntax` define for the runtime export a name also has, and it never
+  fires on fork (a)'s own pinned row (`library_export_phase_order_test.go:110-130`,
+  a `targetPhase == 0` import); measured, it also swaps the installed object for
+  105 of 233 ordinary procedures, whose replacement closure captures
+  `env.Expand()` rather than `env` (the G12 closure-env blocker). (ii) A
+  writer-side guard suppressing the redundant install bypasses the R7RS §5.6
+  conflict check outright: `importConflicts` runs behind `!created`
+  (`library_bindings.go:730`), so with nothing installed there is no `target` and
+  no check. (iii) Giving the language its own store blinds every sealed-tier
+  reader at once, because `SealedBindingAt` is `probeRankedLocked` over slots
+  alone (`global_environment_frame.go:1409-1414`) and row consultation exists
+  only in `resolveRankedLocked:660-663`; `headDenotesSpecialForm`,
+  `quasiHead`'s anti-hijack pin, and `namespace-undefine!`'s startup-set refusal
+  all fail OPEN and all sit outside that proposal's file list.
+
+  **The unmeasured fourth option, which is where a re-opener should start:**
+  discriminate the export hit by SCOPE PROVENANCE, not by phase preference.
+  `findLibraryBinding` already merges two populations and `Binding.Scopes()`
+  already separates them: a `{libScope}` hit is the library's own definition
+  (lowest present phase is correct there, and is what makes `(define foo 1)` plus
+  `(begin-for-syntax (define foo 2))` export the runtime one), while an
+  ∅-ambient hit is a registry or import row the library merely re-exports, where
+  "lowest phase" means nothing. It cannot commit (i)'s fault because it never
+  reaches a library's own `begin-for-syntax` define. **Two costs nobody has
+  priced, and they gated the other three silently:**
+  `TestFindLibraryBindingPrefersRuntimeOverExpand`'s fixture is entirely ambient
+  (`NewCompiledLibrary` with a nil `Scope`, `DefineOwnGlobal(..., nil)` —
+  `library_bindings_test.go:212-221`), so its wants must be deliberately
+  re-specified rather than assumed to survive; and the propagation arm is
+  `placementInPlace`, so an un-renamed two-phase re-export lands on a sealed
+  phase-1 coordinate, the engine-wide overwrite `library_bindings.go:826-841`
+  refuses to relocate.
+
+  **The gates are not the justification for any of it.** Delete them afterwards
+  only if they measurably fall out, keeping `phase_registry.go:174-176` (the
+  `0d1204c6` keeper). Their whole measured symptom is a `GoSyntaxFormCompiles()`
+  delta of +1 plus value tests that pass today; every removal designed so far
+  traded a loud, ranked, documented workaround for a silent one.
+
+  **Identity sharing survives only under its own motivation, which is real and
+  is NOT the gates** [Medium, L]: the stale imported variable (a library `set!`
+  after import leaves the importer reading the old value; Racket reads through,
+  Chez refuses the program) and the R7RS §4.3.2 over/under-acceptance. Note that
+  `eq?`-across-import is NOT among them: the value object is already shared at
+  `library_bindings.go:736`, and `eq?` answers `#f` because each library env
+  re-mints its closures (`pkg/registry/apply.go:267`). The sound residue is
+  sharing the storage LOCATION, not the object; sharing the OBJECT is refused on
+  three independent grounds — `m.Imported` is half the slot coordinate
+  (`global_environment_frame.go:1627`, `:1065`), `Binding.Scopes()` is the store
+  key and the two sides need different sets (`:1630`, `:1112`;
+  `library_bindings.go:708` vs `:485-489`), and the inline-HOF stamp is keyed on
+  the per-import `exportName` so a re-exported sealed-base HOF would be
+  permanently de-stamped at its home (`inline_hof.go:213-215`, `:230-233`). That
+  shape was already run once by accident at `183171a1` and is written up in
+  `installImportedBinding`'s own doc (`library_bindings.go:645-661`). Any re-open
+  must move `Imported` and the scope set off `*Binding` onto `slotRef` FIRST.
+
+  **Scope note: row 3 of the partition below was never in scope** (see that
+  entry).
+
+- [x] **The per-site failure partition, measured 2026-09-10** (scratch worktree at
   `c28616c1`, `GOWORK=off`, `make build` first so `integration/` is not testing a
   stale `dist/`). Recorded so the follow-on inherits its sensors rather than
-  re-deriving them. Each gate reverted ALONE, everything else at HEAD:
+  re-deriving them. **Three SITES, two of which are the reader gates** — row 3 is
+  an independent phase-correctness fix and is NOT a gate (design B13: it contains
+  no `BindingType` test at all). Each reverted ALONE, everything else at HEAD:
 
-  | Gate | Site | Reverting it alone reddens |
+  | # | Site | Reverting it alone reddens |
   |---|---|---|
   | 1 | `LookupPhaseBinding` (`pkg/machine/compilation/phase_registry.go`) | `TestPhase1BaseImportIsBehaviourNeutral` (6/6 subtests), `TestPhase1BaseImportMasksNoPhaseRow` ("20 of 40 phase-1 expander rows were masked by the import: [begin case-lambda cond-expand define define-syntax if include include-ci lambda let let\* letrec letrec\* quasiquote quote set! syntax-error syntax-rules unquote unquote-splicing]"), `TestP02_ExpandOnceMirrorsTheLoop`, `TestP05_FreeIdentifierEqualShadowProbe`, `TestP2_ERRenameIsFreshPerInvocation`, and `integration/TestERMacro_Mixed` (`not a closure: values.voidType`) |
   | 2 | `lookupMacroBinding` ARM 2b's `masked` gate (`pkg/machine/compilation/expander_time_continuation.go`) | `TestPhase1BaseImportDoesNotReviveTheGoSyntaxRules` (96757 vs 96756) and `TestP2_SyntaxRulesAndERAreScheme` (112536 vs 112535). Both are `compilation.GoSyntaxFormCompiles()` COUNTER deltas of +1; every value assertion in the tree stays green |
-  | 3 | the ER rename closure's `.AtPhase(p.env.PhaseLevel())` (same file) | `TestERRenameDenotesTheOutputPhase` (2/3 subtests) and `integration/TestERMacro_Cond` |
+  | 3 | NOT A GATE — the ER rename closure's `.AtPhase(p.env.PhaseLevel())` (same file) | `TestERRenameDenotesTheOutputPhase` (2/3 subtests) and `integration/TestERMacro_Cond` |
 
   The three partitions are DISJOINT — no test appears in two rows — which is why
-  they are three gates and not one, and why a half-fix leaves exactly one red
-  whose failure text names which.
+  rows 1 and 2 are two gates and not one, and why a half-fix leaves exactly one
+  red whose failure text names which.
+  **Row 3 is measured here because it shipped in the same commit (`e61a3e37`),
+  not because the identity fix retires it.** Its doc block argues it on the
+  output-phase contract (Design §3.5, Racket's explicit phasing): a rename
+  denotes at the phase the OUTPUT lands in. Sharing binding identity would fix
+  one of its two measured symptoms (`compare` calling two spellings of one
+  keyword different bindings) and leave the other standing — a phase-1-ONLY
+  import has no phase-0 slot to share identity WITH, so the smuggling hazard
+  survives. Do not fold row 3 into the follow-on's scope; "three reader gates"
+  is the recurring miscount, struck once already at design B13.
   **The earlier filing's partition was wrong in both directions**: it listed three
   extra `pkg/wile` tests and one integration program too few for gate 1
   (`TestP02_ExpandOnceMirrorsTheLoop`, `TestP05_FreeIdentifierEqualShadowProbe`,

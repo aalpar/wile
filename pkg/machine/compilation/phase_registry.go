@@ -141,17 +141,41 @@ func RegisterPhaseBindings[F any](
 // answers require-vs-require, a different relation, and one Wile already ships
 // (importConflicts).
 //
-// What is left is an IDENTITY defect, not a rank defect. An import supplies a
-// DIFFERENT OBJECT for a re-exported name: the winner passes
+// What is left is a WRONG-PHASE EXPORT, not a rank defect. The winner passes
 // BindingType() == BindingTypePrimitive while its VALUE is not a
 // *PrimitiveExpander, which is the whole reason a reader has to look past it.
-// Each library environment mints its own *Binding per re-exported name (memory
-// "library envs are primitive islands"; sameLiteralBinding in
-// internal/match/syntax_adapter.go widens for the same fact). Sharing binding
-// identity across the import edge, or giving the base its own store, is what
-// makes this gate removable, and it is the only thing that does; filed in
-// TODO.md. Until then the gate is the cheap statement of the same fact, and
-// reverting it alone is measured: TODO.md carries the per-gate partition.
+//
+// The cause is upstream, in the export walk. findLibraryBinding walks
+// lib.Env.PresentPhases() ASCENDING and returns the FIRST hit, so the lowest
+// phase wins regardless of the phase the import will install at
+// (library_bindings.go:481-503, pinned by
+// TestFindLibraryBindingPrefersRuntimeOverExpand). (scheme base) holds
+// syntax-rules at phase 0 as a *SyntaxCompiler and at phase 1 as a
+// *PrimitiveExpander, so a for-syntax import is handed the phase-0 object and
+// installs it at phase 1, where the assertion below fails. Fixing which phase
+// an export SELECTS is what makes this gate removable; that is TODO.md's fork
+// (a), and its rider is that validateLibraryExports makes the same first-hit
+// call (compile_library_forms.go:300-312).
+//
+// NOT binding identity, and this correction is load-bearing because the claim
+// stood here for three days and mis-scoped three separate designs. This doc
+// used to say sharing one *Binding across the import edge "is what makes this
+// gate removable, and it is the only thing that does". It is MEASURABLY FALSE:
+// the predicate below reads BindingType() and Value(), and installImportedBinding
+// already supplies both verbatim — libBinding.BindingType() as its create
+// argument, source.Value() at the sole value-write site on any import path
+// (library_bindings.go:736). An identical pointer changes neither input, so the
+// gate would fire exactly as it does now. Struck 2026-09-13; TODO.md's follow-on
+// carries the measurement and the three designs that died on it.
+//
+// A separate, TRUE fact that does not bear on this gate: each library env mints
+// its own *Binding per re-exported name (memory "library envs are primitive
+// islands"; sameLiteralBinding in internal/match/syntax_adapter.go widens for
+// it). That is an identity defect with its own motivation (the stale imported
+// variable, R7RS 4.3.2), filed separately. It is not this one.
+//
+// Until the export walk is fixed the gate stays, and reverting it alone is
+// measured: TODO.md carries the per-site partition.
 func LookupPhaseBinding[T any](
 	phaseEnv *environment.EnvironmentFrame,
 	sym *values.Symbol,

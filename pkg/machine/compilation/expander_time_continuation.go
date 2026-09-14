@@ -460,9 +460,17 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 	// The gate STAYS, and LookupPhaseBinding's doc carries the settled reason:
 	// R7RS-small has no phased imports to conform to, Racket shadows a LANGUAGE
 	// binding at a shifted phase and refuses only require-vs-require, and Wile's
-	// residual is that the import supplies a DIFFERENT OBJECT for a re-exported
-	// name rather than that it out-ranks. Sharing binding identity across the
-	// import edge is what removes both gates.
+	// residual is that the import supplies a WRONG-PHASE OBJECT for a re-exported
+	// name rather than that it out-ranks.
+	//
+	// This doc used to close "Sharing binding identity across the import edge is
+	// what removes both gates." STRUCK 2026-09-13, measurably false: the `masked`
+	// predicate below reads BindingType() alone, and installImportedBinding
+	// passes libBinding.BindingType() straight through as its create argument
+	// (library_bindings.go:793). An identical pointer leaves it evaluating the
+	// same. What removes the gates is fixing which PHASE findLibraryBinding
+	// selects an export from; see LookupPhaseBinding's doc for the walk and
+	// TODO.md's follow-on for the three designs that died assuming otherwise.
 	//
 	// The two are independently observable, which is why they are two gates and
 	// not one. Reverting this one alone leaves every value assertion green and
