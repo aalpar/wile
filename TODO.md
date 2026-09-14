@@ -3665,6 +3665,26 @@ phases, not with point fixes, except 5.2 which is the P0 prerequisite.
   invisible to transformers, which is what R6RS §7 and Racket give. No stdlib file uses these forms
   (Q1 of the phase-hermeticity item), so the gap has no in-tree consumer. Design §5.5 does not need it:
   its helpers live in the sealed base.
+
+  **Corrected 2026-09-14, measured: this is a WITHIN-UNIT ORDERING defect, not a phase or scope
+  one, and the message names neither.** The same five lines pass across unit boundaries and fail
+  inside one unit:
+
+  | Delivery | Result |
+  |---|---|
+  | one form per REPL unit (piped to `./dist/wile`) | `7` |
+  | the identical text in a file (one `(begin …)` unit) | `no such binding "helper" with compatible scopes at phase 1` |
+
+  `begin-for-syntax` is `expandUnchanged` at expand time (`primitive_expanders_registry.go:52`)
+  and runs its body only when the COMPILER reaches it, while `define-syntax` compiles and
+  evaluates its transformer during the EXPANDER's body scan. So within one unit the transformer
+  is built before the preceding `begin-for-syntax` has run, and `helper` does not exist yet.
+  Across units the compile of unit 1 completes first and it resolves.
+
+  "with compatible scopes" is a misdiagnosis the diagnostic invites: instrumented at the raise,
+  a repeat lookup under `syntax.AllScopes()` also misses (`anyScopeHit=false`), so no scope set
+  would have found it. The scoped arm is simply the last one tried. Whatever fixes the ordering
+  should also stop that arm reporting a scope refusal when the name is absent outright.
 - [x] **A `define-syntax` at phase > 0 is unusable from every rung** [Conformance, Done
   2026-09-13]: the keyword twin of the item above, and a wider gap — that one is a phase-1
   *variable* invisible to a *transformer*; this one was a phase-1 *keyword* invisible to
@@ -3696,10 +3716,8 @@ phases, not with point fixes, except 5.2 which is the P0 prerequisite.
   flatten the tower.
 
   **Unchanged, deliberately**: the `begin-for-syntax`-define-invisible-to-a-transformer item
-  above is a DIFFERENT mechanism and is still open. Re-measured after this fix:
-  `(begin-for-syntax (define (helper x) x))` then `(define-syntax m (lambda (stx) (helper
-  #'7)))` now fails `no such binding "helper" with COMPATIBLE SCOPES at phase 1` — a scope-set
-  refusal, not a phase miss. The phase arithmetic was never its problem.
+  above is a DIFFERENT mechanism and is still open. Its message is misleading and its filing
+  is imprecise; see the correction recorded on that item.
 
 ## Tier 2 — Embedding API & Product Value
 
