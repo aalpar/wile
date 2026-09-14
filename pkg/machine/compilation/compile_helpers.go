@@ -69,17 +69,24 @@ func (p *CompileTimeContinuation) expandCompileExecute(
 // The body forms run one phase up from the defining frame (env.NextPhase()), so a
 // begin-for-syntax at phaseLevel N runs its body at phase N+1 and a nested one
 // climbs to N+2. At phaseLevel 0 NextPhase() == Expand(), so top-level
-// begin-for-syntax/eval-when are unchanged (level-0 identity). The expander stays
-// rooted at p.env because its own macro lookup already applies NextPhase()
-// (expander_time_continuation.go), so expander.env.NextPhase() == expandEnv at
-// every phase — expansion and compile/eval agree on the target frame.
+// begin-for-syntax/eval-when are unchanged (level-0 identity).
+//
+// The EXPANDER roots at expandEnv, not p.env — the same frame the body compiles
+// and evaluates against, matching compileTransformerValue's phase-N+1-rooted
+// expander for a transformer right-hand side. The body is phase-(N+1) code, so
+// the keywords it may use are the ones a phase-(N+1) define-syntax deposits, and
+// that deposit lands at N+2 (CompileDefineSyntax reads its own p.env.NextPhase(),
+// and its p.env here is expandEnv). A p.env-rooted expander applies NextPhase()
+// to N and reads N+1 — one rung low, so every (begin-for-syntax (define-syntax
+// m …)) was unreachable from every rung. Macros of the enclosing phase N still
+// resolve: they live IN expandEnv, which is lookupMacroBinding's ambient arm.
 func (p *CompileTimeContinuation) executeFormsAtCompileTime(
 	ctctx CompileTimeCallContext,
 	formName string,
 	bodyPair *syntax.SyntaxPair,
 ) error {
 	expandEnv := p.env.NextPhase()
-	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator)
+	expander := NewExpanderTimeContinuation(ctctx.ctx, expandEnv, p.evaluator)
 
 	v, err := bodyPair.SyntaxForEach(ctctx.ctx, func(_ context.Context, _ int, _ bool, stxVal syntax.SyntaxValue) error {
 		_, err := p.expandCompileExecute(ctctx.ctx, ctctx, stxVal, expandEnv, expander, formName)
