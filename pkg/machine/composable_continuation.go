@@ -33,7 +33,7 @@ type ComposableContinuation struct {
 	windingStack WindingStack
 	threadID     uint64               // SRFI-18: thread that captured this continuation (0 = primordial)
 	barrierValid *BarrierToken        // barrier context at capture time; nil = no active barrier
-	bottom       *MachineContinuation // bottom frame of segment; for parent reset on re-invocation
+	bottom       *MachineContinuation // bottom frame of segment; where a re-invocation's copy stops
 	consumed     bool                 // true after first AcquireSegment call
 	// capturedMarks is the snapshot of the reachable parameter/handler mark
 	// environment at capture time — including the marks ABOVE any sub-context
@@ -111,9 +111,11 @@ func (p *ComposableContinuation) BarrierValid() *BarrierToken {
 // a DeepCopy. Shared marking ensures RestoreAndRelease preserves frame evals
 // for potential re-invocation.
 //
-// Subsequent invocations reset the bottom frame's parent to nil (undoing
-// GraftContinuation's mutation from the prior invocation) and deep-copy
-// from the preserved shared frames.
+// Subsequent invocations deep-copy the preserved shared frames down to the
+// bottom frame. The copy stops at bottom rather than at a nil parent because
+// GraftContinuation hung the original bottom onto the first invocation's chain,
+// and that invocation may still be running: re-invoking from inside it must not
+// write the edge its return goes through.
 //
 // This optimizes one-shot continuations (the common case in Schelog-style
 // backtracking), eliminating O(depth) frame allocations per invocation.
@@ -126,12 +128,7 @@ func (p *ComposableContinuation) AcquireSegment() *MachineContinuation {
 		p.cont.MarkChainShared()
 		return p.cont
 	}
-	// Re-invocation: undo GraftContinuation's parent mutation so
-	// DeepCopy produces a self-contained segment (bottom.parent == nil).
-	if p.bottom != nil {
-		p.bottom.parent = nil
-	}
-	return p.cont.DeepCopy()
+	return p.cont.DeepCopyThrough(p.bottom)
 }
 
 // AcceptsArity reports whether this composable continuation can be called with

@@ -258,11 +258,11 @@ continuation means restoring that context.
 
 Marks are not shared across a copy: `MachineContinuation.Copy()` already does
 `q.marks = cloneMarks(p.marks)`, so a later `with-continuation-mark` on the
-original frame cannot be seen by the copy. `Copy()` vs `DeepCopy()` is a
+original frame cannot be seen by the copy. `Copy()` vs `DeepCopyThrough()` is a
 question of *how much chain* is duplicated (one frame versus every frame down
-to the root), not of mark sharing. Composable continuations, which can be
-invoked multiple times, need the whole chain, so `AcquireSegment` uses
-`DeepCopy` on re-invocation.
+to a segment's bottom), not of mark sharing. Composable continuations, which can
+be invoked multiple times, need the whole segment, so `AcquireSegment` uses
+`DeepCopyThrough` on re-invocation.
 
 **Slice, not map.** The `marks` field is a slice of `(key, val)` entries,
 not a Go map. Keys are compared with `eq?` via `values.EqIdentity`

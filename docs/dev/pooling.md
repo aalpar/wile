@@ -153,12 +153,13 @@ use-after-release if a closure still references it.
 `ComposableContinuation.AcquireSegment` has a first-invocation optimization:
 
 1. **First call**: marks the segment shared via `MarkChainShared` and returns
-   it directly. No `DeepCopy`. Shared marking ensures `RestoreAndRelease`
+   it directly. No copy. Shared marking ensures `RestoreAndRelease`
    copies evals instead of transferring, preserving frames for re-invocation.
 
-2. **Subsequent calls**: resets the bottom frame's parent to `nil` (undoing
-   `GraftContinuation`'s parent mutation), then returns `DeepCopy()` of the
-   segment. Each copy acquires frames from `continuationPool`.
+2. **Subsequent calls**: returns `DeepCopyThrough(bottom)` of the segment, a copy
+   that stops at the segment's bottom frame. The original bottom frame keeps the
+   parent `GraftContinuation` gave it, because the first invocation may still be
+   running on it. Each copy acquires frames from `continuationPool`.
 
 ---
 

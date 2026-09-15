@@ -244,14 +244,14 @@ Where `call/cc` now sits in this protocol: since the capture became delimited, `
 
 **`releaseContinuation` precondition**: The comment on `releaseContinuation` in `pool.go` states shared frames must NOT be passed to it. This is enforced by the `if cont.shared` check in `RestoreAndRelease`. There is no runtime assertion — the check is structural, not defensive.
 
-**`DeepCopy` still exists**: Its one production caller is `ComposableContinuation.AcquireSegment`, which needs a full independent copy of a segment on *re-invocation*; the first invocation uses the original frames and marks them shared. Because a `call/cc` continuation is itself wrapped in a `ComposableContinuation`, re-invoking one reaches `DeepCopy` by that route; no capture path calls it. **Do not remove `DeepCopy`**: it is what makes multi-shot continuations independent.
+**`DeepCopyThrough` still exists**: Its one production caller is `ComposableContinuation.AcquireSegment`, which needs a full independent copy of a segment on *re-invocation*; the first invocation uses the original frames and marks them shared. Because a `call/cc` continuation is itself wrapped in a `ComposableContinuation`, re-invoking one reaches `DeepCopyThrough` by that route; no capture path calls it. **Do not remove `DeepCopyThrough`**: it is what makes multi-shot continuations independent.
 
 ### Invariants
 
 1. If `frame.shared == true`, all ancestors of `frame` are also shared
 2. `shared` is monotonic: once true, never reverted to false
 3. `RestoreAndRelease` never pools a shared frame
-4. `DeepCopy` is reached only through `AcquireSegment` re-invocation, never on capture
+4. `DeepCopyThrough` is reached only through `AcquireSegment` re-invocation, never on capture
 
 Invariant 1 is not maintained everywhere today. `AcquireSegment` marks a first-invocation segment shared while its bottom frame's parent is nil, and `ReinstallSegment` then grafts it onto a boundary (`p.cont` for composable resume, or a prompt frame) whose frames may be unshared. A later `MarkChainShared` from above the segment early-exits at the segment and leaves those frames unshared.
 

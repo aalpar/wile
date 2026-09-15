@@ -261,15 +261,15 @@ func TestMachineContinuationMethods(t *testing.T) {
 	qt.Assert(t, nilCont.IsVoid(), qt.IsTrue)
 }
 
-// --- DeepCopy tests ---
+// --- DeepCopyThrough tests ---
 
-func TestMachineContinuation_DeepCopy_Nil(t *testing.T) {
+func TestMachineContinuation_DeepCopyThrough_Nil(t *testing.T) {
 	var nilCont *MachineContinuation
-	result := nilCont.DeepCopy()
+	result := nilCont.DeepCopyThrough(nil)
 	qt.Assert(t, result, qt.IsNil)
 }
 
-func TestMachineContinuation_DeepCopy_SingleFrame(t *testing.T) {
+func TestMachineContinuation_DeepCopyThrough_SingleFrame(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
@@ -277,7 +277,7 @@ func TestMachineContinuation_DeepCopy_SingleFrame(t *testing.T) {
 	cont.SetPC(7)
 	cont.evals.Push(values.NewInteger(42))
 
-	cpy := cont.DeepCopy()
+	cpy := cont.DeepCopyThrough(cont)
 
 	// Different object
 	qt.Assert(t, cpy != cont, qt.IsTrue)
@@ -291,7 +291,7 @@ func TestMachineContinuation_DeepCopy_SingleFrame(t *testing.T) {
 	qt.Assert(t, cpy.evals != cont.evals, qt.IsTrue)
 }
 
-func TestMachineContinuation_DeepCopy_MultiFrameChain(t *testing.T) {
+func TestMachineContinuation_DeepCopyThrough_MultiFrameChain(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
@@ -302,7 +302,7 @@ func TestMachineContinuation_DeepCopy_MultiFrameChain(t *testing.T) {
 	top := NewMachineContinuation(middle, tpl, env)
 	top.SetPC(3)
 
-	cpy := top.DeepCopy()
+	cpy := top.DeepCopyThrough(bottom)
 
 	// All frames are different objects
 	qt.Assert(t, cpy != top, qt.IsTrue)
@@ -320,7 +320,7 @@ func TestMachineContinuation_DeepCopy_MultiFrameChain(t *testing.T) {
 	qt.Assert(t, middle.pc, qt.Equals, 2)
 }
 
-func TestMachineContinuation_DeepCopy_PreservesPromptTag(t *testing.T) {
+func TestMachineContinuation_DeepCopyThrough_PreservesPromptTag(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	tag := NewPromptTag("test")
@@ -328,7 +328,7 @@ func TestMachineContinuation_DeepCopy_PreservesPromptTag(t *testing.T) {
 	parent := NewMachineContinuation(nil, tpl, env)
 	cont := NewMachineContinuationWithPrompt(parent, tpl, env, tag, nil)
 
-	cpy := cont.DeepCopy()
+	cpy := cont.DeepCopyThrough(parent)
 
 	qt.Assert(t, cpy.PromptTag(), qt.Equals, tag)
 	qt.Assert(t, cpy.parent != parent, qt.IsTrue)
@@ -396,7 +396,7 @@ func TestGraftContinuation_NilTarget(t *testing.T) {
 // MarkChainShared's early exit relies on: a shared frame's ancestors are shared.
 // A capture above a grafted first-invocation (shared) segment must still reach
 // the target chain, or the target's env frames are pooled while the capture
-// aliases them. An unshared (re-invocation, DeepCopy) segment needs no marking:
+// aliases them. An unshared (re-invocation, DeepCopyThrough) segment needs no marking:
 // the capture's own walk passes through it.
 func TestGraftContinuation_SharedSegmentKeepsChainSharedClosed(t *testing.T) {
 	tcs := []struct {
