@@ -26,38 +26,48 @@ import (
 //
 // This form defines a binding in the expand phase environment that is
 // available during macro expansion. The expression is compiled and
-// evaluated at compile time, and the result is stored one phase up from the
+// evaluated during expansion, and the result is stored one phase up from the
 // defining frame (env.NextPhase(); equals env.Expand() at phase 0).
 //
 // Unlike define-syntax (which stores macro transformers), define-for-syntax
 // stores regular values with BindingTypeVariable.
-func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+//
+// The definition has ALREADY TAKEN EFFECT: expandDefineForSyntax ran it when the
+// expander reached the form, so a define-syntax later in the same unit can use it.
+// So this only re-checks the shape and emits nothing. Running it here as well
+// would re-bind the name to a freshly evaluated value after transformers had
+// already used the first one.
+func (p *CompileTimeContinuation) CompileDefineForSyntax(_ CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	_, _, err := p.defineForSyntaxParts(expr)
+	return err
+}
+
+// defineForSyntaxParts returns the name a define-for-syntax form binds and the
+// expression whose value it binds, building the lambda for the procedure form.
+func (p *CompileTimeContinuation) defineForSyntaxParts(expr syntax.SyntaxValue) (*values.Symbol, syntax.SyntaxValue, error) {
 	err := p.ensureState("define-for-syntax")
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	// expr is (name expr) or ((name args...) body...) - the args after 'define-for-syntax'
 	argsPair, err := formArgs(expr, "define-for-syntax", "name and expression")
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	// Get the first element - either a symbol (simple define) or a pair (function define)
 	first := argsPair.SyntaxCar()
 	if first == nil {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-for-syntax: missing name"))
+		return nil, nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-for-syntax: missing name"))
 	}
 
 	// Get the rest (value expression or body)
 	restVal := argsPair.SyntaxCdr()
 	restPair, ok := restVal.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(restPair) {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-for-syntax: missing expression"))
+		return nil, nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-for-syntax: missing expression"))
 	}
-
-	var nameSym *values.Symbol
-	var valueExpr syntax.SyntaxValue
 
 	// Check if it's a function definition: (define-for-syntax (name args...) body...)
 	firstPair, ok := first.(*syntax.SyntaxPair)
@@ -66,25 +76,30 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 		nameStx := firstPair.SyntaxCar()
 		nameSyntaxSym, ok := nameStx.(*syntax.SyntaxSymbol)
 		if !ok {
-			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-for-syntax: function name must be a symbol"))
+			return nil, nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-for-syntax: function name must be a symbol"))
 		}
-		nameSym = nameSyntaxSym.Unwrap().(*values.Symbol)
 
 		// Build (lambda (args...) body...)
 		params := firstPair.SyntaxCdr()
 		lambdaSym := syntax.NewSyntaxSymbol("lambda", nameSyntaxSym.SourceContext())
 		lambdaArgs := syntax.NewSyntaxCons(params, restPair, nameSyntaxSym.SourceContext())
-		valueExpr = syntax.NewSyntaxCons(lambdaSym, lambdaArgs, nameSyntaxSym.SourceContext())
-	} else {
-		// Simple definition: (define-for-syntax name expr)
-		nameSyntaxSym, ok := first.(*syntax.SyntaxSymbol)
-		if !ok {
-			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-for-syntax: name must be a symbol"))
-		}
-		nameSym = nameSyntaxSym.Unwrap().(*values.Symbol)
+		return nameSyntaxSym.Unwrap().(*values.Symbol), syntax.NewSyntaxCons(lambdaSym, lambdaArgs, nameSyntaxSym.SourceContext()), nil
+	}
 
-		// Get the value expression
-		valueExpr = restPair.SyntaxCar()
+	// Simple definition: (define-for-syntax name expr)
+	nameSyntaxSym, ok := first.(*syntax.SyntaxSymbol)
+	if !ok {
+		return nil, nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-for-syntax: name must be a symbol"))
+	}
+	return nameSyntaxSym.Unwrap().(*values.Symbol), restPair.SyntaxCar(), nil
+}
+
+// runDefineForSyntax evaluates a define-for-syntax form's expression one phase up
+// and binds the result there. Called by the expander; see expandDefineForSyntax.
+func (p *CompileTimeContinuation) runDefineForSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	nameSym, valueExpr, err := p.defineForSyntaxParts(expr)
+	if err != nil {
+		return err
 	}
 
 	// Expand, compile, and execute the expression one phase up from the defining
@@ -136,6 +151,5 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-for-syntax: failed to store value for %s", nameSym.Key))
 	}
 
-	// define-for-syntax has no runtime effect - don't emit any operations
 	return nil
 }

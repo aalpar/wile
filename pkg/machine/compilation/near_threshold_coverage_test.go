@@ -148,7 +148,7 @@ func TestCaseLambdaRestArgs(t *testing.T) {
 }
 
 // TestEvalWhenExpand exercises eval-when with the expand phase, hitting
-// evalWhenExecuteAtCompileTime (0% coverage), expandCompileExecute (0%),
+// runEvalWhen (0% coverage), expandCompileExecute (0%),
 // and executeFormsAtCompileTime (0%) in compile_eval_when.go and compile_helpers.go.
 func TestEvalWhenExpand(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{

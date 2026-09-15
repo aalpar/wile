@@ -62,6 +62,11 @@ var evalWhenPhaseTable = map[string]evalWhenBehavior{
 //
 // eval-when is not part of R7RS-small; it is a Wile extension.
 //
+// The expand half has ALREADY RUN: expandEvalWhen ran it when the expander
+// reached the form, so a define-syntax later in the same unit sees what it
+// defines. This compiles only the run half; running the expand half here as well
+// would repeat its side effects.
+//
 // Examples:
 //
 //	(eval-when (expand)
@@ -73,45 +78,16 @@ var evalWhenPhaseTable = map[string]evalWhenBehavior{
 //	(eval-when (expand run)
 //	  (display "both times"))
 func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	err := p.ensureState("eval-when")
+	behavior, bodyPair, err := p.evalWhenParts(ctctx, expr)
 	if err != nil {
 		return err
 	}
-
-	// expr is ((phase ...) body ...) - the args after 'eval-when'
-	argsPair, err := formArgs(expr, "eval-when", "phase list and body")
-	if err != nil {
-		return err
-	}
-
-	// Get the phase list
-	phasesExpr := argsPair.SyntaxCar()
-	phasesStx := phasesExpr
-	behavior, err := p.parseEvalWhenPhases(ctctx.ctx, phasesStx)
-	if err != nil {
-		return err
-	}
-
-	// Get the body expressions
-	bodyCdr := argsPair.Cdr()
-	if values.IsEmptyList(bodyCdr) {
+	if bodyPair == nil {
 		// Empty body — emit void
 		p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(
 			p.template.MaybeAppendLiteral(values.Void),
 		))
 		return nil
-	}
-	bodyPair, ok := bodyCdr.(*syntax.SyntaxPair)
-	if !ok {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "eval-when: expected body expressions"))
-	}
-
-	// If expand phase, evaluate at compile time
-	if behavior&evalWhenExpand != 0 {
-		err := p.evalWhenExecuteAtCompileTime(ctctx, bodyPair)
-		if err != nil {
-			return err
-		}
 	}
 
 	// If run phase, compile for runtime execution
@@ -122,13 +98,56 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 		}
 	} else {
 		// No runtime phase requested: the form still yields a value, so emit void
-		// (compile-time execution above leaves nothing in the value register).
+		// (the expand half left nothing in the value register).
 		p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(
 			p.template.MaybeAppendLiteral(values.Void),
 		))
 	}
 
 	return nil
+}
+
+// runEvalWhen evaluates the body of an (eval-when (phase ...) body ...) form one
+// phase up when its phases include expand. Called by the expander; see
+// expandEvalWhen.
+func (p *CompileTimeContinuation) runEvalWhen(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	behavior, bodyPair, err := p.evalWhenParts(ctctx, expr)
+	if err != nil {
+		return err
+	}
+	if bodyPair == nil || behavior&evalWhenExpand == 0 {
+		return nil
+	}
+	return p.executeFormsAtCompileTime(ctctx, "eval-when", bodyPair)
+}
+
+// evalWhenParts returns an eval-when form's phase behavior and its body, or a nil
+// body for an empty one.
+func (p *CompileTimeContinuation) evalWhenParts(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) (evalWhenBehavior, *syntax.SyntaxPair, error) {
+	err := p.ensureState("eval-when")
+	if err != nil {
+		return 0, nil, err
+	}
+
+	// expr is ((phase ...) body ...) - the args after 'eval-when'
+	argsPair, err := formArgs(expr, "eval-when", "phase list and body")
+	if err != nil {
+		return 0, nil, err
+	}
+	behavior, err := p.parseEvalWhenPhases(ctctx.ctx, argsPair.SyntaxCar())
+	if err != nil {
+		return 0, nil, err
+	}
+
+	bodyCdr := argsPair.Cdr()
+	if values.IsEmptyList(bodyCdr) {
+		return behavior, nil, nil
+	}
+	bodyPair, ok := bodyCdr.(*syntax.SyntaxPair)
+	if !ok {
+		return 0, nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "eval-when: expected body expressions"))
+	}
+	return behavior, bodyPair, nil
 }
 
 // parseEvalWhenPhases parses the phase list from an eval-when form.
@@ -169,14 +188,6 @@ func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phase
 		return 0, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAList, "eval-when: improper phase list"))
 	}
 	return behavior, nil
-}
-
-// evalWhenExecuteAtCompileTime executes body expressions at compile time.
-func (p *CompileTimeContinuation) evalWhenExecuteAtCompileTime(ctctx CompileTimeCallContext, bodyPair *syntax.SyntaxPair) error {
-	if syntax.IsSyntaxEmptyList(bodyPair) {
-		return nil
-	}
-	return p.executeFormsAtCompileTime(ctctx, "eval-when", bodyPair)
 }
 
 // evalWhenCompileForRuntime compiles body expressions for runtime execution.

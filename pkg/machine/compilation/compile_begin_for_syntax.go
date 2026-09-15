@@ -19,24 +19,44 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// CompileBeginForSyntax handles (begin-for-syntax expr ...).
+// CompileBeginForSyntax handles (begin-for-syntax expr ...) for the compiler.
 //
-// Evaluates a sequence of expressions at compile time in the expand phase
-// environment. Used for setting up compile-time state (hash tables, registries)
-// that macros can access. No runtime effect — used for side effects only.
-func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	err := p.ensureState("begin-for-syntax")
+// The body is phase-(N+1) code with no runtime effect, and it has ALREADY RUN:
+// expandBeginForSyntax ran it when the expander reached the form. So this only
+// re-checks the shape and emits nothing. Running it here as well would repeat its
+// side effects.
+func (p *CompileTimeContinuation) CompileBeginForSyntax(_ CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	_, err := p.beginForSyntaxBody(expr)
+	return err
+}
+
+// runBeginForSyntax evaluates the body of (begin-for-syntax expr ...) one phase
+// up. Used for setting up compile-time state (hash tables, registries) that
+// macros can access. Called by the expander; see expandBeginForSyntax.
+func (p *CompileTimeContinuation) runBeginForSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	body, err := p.beginForSyntaxBody(expr)
 	if err != nil {
 		return err
 	}
-
-	if syntax.IsSyntaxEmptyList(expr) {
+	if body == nil {
 		return nil
 	}
-	exprPair, ok := expr.(*syntax.SyntaxPair)
-	if !ok {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "begin-for-syntax: expected expressions"))
-	}
+	return p.executeFormsAtCompileTime(ctctx, "begin-for-syntax", body)
+}
 
-	return p.executeFormsAtCompileTime(ctctx, "begin-for-syntax", exprPair)
+// beginForSyntaxBody returns the body of a begin-for-syntax form, or nil for an
+// empty one.
+func (p *CompileTimeContinuation) beginForSyntaxBody(expr syntax.SyntaxValue) (*syntax.SyntaxPair, error) {
+	err := p.ensureState("begin-for-syntax")
+	if err != nil {
+		return nil, err
+	}
+	if syntax.IsSyntaxEmptyList(expr) {
+		return nil, nil
+	}
+	q, ok := expr.(*syntax.SyntaxPair)
+	if !ok {
+		return nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "begin-for-syntax: expected expressions"))
+	}
+	return q, nil
 }
