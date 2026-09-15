@@ -105,3 +105,28 @@ func TestParser_CleanEOFIsRepeatableAndNotAnError(t *testing.T) {
 		c.Assert(errors.Is(err, ErrAlreadyClosed), qt.IsFalse, qt.Commentf("err = %v", err))
 	}
 }
+
+// TestParser_ReadSyntaxStopsAtDatumEnd pins that ReadSyntax consumes the datum
+// and at most the one rune of tokenizer lookahead, never the next token: it used
+// to advance to the following datum before returning, so a reader shared with
+// read-char (R7RS §6.13.2) had already lost it, and an interactive read held its
+// return until the next datum was typed. ReleaseLookahead returns that one rune.
+func TestParser_ReadSyntaxStopsAtDatumEnd(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewNamespace().Runtime()
+	r := strings.NewReader("(a b) cd")
+	p := NewParser(env, true, r)
+
+	q, err := p.ReadSyntax(context.TODO())
+	c.Assert(err, qt.IsNil)
+	c.Assert(q.UnwrapAll().SchemeString(), qt.Equals, "(a b)")
+	c.Assert(r.Len(), qt.Equals, len(" cd")-1, qt.Commentf("only the lookahead rune past the datum is consumed"))
+
+	c.Assert(p.ReleaseLookahead(r), qt.IsNil)
+	c.Assert(r.Len(), qt.Equals, len(" cd"))
+
+	q, err = p.ReadSyntax(context.TODO())
+	c.Assert(err, qt.IsNil)
+	c.Assert(q.UnwrapAll().SchemeString(), qt.Equals, "cd")
+	c.Assert(q.SourceContext().Start.Column(), qt.Equals, 6, qt.Commentf("positions keep counting across a release"))
+}

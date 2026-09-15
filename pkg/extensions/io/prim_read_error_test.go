@@ -73,6 +73,20 @@ func TestReadErrorClassification(t *testing.T) {
                        (read-line (make-failing-unread-port "ab\rxy"))))`,
 		},
 		{
+			// read returns its lookahead rune to the port after each datum; if
+			// that fails the port position is wrong, which is a read error.
+			name: "read surfaces UnreadRune failure as read-error",
+			code: `(read-error?
+                     (guard (e (#t e))
+                       (read (make-failing-unread-port "ab cd"))))`,
+		},
+		{
+			name: "read-token surfaces UnreadRune failure as read-error",
+			code: `(read-error?
+                     (guard (e (#t e))
+                       (read-token (make-failing-unread-port "ab cd"))))`,
+		},
+		{
 			name: "read-line surfaces inner ReadRune failure as read-error",
 			code: `(read-error?
                      (guard (e (#t e))

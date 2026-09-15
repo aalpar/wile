@@ -86,6 +86,26 @@ func TestOpenInputFile(t *testing.T) {
 	evalExpectError(t, engine, `(open-input-file 42)`)
 }
 
+// TestFilePortReadSharesPosition is the buffered-file analogue of the string-port
+// cases in pkg/extensions/io's TestReadSharesPortPosition: read leaves the
+// delimiter after each datum on the port for read-char and read-line (R7RS
+// §6.13.2), where it used to swallow the next token.
+func TestFilePortReadSharesPosition(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	dir := t.TempDir()
+
+	path := writeTestFile(t, dir, "data.scm", "ab cd\n(e f) g")
+
+	result := eval(t, engine, fmt.Sprintf(
+		`(call-with-input-file %q
+		   (lambda (p)
+		     (let* ((a (read p)) (b (read-char p)) (c (read p)) (d (read-line p))
+		            (e (read p)) (f (peek-char p)) (g (read p)) (h (read p)))
+		       (list a b c d e f g h))))`, path))
+	c.Assert(result.Internal().SchemeString(), qt.Equals, `(ab #\space cd "" (e f) #\space g #<eof>)`)
+}
+
 func TestOpenOutputFile(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)

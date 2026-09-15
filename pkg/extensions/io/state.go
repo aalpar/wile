@@ -266,7 +266,12 @@ func resolveCurrentInputPort(cc machine.CallContext) (*values.PortObject, error)
 // The parser is built lazily under the entry lock (parser.NewParser reads a rune
 // eagerly), so State.mu is never held across a read. First-creator's mk wins,
 // matching the pre-fix "first read constructs the cached parser" behaviour.
-func (p *State) readSyntaxCached(ctx context.Context, port values.Value, mk func() *parser.Parser) (syntax.SyntaxValue, error) {
+//
+// The cache holds reader state that outlives one datum (fold-case mode, source
+// positions, the dead flag), never input: after each datum the tokenizer's
+// lookahead rune goes back to the port, so read-char and friends continue from
+// the datum's end (R7RS §6.13.2).
+func (p *State) readSyntaxCached(ctx context.Context, port *values.PortObject, mk func() *parser.Parser) (syntax.SyntaxValue, error) {
 	p.mu.Lock()
 	entry, ok := p.parsers[port]
 	if !ok || entry == nil {
@@ -281,13 +286,35 @@ func (p *State) readSyntaxCached(ctx context.Context, port values.Value, mk func
 		entry.parser = entry.mk()
 		entry.mk = nil
 	}
-	return entry.parser.ReadSyntax(ctx)
+	q, err := entry.parser.ReadSyntax(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = releaseLookahead(port, entry.parser)
+	if err != nil {
+		return nil, err
+	}
+	return q, nil
+}
+
+// releaseLookahead hands a reader's one-rune lookahead back to port. Every
+// textual input port pairs its rune reader with a rune unreader
+// (port_constructors.go), as peek-char relies on.
+func releaseLookahead(port *values.PortObject, rdr interface {
+	ReleaseLookahead(values.RuneUnreader) error
+}) error {
+	urr, _ := port.AsRuneUnreader()
+	err := rdr.ReleaseLookahead(urr)
+	if err != nil {
+		return werr.WrapForeignReadErrorf(err, "error returning lookahead character to port")
+	}
+	return nil
 }
 
 // nextTokenCached returns the next token from the port's cached tokenizer,
 // serialising reads on one port under the entry lock. Same discipline as
 // readSyntaxCached; the tokenizer is likewise built lazily under the entry lock.
-func (p *State) nextTokenCached(port values.Value, mk func() *tokenizer.Tokenizer) (tokenizer.Token, error) {
+func (p *State) nextTokenCached(port *values.PortObject, mk func() *tokenizer.Tokenizer) (tokenizer.Token, error) {
 	p.mu.Lock()
 	entry, ok := p.tokenizers[port]
 	if !ok || entry == nil {
@@ -302,5 +329,13 @@ func (p *State) nextTokenCached(port values.Value, mk func() *tokenizer.Tokenize
 		entry.tokenizer = entry.mk()
 		entry.mk = nil
 	}
-	return entry.tokenizer.Next()
+	q, err := entry.tokenizer.Next()
+	if err != nil {
+		return nil, err
+	}
+	err = releaseLookahead(port, entry.tokenizer)
+	if err != nil {
+		return nil, err
+	}
+	return q, nil
 }
