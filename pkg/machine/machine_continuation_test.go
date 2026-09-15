@@ -392,6 +392,48 @@ func TestGraftContinuation_NilTarget(t *testing.T) {
 	qt.Assert(t, segment.parent, qt.IsNil)
 }
 
+// TestGraftContinuation_SharedSegmentKeepsChainSharedClosed pins the invariant
+// MarkChainShared's early exit relies on: a shared frame's ancestors are shared.
+// A capture above a grafted first-invocation (shared) segment must still reach
+// the target chain, or the target's env frames are pooled while the capture
+// aliases them. An unshared (re-invocation, DeepCopy) segment needs no marking:
+// the capture's own walk passes through it.
+func TestGraftContinuation_SharedSegmentKeepsChainSharedClosed(t *testing.T) {
+	tcs := []struct {
+		name          string
+		segmentShared bool
+		wantTarget    bool
+	}{
+		{name: "shared segment marks target", segmentShared: true, wantTarget: true},
+		{name: "unshared segment leaves target", segmentShared: false, wantTarget: false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			env := environment.NewNamespace().Runtime()
+			tpl := NewNativeTemplate(0, 0, false)
+
+			targetRoot := NewMachineContinuation(nil, tpl, env)
+			target := NewMachineContinuation(targetRoot, tpl, env)
+			bottom := NewMachineContinuation(nil, tpl, env)
+			top := NewMachineContinuation(bottom, tpl, env)
+			if tc.segmentShared {
+				top.MarkChainShared()
+			}
+
+			GraftContinuation(top, target)
+
+			qt.Assert(t, target.shared, qt.Equals, tc.wantTarget)
+			qt.Assert(t, targetRoot.shared, qt.Equals, tc.wantTarget)
+
+			// A later capture inside the reinstated segment always reaches the target.
+			capture := NewMachineContinuation(top, tpl, env)
+			capture.MarkChainShared()
+			qt.Assert(t, target.shared, qt.IsTrue)
+			qt.Assert(t, targetRoot.shared, qt.IsTrue)
+		})
+	}
+}
+
 // --- CallDepth tests ---
 
 func TestMachineContinuation_CallDepth(t *testing.T) {
