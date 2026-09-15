@@ -45,13 +45,32 @@ func PrimNamespaceName(mc machine.CallContext) error {
 	return nil
 }
 
+// executingNamespace returns the namespace mc is EXECUTING in, falling back to
+// the environment frame's when no executing namespace was established.
+//
+// The frame's namespace is the one the primitive was REGISTERED in (the engine
+// root), so under Engine.EvalIn a namespace derived from it carried the root's
+// authorizer, and a library loaded through it was authorized by the root's
+// policy, not the target's.
+func executingNamespace(mc *machine.MachineContext) *environment.Namespace {
+	q := mc.ExecutingNamespace()
+	if q == nil {
+		return mc.EnvironmentFrame().Namespace()
+	}
+	return q
+}
+
 // PrimMakeNamespace implements (make-namespace . import-specs).
 // With no arguments, returns an empty namespace (kernel only).
 // With import specs, pre-loads the specified libraries.
-func PrimMakeNamespace(mc machine.CallContext) error {
+func PrimMakeNamespace(cc machine.CallContext) error {
+	mc, err := machine.RequireMachineContext(cc, "make-namespace")
+	if err != nil {
+		return err
+	}
 	argsVal := mc.Arg(0)
 
-	callerTopLevel := mc.EnvironmentFrame().Namespace()
+	callerTopLevel := executingNamespace(mc)
 	// Import source = the mutable runtime (reaches the sealed base via its parent walk);
 	// TopLevel() now returns the sealed base alone.
 	callerEnv := callerTopLevel.Runtime()
@@ -73,7 +92,7 @@ func PrimMakeNamespace(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "make-namespace: expected list of import specs, got %T", argsVal)
 	}
 
-	err := helpers.ForEachList(mc.Context(), args, "make-namespace", func(_ context.Context, _ int, _ bool, specVal values.Value) error {
+	err = helpers.ForEachList(mc.Context(), args, "make-namespace", func(_ context.Context, _ int, _ bool, specVal values.Value) error {
 		return compilation.ImportSpecInto(mc.Context(), specVal, callerEnv, newEnv, machine.NewVMMacroEvaluator(), "make-namespace")
 	})
 	if err != nil {
@@ -282,15 +301,21 @@ func PrimNamespaceBoundNames(mc machine.CallContext) error {
 }
 
 // PrimNamespaceRequire implements (namespace-require ns lib-spec).
-func PrimNamespaceRequire(mc machine.CallContext) error {
+func PrimNamespaceRequire(cc machine.CallContext) error {
+	mc, err := machine.RequireMachineContext(cc, "namespace-require")
+	if err != nil {
+		return err
+	}
 	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrNotANamespace, "namespace-require")
 	if err != nil {
 		return err
 	}
 	specVal := mc.Arg(1)
 
-	// Import source = the mutable runtime (it reaches the sealed base via its parent walk).
-	callerEnv := mc.EnvironmentFrame().MutableRuntime()
+	// Import source = the executing namespace's mutable runtime (it reaches the
+	// sealed base via its parent walk). The source, not the target, decides whose
+	// policy authorizes the library load.
+	callerEnv := executingNamespace(mc).Runtime()
 	targetEnv := ns.Runtime()
 
 	err = compilation.ImportSpecInto(mc.Context(), specVal, callerEnv, targetEnv, machine.NewVMMacroEvaluator(), "namespace-require")

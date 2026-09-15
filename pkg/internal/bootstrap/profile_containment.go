@@ -75,8 +75,13 @@ var ErrProfileWidensEngine = werr.NewStaticError("profile widens the engine's ca
 // identity-inclusion reports Console ⊄ KitchenSink and the order is broken
 // before it starts. Names are what a program can actually call, and the Safe
 // variant's names really are a subset of the full one's.
+//
+// callerNS is the EXECUTING namespace, which under Engine.EvalIn is a child, so
+// the policy is its EffectiveAuthorizer (root ∧ child). The own-field
+// Authorizer() would let a permissive child answer namespace:create for a
+// strict root.
 func checkProfileWidening(callerNS *environment.Namespace, profileName string, exts []registry.Extension) error {
-	auth := callerNS.Authorizer()
+	auth := callerNS.EffectiveAuthorizer()
 	if auth == nil {
 		return nil
 	}
