@@ -18,6 +18,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -57,6 +58,12 @@ type quasiKeywords struct {
 	// whose whole purpose is that the nested form takes the runtime path.
 	// Do not "clean it up".
 	nestingAlwaysRuntime bool
+
+	// denote resolves a head identifier to the marker it DENOTES, so a renamed or
+	// prefixed import of unquote / unquote-splicing / quasiquote is still a marker.
+	// nil in the package-level tables: they are compared by spelling until an entry
+	// point with an environment copies them through resolvedBy.
+	denote func(sym *syntax.SyntaxSymbol) string
 }
 
 var quasiquoteKW = quasiKeywords{
@@ -183,7 +190,7 @@ func getSymbolName(v syntax.SyntaxValue) (string, bool) {
 //     element walk already renders it identically. That is also why neither
 //     this walk nor validate's has a quote case.
 func dottedTailCell(cell *syntax.SyntaxPair, kw quasiKeywords) bool {
-	name, ok := getSymbolName(cell.SyntaxCar())
+	name, ok := kw.headName(cell.SyntaxCar())
 	if !ok || (name != kw.unquote && name != kw.nesting) {
 		return false
 	}
@@ -202,6 +209,36 @@ func dottedTailCell(cell *syntax.SyntaxPair, kw quasiKeywords) bool {
 // exactly one thing: whether the head they synthesize needs pinning.
 func quasiQuoted(kw quasiKeywords, v syntax.SyntaxValue, srcCtx *syntax.SourceContext) syntax.SyntaxValue {
 	return buildQuasiSyntaxList(srcCtx, syntax.NewSyntaxSymbol(kw.quoting, srcCtx), v)
+}
+
+// resolvedBy returns a copy of kw whose headName resolves identifiers through
+// env. The package-level tables stay spelling-only so the cluster's package
+// functions remain callable without a compiler, which their own tests rely on.
+func (p quasiKeywords) resolvedBy(env *environment.EnvironmentFrame) quasiKeywords {
+	q := p
+	q.denote = func(sym *syntax.SyntaxSymbol) string {
+		return headFormName(env, sym)
+	}
+	return q
+}
+
+// headName returns the marker name a head carries: what it DENOTES when this
+// table resolves, and its spelling otherwise. The comparisons against kw.unquote,
+// kw.splicing and kw.nesting are against canonical names, so a denoting head
+// dispatches as the marker it names while an ordinary head keeps its spelling.
+func (p quasiKeywords) headName(v syntax.SyntaxValue) (string, bool) {
+	sym, ok := v.(*syntax.SyntaxSymbol)
+	if !ok {
+		return getSymbolName(v)
+	}
+	if p.denote == nil {
+		return getSymbolName(v)
+	}
+	name := p.denote(sym)
+	if name == "" {
+		return getSymbolName(v)
+	}
+	return name, true
 }
 
 // quasiForm builds one synthesized call — (list …), (cons …), (append …),
@@ -294,7 +331,7 @@ func quasiNeedsRuntime(stx syntax.SyntaxValue, depth int, kw quasiKeywords, g *e
 	case *syntax.SyntaxPair:
 		// No empty-list guard: (*SyntaxPair).IsEmptyList is an unconditional
 		// false, so this arm never holds one.
-		carSymName, ok := getSymbolName(v.SyntaxCar())
+		carSymName, ok := kw.headName(v.SyntaxCar())
 		if ok {
 			switch carSymName {
 			case kw.unquote, kw.splicing:
@@ -452,8 +489,9 @@ func (p *CompileTimeContinuation) expandQuasi(
 		// false, so this arm never holds one. () reads as SyntaxEmptyList,
 		// which is not a *SyntaxPair and lands in the default arm.
 		carSymName, ok := getSymbolName(v.SyntaxCar())
-		if ok {
-			switch carSymName {
+		denotedName, denotedOK := kw.headName(v.SyntaxCar())
+		if ok && denotedOK {
+			switch denotedName {
 			case kw.unquote:
 				// The escape. Depth 1 is where an unquote fires, and it yields
 				// the RAW argument: `,x is x, not an expansion of x.
@@ -571,7 +609,7 @@ func (p *CompileTimeContinuation) expandQuasiList(
 
 		carPair, ok := car.(*syntax.SyntaxPair)
 		if ok {
-			carSymName, ok := getSymbolName(carPair.SyntaxCar())
+			carSymName, ok := kw.headName(carPair.SyntaxCar())
 			if ok && carSymName == kw.splicing && depth == 1 {
 				sawSplice = true
 				flushRun()
