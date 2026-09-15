@@ -1401,12 +1401,12 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 }
 
 // expandAndCompileOptimized runs the expand → compile → optimize pipeline for a
-// single syntax value. Thin wrapper around compilation.ExpandAndCompile that adds
-// the Optimize() call used by the public Engine API.
+// single syntax value. Thin wrapper around compilation.ExpandAndCompileOptimized
+// that adds the public Engine API's panic containment.
 func expandAndCompileOptimized(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver, inlineThreshold int, maxExpandDepth int) (q *machine.NativeTemplate, rerr error) {
 	// Containment boundary for the compile verb. This is the single funnel for Eval,
-	// EvalMultiple, and Compile, and the only caller of tpl.Optimize(), so the
-	// peephole optimizer is covered too.
+	// EvalMultiple, and Compile, and the peephole optimizer runs inside it, so it
+	// is covered too.
 	//
 	// Placed here rather than in compilation.ExpandAndCompile for the same reason as
 	// the parse boundary: a compile-time panic is a Wile bug, and containing it
@@ -1425,12 +1425,7 @@ func expandAndCompileOptimized(ctx context.Context, env *environment.Environment
 		rerr = wrapCompilationError("compile error", werr.RecoverAsError(r, werr.ErrInternal, "compile"))
 	}()
 
-	tpl, err := compilation.ExpandAndCompile(ctx, env, stx, resolver, inlineThreshold, maxExpandDepth)
-	if err != nil {
-		return nil, err
-	}
-	tpl.Optimize()
-	return tpl, nil
+	return compilation.ExpandAndCompileOptimized(ctx, env, stx, resolver, inlineThreshold, maxExpandDepth)
 }
 
 // compileExpr compiles a single syntax value into a CompiledCode, returning a wrapped CompilationError on failure. It
