@@ -110,15 +110,18 @@ values*. You can pass an RTD (record-type descriptor) to a function, store it in
 data structure, and construct records dynamically. This is what makes frameworks
 and code generators possible.
 
-SRFI-99 organizes this into three sub-layers:
+SRFI-99 organizes this into three sub-layers. Wile fills the same roles under
+different names:
 
-| Layer | Purpose | Key procedures |
-|-------|---------|----------------|
-| **Syntactic** | Convenience macros | `define-record-type` |
-| **Procedural** | Runtime type creation | `make-record-type`, `record-constructor`, `record-predicate`, `record-accessor`, `record-modifier` |
-| **Inspection** | Querying type structure | `record?`, `record-type`, `record-type?` |
+| Layer | Purpose | SRFI-99 procedures | Wile |
+|-------|---------|--------------------|------|
+| **Syntactic** | Convenience macros | `define-record-type` | `define-record-type` (R7RS form) |
+| **Procedural** | Runtime type creation | `make-rtd`, `rtd?`, `rtd-constructor`, `rtd-predicate`, `rtd-accessor`, `rtd-mutator` | `make-record-type`, `record-type?`, `record-constructor`, `record-predicate`, `record-accessor`, `record-modifier` |
+| **Inspection** | Querying type structure | `record?`, `record-rtd`, `rtd-name`, `rtd-parent`, `rtd-field-names`, `rtd-all-field-names`, `rtd-field-mutable?` | `record?`, `record-type` |
 
-Wile provides all three layers, but without inheritance in any of them.
+Wile provides all three layers, but without inheritance in any of them, and its
+inspection layer stops at recovering the descriptor: there is no procedure for a
+descriptor's name or field names.
 
 ## Layer 2: Record Inheritance (SRFI-99, SRFI-136, R6RS)
 
@@ -126,22 +129,23 @@ This is where things get interesting — and contentious.
 
 ### SRFI-99 / SRFI-131: ERR5RS Style
 
-SRFI-99 extends `make-record-type` with a parent argument:
+SRFI-99's `make-rtd` takes an optional parent argument after the field specs:
 
 ```scheme
 ;; NOT in Wile today — showing the SRFI-99 API
-(define point-rtd (make-rtd 'point #f '(x y)))
-(define point3d-rtd (make-rtd 'point3d point-rtd '(z)))
+(define point-rtd (make-rtd 'point '#(x y)))
+(define point3d-rtd (make-rtd 'point3d '#(z) point-rtd))
 
 ;; point3d inherits x and y, adds z
-;; (record-predicate point-rtd) returns #t for point3d instances
+;; (rtd-predicate point-rtd) returns #t for point3d instances
 ```
 
-The syntactic layer adds a parent clause to `define-record-type`:
+The syntactic layer lets the type name be `(type-name parent)`:
 
 ```scheme
 ;; SRFI-99 / SRFI-131 syntax (not R7RS-small)
-(define-record-type point3d (point x y z)  ; parent is point
+(define-record-type (point3d point)  ; parent is point
+  (make-point3d x y z)
   point3d?
   (z point3d-z))
 ```
@@ -195,8 +199,7 @@ simplicity.
 
 SRFI-240 ("Reconciled Records") tries to end the argument by defining a
 `define-record-type` that extends R7RS-small's syntax to include R6RS features.
-It's designed for R7RS-large adoption. As of 2026, it's still in draft status —
-which tells you something about how hard consensus is in this space.
+It's designed for R7RS-large adoption. The SRFI was finalized in May 2023.
 
 ## Layer 3: Object Systems and the MOP Question
 
@@ -222,7 +225,7 @@ Kiczales and others, documented in *The Art of the Metaobject Protocol* (1991).
 CLOS gives you:
 
 - **Multiple dispatch**: methods specialize on *all* arguments, not just "self"
-- **Multiple inheritance**: with a linearized class precedence list (C3)
+- **Multiple inheritance**: with a linearized class precedence list
 - **Generic functions**: methods don't belong to classes
 - **Full MOP**: metaclasses, custom slot allocation, method combinations
 
@@ -387,8 +390,9 @@ Level 4: R6RS / SRFI-240        + sealed, opaque, nongenerative
 Level 5: Tiny CLOS / GOOPS      + generic functions, multiple dispatch, MOP
 ```
 
-Wile sits at Level 1 (SRFI-9) with the SRFI-99 procedural/inspection layer
-and has also adopted one Level-4 feature à la carte: opaque record types
+Wile sits at Level 1 (SRFI-9) with a procedural and inspection layer in the
+roles SRFI-99 defines (under `make-record-type`-style names, not SRFI-99's
+`rtd-*` names) and has also adopted one Level-4 feature à la carte: opaque record types
 (`define-opaque-record-type` / `make-opaque-record-type`, R6RS-inspired).
 Missing Level-4 features are sealed and nongenerative. The question for
 Wile is whether to climb to Level 2 (SRFI-99 inheritance) — a modest,
