@@ -31,9 +31,9 @@ import (
 // the root. When the authorizer imposes no root (e.g. an unrestricted engine),
 // the helpers fall back to the plain os operation on the original path.
 //
-// Exception: set-current-directory! has no os.Root counterpart for chdir and
-// calls os.Chdir directly after its file:write gate; the TOCTOU window there is
-// not closed.
+// Exception: set-current-directory! has no os.Root counterpart for chdir. It
+// enters the path unconfinedTarget resolves and re-gates, confined or not; the
+// TOCTOU window between that resolution and os.Chdir is not closed.
 
 // relWithinRoot expresses target relative to root. It tolerates root itself
 // being a symlink (e.g. macOS /tmp -> /private/tmp) by retrying against the

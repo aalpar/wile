@@ -18,6 +18,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -105,5 +106,62 @@ func TestEvalAction_Posture(t *testing.T) {
 	loadReq := AccessRequest{Resource: ResourceCode, Action: ActionLoad, Target: "/etc/evil.scm"}
 	if err := ConsoleWithLoadAuthorizer().Authorize(loadReq); !errors.Is(err, ErrAccessDenied) {
 		t.Errorf("ConsoleWithLoad should deny code:load outside /tmp, got: %v", err)
+	}
+}
+
+// A ".." after a symlink backs out of the link's TARGET, not out of the
+// directory holding the link. containedInRoot used to clean ".." lexically
+// before resolving symlinks, so <root>/link/.. was judged as <root> while chdir
+// landed outside it. A ".." that backs out of any symlink is now refused, which
+// is os.Root's own rule; one after a real directory, or inside a not-yet-existing
+// tail, still resolves.
+func TestContainedInRoot_DotDotAfterSymlink(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(base, "root")
+	for _, dir := range []string{
+		filepath.Join(root, "sub"),
+		filepath.Join(root, "a", "b", "c"),
+		filepath.Join(base, "outside", "deep"),
+	} {
+		err = os.MkdirAll(dir, 0o755)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for link, target := range map[string]string{
+		"link":     filepath.Join(base, "outside", "deep"),
+		"inlink":   filepath.Join(root, "a", "b"),
+		"dangling": filepath.Join(base, "outside", "missing"),
+	} {
+		err = os.Symlink(target, filepath.Join(root, link))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sep := string(filepath.Separator)
+	for _, tc := range []struct {
+		rel  string
+		want bool
+	}{
+		{"link/..", false},             // the escape: lands in base/outside
+		{"link/../x", false},           // same, one level further
+		{"link/deeper/../../x", false}, // backs out of the link through a missing tail
+		{"inlink/../x", false},         // stays inside, but lexical and physical disagree
+		{"dangling/..", false},         // unresolvable link: nothing to agree on
+		{"inlink/c/..", true},          // pops the real c under the link target
+		{"sub/../x", true},             // after a real directory
+		{"missing/../x", true},         // inside the not-yet-existing tail
+		{"sub/new", true},              // creation under the root
+		{"sub/../../outside", false},   // real directories, genuinely outside
+	} {
+		target := root + sep + strings.ReplaceAll(tc.rel, "/", sep)
+		got := containedInRoot(root, target)
+		if got != tc.want {
+			t.Errorf("containedInRoot(root, root/%s) = %v, want %v", tc.rel, got, tc.want)
+		}
 	}
 }
