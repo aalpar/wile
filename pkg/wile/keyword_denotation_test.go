@@ -107,3 +107,22 @@ func TestRenamedKeywordExpands(t *testing.T) {
 			`(import (scheme base) (rename (scheme base) (begin my-begin))) (define (f) (my-begin (define-syntax m (syntax-rules () ((_) 6)))) (m)) (f)`, "6"},
 	})
 }
+
+// Task 4: definitions are recognized by denotation in body scans and in use-site
+// scope pruning of macro output.
+func TestRenamedDefinitionsAreRecognized(t *testing.T) {
+	runKeywordRows(t, []keywordRow{
+		{"define-syntax in a let body",
+			`(import (scheme base) (rename (scheme base) (define-syntax my-ds))) (let () (my-ds inner (syntax-rules () ((_) 3))) (inner))`, "3"},
+		{"define-syntax in a lambda body",
+			`(import (scheme base) (rename (scheme base) (define-syntax my-ds))) (define (f) (my-ds inner (syntax-rules () ((_) 4))) (inner)) (f)`, "4"},
+		{"nested renamed define-syntax in a template",
+			`(import (scheme base) (rename (scheme base) (syntax-rules my-sr) (define-syntax my-ds))) (define-syntax outer (syntax-rules () ((_ v) (let () (my-ds inner (syntax-rules () ((_) v))) (inner))))) (outer 9)`, "9"},
+		{"macro emits a renamed define",
+			`(import (scheme base) (rename (scheme base) (define my-define))) (define-syntax defx (syntax-rules () ((_ n) (my-define n 11)))) (defx zz) zz`, "11"},
+		{"macro emits a renamed begin of defines",
+			`(import (scheme base) (rename (scheme base) (begin my-begin))) (define-syntax defxy (syntax-rules () ((_ a b) (my-begin (define a 1) (define b 2))))) (defxy p q) (+ p q)`, "3"},
+		{"macro emits a renamed define-syntax",
+			`(import (scheme base) (rename (scheme base) (define-syntax my-ds))) (define-syntax mk (syntax-rules () ((_ n) (my-ds n (syntax-rules () ((_) 12)))))) (mk k) (k)`, "12"},
+	})
+}

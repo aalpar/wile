@@ -42,9 +42,9 @@ import (
 // Handles:
 //   - (define name value)
 //   - (define (name args...) body...)
-func extractDefineName(form syntax.SyntaxValue) *syntax.SyntaxSymbol {
+func extractDefineName(env *environment.EnvironmentFrame, form syntax.SyntaxValue) *syntax.SyntaxSymbol {
 	// Only handle define, not define-syntax (macros are handled separately).
-	pair, ok := asSyntaxFormWithKeyword(form, "define")
+	pair, ok := asFormDenoting(env, form, "define")
 	if !ok {
 		return nil
 	}
@@ -94,7 +94,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 	// Note: define-syntax is handled in pass 2 below — macro bindings live in the
 	// expand environment, not the runtime environment pre-declared here.
 	for _, form := range forms {
-		nameSym := extractDefineName(form)
+		nameSym := extractDefineName(p.env, form)
 		if nameSym != nil {
 			name := nameSym.Unwrap().(*values.Symbol)
 			predeclareBinding(p.env, name, nameSym.Scopes(), nameSym.SourceContext())
@@ -110,7 +110,8 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 		}
 
 		// If define-syntax, compile it now for subsequent forms
-		if isSyntaxFormWithKeyword(expanded, "define-syntax") {
+		_, isDefineSyntax := asFormDenoting(p.env, expanded, "define-syntax")
+		if isDefineSyntax {
 			pair := expanded.(*syntax.SyntaxPair)
 			err = compileDefineSyntaxFromSyntax(p.ctx, p.env, pair, p.libraryScope, p.evaluator)
 			if err != nil {
