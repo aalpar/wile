@@ -48,9 +48,9 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	{"library", (*ExpanderTimeContinuation).expandUnchanged},
 	{"export", (*ExpanderTimeContinuation).expandUnchanged},
 	{"meta", (*ExpanderTimeContinuation).expandUnchanged},
-	{"define-for-syntax", (*ExpanderTimeContinuation).expandUnchanged},
-	{"begin-for-syntax", (*ExpanderTimeContinuation).expandUnchanged},
-	{"eval-when", (*ExpanderTimeContinuation).expandUnchanged},
+	{"define-for-syntax", (*ExpanderTimeContinuation).expandDefineForSyntax},
+	{"begin-for-syntax", (*ExpanderTimeContinuation).expandBeginForSyntax},
+	{"eval-when", (*ExpanderTimeContinuation).expandEvalWhen},
 	{"let-syntax", (*ExpanderTimeContinuation).expandLetSyntax},
 	{"letrec-syntax", (*ExpanderTimeContinuation).expandLetrecSyntax},
 

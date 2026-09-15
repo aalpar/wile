@@ -16,7 +16,8 @@ package compilation
 
 // expander_primitive_forms.go implements expand-time handlers for primitive
 // special forms: quote-family (via expandUnchanged), if, begin, set!, define,
-// import, with-binding-scope, syntax-error, and with-continuation-mark.
+// import, with-binding-scope, syntax-error, with-continuation-mark, and the
+// compile-time halves of begin-for-syntax, define-for-syntax and eval-when.
 //
 // Each handler is registered in primitive_expanders_registry.go and invoked
 // by ExpandSyntaxExpression when the expander encounters a primitive keyword.
@@ -29,6 +30,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -122,9 +124,44 @@ func (p *ExpanderTimeContinuation) expandEach(expr syntax.SyntaxValue, args []sy
 //     Compile-time forms handled during compilation
 //   - define-library, library, export: Library forms handled by the library
 //     compiler, which walks the declarations itself
-//   - meta, define-for-syntax, begin-for-syntax, eval-when: Phase-shifting
-//     forms whose bodies belong to a phase this expander is not running in
+//   - meta: a phase-shifting form whose body belongs to a phase this expander is
+//     not running in
 func (*ExpanderTimeContinuation) expandUnchanged(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return formUnchanged(sym, expr)
+}
+
+// expandBeginForSyntax, expandDefineForSyntax and expandEvalWhen run a
+// phase-shifting form's compile-time half WHEN THE EXPANDER REACHES IT, then
+// return the form unchanged; the compiler's handlers for these forms no longer
+// run that half.
+//
+// The timing is the point. A define-syntax compiles its transformer during the
+// expander's body scan (ExpandBodyWithDefineSyntax), so a phase-1 definition that
+// waited for the compiler did not exist yet for a define-syntax later in the SAME
+// unit — a file (one begin), a library body, or a lambda body. It resolved only
+// across unit boundaries, one form per REPL line.
+func (p *ExpanderTimeContinuation) expandBeginForSyntax(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return p.runCompileTimeHalf(sym, expr, (*CompileTimeContinuation).runBeginForSyntax)
+}
+
+func (p *ExpanderTimeContinuation) expandDefineForSyntax(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return p.runCompileTimeHalf(sym, expr, (*CompileTimeContinuation).runDefineForSyntax)
+}
+
+func (p *ExpanderTimeContinuation) expandEvalWhen(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return p.runCompileTimeHalf(sym, expr, (*CompileTimeContinuation).runEvalWhen)
+}
+
+// runCompileTimeHalf runs one of the three forms' compile-time halves through a
+// throwaway compiler over this expander's frame — the frame the compiler would
+// have used, so the phase climb (NextPhase) is the same. The template stays
+// empty: none of the three emits code for its compile-time half.
+func (p *ExpanderTimeContinuation) runCompileTimeHalf(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, run SyntaxCompilerFunc) (syntax.SyntaxValue, error) {
+	c := NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), p.env, p.evaluator)
+	err := run(c, NewCompileTimeCallContext(p.ctx, false), expr)
+	if err != nil {
+		return nil, wrapSourcedError(sym.SourceContext(), err)
+	}
 	return formUnchanged(sym, expr)
 }
 
