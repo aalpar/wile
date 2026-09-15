@@ -41,11 +41,11 @@ These operations on exact inputs MUST produce exact results. Precision loss here
 | `exact` | Any exact number | Identity (no conversion) |
 | `exact` | Float/Complex | Exact rational equivalent |
 | Comparison (`=`, `<`, `>`, `<=`, `>=`) | Exact × Exact | Exact comparison (no float64 intermediary) |
-| Comparison (`=`, `<`, `>`, `<=`, `>=`) | Exact × Inexact | Exact comparison. Comparison uses a **separate, lossless** table from arithmetic: neither operand is rounded to reach a common domain. See [`tower.md`](tower.md) § "Two Promotion Tables". |
+| Comparison (`=`, `<`, `>`, `<=`, `>=`) | Exact × Inexact | Exact comparison. Comparison does not use the promotion table: `CompareNumbers` lifts the finite inexact operand to its exact rational, so neither operand is rounded. See [`tower.md`](tower.md) § "Arithmetic Promotes; Comparison Does Not". |
 
 ### Tier 2: INEXACT — Precision Loss Is Inherent
 
-These operations inherently produce results that cannot be represented exactly. Precision loss is expected and conformant, but implementations SHOULD maximize available precision (prefer BigFloat over Float where possible).
+These operations inherently produce results that cannot be represented exactly. Precision loss is expected and conformant, but implementations SHOULD maximize available precision. Wile does so by operand tier for the transcendentals with real results (`sin`, `exp`, `log`, `atan`, and the rest): a `BigInteger`, `Rational` or `BigFloat` operand yields a `BigFloat`, an `Integer` or `Float` operand a `Float`. Not every operation follows the tier: `(sqrt 1/3)`, `(expt #m2 0.5)`, `(log -1/2)` and `(exp 1/2+1/3i)` return float64-based results, and `(sqrt #m2)` currently raises.
 
 | Operation | Why |
 |-----------|-----|
@@ -53,9 +53,9 @@ These operations inherently produce results that cannot be represented exactly. 
 | `exp`, `log` | Transcendental |
 | `sqrt` (non-perfect-square) | Irrational result |
 | `expt` (non-integer exponent) | Generally irrational |
-| `atan2` | Transcendental (uses `math.Atan2`) |
+| `atan` with two arguments | Transcendental (`math.Atan2`, or `values.BigAtan2` for an arbitrary-precision operand) |
 | `magnitude` of complex (non-trivial) | Uses `sqrt(a² + b²)` |
-| `angle` / `phase` of complex | Uses `atan2` |
+| `angle` of complex | Uses atan2 |
 | Constants: π, e | Irrational by definition |
 
 ### Tier 3: BOUNDARY — Precision Loss at System Edges
@@ -73,18 +73,18 @@ The two FFI rows are **strict by default**: the converter raises `werr.ErrLossyC
 
 ### Tier 4: IEEE 754 Special Values in Arbitrary-Precision Types
 
-`values.BigFloat` and `values.BigComplex` support IEEE 754 Inf and NaN representation. The arithmetic dispatch tables retain an `isSpecialFloat` guard (`pkg/values/promotion.go` → `isSpecialFloat`, consumed by `makeArithmeticDispatch`) that short-circuits to `float64` / `complex128` arithmetic when a `Float` operand is Inf/NaN and the lattice LUB is `BigFloat`/`BigComplex`. The `LessThan` dispatch deliberately has no such guard.
+`values.BigFloat` and `values.BigComplex` support IEEE 754 Inf and NaN representation. The arithmetic dispatch tables retain an `isSpecialFloat` guard (`pkg/values/promotion.go` → `isSpecialFloat`, consumed by `makeArithmeticDispatch` and `makeDivideDispatch`) that short-circuits to `float64` / `complex128` arithmetic when a `Float` operand is Inf/NaN and the lattice LUB is `BigFloat`/`BigComplex`. The `LessThan` dispatch deliberately has no such guard.
 
 The guard decides the result *kind*, so the lattice LUB is not what comes back:
 
 | Operation | Result Type | Precision |
 |-----------|------------|-----------|
 | `Float(Inf/NaN) op BigFloat` | `Float` (guard overrides the `BigFloat` LUB) | No precision loss — the special value determines the result, so the extra mantissa carries nothing |
-| `Float(Inf/NaN) op BigComplex` | `BigComplex` (guard computes in `complex128`, rewraps) | Imaginary part of the `BigComplex` operand is preserved rather than dropped to a `Complex` |
+| `Float(Inf/NaN) op BigComplex` | `BigComplex` (guard computes in `complex128`, rewraps) | Imaginary part of the `BigComplex` operand survives rather than being dropped to a `Complex`, but rounded to float64: `(imag-part (+ +inf.0 (make-rectangular #m1 (/ #m1 3))))` keeps 53 bits of the 256 |
 | `BigFloat(Inf) op BigFloat` | `BigFloat` | IEEE 754 rules apply |
 | `BigComplex(Inf real) op BigComplex` | `BigComplex` | IEEE 754 rules apply to each component |
 
-**No blanket precision loss is acceptable at this tier.** When the guard fires, the float64 short-circuit preserves IEEE 754 semantics (Inf/NaN propagation) and loses no information that was representable in the Float operand. See [`tower.md`](tower.md) § "IEEE 754 Semantic Uniformity".
+**No blanket precision loss is acceptable at this tier.** When the guard fires, the float64 short-circuit preserves IEEE 754 semantics (Inf/NaN propagation) and loses no information that was representable in the Float operand. It does round the other operand's finite components to float64 when that operand is a `BigComplex` (row two); a `BigFloat` Inf in the same position keeps them at full precision. See [`tower.md`](tower.md) § "IEEE 754 Semantic Uniformity".
 
 **Go `math/big.Float` limitations:** Go's `big.Float` supports Inf (`SetInf`) but not NaN: a NaN-producing operation panics with `big.ErrNaN`. Wile's `values.BigFloat` extends beyond `big.Float` with an out-of-band `nan` flag (`NewBigFloatNaN`, `recoverNaN` in `pkg/values/big_float.go`). This shipped with issue #362; the guard was **updated** to preserve the BigComplex imaginary part rather than removed, and there is no open plan to remove it.
 
@@ -220,4 +220,4 @@ Sites are pinned as `file` + symbol, never `file:LINE` — a line number rots in
 - [ ] `pkg/wile/ffi.go` argument conversion — Tier 3. No single `convertArg` function; per-argument conversion is distributed across `buildFFISpec` and the converters it selects (`pkg/wile/ffi_arg_converters.go`, `pkg/wile/ffi_ret_converters.go`).
 - [ ] `extensions/math/prim_transcendental.go` — Tier 2, justified
 - [ ] `pkg/values/big_complex.go` `(*BigComplex).Phase` — Tier 2, justified (atan2)
-- [ ] `pkg/values/big_complex.go` `(*BigComplex).EqualTo` (BigComplex vs Complex) — Tier 3, justified (Complex is already float64)
+- [x] ~~`pkg/values/big_complex.go` `(*BigComplex).EqualTo` (BigComplex vs Complex) — Tier 3, justified (Complex is already float64)~~ **No longer a conversion site.** `EqualTo` delegates to `EqvNumber` (`pkg/values/eqv.go`), which decides a complex pair component by component without a float64 round trip; `(eqv? (make-rectangular #m1 #m2) 1.0+2.0i)` is `#f`.

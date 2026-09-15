@@ -31,9 +31,9 @@ All inexact floating-point types in Wile — both machine-width (`Float`, `Compl
 - **`values.BigFloat` and `values.BigComplex` MUST represent both Inf and NaN**, regardless of what Go's `math/big.Float` supports natively. Go's `big.Float` supports Inf (`big.Float.SetInf`) but has no NaN representation; Wile extends beyond this with internal state to track NaN.
 - **IEEE 754 is the single reference spec** for all Inf/NaN behavior. When someone asks "what does `(+ +inf.0 x)` do?", the answer is "IEEE 754" regardless of whether `x` is `Float` or `BigFloat`.
 - **Code paths stay uniform**: `BigFloat.Add` handles Inf/NaN the same way `float64` addition does. No branching on "which numeric type am I?" to get special-value semantics right.
-- **Operations stay in their domain**: `float64 × float64 → float64`. `BigFloat × BigFloat → BigFloat`. Inf/NaN is never a reason to switch domains or demote types.
+- **Operations stay in their domain**: `float64 × float64 → float64`. `BigFloat × BigFloat → BigFloat`. Inf/NaN is never a reason to switch domains or demote types, with one exception: a `Float` Inf or NaN meeting a `BigFloat` or `BigComplex` operand.
 
-This eliminates the need for Inf/NaN guard paths in the dispatch table — the promotion lattice works correctly for all values, including special values.
+That exception is the one Inf/NaN guard the arithmetic dispatch still carries; see "IEEE 754 guard" below.
 
 ### Promotion Beyond Machine Types
 
@@ -48,11 +48,11 @@ An **exact** operand meeting an **inexact** one does NOT enter the Big* domain. 
 | `(+ 1.5 #m2)` | `BigFloat` 3.5 | precision ASKED for is preserved |
 | `(exact->inexact 1/2)` | `Float` 0.5 | |
 
-This is deliberately **lossy**, and it is what "inexact" means. It used to promote exact × `Float` to `BigFloat` "to preserve precision", on the theory that `Simplify` would demote afterwards. Per-op demotion was never wired, so ordinary float arithmetic minted 256-bit bignums that never came back down; `(+ 1.5 2)` was a `*BigFloat`. Removing the promotion made mixed float/integer arithmetic ~40% faster.
+This is deliberately **lossy**, and it is what "inexact" means. It used to promote exact × `Float` to `BigFloat` "to preserve precision", on the theory that `Simplify` would demote afterwards. Per-op demotion was never wired, so ordinary float arithmetic minted 256-bit bignums that never came back down; `(+ 1.5 2)` was a `*BigFloat`. Removing the promotion keeps mixed float/integer arithmetic on `float64`.
 
 **Complex is not exempt.** Exact × `Complex` → `Complex`, exactly as exact × `Float` → `Float`. It has to be: the promotion table is a join-semilattice, and given exact ⊔ `Float` = `Float` and `Float` ⊔ `Complex` = `Complex`, associativity *forces* exact ⊔ `Complex` = `Complex`. Any two of those three entries determine the third.
 
-Exact × `Complex` used to escalate to `BigComplex`, and the reason was real: an exact operand rounded into `complex128` acquires a manufactured `+0.0` imaginary part, which is not an *exact* `0`, so the exact-zero rules that give `(/ 10 2.0+0.0i)` its `-0.0i` sign stop applying. But escalating bought that correctness with a **broken lattice**. With exact ⊔ `Float` = `Float` on one side and exact ⊔ `Complex` = `BigComplex` on the other, the join stopped being associative on 12 of its 343 triples, and the result *kind* is observable through `eqv?`/`equal?` (R7RS §6.1 makes representation observable for inexacts). So:
+Exact × `Complex` used to escalate to `BigComplex`, and the reason was real: an exact operand rounded into `complex128` acquires a manufactured `+0.0` imaginary part, which is not an *exact* `0`, so the exact-zero rules that give `(/ 10 2.0+0.0i)` its `-0.0i` sign stop applying. But escalating bought that correctness with a **broken lattice**. With exact ⊔ `Float` = `Float` on one side and exact ⊔ `Complex` = `BigComplex` on the other, the join stopped being associative on 12 of its 343 triples, and the result *kind* is observable through `eqv?`/`equal?` (R7RS §6.1 makes representation observable for inexacts). So, under that table:
 
 ```scheme
 (+ 1 1.5 2.0+0.0i)                                ; => 4.5+0.0i   (a Complex)
@@ -61,6 +61,8 @@ Exact × `Complex` used to escalate to `BigComplex`, and the reason was real: an
 (eqv?   (+ 1 1.5 2.0+0.0i) (+ 2.0+0.0i 1 1.5))    ; => #f   ← same value, different fold order
 (equal? (* 1.0+2.0i 1) 1.0+2.0i)                  ; => #f   ← multiply by exact 1
 ```
+
+With exact ⊔ `Complex` = `Complex`, both folds produce a `Complex`, and the `eqv?` and `equal?` calls above return `#t`.
 
 **The exact zero is protected at the operation, not in the table.** A real operand has *no* imaginary component, so `real ⊕ complex` is computed part-wise and the component is never manufactured in the first place — `(/ 10 2.0+0.0i)` is still `5.0-0.0i`. `Float` has always worked this way (`Float` ⊔ `Complex` has always been `Complex`); the exact kinds now share that path. See the `real ⊕ complex` helpers in `pkg/values/complex.go` and `initPromotionTable`'s Zone 3 in `pkg/values/promotion.go`.
 
@@ -101,7 +103,7 @@ There used to be a second kind table, `comparisonTable`, sending exact × `Float
 
 **Removed.** `pkg/values/numeric_scratch.go` once provided unexported in-place `*BigInteger` helpers (`addBigIntInPlace`, `subBigIntInPlace`, `mulBigIntInPlace`, `negateBigIntInPlace`) that reused the destination's `[]Word` backing instead of allocating a fresh `*BigInteger` + `*big.Int` + `[]Word` per op. The file is gone: the helpers were written for a caller that never arrived and were used by nothing (see CHANGELOG). Anything reaching for them today should either compute on raw `*big.Int` directly — which is what `extensions/algebra/graph.CountPathsInDAG` does — or re-derive them with a real consumer in hand.
 
-The public `(*BigInteger).Add` etc. remain immutable per R7RS Number semantics, and that is now the only arithmetic API on the type. `extensions/algebra/graph.CountPathsInDAG` — cited here as the motivating consumer, and the one the `(wile algebra graph)` library dispatches to when a semiring declares `(carrier . big-int)` — operates on raw `*big.Int` and never routed through a values-level in-place API.
+The public `(*BigInteger).Add` etc. remain immutable per R7RS Number semantics, and that is now the only arithmetic API on the type. `extensions/algebra/graph.CountPathsInDAG` — cited here as the motivating consumer, and the one the `(wile algebra graph)` library dispatches to when a semiring declares `(carrier . big-int)` and the graph has unit weights — operates on raw `*big.Int` and never routed through a values-level in-place API.
 
 The fast path applies only to `*BigInteger`. The other carriers — `*BigFloat`, `*Rational`, `*BigComplex` — have similar shapes but no in-place helpers: they are out of scope for the counting-semiring workload that motivated these.
 
@@ -124,13 +126,13 @@ The numeric tower uses **pre-built dispatch tables** indexed by `NumericKind`. E
 
 ### Dispatch Table Architecture
 
-Tables are populated at `init()` time by generators in `pkg/values/promotion.go` — `makeArithmeticDispatch` and `makeLessThanDispatch`. All seven numeric types carry five tables each (`Add`, `Subtract`, `Multiply`, `Divide`, `LessThan`), pre-indexed by `NumericKind`. Total: **35 tables, 245 closures**.
+Tables are populated at `init()` time by generators in `pkg/values/promotion.go` — `makeArithmeticDispatch` (behind `makeAddDispatch`, `makeSubtractDispatch`, `makeMultiplyDispatch`), `makeDivideDispatch`, and `makeLessThanDispatch`. All seven numeric types carry five tables each (`Add`, `Subtract`, `Multiply`, `Divide`, `LessThan`), pre-indexed by `NumericKind`. Total: **35 tables, 245 entries**.
 
 `LessThan` is the tower's only ordering primitive. A `Compare(Number) int` sat alongside it until it was removed: it answered a four-state question (less, equal, greater, unordered) in a three-state return, so a NaN operand got `0` and read as "equal". Equality is `NumericEquals` (R7RS `=`) or `EqvNumber` (`eqv?`), never the absence of ordering. See the `Number` doc comment in `pkg/values/values.go`. The fast-path call is `integerAdd[o.Kind()](p, o)` rather than a cascading type switch.
 
 **Call path:** `Integer.Add(o)` → fast path for same type (`*Integer`), otherwise `integerAdd[o.Kind()](p, o)`.
 
-**IEEE 754 guard:** When a `Float` holds Inf or NaN and the lattice LUB is `BigFloat`/`BigComplex`, the dispatch closures short-circuit to `float64`/`complex128` arithmetic. This logic is centralized in `makeArithmeticDispatch` (see `pkg/values/promotion.go` → `isSpecialFloat`), not replicated per type. The guard changes the result *kind*, not only the arithmetic: the `BigFloat` LUB returns a `*Float`, while the `BigComplex` LUB returns a `*BigComplex` so the operand's imaginary part survives. The `LessThan` dispatch deliberately carries no such guard.
+**IEEE 754 guard:** When a `Float` holds Inf or NaN and the lattice LUB is `BigFloat`/`BigComplex`, the dispatch closures short-circuit to `float64`/`complex128` arithmetic. This logic lives in the generators, `makeArithmeticDispatch` and `makeDivideDispatch` (see `pkg/values/promotion.go` → `isSpecialFloat`), not replicated per type. The guard changes the result *kind*, not only the arithmetic: the `BigFloat` LUB returns a `*Float`, while the `BigComplex` LUB returns a `*BigComplex` so the operand's imaginary part survives. The `LessThan` dispatch deliberately carries no such guard.
 
 ### Why This Instead of a Unified Tower
 
@@ -165,7 +167,7 @@ const (
 )
 ```
 
-**Deleted (2026-02-05):** `NumericRank`, `Rank`, `PromoteBoth`, `CommonRank`, `BinaryOp`, `TowerAdd`, `TowerSubtract`, `TowerMultiply`, `TowerDivide`, `TowerCompare`. `Promote` was retained (`pkg/values/promotion.go` → `Promote`) for use by the dispatch-table generators.
+**Deleted (2026-02-05):** `NumericRank`, `Rank`, `PromoteBoth`, `CommonRank`, `BinaryOp`, `TowerAdd`, `TowerSubtract`, `TowerMultiply`, `TowerDivide`, `TowerCompare`. `Promote` was retained (`pkg/values/promotion.go` → `Promote`) as a public accessor over the `promoter` table; the dispatch-table generators index that table directly.
 
 ---
 
@@ -188,6 +190,11 @@ whatever the inner datum's prefixes decided.
 | `#z…` | `BigInteger` | datum must denote an exact integer |
 | `#m…` | `BigFloat` | datum must be real; precision is the value's |
 | `1+2i` | `BigComplex` if both parts exact, else `Complex` | |
+
+One gap in the introducer rule: when digits follow `#z` or `#m` directly, the
+scan stops at the first character it does not recognize instead of reading a
+complete datum, so `#m1+2i` reads as `1.0l0` followed by `+2i`, and `#z1/2` as
+`1` followed by the symbol `/2`.
 
 **Exponent markers.** R7RS §6.2.5 makes `s`/`f`/`d`/`l` an optional precision
 request, and lets an implementation with fewer than four inexact representations
@@ -217,16 +224,20 @@ Two consequences worth stating, since they look like inconsistencies and are not
 
 ## Type Promotion (Lattice Model)
 
-Direct dispatch implements a **lattice** with two dimensions:
+Direct dispatch implements a **join-semilattice** over the seven kinds. The exact kinds form a chain below `Float`; above it, precision (`Float` → `BigFloat`) and complexity (`Float` → `Complex`) are independent and meet at `BigComplex`. `BigComplex` is one kind whether its parts are exact or inexact, so exact × `BigComplex` stays at the top; exactness is tracked separately (see "Exactness Preservation").
 
 ```
-                    BigComplex
-                   ↗    ↑    ↖
-            Complex   BigFloat   (exact BigComplex path)
-               ↑    ↗    ↑         ↑
-             Float    Rational ────┘
-               ↑        ↑
-            Integer → BigInteger
+                BigComplex
+               ↗          ↖
+         BigFloat        Complex
+               ↖          ↗
+                  Float
+                    ↑
+                 Rational
+                    ↑
+                BigInteger
+                    ↑
+                 Integer
 ```
 
 ### Result Type Matrix
@@ -267,16 +278,16 @@ Where:
 | BigInteger that fits int64 | → Integer |
 | Integer, Float, BigFloat, Complex | identity |
 
-The inexact tier does not descend. `Float` is the bottom of it, and demoting a whole-valued `Float` or an integral `BigFloat` to an exact `Integer` (which earlier versions did) crosses the exactness class and would make `(exact? 2.0)` answer `#t`. A `*Complex` never descends either: its parts are `float64`, so a `0.0` imaginary part is always an *inexact* zero, and R7RS §6.2.6 says the component is still there (`(real? -2.5+0.0i)` is `#f`). See the `SimplifyDown` functions registered per kind in `pkg/values/numeric_registry.go`.
+The inexact tier does not descend. `Float` is the bottom of it, and demoting a whole-valued `Float` or an integral `BigFloat` to an exact `Integer` (which earlier versions did) crosses the exactness class and would make `(exact? 2.0)` answer `#t`. A `*Complex` never descends either: its parts are `float64`, so a `0.0` imaginary part is always an *inexact* zero, and R7RS §6.2.6 says the component is still there (`(real? -2.5+0.0i)` is `#f`). See the `simplifyDown` function each type file registers in its `NumericTypeSpec` (`pkg/values/numeric_registry.go`), e.g. `floatSimplifyDown` in `float.go`.
 
 ---
 
 ## Error Handling
 
-All types use consistent panic-based error handling for invalid inputs:
+Invalid inputs panic; division by exact zero is an ordinary error:
 
 - Unknown types: `panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "context: ..."))`
-- Division by zero: `panic(werr.WrapForeignErrorf(werr.ErrDivisionByZero, "context: ..."))`
+- Division by exact zero: `Divide` returns `(Number, error)`, and the error wraps `werr.ErrDivisionByZero` (e.g. `"Integer.Divide: division by exact zero"`). Division by an inexact zero follows IEEE 754 (`(/ 1 0.0)` is `+inf.0`).
 
 No bare sentinel panics remain. All panics wrap the sentinel with location context, enforced by the `noBareSentinelPanic` ruleguard rule.
 
@@ -309,7 +320,7 @@ legacy silent-truncation behavior opt in via
 
 This contrasts with R7RS-mandated `(exact->inexact)`, which is itself
 unchanged — `(exact->inexact (expt 10 500))` continues to saturate to
-`+inf.0` per R7RS §6.2.6. The new `inexact-*` primitives **expose the
+`+inf.0`, which R7RS §6.2.6 permits (it equally permits reporting an implementation restriction). The new `inexact-*` primitives **expose the
 saturation direction** rather than gate it.
 
 ### Accuracy symbol vocabulary
@@ -341,7 +352,7 @@ Coverage tests are in:
 
 - `pkg/values/numeric_tower_coverage_test.go` — 245-case coverage matrix (7×7×5 operations)
 - `pkg/values/numeric_lattice_test.go` — Lattice-based promotion model validation
-- `pkg/values/promotion_test.go` — the two tables' semilattice laws, and the exact set of pairs on which they are permitted to diverge
+- `pkg/values/promotion_test.go` — the promotion table's semilattice laws (symmetry, associativity, idempotency), the promoters, and the `isSpecialFloat` guard
 - `pkg/values/numeric_dispatch_test.go` — `TestAllDispatchEntriesPopulated`: no nil entry in any of the 35 tables
 
 Run tests:
