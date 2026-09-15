@@ -68,7 +68,8 @@ var mergedLetSlotReuseCases = []struct {
 	{
 		// A continuation captured inside the first `let` and re-entered after the
 		// sibling ran resumes a body that reads `a`. Reusing the slot makes the
-		// second trip print 2 for it.
+		// second trip print 2 for it. Since the capture-safety gate these lets
+		// push rather than merge, so the row now also guards that gate.
 		name: "re-entered continuation reads its own let slot",
 		code: `
 (define (h)

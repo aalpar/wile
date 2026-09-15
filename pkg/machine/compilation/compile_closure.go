@@ -69,6 +69,7 @@ func (p *CompileTimeContinuation) compileClosureBody(
 	v validate.ValidatedBodyAndParams,
 	errContext string,
 	fr frameReuse,
+	selfSym *syntax.SyntaxSymbol,
 ) (machine.LiteralIndex, []freeVar, error) {
 	// Phase 1: Bind required parameters to the local environment.
 	// Each parameter becomes a local variable slot populated by the VM at call time.
@@ -145,7 +146,15 @@ func (p *CompileTimeContinuation) compileClosureBody(
 
 	// Phase 4: Compile body expressions into child template. The last expression
 	// is compiled in tail position for proper tail-call optimization.
-	err = p.compileBody(ctctx, v, childEnv, tpl, fr, fvs)
+	//
+	// A `let` merges into this frame only if no continuation can be captured
+	// while the frame is live. A merged let's slot belongs to the frame, not to
+	// one execution of the let, so a continuation that re-runs the let (captured
+	// in its init, or anywhere earlier in the body) writes the slot the earlier
+	// pass's continuation still reads. p.env, not childEnv: the verdict resolves
+	// callees from outside the body, with v's parameters seeded as shadows.
+	mergeLets := validate.ProcedureBodyIsCaptureSafe(v, selfSym, p.env)
+	err = p.compileBody(ctctx, v, childEnv, tpl, fr, fvs, mergeLets)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -165,7 +174,7 @@ func (p *CompileTimeContinuation) compileClosureBody(
 // creation time. nil for an anonymous lambda and for a top-level define, whose
 // name is a global and therefore never a free variable ([nil means NONE]).
 func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, tpl *machine.NativeTemplate, lenv *environment.LocalEnvironmentFrame, v validate.ValidatedProcedure, fr frameReuse, selfSym *syntax.SyntaxSymbol) error {
-	tpli, layout, err := p.compileClosureBody(ctctx, tpl, lenv, v, "lambda", fr)
+	tpli, layout, err := p.compileClosureBody(ctctx, tpl, lenv, v, "lambda", fr, selfSym)
 	if err != nil {
 		return err
 	}
@@ -241,7 +250,7 @@ func (p *CompileTimeContinuation) selfFreeSlot(layout []freeVar, selfSym *syntax
 //
 // R7RS §5.3.2: Internal definitions use letrec* semantics - all defined names are visible
 // throughout the body, enabling forward references between defines.
-func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *machine.NativeTemplate, fr frameReuse, layout []freeVar) error {
+func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *machine.NativeTemplate, fr frameReuse, layout []freeVar, mergeLets bool) error {
 	childCompiler := NewCompileTimeContinuation(tpl, childEnv, p.evaluator)
 	childCompiler.SetInlineThreshold(p.inlineThreshold)
 	// The body's own free layout: how it reaches a variable of an enclosing
@@ -256,8 +265,12 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 	childCompiler.boxedSlots = p.boxedSlots
 	// childEnv is this body's parameter frame AND the shape tpl records, so a slot
 	// appended to it widens every apply frame built from that shape. That is what
-	// makes it the frame a `let` in this body merges into.
-	childCompiler.shape = childEnv
+	// makes it the frame a `let` in this body merges into, when mergeLets says no
+	// continuation can re-run one inside it. A nil shape keeps the pushing form,
+	// which binds a fresh frame on every execution.
+	if mergeLets {
+		childCompiler.shape = childEnv
+	}
 	// The merge maps are SHARED for the same reason boxedSlots is: a body that
 	// retains its lexical env reaches an enclosing merged slot by depth rather
 	// than through its free vector, and a child with an empty map would emit the

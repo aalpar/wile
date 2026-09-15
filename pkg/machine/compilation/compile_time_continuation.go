@@ -149,7 +149,8 @@ type CompileTimeContinuation struct {
 	//
 	// nil disables merging entirely, and that is how the top-level, library and
 	// transformer compilers keep the OpPushEnv path: they have no enclosing frame
-	// to merge into. Set by compileBody on the child continuation.
+	// to merge into. It is also nil over a region where a continuation can be
+	// captured (see canMergeLet). Set by compileBody on the child continuation.
 	shape *environment.EnvironmentFrame
 	// mergedShape maps each compile-time `let` frame that was merged to the frame
 	// it was merged INTO. A frame present here does not exist at run time, so

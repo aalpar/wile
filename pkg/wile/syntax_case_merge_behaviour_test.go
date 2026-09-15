@@ -24,11 +24,13 @@ import (
 )
 
 // TestSyntaxCaseClauseBodyLetBehaviour is the value arm of
-// compilation.TestSyntaxCaseClauseBodyMergesLets.
+// compilation.TestSyntaxCaseClauseBodyLetsPush.
 //
-// A `let` in a syntax-case clause body now takes its slots out of the
+// A `let` in a syntax-case clause body can take its slots out of the
 // pattern-variable frame BindPatternVars pushes, instead of pushing one of its
-// own. The two sides of that frame are built in two different files and nothing
+// own. Since the capture-safety gate (canMergeLet) it does not in practice: the
+// clause body is raw syntax the capture scan cannot prove capture-free. These
+// fixtures keep pinning the values either way. The two sides of that frame are built in two different files and nothing
 // type-checks that they agree, so the failure mode is an INDEX collision: a
 // merged binding landing on a pattern variable, or on the reserved slot holding
 // the form's own syntax-case state. Neither crashes. Both produce a macro that

@@ -272,7 +272,14 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// operation now carries the count (MergedSlots, written below), which is what
 	// takes ownership of the width and lets a `let` in a clause body merge like
 	// any other.
-	bodyCompiler.shape = bodyEnv
+	//
+	// Only inside a region already proven capture-free, for the reason
+	// compileClosureBody gives. The clause body is raw syntax the capture scan
+	// cannot read, so it cannot prove that for itself, and a syntax-case form is
+	// opaque to the scan of any region containing it: in practice this refuses.
+	if p.shape != nil {
+		bodyCompiler.shape = bodyEnv
+	}
 	bodyCompiler.mergedShape = p.mergedShape
 	bodyCompiler.mergedSlot = p.mergedSlot
 	// The boxing verdict is SHARED for compileBody's reason: a read in the clause

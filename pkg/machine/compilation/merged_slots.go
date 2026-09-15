@@ -59,14 +59,17 @@ func (p *CompileTimeContinuation) ensureMergeState() {
 // merged. Otherwise a real runtime frame sits in between, and a slot in the
 // shape frame is not reachable at the depth the merged arithmetic assumes.
 //
-// The two populations this refuses are exactly the two that must be refused:
+// p.shape is nil, and every `let` pushes, in two populations:
 //
-//   - THE TOP LEVEL. p.shape is nil on the program, library and transformer
-//     compilers, so a top-level `let` still pushes. There is no enclosing frame.
-//   - A SYNTAX-CASE CLAUSE BODY. BindPatternVars pushes a pattern-variable frame
-//     at run time between the parameter frame and the body, and its width is
-//     fixed by the pattern rather than by this compiler. The walk stops at that
-//     body frame, which is not merged.
+//   - THE TOP LEVEL. The program, library and transformer compilers have no
+//     enclosing frame, so a top-level `let` still pushes.
+//   - A REGION WHERE A CONTINUATION CAN BE CAPTURED. A merged slot belongs to
+//     the frame, not to one execution of the `let`, so a continuation that re-runs
+//     the `let` would write the slot an earlier pass's continuation still reads
+//     (R7RS §4.2.2 binds fresh locations). compileClosureBody, CompileValidatedLet
+//     and the syntax-case clause compiler set a shape only over a region proven
+//     capture-free; an opaque subtree, an unknown callee or a capture operator
+//     anywhere in it refuses.
 func (p *CompileTimeContinuation) canMergeLet() bool {
 	if p.shape == nil {
 		return false

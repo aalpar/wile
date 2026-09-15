@@ -14,9 +14,14 @@ proposed — and reverted — repeatedly.
 > the enclosing frame, and a merged `let` emits neither `OpPushEnv` nor `OpPopEnv`.
 > The enclosing frame is the lambda's parameter frame, a `syntax-case` clause's
 > pattern-variable frame (`OperationBindPatternVars.MergedSlots`), or an outer
-> unmerged `let`'s frame. The pushing form survives only where there is no frame
-> to merge into: the outermost `let` of a top-level form (program, library or
-> transformer compilers).
+> unmerged `let`'s frame. The pushing form survives where there is no frame to
+> merge into (the outermost `let` of a top-level form: program, library or
+> transformer compilers), and wherever a continuation can be captured while the
+> enclosing frame is live. A merged slot belongs to that frame rather than to one
+> execution of the `let`, so a continuation that re-ran the `let` would write the
+> slot an earlier pass still reads. A region with a capture operator, an unknown
+> callee or an opaque subtree therefore pushes, which includes every
+> `syntax-case` clause body.
 >
 > So the `let`-frame cost analysed below is now a **narrow residual**, not the
 > common case. Measured at `a204912d`, a self-tail loop wrapping one `let` and one

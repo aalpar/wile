@@ -462,8 +462,12 @@ var letFrameCorpus = []struct {
 		// OUTER let's frame at depth 0. That push is the second population — 50 of
 		// the 134 sites — and it is only correct if the closure's free vector is
 		// filled from the patched frame.
+		//
+		// The closure is let-bound, not applied in place: an operator that is a
+		// lambda expression is an unknown callee to the capture-safety verdict,
+		// which would refuse the merge (TestLetMergeFollowsCaptureSafety).
 		name: "closure over a merged slot at the top level",
-		code: `(let ((a 1)) (let ((b (+ a 1))) ((lambda () (+ a b)))))`,
+		code: `(let ((a 1)) (let ((b (+ a 1))) (let ((f (lambda () (+ a b)))) (f))))`,
 		want: "3",
 	},
 	{
