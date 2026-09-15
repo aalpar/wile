@@ -32,10 +32,29 @@ import (
 // recursion to prevent a fatal Go stack overflow on deeply nested syntax
 // (0 disables the bound; pass DefaultMaxExpandDepth for the standard limit).
 // Errors are wrapped with phase context ("expansion" or "compilation"); callers
-// may add site-specific context on top. Callers may call tpl.Optimize() on the
-// returned template if desired.
+// may add site-specific context on top.
+//
+// The returned template is NOT peephole-optimized; closure bodies inside it are.
+// See ExpandAndCompileOptimized for when the top-level pass pays.
 func ExpandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int, maxExpandDepth int) (*machine.NativeTemplate, error) {
 	return expandAndCompileScoped(ctx, env, stx, resolver, inlineThreshold, maxExpandDepth, nil)
+}
+
+// ExpandAndCompileOptimized is ExpandAndCompile followed by the peephole pass on
+// the top-level template. Closure bodies are already optimized as they compile,
+// so the pass only buys the top-level template's own fusions. Callers: the
+// Engine's compile funnel (shared by Eval and Compile, whose CompiledCode can be
+// Run repeatedly), bootstrap loading, and the compile primitive, whose thunk
+// runs the template on every call. The eval and load primitives run each
+// template once and discard it, so they use ExpandAndCompile and skip the pass's
+// allocations.
+func ExpandAndCompileOptimized(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int, maxExpandDepth int) (*machine.NativeTemplate, error) {
+	tpl, err := ExpandAndCompile(ctx, env, stx, resolver, inlineThreshold, maxExpandDepth)
+	if err != nil {
+		return nil, err
+	}
+	tpl.Optimize()
+	return tpl, nil
 }
 
 // expandAndCompileScoped is ExpandAndCompile with a library scope set on both

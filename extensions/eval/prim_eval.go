@@ -681,7 +681,7 @@ func PrimCompile(mc machine.CallContext) error {
 	// globals and a nil namespace.
 	env := environment.NewEnvironmentFrameWithParent(nil, mc.EnvironmentFrame().MutableRuntime())
 
-	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, syntaxVal, nil, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
+	tpl, err := compilation.ExpandAndCompileOptimized(mc.Context(), env, syntaxVal, nil, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "compile")
 	}
