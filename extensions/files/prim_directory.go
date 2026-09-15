@@ -161,7 +161,14 @@ func PrimSetCurrentDirectory(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	err = os.Chdir(path.Value)
+	// chdir has no os.Root form, so the kernel resolves whatever string it gets,
+	// symlinks and ".." included. Enter the resolved path, re-gated when it
+	// differs from the spelling, so the directory entered is the one judged.
+	target, err := unconfinedTarget(mc.Authorizer(), path.Value, security.ActionWrite)
+	if err != nil {
+		return err
+	}
+	err = os.Chdir(target)
 	if err != nil {
 		return werr.WrapForeignFileError(err, "set-current-directory!", path.Value)
 	}

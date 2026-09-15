@@ -119,6 +119,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A `..` after a symlink can no longer move the working directory out of a
+  sandbox root.** `containedInRoot` ran `filepath.Abs`, which cleans `..`
+  lexically, before resolving symlinks, so `<root>/link/..` was judged as
+  `<root>` while `set-current-directory!` handed the raw string to `os.Chdir`
+  and the kernel followed `link` first. Containment now resolves one component
+  at a time and refuses a `..` that backs out of a symlink, the rule `os.Root`
+  already applies. `set-current-directory!` enters the symlink-resolved path,
+  re-gated when it differs from the spelling, so a lexical custom authorizer is
+  covered too. The `os.Root` file and load paths never escaped: they opened the
+  lexically cleaned name inside the root.
 - **`--cover` profiles now carry 1-based columns.** `SourceIndexes` columns
   are 0-based, the tokenizer's convention shared by every diagnostic, and the
   Go cover writer copied them through into a format that reads columns as

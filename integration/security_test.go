@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -103,4 +104,74 @@ func TestSetCurrentDirectoryConfinedToRoot(t *testing.T) {
 	_, err = engine.EvalMultiple(context.Background(),
 		fmt.Sprintf(`(set-current-directory! %q)`, insideDir))
 	qt.Assert(t, err, qt.IsNil)
+}
+
+// TestSetCurrentDirectorySymlinkDotDotConfinedToRoot pins that a ".." after a
+// symlink is judged where the kernel applies it: after the link. <root>/link/..
+// spells <root>, but chdir follows link first and lands in the parent of its
+// target, outside the root.
+//
+// Two authorities, two regressions. FilesystemRoot: containment used to clean
+// ".." lexically before resolving symlinks, so it admitted the spelling. The
+// lexical authorizer: set-current-directory! used to chdir to the raw string
+// rather than the resolved path it re-gates, so a spelling-only gate let the
+// kernel's resolution escape.
+//
+// Not parallel: os.Chdir is process-global.
+func TestSetCurrentDirectorySymlinkDotDotConfinedToRoot(t *testing.T) {
+	origWD, err := os.Getwd()
+	qt.Assert(t, err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = os.Chdir(origWD)
+	})
+
+	// Resolved so the lexical authorizer can compare the re-gated real path.
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	qt.Assert(t, err, qt.IsNil)
+	rootDir := filepath.Join(base, "root")
+	outsideDeep := filepath.Join(base, "outside", "deep")
+	qt.Assert(t, os.MkdirAll(filepath.Join(rootDir, "sub"), 0o755), qt.IsNil)
+	qt.Assert(t, os.MkdirAll(outsideDeep, 0o755), qt.IsNil)
+	qt.Assert(t, os.Symlink(outsideDeep, filepath.Join(rootDir, "link")), qt.IsNil)
+
+	sep := string(filepath.Separator)
+	lexical := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		if req.Target == rootDir || strings.HasPrefix(req.Target, rootDir+sep) {
+			return nil
+		}
+		return security.ErrAccessDenied
+	})
+	escape := filepath.Join(rootDir, "link") + sep + ".."
+	inside := filepath.Join(rootDir, "sub") + sep + ".."
+
+	for _, tc := range []struct {
+		name string
+		auth security.Authorizer
+	}{
+		{"filesystem-root", security.FilesystemRoot(rootDir)},
+		{"lexical", lexical},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine, err := wile.NewEngine(context.Background(),
+				wile.WithExtension(extio.Extension),
+				wile.WithExtension(extfiles.Extension),
+				wile.WithAuthorizer(tc.auth),
+			)
+			qt.Assert(t, err, qt.IsNil)
+
+			_, err = engine.EvalMultiple(context.Background(),
+				fmt.Sprintf(`(set-current-directory! %q)`, escape))
+			wd, wdErr := os.Getwd()
+			qt.Assert(t, wdErr, qt.IsNil)
+			qt.Assert(t, err, qt.ErrorIs, security.ErrAccessDenied, qt.Commentf("cwd is now %s", wd))
+
+			// ".." after a real directory still resolves, to the root itself.
+			_, err = engine.EvalMultiple(context.Background(),
+				fmt.Sprintf(`(set-current-directory! %q)`, inside))
+			qt.Assert(t, err, qt.IsNil)
+			wd, wdErr = os.Getwd()
+			qt.Assert(t, wdErr, qt.IsNil)
+			qt.Assert(t, wd, qt.Equals, rootDir)
+		})
+	}
 }
