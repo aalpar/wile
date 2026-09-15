@@ -68,13 +68,13 @@ Each chapter covers one problem that composes several sub-libraries.
 | [`chapters/06-graph-algorithms.scm`](../../examples/algebra/tutorial/chapters/06-graph-algorithms.scm) | `combinatorial-graph` -- K_n, C_n, Petersen, K_{3,3}; BFS/DFS; Hopcroft-Karp; τ(K_n) = n^(n-2); τ(Petersen) = 2000; chromatic polynomials on K_n, C_n, empty; Tutte polynomial; C_6 vs 2·K_3 isomorphism canary |
 | [`chapters/07-group-actions.scm`](../../examples/algebra/tutorial/chapters/07-group-actions.scm) | `group` -- presets (trivial, cyclic, symmetric, product), preset actions (natural, regular, conjugation), orbit + stabilizer (verifying orbit-stabilizer identity), Burnside on necklaces (C_4 on 2^4 colorings = 6 necklaces, C_2 on 2^2 = 3) |
 | [`chapters/08-lattice-presets.scm`](../../examples/algebra/tutorial/chapters/08-lattice-presets.scm) | `lattice`, `incidence` -- five preset lattices; `distributive?` + `modular?` distinguishing M_3 and N_5; Birkhoff roundtrip; Dedekind D(0)..D(4); Möbius on the divisor poset of 12 |
-| [`chapters/09-dataflow-analysis.scm`](../../examples/algebra/tutorial/chapters/09-dataflow-analysis.scm) | `dataflow`, `abstract-domain`, `lattice` -- sign-lattice and its five elements, `sign-binop` with annihilation and top propagation, linear 3-block CFG + 5-block branching CFG showing merge-induced top |
-| [`chapters/10-unification.scm`](../../examples/algebra/tutorial/chapters/10-unification.scm) | `unification` -- pattern variables, substitutions (lookup/compose/apply), syntactic unification via `ac-unify` with empty theory, AC unification over `+`, `diophantine-basis` for Stickel's kernel, `flatten-ac` |
+| [`chapters/09-dataflow-analysis.scm`](../../examples/algebra/tutorial/chapters/09-dataflow-analysis.scm) | `dataflow`, `abstract-domain`, `lattice` -- sign-lattice and its five elements, `sign-binop` with annihilation and top propagation, linear 3-block CFG + 5-block branching CFG showing merge-induced top; `interval` and `galois` -- a loop analyzed on `interval-lattice` with `interval-widen`, and `interval-galois-connection` checked by `gc-sound?` |
+| [`chapters/10-unification.scm`](../../examples/algebra/tutorial/chapters/10-unification.scm) | `unification` -- pattern variables, substitutions (lookup/compose/apply), syntactic unification via `ac-unify` with empty theory, AC matching over `+` via `ac-match`, `diophantine-basis` for Stickel's kernel, `flatten-ac` |
 | [`chapters/11-equivalence-discovery.scm`](../../examples/algebra/tutorial/chapters/11-equivalence-discovery.scm) | `rewrite`, `symbolic`, `boolean` -- `discover-equivalences` across sub-theories, theory combinators (`filter`, `exclude`, `prioritize`, `merge`), `format-trace`, fuel exhaustion |
 
 ## Quick-tour files
 
-One per sub-library not featured in a deep chapter, except `tree` (tree edit distance), which has neither yet. Each is ~50-100 lines: construct the structure, exercise 3-5 core operations, validate if applicable, one representative use case.
+One per sub-library not otherwise featured, except `tree` (tree edit distance), which has neither yet. `interval` and `galois` also appear in chapter 09. Each is under 110 lines: construct the structure, exercise 3-5 core operations, validate if applicable, one representative use case.
 
 | File | Library | Focus |
 |------|---------|-------|
@@ -130,4 +130,4 @@ One per sub-library not featured in a deep chapter, except `tree` (tree edit dis
 
 - [`overview.md`](overview.md) -- design philosophy, structure hierarchy, the three library layers.
 - [`reference.md`](reference.md) -- complete API reference for every sub-library.
-- `test/wile/algebra-*.scm` -- the library's own test suite (independent of this tutorial).
+- `test/wile/algebra-*.scm` and `pkg/stdlib/lib/wile/algebra/sat-test.scm` -- the library's own test suite (independent of this tutorial).

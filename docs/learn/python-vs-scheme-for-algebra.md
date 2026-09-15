@@ -71,9 +71,9 @@ on the right. Both are lists — the same data structure as the expressions them
 Writing a rewrite rule and writing an expression are the same activity.
 
 (`match` is a library form, not R7RS core: Racket's `racket/match`, `(chibi
-match)`. Wile does not ship one. A pattern variable also cannot repeat within a
-single pattern, which is why the *a + a* rule binds two variables and compares
-them in the body.)
+match)`. Wile does not ship one. Racket's `match` also accepts a repeated
+pattern variable: `(list '+ a a)` matches only when both operands are `equal?`.
+The *a + a* rule above spells that test out in the body instead.)
 
 In SymPy, the equivalent uses `.replace()` with `Wild` patterns, or a custom
 function that walks `.args`:
@@ -86,7 +86,15 @@ expr = expr.replace(Mul(a, 0), lambda a: Integer(0))
 expr = expr.replace(Add(a, a), lambda a: 2*a)
 ```
 
-It works. But notice: you're operating in a meta-language. You construct `Wild`
+As written it does not rewrite anything. SymPy's constructors evaluate eagerly:
+`Mul(a, 0)` is already `0` and `Add(a, a)` is already `2*a` before `.replace()`
+sees them, and `x*0` or `x + x` never survive construction inside `expr` either.
+Building the pattern with `evaluate=False` keeps its shape, but the matcher then
+solves for the wildcard instead of matching structure:
+`x.match(Mul(a, 0, evaluate=False))` returns `{a_: zoo*x}`. SymPy 1.14 behaves
+this way.
+
+Notice also that you're operating in a meta-language. You construct `Wild`
 objects that represent pattern variables. You pass lambdas for the replacement. The
 pattern and the expression look nothing alike — one is a `Wild`-decorated class
 construction, the other is an operator-overloaded Python expression. They're the same
@@ -100,9 +108,10 @@ on top.
 
 ## The Numeric Tower: Where Exactness Matters
 
-There's a subtler structural advantage. Scheme (R7RS) has an exact numeric tower
-built in: integers of arbitrary size, exact rationals (3/7 stays 3/7, not
-0.42857142857...), and a clear distinction between exact and inexact numbers.
+There's a subtler structural advantage. R7RS defines a numeric tower with a clear
+distinction between exact and inexact numbers, and permits (without requiring)
+integers of arbitrary size and exact rationals (3/7 stays 3/7, not
+0.42857142857...). Wile, like most implementations, provides both.
 
 Why does this matter for algebra? Consider simplifying:
 
@@ -121,9 +130,12 @@ every boundary between SymPy and regular Python is a potential contamination poi
 Write `x + 0.5` instead of `x + Rational(1, 2)` and you've introduced an inexact
 number into your symbolic expression.
 
-Scheme's numeric tower isn't bolted on. It's the language's arithmetic. Every
-operation preserves exactness unless you explicitly request otherwise. This removes an
-entire category of bugs from symbolic computation.
+Scheme's numeric tower isn't bolted on. It's the language's arithmetic. `+`, `-`,
+`*`, and `/` on exact arguments return exact results; inexactness enters through
+inexact literals, explicit conversion, and transcendental procedures (in Wile
+`(exp 0)` is `1.0`, and `sqrt` stays exact only when the root is: `(sqrt 4)` is
+`2`, `(sqrt 2)` is inexact). This removes an entire category of bugs from symbolic
+computation.
 
 
 ## Where Python Wins Decisively: Analytic Computation

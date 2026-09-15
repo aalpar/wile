@@ -40,9 +40,11 @@ Print that point:
 ```
 
 You get `#<point>`. Not `#<point: 3 4>`. Not `(point 3 4)`. The fields are
-*invisible*. If you don't export `point-x` from your module, nobody can read the x
-coordinate. Nobody can pattern-match on it. Nobody can even tell two points apart
-(since `equal?` on opaque structs is reference equality).
+*invisible*. If you export neither `point-x` nor the struct name `point` from your
+module, nobody can read the x coordinate. Nobody can pattern-match on it (`match`
+destructures through the compile-time information bound to `point`, so exporting
+`point` alone is enough to match on an opaque struct). Nobody can even tell two
+points apart (since `equal?` on opaque structs is reference equality).
 
 This is the default. To make fields visible, you opt in:
 
@@ -94,7 +96,8 @@ predicate recognizes child instances. Parent accessors work on child instances. 
 is straightforward single inheritance — nothing exotic.
 
 But here's the interesting part: the subtype can be opaque even if the parent is
-transparent, or vice versa. And a subtype's guard runs *after* the parent's guard.
+transparent, or vice versa. And a subtype's guard runs *before* the parent's guard,
+which then sees the field values the subtype's guard returned.
 The type hierarchy is a chain of validation steps:
 
 ```racket
@@ -183,7 +186,8 @@ can't: **extending behavior without modifying dispatch code.**
 
 Consider: in R7RS, if you want `equal?` to work on your record type, you have to
 hope the implementation's `equal?` already does structural comparison on records
-(most do, but R7RS doesn't require it). If you want custom printing, you're at the
+(Wile's does, Chez's returns `#f` for distinct instances, and R7RS permits
+either). If you want custom printing, you're at the
 mercy of the implementation. If you want your type to be usable as a port — that's
 simply impossible.
 
@@ -203,12 +207,13 @@ evaluation creates a *new* type:
 ```racket
 (define (make-a-point-type)
   (struct point (x y))
-  point)
+  (values point point?))
 
-(define Point1 (make-a-point-type))
-(define Point2 (make-a-point-type))
+(define-values (point1 point1?) (make-a-point-type))
+(define-values (point2 point2?) (make-a-point-type))
 
-((Point1 3 4) . point? . Point2)  ; would be #f -- different types!
+(point1? (point1 3 4))  ; => #t
+(point2? (point1 3 4))  ; => #f -- different types!
 ```
 
 This is **generativity** — the type's identity comes from the act of creating it,
@@ -226,8 +231,10 @@ Racket's `#:prefab` solves this:
 '#s(point 3 4)
 ```
 
-Prefab structs are non-generative — the type is determined entirely by its name and
-field count. Any module can create a `point` prefab, and they're all the same type.
+Prefab structs are non-generative. The type is determined entirely by its prefab
+key: the name, the field count, which fields are mutable, and the parent's key (a
+`point` prefab whose `x` field is mutable prints as `#s((point #(0)) 3 4)`). Any
+module can create a `point` prefab, and they're all the same type.
 The trade-off: prefab structs can't have guards, can't have properties, and can't be
 opaque. They're just data.
 
@@ -239,7 +246,7 @@ no prefab equivalent. You can't write a record literal in source code.
 ```
                         R7RS records        Racket structs
                         ───────────         ──────────────
-Fields                  named, typed        named, typed
+Fields                  named, untyped      named, untyped
 Predicate               yes                 yes
 Inheritance             no (SRFI-136 adds)  single, built-in
 Opacity                 always opaque*      opaque/transparent/prefab
@@ -258,14 +265,18 @@ Custom printing         no                  yes (prop:custom-write)
 ## What Would Break Without Properties?
 
 Imagine implementing a pattern-matching library for Racket without struct properties.
-Your `match` macro needs to destructure structs — but structs are opaque by default.
-Without `prop:match-expander` (a custom property), `match` would need to know about
-every struct type at compile time, or every struct would need to be transparent.
+Destructuring structs is not the problem: `match` reads the compile-time struct
+information bound to a struct's name, which works for opaque structs too. The problem
+is *new pattern forms*. `define-match-expander` binds an identifier to a
+compile-time value whose struct type carries `prop:match-expander`. Without that
+property, `match` would need a fixed set of pattern forms, or a registry of every
+extension.
 
-With properties, any struct can opt into pattern matching by attaching the right
-property. The `match` macro checks for the property and uses it to generate the
-destructuring code. New struct types participate in `match` without `match` knowing
-they exist.
+With the property, `match` checks the head identifier's compile-time value for
+`prop:match-expander` and calls the attached transformer to rewrite the pattern. The
+same value's struct type also carries `prop:set!-transformer`, so one identifier works
+as both a pattern and an ordinary macro. New pattern forms participate in `match`
+without `match` knowing they exist.
 
 This is why Racket's struct system is central to the language in a way that R7RS
 records are not. Records are a data definition mechanism. Structs are a *type

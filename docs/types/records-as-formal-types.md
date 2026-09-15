@@ -56,9 +56,11 @@ Map the pieces:
 | β-rule | Accessor ∘ constructor = identity on that field | `(point-x (make-point 3 4))` = `3` |
 | η-rule | Reconstruct from accessors = original | `(make-point (point-x p) (point-y p))` = `p`* |
 
-The asterisk on the η-rule: this holds for immutable records, where identity
-is determined by field values. For mutable records, the η-rule gives you an
-*equal* value, not the *same* object — `eq?` may return `#f`. That's
+The asterisk on the η-rule: the constructor always allocates a new record, with
+or without mutators, so the η-rule gives you a value with the same fields, not
+the *same* object: `eq?` and `eqv?` return `#f`. (Wile's `equal?` compares
+records field by field and returns `#t`; R7RS lets `equal?` answer either way
+on records.) That's
 a distinction between extensional and intensional equality, which matters in
 type theory too.
 

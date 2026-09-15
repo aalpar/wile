@@ -2,7 +2,7 @@
 
 **Status:** Design exploration. **Not implemented, and ruled out.** Nothing in this document describes Wile's value representation.
 
-Wile boxes every value, numbers included, as a Go heap object behind the `values.Value` interface, managed by Go's GC. There is no NaN-boxed representation anywhere in the tree, no tagged `uint64` value word, and no `unsafe` in production code (the only `unsafe` imports are three `_test.go` files that assert struct sizes and field offsets). The reason is in "Why Go Can't Do This" below, and it is a constraint on the project rather than an unfinished task: this note exists to record *why* the idea was closed, so it is not reopened without new information.
+Wile boxes every value, numbers included, as a Go heap object behind the `values.Value` interface, managed by Go's GC. There is no NaN-boxed representation anywhere in the tree, no tagged `uint64` value word, and no `unsafe` in production code (the only `unsafe` imports are four `_test.go` files that assert struct sizes and field offsets). The reason is in "Why Go Can't Do This" below, and it is a constraint on the project rather than an unfinished task: this note exists to record *why* the idea was closed, so it is not reopened without new information.
 
 You just profiled an interpreter and discovered that 60% of wall time is the garbage collector scanning and collecting heap objects. The #1 allocated type is `EnvironmentFrame` — a struct that holds pointers to your value type. The #2 is a `[]Binding` slice copied on every function call. Your value type is a Go interface:
 
@@ -60,7 +60,7 @@ A NaN is any value where all 11 exponent bits are 1 *and* the mantissa is non-ze
 
 - 1 sign bit × 2^52 - 1 mantissa patterns = about **2^53 distinct NaN bit patterns**
 
-IEEE 754 hardware only ever produces one specific NaN (the "canonical" or "quiet" NaN). That means roughly **2^53 - 1 bit patterns** are NaN values that no legitimate floating-point operation will ever generate. They're free real estate.
+An invalid operation on non-NaN operands produces one default quiet NaN (`0x7FF8000000000000` on ARM64; x86-64 SSE produces the sign-set `0xFFF8000000000000`), and an operation on a NaN operand propagates that operand's payload. So an implementation that canonicalizes every NaN before storing it never sees all but one of those **2^53 bit patterns**: NaN values no floating-point operation on ordinary doubles will generate. They're free real estate.
 
 The insight: **stuff your non-float values into the unused NaN bit patterns.** A 64-bit word can now be:
 - A legitimate `double` (any non-NaN pattern), or
@@ -81,14 +81,14 @@ Floating-point double (any non-NaN value):
 NaN-boxed value:
  63  62    52  51  50  48 47                                   0
 ┌───┬────────┬───┬───────┬─────────────────────────────────────┐
-│ 1 │1111111│ 1  │  Tag  │          48-bit Payload             │
-│   │1111   │    │ 3 bits│                                     │
+│ 1 │1111111 │ 1 │  Tag  │          48-bit Payload             │
+│   │1111    │   │ 3 bits│                                     │
 └───┴────────┴───┴───────┴─────────────────────────────────────┘
      exponent  quiet
      all 1s    NaN
 ```
 
-The sign bit is set to 1 (to distinguish from the canonical NaN). The 3-bit tag identifies the type. The 48-bit payload carries the actual data.
+The sign bit is set to 1 to distinguish boxed values from the positive canonical NaN. x86-64's default NaN also has the sign bit set (it would decode as tag 000, payload 0), so every NaN a float operation produces is rewritten to the positive pattern before it is stored. The 3-bit tag identifies the type. The 48-bit payload carries the actual data.
 
 With 3 tag bits, you get 8 non-float types:
 
@@ -105,7 +105,7 @@ With 3 tag bits, you get 8 non-float types:
 
 The heap pointer tag is the escape hatch: any value too large or complex to fit in 48 bits (pairs, vectors, closures, bignums) gets heap-allocated and the NaN-boxed word holds a pointer to it.
 
-Here's the critical part: **48 bits is enough for pointers on every current architecture.** x86-64 uses 48-bit virtual addresses (with sign extension to 64 bits). ARM64 uses 48 or 52 bits. So a heap pointer fits in the payload with room to spare.
+Here's the critical part: **48 bits is enough for userspace pointers on x86-64 and ARM64 in their default configuration.** Both use 48-bit virtual addresses (sign-extended to 64 bits); wider addresses appear only when a system enables 5-level paging (x86-64, 57 bits) or 52-bit address spaces (ARM64), and Linux hands them to a process only on request. So a heap pointer fits in the payload.
 
 ## Why It Matters for Interpreters
 
@@ -119,11 +119,11 @@ The performance impact is dramatic. Consider what changes when every value is 8 
 
 **4. Type checks become bit masking.** Instead of a pointer dereference to read a type descriptor (Go interface) or a memory load of a tag field (tagged union), you check the type by masking the upper bits of the word. This is a single AND instruction — no memory access, no cache miss.
 
-To put numbers on it: LuaJIT (which NaN-boxes) and JavaScriptCore (which uses a variant called "JSValue") report 2-4x speedups over pointer-tagged representations on numeric benchmarks. The improvement comes from both the allocation elimination and the cache effects.
+LuaJIT (which NaN-boxes) and JavaScriptCore (which uses a variant called "JSValue") are the production examples. The improvement comes from both the allocation elimination and the cache effects.
 
 ## The Subtle Parts
 
-**Floats pass through unchanged.** Any legitimate `double` — including positive and negative zero, infinities, and the canonical NaN — is stored directly. The encoding is designed so that the NaN-boxing tag patterns are all *non-canonical* NaNs that floating-point hardware never produces. This means float operations need zero encoding/decoding overhead.
+**Floats pass through unchanged.** Any legitimate `double` — including positive and negative zero, infinities, and the canonical NaN — is stored directly. The encoding is designed so that the NaN-boxing tag patterns are all *non-canonical* NaNs that floating-point operations on ordinary doubles never produce. The only cost on the float path is rewriting a NaN result to the canonical pattern before storing it; non-NaN results need no encoding or decoding.
 
 **Pointer tagging requires cooperation.** The 48-bit payload can hold a pointer, but only if the pointer's upper 16 bits are predictable (typically all zeros or all ones, depending on address space layout). On most operating systems this is guaranteed for userspace addresses. But it means you're making an assumption about the platform's virtual memory layout.
 
@@ -155,7 +155,7 @@ Different languages handle this differently, roughly correlated with how much co
 |---|---|---|
 | **LuaJIT** (C) | NaN-boxing | Full control over memory; custom GC |
 | **JavaScriptCore** (C++) | NaN-boxing variant ("JSValue") | Same; plus JIT can exploit the encoding |
-| **CPython** (C) | Tagged pointer (3-bit tag) | Custom reference-counting GC; `PyObject*` |
+| **CPython** (C) | Untagged `PyObject*` to a heap object (small ints cached) | Reference counting plus a cycle collector |
 | **V8** (C++) | Tagged pointer ("Smi" for small ints) | Pointer tagging, not NaN-boxing; custom GC |
 | **GHC** (Haskell) | Tagged pointer | Unboxed types in compiled code |
 | **Chez Scheme** (C) | Tagged fixnum + heap objects | Custom GC with precise pointer maps |
@@ -171,10 +171,10 @@ Wile uses Go interfaces for values. Every `values.Value` is a 16-byte interface 
 - 54.4M `[]Binding` slice copies (each binding holds a `values.Value` interface)
 - 60% of wall time in GC on allocation-heavy benchmarks
 
-Those three figures are a **historical snapshot and no longer describe the allocation profile.** Per-thread frame pooling has since taken the frame-allocation term down to near zero on call-bound benchmarks, which moved the bottleneck rather than removing it: the dominant remaining contributor to object *count* is float boxing, `values.NewFloat`. That is the one place where the argument below still has real money on the table, since a NaN-boxed word carries a `float64` for free.
+Those three figures are a **historical snapshot and no longer describe the allocation profile.** Per-thread frame pooling has since taken the frame-allocation term down to near zero on call-bound benchmarks, which moved the bottleneck rather than removing it: on numeric code the dominant remaining contributor to object *count* is float boxing, `values.NewFloat` (list-building code is dominated by cons cells instead). That is the one place where the argument below still has real money on the table, since a NaN-boxed word carries a `float64` for free.
 
-NaN-boxing would eliminate most of these allocations. Integers, booleans, characters, and symbols would be inline 8-byte words. Environment bindings would be `[N]uint64` arrays instead of `[N]*Binding` with interface indirection. The GC scan set would shrink dramatically.
+NaN-boxing would eliminate most of these allocations. Integers, booleans, characters, and symbols would be inline 8-byte words. Environment bindings would be `[N]uint64` arrays instead of `[]Binding` structs, each carrying a 16-byte `values.Value` interface. The GC scan set would shrink dramatically.
 
-But the `unsafe` constraint makes this a hard no. The productive direction is reducing allocations *within* Go's type system: inline small arrays to avoid slice allocation, copy-on-write to defer unnecessary copies, and better pool strategies to survive GC drains. These won't achieve the 2-4x that NaN-boxing provides, but they're architecturally sound within the constraint.
+But the `unsafe` constraint makes this a hard no. The productive direction is reducing allocations *within* Go's type system: inline small arrays to avoid slice allocation, copy-on-write to defer unnecessary copies, and better pool strategies to survive GC drains. These won't match what NaN-boxing provides, but they're architecturally sound within the constraint.
 
 > **Aside**: Some Go projects use a "tagged uint64" approach with a custom arena allocator (e.g., Vitess's SQL evaluator). This is architecturally similar to NaN-boxing but uses explicit tag bits instead of IEEE 754 NaN patterns. It still requires `unsafe` for pointer recovery. Wile's constraint rules this out too.

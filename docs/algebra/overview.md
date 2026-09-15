@@ -53,8 +53,12 @@ record definition.
 ## Structure Hierarchy
 
 The library organizes into three layers: a lattice-theoretic foundation,
-an algebraic tower, and a rewriting/symbolic layer. Arrows indicate
-forgetful projections (the target forgets some structure).
+an algebraic tower, and a rewriting/symbolic layer. Arrows labelled
+"forgets" are forgetful projections (the target forgets some structure);
+other labels name a construction or specialization, such as
+`boolean->ring` or `category->endomorphism-monoid`. `Partial Order →
+Setoid` has no projection procedure: a partial order record holds only
+`leq?`.
 
 **Foundation**
 
@@ -113,10 +117,10 @@ graph LR
     PF["Pareto"] --> Front["Pareto frontier"]
 ```
 
-Each arrow discards exactly one capability. `field->ring` forgets the
+Each tower projection discards one capability. `field->ring` forgets the
 reciprocal. `ring->semiring` forgets negation. `boolean->heyting` forgets
-complement. `heyting->lattice` forgets implication. `group->monoid` forgets
-inverse. This means any algorithm written against a semiring works on
+complement, deriving implication as ¬a ∨ b. `heyting->lattice` forgets
+implication. `group->monoid` forgets inverse. This means any algorithm written against a semiring works on
 rings and fields too -- just project first.
 
 Galois connections bridge two partial orders with an adjoint pair of
@@ -125,14 +129,15 @@ projection chain but connect concrete and abstract domains.
 
 ## Patterns
 
-**Validation.** Each algebraic structure type has a `validate-X` procedure that
-spot-checks algebraic laws against sample elements. Pass a structure and a
-list of sample values; it returns `#t` if all laws hold or a list of
+**Validation.** Most algebraic structure types have a `validate-X` procedure that
+spot-checks algebraic laws against sample elements (a Galois connection uses
+`gc-sound?`; incidence algebras and matrices have none). Pass a structure and a
+list of sample values (`validate-category` takes morphism triples and identity morphisms instead); it returns `#t` if all laws hold or a list of
 violation descriptions if any fail. This is not a proof -- it is a
 property-based sanity check. Use it during development to catch mistakes in
 custom structure definitions.
 
-**Destructuring macros.** Each structure type with a fixed operation tuple has a `with-X` syntax macro
+**Destructuring macros.** Most structure types with a fixed operation tuple have a `with-X` syntax macro (partial orders and Galois connections do not)
 that binds its operations to local names. `(with-ring Z (plus times zero
 one negate) ...)` lets you write `(times (plus a b) (plus a (negate b)))`
 instead of `(ring-times Z (ring-plus Z a b) (ring-plus Z a (ring-negate Z
@@ -190,7 +195,8 @@ for the full chapter list with prerequisites.
    Polynomials + `poly-derivative` + `polynomial-derivation`; hand-written
    symbolic differentiator cross-checked against `poly-derivative`.
 6. **[`06-graph-algorithms.scm`](../../examples/algebra/tutorial/chapters/06-graph-algorithms.scm)** --
-   BFS, isomorphism (C_6 vs 2·K_3 cospectral canary), τ(Petersen) = 2000,
+   BFS, isomorphism (C_6 vs 2·K_3, two 2-regular graphs that 1-WL refinement
+   cannot separate), τ(Petersen) = 2000,
    chromatic polynomials, Hopcroft-Karp on K_{3,3} and K_{2,4}.
 7. **[`07-group-actions.scm`](../../examples/algebra/tutorial/chapters/07-group-actions.scm)** --
    Preset groups and actions, orbit / stabilizer, Burnside on necklaces.
@@ -198,9 +204,11 @@ for the full chapter list with prerequisites.
    Canonical lattices, `distributive?` / `modular?`, Birkhoff roundtrip,
    Dedekind numbers through D(4), Möbius on the divisor poset of 12.
 9. **[`09-dataflow-analysis.scm`](../../examples/algebra/tutorial/chapters/09-dataflow-analysis.scm)** --
-   MFP solver, CFG protocol, sign domain; straight-line and branching CFGs.
+   MFP solver, CFG protocol, sign domain; straight-line and branching CFGs;
+   interval domain with widening and its Galois connection.
 10. **[`10-unification.scm`](../../examples/algebra/tutorial/chapters/10-unification.scm)** --
-    Pattern variables, substitutions, AC unification, `diophantine-basis`.
+    Pattern variables, substitutions, syntactic unification, AC matching,
+    `diophantine-basis`.
 11. **[`11-equivalence-discovery.scm`](../../examples/algebra/tutorial/chapters/11-equivalence-discovery.scm)** --
     `discover-equivalences` across sub-theories, theory combinators,
     `format-trace`, fuel exhaustion.
@@ -228,5 +236,6 @@ for the full chapter list with prerequisites.
   projections, rewriting, and symbolic operations.
 - `BIBLIOGRAPHY.md` -- Academic references (abstract algebra, lattice
   theory, term rewriting).
-- `test/wile/algebra-*.scm` -- Test files covering each sub-library.
+- `test/wile/algebra-*.scm` -- Test files covering each sub-library except
+  `sat`, whose suite is `pkg/stdlib/lib/wile/algebra/sat-test.scm`.
   These serve as additional usage examples beyond the guided tutorial.
