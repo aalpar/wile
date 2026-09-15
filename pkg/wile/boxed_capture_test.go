@@ -301,6 +301,27 @@ func TestBoxedSlotNeverEscapesToScheme(t *testing.T) {
 			want: "(quasisyntax (unsyntax 5))",
 			opts: []EngineOption{WithGoSyntaxForms()},
 		},
+		{
+			// The Go syntax-case form is an opaque subtree, so every enclosing
+			// local it names is boxed at its binder; the clause body compiled on
+			// a continuation with no boxing verdict and read the slot without an
+			// unbox. This row answered #&7.
+			name: "an enclosing local read in a syntax-case clause body arrives unboxed",
+			code: `(define (f s) (let ((y 7)) (syntax-case s () ((a b) y))))
+			       (f (syntax (1 2)))`,
+			want: "7",
+			opts: []EngineOption{WithGoSyntaxForms()},
+		},
+		{
+			// The shape it was reported as: the transformer's own input is the
+			// datum->syntax context, and it arrived as a #<box>, so datum->syntax
+			// refused it as "not an identifier, syntax object, or #f".
+			name: "datum->syntax takes the transformer input inside a syntax-case clause",
+			code: `(define-syntax m (lambda (stx) (syntax-case stx () ((k a) (datum->syntax stx 5)))))
+			       (m 1)`,
+			want: "5",
+			opts: []EngineOption{WithGoSyntaxForms()},
+		},
 	}
 	ctx := context.Background()
 	for _, tc := range tcs {
