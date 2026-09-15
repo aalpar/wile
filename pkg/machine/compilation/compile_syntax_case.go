@@ -275,6 +275,14 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	bodyCompiler.shape = bodyEnv
 	bodyCompiler.mergedShape = p.mergedShape
 	bodyCompiler.mergedSlot = p.mergedSlot
+	// The boxing verdict is SHARED for compileBody's reason: a read in the clause
+	// body must agree with the emit that installed the cell at an enclosing
+	// binder. This form is an opaque subtree to newRefIndex, so every enclosing
+	// local it names is boxed; a fresh continuation with no verdict loaded those
+	// slots without OpUnbox and handed Scheme the #<box> itself, which is how
+	// (syntax-case stx () (pat (datum->syntax stx ...))) saw a non-syntax stx.
+	p.ensureBoxedSlots()
+	bodyCompiler.boxedSlots = p.boxedSlots
 	// Inherit the parent compiler's current source so that operations emitted
 	// by bodyCompiler (like BindPatternVars) are tagged with the syntax-case
 	// form's source location.

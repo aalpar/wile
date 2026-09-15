@@ -197,7 +197,7 @@ type ImportSet struct {
 //   - this iota block (the kind constant)
 //   - the importModifier struct (a field for the modifier's payload, if any)
 //   - an Add* builder method on *ImportSet
-//   - the parser dispatch in ParseImportSetFromDatum (import_set_datum.go)
+//   - the parser dispatch in parseLibraryImportSetFromDatum (import_set_datum.go)
 //   - the switch in (*importModifier).apply
 type importModifierKind int
 
@@ -368,50 +368,66 @@ type ResolvedImportSet struct {
 	Bindings  map[string]string // localName -> externalName
 }
 
-// resolveImportSet parses an import set datum, loads the library, and applies
-// modifiers to produce the resolved binding map.
+// resolveImportSets parses an import set datum, loads each library it denotes,
+// and applies modifiers to produce the resolved binding maps, one per library
+// (a phase shift may name several; see ParseImportSetsFromDatum).
 //
 // The env parameter is used only for library loading (to find the library
 // registry and resolve paths). It is NOT the target for binding installation.
-func resolveImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) (*ResolvedImportSet, error) {
-	importSet, err := ParseImportSetFromDatum(ctx, datum)
+func resolveImportSets(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) ([]*ResolvedImportSet, error) {
+	importSets, err := ParseImportSetsFromDatum(ctx, datum)
 	if err != nil {
 		return nil, err
 	}
 
-	lib, err := LoadLibrary(ctx, importSet.LibraryName, env, evaluator)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "import: failed to load library %s",
-			importSet.LibraryName.SchemeString())
-	}
+	q := make([]*ResolvedImportSet, 0, len(importSets))
+	for _, importSet := range importSets {
+		lib, err := LoadLibrary(ctx, importSet.LibraryName, env, evaluator)
+		if err != nil {
+			return nil, werr.WrapForeignErrorf(err, "import: failed to load library %s",
+				importSet.LibraryName.SchemeString())
+		}
 
-	bindings, err := importSet.ApplyToExports(lib)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "import: error applying modifiers for %s",
-			importSet.LibraryName.SchemeString())
-	}
+		bindings, err := importSet.ApplyToExports(lib)
+		if err != nil {
+			return nil, werr.WrapForeignErrorf(err, "import: error applying modifiers for %s",
+				importSet.LibraryName.SchemeString())
+		}
 
-	return &ResolvedImportSet{
-		ImportSet: importSet,
-		Library:   lib,
-		Bindings:  bindings,
-	}, nil
+		q = append(q, &ResolvedImportSet{
+			ImportSet: importSet,
+			Library:   lib,
+			Bindings:  bindings,
+		})
+	}
+	return q, nil
 }
 
 // ResolveAndInstallImportSet resolves an import set and installs bindings into
 // env. Used for top-level imports (both expander and compiler). Library-internal
-// imports share the resolution step (resolveImportSet) but use
+// imports share the resolution step (resolveImportSets) but use
 // copyLibraryBindingsDirect for installation.
 //
 // The stage argument is import-observer metadata only; it does NOT select the
 // install phase. That comes from composePhaseShift below, which combines the
 // environment's own phase level with the import set's for-syntax/for-meta shift.
 func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, stage ImportStage, evaluator machine.MacroEvaluator) error {
-	res, err := resolveImportSet(ctx, datum, env, evaluator)
+	resolved, err := resolveImportSets(ctx, datum, env, evaluator)
 	if err != nil {
 		return err
 	}
+	for _, res := range resolved {
+		err = installResolvedImportSet(env, res, stage)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
+// installResolvedImportSet installs one resolved library import into env for
+// ResolveAndInstallImportSet.
+func installResolvedImportSet(env *environment.EnvironmentFrame, res *ResolvedImportSet, stage ImportStage) error {
 	fireImportObserver(env, res.Library, res.Bindings, LibraryName{}, stage)
 
 	// Compose the parsed for-syntax/for-meta shift with the current expansion
@@ -859,24 +875,26 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 // (namespace-require ...) primitives; op names the calling primitive for error
 // context. callerEnv supplies the library registry for resolution.
 func ImportSpecInto(ctx context.Context, specVal values.Value, callerEnv, targetEnv *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, op string) error {
-	importSet, err := ParseImportSetFromDatum(ctx, specVal)
+	importSets, err := ParseImportSetsFromDatum(ctx, specVal)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "%s: invalid import spec", op)
 	}
 
-	lib, err := LoadLibrary(ctx, importSet.LibraryName, callerEnv, evaluator)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "%s: failed to load %s", op, importSet.LibraryName.SchemeString())
-	}
+	for _, importSet := range importSets {
+		lib, err := LoadLibrary(ctx, importSet.LibraryName, callerEnv, evaluator)
+		if err != nil {
+			return werr.WrapForeignErrorf(err, "%s: failed to load %s", op, importSet.LibraryName.SchemeString())
+		}
 
-	bindings, err := importSet.ApplyToExports(lib)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "%s: error in import set for %s", op, importSet.LibraryName.SchemeString())
-	}
+		bindings, err := importSet.ApplyToExports(lib)
+		if err != nil {
+			return werr.WrapForeignErrorf(err, "%s: error in import set for %s", op, importSet.LibraryName.SchemeString())
+		}
 
-	err = CopyLibraryBindingsToEnvAtPhase(lib, bindings, targetEnv, importSet.PhaseShift)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "%s: error copying bindings from %s", op, importSet.LibraryName.SchemeString())
+		err = CopyLibraryBindingsToEnvAtPhase(lib, bindings, targetEnv, importSet.PhaseShift)
+		if err != nil {
+			return werr.WrapForeignErrorf(err, "%s: error copying bindings from %s", op, importSet.LibraryName.SchemeString())
+		}
 	}
 	return nil
 }

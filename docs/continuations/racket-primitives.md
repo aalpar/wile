@@ -558,9 +558,11 @@ import, because the dialect's declared initial imports make them visible there.
 | `syntax-transforming?` | Trivial | Boolean: are we inside a syntax transformer? |
 | `syntax-local-name` | Low | Inferred name for the current binding position (e.g., "this lambda is being bound to `foo`"). |
 
-**Phase-shifting imports are implemented.** `(import (for-syntax <import-set>))`,
-`(import (for-template <import-set>))` and `(import (for-meta <n> <import-set>))` all
-parse and install at the shifted phase: `ParseImportSetFromDatum`
+**Phase-shifting imports are implemented.** `(import (for-syntax <import-set> ...))`,
+`(import (for-template <import-set> ...))` and `(import (for-meta <n> <import-set> ...))`
+all parse and install at the shifted phase. As in Racket, each takes one or more
+import sets; unlike Racket, a shift over more than one cannot be the operand of
+`only`, `except`, `prefix` or `rename`, and is refused there. `ParseImportSetsFromDatum`
 (`pkg/machine/compilation/import_set_datum.go`) records the shift on
 `ImportSet.PhaseShift`, and `ResolveAndInstallImportSet`
 (`pkg/machine/compilation/library_bindings.go`) composes it with the importing
