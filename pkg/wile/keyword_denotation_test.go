@@ -126,3 +126,24 @@ func TestRenamedDefinitionsAreRecognized(t *testing.T) {
 			`(import (scheme base) (rename (scheme base) (define-syntax my-ds))) (define-syntax mk (syntax-rules () ((_ n) (my-ds n (syntax-rules () ((_) 12)))))) (mk k) (k)`, "12"},
 	})
 }
+
+// TestRenamedKeywordSurvivesCanonicalShadow pins the fix for
+// lookupHeadPrimitiveExpander's canonical-name fallback: the fallback looks up
+// the synthesized canonical spelling (e.g. "quote" for a head renamed to
+// core-quote), and that lookup must not be shadowable by an unrelated user
+// binding of the canonical name. Before the fix, redefining the canonical
+// spelling ((define-syntax quote ...) after renaming quote to core-quote) made
+// LookupPrimitiveExpander refuse to look past the user's shadow, so the renamed
+// head fell into the ordinary-call path while the validator still dispatched it
+// as the special form -- quoted data got macro-expanded, and a renamed begin
+// lost its ability to splice a define-syntax into the enclosing body.
+func TestRenamedKeywordSurvivesCanonicalShadow(t *testing.T) {
+	runKeywordRows(t, []keywordRow{
+		{"renamed quote survives a user shadow of quote",
+			`(import (scheme base) (rename (scheme base) (quote core-quote))) (define-syntax quote (syntax-rules () ((_ x) 0))) (core-quote (when #t 2))`,
+			"(when #t 2)"},
+		{"renamed begin still splices a define-syntax despite a user shadow of begin",
+			`(import (scheme base) (rename (scheme base) (begin my-begin))) (define-syntax begin (syntax-rules () ((_ x ...) (list x ...)))) (define (f) (my-begin (define-syntax m (syntax-rules () ((_) 6)))) (m)) (f)`,
+			"6"},
+	})
+}
