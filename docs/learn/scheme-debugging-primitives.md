@@ -72,9 +72,9 @@ Here's what breaks if you remove `with-continuation-mark` from Racket:
 
 | System | Why it breaks |
 |--------|---------------|
-| **Stack traces** | Exception objects carry `(current-continuation-marks)` captured at the raise site. `continuation-mark-set->context` walks these to produce `(name . srcloc)` pairs. No marks, no traces. |
+| **Stack traces** | Exception objects carry `(current-continuation-marks)` captured at the raise site, and `continuation-mark-set->context` turns that mark set into `(name . srcloc)` pairs. Racket documents the trace as conceptually a private procedure-call mark; Racket CS actually snapshots it from the Chez continuation frames and `code-info` (see below) when the mark set is captured. The mark set is the carrier. Errortrace's expression-level traces are real marks. |
 | **`parameterize`** | Parameters are *implemented* via continuation marks + thread cells. Remove marks and `current-output-port`, `current-error-port`, every parameter stops working. |
-| **`with-handlers`** | The exception handler chain is stored as continuation marks with an internal key. `raise` walks the marks to find matching handlers. |
+| **`with-handlers`** | The exception handler chain is stored as continuation marks with an internal key. `raise` walks those marks, calling handlers innermost first; a `with-handlers` handler aborts to its own prompt and tests its predicates there. |
 | **errortrace** | Wraps every expression with `(with-continuation-mark errortrace-key srcloc expr)`. On exception, reads the marks to produce expression-level stack traces. |
 | **DrRacket debugger** | Breakpoints, stepping, local variable display -- all stored as marks on the continuation. |
 | **Algebraic stepper** | Records execution state in marks to reconstruct source-level reduction steps. |
@@ -157,18 +157,19 @@ in the resulting code object. This record contains:
 
 | Field | Content |
 |-------|---------|
-| `src` | Source object (file + byte position) |
+| `src` | Source object (file + character positions) |
 | `sexpr` | Original S-expression of the procedure body |
 | `free` | Vector of free variable names |
-| `rpis` | Return-point information: for each return address, its source location, livemask, and local variable names |
+| `rpis` | Return-point information, sorted by code offset: for each return point, its source object, expression, and a mask selecting which `live` entries are in scope |
 | `live` | Variable-name-to-slot mappings |
 
 This is the join point where debugging, inspection, and profiling all meet.
 The compiler produces it; everything else consumes it.
 
 The master switch is `generate-inspector-information` (default: `#t`). When `#f`,
-`code-info` records are empty and the inspector degrades to showing raw
-addresses. The critical design insight: **this has zero runtime performance cost.**
+a procedure gets no `code-info` (or one holding only its source, under
+`generate-procedure-source-information`), and the inspector degrades to showing a
+frame's live values without variable names or source. The critical design insight: **this has zero runtime performance cost.**
 The same machine code runs either way. The cost is only memory and file size
 for the metadata tables.
 
@@ -192,9 +193,9 @@ These are the building blocks. The inspector and debugger are built on top:
 1. `$split-continuation` prepares the captured continuation for traversal
 2. At each frame, `$continuation-return-code` gets the code object
 3. `$code-info` extracts the metadata
-4. The return offset indexes into the `rpis` vector to find the return point
+4. The return offset is binary-searched in the `rpis` vector to find the return point
 5. The livemask identifies which slots contain values (vs. garbage)
-6. `code-info-live` maps slot positions to variable names
+6. The return point's mask selects entries of `code-info-live`, which map slot positions to variable names
 7. `$continuation-stack-ref` reads the actual values
 
 This is lower-level than Racket's approach. Racket's marks are a designed
@@ -210,7 +211,7 @@ with a path and checksum. The checksum detects when source has been modified
 since compilation.
 
 **Source objects** (`make-source-object`): A specific span within a file,
-identified by beginning/ending byte positions and optional line/column.
+identified by beginning/ending character positions and optional line/column.
 
 **Annotations** (`make-annotation`): Wrap S-expressions with source objects.
 The reader produces annotations; the expander and compiler consume them.
@@ -227,20 +228,22 @@ wrapping with continuation comparison for tail-call detection.
 2. On entry, capture the current continuation via call/1cc
 3. Compare it to a thread-local "trace continuation" variable
 4. If same: this is a tail call (same depth, don't indent)
-5. If different: this is a nested call (indent deeper)
-6. After the call, display return values
+5. If different: this is a nested call (indent deeper); capture the continuation
+   of the call to the original procedure and make it the trace continuation
+6. After a nested call, display return values
 ```
 
 The tail-call detection is elegant: if the continuation at the call site is
-the same as the continuation of the traced wrapper, then the call is in tail
-position -- the caller's frame was already replaced.
+the same as the continuation of an enclosing traced procedure's body, then the
+call is in tail position -- the caller's frame was already replaced.
 
 ### Post-mortem debugging via `&continuation`
 
-When Chez raises an exception, the default handler captures the current
-continuation and wraps it in a `&continuation` condition (Chez's extension to
-R6RS conditions). This continuation is saved in `debug-condition` (a thread
-parameter).
+When Chez's `error`, `assertion-violation`, or a built-in procedure raises, it
+captures the current continuation with `call/cc` and adds it to the raised
+condition as a `&continuation` component (Chez's extension to R6RS conditions).
+A bare `raise` of a user-built condition carries no continuation. The default
+exception handler saves the condition in `debug-condition` (a thread parameter).
 
 The `debug` procedure reads `debug-condition`, extracts the continuation, and
 passes it to the inspector for frame-by-frame traversal. This gives you post-mortem
@@ -330,7 +333,7 @@ profiler, and stepper ultimately depends on some subset of these:
 
 | Function | Racket | Chez | Built on |
 |----------|--------|------|----------|
-| `trace` | Procedure wrapping | Closure wrapping + continuation comparison | Tier 2 (dynamic binding) |
+| `trace` | Procedure wrapping + a depth mark | Closure wrapping + continuation comparison | Tier 1 marks (Racket); Tier 2 dynamic binding (Chez) |
 | `errortrace` | Compile handler + marks | N/A (no equivalent) | Tier 1 (marks + source locs) |
 | `debug` | DrRacket GUI | Interactive inspector on `debug-condition` | Tier 1 (capture + annotation) |
 | `profile` | Sampling thread | Compiler instrumentation + counters | Tier 1 (source locs) + Tier 2 (timer) |
@@ -372,8 +375,8 @@ program, this is nearly useless.
 ```
 > (g)
 Error: division by zero
-  in: f at foo.scm:1:19
-  called from: g at foo.scm:2:14
+  in: f at foo.scm:1:15
+  called from: g at foo.scm:2:13
 > (debug)
 Error: no continuation available
 ```
@@ -396,7 +399,9 @@ can read them. The contract system and the debugger compose naturally because
 they use the same mechanism.
 
 The downside: marks have runtime cost. Every `with-continuation-mark` allocates
-and installs metadata. Errortrace wraps *every* expression, causing 2-3x slowdown.
+and installs metadata. Errortrace wraps *every* expression; its documentation says
+that slows most programs by a factor of 2 or 3, and a call-heavy naive `fib`
+measured about 10x (Racket 9.2 CS, CPU time).
 
 ### Chez's bet: compiler metadata, zero runtime cost
 
@@ -418,19 +423,28 @@ metadata misleading -- it refers to source expressions that were transformed awa
 Chez's `trace` detects tail calls by comparing continuations:
 
 ```scheme
-(define trace-k #f)
+(define trace-k #f)                    ; where the innermost traced body returns
 
-(define (traced-f . args)
-  (let ((k (call/1cc (lambda (k) k))))
-    (if (eq? k trace-k)
-        (display "tail call")   ; same continuation = tail position
-        (begin
-          (set! trace-k k)
-          (display "nested call")))))
+(define (trace-wrap f)
+  (lambda args
+    (call/1cc
+      (lambda (k)                      ; where this call returns
+        (if (eq? k trace-k)
+            (begin (display "tail call\n")      ; same continuation = tail position
+                   (apply f args))
+            (let ((saved trace-k))
+              (display "nested call\n")
+              (let ((v (call/1cc
+                         (lambda (k2)
+                           (set! trace-k k2)    ; f's body returns here
+                           (apply f args)))))
+                (set! trace-k saved)
+                v)))))))
 ```
 
-If the continuation at the call site equals the saved continuation, the call
-is in tail position. This is a cheaper mechanism than marks for this specific
+(A simplified `$trace-closure` from Chez's `s/trace.ss`, single return value
+only.) If the continuation at the call site equals the saved continuation, the
+call is in tail position. This is a cheaper mechanism than marks for this specific
 purpose, but it only works for trace -- you can't compose it with other tools.
 
 ## What This Means for an Implementor
@@ -454,9 +468,11 @@ If you're building a Scheme and want debugging, here's the priority order:
    - **Compiler-metadata-style** (Chez): Zero runtime cost, but less flexible.
      Requires your compiler to emit `code-info`-like records with variable names,
      source locations per return point, and liveness information.
-   - **Or both.** Chez added continuation marks later (they call them "continuation
-     attachments"). They use compiler metadata for the inspector and marks for
-     `parameterize`.
+   - **Or both.** Racket CS, which runs on Chez, added "continuation attachments"
+     to it (internal `$`-prefixed primitives, now in mainline Chez 10). Racket CS
+     builds its marks, and so Racket's `parameterize`, on attachments, while its
+     stack traces come from Chez's compiler metadata. Chez's own `parameterize`
+     still expands to `dynamic-wind`.
 
 4. **Structured exceptions/conditions.** Typed error hierarchy with who/what/where
    fields. The debugger needs to discriminate error kinds, and "everything is a
