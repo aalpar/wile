@@ -25,9 +25,10 @@ Line-level coverage falls out as "any column on this line was covered."
 
 Coverage is recorded at the bytecode level — after macro expansion.
 You measure what actually ran, not what was textually written. A
-macro that expands to no-op bytecode will show no entries; a macro
-that expands to code appearing on a line you didn't write directly
-will show entries attributed to the macro's source location.
+macro that expands to no-op bytecode will show no entries; code a
+macro template introduces shows entries attributed to the macro use
+(the keyword's span at the call site), not to the template inside
+`define-syntax`.
 
 Libraries reached through `(import …)` are covered like the program
 that imports them: the loader hands each library's compiled body to
@@ -58,15 +59,18 @@ TOTAL  3/7 sexprs covered
 By default, entries from the embedded stdlib (paths starting with
 `scheme/`, `wile/`, or `srfi/`) are excluded. Pass `--cover-stdlib`
 to include them in the output — useful when debugging stdlib
-interactions, noisy otherwise.
+interactions, noisy otherwise. The prefix list does not cover the
+embedded `chibi/` and `rnrs/` libraries: importing `(chibi test)`
+puts `chibi/test.sld` entries in the default output.
 
 ## When the profile is written
 
 The profile is written once, at the end of the run, on every way out:
 a program that returns, one that calls `(exit)` or `(emergency-exit)`,
 and one that dies of an uncaught error (the CLI's own failure exit).
-All three go through the system extension's exit hook, so a suite that
-fails part-way still reports what ran before the failure.
+The last two terminate the process, and reach the writer through the
+system extension's exit hook, so a suite that fails part-way still
+reports what ran before the failure.
 
 ## The `covercheck` gate
 
@@ -80,8 +84,10 @@ is for Go; directories below the threshold are listed in
 
 ## Limitations
 
-- **Peephole fusion** may drop source attribution from some
-  synthesized instructions; those PCs execute but produce no entry.
+- **Peephole fusion** gives a fused instruction the source of one of
+  the instructions it replaces (the `Load` of a `Load`+`Push`, the
+  `Pull` of a `Pull`+`Apply`). A sub-expression whose instructions
+  were all absorbed that way has no PC left and produces no entry.
 - **Constant folding** evaluates branches of `(if #t …)` /
   `(if #f …)` at compile time and emits bytecode only for the
   taken branch. The dead branch will not appear in coverage
@@ -90,8 +96,7 @@ is for Go; directories below the threshold are listed in
   A `count` mode is a plausible future extension.
 - **Coverage is opt-in.** With no `--cover` flag, the VM dispatch
   loop runs its regular path. The hook is a single predictable
-  nil-branch in the hot loop when coverage is off; no measurable
-  effect on throughput.
+  nil-branch in the hot loop when coverage is off.
 
 ## Embedding API
 
@@ -120,3 +125,8 @@ The collector is thread-safe for `Track` and `Entries` calls. Every
 plus every nested sub-template reachable via its literals pool
 (lambda bodies, `define`'d procedures, etc.) — is automatically
 registered.
+
+Only instructions whose source carries a file name produce entries, so
+give the code a source name: `EvalProgram(ctx, code, "app.scm")`
+reports it under `app.scm`, while `EvalMultiple(ctx, code)` compiles
+and runs tracked templates that contribute nothing to the report.
