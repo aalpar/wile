@@ -10,7 +10,7 @@ bridge; a thread blocked on it is unparked by `thread-terminate!`. The
 condition-variable wait, `(mutex-unlock! m cv)`, is cancellable too, by its own
 channel-based route rather than the cond bridge. Three families that previously
 shared this concern have since left the Scheme surface: Go channels and Go-style
-wait-groups in 1.19.1, and the `rw-mutex-*` family in the removal that produced
+wait-groups in 1.19.0, and the `rw-mutex-*` family in the removal that produced
 this revision (`git log` for the history).
 
 **Code:** `pkg/values/cond_wait.go` (`waitOnCondCtx`, the one ctx-to-cond bridge),
@@ -18,7 +18,9 @@ this revision (`git log` for the history).
 `Mutex.UnlockContext`, the atomic unlock-and-wait),
 `pkg/values/condition_variable.go` (`registerWaiter`/`blockOnWaiter`, the cv wait's
 own ctx arm), `pkg/machine/call_foreign_cached.go` (`callForeignCached`, the eager
-timer recheck this design leans on), `pkg/values/thread.go` (`Thread.Terminate`,
+timer recheck this design leans on; `applyForeign` in
+`pkg/machine/machine_context_apply.go` repeats it for unfused foreign calls),
+`pkg/values/thread.go` (`Thread.Terminate`,
 the SRFI-18 ctx; `Thread.setOutcome`, the write-once rule).
 
 ---
@@ -79,12 +81,15 @@ untouched.
 ## The primitive-layer policy: wait side vs held side
 
 A thread blocked **acquiring** wakes on ctx and returns *without acquiring*, so
-nothing is half-held. A thread that already **holds** a lock is untouched: a
-terminated holder's lock stays held. Force-unlocking it would expose the guarded
-resource mid-transition, out of serialization order — the exact race the lock
-exists to prevent. A stuck lock is the safe outcome. SRFI-18's own
-owner-driven `MarkAbandoned` is a different, spec-mandated path, not an
-override of this.
+nothing is half-held. The cancellation machinery never force-unlocks a lock that
+is already **held**: handing it to the next waiter as if it were free would expose
+the guarded resource mid-transition, out of serialization order, which is the exact
+race the lock exists to prevent. What a terminated holder's lock does instead depends on
+ownership. `Thread.Terminate` runs SRFI-18 abandonment (`AbandonOwnedMutexes`, then
+`MarkAbandoned` per mutex) on every mutex the thread *owns*: the next `mutex-lock!`
+acquires it and raises `abandoned-mutex-exception`, so the acquirer is told the
+invariant may be broken. A mutex the thread locked with owner `#f` is not tracked
+and stays held.
 
 How a cancelled wait surfaces to Scheme is decided by one question: does the
 primitive have a free value channel?
@@ -102,8 +107,9 @@ primitive have a free value channel?
   sentinel to match rather than a bare `context.Canceled`. The price is that these
   two must discriminate on the cancellation *source* (`waitCancelled` in
   `extensions/threads/prim_threads.go`): under `ErrTimerExpired` they return
-  error-free, because the eager recheck below runs only on that path and is the
-  only thing that dispatches the `with-timeout` handler. That special case is
+  error-free, because the eager recheck below runs only on that path; an error
+  return becomes an ordinary Scheme condition and the `with-timeout` handler never
+  runs. That special case is
   exactly what a free value channel buys the other two out of.
 
   For `thread-join!` this is a *fourth* outcome alongside the three SRFI-18
@@ -149,11 +155,9 @@ be reported as a terminated thread's result. Pinned channel-free by
 
 ## Boundaries and non-goals
 
-- **Held-lock abandonment is out of scope.** A terminated thread that holds a lock
-  does not release it (see the policy section). It is *possible* — Wile owns the
-  state machine, so a terminated holder *could* release — but it remains an
-  unproposed follow-up, deliberately not built, because releasing mid-transition
-  is the race we are avoiding.
+- **Unowned locks are not released.** A mutex a terminated thread locked with
+  owner `#f` stays locked; only owned mutexes go through abandonment (see the
+  policy section).
 - **The timed `mutex-lock!` path wakes within its timeout, not immediately.** Only
   the *untimed* `Mutex.LockContext` slow path was made ctx-aware; a thread in
   `(mutex-lock! m T)` under termination wakes within `T` (bounded, never an
@@ -203,7 +207,7 @@ test does not report.
 
 The eager recheck's own guards are Go-level:
 `pkg/machine/call_foreign_cached_test.go`, `timer_interrupt_test.go`,
-`machine_context_test.go`, `operations_call_test.go`. The SRFI-18 write-once
+`machine_context_test.go`. The SRFI-18 write-once
 outcome the terminate test leans on is pinned separately, and lock-free, in
 `extensions/threads/prim_threads_terminate_outcome_test.go`
 (`TestThreadTerminateStoresEndException`).
