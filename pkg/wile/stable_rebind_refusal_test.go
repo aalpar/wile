@@ -225,7 +225,7 @@ func TestStableRebind_DefineOverImportStillWorks(t *testing.T) {
 	err = eng.Define("list-tail", wile.NewInteger(9))
 	qt.Assert(t, err, qt.IsNil,
 		qt.Commentf("Engine.Define over an imported name must land; refusing it is the "+
-			"regression that makes this refusal unshippable without the T2 relocation"))
+			"regression that makes this refusal unshippable without relocating imports off tierExactMutable"))
 	got, err = evalStable(t, eng, `list-tail`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, got, qt.Equals, "9")

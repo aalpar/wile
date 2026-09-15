@@ -129,7 +129,7 @@ func TestImportDoesNotOverwriteSealedBootstrapMacro(t *testing.T) {
 
 // TestImportedBindingTakesTheSealedPhaseZeroTier pins the positive half: the
 // BASE install really does land on (phase 0, sealed), and a top-level
-// define really does get its own T1 slot above it. Without this, the refusal
+// define really does get its own tierExactMutable slot above it. Without this, the refusal
 // gate above would still pass on a build where the relocation had been reverted
 // wholesale.
 func TestImportedBindingTakesTheSealedPhaseZeroTier(t *testing.T) {
@@ -156,7 +156,7 @@ func TestImportedBindingTakesTheSealedPhaseZeroTier(t *testing.T) {
 	qt.Assert(t, store.IsImportedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime),
 		qt.IsTrue,
 		qt.Commentf("the import did not reach the imported tier at phase 0; the base install "+
-			"is back on T1 and a later define would assign through it"))
+			"is back on tierExactMutable and a later define would assign through it"))
 
 	// ...and the startup set is still there UNDERNEATH, untouched. This pair is
 	// what the test asserts now and could not before.

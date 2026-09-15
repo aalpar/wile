@@ -323,18 +323,19 @@ func TestResolveRankedCardinalityWithinTier(t *testing.T) {
 // enforcement behind the "name a tier by its identifier, never by an ordinal"
 // convention stated at the tier enum.
 //
-// Eighteen comments across the tree still label THESE tiers "T1"/"T2"/"T3", in
-// seven files — eight of them live labels, the other ten quotations of the wrong
-// text they replaced or the convention statement itself. Each live one is an
-// unchecked second copy of this enum's ordering: inserting tierExactImported
-// renumbered everything below it, and every one of those labels silently changed
-// referent with no test going red.
+// Ten comments across the tree still label THESE tiers "T1"/"T2"/"T3", in three
+// files, all quotations of the wrong text they replaced or the convention
+// statement itself. Eight more were live labels until they were rewritten to name
+// the identifier on 2026-09-14. Each live one was an unchecked second copy of
+// this enum's ordering: inserting tierExactImported renumbered everything below
+// it, and every one of those labels silently changed referent with no test going
+// red.
 //
-// Eighteen, not the "roughly a hundred" this doc claimed until 2026-09-11. That
-// figure was unmeasured and counted two unrelated namespaces that share the
-// spelling. Measured, 2026-09-11 —
+// Eighteen before that sweep, not the "roughly a hundred" this doc claimed until
+// 2026-09-11. That figure was unmeasured and counted two unrelated namespaces
+// that share the spelling. Measured, 2026-09-11 —
 //
-//	grep -rEoh '\bT[123]\b' --include=*.go pkg/ | wc -l    # 81
+//	grep -rEoh '\bT[123]\b' --include=*.go pkg/ | wc -l    # 81 (73 after the sweep)
 //
 // — of which forty-seven are the CLOSURE tiers of design section 5.3.1
 // (boxing.go, compile_closure.go, operations_closure.go,
@@ -407,7 +408,7 @@ func TestResolveRankedCardinalityWithinTier(t *testing.T) {
 // (preferred — see the enum's doc for why), or renumber them, then update the
 // table here.
 //
-// The labels this means are the EIGHTEEN counted above, not every `\bT[123]\b`
+// The labels this means are the binding-tier ones counted above, not every `\bT[123]\b`
 // in the tree: `grep -rEoh '\bT[123]\b' --include=*.go pkg/` also returns the
 // closure tiers and the review item IDs, and rewriting those would corrupt
 // correct comments. Start from the files that name a tier IDENTIFIER
