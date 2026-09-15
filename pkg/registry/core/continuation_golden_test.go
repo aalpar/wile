@@ -86,6 +86,9 @@ var continuationGolden = []struct {
 	{"prompt-abort-to-handler", `(call-with-continuation-prompt (lambda () (+ 1 (abort-current-continuation (default-continuation-prompt-tag) 41))) (default-continuation-prompt-tag) (lambda (v) (* v 2)))`, "82"},
 	{"prompt-abort-handler-squares", `(+ 100 (call-with-continuation-prompt (lambda () (abort-current-continuation (default-continuation-prompt-tag) 5)) (default-continuation-prompt-tag) (lambda (v) (* v v))))`, "125"},
 	{"composable-continuation-composes", `(call-with-continuation-prompt (lambda () (* 2 (call-with-composable-continuation (lambda (k) (+ 1 (k 5))) (default-continuation-prompt-tag)))) (default-continuation-prompt-tag) (lambda (v) v))`, "22"}, // Racket v9.2: cwcc composes in place
+	// A call/cc captured inside a reinstated two-frame composable segment aliases g's
+	// frame; g's normal return must not pool it before (saved 7) re-enters. Racket v9.2.
+	{"composable-segment-callcc-reentry-keeps-invoker-frame", `(let ((kc #f) (saved #f) (out '())) (define (body) (define v (call-with-composable-continuation (lambda (k) (set! kc k) 0) (default-continuation-prompt-tag))) (call/cc (lambda (c) (set! saved c))) v) (define (g a b) (kc 5) (set! out (cons (list a b) out)) 'ok) (call-with-continuation-prompt (lambda () (+ 1 (body))) (default-continuation-prompt-tag) list) (g 'a 'b) (if (< (length out) 2) (saved 7)) out)`, "((a b) (a b))"},
 
 	// --- parameterize + control ---
 	{"parameterize-scoped", `(let ((p (make-parameter 1))) (list (p) (parameterize ((p 2)) (p)) (p)))`, "(1 2 1)"},

@@ -272,6 +272,15 @@ func GraftContinuation(segment, target *MachineContinuation) {
 		current = current.parent
 	}
 	current.parent = target
+	// MarkChainShared stops at the first shared frame, trusting that its
+	// ancestors are shared too. A first-invocation segment is shared
+	// (AcquireSegment) and this edge hangs it over a target that may not be, so
+	// a later capture inside the segment would stop at the segment and leave
+	// target's frames poolable while the new continuation still aliases their
+	// envs. Restore the invariant at the edge that breaks it.
+	if current.shared {
+		target.MarkChainShared()
+	}
 }
 
 // CaptureInterruptContinuationAt captures the full VM execution state at an
