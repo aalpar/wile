@@ -47,7 +47,8 @@ import (
 // The four pin names are exactly the class design §5.1 sizes the migration off
 // and pkg/wile/binding_tier_census_test.go measured: procedures DEFINED in
 // bootstrap Scheme, which hold a phase-0 sealed slot and no exact-phase-1 slot,
-// so the ambient tier is their only route to phase 1. The three control names
+// so the ambient tier was their only route to phase 1 and Stage A left them none.
+// The three control names
 // are Go primitives registered at both phases (registry/apply.go phaseTargets),
 // which keep an exact-phase-1 slot and must still resolve after A — without them
 // a change that made every phase-1 query miss would pass.

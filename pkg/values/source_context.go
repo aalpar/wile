@@ -147,9 +147,9 @@ func (p *SourceContext) WithOrigin(origin *OriginInfo) *SourceContext {
 	return c
 }
 
-// WithoutScopes returns a new SourceContext with scopes cleared.
-// Used when creating template identifiers that should not inherit
-// use-site scopes during macro expansion (Flatt 2016 hygiene model).
+// WithoutScopes returns a new SourceContext with scopes cleared. Template
+// expansion does not use it: applyHygieneToSymbol substitutes a template
+// identifier's definition-site scope set instead of clearing it.
 func (p *SourceContext) WithoutScopes() *SourceContext {
 	if p == nil {
 		return nil

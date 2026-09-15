@@ -22,19 +22,19 @@ package wile_test
 // body that calls cadr is the canonical case — so a message carrying only the
 // name sends the reader hunting for a typo that is not there.
 //
-// Every program below already raises on master — three at phase 1, one per
+// Every program below already raised before Stage A — three at phase 1, one per
 // raise site, plus a phase-2 case for the rendering — so the only thing Stage
-// A's edit moves is the text. That is deliberate: a test whose RED state is
+// A's edit moved was the text. That was deliberate: a test whose RED state is
 // "nothing raises" cannot be turned green by a wrap-message change. The case
 // where a name stops resolving at all is
-// TestPhase1_ProceduralTransformerUnboundWithoutImport (Task 2), green only
-// after the ambient tier is deleted in Task 7.
+// TestPhase1_ProceduralTransformerUnboundWithoutImport (Task 2), which went green
+// when Task 7 deleted the ambient tier.
 //
-// Do NOT rewrite these onto the census names (assoc, caar, vector-map,
-// string-map, make-parameter). Measured on master, every one of them resolves
-// inside a transformer body with err == nil: "phase-0-only" in the
-// binding_tier_census pins means exact@1 == false, not invisible at phase 1,
-// because the ambient tier still covers them.
+// These were not written onto the census names (assoc, caar, vector-map,
+// string-map, make-parameter) for that reason. Measured before Stage A, every
+// one of them resolved inside a transformer body with err == nil:
+// "phase-0-only" in the binding_tier_census pins meant exact@1 == false, not
+// invisible at phase 1, because the ambient tier still covered them.
 
 import (
 	"context"

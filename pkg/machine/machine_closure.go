@@ -25,70 +25,60 @@ var (
 	_ NamedCallable   = (*MachineClosure)(nil)
 )
 
-// MachineClosure is a linked closure (Church 1936, Landin 1964, Cardelli 1983):
-// a pair of compiled code and the lexical environment at definition time.
+// MachineClosure is a flat closure: compiled code, the values of its free
+// variables, and a static link for global resolution.
 //
-//	closure = ⟨λ, E⟩, where:
-//	  λ = template  — compiled bytecode (NativeTemplate)
-//	  E = (frame, parent) — the enclosing environment, kept as a pair
+//	closure = ⟨λ, free, link⟩, where:
+//	  λ    = template — compiled bytecode (NativeTemplate)
+//	  free = the free variables' values, in the template's FreeNames order
+//	  link = the environment the apply frame hangs from
 //
-//	Access cost: O(1) creation (capture pointer), O(depth) free variable
-//	  lookup (traverse parent chain). Flat closures invert this trade-off.
+//	Access cost: O(free) creation (copy the values off the eval stack), O(1)
+//	  free-variable read (index the vector). Linked closures invert this trade-off.
 //
-//	Invariant: E is a live pointer into the frame chain, not a copy.
-//	  Mutations via set! are visible through the closure because the
-//	  closure shares the frame, not a snapshot.
-//	Constrains: OperationMakeClosure (must link E to runtime parent),
-//	  Apply (builds a fresh frame from the pair on every call, to prevent
-//	  aliasing across recursive calls and SRFI-18 thread races).
-//	Constrained by: de Bruijn addressing (free vars addressed by
-//	  slot,depth in E's chain), CESK model (E is the environment component).
+//	Invariant: a slot the template's FreeBoxed marks holds a *values.Box shared
+//	  with every other holder, so an assignment stays visible through the copy.
+//	Constrains: OperationMakeClosure (pushes free values in slot order, picks
+//	  link via closureLink), Apply (builds a fresh frame from the template's shape
+//	  and link on every call, to prevent aliasing across recursive calls and
+//	  SRFI-18 thread races, and installs free as the running vector).
+//	Constrained by: the boxing pass (compilation/boxing.go), which decides which
+//	  slots are cells; CESK model (link supplies the E component's globals).
 //
-// See BIBLIOGRAPHY.md "Linked Closure Representation".
+// See BIBLIOGRAPHY.md "Linked Closure Representation" for the model this
+// replaced.
 //
-// E is never materialized into one frame. Materializing it cost an extra
-// 80-byte object per evaluated lambda that every consumer then took apart
-// again: InitApplyFrame reads exactly p.local and p.parent and derives
-// global/phase/namespace from the parent. The frame was a carrier, not an
-// environment.
+// The local parameter shape is not a field: it is a property of the compiled
+// body, so it rides on the template (NativeTemplate.shape) and every closure
+// over a lambda agrees on it. The apply frame is never materialized here either;
+// Apply combines shape and link straight into a pooled frame.
 //
-//	parent    the runtime environment captured at closure creation — the ONLY
-//	          per-activation word, and the whole of what makes this a closure.
-//	template  the compiled body, which also owns the local parameter shape
-//	          (NativeTemplate.shape). One template, one shape: the shape is a
-//	          property of the compiled body, so every closure over a lambda
-//	          agrees on it and none of them need to carry it.
+// BOTH constructors record a non-nil link, so there is one representation and
+// no nil branch discriminating a second: OpMakeClosure passes
+// closureLink(mc.env, tpl), and NewClosureWithTemplate reads env.Parent() off
+// the frame it is handed. A nil link is unreachable from production —
+// NewClosureCapturing panics on one, and both NewClosureWithTemplate callers
+// (extensions/eval PrimCompile, compilation/compile_syntax_rules.go
+// createTransformerClosure) pass a frame from NewEnvironmentFrameWithParent,
+// which panics on a nil parent. Apply faults on it anyway rather than running
+// with no global, namespace or phases.
 //
-// The shape was briefly a third field here, which is why an intermediate design
-// paid 24 bytes to avoid the 80-byte frame. It is now on the template and this
-// type is back to two words.
-//
-// BOTH constructors capture parent eagerly, so there is one representation and
-// no nil branch discriminating a second: OpMakeClosure passes mc.env, and
-// NewClosureWithTemplate reads it off the frame it is handed. A nil parent is
-// unreachable from production — NewClosureCapturing panics on one, and both
-// NewClosureWithTemplate callers (extensions/eval PrimCompile,
-// compilation/compile_syntax_rules.go createTransformerClosure) pass a frame
-// from NewEnvironmentFrameWithParent, which panics on a nil parent. Apply
-// faults on it anyway rather than running with no global, namespace or phases.
-//
-// Reading it eagerly gives up one check an earlier late frame.Parent() read
-// bought: a frame RELEASED after the closure was built zeroes its own parent,
-// and this closure no longer notices. That check only ever covered the two
-// NewClosureWithTemplate sites — OpMakeClosure has always captured eagerly, and
-// builds every closure a Scheme program makes — and both of them now build a
-// fresh frame instead of borrowing a pooled one, which is what actually closed
-// the (compile ...) use-after-release the check was standing in for. The live
-// protection is mc.envPooled = false at OpMakeClosure, not a nil read.
+// Reading the link eagerly gives up one check an earlier late frame.Parent()
+// read bought: a frame RELEASED after the closure was built zeroes its own
+// parent, and this closure no longer notices. That check only ever covered the
+// two NewClosureWithTemplate sites, and both of them now build a fresh frame
+// instead of borrowing a pooled one, which is what actually closed the
+// (compile ...) use-after-release the check was standing in for.
 type MachineClosure struct {
 	// link is the STATIC LINK: the environment the apply frame hangs from, for
 	// GLOBAL resolution and for the namespace/phase/store the frame derives from
 	// it. It is one pointer to a view, not a chain to be walked: free-variable
 	// lookup no longer travels it.
 	//
-	// It is the creating context's own environment rather than the root view,
-	// because phaseLevel is a RELATIVE index on the owner's macro tower and
-	// today's apply frame inherits the creating frame's level through this
+	// closureLink picks it: the lexical root at the creating frame's own phase,
+	// or the creating frame itself for a template that RetainsLexicalEnv. Never
+	// Runtime(), because phaseLevel is a RELATIVE index on the owner's macro
+	// tower and the apply frame inherits the creating frame's level through this
 	// pointer. A link pinned to Runtime() would collapse the tower for every
 	// closure built above phase 0.
 	link     *environment.EnvironmentFrame
@@ -148,10 +138,10 @@ func (p *MachineClosure) Free() []values.Value {
 }
 
 // NewClosureCapturing builds a closure over a template whose shape is already
-// recorded and the runtime environment captured at creation, without
-// materializing the frame the two would combine into. This is the OpMakeClosure
-// path. parent must be non-nil: a nil one would leave the closure with no
-// record of what it closed over, and the compile-time frame reachable through
+// recorded, its static link, and its free-variable vector, without
+// materializing the frame shape and link would combine into. This is the
+// OpMakeClosure path. link must be non-nil: a nil one would leave the closure
+// with no environment to resolve globals through, and the compile-time frame reachable through
 // the template holds placeholders, so any fallback would be a wrong answer
 // rather than a crash.
 func NewClosureCapturing(tpl *NativeTemplate, link *environment.EnvironmentFrame, free []values.Value) *MachineClosure {
@@ -181,8 +171,8 @@ func (p *MachineClosure) Template() *NativeTemplate {
 	return p.template
 }
 
-// Env materializes the environment from the template's shape and the captured
-// parent. Callers get a fresh frame each time rather than a shared one, so this
+// Env materializes the environment from the template's shape and the static
+// link. Callers get a fresh frame each time rather than a shared one, so this
 // is a reflection and debugging accessor, not an apply-path call: Apply goes
 // straight to InitApplyFrameWithParent and never builds this. The local half is
 // copied by value (see EnvironmentFrame.local), so the result reads the same
@@ -235,10 +225,10 @@ func (p *MachineClosure) Doc() string {
 // field-wise comparison here is an equal?/eqv? divergence at the Scheme level.
 // It also decides member and assoc, which the stdlib defines over equal?.
 //
-// Field-wise comparison is not merely risky, it cannot work: frame is the
-// lambda's compile-time frame, a template constant shared by every evaluation,
-// and parent is the activation. Two closures built by one lambda form in one
-// activation therefore agree on every field while being distinct procedures.
+// Field-wise comparison is not merely risky, it cannot work: template is a
+// constant shared by every evaluation of the lambda, and link and the free
+// values can coincide across evaluations. Two closures built by one lambda form
+// can therefore agree on every field while being distinct procedures.
 // That is not hypothetical — it is reachable from a tail loop or a call/cc
 // re-entry, and it made (equal? a b) answer #t where (eqv? a b) answered #f.
 //

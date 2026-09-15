@@ -154,7 +154,7 @@ func TestPhaseZeroCrossPhaseNamesStayUnbound(t *testing.T) {
 			qt.Assert(t, errors.Is(err, tc.want), qt.IsTrue,
 				qt.Commentf("got: %v", err))
 			if errors.Is(tc.want, werr.ErrNoSuchBinding) {
-				// The name has no ambient keyword, so the keyword refusal must not
+				// The name has no phase-0 keyword, so the keyword refusal must not
 				// be what answered; otherwise the row would pass for the wrong
 				// reason and stop discriminating the two mechanisms.
 				qt.Assert(t, errors.Is(err, werr.ErrSyntacticKeywordAsVariable), qt.IsFalse,
@@ -170,8 +170,8 @@ func TestPhaseZeroCrossPhaseNamesStayUnbound(t *testing.T) {
 // check at the ordinary site above never sees these. Its own tag check is what
 // refuses them, and it falls through rather than raising, because there the
 // caller still has ordinary resolution to try. Where that chain ends is the same
-// split TestPhaseZeroCrossPhaseNamesStayUnbound draws: a name that is also an
-// ambient keyword (`if`) is answered by the type arm on the ordinary path, and
+// split TestPhaseZeroCrossPhaseNamesStayUnbound draws: a name that is also a
+// phase-0 keyword (`if`) is answered by the type arm on the ordinary path, and
 // one that exists only at phase 1 (a bootstrap or user macro) ends unbound.
 //
 // Without that check the pin is emitted as a cached load and the value world

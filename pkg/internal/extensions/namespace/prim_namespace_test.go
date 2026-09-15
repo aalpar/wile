@@ -297,8 +297,8 @@ func TestNamespaceBound_IgnoresMacroOnlyBinder(t *testing.T) {
 	qt.Assert(t, result.SchemeString(), qt.Equals, "#f")
 }
 
-// The ambient read must still reach the sealed base through the parent chain:
-// scope-keying the lookup must not narrow it to the namespace's own frame.
+// The ambient read must still reach the sealed base: scope-keying the lookup must
+// not narrow it to the namespace's own mutable slots.
 func TestNamespaceRef_StillReachesSealedBase(t *testing.T) {
 	eng := newEngine(t)
 
@@ -351,8 +351,8 @@ func TestNamespaceBoundNames_EveryListedNameResolves(t *testing.T) {
 
 // A macro-introduced shadow of a sealed-base name is the case whose resolution
 // the ambient filter actually changed: the macro's slot no longer matches, so the
-// parent walk falls through to the sealed base instead of stopping at the runtime
-// frame. TestNamespaceRef_StillReachesSealedBase covers the unshadowed path and
+// ranked probe falls through to the sealed base's tierExactSealed slot instead of
+// stopping at the macro's mutable one. TestNamespaceRef_StillReachesSealedBase covers the unshadowed path and
 // passes either way, so it cannot pin this.
 func TestNamespaceRef_MacroShadowOfSealedBaseFallsThrough(t *testing.T) {
 	eng := newEngine(t)

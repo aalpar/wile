@@ -97,8 +97,8 @@ func (p *ExpanderContext) MacroValue(id *syntax.SyntaxSymbol) (values.Value, boo
 // asks what the identifier denoted where it was written, and the pin records
 // exactly that, so a use-site binder of the same spelling has no claim on it.
 // Otherwise lookupLiteralBinding resolves id in the use-site env under its own
-// scopes — the frame's own lexical chain at its own phase, the ambient keyword
-// last — which is what the Go matchers apply to a pattern literal. No fallback
+// scopes — the frame's own lexical chain at its own phase, the dialect's bulk
+// rows last — which is what the Go matchers apply to a pattern literal. No fallback
 // phases: the use site's phase is a known fact, and a pinned literal never
 // reaches this arm.
 func (p *ExpanderContext) ResolveFreeIdentifier(id *syntax.SyntaxSymbol) (*environment.Binding, bool) {

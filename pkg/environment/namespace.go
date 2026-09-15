@@ -1069,8 +1069,9 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 // own defines, at whatever phase each was written.
 //
 // Phase separation is key disjointness in that store: a phase-1 read admits only
-// phase-1 and ambient slots, so library phase-1 code reaches primitives and does NOT
-// reach the library's phase-0 defines — the hermeticity cut, matching the top level.
+// phase-1 slots and the bulk rows declared at phase 1, so library phase-1 code
+// reaches the primitives registered at phase 1 and the macro vocabulary, and does
+// NOT reach the library's phase-0 defines — the hermeticity cut, matching the top level.
 // A flat frame could not express that: it held primitives and user defines together,
 // so there was no way to see the first without the second, and a for-syntax body that
 // lost the defines lost car and list with them. See

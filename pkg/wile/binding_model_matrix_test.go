@@ -751,7 +751,7 @@ func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
 			want:  "2"},
 		// CRITICAL fix, fold C3 review round 1: SetOwnGlobalValue's stale-pin
 		// self-heal must not re-heal onto a SEALED slot. square (a bootstrap
-		// SCHEME procedure, sealed at (ANY, sealed) with no phase-1 companion
+		// SCHEME procedure, sealed at (0, sealed) with no phase-1 companion
 		// registration) is shadowed at (0, mutable); f's set! compiles to a
 		// PINNED index at that mutable slot (the same pinned-reach mechanism
 		// the h/car pair above exercises); namespace-undefine! deletes the
@@ -775,7 +775,7 @@ func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
 		// companion — car here, and with it the ~28 dual-phase registration
 		// blocks in pkg/registry/core (pairs, lists, strings, arithmetic,
 		// vectors, predicates, characters, equality, hashes, syntax). car's
-		// slots here are [(ANY, sealed), (1, sealed) expand copy, (0, mutable)
+		// slots here are [(0, sealed), (1, sealed) expand copy, (0, mutable)
 		// shadow]; namespace-undefine! removes only the shadow. A self-heal
 		// that filtered on sealed/mutable ALONE did not eliminate this hazard,
 		// it relocated it: the expand copy sat at (1, MUTABLE) then, so it was
@@ -811,7 +811,7 @@ func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
 		// The DISCRIMINATING form of the two rows above — the replacement
 		// ratchet for what sealing the expand copies took away. A leading
 		// define-for-syntax manufactures the (1, mutable) candidate the seal
-		// removed: car then owns [(ANY, sealed), (1, sealed) registry copy,
+		// removed: car then owns [(0, sealed), (1, sealed) registry copy,
 		// (1, mutable) = 42, (0, mutable) shadow]. namespace-undefine! removes
 		// the (0, mutable) shadow only, so the stale pin from f's set! heals at
 		// (0, mutable) and finds nothing. A filter that asked "mutable?" without

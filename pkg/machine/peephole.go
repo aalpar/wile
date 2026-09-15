@@ -31,8 +31,9 @@ import "github.com/aalpar/wile/pkg/values"
 //	  2. fuseCallForeignCached
 //	       PushCachedBinding ... PullApply → CallForeignCached
 //	         (SaveCont retained; eliminates ~5 dispatches)
-//	       or, for a promoted primitive, one of the 34 promoted opcodes
-//	  3. fuseCallGeneric → CallLocal / CallCachedBinding
+//	       or, for a promoted primitive, its promoted opcode
+//	         (promotedOps: one non-tail and one tail op per primitive)
+//	  3. fuseCallGeneric → CallLocal / CallCachedBinding / CallFree
 //	  4. fusePromotedCompoundArgs (gated on a preceding OpReleaseEnvFrame)
 //
 //	Cost model: each fusion saves one (fetch opcode + switch branch).
