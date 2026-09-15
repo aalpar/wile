@@ -29,12 +29,9 @@ import (
 // not environment hierarchies.
 type Scope struct {
 	id uint64 // ensures unique pointer identity (empty structs can share addresses in Go)
-	// IsRebinding indicates whether this scope can potentially rebind auxiliary syntax.
-	// True for let-syntax/letrec-syntax scopes which create local macro bindings.
-	// False for with-binding-scope which only adds scopes for binding hygiene.
-	// This distinction is used in literalScopesMatchWithDef
-	// (pkg/internal/match/syntax_adapter.go) to correctly handle auxiliary
-	// syntax like => and else in cond/case.
+	// IsRebinding marks a let-syntax/letrec-syntax scope. Nothing consults it:
+	// pattern-literal matching decides shadowing by binding, not by this flag
+	// (literalScopesMatchWithDef, pkg/internal/match/syntax_adapter.go).
 	IsRebinding bool
 	// Label is an optional human-readable description for debugging.
 	// Examples: "lambda", "let-syntax", "intro:my-macro", "library:(wile kanren)".

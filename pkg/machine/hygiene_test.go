@@ -375,9 +375,8 @@ func TestScopeCreation(t *testing.T) {
 // hygienic - if locally shadowed by let-syntax, they should be treated
 // as regular expressions, not as the special auxiliary syntax.
 //
-// Note: We use let-syntax for shadowing because it properly adds scopes
-// to the body (implementing Flatt's "sets of scopes" model). Regular let
-// is a runtime binding that doesn't affect compile-time scope sets.
+// Both let-syntax and regular let shadow: either binds the name locally, and the
+// use-site identifier resolves to that binding instead of the literal's.
 func TestAuxiliarySyntaxShadowing(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -387,8 +386,8 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 	}{
 		{
 			name: "shadowed => via let-syntax treated as expression",
-			// When => is shadowed via let-syntax, it gets a new scope.
-			// The cond pattern's => has different scopes, so it doesn't match.
+			// When => is shadowed via let-syntax, the use-site => resolves to the
+			// local keyword, not my-cond's => literal, so it doesn't match.
 			// The clause falls through to (test result1 result2 ...) pattern.
 			setup: `
 				(define-syntax my-cond
@@ -402,7 +401,7 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 				     (if test (begin result1 result2 ...)))))
 			`,
 			// With => shadowed, (test => 'ok) doesn't match the arrow pattern
-			// because the => has an extra scope from let-syntax.
+			// because the => resolves to the let-syntax keyword.
 			// let-syntax wraps its body in (begin ...).
 			code:     "(let-syntax ((=> (syntax-rules () ((_) #f)))) (my-cond (#t => 'ok)))",
 			expected: "(begin (if #t (begin => (quote ok))))", // => doesn't match arrow, falls through
@@ -433,7 +432,7 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 				    ((my-cond (test result1 result2 ...))
 				     (if test (begin result1 result2 ...)))))
 			`,
-			// With else shadowed via let-syntax, it has a new scope.
+			// With else shadowed via let-syntax, it resolves to the local keyword.
 			// (else 'matched) doesn't match the else pattern, treated as regular test.
 			// let-syntax wraps its body in (begin ...).
 			code:     "(let-syntax ((else (syntax-rules () ((_) #f)))) (my-cond (else 'matched)))",

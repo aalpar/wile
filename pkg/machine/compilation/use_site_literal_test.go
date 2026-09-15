@@ -29,17 +29,12 @@ import (
 // (compilation.newUseSiteScope).
 //
 // Why this file exists. `literalScopesMatchWithDef`
-// (internal/match/syntax_adapter.go) reads `input.Scopes()` twice, and use-site
+// (internal/match/syntax_adapter.go) reads `input.Scopes()`, and use-site
 // scopes made that set strictly larger on every identifier that arrives through
-// a macro use:
-//
-//   - `filterRebindingScopes(input.Scopes())` is provably unaffected — a
-//     use-site scope is minted with NewScopeWithLabel, not
-//     NewRebindingScopeWithLabel, so it is filtered out before the comparison.
-//   - `checker.GetLiteralBinding(input.Key(), input.Scopes())` is a RESOLUTION,
-//     and resolution is subset: a larger reference set admits strictly more
-//     candidates, and the maximal-cardinality argmax can therefore land on a
-//     different binding. That is the half a test has to cover.
+// a macro use. `checker.GetLiteralBinding(input.Key(), input.Scopes())` is a
+// RESOLUTION, and resolution is subset: a larger reference set admits strictly
+// more candidates, and the maximal-cardinality argmax can therefore land on a
+// different binding. That is what a test has to cover.
 //
 // The rows that matter are the ones where resolution genuinely reaches a
 // binding carrying a use-site scope — a `let` binder that arrived FROM the use

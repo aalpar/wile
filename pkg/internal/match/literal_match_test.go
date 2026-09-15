@@ -25,43 +25,6 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// --- filterRebindingScopes tests ---
-
-func TestFilterRebindingScopes(t *testing.T) {
-	c := qt.New(t)
-
-	c.Run("nil scopes returns nil", func(c *qt.C) {
-		result := filterRebindingScopes(nil)
-		c.Assert(result, qt.IsNil)
-	})
-
-	c.Run("no rebinding scopes returns nil", func(c *qt.C) {
-		scopes := []*syntax.Scope{
-			syntax.NewScope(),
-			syntax.NewScope(),
-		}
-		result := filterRebindingScopes(scopes)
-		c.Assert(result, qt.IsNil)
-	})
-
-	c.Run("filters only rebinding scopes", func(c *qt.C) {
-		rebind := syntax.NewRebindingScope()
-		normal := syntax.NewScope()
-		scopes := []*syntax.Scope{normal, rebind}
-		result := filterRebindingScopes(scopes)
-		c.Assert(len(result), qt.Equals, 1)
-		c.Assert(result[0], qt.Equals, rebind)
-	})
-
-	c.Run("nil scope in list skipped", func(c *qt.C) {
-		rebind := syntax.NewRebindingScope()
-		scopes := []*syntax.Scope{nil, rebind}
-		result := filterRebindingScopes(scopes)
-		c.Assert(len(result), qt.Equals, 1)
-		c.Assert(result[0], qt.Equals, rebind)
-	})
-}
-
 // --- ByteCode String() tests ---
 
 func TestByteCodeString(t *testing.T) {

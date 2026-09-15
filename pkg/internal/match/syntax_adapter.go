@@ -24,7 +24,6 @@ package match
 //
 // The SyntaxMatcher wraps the core Matcher, handling:
 //   - Literal hygiene checking (R7RS §4.3.2 auxiliary syntax like => and else)
-//   - Scope-aware literal matching with rebinding scope filtering
 //   - Pattern compilation and binding extraction
 //
 // Template expansion methods live in syntax_expand.go.
@@ -260,8 +259,9 @@ func (p *SyntaxMatcher) Match(ctx context.Context, input syntax.SyntaxValue) err
 // lambda, etc.) but the pattern literal doesn't, they won't match.
 //
 // Pass nil for checker to fall back to the checker supplied at construction
-// (SyntaxMatcherOpts.BindingChecker), and nil in both places for scope-based
-// matching only (less strict).
+// (SyntaxMatcherOpts.BindingChecker), and nil in both places to skip the binding
+// comparison (less strict: literals then match by spelling, unless the pin is
+// ambiguous).
 //
 // The checker is CLOSED OVER rather than stored on the receiver. It used to be
 // assigned to p.bindingChecker and cleared by a defer, which turned a field
@@ -377,17 +377,19 @@ func (p *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
 //
 // The checker is a parameter, not a field read: see MatchWithBindingChecker.
 //
-// 1. Binding check (R7RS compliant). With a pin (pin.Binding non-nil) the
-// definition-site binding captured at macro-compile time is compared against the
-// use site's phase-scoped resolution — the only pairing that actually asks the
+// The decision is the binding comparison alone. With a pin (pin.Binding non-nil)
+// the definition-site binding captured at macro-compile time is compared against
+// the use site's phase-scoped resolution — the only pairing that actually asks the
 // spec's two questions, since a definition-site ENVIRONMENT resolved at match
 // time returns the same *Binding as the use-site one (see LiteralPin). Without a
 // pin, both sides are resolved through the use-site checker by pointer identity,
 // which still discriminates a lexical shadow.
 //
-// 2. Scope check (for let-syntax): We also check rebinding scopes from
-// let-syntax/letrec-syntax. If input has rebinding scopes that pattern doesn't,
-// the literal has been shadowed by a macro binding.
+// No scope-set test follows it. A let-syntax keyword that shadows the literal is a
+// local binding the use site resolves, so the comparison already refuses it; the
+// scope let-syntax stamps on its body says nothing about which names it bound. A
+// rule keyed on that scope refused every literal in every let-syntax body:
+// (let-syntax ((foo ...)) (cond (#f 1) (else 2))) read `else` as a variable.
 //
 // Example with regular let:
 //
@@ -399,11 +401,12 @@ func (p *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
 // literalNotShadowed refuses. It is not the unpinned arm's "one is bound and one
 // isn't" — a reader instrumenting that arm for this program will see nothing run.
 //
-// Example with let-syntax:
+// The let-syntax shadow takes the same branch for the same reason:
 //
 //	(let-syntax ((=> ...)) (cond (#t => 'ok)))
-//	The input => has rebinding scope {letSyntaxScope}
-//	Pattern => has no rebinding scopes, so they don't match
+//
+// resolves the use-site `=>` to the let-syntax keyword, a syntax binding, neither
+// the pinned primitive nor an import.
 func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.SyntaxSymbol, pin LiteralPin) bool {
 	if input == nil || pattern == nil {
 		return false
@@ -436,15 +439,7 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 		}
 	}
 
-	// Also check rebinding scopes for let-syntax shadowing.
-	// This handles cases where the binding checker isn't available,
-	// and provides defense-in-depth for let-syntax cases.
-	inputRebindingScopes := filterRebindingScopes(input.Scopes())
-	patternRebindingScopes := filterRebindingScopes(pattern.Scopes())
-
-	// For the input to match the pattern literal, the input must not have
-	// any rebinding scopes that the pattern doesn't have.
-	return syntax.ScopesMatch(patternRebindingScopes, inputRebindingScopes)
+	return true
 }
 
 // sameLiteralBinding decides whether a definition-site and a use-site resolution
@@ -470,10 +465,10 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 // is not "no program reaches it": the per-library minting above is real, and the
 // arm's failure mode is a forgone tightening, never a capture. It is bounded by
 // the caller, which already requires identical spelling before any binding check
-// runs (match.go, ByteCodeCompareCar), and by the rebinding-scope check that
-// follows. Since no end-to-end program pins it, the rule itself is pinned as a
-// truth table by TestSameLiteralBinding in syntax_adapter_literal_test.go — that
-// is the red test a future change to the rule has to answer to.
+// runs (match.go, ByteCodeCompareCar). Since no end-to-end program pins it, the
+// rule itself is pinned as a truth table by TestSameLiteralBinding in
+// syntax_adapter_literal_test.go — that is the red test a future change to the
+// rule has to answer to.
 func sameLiteralBinding(a, b *environment.Binding) bool {
 	if a == b {
 		return true
@@ -510,16 +505,4 @@ func literalNotShadowed(defB, useB *environment.Binding) bool {
 		return true
 	}
 	return useB != nil && useB.IsImported()
-}
-
-// filterRebindingScopes returns only the scopes that are marked as rebinding scopes.
-// These are scopes from let-syntax/letrec-syntax that could shadow auxiliary syntax.
-func filterRebindingScopes(scopes []*syntax.Scope) []*syntax.Scope {
-	var result []*syntax.Scope
-	for _, s := range scopes {
-		if s != nil && s.IsRebinding {
-			result = append(result, s)
-		}
-	}
-	return result
 }
