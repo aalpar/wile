@@ -215,9 +215,9 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 
 // registerCompileTimeBinding installs a compile-time-only name (an auxiliary
 // keyword such as else or =>, or a special-form name carrying its docstring) as
-// a valueless BindingTypePrimitive binding at the owner's SEALED PHASE-0
-// coordinate, (phase 0, sealed), which the phase-0 sealed-write view
-// produces (EnvironmentFrame.writeCoordinates).
+// a BindingTypePrimitive binding, valued with a FormKeyword naming spec.Name, at
+// the owner's SEALED PHASE-0 coordinate, (phase 0, sealed), which the phase-0
+// sealed-write view produces (EnvironmentFrame.writeCoordinates).
 //
 // Until Stage A that write went to the ambient (ANY, sealed) coordinate and these
 // names were reachable from a frame at EVERY level through the ranked probe's
@@ -242,12 +242,18 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 // SealedWriteViewAt falls back to the receiver's own mutable view, and the keyword
 // would land at (0, mutable), where a later user define of the name would reuse
 // its slot.
-//
-//nolint:unparam // Returns error for consistency with other register functions
 func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingSpec) error {
 	sealedRoot := env.SealedWriteViewAt(environment.PhaseRuntime)
 	sym := values.NewSymbol(spec.Name)
-	sealedRoot.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive, nil)
+	// The value names the form so a renamed import of this keyword still
+	// denotes it (environment.DenotedForm). RegisterAllPhaseHandlersWithout runs
+	// after Apply and replaces the value with a *SyntaxCompiler for the names that
+	// have one; that value denotes the same form.
+	idx, _ := sealedRoot.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive, nil)
+	err := sealedRoot.GlobalEnvironment().SetOwnGlobalValue(idx, environment.NewFormKeyword(spec.Name))
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "registerCompileTimeBinding: failed to set keyword %s", spec.Name)
+	}
 	return nil
 }
 
