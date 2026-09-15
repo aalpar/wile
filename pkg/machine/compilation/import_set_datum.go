@@ -114,20 +114,25 @@ func isVersionReference(v values.Value) bool {
 	return ok
 }
 
-// ParseImportSetFromDatum parses an import set from datum values.
-// Used at both runtime (by the 'environment' procedure) and compile time
-// (via UnwrapAll on syntax objects).
+// ParseImportSetsFromDatum parses one written import set into the library
+// imports it denotes. Used at both runtime (by the 'environment' procedure) and
+// compile time (via UnwrapAll on syntax objects).
 //
 // Import sets can be:
-//   - (<library-name>)              : import all exports
-//   - (only <import-set> <id> ...)  : import only specified identifiers
-//   - (except <import-set> <id> ...): import all except specified
-//   - (prefix <import-set> <prefix>): add prefix to all imported names
+//   - (<library-name>)                       : import all exports
+//   - (only <import-set> <id> ...)           : import only specified identifiers
+//   - (except <import-set> <id> ...)         : import all except specified
+//   - (prefix <import-set> <prefix>)         : add prefix to all imported names
 //   - (rename <import-set> (<old> <new>) ...): rename specific imports
-//   - (for-syntax <import-set>)     : import at phase +1 (macro expansion)
-//   - (for-template <import-set>)   : import at phase -1
-//   - (for-meta <n> <import-set>)   : import at phase +n
-func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet, error) {
+//   - (for-syntax <import-set> ...)          : import at phase +1 (macro expansion)
+//   - (for-template <import-set> ...)        : import at phase -1
+//   - (for-meta <n> <import-set> ...)        : import at phase +n
+//
+// Every form but a phase shift denotes exactly one library. A phase shift takes
+// one or more operands, as Racket's (for-syntax require-spec ...) does, and
+// denotes its operands' imports in order, each shifted. It used to read the
+// first operand and drop the rest without a word.
+func ParseImportSetsFromDatum(ctx context.Context, expr values.Value) ([]*ImportSet, error) {
 	if values.IsEmptyList(expr) {
 		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "import set cannot be empty")
 	}
@@ -136,9 +141,47 @@ func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "import set must be a list")
 	}
 
-	// Check if first element is a modifier keyword
-	car := tuple.Car()
-	carSym, ok := car.(*values.Symbol)
+	carSym, ok := tuple.Car().(*values.Symbol)
+	if ok {
+		switch carSym.Key {
+		case "for-syntax":
+			return parseImportSetPhaseShiftFromDatum(ctx, "for-syntax", tuple.Cdr(), 1)
+		case "for-template":
+			return parseImportSetPhaseShiftFromDatum(ctx, "for-template", tuple.Cdr(), -1)
+		case "for-meta":
+			return parseImportSetForMetaFromDatum(ctx, tuple)
+		}
+	}
+
+	importSet, err := parseLibraryImportSetFromDatum(ctx, tuple)
+	if err != nil {
+		return nil, err
+	}
+	return []*ImportSet{importSet}, nil
+}
+
+// ParseImportSetFromDatum parses an import set that must denote exactly one
+// library: the operand of only/except/prefix/rename. A multi-operand phase
+// shift in that position is refused rather than filtered library by library:
+// Racket checks such a filter's identifiers against the UNION of the operands'
+// exports, so a per-library check would reject programs Racket accepts.
+func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet, error) {
+	importSets, err := ParseImportSetsFromDatum(ctx, expr)
+	if err != nil {
+		return nil, err
+	}
+	if len(importSets) != 1 {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
+			"import set: a phase shift over %d import sets cannot be the operand of only, except, prefix or rename",
+			len(importSets))
+	}
+	return importSets[0], nil
+}
+
+// parseLibraryImportSetFromDatum parses a library name or an
+// only/except/prefix/rename form.
+func parseLibraryImportSetFromDatum(ctx context.Context, tuple values.Tuple) (*ImportSet, error) {
+	carSym, ok := tuple.Car().(*values.Symbol)
 	if ok {
 		switch carSym.Key {
 		case "only":
@@ -149,16 +192,9 @@ func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet
 			return parseImportSetPrefixFromDatum(ctx, tuple)
 		case "rename":
 			return parseImportSetRenameFromDatum(ctx, tuple)
-		case "for-syntax":
-			return parseImportSetPhaseShiftFromDatum(ctx, "for-syntax", tuple, 1)
-		case "for-template":
-			return parseImportSetPhaseShiftFromDatum(ctx, "for-template", tuple, -1)
-		case "for-meta":
-			return parseImportSetForMetaFromDatum(ctx, tuple)
 		}
 	}
 
-	// Not a modifier, must be a library name
 	libName, err := ParseLibraryNameFromDatum(ctx, tuple)
 	if err != nil {
 		return nil, err
@@ -263,60 +299,56 @@ func composePhaseShift(keyword string, base environment.Phase, delta environment
 	return environment.Phase(sum), nil
 }
 
-// parseImportSetPhaseShiftFromDatum parses (<keyword> <import-set>) and adds
-// delta to the nested import set's phase shift. Handles for-syntax (+1) and
-// for-template (-1).
-func parseImportSetPhaseShiftFromDatum(ctx context.Context, keyword string, tuple values.Tuple, delta environment.Phase) (*ImportSet, error) {
-	nestedExpr, _, err := values.Uncons(tuple.Cdr(), keyword, "import-set")
+// parseImportSetPhaseShiftFromDatum parses the <import-set> ... operands of a
+// phase-shift form and adds delta to the phase shift of every import they
+// denote. Handles for-syntax (+1), for-template (-1), and for-meta after its
+// phase level. At least one operand is required.
+func parseImportSetPhaseShiftFromDatum(ctx context.Context, keyword string, operands values.Value, delta environment.Phase) ([]*ImportSet, error) {
+	nestedExprs, err := values.CollectList(ctx, operands, keyword)
 	if err != nil {
 		return nil, err
 	}
-	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
-	if err != nil {
-		return nil, err
+	if len(nestedExprs) == 0 {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected at least one import set", keyword)
 	}
-	composed, err := composePhaseShift(keyword, importSet.PhaseShift, delta)
-	if err != nil {
-		return nil, err
+	var q []*ImportSet
+	for _, nestedExpr := range nestedExprs {
+		importSets, err := ParseImportSetsFromDatum(ctx, nestedExpr)
+		if err != nil {
+			return nil, err
+		}
+		for _, importSet := range importSets {
+			composed, err := composePhaseShift(keyword, importSet.PhaseShift, delta)
+			if err != nil {
+				return nil, err
+			}
+			importSet.PhaseShift = composed
+		}
+		q = append(q, importSets...)
 	}
-	importSet.PhaseShift = composed
-	return importSet, nil
+	return q, nil
 }
 
-// parseImportSetForMetaFromDatum parses (for-meta <n> <import-set>)
-// Adds n to the phase shift of the nested import set.
-func parseImportSetForMetaFromDatum(ctx context.Context, tuple values.Tuple) (*ImportSet, error) {
-	phaseInt, importSetValue, err := values.UnconsTyped[*values.Integer](
+// parseImportSetForMetaFromDatum parses (for-meta <n> <import-set> ...), adding
+// n to the phase shift of every nested import.
+func parseImportSetForMetaFromDatum(ctx context.Context, tuple values.Tuple) ([]*ImportSet, error) {
+	phaseInt, importSetsExpr, err := values.UnconsTyped[*values.Integer](
 		tuple.Cdr(), werr.ErrNotAnInteger, "for-meta", "phase level")
 	if err != nil {
 		return nil, err
 	}
-	nestedExpr, _, err := values.Uncons(importSetValue, "for-meta", "import-set after phase level")
-	if err != nil {
-		return nil, err
-	}
-	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
-	if err != nil {
-		return nil, err
-	}
 
-	// Add n to phase shift (composable). environment.Phase is int8; reject a
-	// single operand that would not fit, then compose onto the nested set's
-	// existing shift — a chain (e.g. (for-meta 100 (for-meta 100 …))) can
-	// overflow int8 even when each operand fits, so the composition is guarded
-	// in composePhaseShift.
+	// environment.Phase is int8; reject a single operand that would not fit. The
+	// composition onto a nested set's existing shift is guarded separately in
+	// composePhaseShift, because a chain (e.g. (for-meta 100 (for-meta 100 …)))
+	// can overflow int8 even when each operand fits.
 	n := phaseInt.Value
 	if n < math.MinInt8 || n > math.MaxInt8 {
 		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"for-meta: phase %d out of range [%d, %d]",
 			n, int64(math.MinInt8), int64(math.MaxInt8))
 	}
-	composed, err := composePhaseShift("for-meta", importSet.PhaseShift, environment.Phase(n))
-	if err != nil {
-		return nil, err
-	}
-	importSet.PhaseShift = composed
-	return importSet, nil
+	return parseImportSetPhaseShiftFromDatum(ctx, "for-meta", importSetsExpr, environment.Phase(n))
 }
 
 // parseIdentifierListFromDatum parses a list of identifiers into a name set.

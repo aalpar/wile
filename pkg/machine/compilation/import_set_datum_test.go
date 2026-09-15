@@ -825,3 +825,29 @@ func TestParseImportSetFromDatum_ForMeta_CompositionAtBoundary(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.PhaseShift, qt.Equals, environment.Phase(127))
 }
+
+// TestParseImportSetsFromDatum_PhaseShiftTakesEveryOperand pins that a phase shift
+// denotes every operand, composed through nesting, instead of the first operand
+// alone: (for-meta 2 (scheme base) (for-syntax (scheme cxr))) is base at +2 and
+// cxr at +3.
+func TestParseImportSetsFromDatum_PhaseShiftTakesEveryOperand(t *testing.T) {
+	schemeCxr := values.List(values.NewSymbol("scheme"), values.NewSymbol("cxr"))
+	importSet := values.List(
+		values.NewSymbol("for-meta"), values.NewInteger(2),
+		schemeBaseDatum(),
+		values.List(values.NewSymbol("for-syntax"), schemeCxr),
+	)
+
+	result, err := ParseImportSetsFromDatum(context.Background(), importSet)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, qt.HasLen, 2)
+	qt.Assert(t, result[0].LibraryName.Key(), qt.Equals, "scheme/base")
+	qt.Assert(t, result[0].PhaseShift, qt.Equals, environment.Phase(2))
+	qt.Assert(t, result[1].LibraryName.Key(), qt.Equals, "scheme/cxr")
+	qt.Assert(t, result[1].PhaseShift, qt.Equals, environment.Phase(3))
+
+	// An improper operand list is refused, not truncated at the last pair.
+	improper := values.NewCons(values.NewSymbol("for-syntax"), values.NewCons(schemeBaseDatum(), values.NewSymbol("x")))
+	_, err = ParseImportSetsFromDatum(context.Background(), improper)
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue, qt.Commentf("got %v", err))
+}
