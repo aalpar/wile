@@ -419,6 +419,117 @@ perf lever.
 
 Items that block production embedded use or prevent silent state corruption.
 
+### Defects from the 2026-09-14 doc-audit sweep
+
+Found while checking docs against code (`99b8c99d`, `032728ab`) and while fixing what that pass
+reproduced. Every fixed item has a regression test that fails on `032728ab`.
+
+**Fixed on a pushed branch, pending review and merge.** A trial merge of all eleven onto
+`032728ab` conflicts only in `CHANGELOG.md` and the `memory`/`plans` symlinks (the two symlink
+commits differ by a trailing slash).
+
+| Branch | Fixes |
+|---|---|
+| `fix/environment-authorizer-under-evalin` | SECURITY. `environment`, `scheme-report-environment`, `null-environment`, `make-namespace`, `namespace-require` built from the registering namespace, so a stricter child authorizer under `EvalIn` was escaped. Also `checkProfileWidening` now reads `EffectiveAuthorizer` |
+| `fix/containment-symlink-dotdot` | SECURITY. `<root>/link/..` passed `containedInRoot` by spelling and `set-current-directory!` left the root. A `..` that backs out of any symlink is now refused, even one that stays inside the root (the `os.Root` rule) |
+| `fix/composable-callcc-pooled-frame` | `GraftContinuation` hung a shared segment on an unshared chain; `call/cc` inside a 2+-frame segment stopped `MarkChainShared` early and a pooled frame was recycled (index-out-of-range panic, or silent wrong values) |
+| `fix/continuation-marks-under-tail-prompt` | A mark was recorded twice under a tail-position prompt/barrier/`call-with-values` (`RunBodyUnderFrame`), and `appendChainMarks` kept the prompt frame's own marks |
+| `fix/read-shares-port-position` | `read` held look-ahead past the datum, so `read-char` after `read` was desynchronised (R7RS §6.13.2). Side effect: an error just after a datum now surfaces on the next read |
+| `fix/let-syntax-body-literals` | `else`/`=>` failed in any `let-syntax` body: `literalScopesMatchWithDef` refused a literal carrying the body scope. `filterRebindingScopes` deleted; `Scope.IsRebinding` is now never read (public API, left) |
+| `fix/define-for-syntax-within-unit` (on `fix/phase-shifted-expander-root`) | `define-for-syntax`/`begin-for-syntax`/`eval-when` ran at compile time, after the unit's `define-syntax` transformers were built. They now run during expansion. Side effects: inside `(meta …)` they no longer run; a transformer that `expand`s a subform containing one and returns it runs it twice; phase-1 code ignores `WithInlineThreshold` |
+| `fix/phased-import-defects` | `(for-syntax A B)` / `for-template` / `for-meta` dropped every set after the first. Go `syntax-case` clause bodies read enclosing locals boxed (`#&7`) |
+| `perf/optimize-eval-load-compile` | `compile`'s returned thunk skipped `Optimize()` (-27%). The report that `eval`/`load` procedures were unoptimized was false: `compileClosureBody` already optimizes them |
+| `chore/stale-comments-and-doc-test` | `TestTrackedDocsDoNotReferenceIgnoredPaths` (exit 128 through the tracked symlinks); 23 files of stale comments; the 8 binding-tier ordinal labels (entry below); `compare-schemes.sh` for Chez/Racket |
+| `docs/semantic-pass-remaining` | algebra, types, numeric, concurrency, coverage, learn docs checked against code |
+
+**Open, needs a decision.**
+
+- [ ] **A `let` inside a procedure is not fresh when a continuation re-enters it** [High,
+  correctness regression] **DECIDED 2026-09-14, FIXED on `fix/let-merge-capture-safe` (`29b9babc`),
+  pending merge: a `let` merges only into a frame no continuation can be captured under.
+  Zebra +5.8%, deriv ~+2%, rest flat. `let*` (frame pushed before its inits) fixed in
+  `9469c442` on the same branch: a capturing `let*` compiles as nested lets.** `6a017fa1` allocates a `let`'s slots in the enclosing procedure's
+  frame, so re-entry writes the slot a closure or continuation from the earlier pass still
+  reads. Composable re-invocation prints `0 1 2 2` (Racket `0 1 2 1`); plain `call/cc` shows it
+  too. `let*` was already wrong before `6a017fa1` (its frame exists before the inits run).
+  Minimal `call/cc` repro, Wile `(0 1 1)`, Chez `(0 1 0 1)`:
+
+  ```scheme
+  (define k1 #f) (define kb #f) (define log '())
+  (define (run)
+    (let ((x (call/cc (lambda (k) (set! k1 k) 0))))
+      (call/cc (lambda (k) (if (= x 0) (set! kb k))))
+      (set! log (cons x log))
+      x))
+  (define (drive)
+    (let ((r (run)))
+      (cond ((= r 0) (k1 1))
+            ((= (length log) 2) (kb #f))))
+    (reverse log))
+  (write (drive))
+  ```
+
+  Frame copying on re-entry is unsound (assigned-but-uncaptured locals live unboxed).
+  Recommended: merge a `let` only when `ProcedureBodyIsCaptureSafe`/`BodyIsFrameReleasable`
+  holds, else emit the pushing form; A/B nqueens (credited −3.5% to merging). Internal
+  `define`/`letrec` reuse the location too, which R7RS letrec* arguably permits and Chez/Racket
+  do not do.
+- [ ] **Composable continuation re-invocation** [High]: (1) re-invoking `kc` inside its own
+  running segment makes `AcquireSegment` set `p.bottom.parent = nil` on a live frame (Wile
+  `210`, Racket `(a b 210)`); (2) every invocation reuses the captured procedure's env frame,
+  so locals leak between invocations (likely the same cause as the `let` item above).
+- [ ] **What an `(environment …)` namespace sees at phase ≥ 1** [Medium]: `(environment '(scheme
+  base))` has no language rows at any phase ≥ 1 (R7RS: starts empty; Racket's
+  `make-base-namespace` phase 1 is empty). Profile environments `(environment '(wile small))`
+  have phase-1 rows but not phase-2 (bootstrap never adds them; the rows live in `pkg/wile`,
+  which bootstrap cannot import). Recommended: leave `environment` empty, give profile
+  environments the default dialect's rows through a hook.
+- [ ] **Schelog no longer runs unmodified** [Medium, docs claim]: since Stage A a procedural
+  transformer needs `(import (for-syntax (scheme base)))`, so `examples/logic/schelog/schelog.scm`
+  fails (`cadr` unbound at phase 1) and its README's headline claim is false. Prepending
+  `(import (for-syntax (scheme base) (scheme cxr)))` (or two `for-syntax` imports on master)
+  makes all 13 `run-all-tests.sh` cases pass. `test-schelog` runs only in `make cd`, which is
+  why CI stayed green.
+- [ ] **Library export of a name the library did not define** [see `findLibraryBinding` entry
+  below]: the two-phase *defined* case already exports phase 0 correctly (measured
+  2026-09-14, matches Racket); re-exporting `syntax-rules` from `(scheme base)` still fails
+  (`TestLibraryExportTakesFirstPresentPhase`), and a `begin-for-syntax`-only define exports to
+  phase 0 where Racket refuses at `provide`.
+
+**Open, no decision needed.**
+
+- [ ] `call-with-immediate-continuation-mark` sees an outer frame's mark after an ordinary
+  non-tail call: `(wcm 'a 1 (list (cicm 'a …)))` gives `1`, Racket the default
+  (`GetImmediateMark` fallback).
+- [ ] `(continuation-marks k)` for a `call/cc` captured in tail position of
+  `with-continuation-mark` inside a procedure omits the capturing frame's marks (Wile `()`,
+  Racket `(2)`).
+- [ ] A literal's binding captured when a nested `syntax-rules` transformer compiles misses an
+  enclosing `let-syntax`-bound `else`: `(let-syntax ((else …)) (let-syntax ((m (syntax-rules
+  (else) …))) (m else)))` gives `other`, Chez `lit`.
+- [ ] A macro expanding to `(begin-for-syntax (define (name x) …))` leaves `name` invisible to
+  a later transformer, one form per unit.
+- [ ] `(eval '(begin (define-syntax m …) (m)) (environment '(scheme base)))` gives `no such
+  binding "m"`; two separate `eval`s work.
+- [ ] Go ER transformers receive plain symbols, so `(datum->syntax (car f) …)` fails where the
+  Scheme syntax forms work. Go `syntax-case` rejects a whole-clause `_` pattern.
+- [ ] Numeric: `(sqrt #m2)` raises (`PrimSqrt` has no `BigFloat` case); the Inf/NaN guard in
+  `pkg/values/promotion.go` (`lubIsComplex` branch) rounds a `BigComplex` operand to float64.
+- [ ] Algebra: `run-analysis` returns all-`#f` outputs for a 3-block forward chain where block 1
+  should be `#t`; `rewrite` treats the term comparison as boolean, `unification` as three-way
+  (`ac-match` raises `=: expected number, got #f`).
+- [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
+  as a profile name.
+- [ ] Coverage: `stdlibPrefixes` (`coverage/gocover.go`) omits the embedded `chibi/` and `rnrs/`.
+- [ ] Stale: `waitOnCondCtx` (`pkg/values/cond_wait.go`) and `LockContext`
+  (`pkg/values/mutex.go`) say a terminated holder's lock stays held (`Thread.Terminate`
+  abandons it); tutorial chapter 06 calls C_6 and 2·K_3 cospectral, chapter 05 lists a
+  nonexistent `(wile algebra field)`; `Makefile` `bench-gabriel-compare` names `ack`;
+  `kanren-benchmark.scm` prints no "Total time".
+- [ ] `read-syntax` positions do not count characters `read-char` consumed between reads (needs
+  port-owned position tracking).
+- [ ] `set-current-directory!` still has a check-then-`os.Chdir` window.
+
 ### The `race` CI job runs the multi-threaded tests only (2026-08-15)
 
 - [x] **`make test-race` no longer runs `./...`** [Tooling, **SHIPPED 2026-08-15**]: the job had been
@@ -1887,7 +1998,8 @@ pass because it was found while planning Stage B, not by a gate.
 ### Ordinal tier labels ("T2", "T3") in prose are known-dirty (2026-09-11)
 
 - [ ] **Sweep the 8 sweepable binding-tier ordinal labels, or stop using them** [Low, M, filed 2026-09-11
-  after Stage B S1]: inserting `tierExactImported` between `tierExactMutable` and
+  after Stage B S1] **SWEPT on `chore/stale-comments-and-doc-test` (`04b6011a`), pending merge:
+  all 8 name the tier identifier; the 10 left quote replaced text or state the rule.** inserting `tierExactImported` between `tierExactMutable` and
   `tierExactSealed` renumbered every tier below it, and **every "(T2)" / "(T3)" in prose
   silently changed referent with no test going red**. A label is a second, unchecked copy of
   the ordering; an identifier moves with the constant.
