@@ -332,7 +332,10 @@ func asFormDenoting(env *environment.EnvironmentFrame, expr syntax.SyntaxValue, 
 	if !ok {
 		return nil, false
 	}
-	return pair, headFormName(env, sym) == keyword
+	if headFormName(env, sym) != keyword {
+		return nil, false
+	}
+	return pair, true
 }
 
 // headFormName returns the special form a head identifier denotes. A head that

@@ -34,6 +34,11 @@ import (
 // extractDefineName extracts the name being defined from a define form.
 // Returns nil if the form is not a define or is malformed.
 //
+// The form is recognized by the binding its head denotes (asFormDenoting), not
+// by spelling, so a renamed or prefixed import of define is recognized too; env
+// is the environment the head is resolved against, and a nil env falls back to
+// spelling only (see headFormName).
+//
 // Note: This intentionally excludes define-syntax forms. Macro bindings are
 // handled separately by compileDefineSyntaxFromSyntax which stores them in the
 // expand environment. We only pre-register define bindings so that macros can
