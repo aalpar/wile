@@ -85,10 +85,13 @@ func TestAcquireSegment_SecondCallDeepCopies(t *testing.T) {
 
 	second := cc.AcquireSegment()
 
-	// Second call returns a deep copy, not the original.
+	// Second call returns a copy of both frames, not the originals.
 	qt.Assert(t, second != top, qt.IsTrue)
-	// The bottom frame's parent was reset to nil before copy.
-	qt.Assert(t, bottom.parent, qt.IsNil)
-	// The deep copy's bottom also has parent == nil.
-	qt.Assert(t, bottomOfChain(second).parent, qt.IsNil)
+	qt.Assert(t, second.parent != bottom, qt.IsTrue)
+	qt.Assert(t, second.parent, qt.IsNotNil)
+	// The copy stops at the segment's bottom frame, not at the graft target.
+	qt.Assert(t, second.parent.parent, qt.IsNil)
+	// The first invocation may still be running on the original frames, so its
+	// graft edge must survive.
+	qt.Assert(t, bottom.parent, qt.Equals, graftTarget)
 }

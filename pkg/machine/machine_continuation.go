@@ -217,21 +217,24 @@ func NewMachineContinuationWithPrompt(parent *MachineContinuation, tpl *NativeTe
 	return q
 }
 
-// DeepCopy creates a deep copy of the entire continuation chain.
-// Each frame in the chain is copied, with parent pointers updated to
-// point to the copied frames. This is needed for composable continuations
-// which must be safely re-invoked multiple times.
-func (p *MachineContinuation) DeepCopy() *MachineContinuation {
+// DeepCopyThrough copies the frames from p down to and including bottom, which
+// must be reachable from p. The copy of bottom has parent == nil whatever
+// bottom's own parent is, and no original frame is written. This is needed for
+// composable continuations, which must be safely re-invoked multiple times: an
+// earlier invocation may still be running on the originals with bottom grafted
+// onto its chain.
+func (p *MachineContinuation) DeepCopyThrough(bottom *MachineContinuation) *MachineContinuation {
 	if p == nil {
 		return nil
 	}
 	q := p.Copy()
 	current := q
-	for current.parent != nil {
-		parentCopy := current.parent.Copy()
+	for src := p; src != bottom; src = src.parent {
+		parentCopy := src.parent.Copy()
 		current.parent = parentCopy
 		current = parentCopy
 	}
+	current.parent = nil
 	return q
 }
 

@@ -119,6 +119,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A continuation re-invoked inside its own invocation no longer cuts the
+  program off.** A composable continuation's first invocation runs the captured
+  frames themselves, grafted onto the invoker's chain. A re-invocation reset the
+  bottom frame's parent to nil so a whole-chain copy would stop there, but with a
+  segment of two or more frames that bottom frame was still live when the body
+  re-invoked the continuation, so everything below the segment was lost: Wile
+  printed `400` where Racket prints `(10 (a b 400))`. A `call/cc` continuation
+  re-invoked under a prompt inside its own run took the same path. Re-invocation
+  now copies down to the bottom frame and writes no original frame, so a
+  multi-shot continuation keeps its first invoker's chain reachable until the
+  continuation is dropped.
 - **A `..` after a symlink can no longer move the working directory out of a
   sandbox root.** `containedInRoot` ran `filepath.Abs`, which cleans `..`
   lexically, before resolving symlinks, so `<root>/link/..` was judged as

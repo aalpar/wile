@@ -305,9 +305,9 @@ After:
   segment: F1 → F2 → G1 → G2 → nil
 ```
 
-### DeepCopy
+### DeepCopyThrough
 
-Creates an independent copy of an entire continuation chain. Every frame is `Copy()`'d with parent pointers relinked to the copies. Used before grafting to ensure re-invocation safety.
+Creates an independent copy of a chain from its top frame down to a given bottom frame. Every frame is `Copy()`'d with parent pointers relinked to the copies, and the copied bottom's parent is nil. Used before grafting to ensure re-invocation safety. It stops at the bottom frame rather than at a nil parent because the original bottom is still grafted onto the first invocation's chain, which may be running.
 
 ## Code locations
 
@@ -317,7 +317,7 @@ Creates an independent copy of an entire continuation chain. Every frame is `Cop
 | `pkg/machine/composable_continuation.go` | `ComposableContinuation` callable value, `AcquireSegment` |
 | `pkg/machine/prompt_abort.go` | `ErrPromptAbort`, `ErrResumeContinuation` |
 | `pkg/machine/dynamic_wind.go` | `DynamicWindFrame`, `WindingStack`, `FindCommonWindingPrefix` |
-| `pkg/machine/machine_continuation.go` | `promptTag`/`promptHandler` fields, `DeepCopy()` |
+| `pkg/machine/machine_continuation.go` | `promptTag`/`promptHandler` fields, `DeepCopyThrough()` |
 | `pkg/machine/barrier_token.go` | `BarrierToken` opaque barrier identity |
 | `pkg/machine/machine_context.go` | `RunResumable`, `RunWithEscapeHandling`, `RunWithinBoundary`, `resolveAbort` |
 | `pkg/machine/run_body_under_frame.go` | `RunBodyUnderPrompt` and the other reified-boundary constructors |

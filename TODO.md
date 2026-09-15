@@ -474,10 +474,17 @@ commits differ by a trailing slash).
   holds, else emit the pushing form; A/B nqueens (credited −3.5% to merging). Internal
   `define`/`letrec` reuse the location too, which R7RS letrec* arguably permits and Chez/Racket
   do not do.
-- [ ] **Composable continuation re-invocation** [High]: (1) re-invoking `kc` inside its own
-  running segment makes `AcquireSegment` set `p.bottom.parent = nil` on a live frame (Wile
-  `210`, Racket `(a b 210)`); (2) every invocation reuses the captured procedure's env frame,
-  so locals leak between invocations (likely the same cause as the `let` item above).
+- [x] **Composable continuation re-invocation** [High] **FIXED on
+  `fix/composable-reinvocation-live-segment`, MERGED 2026-09-14:** (1) re-invoking `kc` inside its own
+  running segment made `AcquireSegment` set `p.bottom.parent = nil` on a live frame, cutting
+  the program off below the segment (Wile `400`, Racket `(10 (a b 400))`). Needs a segment of
+  two or more frames; `call/cc` re-invoked under a prompt inside its own run hit it too.
+  Re-invocation now copies through the bottom frame (`DeepCopyThrough`) and writes no original.
+  Trade-off: the original bottom keeps its graft edge, so a multi-shot continuation retains its
+  first invoker's chain until it is dropped. Pinned by
+  `TestComposableContinuationReinvocationKeepsLiveSegment`. (2) Locals leaking between
+  invocations does not reproduce on `6ce2f4c1`: ten binder shapes (`let`, `let*`, `letrec`,
+  internal `define`, `do`, named `let`, a callee frame) match Racket. It was the `let` item above.
 - [ ] **What an `(environment …)` namespace sees at phase ≥ 1** [Medium]: `(environment '(scheme
   base))` has no language rows at any phase ≥ 1 (R7RS: starts empty; Racket's
   `make-base-namespace` phase 1 is empty). Profile environments `(environment '(wile small))`
