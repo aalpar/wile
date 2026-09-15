@@ -115,10 +115,10 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 	localExpandEnv := environment.NewLocalEnvironment(numBindings)
 	childExpandEnv := environment.NewEnvironmentFrameWithParent(localExpandEnv, p.env)
 
-	// Create a rebinding scope for the let-syntax body.
-	// Rebinding scopes indicate that auxiliary syntax could be shadowed.
-	// This is used in literalScopesMatchWithDef
-	// (internal/match/syntax_adapter.go) to correctly reject shadowed literals.
+	// The binding scope for the keywords and the body. A pattern literal shadowed
+	// by one of the keywords is refused by resolving it to that keyword's local
+	// binding (literalScopesMatchWithDef, internal/match/syntax_adapter.go), not by
+	// the presence of this scope, which every body identifier carries.
 	letScope := syntax.NewRebindingScopeWithLabel("let-syntax")
 
 	// For letrec-syntax, pre-register all keywords so transformers can see each other
