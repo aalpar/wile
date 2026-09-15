@@ -3666,6 +3666,59 @@ phases, not with point fixes, except 5.2 which is the P0 prerequisite.
   (Q1 of the phase-hermeticity item), so the gap has no in-tree consumer. Design §5.5 does not need it:
   its helpers live in the sealed base.
 
+  **Corrected 2026-09-14, measured: this is a WITHIN-UNIT ORDERING defect, not a phase or scope
+  one, and the message names neither.** The same five lines pass across unit boundaries and fail
+  inside one unit:
+
+  | Delivery | Result |
+  |---|---|
+  | one form per REPL unit (piped to `./dist/wile`) | `7` |
+  | the identical text in a file (one `(begin …)` unit) | `no such binding "helper" with compatible scopes at phase 1` |
+
+  `begin-for-syntax` is `expandUnchanged` at expand time (`primitive_expanders_registry.go:52`)
+  and runs its body only when the COMPILER reaches it, while `define-syntax` compiles and
+  evaluates its transformer during the EXPANDER's body scan. So within one unit the transformer
+  is built before the preceding `begin-for-syntax` has run, and `helper` does not exist yet.
+  Across units the compile of unit 1 completes first and it resolves.
+
+  "with compatible scopes" is a misdiagnosis the diagnostic invites: instrumented at the raise,
+  a repeat lookup under `syntax.AllScopes()` also misses (`anyScopeHit=false`), so no scope set
+  would have found it. The scoped arm is simply the last one tried. Whatever fixes the ordering
+  should also stop that arm reporting a scope refusal when the name is absent outright.
+- [x] **A `define-syntax` at phase > 0 is unusable from every rung** [Conformance, Done
+  2026-09-13]: the keyword twin of the item above, and a wider gap — that one is a phase-1
+  *variable* invisible to a *transformer*; this one was a phase-1 *keyword* invisible to
+  everything, including phase-1 code in the same body.
+
+  **Root cause, measured by instrumenting both ends.** The deposit lands at phase 2 and the
+  lookup read phase 1. `executeFormsAtCompileTime` (`compile_helpers.go`, shared by
+  `begin-for-syntax` and compile-time `eval-when`) and `CompileDefineForSyntax` compiled and
+  evaluated the body against `p.env.NextPhase()` but rooted the EXPANDER at `p.env`. The body
+  is phase-(N+1) code, so a `define-syntax` in it climbs from its own `p.env` — that N+1
+  frame — and deposits at N+2, while the `p.env`-rooted expander's ARM 2 applied `NextPhase()`
+  to N and read N+1. Off by exactly one rung, at every rung. `compileTransformerValue` had it
+  right all along: it roots the expander at the same frame it compiles against
+  (`expand_and_compile.go:49`), which is why a procedural transformer body — the other
+  phase-shifted compile in the tree — never had the defect.
+
+  **Fix**: both sites root the expander at `expandEnv`. Two one-line changes, both
+  load-bearing — reverting the `define-for-syntax` half alone leaves exactly the
+  `define-for-syntax` row red.
+
+  Macros of the *enclosing* phase still resolve after the move: they live IN `expandEnv`,
+  which is `lookupMacroBinding`'s ambient arm — the same arm the procedural-transformer root
+  has always relied on.
+
+  Pinned by `pkg/wile/phase1_define_syntax_reach_test.go`: five rows (later body, same body,
+  `er-macro-transformer`, `define-for-syntax` value expression, nested/phase-2), all measured
+  RED with the two lines reverted in place, plus a GUARD that a phase-1 keyword stays
+  invisible at phase 0 — the fix lifts the deposit to the rung its own code reads, it does not
+  flatten the tower.
+
+  **Unchanged, deliberately**: the `begin-for-syntax`-define-invisible-to-a-transformer item
+  above is a DIFFERENT mechanism and is still open. Its message is misleading and its filing
+  is imprecise; see the correction recorded on that item.
+
 ## Tier 2 — Embedding API & Product Value
 
 The embedding experience that differentiates Wile.

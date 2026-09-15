@@ -129,6 +129,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   re-gated when it differs from the spelling, so a lexical custom authorizer is
   covered too. The `os.Root` file and load paths never escaped: they opened the
   lexically cleaned name inside the root.
+- **A `define-syntax` inside `begin-for-syntax` is reachable from its own rung.**
+  The transformer was deposited one phase above where any lookup read it, so
+  `(begin-for-syntax (define-syntax m ...))` bound a keyword that nothing could
+  use — not a later phase-1 body, not the same body, not phase 0. The variable
+  analogue worked at every one of those coordinates, which is what made the gap
+  keyword-specific rather than phase hermeticity doing its job.
+  `executeFormsAtCompileTime` (shared by `begin-for-syntax` and compile-time
+  `eval-when`) and `CompileDefineForSyntax` compiled and evaluated the body
+  against `p.env.NextPhase()` but rooted the EXPANDER at `p.env`; the body is
+  phase-(N+1) code, so its `define-syntax` climbs from that N+1 frame to N+2
+  while the expander's lookup applied `NextPhase()` to N and read N+1. Both sites
+  now root the expander at the frame they compile against, matching
+  `compileTransformerValue`, which is why a procedural transformer body never had
+  the defect. Macros of the enclosing phase still resolve — they live in that
+  frame, which is the lookup's ambient arm — and a phase-1 keyword stays
+  invisible at phase 0.
 - **`--cover` profiles now carry 1-based columns.** `SourceIndexes` columns
   are 0-based, the tokenizer's convention shared by every diagnostic, and the
   Go cover writer copied them through into a format that reads columns as
