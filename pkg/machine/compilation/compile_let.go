@@ -171,13 +171,20 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 	// The operand is patched at the end, which is why the index is kept. That is
 	// the whole difference from a lambda's shape, where the frame is built from
 	// tpl.shape at Apply time and late growth costs nothing.
+	//
+	// Only when no continuation can be captured while the frame is live, for the
+	// reason compileClosureBody gives. An enclosing shape already proves that for
+	// the region this let sits in; without one, the let proves it for itself.
 	pushEnvIndex := -1
 	if !merged {
 		pushEnvIndex = p.template.CodeLen()
 		p.AppendOperations(machine.NewOperationPushEnv(totalSlots))
 		p.ensureMergeState()
 		savedShape := p.shape
-		p.shape = childEnv
+		p.shape = nil
+		if savedShape != nil || validate.LetRegionIsCaptureSafe(v, savedEnv) {
+			p.shape = childEnv
+		}
 		defer func() {
 			p.shape = savedShape
 		}()

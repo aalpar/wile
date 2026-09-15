@@ -282,6 +282,43 @@ func ProcedureBodyIsCaptureSafe(proc ValidatedBodyAndParams, selfSym *syntax.Syn
 	return bodyCannotCaptureCaller(proc, self, env)
 }
 
+// letRegion presents one `let` form as a parameterless body, the shape
+// bodyCannotCaptureCaller walks. The let's own binders reach the shadow set
+// through the walk's *ValidatedLet arm, so there are no parameters to seed.
+type letRegion struct {
+	body []ValidatedExpr
+}
+
+// Params returns nil: a let region binds nothing outside the let form itself.
+func (letRegion) Params() *ValidatedParams {
+	return nil
+}
+
+// Body returns the let form as a one-expression body.
+func (p letRegion) Body() []ValidatedExpr {
+	return p.body
+}
+
+// Docstring returns the empty string: a region is not a procedure.
+func (letRegion) Docstring() string {
+	return ""
+}
+
+// LetRegionIsCaptureSafe reports whether no continuation can be captured while
+// v runs: its inits and body run no capture operator and call only capture-safe
+// callees. env is the frame v is compiled IN, not v's own frame.
+//
+// It is ProcedureBodyIsCaptureSafe for a region that is not a procedure body: a
+// pushing `let` whose frame nested lets merge into. The inits are included
+// although a plain let's frame is pushed after they run; that over-approximates,
+// which only forgoes a merge.
+func LetRegionIsCaptureSafe(v *ValidatedLet, env *environment.EnvironmentFrame) bool {
+	if env == nil {
+		return false
+	}
+	return bodyCannotCaptureCaller(letRegion{body: []ValidatedExpr{v}}, nil, env)
+}
+
 // LetBindingSelfTailReusable reports the arity and eligibility of the i-th
 // binding of a recursively-scoped let (letrec / letrec* / named-let) for in-place
 // self-tail reuse — the local-binding analogue of selfTailForDefine. ok is true iff

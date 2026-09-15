@@ -56,11 +56,19 @@ import (
 // "…unless its body contains code we could not analyse", and the depth axis
 // stays.
 //
+// A SECOND PRODUCER, BY DESIGN. A `let` merges only into a frame no continuation
+// can be captured under (canMergeLet), because a merged slot is not fresh when a
+// continuation re-runs the `let`. A `let` in a region with a capture operator, an
+// unknown callee or an opaque subtree pushes its own frame, and a reference from
+// inside it to an outer binding reads at depth 1. Closing this one means proving
+// more regions capture-free, not changing the frame model.
+//
 // Measured over the whole pkg/wile suite (instrumenting EncodeLocalIndex, the
 // single funnel every local operand reaches) the distinct emit-site count went
 // 134 -> 3 -> 2 across the two changes that closed the enumerable populations:
 // top-level `let` nesting with its free-var pushes, and the syntax-case clause
-// body. Both survivors are the hatch above.
+// body. Both survivors are the hatch above. That count predates the second
+// producer and was not re-measured.
 
 // depthSitesIn counts instructions carrying a non-zero LocalIndex depth across
 // tpl and every template in its literal pool.
@@ -115,8 +123,10 @@ func TestEmittedLocalDepthIsZeroWhereEnumerable(t *testing.T) {
 			code: `(let ((a 1)) (let ((b a)) (let ((c b)) (+ a b c))))`,
 		},
 		{
+			// Let-bound: a lambda applied in place is an unknown callee to the
+			// capture-safety verdict, and the merge would be refused.
 			name: "a closure over a top-level merged slot",
-			code: `(let ((a 1)) (let ((b 2)) ((lambda () (+ a b)))))`,
+			code: `(let ((a 1)) (let ((b 2)) (let ((f (lambda () (+ a b)))) (f))))`,
 		},
 		{
 			// A closure inside a closure: the inner one reaches the outer
@@ -137,12 +147,6 @@ func TestEmittedLocalDepthIsZeroWhereEnumerable(t *testing.T) {
 			name: "a named let loop",
 			code: `(let loop ((i 0) (acc 0)) (if (= i 3) acc (loop (+ i 1) (+ acc i))))`,
 		},
-		{
-			// A syntax-case clause body's `let` merges into the pattern-variable
-			// frame, so the template that follows it reads at depth 0.
-			name: "a let in a syntax-case clause body",
-			code: `(lambda (stx) (syntax-case stx () ((_ a) (let ((x 1)) (syntax a)))))`,
-		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -157,17 +161,17 @@ func TestEmittedLocalDepthIsZeroWhereEnumerable(t *testing.T) {
 	}
 }
 
-// TestEmittedLocalDepthSurvivesOnlyOpaqueSubtrees is the other half of the
-// ratchet: it pins that the remaining producers are exactly the RetainsLexicalEnv
-// hatch, so a future change cannot quietly re-broaden the population and still
-// look green.
+// TestEmittedLocalDepthSurvivesOnlyWhereUnprovable is the other half of the
+// ratchet: it pins that the remaining producers are exactly the two the file
+// header names, so a future change cannot quietly re-broaden the population and
+// still look green.
 //
-// Each row MUST emit depth, and must do so for the same reason: the body holds
-// raw syntax the free-variable pass cannot look inside, so the closure keeps its
-// creating frame. If a row stops emitting depth, someone closed the hatch for
-// that shape — which is progress, and is exactly the moment to re-price the
-// LocalIndex collapse rather than to delete the row.
-func TestEmittedLocalDepthSurvivesOnlyOpaqueSubtrees(t *testing.T) {
+// Each row MUST emit depth, for one of the two reasons the file header gives:
+// raw syntax the free-variable pass cannot look inside, or a `let` that pushes
+// because its region can capture a continuation. If a row stops emitting depth,
+// someone closed the hatch for that shape — which is progress, and is exactly
+// the moment to re-price the LocalIndex collapse rather than to delete the row.
+func TestEmittedLocalDepthSurvivesOnlyWhereUnprovable(t *testing.T) {
 	tcs := []struct {
 		name string
 		code string
@@ -199,6 +203,19 @@ func TestEmittedLocalDepthSurvivesOnlyOpaqueSubtrees(t *testing.T) {
 			         (syntax-case stx ()
 			           ((_ a) (let ((n 1))
 			                    (let ((f (lambda () (quasiquote ((unquote n)))))) (f))))))`,
+		},
+		{
+			// The clause body is raw syntax the capture scan cannot read, so its
+			// `let` pushes rather than merging into the pattern-variable frame,
+			// and the template after it reads the pattern variable at depth 1.
+			name: "a let in a syntax-case clause body",
+			code: `(lambda (stx) (syntax-case stx () ((_ a) (let ((x 1)) (syntax a)))))`,
+		},
+		{
+			// A capture operator in the procedure body: the `let` pushes, and its
+			// body reaches the parameter one frame up.
+			name: "a let in a procedure that can capture a continuation",
+			code: `(lambda (n) (let ((a (call/cc (lambda (k) 1)))) (+ a n)))`,
 		},
 	}
 	for _, tc := range tcs {

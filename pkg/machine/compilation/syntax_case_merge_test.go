@@ -81,62 +81,57 @@ func countOpEverywhere(tpl *machine.NativeTemplate, op machine.OpCode) int {
 	return q
 }
 
-// TestSyntaxCaseClauseBodyMergesLets pins that a `let` in a syntax-case clause
-// body takes its slots out of the pattern-variable frame instead of pushing one.
+// TestSyntaxCaseClauseBodyLetsPush pins that a `let` in a syntax-case clause
+// body pushes its own frame instead of taking slots out of the pattern-variable
+// frame.
 //
-// It could not, for as long as BindPatternVars sized the runtime frame from its
-// own PatternVars list: a slot appended to the compile-time mirror had no
-// runtime counterpart, so canMergeLet had to refuse. That refusal was the last
-// closeable population of depth != 0 emit sites over the pkg/wile suite (4 hits,
-// memory/flat-closure-baseline.local.md §7a's "syntax-case clause body").
+// The merge is mechanically possible (OperationBindPatternVars.MergedSlots
+// carries the width), but canMergeLet refuses any frame a continuation can be
+// captured under, and a clause body is raw syntax the capture scan cannot prove
+// capture-free. A merged slot is not fresh when a continuation re-runs its
+// `let`, which is the defect the refusal closes.
 //
-// MergedSlots is the census. A merge that silently stopped happening would still
-// evaluate correctly — the pushing form is what it falls back to — so no value
-// assertion in the tree would notice.
-func TestSyntaxCaseClauseBodyMergesLets(t *testing.T) {
+// This is a census: if a clause body is ever proven capture-free, MergedSlots
+// rises and the pushes fall, and both are the moment to re-derive this table.
+func TestSyntaxCaseClauseBodyLetsPush(t *testing.T) {
 	tcs := []struct {
 		name string
 		code string
-		// wantMerged is the number of slots the clause body's lets take out of
-		// the pattern-variable frame.
-		wantMerged int
-		// wantPops is 1 for the matched path's pop, plus 1 more when a fender
-		// gives the clause a cleanup block of its own.
+		// wantPushes is one OpPushEnv per `let` in the clause.
+		wantPushes int
+		// wantPops is 1 for the matched path's pop of the pattern-variable frame,
+		// plus 1 more when a fender gives the clause a cleanup block of its own,
+		// plus one per `let` not in tail position.
 		wantPops int
 	}{
 		{
-			name:       "no let in the clause body merges nothing",
+			name:       "no let in the clause body",
 			code:       `(lambda (stx) (syntax-case stx () ((_ a) (syntax a))))`,
-			wantMerged: 0,
+			wantPushes: 0,
 			wantPops:   1,
 		},
 		{
-			name:       "one binding merges one slot",
+			name:       "one let",
 			code:       `(lambda (stx) (syntax-case stx () ((_ a) (let ((x (syntax a))) x))))`,
-			wantMerged: 1,
+			wantPushes: 1,
 			wantPops:   1,
 		},
 		{
-			// Three frames' worth of bindings, one frame. The inner lets merge
-			// through the outer ones, which is canMergeLet's transitive walk.
-			name: "nested lets merge into one frame",
+			name: "nested lets",
 			code: `(lambda (stx)
 			         (syntax-case stx ()
 			           ((_ a) (let ((x 1)) (let ((y 2)) (let ((z 3)) (syntax a)))))))`,
-			wantMerged: 3,
+			wantPushes: 3,
 			wantPops:   1,
 		},
 		{
-			// The fender is compiled BEFORE the body and can merge too, which is
-			// why the count is taken once, after both.
-			name: "a fender's let merges alongside the body's",
+			// The fender's let is not in tail position, so it pops.
+			name: "a fender's let and the body's",
 			code: `(lambda (stx)
 			         (syntax-case stx ()
 			           ((_ a) (let ((g #t)) g) (let ((x 1)) (syntax a)))))`,
-			wantMerged: 2,
-			// A fender adds the cleanup block's pop: three exit edges out of a
-			// clause, two of which unwind the pattern-variable frame.
-			wantPops: 2,
+			wantPushes: 2,
+			wantPops:   3,
 		},
 	}
 	for _, tc := range tcs {
@@ -145,12 +140,9 @@ func TestSyntaxCaseClauseBodyMergesLets(t *testing.T) {
 			tpl := compileToTemplate(t, tc.code)
 			bpvs := bindPatternVarsIn(tpl)
 			c.Assert(len(bpvs), qt.Equals, 1)
-			c.Assert(bpvs[0].MergedSlots, qt.Equals, tc.wantMerged)
-			// The merge is only real if no frame was pushed for it. The clause
-			// itself pushes none: BindPatternVars is the frame.
-			c.Assert(countOpEverywhere(tpl, machine.OpPushEnv), qt.Equals, 0)
-			c.Assert(countOpEverywhere(tpl, machine.OpPopEnv), qt.Equals, tc.wantPops,
-				qt.Commentf("every pop must balance BindPatternVars, never a merged let"))
+			c.Assert(bpvs[0].MergedSlots, qt.Equals, 0)
+			c.Assert(countOpEverywhere(tpl, machine.OpPushEnv), qt.Equals, tc.wantPushes)
+			c.Assert(countOpEverywhere(tpl, machine.OpPopEnv), qt.Equals, tc.wantPops)
 		})
 	}
 }
@@ -180,5 +172,8 @@ func TestSyntaxCaseFrameLayoutIsAppendOrder(t *testing.T) {
 
 	// `_`, `a` and `b`: the underscore is stripped, so two pattern variables.
 	c.Assert(len(bpvs[0].PatternVars), qt.Equals, 2)
-	c.Assert(bpvs[0].MergedSlots, qt.Equals, 2)
+	// Zero, not 2: the lets push (TestSyntaxCaseClauseBodyLetsPush), so the
+	// merged tail of this layout is unexercised until a clause body can be proven
+	// capture-free.
+	c.Assert(bpvs[0].MergedSlots, qt.Equals, 0)
 }
