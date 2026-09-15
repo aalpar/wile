@@ -35,16 +35,17 @@ type vmState struct {
     threadID     uint64
     callDepth    int
     envPooled    bool
+    free         []values.Value
     marks        []markEntry
     barrierValid *BarrierToken
 }
 ```
 
-`singleValue` and `multiValues` form a split value register (single-value fast path plus R7RS `values` slow path); `envPooled` is a release flag for the environment-frame pool; `marks` carries continuation-mark entries (see [`marks.md`](marks.md)); `barrierValid` rides `vmState` rather than the live context so a captured continuation carries the `with-continuation-barrier` it was captured under.
+`singleValue` and `multiValues` form a split value register (single-value fast path plus R7RS `values` slow path); `envPooled` is a release flag for the environment-frame pool; `free` is the executing closure's free-variable vector, which must move with `template`; `marks` carries continuation-mark entries (see [`marks.md`](marks.md)); `barrierValid` rides `vmState` rather than the live context so a captured continuation carries the `with-continuation-barrier` it was captured under.
 
-This is everything the VM needs to resume execution from a given point: which function it's in (`template`), where in that function (`pc`), what variables are in scope (`env`), what intermediate values are on the eval stack (`evals`), and what dynamic-wind extent is active (`windingStack`).
+This is everything the VM needs to resume execution from a given point: which function it's in (`template`), where in that function (`pc`), what variables are in scope (`env` and `free`), and what intermediate values are on the eval stack (`evals`). `windingStack` and `promptTag` are populated only on prompt and boundary frames (`RunBodyUnderFrame`); an ordinary `SaveContinuation` leaves them zero, and the dynamic-wind extent a continuation needs travels with the captured continuation instead (see Dynamic-Wind Integration).
 
-Both `MachineContext` (the running VM) and `MachineContinuation` (a saved frame) embed `vmState`. They're the same shape because saving a continuation is literally: copy these fields into a new struct and link it.
+Both `MachineContext` (the running VM) and `MachineContinuation` (a saved frame) embed `vmState`. They're the same shape because saving a continuation is essentially: copy these fields into a new struct and link it.
 
 ### MachineContinuation: A Linked List of Saved Frames
 
@@ -54,14 +55,18 @@ Defined as `MachineContinuation` in `pkg/machine/machine_continuation.go`:
 type MachineContinuation struct {
     vmState
     parent        *MachineContinuation
-    promptHandler Closure
+    promptHandler values.Callable
     shared        bool
     // Inline eval storage: evals == nil ⟺ the saved values live in
     // inlineEvals[0:inlineEvalsLen].
     inlineEvalsLen uint8
     inlineEvals    [inlineEvalsCap]values.Value
+    // non-nil only on a non-continuable handler's finalizer frame
+    escalatorArm *escalatorArm
 }
 ```
+
+`escalatorArm` is shared by every copy of its frame; see [The Resume Trampoline](resume-trampoline.md).
 
 Each frame points to its parent. The chain reads bottom-up: the root frame (parent == nil) is the oldest pending return; the top of the chain is the most recent. When a function returns, the VM pops the top frame and restores its state. When `call/cc` captures a continuation, it copies this entire chain.
 
@@ -97,8 +102,8 @@ before SaveContinuation:              after SaveContinuation:
 MachineContext                        MachineContext
 ├── pc: 5                             ├── pc: 6 (advanced past save)
 ├── env: E1                           ├── env: E1
-├── evals: [a, b]                     ├── evals: []  (new stack)
-└── cont ──→ (frame 0)                └── cont ──→ (frame 1: pc=8, env=E1, evals=[a,b])
+├── evals: [a, b]                     ├── evals: []  (same stack, cleared)
+└── cont ──→ (frame 0)                └── cont ──→ (frame 1: pc=8, env=E1, inline evals=[a,b])
                                                         │
                                                         └── parent ──→ (frame 0)
 ```
@@ -121,7 +126,7 @@ If `cont` is nil, there's nothing to return to — execution is done.
 
 The implementation lives in `PrimCallCC` in `pkg/registry/core/prim_control.go`. Here's the sequence:
 
-**1. Capture the continuation chain.** `SliceContinuationAt` deep-copies every frame from `mc.cont` down to the nearest `DefaultPromptTag`. Each frame is individually copied so that future mutations to the live chain don't affect the captured one.
+**1. Capture the continuation chain.** `SliceContinuationAt` copies every frame from `mc.cont` down to the nearest `DefaultPromptTag`. Each frame struct and its eval stack are individually copied so that future mutations to the live chain don't affect the captured one; `env` pointers are shared (see Shared Frames below).
 
 ```go
 capturePrompt, _ := mc.FindPrompt(machine.DefaultPromptTag)
@@ -132,7 +137,7 @@ mc.SnapshotReachableMarksInto(comp)            // restore outer marks on resume
 capt := machine.NewCapturedContinuation(comp, mc.ThreadID(), mc.BarrierValid())
 ```
 
-The capture is **delimited**, not absolute. `FindPrompt(DefaultPromptTag)` returns `(nil, true)` at the top-level context boundary — `SliceContinuationAt(nil)` then grabs the whole chain — or a chain *frame* when the `call/cc` sits inside a `call-with-continuation-prompt` reusing the default tag, in which case only the segment down to that prompt is captured. Capturing more would loop forever: the chain above the prompt includes the re-invocation site itself.
+The capture is **delimited**, not absolute. `FindPrompt(DefaultPromptTag)` returns `(nil, true)` at the top-level context boundary — `SliceContinuationAt(nil)` then grabs the whole chain — or a chain *frame* when the `call/cc` sits inside a `call-with-continuation-prompt` reusing the default tag, in which case only the segment down to that prompt is captured. Capturing more would loop forever: the chain past the prompt, toward the root, includes the re-invocation site itself.
 
 **2. Build the captured continuation value.** `call/cc` does not return a Go closure. It returns a `CapturedContinuation` (`pkg/machine/captured_continuation.go`) — a value that is both *callable* (invoking it resumes the captured point) and *introspectable* (`continuation-marks` can read its chain). The escape logic — thread-ID check, barrier check, and the resume itself — lives in `applyCapturedContinuation`, not inside a closure.
 
@@ -183,10 +188,11 @@ func (p *MachineContext) RunResumable() error {
         if errors.As(err, &resumeErr) {
             boundary, _ := p.FindPrompt(resumeErr.Tag)
             p.ReinstallSegment(resumeErr.Segment, boundary,
-                resumeErr.SourceWinding, resumeErr.Values, true)
+                resumeErr.SourceWinding, resumeErr.Values, true,
+                resumeErr.escalatorRevivals)
             continue                     // the trampoline bounce
         }
-        // ... timer interrupts, then real errors fall through
+        // ... timer and debugger-break interrupts, then real errors fall through
     }
 }
 ```
@@ -216,15 +222,15 @@ This happens transparently whenever a continuation crosses a dynamic-wind bounda
 
 ### The Sub-Context Architecture
 
-Foreign functions (Go primitives) that need to call Scheme closures create sub-contexts via `NewSubContext()`. Sub-contexts have their own call stacks (`cont = nil`) but share the global environment. This matters for continuations because:
+Some foreign functions (Go primitives) that call Scheme closures create sub-contexts via `NewSubContext()`: rootless `call/cc` and `call-with-composable-continuation`, `eval`/`load`, `call-with-input-file`/`call-with-output-file`, and the dynamic-wind before/after thunks a winding reconcile runs. Most control primitives no longer do: `call-with-values`, `call-with-exit`, `call-with-continuation-prompt`, `with-continuation-barrier`, `with-timeout`, and `force` run their Scheme body on the live chain under a reified frame (`RunBodyUnderFrame` and its constructors), so a continuation captured inside spans the rest of the program. Sub-contexts have their own call stacks (`cont = nil`) but share the global environment. This matters for continuations because:
 
 - A continuation captured in a sub-context only captures frames up to the sub-context boundary — not the parent's frames.
-- `mc.Parent()` (the chain pointer) is what tells `call/cc` whether to apply inline or in a fresh sub-context; `parentMC` is the separate context link, used for mark and stack-trace walks across the boundary.
+- `mc.Parent()` (the chain pointer) is what tells `call/cc` whether to apply inline or in a fresh sub-context; `parentMC` is the separate context link, used for mark and stack-trace walks across the boundary. It is nil on an SRFI-18 thread root (`NewThreadSubContext`), which runs concurrently with its parent.
 - Cross-context continuation jumps are mediated by control signals (`ErrResumeContinuation` for a `call/cc` resume, `ErrPromptAbort` for a value-delivery abort), not by direct frame manipulation.
 
 ## Seeing It In Action
 
-Consider this Scheme program:
+Consider this REPL session (each form entered separately; in a program file the continuation would also include the later `(saved 42)` form, which would then re-invoke itself forever):
 
 ```scheme
 (define saved #f)
@@ -241,7 +247,7 @@ Here's what happens inside the VM:
 3. `PrimCallCC` fires. `SliceContinuationAt` copies the continuation chain (which includes the frame from step 2) and marks the live chain shared. It wraps the copy in a `ComposableContinuation`, then in a `CapturedContinuation` value.
 4. The lambda `(lambda (k) (set! saved k) 10)` runs. It stashes `k` (the `CapturedContinuation`) in `saved` and returns `10`.
 5. `10` flows back through `RestoreContinuation`, the saved frame is popped, `(+ 1 10)` evaluates to `11`.
-6. Later, `(saved 42)` invokes the continuation with `42`. Rather than running the captured chain on the spot, it returns it *unrun* as an `ErrResumeContinuation` control signal. The nearest `DefaultPromptTag` driver (`RunResumable`) catches the signal, grafts the captured chain onto its own live continuation, puts `42` in the value register, and keeps looping — resuming at the `+` application with `1` on the eval stack. `(+ 1 42)` evaluates to `43`, which is returned.
+6. Later, `(saved 42)` invokes the continuation with `42`. Rather than running the captured chain on the spot, it returns it *unrun* as an `ErrResumeContinuation` control signal. The nearest `DefaultPromptTag` driver (`RunResumable`) catches the signal, replaces its live chain with the captured one (at the top level `FindPrompt` yields a nil boundary), puts `42` in the value register, and keeps looping — resuming at the `+` application with `1` on the eval stack. `(+ 1 42)` evaluates to `43`, which is returned.
 
 > Step 6 is the **resume trampoline**. An earlier design ran the captured chain in a fresh sub-context and aborted the result back to `DefaultPromptTag` — which cost one Go stack frame *per resume* (deep `call/cc` programs like `ctak` overflowed the Go stack under `-race`) and reconciled `dynamic-wind` winding twice. Returning the segment unrun and letting the single driver reinstall it onto itself runs every resume on the one `Run()` loop: O(1) Go frames, one winding reconcile. See [The Resume Trampoline](resume-trampoline.md) for the full mechanism.
 
@@ -251,7 +257,7 @@ Remove the continuation chain and use Go's call stack instead. What happens?
 
 - **`call/cc` becomes impossible.** You can't snapshot Go's call stack. You'd need `setjmp/longjmp` (C, not Go) or coroutine support (not in Go's runtime model for user code).
 - **Tail-call optimization disappears.** TCO in Wile works by not emitting `SaveContinuation` for tail calls. Without an explicit chain, every call would grow the Go stack, and `(let loop () (loop))` would eventually overflow.
-- **`dynamic-wind` can't unwind across continuations.** The winding stack is saved per-frame. Without explicit frames, there's nowhere to put it.
+- **`dynamic-wind` can't unwind across continuations.** The winding stack is captured with each continuation and carried on prompt frames. Without explicit frames and continuation values, there's nowhere to put it.
 - **Sub-context isolation breaks.** The parent/child relationship between contexts enables safe foreign function calls into Scheme. With a single Go stack, a Go function calling a Scheme closure would be trapped in the middle of the stack — invisible to continuation operations.
 
 The explicit continuation chain is not an optimization or a convenience. It's the mechanism that makes Scheme's control operators possible inside a language (Go) that doesn't have them.

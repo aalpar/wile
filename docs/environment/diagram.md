@@ -41,7 +41,7 @@ See [system.md](system.md) for detailed API documentation.
 │  any int8 phase, lazy):           sealedAxis row):                            │
 │    0 → runtime   (mutable writes)   0 → sealed-write root                     │
 │    1 → expand    (mutable writes)     (writes land (phase 0, sealed))         │
-│    2 → compile   (mutable writes)   1 → sealed-write expand                   │
+│    2 → phase 2   (mutable writes)   1 → sealed-write expand                   │
 │   -1 → template                       (writes land (phase 1, sealed))         │
 │    N → tower phase, on demand                                                 │
 │                                                                               │
@@ -60,7 +60,7 @@ the root are ownership-policy, not shape:
 | `syntaxInterns` | nil (`InternSyntax` delegates up) |
 | `phases` | own `PhaseRegistry`, own store, sealed tier starts **empty** |
 | `runtime` | own `EnvironmentFrame`, empty |
-| captured | `libraryRegistry`, `registry`, `authorizer`, `envMap` — parent's pointer at fork time |
+| captured | `libraryRegistry`, `libraryEnvFactory`, `registry`, `authorizer`, `envMap` — parent's pointer at fork time |
 | `services` | shared `*EngineServices` (same pointer as parent) |
 
 ---
@@ -69,8 +69,8 @@ the root are ownership-policy, not shape:
 
 Every phase VIEW, whether `runtime`, `expand`, a tower phase (phase ≥ 2), or a
 sealed-write view, shares the SAME `*GlobalEnvironmentFrame` (`global`); they
-differ only in which `(phase, sealed)` coordinates their reads probe and
-their writes stamp (`pkg/environment/global_environment_frame.go`,
+differ only in the phase their reads probe at and the `(phase, sealed)`
+coordinate their writes stamp (`pkg/environment/global_environment_frame.go`,
 `environment_frame.go`). There is no parent chain to a "sealed base" any more.
 
 ```
@@ -79,20 +79,30 @@ their writes stamp (`pkg/environment/global_environment_frame.go`,
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-| View | Coordinate | Read tier | Write lands at |
-|---|---|---|---|
-| `runtime` (`Runtime()`) | (0, mutable) | `tierExactMutable` | (0, mutable) |
-| `expand` (`Expand()`) | (1, mutable) | `tierExactMutable` | (1, mutable) |
-| `tower` (`AtPhase(n)`, n ≥ 2) | (n, mutable) | `tierExactMutable` | (n, mutable) |
-| sealed-write root | (0, sealed) at construction | sealed tiers at phase 0 | (0, sealed) |
-| sealed-write expand | (1, sealed) at construction | sealed tiers at phase 1 | (1, sealed) |
+| View | Reads (ranked probe at) | Write lands at |
+|---|---|---|
+| `runtime` (`Runtime()`) | phase 0 | (0, mutable) |
+| `expand` (`Expand()`) | phase 1 | (1, mutable) |
+| `tower` (`AtPhase(n)`, n ≥ 2) | phase n | (n, mutable) |
+| sealed-write root | phase 0 | (0, sealed) |
+| sealed-write expand | phase 1 | (1, sealed) |
+
+Every ordinary read (`GetBinding`, `GetGlobalIndexWithScopes`) runs the same
+probe (`resolveRankedLocked`): `tierExactMutable`, then `tierExactImported`, then
+`tierExactSealed` at the view's phase, then the bulk rows declared at that phase
+on a miss. The `sealed` flag affects only writes and
+`AtPhase`'s upward climb.
 
 There is no phase-blind tier. A phase-*N* read is a candidate only for slots at
 exactly phase *N* — never any OTHER phase. That disjointness IS hermeticity: a
-phase-1 read cannot see a phase-0 user define, and vice versa. What makes
-primitives and sealed stdlib procedures visible from a phase that holds no slot
-of its own for them is a declared BULK ROW, consulted only when the per-symbol
-probe misses (`pkg/environment/bulk_source.go`).
+phase-1 read cannot see a phase-0 user define, and vice versa. What makes a base
+name visible from a phase that holds no slot of its own for it is a declared BULK
+ROW, consulted only when the per-symbol probe misses
+(`pkg/environment/bulk_source.go`). By default the Engine declares the whole base
+at phase 0 and only the macro-vocabulary subset at every phase ≥ 1 (`installInitialImports`,
+`pkg/wile/engine.go`), so a phase-1 body reaches `car` but not `cadr` without an
+`(import (for-syntax …))`. Primitives registered for the expand phase also hold
+their own `(1, sealed)` slots (`registry.Apply`).
 
 The split between the mutable tier and the sealed ones is what makes a top-level
 `define-syntax` shadow a bootstrap macro in the mutable expand view rather than
@@ -127,7 +137,11 @@ All phase views share:
 
 ## Lexical Scope Chain (Runtime Execution)
 
-Created by `lambda`, `let`, `letrec`, etc. via `NewEnvironmentFrameWithParent`.
+The compiler builds this chain with `NewEnvironmentFrameWithParent`. At run time
+a closure call builds its parameter frame with `InitApplyFrameWithParent`, and only
+an unmerged `let` (`OpPushEnv`) adds a frame of its own; a `let` in a procedure
+body takes its slots from the parameter frame (see
+[frame-allocation.md](frame-allocation.md)).
 
 ```
 ┌───────────────────┐    ┌───────────────────┐    ┌───────────────────┐
@@ -141,10 +155,10 @@ Created by `lambda`, `let`, `letrec`, etc. via `NewEnvironmentFrameWithParent`.
                 │                        │                        │
                 └────────────────────────┴────────────────────────┘
                               SHARED GlobalEnvironmentFrame
-                              (all frames at same phase share it)
+                              (every frame of the owner shares it, at every phase)
 ```
 
-Child frames inherit `global`, `phases`, and `namespace` from the parent. Only `local` and `parent` differ.
+Child frames inherit `global`, `phaseLevel`, `phases`, and `namespace` from the parent; `local` and `parent` are their own, and `sealed` is always false (a lexical child is never a registration target).
 
 ---
 
@@ -177,13 +191,13 @@ pointer, for syntax interning identity.
 Inside the library's own store, phase separation is the same ranked probe as a
 namespace's — over the library's OWN coordinates, never the root's:
 
-| View | Coordinate | Read tier |
+| View | Reads (ranked probe at) | Write lands at |
 |---|---|---|
-| `libRT` (`Runtime()`) | (0, mutable) | `tierExactMutable` |
-| `libExp` (`Expand()`) | (1, mutable) | `tierExactMutable` |
-| `libTower` (`AtPhase(n)`, n ≥ 2) | (n, mutable) | `tierExactMutable` |
-| library sealed-write root | writes (0, sealed) | sealed tiers at phase 0 |
-| library sealed-write expand | writes (1, sealed) | sealed tiers at phase 1 |
+| `libRT` (`Runtime()`) | phase 0 | (0, mutable) |
+| `libExp` (`Expand()`) | phase 1 | (1, mutable) |
+| `libTower` (`AtPhase(n)`, n ≥ 2) | phase n | (n, mutable) |
+| library sealed-write root | phase 0 | (0, sealed) |
+| library sealed-write expand | phase 1 | (1, sealed) |
 
 So the isolation a library env provides is both *lateral* (its store is not the
 engine's, so nothing reaches the engine's bindings at any phase) and *vertical*
@@ -191,14 +205,18 @@ engine's, so nothing reaches the engine's bindings at any phase) and *vertical*
 primitives, bootstrap procedures, syntax compilers — writes through the
 library's sealed-write views, and the library's own `define`s land in its
 `(0, mutable)` tier; that split is what lets a `begin-for-syntax` body reach
-`car` while missing the library's runtime defines.
+`car` (the registry's expand-phase copy at `(1, sealed)`) while missing the
+library's runtime defines. The Engine's library env factory also installs the
+dialect's initial-import rows into the library store, as it does for the
+namespace.
 
 Until 2026-08-05 a library env was a single flat frame with `parent: nil`, and
 its phase-1/phase-2 frames parented to its own phase-0 frame — the one
 phase→phase parent edge in the tree, from back when hermeticity was topology
 rather than key disjointness. Neither shape, flat or fold, was ever the
-mechanism of an observable phase leak that existed independently; see
-`docs/environment/system.md` on `GetGlobalIndexFromLibraryScopes`.
+mechanism of an observable phase leak that existed independently; see the doc
+comment on `EnvironmentFrame.GetGlobalIndexFromLibraryScopes`
+(`environment_frame.go`).
 
 ---
 
@@ -248,9 +266,9 @@ CompileTimeContinuation          ExpanderTimeContinuation
 │                        │       │                        │
 │ Uses:                  │       │ Uses:                  │
 │  env ──── runtime vars │       │  env ───── arm 1 macro │
-│  keywords ── ambient   │       │  env.NextPhase() arm 2 │
-│  env.Expand() ──── P1  │       │  libEnv.Expand() arm 3 │
-│  env.NextPhase() P N+1 │       │                        │
+│  keywords ─ (0,sealed) │       │  env.NextPhase() arm 2 │
+│  env.Expand() ──── P1  │       │  SealedBindingAt arm2b │
+│  env.NextPhase() P N+1 │       │  libEnv.Expand() arm 3 │
 └────────────────────────┘       └────────────────────────┘
           │                                  │
           │ define-syntax                    │ let-syntax / letrec-syntax
@@ -273,14 +291,18 @@ at its climbed phase. At `phaseLevel 0` `NextPhase() == Expand()`, which is why
 top-level behavior is unchanged. The remaining absolute readers fall in two groups:
 
 - **Registry fixtures, absolute by design.** `LookupPrimitiveExpander` reads
-  `env.Expand()`; it resolves through the sealed axis and names no user macro
-  that could climb. Syntax compilers and auxiliary keywords are ambient and
-  need no landmark to read.
-- **Two sites that pin phase 1 regardless of the defining frame's level.**
-  `CompileMeta` (the `meta` form) compiles its body against `p.env.Expand()`, and
-  `er-macro-transformer` stores `env.Expand()` as the transformer's definition-site
-  env (`compile_er_macro.go`). Both are correct at the top level and collapse to
-  phase 1 inside a transformer body.
+  `env.Expand()` and accepts only `BindingTypePrimitive`, so it names no user
+  macro that could climb. The expander's arm 2b reads the owner's sealed phase-1
+  tier (`SealedBindingAt(…, PhaseExpand)`) from phase 2 and above, or when arm 2
+  answered a `BindingTypePrimitive` binding, so bootstrap macros stay reachable
+  up the tower. Syntax compilers and auxiliary keywords are `(0, sealed)` slots;
+  a higher phase reaches `else`/`=>` and the macro-writing names only through
+  the dialect's macro-vocabulary bulk row.
+- **One site that pins phase 1 regardless of the defining frame's level.**
+  `CompileMeta` (the `meta` form) compiles its body against `p.env.Expand()`:
+  correct at the top level, collapsed to phase 1 inside a transformer body.
+  `er-macro-transformer` no longer does this; `CompileERMacroTransformerExpr`
+  (`compile_transformer_forms.go`) records `p.env` as the definition-site env.
 
 **Note:** `let-syntax` environments chain through the enclosing expander's env (`p.env`), not through `env.Expand()`. This preserves nested lexical scoping of macros — inner macros can reference outer macros through the parent chain.
 
@@ -301,7 +323,7 @@ MachineContext
 │   .useSiteScope ─ hygiene scope      │
 │                                      │
 │ Opcodes that change env:             │
-│   OpMakeClosure → new child env      │  (lambda captures env)
+│   Apply → fresh parameter frame      │  (closure call)
 │   OpPushEnv → extend with locals     │  (let/letrec)
 │   OpPopEnv → restore parent          │
 └──────────────────────────────────────┘
@@ -319,10 +341,10 @@ MachineContext
 | Report Namespace | `NewSchemeReportNamespace()` | Own store, **copied** from the parent's | Delegates to parent | Own registry | `(scheme-report-environment)` |
 | Runtime frame | `ns.Runtime()` | (0, mutable) tier of the store — the ROOT VIEW | Via Namespace | Shared | Normal execution |
 | Sealed-write root view | `ns.Runtime().SealedWriteViewAt(PhaseRuntime)` | writes land (0, sealed) — the startup set | Via Namespace | Shared | Primitives, sealed stdlib, `Stable` anchors |
-| Sealed-write expand view | `ns.Runtime().SealedWriteViewAt(PhaseExpand)` | writes land (1, sealed) | Via Namespace | Shared | Bootstrap macros, special-form expanders |
+| Sealed-write expand view | `ns.Runtime().SealedWriteViewAt(PhaseExpand)` | writes land (1, sealed) | Via Namespace | Shared | Bootstrap macros, special-form expanders, expand-phase primitive copies |
 | Expand frame | `env.Expand()` / `AtPhase(1)` | (1, mutable) tier | Via Namespace | Shared | Macro bindings |
-| Tower frame | `env.NextPhase()` / `AtPhase(n)` | Phase *n* global | Via Namespace | Shared | Nested compile-time forms at phase ≥ 2; `(for-meta 2 …)` imports |
-| Template frame | `AtPhase(-1)` | Phase -1 global | Via Namespace | Shared | `(for-template …)` import target; no reader |
+| Tower frame | `env.NextPhase()` / `AtPhase(n)` | (n, mutable) tier | Via Namespace | Shared | Nested compile-time forms at phase ≥ 2; `(for-meta 2 …)` imports |
+| Template frame | `AtPhase(-1)` | (-1, mutable) tier | Via Namespace | Shared | `(for-template …)` import target; no reader |
 | Lexical child | `NewEnvironmentFrameWithParent()` | Own local, shared global | Via Namespace | Shared | `lambda`, `let`, `letrec` |
 | Library env | `ns.NewChildRuntime()` | Own global + phases | Via shared Namespace | Own registry | `(import ...)` |
 | let-syntax env | `NewEnvironmentFrameWithParent(local, p.env)` | Own local macros | Via Namespace | Shared | `let-syntax`, `letrec-syntax` |

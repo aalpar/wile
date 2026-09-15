@@ -85,7 +85,7 @@ A complete reference for Wile's Scheme language, covering lexical syntax, data t
 **Arbitrary precision** (Wile extension):
 
 ```scheme
-#z12345678901234567890         ; BigInteger (exact, always decimal)
+#z12345678901234567890         ; BigInteger (exact)
 #m3.14159265358979323846       ; BigFloat (inexact, 256-bit)
 ```
 
@@ -367,7 +367,7 @@ Dispatches on argument count. First matching clause wins.
 (set! <variable> <expression>)
 ```
 
-Mutates an existing binding. The variable must already be defined. Top-level definitions are immutable by default, so a top-level `set!` raises unless the engine was built with `WithMutableTopLevel()`; see [`r7rs-differences.md`](r7rs-differences.md).
+Mutates an existing binding. The variable must already be defined. Top-level definitions are immutable by default: a `set!` of a builtin or imported binding raises, and so does a `set!` from a later compilation unit (an `eval`, a later `EvalMultiple` call) of a definition its own unit never `set!`s, unless the engine was built with `WithMutableTopLevel()`. A `set!` in the same unit as the `define` is permitted, and the CLI's REPL runs with a mutable top level. See [`r7rs-differences.md`](r7rs-differences.md).
 
 ### `quote` — Literal Data
 
@@ -588,8 +588,9 @@ runtime execution; `visit` is accepted and does nothing. Naming both kinds, as i
 `define-for-syntax` and `begin-for-syntax` bodies run one phase above the form's
 own phase, so they nest: at the top level a `begin-for-syntax` body runs at phase
 1, and a `begin-for-syntax` inside one runs at phase 2. Each phase is hermetic,
-so a name a body needs must be imported at that body's phase (see the `for-meta`
-import modifiers under [Libraries](#libraries)).
+so most names a body needs (`display` and `map` among them) must be imported at
+that body's phase (see the `for-meta` import modifiers under
+[Libraries](#libraries)).
 
 ### `syntax-error`
 
@@ -617,7 +618,7 @@ that would raise to it.
 
 ## Derived Forms
 
-These are defined in the bootstrap environment rather than the compiler: macros expanding to core special forms, except `map` and `for-each`, which are Scheme procedures.
+These are defined in the bootstrap environment rather than the compiler: macros expanding to core special forms, except `map` and `for-each`, which are Scheme procedures, and `let`, `let*`, `letrec`, and `letrec*`, which the compiler handles directly.
 
 ### `and` / `or`
 
@@ -757,7 +758,7 @@ Promises support proper tail recursion via `delay-force`:
 ; → "caught: something went wrong"
 ```
 
-Wile extension: `guard` correctly propagates multiple values from the body (R7RS reference implementation drops them).
+`guard` propagates multiple values from the body, as the R7RS §7.3 definition does: `(guard (e (#f)) (values 1 2 3))` returns 1, 2 and 3.
 
 ### `map` / `for-each`
 
@@ -774,7 +775,7 @@ These are `case-lambda` procedures written in Scheme (not Go primitives) so that
 (with-continuation-barrier <body> ...)
 ```
 
-Prevents continuations from re-entering or escaping across the barrier.
+Prevents `call/cc` continuations from crossing the barrier in either direction (re-entry or escape). Escapes through `call-with-exit` and raised exceptions still pass through.
 
 ---
 
@@ -787,8 +788,8 @@ Prevents continuations from re-entering or escaping across the barrier.
 | `(eq? a b)` | Identity comparison (same object) |
 | `(eqv? a b)` | Equivalence (same type and value for primitives) |
 | `(equal? a b)` | Recursive structural equality |
-| `(boolean=? b ...)` | All booleans equal (variadic) |
-| `(symbol=? s ...)` | All symbols equal (variadic) |
+| `(boolean=? b1 b2 ...)` | All booleans equal (variadic, at least two) |
+| `(symbol=? s1 s2 ...)` | All symbols equal (variadic, at least two) |
 
 ### Boolean Operations
 
@@ -1374,9 +1375,9 @@ Requires the eval extension:
 
 | Procedure | Description |
 |-----------|-------------|
-| `(expand expr)` | Fully expand expression |
-| `(expand-once expr)` | Expand one macro level |
-| `(compile expr)` | Compile expression |
+| `(expand stx)` | Fully expand a syntax object (a plain datum is rejected) |
+| `(expand-once stx)` | Expand one macro level; two values: the form and whether it expanded |
+| `(compile expr)` | Compile a datum or syntax object to a zero-argument procedure |
 | `(read-syntax)` | Read datum as syntax object |
 | `(read-syntax port)` | |
 | `(read-token)` | Read single token |
@@ -1398,7 +1399,7 @@ Requires the eval extension:
 | `(syntax-column stx)` | 0-based column, or `#f` |
 | `(syntax-position stx)` | 0-based byte position, or `#f` |
 | `(syntax-span stx)` | Byte span (end − start), or `#f` |
-| `(syntax-local-value/immediate id)` | Like above, no rename-transformer chasing |
+| `(syntax-local-value/immediate id)` | Like `syntax-local-value`, no rename-transformer chasing |
 | `(syntax-local-introduce stx)` | Introduce syntax marks |
 | `(syntax-local-identifier-as-binding id)` | Convert to binding form |
 
@@ -1421,7 +1422,7 @@ Requires the eval extension:
 | `(procedure-arity proc)` | Arity information |
 | `(procedure-name proc)` | Name (or `#f`) |
 | `(procedure-source-location proc)` | Source location (or `#f`) |
-| `(procedure-bound-symbols proc)` | Closed-over symbols |
+| `(procedure-bound-symbols proc)` | The procedure's own local names (parameters, internal definitions), not its closed-over variables; `#f` for a Go primitive |
 | `(procedure-type proc)` | Type tag symbol: `closure` (Scheme lambda), `foreign` (Go primitive), `case-lambda` (case-lambda closure), `parameter` (parameter object), `continuation` (captured or composable continuation), or `unknown` (any other callable) |
 
 ### Records (Procedural API)
@@ -1432,7 +1433,7 @@ Requires the eval extension:
 | `(record-type? x)` | Is record type descriptor |
 | `(record? x)` | Is record instance |
 | `(record-type r)` | Get record's type |
-| `(record-constructor rtd)` | Get constructor |
+| `(record-constructor rtd field-names)` | Get constructor taking the listed fields |
 | `(record-predicate rtd)` | Get predicate |
 | `(record-accessor rtd field)` | Get field accessor |
 | `(record-modifier rtd field)` | Get field modifier |
@@ -1487,7 +1488,7 @@ Requires threads extension. Threads map to Go goroutines.
 
 | Procedure | Description |
 |-----------|-------------|
-| `(current-thread)` | Current thread object |
+| `(current-thread)` | Current thread object; the symbol `primordial` on the main thread, which is not `thread?` |
 | `(thread? x)` | Is a thread |
 | `(make-thread thunk)` | Create thread |
 | `(make-thread thunk name)` | Create named thread |
@@ -1583,7 +1584,7 @@ Requires gointerop extension.
 
 ### R7RS Standard Libraries
 
-These ship as `.sld` files embedded from `pkg/stdlib/lib/` and served through the engine's `FileResolver` chain. Require `WithLibraryPaths()` on the engine.
+These ship as `.sld` files embedded from `pkg/stdlib/lib/` and served through the engine's `FileResolver` chain. Require `WithLibraryPaths()` on the engine, plus a resolver that serves the embedded tree (`WithSourceFS(stdlib.FS)`). The `wile` CLI sets both.
 
 | Library | Contents |
 |---------|----------|
@@ -1737,20 +1738,9 @@ The `features` procedure and `cond-expand` recognize these identifiers:
 #m3.14159265358979323846264338327950288
 ```
 
-`#z` reads decimal digits only; a radix prefix after it (`#z#x...`) is a parse error.
+`#z` introduces one datum and reads it as an exact integer: decimal by default, or in the radix of a prefix the datum carries (`#z#x1f` is 31). The reverse order is a parse error, since a radix prefix needs a literal operand (`#x#z1f`), and so is a non-integer (`#z1.5`).
 
 Standard R7RS programs never need these — integer overflow promotes automatically, and `#e`/`#i` prefixes handle explicit conversion. These are convenience syntax for direct construction.
-
-### `guard` Body Multiple Values
-
-Wile's `guard` correctly propagates multiple values from the body:
-
-```scheme
-(guard (e (#f))
-  (values 1 2 3))   ; → 1 2 3
-```
-
-The R7RS reference implementation would signal an error here.
 
 ### Delimited Continuations
 

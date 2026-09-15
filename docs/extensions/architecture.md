@@ -32,15 +32,14 @@ R7RS library system is enabled — automatically importable from Scheme via
                │                               │
                │  Phase 0 (runtime)  ← procs   │
                │  Phase 1 (expand)   ← macros  │
-               │  Phase 2 (compile)  ← syntax  │
                └───────────────────────────────┘
 ```
 
 ### Lifecycle
 
-1. **Registration** — Extensions call `Registry.AddPrimitives`, `AddBindings`,
+1. **Registration** — Extensions call `PrimitiveRegistry.AddPrimitives`, `AddBindings`,
    `AddMacroSource`, `AddGlobalValue`, `AddNamespaceInit` during `NewEngine`.
-2. **Application** — `Registry.Apply` materializes everything into a live
+2. **Application** — `PrimitiveRegistry.Apply` materializes everything into a live
    environment, following a strict phase order.
 3. **Library creation** — If `WithLibraryPaths` was called, each extension's
    runtime primitives are wrapped in a synthetic `CompiledLibrary` and
@@ -131,8 +130,8 @@ Every extension implements the `registry.Extension` interface:
 
 ```go
 type Extension interface {
-    Name() string                    // "math", "system", etc.
-    AddToRegistry(r *Registry) error // Registers primitives with the registry
+    Name() string                             // "math", "system", etc.
+    AddToRegistry(r *PrimitiveRegistry) error // Registers primitives with the registry
 }
 ```
 
@@ -159,7 +158,7 @@ Extensions can implement additional interfaces for extra behavior:
 | `LibraryNamer` | `LibraryName() []string` | Custom R7RS library name (default: `(wile <name>)`) |
 | `Closeable` | `Close() error` | Resource cleanup when `Engine.Close()` is called |
 
-`registry.ExtensionFunc` satisfies all three unconditionally and carries them as
+`*registry.ExtensionFunc` satisfies all three unconditionally and carries them as
 slots filled by `ExtensionOption` values, so a hand-rolled struct is not needed:
 
 ```go
@@ -218,6 +217,8 @@ r.AddPrimitives([]registry.PrimitiveSpec{
 | `ReturnType` | `values.TypeConstraint` | no | Return-type declaration (nil = unspecified) |
 | `Keywords` | `[]string` | no | Searchable tags for `apropos` discovery |
 | `InvokesProcedure` | `bool` | see below | Marks a primitive that may call back into a Scheme procedure |
+| `Mutates` | `bool` | if destructive | Marks a primitive that destructively updates a value the program holds; the `NoMutation` dialect removes these |
+| `Identity` | `*machine.PrimitiveIdentity` | no | Token stamped on every `ForeignClosure` built from the spec, so Go code can recognize the primitive |
 
 `PrimitiveSpec.Validate` rejects an empty `Name`, a nil `Impl`, a variadic spec
 with `ParamCount < 1`, and a `ParamTypes` slice of the wrong length.
@@ -277,7 +278,7 @@ the `Namespace` instead of allocating a new one (`addPortState` in
 
 ### Application Order
 
-`Registry.Apply()` processes registrations in this fixed order:
+`PrimitiveRegistry.Apply()` processes registrations in this fixed order:
 
 ```
 1. Compile-time bindings     (AddBindings)
@@ -302,14 +303,17 @@ over `environment.Phase` values, and its bits compose with `|`.
 | `PhaseSetRuntime` | `1` | `PhaseRuntime` (0) | Top-level (phase 0) | Normal runtime evaluation |
 | `PhaseSetExpand` | `2` | `PhaseExpand` (1) | Expand (phase 1) | Available during macro expansion |
 
-Most extension primitives use `PhaseSetRuntime` only. Primitives needed during
-`syntax-rules` expansion use `PhaseSetRuntime | PhaseSetExpand`. Compile-time-only
-names (auxiliary syntax keywords such as `else` and `=>`, and special-form
-names that carry a docstring) are registered with `AddBinding` /
-`AddBindingSpecs` and land at the owner's ambient coordinate, reachable from
-every phase.
+Most extension primitives use `PhaseSetRuntime` only. Primitives a transformer
+body calls during macro expansion use `PhaseSetRuntime | PhaseSetExpand`.
+Compile-time-only names (auxiliary syntax keywords such as `else` and `=>`, and
+special-form names that carry a docstring) are registered with `AddBinding` /
+`AddBindingSpecs` and land at the owner's sealed phase-0 coordinate
+(`registerCompileTimeBinding`, `pkg/registry/apply.go`). There is no longer an
+ambient coordinate reachable from every phase: without an import of its own, a
+transformer body sees such a name only when the dialect's macro vocabulary
+(`defaultMacroVocabulary`, `pkg/wile/dialect.go`) declares it.
 
-Three limits on this axis, all deliberate:
+Two limits on this axis, both deliberate:
 
 - **`PhaseSet` is narrower than `Phase`.** It is a `uint8` covering phase indices
   0..7 (`phaseSetBits`, `pkg/registry/phase.go`). `PhaseTemplate` (-1) and every macro
@@ -321,8 +325,9 @@ Three limits on this axis, all deliberate:
   installs a `ForeignClosure` at phase 2 or above. A primitive an expander needs
   at a tower phase has to reach it some other way.
 
-Under the default immutable top level, `PhaseSetRuntime` primitives are bound in
-the sealed base frame rather than the mutable runtime frame, while the closure
+`PhaseSetRuntime` primitives are bound in the owner's sealed base frame rather
+than the mutable runtime frame (`LoadBootstrapCore` passes that seal as the
+runtime target for every owner, engine and library env alike), while the closure
 still captures the mutable frame so it resolves user definitions. The
 registration API does not change.
 
@@ -358,7 +363,7 @@ var Extension = registry.NewDescribedExtension("math",
     AddToRegistry)
 ```
 
-Each function receives the same `*Registry` and can independently register its
+Each function receives the same `*PrimitiveRegistry` and can independently register its
 primitives. The builder runs them in order, stopping on the first error.
 
 ---
@@ -458,7 +463,7 @@ A recursive value type that does **not** implement `DeepEqualer` is compared
 through its own `EqualTo`. If that `EqualTo` recurses, `equal?` on a cyclic
 instance is a Go `fatal error: stack overflow` — which `recover()` **cannot**
 catch, so it kills the embedding host process. Core containers (`*Pair`,
-`*Vector`, `*Record`, `*Hashtable`, `*Box`, `*NativeError`, `*CompileTimeValue`)
+`*Vector`, `*Record`, `*Hashtable`, `*Box`, `*NativeError`)
 all implement it; extension types are the remaining exposure, and only the
 extension author can close it.
 
@@ -585,15 +590,17 @@ point of this section. Three words in it are doing work:
 //   primitive returns err
 //     → machine.applyCallableError   (pkg/machine/foreign_closure.go)
 //         control signal?  → pass through untouched
+//         access denied?   → stamp location + trace, escape to the host (not a condition)
 //         otherwise        → machine.ConditionFromError, then RaiseInPlace
 //     → the Scheme handler chain (guard / with-exception-handler)
 //   nothing caught it
 //     → *wile.RuntimeError at the Engine boundary, IsSchemeException() == true
 ```
 
-`applyCallableError` passes four error types through as control flow rather than
-converting them: a prompt abort, the uncaught-exception carrier, a timer
-interrupt, and a continuation resume. An extension will not normally construct
+`applyCallableError` passes five error types through as control flow rather than
+converting them (`isControlSignal`): a prompt abort, the uncaught-exception
+carrier, a timer interrupt, a debugger break interrupt, and a continuation
+resume. An extension will not normally construct
 any of them; a primitive that calls back into Scheme can *observe* one, and must
 return it unchanged rather than swallowing it.
 
@@ -650,9 +657,12 @@ narrower than "a panic":
 That table is grep-checkable rather than asserted:
 `grep -rn 'recover()' --include='*.go' pkg/machine/ pkg/values/ pkg/wile/ | grep -v _test.go`
 returns those three plus `pkg/values/big_float.go` (a local guard around
-`big.Float` parsing, not a VM boundary). An earlier revision of this
-documentation described a further per-call recovery inside a bytecode
-`OperationForeignFunctionCall`; that operation was measured to have no
+`big.Float` parsing, not a VM boundary), `pkg/values/valuestest` (a test
+helper), and the Engine's parse and compile boundaries (`Engine.parse` in
+`pkg/wile/expression.go`, `expandAndCompileOptimized` in `pkg/wile/engine.go`),
+which contain panics raised before execution rather than by a primitive.
+An earlier revision of this documentation described a further per-call
+recovery inside a bytecode `OperationForeignFunctionCall`; that operation was measured to have no
 production references and was deleted in 2026-08.
 
 The practical consequence for an extension author is the one already stated
@@ -720,20 +730,20 @@ as they are.
 
 ### Catchable is not delivered
 
-Making a condition catchable does not guarantee a handler observes it. A handler
-that invokes a continuation anywhere in its dynamic extent can currently swallow
-the mandatory secondary exception, so a condition this contract makes catchable
-may still be discarded without diagnostic:
+Making a condition catchable means a handler can observe it, not that one will
+act on it: a handler is free to discard what it catches. What a handler cannot
+do is return normally from a non-continuable raise. That raises the R7RS §6.11
+secondary exception, including when the handler takes a `call/cc` jump inside
+its own body:
 
 ```scheme
 (with-exception-handler (lambda (e) (call/cc (lambda (k) (k 1))) 42)
                         (lambda () (car 5)))
-;; returns 42 — the handler returned from a non-continuable raise and
-;; the secondary exception was not raised
+;; error: exception handler returned from non-continuable exception
 ```
 
-Until that counter is path-precise, "the program can catch it" is the strongest
-claim this contract makes. It is not "the program will be told."
+An earlier revision swallowed that secondary exception and returned 42.
+`TestNonContinuableHandlerReturnErrors` (`pkg/registry/core`) pins the fix.
 
 ---
 
@@ -794,7 +804,7 @@ comment is the authoritative checklist.
 | `WithRegistry(reg)` | Use a custom registry (skips core primitives) |
 | `WithMaxCallDepth(n)` | Set maximum VM recursion depth |
 | `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy (see [`sandboxing.md`](../security/sandboxing.md)) |
-| `WithSandbox()` | Compose the sandbox env-prefix wrapper with the current authorizer |
+| `WithSandbox()` | Intersect `security.SandboxAuthorizer` (read-only files, env reads filtered by prefix, `code` and `process` denied) with the resolved authorizer |
 | `WithEnv(k, v)`, `WithEnvMap(m)` | Install a virtual environment-variable map |
 
 `WithProfile(KitchenSink)` matches the CLI's full extension set; `WithProfile(Console)` is the safe-by-default bundle (io with stdin/stdout/stderr, files restricted to `/tmp`, math, `all.SafeExtension`, charsets, and envvars) plus a matching `ConsoleAuthorizer`. The profile-to-extensions mapping has a single source of truth in `bootstrap.ProfileExtensions`. See [`sandboxing.md`](../security/sandboxing.md) for the full profile table.
@@ -803,7 +813,7 @@ comment is the authoritative checklist.
 
 ## Thread Safety
 
-- `Registry` is thread-safe for concurrent registration (uses `sync.RWMutex`).
+- `PrimitiveRegistry` is thread-safe for concurrent registration (uses `sync.RWMutex`).
 - `Engine` is **not** safe for concurrent use. Each goroutine needs its own
   engine, or external synchronization.
 - SRFI-18 threads within a single engine are safe — the VM handles coordination
@@ -828,7 +838,7 @@ Extensions should depend only on public packages:
 
 ```
 extensions/myext
-  ├── github.com/aalpar/wile/pkg/registry       ← Extension, Registry, PrimitiveSpec
+  ├── github.com/aalpar/wile/pkg/registry       ← Extension, PrimitiveRegistry, PrimitiveSpec
   ├── github.com/aalpar/wile/pkg/machine        ← CallContext, ForeignFunction
   ├── github.com/aalpar/wile/pkg/values         ← Value types, type constraints
   ├── github.com/aalpar/wile/pkg/werr           ← Sentinels, WrapForeignErrorf

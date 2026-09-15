@@ -8,7 +8,7 @@ Sandboxing has **two layers**. The registry layer decides which primitives are *
 
 By default, `NewEngine(ctx)` includes only core primitives (arithmetic, pairs, lists, vectors, strings, characters, bytevectors, control flow, syntax, parameters). Extensions are opt-in via `WithExtension()`. If the filesystem extension isn't loaded, `open-input-file` is an unbound variable — the binding doesn't exist in the environment at all.
 
-This restriction is **transitive**: when the library system is enabled (`WithLibraryPaths`), library environments are created by a factory that closes over the engine's registry (`Engine.applyBaseEnvironment`, wired via `Namespace.SetLibraryEnvFactory` in `pkg/wile/engine.go`). A library loaded from a `.sld` file gets the same set of primitives as the engine that loaded it, and inherits the engine's authorizer (Hardy, "The Confused Deputy", 1988). One construct escapes the registry half of that statement: see [Profile namespaces widen the surface](#profile-namespaces-widen-the-surface).
+This restriction is **transitive**: when the library system is enabled (`WithLibraryPaths`), library environments are created by a factory that closes over the engine's registry (`applyBaseEnvironment`, wired via `Namespace.SetLibraryEnvFactory` in `pkg/wile/engine.go`). A library loaded from a `.sld` file gets the same set of primitives as the engine that loaded it, and inherits the engine's authorizer (Hardy, "The Confused Deputy", 1988). One construct escapes the registry half of that statement: see [Profile namespaces widen the surface](#profile-namespaces-widen-the-surface).
 
 ## Extension security classification
 
@@ -17,17 +17,17 @@ This restriction is **transitive**: when the library system is enabled (`WithLib
 | **Safe** | core | `pkg/registry/core` | None. Pure computation. |
 | **Safe** | io | `pkg/extensions/io` | Host stdio, gated. `current-{input,output,error}-port` are opened over the process's `stdin`/`stdout`/`stderr` at engine construction, each gated by `stream:{read,write}`; a refusal binds a closed in-memory port instead. Everything else is in-memory or caller-provided ports. No filesystem access. |
 | **Safe** | math | `extensions/math` | None. `sqrt`, `sin`, `cos`, transcendental functions. |
-| **Safe** | introspection | `extensions/introspection` | None on its own. `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?`, `features`, `available-libraries`. Read-only: it observes an environment, it cannot add bindings to one. Note `environment-ref` returns the *value* of a binding, so any environment object handed to it yields the capabilities that environment holds. |
+| **Safe** | introspection | `extensions/introspection` | None on its own. `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?`, `features`, `available-libraries`, `disassemble`. Read-only: it observes an environment, it cannot add bindings to one. Note `environment-ref` returns the *value* of a binding, so any environment object handed to it yields the capabilities that environment holds. |
 | **Safe** | charsets | `extensions/charsets` | None. SRFI-14 character sets. |
 | **Safe** | sat | `extensions/sat` | None beyond CPU/memory. CDCL SAT solver: pure computation on caller-supplied clauses. |
 | **Safe** | algebragraph | `extensions/algebragraph` | None. Graph analytics backing `(wile algebra …)`. |
 | **Safe** | all (safe subset) | `pkg/internal/extensions/all` | None. Records, promises, additional string/character ops. |
 | **Privileged** | files | `extensions/files` | Filesystem: `open-input-file`, `open-output-file`, `delete-file`, `file-exists?`, `create-directory`, `delete-directory`, `directory-files`, `current-directory`, `set-current-directory!`. |
-| **Privileged** | eval | `extensions/eval` | Evaluation / compilation: `eval`, `load`, `environment`, `expand`, `compile`, `syntax-local-value`, `syntax-local-introduce`, `syntax-local-identifier-as-binding`. |
+| **Privileged** | eval | `extensions/eval` | Evaluation / compilation: `eval`, `load`, `environment`, `expand`, `expand-once`, `compile`, `syntax-local-value/immediate`, `syntax-local-introduce`, `syntax-local-identifier-as-binding`. |
 | **Privileged** | envvars | `pkg/internal/extensions/envvars` | Environment variables: `get-environment-variable`, `get-environment-variables`. `Console`/`ConsoleWithLoad` allocate an empty virtual map (no OS fallthrough); `Small`/`KitchenSink` fall through to `os.Getenv` when the envMap is unset. |
 | **Privileged** | system | `extensions/system` | Process lifecycle: `exit`, `emergency-exit`, `command-line`, `current-second`, `current-jiffy`, `jiffies-per-second`. Gated: `exit`/`emergency-exit` as `process:exit`, `command-line` as `process:read`; the clock primitives are ungated. |
 | **Privileged** | process | `extensions/process` | Process execution: `system`, `process-spawn`, `process-wait`, `process-kill`. |
-| **Privileged** | namespace | `pkg/internal/extensions/namespace` | Namespace introspection: `namespace?`, `make-namespace`, `namespace-derive`, `namespace-define!`, `namespace-ref`, `namespace-bound?`, `namespace-bound-names`, `namespace-require`. Not gated by any authorizer; exclude it from the registry rather than relying on a policy. |
+| **Privileged** | namespace | `pkg/internal/extensions/namespace` | Namespace introspection: `namespace?`, `namespace-name`, `make-namespace`, `namespace-derive`, `namespace-define!`, `namespace-undefine!`, `namespace-ref`, `namespace-bound?`, `namespace-bound-names`, `namespace-require`. Not gated by any authorizer; exclude it from the registry rather than relying on a policy. |
 | **Context-dependent** | gointerop | `extensions/gointerop` | Go concurrency primitives: atomic boxes. Resource exhaustion via unbounded object creation. No ambient authority. Not gated by any authorizer. Safe for trusted code. |
 | **Context-dependent** | threads | `extensions/threads` | SRFI-18 threads, mutexes, condition variables. Resource exhaustion via unbounded thread creation. Not gated by any authorizer. Safe for trusted code. |
 
@@ -64,7 +64,7 @@ An `AccessRequest` is a resource, an action, and an operation-specific target (`
 | Resource | Actions used at gate sites | Target |
 |----------|---------------------------|--------|
 | `file` | `read`, `write`, `exec`, `stat`, `delete` | the path |
-| `code` | `load` (run a resolved file), `eval` (compile+run an in-memory datum) | the resolved path, or `<eval>`/`<compile>` |
+| `code` | `load` (run a resolved file), `eval` (compile+run an in-memory datum) | the resolved path, or `<eval>`/`<compile>`/`<expand>`/`<expand-once>` |
 | `env` | `read` | the variable name, or `*` for a whole-map read |
 | `process` | `read` (argv), `exit`, `exec`, `exec-shell` | the command, or empty |
 | `namespace` | `create` | the profile name |
@@ -94,8 +94,9 @@ Every enforcement point calls `security.CheckWithAuthorizer(auth, req)`. `securi
 | `extensions/system`: `PrimCommandLine`, `PrimExit`/`PrimEmergencyExit` | `process:read`, `process:exit` |
 | `extensions/process`: `PrimSystem`, `PrimProcessSpawn` (`PrimProcessWait`/`PrimProcessKill` are ungated: they act on a process handle already obtained through a gated spawn) | `process:exec-shell`, `process:exec`, then `file:exec` twice — on the resolved binary (`/bin/sh` for `system`) and on the child's start directory |
 | `pkg/internal/extensions/envvars`: `PrimGetEnvironmentVariable`, `PrimGetEnvironmentVariables` | `env:read` |
-| Source loading (`include`, `include-ci`, `load`, library `import`): `resolver.openAuthorized`, `isAuthorized`, `openUnconfined`, `FSFileResolver.ResolveAndOpen`, `OSFileResolver.ResolveAndOpen` | `code:load` on the resolved path |
-| `pkg/extensions/io`: `NewState`, once per engine when the port parameters are built | `stream:read` on `stdin`, `stream:write` on `stdout` and `stderr` |
+| Source loading (`include`, `include-ci`, `load`, library `import`): `resolver.authorizeCandidates` (the search loop of `FSFileResolver.ResolveAndOpen` and `OSFileResolver.ResolveAndOpen`), `openAuthorized`, `isAuthorized`, `openUnconfined`, plus `compilation.LoadLibrary` re-authorizing a cached library's source file | `code:load` on the resolved path |
+| `pkg/extensions/io`: `NewState` (via `gatedInputPort`/`gatedOutputPort`), once per engine when the port parameters are built | `stream:read` on `stdin`, `stream:write` on `stdout` and `stderr` |
+| `pkg/internal/bootstrap`: `checkProfileWidening`, only when a `(wile <profile>)` namespace would widen the engine's surface | `namespace:create` on the profile name |
 
 `EmbedFileResolver` performs no check: it serves the compiled-in bootstrap sources, which are not attacker-controlled.
 
@@ -185,7 +186,7 @@ engine, err := wile.NewEngine(ctx,
 )
 ```
 
-This produces an engine where only `sqrt`, `sin`, `cos`, etc. exist. Even `+`, `car`, and `if` are absent. This is useful for building highly specialized engines.
+This produces an engine where only `sqrt`, `sin`, `cos`, etc. exist as procedures. Even `+` and `car` are absent. Special forms such as `if`, `lambda`, and `define` remain: they are compiler phase handlers, not registry entries. This is useful for building highly specialized engines.
 
 Note: Both `WithoutCore()` and `WithRegistry(reg)` set the registry. `WithRegistry` provides a pre-populated registry (skipping default core setup). `WithoutCore` provides an empty registry. If both are used, last-wins (standard Go options semantics).
 

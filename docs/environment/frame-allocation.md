@@ -11,11 +11,12 @@ proposed — and reverted — repeatedly.
 > **Scope note (updated after let-slot merging).** This document was written when
 > every `let` pushed its own frame. It no longer does. `canMergeLet`
 > (`pkg/machine/compilation/merged_slots.go`) takes a merged `let`'s slots out of
-> the enclosing lambda's parameter frame, and `CompileValidatedLet`'s own doc says
-> what that means: a merged `let` "emits NEITHER bracket … That is the ordinary
-> case — every let inside a procedure body — and the pushing form survives only
-> where there is no frame to merge into (the top level, a syntax-case clause
-> body)."
+> the enclosing frame, and a merged `let` emits neither `OpPushEnv` nor `OpPopEnv`.
+> The enclosing frame is the lambda's parameter frame, a `syntax-case` clause's
+> pattern-variable frame (`OperationBindPatternVars.MergedSlots`), or an outer
+> unmerged `let`'s frame. The pushing form survives only where there is no frame
+> to merge into: the outermost `let` of a top-level form (program, library or
+> transformer compilers).
 >
 > So the `let`-frame cost analysed below is now a **narrow residual**, not the
 > common case. Measured at `a204912d`, a self-tail loop wrapping one `let` and one
@@ -30,7 +31,7 @@ inside a procedure body has no frame of its own at all.
 
 | | parameter frame | **unmerged** `let` frame |
 |---|---|---|
-| created by | `Apply` (the closure-call path) | `OpPushEnv` — top level and `syntax-case` clause bodies only |
+| created by | `Apply` (the closure-call path) | `OpPushEnv`: the outermost `let` of a top-level form only |
 | construction | `acquireEnvFrame()` + `InitApplyFrameWithParent` | `NewLocalEnvironment` + `NewEnvironmentFrameWithParent` |
 | pool-owned | **yes** | **no** |
 | steady-state allocations | **~0** | **3** |
@@ -74,8 +75,10 @@ graph TD
 
 ## The environment chain during a call
 
-A procedure whose body contains a `let` builds a two-frame chain. The parameter
-frame is the pooled one; the `let` frame hangs off it as a lexical child.
+Before let-slot merging, a procedure whose body contains a `let` built a two-frame
+chain: the pooled parameter frame, with the `let` frame hanging off it as a
+lexical child. Compiled today, `count-up` builds one frame and `j` is its slot 2;
+the chain below is the shape an unmerged `let` still has.
 
 ```scheme
 (define (count-up i n)        ; parameter frame — slots i, n — POOLED
@@ -112,8 +115,8 @@ closures removed the general one:
 |---|---|
 | `OpPushEnv` | the new `let` frame points at `mc.env` as its parent |
 | `OpMakeClosure` | **only when the closure retains its lexical env.** A non-retaining closure records `env.TopLevel()` instead of `mc.env`, and its free variables travel by value in a vector, so it is not a parent and the flag stays set. The site's own comment calls this "narrowed to the retaining case … Keeping the flag set preserves H; it does not weaken it." |
-| `OperationBindPatternVars` | `syntax-case` binds its pattern variables in a child frame (`compilation/operation_syntax_case.go:292`, cleared at `:350`) |
-| `ClosureEnv`'s detached-env fallback | a `ForeignClosure` outliving its call is parented on `mc.env` when that frame has no mutable runtime (`machine_context.go:341`) |
+| `OperationBindPatternVars` | `syntax-case` binds its pattern variables in a child frame (`OperationBindPatternVars.Apply`, `compilation/operation_syntax_case.go`) |
+| `ClosureEnv`'s detached-env fallback | a `ForeignClosure` outliving its call is parented on `mc.env` when that frame has no mutable runtime (`MachineContext.ClosureEnv`, `machine_context.go`) |
 
 `OpPushEnv` is now itself narrow (see the scope note), and `OpMakeClosure` clears
 only when the closure retains. Each site carries its own clear. All four run under `Run` — being
@@ -141,8 +144,9 @@ stateDiagram-v2
 
 ## Why the parameter frame is not recovered when a `let` runs
 
-Once the `let` executes, the enclosing procedure's parameter frame is no longer
-recoverable on return — and the mechanism differs by where the `let` sits.
+Once an unmerged `let` executes, the enclosing parameter frame is no longer
+recoverable on return, and the mechanism differs by where the `let` sits. The
+92% / 8% split below is the pre-merging population of `let` sites.
 
 ```mermaid
 graph TD
@@ -161,11 +165,13 @@ graph TD
     style LEAK fill:#5c1a1a,color:#fff
 ```
 
-The two shapes, and what each compiles to:
+The two shapes, and what each compiled to before let-slot merging. Compiled today,
+neither procedure emits `PushEnv` or `PopEnv`: `j` is a parameter-frame slot, and
+both release that frame with `OpReleaseEnvFrame` before the tail call.
 
 ```scheme
 ;; TAIL — the let is the last thing the body evaluates.
-;; Emits: PushEnv=1  PopEnv=0
+;; Emitted (pre-merging): PushEnv=1  PopEnv=0
 (define (tail-let i n)
   (if (>= i n)
       i
@@ -173,7 +179,7 @@ The two shapes, and what each compiles to:
         (helper j n))))         ; mc.env is still the LET frame at return
 
 ;; NON-TAIL — the let is an argument, so its value must come back.
-;; Emits: PushEnv=1  PopEnv=1
+;; Emitted (pre-merging): PushEnv=1  PopEnv=1
 (define (arg-let i n)
   (+ (let ((j (+ i 1))) j)
      n))
@@ -206,10 +212,11 @@ sequenceDiagram
     Note over PF: use-after-release —<br/>the escaped closure still reads it
 ```
 
-A program that walks that sequence:
+A program that walked that sequence before let-slot merging (today it emits only
+`MakeClosure` of the three, and no `OpReleaseEnvFrame`):
 
 ```scheme
-;; Emits: PushEnv=1  MakeClosure=1  PopEnv=1 — all three of the diagram's ops.
+;; Emitted (pre-merging): PushEnv=1  MakeClosure=1  PopEnv=1 — all three of the diagram's ops.
 (define (leaky i n)
   (cons (let ((j (+ i 1)))
           (lambda () (+ i j)))  ; escapes, and reads i from the PARAMETER frame
@@ -243,29 +250,26 @@ instead of minting a new one.
 That was the shape of the cost when every `let` pushed: three frames' worth of
 objects never recycled, **and** the enclosing procedure's parameter frame knocked
 out of recovery — a different frame, and the one the pool exists for. Since
-let-slot merging the first half is gone for every `let` in a procedure body, and
-the second half is what the rest of this document is about.
+let-slot merging both halves are gone for every `let` in a procedure body: there
+is no `let` frame to allocate, and none left as `mc.env` to strand the parameter
+frame. They remain for an unmerged `let`.
 
-The freelist's own counters, whole-program. **These were measured before let-slot
-merging and have not been re-taken**; treat the shape as indicative and the
-numbers as dated.
+`VMCounters` over the whole program (`ClosuresApplied` acquired,
+`EnvFramePoolReleases` released), `KitchenSink` profile and otherwise default
+engine options, re-measured after let-slot merging:
 
-| benchmark | parameter frames acquired | released back | misses | recovered |
-|---|---|---|---|---|
-| `fib` (no `let`) | 2,692,550 | 2,692,549 | 27 | **100.0%** |
-| `nqueens` | 8,503,623 | 5,623,346 | 2,880,278 | 66.1% |
-| `sieve` | 1,040,948 | 694,591 | 346,358 | 66.7% |
-| `peval` | 900,031 | 400,020 | 500,012 | 44.4% |
+| benchmark | parameter frames acquired | released back | recovered |
+|---|---|---|---|
+| `fib` (no `let`) | 2,692,550 | 2,692,550 | **100.0%** |
+| `nqueens` | 8,503,623 | 7,549,863 | 88.8% |
+| `sieve` | 1,040,948 | 694,592 | 66.7% |
+| `peval` | 900,031 | 400,027 | 44.4% |
 
-`fib` is the control: 27 misses across 2.7M acquires is warmup, and it shows the
-pool works perfectly when frames come back. Everywhere else
-`misses == in-flight-at-exit` exactly — every miss is one frame acquired and never
-returned.
-
-Re-measured at `e28364f9` (2026-08-19): all four recovery rates are unchanged and
-every release count is identical. Acquires differ by 9 on `fib` and 1 on
-`nqueens`, unattributed. The misses column was not re-read — it is the freelist's
-own factory counter, not `VMCounters`.
+Acquires are unchanged from the pre-merging measurement. Only `nqueens` moved
+materially (5,623,346 released, 66.1%, before merging); `sieve` and `peval` recover what they
+did, so what they still lose is not procedure-body `let` frames. The original
+table also had a misses column (the freelist's own factory counter, not
+`VMCounters`), which showed `misses == in-flight-at-exit`; it was not re-read.
 
 Isolating the cause, on three `fib` variants that differ only in where a `let`
 sits:
@@ -284,8 +288,7 @@ sits:
   (if (< n 2) (let ((b n)) b) (+ (fib (- n 1)) (fib (- n 2)))))
 ```
 
-Driven by `(fib 22)`, whose 57,313 activations are the whole of column one in row
-1 — nothing else in the program applies a closure:
+Driven by `(fib 22)`, before let-slot merging:
 
 | body | parameter frames acquired | released back | recovered |
 |---|---|---|---|
@@ -293,13 +296,15 @@ Driven by `(fib 22)`, whose 57,313 activations are the whole of column one in ro
 | `let` in non-tail position | 85,969 | 57,313 | 66.7% |
 | `let` wrapping **only the base branch** | 57,313 | **28,656** | **50.0%** |
 
-The third row is the sharpest: that `let` is off the recursive path and changes
-no acquire count at all — and half the *parameter* frames stop coming back. The
-28,657 activations that reach the base branch are exactly the ones that stop
-releasing. It is a *tail* `let` — the last form the body evaluates on that branch
-— so it compiles to `PushEnv` with no `PopEnv`, same as `tail-let` above. The
-`let` frames it created are additional, and are not counted here because none of
-them was ever poolable.
+The third row was the sharpest: that `let` is off the recursive path and changed
+no acquire count at all, yet half the *parameter* frames stopped coming back. The
+28,657 activations that reach the base branch were exactly the ones that stopped
+releasing. It is a *tail* `let`, so it compiled to `PushEnv` with no `PopEnv`,
+same as `tail-let` above.
+
+Re-measured after merging, every row recovers **100.0%** (57,313 / 57,313;
+85,969 / 85,969; 57,313 / 57,313): both `let`s merge into the parameter frame, so
+the variants no longer differ in recovery.
 
 Per-iteration allocation for a loop, by shape:
 
@@ -338,9 +343,11 @@ at 10,000 trips and 14 at 30,000, i.e. a fixed startup cost and nothing per
 iteration. Let-slot merging removed the frames entirely.
 
 Both tests read the slope across two trip counts so a fixed cost cannot hide in
-it, but note they assert a *ceiling* (`slope > 4.0` fails), not equality — so they
-kept passing across the change, and their in-code comment still describes "the 3.0
-let-frame floor" that no longer exists.
+it, but note they assert a *ceiling* (`slope > 4.0` and `slope > 7.0` fail), not
+equality, so they kept passing across the change, and their in-code comments still
+describe the 3.0 and 6.0 let-frame floors that no longer exist. `tail-loop` and
+`arg-loop`, which neither test covers, measure the same 14 allocs at both trip
+counts under the same engine configuration.
 
 ## What a sound recovery would need
 
@@ -360,6 +367,12 @@ proof. The minimal pair is `leaky` above against:
         n))
 ```
 
+For a procedure-body `let` the question has moved: with the `let` merged there is
+only the parameter frame, and the escape-gated `OpReleaseEnvFrame` gate
+(no capture, no escaping closure, only capture-safe callees) decides on it.
+Compiled today, `safe` emits `OpReleaseEnvFrame` before its tail call to `cons`
+and `leaky` does not.
+
 **The one class recovered without a proof, and why it does not generalize.** Until
 `e28364f9`, every `call-with-values`, `call-with-exit`, prompt, barrier and
 `force` call drained exactly one frame from the pool: the helper builds its
@@ -376,8 +389,8 @@ it, which is what forces the proof.
 
 Two separate pieces would follow from the proof. **Both were sized against a tree
 in which every `let` pushed a frame, and let-slot merging took that population
-away** — they now reach only unmerged `let`s, i.e. the top level and `syntax-case`
-clause bodies. Kept because the reasoning is the same if the residual ever
+away** — they now reach only unmerged `let`s, i.e. the outermost `let` of a
+top-level form. Kept because the reasoning is the same if the residual ever
 matters:
 
 - Re-arming the release at `OpPopEnv` behind that proof — reaches the share of
@@ -395,7 +408,8 @@ caveat applies: merging already removed the sites where this would have paid.
 as a standing alternative: rather than prove things about a capture path, delete
 one. A **flat closure** holds the *values* of its free variables rather than a
 pointer to the frame they live in. That is now the implementation —
-`OpMakeClosure` links `env.TopLevel()`, not `mc.env`, and free variables travel by
+`OpMakeClosure` links `env.TopLevel()` (`closureLink`), not `mc.env`, unless the
+template retains its lexical env, and free variables travel by
 value in a vector (`pkg/machine/operations_free.go` is the read side), which is
 why the `envPooled` clear at that site is narrowed to the retaining case.
 

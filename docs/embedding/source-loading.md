@@ -24,8 +24,12 @@ error messages), and an error.
 The chain protocol uses error identity to distinguish "not found here, try
 the next resolver" from hard errors:
 
-- `errors.Is(err, werr.ErrFileNotFound)` → fall through to the next resolver
-- Any other error (security denial, I/O failure) → propagate immediately
+- `werr.ErrFileNotFound` or `fs.ErrNotExist` → fall through to the next resolver
+- `security.ErrAccessDenied` → fall through only if a later resolver authorizes
+  under a different source (virtual FS versus host OS, reported by
+  `SourceGate.AuthorizedSource`); a resolver that authorizes nothing
+  (`EmbedFileResolver`) ends the scan
+- Any other error (I/O failure) → propagate immediately
 
 This convention lets `ChainFileResolver` compose resolvers without
 swallowing real errors.
@@ -36,7 +40,8 @@ swallowing real errors.
 ┌─────────────────────────────────────────────────────────┐
 │                   ChainFileResolver                     │
 │  Tries each resolver in order; falls through on         │
-│  ErrFileNotFound, propagates all other errors.          │
+│  not-found and on a denial a later source can revisit;  │
+│  propagates all other errors.                           │
 ├──────────────────────┬──────────────────────────────────┤
 │   FSFileResolver     │       OSFileResolver             │
 │   (virtual fs.FS)    │       (OS filesystem)            │
@@ -48,7 +53,7 @@ swallowing real errors.
 ├──────────────────────┴──────────────────────────────────┤
 │                  EmbedFileResolver                      │
 │  Fixed bootstrap FS — not in the chain.                 │
-│  Loads core macros (and, or, let, cond, etc.)           │
+│  Serves includes in bootstrap sources (and, or, cond)   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -56,19 +61,22 @@ swallowing real errors.
 
 Resolves files from the OS filesystem. Resolution order:
 
-1. `LoadPathStack.CurrentDir()` — the directory of the currently-loading
+1. `LoadStack.CurrentDir()` — the directory of the currently-loading
    file, enabling relative `include` paths from OS-loaded sources.
 2. Library registry search paths (`LibraryRegistry.GetSearchPaths()`)
 3. `SCHEME_INCLUDE_PATH` environment variable (colon-separated on Unix,
    semicolon-separated on Windows)
 4. Current working directory
-5. Filesystem root, as a last resort (mirroring `sourceload.Finder`'s `"."`
-   fallback; not reported in the searched-dirs list on failure)
+
+Each directory is made absolute and duplicates are dropped. There is no
+filesystem-root fallback.
 
 Absolute paths bypass the search list and are opened directly (still
-subject to authorization). Before returning, runs a `code`/`load`
-authorization check via `security.CheckWithAuthorizer`. This gates file
-access in sandboxed engines. When the authorizer reports a
+subject to authorization). Every candidate path is authorized
+(`code`/`load`, via `security.CheckWithAuthorizer`) before it is stat'd or
+opened, so a sandboxed engine cannot probe a denied path for existence; a
+denied candidate is skipped, and the denial is reported only if no later
+candidate opens. When the authorizer reports a
 `security.RootConfined` confinement root, the open itself goes through
 `os.Root`, closing the TOCTOU gap between the check and the open
 (`resolver/confined.go`).
@@ -79,43 +87,73 @@ Resolves files from any `fs.FS` — typically an `embed.FS` holding the
 standard library. Rejects absolute paths (virtual filesystems have no
 concept of root-relative paths). Resolution order:
 
-1. Relative to `LoadPathStack.CurrentDir()` — the directory of the
+1. Relative to `LoadStack.CurrentDir()` — the directory of the
    currently-loading file, enabling relative `include` paths
 2. Library registry search paths
 3. Path as-is at FS root
 
-Also runs the security authorization check, consistent with
-`OSFileResolver`.
+Also authorizes every candidate before touching it, consistent with
+`OSFileResolver`, but under `TargetSource` `security.SourceVirtualFS`, which
+is what lets a chain look past a virtual-FS denial to the OS resolver.
 
 ### EmbedFileResolver
 
 A minimal resolver backed by any `fs.FS`, with no path resolution and no
-security checks. Used exclusively for bootstrap: loading `bootstrap.scm`
-and its includes from `core.BootstrapFS`. This resolver is never exposed
-to embedders and is not part of the chain.
+security checks. Used exclusively for bootstrap: the bootstrap macro and
+procedure sources are registered on the registry as strings, and this
+resolver over `core.BootstrapFS` serves any `(include ...)` inside them.
+This resolver is never exposed to embedders and is not part of the chain.
 
 ### ChainFileResolver
 
 Composes a list of `FileResolver`s into a single resolver. Tries each in
-order. On `ErrFileNotFound`, proceeds to the next. On any other error,
-returns immediately.
+order. On not-found, proceeds to the next. On a denial, proceeds only under
+the source rule above. On any other error, returns immediately.
 
 ```go
 func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error) {
     var lastErr error
-    for _, r := range p.resolvers {
+    for i, r := range p.resolvers {
         f, resolved, err := r.ResolveAndOpen(ctx, path)
         if err == nil {
             return f, resolved, nil
         }
-        if !errors.Is(err, werr.ErrFileNotFound) {
-            return nil, "", err  // hard error — stop searching
+        if !p.continuesPast(err, i) {
+            return nil, "", err // hard error, or a denial nothing later can revisit
         }
         lastErr = err
     }
     return nil, "", lastErr
 }
+
+func (p *ChainFileResolver) continuesPast(err error, i int) bool {
+    if IsNotFound(err) {
+        return true
+    }
+    if !errors.Is(err, security.ErrAccessDenied) {
+        return false
+    }
+    refused, ok := p.resolvers[i].(SourceGate)
+    if !ok {
+        return false
+    }
+    for _, r := range p.resolvers[i+1:] {
+        later, ok := r.(SourceGate)
+        if !ok {
+            return false // an ungated resolver would hand out the refused file
+        }
+        if later.AuthorizedSource() != refused.AuthorizedSource() {
+            return true
+        }
+    }
+    return false
+}
 ```
+
+The denial rule is what keeps `WithSourceFS(...)` + `WithSourceOS()` working
+under a path-confining authorizer: a name absent from the `fs.FS` is refused
+rather than reported missing, and that refusal says nothing about the host
+file the OS resolver would serve.
 
 ## Engine Wiring
 
@@ -142,8 +180,9 @@ must explicitly add `WithSourceOS()`.
 
 ### Bootstrap Isolation
 
-Bootstrap macros (`and`, `or`, `let`, `cond`, etc.) are always loaded from
-`core.BootstrapFS` via a separate `EmbedFileResolver`. This resolver is
+Bootstrap macros (`and`, `or`, `cond`, etc.) always come from sources
+embedded in `pkg/registry/core`, loaded with a separate `EmbedFileResolver`
+over `core.BootstrapFS`. This resolver is
 wired during `NewEngine` before the embedder-visible chain is configured,
 and is never part of that chain. An embedder cannot accidentally shadow
 bootstrap definitions by providing a virtual FS with conflicting paths.
@@ -162,14 +201,17 @@ the library name to a filesystem path:
 The loader tries `.sld` first, then `.scm` as a fallback:
 
 ```go
-f, path, err := resolver.ResolveAndOpen(ctx, "scheme/base.sld")
-if errors.Is(err, werr.ErrFileNotFound) {
-    f, path, err = resolver.ResolveAndOpen(ctx, "scheme/base.scm")
+f, path, err := res.ResolveAndOpen(ctx, "scheme/base.sld")
+if resolver.IsNotFound(err) {
+    f, path, err = res.ResolveAndOpen(ctx, "scheme/base.scm")
 }
 ```
 
-This fallback logic lives in the library loader, not in any resolver.
-Resolvers only see opaque file paths.
+This fallback logic lives in the library loader (`ResolveLibraryFile` in
+`library_registry.go`), not in any resolver. Only absence of the `.sld`
+licenses the `.scm`; a denial or I/O error propagates. The whole chain is
+tried for `.sld` before any resolver is asked for `.scm`. Resolvers only see
+opaque file paths.
 
 ### Profiles Gate Which Standard Libraries Load
 
@@ -189,12 +231,14 @@ under a subset import**. For example, under the `Tiny` profile:
 ```
 
 fails even though `car`/`cons` are available, because `(scheme base)` also
-exports ~64 I/O and numeric primitives (`display`, `write`, `read`, `floor`, …)
+exports 65 I/O and numeric primitives (`display`, `write`, `read`, `floor`, …)
 that `Tiny` does not register. `(scheme base)` cannot satisfy its own export
 list under `Tiny`, so it is not a loadable library there. (This is intended, not
 a workaround target — see issue #801, resolved by-design.) The validation is
-eager and reports all unsatisfied exports at once, naming both possible causes
-(a typo in the export list, or a profile that does not register the primitives).
+eager and reports all unsatisfied exports at once, naming the possible causes
+(a typo in the export list, a profile that does not register the primitives, or
+a binder introduced by a macro template, which is hygienically distinct from the
+exported name).
 
 Two consequences for embedders:
 
@@ -280,7 +324,7 @@ pkg/stdlib/lib/
 ├── chibi/
 │   └── test.sld
 ├── srfi/
-│   └── 1.scm
+│   └── 1.sld
 └── wile/
     ├── algebra.sld
     └── kanren.sld
@@ -293,6 +337,7 @@ eng, err := wile.NewEngine(ctx,
     wile.WithProfile(wile.KitchenSink),
     wile.WithSourceFS(stdlib.FS),   // embedded libs
     wile.WithSourceOS(),            // user files on disk
+    wile.WithLibraryPaths(),        // enables (import ...); required
 )
 ```
 
@@ -309,12 +354,12 @@ For a given path, the full resolution order is:
 ChainFileResolver (in WithSource* call order)
 │
 ├─ FSFileResolver (WithSourceFS)
-│   1. LoadPathStack.CurrentDir() + path
+│   1. LoadStack.CurrentDir() + path
 │   2. LibraryRegistry search paths, each + path
 │   3. FS root + path
 │
 └─ OSFileResolver (WithSourceOS)
-    1. LoadPathStack.CurrentDir() + path
+    1. LoadStack.CurrentDir() + path
     2. LibraryRegistry search paths, each + path
     3. SCHEME_INCLUDE_PATH dirs, each + path
     4. CWD + path
@@ -322,8 +367,11 @@ ChainFileResolver (in WithSource* call order)
 Bootstrap: always from core.BootstrapFS via EmbedFileResolver (separate)
 ```
 
-At each step, the first successful open wins. `ErrFileNotFound` moves to
-the next step. Any other error terminates the search.
+At each step, the first successful open wins. Not-found moves to the next
+step. A denied candidate is skipped; a resolver that found nothing else
+reports the denial, which the chain looks past only under the source rule
+in [ChainFileResolver](#chainfileresolver). Any other error terminates the
+search.
 
 ### CLI Configuration
 
@@ -362,8 +410,8 @@ the default search paths.
 │  Pure file finding: fs.FS + search dirs → open.     │
 │  LoadStack for relative path tracking.              │
 │  Walk for file enumeration.                         │
-│  Dependencies: io/fs, path, sync, errors. Nothing   │
-│  else — zero Scheme knowledge.                      │
+│  Imports: context, errors, io/fs, path, slices,     │
+│  sync, werr. Zero Scheme knowledge.                 │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -376,7 +424,7 @@ the default search paths.
 | `Walk` (file enumeration) | `pkg/machine/compilation/sourceload/walk.go` |
 | `ErrNotFound` sentinel | `pkg/machine/compilation/sourceload/doc.go` |
 | `FileResolver` interface | `pkg/environment/file_resolver.go` |
-| `LoadStack` (carried on ctx) | `pkg/machine/compilation/sourceload/load_stack.go` |
+| `LoadStack` on ctx (`WithLoadStack`, `LoadStackFromContext`) | `pkg/machine/compilation/sourceload/context.go` |
 | `OSFileResolver` | `pkg/machine/compilation/resolver/os_file_resolver.go` |
 | `FSFileResolver` | `pkg/machine/compilation/resolver/fs_file_resolver.go` |
 | `EmbedFileResolver` | `pkg/machine/compilation/resolver/embed_file_resolver.go` |

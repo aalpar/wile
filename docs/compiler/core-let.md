@@ -2,8 +2,14 @@
 
 Status: shipped. All four binding forms (`let`, `let*`, `letrec`, `letrec*`) are
 core forms: expanded by `expander_let.go`, validated into a `validate.ValidatedLet`
-carrying a `LetKind`, and compiled by `CompileValidatedLet` into
-`OpPushEnv` / `StoreLocal` / `OpPopEnv`. The macro that expanded `let` into
+carrying a `LetKind`, and compiled by `CompileValidatedLet`. Inside a
+procedure body a `let` is *merged* (`canMergeLet`, `merged_slots.go`): its
+slots come out of the enclosing lambda's frame and it compiles to `StoreLocal`
+/ `LoadLocal` alone. Only where there is no frame to merge into (the top level,
+a `syntax-case` clause body) does it push one, as `OpPushEnv` / `StoreLocal` /
+`OpPopEnv` (the `OpPopEnv` only in non-tail position). An `or`-shaped
+`(let ((t E)) (if t t B))` compiles with no binding at all
+(`compileOrShapedLet`). The macro that expanded `let` into
 `((lambda (x ...) body) val ...)` is gone from `bootstrap_macros.scm`.
 
 This document is the design rationale behind that move: is it a Wile-specific optimization, or is it how compilers actually work? Who else does this? And what forced them to?
@@ -99,7 +105,7 @@ Wile uses the first approach: the expander recognizes `let`, the validator produ
 
 Even if the compiler sees `let` as a core form, it could still compile it as a function call (just with metadata attached). The alternative is dedicated opcodes for binding: push an env frame, store into slots, pop the frame.
 
-Wile uses `OpPushEnv` / `StoreLocal` / `OpPopEnv` — dedicated binding operations. This is also standard. Chez Scheme, Guile (in its VM), and Chicken all have binding-specific bytecodes or instructions. The reason is the same as before: if the VM can distinguish "this is a local binding" from "this is a function call," it can optimize accordingly (frame reuse, stack allocation, avoiding arity checks).
+Wile uses `StoreLocal` into slots of the enclosing procedure's frame, falling back to `OpPushEnv` / `StoreLocal` / `OpPopEnv` where there is no enclosing frame — dedicated binding operations. This is also standard. Chez Scheme, Guile (in its VM), and Chicken all have binding-specific bytecodes or instructions. The reason is the same as before: if the VM can distinguish "this is a local binding" from "this is a function call," it can optimize accordingly (frame reuse, stack allocation, avoiding arity checks).
 
 ## The Deeper Pattern: Compilers Need Binding Structure
 

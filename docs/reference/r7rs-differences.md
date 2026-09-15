@@ -9,15 +9,15 @@ This document catalogs differences between the current implementation and the R7
 ## Summary
 
 18 known differences exist:
-1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
+1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Correct for string, bytevector and regular-file ports; on a port that can block (stdin, a pipe) the `#t` is a promise the next read may break.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
 4. Vector and bytevector literals are **immutable** — mutating one **raises an error** (R7RS permits but does not require this detection), matching immutable string literals. Pair literals are **not** detected: the flag would have to grow the cons cell, and R7RS does not require the detection.
-5. **Default** (opt out with `WithMutableTopLevel`): a defined-once, never-`set!`-in-unit top-level `define` in the user program is immutable, so a later `set!` **raises an error**, and code already compiled against a sealed base binding does not observe a later shadowing re-`define` (Chez two-environment model). User-loaded libraries stay mutable. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
+5. **Default** (opt out with `WithMutableTopLevel`): a defined-once, never-`set!`-in-unit top-level `define` in the user program is immutable, so a `set!` or re-`define` of it from a later compilation unit **raises an error**, and code already compiled against a sealed base binding does not observe a later shadowing re-`define` (Chez two-environment model). User-loaded libraries stay mutable. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
 6. Importing one identifier from two libraries with **different** bindings **raises an error** (`ErrDuplicateBinding`) rather than silently letting the last import win. R7RS §5.6 makes this "an error" (undefined) but does not require signalling; Wile signals it, matching Chez/Racket. Re-export diamonds and repeated imports stay legal.
 7. Delivering a number of values other than one into a **single-value slot** (a call argument, a `let` init, a `define` or `set!` operand) **raises an error**, whether those values come from `(values …)` or from invoking a continuation. R7RS §6.10 leaves the ≠1-value case **unspecified** for continuations not made by `call-with-values`, so this is a choice within unspecified territory; it matches Chez and Racket. `call-with-values` and the other multiple-value receivers still accept 0, 1 or N. **Changed:** Wile previously spliced the values into the slot.
 8. `current-second` returns POSIX/Unix time, not TAI. R7RS §6.13.2 specifies TAI (International Atomic Time); Wile returns seconds since the Unix epoch (leap seconds excluded), which trails TAI by a fixed offset (37 s as of 2017). A portable leap-second table is maintenance overhead with little practical benefit, so the deviation is documented rather than corrected.
-9. `equal?` is **structural** on records, hashtables, and boxes, where Chez and Racket answer `#f` for distinct objects. R7RS §6.1 permits either — records fall under "in all other cases, `equal?` may return either `#t` or `#f`" — so this is a deliberate choice, not a deviation from the spec. It is a deviation from most other Schemes, which is why it is listed here. **Item 14 narrows this for hashtables specifically.**
+9. `equal?` is **structural** on records, hashtables, and boxes. Chez answers `#f` for distinct records and hashtables, Racket for distinct opaque records; both compare boxes by content, and Racket compares hash tables by content too. R7RS §6.1 permits either — records fall under "in all other cases, `equal?` may return either `#t` or `#f`" — so this is a deliberate choice, not a deviation from the spec. It is a deviation from most other Schemes, which is why it is listed here. **Item 14 narrows this for hashtables specifically.**
 10. Procedure calls evaluate **strictly left to right**, operator before operands, and `let` evaluates its inits in written order. R7RS §4.1.3 leaves that order **unspecified**, so the guarantee is stricter than the standard requires: a program that relies on it does not port to an implementation that evaluates right to left.
 11. `(eqv? +nan.0 +nan.0)` returns `#t`. R7RS §6.1 makes this **explicitly unspecified** ("As an exception, the behavior of `eqv?` is unspecified when both `obj1` and `obj2` are NaN"), so this is a choice within unspecified territory, matching Chez and Racket. Numeric `=` keeps IEEE-754 semantics: `(= +nan.0 +nan.0)` is still `#f`.
 12. `(rnrs hashtables)` is provided, with one gap: `make-hashtable` accepts only
@@ -47,8 +47,8 @@ This document catalogs differences between the current implementation and the R7
     back the copy visible at the namespace's mutable top level, falling back to
     the sealed base, so the pair a program reads off a table is `eq?` to the
     pair it can write.
-13. `make-equal-hashtable` is a non-standard constructor, matching Chez,
-    Larceny, Vicare, and Ypsilon. R6RS spells it
+13. `make-equal-hashtable` is a non-standard constructor, matching Larceny,
+    Vicare, and Ypsilon (Chez 10.4.1 does not bind it). R6RS spells it
     `(make-hashtable equal-hash equal?)`, which Wile also accepts. Prefer
     `make-eq-hashtable` when the keys are objects whose `equal?` **is** identity
     (a record type, a port, a procedure): those all hash to one bucket under
@@ -115,7 +115,7 @@ Go's `io.Reader` interface does not expose readiness status or non-blocking I/O 
 3. Handling buffered readers (`bufio.Reader`) where buffered data makes reads non-blocking even when the underlying descriptor would block
 4. Significant complexity in the I/O layer with cross-platform maintenance burden
 
-The conservative behavior (always returning `#t`) is **safe**: it may cause blocking where R7RS code expected non-blocking, but never claims data is available when it isn't (which would violate R7RS guarantees).
+Always returning `#t` is **not** conservative in R7RS's sense. The `#t` guarantees the next `read-char` will not hang, and on a port that can block (stdin, a pipe, a process port) Wile cannot keep that guarantee: code that polls with `char-ready?` blocks in the read that follows. On string, bytevector and regular-file ports, where a read never blocks, the answer is correct.
 
 **Workaround:**
 
@@ -160,7 +160,7 @@ Read on a dedicated thread and hand the result back through a shared slot:
 
 This difference is observable only when code mutates a parameter via `(p val)` inside a `parameterize` body — a rare pattern. The standard pattern of reading `(p)` inside `parameterize` is unaffected.
 
-**Impact:** **LOW** — standard R7RS programs use `parameterize` for scoped binding, not direct mutation. The marks-based approach matches Racket's semantics and is correct for composable continuations.
+**Impact:** **LOW** — standard R7RS programs use `parameterize` for scoped binding, not direct mutation. Racket also keeps parameterizations in continuation marks, but binds a fresh cell per `parameterize`, so the mutation stays local: `(define p (make-parameter 1))` then `(list (parameterize ((p 2)) (p 3) (p)) (p))` is `(3 1)` in Racket and Chez and `(2 3)` in Wile.
 
 ---
 
@@ -191,7 +191,7 @@ Because Wile shares structure for same-shape literals (`(eq? '(a b c) '(a b c)) 
 
 **Implementation:**
 
-Immutability is **intrinsic to the value**. `*values.Vector` and `*values.ByteVector` are structs carrying an `immutable` flag, the same shape `*values.String` uses; `values.Immutable` normalizes the read across all three (the underlying fields do not agree on polarity), and `values.MarkImmutable` is the one write surface. Each type's `Set` self-enforces, so a caller reaching the setter from a path nobody gated still gets the refusal.
+Immutability is **intrinsic to the value**. `*values.Vector` and `*values.ByteVector` are structs carrying an `immutable` flag, the same shape `*values.String` uses; `values.Immutable` normalizes the read across all three and `*values.Hashtable` (the underlying fields do not agree on polarity), and `values.MarkImmutable` is the one write surface. Each type's `Set` self-enforces, so a caller reaching the setter from a path nobody gated still gets the refusal.
 
 The flag is written by one compile-time walk, the quote hook's `markLiteralImmutable` (`pkg/machine/compilation/compile_literal_immutability.go`), which descends the whole literal and flags every vector and bytevector in it — including ones reachable only through a pair spine, which is why that walk still traverses pairs while flagging nothing in them. The write happens before the value can be named from Scheme, so a plain `bool` suffices with no synchronization. Only literals are constrained: `list`, `cons`, `make-vector` and the copying procedures all yield unflagged allocations, and structure-shared siblings are one object, so one flag covers them all.
 
@@ -202,7 +202,8 @@ There was, until 2026-08, a second home: an engine-scoped `sync.Map` side set ke
 Construct with `list`, `cons`, `make-vector`, or `vector-copy` to obtain an allocation not shared with any literal:
 
 ```scheme
-;; Error — literal is immutable:
+;; Wrong: mutates a pair literal; not detected, and visible through any
+;; structure-shared quotation of the same shape:
 (let ((xs '(1 2 3))) (set-car! xs 99) xs)
 
 ;; Right — guaranteed mutable, no aliasing with literals:
@@ -210,7 +211,7 @@ Construct with `list`, `cons`, `make-vector`, or `vector-copy` to obtain an allo
 (let ((v (vector-copy '#(1 2 3)))) (vector-set! v 0 99) v)
 ```
 
-**Impact:** **LOW** — programs that mutate literals are already non-portable across R7RS implementations; Wile now rejects them rather than silently corrupting shared structure.
+**Impact:** **LOW** — programs that mutate literals are already non-portable across R7RS implementations; Wile rejects the vector, bytevector and string cases rather than silently corrupting shared structure, and does not detect the pair case.
 
 ---
 
@@ -220,12 +221,13 @@ Construct with `list`, `cons`, `make-vector`, or `vector-copy` to obtain an allo
 
 **R7RS §4.1.6 / §5.3.1:** top-level variables are mutable (`set!`) and redefinable.
 
-**Wile Behavior (default):** A top-level `define` in the user program that is *defined exactly once* and *never `set!` within its compilation unit* is marked rebind-stable. A subsequent `set!` of such a binding **raises `ErrImmutableBinding`** at compile time:
+**Wile Behavior (default):** A top-level `define` in the user program that is *defined exactly once* and *never `set!` within its compilation unit* is marked rebind-stable. A `set!` or re-`define` of such a binding from a **later compilation unit** (a separate `Engine.Eval`/`EvalProgram` call, or `-e` after `-f` on the CLI) **raises `ErrImmutableBinding`** at compile time. Within one unit (one file, or one `-e` batch) both are permitted, because the `define` is then not stable:
 
 ```scheme
-;; Default (immutable top level):
+;; Default (immutable top level), each form its own compilation unit:
 (define f 5)
 (set! f 6)        ; raises ErrImmutableBinding — f is stable
+(define f 7)      ; raises ErrImmutableBinding (define: cannot redefine)
 
 ;; Still mutable: a define that IS set! within its own unit is not stable.
 (begin (define g 5) (set! g 6) g)   ; => 6, permitted
@@ -260,7 +262,8 @@ immutability opt-in:
 
 **Redefine-visibility deviation (Chez two-environment model).** Because a sealed binding
 is resolved and pinned at *compile time*, an already-compiled closure over a sealed name
-keeps seeing the **sealed** value after a later shadow:
+keeps seeing the **sealed** value after a later shadow. Each form below is its own
+compilation unit (in one unit the `define` of `car` is hoisted and both calls see it):
 
 ```scheme
 (define (use-car p) (car p))   ; car pinned to the sealed base at compile time
@@ -307,7 +310,7 @@ as `caar`/`map`) is rejected with `ErrImmutableBinding`. This is ordinary Scheme
 
 **Rationale:** This is the language-level enforcement half of the frame-reclamation optimizer. The optimizer may release a function's stack frame at a tail call only if every callee it relies on provably never captures a continuation; proving that for a *top-level* callee requires knowing the binding will not be rebound to a capturing procedure. Rather than *infer* unit-closure (undecidable for an incremental/embedded system), the engine *enforces* it — the "compile for speed" contract used by sealed-module Schemes (Racket modules, Chez `optimize-level 3`).
 
-**Implementation:** Pure compile-time, scoped to the engine's **root** namespace. The redefinition guard fires only for a define landing in the root's own user runtime or sealed base (`compile_validated.go`); child namespaces report `ImmutableTopLevel() == false`, so REPL / `(environment …)` / `scheme-report-environment` redefines are permitted. The compiler stamps `BindingMeta.Stable`; the `set!` guard keys on `IsStable()` **directly** (not on the namespace flag), so a `Stable` anchor copied into a mutable child stays `set!`-protected — preserving frame-reclaim soundness while still allowing define-shadow. Imported-binding `set!` rejection (always on) is unchanged.
+**Implementation:** Pure compile-time, scoped to the engine's **root** namespace. The redefinition guard fires only for a define landing in the root's own user runtime or sealed base (`compile_define.go`); child namespaces report `ImmutableTopLevel() == false`, so REPL / `(environment …)` / `scheme-report-environment` redefines are permitted. The compiler stamps `BindingMeta.Stable`; the `set!` guard keys on `IsStable()` **directly** (not on the namespace flag), so a `Stable` anchor copied into a mutable child stays `set!`-protected — preserving frame-reclaim soundness while still allowing define-shadow. Imported-binding `set!` rejection (always on) is unchanged.
 
 **Impact:** Programs that rebind their own never-mutated top-level definitions via `set!` are rejected by default; the common case (define-once, call-many) is unaffected and gains the optimization. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
 
@@ -365,7 +368,7 @@ From Go it matches `werr.ErrWrongNumberOfValues`, which is deliberately distinct
 from `ErrWrongNumberOfArguments`: `(define x (values))` has no arguments, and
 `(f (values 1 2))` is a well-formed one-argument call whose argument misbehaved.
 It reports at the **offending subexpression** rather than the enclosing form, so
-`(+ 3 (values 1 2))` names column 15 and `(let ((a 1) (x (values 1 2))) x)` names
+`(+ 3 (values 1 2))` names column 6 and `(let ((a 1) (x (values 1 2))) x)` names
 the second binding's init.
 
 ```scheme
@@ -415,8 +418,8 @@ instruction that can still see the count: once the values are on the stack,
 resumption contexts had been investigated and declined, on the grounds that it
 costs a check on the `RestoreContinuation` hot path to constrain behavior R7RS
 leaves unspecified. That cost objection does not apply to the check as built:
-it sits at the delivery instruction, on a branch `pushValueRegisterTo` already
-took to distinguish the single-value fast path from the multiple-value one.
+it sits at the delivery instruction, in `pushSingleValueRegisterTo`, on the branch
+that distinguishes the single-value fast path from the multiple-value one.
 `RestoreContinuation` is untouched.
 
 **Unchanged:** `dynamic-wind` still preserves multiple values from its thunk,
@@ -688,7 +691,8 @@ is not part of any Scheme standard, but is near-universal (Racket, Chez, Guile).
 #0=#&#0#   ; a box holding itself
 ```
 
-The cyclic form is accepted, following Racket; Chez rejects it. Wile has to
+The cyclic form is accepted. Chez 10.4.1 and Racket both accept it from `read`;
+as program source Chez accepts it only quoted and Racket not at all. Wile has to
 accept it, because Wile's own writer emits exactly that form for a box reachable
 from itself, and rejecting it would leave the writer's output unreadable.
 
@@ -734,10 +738,13 @@ what lets a matcher written in Scheme walk a form without losing hygiene.
 `syntax-vector->list` returns a syntax *list* carrying the vector's context, so a
 vector pattern reduces to the list case.
 
-**`er-macro-transformer` hands its procedure a spine.** Pairs and vectors are plain all
-the way down; identifier leaves stay syntax objects. So `identifier?` is the test on a
-form element and `symbol?` answers `#f`. The `compare` argument is `free-identifier=?`
-and requires two identifiers.
+**`er-macro-transformer` hands its procedure plain data, and what a leaf is depends on
+the syntax-forms implementation.** Under the default Go forms the form is fully
+unwrapped: identifiers arrive as symbols, so `symbol?` is the test on a form element,
+`identifier?` answers `#f`, and `compare` requires two symbols. Under
+`WithSchemeSyntaxForms` (or `WILE_SYNTAX_FORMS=scheme`) it is a spine whose identifier
+leaves stay syntax objects, so `identifier?` is the test, `symbol?` answers `#f`, and
+`compare` is `free-identifier=?` over two identifiers.
 
 Hygiene is Flatt's sets-of-scopes model (2016), as Racket's is, rather than R6RS's
 mark-and-substitution. That is invisible through `syntax-rules` and observable through
@@ -781,7 +788,7 @@ saturate silently to `+inf.0` / `-inf.0` on overflow. The new
 primitives **expose** the rounding direction rather than gate it.
 R7RS-strict programs that import only `(scheme base)` /
 `(scheme inexact)` are unaffected; these primitives are reachable
-only after loading the math extension (profile `Small` and above).
+only after loading the math extension (every profile except `Tiny`).
 
 ### FFI Numeric Argument Precision
 
@@ -789,7 +796,7 @@ For embedders using `Engine.RegisterFunc` with Go functions taking
 `float64` or `complex128` parameters: the default conversion is now
 **precision-aware**. Passing a Scheme numeric value that cannot be
 exactly represented in the Go fixed-precision type (e.g. `1/3`,
-`*BigInteger` exceeding 2^53, `*BigFloat` overflowing magnitude)
+a `*BigInteger` such as 2^64+1, `*BigFloat` overflowing magnitude)
 returns `werr.ErrLossyConversion` instead of silently truncating.
 
 The `wile.WithLossyConversionsAllowed()` engine option restores the

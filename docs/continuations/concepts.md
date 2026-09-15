@@ -104,6 +104,8 @@ This is essentially what `throw` does in exception-based languages. But it's not
 (saved-k 99) ; prints 99
 ```
 
+The comments assume each form is entered separately at a REPL, where every top-level form is its own delimited computation. In a program file the captured continuation also includes every later top-level form, so `(saved-k 42)` would run itself again, forever. The same holds for the side-effect example below.
+
 This is where it gets genuinely strange. The first call to `(test)` runs normally: `call/cc` stashes the continuation in `saved-k` and returns `1`. The `let` binds `x` to `1`, we print it, done.
 
 But `saved-k` is still there. It represents the continuation "bind whatever I receive to `x`, display it, print a newline." When we call `(saved-k 42)`, we jump back into that computation, as if `call/cc` had returned `42` instead of `1`. The `let` binds `x` to `42`, we print it.

@@ -8,9 +8,9 @@ The code touched by these optimizations is intentionally more complex than a nai
 
 ## Why This Matters
 
-The VM spends ~70% of wall time in the Go garbage collector on continuation-heavy workloads. The actual `Run()` loop is ~11% of wall time. The bottleneck is allocation pressure and resulting memory traffic, not VM dispatch speed.
+When these optimizations were made, the VM spent ~70% of wall time in the Go garbage collector on continuation-heavy workloads, and the `Run()` loop ~11%. The bottleneck was allocation pressure and resulting memory traffic, not VM dispatch speed. The figures in this document are from that profile and have not been re-measured since later pool work (per-thread freelists, frame reclaim).
 
-This was confirmed empirically:
+This was confirmed empirically at the time:
 
 | GOGC | Wall Time | Implication |
 |------|-----------|-------------|
@@ -52,7 +52,7 @@ The diagram below shows the allocation flow for a single closure call:
 │    └── NewLocalIndex()           ← alloc: *[2]int (GONE)            │
 │                                                                     │
 │  call/cc capture                                                    │
-│    └── DeepCopy() entire chain   ← alloc: O(depth) frames (GONE)   │
+│    └── DeepCopy() entire chain   ← alloc: O(depth) frames (GONE)    │
 │                                                                     │
 │  (GONE) = eliminated by optimizations                               │
 └─────────────────────────────────────────────────────────────────────┘
@@ -90,7 +90,7 @@ Added `GetLocalBindingBySlotDepth(slot, depth int)` and `SetLocalValueBySlotDept
 
 ### Solution
 
-Changed to `[]Binding` (value slice). Now `CopyForApply` does a single `make([]Binding, n)` and copies structs directly. All accessors return `&p.bindings[i]` (pointer to slice element).
+Changed to `[]Binding` (value slice). The apply copy (now `copyForApplyInto`) reslices the destination's retained backing array, or does a single `make` when it is too small, and copies structs directly. All accessors return `&p.bindings[i]` (pointer to slice element).
 
 ### Why the code looks this way
 
@@ -131,7 +131,7 @@ Embedded `LocalEnvironmentFrame` by value inside `EnvironmentFrame`:
 └──────────────────────────────────────────────────────┘
 ```
 
-The fused allocation `NewApplyFrame()` replaces the old `CopyForApply() + NewEnvironmentFrameWithParent()` two-step. `Apply` itself no longer allocates at all in the common case: it takes a frame from the env-frame pool and fills it with `InitApplyFrame(dst)`, the non-allocating counterpart that `NewApplyFrame` is now a thin wrapper over.
+The fused allocation `NewApplyFrame()` replaced the old `CopyForApply() + NewEnvironmentFrameWithParent()` two-step. `Apply` itself no longer allocates at all in the common case: it takes a frame from the env-frame pool and fills it with `tpl.Shape().InitApplyFrameWithParent(env, mcls.Link())`, reading the parameter shape off the template and the parent off the closure. Foreign calls use `InitApplyFrame(dst)`. `NewApplyFrame` remains as the allocating wrapper, with no production caller.
 
 ### Why the code looks this way
 
@@ -253,6 +253,8 @@ Where `call/cc` now sits in this protocol: since the capture became delimited, `
 3. `RestoreAndRelease` never pools a shared frame
 4. `DeepCopy` is reached only through `AcquireSegment` re-invocation, never on capture
 
+Invariant 1 is not maintained everywhere today. `AcquireSegment` marks a first-invocation segment shared while its bottom frame's parent is nil, and `ReinstallSegment` then grafts it onto a boundary (`p.cont` for composable resume, or a prompt frame) whose frames may be unshared. A later `MarkChainShared` from above the segment early-exits at the segment and leaves those frames unshared.
+
 ---
 
 ## Optimization 6: Compile-Time Escape Analysis (NoCopyApply) — REMOVED
@@ -262,7 +264,8 @@ Where `call/cc` now sits in this protocol: since the capture became delimited, `
 > the closure's own environment frame for leaf functions, but concurrent callers
 > would write parameters to the same binding slots, producing torn reads on the
 > two-word `values.Value` interface. Apply now always acquires a fresh env frame
-> from the pool (except for parentless top-level thunks with no parameters).
+> from the pool; a closure with no recorded parent is rejected with
+> `ErrNilParentEnvironment`.
 
 **Files (historical):** `pkg/machine/native_template.go`, `pkg/machine/machine_context.go`, `machine/compile_validated.go`
 **Allocation saved (historical):** 1.8 GB, 24.6M allocations
@@ -399,7 +402,7 @@ reads — one thread's type pointer with another's data pointer.
 
 - `pkg/machine/pool.go` — Continuation and stack pooling
 - `pkg/machine/machine_context_continuation.go` — `RestoreAndRelease` with shared-flag branching
-- `pkg/machine/machine_context_apply.go` — Apply always-copy path (nil-parent exception)
+- `pkg/machine/machine_context_apply.go` — Apply always-copy path (nil parent is an error)
 - `pkg/machine/machine_continuation.go` — `MarkChainShared` with early exit
 - `pkg/environment/environment_frame.go` — `NewApplyFrame` fused allocation
 - `pkg/machine/stack.go` — `PopAll` with backing array retention

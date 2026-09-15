@@ -1,6 +1,6 @@
 # CPS and ANF as Intermediate Forms — Would They Help Wile?
 
-The previous document ([SSA for Scheme Compilers](ssa.md)) argued that SSA doesn't fit Wile's architecture. But SSA comes from the world of C and Fortran compilers. Scheme has its *own* intermediate representations, developed specifically for languages with first-class continuations and closures:
+The previous document ([Would SSA Help the Wile Compiler?](ssa.md)) argued that SSA doesn't fit Wile's architecture. But SSA comes from the world of C and Fortran compilers. Scheme has its *own* intermediate representations, developed specifically for languages with first-class continuations and closures:
 
 - **CPS** (Continuation-Passing Style) — Steele 1978, Appel 1992
 - **ANF** (A-Normal Form) — Flanagan et al. 1993
@@ -59,25 +59,24 @@ Wile uses neither CPS nor ANF. It uses **direct-style compilation** following Dy
 (+ (car x) (* y 2))
 ```
 
-compiles to:
+compiles (as the tail expression of `(define (f x y) …)`, after peephole optimization) to:
 
 ```
-LoadLocal x       ; value = x
-Push              ; stack = [x]
-Car               ; value = (car x)
-Push              ; stack = [(car x)]
-LoadLocal y       ; value = y
-Push              ; stack = [(car x), y]
-PushLiteral 2     ; stack = [(car x), y, 2]
-Mul               ; value = (* y 2)
-Push              ; stack = [(car x), (* y 2)]
-Pull              ; value = +       (pulled from bottom)
-Apply             ; call +(car x, *y2)
+PushCachedBinding +   ; stack = [+]
+PushLocal x           ; stack = [+, x]
+Car                   ; promoted: pops x, value = (car x)
+Push                  ; stack = [+, (car x)]
+PushLocal y           ; stack = [+, (car x), y]
+PushLiteral 2         ; stack = [+, (car x), y, 2]
+Mul                   ; promoted: pops y and 2, value = (* y 2)
+Push                  ; stack = [+, (car x), (* y 2)]
+ReleaseEnvFrame       ; f's frame is proven dead: return it to the pool
+PullApply             ; pull + from the bottom, apply it to the rest
 ```
 
-The stack implicitly names intermediates. Position 0 holds `(car x)`, position 1 holds `(* y 2)`. Evaluation order is the bytecode emission order. Tail position is tracked by a boolean flag (`CompileTimeCallContext.inTail`).
+The stack implicitly names intermediates. Position 1 holds `(car x)`, position 2 holds `(* y 2)`. Evaluation order is the bytecode emission order. Tail position is tracked by a boolean flag (`CompileTimeCallContext.inTail`).
 
-This is the simplest possible approach. No intermediate representation, no transformation passes. The question is: what would we gain by adding one?
+This is the simplest possible approach. No ANF or CPS conversion: the compiler walks the `Validated*` tree once, emitting bytecode (with call-site inlining and a few analyses on that same tree), and the peephole passes rewrite the result. The question is: what would we gain by adding a real IR?
 
 ## CPS: What It Would Buy (and Cost)
 
@@ -97,7 +96,7 @@ But these optimizations assume you're targeting native code where eliminated clo
 
 In practice, a CPS compiler spends significant effort *undoing* the CPS transform during code generation: recognizing that a continuation lambda is "just a let binding" or "just a return." Appel's "Compiling with Continuations" devotes multiple chapters to this. You're adding complexity to a representation and then working to remove that complexity.
 
-**Compilation speed.** CPS transform is an O(n) pass, but it creates an entirely new tree (doubled in size), which must then be traversed by every subsequent pass. For a REPL-oriented interpreter, this matters. Wile's current compile path (validated AST → bytecode) is a single recursive walk with no intermediate allocation.
+**Compilation speed.** CPS transform is an O(n) pass, but it creates an entirely new tree (doubled in size), which must then be traversed by every subsequent pass. For a REPL-oriented interpreter, this matters. Wile's current compile path (validated AST → bytecode) is a single recursive walk that builds no second tree.
 
 **Increased closure count.** This is the fatal one for Wile specifically. Consider what CPS does to `let`:
 
@@ -111,7 +110,7 @@ In practice, a CPS compiler spends significant effort *undoing* the CPS transfor
   (*/k x 2 k)))
 ```
 
-In Wile, `let` compiles to a frame push and slot stores with no lambda at all. In CPS, every intermediate becomes a lambda, and each one would need to be recognized and eliminated to get back to what core `let` already emits. The optimizer would have to handle more patterns to reach the same result as today's direct compilation.
+In Wile, `let` compiles to slot stores (into the enclosing procedure's frame, or a pushed frame at the top level) with no lambda at all. In CPS, every intermediate becomes a lambda, and each one would need to be recognized and eliminated to get back to what core `let` already emits. The optimizer would have to handle more patterns to reach the same result as today's direct compilation.
 
 ### Who benefits from CPS?
 
@@ -140,7 +139,7 @@ Now `t1` and `t2` are named. An optimization pass could check: is `t1` used once
 
 When this document was written, `let` was a macro expanding to `((lambda (name ...) body ...) val ...)`, so an ANF-introduced `let` binding cost a closure allocation plus a full call protocol: easily 10+ instructions and a heap-allocated environment frame, where direct compilation emitted four instructions and no allocation. That was the sharpest objection to ANF here: **ANF names intermediates by binding them in `let`, and Wile's `let` was expensive.**
 
-That objection is retired. `let` is now a core compiled form (see [Core `let`](core-let.md)); `CompileValidatedLet` emits `OpPushEnv(n)`, one `StoreLocal` per binding, and (on a non-tail exit) `OpPopEnv`, with no closure and no template boundary. An ANF-introduced binding would cost a slot in a frame that the enclosing form is pushing anyway.
+That objection is retired. `let` is now a core compiled form (see [Core `let`](core-let.md)); inside a procedure body `CompileValidatedLet` merges the bindings into the enclosing lambda's frame and emits one `StoreLocal` per binding, with no frame push, no closure, and no template boundary (only a top-level `let` still brackets its stores with `OpPushEnv(n)` and, on a non-tail exit, `OpPopEnv`). An ANF-introduced binding would cost one slot in a frame the procedure allocates anyway.
 
 So the remaining question is not cost of representation but payoff of analysis, which is the subject of the next section.
 
@@ -167,6 +166,8 @@ You could propagate `x = 5`, fold `(+ 5 3)` → `8`, fold `(* 8 2)` → `16`. Bu
 CPS and ANF are solutions to the problem of *analyzing and transforming programs before generating code*. They create a uniform representation where optimizations are easy to express.
 
 But Wile's profiling data shows that the bottleneck isn't redundant computation or missed optimizations — it's **dispatch overhead** in the VM loop. Every opcode fetch + switch branch costs real time. The optimizations that have delivered measurable speedups are:
+
+Figures below were recorded when each change shipped and have not been re-measured against the current VM.
 
 | Optimization | Speedup | What it reduces |
 |-------------|---------|-----------------|

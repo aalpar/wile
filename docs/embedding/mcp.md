@@ -12,7 +12,7 @@ wile --mcp
 ```
 
 The server communicates via JSON-RPC over stdin/stdout. It is mutually exclusive
-with `-e`, `-f`, and `-i`.
+with `-e`, `-f`, `-i`, and `--check`.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -147,11 +147,12 @@ Show bytecode disassembly for a Scheme procedure.
 Returns a textual listing for the named procedure. Scheme (`lambda`)
 procedures yield a full bytecode disassembly (opcodes, literals, branch
 targets, cached binding names, source locations). Go-implemented
-(`foreign`) primitives yield a one-line summary (name, parameter count,
+(`foreign`) primitives yield a short summary (name, parameter count,
 variadic flag, docstring) — foreign primitives have no Scheme bytecode to
-disassemble. Errors are returned as MCP tool errors if the name is
-unbound or does not resolve to a procedure (e.g., a syntax binding or
-plain value).
+disassemble. A `syntax-rules` macro such as `when` yields the disassembly
+of its transformer procedure. Errors are returned as MCP tool errors if the
+name is unbound or does not resolve to a procedure (e.g., a plain value, or
+a core special form such as `if`).
 
 ### `reset`
 
@@ -207,8 +208,8 @@ engine on first access. Returns a JSON array:
 
 ```json
 [
-  {"name": "car", "category": "pair", "paramCount": 1, "doc": "..."},
-  {"name": "+", "category": "arithmetic", "paramCount": 0, "variadic": true, "doc": "..."}
+  {"name": "car", "category": "pairs", "paramCount": 1, "doc": "..."},
+  {"name": "+", "category": "arithmetic", "paramCount": 1, "variadic": true, "doc": "..."}
 ]
 ```
 
@@ -230,10 +231,12 @@ what the AI assistant should accomplish.
   filesystem, math, system, threads, eval, Go interop, introspection, and more.
 - **Stdout isolation**: Scheme output (`display`, `write`) is captured per-call and
   returned in the `output` field. It never reaches the MCP JSON-RPC transport.
-- **Panic recovery**: VM panics (e.g. uncaught `raise`) are caught and returned as
-  tool errors. The server remains operational.
-- **Serialized access**: All tool calls are serialized via mutex. The engine is not
-  accessed concurrently.
+- **Error and panic recovery**: Scheme errors, including an uncaught `raise`, are
+  returned as tool errors. A Go panic inside `eval` or a documentation tool is
+  recovered and reported as `internal error (panic): ...`. The server remains
+  operational.
+- **Serialized access**: All tool and resource calls are serialized by the session
+  lock described under [Tools](#tools). The engine is not accessed concurrently.
 
 ## Engine configuration
 
@@ -251,6 +254,8 @@ wile.NewEngine(ctx,
 ```
 
 This means all R7RS libraries and wile extensions are available via `(import ...)`.
+On initialization the server also imports `(srfi 1)` and `(wile algebra)`, so their
+bindings are visible to the first `eval` and to `doc`/`apropos`.
 `WithMutableTopLevel` opts out of the engine-wide immutable-top-level default:
 redefining a binding across `eval` calls is a primary workflow here, as in the
 REPL. It costs the frame-reclamation optimizer's top-level payoff.

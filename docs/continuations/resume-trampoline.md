@@ -200,12 +200,15 @@ semantics: `(k z)` abandons the present and resumes the captured future.
 When the tag *does* match an inner `call-with-continuation-prompt` frame:
 
 ```
-boundary == prompt frame  →  graft onto it  →  EXTEND; segment's result
+boundary == prompt frame  →  graft onto it  →  REPLACE the chain above the
+                                               prompt; segment's result
                                                flows through the prompt
 ```
 
-The delimited segment runs and delivers its result to that prompt, which passes
-it on. Same primitive, one pointer's difference.
+The live frames above the prompt are discarded, the delimited segment runs, and
+it delivers its result to that prompt, which passes it on. Same primitive, one
+pointer's difference. (Composable resume passes `boundary = p.cont`, which is the
+case that truly extends the live chain.)
 
 ## The Subtle Parts
 
@@ -218,8 +221,10 @@ Look back at the signal: it carries `p.windingStack.Copy()` taken *at the moment
 `(k v)` is called*, not the driver's winding. Why?
 
 Because the continuation may be invoked from a *deeper* sub-context than the
-driver — inside a `force`/`delay` thunk, a parameter converter, a nested
-`dynamic-wind` body. The frames between that call site and the driver have
+driver — inside an `eval`, a `call-with-output-file` procedure, or a
+`dynamic-wind` before/after thunk run by a winding reconcile. (`force`, parameter
+converters, and `dynamic-wind` bodies now run on the live chain, not in
+sub-contexts.) The frames between that call site and the driver have
 dynamic-wind extents that must be unwound. If `ReinstallSegment` reconciled
 against the *driver's* winding it would miss them, and a deeper after-thunk would
 be skipped. Carrying the source winding forward is what lets the single reconcile
@@ -280,7 +285,7 @@ arms the segment carries and the live chain does not. "Resumed through" means
 The set is decided **by the invoker**, alongside `SourceWinding` and for the same
 reason: the resume trampolines to the nearest `DefaultPromptTag` driver, which is
 not the context the continuation was invoked on. A raise handled inside a
-sub-context — every `dynamic-wind` before/after thunk is one, and `RunWithinBoundary`
+sub-context — every `dynamic-wind` before/after thunk a winding reconcile runs is one, and `RunWithinBoundary`
 re-raises `ErrResumeContinuation` rather than resolving it — arms its finalizer
 frame on the *sub's* chain, and the top driver's chain never held it. Asking the
 driver reads "absent", i.e. a revival, for a jump that never left the extent, and
@@ -314,7 +319,9 @@ conservatism is deliberate.
 
 ## Seeing It In Action
 
-The multi-shot pattern, traced:
+The multi-shot pattern, traced. Run it as a program file: the captured
+continuation must include the later top-level forms. At a REPL each form is its
+own delimited computation, and the last line reads `(r 2 count 1)`.
 
 ```scheme
 (define k #f)
@@ -366,7 +373,7 @@ exception is swallowed: by the flag for every non-continuable handler that
 returns after any earlier resume, by the counter for every handler that takes a
 `call/cc` escape inside its own body. Move the arm decision from the `(k v)` site
 to the driver and the same hole reopens, narrower: only for a raise handled in a
-sub-context, which is every `dynamic-wind` thunk. All three are silent
+sub-context, such as a `dynamic-wind` thunk run by a winding reconcile. All three are silent
 correctness holes that only surface in programs which both resume continuations
 and misuse exception handlers.
 

@@ -29,7 +29,7 @@ mechanism and the bugs it fixed.
 
 ## Design Rationale
 
-### Why one control signal instead of a payload carrier?
+### Why control signals instead of a payload carrier?
 
 The previous design used a `continuationEscapePayload` carrier tunneled
 through `ErrPromptAbort`, with a dedicated `HandleContinuationEscapeAbort`

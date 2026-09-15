@@ -249,8 +249,9 @@ accumulates across evaluations. Mutation and introspection are `namespace?`,
 `namespace-bound?`, `namespace-undefine!`, and `namespace-bound-names`, with
 `environment?` / `environment-ref` / `environment-bound?` /
 `environment-bound-names` covering the same read side under R7RS-flavored names.
-`namespace-require` is the dynamic import, Racket's `namespace-require`: it pulls
-a library's bindings into an existing namespace after the fact.
+`namespace-require` is the dynamic import, Racket's `namespace-require` with the
+namespace as the first argument: it pulls a library's bindings into an existing
+namespace after the fact.
 
 The two constructor shapes are not interchangeable. An import-spec form,
 `(environment '(scheme base))`, installs the imported bindings at
@@ -260,8 +261,11 @@ a definition of the same name **shadows** the import rather than overwriting it,
 and `namespace-undefine!` can still remove the import, which it recognises by
 import provenance rather than by rank. A profile form,
 `(environment '(wile <profile> [<strictness>]))`, applies a curated primitive
-registry into the new namespace's own *sealed* base, so the same names are
-immutable there. `(environment)` with no specs is Racket's
+registry into the new namespace's own *sealed* base, so `namespace-undefine!`
+refuses those names and a `define` still shadows them. They are not
+`set!`-immutable: a child namespace is a mutable scratch space, so `(set! car 5)`
+evaluated there writes the sealed binding in place, where the import-spec form
+refuses `set!` on an imported name. `(environment)` with no specs is Racket's
 `make-empty-namespace`: genuinely empty, not "kernel only".
 
 Two pieces are absent. There is no `current-namespace` parameter: the target is

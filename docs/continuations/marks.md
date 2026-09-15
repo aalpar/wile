@@ -175,7 +175,7 @@ for cont != nil {
 }
 ```
 
-The real implementation (`CollectContinuationMarks` in `pkg/machine/continuation_mark_set.go`) does this in the opposite order — builds a `frames` slice with the current frame's marks appended first, then walks the chain — and returns a `ContinuationMarkSet` rather than a raw list. Same invariant either way: current frame first, innermost-to-outermost. Its sibling `CollectMarksFromContinuation` runs the same walk over a *captured* chain, which is what `(continuation-marks k)` uses.
+The real implementation (`CollectContinuationMarks` in `pkg/machine/continuation_mark_set.go`) does not look up a key during the walk: it snapshots every non-empty mark frame (the current frame's marks first, then the chain via `appendChainMarks`) into a `ContinuationMarkSet`, and the per-key lookup happens later, in `ToList` / `First`. Same invariant either way: current frame first, innermost-to-outermost. Its sibling `CollectMarksFromContinuation` runs the same walk over a *captured* chain, which is what `(continuation-marks k)` uses.
 
 The walk produces a list of values for a given key, ordered from innermost
 (current frame) to outermost (top-level). This is a `ContinuationMarkSet` —
@@ -183,19 +183,24 @@ a snapshot of the marks visible at the point of collection.
 
 ### Prompt Delimiting
 
-Collection doesn't always walk the entire chain. If a *prompt tag* is
-specified, the walk stops at the first continuation frame with a matching
+Collection doesn't always walk the entire chain. `current-continuation-marks`
+takes an optional *prompt tag* (default: `(default-continuation-prompt-tag)`),
+and the walk stops at the first continuation frame with a matching
 `promptTag`. This is how delimited continuations interact with marks:
 marks below the prompt boundary are invisible.
 
 ```scheme
-(call-with-continuation-prompt
-  (lambda ()
-    (with-continuation-mark 'k 'inner
-      (continuation-mark-set->list
-        (current-continuation-marks) 'k)))
-  my-tag)
-;; Only collects marks above the prompt
+(with-continuation-mark 'k 'outer
+  (list
+    (call-with-continuation-prompt
+      (lambda ()
+        (with-continuation-mark 'k 'inner
+          (continuation-mark-set->list
+            (current-continuation-marks my-tag) 'k)))
+      my-tag
+      #f)))
+;; => ((inner)): only marks above the my-tag prompt
+;; without the my-tag argument the walk runs to the default prompt: ((inner outer))
 ```
 
 Collection does its own walk rather than calling `FindPrompt(tag)`
@@ -230,8 +235,8 @@ converted value in the *outer* dynamic extent, per R7RS §4.2.6, then nests one
 ```
 
 Reading the parameter means "find the nearest mark for this key"
-(`findParameterInMarks` in `pkg/machine/machine_context_apply.go`, falling back to
-the parameter's base value). No thunks, no entry/exit overhead, and composing a
+(`findParameterInMarks` in `pkg/machine/machine_context_apply.go`, with
+`applyParameter` falling back to the parameter's base value). No thunks, no entry/exit overhead, and composing a
 captured continuation carries its parameter bindings automatically because the
 marks ride the frames. This is how Racket implements parameters, and it's why
 continuation marks were invented.

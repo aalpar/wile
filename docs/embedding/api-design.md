@@ -38,7 +38,9 @@ The `wile` package exposes a high-level API for embedding the Scheme interpreter
 5. Create the runtime `EnvironmentFrame` from the top-level environment
 6. Apply registry bindings to the environment
 7. Register syntax compilers and primitive expanders
-8. Load bootstrap macros from the registry
+8. Load bootstrap macros and procedures from the registry
+9. Install the runtime file resolver (`WithSourceFS`/`WithSourceOS`; OS filesystem by default)
+10. Set up the library system, only if `WithLibraryPaths` was given
 
 If any step fails (including bootstrap macro loading), the engine is not returned.
 
@@ -48,11 +50,12 @@ If any step fails (including bootstrap macro loading), the engine is not returne
 
 ### Per-Instance Isolation
 
-Each `Engine` has its own `Namespace` and symbol table. This means:
+Each `Engine` has its own `Namespace`, which carries its syntax interning table. This means:
 
 - Multiple engines can coexist in the same process
-- Symbols from different engines are not `eq?` to each other
 - Each engine has independent variable bindings
+
+Symbols are not interned per engine: `eq?` compares symbols by name, so `'foo` from one engine is `eq?` to `'foo` from another.
 
 ## Evaluation Methods
 
@@ -68,6 +71,7 @@ Each `Engine` has its own `Namespace` and symbol table. This means:
 | `EvalMultiple(ctx, code)` | `string` | Compile and run each top-level form independently, return last result. Forward references between separate `define`s do not resolve |
 | `EvalMultipleWithSource(ctx, code, source)` | `string` + source name | EvalMultiple with source attribution |
 | `EvalProgram(ctx, code, source)` | `string` + source name | Whole-program semantics: every top-level form is spliced into one `(begin ...)` and compiled as a unit, so top-level `define`s are mutually visible. The recommended entry point for a script or file |
+| `CheckProgram(ctx, code, source)` | `string` + source name | Parse, expand, and compile exactly as `EvalProgram` does, without running; returns the first error. Not side-effect-free: `(import ...)` runs library bodies, and the program's top-level `define`s stay registered on the engine |
 | `Compile(ctx, expr)` | `*Expression` | Compile a parsed expression without executing |
 | `Run(ctx, compiled)` | `*CompiledCode` | Execute pre-compiled code |
 | `Call(ctx, proc, args...)` | `Value` + args | Call a Scheme procedure from Go |
@@ -88,13 +92,13 @@ engine.Parse(ctx, "(+ 1 2 3)")       ── string → *Expression
     │
 engine.Eval(ctx, expr)               ── *Expression → result
     │
-    ├─ ExpandExpression()
-    │  └─ Macro expansion
+    ├─ compilation.ExpandAndCompile()
+    │  └─ Macro expansion, then bytecode compilation
     │
-    ├─ CompileExpression()
-    │  └─ Bytecode compilation
+    ├─ NativeTemplate.Optimize()
+    │  └─ Peephole optimization
     │
-    └─ MachineContext.Run()
+    └─ MachineContext.RunWithEscapeHandling()
        └─ VM execution → result
 ```
 
@@ -151,7 +155,7 @@ The interface includes an unexported method to prevent external implementations.
 ```go
 type PrimitiveSpec struct {
     Name       string          // Scheme-visible name
-    ParamCount int             // Fixed parameter count
+    ParamCount int             // Parameter count; with IsVariadic, the last slot holds the rest list
     IsVariadic bool            // Accepts variable arguments
     Impl       ForeignFunction // Go implementation
     // Optional fields:
@@ -162,6 +166,8 @@ type PrimitiveSpec struct {
     ReturnType values.TypeConstraint   // return type
     Keywords   []string        // searchable tags
     InvokesProcedure bool      // Impl may call back into a Scheme procedure
+    Mutates    bool            // Impl destructively updates an existing Scheme value
+    Identity   *machine.PrimitiveIdentity // lets Go code recognize this primitive's closures
 }
 ```
 
@@ -191,7 +197,7 @@ Engine behavior can be customized via functional options:
 | `WithoutCore()` | Skip core primitives — bare engine with only explicit extensions |
 | `WithRegistry(r)` | Use a custom registry (skips automatic core registration) |
 | `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy |
-| `WithSandbox(opts...)` | Layer a restrictive authorizer (read-allowed, write/delete denied, env-prefix filtered). Takes optional `SandboxEnvPrefix(prefix)`; default prefix is `"WILE_"`. See "Option ordering" below |
+| `WithSandbox(opts...)` | Layer a restrictive authorizer (read-allowed, write/delete denied, code loading and process execution denied, env-prefix filtered). Takes optional `SandboxEnvPrefix(prefix)`; default prefix is `"WILE_"`. See "Option ordering" below |
 | `WithStrictNamespace()` | Bind only the core surface at the top level; the profile's extension primitives stay importable but are not pre-bound. See "Strict namespace" below |
 | `WithoutAmbientBindings()` | Bind *nothing* at the top level — one step past `WithStrictNamespace()`. Only the core special forms remain (they are phase handlers, not bindings); everything else, `car` included, must be imported. See "Strict namespace" below |
 | `WithEnv(k, v)`, `WithEnvMap(m)` | Install a virtual environment-variable map |
@@ -201,6 +207,7 @@ Engine behavior can be customized via functional options:
 | `WithDialect(d)` | Fork the forms registry per engine so a dialect can install, replace, or remove special forms (`DefaultDialect` is R7RS; `NoMutation` also ships). Namespace-scoped: pass it to `NewNamespace` |
 | `WithMutableTopLevel()` | Opt out of the immutable-top-level default and take strict R7RS redefinable/`set!`-able top-level bindings |
 | `WithImmutableTopLevel()` | Explicit, redundant selector for the default. Retained for source compatibility |
+| `WithSchemeSyntaxForms()` / `WithGoSyntaxForms()` | Transitional: select the Scheme-specified or the Go implementations of `syntax-case`, `syntax-rules`, and related syntax forms. Go is the default unless `WILE_SYNTAX_FORMS=scheme` is set |
 | `WithContractEnforcement()` | Enable runtime enforcement of `PrimitiveSpec.ParamTypes`/`ReturnType` contracts. Namespace-scoped; travels with the namespace, so two engines over one namespace share it |
 | `WithLossyConversionsAllowed()` | Let FFI converters truncate Scheme numerics into fixed-precision Go types instead of failing with `werr.ErrLossyConversion` |
 | `WithMaxCallDepth(n)` | Cap the continuation chain depth (default `DefaultMaxCallDepth`) |
@@ -222,7 +229,7 @@ NewEngine(ctx, opts ...EngineOption)                       // builds its own nam
 NewEngineWithNamespace(ctx, ns, opts ...EngineOnlyOption)  // uses one you built
 ```
 
-`EngineOnlyOption` embeds `EngineOption`, so every engine-only option is still passable to `NewEngine` and still fits a `[]EngineOption` literal — `NewEngine` accepts everything. The 15 **namespace-consumed** options (`WithRegistry`, `WithoutCore`, `WithExtension`, `WithExtensions`, `WithProfile`, `WithAuthorizer`, `WithSandbox`, `WithEnv`/`WithEnvMap`, `WithImmutableTopLevel`/`WithMutableTopLevel`, `WithStrictNamespace`, `WithoutAmbientBindings`, `WithDialect`, `WithContractEnforcement`) return `EngineOption` only, so writing one at `NewEngineWithNamespace` **does not compile**. Migration is mechanical: namespace options to `NewNamespace`, engine options to either.
+`EngineOnlyOption` embeds `EngineOption`, so every engine-only option is still passable to `NewEngine` and still fits a `[]EngineOption` literal — `NewEngine` accepts everything. The 17 **namespace-consumed** options (`WithRegistry`, `WithoutCore`, `WithExtension`, `WithExtensions`, `WithProfile`, `WithAuthorizer`, `WithSandbox`, `WithEnv`/`WithEnvMap`, `WithImmutableTopLevel`/`WithMutableTopLevel`, `WithSchemeSyntaxForms`/`WithGoSyntaxForms`, `WithStrictNamespace`, `WithoutAmbientBindings`, `WithDialect`, `WithContractEnforcement`) return `EngineOption` only, so writing one at `NewEngineWithNamespace` **does not compile**. Migration is mechanical: namespace options to `NewNamespace`, engine options to either.
 
 ```go
 ns, _ := wile.NewNamespace(ctx, wile.WithProfile(wile.Small), wile.WithSandbox())
@@ -243,7 +250,7 @@ Wile provides two independent sandboxing layers.
 
 **Layer 1: Extension-based (compile-time).** Primitives not in the registry don't exist — there's no runtime check to bypass (Rees, "A Security Kernel Based on the Lambda Calculus", 1996; Miller, "Robust Composition", 2006). `WithProfile(Console)` selects a curated bundle (io with in-memory ports, files, math, the safe subset of `all`, charsets, and envvars) plus a matching `ConsoleAuthorizer` that restricts file ops to `/tmp` and denies code/process. `WithProfile(Tiny)` registers no extensions beyond core; `WithProfile(KitchenSink)` registers every extension and matches the CLI. `WithoutCore()` goes further — it produces an engine with zero primitives. Library environments inherit the engine's registry, so restrictions propagate transitively to loaded libraries.
 
-**Layer 2: Fine-grained authorization (runtime).** The `security.Authorizer` interface gates privileged operations at runtime using a K8s-style resource+action vocabulary (resources: `file`, `code`, `env`, `process`, `namespace`, `stream`; actions: `read`, `write`, `exec`, `stat`, `delete`, `load`, `eval`, `exit`, `exec-shell`, `create`). `file` carries the chmod triple `read`/`write`/`exec` and the three are enforced together — a primitive whose argument denotes a host path files it under `file` whatever else it also asks, so `process-spawn` gates `file:exec` on the resolved binary and on the child's start directory in addition to `process:exec`. Set via `WithAuthorizer(auth)`. Gate sites include file I/O, system calls, `eval`/`load`, `include`, and library loading. Without an authorizer, all operations are allowed (open by default). Built-in authorizers: `DenyAll()`, `ReadOnly()`, `ReadOnlyWithLoad()`, `FilesystemRoot(path)`, `ConsoleAuthorizer()`, `ConsoleWithLoadAuthorizer()`, `SandboxAuthorizer(envPrefix)`, `All(authorizers...)`. Profiles bundle a matching authorizer; `WithSandbox` adds `SandboxAuthorizer` on top via `All(...)`.
+**Layer 2: Fine-grained authorization (runtime).** The `security.Authorizer` interface gates privileged operations at runtime using a K8s-style resource+action vocabulary (resources: `file`, `code`, `env`, `process`, `namespace`, `stream`; actions: `read`, `write`, `exec`, `stat`, `delete`, `load`, `eval`, `exit`, `exec-shell`, `create`). `file` carries the chmod triple `read`/`write`/`exec` and the three are enforced together — a primitive whose argument denotes a host path files it under `file` whatever else it also asks, so `process-spawn` gates `file:exec` on the resolved binary and on the child's start directory in addition to `process:exec`. Set via `WithAuthorizer(auth)`. Gate sites include file I/O, system calls, `eval`/`load`, `include`, and library loading. Without an authorizer, all operations are allowed (open by default). Built-in authorizers: `DenyAll()`, `ReadOnly()`, `ReadOnlyWithLoad()`, `FilesystemRoot(path)`, `FilesystemRootWithVirtualSources(path)`, `ConsoleAuthorizer()`, `ConsoleWithLoadAuthorizer()`, `ConsoleWithLoadAllowingVirtualSources()`, `SandboxAuthorizer(envPrefix)`, `All(authorizers...)`. Profiles bundle a matching authorizer; `WithSandbox` adds `SandboxAuthorizer` on top via `All(...)`.
 
 The two layers complement each other: layer 1 removes entire categories of capability at zero runtime cost; layer 2 fine-tunes what remains. See [`security/sandboxing.md`](../security/sandboxing.md) for the full security model.
 
@@ -373,7 +380,7 @@ and the procedures alike.
   library size. A level-2 engine is therefore slower to reach a usable state than
   a `Small` engine is at rest. (In-process, warm, macOS/arm64, 2026-08-04.)
 - *Profile bound.* Usable on `Small` and `KitchenSink` only. `Tiny` cannot import
-  `(scheme base)` (64 of its exports are unregistered there) and
+  `(scheme base)` (65 of its exports are unregistered there) and
   `Console`/`ConsoleWithLoad` are denied `code:load` on the stdlib path. Both
   failures pre-date the option and reproduce without it — but at level 0 or 1
   those profiles still hand the program an ambient surface, and at level 2 there
@@ -444,7 +451,7 @@ engine, err := wile.NewEngine(ctx,
 
 Library search paths from `WithLibraryPaths` become relative paths within each FS layer. Bootstrap macros are unaffected — they always load from the embedded bootstrap filesystem.
 
-Internally, each `WithSourceFS` creates an `FSFileResolver` that resolves files within its `fs.FS` using load-path-stack directory, then library search paths, then FS root. Multiple resolvers are composed into a `ChainFileResolver` that tries each in order, falling through on file-not-found. Absolute paths are rejected by `FSFileResolver`. Security authorization (`WithAuthorizer`) is still enforced.
+Internally, each `WithSourceFS` creates an `FSFileResolver` that resolves files within its `fs.FS` using load-path-stack directory, then library search paths, then FS root. Multiple resolvers are composed into a `ChainFileResolver` that tries each in order, falling through on file-not-found, and on an authorization denial only when a later resolver authorizes under a different source (see [`source-loading.md`](source-loading.md)). Absolute paths are rejected by `FSFileResolver`. Security authorization (`WithAuthorizer`) is still enforced.
 
 ## Design Decisions
 
@@ -452,7 +459,7 @@ Internally, each `WithSourceFS` creates an `FSFileResolver` that resolves files 
 
 **Per-instance syntax interning**: Avoids global state and allows concurrent independent engines. Symbols are compared by string key (`helpers.EqIdentity`), not pointer identity.
 
-**Registry freezing**: Primitives must be registered before or during engine creation. This simplifies the runtime model — the set of available primitives is fixed once the engine is initialized.
+**Registry fixed at construction**: The registry is consumed when the engine is built; each library environment is bound from it when the library loads. `Engine.RegisterPrimitive` and `Engine.RegisterFunc` still add primitives afterwards, but they bind only in the engine's top level and are not visible inside libraries.
 
 **Continuation escape handling enabled**: Both the compiled-code path (`Engine.Run` / `Engine.Eval`, via `runCompiled` in `engine.go`) and the foreign-call path (`Engine.Call`, via `callCallable`) use `MachineContext.RunWithEscapeHandling`. It installs `DefaultPromptTag` as a top-level prompt and catches `ErrPromptAbort` aborts to that tag, restoring to the prompt frame and resuming execution so the abort payload becomes the returned value (normal return, `err == nil`). Only aborts for tags that have no matching prompt escape as runtime errors. Embedders get consistent R7RS escape semantics regardless of entry point.
 
@@ -461,6 +468,7 @@ Internally, each `WithSourceFS` creates an `FSFileResolver` that resolves files 
 | File | Purpose |
 |------|---------|
 | `engine.go` | Engine type, evaluation methods, initialization |
+| `check.go` | `CheckProgram` |
 | `expression.go` | `Expression` type, `Parse`, `ParseWithSource`, `MustParse`, `MustParseWithSource`, `ReadExpression`, `ReadExpressions` |
 | `value.go`, `value_helpers.go` | `Value` interface, constructors, wrapping |
 | `options.go` | Functional options for engine configuration, `resolveAuthorizer` |

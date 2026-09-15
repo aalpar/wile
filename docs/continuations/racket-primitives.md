@@ -48,7 +48,8 @@ up to the top level — which is usually too much.
               (k (k 10)))  ; (k 10)->11, (k 11)->12; proc's 12 then flows IN
                            ; PLACE into the live (+ 1 _) => 13 (compose, not remove)
             tag)))
-  tag)
+  tag
+  #f)  ; no handler; Wile requires all three arguments, Racket makes the last two optional
 ```
 
 The prompt acts like a fence: the continuation captured inside only reaches up to it.
@@ -106,7 +107,7 @@ continuation primitives follow Flatt et al. (2007).
 |-----------|----------|
 | `call-with-escape-continuation` / `call/ec` | `(wile control)` — alias for `call-with-exit` |
 | `continuation-prompt-available?` | `pkg/registry/core/prim_prompt.go` |
-| `shift` / `reset` and all `racket/control` operators | `(wile control)` — Scheme macros over existing primitives |
+| `shift` / `reset` and the other `racket/control` operator families | `(wile control)` — Scheme macros over existing primitives |
 
 **Could add without regressing existing code:**
 
@@ -116,10 +117,10 @@ continuation primitives follow Flatt et al. (2007).
 
 #### shift/reset as a Scheme Library
 
-All of the named operators from `racket/control` — `shift`/`reset`,
+The `racket/control` operator families Wile ships — `shift`/`reset`,
 `prompt`/`control`, `shift0`/`reset0`, `prompt0`/`control0`, `spawn`,
 `set`/`cupto`, and their tagged variants — are *derived* from the three
-core primitives Wile already has. No Go code needed. The two sketches below are
+core primitives Wile already has (the appendix lists what is not provided). No Go code needed. The two sketches below are
 simplified for exposition; the shipped definitions live in
 `pkg/stdlib/lib/wile/control.scm`, where `reset-at` routes through a
 `%prompt-reinstall` helper (so the prompt is reinstalled after each abort) and
@@ -346,13 +347,12 @@ compile-time binding manipulation is where gaps remain.
 |-----------|----------|
 | `syntax-local-value/immediate` | `extensions/eval/prim_eval.go` — identical to `syntax-local-value` (no rename-transformers yet) |
 
-**Registered but non-functional** (callable, so a program gets a diagnosis rather
-than an unbound-variable error, but neither does its job today):
+**Partially functional:**
 
 | Primitive | Location | Actual behavior |
 |-----------|----------|-----------------|
-| `syntax-local-introduce` | `extensions/eval/prim_eval.go` (`PrimSyntaxLocalIntroduce`) | Always raises `werr.ErrNotImplemented`. Nothing in production calls `ExpanderContext.SetIntroductionScope`, and there is no single scope to store: each of the three transformer entry points mints its own intro scope per invocation. |
-| `syntax-local-identifier-as-binding` | `extensions/eval/prim_eval.go` (`PrimSyntaxLocalIdentifierAsBinding`) | Returns its argument unchanged. `ExpanderContext.SetUseSiteScope` is likewise never called, so `UseSiteScope()` is always nil. |
+| `syntax-local-introduce` | `extensions/eval/prim_eval.go` (`PrimSyntaxLocalIntroduce`) | Works inside a closure transformer (`(define-syntax m (lambda (stx) ...))`): flips the fresh intro scope the expander mints around each invocation (`expandMacroInvocation` and `ExpandOnce` call `ExpanderContext.SetIntroductionScope`). Raises `werr.ErrNoCaptureContext` outside expansion and inside an `er-macro-transformer`, which stays outside the flip. |
+| `syntax-local-identifier-as-binding` | `extensions/eval/prim_eval.go` (`PrimSyntaxLocalIdentifierAsBinding`) | Registered but non-functional: returns its argument unchanged. `ExpanderContext.SetUseSiteScope` is never called in production, so `UseSiteScope()` is always nil. |
 
 **Could add at zero cost (compile-time only):**
 
@@ -360,7 +360,7 @@ than an unbound-variable error, but neither does its job today):
 |-----------|--------|-------|
 | `identifier-binding` | Moderate | Introspect where an identifier is bound. Wile's scope-set system already tracks provenance. Read-only, zero runtime overhead. |
 | `syntax-local-context` | Low | Expose expansion context (`'expression`, `'module`, `'top-level`). Expander already knows this. |
-| `syntax-local-phase-level` | Trivial | Wile has 2 phases (0, 1). Return the current one. |
+| `syntax-local-phase-level` | Trivial | Return the current integer phase level (see §5). |
 | `syntax-transforming?` | Trivial | Boolean: are we inside a transformer? |
 
 **Added in PR #547 (syntax accessors):**
@@ -541,18 +541,19 @@ of them on demand, so the macro tower climbs past 2 whenever a transformer body 
 its own macro. Phase 0 is runtime and phase 1 is compile-time (`define-for-syntax` /
 `begin-for-syntax`), but they are not the only two.
 
-What Wile does not do is enforce strict phase separation: phase-1 code can reference
-phase-0 bindings, because the sealed startup set is installed at a wildcard coordinate
-visible from every phase.
+Phase separation is enforced for user code but not for the startup set: a top-level
+`define` or a plain `import` is invisible inside a transformer body, while core
+bindings such as `lambda` and `car` are visible at phase 1 without a `for-syntax`
+import, because the dialect's declared initial imports make them visible there.
 
-**Already implemented:** none. `syntax-local-introduce` is registered but always
-raises `werr.ErrNotImplemented` (see §3).
+**Already implemented:** `syntax-local-introduce`, inside closure transformers only
+(see §3).
 
 **Could add at zero cost (compile-time only):**
 
 | Primitive | Effort | Notes |
 |-----------|--------|-------|
-| `syntax-local-phase-level` | Trivial | Return 0 or 1 based on expansion context. |
+| `syntax-local-phase-level` | Trivial | Return the current phase level of the expansion context. |
 | `syntax-local-context` | Low | Expose current context: `'expression`, `'module`, `'top-level`. Expander already tracks this. |
 | `syntax-transforming?` | Trivial | Boolean: are we inside a syntax transformer? |
 | `syntax-local-name` | Low | Inferred name for the current binding position (e.g., "this lambda is being bound to `foo`"). |
@@ -573,10 +574,10 @@ environment's own level via `composePhaseShift` before installing. So
 
 works, and `(for-meta 2 …)` reaches phase 2.
 
-**One caveat:** inside a `define-library` body the shift is currently dropped —
-`processLibraryImport` installs through `copyLibraryBindingsDirect`, which takes no
-phase — so a library-body `(import (for-syntax X))` binds at phase 0 instead. Tracked;
-use a top-level import until it is fixed.
+The same holds inside a `define-library` body: `processLibraryImport`
+(`pkg/machine/compilation/compile_import.go`) composes the shift with the library
+env's phase and passes the result to `copyLibraryBindingsDirect`, so a library-body
+`(import (for-syntax X))` binds X at phase 1.
 
 ## 6. Runtime Infrastructure Primitives
 
@@ -658,7 +659,7 @@ and `extensions/eval/`. Derived Scheme forms are in `(wile control)`.
 | What | Status | Location |
 |------|--------|----------|
 | `call/ec` / `call-with-escape-continuation` | ✅ Done | `(wile control)` — alias for `call-with-exit` |
-| `shift` / `reset` and all `racket/control` operators | ✅ Done | `(wile control)` — 27 exported bindings, tagged variants included |
+| `shift` / `reset` and the other `racket/control` operator families | ✅ Done | `(wile control)` — 27 exported bindings, tagged variants included |
 | `continuation-prompt-available?` | ✅ Done | `pkg/registry/core/prim_prompt.go` |
 | `continuation-mark-set->list*` | ✅ Done | `pkg/registry/core/prim_cont_marks.go` |
 | `continuation-mark-set->iterator` | ✅ Done | `(wile control)` — Scheme closure over `->list*` |
@@ -672,7 +673,7 @@ and `extensions/eval/`. Derived Scheme forms are in `(wile control)`.
 | What | Effort | Notes |
 |------|--------|-------|
 | `syntax-local-context` | Low | Expander already tracks context |
-| `syntax-local-phase-level` | Trivial | Return 0 or 1 |
+| `syntax-local-phase-level` | Trivial | Return the current phase level |
 | `syntax-transforming?` | Trivial | Boolean check |
 | `syntax-local-name` | Low | Inferred binding name |
 | `identifier-binding` | Moderate | Scope-set system already tracks provenance |
@@ -720,16 +721,16 @@ and `extensions/eval/`. Derived Scheme forms are in `(wile control)`.
 | Primitive | Purpose | Wile |
 |-----------|---------|------|
 | `call-with-current-continuation` (`call/cc`) | Capture full (undelimited) continuation | Yes |
-| `call-with-composable-continuation` (`call/comp`) | Capture delimited composable continuation (up to nearest prompt) | Yes |
-| `call-with-escape-continuation` (`call/ec`) | Capture escape-only (one-shot, up-stack) continuation | `call-with-exit` |
+| `call-with-composable-continuation` (`call/comp`) | Capture delimited composable continuation (up to nearest prompt) | Yes (tag required; no `call/comp` alias) |
+| `call-with-escape-continuation` (`call/ec`) | Capture escape-only (one-shot, up-stack) continuation | `call-with-exit`; both Racket names via `(wile control)` |
 | `call-with-continuation-prompt` | Install a prompt delimiter | Yes |
 | `abort-current-continuation` | Abort to nearest prompt with matching tag | Yes |
 | `call-in-continuation` | Call proc with a given continuation as its continuation | No (Tier 3) |
-| `call-with-continuation-barrier` | Install a barrier continuations can't cross | Yes |
+| `call-with-continuation-barrier` | Install a barrier continuations can't cross | Yes (stricter than Racket: a full continuation captured outside cannot be invoked inside to jump out) |
 | `make-continuation-prompt-tag` | Create a fresh prompt tag | Yes |
 | `default-continuation-prompt-tag` | The default tag (wraps each REPL interaction, each thread) | Yes |
 | `continuation-prompt-tag?` | Predicate | Yes |
-| `continuation?` | Predicate — is `v` a captured continuation? | Yes |
+| `continuation?` | Predicate — is `v` a captured continuation? | Yes, for `call/cc` continuations only (`#f` for composable and `call-with-exit` ones, where Racket answers `#t`) |
 | `continuation-prompt-available?` | Is a prompt with this tag on the current continuation? | Yes |
 
 #### `racket/control` — named operators (§10.4)
@@ -746,9 +747,15 @@ These are all *derived* from the core primitives above:
 | `set` / `cupto` | Queinnec & Serpette | Queinnec & Serpette 1991 | `(wile control)` |
 
 Plus tagged variants: `prompt-at`, `reset-at`, `control-at`, `shift-at`, `prompt0-at`,
-`reset0-at`, `control0-at`, `shift0-at`, `spawn-at`, `set-at`, `cupto-at`.
+`reset0-at`, `control0-at`, `shift0-at`, and the Wile-only `spawn-at`, `set-at`,
+`cupto-at`.
 
 And the alias `new-prompt` for `make-continuation-prompt-tag`.
+
+Shape differences from Racket: Racket's `set`/`cupto` take a prompt tag first (Wile's
+`set-at`/`cupto-at`; Wile's untagged `set`/`cupto` use the default tag), and Racket's
+`spawn` takes a procedure while Wile's `spawn` takes a body (`(control k (k body))`).
+Not provided: `%`/`fcontrol`, `abort`, `abort/cc`, `call/prompt`, `call/comp`, `splitter`.
 
 ### 2. Continuation Marks (§10.5, §3.19)
 
@@ -756,7 +763,7 @@ And the alias `new-prompt` for `make-continuation-prompt-tag`.
 |-----------|---------|------|
 | `with-continuation-mark` | Attach key-value mark to current frame (syntax) | Yes |
 | `current-continuation-marks` | Snapshot all marks on current continuation | Yes |
-| `continuation-marks` | Extract marks from a captured continuation or exn | Yes |
+| `continuation-marks` | Extract marks from a captured continuation or exn | Yes, for `call/cc` continuations only |
 | `continuation-mark-set->list` | All values for a key, ordered innermost-first | Yes |
 | `continuation-mark-set->list*` | Multi-key variant (returns vectors) | Yes |
 | `continuation-mark-set-first` | Nearest value for a key (amortized O(1)) | Yes |
@@ -850,7 +857,7 @@ and has no non-test caller).
 |-----------|---------|------|
 | `syntax-local-phase-level` | Current phase level (integer) | No (Tier 2, trivial) |
 | `syntax-local-context` | Expansion context | No (Tier 2, low effort) |
-| `syntax-local-introduce` | Flip macro-introduction scope on syntax | Registered, raises `ErrNotImplemented` |
+| `syntax-local-introduce` | Flip macro-introduction scope on syntax | Yes, in closure transformers (raises in an ER transformer) |
 | `syntax-local-identifier-as-binding` | Prepare identifier for use as binding | Registered, identity no-op |
 | `syntax-local-name` | Inferred name for current expression position | No (Tier 2, low effort) |
 | `syntax-local-transforming?` / `syntax-transforming?` | Are we inside a syntax transformer? | No (Tier 2, trivial) |

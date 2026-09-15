@@ -67,14 +67,14 @@ engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.Tiny))
 
 // This produces a compile-time error — open-input-file is unbound
 _, err = engine.Eval(ctx, engine.MustParse(ctx, `(open-input-file "/etc/passwd")`))
-// err: expand/compile error: no such local or global binding "open-input-file": no such binding
+// err: expand/compile error: compilation: :1:1: no such local or global binding "open-input-file": no such binding
 ```
 
 In Java, `FileInputStream` exists in every JVM. The SecurityManager intercepts the `open` call at runtime, walks the call stack to check permissions, and allows or denies the operation. Every permission check costs runtime; every new API needs explicit gating; and the interaction between permissions breeds bugs.
 
 In Scheme, the binding either exists or it doesn't. Nothing remains to intercept.
 
-That covers the capabilities you can remove outright. It does not cover the ones you want present but bounded: "you may open files, but only under `/tmp`" is not a statement about which bindings exist, because the path is a runtime value. So Wile has a second, smaller layer for exactly those: a `security.Authorizer` that each privileged primitive consults with a resource, an action, and a target before it acts. That is a runtime check, and it is the same *kind* of thing the SecurityManager did. The difference is scale. There is no stack walking, and there is nothing to enumerate, because the set of operations that can reach the host is the set you registered. A couple of dozen call sites, enumerable in a grep, not an open-ended search for the next reflective path.
+That covers the capabilities you can remove outright. It does not cover the ones you want present but bounded: "you may open files, but only under `/tmp`" is not a statement about which bindings exist, because the path is a runtime value. So Wile has a second, smaller layer for exactly those: a `security.Authorizer` that each privileged primitive consults with a resource, an action, and a target before it acts. That is a runtime check, and it is the same *kind* of thing the SecurityManager did. The difference is scale. There is no stack walking, and there is nothing to enumerate, because the set of operations that can reach the host is the set you registered. (One construct can widen that set: with the eval extension loaded, `(environment '(wile kitchen-sink))` builds a namespace carrying every extension. Wile refuses that widening once an authorizer is installed, unless the authorizer permits `namespace:create`.) About thirty call sites, enumerable in a grep, not an open-ended search for the next reflective path.
 
 ## Five properties that make this work
 

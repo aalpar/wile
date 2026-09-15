@@ -8,13 +8,16 @@ REPL, and the in-REPL debugger.
 ### Synopsis
 
 ```
-wile [options] [file...]
+wile [options] [file [arg...]]
 ```
 
-With no arguments, `wile` enters the interactive REPL. Positional arguments
-are treated as Scheme files to load before evaluation begins. Files can also
-be passed via `-f`/`--file`. A bare `-` names standard input, positionally or
-as `--file -`.
+With no arguments, `wile` enters the interactive REPL. Without `-f`, the first
+positional argument is the program file and the rest are its arguments, so
+`(command-line)` is `(file arg...)`; a leading `#!` line in that file is
+skipped. Files passed via `-f`/`--file` (repeatable) are pure Scheme source, with
+no `#!` skip, and every positional argument then goes to `(command-line)` after
+the last `-f` file. A bare `-` names standard input, positionally or as
+`--file -`.
 
 ### Options
 
@@ -29,7 +32,7 @@ as `--file -`.
 |       | `--strict`       | string     | Narrow the visible top level: `core` binds only the core surface, `no-bindings` binds nothing (everything, `car` included, must be imported). See [Strict namespace](../embedding/api-design.md#strict-namespace) |
 | `-V`  | `--version`      | bool       | Print version and exit |
 |       | `--mcp`          | bool       | Start as MCP server on stdio |
-|       | `--mcp-timeout`  | float      | Default eval timeout in seconds for MCP mode (default: 30) |
+|       | `--mcp-timeout`  | float      | Default eval timeout in seconds for MCP mode (default: 30; 0 = no caller-supplied deadline, bounded by the server maximum) |
 |       | `--cpuprofile`   | string     | Write CPU profile to file |
 |       | `--memprofile`   | string     | Write memory profile to file |
 |       | `--mutexprofile` | string     | Write mutex contention profile to file |
@@ -37,15 +40,17 @@ as `--file -`.
 |       | `--cover`        | string     | Write Scheme-level coverage report to file (Go cover format) |
 |       | `--cover-stdlib` | bool       | Include stdlib files in `--cover` output (default excludes `scheme/`, `wile/`, `srfi/`) |
 |       | `--cover-summary`| string     | Write human-readable coverage summary to file |
+| `-h`  | `--help`         | bool       | Print usage and exit |
 
 `--` terminates flag parsing; everything after is a positional argument.
 
 ### Checking Without Running
 
 `--check` parses, expands, and compiles the program and then stops, reporting
-the first error as `file:line:col: ...` with exit status 1, or exiting 0 in
-silence. It is the `go build` of a Scheme program: every diagnostic the compiler
-already produces, including for code a test run would have to reach to discover.
+the first error on stderr as `Error: ...` (the message carries the
+`file:line:col`) with exit status 1, or exiting 0 in silence. It is the
+`go build` of a Scheme program: every diagnostic the compiler already produces,
+including for code a test run would have to reach to discover.
 
 ```bash
 wile --check program.scm                # Check one file
@@ -64,7 +69,7 @@ that resolves nowhere, and a call whose argument count the callee cannot accept.
 
 ```
 $ wile --check chk.scm
-Error: chk.scm:2:3: expand/compile error: compilation: chk.scm:2:3: call to helper: expected 2 argument(s), got 1: wrong number of arguments
+Error: expand/compile error: compilation: chk.scm:2:3: call to helper: expected 2 argument(s), got 1: wrong number of arguments
 ```
 
 Checking stops at the first failing input. Files are checked in order against
@@ -87,7 +92,8 @@ cannot be rebound to a different arity:
 | `define` that is redefined or `set!` in the unit | No | No single arity to check against |
 | Anything under `-i` or a mutable top level | No | The name may be rebound before the call runs |
 | A procedure reached through a parameter, or `apply` | No | The callee is not known until run time |
-| `case-lambda` | Accepted or rejected correctly, but the message says "one of its clause arities" rather than listing them |
+| Ambient or imported `case-lambda` (`string-map`) | Yes | The message says "one of its clause arities" rather than listing them |
+| `(define f (case-lambda ...))` in the unit | No | Only lambda-shaped defines have a compile-time arity |
 
 Uncheckable calls are left to the existing run-time arity error; nothing is
 weakened, only reported earlier where it can be.
@@ -107,7 +113,7 @@ library runs those effects. The checked program's own top level never runs.
 ```bash
 wile                                    # Start REPL
 wile program.scm                        # Run file and exit
-wile -f program.scm                     # Same, via flag
+wile -f program.scm                     # Same, via flag (no #! skip)
 wile -f program.scm -i                  # Run file, then enter REPL
 wile -e '(+ 1 2)'                       # Evaluate expression and print result
 wile -L /path/to/libs program.scm       # Add library search path
@@ -142,10 +148,10 @@ evaluating Scheme. Most accept a short alias.
 | `,doc [-x] <name>`   |          | Show documentation for a binding or library. `-x` includes examples |
 | `,doc (<lib>)`       |          | Show library description, source, and exports |
 | `,edit <file>`       |          | Open file in `$EDITOR` (REPL blocks until editor exits) |
-| `,apropos <pattern>` | `,a`     | Search bindings by name, documentation, or category |
+| `,apropos <pattern>` | `,a`     | Search bindings by name, documentation, category, or keyword |
 | `,topics`            |          | List documentation categories with entry counts |
 | `,topic <category>`  |          | List bindings in a category |
-| `,libraries`         | `,libs`  | List loaded Scheme libraries with descriptions |
+| `,libraries`         | `,libs`  | List loaded libraries, then discoverable but not-yet-imported ones, with descriptions |
 | `,disassemble <name>`| `,dis`   | Show bytecode disassembly of a procedure |
 | `,version`           |          | Show interpreter version and build identifier |
 
@@ -174,6 +180,10 @@ The commands below are available at the ordinary prompt.
 | `,backtrace`           | `,bt`   | Show the current continuation stack |
 | `,where`               |         | Show the current source location |
 
+`FILE` is compared as an exact string against the source name the code was
+compiled under: the path as given for a `-f` or positional file, but the
+resolved absolute path for code reached through `load`.
+
 Breakpoints survive across continuation resumes — they are attached to source
 locations, not to particular VM states. A breakpoint set inside a procedure
 fires on every call that re-enters its line; see the stop-counting rule below
@@ -184,9 +194,9 @@ for the shapes where a call does not re-enter it.
 While execution is suspended only six of the commands above are accepted:
 `,continue`, `,step`, `,next` and `,finish` each resume with a different
 stepping mode, and `,backtrace` and `,where` report the suspended state and
-leave you at the prompt. Anything else — including a Scheme expression — is
-refused, because evaluating it would re-enter the VM the break is holding
-still. `Ctrl-D` abandons the suspended computation; its `dynamic-wind`
+leave you at the prompt. Aliases work there and the leading `,` is optional.
+Anything else — including a Scheme expression — is refused, because evaluating
+it would re-enter the VM the break is holding still. `Ctrl-D` abandons the suspended computation; its `dynamic-wind`
 after-thunks still run.
 
 A breakpoint names a source LINE, so one entry to that line is one stop even

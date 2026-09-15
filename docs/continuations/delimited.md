@@ -78,7 +78,7 @@ The accumulate-and-reverse shape is load-bearing, not a stylistic choice. The st
 
 The multi-list case uses `any-null?` (a named-let helper) to check if any input list is exhausted, matching R7RS's behavior of stopping at the shortest list.
 
-The definitions live in `pkg/registry/core/bootstrap_procedures.scm`, alongside `vector-map`, `vector-for-each`, `string-map`, `string-for-each`, `member`, and `assoc`, all moved to Scheme for the same reason.
+The definitions live in `pkg/registry/core/bootstrap_procedures.scm`, alongside `vector-for-each`, `string-for-each`, `member`, and `assoc`, all moved to Scheme for the same reason. `vector-map` and `string-map` are Scheme too, but live in the dialect-swappable `bootstrap_maps_mutable.scm` (replaced by `bootstrap_maps_immutable.scm` in a no-mutation dialect).
 
 ### 2. Add delimited continuations
 
@@ -137,7 +137,7 @@ Two control signals, both declared in `pkg/machine/prompt_abort.go`, ride the VM
          otherwise re-raises)             delegates to it)
 ```
 
-The order in `applyCallableError` matters: `ErrPromptAbort`, `ErrExceptionEscape`, `ErrTimerInterrupt`, and `ErrResumeContinuation` are each recognized *before* the fallthrough. Without those checks, an abort or a resume would be converted into a catchable Scheme condition and its driver would never see it.
+The order in `applyCallableError` matters: `isControlSignal` recognizes `ErrPromptAbort`, `ErrExceptionEscape`, `ErrTimerInterrupt`, `ErrBreakInterrupt`, and `ErrResumeContinuation` *before* the fallthrough (an authorizer denial also bypasses it, returned as an uncatchable `*SchemeError`). Without those checks, an abort or a resume would be converted into a catchable Scheme condition and its driver would never see it.
 
 ## How Each Primitive Works
 
@@ -146,6 +146,8 @@ The order in `applyCallableError` matters: `ErrPromptAbort`, `ErrExceptionEscape
 ```scheme
 (call-with-continuation-prompt thunk tag handler)
 ```
+
+All three arguments are required (Racket makes `tag` and `handler` optional); pass `#f` for no handler. Likewise `call-with-composable-continuation` requires its `tag`.
 
 Implementation in Go (`PrimCallWithContinuationPrompt` → `RunBodyUnderPrompt`):
 
@@ -178,7 +180,7 @@ This is the most complex primitive. Implementation:
 3. Create a `ComposableContinuation` wrapping the segment and a copy of the current winding stack (plus thread ID and barrier token). No mark snapshot is taken: composable resume composes the invoker's marks, unlike `call/cc`.
 4. Apply `proc` with the composable continuation **in place** on the live chain, mirroring `call/cc`'s inline mode (`prim_control.go`), NOT aborting. The deep copy in step 2 left the originals on the live chain, so `proc`'s result flows back through them. When the capture is rootless (`mc.Parent() == nil`), `proc` runs in a fresh sub-context under its own `DefaultPromptTag` driver instead, exactly as call/cc's sub-context mode; its value(s) are then delivered to `mc`.
 
-This is the defining behavior of a *composable* continuation (Racket semantics, verified against Racket v9.2): `proc` runs in the continuation of the `call-with-composable-continuation` call — it does not remove the current continuation — and applying the captured continuation **composes** (extends) rather than replaces, so the captured frames may legitimately run more than once. For example `(+ 1 (call-with-composable-continuation (lambda (k) (k (k 10))) tag))` under a prompt yields **13**: `(k 10)`→11, `(k 11)`→12, then `proc`'s 12 flows in place into the live `(+ 1 _)` → 13. `shift`/`control` add their own `abort-current-continuation` on top of this raw capture (`wile/control.scm`); the primitive itself must not. (Earlier versions aborted to the prompt — `control`/frame-removing semantics — which was non-conformant to the Racket primitive this primitive follows.)
+This is the defining behavior of a *composable* continuation (Racket semantics, verified against Racket v9.2): `proc` runs in the continuation of the `call-with-composable-continuation` call — it does not remove the current continuation — and applying the captured continuation **composes** (extends) rather than replaces, so the captured frames may legitimately run more than once. For example `(+ 1 (call-with-composable-continuation (lambda (k) (k (k 10))) tag))` under a prompt yields **13**: `(k 10)`→11, `(k 11)`→12, then `proc`'s 12 flows in place into the live `(+ 1 _)` → 13. `shift`/`control` add their own `abort-current-continuation` on top of this raw capture (`pkg/stdlib/lib/wile/control.scm`); the primitive itself must not. (Earlier versions aborted to the prompt — `control`/frame-removing semantics — which was non-conformant to the Racket primitive this primitive follows.)
 
 ### Applying a composable continuation
 
@@ -201,7 +203,7 @@ The share-then-copy discipline in step 4b is essential in both directions. Witho
 
 ### The winding stack model
 
-Each `DynamicWindFrame` has an atomic ID. The winding stack is a slice of frame pointers, outermost at index 0. `FindCommonWindingPrefix` compares two stacks by ID to find where they diverge.
+Each `DynamicWindFrame` has an atomic ID. The winding stack is a slice of frames (held by value), outermost at index 0. `FindCommonWindingPrefix` compares two stacks by ID to find where they diverge.
 
 When transitioning between dynamic extents (whether from `call/cc`, abort, or composable continuation application), `RestoreWithWindingFrom` runs:
 
@@ -343,9 +345,14 @@ Creates an independent copy of an entire continuation chain. Every frame is `Cop
 
 ## Derived Operators: (wile control)
 
-The `(wile control)` library provides all named delimited continuation operators
-from Racket's `racket/control` module, derived entirely from the three core
-primitives above (no additional VM paths).
+The `(wile control)` library provides the prompt/control, reset/shift,
+prompt0/control0, reset0/shift0, spawn, and set/cupto families named after
+Racket's `racket/control` module, derived entirely from the three core
+primitives above (no additional VM paths). It does not provide `%`/`fcontrol`,
+`abort`, `abort/cc`, `call/prompt`, `call/comp`, or `splitter`, and two shapes
+differ from Racket's: untagged `set`/`cupto` use the default tag (Racket's take a
+prompt first, like Wile's `set-at`/`cupto-at`), and `spawn` takes a body
+(`(control k (k body))`) rather than Racket's procedure-receiving form.
 
 ### Operator Matrix
 

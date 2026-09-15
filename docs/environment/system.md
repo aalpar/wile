@@ -30,9 +30,9 @@ The environment system has four key types organized in a hierarchy:
 │                      structural root — every phase/sealed-write view)   │
 │  local ──────────── LocalEnvironmentFrame (value; keys==nil → none)     │
 │  global ─────────── *GlobalEnvironmentFrame (the owner's ONE store)     │
-│  phaseLevel ─────── Phase (-1=template, 0=runtime, 1=expand, 2=compile) │
-│  rank ───────────── writeRank (mutable | sealed — which tier this       │
-│                      view's writes land in)                             │
+│  phaseLevel ─────── Phase (RELATIVE: -1=template, 0=runtime, 1=expand)  │
+│  sealed ─────────── bool (true → writes land in the sealed tier; set    │
+│                      only on a sealed-write view)                       │
 │  phases ─────────── *PhaseRegistry (shared reference)                   │
 │  namespace ──────── *Namespace (back-reference)                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -81,7 +81,7 @@ Four constructors, and the differences between them are not cosmetic:
 | Constructor | Store's sealed tier | Runtime view | Scheme surface |
 |---|---|---|---|
 | `NewNamespace()` | empty until bootstrap applies the registry | own | the engine root |
-| `NewChildNamespace()` | own store, **stays empty** | own, empty | `(environment …)`, `(null-environment)`, `(make-namespace)`, `namespace-derive` |
+| `NewChildNamespace()` | own store, **empty** at construction | own, empty | `(environment …)`, `(null-environment)`, `(make-namespace)`, `namespace-derive` |
 | `NewSchemeReportNamespace()` | own store, a **copy** of the parent's | own, a copy of the parent's runtime | `(scheme-report-environment)` |
 | `NewChildRuntime()` | own store, own sealed tier | is itself | not first-class — library loading only |
 
@@ -115,7 +115,7 @@ is the authority — new fields must pick one):
 |---|---|---|
 | Per-VM | `Name`, `parent`, `phases`, `runtime`, `moduleInstances`, `syntaxInterns` | child gets its own; `syntaxInterns` is nil and `InternSyntax` delegates to the parent |
 | Captured at construction | `libraryRegistry`, `libraryEnvFactory`, `registry`, `authorizer`, `envMap` | child copies the parent's pointer at fork time; a later `parent.SetRegistry(other)` does **not** reach it, but mutation *through* the shared pointer does |
-| Delegated to root | `fileResolver`, `scopeRegistry`, `immutableTopLevel` | child stores nothing; reads walk the parent chain |
+| Delegated to root | `fileResolver`, `scopeRegistry`, `immutableTopLevel`, `contractEnforcement` | child stores nothing; reads walk the parent chain, except `ImmutableTopLevel()`, which answers false for any child |
 | Pointer-shared (`*EngineServices`) | `ioState`, `formRegistry`, `inlineThreshold`, `maxExpandDepth`, `exportIndex` | one struct for the whole namespace tree |
 | Owned outright | `sealedWriteRoot`, `inlineHOFTemplates`, `effectiveRegistry`, `extensionState` | child builds its own; unrelated to the parent's |
 
@@ -151,7 +151,7 @@ interned := ns.InternSyntax(key, syntaxValue)
 ## Phase Hierarchy
 
 `Phase` is an `int8`, and `PhaseRegistry.GetOrCreate` mints a frame for **any**
-value in `[-128, 127]` on first access. The four named constants are the phases
+value in `[-128, 127]` on first access. The three named constants are the phases
 that have names; they are not the set of phases that exist.
 
 | Phase | Constant | What actually lands there |
@@ -162,9 +162,11 @@ that have names; they are not the set of phases that exist.
 | 2 … 127 | *(none)* | Created on demand by the macro tower: a transformer body or a nested `begin-for-syntax` at phase *N* runs its own compile-time code at *N+1*; `(for-meta 2 …)` imports land here |
 
 Auxiliary keywords (`else`, `=>`) and special-form names sit at `(phase 0,
-sealed)` like the rest of the startup set. A higher phase reaches them only
-because the dialect declares a bulk row that supplies them there (see [The Ranked
-Probe](#invariants) below).
+sealed)` like the rest of the startup set. A higher phase holds no slot for them;
+it reaches `else`, `=>` and the macro-writing names only through the dialect's
+macro-vocabulary bulk row, installed at every phase ≥ 1 (`defaultMacroVocabulary`,
+`pkg/wile/dialect.go`; see [The Ranked Probe](#invariants) below). Special-form
+dispatch goes through the forms registry, not these bindings.
 
 Phases 3 and up are not hypothetical, and the tower is observable from Scheme.
 Under `--strict=no-bindings` (nothing ambient, so every name must be imported at
@@ -178,12 +180,12 @@ a stated phase):
 ;; program B, a separate file: the imports do not accumulate
 (import (for-syntax (scheme base)))                  ; car bound at phase 1
 (begin-for-syntax (begin-for-syntax (car '(1 2))))   ; body runs at phase 2
-;; => no such local or global binding "car"
+;; => no such local or global binding "car" at phase 2 of this unit's macro tower
 ```
 
 The second failure is the hermeticity property, not a missing feature: a phase-*N*
-read is a candidate only against slots at exactly phase *N* or the ambient
-coordinate — never at any other exact phase — so a binding installed at phase
+read is a candidate only against slots at exactly phase *N*, plus the bulk rows
+declared at *N*, never at any other phase, so a binding installed at phase
 *N* is invisible at *N+1* (and at *N-1*) by key disjointness in the store, not by
 a missing parent link. Phase shifts compose
 additively, so `(for-syntax (for-syntax lib))` is the same as `(for-meta 2 lib)`,
@@ -208,7 +210,8 @@ search.
 
 Everything else that walks phases is driven by `Store().LiveSlots()` (every
 live slot at every phase and rank, in one map walk over the owner's store):
-`BoundNamesAcrossPhases`, and `,apropos` through it.
+`BoundNamesAcrossPhases`, and `,apropos` (`searchEnvironmentBindings`,
+`pkg/registry/search.go`).
 
 `registry.PhaseSet`, the *registration* vocabulary, is narrower still: a `uint8`
 bitset covering phases 0..7 only. `PhaseTemplate` and any tower phase ≥ 8 are
@@ -228,7 +231,7 @@ tower   := env.AtPhase(7)                          // legal; created on demand
 // Relative phase access: what the macro tower is built on. Climbing sites
 // must use these, not Expand(), or every phase collapses into phase 1.
 next := env.NextPhase()                   // frame at env.PhaseLevel()+1
-next, err := env.NextPhaseChecked(base)   // same, int8 ceiling as an error
+next, err := env.NextPhaseChecked(base)   // frame at base+1, int8 ceiling as an error
 ```
 
 `NextPhase()` at `phaseLevel 0` equals `Expand()`, which is why top-level
@@ -236,7 +239,7 @@ expansion is byte-for-byte unchanged by the tower (the *level-0 identity*). The
 climbing sites are enumerated in
 [compiler/macro-system.md](../compiler/macro-system.md#phase-tower-relative-phase-accessors).
 
-Each phase has its own `GlobalEnvironmentFrame` for bindings but shares the `Namespace` for interning.
+Every phase view shares the owner's one `GlobalEnvironmentFrame` and the `Namespace` for interning; phases are separated by slot coordinates in that store, not by separate stores.
 
 ---
 
@@ -296,9 +299,14 @@ func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.Envi
     return libEnv, nil
 }
 
-// In main.go or engine setup
+// Internal setup (e.g. pkg/registry/testhelpers)
 env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 ```
+
+`wile.NewEngine` does not use `bootstrap.NewLibraryEnvironmentFrame`: it installs
+its own factory closure (`pkg/wile/engine.go`) that also calls `NewChildRuntime`,
+then installs the dialect's initial-import bulk rows into the library store
+before applying the engine's registry.
 
 ---
 
@@ -332,6 +340,10 @@ func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {
 }
 ```
 
+`pkg/internal/bootstrap` is importable only inside the module. It installs no
+initial-import bulk rows, so a frame built this way lacks the macro-vocabulary
+row at phases ≥ 1 that `wile.NewEngine` declares.
+
 ### Creating Test Environments
 
 ```go
@@ -361,7 +373,7 @@ env := environment.NewNamespaceFrame()
 // own scope set, which keys a distinct slot under the same name.
 // DefineOwnGlobal pairs the create and the write under one key; see Invariant 5.
 sym := values.NewSymbol("foo")
-err := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, values.NewInteger(42))
+_, err := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, values.NewInteger(42))
 if err != nil {
     return err
 }
@@ -426,15 +438,19 @@ These invariants must be maintained:
      `DefineOwnGlobal` exists so that pairing cannot be written by hand
 
 6. **One store per owner; sealed vs. mutable is a slot coordinate, not a frame**
-   - **Phase environments are isolated; the one thing they all reach is the
-     ambient set built at VM startup.** There is no hierarchy of phases and no
-     phase frame ever resolves into the phase below it. But there is also no
-     *frame* to inherit from any more: a `Namespace` and a `NewChildRuntime`
+   - **Phase environments are isolated; what a phase sees beyond its own slots
+     is what the dialect declares there as bulk rows.** The Engine installs one
+     row per `PhasedImport` from `LanguageProvider.InitialImports` (by default
+     the base at phase 0) plus the macro-vocabulary row at every phase ≥ 1
+     (`installInitialImports`, `pkg/wile/engine.go`). There is no hierarchy of
+     phases and no phase frame ever resolves into the phase below it. There is
+     also no *frame* to inherit from: a `Namespace` and a `NewChildRuntime`
      library env each own exactly ONE `GlobalEnvironmentFrame` (the "store"),
      and both the ordinary phase views and the sealed-write views
      (`EnvironmentFrame.AtPhase` / `SealedWriteViewAt`) are thin views over that
-     same store, distinguished only by which coordinates their reads probe and
-     their writes stamp. What used to be "does frame A's parent chain reach
+     same store, distinguished only by the phase their reads probe at and the
+     `(phase, sealed)` coordinate their writes stamp. A mutable view and a
+     sealed-write view at the same phase read identically. What used to be "does frame A's parent chain reach
      frame B" is now "does slot X's `(phase, sealed)` pair make it a
      candidate for this read".
    - **Every slot carries a coordinate.** `phase` is a plain `Phase` and `sealed`
@@ -449,8 +465,8 @@ These invariants must be maintained:
      | Tier | Coordinate | What lands here |
      |------|------------|------------------|
      | `tierExactMutable` | `(phase N, mutable)` | ordinary `define`s at phase N — user code, `define-for-syntax` bodies |
-     | `tierExactImported` | `(phase N, sealed)`, stamped `Imported` | what an `(import …)` installs, which therefore shadows a base name of the same spelling rather than overwriting it |
-     | `tierExactSealed` | `(phase N, sealed)`, unstamped | the startup set: Go primitives, sealed stdlib procedures, optimizer `Stable` anchors, the syntax compilers (`RegisterSyntaxCompilers`) and the auxiliary keywords and special-form names (`registerCompileTimeBinding`) at phase 0; the bootstrap macros and special-form expanders at phase 1 |
+     | `tierExactImported` | `(phase N, sealed)`, stamped `Imported` | what a phase-0 program or `(environment …)` import installs (`CopyLibraryBindingsToEnvAtPhase`, `placementShadowable`), which therefore shadows a base name of the same spelling rather than overwriting it; every other import install (another phase, a propagated phase, a library body's own imports) is `placementInPlace` and lands at `(N, mutable)` |
+     | `tierExactSealed` | `(phase N, sealed)`, unstamped | the startup set: Go primitives, sealed stdlib procedures, optimizer `Stable` anchors, the syntax compilers (`RegisterSyntaxCompilers`) and the auxiliary keywords and special-form names (`registerCompileTimeBinding`) at phase 0; the bootstrap macros, special-form expanders and the registry's expand-phase primitive copies at phase 1 |
 
      A slot at any OTHER phase is **not a candidate at all** — that is
      phase hermeticity, expressed as key disjointness rather than a missing
@@ -472,11 +488,13 @@ These invariants must be maintained:
      so a `define-syntax` inside a transformer body climbs off the sealed axis
      into the ordinary mutable phase-2 view.
    - **`SealedWriteViewAt(phase)` is what registration writes through.** It
-     returns the owner's cached sealed-write view for `phase` when the axis has
-     a row there, else falls back to the receiver's own ordinary view at that
-     phase (`unsealedTargetAt`). Both `sealedAxis` rows are owned by every owner,
-     a library env included, so that fallback is dead for phases 0 and 1 and only
-     phases 2 and above take it. `registry.Apply`'s `phaseTargets` therefore
+     returns the owner's cached sealed-write view for `phase` when the receiver
+     is an owner root (`ownsSealedAxis`: the phase-0 entry of its own registry)
+     and the axis has a row there, else falls back to the receiver's own ordinary
+     view at that phase (`unsealedTargetAt`). Both `sealedAxis` rows are owned by
+     every owner, a library env included, so for an owner-root receiver that
+     fallback is dead for phases 0 and 1; a lexical child or a sealed-write view
+     always takes it. `registry.Apply`'s `phaseTargets` therefore
      seats its expand-phase primitives at **(1, sealed)**, which is what makes a
      top-level `(define-for-syntax car …)` a shadow at (1, mutable) rather than a
      write through the registry's copy.
@@ -504,7 +522,7 @@ These invariants must be maintained:
      sealed)` would be reachable by **runtime value resolution** — that is
      exactly the tier a phase-0 read ranks last and still reaches.
      That is a phase confusion: a dialect that removes a form
-     (`Dialect.Forms().Remove`) would then leak the form's
+     (`FormRegistry.Remove` inside `Dialect.InstallForms`) would then leak the form's
      `#<primitive-expander:…>` into the value world instead of the name being
      unbound. Landing it at `(1, sealed)` instead keeps it off every phase-0
      probe entirely — it is a candidate only for a phase-1 read.
@@ -558,7 +576,7 @@ All three file-loading operations get-or-create the chain's stack and push/pop o
 | `include` | `pkg/machine/compilation/compile_time_continuation_include.go` | Compile-time |
 | `import` (library loading) | `pkg/machine/compilation/library_loader.go` | Compile-time |
 
-Each finds the stack with `resolver.SelectLoadStack(ctx)`, and creates one — installing it on the context it passes downward — when there is none. That get-or-create is what makes the outermost of the three own the chain while the inner ones nest inside it.
+Each finds the stack on the context (`sourceload.LoadStackFromContext`, which `resolver.SelectLoadStack(ctx)` wraps), and creates one — installing it on the context it passes downward — when there is none. That get-or-create is what makes the outermost of the three own the chain while the inner ones nest inside it.
 
 This enables correct nested resolution: `(load "a.scm")` containing `(load "b.scm")` resolves `b.scm` relative to `a.scm`'s directory.
 

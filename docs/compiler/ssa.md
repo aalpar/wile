@@ -48,20 +48,19 @@ This is genuinely powerful. It's the backbone of LLVM, GCC, V8's TurboFan, and e
 
 Here's the insight: **a stack machine is naturally in something like SSA form already.**
 
-When Wile compiles `(+ (car x) (* y 2))`, it produces:
+When Wile compiles `(+ (car x) (* y 2))` (as the tail expression of a procedure, after peephole optimization), it produces:
 
 ```
-LoadLocal x        ; value = x
-Push               ; stack = [x]
-Car                ; value = (car x)    -- new "version" of value register
-Push               ; stack = [x, (car x)]
-LoadLocal y        ; value = y
-Push               ; stack = [x, (car x), y]
-PushLiteral 2      ; stack = [x, (car x), y, 2]
-Mul                ; value = (* y 2)    -- new "version"
-Push               ; stack = [x, (car x), y, 2, (* y 2)]
-...
-Add                ; value = result
+PushCachedBinding +  ; stack = [+]
+PushLocal x          ; stack = [+, x]
+Car                  ; pops x; value = (car x)    -- new "version" of value register
+Push                 ; stack = [+, (car x)]
+PushLocal y          ; stack = [+, (car x), y]
+PushLiteral 2        ; stack = [+, (car x), y, 2]
+Mul                  ; pops y, 2; value = (* y 2) -- new "version"
+Push                 ; stack = [+, (car x), (* y 2)]
+ReleaseEnvFrame
+PullApply            ; value = result
 ```
 
 Each `Push` creates a new stack slot that is consumed exactly once. Each write to the value register creates a new "version" that lives until the next write. **There is no "which definition reaches here?" ambiguity** — the stack discipline guarantees it. Values flow through the stack in a single, deterministic order. You never need to ask "which `x`?" because the stack position *is* the identity.
@@ -103,9 +102,9 @@ SSA relies on structured control flow. The phi-functions at merge points assume 
     a))
 ```
 
-After `call/cc`, the continuation `k` can re-enter the body of `f` at any later time. The variable `a` can never be declared dead — the captured continuation holds a reference to the entire environment frame. Any SSA-based liveness analysis would need to conservatively mark every variable as live if a continuation is captured anywhere in scope. At that point, the analysis is doing work to produce the same answer as "keep everything" — which is what Wile's environment frames already do.
+After `call/cc`, the continuation `k` can re-enter the body of `f` at any later time. The variable `a` can never be declared dead — the captured continuation holds a reference to the entire environment frame. Any SSA-based liveness analysis would need to conservatively mark every variable as live if a continuation is captured anywhere in scope. At that point, the analysis is doing work to produce the same answer as "keep everything" — which is Wile's default: a captured continuation keeps the frame (`NewMachineContinuation` holds `mc.env`).
 
-Wile's linked-closure environment model (where each closure points to its parent frame) is actually the *correct* representation for a language with first-class continuations. It's not a naive choice that SSA would improve — it's the design that handles the hard case correctly.
+Wile does run the conservative version of this analysis, per frame rather than per variable. Codegen hands a frame back to the pool before a tail call (`OpReleaseEnvFrame`) or reuses it for a self tail call (`OpSelfTailCall`) only after proving nothing can capture it: no escaping closure, only capture-safe callees (`validate.BodyIsSelfTailReusable`, `validate.LetBindingFrameReleasable`, and the frame-reclaim verdict). Those predicates run over the validated IR, not over an SSA form. Closures are no longer part of the problem: flat-closure conversion copies each free variable's value into the closure (boxing those that are also assigned) and links the closure to the top level rather than its creating frame, except for a body flagged `RetainsLexicalEnv`.
 
 ### 4. `set!` requires memory cells anyway
 
@@ -117,7 +116,7 @@ SSA can handle mutable variables, but it does so by converting them to explicit 
   x)
 ```
 
-If you built SSA for this, the `set!` would force `x` into a "cell" (an allocated memory slot), and the SSA would consist of `load(cell)` and `store(cell, value)` — exactly what `LoadLocal`/`StoreLocal` already are. The SSA form would be a verbose restatement of what the bytecode already says.
+If you built SSA for this, the `set!` would force `x` into a "cell" (an allocated memory slot), and the SSA would consist of `load(cell)` and `store(cell, value)` — exactly what `LoadLocal`/`StoreLocal` already are. The SSA form would be a verbose restatement of what the bytecode already says. Where a variable is both assigned and captured by a closure, Wile already makes the cell explicit: flat-closure conversion boxes it (`boxing.go`), and the bytecode becomes `BoxSlot` / `StoreThroughBox` in the binding procedure and `LoadFree` + `Unbox` / `StoreFree` in the closure.
 
 ### 5. Compilation speed matters more than optimization depth
 
@@ -127,7 +126,7 @@ For a language where functions are typically 5-20 lines and where most runtime c
 
 ## What Wile Optimizes Instead (And Why It's Right)
 
-Wile's actual performance bottleneck is **VM dispatch overhead**: the cost of fetching each opcode, branching through the switch statement, and executing the operation. The profiling data confirms this — the opcode promotion work (inlining `car`, `cdr`, `+`, `-`, `<`, etc. as dedicated opcodes) produced 30-70% speedups on benchmarks. That dwarfs anything SSA-based optimization could deliver.
+Wile's actual performance bottleneck is **VM dispatch overhead**: the cost of fetching each opcode, branching through the switch statement, and executing the operation. The profiling data confirms this — the opcode promotion work (inlining `car`, `cdr`, `+`, `-`, `<`, etc. as dedicated opcodes) produced 30-70% speedups on benchmarks (figures recorded when promotion shipped; not re-measured against the current VM). That dwarfs anything SSA-based optimization could deliver.
 
 The optimization strategy Wile has chosen is:
 
@@ -139,8 +138,12 @@ The optimization strategy Wile has chosen is:
 | Dead LoadVoid removal | Wasted dispatch | `LoadVoid; LoadLiteral` -> `LoadLiteral` |
 | Cached binding resolution | Environment chain walk | `OpPushCachedBinding` |
 | Call fusion | Pull+Apply+SaveCont overhead | `OpCallForeignCached` |
+| Procedure inlining | Call protocol | `let`-bound small lambda → synthetic `let` |
+| Self tail call as jump | Call protocol, frame allocation | `OpSelfTailCall` |
+| `let`-slot merging | Frame push/pop | `let` slots in the enclosing procedure frame |
+| Frame reclaim | Env frame allocation | `OpReleaseEnvFrame` before a proven-safe tail call |
 
-These all target the actual bottleneck (dispatch) rather than a theoretical bottleneck (redundant computation). For a Go-hosted interpreter without `unsafe`, dispatch is where the time goes.
+These target the actual bottleneck (dispatch) and per-call overhead rather than a theoretical bottleneck (redundant computation). For a Go-hosted interpreter without `unsafe`, dispatch is where the time goes.
 
 ## When Would SSA Become Worthwhile?
 

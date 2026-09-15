@@ -36,7 +36,7 @@ This document explores what inlining means for Wile specifically: what infrastru
 Before talking about eliminating calls, we should know what a call costs. Here's the bytecode for `(square 3)` in a non-tail position, after peephole optimization:
 
 ```
-SaveContinuation(+4)     ; save env, template, pc, evals
+SaveContinuation(+3)     ; save env, template, pc, evals
 PushLiteral 3             ; argument
 CallCachedBinding idx     ; fused: load square + drain args + check arity + apply
                           ; (inside template 1: bind x, compute (* x x), restore)
@@ -53,7 +53,7 @@ What `Apply` does for a `MachineClosure`:
 4. Execute the body
 5. `RestoreContinuation`: restore saved env, template, pc, evals
 
-Steps 1-3 and 5 are pure overhead when the body is a single expression like `(* x x)`. The body itself — two `LoadLocal` + `Mul` — takes three dispatches. The call protocol around it takes five or six. The overhead dominates.
+Steps 1-3 and 5 are pure overhead when the body is a single expression like `(* x x)`. The body itself (two `PushLocal`, `ReleaseEnvFrame`, and a promoted `MulTail` that returns directly) takes four dispatches. The call protocol around it takes five or six. The overhead dominates.
 
 ## Why Core `let` Is the Prerequisite
 
@@ -73,19 +73,19 @@ With core `let`, the inlined code becomes:
 (let ((x 3)) (* x x))
 ```
 
-Which compiles to:
+Which, inside a procedure body, compiles to:
 
 ```
 PushLiteral 3
-OpPushEnv(1)
-StoreLocal x
-LoadLocal x     ; could be further optimized: x is known to be 3
-LoadLocal x
+StoreLocal x    ; a slot in the enclosing procedure's frame (merged let)
+PushLocal x     ; could be further optimized: x is known to be 3
+PushLocal x
 Mul
-OpPopEnv
 ```
 
-All in one template. No closure. No call protocol. And now the optimizer can see that `x` is always `3`, which enables constant propagation to eliminate the `LoadLocal` instructions entirely.
+At the top level, where there is no enclosing frame to merge into, the store and body sit between `PushEnv 1` and (in non-tail position) `PopEnv`.
+
+All in one template. No closure. No call protocol. And now the optimizer can see that `x` is always `3`, which enables constant propagation to eliminate the `PushLocal` instructions entirely.
 
 The progression is: **core `let` makes inlining possible; inlining makes constant propagation profitable.**
 
@@ -103,11 +103,11 @@ Inlining a call requires three pieces of information that the compiler currently
 
 If `square` can be reassigned, inlining it is unsound — the inlined body might not match what `square` actually holds at runtime. The compiler must prove that the binding is never targeted by `set!`.
 
-`BindingType` (`Variable`, `Syntax`, `Primitive`, `Unknown`) does not carry this, and `CompileValidatedSetBang` does not mark its target: it emits a `StoreLocal` or `StoreGlobal` and moves on.
+`BindingType` (`Variable`, `Syntax`, `Primitive`, `Unknown`) does not carry this, and `CompileValidatedSetBang` does not mark its target: past its imported/stable rejections, it emits a local store (`StoreLocal`, or `StoreThroughBox` / `StoreFree` for a boxed captured variable) or a `StoreGlobal` and moves on.
 
-**Shipped:** the validator answers it instead, at `let` scope. `markMutableBindings` (`pkg/internal/validate/validate_let.go`) walks the body for `ValidatedSetBang` targets and sets `ValidatedLetBinding.Mutable`; the inline predicate rejects a mutable binding. This is per-`let`, not whole-module, which is exactly as far as the shipped inliner reaches.
+**Shipped:** the validator answers it instead, at `let` scope. `markMutableBindings` (`pkg/internal/validate/validate_let.go`) checks each binding against the `set!` targets recorded during validation and sets `ValidatedLetBinding.Mutable`; the inline predicate rejects a mutable binding. This is per-`let`, not whole-module, which is exactly as far as the shipped inliner reaches.
 
-> Note: R7RS primitive bindings are a special case. Bindings like `+`, `car`, `cons` are `BindingTypePrimitive` and are never `set!`-able (the language guarantees this). The existing `CallForeignCached` optimization already exploits this — it resolves the binding at compile time and emits a direct call. Inlining extends this: instead of calling `+`, emit `Add` directly. The opcode promotion system already does this for the 11 hottest primitives. Inlining user-defined procedures is the generalization.
+> Note: primitive bindings are a special case. Bindings like `+`, `car`, `cons` are ordinary `BindingTypeVariable` globals (`BindingTypePrimitive` marks compile-time bindings such as special forms). Under the default immutable top level, capture-safe base primitives are stamped stable and `CompileValidatedSetBang` rejects `set!` on them; under `WithMutableTopLevel` they can be reassigned. The existing `CallForeignCached` optimization reads the binding at compile time and emits a direct call, re-checking the binding at run time for the reassigned case. Inlining extends this: instead of calling `+`, emit `Add` directly. The opcode promotion system already does this for 18 primitives. Inlining user-defined procedures is the generalization.
 
 ### 2. Is the body small enough?
 
@@ -149,7 +149,7 @@ Inlining could happen at two points:
 
 ### Option A: During Compilation (Validated IR)
 
-The compiler sees a `ValidatedApply` whose callee is a `ValidatedSymbol` pointing to a known `ValidatedLambda`. Instead of emitting `SaveContinuation` + `CallCachedBinding`, it emits the lambda body wrapped in `PushEnv`/`StoreLocal`/`PopEnv`.
+The compiler sees a `ValidatedCall` whose callee is a `ValidatedSymbol` pointing to a known `ValidatedLambda`. Instead of emitting `SaveContinuation` + `CallCachedBinding`, it emits the lambda body as a `let` over its parameters.
 
 **Advantages:**
 - Works at the validated IR level, where binding information is explicit
@@ -200,7 +200,7 @@ Here's a concrete inventory.
 | Callee specialization | Peephole checks `cachedBindings[idx].Value().(*ForeignClosure)` |
 | Per-template optimization | `Optimize()` with `EditPlan`, branch target tracking, four passes |
 | Opcode promotion (primitive inlining) | 18 primitives inlined as VM opcodes |
-| Cost-free binding forms | Core `let` — `OpPushEnv`/`StoreLocal`/`OpPopEnv` |
+| Cost-free binding forms | Core `let`: slots merged into the enclosing procedure frame (`merged_slots.go`); `OpPushEnv`/`OpPopEnv` only where no frame exists to merge into |
 | Body compilation infrastructure | `compileBody`, `compileClosureBody`, `compileValidatedSequence` |
 | Mutability tracking | `markMutableBindings` → `ValidatedLetBinding.Mutable` |
 | Escape tracking | `markEscapedBindings` → `ValidatedLetBinding.Escapes` |
@@ -214,7 +214,7 @@ Here's a concrete inventory.
 | Capability | Needed for | Difficulty |
 |-----------|-----------|------------|
 | **Inlining `define`d procedures** | The `(define (square x) …)` case in this document's opening | Medium — needs the same Mutable/Escapes analysis at top level and inside bodies, where the validator does not currently run it |
-| **Call-graph cycle detection** | Refusing a recursive candidate up front rather than expanding it one level and stopping | Medium — call graph over the validated IR; `currentlyInlining` bounds the expansion but does not avoid the duplicated body |
+| **Call-graph cycle detection** | Refusing a recursive candidate up front rather than expanding it one level and stopping | Medium — call graph over the validated IR; the same-environment test and `currentlyInlining` bound the expansion but do not avoid the duplicated body |
 | **Cross-module inlining** | Inlining library-exported functions | High — requires storing validated IR in library registry |
 | **Constant propagation through inlined parameters** | Collapsing `(let ((x 3)) (* x x))` to `9` | Medium — the synthetic `let` makes the value visible; nothing consumes it yet |
 
@@ -240,47 +240,48 @@ The key insight: **levels 5-8 are all about making binding information visible t
 
 ## A Concrete Example
 
-Walk through what happens to `(+ (square 3) (square 4))` at each level. Because `square` here is a top-level `define`, Level 3 is what actually compiles today; binding it with `(let ((square (lambda (x) (* x x)))) …)` instead reaches Level 6.
+Walk through what happens to `(+ (square 3) (square 4))` at each level, compiled as the body of a procedure `(define (g) …)`, so the outer `+` is a tail call. Because `square` here is a top-level `define`, Level 3 is what actually compiles today; binding it with `(let ((square (lambda (x) (* x x)))) …)` instead reaches Level 6.
 
 **Level 3 (top-level `define`):**
 ```
-SaveContinuation(+6)
+SaveContinuation(+3)
 PushLiteral 3
-CallCachedBinding square    ; → Template 1: bind x=3, compute (* x x), restore
+CallCachedBinding square    ; → Template 1: bind x=3, compute (* x x), return
 Push                         ; save result (9)
-SaveContinuation(+6)
+SaveContinuation(+3)
 PushLiteral 4
-CallCachedBinding square    ; → Template 1: bind x=4, compute (* x x), restore
+CallCachedBinding square    ; → Template 1: bind x=4, compute (* x x), return
 Push                         ; save result (16)
-Add                          ; promoted opcode: 9 + 16 = 25
+ReleaseEnvFrame              ; g's frame is proven dead
+AddTail                      ; promoted opcode: 9 + 16 = 25, returns
 ```
 
 Two template transitions, two env frame allocations, two arity checks.
 
 **Level 6 (after inlining + core let):**
 ```
-PushLiteral 3
-OpPushEnv(1)
-StoreLocal x
-LoadLocal x
+PushLiteral <template>
+MakeClosure                  ; square's closure is still built
 Push
-LoadLocal x
+StoreLocal square
+PushCachedBinding +
+PushLiteral 3
+StoreLocal x                 ; first inlined copy's x (merged slot)
+PushLocal x
+PushLocal x
 Mul                          ; 3 * 3 = 9
-OpPopEnv
 Push                         ; save 9
 PushLiteral 4
-OpPushEnv(1)
-StoreLocal x
-LoadLocal x
-Push
-LoadLocal x
+StoreLocal x'                ; second copy's x, its own slot
+PushLocal x'
+PushLocal x'
 Mul                          ; 4 * 4 = 16
-OpPopEnv
 Push                         ; save 16
-Add                          ; 9 + 16 = 25
+ReleaseEnvFrame
+PullApply                    ; generic call to +: 9 + 16 = 25
 ```
 
-Everything in one template. No call overhead. But there's redundancy — we're storing 3 into a slot just to load it back twice.
+Everything in one template. No call to `square`. Three costs remain: we're storing 3 into a slot just to load it back twice; `square`'s closure is still allocated though nothing calls it (dead binding elimination); and the outer `+` is no longer promoted, because an inlined argument's `StoreLocal` is not an argument shape the peephole's compound-argument pass recognizes (see [Peephole Optimizer](peephole-optimizer.md), Pass 4).
 
 **Level 7 (after constant propagation, future):**
 ```
@@ -318,7 +319,7 @@ The entire computation collapsed to a single literal. This is what Chez Scheme d
 
 Inlining `fib` into itself is obviously an infinite loop. The compiler must detect self-reference in the callee's body and refuse to inline. But what about *mutual* recursion? `even?` calls `odd?` which calls `even?` — inlining either one starts a cycle. Detection requires building a call graph at the validated IR level and checking for cycles.
 
-The shipped guard is cheaper still and covers both shapes for the scopes it reaches: `currentlyInlining` holds the `BindingID`s currently being expanded, and `tryInlineCall` declines any binding already in that set. Expansion terminates because the set only grows on the way down. A `letrec`-bound mutually recursive pair is caught the same way, one level in.
+The shipped guards are cheaper still and stop expansion one level in. An inlined body compiles inside the synthetic `let`'s fresh compile-time frame, where `tryInlineCall`'s same-environment test (`p.env != candidate.env`) already fails, so a recursive call inside it, self or `letrec`-mutual, stays a call. `currentlyInlining` holds the `BindingID`s currently being expanded and covers the one call to the same binding that does compile in the registration frame: an argument of the call being inlined, because plain-`let` inits compile outside the `let`. `(sq (sq 3))` inlines the outer call and leaves the inner one a `CallLocal`.
 
 ### Closures that capture variables
 

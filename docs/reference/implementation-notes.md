@@ -38,6 +38,8 @@ Treating them as core forms eliminates an entire layer of macro expansion and le
 
 **Semantics preserved:**
 
+The opcode shapes below are the *pushing* form, emitted only where there is no enclosing frame to merge into (the top level, a `syntax-case` clause body). A `let` inside a procedure body is normally *merged* (`canMergeLet`, `merged_slots.go`): it emits neither `OpPushEnv` nor `OpPopEnv` and takes its slots from the enclosing lambda's frame, with the same init/store order.
+
 - `let` — parallel binding; inits evaluated in an outer scope, then `OpPushEnv` allocates the frame and `StoreLocal` stores each value into the body scope.
 - `let*` — sequential binding; `OpPushEnv` first, then each init is compiled followed by its `StoreLocal`, so each later init sees the prior vars.
 - `letrec` / `letrec*` — `OpPushEnv` first so all slots exist before any init is evaluated. `letrec*` then compiles each init followed immediately by its `StoreLocal`, satisfying R7RS §4.2.2's strict left-to-right requirement; `letrec` compiles all inits onto the stack first and stores them in reverse, which meets the weaker R7RS guarantee. See the comment summary on `CompileValidatedLet` (`pkg/machine/compilation/compile_let.go`) for the opcode sequence per form.

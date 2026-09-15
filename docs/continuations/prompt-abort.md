@@ -34,12 +34,14 @@ Both are declared in `pkg/machine/prompt_abort.go`.
                                       │
       ┌──────────────────────────────────────────────────────────────┐
       │ applyCallableError (machine/foreign_closure.go), reached via │
-      │ bridgeForeignError from applyForeign, callForeignCached,     │
-      │ the promoted-op call sites and OperationPushWind             │
+      │ bridgeForeignError (applyForeign, callForeignCached, the     │
+      │ promoted ops, OperationPushWind, drainAndApply, Run()), and  │
+      │ directly from Run()'s apply-spread arm                       │
       │                                                              │
-      │ errors.As matches a control signal?                          │
+      │ isControlSignal(err)?                                        │
       │   YES → return it unchanged                                  │
-      │   NO  → RaiseInPlace as a Scheme condition                   │
+      │   authorizer denial → return it as a *SchemeError            │
+      │   otherwise → RaiseInPlace as a Scheme condition             │
       └───────────────────────────────┬──────────────────────────────┘
                                       │
       ┌──────────────────────────────────────────────────────────────┐
@@ -57,6 +59,8 @@ Both are declared in `pkg/machine/prompt_abort.go`.
    │ not found → re-raise           │  │ abort  → resolveAbort          │
    │ resume signals always          │  │ resume → ReinstallSegment      │
    │   re-raise                     │  │ timer  → resolveTimerInterrupt │
+   │ timer/break: resolved only if  │  │ break  → resolveBreakInterrupt │
+   │   the boundary is on OWN chain │  │                                │
    └────────────────────────────────┘  └────────────────────────────────┘
 ```
 
@@ -65,11 +69,10 @@ Both are declared in `pkg/machine/prompt_abort.go`.
 `applyCallableError` (`pkg/machine/foreign_closure.go`) has a strict order:
 
 ```go
-// 1. ErrPromptAbort          (errors.As) → pass through unchanged
-// 2. ErrExceptionEscape      (errors.As) → pass through unchanged
-// 3. ErrTimerInterrupt       (errors.As) → pass through unchanged
-// 4. ErrResumeContinuation   (errors.As) → pass through unchanged
-// 5. any other Go error → RaiseInPlace(ConditionFromError(err))
+// 1. isControlSignal(err): ErrPromptAbort, ErrExceptionEscape, ErrTimerInterrupt,
+//    ErrBreakInterrupt, ErrResumeContinuation (errors.As) → pass through unchanged
+// 2. security.ErrAccessDenied (errors.Is) → returned as an uncatchable *SchemeError
+// 3. any other Go error → RaiseInPlace(ConditionFromError(err))
 ```
 
 No live call site recovers panics around this function. The one that did,
@@ -127,6 +130,9 @@ routed by `FindPrompt`, a resume by `ReinstallSegment`.
 │    │                                                               │
 │    ├─ ErrTimerInterrupt → resolveTimerInterrupt; continue loop     │
 │    │                                                               │
+│    ├─ ErrBreakInterrupt → resolveBreakInterrupt                    │
+│    │   control signal? → pending; continue loop                    │
+│    │                                                               │
 │    └─ other error → return err                                     │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -176,9 +182,11 @@ continuation *chain frames*, such a boundary can land inside a surviving
 sub-context (a `with-continuation-barrier` thunk, a `RaiseInPlace` handler, a
 `dynamic-wind` thunk, a parameter converter). `RunWithinBoundary` drives such a
 sub-context like `Run`, but resolves an abort whose tag names a prompt on *that*
-chain inline. An abort targeting an outer boundary, and every
-`ErrResumeContinuation`, re-raise unchanged. It installs no `DefaultPromptTag`
-and does no panic handling; those belong to the one top-level `RunResumable`.
+chain inline. A timer interrupt or debugger break whose boundary frame is on that
+chain is resolved the same way. An abort (or timer/break) targeting an outer
+boundary, and every `ErrResumeContinuation`, re-raise unchanged. It installs no
+`DefaultPromptTag` and does no panic handling; those belong to the one top-level
+`RunResumable`.
 
 ## RestoreWithWindingFrom
 

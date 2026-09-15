@@ -40,7 +40,7 @@ registered as an R7RS library named `(wile <extension-name>)`:
 ```scheme
 ;; Import all primitives from the math extension
 (import (wile math))
-(sqrt 16)  ; → 4.0
+(sqrt 16)  ; → 4
 
 ;; Import only specific bindings
 (import (only (wile math) sqrt sin cos))
@@ -50,15 +50,15 @@ registered as an R7RS library named `(wile <extension-name>)`:
 
 ;; Prefix all imported bindings
 (import (prefix (wile math) m:))
-(m:sqrt 9)  ; → 3.0
+(m:sqrt 9)  ; → 3
 
 ;; Rename specific bindings
 (import (rename (wile math) (sqrt square-root)))
-(square-root 25)  ; → 5.0
+(square-root 25)  ; → 5
 
 ;; Combine modifiers
 (import (prefix (only (wile math) sqrt sin cos) math:))
-(math:sqrt 4)  ; → 2.0
+(math:sqrt 4)  ; → 2
 ```
 
 ### Available Extension Libraries
@@ -73,7 +73,7 @@ registered as an R7RS library named `(wile <extension-name>)`:
 | `(wile threads)` | `extensions/threads` | SRFI-18 threading primitives |
 | `(wile gointerop)` | `extensions/gointerop` | Go concurrency primitives |
 | `(wile introspection)` | `extensions/introspection` | Environment introspection, features, disassembler |
-| `(wile eval)` | `extensions/eval` | 16 eval/load/expand/syntax-local primitives |
+| `(wile eval)` | `extensions/eval` | 14 eval/load/expand/syntax-local primitives |
 | `(wile charsets)` | `extensions/charsets` | 20 SRFI-14 character-set primitives |
 | `(wile sat)` | `extensions/sat` | 2 CDCL SAT kernel primitives |
 | `(wile algebragraph)` | `extensions/algebragraph` | 2 graph path-counting primitives |
@@ -112,7 +112,7 @@ NewEngine initialization:
 
 Each snapshot records the extension's half-open index range plus its
 `LibraryNamer` and `Describer`, if any. `registerExtensionLibraries`
-(`pkg/wile/engine.go`) then calls `Registry.RuntimePrimitiveNamesRange(start,
+(`pkg/wile/engine.go`) then calls `PrimitiveRegistry.RuntimePrimitiveNamesRange(start,
 end)` to determine exactly which runtime primitives that extension contributed.
 Extensions that register only compile-time bindings (no `PhaseRuntime`
 primitives) yield no names, so no library is created for them.
@@ -168,7 +168,8 @@ var Extension = registry.NewExtension("utils",
     registry.WithLibraryName("myorg", "utils"))
 ```
 
-An empty name part is rejected at engine construction with `ErrEngineInit`.
+When the library system is enabled, an empty name part is rejected at engine
+construction with `ErrEngineInit`.
 
 ```scheme
 ;; Imports as (myorg utils) instead of (wile utils)
@@ -218,8 +219,9 @@ Library name     →  Path probed
 Within `OSFileResolver`, the directories tried for each probe are, in order: the
 current load directory from the load-path stack, the library registry's search
 paths (user-supplied first, then the default `"."`), `$SCHEME_INCLUDE_PATH`, and
-the working directory. Each candidate is located with `os.Stat` and opened only
-after the authorizer permits `code:load` on it.
+the working directory. Each candidate is authorized for `code:load` before it is
+`os.Stat`ed (`authorizeCandidates`), so a denied path that exists answers the
+same as one that does not; a denial does not stop the search.
 
 There is no filesystem-root last resort. A relative path never names an absolute
 host path: joining `"tmp/x.scm"` onto `/` would make a missing relative include
@@ -267,13 +269,18 @@ The `LibraryEnvFactory` creates these environments:
 ```
 Caller env ──► LibraryEnvFactory ──► Namespace.NewChildRuntime()
                                          │
+                                         ├─ Install initial imports
                                          ├─ Apply registry
                                          ├─ Register syntax compilers
                                          ├─ Register primitive expanders
                                          ├─ Load bootstrap macros
                                          ├─ Load bootstrap procedures
-                                         └─ Inject documentation
+                                         ├─ Load late bootstrap macros
+                                         └─ Stamp inline HOFs
 ```
+
+Documentation is not re-injected: `applyBaseEnvironment` skips that step for a
+library frame, whose docs already live on the shared root.
 
 The frame is fresh; the `Namespace` is the engine's, shared with the caller.
 That is why a `NamespaceInit` must be idempotent: it re-runs for every library

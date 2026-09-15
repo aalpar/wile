@@ -22,19 +22,21 @@ exchanges two variables:
 That looks fine. But now use it like this:
 
 ```scheme
-(let ((tmp 5) (a 1) (b 2))
-  (swap! a b)
-  tmp)
+(let ((tmp 5) (other 6))
+  (swap! tmp other)
+  (list tmp other))
 ```
 
-What should `tmp` be after the swap? The user's `tmp` is `5` and was never
-touched. It should still be `5`.
+The user's variable happens to be called `tmp` too. After the swap, `tmp`
+should be `6` and `other` should be `5`, so the expression should return
+`(6 5)`.
 
 But a naïve macro expander just does textual substitution. It replaces
-`(swap! a b)` with `(let ((tmp a)) (set! a b) (set! b tmp))` and pastes
-that into the surrounding code. Now there are *two* variables named `tmp` in
-the same scope, and the inner one shadows the outer one. The expression
-returns `2` (the new value of `b`), not `5`.
+`(swap! tmp other)` with `(let ((tmp tmp)) (set! tmp other) (set! other tmp))`
+and pastes that into the surrounding code. Inside that `let`, the macro's `tmp`
+shadows the user's: `(set! tmp other)` writes the macro's temporary instead of
+the user's variable, `(set! other tmp)` writes `other`'s own value back, and
+nothing is swapped. The expression returns `(5 6)`.
 
 This is called **variable capture**. The macro accidentally stole the user's
 name. Every Lisp programmer who wrote macros in the 1980s knew about this. The
@@ -86,8 +88,9 @@ type Scope struct {
 }
 ```
 
-Every time a macro is invoked, the expander mints a fresh scope by
-atomically incrementing a counter (`nextScopeID`). Pointer equality is used
+Every time a macro is invoked, the expander mints fresh scopes (two of them,
+as the walkthrough below shows), each by atomically incrementing a counter
+(`nextScopeID`). Pointer equality is used
 to test scope identity — two scope objects are the same scope if and only if
 they are the same pointer.
 
@@ -113,7 +116,8 @@ type SyntaxSymbol struct {
 ```
 
 When code is first parsed, every identifier has an empty scope set — it has
-not been through any macro yet. Scopes accumulate as macros expand.
+not been through any macro yet. Scopes accumulate as macros and binding forms
+(`let`, `lambda`, …) expand.
 
 Syntax objects are **immutable**. `AddScope` does not modify the existing
 object; it returns a new one:
@@ -140,54 +144,66 @@ expansion. You can re-expand the same tree safely.
 
 ## How Expansion Works Step by Step
 
-Here is what happens when `(swap! a b)` is expanded, starting from the moment
-the expander sees it:
+Here is what happens when `(swap! tmp other)` is expanded, starting from the
+moment the expander sees it. (The scopes the two `let` forms add are left out
+to keep the picture small.)
 
-**Step 1 — Detect the macro.**  
-The expander looks up `swap!` in the environment and finds a binding of type
-`BindingTypeSyntax`. That tells it: this is a transformer, not a value.
+**Step 1: Detect the macro.**  
+The expander checks that no local variable named `swap!` shadows it, then looks
+up `swap!` and finds a binding of type `BindingTypeSyntax`. That tells it: this
+is a transformer, not a value.
 
-**Step 2 — Invoke the transformer.**  
-The transformer closure (compiled earlier from the `syntax-rules` form) is
-called with the whole form `(swap! a b)` as its argument.
-
-**Step 3 — Match the pattern.**  
-The pattern `(swap! x y)` is matched against `(swap! a b)`. This is done by a
-bytecode-based pattern-matching VM (see `pkg/internal/match/`). On success, the
-matcher has captured `x → a` and `y → b`.
-
-**Step 4 — Mint the intro scope.**  
-A fresh scope `S1` is created for *this invocation*:
+**Step 2: Stamp the input with two fresh scopes.**  
+A use-site scope `U` and an intro scope `S1` are created for *this invocation*,
+and both are added to every identifier in the whole form:
 
 ```go
-// pkg/machine/compilation/operation_syntax_rules_transform.go
-//   (*OperationSyntaxRulesTransform).Apply
+// pkg/machine/compilation/expander_time_continuation.go
+//   (*ExpanderTimeContinuation).expandMacroInvocation
+inputForm := p.withUseSiteScope(syntax.NewSyntaxCons(sym, expr, sym.SourceContext()))
 introScope := syntax.NewScopeWithLabel("intro")
+inputForm = syntax.AddScopeToSyntax(inputForm, introScope)
 ```
 
-**Step 5 — Expand the template.**  
+The transformer receives `(swap!{U,S1} tmp{U,S1} other{U,S1})`.
+
+**Step 3: Invoke the transformer and match the pattern.**  
+The transformer closure (compiled earlier from the `syntax-rules` form) is
+called with that form. The pattern `(swap! x y)` is matched against it by a
+bytecode-based pattern-matching VM (see `pkg/internal/match/`). On success, the
+matcher has captured `x → tmp{U,S1}` and `y → other{U,S1}`.
+
+**Step 4: Expand the template.**  
 The template `(let ((tmp x)) (set! x y) (set! y tmp))` is expanded with the
-captured bindings substituted in. Every identifier introduced *by the macro
-itself* (like `tmp`) gets `S1` added to its scope set. Pattern variables that
-came *from the call site* (like `x → a` and `y → b`) keep their original
-scopes — they must NOT get `S1`, because they belong to the user, not the
-macro.
+captures substituted in unchanged. Identifiers the template itself introduces
+(`let`, `tmp`, `set!`) keep the scopes they were written with at the macro's
+definition, which here is none.
+
+**Step 5: Flip the intro scope.**  
+The expander flips `S1` on the result: an identifier that has it loses it, and
+one that lacks it gains it. Everything that came from the call site carried
+`S1` and loses it; everything the macro introduced gains it. `U` stays on the
+call-site identifiers (it is removed only from the name a macro-generated
+definition binds, so code after the macro use can see that definition).
 
 After expansion, the syntax tree looks roughly like this:
 
 ```
-(let ((tmp{S1} a{}) ...)
-  (set! a{} b{})
-  (set! b{} tmp{S1}))
+(let{S1} ((tmp{S1} tmp{U}))
+  (set!{S1} tmp{U} other{U})
+  (set!{S1} other{U} tmp{S1}))
 ```
 
-**Step 6 — Variable resolution.**  
-When the compiler later resolves `tmp` in the user's surrounding `let`, it
-sees `tmp{}` (no scopes). The binding for the macro's `tmp` has scope set
-`{S1}`. Is `{S1} ⊆ {}`? No — they don't match. So the user's `tmp` finds
-the user's binding. Hygiene is maintained.
+**Step 6: Variable resolution.**  
+Two bindings named `tmp` are in reach: the user's, with scope set `{}`, and the
+macro's, with `{S1}`. For the user's `tmp{U}` in `(set! tmp other)`: is
+`{} ⊆ {U}`? Yes. Is `{S1} ⊆ {U}`? No. So it finds the user's binding. For the
+macro's `tmp{S1}` on the last line, both `{} ⊆ {S1}` and `{S1} ⊆ {S1}` hold,
+and the larger set, the macro's, wins (see below). Hygiene is maintained, and
+the result is `(6 5)`. `U` changes none of these answers; it is one more badge
+on the user's identifiers that no macro-introduced binding carries.
 
-The resolution check itself is five lines:
+The resolution check itself is a few lines:
 
 ```go
 // pkg/values/scope.go
@@ -205,11 +221,14 @@ func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
 ```
 
 Several bindings of the same name can pass that check at once, so the resolver
-keeps the candidate with the *largest* scope set, the most specific one. If two
-candidates tie on size and neither one's scope set contains the other's, there is
-no most-specific answer, and the resolver raises `werr.ErrAmbiguousBinding` rather
-than picking arbitrarily (`scopedBestOf` in `pkg/environment/best_of.go` flags the
-tie; `EnvironmentFrame.GetBinding` and its siblings raise on it).
+keeps the candidate with the *largest* scope set, the most specific one (for
+global bindings, a tier ranking comes first and size breaks ties within a tier).
+If two candidates tie on size and neither one's scope set contains the other's,
+there is no most-specific answer, and the resolver raises
+`werr.ErrAmbiguousBinding` rather than picking arbitrarily (`scopedBestOf` in
+`pkg/environment/best_of.go` flags the tie for lexical frames, `rankedArgmax` in
+`pkg/environment/global_environment_frame.go` for globals;
+`EnvironmentFrame.GetBinding` and its siblings raise on it).
 
 ---
 
@@ -234,29 +253,32 @@ references to existing definitions.
 
 The intro scope alone does not protect them. Adding `S1` to a reference is
 harmless for a top-level binding, because that binding's scope set is `{}` and
-`{} ⊆ {S1}` holds. But that same subset rule is the exposure: a top-level binding
-of the same name at the *use* site also has scope set `{}`, so it satisfies the
-check just as well as the definition-site one does. A user who defines their own
-top-level `helper` would capture the macro's.
+`{} ⊆ {S1}` holds. But that same subset rule is the exposure: if `my-when` is
+exported from a library and used in a program that defines its own top-level
+`helper`, that binding also has scope set `{}`, so it satisfies the check just as
+well as the library's does, and the program's `helper` would capture the macro's.
+(Within a single top level there is only one `helper`: a later
+`(define (helper) …)` there redefines the same variable, R7RS §5.3.1, and the
+macro sees the new definition.)
 
 So the compiler identifies free identifiers at macro-definition time (everything
 in the template that is neither a pattern variable nor a literal) and resolves
 each one against the *definition* environment right there
 (`collectFreeIdentifiersWithEllipsis` in
-`pkg/machine/compilation/compile_syntax_rules.go`). What happens next depends on
-what it found:
+`pkg/machine/compilation/compile_syntax_rules.go`). Two things protect them:
 
-- A binding in the macro's own lexical context: the template identifier is
-  rebuilt carrying that binder's scope set, and no intro scope, so it still names
-  the same variable after expansion.
-- A global binding: the identifier keeps the intro scope and additionally carries
-  the resolved binding itself (`ResolvedBinding` on `SyntaxSymbol`) plus the
-  defining library's scope. The compiler consults that pin ahead of the use-site
-  global, so the use site cannot hijack the name. (It still sits below the
-  scope-set match against local bindings, so a binder the same template
-  introduced can shadow it.)
+- Every template identifier keeps the scope set it was written with, never the
+  use site's. That alone covers a binding in the macro's own lexical context: a
+  reference written inside `(let ((x …)) …)` carries that `let`'s scope, so after
+  expansion it is still a superset of the binder's scope set and still names the
+  same variable.
+- A global binding found at definition time is attached to the identifier itself
+  (`ResolvedBinding` on `SyntaxSymbol`), along with the defining library's scope.
+  The compiler consults that pin ahead of the use-site global, so the use site
+  cannot hijack the name. (It still sits below the scope-set match against local
+  bindings, so a binder the same template introduced can shadow it.)
 
-That pin is also what gives cross-library hygiene: a macro defined in library A
+That pin is what gives cross-library hygiene: a macro defined in library A
 that references `car` resolves to the `car` that library A saw, even when the
 macro is used in library B, and even if B has its own `car`.
 
@@ -269,17 +291,20 @@ The macro system is split into three layers so each can be simple:
 ```
 ┌───────────────────────────────────────────────────────┐
 │ Layer 3: Hygiene                                      │
-│   Mints the intro scope for each invocation and       │
-│   resolves free identifiers against the macro's       │
-│   definition environment.                             │
+│   Stamps a use-site scope and a fresh intro scope     │
+│   on each invocation's input, flips the intro scope   │
+│   on the output, and resolves free identifiers        │
+│   against the macro's definition environment.         │
 │   Files: pkg/machine/compilation/                     │
+│            expander_time_continuation.go,             │
 │            compile_syntax_rules.go,                   │
 │            operation_syntax_rules_transform.go        │
 ├───────────────────────────────────────────────────────┤
 │ Layer 2: Syntax Adapter                               │
 │   Scope-aware literal matching, plus the template     │
-│   expander that stamps the intro scope and keeps      │
-│   captured pattern variables' original syntax.        │
+│   expander that substitutes captures unchanged and    │
+│   gives template identifiers their definition-site    │
+│   scopes and pins.                                    │
 │   Files: pkg/internal/match/syntax_adapter.go,        │
 │          pkg/internal/match/syntax_expand.go          │
 ├───────────────────────────────────────────────────────┤
@@ -292,40 +317,37 @@ The macro system is split into three layers so each can be simple:
 ```
 
 Layer 1 can be tested and debugged without thinking about scopes: it captures
-pattern variables and never mints or adds a scope. Layer 2 is where scopes enter
-the expanded output. Layer 3 is where the invariant — *macro-introduced names get the
-intro scope, captured names keep their original scopes* — is enforced.
+pattern variables and never mints or adds a scope. Layer 2 decides which scopes
+each template identifier starts from, but adds no intro scope. Layer 3 enforces the
+invariant, *macro-introduced names get the intro scope, captured names do not*,
+by the flip.
 
 ---
 
 ## What Would Break Without This
 
-Suppose we removed the intro-scope step entirely. Every identifier in the
-macro expansion would have empty scope sets. Then:
+Suppose we removed the intro-scope step entirely. Then:
 
 ```scheme
-(let ((tmp 5) (a 1) (b 2))
-  (swap! a b)
-  tmp)
+(let ((tmp 5) (other 6))
+  (swap! tmp other)
+  (list tmp other))
 ```
 
-Would expand to a context with two `tmp` bindings both carrying `{}`. The
-resolution rule (`bindingScopes ⊆ useScopes`) would match *both* — and the
-inner one (from the macro) would shadow the outer one (from the user). Result:
-`2` instead of `5`. Variable capture, the original bug.
+The macro's `tmp` would carry no scope that the user's `tmp` lacks, so nothing
+would stop the user's `tmp`, passed in as `x`, from satisfying the resolution
+rule (`bindingScopes ⊆ useScopes`) against the macro's binder too. That is
+variable capture, the original bug; textual substitution shows where it leads:
+`(5 6)` instead of `(6 5)`.
 
-Alternatively, suppose we stamped *all* identifiers — including captured
-pattern variables — with the intro scope. Then `a{}` would become `a{S1}`,
-and the user's binding `a{}` (with scope set `{}`) would fail to match
-(`{} ⊆ {S1}` is true, but the reference has `{S1}` and the binding has
-`{}` — wait, that would actually match since `{} ⊆ {S1}`). Let me be more
-precise: the binding for `a` at the call site has scopes `{}`. If the
-reference inside the macro gets `{S1}`, then `ScopesMatch({S1}, {})` checks
-`{} ⊆ {S1}` — which is **true** — so it would still work for simple cases.
-But it would break cases where the user's binding has a non-empty scope set of
-its own (e.g., `a` defined inside another macro). The correct rule is:
-captured identifiers must keep *exactly* the scope set they arrived with,
-unmodified.
+Alternatively, suppose we stamped *all* identifiers, including captured pattern
+variables, with the intro scope and never flipped it off. Adding a scope to a
+reference never stops it matching its own binder (`{} ⊆ {S1}` still holds), so
+the user's `other` would still resolve. The damage runs the other way: the
+user's `tmp` would arrive as `tmp{S1}`, the macro's binder `tmp{S1}` would now
+be a subset of it and the larger candidate, and the user's variable would be
+captured again. The correct rule is: captured identifiers must not leave the
+expansion carrying the intro scope.
 
 ---
 
@@ -342,17 +364,18 @@ If you have Wile built (`make build`), you can observe hygiene directly:
        (set! x y)
        (set! y tmp)))))
 
-(let ((tmp 5) (a 1) (b 2))
-  (swap! a b)
-  (display tmp) (newline))   ;; should print 5
+(let ((tmp 5) (other 6))
+  (swap! tmp other)
+  (display (list tmp other)) (newline))   ;; prints (6 5)
 ```
 
 ```bash
 ./dist/$(go env GOOS)/$(go env GOARCH)/wile hygiene-demo.scm
 ```
 
-Change `swap!`'s `tmp` to be captured-from-pattern (break the macro), or
-remove the `syntax-rules` wrapping to observe the failure modes.
+To observe the failure mode, replace the `(swap! tmp other)` line with its
+textual substitution, `(let ((tmp tmp)) (set! tmp other) (set! other tmp))`;
+the program then prints `(5 6)`.
 
 ---
 
