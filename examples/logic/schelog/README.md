@@ -1,12 +1,19 @@
 # Schelog: Prolog in Scheme
 
 Schelog is an embedding of Prolog-style logic programming in Scheme, created by
-Dorai Sitaram. Wile runs the **unmodified** upstream schelog.scm — no patches, no
-compatibility shims. This works because Schelog exercises exactly the features
-Wile implements: first-class continuations (`call/cc`) for backtracking,
-hygienic macros (`syntax-rules`) for the query DSL, and mutable state for the
-trail. Having all three work correctly together, on unmodified third-party code,
-is a concrete demonstration of Wile's R7RS language completeness.
+Dorai Sitaram. Wile runs upstream schelog.scm with one added line:
+
+```scheme
+(import (for-syntax (scheme base) (scheme cxr)))
+```
+
+Schelog's query DSL is 14 procedural transformers (`syntax->datum`, compute,
+`datum->syntax`). Wile separates phases, as Racket and R6RS do: a transformer
+body runs at phase 1 and sees only what is imported for syntax, so without
+that line `%let` fails with `cadr` unbound at phase 1. Beyond that, Schelog
+exercises first-class continuations (`call/cc`) for backtracking and mutable
+top-level state for the trail, on third-party code Wile does not otherwise
+patch.
 
 ## Quick Start
 
@@ -81,12 +88,6 @@ mapcol, games) and completes in seconds:
 ./examples/logic/schelog/run-all-tests.sh
 ```
 
-Or via the single-process Scheme test runner:
-
-```bash
-./dist/wile -f examples/logic/schelog/run-all-tests.scm
-```
-
 ## Key Concepts
 
 - **Logic variables**: Created with `%let`, represent unknowns to be unified
@@ -100,7 +101,7 @@ Or via the single-process Scheme test runner:
 ## Files
 
 ### Core Library
-- `schelog.scm` - Complete schelog library (unmodified from upstream)
+- `schelog.scm` - Complete schelog library (upstream plus the `for-syntax` import)
 
 ### Examples (from upstream)
 - `toys.scm` - Basic predicates: append, reverse, factorial, length
@@ -132,8 +133,11 @@ space; Schelog's pure backtracking approach does not.
 To run:
 
 ```bash
-./dist/wile -f examples/logic/schelog/stress-test.scm
+./dist/wile -q -i -f examples/logic/schelog/stress-test.scm < /dev/null
 ```
+
+`-i` gives a mutable top level, which schelog needs (it `set!`s its own
+globals); `< /dev/null` lets the REPL that `-i` leaves running exit.
 
 Or interactively:
 

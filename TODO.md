@@ -497,12 +497,20 @@ commits differ by a trailing slash).
   phase-2 transformer body raised `no such binding "list" … at phase 2`. Pinned by
   `TestProfileEnvironmentHasTheMacroVocabularyAtEveryPhase` and, on the bootstrap path,
   `TestBootstrapOwnersHaveTheMacroVocabularyAtPhaseTwo`.
-- [ ] **Schelog no longer runs unmodified** [Medium, docs claim]: since Stage A a procedural
-  transformer needs `(import (for-syntax (scheme base)))`, so `examples/logic/schelog/schelog.scm`
-  fails (`cadr` unbound at phase 1) and its README's headline claim is false. Prepending
-  `(import (for-syntax (scheme base) (scheme cxr)))` (or two `for-syntax` imports on master)
-  makes all 13 `run-all-tests.sh` cases pass. `test-schelog` runs only in `make cd`, which is
-  why CI stayed green.
+- [x] **Schelog no longer runs unmodified** [Medium, docs claim]: decided 2026-09-15, keep phase
+  separation. `schelog.scm` now carries `(import (for-syntax (scheme base) (scheme cxr)))`; all 13
+  `run-all-tests.sh` cases pass and the zebra bench runs. README and BIBLIOGRAPHY no longer claim
+  "unmodified" or `syntax-rules` (all 14 transformers are procedural). `test-schelog` runs only in
+  `make cd`, which is why CI stayed green.
+- [ ] **A macro defined in an `include`d file is unbound in the including file** [Medium, filed
+  2026-09-15 as #820, not bisected]: `t6.scm` = `(define-syntax foo (syntax-rules () ((_ x) x)))`,
+  `t7.scm` = `(include "t6.scm") (display (foo 42))`. `wile -f t7.scm` (with or without `-i`, and
+  with an explicit `(begin …)` wrap) fails "no such local or global binding foo"; `wile -i < t7.scm`
+  prints 42. A *sibling* include sees it (`(include "defs.scm") (include "use.scm")` works, which is
+  why `stress-test.scm` passes); forms written in the file holding the `include` do not, whether
+  that file is the `-f` file or itself included. A procedure defined the same way is visible.
+  R7RS §4.1.7: `include` is `begin` over the file's contents, no new scope. Breaks `examples/logic/schelog/run-all-tests.scm` (`%which` unbound at line 65); its README
+  instruction was removed 2026-09-15, restore it when this is fixed.
 - [ ] **Library export of a name the library did not define** [see `findLibraryBinding` entry
   below]: the two-phase *defined* case already exports phase 0 correctly (measured
   2026-09-14, matches Racket); re-exporting `syntax-rules` from `(scheme base)` still fails

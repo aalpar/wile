@@ -787,7 +787,7 @@ Wile ships relational programming as a library, not a language feature. `(wile m
 
 ### Schelog (Dorai Sitaram)
 
-Prolog-in-Scheme embedding. Wile runs the unmodified upstream `schelog.scm` as an integration test for `call/cc`, `syntax-rules`, and mutable state working together on third-party code. Located in `examples/logic/schelog/`.
+Prolog-in-Scheme embedding. Wile runs upstream `schelog.scm`, plus one `(import (for-syntax (scheme base) (scheme cxr)))` line its procedural transformers need under phase separation, as an integration test for `call/cc`, procedural macros, and mutable state working together on third-party code. Located in `examples/logic/schelog/`.
 
 - **Documentation**: https://ds26gte.github.io/schelog/
 - **Source**: https://github.com/ds26gte/schelog
