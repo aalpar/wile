@@ -33,6 +33,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/bootstrap"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 
@@ -64,7 +65,7 @@ func TestPhase1VocabularyMembership(t *testing.T) {
 	slices.Sort(want)
 
 	got := []string{}
-	for k := range defaultMacroVocabulary() {
+	for k := range bootstrap.MacroVocabulary() {
 		got = append(got, k)
 	}
 	slices.Sort(got)
@@ -101,17 +102,17 @@ func TestPhase1VocabularyMembership(t *testing.T) {
 // decided by the closed set. It does not widen D4's break, because a %-name is
 // not something user code writes.
 func TestMacroVocabularyAdmitsTheBootstrapPrefix(t *testing.T) {
-	qt.Assert(t, macroVocabularyAdmits("%syntax-case-transform"), qt.IsTrue)
-	qt.Assert(t, macroVocabularyAdmits("%pattern-variable?"), qt.IsTrue)
-	qt.Assert(t, macroVocabularyAdmits("%"), qt.IsTrue)
+	qt.Assert(t, bootstrap.MacroVocabularyAdmits("%syntax-case-transform"), qt.IsTrue)
+	qt.Assert(t, bootstrap.MacroVocabularyAdmits("%pattern-variable?"), qt.IsTrue)
+	qt.Assert(t, bootstrap.MacroVocabularyAdmits("%"), qt.IsTrue)
 
 	// The boundary: a name that merely CONTAINS % is not admitted, and neither
 	// is an ordinary runtime name.
-	qt.Assert(t, macroVocabularyAdmits("mod%"), qt.IsFalse)
-	qt.Assert(t, macroVocabularyAdmits("cadr"), qt.IsFalse,
+	qt.Assert(t, bootstrap.MacroVocabularyAdmits("mod%"), qt.IsFalse)
+	qt.Assert(t, bootstrap.MacroVocabularyAdmits("cadr"), qt.IsFalse,
 		qt.Commentf("cadr in the vocabulary would delete D4's break outright"))
-	qt.Assert(t, macroVocabularyAdmits("assoc"), qt.IsFalse)
-	qt.Assert(t, macroVocabularyAdmits("vector-map"), qt.IsFalse)
+	qt.Assert(t, bootstrap.MacroVocabularyAdmits("assoc"), qt.IsFalse)
+	qt.Assert(t, bootstrap.MacroVocabularyAdmits("vector-map"), qt.IsFalse)
 }
 
 // TestPhase1VocabularyIsAStrictSubsetOfTheBase is the property that makes the

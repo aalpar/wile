@@ -53,8 +53,8 @@ import (
 //   - The BASE row is declared at phase 0 only, and carries the whole sealed base.
 //   - The MACRO VOCABULARY row is installed at EVERY macro phase as that phase's
 //     view is minted, and is a STRICT SUBSET of the base: the macro-writing
-//     kernel, plus any %-prefixed bootstrap-private name (defaultMacroVocabulary,
-//     macroVocabularyAdmits).
+//     kernel, plus any %-prefixed bootstrap-private name (bootstrap.MacroVocabulary,
+//     bootstrap.MacroVocabularyAdmits).
 //
 // So phase-1 visibility is three-valued, not two, and which of the three a name
 // falls in decides whether a procedural transformer body that calls it must
@@ -169,7 +169,7 @@ func TestKeywordSlotIsNotTheExpanderSlot(t *testing.T) {
 // TestEllipsisAndUnderscoreReachPhaseOneOnlyThroughABulkRow pins the two names
 // that hold NO phase-1 slot at all. Before Stage A they were reachable at phase 1
 // because the ambient tier was phase-blind; now they are reachable because the
-// MACRO VOCABULARY row lists them by name (defaultMacroVocabulary's declarative
+// MACRO VOCABULARY row lists them by name (bootstrap.MacroVocabulary's declarative
 // group), and that listing is the only thing holding them up — the base row is
 // declared at phase 0 and cannot. Racket's measured phase-1 surface under
 // racket/base is the same set plus syntax-rules.
@@ -269,7 +269,7 @@ func TestPhaseOneVisibilityHasThreeGroups(t *testing.T) {
 		// (a) Registered at both phases (registry/apply.go phaseTargets).
 		{"car", true, groupDualPhaseGo},
 		{"list-copy", true, groupDualPhaseGo},
-		// (b) In defaultMacroVocabulary. apply and not are the surprising ones:
+		// (b) In bootstrap.MacroVocabulary. apply and not are the surprising ones:
 		// they read like ordinary runtime procedures and are runtime-only in the
 		// registry (see TestCorePrimitivePhaseCensus), so the row is the whole of
 		// why a transformer body may call them unimported.
