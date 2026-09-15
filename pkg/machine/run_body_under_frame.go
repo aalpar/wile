@@ -225,16 +225,20 @@ func (p *MachineContext) RunBodyUnderFrame(frame *MachineContinuation, body valu
 	if len(p.windingStack) > 0 {
 		frame.windingStack = p.windingStack.Copy()
 	}
-	// Carry the caller's live activation marks onto the pushed frame so they survive
-	// the frame's restore. The body runs in the caller's dynamic extent and keeps
-	// p.marks intact (Apply does not touch them); but when the frame is later restored
-	// — to run a consumer (call-with-values) or finalizer (call-with-exit), or to
-	// resolve a re-raise inside an inline exception handler (RaiseInPlace) — mc.marks is
-	// reloaded from the frame. Without this, a mark on the live activation (e.g. the
-	// %exception-handlers mark a tail-position call-with-values inherits, or the
-	// parent-handler mark RaiseInPlace installs) would be dropped at that boundary,
-	// leaving the consumer/handler unable to see the current exception handler.
-	frame.marks = cloneMarks(p.marks)
+	// MOVE the caller's live activation marks onto the pushed frame, as SaveContinuation
+	// does for an ordinary call. When the frame is restored — to run a consumer
+	// (call-with-values) or finalizer (call-with-exit), or to resolve a re-raise inside
+	// an inline exception handler (RaiseInPlace) — mc.marks is reloaded from it, so a
+	// mark on the live activation (the %exception-handlers mark a tail-position
+	// call-with-values inherits, the parent-handler mark RaiseInPlace installs) survives
+	// the boundary, and the body still sees it by walking the chain.
+	//
+	// The body is a new frame and starts with no marks. Copying instead of moving left
+	// the marks on BOTH the frame and the body's activation, so a tail-position
+	// (with-continuation-mark 'a 1 (call-with-continuation-prompt thunk tag #f)) listed
+	// 'a twice inside thunk.
+	frame.marks = p.marks
+	p.marks = nil
 	// The reified frame inherits the current barrier, so a continuation captured in the
 	// body records it (crossing detection still fires), and the frame's restore reverts it.
 	frame.barrierValid = p.barrierValid
@@ -325,7 +329,8 @@ func (p *MachineContext) RunBodyUnderBarrier(body values.Value, token *BarrierTo
 	if len(p.windingStack) > 0 {
 		frame.windingStack = p.windingStack.Copy()
 	}
-	frame.marks = cloneMarks(p.marks)
+	frame.marks = p.marks // moved, not copied: see RunBodyUnderFrame
+	p.marks = nil
 	frame.barrierValid = p.barrierValid // outer token = restore target on frame exit
 	transferEnvOwnership(p, frame)
 	p.cont = frame

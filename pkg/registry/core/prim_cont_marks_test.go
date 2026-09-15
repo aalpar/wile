@@ -174,6 +174,109 @@ func TestPrimContinuationMarks(t *testing.T) {
 	}
 }
 
+// TestContinuationMarks_TailBoundaryRecordsMarkOnce pins that a mark set by a
+// tail-position with-continuation-mark belongs to ONE frame when the body installs
+// a reified boundary (prompt, call-with-values, barrier, raise-continuable handler).
+// The boundary frame used to copy the caller's live marks while the body kept them
+// too, so every such mark was recorded twice; and a tag-bounded collection included
+// the prompt frame's marks, which belong outside the prompt. Expected values are
+// Racket's. Each case wraps the wcm in a lambda body, where it is in tail position.
+//
+// call-with-immediate-continuation-mark is not pinned here: inside a prompt body it
+// answers the caller's mark where Racket answers the default, a separate defect in
+// GetImmediateMark's fallback to p.cont that this fix does not change.
+func TestContinuationMarks_TailBoundaryRecordsMarkOnce(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name: "list under prompt",
+			code: `((lambda () (with-continuation-mark 'a 'outer
+				(call-with-continuation-prompt
+					(lambda () (continuation-mark-set->list (current-continuation-marks) 'a))
+					(make-continuation-prompt-tag) #f))))`,
+			expected: "(outer)",
+		},
+		{
+			name: "list* under prompt with inner key",
+			code: `((lambda () (with-continuation-mark 'a 'outer
+				(call-with-continuation-prompt
+					(lambda () (with-continuation-mark 'b 'x
+						(continuation-mark-set->list* (current-continuation-marks) '(a b))))
+					(make-continuation-prompt-tag) #f))))`,
+			expected: "(#(#f x) #(outer #f))",
+		},
+		{
+			name: "nested prompts",
+			code: `((lambda () (with-continuation-mark 'a 1
+				(call-with-continuation-prompt
+					(lambda () (with-continuation-mark 'a 2
+						(call-with-continuation-prompt
+							(lambda () (continuation-mark-set->list (current-continuation-marks) 'a))
+							(make-continuation-prompt-tag) #f)))
+					(make-continuation-prompt-tag) #f))))`,
+			expected: "(2 1)",
+		},
+		{
+			name: "list bounded by the prompt's own tag",
+			code: `(let ((tag (make-continuation-prompt-tag)))
+				((lambda () (with-continuation-mark 'a 'outer
+					(call-with-continuation-prompt
+						(lambda () (continuation-mark-set->list (current-continuation-marks tag) 'a))
+						tag #f)))))`,
+			expected: "()",
+		},
+		{
+			name: "first bounded by the prompt's own tag",
+			code: `(let ((tag (make-continuation-prompt-tag)))
+				((lambda () (with-continuation-mark 'a 'outer
+					(call-with-continuation-prompt
+						(lambda () (continuation-mark-set-first (current-continuation-marks tag) 'a 'none))
+						tag #f)))))`,
+			expected: "none",
+		},
+		{
+			name: "list bounded by the default tag under a default prompt",
+			code: `((lambda () (with-continuation-mark 'a 'outer
+				(call-with-continuation-prompt
+					(lambda () (continuation-mark-set->list (current-continuation-marks) 'a))
+					(default-continuation-prompt-tag) #f))))`,
+			expected: "()",
+		},
+		{
+			name: "call-with-values producer",
+			code: `((lambda () (with-continuation-mark 'a 'outer
+				(call-with-values
+					(lambda () (continuation-mark-set->list (current-continuation-marks) 'a))
+					(lambda (x) x)))))`,
+			expected: "(outer)",
+		},
+		{
+			name: "barrier",
+			code: `((lambda () (with-continuation-mark 'a 'outer
+				(call-with-continuation-barrier
+					(lambda () (continuation-mark-set->list (current-continuation-marks) 'a))))))`,
+			expected: "(outer)",
+		},
+		{
+			name: "raise-continuable handler",
+			code: `(with-exception-handler
+				(lambda (c) (continuation-mark-set->list (current-continuation-marks) 'a))
+				(lambda () (with-continuation-mark 'a 'outer (raise-continuable 'x))))`,
+			expected: "(outer)",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.expected)
+		})
+	}
+}
+
 func TestPrimContinuationQ(t *testing.T) {
 	tcs := []struct {
 		name     string

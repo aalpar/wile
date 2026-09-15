@@ -207,8 +207,9 @@ func TestCollectContinuationMarks_StopsAtPrompt(t *testing.T) {
 	mc.SetMark(key, values.NewInteger(3))
 
 	cms := mc.CollectContinuationMarks(tag)
-	// Current (3), prompt frame (2) included, below-prompt (1) excluded
-	c.Assert(cms.ToList(key).SchemeString(), qt.Equals, "(3 2)")
+	// Current (3) included. The prompt frame's marks (2) are the installing
+	// activation's, outside the prompt, so they are excluded with everything below.
+	c.Assert(cms.ToList(key).SchemeString(), qt.Equals, "(3)")
 }
 
 func TestCollectContinuationMarks_SnapshotImmutability(t *testing.T) {
@@ -229,8 +230,8 @@ func TestCollectContinuationMarks_SnapshotImmutability(t *testing.T) {
 
 // CollectMarksFromContinuation shares its chain walk with CollectContinuationMarks
 // (appendChainMarks); this pins the entry that starts at a captured frame rather
-// than the live one: the live frame is excluded, the prompt frame included, and
-// frames below the prompt excluded.
+// than the live one: the live frame is excluded, a frame inside the prompt
+// included, and the prompt frame and everything below it excluded.
 func TestCollectMarksFromContinuation_StopsAtPrompt(t *testing.T) {
 	c := qt.New(t)
 	mc := newContMarkTestContext()
@@ -248,8 +249,12 @@ func TestCollectMarksFromContinuation_StopsAtPrompt(t *testing.T) {
 	mc.cont.SetPromptTag(tag)
 
 	mc.SetMark(key, values.NewInteger(3))
+	err = mc.SaveContinuation(1)
+	c.Assert(err, qt.IsNil)
 
-	c.Assert(CollectMarksFromContinuation(mc.cont, tag).ToList(key).SchemeString(), qt.Equals, "(2)")
-	c.Assert(CollectMarksFromContinuation(mc.cont, DefaultPromptTag).ToList(key).SchemeString(), qt.Equals, "(2 1)")
+	mc.SetMark(key, values.NewInteger(4))
+
+	c.Assert(CollectMarksFromContinuation(mc.cont, tag).ToList(key).SchemeString(), qt.Equals, "(3)")
+	c.Assert(CollectMarksFromContinuation(mc.cont, DefaultPromptTag).ToList(key).SchemeString(), qt.Equals, "(3 2 1)")
 	c.Assert(CollectMarksFromContinuation(nil, tag).ToList(key).SchemeString(), qt.Equals, "()")
 }
