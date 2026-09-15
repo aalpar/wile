@@ -447,8 +447,8 @@ commits differ by a trailing slash).
 - [ ] **A `let` inside a procedure is not fresh when a continuation re-enters it** [High,
   correctness regression] **DECIDED 2026-09-14, FIXED on `fix/let-merge-capture-safe` (`29b9babc`),
   pending merge: a `let` merges only into a frame no continuation can be captured under.
-  Zebra +5.8%, deriv ~+2%, rest flat. `let*`'s pre-existing frame-before-inits case is not
-  covered.** `6a017fa1` allocates a `let`'s slots in the enclosing procedure's
+  Zebra +5.8%, deriv ~+2%, rest flat. `let*` (frame pushed before its inits) fixed in
+  `9469c442` on the same branch: a capturing `let*` compiles as nested lets.** `6a017fa1` allocates a `let`'s slots in the enclosing procedure's
   frame, so re-entry writes the slot a closure or continuation from the earlier pass still
   reads. Composable re-invocation prints `0 1 2 2` (Racket `0 1 2 1`); plain `call/cc` shows it
   too. `let*` was already wrong before `6a017fa1` (its frame exists before the inits run).
