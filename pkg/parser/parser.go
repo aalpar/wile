@@ -53,7 +53,6 @@ type Parser struct {
 	env         *environment.EnvironmentFrame
 	toks        *tokenizer.Tokenizer
 	cur         tokenizer.Token
-	err         error // ReadSyntax's cross-call EOF lookahead cache; written only there (see advance)
 	dead        error // terminal state: nil means alive, non-nil is what every further read returns
 	skipComment bool
 	foldCase    bool                       // R7RS §2.1: #!fold-case mode for identifiers
@@ -177,10 +176,6 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 	}
 	if p.toks == nil {
 		p.toks = tokenizer.NewTokenizer(p.rdr, false)
-		p.err = p.advance()
-	}
-	if p.err != nil {
-		return nil, p.locateReaderErr(p.err)
 	}
 	// R7RS §2.4: a datum label's scope is the datum in which it appears. Carrying
 	// the table across calls let a #n# in one top-level form resolve to a #n=
@@ -193,6 +188,18 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 	)
 
 	for {
+		// The datum's first token is read here, never after the previous datum:
+		// a token read ahead is input consumed past the datum's end, invisible to
+		// anything else reading the same port (R7RS §6.13.2 gives read and
+		// read-char one position), and on an interactive port it holds the return
+		// until the next datum is typed. A clean end of input is not death.
+		err = p.advance()
+		if errors.Is(err, io.EOF) {
+			return nil, err
+		}
+		if err != nil {
+			return nil, p.die(err)
+		}
 		q, _, err = p.readSyntax()
 		// R7RS: an unexpected close delimiter at top level is a read error.
 		// errNoDatum uniquely means readSyntax stopped on a closer (p.cur is it).
@@ -202,35 +209,44 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 		if err != nil {
 			return nil, p.die(err)
 		}
-		// Advance to the next token for the next ReadSyntax() call. This is the
-		// one advance whose error is intentionally retained: a trailing io.EOF
-		// stored here is read at the top of the next ReadSyntax call so it
-		// returns EOF immediately. This is p.err's sole reason to exist.
-		p.err = p.advance()
-		// EOF is fine - it means there's nothing more to read
-		if p.err != nil && !errors.Is(p.err, io.EOF) {
-			return nil, p.die(p.err)
+		// Tokenizer.Next reports a token and the fault that ended it on separate
+		// calls, so a datum whose last token a scanner fault cut short ("#b109"
+		// stops at the 9) arrives looking valid with the fault still pending. The
+		// fault is the rune, not the token: clearing p.cur lets the error locate
+		// at the stamped rune. A clean end of input is not a fault.
+		pending := p.toks.Err()
+		if pending != nil && !errors.Is(pending, io.EOF) {
+			p.cur = nil
+			return nil, p.die(pending)
 		}
 		if !p.skipComment {
 			return q, nil
 		}
 		switch d := q.(type) {
 		case *syntax.SyntaxComment, *syntax.SyntaxDatumComment:
-			if errors.Is(p.err, io.EOF) {
-				return nil, p.err
-			}
 			continue
 		case *syntax.SyntaxDirective:
 			// R7RS §2.1: Process fold-case directives
 			p.processFoldCaseDirective(d)
-			if errors.Is(p.err, io.EOF) {
-				return nil, p.err
-			}
 			continue
 		default:
 			return q, nil
 		}
 	}
+}
+
+// ReleaseLookahead returns the rune the tokenizer has read past the end of the
+// last datum to urr, the unreader paired with the parser's reader. After a
+// successful ReadSyntax (which reads no token beyond the datum) the reader then
+// stands exactly at the datum's end, so a caller sharing that reader — the read
+// primitives, whose port read-char also consumes — sees the terminating
+// delimiter. Positions keep counting across calls. A parser with no tokenizer
+// (unread, closed, or dead) holds nothing to return.
+func (p *Parser) ReleaseLookahead(urr values.RuneUnreader) error {
+	if p.toks == nil {
+		return nil
+	}
+	return p.toks.ReleaseLookahead(urr)
 }
 
 // locateReaderErr lifts any lower-layer error escaping a read — a lexical
@@ -269,8 +285,8 @@ func (p *Parser) locateReaderErr(err error) error {
 // malformed — "(1 2] (3 4) (5 6)" reported the mismatched delimiter once and
 // then returned (3 4) and (5 6).
 //
-// The flag is what carries that state, not the nil tokenizer and not p.err.
-// Dropping the tokenizer is only the release; ReadSyntax rebuilds one on demand.
+// The flag is what carries that state, not the nil tokenizer. Dropping the
+// tokenizer is only the release; ReadSyntax rebuilds one on demand.
 func (p *Parser) die(err error) error {
 	p.toks = nil
 	p.dead = p.locateReaderErr(err)
@@ -278,15 +294,10 @@ func (p *Parser) die(err error) error {
 }
 
 // advance reads the next token into p.cur and returns any tokenizer error.
-//
-// It deliberately does NOT write p.err. Every compound reader (readList,
-// readLabeledList, readVector, readByteVector, the number parsers) advances
-// through this chokepoint and propagates the error via its own return value,
-// so a transient read error never lands in the cross-call field. p.err holds
-// ReadSyntax's cross-call EOF lookahead — the trailing io.EOF the parser must
-// remember between calls so the next call reports it immediately. It is NOT the
-// "parser is dead" flag: that is p.dead, set only by die, and it is what makes
-// the invariant true by construction rather than by convention.
+// Every compound reader (readList, readLabeledList, readVector, readByteVector,
+// the number parsers) advances through this chokepoint and propagates the error
+// via its own return value; the parser keeps no error across calls except
+// p.dead, set only by die.
 func (p *Parser) advance() error {
 	var err error
 	p.cur, err = p.toks.Next()

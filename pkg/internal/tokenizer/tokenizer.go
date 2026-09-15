@@ -15,12 +15,14 @@
 package tokenizer
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // Error messages returned by the tokenizer.
@@ -214,8 +216,14 @@ const (
 
 // Tokenizer reads Scheme source code and produces a stream of tokens.
 type Tokenizer struct {
-	rdr        io.RuneReader
-	cur        rune
+	rdr io.RuneReader
+	cur rune
+	// prev is the rune cur replaced, kept for CRLF pairing and so
+	// ReleaseLookahead can restore the scanner to its state before cur was read.
+	prev rune
+	// released means cur was handed back to the reader by ReleaseLookahead;
+	// the next Next reads it again before scanning.
+	released   bool
 	err        error
 	runeEnd    syntax.SourceIndexes // end of the current rune
 	runeStart  syntax.SourceIndexes // start of the current rune
@@ -293,6 +301,10 @@ func (p *Tokenizer) Text() string {
 // Comment tokens are always emitted; callers that want them elided (the parser,
 // when constructed with skipComments) drop them themselves.
 func (p *Tokenizer) Next() (Token, error) {
+	if p.released {
+		p.released = false
+		p.readNextRune()
+	}
 	for p.err == nil {
 		p.skipWhitespace() //nolint:errcheck
 		if p.err != nil {
@@ -308,6 +320,38 @@ func (p *Tokenizer) Next() (Token, error) {
 		return q, nil //nolint:staticcheck
 	}
 	return nil, p.err
+}
+
+// ReleaseLookahead hands the one rune the scanner has read past the last token
+// back to urr, the unreader paired with the tokenizer's reader, and rewinds the
+// position to match. Afterwards the reader stands exactly at the end of the last
+// token, so another consumer of the same reader (read-char on a shared port) sees
+// the delimiter that ended it; the next Next reads the rune again.
+//
+// Rewinding restores cur and the rune position, so an uninterrupted re-read
+// reproduces the same positions. End of input consumed nothing and needs no
+// unread; a bare read error is dropped and meets the reader again on re-read.
+// A pending scanner diagnosis is kept and nothing is released: it was stamped
+// with the position, rune, and state of the fault, which re-reading one rune
+// cannot reproduce, and the next Next reports it. Calling it twice without an
+// intervening Next is a no-op: only one rune is held.
+func (p *Tokenizer) ReleaseLookahead(urr values.RuneUnreader) error {
+	var terr *TokenizerError
+	if p.released || errors.As(p.err, &terr) {
+		return nil
+	}
+	// readNextRune advances runeEnd's index by exactly the bytes it consumed.
+	if p.runeEnd.Index() > p.runeStart.Index() {
+		err := urr.UnreadRune()
+		if err != nil {
+			return err
+		}
+	}
+	p.runeEnd = p.runeStart
+	p.cur = p.prev
+	p.err = nil
+	p.released = true
+	return nil
 }
 
 // Reader returns the underlying RuneReader.
@@ -539,9 +583,9 @@ func (p *Tokenizer) term() {
 // Sets p.cur to utf8.RuneError and p.err appropriately on EOF or encoding error.
 func (p *Tokenizer) readNextRune() {
 	n := 0
-	// The rune being replaced, kept only to recognise the '\n' of a CRLF pair,
-	// which its '\r' has already counted as the line ending.
-	prev := p.cur
+	// The rune being replaced, kept to recognise the '\n' of a CRLF pair, which
+	// its '\r' has already counted as the line ending.
+	p.prev = p.cur
 	p.cur, n, p.err = p.rdr.ReadRune()
 	p.runeStart = p.runeEnd
 	if n == 0 {
@@ -565,10 +609,9 @@ func (p *Tokenizer) readNextRune() {
 	//
 	// All three spellings end a line, and CRLF ends exactly one.
 	if isLineEnding(p.cur) {
-		if isNewLine(p.cur) && isReturn(prev) {
+		if isNewLine(p.cur) && isReturn(p.prev) {
 			// The '\r' of a CRLF already advanced the line; its '\n' only
-			// holds the column at the new line's origin. That pairing is the
-			// only reason prev exists.
+			// holds the column at the new line's origin.
 			p.runeEnd = syntax.NewSourceIndexes(p.runeEnd.Index(), 0, p.runeEnd.Line())
 			return
 		}

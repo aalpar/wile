@@ -244,6 +244,81 @@ func TestRead(t *testing.T) {
 	}
 }
 
+// TestReadSharesPortPosition pins R7RS §6.13.2: read and the character-level
+// input procedures consume one port position. read used to keep a parser per
+// port that had already pulled the next token (and the rune after it) off the
+// port, so read-char after (read p) on "ab cd" returned #<eof>.
+//
+// read consumes exactly the datum's characters and leaves the delimiter that
+// ended it on the port. Chez (petite) and Racket agree on every row here that
+// both can read, including the ";" of a following comment.
+func TestReadSharesPortPosition(t *testing.T) {
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"read then read-char then read",
+			`(let ((p (open-input-string "ab cd")))
+			   (let* ((a (read p)) (b (read-char p)) (c (read p))) (list a b c)))`,
+			`(ab #\space cd)`},
+		{"closing delimiter is part of the datum, next char is not",
+			`(let ((p (open-input-string "(a b)cd")))
+			   (let* ((a (read p)) (b (read-char p)) (c (read p))) (list a b c)))`,
+			`((a b) #\c d)`},
+		{"comment start is left on the port",
+			`(let ((p (open-input-string "ab;c\nd")))
+			   (let* ((a (read p)) (b (read-char p)) (c (read-line p)) (d (read p))) (list a b c d)))`,
+			`(ab #\; "c" d)`},
+		{"datum comment is skipped, trailing space is not consumed",
+			`(let ((p (open-input-string "#;x y z")))
+			   (let* ((a (read p)) (b (peek-char p))) (list a b)))`,
+			`(y #\space)`},
+		{"datum at end of input leaves eof",
+			`(let ((p (open-input-string "ab")))
+			   (let* ((a (read p)) (b (read-char p)) (c (read p))) (list a b c)))`,
+			`(ab #<eof> #<eof>)`},
+		{"peek-char then read",
+			`(let ((p (open-input-string " ab cd")))
+			   (let* ((a (peek-char p)) (b (read p)) (c (peek-char p)) (d (read p))) (list a b c d)))`,
+			`(#\space ab #\space cd)`},
+		{"read-char then read",
+			`(let ((p (open-input-string "(x) y")))
+			   (let* ((a (read-char p)) (b (read p)) (c (read-char p)) (d (read p))) (list a b c d)))`,
+			`(#\( x #\) y)`},
+		{"read-line then read then read-line",
+			`(let ((p (open-input-string "first line\n(a b) rest\nlast")))
+			   (let* ((a (read-line p)) (b (read p)) (c (read-line p)) (d (read p))) (list a b c d)))`,
+			`("first line" (a b) " rest" last)`},
+		{"read-string then read",
+			`(let ((p (open-input-string "abc def")))
+			   (let* ((a (read-string 2 p)) (b (read p)) (c (read-char p)) (d (read p))) (list a b c d)))`,
+			`("ab" c #\space def)`},
+		{"fold-case survives interleaved char reads",
+			`(let ((p (open-input-string "#!fold-case AB c CD")))
+			   (let* ((a (read p)) (b (read-char p)) (c (read p)) (d (read p))) (list a b c d)))`,
+			`(ab #\space c cd)`},
+		{"read-token leaves the delimiter too",
+			`(let ((p (open-input-string "ab cd")))
+			   (read-token p)
+			   (read-char p))`,
+			`#\space`},
+		{"default current-input-port",
+			`(parameterize ((current-input-port (open-input-string "ab cd")))
+			   (let* ((a (read)) (b (read-char)) (c (read))) (list a b c)))`,
+			`(ab #\space cd)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal().SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
 func TestWrite(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
