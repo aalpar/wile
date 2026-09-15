@@ -485,12 +485,18 @@ commits differ by a trailing slash).
   `TestComposableContinuationReinvocationKeepsLiveSegment`. (2) Locals leaking between
   invocations does not reproduce on `6ce2f4c1`: ten binder shapes (`let`, `let*`, `letrec`,
   internal `define`, `do`, named `let`, a callee frame) match Racket. It was the `let` item above.
-- [ ] **What an `(environment …)` namespace sees at phase ≥ 1** [Medium]: `(environment '(scheme
-  base))` has no language rows at any phase ≥ 1 (R7RS: starts empty; Racket's
-  `make-base-namespace` phase 1 is empty). Profile environments `(environment '(wile small))`
-  have phase-1 rows but not phase-2 (bootstrap never adds them; the rows live in `pkg/wile`,
-  which bootstrap cannot import). Recommended: leave `environment` empty, give profile
-  environments the default dialect's rows through a hook.
+- [x] **What an `(environment …)` namespace sees at phase ≥ 1** [Medium] **DECIDED, FIXED and
+  MERGED 2026-09-14 (`fix/profile-env-macro-phase-rows`):** an import-spec `(environment …)` stays
+  empty above phase 0 (R7RS §6.12; Racket's `make-base-namespace` phase 1 is empty), pinned by
+  `TestImportSetEnvironmentIsEmptyAboveRuntime`. A profile environment now carries the engine
+  root's language rows: `installInitialImports`'s row installers and the vocabulary moved from
+  `pkg/wile` to `pkg/internal/bootstrap/language_rows.go`, and `initializeEnvironmentWithRegistry`
+  installs the default rows, so both bootstrap sequences share one definition (a hook set from
+  `pkg/wile` would have left testhelpers environments without them). Measured before: phase 1
+  worked in `(environment '(wile small))` only through the registry's exact phase-1 slots, and a
+  phase-2 transformer body raised `no such binding "list" … at phase 2`. Pinned by
+  `TestProfileEnvironmentHasTheMacroVocabularyAtEveryPhase` and, on the bootstrap path,
+  `TestBootstrapOwnersHaveTheMacroVocabularyAtPhaseTwo`.
 - [ ] **Schelog no longer runs unmodified** [Medium, docs claim]: since Stage A a procedural
   transformer needs `(import (for-syntax (scheme base)))`, so `examples/logic/schelog/schelog.scm`
   fails (`cadr` unbound at phase 1) and its README's headline claim is false. Prepending
@@ -1790,7 +1796,7 @@ this idea — "just delete the vocabulary row" — is wrong in a way that looks 
 
 - [ ] **Re-derive the macro vocabulary when the Scheme syntax layer flips**
   [Medium, M, filed 2026-09-09 closing out Flatt Stage A, Task 10 / D9's residual]:
-  `defaultMacroVocabulary` (`pkg/wile/dialect.go`) is pinned against the **Go**
+  `MacroVocabulary` (`pkg/internal/bootstrap/language_rows.go`) is pinned against the **Go**
   layer by `TestPhase1VocabularyMembership`. Under `WithSchemeSyntaxForms`,
   `syntax-rules` becomes a Scheme macro with a procedural body, and that body's own
   transformer needs phase-**2** visibility — so the flip revises the set rather

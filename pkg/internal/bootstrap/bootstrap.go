@@ -229,6 +229,11 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 	// here as "nothing was narrowed". pkg/wile does the same at bootstrapNamespace.
 	env.Namespace().SetEffectiveRegistry(visibleReg)
 
+	// The language rows go in before the base is written, as the engine does, and
+	// whatever the level: they are live references, so a narrowed level simply
+	// leaves them less to find.
+	installDefaultLanguageRows(env)
+
 	// Run the ordering-sensitive sequence shared with pkg/wile's applyBaseEnvironment.
 	_, err = LoadBootstrapCore(ctx, env, visibleReg)
 	if err != nil {

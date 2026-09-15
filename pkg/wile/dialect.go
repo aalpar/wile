@@ -15,9 +15,8 @@
 package wile
 
 import (
-	"strings"
-
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/bootstrap"
 	"github.com/aalpar/wile/pkg/internal/forms"
 	"github.com/aalpar/wile/pkg/values"
 )
@@ -196,7 +195,7 @@ type LanguageProvider interface {
 // One row: the base at phase 0, the whole of what the ambient tier used to
 // supply, relocated onto one coordinate. The DECLARATIVE vocabulary, the names a
 // syntax-rules macro needs without any import of its own, is not a declaration
-// here: installInitialImports installs defaultMacroVocabulary at every macro
+// here: installInitialImports installs bootstrap.MacroVocabulary at every macro
 // phase whatever the dialect declares. That split is Racket's rule (i) and the
 // reason a declarative macro survives Stage A untouched while a procedural one
 // must declare (import (for-syntax (scheme base))).
@@ -220,99 +219,7 @@ func defaultInitialImports() []PhasedImport {
 // MacroVocabularyName identifies the row a dialect declares at every macro
 // phase, as distinct from the base row it declares at phase 0.
 func MacroVocabularyName() values.Value {
-	return values.NewSymbol("#%wile-macro-vocabulary")
-}
-
-// defaultMacroVocabulary is the set of base names visible from EVERY macro
-// phase without an import of the writer's own.
-//
-// This is design section 9's Q2, and the split it draws is Racket's rule (i):
-// the MACRO-WRITING kernel is ambient to a transformer, the RUNTIME library is
-// not. A syntax-rules macro therefore needs no import — its template expands
-// into the use site, which is phase 0 — while a procedural transformer that
-// wants cadr must say (import (for-syntax (scheme base))). Widening this set is
-// how D4's break gets quietly undone, so a name belongs here only if there is no
-// import that could supply it.
-//
-// The membership was measured, not reasoned, by deleting the ambient tier and
-// reading what a transformer body could no longer reach. Three groups, and each
-// earns its place by having NO import route:
-//
-//   - the declarative vocabulary a syntax-rules macro's own definition needs;
-//   - the bootstrap Scheme syntax layer's private helpers, which are definitions
-//     in the base store itself and which no .sld exports or could export;
-//   - the syntax-introspection primitives, which are registered at phase 1 and
-//     which no library exports at any phase — measured, grep over
-//     pkg/stdlib/lib finds no exporter of datum->syntax.
-//
-// Two names the Racket-derived presumption omits are here on measurement rather
-// than by analogy: else and => are auxiliary keywords a pattern literal probe
-// reaches at phase 1, and the ellipsis and underscore identifiers are here even
-// though the Go matcher compares them by NAME (pkg/internal/match) and would
-// work without them — the Scheme layer's own %ellipsis? compares them as
-// bindings, so the two layers need them to agree.
-//
-// Built ONCE, into a package-level set. It was a per-call constructor, and
-// macroVocabularyAdmits consults it per NAME LOOKUP while every library env
-// rebuilt it at construction — a map plus sixty string keys, allocated on the
-// resolution path. Measured as a large share of a +6% engine-startup
-// regression. The map is read-only after init, so sharing it is safe.
-var defaultMacroVocabularySet = buildDefaultMacroVocabulary()
-
-// defaultMacroVocabulary returns the shared set.
-func defaultMacroVocabulary() map[string]struct{} {
-	return defaultMacroVocabularySet
-}
-
-func buildDefaultMacroVocabulary() map[string]struct{} {
-	names := []string{
-		// Declarative vocabulary.
-		"syntax-rules", "...", "_", "else", "=>",
-		// Syntax introspection: registered at phase 1, exported by nothing.
-		"datum->syntax", "syntax->datum", "free-identifier=?", "bound-identifier=?",
-		"syntax-local-value", "syntax-local-introduce", "syntax-local-identifier-as-binding",
-		"er-macro-transformer", "quote-syntax", "syntax", "syntax-case", "with-syntax",
-		// expand / expand-once exist ONLY to be called from a transformer body —
-		// their argument is a syntax object and their result is the expansion — so
-		// a phase-0-only registration would make them unusable at the one place
-		// they are for. They come from the eval extension rather than the core
-		// registry, which is why they are named here rather than inferred: a
-		// vocabulary keyed on where a primitive was registered would miss them.
-		"expand", "expand-once",
-		"quasisyntax", "unsyntax", "unsyntax-splicing", "syntax-violation",
-		"make-synthetic-identifier", "identifier?", "generate-temporaries",
-		// Predicates and equality the macro layer's own bodies use.
-		"procedure?", "symbol?", "pair?", "null?", "eq?", "eqv?", "equal?",
-		"not", "car", "cdr", "cons", "list", "append", "length", "reverse",
-		"apply", "error", "=", "+", "-",
-	}
-	q := make(map[string]struct{}, len(names))
-	for _, n := range names {
-		q[n] = struct{}{}
-	}
-	return q
-}
-
-// macroVocabularyAdmits reports whether a name belongs to the macro-writing
-// kernel: an explicit member, or a %-prefixed bootstrap-private helper.
-//
-// The %-prefix arm is not a shortcut around enumerating. It is the tree's own
-// marker for a definition that exists only to implement the syntax layer:
-// bootstrap_syntax_procedures.scm alone defines 56 of them
-// (%syntax-case-transform, %pattern-variable?, %syntax-map, %k-ellipsis ...),
-// they live in the base store, and no .sld exports one or could — a %-name is
-// unreachable by ANY import, so leaving it out would strand the Scheme syntax
-// layer with no route at all rather than making it declare one. Enumerating 56
-// names that move whenever that file does would be a ratchet on the wrong thing.
-//
-// It does not widen D4's break: a %-name is not something user code writes, and
-// nothing a program can import is admitted by this arm.
-func macroVocabularyAdmits(name string) bool {
-	_, ok := defaultMacroVocabularySet[name]
-	if ok {
-		return true
-	}
-	return strings.HasPrefix(name, "%")
+	return bootstrap.MacroVocabularyName()
 }
 
 // initialImportsFor returns the declaration the engine should install for a

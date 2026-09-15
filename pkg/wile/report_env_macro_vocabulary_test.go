@@ -49,8 +49,8 @@ import (
 // reportEnvTransformerProgram is a procedural transformer whose body calls a
 // MACRO-VOCABULARY name, evaluated under the given environment expression.
 //
-// not, not cadr. The vocabulary is a strict subset of the base (dialect.go's
-// defaultMacroVocabulary) and cadr is deliberately outside it — a transformer
+// not, not cadr. The vocabulary is a strict subset of the base (pkg/internal/bootstrap's
+// MacroVocabulary) and cadr is deliberately outside it — a transformer
 // body reaches cadr only through (import (for-syntax (scheme base))), which is
 // D4's break and not what this pins. not is inside it, so it must resolve at
 // phase 1 with no import in EVERY environment the vocabulary row reaches.

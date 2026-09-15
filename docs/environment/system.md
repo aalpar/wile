@@ -94,6 +94,14 @@ curated registry apply through the child's **sealed-write view**
 (`NewProfileEnvironment`, `pkg/internal/bootstrap/bootstrap.go`), which lands
 unstamped, in `tierExactSealed`.
 
+They also differ above phase 0. A profile environment carries the language rows
+the engine root does, the base at phase 0 and the macro vocabulary at every
+phase ≥ 1 (`installDefaultLanguageRows`, `pkg/internal/bootstrap/language_rows.go`),
+so its transformer bodies see what the root's see. An import-spec environment
+carries no rows: at phase ≥ 1 it holds only what its import set put there, so a
+transformer body reaches `car` only through `(for-syntax …)`, as in R7RS §6.12
+and Racket's namespaces.
+
 Both are "sealed", and they are still not the same thing. The mutable tier
 outranks both, so a user `define` gets its own slot and **shadows** an import — it does not
 assign through it, which is what sharing one mutable slot used to mean. And
@@ -164,8 +172,8 @@ that have names; they are not the set of phases that exist.
 Auxiliary keywords (`else`, `=>`) and special-form names sit at `(phase 0,
 sealed)` like the rest of the startup set. A higher phase holds no slot for them;
 it reaches `else`, `=>` and the macro-writing names only through the dialect's
-macro-vocabulary bulk row, installed at every phase ≥ 1 (`defaultMacroVocabulary`,
-`pkg/wile/dialect.go`; see [The Ranked Probe](#invariants) below). Special-form
+macro-vocabulary bulk row, installed at every phase ≥ 1 (`MacroVocabulary`,
+`pkg/internal/bootstrap/language_rows.go`; see [The Ranked Probe](#invariants) below). Special-form
 dispatch goes through the forms registry, not these bindings.
 
 Phases 3 and up are not hypothetical, and the tower is observable from Scheme.

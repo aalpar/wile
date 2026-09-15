@@ -311,7 +311,7 @@ special-form names that carry a docstring) are registered with `AddBinding` /
 (`registerCompileTimeBinding`, `pkg/registry/apply.go`). There is no longer an
 ambient coordinate reachable from every phase: without an import of its own, a
 transformer body sees such a name only when the dialect's macro vocabulary
-(`defaultMacroVocabulary`, `pkg/wile/dialect.go`) declares it.
+(`MacroVocabulary`, `pkg/internal/bootstrap/language_rows.go`) declares it.
 
 Two limits on this axis, both deliberate:
 

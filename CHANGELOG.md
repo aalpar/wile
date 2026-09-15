@@ -119,6 +119,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A `(wile <profile>)` environment sees the macro vocabulary at every phase.**
+  The language rows (the base at phase 0, the macro vocabulary at every macro
+  phase) were installed only on the engine's bootstrap path, so an environment
+  built by `(environment '(wile small))` reached `car` in a transformer body only
+  through the registry's phase-1 slots, and a transformer nested one level deeper
+  raised `no such binding "list" … at phase 2`. Both bootstrap sequences now
+  install the rows from one definition. An import-set environment such as
+  `(environment '(scheme base))` is unchanged and stays empty above phase 0, as
+  R7RS §6.12 and Racket have it.
 - **A continuation re-invoked inside its own invocation no longer cuts the
   program off.** A composable continuation's first invocation runs the captured
   frames themselves, grafted onto the invoker's chain. A re-invocation reset the

@@ -353,40 +353,16 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 // per-name copying, passes every behavioural test in the suite; the counter is
 // what catches it.
 //
-// Rows carry the empty scope set and sealed=true: the base is not
-// macro-introduced, and it is not user-writable. They also carry
-// BulkOriginLanguage, and that holds for every row here despite the capability
-// being named InitialImports: these are what the DIALECT declares. A program's
+// Every row carries BulkOriginLanguage (see bootstrap.InstallBaseRow), and that
+// holds despite the capability being named InitialImports: these are what the
+// DIALECT declares. A program's
 // own (import ...) is a different path entirely — installImportedBinding's
 // per-symbol slots — and installs no row at all.
 func installInitialImports(owner *environment.EnvironmentFrame, imports []PhasedImport) {
-	store := owner.GlobalEnvironment()
 	for _, imp := range imports {
-		// D11, and the two phases really are different here. The SOURCE phase is
-		// PhaseRuntime, because that is where LoadBootstrapCore writes the base
-		// and where a base name therefore lives. The INSTALL phase is imp.Phase,
-		// which is where a reference may see it from. Using imp.Phase for both
-		// makes the phase-1 row look for base names at phase 1 and find nothing,
-		// so the row installs, ranks, and supplies nothing — which is precisely
-		// the "installed but never wins" failure design section 6.3 says this
-		// change defaults to.
-		src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, imp.Library)
-		store.InstallBulkRow(src, nil, imp.Phase, true, environment.BulkOriginLanguage)
+		bootstrap.InstallBaseRow(owner, imp.Library, imp.Phase)
 	}
-
-	// The macro vocabulary is declared at EVERY macro phase, not at an enumerated
-	// few: the tower is lazy and unbounded, so the row is a template the store
-	// installs as each phase view appears. It is a strict subset of the base —
-	// widening it to the whole base is how D4's phase-distinctness break gets
-	// quietly undone, because a procedural transformer would then reach cadr
-	// again with no import.
-	vocab := environment.NewFilteredBulkSource(
-		environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, MacroVocabularyName()),
-		macroVocabularyAdmits,
-		defaultMacroVocabulary(),
-		MacroVocabularyName(),
-	)
-	store.InstallMacroPhaseRow(vocab, nil, true, environment.BulkOriginLanguage)
+	bootstrap.InstallMacroVocabularyRow(owner)
 }
 
 // removedFormNames returns the R7RS form names the engine's dialect deleted from
