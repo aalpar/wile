@@ -17,6 +17,7 @@ package wile_test
 import (
 	"context"
 	"testing"
+	"testing/fstest"
 
 	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/wile"
@@ -145,5 +146,67 @@ func TestRenamedKeywordSurvivesCanonicalShadow(t *testing.T) {
 		{"renamed begin still splices a define-syntax despite a user shadow of begin",
 			`(import (scheme base) (rename (scheme base) (begin my-begin))) (define-syntax begin (syntax-rules () ((_ x ...) (list x ...)))) (define (f) (my-begin (define-syntax m (syntax-rules () ((_) 6)))) (m)) (f)`,
 			"6"},
+	})
+}
+
+// TestKeywordImportConflicts pins a behavior change: giving keyword bindings a
+// non-nil FormKeyword/PrimitiveExpander value (this branch) put them through
+// sameImportedBinding's EqualTo path instead of comparing values.Void ==
+// values.Void, which was true unconditionally. import conflict detection for
+// keywords is now real: two libraries that re-export the SAME keyword under one
+// name are still a diamond (EqualTo compares the denoted form, both "if"), but
+// two libraries that export DIFFERENT keywords under the SAME local name are now
+// correctly refused as a conflict, where before the branch they silently
+// last-import-won.
+func TestKeywordImportConflicts(t *testing.T) {
+	t.Run("diamond: two libraries re-export the same keyword under one name", func(t *testing.T) {
+		eng, err := wile.NewEngine(context.Background(),
+			wile.WithProfile(wile.KitchenSink),
+			wile.WithSourceFS(fstest.MapFS{
+				"lib-if-a.scm": &fstest.MapFile{Data: []byte(
+					"(define-library (lib-if-a)\n" +
+						"  (import (scheme base))\n" +
+						"  (export (rename if common-if)))\n")},
+				"lib-if-b.scm": &fstest.MapFile{Data: []byte(
+					"(define-library (lib-if-b)\n" +
+						"  (import (scheme base))\n" +
+						"  (export (rename if common-if)))\n")},
+			}),
+			wile.WithSourceFS(stdlib.FS),
+			wile.WithLibraryPaths("."),
+		)
+		qt.Assert(t, err, qt.IsNil)
+		t.Cleanup(func() {
+			_ = eng.Close()
+		})
+		v, err := eng.EvalMultiple(context.Background(),
+			"(import (lib-if-a) (lib-if-b)) (common-if #t 1 2)")
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, v.SchemeString(), qt.Equals, "1")
+	})
+
+	t.Run("clash: two libraries export different keywords under the same name", func(t *testing.T) {
+		eng, err := wile.NewEngine(context.Background(),
+			wile.WithProfile(wile.KitchenSink),
+			wile.WithSourceFS(fstest.MapFS{
+				"lib-if.scm": &fstest.MapFile{Data: []byte(
+					"(define-library (lib-if)\n" +
+						"  (import (scheme base))\n" +
+						"  (export (rename if my-if)))\n")},
+				"lib-lambda.scm": &fstest.MapFile{Data: []byte(
+					"(define-library (lib-lambda)\n" +
+						"  (import (scheme base))\n" +
+						"  (export (rename lambda my-if)))\n")},
+			}),
+			wile.WithSourceFS(stdlib.FS),
+			wile.WithLibraryPaths("."),
+		)
+		qt.Assert(t, err, qt.IsNil)
+		t.Cleanup(func() {
+			_ = eng.Close()
+		})
+		_, err = eng.EvalMultiple(context.Background(), "(import (lib-if) (lib-lambda))")
+		qt.Assert(t, err, qt.IsNotNil)
+		qt.Assert(t, err.Error(), qt.Contains, "my-if")
 	})
 }
