@@ -23,6 +23,8 @@ package compilation
 //   - Store order: all-then-store (let, letrec) vs sequential (let*, letrec*)
 
 import (
+	"slices"
+
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/forms"
 	"github.com/aalpar/wile/pkg/internal/validate"
@@ -67,10 +69,25 @@ func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCall
 	return p.compileClosure(ctctx.NotInTail(), tpl, lenv, lam, reuse, name)
 }
 
+// letStarAsNestedLets rewrites (let* ((a A) (b B)) body...) as
+// (let ((a A)) (let ((b B)) body...)). A one-binding let and a one-binding let*
+// have the same scoping, so the binders, inits and body are reused unchanged.
+func letStarAsNestedLets(v *validate.ValidatedLet) *validate.ValidatedLet {
+	body := v.Body()
+	var q *validate.ValidatedLet
+	for _, b := range slices.Backward(v.Bindings) {
+		q = validate.NewValidatedLet(v.FormName(), v.Source(), validate.LetKindLet,
+			[]validate.ValidatedLetBinding{b}, body)
+		body = []validate.ValidatedExpr{q}
+	}
+	return q
+}
+
 // CompileValidatedLet compiles all binding forms based on Kind.
 //
 // let:     <inits> Push... | OpPushEnv | StoreLocal(reverse) | body | OpPopEnv
-// let*:    OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv
+// let*:    OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv, or nested
+// lets where an init can capture a continuation
 // letrec:  OpPushEnv | <inits> Push... | StoreLocal(reverse) | body | OpPopEnv
 // letrec*: OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv
 //
@@ -79,9 +96,8 @@ func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCall
 //
 // A MERGED let (canMergeLet, merged_slots.go) emits NEITHER bracket: its slots
 // come out of the enclosing lambda's parameter frame, so the stores and loads
-// above are the whole shape. That is the ordinary case — every let inside a
-// procedure body — and the pushing form survives only where there is no frame to
-// merge into (the top level, a syntax-case clause body).
+// above are the whole shape. A let merges only into a frame no continuation can
+// be captured under; elsewhere it pushes.
 func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
 	v := expr.(*validate.ValidatedLet)
 
@@ -93,6 +109,16 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 	}
 
 	n := len(v.Bindings)
+
+	// let* pushes its frame BEFORE its inits run, so a continuation captured in
+	// an init resumes after the push and stores into the frame an earlier pass
+	// still reads. Where that can happen, compile the nested lets R7RS §4.2.2
+	// defines let* as: each frame is pushed after its own init, so re-entering an
+	// init binds that name and every later one freshly. A capture outside the
+	// let* re-runs its OpPushEnv, so only the let* form's own region matters.
+	if v.Kind == validate.LetKindLetStar && n > 0 && p.shape == nil && !validate.LetRegionIsCaptureSafe(v, p.env) {
+		return CompileValidatedLet(p, ctctx, letStarAsNestedLets(v))
+	}
 
 	// For plain let: compile inits BEFORE creating the env frame
 	// (inits don't see bindings, so they're compiled in the parent env).

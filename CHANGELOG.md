@@ -125,9 +125,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   pass's continuation still read (Wile `(0 1 1)`, Chez `(0 1 0 1)`). A `let` now
   merges only into a frame no continuation can be captured under: a procedure
   body, or a pushing `let`, with no capture operator, unknown callee or opaque
-  subtree. Elsewhere it pushes its own frame. Cost, interleaved: schelog zebra
-  +5.8% (its backtracking captures continuations), deriv about +2%, the other
-  eleven Gabriel benchmarks within noise.
+  subtree. Elsewhere it pushes its own frame. `let*` had the same defect without
+  merging, because it pushes its frame before its inits run; where an init can
+  capture, it now compiles as the nested `let`s R7RS §4.2.2 defines it as. Cost,
+  interleaved: schelog zebra +5.8% (its backtracking captures continuations),
+  deriv about +2%, the other eleven Gabriel benchmarks within noise; the `let*`
+  half measured flat.
 - **`--cover` profiles now carry 1-based columns.** `SourceIndexes` columns
   are 0-based, the tokenizer's convention shared by every diagnostic, and the
   Go cover writer copied them through into a format that reads columns as

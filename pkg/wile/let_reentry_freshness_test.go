@@ -22,8 +22,8 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 )
 
-// A `let` binds FRESH locations every time it runs (R7RS §4.2.2), including when
-// a continuation re-runs it. A merged let's slot (merged_slots.go) belongs to the
+// A `let` or `let*` binds FRESH locations every time it runs (R7RS §4.2.2),
+// including when a continuation re-runs it. A merged let's slot (merged_slots.go) belongs to the
 // enclosing frame, not to one execution of the let, so a re-run wrote the slot an
 // earlier pass's continuation still read. Merging is therefore refused wherever a
 // continuation can be captured while the frame it would merge into is live.
@@ -125,6 +125,57 @@ var letReentryFreshnessCases = []struct {
   (reverse log))`,
 		want: "(0 1 0 1)",
 	},
+	{
+		// let* pushed its frame before its inits, so it shared the slot with or
+		// without merging.
+		name: "let* with call/cc in its only init",
+		code: `
+(define (drive)
+  (define k1 #f) (define kb #f) (define log '())
+  (define (run)
+    (let* ((x (call/cc (lambda (k) (set! k1 k) 0))))
+      (call/cc (lambda (k) (if (= x 0) (set! kb k))))
+      (set! log (cons x log))
+      x))
+  (let ((r (run)))
+    (cond ((= r 0) (k1 1))
+          ((= (length log) 2) (kb #f))))
+  (reverse log))
+(drive)`,
+		want: "(0 1 0 1)",
+	},
+	{
+		// Re-entering the second init rebinds x freshly and keeps sharing a,
+		// which that init did not re-run.
+		name: "let* with call/cc in its second init",
+		code: `
+(define (drive)
+  (define k1 #f) (define kb #f) (define log '())
+  (define (run)
+    (let* ((a 'a) (x (call/cc (lambda (k) (set! k1 k) 0))))
+      (call/cc (lambda (k) (if (= x 0) (set! kb k))))
+      (set! log (cons (list a x) log))
+      x))
+  (let ((r (run)))
+    (cond ((= r 0) (k1 1))
+          ((= (length log) 2) (kb #f))))
+  (reverse log))
+(drive)`,
+		want: "((a 0) (a 1) (a 0) (a 1))",
+	},
+	{
+		name: "top-level let* with call/cc in its init",
+		code: `
+(let ((log '()) (k1 #f) (kb #f))
+  (let ((r (let* ((x (call/cc (lambda (k) (set! k1 k) 0))))
+             (call/cc (lambda (k) (if (= x 0) (set! kb k))))
+             (set! log (cons x log))
+             x)))
+    (cond ((= r 0) (k1 1))
+          ((= (length log) 2) (kb #f))))
+  (reverse log))`,
+		want: "(0 1 0 1)",
+	},
 }
 
 func TestLetIsFreshWhenAContinuationReentersIt(t *testing.T) {
@@ -184,6 +235,19 @@ func TestLetMergeFollowsCaptureSafety(t *testing.T) {
 			name:       "lambda applied in place refuses the merge",
 			code:       `(let ((a 1)) (let ((b 2)) ((lambda () (+ a b)))))`,
 			wantPushes: 2,
+		},
+		{
+			// One frame per binding, each pushed after its own init.
+			name:       "capturing top-level let* pushes a frame per binding",
+			code:       `(let* ((a 1) (b (call/cc (lambda (k) a))) (c (+ a b))) c)`,
+			wantPushes: 3,
+		},
+		{
+			// A capture outside the let* re-runs its push, so the let* keeps its
+			// single frame.
+			name:       "capture-free top-level let* keeps one frame",
+			code:       `(let* ((a 1) (b (+ a 1)) (c (+ a b))) c)`,
+			wantPushes: 1,
 		},
 		{
 			name:       "capturing top-level let pushes its nested lets",
