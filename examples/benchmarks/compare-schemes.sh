@@ -28,11 +28,31 @@ else
     WILE_BIN=""
 fi
 
-# Scheme implementations to try
+# The benchmarks are headerless R7RS top-level programs that call current-jiffy
+# and jiffies-per-second. Chez's top level has neither, and `racket FILE` demands
+# a module declaration, so both load the file into a top level (`-f` for Racket)
+# after a prelude defining the two. None of the benchmarks mutates a pair, so
+# Racket's immutable pairs do not change what they measure.
+PRELUDE_DIR=$(mktemp -d)
+trap 'rm -rf "$PRELUDE_DIR"' EXIT
+
+cat > "$PRELUDE_DIR/chez.ss" <<'EOF'
+(define (jiffies-per-second) 1000000)
+(define (current-jiffy)
+  (let ((t (current-time 'time-monotonic)))
+    (+ (* (time-second t) 1000000) (quotient (time-nanosecond t) 1000))))
+EOF
+
+cat > "$PRELUDE_DIR/racket.scm" <<'EOF'
+(define (jiffies-per-second) 1000)
+(define (current-jiffy) (current-inexact-monotonic-milliseconds))
+EOF
+
+# Scheme implementations to try. Each command takes the benchmark file last.
 declare -A SCHEMES=(
     ["wile"]="$WILE_BIN --file"
-    ["chez"]="scheme --script"
-    ["racket"]="racket"
+    ["chez"]="scheme -q $PRELUDE_DIR/chez.ss"
+    ["racket"]="racket -f $PRELUDE_DIR/racket.scm -f"
     ["chibi"]="chibi-scheme"
     ["guile"]="guile"
 )
@@ -96,10 +116,12 @@ for bench in $BENCHMARKS; do
 
         CMD=${SCHEMES[$scheme]}
 
-        # Run benchmark with timeout
-        if OUTPUT=$(timeout 30s $CMD "${bench}.scm" 2>&1); then
-            # Extract time
-            if TIME=$(echo "$OUTPUT" | grep "Total time:" | awk '{print $3}' | tr -d 's'); then
+        # Run benchmark with timeout. stdin is /dev/null so Chez's REPL, entered
+        # after it loads the files, exits instead of waiting.
+        if OUTPUT=$(timeout 30s $CMD "${bench}.scm" < /dev/null 2>&1); then
+            # Extract time, normalized to fixed-point: Chez prints small times in
+            # exponent form (6.3e-4), which neither the numeric check below nor bc reads.
+            if TIME=$(echo "$OUTPUT" | awk '/Total time:/ {t = $3; sub(/s$/, "", t); printf "%.6f", t; exit}'); then
                 if [ -n "$TIME" ]; then
                     echo "${TIME}s"
                     echo -n ",$TIME" >> "$RESULTS_FILE"
@@ -155,10 +177,9 @@ if [ ${#AVAILABLE[@]} -gt 1 ]; then
         for i in "${!AVAILABLE[@]}"; do
             TIME=${TIMES[$i]}
             if [[ $TIME =~ ^[0-9.]+$ ]]; then
-                FLOAT=$(echo "$TIME" | awk '{print $1+0}')
-                IS_MIN=$(echo "$FLOAT < $MIN" | bc -l)
+                IS_MIN=$(echo "$TIME < $MIN" | bc -l)
                 if [ "$IS_MIN" -eq 1 ]; then
-                    MIN=$FLOAT
+                    MIN=$TIME
                     MIN_SCHEME=${AVAILABLE[$i]}
                 fi
             fi
@@ -185,4 +206,4 @@ fi
 
 echo ""
 echo "To compare more benchmarks, run:"
-echo "  BENCHMARKS=\"tak fib ack deriv sieve\" $0"
+echo "  BENCHMARKS=\"tak fib ackermann deriv sieve\" $0"

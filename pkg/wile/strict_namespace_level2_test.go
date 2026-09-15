@@ -42,7 +42,7 @@ import (
 // syntax-rules joined the set in P0.1: a transformer right-hand side is now
 // compiled as an EXPRESSION, so syntax-rules is a real expression-level syntax
 // compiler (CompileSyntaxRulesExpr) with a row in syntaxCompilerEntries, and
-// RegisterSyntaxCompilers therefore mints an ambient keyword for it. Before
+// RegisterSyntaxCompilers therefore mints a (phase 0, sealed) keyword for it. Before
 // that, define-syntax recognized the spelling inline and the name resolved to
 // nothing at this level. quote-syntax joined in P0.3, as a new core form with
 // its own compiler row.

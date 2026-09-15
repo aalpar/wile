@@ -709,8 +709,8 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 }
 
 // The literal lookup is PHASE-SCOPED on the use side: the identifier is resolved
-// in the frame's own lexical chain at its own phase, plus the ambient special-form
-// registry phase, and nowhere else.
+// in the frame's own lexical chain at its own phase, plus the dialect's bulk rows
+// at that phase, and nowhere else.
 //
 // These rows are the regression gate for a phase-BLIND lookup. An earlier revision
 // of the pin walked every phase the owner had instantiated, ascending. From a

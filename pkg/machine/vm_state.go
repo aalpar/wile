@@ -51,7 +51,7 @@ type markEntry struct {
 //	Constrains: Apply (must produce correct K), SaveContinuation/Restore
 //	  (must preserve exactly the fields in σ).
 //	Constrained by: de Bruijn addressing (E is indexed by slot,depth),
-//	  linked closures (MakeClosure captures E by pointer).
+//	  flat closures (free variables travel in the vmState.free vector, not E).
 //
 // See BIBLIOGRAPHY.md "CESK Abstract Machine".
 //

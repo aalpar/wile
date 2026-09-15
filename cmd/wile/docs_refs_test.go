@@ -69,6 +69,73 @@ func TestTrackedDocsDoNotReferenceIgnoredPaths(t *testing.T) {
 	}
 	paths := slices.Sorted(maps.Keys(refs))
 
+	for _, absent := range absentFromClone(t, root, paths) {
+		for _, doc := range refs[absent] {
+			if uncleanedDocs[doc] {
+				continue
+			}
+			t.Errorf("%s references %q, which is absent from a clone: inline the content or drop the pointer",
+				doc, absent)
+		}
+	}
+}
+
+// TestAbsentFromCloneCatchesWorkingNotes pins the classifier the guard above
+// rests on. A classifier that answers "nothing is absent" passes that guard
+// vacuously, so its positives are asserted here directly.
+func TestAbsentFromCloneCatchesWorkingNotes(t *testing.T) {
+	root := gitOutput(t, ".", "rev-parse", "--show-toplevel")
+	paths := []string{
+		"README.md",
+		"docs/INDEX.md",
+		"docs/notes.local.md",
+		"memory",
+		"memory/2026-01-01-x.local.md",
+		"plans/foo.local.md",
+		"plans/sub/bar.md",
+	}
+	want := []string{
+		"docs/notes.local.md",
+		"memory",
+		"memory/2026-01-01-x.local.md",
+		"plans/foo.local.md",
+		"plans/sub/bar.md",
+	}
+	got := absentFromClone(t, root, paths)
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Errorf("absentFromClone(%q)\n got %q\nwant %q", paths, got, want)
+	}
+}
+
+// absentFromClone returns the subset of paths a fresh clone does not have:
+// those .gitignore excludes, and those at or beyond a tracked symlink whose
+// target leaves the repository. memory and plans are such symlinks, into a
+// checkout of the working notes that sits beside the repository.
+//
+// The symlink case cannot go through git check-ignore, which refuses any path
+// beyond a symlink ("beyond a symbolic link", exit 128) and so fails the whole
+// batch. It needs no ignore rule either: git never tracks a path beyond a
+// symlink, so a clone has one only if the link's target supplies it, and a
+// target outside the repository is not part of the clone. The target is read
+// from the index rather than the filesystem, so a dangling link (CI, a
+// worktree) classifies the same as a live one.
+func absentFromClone(t *testing.T, root string, paths []string) []string {
+	t.Helper()
+	var q []string
+	escaping := escapingSymlinks(t, root)
+	var rest []string
+	for _, p := range paths {
+		if atOrBeyondAny(p, escaping) {
+			q = append(q, p)
+			continue
+		}
+		rest = append(rest, p)
+	}
+	if len(rest) == 0 {
+		return q
+	}
+
 	// git check-ignore echoes back the subset of its input paths that .gitignore
 	// excludes, and exits 1 when none are — so the output, not the exit status,
 	// carries the answer. The paths go in on stdin rather than argv: a candidate
@@ -77,26 +144,51 @@ func TestTrackedDocsDoNotReferenceIgnoredPaths(t *testing.T) {
 	// guard silently pass).
 	cmd := exec.CommandContext(context.Background(), "git", "check-ignore", "--stdin")
 	cmd.Dir = root
-	cmd.Stdin = strings.NewReader(strings.Join(paths, "\n") + "\n")
+	cmd.Stdin = strings.NewReader(strings.Join(rest, "\n") + "\n")
 	out, err := cmd.Output()
 	var exitErr *exec.ExitError
 	isExit := errors.As(err, &exitErr)
 	if err != nil && (!isExit || exitErr.ExitCode() != 1) {
 		t.Fatalf("git check-ignore: %v", err)
 	}
-
 	for ignored := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		if ignored == "" {
 			continue
 		}
-		for _, doc := range refs[ignored] {
-			if uncleanedDocs[doc] {
-				continue
-			}
-			t.Errorf("%s references %q, which is gitignored and absent from a clone: inline the content or drop the pointer",
-				doc, ignored)
+		q = append(q, ignored)
+	}
+	return q
+}
+
+// escapingSymlinks returns the tracked symlinks whose target, resolved against
+// the link's directory, leaves the repository.
+func escapingSymlinks(t *testing.T, root string) []string {
+	t.Helper()
+	var q []string
+	for entry := range strings.SplitSeq(gitOutput(t, root, "ls-files", "-s"), "\n") {
+		// <mode> <object> <stage>\t<path>; 120000 is git's symlink mode.
+		meta, link, found := strings.Cut(entry, "\t")
+		if !found || !strings.HasPrefix(meta, "120000 ") {
+			continue
+		}
+		object := strings.Fields(meta)[1]
+		target := gitOutput(t, root, "cat-file", "blob", object)
+		if filepath.IsLocal(filepath.Join(filepath.Dir(link), target)) {
+			continue
+		}
+		q = append(q, link)
+	}
+	return q
+}
+
+// atOrBeyondAny reports whether path names one of links or a path inside it.
+func atOrBeyondAny(path string, links []string) bool {
+	for _, link := range links {
+		if path == link || strings.HasPrefix(path, link+"/") {
+			return true
 		}
 	}
+	return false
 }
 
 // uncleanedDocs are the tracked docs that still cite gitignored working notes.

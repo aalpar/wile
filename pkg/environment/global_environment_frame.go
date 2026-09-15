@@ -783,15 +783,16 @@ func (p *GlobalEnvironmentFrame) materializeBulkLocked(key values.Symbol, row bu
 // referent with no test going red. An identifier moves with the constant; an
 // ordinal is a second, unchecked copy of the ordering.
 //
-// EIGHTEEN ordinal labels for THESE tiers still exist, over seven files. Eight
-// are live labels left unswept; the other ten are quotations of the wrong text
-// they replaced, or this convention statement itself, and cannot be swept.
+// TEN ordinal labels for THESE tiers still exist, over three files, and none is
+// live: each quotes the wrong text it replaced, or is this convention statement
+// itself, and cannot be swept. The eight live labels were rewritten to name the
+// identifier on 2026-09-14.
 //
 // The figure read "about a hundred" until 2026-09-11, and it was unmeasured: it
 // counted the whole `\bT[123]\b` population, whose spelling three unrelated
 // namespaces share. Measured, 2026-09-11:
 //
-//	grep -rEoh '\bT[123]\b' --include=*.go pkg/ | wc -l    # 81
+//	grep -rEoh '\bT[123]\b' --include=*.go pkg/ | wc -l    # 81 (73 after the sweep)
 //
 // Of those 81, forty-seven are the CLOSURE tiers (design section 5.3.1's boxed /
 // self-patch / mutual, in boxing.go, compile_closure.go, operations_closure.go

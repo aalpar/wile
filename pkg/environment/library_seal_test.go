@@ -53,7 +53,7 @@ func TestChildRuntimeOwnsItsOwnStore(t *testing.T) {
 
 // Every library phase view shares the library's ONE store, exactly as a
 // namespace's do. Hermeticity is key disjointness in that store — a phase-N read
-// admits only phase-N and ambient slots — not a parent link that skips the
+// admits only phase-N slots and phase-N bulk rows — not a parent link that skips the
 // mutable frame, so there is no per-phase global to diverge from the namespace's
 // shape.
 func TestChildRuntimePhaseViewsShareItsStore(t *testing.T) {

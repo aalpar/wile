@@ -150,7 +150,8 @@ func TestLibraryBody_SyntacticKeywordAsVariableRefused(t *testing.T) {
 //
 // Both rows now reach the keyword refusal, and for one reason rather than two.
 // `if` and `define-syntax` are both compileTimeBindingSpecs names, so both are
-// ambient BindingTypePrimitive bindings that a phase-0 probe reaches as T3, and
+// (phase 0, sealed) BindingTypePrimitive bindings that a phase-0 probe reaches
+// at tierExactSealed, and
 // refuseCompileTimeMeaning's type arm answers both. They differ only in what the
 // slot HOLDS (void for `if`, the compiler object for `define-syntax`), which
 // the refusal does not consult.
@@ -162,7 +163,7 @@ func TestLibraryBody_SyntacticKeywordAsVariableRefused(t *testing.T) {
 // deleting the keyword refusal from the top-level path would now redden both
 // rows together. The remaining discrimination is
 // TestPhaseZeroCrossPhaseNamesStayUnbound (pkg/machine/compilation), whose
-// bootstrap- and user-macro rows still have no ambient keyword and still pin
+// bootstrap- and user-macro rows still have no phase-0 keyword and still pin
 // ErrNoSuchBinding.
 //
 // Inside a library body both resolve through the library-scope arm and must

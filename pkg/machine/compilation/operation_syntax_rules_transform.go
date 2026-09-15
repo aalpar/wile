@@ -95,8 +95,8 @@ func (p *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *envi
 }
 
 // GetLiteralBinding resolves the use-site side of the R7RS §4.3.2 comparison:
-// the frame's own lexical chain at its own phase, and the ambient keyword of the
-// name last. No other phase: the use site's phase is a known, exact fact, and
+// the frame's own lexical chain at its own phase, and what the language supplies
+// through the dialect's bulk rows last. No other phase: the use site's phase is a known, exact fact, and
 // another phase's binding of the name is a different program's.
 func (p *envBindingChecker) GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool) {
 	return lookupLiteralBinding(p.env, sym, scopes, nil)
@@ -115,9 +115,9 @@ func (p *envBindingChecker) GetLiteralBinding(sym string, scopes []*syntax.Scope
 // macro with an `else` literal answers (ELSE 1), the two identifiers being one
 // phase-0 binding, even though the literal is written in phase-1 code.
 //
-// The ambient keywords are not in this list. lookupLiteralBinding ranks them
-// below every exact-phase hit and answers them last, so an ordinary binding at a
-// lower phase wins over the ambient auxiliary-syntax one. The descent stops at
+// The language-supplied keywords are not in this list. lookupLiteralBinding
+// reads them from the bulk rows after every per-symbol probe, so an ordinary
+// binding at a lower phase wins over the dialect's auxiliary-syntax one. The descent stops at
 // PhaseRuntime: negative phases rank for-template bindings, a different axis
 // rather than a lower rung of this one, and PresentPhases excludes them for the
 // same reason.

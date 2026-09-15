@@ -80,8 +80,8 @@ func (instr Instruction) String() string {
 //	Invariant: the same variable always has the same (slot, depth)
 //	  regardless of its name. Alpha-equivalence is a non-issue at runtime.
 //	Constrains: GetLocalBindingBySlotDepth / SetLocalValueBySlotDepth
-//	  (runtime access walks depth parent pointers, indexes by slot),
-//	  linked closures (parent chain must match compile-time depth).
+//	  (runtime access walks depth parent pointers, indexes by slot; the
+//	  runtime frame chain must match compile-time depth).
 //	Constrained by: resolveLocal (compile-time computation of depth
 //	  by walking the EnvironmentFrame parent chain).
 //

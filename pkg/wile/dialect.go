@@ -193,22 +193,23 @@ type LanguageProvider interface {
 // defaultInitialImports is the declaration every engine gets when its dialect
 // does not implement LanguageProvider.
 //
-// Two rows. The base at phase 0 is the whole of what the ambient tier used to
-// supply, relocated onto one coordinate. The phase-1 row is the DECLARATIVE
-// vocabulary: the names a syntax-rules macro needs without any import of its
-// own, which is Racket's rule (i) and the reason a declarative macro survives
-// Stage A untouched while a procedural one must declare
-// (import (for-syntax (scheme base))).
+// One row: the base at phase 0, the whole of what the ambient tier used to
+// supply, relocated onto one coordinate. The DECLARATIVE vocabulary, the names a
+// syntax-rules macro needs without any import of its own, is not a declaration
+// here: installInitialImports installs defaultMacroVocabulary at every macro
+// phase whatever the dialect declares. That split is Racket's rule (i) and the
+// reason a declarative macro survives Stage A untouched while a procedural one
+// must declare (import (for-syntax (scheme base))).
 //
-// The phase-1 membership is design section 9's Q2 and is pinned by
+// The vocabulary's membership is design section 9's Q2 and is pinned by
 // TestPhase1VocabularyMembership rather than argued here. Two measurements
 // constrain what the ratchet may claim, and both cut against the obvious
 // justification: the ellipsis and underscore identifiers do NOT need a phase-1
 // binding, because pkg/internal/match/syntax_compiler.go matches them by NAME
 // (under WithoutAmbientBindings they hold zero slots anywhere and still expand);
 // and syntax-rules holds an exact-phase-1 slot from the primitive-expander
-// registration that deleting the ambient tier does not remove. So the
-// declaration is right for a future scope-aware matcher and for stating the
+// registration that deleting the ambient tier does not remove. So listing those
+// three is right for a future scope-aware matcher and for stating the
 // vocabulary explicitly, not because anything would break without it today.
 func defaultInitialImports() []PhasedImport {
 	return []PhasedImport{

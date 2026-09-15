@@ -33,7 +33,7 @@ type nameDoc struct {
 // compileTimeBindingSpecs names the forms the expander recognizes as
 // primitive forms and dispatches to registered primitive expanders rather
 // than treating as applications. Every one of them exists ONLY at compile
-// time: the registry installs each as an ambient keyword binding
+// time: the registry installs each as a (phase 0, sealed) keyword binding
 // (registerCompileTimeBinding), and a reference in value position is refused.
 // A form that also holds a runtime value belongs in procedureFormDocs below.
 //
@@ -345,7 +345,7 @@ var compileTimeBindingSpecs = []nameDoc{
 // BindingTypeVariable, which is what lets (procedure? dynamic-wind) and
 // (apply apply ...) work. The registry therefore installs NO keyword for them
 // and these rows are the docstring's home only: a keyword binding would occupy
-// the same ambient slot the value writer needs, and DefineOwnGlobal cannot
+// the same (phase 0, sealed) slot the value writer needs, and DefineOwnGlobal cannot
 // change an existing slot's type, so the procedure would be refused in value
 // position. Head dispatch is unaffected: headDenotesSpecialForm decides it
 // from the sealed Variable binding, not from membership in this file's tables.

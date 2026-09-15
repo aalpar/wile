@@ -510,7 +510,8 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 //     source, or re-importing the same library) is permitted;
 //   - a pre-existing user definition is not an import and is left to shadow.
 //
-// The second bullet was FALSE until the base install moved to T2: the define and
+// The second bullet was FALSE until the base install moved off tierExactMutable
+// to (phase 0, sealed): the define and
 // the import shared one (phase 0, mutable) slot, so the import assigned
 // through the define instead of being shadowed by it — measured, (define map 1)
 // then (import (scheme base)) left one slot whose value went 1 ->
@@ -620,11 +621,11 @@ const (
 // define: one slot, value 1 -> #<case-lambda-closure>, meta imported false ->
 // true. importConflicts' own doc comment says "a pre-existing user definition is
 // not an import and is left to shadow" — that sentence was FALSE, and moving the
-// base install to T2 is what makes it true.
+// base install to (phase 0, sealed) is what makes it true.
 //
 // placementShadowable therefore writes (phase 0, sealed) directly rather
-// than through the view. T1 mutable outranks T2 sealed, so a define shadows
-// while the import stays visible when no define exists.
+// than through the view. tierExactMutable outranks tierExactImported, so a
+// define shadows while the import stays visible when no define exists.
 //
 // # THE HAZARD, and why only ONE site takes the shadowable tier
 //

@@ -76,7 +76,7 @@ func TestStringHashSRFI13StillShadows(t *testing.T) {
 // equal-hash equal?) behaves inside a FRESHLY CONSTRUCTED namespace.
 //
 // make-hashtable recognizes its argument pair by POINTER IDENTITY against the
-// namespace's sealed base. SealedBase is per-namespace, so whether recognition
+// namespace's sealed base. The sealed base is per-namespace, so whether recognition
 // survives (environment '(wile small)) depends on whether that construction
 // SHARES the parent's closure pointers or REBUILDS them. Both outcomes are
 // fail-closed — a rebuild would raise ErrUnsupportedHashtableKind rather than

@@ -398,7 +398,7 @@ func TestGlobalFrame_StalePinDoesNotHealOntoSealedSlot(t *testing.T) {
 	sym := values.NewSymbol("car")
 
 	// The startup set: a sealed primitive, exactly as bootstrap installs one —
-	// through the sealed-write ROOT VIEW, so it lands at (ANY, sealed) the same
+	// through the sealed-write ROOT VIEW, so it lands at (0, sealed) the same
 	// way a real (car ...) primitive does.
 	sealedVal := values.NewInteger(-1)
 	mustDefine(c, ns.sealedWriteRoot, sym, BindingTypePrimitive, nil, sealedVal)
@@ -749,7 +749,7 @@ func TestStalePinHealsUseTheirCoordinates(t *testing.T) {
 
 	c.Assert(runtime.DeleteOwnGlobal(sym, AmbientScopes()), qt.IsTrue)
 
-	// WRITE: refused. Neither the (ANY, sealed) entry nor the (1, mutable) one is
+	// WRITE: refused. Neither the (0, sealed) entry nor the (1, mutable) one is
 	// at the pin's coordinates, and both are reachable by name.
 	err := store.SetOwnGlobalValue(pin, values.NewInteger(99))
 	c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue)

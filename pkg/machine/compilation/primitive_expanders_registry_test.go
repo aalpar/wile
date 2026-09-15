@@ -110,7 +110,7 @@ func TestPrimitiveExpandersLandAtExactPhaseOne(t *testing.T) {
 	g := env.GlobalEnvironment()
 	// let-syntax and when-adjacent forms have no specialforms.go keyword row, so they
 	// are the discriminating cases; syntax-rules and quote do, and are included to show
-	// the bare path alone still mints no ambient slot for them.
+	// the bare path alone still mints no phase-0 slot for them.
 	for _, name := range []string{"syntax-rules", "quote", "let-syntax", "import", "lambda"} {
 		t.Run(name, func(t *testing.T) {
 			sym := values.NewSymbol(name)

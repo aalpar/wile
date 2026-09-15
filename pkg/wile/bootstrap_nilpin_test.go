@@ -73,8 +73,8 @@ type nilPin struct {
 // bootstrap procedure) OR in the expand phase (an unpinned sibling macro/expander or recursive
 // self-reference, a real capture exposure). A neither-bound nil-pin is genuinely inert: a
 // template-introduced binder. Special-form names and auxiliary syntax (else, =>) are NOT in
-// that set any more, because both now hold an ambient keyword binding the phase-0 probe
-// reaches; a nil pin on one of those names is a defect like any other.
+// that set any more, because both now hold a (phase 0, sealed) keyword binding the phase-0
+// probe reaches; a nil pin on one of those names is a defect like any other.
 //
 // Fixing a flagged entry: reorder the referent's definition above the referencing macro
 // (sibling macro/expander) or into an earlier bootstrap file (runtime procedure). A

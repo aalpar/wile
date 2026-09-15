@@ -35,7 +35,7 @@ cd examples/benchmarks
 
 By default, this runs a few quick benchmarks (tak, fib, deriv, peval) on all installed Schemes.
 
-**Currently only the Wile column succeeds.** The benchmark files call `current-jiffy` without importing `(scheme time)` and carry no module header, so Chez fails with `variable current-jiffy is not bound` and Racket with `expected a 'module' declaration`.
+Chez (`scheme`) and Racket each load a small prelude defining `current-jiffy` and `jiffies-per-second` before the benchmark. Benchmarks that import libraries or `include` Wile sources (`kanren-benchmark`, `parallel-matrix-mul`, `schelog-zebra-bench`, `bench-*`) report FAILED outside Wile.
 
 To compare more benchmarks:
 
