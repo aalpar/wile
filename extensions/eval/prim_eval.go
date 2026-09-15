@@ -49,6 +49,21 @@ func executingRuntime(mc *machine.MachineContext) *environment.EnvironmentFrame 
 	return ns.Runtime()
 }
 
+// executingNamespace returns the namespace mc is EXECUTING in, falling back to
+// the environment frame's when no executing namespace was established.
+//
+// The environment constructors derive from this rather than the frame for the
+// reason executingRuntime gives: the frame's namespace is the one the primitive
+// was registered in, so under Engine.EvalIn a constructed namespace inherited the
+// engine root's authorizer and library-load authority instead of the target's.
+func executingNamespace(mc *machine.MachineContext) *environment.Namespace {
+	q := mc.ExecutingNamespace()
+	if q == nil {
+		return mc.EnvironmentFrame().Namespace()
+	}
+	return q
+}
+
 // ProfileFactory is the callback used by (environment '(wile <name>)) and
 // (environment '(wile <name> <strictness>)) to construct a namespace for a named
 // Wile profile. It is set by internal/bootstrap at init time (bootstrap cannot be
@@ -110,10 +125,7 @@ func PrimEval(cc machine.CallContext) error {
 		// 1-arg form: the EXECUTING namespace. mc.EnvironmentFrame() here is the
 		// apply frame of this primitive's REGISTERING namespace, so the 1-arg
 		// form used to evaluate sandboxed code in the engine root.
-		topLevelEnv = mc.ExecutingNamespace()
-		if topLevelEnv == nil {
-			topLevelEnv = mc.EnvironmentFrame().Namespace()
-		}
+		topLevelEnv = executingNamespace(mc)
 	}
 
 	env := topLevelEnv.Runtime()
@@ -295,7 +307,11 @@ func PrimCurrentLoadDepth(mc machine.CallContext) error {
 
 // PrimSchemeReportEnvironment implements the (scheme-report-environment) primitive.
 // Returns R5RS env.
-func PrimSchemeReportEnvironment(mc machine.CallContext) error {
+func PrimSchemeReportEnvironment(cc machine.CallContext) error {
+	mc, err := machine.RequireMachineContext(cc, "scheme-report-environment")
+	if err != nil {
+		return err
+	}
 	version := mc.Arg(0)
 	versionInt, err := helpers.RequireType[*values.Integer](version, werr.ErrNotAnInteger, "scheme-report-environment")
 	if err != nil {
@@ -309,7 +325,7 @@ func PrimSchemeReportEnvironment(mc machine.CallContext) error {
 		// but contains a snapshot of the current standard bindings.
 		// R7RS §6.12: scheme-report-environment must be distinct from
 		// interaction-environment and contain the R7RS standard bindings.
-		callerTopLevel := mc.EnvironmentFrame().Namespace()
+		callerTopLevel := executingNamespace(mc)
 		newTopLevel := callerTopLevel.NewSchemeReportNamespace()
 		newTopLevel.Name = "scheme-report-environment"
 		mc.SetValue(newTopLevel)
@@ -321,7 +337,11 @@ func PrimSchemeReportEnvironment(mc machine.CallContext) error {
 
 // PrimNullEnvironment implements the null-environment primitive.
 // Returns an empty R5RS environment with no bindings.
-func PrimNullEnvironment(mc machine.CallContext) error {
+func PrimNullEnvironment(cc machine.CallContext) error {
+	mc, err := machine.RequireMachineContext(cc, "null-environment")
+	if err != nil {
+		return err
+	}
 	version := mc.Arg(0)
 	versionInt, err := helpers.RequireType[*values.Integer](version, werr.ErrNotAnInteger, "null-environment")
 	if err != nil {
@@ -335,7 +355,7 @@ func PrimNullEnvironment(mc machine.CallContext) error {
 		// bindings here; this returns a fully empty child instead.
 		// Shares the caller's syntax-object interning (Namespace.InternSyntax
 		// delegates to the parent) for R7RS §6.5 symbol identity.
-		callerTopLevel := mc.EnvironmentFrame().Namespace()
+		callerTopLevel := executingNamespace(mc)
 		newTopLevel := callerTopLevel.NewChildNamespace()
 		newTopLevel.Name = "null-environment"
 		mc.SetValue(newTopLevel)
@@ -361,7 +381,7 @@ func PrimNullEnvironment(mc machine.CallContext) error {
 //	(environment '(wile small))                ; the Small surface, pre-bound
 //	(environment '(wile small core))           ; core only; import the rest
 //	(environment '(wile small no-bindings))    ; nothing; import everything
-func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.Namespace, bool, error) {
+func tryWileProfile(mc *machine.MachineContext, argsVal values.Value) (*environment.Namespace, bool, error) {
 	args, ok := argsVal.(values.Tuple)
 	if !ok {
 		return nil, false, nil
@@ -423,7 +443,7 @@ func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.
 			"environment: (wile %s) requires bootstrap to register ProfileFactory", nameSym.Key)
 	}
 
-	callerNS := mc.EnvironmentFrame().Namespace()
+	callerNS := executingNamespace(mc)
 	ns, err := ProfileFactory(mc.Context(), callerNS, nameSym.Key, strictName)
 	if err != nil {
 		return nil, true, werr.WrapForeignErrorf(err,
@@ -445,7 +465,11 @@ func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.
 //   - (environment '(for-syntax (scheme base)))       ; Phase 1 (expand)
 //   - (environment '(for-template (scheme base)))     ; Phase -1
 //   - (environment '(for-meta 2 (scheme base)))       ; Phase 2
-func PrimEnvironment(mc machine.CallContext) error {
+func PrimEnvironment(cc machine.CallContext) error {
+	mc, err := machine.RequireMachineContext(cc, "environment")
+	if err != nil {
+		return err
+	}
 	// Get variadic import specs (collected as a list in arg 0)
 	argsVal := mc.Arg(0)
 
@@ -462,7 +486,7 @@ func PrimEnvironment(mc machine.CallContext) error {
 	// Create child top-level environment sharing the caller's syntax-object
 	// interning (Namespace.InternSyntax delegates to the parent) and library
 	// registry for R7RS §6.5 symbol identity.
-	callerTopLevel := mc.EnvironmentFrame().Namespace()
+	callerTopLevel := executingNamespace(mc)
 	// Import source = the mutable runtime (reaches the sealed base via its parent walk,
 	// so resolution is preserved); TopLevel() now returns the sealed base alone.
 	callerEnv := callerTopLevel.Runtime()

@@ -226,3 +226,149 @@ func TestChildNamespaceCannotWidenAStrictRoot(t *testing.T) {
 		})
 	}
 }
+
+// denyResource refuses one resource (and, when action is non-empty, only that
+// action on it) and permits everything else. A child holding it keeps code:eval
+// and can still import: the shape of a sandbox that trusts eval but not, say,
+// the shell.
+type denyResource struct {
+	resource string
+	action   string
+}
+
+func (p denyResource) Authorize(req security.AccessRequest) error {
+	if req.Resource != p.resource {
+		return nil
+	}
+	if p.action != "" && req.Action != p.action {
+		return nil
+	}
+	return security.ErrAccessDenied
+}
+
+// evalTrustingChild builds a KitchenSink engine whose root permits everything
+// and a child whose recorded policy is inner, with the eval, process, namespace
+// and introspection libraries already imported into the child.
+func evalTrustingChild(t *testing.T, libDir string, inner security.Authorizer) (*Engine, *environment.Namespace, *recordingAuthorizer) {
+	t.Helper()
+	ctx := context.Background()
+	eng, err := NewEngine(ctx,
+		WithProfile(KitchenSink),
+		WithLibraryPaths(libDir),
+		WithAuthorizer(allowAll{}))
+	qt.Assert(t, err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = eng.Close()
+	})
+	childAuth := &recordingAuthorizer{inner: inner}
+	child := eng.Namespace().NewChildNamespace(environment.WithChildAuthorizer(childAuth))
+	_, err = eng.EvalIn(ctx, eng.MustParse(ctx,
+		`(import (wile eval) (wile process) (wile namespace) (wile introspection))`), child)
+	qt.Assert(t, err, qt.IsNil)
+	return eng, child, childAuth
+}
+
+// TestChildNamespaceAuthorizerGovernsConstructedEnvironments pins the
+// constructors. Each derived its new namespace from the one the primitive was
+// REGISTERED in (the engine root), so the namespace handed to eval carried the
+// root's authorizer, and a child that denies process but grants code:eval ran
+// system through it.
+//
+// The marker file is the oracle, and the child's recorder is the second one: a
+// denial alone would pass against a constructor that merely failed to bind
+// system, or against a root that happened to deny too.
+func TestChildNamespaceAuthorizerGovernsConstructedEnvironments(t *testing.T) {
+	cases := []struct {
+		name string
+		env  string
+	}{
+		{name: "environment import spec", env: `(environment '(only (wile process) system))`},
+		{name: "environment wile profile", env: `(environment '(wile kitchen-sink))`},
+		{name: "scheme-report-environment", env: `(scheme-report-environment 5)`},
+		{name: "null-environment", env: `(null-environment 5)`},
+		{name: "make-namespace", env: `(make-namespace '(only (wile process) system))`},
+	}
+	ctx := context.Background()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			eng, child, childAuth := evalTrustingChild(t, t.TempDir(),
+				denyResource{resource: security.ResourceProcess})
+
+			// The import inside the eval'd body is what reaches system in the
+			// report and null environments, which bind nothing of (wile process)
+			// on their own.
+			marker := filepath.Join(t.TempDir(), "escaped")
+			code := `(eval '(begin (import (only (wile process) system)) (system "touch ` + marker + `")) ` + tc.env + `)`
+
+			before := len(childAuth.reqs)
+			_, err := eng.EvalIn(ctx, eng.MustParse(ctx, code), child)
+			qt.Assert(t, err, qt.IsNotNil, qt.Commentf("the child's policy must govern the constructed namespace"))
+			qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+			_, statErr := os.Stat(marker)
+			qt.Assert(t, errors.Is(statErr, os.ErrNotExist), qt.IsTrue,
+				qt.Commentf("system ran under the engine root's policy"))
+			qt.Assert(t, len(childAuth.reqs) > before, qt.IsTrue,
+				qt.Commentf("the child's authorizer was never consulted"))
+		})
+	}
+}
+
+// TestChildNamespaceAuthorizerGovernsConstructorImports is the load half of the
+// same confusion. The import source handed to ImportSpecInto decides whose
+// EffectiveAuthorizer LoadLibrary consults, and it was the registering
+// namespace's runtime, so a child denied code:load loaded a file-backed library
+// through any of the three primitives that share that sink, while a plain
+// (import …) from the same child was refused.
+func TestChildNamespaceAuthorizerGovernsConstructorImports(t *testing.T) {
+	cases := []struct {
+		name string
+		code string
+	}{
+		{name: "environment", code: `(environment '(gamma))`},
+		{name: "make-namespace", code: `(make-namespace '(gamma))`},
+		{name: "namespace-require", code: `(namespace-require (interaction-environment) '(gamma))`},
+	}
+	ctx := context.Background()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			err := writeTestFile(filepath.Join(dir, "gamma.sld"), `(define-library (gamma)
+  (export gamma-val)
+  (begin (define gamma-val 5)))`)
+			qt.Assert(t, err, qt.IsNil)
+			eng, child, childAuth := evalTrustingChild(t, dir,
+				denyResource{resource: security.ResourceCode, action: security.ActionLoad})
+
+			before := len(childAuth.reqs)
+			_, err = eng.EvalIn(ctx, eng.MustParse(ctx, tc.code), child)
+			qt.Assert(t, err, qt.IsNotNil, qt.Commentf("the child's code:load denial must govern"))
+			qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+			qt.Assert(t, len(childAuth.reqs) > before, qt.IsTrue,
+				qt.Commentf("the child's authorizer was never consulted"))
+		})
+	}
+}
+
+// TestChildNamespaceCannotWidenProfileOfAStrictRoot is the containment
+// direction for (environment '(wile <profile>)), and a ratchet rather than a
+// must-fail-first test: it passes on the pre-fix code, where the widening check
+// read the ROOT namespace. It fails if checkProfileWidening, now handed the
+// executing child, reads the child's own Authorizer() instead of
+// EffectiveAuthorizer(): a permissive child would then answer namespace:create
+// for a strict root.
+func TestChildNamespaceCannotWidenProfileOfAStrictRoot(t *testing.T) {
+	ctx := context.Background()
+	eng, err := NewEngine(ctx,
+		WithProfile(ConsoleWithLoad),
+		WithLibraryPaths(t.TempDir()))
+	qt.Assert(t, err, qt.IsNil)
+	defer eng.Close() //nolint:errcheck // test cleanup
+
+	child := eng.Namespace().NewChildNamespace(environment.WithChildAuthorizer(allowAll{}))
+	_, err = eng.EvalIn(ctx, eng.MustParse(ctx, `(import (wile eval))`), child)
+	qt.Assert(t, err, qt.IsNil)
+
+	_, err = eng.EvalIn(ctx, eng.MustParse(ctx, `(environment '(wile kitchen-sink))`), child)
+	qt.Assert(t, err, qt.IsNotNil, qt.Commentf("a permissive child must not widen a strict root's profile"))
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
