@@ -98,3 +98,12 @@ func TestRenamedKeywordValidates(t *testing.T) {
 		{"define inside a let-syntax body", `(import (scheme base) (rename (scheme base) (define my-define))) (let-syntax ((m (syntax-rules () ((_) 1)))) (my-define z 8) z)`, "8"},
 	})
 }
+
+// Task 3: the expander must see a renamed begin as begin, or the define-syntax it
+// splices into a body is never compiled before the body uses it.
+func TestRenamedKeywordExpands(t *testing.T) {
+	runKeywordRows(t, []keywordRow{
+		{"begin splicing a define-syntax into a body",
+			`(import (scheme base) (rename (scheme base) (begin my-begin))) (define (f) (my-begin (define-syntax m (syntax-rules () ((_) 6)))) (m)) (f)`, "6"},
+	})
+}
