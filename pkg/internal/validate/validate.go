@@ -148,8 +148,12 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 	if ok {
 		symVal, ok := sym.Unwrap().(*values.Symbol)
 		if ok {
-			// Resolve the head ONCE, at its own phase. A keyword binding names the
-			// form it denotes, so a renamed or prefixed import dispatches on that
+			// Resolve the head ONCE, at its own phase, for every symbol-headed
+			// form — ordinary calls included: a renamed keyword's form cannot be
+			// known without resolving it, so the resolution can no longer be
+			// gated behind a name-only fast path. That cost is measured in plan
+			// Task 5 (BenchmarkValidatePhase). A keyword binding names the form
+			// it denotes, so a renamed or prefixed import dispatches on that
 			// form; anything else keeps the spelling as the candidacy key. Both
 			// uses of b below happen in this call, off this env, with no binding
 			// created in between, so b is a valid identity for the sealed compare.
@@ -252,11 +256,6 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 // answer 4 where the peers raise. They turn on referenceReachesBinderDirectly's
 // hygiene guard below, which exists to stop a user's (define set! …) capturing a
 // template's set!. Relaxing it is its own arc.
-//
-// GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
-// tie. That is deliberately not caught: it reaches the compile path's recover
-// boundary and surfaces as a CompilationError chaining the sentinel, which is
-// the answer an ambiguous identifier is supposed to get.
 func headDenotesSpecialForm(
 	env *environment.EnvironmentFrame,
 	symVal *values.Symbol,
@@ -295,6 +294,11 @@ func headDenotesSpecialForm(
 // is no environment to resolve in. nil is also the answer for an unbound head;
 // both mean "the spelling decides", which is what headDenotesSpecialForm's nil
 // arm and validateForm's candidacy key already give.
+//
+// GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
+// tie. That is deliberately not caught here: it reaches the compile path's
+// recover boundary and surfaces as a CompilationError chaining the sentinel,
+// which is the answer an ambiguous identifier is supposed to get.
 func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, sym *syntax.SyntaxSymbol) *environment.Binding {
 	if env == nil {
 		return nil
