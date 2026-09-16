@@ -523,14 +523,15 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 // never be pointer-equal at the use site. An imported binding of the name is
 // therefore accepted — deliberately over-accepting across libraries, since the
 // rider cannot tell which library the import came from — but WHAT ELSE is
-// required to accept it depends on what defB denotes, exactly as the third
-// paragraph below states: same spelling, when defB denotes no form and
-// DenotedForm cannot discriminate at all; the SAME denotation, spelling-
-// independent, when defB does. Neither condition is universal on its own, and
-// same spelling is never sufficient when defB denotes a form — see the boundary
-// paragraph below for the accepted cost of the first case. The under-accepting
-// alternative breaks the legitimate re-export, and this predicate's false
-// positive is a forgone discrimination, not a capture.
+// required to accept it depends on what defB denotes, exactly as the
+// narrowing paragraph below states: same spelling, when defB denotes no
+// form and DenotedForm cannot discriminate at all; the SAME denotation,
+// spelling-independent, when defB does. Neither condition is universal on
+// its own, and same spelling is never sufficient when defB denotes a
+// form — see the boundary paragraph below for the accepted cost of the
+// first case. The under-accepting alternative breaks the legitimate
+// re-export, and this predicate's false positive is a forgone
+// discrimination, not a capture.
 //
 // The over-acceptance is a SURVIVING residual of R7RS §4.3.2, not a closed case,
 // and it is not hypothetical: with a library exporting only a macro over its own
