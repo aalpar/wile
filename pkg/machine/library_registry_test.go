@@ -103,7 +103,7 @@ func TestCompiledLibraryGetInternalNameNotExported(t *testing.T) {
 	name := compilation.NewLibraryName("test", "lib")
 	lib := compilation.NewCompiledLibrary(name, env)
 
-	c.Assert(lib.GetInternalName("nonexistent"), qt.Equals, "")
+	c.Assert(lib.GetInternalName(compilation.ExportKey{Name: "nonexistent"}), qt.Equals, "")
 }
 
 func TestFilePathToLibraryName(t *testing.T) {

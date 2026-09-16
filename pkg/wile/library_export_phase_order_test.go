@@ -26,22 +26,20 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// findLibraryBinding (machine/compilation/library_bindings.go) walks
-// lib.Env.PresentPhases() and returns the FIRST hit. PresentPhases sorts ascending
-// and trims below PhaseRuntime (environment_frame.go), measured as
-// [runtime expand phase(2)], so PHASE 0 WINS for any name bound at both phases.
+// findLibraryBinding (machine/compilation/library_bindings.go) answers a plain
+// export from phase 0, or from phase 1 for a keyword, since Wile stores a keyword
+// one phase above the code that uses it. PHASE 0 WINS for any name bound at both.
 //
-// For a name bound only at phase 1 that is harmless and the export works. For a
-// name bound at both — syntax-rules holds a phase-0 SyntaxCompiler AND a phase-1
-// PrimitiveExpander — the export takes the phase-0 binding, which is not the one
-// the importer needs, and the imported name is unusable. Validation does not catch
-// it: validateLibraryExports asks only whether SOME binding is reachable.
+// For a keyword bound only at phase 1 that is harmless and the export works. For
+// a name bound at both — syntax-rules holds a phase-0 SyntaxCompiler AND a phase-1
+// PrimitiveExpander — the export takes the phase-0 binding, which is not the one a
+// transformer right-hand side needs, and the imported name is unusable there.
+// Validation does not catch it: the phase-0 binding is a legitimate plain export.
 //
 // These are ANSWER pins of current behavior, recorded because the failure is
-// silent. See TODO.md, "findLibraryBinding exports the wrong phase". Whether
-// that row should ever work is a phase-isolation decision (a plain export
-// binds at phase 0 only); see TODO.md's option 2 entry. The let-syntax row
-// must keep passing either way.
+// silent. A plain export binds at phase 0 only, as Racket's does; the phase-1 row
+// is exported by (for-syntax ...), and (scheme base) does not declare one. The
+// let-syntax row must keep passing either way.
 
 func exportProbeEngine(t *testing.T) *wile.Engine {
 	t.Helper()
@@ -69,9 +67,10 @@ func exportProbeEngine(t *testing.T) *wile.Engine {
 	return eng
 }
 
-// TestPresentPhasesIsAscendingFromRuntime pins the ordering the export walk
-// inherits. If this ever reverses, findLibraryBinding silently changes which
-// binding a two-phase name exports.
+// TestPresentPhasesIsAscendingFromRuntime pins the ordering the export lookup
+// inherits: findLibraryBinding binary-searches PresentPhases to avoid creating a
+// phase frame, and the export diagnostic reports the lowest phase a name is bound
+// at. If this ever reverses, the search misses phases that are present.
 func TestPresentPhasesIsAscendingFromRuntime(t *testing.T) {
 	eng, err := wile.NewEngine(context.Background())
 	qt.Assert(t, err, qt.IsNil)

@@ -1649,6 +1649,26 @@ equals a plain import. A shift outside the `int8` phase range is an error
 (`for-meta: phase 200 out of range [-128, 127]`). Nothing in Wile evaluates at
 phase -1, so `for-template` bindings are installed but never consulted.
 
+An export names a binding at one phase. A plain export is phase 0: a `define`,
+an import, or a `define-syntax` keyword. `for-syntax` exports its specs one phase
+up, and nests, as Racket's `provide` does:
+
+```scheme
+(define-library (helpers)
+  (import (scheme base))
+  (export (for-syntax twice))                ; phase 1
+  (begin (begin-for-syntax (define (twice x) (* 2 x)))))
+
+(import (helpers))
+(begin-for-syntax (twice 21))                ; phase 1: bound here, unbound at phase 0
+```
+
+A plain export of a name bound only at another phase is an error that names the
+phase it is bound at (`twice (bound at phase 1, not phase 0)`). An import shifts a
+`for-syntax` export along with everything else: `(import (for-syntax (helpers)))`
+binds `twice` at phase 2. `only`, `except`, `prefix` and `rename` apply to a name
+at every phase it is exported.
+
 ### Wile Scheme Libraries
 
 | Library | Contents |

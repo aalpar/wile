@@ -62,7 +62,7 @@ func TestCompiledLibrary_NewCompiledLibrary(t *testing.T) {
 	name := NewLibraryName("test", "lib")
 	lib := &CompiledLibrary{
 		Name:       name,
-		Exports:    make(map[string]string),
+		Exports:    make(map[ExportKey]string),
 		SourceFile: "test/lib.sld",
 	}
 

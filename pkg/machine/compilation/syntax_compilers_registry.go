@@ -73,10 +73,10 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 //
 // These bindings serve two purposes:
 //
-//  1. Library export/import: findLibraryBinding in library_bindings.go searches
-//     the levels the library's own registry has instantiated (PresentPhases) to
-//     locate syntax compilers when exporting or importing forms like syntax-case,
-//     define-syntax, etc. A NewChildRuntime library env is an island — it owns its
+//  1. Library export/import: findLibraryBinding in library_bindings.go resolves
+//     an export at its declared phase, among the levels the library's own
+//     registry has instantiated (PresentPhases), to locate syntax compilers when
+//     exporting or importing forms like syntax-case, define-syntax, etc. A NewChildRuntime library env is an island — it owns its
 //     own store, so the engine root's sealed base is not reachable from it at any
 //     level — and it registers its own compilers through its own sealed axis.
 //  2. Scope-aware lookup via LookupPhaseBinding[*SyntaxCompiler] for hygiene

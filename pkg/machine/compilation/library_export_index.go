@@ -171,38 +171,51 @@ func parseSummaryDeclaration(ctx context.Context, summary *LibrarySummary, decl 
 // extracting each export name.
 func parseSummaryExports(ctx context.Context, summary *LibrarySummary, args syntax.SyntaxValue) error {
 	return syntax.SyntaxWalk(ctx, args, func(v syntax.SyntaxValue) error {
-		parseSummaryExportSpec(summary, v)
-		return nil
+		return parseSummaryExportSpec(ctx, summary, v)
 	})
 }
 
-// parseSummaryExportSpec extracts a single export name from an export spec.
+// parseSummaryExportSpec extracts the export names from an export spec.
 // For simple symbols, the symbol key is used. For (rename internal external),
-// the external name (3rd element) is extracted. Malformed specs are skipped.
-func parseSummaryExportSpec(summary *LibrarySummary, spec syntax.SyntaxValue) {
+// the external name (3rd element) is extracted. (for-syntax spec ...) yields the
+// names of its specs; the index lists names, not phases. Malformed specs are
+// skipped.
+func parseSummaryExportSpec(ctx context.Context, summary *LibrarySummary, spec syntax.SyntaxValue) error {
 	switch s := spec.(type) {
 	case *syntax.SyntaxComment, *syntax.SyntaxDatumComment:
-		return
+		return nil
 
 	case *syntax.SyntaxSymbol:
 		summary.Exports = append(summary.Exports, s.Key())
 
 	case *syntax.SyntaxPair:
-		// Could be (rename internal external).
+		// Could be (rename internal external) or (for-syntax spec ...).
 		carSym, ok := s.SyntaxCar().(*syntax.SyntaxSymbol)
-		if !ok || carSym.Key() != "rename" {
-			return
+		if !ok {
+			return nil
 		}
-		// (rename internal external) — exactly three elements counting the
-		// keyword. Skip the spec on any structural mismatch (best-effort index).
-		parts, err := syntax.FormParts(s, "rename", 3, 3)
-		if err != nil {
-			return
+		switch carSym.Key() {
+		case "for-syntax":
+			return parseSummaryExports(ctx, summary, s.SyntaxCdr())
+		case "rename":
+			parseSummaryRenameExport(summary, s)
 		}
-		externalSym, ok := parts[2].(*syntax.SyntaxSymbol)
-		if ok {
-			summary.Exports = append(summary.Exports, externalSym.Key())
-		}
+	}
+	return nil
+}
+
+// parseSummaryRenameExport extracts the external name (3rd element) of a
+// (rename internal external) export spec.
+func parseSummaryRenameExport(summary *LibrarySummary, spec *syntax.SyntaxPair) {
+	// (rename internal external) — exactly three elements counting the
+	// keyword. Skip the spec on any structural mismatch (best-effort index).
+	parts, err := syntax.FormParts(spec, "rename", 3, 3)
+	if err != nil {
+		return
+	}
+	externalSym, ok := parts[2].(*syntax.SyntaxSymbol)
+	if ok {
+		summary.Exports = append(summary.Exports, externalSym.Key())
 	}
 }
 

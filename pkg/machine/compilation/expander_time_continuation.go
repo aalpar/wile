@@ -468,9 +468,9 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 	// predicate below reads BindingType() alone, and installImportedBinding
 	// passes libBinding.BindingType() straight through as its create argument
 	// (library_bindings.go:793). An identical pointer leaves it evaluating the
-	// same. What removes the gates is fixing which PHASE findLibraryBinding
-	// selects an export from; see LookupPhaseBinding's doc for the walk and
-	// TODO.md's follow-on for the three designs that died assuming otherwise.
+	// same. The residual is which phase's OBJECT a shifted import carries; see
+	// LookupPhaseBinding's doc for the export and TODO.md's follow-on for the
+	// three designs that died assuming otherwise.
 	//
 	// The two are independently observable, which is why they are two gates and
 	// not one. Reverting this one alone leaves every value assertion green and

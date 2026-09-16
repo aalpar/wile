@@ -201,12 +201,13 @@ and a shift that leaves `int8` is rejected (`for-meta: phase 200 out of range
 [-128, 127]`).
 
 `GetGlobalIndexAcrossPhases` (`pkg/environment/environment_frame.go`, the R7RS §4.3
-macro-generating-macro carve-out for free template identifiers) and
-`findLibraryBinding` (`pkg/machine/compilation/library_bindings.go`, which decides
-what a library can export) both derive their probe set from
-`EnvironmentFrame.PresentPhases()`, ascending, `PhaseTemplate` excluded. Neither
-is hard-wired to `{0, 1, 2}` — a name a library binds at phase 3 or above is
-exportable.
+macro-generating-macro carve-out for free template identifiers) derives its probe
+set from `EnvironmentFrame.PresentPhases()`, ascending, `PhaseTemplate` excluded,
+and is not hard-wired to `{0, 1, 2}`. `findLibraryBinding`
+(`pkg/machine/compilation/library_bindings.go`, which decides what a library can
+export) probes only the export's declared phase, plus the phase above it for a
+keyword, and only where `PresentPhases()` lists them: a name a library binds at
+phase 3 is exportable as `(for-syntax (for-syntax (for-syntax name)))`.
 
 `PresentPhases` is the UNION of the phases the owner's registry has instantiated
 a VIEW for and the phases its STORE holds slots at. The two come apart:

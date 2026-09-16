@@ -22,7 +22,9 @@ package compilation
 
 import (
 	"context"
+	"maps"
 	"math"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/machine"
 
@@ -150,8 +152,8 @@ func markBindingImported(target, source *environment.Binding, exportName, intern
 // library compile, single-threaded; the nil-guard keeps it idempotent and
 // preserves a re-export's root.
 func stampLibraryExportOrigins(lib *CompiledLibrary) {
-	for _, internalName := range lib.Exports {
-		binding, _, found := findLibraryBinding(lib, internalName)
+	for key, internalName := range lib.Exports {
+		binding, _, found := findLibraryBinding(lib, internalName, key.Phase)
 		if !found || binding == nil || binding.Origin() != nil {
 			continue
 		}
@@ -261,13 +263,16 @@ func (p *ImportSet) AddRename(renames map[string]string) {
 }
 
 // ApplyToExports applies the import modifiers inside-out and returns the final
-// bindings as a map of local-name -> external-name (the name in the library).
-func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, error) {
-	result := make(map[string]string)
+// bindings as a map of (export phase, local name) -> external name (the name in
+// the library). The modifiers act on names at every phase at once, as Racket's
+// only-in, except-in, prefix-in and rename-in do: (only LIB x) keeps x at each
+// phase LIB exports it.
+func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[ExportKey]string, error) {
+	result := make(map[ExportKey]string, len(lib.Exports))
 
 	// Start with all exports.
-	for externalName := range lib.Exports {
-		result[externalName] = externalName
+	for key := range lib.Exports {
+		result[key] = key.Name
 	}
 
 	// Fold modifiers in written nesting order (innermost first); each step sees the
@@ -284,29 +289,30 @@ func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, err
 	return result, nil
 }
 
-// apply transforms a local-name -> external-name map by one import modifier.
-func (p *importModifier) apply(result map[string]string, lib *CompiledLibrary) (map[string]string, error) {
+// apply transforms a (phase, local name) -> external name map by one import
+// modifier. A name the modifier lists must be present at some phase.
+func (p *importModifier) apply(result map[ExportKey]string, lib *CompiledLibrary) (map[ExportKey]string, error) {
 	switch p.kind {
 	case importModOnly:
-		filtered := make(map[string]string)
-		for name := range p.ids {
-			externalName, ok := result[name]
-			if !ok {
-				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
-					"applyToExports: identifier %q not exported by %s", name, lib.Name.SchemeString())
+		filtered := make(map[ExportKey]string)
+		for key, externalName := range result {
+			if p.ids.ContainsOne(key.Name) {
+				filtered[key] = externalName
 			}
-			filtered[name] = externalName
+		}
+		err := p.requireListed(filtered, lib)
+		if err != nil {
+			return nil, err
 		}
 		return filtered, nil
 	case importModExcept:
-		for name := range p.ids {
-			_, ok := result[name]
-			if !ok {
-				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
-					"applyToExports: identifier %q not exported by %s", name, lib.Name.SchemeString())
-			}
-			delete(result, name)
+		err := p.requireListed(result, lib)
+		if err != nil {
+			return nil, err
 		}
+		maps.DeleteFunc(result, func(key ExportKey, _ string) bool {
+			return p.ids.ContainsOne(key.Name)
+		})
 		return result, nil
 	case importModRename:
 		// Validate that every rename SOURCE name is in the current name set, mirroring
@@ -314,35 +320,36 @@ func (p *importModifier) apply(result map[string]string, lib *CompiledLibrary) (
 		// identifier to a new name; a source name that is absent denotes nothing, so
 		// silently no-op'ing it would mask a user error. Reject instead.
 		for oldName := range p.renames {
-			_, ok := result[oldName]
-			if !ok {
+			if !hasExportName(result, oldName) {
 				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
 					"applyToExports: rename source %q not exported by %s", oldName, lib.Name.SchemeString())
 			}
 		}
-		renamed := make(map[string]string)
-		for localName, externalName := range result {
-			newName, ok := p.renames[localName]
+		renamed := make(map[ExportKey]string)
+		for key, externalName := range result {
+			newName, ok := p.renames[key.Name]
 			if !ok {
-				newName = localName
+				newName = key.Name
 			}
-			// Two source names collapsing to one target (e.g. (rename LIB (car kar)
-			// (cdr kar)), or a rename target shadowing a pass-through name) would bind
-			// one name to two different exports. R7RS §5.6 forbids importing a name with
-			// two different bindings; reject rather than silently drop one by map order.
-			existing, dup := renamed[newName]
+			newKey := ExportKey{Phase: key.Phase, Name: newName}
+			// Two source names collapsing to one target at one phase (e.g. (rename LIB
+			// (car kar) (cdr kar)), or a rename target shadowing a pass-through name)
+			// would bind one name to two different exports. R7RS §5.6 forbids importing a
+			// name with two different bindings; reject rather than silently drop one by
+			// map order.
+			existing, dup := renamed[newKey]
 			if dup && existing != externalName {
 				return nil, werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
 					"applyToExports: rename binds %q to two different exports (%q and %q) in %s",
 					newName, existing, externalName, lib.Name.SchemeString())
 			}
-			renamed[newName] = externalName
+			renamed[newKey] = externalName
 		}
 		return renamed, nil
 	case importModPrefix:
-		prefixed := make(map[string]string)
-		for localName, externalName := range result {
-			prefixed[p.prefix+localName] = externalName
+		prefixed := make(map[ExportKey]string)
+		for key, externalName := range result {
+			prefixed[ExportKey{Phase: key.Phase, Name: p.prefix + key.Name}] = externalName
 		}
 		return prefixed, nil
 	}
@@ -350,11 +357,32 @@ func (p *importModifier) apply(result map[string]string, lib *CompiledLibrary) (
 		"applyToExports: unknown import modifier kind %d", int(p.kind))
 }
 
+// requireListed rejects a name in p.ids that names nothing in result at any phase.
+func (p *importModifier) requireListed(result map[ExportKey]string, lib *CompiledLibrary) error {
+	for name := range p.ids {
+		if !hasExportName(result, name) {
+			return werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
+				"applyToExports: identifier %q not exported by %s", name, lib.Name.SchemeString())
+		}
+	}
+	return nil
+}
+
+// hasExportName reports whether result binds name at any phase.
+func hasExportName(result map[ExportKey]string, name string) bool {
+	for key := range result {
+		if key.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // CopyLibraryBindingsToEnv copies exported bindings from a library to an environment.
-// bindings is the map from localName -> externalName produced by ApplyToExports.
+// bindings is the map from (phase, localName) -> externalName produced by ApplyToExports.
 // Both runtime and syntax bindings are copied.
 // This is a convenience wrapper that imports to phase 0 (runtime).
-func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame) error {
+func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[ExportKey]string, targetEnv *environment.EnvironmentFrame) error {
 	return CopyLibraryBindingsToEnvAtPhase(lib, bindings, targetEnv, environment.PhaseRuntime)
 }
 
@@ -365,7 +393,7 @@ func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, 
 type ResolvedImportSet struct {
 	ImportSet *ImportSet
 	Library   *CompiledLibrary
-	Bindings  map[string]string // localName -> externalName
+	Bindings  map[ExportKey]string // (export phase, localName) -> externalName
 }
 
 // resolveImportSets parses an import set datum, loads each library it denotes,
@@ -450,31 +478,42 @@ func installResolvedImportSet(env *environment.EnvironmentFrame, res *ResolvedIm
 	return nil
 }
 
-// ExportedBinding resolves one of the library's exportable bindings by its
-// internal name, using the same hygienic rule the import path uses. Callers
-// outside this package (the doc-registration observer) must go through this
-// rather than reaching into lib.Env with a bare-name lookup, or they will
-// disagree with what an import actually installs.
+// ExportedBinding resolves the binding a phase-0 export of internalName denotes,
+// using the same hygienic rule the import path uses. Callers outside this
+// package (the doc-registration observer) must go through this rather than
+// reaching into lib.Env with a bare-name lookup, or they will disagree with what
+// an import actually installs.
 func (p *CompiledLibrary) ExportedBinding(internalName string) (*environment.Binding, bool) {
-	binding, _, found := findLibraryBinding(p, internalName)
+	binding, _, found := findLibraryBinding(p, internalName, environment.PhaseRuntime)
 	return binding, found
 }
 
-// findLibraryBinding searches every phase the library's OWN registry has
-// actually instantiated — not just runtime, expand, and compile — for a
-// binding with the given internal name. The boolean reports whether a binding
-// was found; when false, the binding pointer is nil and the phase value is
-// meaningless. Callers must check the boolean (or the binding pointer) before
-// relying on the returned phase — the phase return cannot carry a sentinel
-// "not found" value because every non-negative Phase is a valid result.
+// findLibraryBinding resolves the binding an export of internalName at phase
+// denotes, and the phase that binding is stored at. The boolean reports whether
+// one was found; when false, the binding pointer is nil and the phase value is
+// meaningless.
 //
-// The phase list comes from lib.Env.PresentPhases(), ascending, so a name a
-// library binds via nested begin-for-syntax at phase 3 or above is reachable
-// too; the old {runtime, expand, compile} literal truncated the tower (design
-// Phase D, closing memory/2026-08-04-library-phase-isolation-impl.local.md's Q2
-// residual). Ascending order is what makes the first hit the LOWEST phase,
-// preserving runtime-first precedence when a name is bound at more than one —
-// pinned by TestFindLibraryBindingPrefersRuntimeOverExpand.
+// Two frames can hold it, because Wile stores a define-syntax keyword one phase
+// above the code that uses it:
+//
+//   - at phase itself, any binding but a define-syntax keyword: a variable, or a
+//     primitive keyword such as if (FormKeyword) or syntax-rules (SyntaxCompiler);
+//   - at phase+1, a keyword: a define-syntax transformer, or a primitive
+//     expander, which is registered at absolute phase 1 for phase-0 use
+//     (let-syntax).
+//
+// So a define-syntax keyword stored AT phase, which serves phase-1 code, and a
+// variable stored at phase+1 are refused. That is Racket's rule: a plain
+// provide sees phase 0 only, (for-syntax x) phase 1 only, and a
+// begin-for-syntax define is not exportable without for-syntax. The second
+// bullet cannot tell a primitive keyword stored at phase+1 for phase+1 code
+// (if at phase 1) from one stored there for phase code (let-syntax). Measured
+// on the default startup set, it does not have to: the only primitive keywords
+// present at a phase but not the phase below are the phase-1 primitive
+// expanders, which are the second kind.
+//
+// Only phases the library's own registry has instantiated are probed, so an
+// export lookup never creates a phase frame.
 //
 // Resolution is HYGIENIC, keyed on the library's own scope (CompiledLibrary.Scope),
 // not by bare name. Three cases, all decided by maximal subset resolution rather
@@ -494,7 +533,7 @@ func (p *CompiledLibrary) ExportedBinding(internalName string) (*environment.Bin
 // A name arriving through a macro PATTERN VARIABLE (define-record-type's
 // accessors, any (mk name v) form) carries {libScope} like a hand-written
 // binder, so those stay exportable.
-func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment.Binding, environment.Phase, bool) {
+func findLibraryBinding(lib *CompiledLibrary, internalName string, phase environment.Phase) (*environment.Binding, environment.Phase, bool) {
 	// exportScopes stays a concrete slice: nil and empty are the same query under
 	// ScopeSet (values.ScopesOf), so this is the ambient (empty) set, never the
 	// wildcard.
@@ -502,19 +541,33 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 	if lib.Scope != nil {
 		exportScopes = append(exportScopes, lib.Scope)
 	}
-
+	scopes := syntax.ScopesOf(exportScopes)
 	libSym := values.NewSymbol(internalName)
-	for _, phase := range lib.Env.PresentPhases() {
-		env := lib.Env.AtPhase(phase)
-		if env == nil {
-			continue
-		}
-		binding := env.GetBinding(libSym, syntax.ScopesOf(exportScopes))
-		if binding != nil {
-			return binding, phase, true
-		}
+	present := lib.Env.PresentPhases()
+
+	binding := libraryBindingAt(lib, present, libSym, scopes, phase)
+	if binding != nil && binding.BindingType() != environment.BindingTypeSyntax {
+		return binding, phase, true
 	}
-	return nil, environment.PhaseRuntime, false
+	keywordPhase, err := composePhaseShift("export", phase, environment.PhaseExpand)
+	if err != nil {
+		return nil, phase, false
+	}
+	binding = libraryBindingAt(lib, present, libSym, scopes, keywordPhase)
+	if binding != nil && binding.BindingType() != environment.BindingTypeVariable {
+		return binding, keywordPhase, true
+	}
+	return nil, phase, false
+}
+
+// libraryBindingAt resolves sym in lib's phase frame, or returns nil when present
+// (lib.Env.PresentPhases()) does not list phase: AtPhase would create the frame.
+func libraryBindingAt(lib *CompiledLibrary, present []environment.Phase, sym *values.Symbol, scopes syntax.ScopeSet, phase environment.Phase) *environment.Binding {
+	_, ok := slices.BinarySearch(present, phase)
+	if !ok {
+		return nil
+	}
+	return lib.Env.AtPhase(phase).GetBinding(sym, scopes)
 }
 
 // importConflicts reports whether installing incoming under a local name whose
@@ -760,7 +813,10 @@ func installImportedBinding(
 }
 
 // CopyLibraryBindingsToEnvAtPhase copies exported bindings from a library to a specific phase.
-// bindings is the map from localName -> externalName produced by ApplyToExports.
+// bindings is the map from (phase, localName) -> externalName produced by ApplyToExports.
+//
+// Every phase below is shifted by the export's own phase: a (for-syntax x) export
+// lands one phase above where a plain export of x would.
 //
 // Phase semantics:
 //   - targetPhase == 0: Runtime import (default). Runtime bindings go to phase 0.
@@ -772,43 +828,48 @@ func installImportedBinding(
 //     Syntax bindings follow the same skipBase rule: targetPhase+1 only.
 //   - targetPhase < 0: For-template import. Bindings shifted to negative phase
 //     (used for generating code that will run at a lower phase).
-func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
-	for localName, externalName := range bindings {
-		internalName := lib.GetInternalName(externalName)
+func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKey]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
+	for localKey, externalName := range bindings {
+		localName := localKey.Name
+		exportPhase := localKey.Phase
+		internalName := lib.GetInternalName(ExportKey{Phase: exportPhase, Name: externalName})
 		if internalName == "" {
 			internalName = externalName
 		}
 
-		libBinding, sourcePhase, found := findLibraryBinding(lib, internalName)
+		libBinding, sourcePhase, found := findLibraryBinding(lib, internalName, exportPhase)
 		if !found {
 			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "library %s exports %q but binding not found",
 				lib.Name.SchemeString(), internalName)
 		}
+		basePhase, err := composePhaseShift("import", targetPhase, exportPhase)
+		if err != nil {
+			return err
+		}
 
 		// A syntax (macro) binding is an expand-phase concept: skip the base
-		// (runtime, phase 0 at a top-level import) install so findLibraryBinding's
-		// runtime-first probe cannot return it over the importer's own
-		// define-syntax, which lands in the expand phase — the same shadowing
-		// copyLibraryBindingsDirect avoids, so an imported macro the importer then
-		// re-defines does not win. The source-phase propagation below is then its
-		// sole install (sourcePhase == PhaseExpand for a macro). Skip only when
-		// that propagation will run (sourcePhase > 0); a syntax binding with no
-		// source phase still needs a home, so it falls through to the base install.
-		skipBase := libBinding.BindingType() == environment.BindingTypeSyntax && sourcePhase > 0
+		// (runtime, phase 0 at a top-level import) install, where it would be a
+		// keyword for the phase below, and would not be shadowed by the importer's
+		// own define-syntax, which lands in the expand phase. The source-phase
+		// propagation below is then its sole install. findLibraryBinding returns a
+		// syntax binding only from one phase above the export phase, so
+		// sourcePhase > exportPhase always holds for one; the check keeps the skip
+		// tied to the propagation that replaces it.
+		skipBase := libBinding.BindingType() == environment.BindingTypeSyntax && sourcePhase > exportPhase
 		if !skipBase {
 			// Create binding in the target at the base phase. This is the ONE site
-			// that takes the shadowable tier: at targetPhase 0 it resolves to
+			// that takes the shadowable tier: at base phase 0 it resolves to
 			// (phase 0, sealed) stamped Imported, which is tierExactImported — NOT
 			// an empty coordinate, the startup set is at the same (phase, sealed)
 			// pair and is separated by the stamp alone. A user top-level define
 			// gets its own tierExactMutable slot above both and shadows rather than
-			// assigning through the import. At any other targetPhase
+			// assigning through the import. At any other base phase
 			// installImportedBinding falls back to the view — see the hazard in its
 			// doc, which is where the "empty coordinate" argument was falsified.
-			phaseEnv := targetEnv.AtPhase(targetPhase)
+			phaseEnv := targetEnv.AtPhase(basePhase)
 			localSym := values.NewSymbol(localName)
 			err := installImportedBinding(phaseEnv, localSym, libBinding.BindingType(),
-				libBinding, externalName, internalName, lib.Name, " at phase "+targetPhase.String(),
+				libBinding, externalName, internalName, lib.Name, " at phase "+basePhase.String(),
 				placementShadowable)
 			if err != nil {
 				return err
@@ -820,7 +881,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 		// be in the expand phase for macro expansion; an auxiliary keyword is
 		// ambient in its library env and is found at phase 0, so it never takes
 		// this branch.
-		if sourcePhase > 0 {
+		if sourcePhase > exportPhase {
 			// Phase is int8; a high for-meta target phase plus the source-phase
 			// shift can overflow (e.g. 127+1 wraps to -128) and silently route the
 			// binding into the wrong phase registry. Guard the sum at int width
@@ -927,25 +988,31 @@ func ImportSpecInto(ctx context.Context, specVal values.Value, callerEnv, target
 // and TestBindingModelMatrix/imported_rename_shadows_set!_special_form pins that
 // a library env is deliberately a flat island with no sealed tier of its own.
 // Collapsing the two paths takes that decision as a silent side effect.
-func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
-	// A syntax binding is an expand-phase concept RELATIVE to the phase the
-	// import lands on, so it is targetPhase+1, not a hardcoded 1. Composed
-	// through the same int8 guard the propagation install uses, so a for-meta
-	// near the ceiling is refused rather than wrapping negative.
-	syntaxPhase, err := composePhaseShift("import", targetPhase, environment.PhaseExpand)
-	if err != nil {
-		return err
-	}
-	for localName, externalName := range bindings {
-		internalName := lib.GetInternalName(externalName)
+func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[ExportKey]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
+	for localKey, externalName := range bindings {
+		localName := localKey.Name
+		internalName := lib.GetInternalName(ExportKey{Phase: localKey.Phase, Name: externalName})
 		if internalName == "" {
 			internalName = externalName
 		}
 
-		importedBinding, _, found := findLibraryBinding(lib, internalName)
+		importedBinding, _, found := findLibraryBinding(lib, internalName, localKey.Phase)
 		if !found {
 			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "import: %s exports %q but binding not found",
 				lib.Name.SchemeString(), internalName)
+		}
+		// The import lands at targetPhase shifted by the export's own phase, and a
+		// syntax binding is an expand-phase concept RELATIVE to that, so one above
+		// it, not a hardcoded 1. Both composed through the int8 guard the
+		// propagation install uses, so a for-meta near the ceiling is refused
+		// rather than wrapping negative.
+		basePhase, err := composePhaseShift("import", targetPhase, localKey.Phase)
+		if err != nil {
+			return err
+		}
+		syntaxPhase, err := composePhaseShift("import", basePhase, environment.PhaseExpand)
+		if err != nil {
+			return err
 		}
 
 		// A syntax (macro) binding is an expand-phase concept: install it into the
@@ -964,8 +1031,8 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 		// libraries with different bindings for one name is rejected per R7RS §5.6,
 		// not just a top-level program import.
 		localSym := values.NewSymbol(localName)
-		installEnv := targetEnv.AtPhase(targetPhase)
-		phaseNote := " at phase " + targetPhase.String()
+		installEnv := targetEnv.AtPhase(basePhase)
+		phaseNote := " at phase " + basePhase.String()
 		if importedBinding.BindingType() == environment.BindingTypeSyntax {
 			installEnv = targetEnv.AtPhase(syntaxPhase)
 			phaseNote = " in expand phase " + syntaxPhase.String()

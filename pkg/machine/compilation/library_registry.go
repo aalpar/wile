@@ -25,6 +25,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"iter"
 	"maps"
 	"slices"
 	"strconv"
@@ -96,7 +97,7 @@ type CompiledLibrary struct {
 	Name        LibraryName                   // Library name
 	Description string                        // from (description ...) clause; "" if absent
 	Env         *environment.EnvironmentFrame // Library's private environment
-	Exports     map[string]string             // external-name -> internal-name
+	Exports     map[ExportKey]string          // (phase, external name) -> internal name
 	SourceFile  string                        // Path to .sld file (for error messages)
 	Template    *machine.NativeTemplate       // Compiled bytecode (for execution)
 
@@ -115,29 +116,54 @@ func NewCompiledLibrary(name LibraryName, env *environment.EnvironmentFrame) *Co
 	return &CompiledLibrary{
 		Name:    name,
 		Env:     env,
-		Exports: make(map[string]string),
+		Exports: make(map[ExportKey]string),
 	}
 }
 
-// AddExport adds an export to the library.
+// ExportKey names one export: an external name at the phase it is exported
+// for. A plain (export x) is phase 0; (export (for-syntax x)) is phase 1. One
+// name can be exported at several phases, each denoting its own binding, as
+// Racket's provide allows.
+type ExportKey struct {
+	Phase environment.Phase
+	Name  string
+}
+
+// AddExport adds an export to the library at phase.
 // If internalName is empty, it defaults to externalName (no rename).
-func (p *CompiledLibrary) AddExport(externalName, internalName string) {
+func (p *CompiledLibrary) AddExport(phase environment.Phase, externalName, internalName string) {
 	if internalName == "" {
 		internalName = externalName
 	}
-	p.Exports[externalName] = internalName
+	p.Exports[ExportKey{Phase: phase, Name: externalName}] = internalName
 }
 
-// IsExported returns true if the given external name is exported.
+// IsExported returns true if the given external name is exported at phase 0.
 func (p *CompiledLibrary) IsExported(externalName string) bool {
-	_, ok := p.Exports[externalName]
+	_, ok := p.Exports[ExportKey{Name: externalName}]
 	return ok
 }
 
-// GetInternalName returns the internal name for an exported external name.
+// GetInternalName returns the internal name for an exported key.
 // Returns empty string if not exported.
-func (p *CompiledLibrary) GetInternalName(externalName string) string {
-	return p.Exports[externalName]
+func (p *CompiledLibrary) GetInternalName(key ExportKey) string {
+	return p.Exports[key]
+}
+
+// ExportNames returns the exported external names, sorted, each once however
+// many phases export it.
+func (p *CompiledLibrary) ExportNames() []string {
+	return exportKeyNames(maps.Keys(p.Exports))
+}
+
+// exportKeyNames projects export keys to their names, sorted and deduplicated.
+func exportKeyNames(keys iter.Seq[ExportKey]) []string {
+	var q []string
+	for key := range keys {
+		q = append(q, key.Name)
+	}
+	slices.Sort(q)
+	return slices.Compact(q)
 }
 
 // ImportStage names which pipeline pass observed an import. A top-level
@@ -310,10 +336,10 @@ func fireCompileObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary
 }
 
 // fireImportObserver calls the import observer if one is set on the
-// registry stored in env. bindings maps local name -> external name
+// registry stored in env. bindings maps (phase, local name) -> external name
 // (as returned by ApplyToExports). importer is the importing library's
 // name, or zero value for top-level imports.
-func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary, bindings map[string]string, importer LibraryName, stage ImportStage) {
+func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary, bindings map[ExportKey]string, importer LibraryName, stage ImportStage) {
 	reg := registryOf(env)
 	if reg == nil {
 		return
@@ -323,8 +349,8 @@ func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary,
 		return
 	}
 
-	exports := slices.Sorted(maps.Keys(lib.Exports))
-	imported := slices.Sorted(maps.Keys(bindings))
+	exports := lib.ExportNames()
+	imported := exportKeyNames(maps.Keys(bindings))
 
 	obs(LibraryImportEvent{
 		Library:    lib.Name,
