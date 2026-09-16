@@ -1683,6 +1683,46 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   it would under-accept nothing — so the rejection does not transfer and must be re-measured on
   this consumer, not assumed either way.
 
+- [ ] **`quasisyntax`'s `#,` reaches the same permissive disagreement this branch fixed for
+  `quasiquote`, live on MASTER, by a different route** [Medium, M, filed 2026-09-15 during the
+  renamed-inner-positions whole-branch review]: `quasisyntax` is a bare passthrough
+  (`registerPassthrough("quasisyntax")`, `pkg/internal/validate/register.go:75`), so
+  `opaqueEntryDepth` enters its whole form at `quasiDepthCode` rather than at template depth, and
+  `quasiHeadDepth("quote", 0)` is a BARRIER there — the validate walk stops at the `(quote …)`
+  subform quasisyntax's own expansion wraps literal data in and marks nothing inside it. The
+  compiler disagrees: `quasisyntaxKW.quoting` is `"syntax"`, not `"quote"`
+  (`pkg/machine/compilation/quasi_expand.go:83-87`), and `expandQuasi` has no case for that
+  quoting kind, so it descends into the same `(quote …)` at depth 1 and fires the `#,` inside —
+  validate says barrier, the compiler says live, the exact shape the branch's C1 fix closed for
+  `quasiquote`, reached here by a route that fix never touched. Measured identically on master
+  `963cab4b`, on `079c62ab`, and at HEAD (`093679e7`) — this branch neither creates nor fixes it:
+  `(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quote (#,(begin (set! n 1) (set! f (lambda ()
+  99))))))) (list n (f)))` answers `(1 7)`; the canonical control (the same two `set!`s run
+  directly, no quasisyntax) answers `(1 99)`.
+
+- [ ] **The branch's headline fix does not reach a marker introduced by a macro template** [Low,
+  M, filed 2026-09-15 during the renamed-inner-positions whole-branch review]: a library that
+  imports `(rename (scheme base) (unquote uq))` and exports a `syntax-rules` macro whose template
+  is `` `((uq e)) `` gives `(0 7)` at HEAD and at base (`079c62ab`) for
+  `(let ((f (lambda () 7)) (n 0)) (mk (begin (set! n 1) (set! f (lambda () 99)))) (list n (f)))`
+  — the `set!` never runs and `f` keeps its original body, where a recognized marker would answer
+  `(1 99)`. The macro-introduced `uq` carries the macro's DEFINITION-site scopes and resolves to
+  nothing at the compiled use site, so neither `markerName` nor the compiler's `headFormName` sees
+  a marker there. Both walks agree, so this is a conformance gap, not the soundness hole the
+  branch fixed — Racket fires the renamed unquote through the same shape.
+
+- [ ] **`validateInclude` never reads the included file** [Medium, M, filed 2026-09-15 during the
+  renamed-inner-positions whole-branch review]: `validateInclude`
+  (`pkg/internal/validate/validate_macro.go:235`) calls `markOpaqueCode(env, pair, result)` on
+  `pair`, the `(include "f.scm")` form ITSELF — its own head symbol and string filename arguments
+  — never on the forms the named file actually contains, which this validation pass does not even
+  parse (its own comment says so: "The file's contents are not even readable here"). A `set!` of
+  a captured or let-bound binding written inside the included file is therefore invisible to the
+  opaque scan the same way a renamed marker was before this branch's fix, except here there is no
+  marker-recognition question at all — the file's contents are structurally unreachable from this
+  walk. Same hazard class as the fixed C1 bug (a hidden `set!` leaves a stale inline body or an
+  unboxed capture); unpinned — no repro constructed.
+
 - [ ] **`include` inside a procedure body skips letrec\* predeclaration** [Medium, S, filed
   2026-09-15 during the keyword-denotation-dispatch whole-branch review; pre-existing on master, not
   caused by this branch]: `(define (k) (include "x.scm") (inc-g))`, where the included file
