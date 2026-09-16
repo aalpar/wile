@@ -3,6 +3,10 @@
 ;Dorai Sitaram
 ;last modified 2018-06-09
 
+;Wile: the one change from upstream. The procedural transformers below
+;run at phase 1, which sees only what is imported for syntax.
+(import (for-syntax (scheme base) (scheme cxr)))
+
 ;logic variables and their manipulation
 
 (define schelog:*ref* "ref")

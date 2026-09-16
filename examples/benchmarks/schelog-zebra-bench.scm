@@ -4,8 +4,8 @@
 ;;; Usage: SCHEME_INCLUDE_PATH=. ./dist/wile -q -i \
 ;;;            --file examples/benchmarks/schelog-zebra-bench.scm < /dev/null
 ;;;
-;;; -i (mutable top level) is REQUIRED: schelog is unmodified upstream source
-;;; that set!s its own top-level globals and redefines %append, both of which
+;;; -i (mutable top level) is REQUIRED: schelog is upstream source (plus a
+;;; for-syntax import) that set!s its own top-level globals and redefines %append, both of which
 ;;; the immutable-top-level default rejects. `< /dev/null` feeds EOF so the
 ;;; REPL that -i leaves running exits 0 instead of waiting on stdin.
 
