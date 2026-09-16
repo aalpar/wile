@@ -91,8 +91,12 @@ var quasisyntaxKW = quasiKeywords{
 // quasiHead is the only thing in the quasi cluster that genuinely reads any —
 // it consults the sealed startup set — so everything still carrying a receiver
 // does so because it reaches quasiHead, directly or through quasiForm. The
-// needs-runtime predicate reaches nothing, which is why it is a pair of package
-// functions and can be exercised without a compiler at all.
+// needs-runtime predicate takes no receiver and reaches no compile-time state
+// of its own: an environment lookup arrives only when its kw argument was built
+// by resolvedBy, threaded through as the denote closure rather than read off a
+// receiver. Called with the raw package-level tables (denote == nil) it reaches
+// nothing at all, which is what lets the package tests exercise it without a
+// compiler.
 func buildQuasiSyntaxList(srcCtx *syntax.SourceContext, elems ...syntax.SyntaxValue) syntax.SyntaxValue {
 	var q syntax.SyntaxValue = syntax.SyntaxEmptyList
 	for i := range slices.Backward(elems) {
@@ -144,8 +148,11 @@ func (p *CompileTimeContinuation) quasiHead(name string, srcCtx *syntax.SourceCo
 // It compares SPELLINGS, and every caller here is right to: these walks run on
 // an unexpanded template datum before any scope-set resolution, and R7RS §4.2.6
 // defines quasiquote's recognition of unquote on the datum. This is not the
-// binding-identity rule's territory; validate/opaque_subtree.go documents the
-// same limitation for the same reason.
+// binding-identity rule's territory for getSymbolName's own remaining callers —
+// headName's unresolved fallback, and the spelling expandQuasi keeps for
+// rewrapQuasiForm's reconstruction — though marker RECOGNITION itself now goes
+// through headName's resolved binding a few lines below; validate/opaque_subtree.go
+// documents the same spelling limitation for the same reason.
 func getSymbolName(v syntax.SyntaxValue) (string, bool) {
 	s, ok := v.(*syntax.SyntaxSymbol)
 	if ok {
