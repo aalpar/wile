@@ -40,7 +40,7 @@ func TestLibraryRegistryMethodsAdditional(t *testing.T) {
 	lib := &CompiledLibrary{
 		Name:    NewLibraryName("test", "lib"),
 		Env:     env,
-		Exports: map[string]string{},
+		Exports: map[ExportKey]string{},
 	}
 
 	// Register it
@@ -102,15 +102,15 @@ func TestLibraryRequirementIsSatisfiedAdditional(t *testing.T) {
 func TestApplyToExports_Modifiers(t *testing.T) {
 	lib := &CompiledLibrary{
 		Name: NewLibraryName("test", "lib"),
-		Exports: map[string]string{
-			"alpha": "alpha",
-			"beta":  "beta",
-			"gamma": "gamma",
+		Exports: map[ExportKey]string{
+			{Name: "alpha"}: "alpha",
+			{Name: "beta"}:  "beta",
+			{Name: "gamma"}: "gamma",
 		},
 	}
 
-	sortedKeys := func(m map[string]string) []string {
-		return slices.Sorted(maps.Keys(m))
+	sortedKeys := func(m map[ExportKey]string) []string {
+		return exportKeyNames(maps.Keys(m))
 	}
 
 	// build constructs an import set on the test library by applying the modifier
@@ -313,16 +313,16 @@ func TestCompiledLibrary_Methods(t *testing.T) {
 			NewLibraryName("test", "lib"),
 			environment.NewNamespace().Runtime(),
 		)
-		lib.AddExport("foo", "internal-foo")
-		lib.AddExport("bar", "") // defaults to "bar"
+		lib.AddExport(environment.PhaseRuntime, "foo", "internal-foo")
+		lib.AddExport(environment.PhaseRuntime, "bar", "") // defaults to "bar"
 
 		qt.Assert(t, lib.IsExported("foo"), qt.IsTrue)
 		qt.Assert(t, lib.IsExported("bar"), qt.IsTrue)
 		qt.Assert(t, lib.IsExported("baz"), qt.IsFalse)
 
-		qt.Assert(t, lib.GetInternalName("foo"), qt.Equals, "internal-foo")
-		qt.Assert(t, lib.GetInternalName("bar"), qt.Equals, "bar")
-		qt.Assert(t, lib.GetInternalName("baz"), qt.Equals, "")
+		qt.Assert(t, lib.GetInternalName(ExportKey{Name: "foo"}), qt.Equals, "internal-foo")
+		qt.Assert(t, lib.GetInternalName(ExportKey{Name: "bar"}), qt.Equals, "bar")
+		qt.Assert(t, lib.GetInternalName(ExportKey{Name: "baz"}), qt.Equals, "")
 	})
 
 	t.Run("SetImportObserver and ImportObserver", func(t *testing.T) {
@@ -363,10 +363,10 @@ func TestCompiledLibrary_Methods(t *testing.T) {
 			NewLibraryName("test", "fire"),
 			environment.NewNamespace().Runtime(),
 		)
-		lib.AddExport("x", "x")
-		lib.AddExport("y", "y")
+		lib.AddExport(environment.PhaseRuntime, "x", "x")
+		lib.AddExport(environment.PhaseRuntime, "y", "y")
 
-		bindings := map[string]string{"x": "x"}
+		bindings := map[ExportKey]string{{Name: "x"}: "x"}
 		importer := NewLibraryName("my", "app")
 
 		fireImportObserver(env, lib, bindings, importer, ImportStageExpand)
@@ -388,7 +388,7 @@ func TestCompiledLibrary_Methods(t *testing.T) {
 			NewLibraryName("test", "noop"),
 			environment.NewNamespace().Runtime(),
 		)
-		fireImportObserver(env, lib, map[string]string{}, LibraryName{}, ImportStageExpand)
+		fireImportObserver(env, lib, map[ExportKey]string{}, LibraryName{}, ImportStageExpand)
 	})
 
 	t.Run("fireImportObserver without registry", func(t *testing.T) {
@@ -398,7 +398,7 @@ func TestCompiledLibrary_Methods(t *testing.T) {
 			NewLibraryName("test", "noop"),
 			environment.NewNamespace().Runtime(),
 		)
-		fireImportObserver(env, lib, map[string]string{}, LibraryName{}, ImportStageExpand)
+		fireImportObserver(env, lib, map[ExportKey]string{}, LibraryName{}, ImportStageExpand)
 	})
 }
 

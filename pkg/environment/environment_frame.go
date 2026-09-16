@@ -1277,8 +1277,9 @@ func (p *EnvironmentFrame) globalIndexAtPhase(key *values.Symbol, q syntax.Scope
 // Per Owner" in the package doc), ascending. It is the shared basis for every
 // cross-phase search that must reach the whole macro tower rather than a fixed
 // {0,1,2} guess: GetGlobalIndexAcrossPhases above, and machine/compilation's
-// findLibraryBinding (export resolution), which cannot reach p.phases directly
-// since it lives outside this package.
+// export resolution (findLibraryBinding), which probes only listed phases so it
+// never creates one, and cannot reach p.phases directly since it lives outside
+// this package.
 //
 // It is the UNION of two sets, because neither alone is the question. The
 // registry's instantiated VIEWS are phases something has looked at; the store's

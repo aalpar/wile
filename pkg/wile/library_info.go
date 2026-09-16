@@ -17,7 +17,6 @@ package wile
 import (
 	"context"
 	"errors"
-	"maps"
 	"slices"
 	"strings"
 
@@ -168,7 +167,7 @@ func (p *Engine) ensureExportIndex(ctx context.Context) *compilation.LibraryExpo
 }
 
 func compiledLibraryToInfo(lib *compilation.CompiledLibrary) *LibraryInfo {
-	exports := slices.Sorted(maps.Keys(lib.Exports))
+	exports := lib.ExportNames()
 	return &LibraryInfo{
 		Name:        lib.Name.SchemeString(),
 		Description: lib.Description,

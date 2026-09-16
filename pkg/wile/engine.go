@@ -1312,7 +1312,7 @@ func registerExtensionLibraries(
 			lib.Description = snap.describer.Description()
 		}
 		for _, name := range names {
-			lib.AddExport(name, "")
+			lib.AddExport(environment.PhaseRuntime, name, "")
 		}
 		regErr := libReg.Register(lib)
 		if regErr != nil {
@@ -1636,7 +1636,7 @@ func makeDocRegistrationObserver(libReg *compilation.LibraryRegistry, reg *regis
 		}
 
 		for _, name := range evt.Imported {
-			internalName := lib.GetInternalName(name)
+			internalName := lib.GetInternalName(compilation.ExportKey{Name: name})
 			if internalName == "" {
 				internalName = name
 			}

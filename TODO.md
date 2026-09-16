@@ -328,8 +328,9 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
 - [ ] **Library export of a name the library did not define** [see `findLibraryBinding` entry
   below]: the two-phase *defined* case already exports phase 0 correctly (measured
   2026-09-14, matches Racket); re-exporting `syntax-rules` from `(scheme base)` still fails
-  (`TestLibraryExportTakesFirstPresentPhase`), and a `begin-for-syntax`-only define exports to
-  phase 0 where Racket refuses at `provide`.
+  (`TestLibraryExportTakesFirstPresentPhase`). ~~A `begin-for-syntax`-only define exports to
+  phase 0 where Racket refuses at `provide`.~~ Refused since 2026-09-16, branch
+  `feat/export-for-syntax` (`TestLibraryExportRefusesNameNotBoundAtItsPhase`).
 
 **Open, no decision needed.**
 
@@ -449,6 +450,12 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   A per-phase curated export list sidesteps it. It also blocks the idea of moving
   `syntax-rules` into an importable library so the phase-1 vocabulary is declared rather
   than hardcoded — the one name that motivates it is the failing row.
+
+  **WITHDRAWN 2026-09-16:** exports now declare their phase (`(for-syntax ...)`, branch
+  `feat/export-for-syntax`, Racket's `provide`), and `findLibraryBinding` takes the export's
+  phase, not the importing one. Shifting an import shifts what an export denotes; it never
+  re-selects it. Fork (a) below would contradict that. The record that follows is kept as
+  history.
 
   ~~**Open fork, not decided.**~~ **DECIDED (a), 2026-09-10** (Stage B impl fork F). Either
   (a) `findLibraryBinding` takes the requesting phase and
@@ -641,7 +648,13 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   initializer runs (letrec\*); the body scan that does this for defines written directly in the body
   does not descend into an `include`d file's forms to find the names it will introduce.
 
-- [ ] **Option 2: declared per-phase export tables** [Medium, L, filed 2026-09-15, follow-on to
+- [ ] **Option 2: declared per-phase export tables** [**partly done 2026-09-16**, branch
+  `feat/export-for-syntax`: decision (1) is the export syntax, `(export (for-syntax <spec> ...))`,
+  nesting like Racket's; decision (2) is phase 0 only for a plain export, matching Racket's
+  `provide`. `CompiledLibrary.Exports` is keyed by `(phase, name)`, and import modifiers act on a
+  name at every phase. **Still open:** nothing declares `syntax-rules`'s two rows as one name;
+  `(scheme base)`'s forms are registered Go-side and export no `for-syntax` row. Original entry
+  follows.] [Medium, L, filed 2026-09-15, follow-on to
   the `findLibraryBinding` item above]: that item's fix (preferring the requesting phase) only
   routes an import to the right EXISTING binding; it does not let a library DECLARE which phases
   a name exports for. `syntax-rules` needs both its phase-0 `SyntaxCompiler` row and its phase-1

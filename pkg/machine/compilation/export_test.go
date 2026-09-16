@@ -16,11 +16,10 @@ package compilation
 
 import "github.com/aalpar/wile/pkg/environment"
 
-// FindLibraryBindingForTest exposes findLibraryBinding to the external test package.
-// The function decides a binding's export PHASE by probe order, which is the property
-// TestFindLibraryBindingPrefersRuntimeOverExpand pins.
-func FindLibraryBindingForTest(lib *CompiledLibrary, internalName string) (*environment.Binding, environment.Phase, bool) {
-	return findLibraryBinding(lib, internalName)
+// FindLibraryBindingForTest exposes findLibraryBinding to the external test package,
+// for TestFindLibraryBindingAtExportPhase.
+func FindLibraryBindingForTest(lib *CompiledLibrary, internalName string, phase environment.Phase) (*environment.Binding, environment.Phase, bool) {
+	return findLibraryBinding(lib, internalName, phase)
 }
 
 // SyntaxCompilerNamesForTest exposes the syntaxCompilerEntries names to the

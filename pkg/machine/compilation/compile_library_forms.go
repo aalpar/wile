@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -218,8 +219,8 @@ func (p *CompileTimeContinuation) processLibraryExport(ctx context.Context, lib 
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "export: expected list of export specs"))
 	}
 
-	_, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, _ bool, spec syntax.SyntaxValue) error {
-		return parseExportSpec(lib, spec)
+	_, err := syntax.SyntaxForEach(ctx, argsPair, func(ctx context.Context, _ int, _ bool, spec syntax.SyntaxValue) error {
+		return parseExportSpec(ctx, lib, spec, environment.PhaseRuntime)
 	})
 	return err
 }
@@ -240,11 +241,15 @@ func (p *CompileTimeContinuation) processLibraryDescription(lib *CompiledLibrary
 	return nil
 }
 
-// parseExportSpec parses a single export spec and adds it to the library.
-// Export specs can be:
+// parseExportSpec parses a single export spec and adds it to the library at
+// phase. Export specs can be:
 //   - <identifier>              : export with same internal and external name
 //   - (rename <internal> <external>) : export with different names
-func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
+//   - (for-syntax <export-spec> ...) : the specs, exported one phase up
+//
+// for-syntax is Racket's provide form, and nests the same way:
+// (for-syntax (for-syntax x)) exports x at phase 2.
+func parseExportSpec(ctx context.Context, lib *CompiledLibrary, spec syntax.SyntaxValue, phase environment.Phase) error {
 	switch s := spec.(type) {
 	case *syntax.SyntaxComment, *syntax.SyntaxDatumComment:
 		// Skip comments in export lists
@@ -253,15 +258,17 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 	case *syntax.SyntaxSymbol:
 		// Simple export: symbol name
 		name := s.Key()
-		lib.AddExport(name, name)
+		lib.AddExport(phase, name, name)
 		return nil
 
 	case *syntax.SyntaxPair:
-		// The only list-shaped export spec is (rename internal external).
 		carExpr := s.SyntaxCar()
 		carSym, ok := carExpr.(*syntax.SyntaxSymbol)
 		if !ok {
 			return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export: expected symbol"))
+		}
+		if carSym.Key() == "for-syntax" {
+			return parseForSyntaxExportSpec(ctx, lib, s, phase)
 		}
 		if carSym.Key() != "rename" {
 			return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: invalid spec form"))
@@ -283,7 +290,7 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 
 		internalName := internalSym.Key()
 		externalName := externalSym.Key()
-		lib.AddExport(externalName, internalName)
+		lib.AddExport(phase, externalName, internalName)
 		return nil
 
 	default:
@@ -291,26 +298,52 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 	}
 }
 
+// parseForSyntaxExportSpec parses the operands of (for-syntax <export-spec> ...)
+// at phase+1.
+func parseForSyntaxExportSpec(ctx context.Context, lib *CompiledLibrary, form *syntax.SyntaxPair, phase environment.Phase) error {
+	inner, err := composePhaseShift("export for-syntax", phase, environment.PhaseExpand)
+	if err != nil {
+		return wrapSourcedError(form.SourceContext(), err)
+	}
+	operands := form.SyntaxCdr()
+	if syntax.IsSyntaxEmptyList(operands) {
+		return nil
+	}
+	operandsPair, ok := operands.(*syntax.SyntaxPair)
+	if !ok {
+		return wrapSourcedError(form.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotAPair, "export for-syntax: expected list of export specs"))
+	}
+	_, err = syntax.SyntaxForEach(ctx, operandsPair, func(ctx context.Context, _ int, _ bool, spec syntax.SyntaxValue) error {
+		return parseExportSpec(ctx, lib, spec, inner)
+	})
+	return err
+}
+
 // validateLibraryExports verifies that every export's internal name resolves to a
-// binding in the library's environment (R7RS §5.6). It collects ALL unresolved names
-// and reports them once, sorted for a deterministic message, naming the library. This
-// runs at library finalization — after all begin/include/import declarations have
-// installed their bindings — so an export of a name the library never defines or imports
-// fails eagerly here rather than lazily (and partially) at a downstream import site.
+// binding in the library's environment at the export's phase (R7RS §5.6). It
+// collects ALL unresolved names and reports them once, sorted for a deterministic
+// message, naming the library. This runs at library finalization — after all
+// begin/include/import declarations have installed their bindings — so an export of
+// a name the library never defines or imports fails eagerly here rather than lazily
+// (and partially) at a downstream import site.
 func validateLibraryExports(lib *CompiledLibrary) error {
 	var missing []string
-	for externalName, internalName := range lib.Exports {
-		_, _, found := findLibraryBinding(lib, internalName)
+	for key, internalName := range lib.Exports {
+		_, _, found := findLibraryBinding(lib, internalName, key.Phase)
 		if found {
 			continue
 		}
 		// Report the external name (what the user wrote in the export list); include the
 		// internal name when a rename made them differ, so the gap is unambiguous.
-		if internalName == externalName {
-			missing = append(missing, externalName)
-		} else {
-			missing = append(missing, externalName+" (rename of "+internalName+")")
+		entry := key.Name
+		if internalName != key.Name {
+			entry += " (rename of " + internalName + ")"
 		}
+		boundAt, ok := exportablePhase(lib, internalName)
+		if ok {
+			entry += fmt.Sprintf(" (bound at phase %d, not phase %d)", boundAt, key.Phase)
+		}
+		missing = append(missing, entry)
 	}
 	if len(missing) == 0 {
 		return nil
@@ -331,9 +364,22 @@ func validateLibraryExports(lib *CompiledLibrary) error {
 	return werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
 		"define-library: %s exports %d identifier(s) with no binding the export list can "+
 			"reach (a typo in the export list; the active security profile does not "+
-			"register these primitives; or the binder was introduced by a macro template, "+
-			"which is hygienically distinct from the exported name): %s",
+			"register these primitives; the binder was introduced by a macro template, "+
+			"which is hygienically distinct from the exported name; or the name is bound "+
+			"only at another phase, which (for-syntax ...) exports): %s",
 		lib.Name.SchemeString(), len(missing), strings.Join(missing, ", "))
+}
+
+// exportablePhase returns the lowest phase an export of internalName could name,
+// for the diagnostic of an export at the wrong one.
+func exportablePhase(lib *CompiledLibrary, internalName string) (environment.Phase, bool) {
+	for _, phase := range lib.Env.PresentPhases() {
+		_, _, found := findLibraryBinding(lib, internalName, phase)
+		if found {
+			return phase, true
+		}
+	}
+	return 0, false
 }
 
 // CompileExport handles top-level (export <export-spec> ...).

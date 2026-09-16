@@ -145,17 +145,16 @@ func RegisterPhaseBindings[F any](
 // BindingType() == BindingTypePrimitive while its VALUE is not a
 // *PrimitiveExpander, which is the whole reason a reader has to look past it.
 //
-// The cause is upstream, in the export walk. findLibraryBinding walks
-// lib.Env.PresentPhases() ASCENDING and returns the FIRST hit, so the lowest
-// phase wins regardless of the phase the import will install at
-// (library_bindings.go:481-503, pinned by
-// TestFindLibraryBindingPrefersRuntimeOverExpand). (scheme base) holds
-// syntax-rules at phase 0 as a *SyntaxCompiler and at phase 1 as a
-// *PrimitiveExpander, so a for-syntax import is handed the phase-0 object and
-// installs it at phase 1, where the assertion below fails. Fixing which phase
-// an export SELECTS is what makes this gate removable; that is TODO.md's fork
-// (a), and its rider is that validateLibraryExports makes the same first-hit
-// call (compile_library_forms.go:300-312).
+// The cause is upstream, in the export. A plain export denotes the phase-0
+// binding whatever phase the import will install at (findLibraryBinding, pinned
+// by TestFindLibraryBindingAtExportPhase). (scheme base) holds syntax-rules at
+// phase 0 as a *SyntaxCompiler and at phase 1 as a *PrimitiveExpander, so a
+// for-syntax import is handed the phase-0 object and installs it at phase 1,
+// where the assertion below fails. TODO.md's fork (a), selecting the export by
+// the importing phase, is WITHDRAWN: since exports declare their phase
+// ((for-syntax ...), 2026-09-16), shifting an import shifts what an export
+// denotes and never re-selects it, as in Racket. What remains is that the
+// phase-0 object does not work shifted to phase 1.
 //
 // NOT binding identity, and this correction is load-bearing because the claim
 // stood here for three days and mis-scoped three separate designs. This doc

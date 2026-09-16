@@ -131,7 +131,7 @@ func TestParseExportSpec(t *testing.T) {
 			expectError: false,
 			checkExport: func(t *testing.T, lib *CompiledLibrary) {
 				qt.Assert(t, lib.Exports, qt.HasLen, 1)
-				qt.Assert(t, lib.Exports["bindSymbolWithScopes"], qt.Equals, "bindSymbolWithScopes")
+				qt.Assert(t, lib.Exports[ExportKey{Name: "bindSymbolWithScopes"}], qt.Equals, "bindSymbolWithScopes")
 			},
 		},
 		{
@@ -140,7 +140,7 @@ func TestParseExportSpec(t *testing.T) {
 			expectError: false,
 			checkExport: func(t *testing.T, lib *CompiledLibrary) {
 				qt.Assert(t, lib.Exports, qt.HasLen, 1)
-				qt.Assert(t, lib.Exports["external-name"], qt.Equals, "internal-name")
+				qt.Assert(t, lib.Exports[ExportKey{Name: "external-name"}], qt.Equals, "internal-name")
 			},
 		},
 	}
@@ -157,7 +157,7 @@ func TestParseExportSpec(t *testing.T) {
 			qt.Assert(t, err, qt.IsNil)
 
 			// Call parseExportSpec
-			err = parseExportSpec(lib, stx)
+			err = parseExportSpec(context.TODO(), lib, stx, environment.PhaseRuntime)
 
 			if tc.expectError {
 				qt.Assert(t, err, qt.IsNotNil)
@@ -520,7 +520,7 @@ func TestParseExportSpecRenameErrors(t *testing.T) {
 				return
 			}
 
-			err = parseExportSpec(lib, stx)
+			err = parseExportSpec(context.TODO(), lib, stx, environment.PhaseRuntime)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

@@ -56,6 +56,13 @@ func TestParseSummary(t *testing.T) {
 			wantExports: []string{"alpha", "external-name"},
 		},
 		{
+			name: "for-syntax export lists its names, nested and renamed",
+			input: `(define-library (phased)
+				(export a (for-syntax b (rename c d) (for-syntax e))))`,
+			libName:     NewLibraryName("phased"),
+			wantExports: []string{"a", "b", "d", "e"},
+		},
+		{
 			name: "no description",
 			input: `(define-library (nodesc)
 				(export x y))`,

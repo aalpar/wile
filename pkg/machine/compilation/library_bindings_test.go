@@ -15,7 +15,6 @@
 package compilation_test
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -119,11 +118,11 @@ func TestCopyLibraryBindingsPhaseOverflow(t *testing.T) {
 	lib := &compilation.CompiledLibrary{
 		Name:    compilation.NewLibraryName("test", "overflow"),
 		Env:     libEnv,
-		Exports: map[string]string{"my-macro": "my-macro"},
+		Exports: map[compilation.ExportKey]string{{Name: "my-macro"}: "my-macro"},
 	}
 
 	targetEnv := ns.NewChildRuntime()
-	bindings := map[string]string{"my-macro": "my-macro"}
+	bindings := map[compilation.ExportKey]string{{Name: "my-macro"}: "my-macro"}
 
 	// Max int8 target phase; +1 for the syntax source phase overflows.
 	err = compilation.CopyLibraryBindingsToEnvAtPhase(lib, bindings, targetEnv, environment.Phase(127))
@@ -162,47 +161,85 @@ func TestLibraryBindingsPhaseShift(t *testing.T) {
 	}
 }
 
-// findLibraryBinding probes the phases the library's OWN registry has actually
-// instantiated, ASCENDING, and returns the first hit — so a name bound at
-// several phases exports as its LOWEST phase. That is the correct answer, but
-// it is delivered by probe order rather than by asking the phases apart — the
-// same "search every phase" assumption that let a library body resolve across
-// phases (memory/2026-08-04-library-phase-isolation-impl.local.md, Q2).
-//
-// Before design Phase D the probed set was a hard-wired {runtime, expand,
-// compile} literal; this pins ascending order as the tie-breaker generally,
-// across every present phase, including phase 3 and up (nested
-// begin-for-syntax), not just the three that used to be the whole ceiling.
-func TestFindLibraryBindingPrefersRuntimeOverExpand(t *testing.T) {
+// findLibraryBinding answers for ONE export phase, from two frames: the export
+// phase itself for anything but a define-syntax keyword, and the phase above it
+// for a keyword, because Wile stores a define-syntax transformer one phase above
+// the code that uses it. Everything else is refused, which is Racket's provide:
+// a plain export sees phase 0 only, and a begin-for-syntax define needs
+// (for-syntax x).
+func TestFindLibraryBindingAtExportPhase(t *testing.T) {
+	type stored struct {
+		bindingType environment.BindingType
+		phase       environment.Phase
+	}
 	tcs := []struct {
-		name          string              // subtest label
-		definedPhases []environment.Phase // phases (ascending) that get a binding of the same name
-		wantPhase     environment.Phase   // the phase findLibraryBinding must report
+		name        string
+		bindings    []stored          // bindings of one name, ascending phase; the value is the index
+		exportPhase environment.Phase // the phase asked for
+		wantFound   bool
+		wantPhase   environment.Phase // the stored phase reported, when found
+		wantIndex   int               // which binding is returned, when found
 	}{
 		{
-			name:          "runtime wins over expand and phase 2",
-			definedPhases: []environment.Phase{environment.PhaseRuntime, environment.PhaseExpand, environment.Phase(2)},
-			wantPhase:     environment.PhaseRuntime,
+			name:        "variable at the export phase",
+			bindings:    []stored{{environment.BindingTypeVariable, 0}},
+			exportPhase: 0, wantFound: true, wantPhase: 0,
 		},
 		{
-			name:          "expand wins over phase 2 and phase 3",
-			definedPhases: []environment.Phase{environment.PhaseExpand, environment.Phase(2), 3},
-			wantPhase:     environment.PhaseExpand,
+			name:        "variable one phase up is refused: a begin-for-syntax define",
+			bindings:    []stored{{environment.BindingTypeVariable, 1}},
+			exportPhase: 0,
 		},
 		{
-			name:          "phase 2 wins over phase 3 and phase 4: the old ceiling's top phase is no longer special",
-			definedPhases: []environment.Phase{environment.Phase(2), 3, 4},
-			wantPhase:     environment.Phase(2),
+			name:        "variable one phase down is refused",
+			bindings:    []stored{{environment.BindingTypeVariable, 0}},
+			exportPhase: 1,
 		},
 		{
-			name:          "phase 3 wins when it is the lowest present — beyond the old {0,1,2} ceiling",
-			definedPhases: []environment.Phase{3, 4},
-			wantPhase:     3,
+			name:        "variable at phase 3 exports at phase 3",
+			bindings:    []stored{{environment.BindingTypeVariable, 3}},
+			exportPhase: 3, wantFound: true, wantPhase: 3,
 		},
 		{
-			name:          "phase 4 alone still resolves",
-			definedPhases: []environment.Phase{4},
-			wantPhase:     4,
+			name:        "define-syntax keyword one phase up",
+			bindings:    []stored{{environment.BindingTypeSyntax, 1}},
+			exportPhase: 0, wantFound: true, wantPhase: 1,
+		},
+		{
+			name:        "define-syntax keyword at the export phase is refused: it serves the phase below",
+			bindings:    []stored{{environment.BindingTypeSyntax, 1}},
+			exportPhase: 1,
+		},
+		{
+			name:        "define-syntax keyword two phases up is refused",
+			bindings:    []stored{{environment.BindingTypeSyntax, 2}},
+			exportPhase: 0,
+		},
+		{
+			name:        "primitive keyword at the export phase",
+			bindings:    []stored{{environment.BindingTypePrimitive, 0}},
+			exportPhase: 0, wantFound: true, wantPhase: 0,
+		},
+		{
+			name:        "primitive keyword one phase up: a primitive expander",
+			bindings:    []stored{{environment.BindingTypePrimitive, 1}},
+			exportPhase: 0, wantFound: true, wantPhase: 1,
+		},
+		{
+			name: "the export phase wins over the phase above",
+			bindings: []stored{
+				{environment.BindingTypeVariable, 0},
+				{environment.BindingTypePrimitive, 1},
+			},
+			exportPhase: 0, wantFound: true, wantPhase: 0, wantIndex: 0,
+		},
+		{
+			name: "a define-syntax keyword at the export phase falls through to the phase above",
+			bindings: []stored{
+				{environment.BindingTypeSyntax, 1},
+				{environment.BindingTypeSyntax, 2},
+			},
+			exportPhase: 1, wantFound: true, wantPhase: 2, wantIndex: 1,
 		},
 	}
 	for _, tc := range tcs {
@@ -211,20 +248,38 @@ func TestFindLibraryBindingPrefersRuntimeOverExpand(t *testing.T) {
 
 			ns := environment.NewNamespace()
 			libEnv := ns.NewChildRuntime()
-			lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("q2"), libEnv)
+			lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("export-phase"), libEnv)
 
-			sym := values.NewSymbol("multi-phase")
-			for i, phase := range tc.definedPhases {
-				_, err := libEnv.AtPhase(phase).DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, values.NewInteger(int64(i)))
+			sym := values.NewSymbol("probe")
+			for i, b := range tc.bindings {
+				_, err := libEnv.AtPhase(b.phase).DefineOwnGlobal(sym, b.bindingType, nil, values.NewInteger(int64(i)))
 				c.Assert(err, qt.IsNil)
 			}
 
-			binding, phase, found := compilation.FindLibraryBindingForTest(lib, "multi-phase")
-			c.Assert(found, qt.IsTrue)
+			binding, phase, found := compilation.FindLibraryBindingForTest(lib, "probe", tc.exportPhase)
+			c.Assert(found, qt.Equals, tc.wantFound)
+			if !tc.wantFound {
+				c.Assert(binding, qt.IsNil)
+				return
+			}
 			c.Assert(phase, qt.Equals, tc.wantPhase)
-
-			wantIndex := slices.Index(tc.definedPhases, tc.wantPhase)
-			c.Assert(binding.Value().SchemeString(), qt.Equals, values.NewInteger(int64(wantIndex)).SchemeString())
+			c.Assert(binding.Value().SchemeString(), qt.Equals, values.NewInteger(int64(tc.wantIndex)).SchemeString())
 		})
 	}
+}
+
+// An export lookup must not instantiate the phase frames it probes: AtPhase
+// creates a missing frame, which would grow the library's PresentPhases as a
+// side effect of validating or importing it.
+func TestFindLibraryBindingCreatesNoPhase(t *testing.T) {
+	c := qt.New(t)
+
+	ns := environment.NewNamespace()
+	libEnv := ns.NewChildRuntime()
+	lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("no-create"), libEnv)
+	before := libEnv.PresentPhases()
+
+	_, _, found := compilation.FindLibraryBindingForTest(lib, "absent", 5)
+	c.Assert(found, qt.IsFalse)
+	c.Assert(libEnv.PresentPhases(), qt.DeepEquals, before)
 }

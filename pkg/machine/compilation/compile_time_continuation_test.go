@@ -1799,10 +1799,10 @@ func TestCompiledLibraryMethods(t *testing.T) {
 	name := NewLibraryName("test", "lib")
 	lib := &CompiledLibrary{
 		Name:    name, //nolint:govet
-		Exports: make(map[string]string),
+		Exports: make(map[ExportKey]string),
 	}
 
-	lib.Exports["bindSymbolWithScopes"] = "bindSymbolWithScopes"
+	lib.Exports[ExportKey{Name: "bindSymbolWithScopes"}] = "bindSymbolWithScopes"
 	qt.Assert(t, len(lib.Exports), qt.Equals, 1)
 }
 

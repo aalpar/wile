@@ -158,6 +158,8 @@ func TestLibraryPhaseOneSeesItsOwnPhaseOneDefines(t *testing.T) {
 // exportable: the cross-phase carve-out (GetGlobalIndexAcrossPhases) and the
 // export search (findLibraryBinding) used to hard-wire {0,1,2}, so a phase-3+
 // binding was invisible to both. Design Phase D (closes phase-isolation Q2).
+// The export names its phase, as Racket's provide requires; a plain
+// (export deep) is refused (TestLibraryExportRefusesNameNotBoundAtItsPhase).
 //
 // The use-site check nests begin-for-syntax three times to land at phase 3
 // too, and raises if the resolved value is wrong — the only way to observe a
@@ -174,7 +176,7 @@ func TestLibraryExportsPhaseThreeBinding(t *testing.T) {
 	ctx := context.Background()
 	eng := phaseIsolationEngine(t, fstest.MapFS{
 		"deep.scm": &fstest.MapFile{Data: []byte(`(define-library (deep)
-  (export deep)
+  (export (for-syntax (for-syntax (for-syntax deep))))
   (import (scheme base))
   (begin
     (begin-for-syntax
