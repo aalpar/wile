@@ -478,6 +478,62 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   vocabulary becomes declarable → only then is Racket's empty phase 1 reachable. Doing them out
   of order does not work.
 
+  **2026-09-15:** the motivating row (renamed `syntax-rules` in a transformer RHS,
+  `TestLibraryExportTakesFirstPresentPhase/syntax-rules_(two_phases)_does_not`) turns out to be a phase-isolation
+  question, not an export-walk defect. Under default phase isolation a plain `export` binds at
+  phase 0 only, matching Racket's `rename-out`: `(only-meta-in 0 (prefix-in b: racket/base))`
+  refuses `b:syntax-rules` in a transformer RHS, and `racket/base` declares exactly `...`, `_`,
+  `syntax-id-rules`, `syntax-rules` at phase 1. The fix is the "Option 2" item below: declared
+  per-phase export tables. That needs the renamed-keyword-by-binding dispatch shipped on
+  `feat/keyword-denotation-dispatch` first, because `(import (scheme base) (for-syntax (scheme
+  base)))` must see its two `syntax-rules` rows at phase 1 as one denotation before a per-phase
+  export table can declare them as one name.
+
+- [ ] **Renamed `unquote`/`unquote-splicing` are matched by spelling, not by binding**
+  [Low, S, filed 2026-09-15 while closing the keyword-denotation-dispatch plan
+  (`feat/keyword-denotation-dispatch`)]: `quasi_expand.go`'s marker recognition (`dottedTailCell`,
+  the depth walk `quasiNeedsRuntime`) compares a head symbol's spelling against `"unquote"` /
+  `"unquote-splicing"`, not its resolved binding, because those functions read no compile state
+  by design. `(import (rename (scheme base) (unquote uq))) `(1 (uq (+ 1 1)))` gives
+  `(1 (uq (+ 1 1)))`; Racket gives `(1 2)`. Reader-produced `` `(a ,x) `` under a plain `prefix`
+  import is unaffected (arm 2 of the keyword-denotation-dispatch rule: an unbound head still keys
+  on spelling). Out of scope for that plan by design (§Out of scope); fixing this would mean
+  threading an environment into the marker walk, which conflicts with its current no-compile-state
+  shape.
+
+- [ ] **Renamed AUXILIARY keywords (`else`, `case`'s `else`, `=>`) are still matched by
+  spelling, not by binding** [Low, S, filed 2026-09-15 while closing the keyword-denotation-dispatch
+  plan (`feat/keyword-denotation-dispatch`)]: `sameLiteralBinding`
+  (`pkg/internal/match/syntax_adapter.go`) accepts a pattern-literal match whenever both the
+  definition-site and use-site bindings are `BindingTypePrimitive` — it never asks whether the two
+  denote the SAME form, only that both are compile-time bindings. `(import (scheme base) (rename
+  (scheme base) (else otherwise))) (cond (#f 1) (otherwise 2))` fails on this branch and on master
+  (`syntactic keyword "otherwise" used as a variable`); Racket accepts it and answers `2`. Same for
+  `case`'s `else`. Fix candidate: compare the denoted form (`environment.DenotedForm`, this branch's
+  own mechanism) instead of "both Primitive".
+
+- [ ] **`include` inside a procedure body skips letrec\* predeclaration** [Medium, S, filed
+  2026-09-15 during the keyword-denotation-dispatch whole-branch review; pre-existing on master, not
+  caused by this branch]: `(define (k) (include "x.scm") (inc-g))`, where the included file
+  forward-references a later included `define`, raises `application: expected a procedure, got
+  #<void>` at run time. R7RS §5.3.2 body semantics predeclare every name a body defines before any
+  initializer runs (letrec\*); the body scan that does this for defines written directly in the body
+  does not descend into an `include`d file's forms to find the names it will introduce.
+
+- [ ] **Option 2: declared per-phase export tables** [Medium, L, filed 2026-09-15, follow-on to
+  the `findLibraryBinding` item above]: that item's fix (preferring the requesting phase) only
+  routes an import to the right EXISTING binding; it does not let a library DECLARE which phases
+  a name exports for. `syntax-rules` needs both its phase-0 `SyntaxCompiler` row and its phase-1
+  `PrimitiveExpander` row visible to an importer as one denotation, and Wile's stdlib forms are
+  registered Go-side, not declared through `export` syntax at all. Two open decisions block a
+  design: (1) declaration mechanism, a field on the Go registration call vs. an `export` syntax
+  extension a library body writes; (2) whether a plain `(export name)` re-export (no `rename`,
+  no explicit phase) carries the source's declared phase rows, or defaults to phase 0 only,
+  matching Racket's `rename-out` under `only-meta-in`. Depends on the renamed-keyword-by-binding
+  dispatch shipped on `feat/keyword-denotation-dispatch`: `(import (scheme base) (for-syntax
+  (scheme base)))` must see the two `syntax-rules` rows at phase 1 as one denotation before a
+  per-phase export table can declare them as one name.
+
 ### The D7 residual: a primitive expander above phase 1 (2026-09-09)
 
 - [ ] **Precondition on any dialect that installs one; not an open defect today**

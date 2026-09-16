@@ -36,3 +36,9 @@ func (p *namedHandlerBase) IsVoid() bool {
 func (p *namedHandlerBase) SchemeString() string {
 	return "#<" + p.prefix + ":" + p.name + ">"
 }
+
+// FormName implements environment.FormDenotation: a syntax compiler or primitive
+// expander bound under any name denotes the form it was registered for.
+func (p *namedHandlerBase) FormName() string {
+	return p.name
+}

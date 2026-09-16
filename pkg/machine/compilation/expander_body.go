@@ -34,6 +34,11 @@ import (
 // extractDefineName extracts the name being defined from a define form.
 // Returns nil if the form is not a define or is malformed.
 //
+// The form is recognized by the binding its head denotes (asFormDenoting), not
+// by spelling, so a renamed or prefixed import of define is recognized too; env
+// is the environment the head is resolved against, and a nil env falls back to
+// spelling only (see headFormName).
+//
 // Note: This intentionally excludes define-syntax forms. Macro bindings are
 // handled separately by compileDefineSyntaxFromSyntax which stores them in the
 // expand environment. We only pre-register define bindings so that macros can
@@ -42,9 +47,9 @@ import (
 // Handles:
 //   - (define name value)
 //   - (define (name args...) body...)
-func extractDefineName(form syntax.SyntaxValue) *syntax.SyntaxSymbol {
+func extractDefineName(env *environment.EnvironmentFrame, form syntax.SyntaxValue) *syntax.SyntaxSymbol {
 	// Only handle define, not define-syntax (macros are handled separately).
-	pair, ok := asSyntaxFormWithKeyword(form, "define")
+	pair, ok := asFormDenoting(env, form, "define")
 	if !ok {
 		return nil
 	}
@@ -94,7 +99,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 	// Note: define-syntax is handled in pass 2 below — macro bindings live in the
 	// expand environment, not the runtime environment pre-declared here.
 	for _, form := range forms {
-		nameSym := extractDefineName(form)
+		nameSym := extractDefineName(p.env, form)
 		if nameSym != nil {
 			name := nameSym.Unwrap().(*values.Symbol)
 			predeclareBinding(p.env, name, nameSym.Scopes(), nameSym.SourceContext())
@@ -110,7 +115,8 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 		}
 
 		// If define-syntax, compile it now for subsequent forms
-		if isSyntaxFormWithKeyword(expanded, "define-syntax") {
+		_, isDefineSyntax := asFormDenoting(p.env, expanded, "define-syntax")
+		if isDefineSyntax {
 			pair := expanded.(*syntax.SyntaxPair)
 			err = compileDefineSyntaxFromSyntax(p.ctx, p.env, pair, p.libraryScope, p.evaluator)
 			if err != nil {

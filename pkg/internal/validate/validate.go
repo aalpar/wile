@@ -148,12 +148,23 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 	if ok {
 		symVal, ok := sym.Unwrap().(*values.Symbol)
 		if ok {
-			// The registry answers CANDIDACY by name; headDenotesSpecialForm
-			// answers whether the head really denotes that form here, by the
-			// binding it resolves to. The name test comes first so an ordinary
-			// call pays no resolution.
-			spec := forms.RegistryFor(env).Lookup(symVal.Key)
-			if spec != nil && spec.Validate != nil && headDenotesSpecialForm(env, symVal, sym) {
+			// Resolve the head ONCE, at its own phase, for every symbol-headed
+			// form — ordinary calls included: a renamed keyword's form cannot be
+			// known without resolving it, so the resolution can no longer be
+			// gated behind a name-only fast path. That cost is measured in plan
+			// Task 5 (BenchmarkValidatePhase). A keyword binding names the form
+			// it denotes, so a renamed or prefixed import dispatches on that
+			// form; anything else keeps the spelling as the candidacy key. Both
+			// uses of b below happen in this call, off this env, with no binding
+			// created in between, so b is a valid identity for the sealed compare.
+			b := resolveFormHead(env, symVal, sym)
+			name := symVal.Key
+			denoted := environment.DenotedForm(b)
+			if denoted != "" {
+				name = denoted
+			}
+			spec := forms.RegistryFor(env).Lookup(name)
+			if spec != nil && spec.Validate != nil && (denoted != "" || headDenotesSpecialForm(env, symVal, sym.Scopes(), b)) {
 				expr := spec.Validate(ctx, env, pair, result)
 				if expr != nil {
 					// Override formName only for passthrough forms (prefixed with "@")
@@ -163,7 +174,7 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 					// with formName "letrec" for the keyword "let").
 					fn := expr.FormName()
 					if fn == "" || fn[0] == '@' {
-						expr.SetFormName(symVal.Key)
+						expr.SetFormName(name)
 					}
 				}
 				return expr
@@ -177,7 +188,10 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 
 // headDenotesSpecialForm reports whether a form head the validator's table
 // already recognizes BY NAME actually denotes that special form here, rather
-// than an ordinary operator that happens to share the spelling.
+// than an ordinary operator that happens to share the spelling. The caller
+// resolves the head's binding once, via resolveFormHead, and passes the
+// result in as b; a non-nil b implies env and its global environment are
+// non-nil, since resolveFormHead returns nil whenever either is.
 //
 // R7RS §4.3 makes a variable binding shadow a syntactic one, and §5.3.1 lets a
 // top-level define do it too. A name cannot answer that question; only the
@@ -242,26 +256,12 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 // answer 4 where the peers raise. They turn on referenceReachesBinderDirectly's
 // hygiene guard below, which exists to stop a user's (define set! …) capturing a
 // template's set!. Relaxing it is its own arc.
-//
-// GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
-// tie. That is deliberately not caught: it reaches the compile path's recover
-// boundary and surfaces as a CompilationError chaining the sentinel, which is
-// the answer an ambiguous identifier is supposed to get.
 func headDenotesSpecialForm(
 	env *environment.EnvironmentFrame,
 	symVal *values.Symbol,
-	sym *syntax.SyntaxSymbol,
+	scopes []*syntax.Scope,
+	b *environment.Binding,
 ) bool {
-	if env == nil {
-		return true
-	}
-	ge := env.GlobalEnvironment()
-	if ge == nil {
-		return true
-	}
-	scopes := sym.Scopes()
-	q := syntax.ScopesOf(scopes)
-	b := env.GetBinding(symVal, q)
 	if b == nil {
 		// A miss means the form. Under a registry that binds no keywords
 		// (WithoutAmbientBindings) the table is the only thing that knows these
@@ -283,10 +283,30 @@ func headDenotesSpecialForm(
 	if m != nil && m.Predeclared {
 		return true
 	}
-	if b == ge.SealedBindingAt(symVal, q, env.PhaseLevel()) {
+	ge := env.GlobalEnvironment()
+	if b == ge.SealedBindingAt(symVal, syntax.ScopesOf(scopes), env.PhaseLevel()) {
 		return true
 	}
 	return !referenceReachesBinderDirectly(env, symVal, scopes, b)
+}
+
+// resolveFormHead resolves a form head at its own phase, or returns nil when there
+// is no environment to resolve in. nil is also the answer for an unbound head;
+// both mean "the spelling decides", which is what headDenotesSpecialForm's nil
+// arm and validateForm's candidacy key already give.
+//
+// GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
+// tie. That is deliberately not caught here: it reaches the compile path's
+// recover boundary and surfaces as a CompilationError chaining the sentinel,
+// which is the answer an ambiguous identifier is supposed to get.
+func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, sym *syntax.SyntaxSymbol) *environment.Binding {
+	if env == nil {
+		return nil
+	}
+	if env.GlobalEnvironment() == nil {
+		return nil
+	}
+	return env.GetBinding(symVal, syntax.ScopesOf(sym.Scopes()))
 }
 
 // referenceReachesBinderDirectly reports whether the reference sym reaches the

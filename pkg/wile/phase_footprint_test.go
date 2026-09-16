@@ -23,7 +23,6 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/forms"
-	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
 )
@@ -151,14 +150,11 @@ func TestKeywordSlotsNeverHoldAProcedure(t *testing.T) {
 				checked++
 
 				v := bnd.Value()
-				if v == nil || v == values.Void {
-					continue
-				}
-				_, isCompiler := v.(*compilation.SyntaxCompiler)
-				qt.Assert(t, isCompiler, qt.IsTrue,
-					qt.Commentf("keyword %q holds %s (%T): a name that carries a runtime value "+
-						"must be a DocOnly row (procedureFormDocs), not an installed keyword",
-						spec.Name, v.SchemeString(), v))
+				denoted := environment.DenotedForm(bnd)
+				qt.Assert(t, denoted, qt.Equals, spec.Name,
+					qt.Commentf("keyword %q holds %v (%T): every installed keyword must name its form, "+
+						"or a renamed import of it stops denoting it; a name that carries a runtime "+
+						"value must be a DocOnly row (procedureFormDocs)", spec.Name, v, v))
 			}
 			// Guard the walk itself: an empty BindingSpecs would make every assertion
 			// above vacuous.

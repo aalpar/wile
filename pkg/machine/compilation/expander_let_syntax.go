@@ -318,3 +318,41 @@ func isSyntaxFormWithKeyword(expr syntax.SyntaxValue, keyword string) bool {
 	_, ok := asSyntaxFormWithKeyword(expr, keyword)
 	return ok
 }
+
+// asFormDenoting reports whether expr is a non-empty form whose head denotes the
+// special form keyword, and returns the pair. It is asSyntaxFormWithKeyword with
+// the head resolved through its binding, so a renamed or prefixed import of the
+// keyword is recognized; see headFormName for the fallback.
+func asFormDenoting(env *environment.EnvironmentFrame, expr syntax.SyntaxValue, keyword string) (*syntax.SyntaxPair, bool) {
+	pair, ok := expr.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(pair) {
+		return nil, false
+	}
+	sym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return nil, false
+	}
+	if headFormName(env, sym) != keyword {
+		return nil, false
+	}
+	return pair, true
+}
+
+// headFormName returns the special form a head identifier denotes. A head that
+// resolves to no keyword binding answers with its spelling, which keeps every
+// pre-existing answer for unbound heads and variables unchanged; only a keyword
+// bound under another name answers differently.
+func headFormName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) string {
+	symVal, ok := sym.Unwrap().(*values.Symbol)
+	if !ok {
+		return ""
+	}
+	if env == nil {
+		return symVal.Key
+	}
+	denoted := environment.DenotedForm(env.GetBinding(symVal, syntax.ScopesOf(sym.Scopes())))
+	if denoted != "" {
+		return denoted
+	}
+	return symVal.Key
+}

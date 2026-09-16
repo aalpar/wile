@@ -38,9 +38,10 @@ import (
 // it: validateLibraryExports asks only whether SOME binding is reachable.
 //
 // These are ANSWER pins of current behavior, recorded because the failure is
-// silent. See TODO.md, "findLibraryBinding exports the wrong phase". Fixing that
-// is expected to flip TestLibraryExportTakesFirstPresentPhase/syntax-rules from
-// refusing to working; the let-syntax row must keep passing either way.
+// silent. See TODO.md, "findLibraryBinding exports the wrong phase". Whether
+// that row should ever work is a phase-isolation decision (a plain export
+// binds at phase 0 only); see TODO.md's option 2 entry. The let-syntax row
+// must keep passing either way.
 
 func exportProbeEngine(t *testing.T) *wile.Engine {
 	t.Helper()

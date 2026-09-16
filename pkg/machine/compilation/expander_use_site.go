@@ -121,7 +121,8 @@ func (p *ExpanderTimeContinuation) pruneUseSiteScopes(stx syntax.SyntaxValue) sy
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
 		return stx
 	}
-	if isSyntaxFormWithKeyword(pair, "begin") {
+	_, isBegin := asFormDenoting(p.env, pair, "begin")
+	if isBegin {
 		return p.pruneUseSiteScopesInBegin(pair)
 	}
 	return p.pruneDefinitionBinder(pair)
@@ -182,7 +183,8 @@ func (p *ExpanderTimeContinuation) pruneDefinitionBinder(pair *syntax.SyntaxPair
 	if !ok {
 		return pair
 	}
-	if keyword.Key() != "define" && keyword.Key() != "define-syntax" {
+	form := headFormName(p.env, keyword)
+	if form != "define" && form != "define-syntax" {
 		return pair
 	}
 	cdrPair, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)

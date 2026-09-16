@@ -555,7 +555,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 
 		// Not a macro - check if it's a primitive (quote, if, define-syntax, etc.)
 		symVal := sym0
-		pe := LookupPrimitiveExpander(p.env, symVal, sym.Scopes())
+		pe := p.lookupHeadPrimitiveExpander(symVal, sym.Scopes())
 		if pe != nil {
 			return pe.Expand(p, sym, expr)
 		}
@@ -571,6 +571,52 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 		return syntax.NewSyntaxCons(sym, expandedArgs, sym.SourceContext()), nil
 	}
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+}
+
+// lookupHeadPrimitiveExpander finds the primitive expander for a form head. The
+// head is resolved at its OWN phase: a keyword binding names the form it denotes,
+// so a renamed or prefixed import expands as that form. A binding whose value is
+// the expander itself (a phase-1 row, or an import of one) is used directly;
+// otherwise the expander is looked up under the denoted form's name. A head that
+// denotes no form keeps the spelling lookup, which is the pre-existing behaviour
+// for unbound heads, variables, and phase-2+ code.
+//
+// denoted is a canonical spelling this method synthesizes, never a name the user
+// wrote, so it is looked up directly against the sealed phase-1 row rather than
+// through LookupPrimitiveExpander's ranked resolution. LookupPrimitiveExpander
+// (via LookupPhaseBinding) deliberately refuses to look past a user's own shadow
+// of a name — that is right when the name came from the program text, but wrong
+// here: a program can redefine the CANONICAL spelling ((define-syntax quote ...)
+// after renaming quote to core-quote) without touching the renamed head at all,
+// and that unrelated shadow must not stop core-quote from dispatching as quote.
+// The sealed probe is checked first so that shadow can never intervene; the
+// ranked LookupPrimitiveExpander call remains as the fallback for coordinates
+// with no sealed phase-1 row, such as an
+// (environment '(scheme base) '(for-syntax (scheme base))) namespace — see
+// TestPhaseShiftImportTakesEveryImportSet and
+// TestImportSetEnvironmentIsEmptyAboveRuntime.
+func (p *ExpanderTimeContinuation) lookupHeadPrimitiveExpander(sym *values.Symbol, scopes []*syntax.Scope) *PrimitiveExpander {
+	b := p.env.GetBinding(sym, syntax.ScopesOf(scopes))
+	denoted := environment.DenotedForm(b)
+	if denoted == "" {
+		return LookupPrimitiveExpander(p.env, sym, scopes)
+	}
+	pe, ok := b.Value().(*PrimitiveExpander)
+	if ok {
+		return pe
+	}
+	canon := values.NewSymbol(denoted)
+	expandEnv := p.env.Expand()
+	if expandEnv != nil && expandEnv.GlobalEnvironment() != nil {
+		sealed := expandEnv.GlobalEnvironment().SealedBindingAt(canon, syntax.ScopesOf(nil), expandEnv.PhaseLevel())
+		if sealed != nil && sealed.BindingType() == environment.BindingTypePrimitive {
+			spe, ok := sealed.Value().(*PrimitiveExpander)
+			if ok {
+				return spe
+			}
+		}
+	}
+	return LookupPrimitiveExpander(p.env, canon, nil)
 }
 
 // invokeTransformerClosure is defined in machine/macro_evaluator.go
