@@ -1579,28 +1579,47 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   base)))` must see its two `syntax-rules` rows at phase 1 as one denotation before a per-phase
   export table can declare them as one name.
 
-- [ ] **Renamed `unquote`/`unquote-splicing` are matched by spelling, not by binding**
-  [Low, S, filed 2026-09-15 while closing the keyword-denotation-dispatch plan
-  (`feat/keyword-denotation-dispatch`)]: `quasi_expand.go`'s marker recognition (`dottedTailCell`,
-  the depth walk `quasiNeedsRuntime`) compares a head symbol's spelling against `"unquote"` /
-  `"unquote-splicing"`, not its resolved binding, because those functions read no compile state
-  by design. `(import (rename (scheme base) (unquote uq))) `(1 (uq (+ 1 1)))` gives
-  `(1 (uq (+ 1 1)))`; Racket gives `(1 2)`. Reader-produced `` `(a ,x) `` under a plain `prefix`
-  import is unaffected (arm 2 of the keyword-denotation-dispatch rule: an unbound head still keys
-  on spelling). Out of scope for that plan by design (§Out of scope); fixing this would mean
-  threading an environment into the marker walk, which conflicts with its current no-compile-state
-  shape.
+- [x] **Renamed `unquote`/`unquote-splicing` are matched by spelling, not by binding**
+  [Done 2026-09-15, branch `feat/renamed-inner-positions`]: `quasi_expand.go`'s marker
+  recognition (`dottedTailCell`, the depth walk `quasiNeedsRuntime`) compared a head symbol's
+  spelling against `"unquote"` / `"unquote-splicing"`, never its resolved binding.
+  `(import (rename (scheme base) (unquote uq))) `(1 (uq (+ 1 1)))` gave `(1 (uq (+ 1 1)))`,
+  where Racket gives `(1 2)` — this branch now answers `(1 2)` too (same for
+  `unquote-splicing`, and for a `prefix` import). **What now decides:** the form the marker's
+  head denotes (`environment.DenotedForm`), with spelling as the fallback for a head that
+  resolves to no form — an unbound head under a plain `prefix` import still keys on spelling
+  unchanged (arm 2 of the keyword-denotation-dispatch rule). Pinned by
+  `TestRenamedQuasiquoteMarkers` (`pkg/wile/renamed_inner_positions_test.go`). Cost measured
+  2026-09-15 with a 12-run interleaved A/B against `feat/keyword-denotation-dispatch`
+  (`BenchmarkValidatePhase`, `BenchmarkFrontEndPhase`): no statistically significant delta,
+  0 extra allocs/op.
 
-- [ ] **Renamed AUXILIARY keywords (`else`, `case`'s `else`, `=>`) are still matched by
-  spelling, not by binding** [Low, S, filed 2026-09-15 while closing the keyword-denotation-dispatch
-  plan (`feat/keyword-denotation-dispatch`)]: `sameLiteralBinding`
-  (`pkg/internal/match/syntax_adapter.go`) accepts a pattern-literal match whenever both the
-  definition-site and use-site bindings are `BindingTypePrimitive` — it never asks whether the two
-  denote the SAME form, only that both are compile-time bindings. `(import (scheme base) (rename
-  (scheme base) (else otherwise))) (cond (#f 1) (otherwise 2))` fails on this branch and on master
-  (`syntactic keyword "otherwise" used as a variable`); Racket accepts it and answers `2`. Same for
-  `case`'s `else`. Fix candidate: compare the denoted form (`environment.DenotedForm`, this branch's
-  own mechanism) instead of "both Primitive".
+- [x] **Renamed AUXILIARY keywords (`else`, `case`'s `else`, `=>`) are still matched by
+  spelling, not by binding** [Done 2026-09-15, branch `feat/renamed-inner-positions`]:
+  `sameLiteralBinding` (`pkg/internal/match/syntax_adapter.go`) accepted a pattern-literal
+  match whenever both the definition-site and use-site bindings were `BindingTypePrimitive`,
+  never asking whether the two denote the SAME form. `(import (scheme base) (rename
+  (scheme base) (else otherwise))) (cond (#f 1) (otherwise 2))` failed on this branch's base
+  and on master (`syntactic keyword "otherwise" used as a variable`); Racket answers `2` —
+  this branch now answers `2` too (same for `case`'s `else`, and for a renamed `=>`). **What
+  now decides:** the denoted form (`environment.DenotedForm`) instead of "both Primitive",
+  narrowed further so an imported literal that denotes NO form (an ordinary variable or user
+  macro) still falls back to matching spelling, or any imported name would satisfy any such
+  literal (see `TestRenamedLiteralDoesNotOverAcceptUnrelatedImports`, which measured that
+  exact over-acceptance before this narrowing). Pinned by `TestRenamedAuxiliaryKeywords` and
+  `TestRenamedLiteralDoesNotOverAcceptUnrelatedImports`
+  (`pkg/wile/renamed_inner_positions_test.go`). A reviewer flagged an unmeasured cost: an
+  N-clause `cond`/`case` now pays a binding resolution per clause tried against `else`/`=>`,
+  since match.go's literal arm used to refuse a differently-spelled symbol with a cheap
+  string compare and now always resolves it (`pkg/internal/match/match.go`'s
+  `ByteCodeCompareCar`). Measured 2026-09-15 with a benchmark built specifically to hit this
+  path (`BenchmarkCondClauseLiteralExpand`, `pkg/machine/compilation`; bare-identifier clause
+  tests, the shape whose else/=>-position input actually is a symbol — a compound-test clause
+  like `(< n 2)` never reaches the literal comparison at all): no statistically significant
+  delta and 0 extra allocs/op against `feat/keyword-denotation-dispatch`, 12-run interleaved.
+  `case`'s clause heads are always `(atoms ...)` lists, so its cost stays O(1) regardless of
+  clause count; `cond`'s bare-identifier/`=>`-clause shape is the one that pays O(N) in
+  principle, and it still measures flat.
 
 - [ ] **`include` inside a procedure body skips letrec\* predeclaration** [Medium, S, filed
   2026-09-15 during the keyword-denotation-dispatch whole-branch review; pre-existing on master, not
