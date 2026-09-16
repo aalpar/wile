@@ -113,6 +113,50 @@ var condCaseBenchCorpus = []string{
 	`(define (tag5 n) (case n ((0) 'zero) ((1) 'one) ((2) 'two) ((3) 'three) (else 'other)))`,
 }
 
+// quasiquoteBenchCorpus exists for the same reason condCaseBenchCorpus does, one
+// subsystem over: compileBenchCorpus and condCaseBenchCorpus contain zero
+// quasiquote between them, so neither BenchmarkValidatePhase nor
+// BenchmarkFrontEndPhase can see the quasiquote change at all — a measurement
+// taken on them and reported as "no delta for the marker fix" is reporting on a
+// corpus the fix never touches.
+//
+// Both walks the fix moved are in here, because they cost at different places:
+//
+//   - the EXPANDER's (quasi_expand.go), one headName per template pair head, now
+//     a binding resolution rather than a string compare;
+//   - VALIDATE's (opaque_subtree.go), one markerName per pair head in the same
+//     template, plus the same walk again per enclosing region from the boxing
+//     pass's reference index (ref_index.go).
+//
+// So the benchmark runs the full parse → expand → validate → compile, not expand
+// alone as BenchmarkCondClauseLiteralExpand does.
+//
+// The shapes are chosen for head density rather than size: a template whose pairs
+// are mostly data still pays one resolution per head. row/deep are ordinary
+// element templates, nest reaches depth 2 (where an unquote does NOT fire and the
+// walk keeps descending), splice takes the append path, dotted is the
+// (a unquote b) spine shape both walks special-case, and vec is the vector arm.
+var quasiquoteBenchCorpus = []string{
+	`(define (row a b) (quasiquote (x (unquote a) y (unquote b) z)))`,
+	`(define (nest a) (quasiquote (1 (quasiquote (2 (unquote (unquote a)))) 3)))`,
+	`(define (splice xs) (quasiquote (head (unquote-splicing xs) tail)))`,
+	`(define (dotted a b) (quasiquote (a unquote b)))`,
+	`(define (deep a) (quasiquote ((k1 (unquote a)) (k2 (quote lit)) (k3 (unquote (+ a 1))))))`,
+}
+
+// newQuasiquoteBenchEnv extends newCompileBenchEnv with the list-construction
+// operators quasiquote SYNTHESIZES — quasiHead finds no sealed binding in this
+// minimal namespace, so the references it emits are ordinary free ones the
+// compiler still has to resolve. Its own function, so it cannot perturb
+// BenchmarkValidatePhase/BenchmarkFrontEndPhase's environment.
+func newQuasiquoteBenchEnv() *environment.EnvironmentFrame {
+	env := newCompileBenchEnv()
+	for _, name := range []string{"cons", "append", "list->vector"} {
+		env.MaybeCreateOwnGlobalBinding(values.NewSymbol(name), environment.BindingTypeVariable, nil)
+	}
+	return env
+}
+
 // newCondCaseBenchEnv extends newCompileBenchEnv with "memv", which case's
 // bootstrap expansion references; kept as its own function so this benchmark's
 // setup never changes BenchmarkValidatePhase/BenchmarkFrontEndPhase's own

@@ -59,11 +59,18 @@ type quasiKeywords struct {
 	// Do not "clean it up".
 	nestingAlwaysRuntime bool
 
-	// denote resolves a head identifier to the marker it DENOTES, so a renamed or
+	// env is the frame headName resolves a head identifier in, so a renamed or
 	// prefixed import of unquote / unquote-splicing / quasiquote is still a marker.
 	// nil in the package-level tables: they are compared by spelling until an entry
 	// point with an environment copies them through resolvedBy.
-	denote func(sym *syntax.SyntaxSymbol) string
+	//
+	// A frame pointer rather than the resolver closure this used to hold. The
+	// closure was allocated once per compileQuasiquoteDatum and twice per
+	// quasisyntax, for a function whose only capture was this frame: replacing it
+	// took 5 allocs/op off BenchmarkQuasiquoteExpand (2.164k -> 2.159k, p=0.000,
+	// 12-run interleaved). It also made quasiKeywords non-comparable, which a
+	// struct of four names and two flags has no reason to be.
+	env *environment.EnvironmentFrame
 }
 
 var quasiquoteKW = quasiKeywords{
@@ -93,8 +100,8 @@ var quasisyntaxKW = quasiKeywords{
 // does so because it reaches quasiHead, directly or through quasiForm. The
 // needs-runtime predicate takes no receiver and reaches no compile-time state
 // of its own: an environment lookup arrives only when its kw argument was built
-// by resolvedBy, threaded through as the denote closure rather than read off a
-// receiver. Called with the raw package-level tables (denote == nil) it reaches
+// by resolvedBy, carried in the table's own env field rather than read off a
+// receiver. Called with the raw package-level tables (env == nil) it reaches
 // nothing at all, which is what lets the package tests exercise it without a
 // compiler.
 func buildQuasiSyntaxList(srcCtx *syntax.SourceContext, elems ...syntax.SyntaxValue) syntax.SyntaxValue {
@@ -145,14 +152,14 @@ func (p *CompileTimeContinuation) quasiHead(name string, srcCtx *syntax.SourceCo
 
 // getSymbolName returns the symbol name if the value is a symbol.
 //
-// It compares SPELLINGS, and every caller here is right to: these walks run on
-// an unexpanded template datum before any scope-set resolution, and R7RS §4.2.6
-// defines quasiquote's recognition of unquote on the datum. This is not the
-// binding-identity rule's territory for getSymbolName's own remaining callers —
-// headName's unresolved fallback, and the spelling expandQuasi keeps for
-// rewrapQuasiForm's reconstruction — though marker RECOGNITION itself now goes
-// through headName's resolved binding a few lines below; validate/opaque_subtree.go
-// documents the same spelling limitation for the same reason.
+// It compares SPELLINGS, and its two remaining callers are right to: headName's
+// fallback, for a head that denotes nothing and so has only its spelling, and the
+// spelling expandQuasi keeps so rewrapQuasiForm rebuilds a too-deep marker with
+// the symbol the user actually wrote. Marker RECOGNITION is no longer here — it
+// goes through headName's resolved binding a few lines below, and
+// validate/opaque_subtree.go's markerName is that same resolution on the other
+// side of the validate → machine edge, because the two walks have to agree about
+// which heads are markers (quasiHeadDepth).
 func getSymbolName(v syntax.SyntaxValue) (string, bool) {
 	s, ok := v.(*syntax.SyntaxSymbol)
 	if ok {
@@ -223,9 +230,7 @@ func quasiQuoted(kw quasiKeywords, v syntax.SyntaxValue, srcCtx *syntax.SourceCo
 // functions remain callable without a compiler, which their own tests rely on.
 func (p quasiKeywords) resolvedBy(env *environment.EnvironmentFrame) quasiKeywords {
 	q := p
-	q.denote = func(sym *syntax.SyntaxSymbol) string {
-		return headFormName(env, sym)
-	}
+	q.env = env
 	return q
 }
 
@@ -238,10 +243,10 @@ func (p quasiKeywords) headName(v syntax.SyntaxValue) (string, bool) {
 	if !ok {
 		return getSymbolName(v)
 	}
-	if p.denote == nil {
+	if p.env == nil {
 		return getSymbolName(v)
 	}
-	name := p.denote(sym)
+	name := headFormName(p.env, sym)
 	if name == "" {
 		return getSymbolName(v)
 	}
@@ -283,8 +288,14 @@ func (p *CompileTimeContinuation) consChain(srcCtx *syntax.SourceContext, elems 
 // form (anything but exactly one argument) is quoted verbatim instead; R7RS
 // gives no error here, and `(quasiquote (unquote)) evaluates to (unquote).
 //
-// keyword is the name the caller's switch already matched, not a re-spelled
-// kw field, so a keyword cannot be paired with another keyword's depth delta.
+// keyword is the SPELLING the caller read off the head, and newDepth the delta
+// the caller's switch chose from what that head DENOTES; the two arrive from the
+// same head in the same arm, so a keyword still cannot be paired with another
+// keyword's depth delta. What the two no longer have to be is the same string:
+// the switch matches denotedName while the caller passes carSymName, which is
+// what re-emits `(qq (2 (uq x))) with the user's own qq and uq rather than
+// respelling them canonically. Rebuilding from a kw field would do the latter,
+// which is why this is a parameter and not a lookup.
 //
 // It does not enter the depth guard: the recursive expandQuasi call does.
 func (p *CompileTimeContinuation) rewrapQuasiForm(
