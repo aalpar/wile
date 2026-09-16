@@ -57,6 +57,72 @@ func newCompileBenchEnv() *environment.EnvironmentFrame {
 	return env
 }
 
+// condCaseBenchCorpus defines cond and case locally, verbatim from
+// pkg/registry/core/bootstrap_macros.scm, because newCompileBenchEnv's minimal
+// namespace never loads stdlib bootstrap (see newNamespace); compileBenchCorpus
+// has no cond/case at all, so neither BenchmarkValidatePhase nor
+// BenchmarkFrontEndPhase can see the per-clause else/=> literal-resolution cost
+// the renamed-auxiliary-keyword fix (pkg/internal/match) added.
+//
+// Three clause shapes, chosen because they cost differently under that fix:
+//
+//   - flag-chain / arrow-chain: each non-final clause's test is a bare
+//     identifier, or uses the (test => proc) idiom. This is the shape that
+//     puts a real symbol at cond's else/=> literal-comparison position for
+//     every clause tried — match.go's ByteCodeCompareCar only calls
+//     literalMatcher when the input at a literal position is itself a
+//     *syntax.SyntaxSymbol (pkg/internal/match/match.go, the isLiteral/
+//     inputIsSym guard around line 348), so this shape pays one binding
+//     resolution per clause, i.e. O(N).
+//   - compound-test: each clause's test is a compound expression, (< n K),
+//     matching compileBenchCorpus's own if/let style. The else/=> position
+//     never sees a symbol here, so this shape never reaches literalMatcher at
+//     all — kept as a control to contrast against flag-chain/arrow-chain.
+//   - tag5 (case): every non-final clause's head is a LIST, (atoms ...), never
+//     a symbol, so unlike cond's flag-chain shape, case's else-literal check
+//     is reached (and pays one resolution) only once, for the terminal else
+//     clause, regardless of N — case's per-clause cost from this fix is O(1),
+//     not O(N).
+var condCaseBenchCorpus = []string{
+	`(define-syntax cond
+	   (syntax-rules (else =>)
+	     ((cond (else result1 result2 ...)) (begin result1 result2 ...))
+	     ((cond (test => result)) (let ((temp test)) (if temp (result temp))))
+	     ((cond (test => result) clause1 clause2 ...)
+	      (let ((temp test)) (if temp (result temp) (cond clause1 clause2 ...))))
+	     ((cond (test)) test)
+	     ((cond (test) clause1 clause2 ...)
+	      (let ((temp test)) (if temp temp (cond clause1 clause2 ...))))
+	     ((cond (test result1 result2 ...)) (if test (begin result1 result2 ...)))
+	     ((cond (test result1 result2 ...) clause1 clause2 ...)
+	      (if test (begin result1 result2 ...) (cond clause1 clause2 ...)))))`,
+	`(define-syntax case
+	   (syntax-rules (else =>)
+	     ((case (key ...) clauses ...) (let ((atom-key (key ...))) (case atom-key clauses ...)))
+	     ((case key (else => result)) (result key))
+	     ((case key (else result1 result2 ...)) (begin result1 result2 ...))
+	     ((case key ((atoms ...) => result)) (if (memv key '(atoms ...)) (result key)))
+	     ((case key ((atoms ...) => result) clause clauses ...)
+	      (if (memv key '(atoms ...)) (result key) (case key clause clauses ...)))
+	     ((case key ((atoms ...) result1 result2 ...)) (if (memv key '(atoms ...)) (begin result1 result2 ...)))
+	     ((case key ((atoms ...) result1 result2 ...) clause clauses ...)
+	      (if (memv key '(atoms ...)) (begin result1 result2 ...) (case key clause clauses ...)))))`,
+	`(define (flag-chain a b c d e) (cond (a 'a) (b 'b) (c 'c) (d 'd) (else 'other)))`,
+	`(define (arrow-chain a b) (cond (a => car) (b => cdr) (else 'other)))`,
+	`(define (compound-test n) (cond ((< n 0) 'neg) ((< n 10) 'small) ((< n 100) 'mid) (else 'large)))`,
+	`(define (tag5 n) (case n ((0) 'zero) ((1) 'one) ((2) 'two) ((3) 'three) (else 'other)))`,
+}
+
+// newCondCaseBenchEnv extends newCompileBenchEnv with "memv", which case's
+// bootstrap expansion references; kept as its own function so this benchmark's
+// setup never changes BenchmarkValidatePhase/BenchmarkFrontEndPhase's own
+// environment.
+func newCondCaseBenchEnv() *environment.EnvironmentFrame {
+	env := newCompileBenchEnv()
+	env.MaybeCreateOwnGlobalBinding(values.NewSymbol("memv"), environment.BindingTypeVariable, nil)
+	return env
+}
+
 func parseForBench(b *testing.B, env *environment.EnvironmentFrame, code string) syntax.SyntaxValue {
 	reader := bufio.NewReader(strings.NewReader(code))
 	p := parser.NewParser(env, true, reader)

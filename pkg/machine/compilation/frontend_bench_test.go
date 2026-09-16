@@ -94,3 +94,28 @@ func BenchmarkFrontEndPhase(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkCondClauseLiteralExpand times parse+expand over condCaseBenchCorpus
+// (see that var's comment): compileBenchCorpus has no cond/case at all, so
+// this is the gate on the per-clause else/=> literal-resolution cost the
+// renamed-auxiliary-keyword fix (pkg/internal/match) added. Unlike
+// BenchmarkFrontEndPhase, it stops at expand — validate and compile touch no
+// code this task changed, so including them would only dilute the signal.
+func BenchmarkCondClauseLiteralExpand(b *testing.B) {
+	env := newCondCaseBenchEnv()
+	eval := machine.NewVMMacroEvaluator()
+	ctx := context.Background()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, code := range condCaseBenchCorpus {
+			prog := parseForBench(b, env, code)
+			econt := NewExpanderTimeContinuation(ctx, env, eval)
+			_, expandErr := econt.ExpandExpression(prog)
+			if expandErr != nil {
+				b.Fatalf("expand %q: %v", code, expandErr)
+			}
+		}
+	}
+}
