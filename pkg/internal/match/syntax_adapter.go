@@ -580,6 +580,26 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 // (pkg/wile/matcher_pattern_gaps_test.go), so a later widening of the
 // sameSpelling fallback — comparing resolved bindings across the rename
 // instead of names — is a measurable flip rather than a silent change.
+//
+// THE OTHER EDGE THE SAME THREE LINES MOVED, and unlike the boundary above it is
+// a BEHAVIOUR CHANGE rather than an unchanged limitation, so it is stated here
+// rather than left to be rediscovered. When defB DOES denote a form, the rider
+// now requires useB to denote the SAME form, which refuses an imported useB that
+// denotes none — where the unconditional rider accepted it. That refusal is the
+// R7RS answer: a program importing its own `else` as an ordinary variable has
+// shadowed cond's auxiliary keyword, and §4.3.2 asks whether the two identifiers
+// denote the same binding, which a variable and a keyword never do. It is still
+// a flip, and a visible one — with a library exporting (define else 42), imported
+// alongside (only (scheme base) cond quote lambda define),
+//
+//	(cond (#f 1) (else => (lambda (x) x)))
+//
+// raised `syntactic keyword "=>" used as a variable` on the pre-task base
+// (90c4f2c2), because the literal reading puts => in expression position, and
+// answers 42 here, taking the (test => proc) reading. Both measured. Pinned as
+// "FLIP: an imported variable no longer matches an auxiliary-keyword literal" in
+// TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding, next to the
+// RESIDUAL/BOUNDARY pair.
 func literalNotShadowed(defB, useB *environment.Binding, sameSpelling bool) bool {
 	if sameLiteralBinding(defB, useB) {
 		return true

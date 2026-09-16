@@ -616,6 +616,11 @@ func w16LibEngine(t *testing.T, libs map[string]string) *wile.Engine {
 // left for a variable literal (DenotedForm is "" on both sides) and the
 // prefix changes the spelling. Under-acceptance, not over-acceptance — the
 // safer direction, but still not the R7RS answer.
+//
+// The FLIP row is the third edge of the same rider, and the only one whose
+// ANSWER moved: with defB denoting a form, an imported useB denoting none is now
+// refused where it used to be accepted. See literalNotShadowed's own paragraph
+// on it; the row exists so the change is a measurement rather than folklore.
 func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 	const libRules = `(define-library (w16lib)
   (export mg)
@@ -654,6 +659,13 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
   (import (scheme base))
   (begin
     (define lit 999)))
+`
+
+	const libElseVariable = `(define-library (w16else)
+  (export else)
+  (import (scheme base))
+  (begin
+    (define else 42)))
 `
 
 	cases := []struct {
@@ -716,6 +728,30 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 			libs: map[string]string{"w16lib.scm": libRulesExportingLit},
 			src:  "(import (prefix (w16lib) p:))\n(p:mg p:lit)",
 			want: "OTHER",
+		},
+		{
+			// FLIP, the third edge of the same rider and the only one that
+			// CHANGED an answer. defB (cond's `else` literal) denotes a form,
+			// so the rider now requires useB to denote the same one; the
+			// imported `else` is an ordinary variable and denotes none, so it
+			// is refused as the literal and the clause reads as
+			// (test => proc): `else` is 42, truthy, and the identity
+			// procedure returns it. The pre-task base (90c4f2c2) accepted the
+			// imported binding unconditionally, took the else-clause reading,
+			// and raised `syntactic keyword "=>" used as a variable` because
+			// that reading leaves => in expression position — measured, both
+			// ways. Head's answer is the R7RS one (§4.3.2 compares bindings,
+			// and a variable never denotes cond's keyword); this row is here
+			// because the flip is a behaviour change the BOUNDARY paragraph in
+			// literalNotShadowed did not name, not because 42 is in doubt.
+			//
+			// (only …) rather than a plain (scheme base) import: the library's
+			// `else` has to be the only `else` in scope for the shadow to be
+			// the one under test.
+			name: "FLIP: an imported variable no longer matches an auxiliary-keyword literal",
+			libs: map[string]string{"w16else.scm": libElseVariable},
+			src:  "(import (only (scheme base) cond quote lambda define) (w16else))\n(cond (#f 1) (else => (lambda (x) x)))",
+			want: "42",
 		},
 		{
 			name: "syntax-case takes the same path",
