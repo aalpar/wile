@@ -1588,11 +1588,31 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   `unquote-splicing`, and for a `prefix` import). **What now decides:** the form the marker's
   head denotes (`environment.DenotedForm`), with spelling as the fallback for a head that
   resolves to no form — an unbound head under a plain `prefix` import still keys on spelling
-  unchanged (arm 2 of the keyword-denotation-dispatch rule). Pinned by
-  `TestRenamedQuasiquoteMarkers` (`pkg/wile/renamed_inner_positions_test.go`). Cost measured
-  2026-09-15 with a 12-run interleaved A/B against `feat/keyword-denotation-dispatch`
-  (`BenchmarkValidatePhase`, `BenchmarkFrontEndPhase`): no statistically significant delta,
-  0 extra allocs/op.
+  unchanged (arm 2 of the keyword-denotation-dispatch rule). **Both marker walks moved, not
+  one.** The first round moved only the expander's; `pkg/internal/validate/opaque_subtree.go`'s
+  walk kept comparing spellings, and that walk is what records a quasiquoted `set!` as a
+  mutation and a capture. The permissive disagreement its own doc warns about then happened:
+  a renamed unquote left the `set!` unmarked, so the inliner kept a stale lambda body, a
+  captured binder was never boxed, and top-level immutability REFUSED a legal `set!`. Fixed by
+  giving the opaque node the environment it was validated in (`ValidatedQuasiquote.Env`,
+  `ValidatedLiteral.Env`) so every consumer of the walk — the boxing pass's reference index and
+  the or-shaped-let lowering — reads the same answer from the node rather than from wherever it
+  happens to stand. Pinned by
+  `TestRenamedQuasiquoteMarkers` and `TestRenamedQuasiquoteMarkerIsVisibleToTheOpaqueScan`
+  (`pkg/wile/renamed_inner_positions_test.go`). **The first cost claim filed here was measured
+  on a corpus without quasiquote in it** — `BenchmarkValidatePhase` and `BenchmarkFrontEndPhase`
+  run `compileBenchCorpus`, which has no `quasiquote`, so "no statistically significant delta"
+  said nothing about this change. Re-measured 2026-09-15 with a benchmark built for the path
+  (`BenchmarkQuasiquoteExpand`, `pkg/machine/compilation`: five quasiquote defines through
+  parse → expand → validate → compile, covering the element, nested-depth, splice, dotted-spine
+  and deep shapes), 12-run interleaved A/B against `feat/keyword-denotation-dispatch`
+  (079c62ab): **sec/op 66.71µ → 68.71µ, +2.99% (p=0.000, n=12)**; allocs/op 2.164k → 2.159k
+  (−5, p=0.000); B/op −0.05%. The +3% is the resolution the fix adds per template head, in both
+  the expander's walk and validate's; the −5 allocs are the `resolvedBy` closure this round
+  replaced with a frame pointer on `quasiKeywords`. `BenchmarkValidatePhase` and
+  `BenchmarkFrontEndPhase` remain flat (p=0.052 / p=0.198, 0 alloc change, same 12-run
+  interleave), which is now a statement about quasiquote-free code rather than a claim about
+  this fix.
 
 - [x] **Renamed AUXILIARY keywords (`else`, `case`'s `else`, `=>`) are still matched by
   spelling, not by binding** [Done 2026-09-15, branch `feat/renamed-inner-positions`]:
@@ -1620,6 +1640,48 @@ compile error. Plans: `memory/2026-08-24-typed-engine-options-design.local.md` (
   `case`'s clause heads are always `(atoms ...)` lists, so its cost stays O(1) regardless of
   clause count; `cond`'s bare-identifier/`=>`-clause shape is the one that pays O(N) in
   principle, and it still measures flat.
+
+- [ ] **A quasiquote head can now raise `ErrAmbiguousBinding` on a DATUM** [Low, S, filed
+  2026-09-15 during the renamed-inner-positions whole-branch review]: marker recognition resolves a
+  template head through `env.GetBinding` (`headFormName`, `pkg/machine/compilation`;
+  `markerName`, `pkg/internal/validate/opaque_subtree.go`), and `GetBinding` raises
+  `ErrAmbiguousBinding` on an equal-cardinality incomparable maximum (Fork C, auto-memory
+  `ambiguous-binding-raise-fork-c.md`). Every previous consumer of that raise was asking about
+  code; the quasi walk asks about a head sitting in pure DATA, where an identifier's identity was
+  never consulted before — so `` `(a (foo b)) `` can in principle refuse to compile for a reason
+  that has nothing to do with what the form means. Latent: no Scheme-level repro constructed, and
+  the shape needs two same-spelled imported bindings at incomparable scope sets reachable at a
+  template head. The conservative answer for this consumer is "not a marker" (keep the spelling),
+  which is what the existing `denoted == ""` fallback already does for every non-raising failure.
+
+- [ ] **`(cond (otherwise 2))` works with a renamed `else` but `(cond-expand (otherwise …))` does
+  not** [Low, S, filed 2026-09-15 during the renamed-inner-positions whole-branch review; an
+  inconsistency this branch CREATES by fixing one of the two]: `cond`'s and `case`'s `else` are
+  pattern literals and now resolve by binding, so `(rename (scheme base) (else otherwise))` makes
+  `(cond (#f 1) (otherwise 2))` answer `2`. `cond-expand`'s `else` is not a pattern literal — it is
+  a hand-written spelling test, `sym.Key() == "else"` at
+  `pkg/machine/compilation/compile_cond_expand.go:187` — so the same rename leaves
+  `(cond-expand (otherwise …))` unrecognized. Two forms named `else`, two mechanisms, one of them
+  now binding-aware. Fix candidate: the same `environment.DenotedForm` reading the other two use,
+  spelling as the fallback. `isElseClause` is a package function, but its only caller
+  (`resolveCondExpandClause`, same file) is a `*CompileTimeContinuation` method and already reads
+  `p.env`, so the environment is in reach; what is NOT settled is whether `else` in a
+  `cond-expand` position resolves to a form keyword at all in the frames this runs in, including
+  a library body's. Measure that before writing the comparison.
+
+- [ ] **`environment.SameBinding` is the identity `literalNotShadowed` approximates** [Low, M,
+  filed 2026-09-15 during the renamed-inner-positions whole-branch review]: the pattern-literal
+  rider in `pkg/internal/match/syntax_adapter.go` accepts an imported use-site binding and then
+  discriminates with `DenotedForm`, falling back to spelling when neither side denotes a form —
+  which is what the BOUNDARY row of `TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding`
+  records as refusing a legitimate prefixed re-export. `environment.SameBinding`
+  (`pkg/environment/binding.go:489`) is the origin-based identity that answers it properly, and
+  the reviewer measured that adding it flips exactly that one documented BOUNDARY row to the R7RS
+  answer with everything else green. Filed rather than applied because origin-based identity was
+  REJECTED for import-conflict detection (auto-memory `import-conflict-detection-shipped.md`) on a
+  failure with the opposite polarity — there it over-ACCEPTED distinct bindings as the same, here
+  it would under-accept nothing — so the rejection does not transfer and must be re-measured on
+  this consumer, not assumed either way.
 
 - [ ] **`include` inside a procedure body skips letrec\* predeclaration** [Medium, S, filed
   2026-09-15 during the keyword-denotation-dispatch whole-branch review; pre-existing on master, not
