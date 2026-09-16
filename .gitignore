@@ -5,8 +5,6 @@ private/
 # must never reach the public surface. Belt-and-suspenders: these are also
 # covered by a personal global gitignore on the maintainer's machine, but the
 # repo must protect itself for fresh clones, CI, and other contributors.
-/memory/
-/plans/
 /scheme-corpus/
 
 # Build outputs
