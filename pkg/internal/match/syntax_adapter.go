@@ -147,8 +147,11 @@ type BindingChecker interface {
 // macro-definition time and matched against a different use-site environment each
 // expansion (syntax-rules). Match() supplies no per-call checker and falls back
 // to the opts one — that fallback is how syntax-case gets its checker at all.
-// With a checker in neither position the binding comparison is skipped, but an
-// Ambiguous pin still refuses the literal.
+// With a checker in neither position the binding comparison is skipped
+// entirely and a non-Ambiguous literal matches ANY identifier, spelling
+// included — production never does this (operation_syntax_rules_transform.go
+// and operation_syntax_case.go always construct a checker), so the gap is
+// real but unexercised, not a documented "matches by spelling" fallback.
 type SyntaxMatcher struct {
 	matcher        *Matcher
 	ellipsisID     string                // Custom ellipsis identifier (default "...")
@@ -259,9 +262,15 @@ func (p *SyntaxMatcher) Match(ctx context.Context, input syntax.SyntaxValue) err
 // lambda, etc.) but the pattern literal doesn't, they won't match.
 //
 // Pass nil for checker to fall back to the checker supplied at construction
-// (SyntaxMatcherOpts.BindingChecker), and nil in both places to skip the binding
-// comparison (less strict: literals then match by spelling, unless the pin is
-// ambiguous).
+// (SyntaxMatcherOpts.BindingChecker). With nil in both places the binding
+// comparison is skipped entirely: a non-Ambiguous literal then matches ANY
+// identifier regardless of spelling, not "by spelling" as this doc used to
+// claim — match.go's literal arm no longer enforces spelling upstream, so
+// there is nothing left to fall back to. Both production callers
+// (operation_syntax_rules_transform.go, operation_syntax_case.go) always
+// construct a real checker, so this gap is unreachable today, not merely
+// undesirable; a future caller that matches literals without one would need
+// to add the spelling check itself.
 //
 // The checker is CLOSED OVER rather than stored on the receiver. It used to be
 // assigned to p.bindingChecker and cleared by a defer, which turned a field
@@ -423,7 +432,7 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 		if !ok {
 			return false
 		}
-		if !literalNotShadowed(pin.Binding, useB) {
+		if !literalNotShadowed(pin.Binding, useB, input.Key() == pattern.Key()) {
 			return false
 		}
 	} else if checker != nil {
@@ -503,16 +512,20 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 }
 
 // literalNotShadowed decides whether the use site's resolution of a pattern
-// literal is still the literal the macro was defined against.
+// literal is still the literal the macro was defined against. sameSpelling is
+// input.Key() == pattern.Key() from the caller: whether the identifier that
+// actually appeared at the use site is spelled the same as the literal as
+// written in the macro's literal list.
 //
 // The IsImported rider covers the one legitimate case pointer identity cannot:
 // an import mints a FRESH *Binding for a re-exported ordinary name, so a library
 // that exports both a macro and the variable the macro uses as a literal can
-// never be pointer-equal at the use site. Any imported binding of the name is
-// therefore accepted — deliberately over-accepting, since the rider cannot tell
-// which library the import came from. The under-accepting alternative breaks the
-// legitimate re-export, and this predicate's false positive is a forgone
-// discrimination, not a capture.
+// never be pointer-equal at the use site. Any SAME-SPELLED imported binding of
+// the name is therefore accepted — deliberately over-accepting across libraries,
+// since the rider cannot tell which library the import came from — but spelling
+// is still required when defB's own denotation cannot substitute for it (see
+// below). The under-accepting alternative breaks the legitimate re-export, and
+// this predicate's false positive is a forgone discrimination, not a capture.
 //
 // The over-acceptance is a SURVIVING residual of R7RS §4.3.2, not a closed case,
 // and it is not hypothetical: with a library exporting only a macro over its own
@@ -521,19 +534,25 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 // exact program is pinned — as today's answer, labelled residual — by the
 // imported-shadow row of TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding
 // (pkg/wile/matcher_pattern_gaps_test.go), so a later tightening of the rider has
-// a measurement to flip rather than a silent behaviour change.
+// a measurement to flip rather than a silent behaviour change. That row, and
+// every other row exercising this rider, is same-spelled — the residual is about
+// WHICH library's binding is accepted, never about accepting a different name.
 //
 // When defB denotes a form, the rider is narrowed to useB denoting the SAME
-// form. Before match.go's literal arm could reach a differently-spelled useB,
-// this rider only ever saw a useB resolved from input carrying the pattern's OWN
-// spelling, so "any imported binding" and "any imported binding of this form"
-// coincided. Once spelling can differ (a renamed or prefixed auxiliary keyword),
-// they no longer do: an imported `else` binding would otherwise satisfy a `=>`
-// pattern's rider, matching one auxiliary keyword against another. A defB that
-// denotes no form (the private-`lit`-variable case above) keeps the unconditional
-// acceptance verbatim — DenotedForm is "" on both sides there, so it cannot
-// discriminate, and that residual is unrelated to this narrowing.
-func literalNotShadowed(defB, useB *environment.Binding) bool {
+// form — spelling-independent, like sameLiteralBinding's own widening, because
+// DenotedForm survives per-library minting and renaming alike. When defB denotes
+// no form (defB is an ordinary variable literal, or a user macro — the
+// private-`lit` case above), DenotedForm is "" on both sides and cannot
+// discriminate at all, so the rider falls back to sameSpelling. Before match.go's
+// literal arm could reach a differently-spelled useB, sameSpelling was always
+// true here (the caller guaranteed it), so this fallback was unreachable with a
+// mismatch and returning true unconditionally was equivalent. It no longer is:
+// with a renamed or prefixed literal now reaching this rider, an unconditional
+// true would accept ANY imported binding — of any name — as any OTHER literal
+// that happens to denote no form, which is most literals (every plain-variable
+// or user-macro literal). Falling back to sameSpelling instead keeps every
+// documented row above (all same-spelled) while refusing that cross-name case.
+func literalNotShadowed(defB, useB *environment.Binding, sameSpelling bool) bool {
 	if sameLiteralBinding(defB, useB) {
 		return true
 	}
@@ -542,7 +561,7 @@ func literalNotShadowed(defB, useB *environment.Binding) bool {
 	}
 	denoted := environment.DenotedForm(defB)
 	if denoted == "" {
-		return true
+		return sameSpelling
 	}
 	return denoted == environment.DenotedForm(useB)
 }

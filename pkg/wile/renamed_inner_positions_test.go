@@ -99,6 +99,45 @@ func TestRenamedAuxiliaryKeywords(t *testing.T) {
 		{"control: a local binding of else is not the literal",
 			`(import (scheme base)) (let ((else #t)) (cond (else 3) (#t 4)))`, "3"},
 		{"control: an unrelated keyword does not match the literal",
-			`(import (scheme base) (rename (scheme base) (else otherwise))) (cond (#f 1) (#t 5))`, "5"},
+			`(import (scheme base) (rename (scheme base) (else otherwise))) (cond (#f 1) (car 5))`, "5"},
 	})
+}
+
+// Fix round 1, C1: literalNotShadowed's IsImported rider, when the
+// definition-site literal denotes no form (an ordinary variable or user
+// macro — every literal that is not an auxiliary keyword like else/=>), used
+// to accept ANY imported binding regardless of spelling. Before match.go's
+// literal arm could reach a differently-spelled use-site identifier, spelling
+// was already guaranteed equal by the caller, so this was unreachable with a
+// mismatch. Once it wasn't, an unrelated imported identifier (here: `car`,
+// unrelated to the macro's own `state`/`on` literals) could match a literal
+// purely by being imported, stealing the wrong clause silently.
+//
+// This is the shape of examples/macros/state-machine.scm:25 — a
+// syntax-rules macro whose literals are ordinary-looking names (state, on)
+// that a real program's `(scheme base)` imports (car, cdr, ...) can collide
+// with. Measured on 80aeca39 (before this fix round): (go) answered
+// ((STATE 1) (ON 2) (STATE 3)) — the third clause wrongly took the `state`
+// arm because car's imported binding satisfied literalNotShadowed's
+// denoted=="" fallback unconditionally.
+func TestRenamedLiteralDoesNotOverAcceptUnrelatedImports(t *testing.T) {
+	const lib = `(define-library (sm)
+  (export go)
+  (import (scheme base))
+  (begin
+    (define state 0)
+    (define on 0)
+    (define-syntax machine
+      (syntax-rules (state on)
+        ((_ state n) (list 'STATE n))
+        ((_ on n)    (list 'ON n))
+        ((_ other n) (list 'OTHER n))))
+    (define (go) (list (machine state 1) (machine on 2) (machine car 3)))))
+`
+	eng := w16LibEngine(t, map[string]string{"sm.scm": lib})
+	got := evalString(t, eng, "(import (sm))\n(go)")
+	want := "((STATE 1) (ON 2) (OTHER 3))"
+	if got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
 }

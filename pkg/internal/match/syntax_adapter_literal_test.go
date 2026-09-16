@@ -38,8 +38,15 @@ func newLiteralTestBinding(name string, bt environment.BindingType, imported boo
 // newDenotingLiteralTestBinding builds a standalone binding whose value is a
 // FormKeyword, so DenotedForm(q) == form — the shape a real keyword binding
 // (else, =>, ...) has, as opposed to newLiteralTestBinding's plain symbol.
-func newDenotingLiteralTestBinding(form string, bt environment.BindingType) *environment.Binding {
-	return environment.NewBinding(environment.NewFormKeyword(form), bt)
+func newDenotingLiteralTestBinding(form string, bt environment.BindingType, imported bool) *environment.Binding {
+	q := environment.NewBinding(environment.NewFormKeyword(form), bt)
+	if imported {
+		q.UpdateMeta(func(m *environment.BindingMeta) bool {
+			m.Imported = true
+			return true
+		})
+	}
+	return q
 }
 
 // TestSameLiteralBinding pins the identity rule the definition-site pin is
@@ -56,9 +63,9 @@ func TestSameLiteralBinding(t *testing.T) {
 	otherPrimitive := newLiteralTestBinding("else", environment.BindingTypePrimitive, false)
 	variable := newLiteralTestBinding("else", environment.BindingTypeVariable, false)
 	otherVariable := newLiteralTestBinding("else", environment.BindingTypeVariable, false)
-	elseFormA := newDenotingLiteralTestBinding("else", environment.BindingTypePrimitive)
-	elseFormB := newDenotingLiteralTestBinding("else", environment.BindingTypePrimitive)
-	arrowForm := newDenotingLiteralTestBinding("=>", environment.BindingTypePrimitive)
+	elseFormA := newDenotingLiteralTestBinding("else", environment.BindingTypePrimitive, false)
+	elseFormB := newDenotingLiteralTestBinding("else", environment.BindingTypePrimitive, false)
+	arrowForm := newDenotingLiteralTestBinding("=>", environment.BindingTypePrimitive, false)
 
 	cases := []struct {
 		name string
@@ -96,6 +103,18 @@ func TestSameLiteralBinding(t *testing.T) {
 			b:    elseFormA,
 			want: false,
 		},
+		{
+			// THE FLIP, pinned in both directions: before this task, two
+			// distinct primitives named "else" but denoting nothing (a plain
+			// symbol value, not a FormKeyword) counted as one literal under the
+			// old "both BindingTypePrimitive" rule. Under DenotedForm narrowing
+			// they do not — DenotedForm is "" for both, and an empty denotation
+			// is never an identity, even against itself.
+			name: "two distinct primitives with no denotation are not one literal",
+			a:    shared,
+			b:    otherPrimitive,
+			want: false,
+		},
 		{name: "primitive versus variable", a: shared, b: variable, want: false},
 		{name: "two distinct variables", a: variable, b: otherVariable, want: false},
 	}
@@ -111,37 +130,91 @@ func TestSameLiteralBinding(t *testing.T) {
 }
 
 // TestLiteralNotShadowed pins the IsImported rider on top of the identity rule.
-// The rider accepts ANY imported binding of the name, from any library, which is
-// a deliberate over-acceptance; the cross-library rows of
-// TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding (pkg/wile) pin what
-// that costs at the program level.
+//
+// When defB denotes no form (every row below except the two using
+// elseForm/arrowForm: defB is BindingTypeVariable, so DenotedForm(defB) == ""),
+// the rider accepts an imported binding of the SAME-SPELLED name, from any
+// library — a deliberate over-acceptance across libraries, pinned at the
+// program level by the cross-library rows of
+// TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding (pkg/wile), which
+// are all same-spelled. It does NOT accept an imported binding of a DIFFERENT
+// name: sameSpelling is the caller's input.Key() == pattern.Key(), and with
+// defB denoting no form it is the only signal left to discriminate one
+// unrelated imported identifier from another (see "an unrelated import of a
+// different name" below).
+//
+// When defB DOES denote a form (else, =>, ...), the rider is spelling-
+// independent and instead requires useB to denote the SAME form (see
+// "differently-named auxiliary keywords" below) — mirroring
+// sameLiteralBinding's own DenotedForm widening.
 func TestLiteralNotShadowed(t *testing.T) {
 	pinned := newLiteralTestBinding("lit", environment.BindingTypeVariable, false)
 	localShadow := newLiteralTestBinding("lit", environment.BindingTypeVariable, false)
 	importedShadow := newLiteralTestBinding("lit", environment.BindingTypeVariable, true)
+	unrelatedImport := newLiteralTestBinding("other", environment.BindingTypeVariable, true)
+	elseForm := newDenotingLiteralTestBinding("else", environment.BindingTypePrimitive, false)
+	importedArrowForm := newDenotingLiteralTestBinding("=>", environment.BindingTypePrimitive, true)
+	importedElseForm := newDenotingLiteralTestBinding("else", environment.BindingTypePrimitive, true)
 
 	cases := []struct {
-		name string
-		defB *environment.Binding
-		useB *environment.Binding
-		want bool
+		name         string
+		defB         *environment.Binding
+		useB         *environment.Binding
+		sameSpelling bool
+		want         bool
 	}{
-		{name: "same binding", defB: pinned, useB: pinned, want: true},
-		{name: "unrelated local rebinding is a shadow", defB: pinned, useB: localShadow, want: false},
+		{name: "same binding", defB: pinned, useB: pinned, sameSpelling: true, want: true},
+		{name: "unrelated local rebinding is a shadow", defB: pinned, useB: localShadow, sameSpelling: true, want: false},
 		{
 			// An import mints a fresh *Binding for a re-exported name, so a
 			// legitimately imported literal can never be pointer-equal.
-			name: "any imported binding is accepted",
-			defB: pinned,
-			useB: importedShadow,
-			want: true,
+			name:         "any imported binding of the same name is accepted",
+			defB:         pinned,
+			useB:         importedShadow,
+			sameSpelling: true,
+			want:         true,
 		},
-		{name: "unbound at the use site", defB: pinned, useB: nil, want: false},
+		{
+			// THE FLIP under this task's C1 fix: defB denotes no form (a plain
+			// variable literal), so before this fix "any imported binding" was
+			// accepted regardless of spelling — a renamed or prefixed import of
+			// a totally unrelated name would satisfy this literal. Spelling is
+			// the only signal left when DenotedForm can't discriminate, so an
+			// import of a DIFFERENT name must be refused.
+			name:         "an unrelated import of a different name is refused",
+			defB:         pinned,
+			useB:         unrelatedImport,
+			sameSpelling: false,
+			want:         false,
+		},
+		{name: "unbound at the use site", defB: pinned, useB: nil, sameSpelling: true, want: false},
+		{
+			// defB denotes "else"; an imported binding denoting a DIFFERENT
+			// form ("=>") must not satisfy it, regardless of spelling — this is
+			// literalNotShadowed's half of the else-vs-=> cross-match this task
+			// fixed in sameLiteralBinding.
+			name:         "differently-named auxiliary keywords do not match even when imported",
+			defB:         elseForm,
+			useB:         importedArrowForm,
+			sameSpelling: false,
+			want:         false,
+		},
+		{
+			// defB denotes "else"; an imported binding denoting the SAME form
+			// matches regardless of spelling — the renamed/prefixed-import case
+			// this task exists to fix (renamed "else" import
+			// literal-matching cond's else).
+			name:         "an imported binding denoting the same form matches regardless of spelling",
+			defB:         elseForm,
+			useB:         importedElseForm,
+			sameSpelling: false,
+			want:         true,
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := literalNotShadowed(tc.defB, tc.useB)
+			got := literalNotShadowed(tc.defB, tc.useB, tc.sameSpelling)
 			if got != tc.want {
 				t.Errorf("literalNotShadowed = %v, want %v", got, tc.want)
 			}
