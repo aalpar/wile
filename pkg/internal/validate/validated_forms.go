@@ -193,9 +193,14 @@ type ValidatedSymbol struct {
 // It's also used for passthrough forms like define-syntax, syntax-case, etc.
 //
 // Env is the environment the form was validated in, carried for the opaque walk
-// (opaque_subtree.go) and nil for genuine data, which conceals no code. See
-// opaqueRawSyntax for why the node owns it rather than each consumer supplying
-// one.
+// (opaque_subtree.go). Every caller passes its own environment here, genuine
+// self-evaluating data included (validate.go's self-evaluating arm at :124 and
+// validateSyntaxObject at :138 both pass a non-nil env) — Env being non-nil does
+// not distinguish a passthrough form from genuine data. It is harmless on
+// genuine data because opaqueRawSyntax only treats a ValidatedLiteral as opaque
+// when Value is a non-empty *syntax.SyntaxPair (a form shape); genuine data is
+// never that shape, so Env is never read for it. See opaqueRawSyntax for why the
+// node owns the environment rather than each consumer supplying one.
 type ValidatedLiteral struct {
 	validatedBase
 	Value syntax.SyntaxValue

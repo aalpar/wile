@@ -354,10 +354,15 @@ func forEachRawSymbol(env *environment.EnvironmentFrame, v values.Value, quasi i
 //
 // Heads are matched by what they DENOTE in env, falling back to the spelling when
 // they denote no form (markerName) — the rule compilation.quasiKeywords.headName
-// uses, so a renamed or prefixed unquote is a marker on both sides and a lexical
-// shadow of the name is a marker on neither. With a nil env the walk is
-// spelling-only and both of those cases are misread; opaqueRawSyntax says which
-// nodes carry one.
+// uses, so a renamed or prefixed unquote is a marker on both sides, and a lexical
+// shadow of a RENAMED marker name is a marker on neither (the shadow's spelling no
+// longer matches unquoteKey, so neither the denotation nor the spelling fallback
+// recognizes it). That does NOT hold for the CANONICAL spelling: the fallback
+// reads spelling whenever the head denotes no form, and a local binding of
+// `unquote` still denotes no form, so it still reads as the marker by spelling —
+// measured, `(let ((unquote (lambda (x) x))) `(1 ,2))` still answers `(1 2)`, not
+// `(1 (unquote 2))`. With a nil env the walk is spelling-only and the renamed-shadow
+// case is misread; opaqueRawSyntax says which nodes carry one.
 func forEachRawSymbolPair(env *environment.EnvironmentFrame, p *syntax.SyntaxPair, quasi int, fn func(*syntax.SyntaxSymbol)) {
 	head, ok := p.SyntaxCar().(*syntax.SyntaxSymbol)
 	if ok {

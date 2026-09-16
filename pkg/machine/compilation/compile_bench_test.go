@@ -142,6 +142,7 @@ var quasiquoteBenchCorpus = []string{
 	`(define (splice xs) (quasiquote (head (unquote-splicing xs) tail)))`,
 	`(define (dotted a b) (quasiquote (a unquote b)))`,
 	`(define (deep a) (quasiquote ((k1 (unquote a)) (k2 (quote lit)) (k3 (unquote (+ a 1))))))`,
+	`(define (vec a b) (quasiquote #(x (unquote a) y (unquote b) z)))`,
 }
 
 // newQuasiquoteBenchEnv extends newCompileBenchEnv with the list-construction
