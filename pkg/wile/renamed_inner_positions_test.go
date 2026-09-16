@@ -186,6 +186,33 @@ func TestRenamedQuasiquoteMarkerIsVisibleToTheOpaqueScan(t *testing.T) {
 			`(import (scheme base) (rename (scheme base) (unquote uq)))
 			 (define t 0)
 			 (let ((t #f)) (if t t (quasiquote ((uq t)))))`, "(#f)"},
+		// dottedUnquoteTail's own marker read: `(a . ,x) parses as the 3-element
+		// list (a unquote x), a bare marker symbol in the SPINE rather than a pair
+		// head, so it reaches forEachRawSymbolPair's dotted-tail arm
+		// (opaque_subtree.go:413-430), not the pair-head dispatch the row above
+		// exercises. Reverting dottedUnquoteTail's markerName call to sym.Key()
+		// makes this site read the renamed uq by spelling only, so it is never
+		// recognized as the marker and the whole tail stays data: the set! never
+		// marks, and (f) after the quasiquote answers the stale 7 instead of 99 --
+		// measured on the throwaway-worktree revert described in the review report,
+		// (1 7) there against (1 99) here.
+		{"renamed unquote in dotted-tail position hides a set! of a let-bound lambda",
+			`(import (scheme base) (rename (scheme base) (unquote uq)))
+				 (let ((f (lambda () 7)) (n 0))
+				   (quasiquote (a uq (begin (set! n 1) (set! f (lambda () 99)))))
+				   (list n (f)))`, "(1 99)"},
+		// forEachRawSymbol's vector arm (opaque_subtree.go:340-349) recurses with
+		// env threaded through; passing nil there instead makes every symbol inside
+		// the vector template resolve by spelling only, same failure mode as a nil
+		// env anywhere else in this walk (opaqueRawSyntax's contract). The unquote
+		// sits inside a vector template rather than a list one, so this is the
+		// vector twin of the row above, not a duplicate of it -- measured on the
+		// throwaway-worktree revert, (1 7) there against (1 99) here.
+		{"renamed unquote inside a vector template hides a set! of a let-bound lambda",
+			`(import (scheme base) (rename (scheme base) (unquote uq)))
+				 (let ((f (lambda () 7)) (n 0))
+				   (quasiquote #((uq (begin (set! n 1) (set! f (lambda () 99))))))
+				   (list n (f)))`, "(1 99)"},
 	})
 }
 
