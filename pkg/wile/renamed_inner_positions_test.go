@@ -98,8 +98,21 @@ func TestRenamedAuxiliaryKeywords(t *testing.T) {
 			`(import (scheme base)) (cond (#f 1) (else 2))`, "2"},
 		{"control: a local binding of else is not the literal",
 			`(import (scheme base)) (let ((else #t)) (cond (else 3) (#t 4)))`, "3"},
+		// (cond (test result)) and (cond (else result...)) both evaluate
+		// `result` unconditionally when the test is truthy, so a plain
+		// `(car 5)` clause answers 5 whichever reading is taken — it cannot
+		// tell a correct refusal from a silent regression. `(test => proc)`
+		// discriminates: the non-literal reading applies proc to the test
+		// (5), but the else-literal reading puts `=>` in expression/variable
+		// position — (begin => (lambda (x) 5)) — and errors. Measured
+		// directly: (cond (#f 1) (else => (lambda (x) 5))) (forcing the
+		// literal-else reading with the real `else`) raises `syntactic
+		// keyword "=>" used as a variable`; reverting literalNotShadowed's
+		// IsImported rider to unconditional accept (so `car` wrongly matches
+		// `else` too) makes THIS row raise the identical error instead of
+		// answering 5 — confirmed in a disposable worktree, not asserted.
 		{"control: an unrelated keyword does not match the literal",
-			`(import (scheme base) (rename (scheme base) (else otherwise))) (cond (#f 1) (car 5))`, "5"},
+			`(import (scheme base) (rename (scheme base) (else otherwise))) (cond (#f 1) (car => (lambda (x) 5)))`, "5"},
 	})
 }
 

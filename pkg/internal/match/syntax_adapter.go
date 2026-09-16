@@ -520,12 +520,17 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 // The IsImported rider covers the one legitimate case pointer identity cannot:
 // an import mints a FRESH *Binding for a re-exported ordinary name, so a library
 // that exports both a macro and the variable the macro uses as a literal can
-// never be pointer-equal at the use site. Any SAME-SPELLED imported binding of
-// the name is therefore accepted — deliberately over-accepting across libraries,
-// since the rider cannot tell which library the import came from — but spelling
-// is still required when defB's own denotation cannot substitute for it (see
-// below). The under-accepting alternative breaks the legitimate re-export, and
-// this predicate's false positive is a forgone discrimination, not a capture.
+// never be pointer-equal at the use site. An imported binding of the name is
+// therefore accepted — deliberately over-accepting across libraries, since the
+// rider cannot tell which library the import came from — but WHAT ELSE is
+// required to accept it depends on what defB denotes, exactly as the third
+// paragraph below states: same spelling, when defB denotes no form and
+// DenotedForm cannot discriminate at all; the SAME denotation, spelling-
+// independent, when defB does. Neither condition is universal on its own, and
+// same spelling is never sufficient when defB denotes a form — see the boundary
+// paragraph below for the accepted cost of the first case. The under-accepting
+// alternative breaks the legitimate re-export, and this predicate's false
+// positive is a forgone discrimination, not a capture.
 //
 // The over-acceptance is a SURVIVING residual of R7RS §4.3.2, not a closed case,
 // and it is not hypothetical: with a library exporting only a macro over its own
@@ -552,6 +557,28 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 // that happens to denote no form, which is most literals (every plain-variable
 // or user-macro literal). Falling back to sameSpelling instead keeps every
 // documented row above (all same-spelled) while refusing that cross-name case.
+//
+// BOUNDARY: the sameSpelling fallback is where this predicate's headline
+// property — a renamed or prefixed import still matches its literal — does
+// NOT hold. It holds for auxiliary keywords (defB denotes a form: spelling-
+// independent, per the paragraph above) but not for an ordinary-variable or
+// user-macro literal, since DenotedForm gives sameSpelling nothing to widen
+// past. A library that exports a macro over its own private variable literal
+// and is then imported with a prefix loses the match: with (w16lib) exporting
+// `mg`/`lit` (see the residual above), (import (prefix (w16lib) p:)) (p:mg
+// p:lit) answers OTHER, where R7RS §4.3.2 wants MATCHED-LITERAL, because
+// sameSpelling is false ("p:lit" != "lit") and DenotedForm can't substitute.
+// This is NOT a regression: before match.go's literal arm could reach a
+// mismatched spelling, EVERY renamed or prefixed literal — auxiliary keyword
+// or not — was refused the same way, by the caller's spelling gate rather than
+// by this fallback. Measured unchanged against the pre-task base (commit
+// 90c4f2c2): the same program answers OTHER there too. Pinned next to the
+// over-acceptance residual, as
+// "BOUNDARY: a prefixed re-export of a variable literal is refused" in
+// TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding
+// (pkg/wile/matcher_pattern_gaps_test.go), so a later widening of the
+// sameSpelling fallback — comparing resolved bindings across the rename
+// instead of names — is a measurable flip rather than a silent change.
 func literalNotShadowed(defB, useB *environment.Binding, sameSpelling bool) bool {
 	if sameLiteralBinding(defB, useB) {
 		return true

@@ -601,13 +601,21 @@ func w16LibEngine(t *testing.T, libs map[string]string) *wile.Engine {
 // complete absence of one — is a different binding and must not match. The first
 // two rows and the syntax-case row answered MATCHED-LITERAL at the base.
 //
-// The discrimination is NOT absolute, and the last row says so out loud.
-// literalNotShadowed accepts ANY imported binding of the name, from any library,
-// because an import mints a fresh *Binding and the rider cannot tell which library
-// minted it. So a use-site `lit` imported from an UNRELATED library still matches
-// the private literal, where R7RS §4.3.2 wants the fallback. That row records
-// today's answer as a residual, not as the correct one; it is here so a later
-// tightening of the rider is a measurable flip rather than a silent change.
+// The discrimination is NOT absolute, and the RESIDUAL row says so out loud.
+// literalNotShadowed accepts a SAME-SPELLED imported binding of the name, from
+// any library, because an import mints a fresh *Binding and the rider cannot
+// tell which library minted it. So a use-site `lit` imported from an UNRELATED
+// library still matches the private literal, where R7RS §4.3.2 wants the
+// fallback. That row records today's answer as a residual, not as the correct
+// one; it is here so a later tightening of the rider is a measurable flip
+// rather than a silent change.
+//
+// The BOUNDARY row records the opposite direction: a legitimate re-export of
+// the SAME `lit` binding, reached through a prefix rename, is refused rather
+// than accepted, because spelling is the only signal literalNotShadowed has
+// left for a variable literal (DenotedForm is "" on both sides) and the
+// prefix changes the spelling. Under-acceptance, not over-acceptance — the
+// safer direction, but still not the R7RS answer.
 func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 	const libRules = `(define-library (w16lib)
   (export mg)
@@ -688,6 +696,26 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 			libs: map[string]string{"w16lib.scm": libRules, "w16other.scm": libUnrelatedLit},
 			src:  "(import (w16lib) (w16other))\n(mg lit)",
 			want: "MATCHED-LITERAL",
+		},
+		{
+			// BOUNDARY, the under-acceptance twin of the RESIDUAL row above,
+			// not the R7RS-correct answer. `lit` is BindingTypeVariable, so
+			// DenotedForm(defB) == "" and literalNotShadowed's IsImported
+			// rider falls back to sameSpelling — but the prefix import
+			// renames the use site's `lit` to `p:lit`, so sameSpelling
+			// ("p:lit" != "lit") is false even though p:lit is a legitimate
+			// re-export of the SAME literal binding. R7RS §4.3.2 wants
+			// MATCHED-LITERAL; this answers OTHER. NOT a regression: the
+			// pre-task base (match.go's spelling gate, before any binding
+			// check ran at all) refused every renamed or prefixed literal the
+			// same way, auxiliary keyword or not — measured unchanged against
+			// commit 90c4f2c2. Flip this want only together with a widening
+			// of the sameSpelling fallback (e.g. comparing resolved bindings
+			// across the rename instead of names).
+			name: "BOUNDARY: a prefixed re-export of a variable literal is refused",
+			libs: map[string]string{"w16lib.scm": libRulesExportingLit},
+			src:  "(import (prefix (w16lib) p:))\n(p:mg p:lit)",
+			want: "OTHER",
 		},
 		{
 			name: "syntax-case takes the same path",
