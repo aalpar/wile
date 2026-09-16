@@ -350,16 +350,23 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 							// Input is not a symbol, can't match literal
 							return ErrNotAMatch
 						}
-						// Same spelling is required before the binding check.
-						// This is stricter than R7RS 4.3.2, which lets two
-						// differently-spelled identifiers match when they share
-						// a binding; a known deviation, not a shadowing marker.
-						if inputSym.Key() != symKey {
-							return ErrNotAMatch
-						}
-						// Check binding compatibility
+						// R7RS §4.3.2 states the literal rule in terms of
+						// BINDINGS: two differently-spelled identifiers match
+						// when they denote the same one, which is what a renamed
+						// or prefixed import of an auxiliary keyword produces.
+						// The binding check now runs regardless of spelling, so
+						// a same-spelling literal pays it exactly as before, and
+						// falls through to the shared equality check below,
+						// keeping its old answer.
 						if !literalMatcher(inputSym, symKey) {
 							return ErrNotAMatch
+						}
+						if inputSym.Key() != symKey {
+							// A binding-only match (spelling differs) is already
+							// fully checked; break out of the case so the shared
+							// equality check below — which compares spelling —
+							// does not refuse the match this arm just accepted.
+							break
 						}
 					}
 				}

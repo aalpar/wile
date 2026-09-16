@@ -128,13 +128,23 @@ func bindingOccursIn(expr ValidatedExpr, binder *syntax.SyntaxSymbol) bool {
 //
 // Same classify-and-walk as ForEachOpaqueLiveSymbol, differing in what it does
 // with the two halves: this one recurses into validated children itself, and
-// answers a question ABOUT the scan rather than reporting node opacity. The
-// entry depth is the shared decision, so both take it from opaqueEntryDepth.
+// answers a question ABOUT the scan rather than reporting node opacity. The entry
+// depth and the environment the payload's heads denote in are the shared
+// decisions, so both take them from opaqueEntryDepth and opaqueRawSyntax.
+//
+// Reading the environment off the NODE is what keeps this answer the same for
+// every asker, and both askers need it to be: compileOrShapedLet elides the
+// frame on it and tailExprHasSelfCall sets the self-tail-call pop count on it,
+// from different frames and in different passes. A renamed unquote read
+// spelling-only put `(,t) back at template depth here and at depth 0 in the
+// compiler, so the only reference to the let's binder was invisible and the
+// lowering dropped a frame that was live — (let ((t #f)) (if t t `(,t)))
+// answered the OUTER t. Pinned in pkg/wile/renamed_inner_positions_test.go.
 func opaqueSubtreeMentions(expr ValidatedExpr, binder *syntax.SyntaxSymbol) bool {
 	if expr == nil {
 		return false
 	}
-	raw, opaque := opaqueRawSyntax(expr)
+	raw, env, opaque := opaqueRawSyntax(expr)
 	if !opaque {
 		q := false
 		WalkSubExprs(expr, func(child ValidatedExpr, _ ChildRole) {
@@ -148,7 +158,7 @@ func opaqueSubtreeMentions(expr ValidatedExpr, binder *syntax.SyntaxSymbol) bool
 		return true
 	}
 	q := false
-	forEachRawSymbol(raw, opaqueEntryDepth(expr), func(sym *syntax.SyntaxSymbol) {
+	forEachRawSymbol(env, raw, opaqueEntryDepth(expr), func(sym *syntax.SyntaxSymbol) {
 		if refMatchesBinder(sym, binder) {
 			q = true
 		}

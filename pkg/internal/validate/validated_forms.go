@@ -15,6 +15,7 @@
 package validate
 
 import (
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/forms"
 	"github.com/aalpar/wile/pkg/syntax"
 )
@@ -190,24 +191,45 @@ type ValidatedSymbol struct {
 
 // ValidatedLiteral represents self-evaluating data (numbers, strings, booleans, etc.)
 // It's also used for passthrough forms like define-syntax, syntax-case, etc.
+//
+// Env is the environment the form was validated in, carried for the opaque walk
+// (opaque_subtree.go). Every caller passes its own environment here, genuine
+// self-evaluating data included (validate.go's self-evaluating arm at :124 and
+// validateSyntaxObject at :138 both pass a non-nil env) — Env being non-nil does
+// not distinguish a passthrough form from genuine data. It is harmless on
+// genuine data because opaqueRawSyntax only treats a ValidatedLiteral as opaque
+// when Value is a non-empty *syntax.SyntaxPair (a form shape); genuine data is
+// never that shape, so Env is never read for it. See opaqueRawSyntax for why the
+// node owns the environment rather than each consumer supplying one.
 type ValidatedLiteral struct {
 	validatedBase
 	Value syntax.SyntaxValue
+	Env   *environment.EnvironmentFrame
 }
 
 // newLiteralExpr creates a ValidatedLiteral wrapping a syntax value as a
 // passthrough form. Used by structural validators and the passthrough registry.
-func newLiteralExpr(source *syntax.SourceContext, value syntax.SyntaxValue) *ValidatedLiteral {
+//
+// env is the validator's own environment, and every caller passes the one it was
+// handed: a passthrough form conceals code whose heads resolve there, and a
+// caller holding no environment is one whose value is self-evaluating data and
+// never reaches the opaque walk at all.
+func newLiteralExpr(env *environment.EnvironmentFrame, source *syntax.SourceContext, value syntax.SyntaxValue) *ValidatedLiteral {
 	return &ValidatedLiteral{
 		formName: "@literal", source: source,
 		Value: value,
+		Env:   env,
 	}
 }
 
 // ValidatedQuasiquote represents (quasiquote template)
+//
+// Env is the environment the form was validated in; the template's marker heads
+// denote what they denote THERE. See opaqueRawSyntax.
 type ValidatedQuasiquote struct {
 	validatedBase
 	Template syntax.SyntaxValue // The raw template - quasiquote has complex runtime semantics
+	Env      *environment.EnvironmentFrame
 }
 
 // ValidatedCaseLambdaClause represents a single clause in case-lambda

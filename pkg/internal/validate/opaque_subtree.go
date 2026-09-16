@@ -59,10 +59,12 @@ import (
 // So every symbol in an EVALUATED position is treated as a potential set! target.
 //
 // The walk narrows by POSITION, never by what the code appears to do. Whether the
-// compiler would evaluate a position is a syntactic fact this package can decide
-// (forEachRawSymbol / quasiHeadDepth); what an unevaluated macro would expand to is
-// not. Skipping a symbol because it is quasiquoted data is therefore safe in a way
-// that skipping one because "it does not look like a set!" never is.
+// compiler would evaluate a position is a fact this package can decide
+// (forEachRawSymbol / quasiHeadDepth) — structure, plus one resolution per head to
+// ask which marker it denotes, both of which the compiler decides the same way;
+// what an unevaluated macro would expand to is not. Skipping a symbol because it is
+// quasiquoted data is therefore safe in a way that skipping one because "it does not
+// look like a set!" never is.
 //
 // Why macro TEMPLATES are not in the hazard set. Validation runs AFTER expansion
 // (compilation.ExpandAndCompile: expand, then CompileExpression → ValidateExpression).
@@ -73,20 +75,34 @@ import (
 // are genuinely opaque here.
 
 // opaqueRawSyntax reports whether an expression is an opaque subtree, and returns
-// the raw syntax it conceals. It is the single place that decides what "opaque"
-// means; every consumer below and in capture_operator.go asks through it.
+// the raw syntax it conceals together with the environment that syntax's heads
+// denote in. It is the single place that decides what "opaque" means; every
+// consumer below and in capture_operator.go asks through it.
 //
-// The two return values answer two DIFFERENT questions, and conflating them is a
+// The return values answer DIFFERENT questions, and conflating the first two is a
 // fail-open bug. Opacity is a property of the NODE ("this analysis cannot see
 // inside"); the raw syntax is merely the payload to scan, and it may be nil. A
 // *ValidatedQuasiquote with a nil Template is still opaque — a nil payload is when
 // we know least, not most, so reporting it as transparent would be exactly
 // backwards. Callers that scan must nil-guard the payload; callers that ask
 // "is this unsafe?" must use only the boolean.
-func opaqueRawSyntax(expr ValidatedExpr) (syntax.SyntaxValue, bool) {
+//
+// WHY THE NODE OWNS THE ENVIRONMENT rather than each consumer supplying one.
+// Marker recognition is a RESOLUTION (markerName), so it has an answer only
+// relative to a frame, and the frame that matters is the one the form was
+// validated in — the same one the compiler will expand its template in. The
+// consumers stand somewhere else: the boxing pass asks from the enclosing lambda
+// or let (ref_index.go), the or-shaped lowering from wherever the let is being
+// compiled or walked (or_lower.go, self_tail.go), and those are ancestors, or
+// different frames for the same node between two passes. Letting each supply its
+// own frame makes the answer depend on WHO ASKED, and two consumers that must
+// agree — compileOrShapedLet's frame elision and tailExprHasSelfCall's pop count
+// — would be asking from different ones. Carrying it on the node makes the
+// answer a property of the subtree, which is what it is.
+func opaqueRawSyntax(expr ValidatedExpr) (syntax.SyntaxValue, *environment.EnvironmentFrame, bool) {
 	switch e := expr.(type) {
 	case *ValidatedQuasiquote:
-		return e.Template, true
+		return e.Template, e.Env, true
 
 	case *ValidatedLiteral:
 		// A *ValidatedLiteral is overloaded: genuine self-evaluating data
@@ -95,11 +111,11 @@ func opaqueRawSyntax(expr ValidatedExpr) (syntax.SyntaxValue, bool) {
 		// self-evaluating data never is.
 		pair, ok := e.Value.(*syntax.SyntaxPair)
 		if !ok || pair.IsEmptyList() {
-			return nil, false
+			return nil, nil, false
 		}
-		return pair, true
+		return pair, e.Env, true
 	}
-	return nil, false
+	return nil, nil, false
 }
 
 // IsOpaqueSubtree reports whether an expression is an opaque subtree — the
@@ -120,7 +136,7 @@ func opaqueRawSyntax(expr ValidatedExpr) (syntax.SyntaxValue, bool) {
 // unenforced coincidence between this function and a hand-copy in compilation.
 // Adding a third opaque shape to opaqueRawSyntax now moves both walks at once.
 func IsOpaqueSubtree(expr ValidatedExpr) bool {
-	_, ok := opaqueRawSyntax(expr)
+	_, _, ok := opaqueRawSyntax(expr)
 	return ok
 }
 
@@ -136,12 +152,14 @@ func IsOpaqueSubtree(expr ValidatedExpr) bool {
 // index, so a captured local was never boxed and the closure kept a stale copy —
 // (let ((n 0)) (let ((f (lambda () n))) `(,(set! n 99)) f)) returned 0.
 //
-// WHY NOT EXPORT forEachRawSymbol. Its second parameter is the entry depth, and
-// the depth differs by SHAPE: a quasiquote Template has already been stepped
-// into (quasiDepthTemplate), a passthrough form has not (quasiDepthCode).
-// Exporting the raw walker moves that choice to the call site, where getting it
-// wrong under-marks silently — the exact failure mode this file exists to
-// prevent. The classification stays here, with the switch that defines it.
+// WHY NOT EXPORT forEachRawSymbol. Its parameters are the entry depth and the
+// environment the payload's heads denote in, and both are decided by the NODE:
+// the depth differs by SHAPE (a quasiquote Template has already been stepped
+// into, a passthrough form has not) and the environment is the one the form was
+// validated in, not the one the caller happens to stand in. Exporting the raw
+// walker moves both choices to the call site, where getting either wrong
+// under-marks silently — the exact failure mode this file exists to prevent. The
+// classification stays here, with the switch that defines it.
 //
 // The boolean and fn answer DIFFERENT questions, per opaqueRawSyntax's contract:
 // an opaque node with a nil payload calls fn zero times and still reports true,
@@ -150,14 +168,14 @@ func ForEachOpaqueLiveSymbol(expr ValidatedExpr, fn func(*syntax.SyntaxSymbol)) 
 	if expr == nil {
 		return false
 	}
-	raw, opaque := opaqueRawSyntax(expr)
+	raw, env, opaque := opaqueRawSyntax(expr)
 	if !opaque {
 		return false
 	}
 	if raw == nil {
 		return true
 	}
-	forEachRawSymbol(raw, opaqueEntryDepth(expr), fn)
+	forEachRawSymbol(env, raw, opaqueEntryDepth(expr), fn)
 	return true
 }
 
@@ -188,7 +206,7 @@ const (
 	quasiDepthTemplate = 1
 )
 
-// The quasiquote keywords this walk recognizes, matched by name.
+// The quasiquote markers this walk recognizes, by the form they DENOTE.
 const (
 	quoteKey           = "quote"
 	quasiquoteKey      = "quasiquote"
@@ -196,7 +214,31 @@ const (
 	unquoteSplicingKey = "unquote-splicing"
 )
 
-// quasiHeadDepth reports how to walk a form whose head symbol is key, sitting at
+// markerName returns the marker a head identifier names: the form it DENOTES in
+// env, and its spelling when it denotes none.
+//
+// This is compilation.headFormName, restated here rather than shared because the
+// two packages sit on opposite sides of the validate → machine edge; the
+// primitive both reduce to is environment.DenotedForm, and neither adds anything
+// to it. Keeping them the same function in two places is the price of the
+// layering, and quasiHeadDepth's doc is where the agreement is stated as a
+// requirement.
+//
+// A nil env means spelling-only. That is what a node carrying no environment
+// gets (opaqueRawSyntax), and it is also what the whole walk did before markers
+// could be renamed.
+func markerName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) string {
+	if env == nil {
+		return sym.Key()
+	}
+	denoted := environment.DenotedForm(env.GetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes())))
+	if denoted != "" {
+		return denoted
+	}
+	return sym.Key()
+}
+
+// quasiHeadDepth reports how to walk a form whose head DENOTES key, sitting at
 // quasiquote depth quasi. argDepth is the depth for the form's ARGUMENTS (its cdr);
 // barrier reports that nothing inside the form is live, so the walk skips it whole.
 //
@@ -206,6 +248,15 @@ const (
 // evaluated. Where they disagree in the permissive direction (this says data, the
 // compiler says live) a hidden set! goes unmarked and the inliner miscompiles
 // silently — the exact failure this file exists to prevent.
+//
+// The agreement is on the KEY as well as the rules, which is why key is what a
+// head denotes and not what it spells: compilation.quasiKeywords.headName
+// resolves a head through its binding and falls back to the spelling, and
+// markerName is that same function on this side. A spelling-only reading here
+// left `(,(set! f …)) unmarked whenever unquote arrived renamed or prefixed, and
+// the inliner then kept f's stale body — exactly the permissive disagreement the
+// paragraph above forbids, measured in
+// pkg/wile/renamed_inner_positions_test.go's TestRenamedQuasiquoteMarkerIsVisibleToTheOpaqueScan.
 //
 // The rules the compiler's own walk holds to, and that this predicate must match:
 //
@@ -272,7 +323,7 @@ func quasiHeadDepth(key string, quasi int) (argDepth int, barrier bool) {
 //
 // The spine is walked iteratively so that a long list costs no Go stack; only
 // genuine nesting (car, vector element) recurses.
-func forEachRawSymbol(v values.Value, quasi int, fn func(*syntax.SyntaxSymbol)) {
+func forEachRawSymbol(env *environment.EnvironmentFrame, v values.Value, quasi int, fn func(*syntax.SyntaxSymbol)) {
 	switch e := v.(type) {
 	case nil:
 		return
@@ -284,7 +335,7 @@ func forEachRawSymbol(v values.Value, quasi int, fn func(*syntax.SyntaxSymbol)) 
 		fn(e)
 
 	case *syntax.SyntaxPair:
-		forEachRawSymbolPair(e, quasi, fn)
+		forEachRawSymbolPair(env, e, quasi, fn)
 
 	case *syntax.SyntaxVector:
 		// A vector at depth 0 is a self-evaluating literal: its elements are data.
@@ -293,49 +344,56 @@ func forEachRawSymbol(v values.Value, quasi int, fn func(*syntax.SyntaxSymbol)) 
 			return
 		}
 		for _, elem := range e.Values {
-			forEachRawSymbol(elem, quasi, fn)
+			forEachRawSymbol(env, elem, quasi, fn)
 		}
 	}
 }
 
-// forEachRawSymbolPair walks a pair, dispatching on a quasiquote keyword head via
+// forEachRawSymbolPair walks a pair, dispatching on a quasiquote marker head via
 // quasiHeadDepth before falling through to an ordinary car/cdr walk.
 //
-// Heads are matched by NAME. That is the same limitation the compiler's own walk
-// accepts (compilation.getSymbolName): a program that lexically shadows
-// quote/quasiquote/unquote would be misread. Detecting that needs binding
-// information this walk does not carry.
-func forEachRawSymbolPair(p *syntax.SyntaxPair, quasi int, fn func(*syntax.SyntaxSymbol)) {
+// Heads are matched by what they DENOTE in env, falling back to the spelling when
+// they denote no form (markerName) — the rule compilation.quasiKeywords.headName
+// uses, so a renamed or prefixed unquote is a marker on both sides, and a lexical
+// shadow of a RENAMED marker name is a marker on neither (the shadow's spelling no
+// longer matches unquoteKey, so neither the denotation nor the spelling fallback
+// recognizes it). That does NOT hold for the CANONICAL spelling: the fallback
+// reads spelling whenever the head denotes no form, and a local binding of
+// `unquote` still denotes no form, so it still reads as the marker by spelling —
+// measured, `(let ((unquote (lambda (x) x))) `(1 ,2))` still answers `(1 2)`, not
+// `(1 (unquote 2))`. With a nil env the walk is spelling-only and the renamed-shadow
+// case is misread; opaqueRawSyntax says which nodes carry one.
+func forEachRawSymbolPair(env *environment.EnvironmentFrame, p *syntax.SyntaxPair, quasi int, fn func(*syntax.SyntaxSymbol)) {
 	head, ok := p.SyntaxCar().(*syntax.SyntaxSymbol)
 	if ok {
-		argDepth, barrier := quasiHeadDepth(head.Key(), quasi)
+		argDepth, barrier := quasiHeadDepth(markerName(env, head), quasi)
 		if barrier {
 			return
 		}
 		if argDepth != quasi {
-			forEachRawSymbol(p.SyntaxCdr(), argDepth, fn)
+			forEachRawSymbol(env, p.SyntaxCdr(), argDepth, fn)
 			return
 		}
 	}
 	var end syntax.SpineEnd
 	for cur, e := range syntax.Spine(p) {
-		tail, isDotted := dottedUnquoteTail(cur, quasi)
+		tail, isDotted := dottedUnquoteTail(env, cur, quasi)
 		if isDotted {
 			// `(a . ,x): the tail is evaluated, and it is the end of the spine.
 			argDepth, barrier := quasiHeadDepth(unquoteKey, quasi)
 			if !barrier {
-				forEachRawSymbol(tail, argDepth, fn)
+				forEachRawSymbol(env, tail, argDepth, fn)
 			}
 			return
 		}
-		forEachRawSymbol(cur.Car(), quasi, fn)
+		forEachRawSymbol(env, cur.Car(), quasi, fn)
 		end = e
 	}
 	// The dotted-unquote arm above returns outright, so reaching here means the
 	// walk ran to a terminator. Improper() screens out the proper-list case,
 	// where the old walk handed SyntaxEmptyList to forEachRawSymbol as a no-op.
 	if end.Improper() {
-		forEachRawSymbol(end.Tail, quasi, fn)
+		forEachRawSymbol(env, end.Tail, quasi, fn)
 	}
 }
 
@@ -352,12 +410,17 @@ func forEachRawSymbolPair(p *syntax.SyntaxPair, quasi int, fn func(*syntax.Synta
 //
 // The compiler's version accepts a bare `quasiquote` in the same position too,
 // which this one does not; quasiHeadDepth says why that gap is safe.
-func dottedUnquoteTail(cur *syntax.SyntaxPair, quasi int) (syntax.SyntaxValue, bool) {
+//
+// The unquote is identified the way every other marker head here is — by what it
+// denotes, spelling as the fallback (markerName) — because the compiler's
+// dottedTailCell reads this same cell through kw.headName. A spelling-only test
+// would miss `(a . ,x) written with a renamed unquote and under-mark x.
+func dottedUnquoteTail(env *environment.EnvironmentFrame, cur *syntax.SyntaxPair, quasi int) (syntax.SyntaxValue, bool) {
 	if quasi == quasiDepthCode {
 		return nil, false
 	}
 	sym, ok := cur.SyntaxCar().(*syntax.SyntaxSymbol)
-	if !ok || sym.Key() != unquoteKey {
+	if !ok || markerName(env, sym) != unquoteKey {
 		return nil, false
 	}
 	cdrPair, ok := cur.SyntaxCdr().(*syntax.SyntaxPair)
@@ -422,7 +485,7 @@ func markOpaqueSubtree(env *environment.EnvironmentFrame, raw values.Value, quas
 	if result == nil || raw == nil {
 		return
 	}
-	forEachRawSymbol(raw, quasi, func(sym *syntax.SyntaxSymbol) {
+	forEachRawSymbol(env, raw, quasi, func(sym *syntax.SyntaxSymbol) {
 		if env != nil {
 			ref := env.ResolveBindingRef(sym.Sym, syntax.ScopesOf(sym.Scopes()))
 			if ref.IsLocal() {

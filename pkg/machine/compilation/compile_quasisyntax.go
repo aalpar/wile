@@ -78,15 +78,19 @@ func (p *CompileTimeContinuation) compileQuasisyntaxTemplate(ctctx CompileTimeCa
 
 // quasisyntaxNeedsRuntime checks if a quasisyntax template contains unsyntax at
 // the given depth. It creates a fresh recursion guard; the walk itself is the
-// shared quasiNeedsRuntime, keyed by quasisyntaxKW.
+// shared quasiNeedsRuntime, keyed by quasisyntaxKW resolved through p.env so a
+// renamed or prefixed unsyntax/unsyntax-splicing/quasisyntax still dispatches.
 func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue, depth int) bool {
-	return quasiNeedsRuntime(stx, depth, quasisyntaxKW, p.newQuasiDepthGuard())
+	kw := quasisyntaxKW.resolvedBy(p.env)
+	return quasiNeedsRuntime(stx, depth, kw, p.newQuasiDepthGuard())
 }
 
 // expandQuasisyntax transforms quasisyntax template into equivalent Scheme code.
-// Delegates to the unified expandQuasi with quasisyntax keywords.
+// Delegates to the unified expandQuasi with quasisyntax keywords resolved
+// through p.env, so a renamed or prefixed import of the markers still matches.
 func (p *CompileTimeContinuation) expandQuasisyntax(ctx context.Context, stx syntax.SyntaxValue, depth int) (syntax.SyntaxValue, error) {
-	return p.expandQuasi(ctx, stx, depth, quasisyntaxKW, p.newQuasiDepthGuard())
+	kw := quasisyntaxKW.resolvedBy(p.env)
+	return p.expandQuasi(ctx, stx, depth, kw, p.newQuasiDepthGuard())
 }
 
 // CompileUnsyntax errors - unsyntax outside of quasisyntax

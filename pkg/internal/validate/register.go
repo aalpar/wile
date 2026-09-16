@@ -108,6 +108,6 @@ func registerPassthrough(name string) {
 		if ok {
 			markOpaqueCode(env, pair, res)
 		}
-		return newLiteralExpr(pair.SourceContext(), pair)
+		return newLiteralExpr(env, pair.SourceContext(), pair)
 	})
 }

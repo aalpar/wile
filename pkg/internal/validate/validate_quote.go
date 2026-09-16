@@ -40,12 +40,12 @@ func validateQuote(_ context.Context, env *environment.EnvironmentFrame, pair *s
 // markOpaqueCode — that would withdraw top-level immutability, inlining and
 // frame-reclaim arming from every keyword and helper name the Scheme syntax
 // layer's generated code quotes.
-func validateQuoteSyntax(_ context.Context, _ *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
+func validateQuoteSyntax(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	_, _, ok := formPrologue(pair, "quote-syntax", 1, 1, result)
 	if !ok {
 		return nil
 	}
-	return newLiteralExpr(pair.SourceContext(), pair)
+	return newLiteralExpr(env, pair.SourceContext(), pair)
 }
 
 // validateQuasiquote validates (quasiquote template)
@@ -66,5 +66,6 @@ func validateQuasiquote(_ context.Context, env *environment.EnvironmentFrame, pa
 	return &ValidatedQuasiquote{
 		formName: "quasiquote", source: source,
 		Template: elements[1],
+		Env:      env,
 	}
 }

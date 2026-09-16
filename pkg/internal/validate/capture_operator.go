@@ -81,7 +81,7 @@ func exprReferencesCaptureOperator(
 	// Refining to "only subtrees that actually contain an unquote / a capture"
 	// needs a nesting-aware raw-syntax walk and is deferred (precision, not
 	// soundness).
-	_, isOpaque := opaqueRawSyntax(expr)
+	_, _, isOpaque := opaqueRawSyntax(expr)
 	if isOpaque {
 		return true
 	}

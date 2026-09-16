@@ -94,3 +94,68 @@ func BenchmarkFrontEndPhase(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkQuasiquoteExpand times the whole front end over
+// quasiquoteBenchCorpus (see that var's comment): compileBenchCorpus and
+// condCaseBenchCorpus contain no quasiquote, so this is the only gate on the
+// marker-resolution cost the renamed-marker fix added to the expander's template
+// walk (quasi_expand.go) and to validate's opaque-subtree walk
+// (opaque_subtree.go, reached again per region by ref_index.go).
+//
+// Unlike BenchmarkCondClauseLiteralExpand this does NOT stop at expand: the
+// validate-side walk is half the changed surface, and the boxing pass's second
+// pass over the same template runs at compile.
+func BenchmarkQuasiquoteExpand(b *testing.B) {
+	env := newQuasiquoteBenchEnv()
+	eval := machine.NewVMMacroEvaluator()
+	ctx := context.Background()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, code := range quasiquoteBenchCorpus {
+			prog := parseForBench(b, env, code)
+			econt := NewExpanderTimeContinuation(ctx, env, eval)
+			ex, expandErr := econt.ExpandExpression(prog)
+			if expandErr != nil {
+				b.Fatalf("expand %q: %v", code, expandErr)
+			}
+			result := validate.ValidateExpression(ctx, env, ex)
+			if !result.Ok() {
+				b.Fatalf("validate %q: %v", code, result.Error())
+			}
+			tpl := machine.NewNativeTemplate(0, 0, false)
+			cctx := NewCompileTimeContinuation(tpl, env, eval)
+			cnt := NewCompileTimeCallContext(ctx, false)
+			compileErr := cctx.compileValidated(cnt, result.Expr)
+			if compileErr != nil {
+				b.Fatalf("compile %q: %v", code, compileErr)
+			}
+		}
+	}
+}
+
+// BenchmarkCondClauseLiteralExpand times parse+expand over condCaseBenchCorpus
+// (see that var's comment): compileBenchCorpus has no cond/case at all, so
+// this is the gate on the per-clause else/=> literal-resolution cost the
+// renamed-auxiliary-keyword fix (pkg/internal/match) added. Unlike
+// BenchmarkFrontEndPhase, it stops at expand — validate and compile touch no
+// code this task changed, so including them would only dilute the signal.
+func BenchmarkCondClauseLiteralExpand(b *testing.B) {
+	env := newCondCaseBenchEnv()
+	eval := machine.NewVMMacroEvaluator()
+	ctx := context.Background()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, code := range condCaseBenchCorpus {
+			prog := parseForBench(b, env, code)
+			econt := NewExpanderTimeContinuation(ctx, env, eval)
+			_, expandErr := econt.ExpandExpression(prog)
+			if expandErr != nil {
+				b.Fatalf("expand %q: %v", code, expandErr)
+			}
+		}
+	}
+}

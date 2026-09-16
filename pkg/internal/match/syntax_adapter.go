@@ -147,8 +147,11 @@ type BindingChecker interface {
 // macro-definition time and matched against a different use-site environment each
 // expansion (syntax-rules). Match() supplies no per-call checker and falls back
 // to the opts one — that fallback is how syntax-case gets its checker at all.
-// With a checker in neither position the binding comparison is skipped, but an
-// Ambiguous pin still refuses the literal.
+// With a checker in neither position the binding comparison is skipped
+// entirely and a non-Ambiguous literal matches ANY identifier, spelling
+// included — production never does this (operation_syntax_rules_transform.go
+// and operation_syntax_case.go always construct a checker), so the gap is
+// real but unexercised, not a documented "matches by spelling" fallback.
 type SyntaxMatcher struct {
 	matcher        *Matcher
 	ellipsisID     string                // Custom ellipsis identifier (default "...")
@@ -259,9 +262,15 @@ func (p *SyntaxMatcher) Match(ctx context.Context, input syntax.SyntaxValue) err
 // lambda, etc.) but the pattern literal doesn't, they won't match.
 //
 // Pass nil for checker to fall back to the checker supplied at construction
-// (SyntaxMatcherOpts.BindingChecker), and nil in both places to skip the binding
-// comparison (less strict: literals then match by spelling, unless the pin is
-// ambiguous).
+// (SyntaxMatcherOpts.BindingChecker). With nil in both places the binding
+// comparison is skipped entirely: a non-Ambiguous literal then matches ANY
+// identifier regardless of spelling, not "by spelling" as this doc used to
+// claim — match.go's literal arm no longer enforces spelling upstream, so
+// there is nothing left to fall back to. Both production callers
+// (operation_syntax_rules_transform.go, operation_syntax_case.go) always
+// construct a real checker, so this gap is unreachable today, not merely
+// undesirable; a future caller that matches literals without one would need
+// to add the spelling check itself.
 //
 // The checker is CLOSED OVER rather than stored on the receiver. It used to be
 // assigned to p.bindingChecker and cleared by a defer, which turned a field
@@ -423,7 +432,7 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 		if !ok {
 			return false
 		}
-		if !literalNotShadowed(pin.Binding, useB) {
+		if !literalNotShadowed(pin.Binding, useB, input.Key() == pattern.Key()) {
 			return false
 		}
 	} else if checker != nil {
@@ -433,6 +442,16 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 		// bindings: compare the bindings, not their existence.
 		inputBinding := checker.GetBinding(input.Key(), input.Scopes())
 		patternBinding := checker.GetBinding(pattern.Key(), pattern.Scopes())
+		if inputBinding == nil && patternBinding == nil {
+			// R7RS §4.3.2's unbound arm is "the two identifiers are the SAME
+			// and both have no lexical binding" — with no binding on either
+			// side, spelling is the only signal left, and nil == nil compares
+			// none. Before match.go's literal arm could reach a differently-
+			// spelled input, this was unreachable with mismatched spelling;
+			// now it is, so it must be checked explicitly rather than treating
+			// "both unbound" alone as a match.
+			return input.Key() == pattern.Key()
+		}
 		if inputBinding != patternBinding {
 			// Different bindings (or one bound and one not) - don't match
 			return false
@@ -446,29 +465,26 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 // denote the same pattern literal.
 //
 // Pointer identity is the primary test, and it covers both-nil. Kind equivalence
-// on BindingTypePrimitive is a deliberate widening: each library environment mints
-// its OWN *Binding for every special form and auxiliary-syntax name (memory
-// "library envs are primitive islands"), so a bootstrap macro's pinned `else`
-// and the one a library-loaded use site resolves can be different objects for one
-// name.
+// on BindingTypePrimitive, narrowed to matching DenotedForm, is a deliberate
+// widening: each library environment mints its OWN *Binding for every special
+// form and auxiliary-syntax name (memory "library envs are primitive islands"),
+// so a bootstrap macro's pinned `else` and the one a library-loaded use site
+// resolves can be different objects for one name.
 //
-// Reachability, measured rather than asserted: NO test in this repo reaches the
-// widening. Instrumenting the arm and running `go test ./pkg/... ./integration/...
-// ./extensions/...` plus `make cover-scm` (64 Scheme files) prints it zero times —
-// the two-distinct-primitives shape never arises, because a library-resolved
-// auxiliary name arrives IMPORTED and literalNotShadowed's rider takes it first. An
-// earlier revision of this comment named TestChibiTestComparator and the SRFI
-// library tests as observing the widening; re-measurement refutes that, and
-// ablating the widening leaves every one of those suites green.
+// Reachability changed with match.go's literal arm (ByteCodeCompareCar): that
+// arm used to require identical spelling before any binding check ran, so two
+// distinct primitives could only reach here already same-named, making the kind
+// check alone sufficient. Once a differently-spelled identifier can reach this
+// widening — a renamed or prefixed import of `else` or `=>` — "both primitive"
+// alone would match `else` against `=>`. DenotedForm is the identity that
+// survives per-library minting: every owner's `else` binding carries a value
+// denoting "else", regardless of spelling, so comparing denotations rather than
+// binding kind is the correct narrowing. An empty denotation (a primitive whose
+// value names no form) is not an identity and never matches, even against
+// itself.
 //
-// It is kept, rather than deleted on that evidence, because "no test reaches it"
-// is not "no program reaches it": the per-library minting above is real, and the
-// arm's failure mode is a forgone tightening, never a capture. It is bounded by
-// the caller, which already requires identical spelling before any binding check
-// runs (match.go, ByteCodeCompareCar). Since no end-to-end program pins it, the
-// rule itself is pinned as a truth table by TestSameLiteralBinding in
-// syntax_adapter_literal_test.go — that is the red test a future change to the
-// rule has to answer to.
+// Pinned as a truth table by TestSameLiteralBinding in
+// syntax_adapter_literal_test.go.
 func sameLiteralBinding(a, b *environment.Binding) bool {
 	if a == b {
 		return true
@@ -476,20 +492,45 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	return a.BindingType() == environment.BindingTypePrimitive &&
-		b.BindingType() == environment.BindingTypePrimitive
+	// Both sides must be the SAME keyword, not merely both keywords: a
+	// differently-spelled literal now reaches this widening (match.go's literal
+	// arm), and "both primitive" would match else against =>. Every owner mints
+	// its own value for a keyword, so the denoted form is the identity that
+	// survives per-library minting; an empty denotation is not an identity and
+	// never matches.
+	if a.BindingType() != environment.BindingTypePrimitive {
+		return false
+	}
+	if b.BindingType() != environment.BindingTypePrimitive {
+		return false
+	}
+	denoted := environment.DenotedForm(a)
+	if denoted == "" {
+		return false
+	}
+	return denoted == environment.DenotedForm(b)
 }
 
 // literalNotShadowed decides whether the use site's resolution of a pattern
-// literal is still the literal the macro was defined against.
+// literal is still the literal the macro was defined against. sameSpelling is
+// input.Key() == pattern.Key() from the caller: whether the identifier that
+// actually appeared at the use site is spelled the same as the literal as
+// written in the macro's literal list.
 //
 // The IsImported rider covers the one legitimate case pointer identity cannot:
 // an import mints a FRESH *Binding for a re-exported ordinary name, so a library
 // that exports both a macro and the variable the macro uses as a literal can
-// never be pointer-equal at the use site. Any imported binding of the name is
-// therefore accepted — deliberately over-accepting, since the rider cannot tell
-// which library the import came from. The under-accepting alternative breaks the
-// legitimate re-export, and this predicate's false positive is a forgone
+// never be pointer-equal at the use site. An imported binding of the name is
+// therefore accepted — deliberately over-accepting across libraries, since the
+// rider cannot tell which library the import came from — but WHAT ELSE is
+// required to accept it depends on what defB denotes, exactly as the
+// narrowing paragraph below states: same spelling, when defB denotes no
+// form and DenotedForm cannot discriminate at all; the SAME denotation,
+// spelling-independent, when defB does. Neither condition is universal on
+// its own, and same spelling is never sufficient when defB denotes a
+// form — see the boundary paragraph below for the accepted cost of the
+// first case. The under-accepting alternative breaks the legitimate
+// re-export, and this predicate's false positive is a forgone
 // discrimination, not a capture.
 //
 // The over-acceptance is a SURVIVING residual of R7RS §4.3.2, not a closed case,
@@ -499,10 +540,76 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 // exact program is pinned — as today's answer, labelled residual — by the
 // imported-shadow row of TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding
 // (pkg/wile/matcher_pattern_gaps_test.go), so a later tightening of the rider has
-// a measurement to flip rather than a silent behaviour change.
-func literalNotShadowed(defB, useB *environment.Binding) bool {
+// a measurement to flip rather than a silent behaviour change. That row, and
+// every other row exercising this rider, is same-spelled — the residual is about
+// WHICH library's binding is accepted, never about accepting a different name.
+//
+// When defB denotes a form, the rider is narrowed to useB denoting the SAME
+// form — spelling-independent, like sameLiteralBinding's own widening, because
+// DenotedForm survives per-library minting and renaming alike. When defB denotes
+// no form (defB is an ordinary variable literal, or a user macro — the
+// private-`lit` case above), DenotedForm is "" on both sides and cannot
+// discriminate at all, so the rider falls back to sameSpelling. Before match.go's
+// literal arm could reach a differently-spelled useB, sameSpelling was always
+// true here (the caller guaranteed it), so this fallback was unreachable with a
+// mismatch and returning true unconditionally was equivalent. It no longer is:
+// with a renamed or prefixed literal now reaching this rider, an unconditional
+// true would accept ANY imported binding — of any name — as any OTHER literal
+// that happens to denote no form, which is most literals (every plain-variable
+// or user-macro literal). Falling back to sameSpelling instead keeps every
+// documented row above (all same-spelled) while refusing that cross-name case.
+//
+// BOUNDARY: the sameSpelling fallback is where this predicate's headline
+// property — a renamed or prefixed import still matches its literal — does
+// NOT hold. It holds for auxiliary keywords (defB denotes a form: spelling-
+// independent, per the paragraph above) but not for an ordinary-variable or
+// user-macro literal, since DenotedForm gives sameSpelling nothing to widen
+// past. A library that exports a macro over its own private variable literal
+// and is then imported with a prefix loses the match: with (w16lib) exporting
+// `mg`/`lit` (see the residual above), (import (prefix (w16lib) p:)) (p:mg
+// p:lit) answers OTHER, where R7RS §4.3.2 wants MATCHED-LITERAL, because
+// sameSpelling is false ("p:lit" != "lit") and DenotedForm can't substitute.
+// This is NOT a regression: before match.go's literal arm could reach a
+// mismatched spelling, EVERY renamed or prefixed literal — auxiliary keyword
+// or not — was refused the same way, by the caller's spelling gate rather than
+// by this fallback. Measured unchanged against the pre-task base (commit
+// 90c4f2c2): the same program answers OTHER there too. Pinned next to the
+// over-acceptance residual, as
+// "BOUNDARY: a prefixed re-export of a variable literal is refused" in
+// TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding
+// (pkg/wile/matcher_pattern_gaps_test.go), so a later widening of the
+// sameSpelling fallback — comparing resolved bindings across the rename
+// instead of names — is a measurable flip rather than a silent change.
+//
+// THE OTHER EDGE THE SAME THREE LINES MOVED, and unlike the boundary above it is
+// a BEHAVIOUR CHANGE rather than an unchanged limitation, so it is stated here
+// rather than left to be rediscovered. When defB DOES denote a form, the rider
+// now requires useB to denote the SAME form, which refuses an imported useB that
+// denotes none — where the unconditional rider accepted it. That refusal is the
+// R7RS answer: a program importing its own `else` as an ordinary variable has
+// shadowed cond's auxiliary keyword, and §4.3.2 asks whether the two identifiers
+// denote the same binding, which a variable and a keyword never do. It is still
+// a flip, and a visible one — with a library exporting (define else 42), imported
+// alongside (only (scheme base) cond quote lambda define),
+//
+//	(cond (#f 1) (else => (lambda (x) x)))
+//
+// raised `syntactic keyword "=>" used as a variable` on the pre-task base
+// (90c4f2c2), because the literal reading puts => in expression position, and
+// answers 42 here, taking the (test => proc) reading. Both measured. Pinned as
+// "FLIP: an imported variable no longer matches an auxiliary-keyword literal" in
+// TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding, next to the
+// RESIDUAL/BOUNDARY pair.
+func literalNotShadowed(defB, useB *environment.Binding, sameSpelling bool) bool {
 	if sameLiteralBinding(defB, useB) {
 		return true
 	}
-	return useB != nil && useB.IsImported()
+	if useB == nil || !useB.IsImported() {
+		return false
+	}
+	denoted := environment.DenotedForm(defB)
+	if denoted == "" {
+		return sameSpelling
+	}
+	return denoted == environment.DenotedForm(useB)
 }

@@ -51,9 +51,10 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 	// A single guard bounds both the needs-runtime analysis and the expansion;
 	// each is reset (enter/leave is symmetric) before the next phase runs.
 	g := p.newQuasiDepthGuard()
+	kw := quasiquoteKW.resolvedBy(p.env)
 
 	// Optimization: if no runtime evaluation needed, emit as literal
-	if !quasiNeedsRuntime(datum, depth, quasiquoteKW, g) {
+	if !quasiNeedsRuntime(datum, depth, kw, g) {
 		// Validate quoted literal for circular datum labels
 		val, err := p.validateQuotedLiteral(datum.UnwrapAll())
 		if err != nil {
@@ -71,7 +72,7 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 	// sit here called the SAME function with the same arguments — a branch that
 	// was reachable, redundant, and an asymmetry with the quasisyntax entry,
 	// which never had one.
-	expanded, err := p.expandQuasi(ctctx.ctx, datum, depth, quasiquoteKW, g)
+	expanded, err := p.expandQuasi(ctctx.ctx, datum, depth, kw, g)
 	if err != nil {
 		return p.wrapCompilationError(err)
 	}
