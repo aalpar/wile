@@ -116,6 +116,79 @@ func TestRenamedAuxiliaryKeywords(t *testing.T) {
 	})
 }
 
+// Fix round 2, C1: a renamed marker must be visible to validate's opaque-subtree
+// walk, not just to the compiler's.
+//
+// A quasiquote template is raw syntax the validator never looks inside, so
+// pkg/internal/validate/opaque_subtree.go walks it separately and records every
+// symbol in an EVALUATED position as a possible set! target and a possible
+// capture. That walk recognized the markers by SPELLING while this branch moved
+// the compiler's walk to the denotation, so an unquote reached through a rename
+// or a prefix put its argument back at template depth for the walk and at depth
+// 0 for the compiler: the set! inside it went unmarked, and the inliner and the
+// boxing pass then miscompiled a program the compiler had already agreed to
+// evaluate. quasiHeadDepth's own doc names this disagreement as the failure the
+// file exists to prevent.
+//
+// Every row states the canonical-spelling answer as its want; that is the
+// control, and each was measured on 079c62ab as (1 7) / (0 1) / a raised
+// "cannot mutate immutable top-level binding" / (0).
+func TestRenamedQuasiquoteMarkerIsVisibleToTheOpaqueScan(t *testing.T) {
+	runInnerPositionRows(t, []innerPositionRow{
+		// The inliner: f is let-bound to a lambda and set! to another one from
+		// inside the template. Unmarked, f is still Stable, so the call is
+		// inlined with the stale body and (f) answers 7 after the set! ran.
+		{"renamed unquote hides a set! of a let-bound lambda",
+			`(import (scheme base) (rename (scheme base) (unquote uq)))
+			 (let ((f (lambda () 7)) (n 0))
+			   (quasiquote ((uq (begin (set! n 1) (set! f (lambda () 99))))))
+			   (list n (f)))`, "(1 99)"},
+		{"prefixed unquote hides a set! of a let-bound lambda",
+			`(import (scheme base) (prefix (scheme base) b:))
+			 (let ((f (lambda () 7)) (n 0))
+			   (quasiquote ((b:unquote (begin (set! n 1) (set! f (lambda () 99))))))
+			   (list n (f)))`, "(1 99)"},
+		// The boxing pass: n is captured by f and set! from inside the template.
+		// Unmarked, n is never boxed, so the closure keeps a copy of 0. The
+		// vector-set! is the witness that the template's expression really ran.
+		{"renamed unquote hides a set! of a captured binder",
+			`(import (scheme base) (rename (scheme base) (unquote uq)))
+			 (define v (vector 0))
+			 (define g
+			   (let ((n 0))
+			     (let ((f (lambda () n)))
+			       (quasiquote ((uq (begin (vector-set! v 0 1) (set! n 99)))))
+			       f)))
+			 (list (g) (vector-ref v 0))`, "(99 1)"},
+		// Top-level immutability keys on the same Stable stamp, so the unmarked
+		// direction is not only a wrong value: it REFUSES a legal program.
+		//
+		// (begin …)-wrapped because the stamp is per VALIDATION UNIT and
+		// EvalMultiple's unit is one top-level expression: left unwrapped, the
+		// define is stamped Stable before the let is even parsed and the set! is
+		// refused whatever the marking says — the canonical spelling is refused
+		// too, measured. The wrap is what the file loader does for the same
+		// reason (EvalMultipleWithSource), and it is what the CLI run of this
+		// program used.
+		{"renamed unquote hides a set! of a top-level binding",
+			`(import (scheme base) (rename (scheme base) (unquote uq)))
+			 (begin
+			   (define g 0)
+			   (let ((f (lambda () 7)))
+			     (quasiquote ((uq (begin (set! g 1) (set! f (lambda () 99))))))
+			     (list g (f))))`, "(1 99)"},
+		// The same disagreement reaches the or-shaped let lowering, which drops
+		// the frame when the binder occurs nowhere in the alternative. The
+		// occurrence scan is forEachRawSymbol's, so a renamed unquote hid the
+		// only reference to the inner t and the alternative was compiled in the
+		// enclosing frame, where t is the top-level 0.
+		{"renamed unquote hides a reference in an or-shaped let's alternative",
+			`(import (scheme base) (rename (scheme base) (unquote uq)))
+			 (define t 0)
+			 (let ((t #f)) (if t t (quasiquote ((uq t)))))`, "(#f)"},
+	})
+}
+
 // Fix round 1, C1: literalNotShadowed's IsImported rider, when the
 // definition-site literal denotes no form (an ordinary variable or user
 // macro — every literal that is not an auxiliary keyword like else/=>), used

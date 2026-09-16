@@ -54,7 +54,7 @@ func validateDefineSyntax(_ context.Context, env *environment.EnvironmentFrame, 
 	// compiler/expander handles transformer validation.
 
 	// Return as literal - compiler handles the rest
-	return newLiteralExpr(source, pair)
+	return newLiteralExpr(env, source, pair)
 }
 
 // validateSyntaxRules validates (syntax-rules (literals...) clause...) and the
@@ -133,7 +133,7 @@ func validateSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame,
 	}
 
 	// Return as literal - compiler handles the rest
-	return newLiteralExpr(source, pair)
+	return newLiteralExpr(env, source, pair)
 }
 
 // validateImport validates (import import-set...)
@@ -155,7 +155,7 @@ func validateImport(_ context.Context, env *environment.EnvironmentFrame, pair *
 		}
 	}
 
-	return newLiteralExpr(source, pair)
+	return newLiteralExpr(env, source, pair)
 }
 
 // validateExport validates (export export-spec...)
@@ -184,7 +184,7 @@ func validateExport(_ context.Context, env *environment.EnvironmentFrame, pair *
 		result.addErrorf(getSourceContext(spec), "export", "export-spec %d must be a symbol or rename form", i)
 	}
 
-	return newLiteralExpr(source, pair)
+	return newLiteralExpr(env, source, pair)
 }
 
 // validateDefineLibrary validates (define-library (name...) declaration...)
@@ -227,7 +227,7 @@ func validateDefineLibrary(ctx context.Context, env *environment.EnvironmentFram
 		return nil
 	}
 
-	return newLiteralExpr(source, pair)
+	return newLiteralExpr(env, source, pair)
 }
 
 // validateInclude validates (include filename...)
@@ -255,7 +255,7 @@ func validateInclude(_ context.Context, env *environment.EnvironmentFrame, pair 
 	// contents are not even readable here, so this is the most that can be said —
 	// which is why the capture predicate independently disqualifies frame reuse.
 	markOpaqueCode(env, pair, result)
-	return newLiteralExpr(source, pair)
+	return newLiteralExpr(env, source, pair)
 }
 
 // validateCondExpand validates (cond-expand clause...)
@@ -283,5 +283,5 @@ func validateCondExpand(_ context.Context, env *environment.EnvironmentFrame, pa
 	// its own unit. Which clause wins is not known here, so every name any clause
 	// mentions is recorded as a possible set! target. See opaque_subtree.go.
 	markOpaqueCode(env, pair, result)
-	return newLiteralExpr(source, pair)
+	return newLiteralExpr(env, source, pair)
 }

@@ -112,20 +112,20 @@ func validateExpr(ctx context.Context, env *environment.EnvironmentFrame, expr s
 		// R7RS §4.1.3 makes () a syntax error (a combination needs at least one
 		// subexpression); Wile deliberately admits it.
 		if e.IsEmptyList() {
-			return newLiteralExpr(e.SourceContext(), e)
+			return newLiteralExpr(env, e.SourceContext(), e)
 		}
 		return validateForm(ctx, env, e, result)
 	case *syntax.SyntaxSymbol:
 		return &ValidatedSymbol{formName: "@symbol", source: e.SourceContext(), Symbol: e}
 	case *syntax.SyntaxObject:
-		return validateSyntaxObject(e, result)
+		return validateSyntaxObject(env, e, result)
 	default:
 		// Self-evaluating: numbers, strings, booleans, etc.
-		return newLiteralExpr(nil, expr)
+		return newLiteralExpr(env, nil, expr)
 	}
 }
 
-func validateSyntaxObject(obj *syntax.SyntaxObject, result *ValidationResult) ValidatedExpr {
+func validateSyntaxObject(env *environment.EnvironmentFrame, obj *syntax.SyntaxObject, result *ValidationResult) ValidatedExpr {
 	wrapped := obj.Unwrap()
 	switch wrapped.(type) {
 	case *values.Symbol:
@@ -135,7 +135,7 @@ func validateSyntaxObject(obj *syntax.SyntaxObject, result *ValidationResult) Va
 		return nil
 	default:
 		// Self-evaluating literal wrapped in syntax
-		return newLiteralExpr(obj.SourceContext(), obj)
+		return newLiteralExpr(env, obj.SourceContext(), obj)
 	}
 }
 

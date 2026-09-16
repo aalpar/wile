@@ -1085,7 +1085,7 @@ func TestValidateSyntaxObject(t *testing.T) {
 	// Test with a self-evaluating value wrapped in SyntaxObject
 	syntaxObj := syntax.NewSyntaxObject(values.NewInteger(42), nil)
 	result := &ValidationResult{}
-	validated := validateSyntaxObject(syntaxObj, result)
+	validated := validateSyntaxObject(nil, syntaxObj, result)
 	c.Assert(result.Ok(), qt.IsTrue)
 	c.Assert(validated, qt.IsNotNil)
 	_, ok := validated.(*ValidatedLiteral)
@@ -1094,7 +1094,7 @@ func TestValidateSyntaxObject(t *testing.T) {
 	// Test with a string
 	syntaxObj2 := syntax.NewSyntaxObject(values.NewString("hello"), nil)
 	result2 := &ValidationResult{}
-	validated2 := validateSyntaxObject(syntaxObj2, result2)
+	validated2 := validateSyntaxObject(nil, syntaxObj2, result2)
 	c.Assert(result2.Ok(), qt.IsTrue)
 	c.Assert(validated2, qt.IsNotNil)
 }

@@ -181,7 +181,7 @@ func TestIsOpaqueSubtreeMatchesPayloadHalf(t *testing.T) {
 		}
 	}
 	for _, e := range exprs {
-		_, want := opaqueRawSyntax(e)
+		_, _, want := opaqueRawSyntax(e)
 		c.Assert(IsOpaqueSubtree(e), qt.Equals, want,
 			qt.Commentf("IsOpaqueSubtree disagrees with opaqueRawSyntax on %T", e))
 	}
@@ -189,7 +189,7 @@ func TestIsOpaqueSubtreeMatchesPayloadHalf(t *testing.T) {
 	// The nil-Template quasiquote, stated as its own assertion rather than left
 	// to the loop: opaque, with nothing to scan.
 	nilTemplate := &ValidatedQuasiquote{formName: "quasiquote"}
-	raw, ok := opaqueRawSyntax(nilTemplate)
+	raw, _, ok := opaqueRawSyntax(nilTemplate)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(raw, qt.IsNil)
 }
