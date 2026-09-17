@@ -48,6 +48,7 @@
     =>
     ...
     _
+    (for-syntax syntax-rules ... _)
     ;; Equivalence predicates
     eq?
     eqv?

@@ -648,13 +648,15 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   initializer runs (letrec\*); the body scan that does this for defines written directly in the body
   does not descend into an `include`d file's forms to find the names it will introduce.
 
-- [ ] **Option 2: declared per-phase export tables** [**partly done 2026-09-16**, branch
-  `feat/export-for-syntax`: decision (1) is the export syntax, `(export (for-syntax <spec> ...))`,
-  nesting like Racket's; decision (2) is phase 0 only for a plain export, matching Racket's
-  `provide`. `CompiledLibrary.Exports` is keyed by `(phase, name)`, and import modifiers act on a
-  name at every phase. **Still open:** nothing declares `syntax-rules`'s two rows as one name;
-  `(scheme base)`'s forms are registered Go-side and export no `for-syntax` row. Original entry
-  follows.] [Medium, L, filed 2026-09-15, follow-on to
+- [x] **Option 2: declared per-phase export tables** [**Done 2026-09-16**, branches
+  `feat/export-for-syntax` and `fix/renamed-syntax-rules-import`: decision (1) is the export
+  syntax, `(export (for-syntax <spec> ...))`, nesting like Racket's; decision (2) is phase 0 only
+  for a plain export, matching Racket's `provide`. `CompiledLibrary.Exports` is keyed by
+  `(phase, name)`, and import modifiers act on a name at every phase. `(scheme base)` and
+  `(scheme r5rs)` export `(for-syntax syntax-rules ... _)`, and `exportRoot` roots a base binding
+  at `#%base` with no phase, so the two `syntax-rules` rows are one binding: a renamed or prefixed
+  `syntax-rules` works in a transformer RHS, and `(import (scheme base) (for-syntax (scheme
+  base)))` is no conflict (`TestSchemeBaseExportsSyntaxRulesForSyntax`). Original entry follows.] [Medium, L, filed 2026-09-15, follow-on to
   the `findLibraryBinding` item above]: that item's fix (preferring the requesting phase) only
   routes an import to the right EXISTING binding; it does not let a library DECLARE which phases
   a name exports for. `syntax-rules` needs both its phase-0 `SyntaxCompiler` row and its phase-1
