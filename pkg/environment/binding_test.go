@@ -234,9 +234,13 @@ func TestBinding_InlineHOFParam(t *testing.T) {
 }
 
 func bindingWithOrigin(lib, name string) *Binding {
+	return bindingWithOriginAt(lib, name, PhaseRuntime)
+}
+
+func bindingWithOriginAt(lib, name string, phase Phase) *Binding {
 	b := NewBinding(values.Void, BindingTypeVariable)
 	b.UpdateMeta(func(m *BindingMeta) bool {
-		m.Origin = &OriginRef{RootLib: lib, RootName: name}
+		m.Origin = &OriginRef{RootLib: lib, RootName: name, RootPhase: phase}
 		return true
 	})
 	return b
@@ -259,6 +263,7 @@ func TestSameBinding(t *testing.T) {
 		{"equal origins, distinct objects", bindingWithOrigin("(aa)", "foo"), bindingWithOrigin("(aa)", "foo"), true},
 		{"same lib, different defining name", bindingWithOrigin("(aa)", "foo"), bindingWithOrigin("(aa)", "bar"), false},
 		{"different lib, same defining name", bindingWithOrigin("(aa)", "foo"), bindingWithOrigin("(bb)", "foo"), false},
+		{"same lib and defining name, different phase", bindingWithOrigin("(aa)", "foo"), bindingWithOriginAt("(aa)", "foo", PhaseExpand), false},
 		{"one has origin, one plain", bindingWithOrigin("(aa)", "foo"), NewBinding(values.Void, BindingTypeVariable), false},
 	}
 	for _, tc := range tcs {

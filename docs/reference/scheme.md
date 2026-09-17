@@ -1667,7 +1667,9 @@ A plain export of a name bound only at another phase is an error that names the
 phase it is bound at (`twice (bound at phase 1, not phase 0)`). An import shifts a
 `for-syntax` export along with everything else: `(import (for-syntax (helpers)))`
 binds `twice` at phase 2. `only`, `except`, `prefix` and `rename` apply to a name
-at every phase it is exported.
+at every phase it is exported. A library's bindings of one name at two phases are
+two bindings, so `(import (lib) (for-syntax (lib)))` for a library exporting `x`
+and `(for-syntax x)` puts both at phase 1 and is a conflicting import.
 
 ### Wile Scheme Libraries
 
