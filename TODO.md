@@ -325,12 +325,14 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   that file is the `-f` file or itself included. A procedure defined the same way is visible.
   R7RS §4.1.7: `include` is `begin` over the file's contents, no new scope. Breaks `examples/logic/schelog/run-all-tests.scm` (`%which` unbound at line 65); its README
   instruction was removed 2026-09-15, restore it when this is fixed.
-- [ ] **Library export of a name the library did not define** [see `findLibraryBinding` entry
-  below]: the two-phase *defined* case already exports phase 0 correctly (measured
-  2026-09-14, matches Racket); re-exporting `syntax-rules` from `(scheme base)` still fails
-  (`TestLibraryExportTakesFirstPresentPhase`). ~~A `begin-for-syntax`-only define exports to
-  phase 0 where Racket refuses at `provide`.~~ Refused since 2026-09-16, branch
-  `feat/export-for-syntax` (`TestLibraryExportRefusesNameNotBoundAtItsPhase`).
+- [x] **Library export of a name the library did not define** [Done 2026-09-16, branch
+  `feat/export-for-syntax`; see `findLibraryBinding` entry below]: the two-phase *defined* case
+  exports phase 0 (measured 2026-09-14, matches Racket). A re-exported `syntax-rules` reaches a
+  transformer only through its phase-1 row: `(export (for-syntax (rename syntax-rules my-sr)))`
+  makes `(define-syntax two (my-sr () ((_) 2)))` work, and a plain `(export (rename syntax-rules
+  my-sr))` refuses it, as Racket v9.2's `rename-out` does (both pinned by
+  `TestLibraryExportRoundTripByPhase`). A `begin-for-syntax`-only define is refused at export, as
+  Racket refuses it at `provide` (`TestLibraryExportRefusesNameNotBoundAtItsPhase`).
 
 **Open, no decision needed.**
 
@@ -419,9 +421,10 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
 
 ### `findLibraryBinding` exports the wrong phase for a two-phase name (2026-09-08)
 
-- [ ] **Make the export walk pick the phase the importer needs, not the lowest one**
-  [High, M, filed 2026-09-08 while checking whether an importable `syntax-rules` is possible
-  for the Flatt Stage A design (`memory/2026-09-08-flatt-binding-model-a-design`, §9 Q3)]:
+- [x] **Make the export walk pick the phase the importer needs, not the lowest one**
+  [High, M, WITHDRAWN 2026-09-16, filed 2026-09-08 while checking whether an importable
+  `syntax-rules` is possible for the Flatt Stage A design
+  (`memory/2026-09-08-flatt-binding-model-a-design`, §9 Q3)]:
   `findLibraryBinding` (`pkg/machine/compilation/library_bindings.go`) walks
   `lib.Env.PresentPhases()` and returns the **first** hit. `PresentPhases`
   (`pkg/environment/environment_frame.go`) sorts ascending and trims below `PhaseRuntime`,
@@ -486,13 +489,13 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   of order does not work.
 
   **2026-09-15:** the motivating row (renamed `syntax-rules` in a transformer RHS,
-  `TestLibraryExportTakesFirstPresentPhase/syntax-rules_(two_phases)_does_not`) turns out to be a phase-isolation
+  `TestLibraryExportRoundTripByPhase/syntax-rules_plain_export_does_not`) turns out to be a phase-isolation
   question, not an export-walk defect. Under default phase isolation a plain `export` binds at
   phase 0 only, matching Racket's `rename-out`: `(only-meta-in 0 (prefix-in b: racket/base))`
   refuses `b:syntax-rules` in a transformer RHS, and `racket/base` declares exactly `...`, `_`,
   `syntax-id-rules`, `syntax-rules` at phase 1. The fix is the "Option 2" item below: declared
-  per-phase export tables. That needs the renamed-keyword-by-binding dispatch shipped on
-  `feat/keyword-denotation-dispatch` first, because `(import (scheme base) (for-syntax (scheme
+  per-phase export tables (done 2026-09-16). That needs the renamed-keyword-by-binding dispatch
+  shipped on `feat/keyword-denotation-dispatch` first, because `(import (scheme base) (for-syntax (scheme
   base)))` must see its two `syntax-rules` rows at phase 1 as one denotation before a per-phase
   export table can declare them as one name.
 
@@ -809,11 +812,18 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   `TestFindLibraryBindingPrefersRuntimeOverExpand`). `(scheme base)` holds
   `syntax-rules` at phase 0 as a `*SyntaxCompiler` and at phase 1 as a
   `*PrimitiveExpander`; the export walk hands a for-syntax import the phase-0
-  one, which then fails gate 1's type assertion at the importer's phase 1. That
+  one, which then fails gate 1's type assertion at the importer's phase 1. ~~That
   is fork (a) above, already decided and unshipped, and it is the item that
   should carry this work. Its rider stands: `validateLibraryExports`
   (`compile_library_forms.go:300-312`) makes the SAME first-hit call and
-  discards both returns, so fixing the walk alone leaves the false green.
+  discards both returns, so fixing the walk alone leaves the false green.~~
+  **Fork (a) WITHDRAWN 2026-09-16** (`372d703c`, entry above): an export declares its
+  phase, `findLibraryBinding` probes that phase (then phase+1 for a keyword) instead of
+  walking `PresentPhases`, `validateLibraryExports` asks the same question, and
+  `TestFindLibraryBindingPrefersRuntimeOverExpand` was replaced by
+  `TestFindLibraryBindingAtExportPhase`. The three mechanisms and the fourth option below
+  were designed for fork (a) and are kept as history. Whether the two gates still fire
+  after that change has not been re-measured.
 
   **Three mechanisms for fork (a) were designed and all three took a fatal on
   adversarial review (2026-09-13, 20 agents).** Recorded so they are not
@@ -821,7 +831,7 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   in the library env at another phase, where `ScopesCompatible(∅, {libScope})`
   is unconditionally true, so it substitutes a library's private
   `begin-for-syntax` define for the runtime export a name also has, and it never
-  fires on fork (a)'s own pinned row (`library_export_phase_order_test.go:110-130`,
+  fires on fork (a)'s own pinned row (`TestLibraryExportRoundTripByPhase/syntax-rules_plain_export_does_not`,
   a `targetPhase == 0` import); measured, it also swaps the installed object for
   105 of 233 ordinary procedures, whose replacement closure captures
   `env.Expand()` rather than `env` (the G12 closure-env blocker). (ii) A
@@ -1593,7 +1603,9 @@ open work. Headings kept so old references still find them.
   check is needed ("the hermetic rejection *is* the loud failure") did not hold in a library body.
   **Q2 closed (Phase D):** `findLibraryBinding` and `GetGlobalIndexAcrossPhases` derive their probe
   set from `EnvironmentFrame.PresentPhases()`, ascending, so ties still prefer runtime
-  (`TestFindLibraryBindingPrefersRuntimeOverExpand`) and a phase-3 define is exportable
+  (`TestFindLibraryBindingPrefersRuntimeOverExpand`; superseded for `findLibraryBinding` on
+  2026-09-16 by `372d703c`, which probes the export's phase, pinned by
+  `TestFindLibraryBindingAtExportPhase`) and a phase-3 define is exportable
   (`TestLibraryExportsPhaseThreeBinding`); `PhaseTemplate` (-1) is excluded deliberately.
   Residual: Q3, a predeclared-but-unwritten slot reads as `#!void` rather than raising; the
   `predeclareBinding` twin-slot entry stays open, and closing this did not require it, which shows
@@ -1733,9 +1745,9 @@ open work. Headings kept so old references still find them.
     name. Racket's zero requires the identity fix first, not instead of it. It also moves R7RS
     conformance results.
   - **Sequence for whoever re-opens it:** identity fix across the import edge →
-    `findLibraryBinding` takes the requesting phase (entry above, decided (a)), making
-    `syntax-rules` importable → the phase-1 vocabulary becomes declarable → only then is zero
-    reachable.
+    ~~`findLibraryBinding` takes the requesting phase (entry above, decided (a))~~ declared
+    per-phase exports (done 2026-09-16; fork (a) withdrawn), making `syntax-rules` importable →
+    the phase-1 vocabulary becomes declarable → only then is zero reachable.
 
 #### A library DECLARATION's `(import (for-syntax …))` silently drops the phase shift (2026-09-09)
 
