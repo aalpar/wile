@@ -26,7 +26,8 @@ import (
 // the defining library's KEY (RootLib), the DEFINING name inside it (RootName,
 // invariant to any export/import renaming), and the phase that library stores
 // the binding at (RootPhase, invariant to any import shift). One library can
-// bind one name at several phases, as distinct bindings. It is value-identity: a
+// bind one name at several phases, as distinct bindings; a base binding
+// (BaseOriginLib) has no phase. It is value-identity: a
 // library define and every import of it, however renamed, re-exported or
 // shifted, carry equal OriginRefs. Set once (library finalization for a define, propagation at
 // import) and never mutated, so it is safe to share across the copy-on-write
@@ -44,8 +45,11 @@ type OriginRef struct {
 // primitive, a bootstrap definition, or a core form keyword. Every library
 // environment is built from the engine's one base, so each library's copy of
 // such a binding is the same definition, and an export of it is rooted here
-// rather than at the exporting library. The #% prefix keeps it from reading as
-// a library name part.
+// rather than at the exporting library. The base binds a name at several phases
+// as one definition (syntax-rules is a *SyntaxCompiler at phase 0 and a
+// *PrimitiveExpander at phase 1, both the one form, as racket/base's phase-1
+// syntax-rules is its phase-0 binding shifted), so a base root leaves RootPhase
+// zero. The #% prefix keeps it from reading as a library name part.
 const BaseOriginLib = "#%base"
 
 // BindingMeta holds compile-time metadata (scopes, source location) never read

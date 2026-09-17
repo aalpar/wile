@@ -26,6 +26,10 @@
     ;; Auxiliary syntax (R7RS §4.3.2)
     ...
     _
+    ;; A syntax-rules transformer is phase-1 code: export its vocabulary there
+    ;; too, so a renamed or prefixed syntax-rules reaches it. racket/base
+    ;; exports the same names at phase 1.
+    (for-syntax syntax-rules ... _)
     ;; Derived syntax (bootstrap macros)
     cond
     case

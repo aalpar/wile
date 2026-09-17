@@ -648,8 +648,9 @@ func parseSupersetDocTable(t *testing.T) map[string]bool {
 	return q
 }
 
-// sldExportNames returns the identifiers in sldPath's (export ...) form, read
-// from the embedded stdlib FS.
+// sldExportNames returns the phase-0 identifiers in sldPath's (export ...) form,
+// read from the embedded stdlib FS. A (for-syntax ...) spec exports at phase 1,
+// outside what an R7RS authority lists, so it is skipped.
 func sldExportNames(t *testing.T, sldPath string) []string {
 	t.Helper()
 	raw, err := fs.ReadFile(stdlib.FS, sldPath)
@@ -667,17 +668,41 @@ func sldExportNames(t *testing.T, sldPath string) []string {
 		qt.Commentf("%s has no (export ...) form", sldPath))
 
 	var q []string
-	for _, tok := range toks[open+2:] {
+	rest := toks[open+2:]
+	for i := 0; i < len(rest); i++ {
+		tok := rest[i]
 		if tok == ")" {
 			return q
 		}
+		if tok == "(" && i+1 < len(rest) && rest[i+1] == "for-syntax" {
+			i = skipForm(rest, i)
+			continue
+		}
 		qt.Assert(t, tok != "(", qt.IsTrue,
 			qt.Commentf("%s nests a form inside (export ...); this reader only "+
-				"understands bare identifiers and would mis-parse it", sldPath))
+				"understands bare identifiers and (for-syntax ...), and would "+
+				"mis-parse it", sldPath))
 		q = append(q, tok)
 	}
 	t.Fatalf("%s: unterminated (export ...) form", sldPath)
 	return nil
+}
+
+// skipForm returns the index of the ")" closing the form that opens at toks[i].
+func skipForm(toks []string, i int) int {
+	depth := 0
+	for ; i < len(toks); i++ {
+		switch toks[i] {
+		case "(":
+			depth++
+		case ")":
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return i
 }
 
 // scanUpToExportForm tokenizes src into parens and atoms, stopping once the

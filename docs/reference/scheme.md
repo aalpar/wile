@@ -1671,6 +1671,14 @@ at every phase it is exported. A library's bindings of one name at two phases ar
 two bindings, so `(import (lib) (for-syntax (lib)))` for a library exporting `x`
 and `(for-syntax x)` puts both at phase 1 and is a conflicting import.
 
+`(scheme base)` and `(scheme r5rs)` export `syntax-rules`, `...` and `_` at
+phase 1 as well as phase 0, as `racket/base` does, because a transformer
+right-hand side is phase-1 code. A renamed or prefixed import therefore reaches
+it: `(import (rename (scheme base) (syntax-rules sr)))` makes
+`(define-syntax two (sr () ((_) 2)))` work. Both rows are the one base
+binding, so `(import (scheme base) (for-syntax (scheme base)))` is not a
+conflict.
+
 ### Wile Scheme Libraries
 
 | Library | Contents |

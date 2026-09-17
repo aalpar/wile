@@ -150,13 +150,13 @@ func stampLibraryExportOrigins(lib *CompiledLibrary) {
 // imported into it: internalName, stored at phase. With no origin it is either
 // defined by lib or supplied by the engine base lib's environment is built from,
 // and only a definition in lib carries lib's scope. A base binding is rooted at
-// environment.BaseOriginLib, so every library's copy of it is one binding.
+// environment.BaseOriginLib with no phase, so every library's copy of it, at
+// every phase, is one binding.
 func exportRoot(lib *CompiledLibrary, binding *environment.Binding, internalName string, phase environment.Phase) *environment.OriginRef {
-	rootLib := environment.BaseOriginLib
 	if lib.Scope != nil && slices.Contains(binding.Scopes(), lib.Scope) {
-		rootLib = lib.Name.Key()
+		return &environment.OriginRef{RootLib: lib.Name.Key(), RootName: internalName, RootPhase: phase}
 	}
-	return &environment.OriginRef{RootLib: rootLib, RootName: internalName, RootPhase: phase}
+	return &environment.OriginRef{RootLib: environment.BaseOriginLib, RootName: internalName}
 }
 
 // importOrigin returns the provenance root an import of source carries (plan
