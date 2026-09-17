@@ -36,10 +36,10 @@ import (
 // transformer right-hand side needs, and the imported name is unusable there.
 // Validation does not catch it: the phase-0 binding is a legitimate plain export.
 //
-// These are ANSWER pins of current behavior, recorded because the failure is
-// silent. A plain export binds at phase 0 only, as Racket's does; the phase-1 row
-// is exported by (for-syntax ...), and (scheme base) does not declare one. The
-// let-syntax row must keep passing either way.
+// That is decided behavior, pinned because it is silent: a plain export binds at
+// phase 0 only, as Racket's provide does. The phase-1 row is exported by
+// (for-syntax ...), as (scheme base) does. The let-syntax row must keep passing
+// either way.
 
 func exportProbeEngine(t *testing.T) *wile.Engine {
 	t.Helper()
@@ -55,6 +55,10 @@ func exportProbeEngine(t *testing.T) *wile.Engine {
 			"lib-syntaxrules.scm": &fstest.MapFile{Data: []byte(
 				"(define-library (lib-syntaxrules)\n" +
 					"  (export (rename syntax-rules my-sr))\n" +
+					"  (begin (define anchor 1)))\n")},
+			"lib-syntaxrules-for-syntax.scm": &fstest.MapFile{Data: []byte(
+				"(define-library (lib-syntaxrules-for-syntax)\n" +
+					"  (export (for-syntax (rename syntax-rules my-sr)))\n" +
 					"  (begin (define anchor 1)))\n")},
 		}),
 		wile.WithSourceFS(stdlib.FS),
@@ -102,12 +106,13 @@ func TestLibraryExportOfExpandPhaseNameValidates(t *testing.T) {
 	}
 }
 
-// TestLibraryExportTakesFirstPresentPhase is the round trip. let-syntax has no
-// phase-0 binding, so the walk falls through to its phase-1 PrimitiveExpander and
-// the renamed name expands. syntax-rules has one, so the walk stops at phase 0 and
-// the renamed name is not a primitive expander at all — LookupPrimitiveExpander
-// reads env.Expand() and finds nothing.
-func TestLibraryExportTakesFirstPresentPhase(t *testing.T) {
+// TestLibraryExportRoundTripByPhase is the round trip. A plain export probes
+// phase 0, then phase 1 for a keyword. let-syntax has no phase-0 binding, so the
+// probe reaches its phase-1 PrimitiveExpander and the renamed name expands.
+// syntax-rules has one, so a plain export stops at phase 0 and the renamed name is
+// not a primitive expander at all: LookupPrimitiveExpander reads env.Expand() and
+// finds nothing. Exporting it (for-syntax ...) takes the phase-1 row, which expands.
+func TestLibraryExportRoundTripByPhase(t *testing.T) {
 	t.Run("let-syntax (phase-1 only) round-trips", func(t *testing.T) {
 		eng := exportProbeEngine(t)
 		// (car '()) raises, so anything but 42 fails loudly rather than rendering.
@@ -116,14 +121,21 @@ func TestLibraryExportTakesFirstPresentPhase(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 	})
 
-	t.Run("syntax-rules (two phases) does not", func(t *testing.T) {
+	t.Run("syntax-rules plain export does not", func(t *testing.T) {
 		eng := exportProbeEngine(t)
 		_, err := eng.EvalMultiple(context.Background(), `(import (lib-syntaxrules))
 (define-syntax two (my-sr () ((_) 2)))`)
-		// Current behavior. When findLibraryBinding learns to prefer the phase the
-		// importer needs, this becomes qt.IsNil and the assertion below goes away.
 		qt.Assert(t, err, qt.IsNotNil,
 			qt.Commentf("expected the phase-0 export to be unusable as a transformer"))
 		qt.Assert(t, err.Error(), qt.Contains, "my-sr")
+	})
+
+	t.Run("syntax-rules for-syntax export round-trips", func(t *testing.T) {
+		eng := exportProbeEngine(t)
+		v, err := eng.EvalMultiple(context.Background(), `(import (lib-syntaxrules-for-syntax))
+(define-syntax two (my-sr () ((_) 2)))
+(two)`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, v.Internal().SchemeString(), qt.Equals, "2")
 	})
 }
