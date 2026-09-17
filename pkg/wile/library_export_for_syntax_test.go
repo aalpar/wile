@@ -196,6 +196,91 @@ func TestLibraryExportForSyntaxIsNotBoundAtPhaseZero(t *testing.T) {
 	}
 }
 
+// One library's phase-0 and phase-1 bindings of a name are two bindings, so
+// importing the library plainly and for-syntax puts two bindings of that name
+// at one phase: a conflict, in either import order. Racket 8 refuses both
+// ("identifier already required for syntax"). Procedures and macros are the
+// cases a value comparison cannot separate: a procedure compares by name and a
+// macro has none.
+var twoPhaseDefinitionFS = fstest.MapFS{
+	"two-proc.scm": &fstest.MapFile{Data: []byte(`(define-library (two-proc)
+  (import (scheme base))
+  (export x (for-syntax x))
+  (begin (define (x) 0) (begin-for-syntax (define (x) 1))))
+`)},
+	"two-mac.scm": &fstest.MapFile{Data: []byte(`(define-library (two-mac)
+  (import (scheme base) (for-syntax (scheme base)))
+  (export m (for-syntax m))
+  (begin (define-syntax m (syntax-rules () ((_) 0)))
+         (begin-for-syntax (define-syntax m (syntax-rules () ((_) 1))))))
+`)},
+	"two-var.scm": &fstest.MapFile{Data: []byte(`(define-library (two-var)
+  (import (scheme base))
+  (export v (for-syntax v))
+  (begin (define v 0) (begin-for-syntax (define v 1))))
+`)},
+	// Imports (two-proc) plainly and re-exports both rows: the same two bindings.
+	"relay-both.scm": &fstest.MapFile{Data: []byte(`(define-library (relay-both)
+  (import (two-proc))
+  (export x (for-syntax x)))
+`)},
+	// Imports (two-proc) for-syntax and re-exports its phase-0 x one phase up.
+	"relay-shifted.scm": &fstest.MapFile{Data: []byte(`(define-library (relay-shifted)
+  (import (for-syntax (two-proc)))
+  (export (for-syntax x)))
+`)},
+}
+
+func TestImportOfOneNameFromTwoPhasesConflicts(t *testing.T) {
+	tcs := []struct {
+		name string
+		prog string
+	}{
+		{name: "procedure, plain import first", prog: `(import (two-proc) (for-syntax (two-proc)))`},
+		{name: "procedure, for-syntax import first", prog: `(import (for-syntax (two-proc)) (two-proc))`},
+		{name: "macro, plain import first", prog: `(import (two-mac) (for-syntax (two-mac)))`},
+		{name: "macro, for-syntax import first", prog: `(import (for-syntax (two-mac)) (two-mac))`},
+		{name: "variable", prog: `(import (two-var) (for-syntax (two-var)))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			eng := phaseIsolationEngine(t, twoPhaseDefinitionFS)
+			_, err := eng.EvalMultiple(context.Background(), tc.prog)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, werr.ErrDuplicateBinding), qt.IsTrue,
+				qt.Commentf("want ErrDuplicateBinding, got: %v", err))
+		})
+	}
+}
+
+// The same binding reaching one phase by two routes is not a conflict, however
+// far each route shifted it.
+func TestImportOfOneBindingByTwoRoutesDoesNotConflict(t *testing.T) {
+	tcs := []struct {
+		name string
+		prog string
+	}{
+		{
+			name: "re-export at the same phases",
+			prog: `(import (two-proc) (relay-both))
+(begin-for-syntax (if (= (x) 1) #t (error "phase-1 x" (x))))
+(if (= (x) 0) #t (error "phase-0 x" (x)))`,
+		},
+		{
+			name: "re-export of a shifted import",
+			prog: `(import (relay-shifted) (for-syntax (two-proc)))
+(begin-for-syntax (if (= (x) 0) #t (error "phase-1 x" (x))))`,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			eng := phaseIsolationEngine(t, twoPhaseDefinitionFS)
+			_, err := eng.EvalMultiple(context.Background(), tc.prog)
+			qt.Assert(t, err, qt.IsNil)
+		})
+	}
+}
+
 func TestLibraryExportForSyntaxMalformed(t *testing.T) {
 	eng := phaseIsolationEngine(t, fstest.MapFS{
 		"bad.scm": &fstest.MapFile{Data: []byte(`(define-library (bad)

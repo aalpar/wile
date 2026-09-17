@@ -972,6 +972,14 @@ func TestWriteOrigin(t *testing.T) {
 			want:        "",
 		},
 		{
+			// cddr through (scheme cxr): a base definition, which no library
+			// defines, so it names no library either.
+			name:        "base root renders nothing",
+			displayName: "cddr",
+			origin:      &environment.OriginRef{RootLib: environment.BaseOriginLib, RootName: "cddr"},
+			want:        "",
+		},
+		{
 			name:        "root name matches the display name",
 			displayName: "fold",
 			origin:      &environment.OriginRef{RootLib: "srfi/1", RootName: "fold"},

@@ -71,7 +71,7 @@ import (
 // their real home (StampInlineHOFs). The import path is also the only library
 // seam, so a user's own (define …) of a HOF name is never stamped here. Any stale
 // stamp from a prior import of this slot is reset below before re-deriving it.
-func markBindingImported(target, source *environment.Binding, exportName, internalName string, sourceLib LibraryName) {
+func markBindingImported(target, source *environment.Binding, exportName, internalName string, sourceLib *CompiledLibrary, sourcePhase environment.Phase) {
 	if target == nil {
 		return
 	}
@@ -79,8 +79,8 @@ func markBindingImported(target, source *environment.Binding, exportName, intern
 	// the source's already-resolved root when the source is itself imported (a
 	// re-export hop), else synthesize the root from the defining name in the
 	// source library. Keyed on internalName — the name inside sourceLib that
-	// defines the binding — so a renamed export or import does not fork one
-	// binding's identity. This is the signal SameBinding reads for
+	// defines the binding — and sourcePhase, the phase sourceLib stores it at, so
+	// a renamed export or a shifted import does not fork one binding's identity. This is the signal SameBinding reads for
 	// free-identifier=? and ER-compare. Computed ONCE here, outside the UpdateMeta closure
 	// below, so the fold stays a pure function of the *BindingMeta it is handed
 	// even when a CAS retry re-runs it (source.Origin() is a cross-binding read).
@@ -94,10 +94,10 @@ func markBindingImported(target, source *environment.Binding, exportName, intern
 			// direct import's define-site root.
 			origin = srcOrigin
 		} else {
-			// Fallback for a source with no pre-stamped origin (e.g. a synthetic
-			// library that skipped stampLibraryExportOrigins): synthesize the root
-			// from the defining name in the source library.
-			origin = &environment.OriginRef{RootLib: sourceLib.Key(), RootName: internalName}
+			// Fallback for a source with no pre-stamped origin (a Go extension
+			// library, which skips stampLibraryExportOrigins): the same root the
+			// stamp would have given it.
+			origin = exportRoot(sourceLib, source, internalName, sourcePhase)
 		}
 	}
 	target.UpdateMeta(func(m *environment.BindingMeta) bool {
@@ -139,25 +139,24 @@ func markBindingImported(target, source *environment.Binding, exportName, intern
 	stampImportedInlineHOF(target, exportName, origin)
 }
 
-// stampLibraryExportOrigins gives each library-DEFINED export its own provenance
-// root {lib.Key(), internalName}, intrinsically at library finalization — before
+// stampLibraryExportOrigins gives each export not imported into lib its
+// provenance root (exportRoot), intrinsically at library finalization — before
 // any import. So a define-site binding carries the same origin an import of it
 // would otherwise synthesize, which is what makes identifier equality
 // (free-identifier=?, ER-compare's definition-site rename) match a library's
 // internal binding against an import of itself.
 //
-// Only a genuine define in THIS library is stamped: a re-exported binding already
-// carries the propagated root of its true source (it was imported into this
-// library, so its Origin is non-nil), and is left untouched. Runs once per
-// library compile, single-threaded; the nil-guard keeps it idempotent and
-// preserves a re-export's root.
+// A re-exported binding already carries the propagated root of its true source
+// (it was imported into this library, so its Origin is non-nil), and is left
+// untouched. Runs once per library compile, single-threaded; the nil-guard keeps
+// it idempotent and preserves a re-export's root.
 func stampLibraryExportOrigins(lib *CompiledLibrary) {
 	for key, internalName := range lib.Exports {
-		binding, _, found := findLibraryBinding(lib, internalName, key.Phase)
+		binding, phase, found := findLibraryBinding(lib, internalName, key.Phase)
 		if !found || binding == nil || binding.Origin() != nil {
 			continue
 		}
-		root := &environment.OriginRef{RootLib: lib.Name.Key(), RootName: internalName}
+		root := exportRoot(lib, binding, internalName, phase)
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
 			if m.Origin != nil {
 				return false
@@ -166,6 +165,19 @@ func stampLibraryExportOrigins(lib *CompiledLibrary) {
 			return true
 		})
 	}
+}
+
+// exportRoot returns the provenance root of a binding lib exports that was not
+// imported into it: internalName, stored at phase. With no origin it is either
+// defined by lib or supplied by the engine base lib's environment is built from,
+// and only a definition in lib carries lib's scope. A base binding is rooted at
+// environment.BaseOriginLib, so every library's copy of it is one binding.
+func exportRoot(lib *CompiledLibrary, binding *environment.Binding, internalName string, phase environment.Phase) *environment.OriginRef {
+	rootLib := environment.BaseOriginLib
+	if lib.Scope != nil && slices.Contains(binding.Scopes(), lib.Scope) {
+		rootLib = lib.Name.Key()
+	}
+	return &environment.OriginRef{RootLib: rootLib, RootName: internalName, RootPhase: phase}
 }
 
 // ImportSet represents a parsed import specification.
@@ -609,6 +621,14 @@ func importConflicts(existing, incoming *environment.Binding) bool {
 		// conflict" rather than risk a spurious one.
 		return false
 	}
+	// One library's name at two phases is two bindings, and nothing in the
+	// values can say so: a procedure compares by name and a macro has none.
+	// The roots can. Roots from different libraries still go to the value
+	// comparison below.
+	eo, io := existing.Origin(), incoming.Origin()
+	if eo != nil && io != nil && eo.RootLib == io.RootLib && eo.RootName == io.RootName {
+		return eo.RootPhase != io.RootPhase
+	}
 	return !sameImportedBinding(ev, iv)
 }
 
@@ -771,7 +791,8 @@ func installImportedBinding(
 	source *environment.Binding,
 	exportName string,
 	internalName string,
-	sourceLib LibraryName,
+	sourceLib *CompiledLibrary,
+	sourcePhase environment.Phase,
 	phaseContext string,
 	placement importPlacement,
 ) error {
@@ -800,7 +821,7 @@ func installImportedBinding(
 	if !created && importConflicts(target, source) {
 		return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
 			"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
-			localSym.Key, sourceLib.SchemeString())
+			localSym.Key, sourceLib.Name.SchemeString())
 	}
 
 	err := own.SetOwnGlobalValue(idx, source.Value())
@@ -808,7 +829,7 @@ func installImportedBinding(
 		return werr.WrapForeignErrorf(err,
 			"import: failed to set binding for %s%s", localSym.Key, phaseContext)
 	}
-	markBindingImported(target, source, exportName, internalName, sourceLib)
+	markBindingImported(target, source, exportName, internalName, sourceLib, sourcePhase)
 	return nil
 }
 
@@ -869,7 +890,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKe
 			phaseEnv := targetEnv.AtPhase(basePhase)
 			localSym := values.NewSymbol(localName)
 			err := installImportedBinding(phaseEnv, localSym, libBinding.BindingType(),
-				libBinding, externalName, internalName, lib.Name, " at phase "+basePhase.String(),
+				libBinding, externalName, internalName, lib, sourcePhase, " at phase "+basePhase.String(),
 				placementShadowable)
 			if err != nil {
 				return err
@@ -919,7 +940,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKe
 			// still supersedes in place, which is the known residual recorded in
 			// TODO.md against the Imported arm of IsStable().
 			err := installImportedBinding(propagateEnv, propagateSym, libBinding.BindingType(),
-				libBinding, externalName, internalName, lib.Name, " propagated to phase "+propagatePhase.String(),
+				libBinding, externalName, internalName, lib, sourcePhase, " propagated to phase "+propagatePhase.String(),
 				placementInPlace)
 			if err != nil {
 				return err
@@ -996,7 +1017,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[ExportKey]stri
 			internalName = externalName
 		}
 
-		importedBinding, _, found := findLibraryBinding(lib, internalName, localKey.Phase)
+		importedBinding, sourcePhase, found := findLibraryBinding(lib, internalName, localKey.Phase)
 		if !found {
 			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "import: %s exports %q but binding not found",
 				lib.Name.SchemeString(), internalName)
@@ -1053,7 +1074,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[ExportKey]stri
 		// resolution for no stated defect, and split one function's two arms across
 		// two tiers on no principle. It is a separate decision.
 		err = installImportedBinding(installEnv, localSym, importedBinding.BindingType(),
-			importedBinding, externalName, internalName, lib.Name, phaseNote,
+			importedBinding, externalName, internalName, lib, sourcePhase, phaseNote,
 			placementInPlace)
 		if err != nil {
 			return err

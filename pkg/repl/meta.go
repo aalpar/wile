@@ -481,12 +481,13 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 }
 
 // writeOrigin renders a binding's import-provenance root as a "From:" line, or
-// nothing when the binding has no root (never imported). displayName is the name
+// nothing when the binding has no root (never imported) or is rooted at the
+// engine base, which no library defines. displayName is the name
 // being documented, so a root reached under a different name — an export or
 // import rename anywhere along the chain — is called out rather than silently
 // showing a name the user never typed.
 func writeOrigin(w *strings.Builder, displayName string, o *environment.OriginRef) {
-	if o == nil {
+	if o == nil || o.RootLib == environment.BaseOriginLib {
 		return
 	}
 	if o.RootName != "" && o.RootName != displayName {

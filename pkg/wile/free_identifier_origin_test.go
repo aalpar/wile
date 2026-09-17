@@ -143,6 +143,33 @@ func TestFreeIdentifierOriginProvenance(t *testing.T) {
 			want: "#f",
 		},
 		{
+			// cddr is a bootstrap definition. (scheme base) and (scheme cxr) each
+			// export their own library environment's copy of it, and neither
+			// library defines it, so both are rooted at the engine base.
+			name: "a base definition exported by two libraries is same",
+			code: `(import (rename (scheme base) (cddr b))
+			                (rename (scheme cxr) (cddr c)))
+			       (free-identifier=? #'b #'c)`,
+			want: "#t",
+		},
+		{
+			// (wile math) is a Go extension library: its exports are registry
+			// primitives, rooted at the base like (scheme inexact)'s sqrt.
+			name: "a primitive exported by an extension library and by a stdlib library is same",
+			code: `(import (rename (wile math) (sqrt m))
+			                (rename (scheme inexact) (sqrt i)))
+			       (free-identifier=? #'m #'i)`,
+			want: "#t",
+		},
+		{
+			// (srfi 13) defines its own string-map; (scheme base) exports the base's.
+			name: "a library definition shadowing a base name is different",
+			code: `(import (rename (scheme base) (string-map b))
+			                (rename (srfi 13) (string-map s)))
+			       (free-identifier=? #'b #'s)`,
+			want: "#f",
+		},
+		{
 			// Guard for the removed same-value fallback direction: an
 			// unimported sealed-base primitive (nil origin) compared to itself
 			// resolves to the identical binding object, so SameBinding's a==b
