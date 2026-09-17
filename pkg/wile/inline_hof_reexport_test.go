@@ -190,25 +190,20 @@ func TestInlineHOFRenamedOntoCuratedNameDispatchesCorrectly(t *testing.T) {
 	}
 }
 
-// TestInlineHOFConflationReimportClearsStaleStamp guards a soundness edge the
-// origin-following dispatch would otherwise widen: two libraries both export a
-// procedure whose closure is Go-named "fold" — srfi-1's real fold (via (myfold))
-// and a DIFFERENT custom fold (via (customfold)). sameImportedBinding conflates
-// them by name (R7RS §5.6 last-import-wins, the documented irreducible gap), so
-// the second import overwrites the value. The inline-HOF stamp from the first
-// import must be CLEARED on the overwrite — otherwise (z ...) would inline srfi-1
-// fold's template onto the custom fold value (a silent wrong result). z resolves
-// to the custom fold, so it must return (CUSTOM-FOLD), not srfi-1 fold's 6.
-func TestInlineHOFConflationReimportClearsStaleStamp(t *testing.T) {
+// TestInlineHOFSameNamedFoldsConflict: two libraries both export a procedure
+// whose closure is Go-named "fold" — srfi-1's real fold (via (myfold)) and a
+// DIFFERENT custom fold (via (customfold)). Compared by name they used to read as
+// one binding, the second import overwrote the value, and the inline-HOF stamp
+// from the first import had to be cleared or (z ...) would inline srfi-1 fold's
+// template onto the custom fold. Their provenance roots differ, so the second
+// import is refused and no value is ever overwritten under a stale stamp.
+func TestInlineHOFSameNamedFoldsConflict(t *testing.T) {
 	eng := reexportHOFEngine(t)
-	got, err := eng.EvalMultiple(context.Background(),
+	_, err := eng.EvalMultiple(context.Background(),
 		`(import (rename (myfold) (fold z)))
-		 (import (rename (customfold) (fold z)))
-		 (z + 0 '(1 2 3))`)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, got.Internal().SchemeString(), qt.Equals, "(CUSTOM-FOLD)",
-		qt.Commentf("z resolves to the custom fold (last import wins); the stale srfi-1 fold stamp "+
-			"must not inline its template onto the replaced value"))
+		 (import (rename (customfold) (fold z)))`)
+	qt.Assert(t, errors.Is(err, werr.ErrDuplicateBinding), qt.IsTrue,
+		qt.Commentf("two different procedures named fold imported as z must conflict; got %v", err))
 }
 
 // TestInlineHOFRenamedOntoIncompatibleArityErrors pins that renaming fold (3 args)

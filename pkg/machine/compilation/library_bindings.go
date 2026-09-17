@@ -71,43 +71,24 @@ import (
 // their real home (StampInlineHOFs). The import path is also the only library
 // seam, so a user's own (define …) of a HOF name is never stamped here. Any stale
 // stamp from a prior import of this slot is reset below before re-deriving it.
-func markBindingImported(target, source *environment.Binding, exportName, internalName string, sourceLib *CompiledLibrary, sourcePhase environment.Phase) {
+//
+// origin is the import's provenance root (importOrigin), resolved by the caller
+// before the conflict check reads it. It is computed outside the
+// UpdateMeta closure below, so the fold stays a pure function of the
+// *BindingMeta it is handed even when a CAS retry re-runs it (source.Origin() is
+// a cross-binding read).
+func markBindingImported(target, source *environment.Binding, exportName string, origin *environment.OriginRef) {
 	if target == nil {
 		return
 	}
-	// Import-provenance root (plan 2026-07-24-free-identifier-origin): propagate
-	// the source's already-resolved root when the source is itself imported (a
-	// re-export hop), else synthesize the root from the defining name in the
-	// source library. Keyed on internalName — the name inside sourceLib that
-	// defines the binding — and sourcePhase, the phase sourceLib stores it at, so
-	// a renamed export or a shifted import does not fork one binding's identity. This is the signal SameBinding reads for
-	// free-identifier=? and ER-compare. Computed ONCE here, outside the UpdateMeta closure
-	// below, so the fold stays a pure function of the *BindingMeta it is handed
-	// even when a CAS retry re-runs it (source.Origin() is a cross-binding read).
-	var origin *environment.OriginRef
-	if source != nil {
-		srcOrigin := source.Origin()
-		if srcOrigin != nil {
-			// Propagate the source's already-resolved root. A library define is
-			// pre-stamped with its self-root at finalization (stampLibraryExport-
-			// Origins), so this branch carries both a re-export hop's root and a
-			// direct import's define-site root.
-			origin = srcOrigin
-		} else {
-			// Fallback for a source with no pre-stamped origin (a Go extension
-			// library, which skips stampLibraryExportOrigins): the same root the
-			// stamp would have given it.
-			origin = exportRoot(sourceLib, source, internalName, sourcePhase)
-		}
-	}
 	target.UpdateMeta(func(m *environment.BindingMeta) bool {
 		m.Imported = true
-		// Reset any inline-HOF stamp before re-deriving it below: a re-import can
-		// overwrite target's value (R7RS §5.6 last-import-wins under the
-		// sameImportedBinding name-conflation), and the stamp — since dispatch
-		// selects the template by it — must track the CURRENT value, never a stale
-		// template from a prior import of this slot. stampImportedInlineHOF re-adds
-		// it iff THIS import qualifies. Harmless on a first import (already unset).
+		// Reset any inline-HOF stamp before re-deriving it below: a re-import
+		// overwrites target's value with its source's copy, and the stamp — since
+		// dispatch selects the template by it — must track the CURRENT value, never
+		// a stale template from a prior import of this slot. stampImportedInlineHOF
+		// re-adds it iff THIS import qualifies. Harmless on a first import (already
+		// unset).
 		m.InlineHOF = false
 		m.InlineHOFName = ""
 		m.InlineHOFCallbackParam = 0
@@ -119,10 +100,9 @@ func markBindingImported(target, source *environment.Binding, exportName, intern
 			// the value, so without this the docstring would be lost on import.
 			//
 			// Assigned unconditionally, for the same reason the inline-HOF stamp is
-			// reset above: a re-import can replace target's value under the
-			// sameImportedBinding name-conflation (R7RS §5.6 last-import-wins), and
-			// a docstring left over from the displaced value documents a binding
-			// that is no longer there. A procedure carries its own docstring on its
+			// reset above: a re-import replaces target's value, and a docstring left
+			// over from the displaced value would document a value that is no longer
+			// there. A procedure carries its own docstring on its
 			// template and so tracks its value for free; a macro has no template,
 			// making this field the macro path's only carrier — and the only one
 			// that could go stale.
@@ -133,9 +113,8 @@ func markBindingImported(target, source *environment.Binding, exportName, intern
 	})
 	// The inline-HOF stamp is gated on the binding's provenance ROOT (origin), not
 	// just the export name — so the real srfi-1 fold is stamped even through a
-	// re-export chain, while a same-named HOF from another library is not (and the
-	// reset above drops a stale stamp when a conflation re-import replaced the
-	// value). See stampImportedInlineHOF.
+	// re-export chain, while a same-named HOF from another library is not. See
+	// stampImportedInlineHOF.
 	stampImportedInlineHOF(target, exportName, origin)
 }
 
@@ -178,6 +157,21 @@ func exportRoot(lib *CompiledLibrary, binding *environment.Binding, internalName
 		rootLib = lib.Name.Key()
 	}
 	return &environment.OriginRef{RootLib: rootLib, RootName: internalName, RootPhase: phase}
+}
+
+// importOrigin returns the provenance root an import of source carries (plan
+// 2026-07-24-free-identifier-origin): the source's own root when it has one — a
+// library export stamped at finalization, or a re-export hop propagating its
+// true source's — else the root the stamp would have given it (a Go extension
+// library, which skips stampLibraryExportOrigins). internalName is the name
+// sourceLib defines it under and sourcePhase the phase it stores it at, so a
+// renamed export or a shifted import does not fork one binding's identity.
+func importOrigin(source *environment.Binding, internalName string, sourceLib *CompiledLibrary, sourcePhase environment.Phase) *environment.OriginRef {
+	q := source.Origin()
+	if q != nil {
+		return q
+	}
+	return exportRoot(sourceLib, source, internalName, sourcePhase)
 }
 
 // ImportSet represents a parsed import specification.
@@ -582,9 +576,9 @@ func libraryBindingAt(lib *CompiledLibrary, present []environment.Phase, sym *va
 	return lib.Env.AtPhase(phase).GetBinding(sym, scopes)
 }
 
-// importConflicts reports whether installing incoming under a local name whose
-// own-frame binding already exists would bind one identifier to two DIFFERENT
-// bindings — an error per R7RS §5.6 ("it is an error to import the same identifier
+// importConflicts reports whether installing an import rooted at incoming under a
+// local name whose own-frame binding already exists would bind one identifier to
+// two DIFFERENT bindings — an error per R7RS §5.6 ("it is an error to import the same identifier
 // more than once with different bindings"). Only a prior IMPORTED binding counts:
 //
 //   - a re-import of the same binding (a diamond — two libraries re-exporting one
@@ -602,74 +596,29 @@ func libraryBindingAt(lib *CompiledLibrary, present []environment.Phase, sym *va
 // already sits here", and the guard's own precondition is what makes the bullet
 // true rather than aspirational.
 //
-// Whether the two denote the same definition (diamond) or two definitions of one name
-// (conflict) is decided by sameImportedBinding — see its doc for the by-name comparison
-// and why it is used instead of value identity.
-func importConflicts(existing, incoming *environment.Binding) bool {
+// Whether the two denote the same definition (diamond) or two definitions of one
+// name (conflict) is decided by their provenance roots alone, as Racket decides
+// it by binding identity. Values cannot decide it: each library environment holds
+// its own copy of a base definition (cddr from (scheme base) and from (scheme
+// cxr) are two closures), while two libraries defining one name can hold equal
+// values or same-named procedures. The roots separate both, because a base
+// binding is rooted at the base (exportRoot) and a library definition at its
+// library.
+func importConflicts(existing *environment.Binding, incoming *environment.OriginRef) bool {
 	if existing == nil || incoming == nil {
 		return false
 	}
 	if !existing.IsImported() {
 		return false
 	}
-	ev := existing.Value()
-	iv := incoming.Value()
-	if ev == nil || iv == nil {
-		// Defensive: a found binding's value is never Go-nil in practice (a freshly
-		// created binding holds values.Void, not nil), so this guards an upstream-bug
-		// shape rather than a reachable path; treat an absent value as "cannot prove a
-		// conflict" rather than risk a spurious one.
+	eo := existing.Origin()
+	if eo == nil {
+		// Defensive: every import is marked with its origin in the same install
+		// that creates its slot, so an imported binding without one is an upstream
+		// bug; treat it as "cannot prove a conflict" rather than risk a spurious one.
 		return false
 	}
-	// One library's name at two phases is two bindings, and nothing in the
-	// values can say so: a procedure compares by name and a macro has none.
-	// The roots can. Roots from different libraries still go to the value
-	// comparison below.
-	eo, io := existing.Origin(), incoming.Origin()
-	if eo != nil && io != nil && eo.RootLib == io.RootLib && eo.RootName == io.RootName {
-		return eo.RootPhase != io.RootPhase
-	}
-	return !sameImportedBinding(ev, iv)
-}
-
-// sameImportedBinding reports whether two imported values denote the same underlying
-// definition (a diamond / re-export) rather than two different definitions sharing one
-// name (a conflict). Closures compare by NAME; everything else by EqualTo.
-//
-// Why by name and not value identity for closures: a re-export does not preserve a
-// single closure value. An ambient definition (a bootstrap procedure or macro) is
-// RECOMPILED into each manifest library that re-exports it, so the copies have distinct
-// template/env/pointer and EqualTo would wrongly report a legitimate re-export as a
-// conflict (verified: (scheme base) cddr vs (scheme cxr) cddr; delay across (scheme
-// base)/(scheme lazy)/(scheme r5rs)). The name is the signal that survives
-// recompilation, so equal names mark these as the one logical binding (a diamond).
-//
-// The EqualTo default still does real work for non-closure values: a case-lambda
-// re-exported through an importing library SHARES its value pointer (EqualTo identity →
-// diamond), while two genuinely different case-lambdas differ structurally (EqualTo
-// unequal → conflict). This is what catches the one genuine stdlib collision — (scheme
-// base) string-map vs (srfi 13) string-map, both name-less CaseLambdaClosures.
-//
-// Deliberate, IRREDUCIBLE gap: two DIFFERENT definitions under one name that the name
-// cannot distinguish are treated as a diamond and silently last-import-wins. This covers
-// name-less closures (macro transformers and var-form-defined procedures, whose template
-// name is empty, so "" == "" reads as same) and same-named function-form procedures. The
-// only signal that could separate "same definition, recompiled-and-re-exported" from
-// "different definition, same name" is a definition origin (source location) — and that
-// was rejected because it falsely flags the ubiquitous, legal define-over-import shadow
-// ((import (scheme base)) then (define (zero? x) …)). No such hidden clash exists in the
-// bundled stdlib (the one real collision, string-map, is caught via EqualTo above).
-func sameImportedBinding(a, b values.Value) bool {
-	switch av := a.(type) {
-	case *machine.ForeignClosure:
-		bv, ok := b.(*machine.ForeignClosure)
-		return ok && av.Name() == bv.Name()
-	case *machine.MachineClosure:
-		bv, ok := b.(*machine.MachineClosure)
-		return ok && av.Name() == bv.Name()
-	default:
-		return a.EqualTo(b)
-	}
+	return *eo != *incoming
 }
 
 // importPlacement selects the store TIER an import install lands on. It is a
@@ -818,7 +767,8 @@ func installImportedBinding(
 	// different binding is a conflicting import (R7RS §5.6): reject rather than
 	// silently last-wins. `created` and `target` now come from the same predicate,
 	// so the guard cannot be asked about a binding other than the one it protects.
-	if !created && importConflicts(target, source) {
+	origin := importOrigin(source, internalName, sourceLib, sourcePhase)
+	if !created && importConflicts(target, origin) {
 		return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
 			"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
 			localSym.Key, sourceLib.Name.SchemeString())
@@ -829,7 +779,7 @@ func installImportedBinding(
 		return werr.WrapForeignErrorf(err,
 			"import: failed to set binding for %s%s", localSym.Key, phaseContext)
 	}
-	markBindingImported(target, source, exportName, internalName, sourceLib, sourcePhase)
+	markBindingImported(target, source, exportName, origin)
 	return nil
 }
 

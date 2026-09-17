@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"testing/fstest"
 
 	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/werr"
@@ -165,19 +166,18 @@ func TestImportConflictDetection(t *testing.T) {
 		},
 		{
 			// define-over-import: a user (define zero?) after (import (scheme base))
-			// legally shadows the imported zero? — it is NOT an import conflict. (A
-			// source-location origin would falsely flag this; name comparison preserves
-			// shadowing. See r7rs-differences.md.)
+			// legally shadows the imported zero? — it is NOT an import conflict. The
+			// check only ever compares two imports; a define is not one.
 			name:    "define-over-import-shadows-not-conflict",
 			program: `(import (scheme base)) (define (zero? x) (eq? x 'z)) (list (zero? 'z) (zero? 5))`,
 			want:    "(#t #f)",
 		},
 		{
 			// Macro re-export diamond: (scheme base) and (scheme r5rs) both re-export the
-			// ambient derived-syntax macros (let, cond, …). These are name-less,
-			// recompiled-per-manifest closures, so they MUST be recognized as the same
-			// binding by name — a value-identity check would falsely flag this common
-			// combination as a conflict (regression lock).
+			// ambient derived-syntax macros (let, cond, …). Each library environment
+			// holds its own copy of these name-less closures, so a value-identity
+			// check would falsely flag this common combination as a conflict; their
+			// origins are both the engine base (regression lock).
 			name:    "macro-re-export-not-conflict",
 			program: `(import (scheme base) (scheme r5rs)) (let ((x 1)) (cond (#t (+ x 1))))`,
 			want:    "2",
@@ -193,6 +193,74 @@ func TestImportConflictDetection(t *testing.T) {
 			if tc.wantErr {
 				c.Assert(err, qt.IsNotNil)
 				c.Assert(errors.Is(err, werr.ErrDuplicateBinding), qt.IsTrue)
+				return
+			}
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestImportConflictDetectionByOrigin pins that two libraries each DEFINING a
+// name are two bindings, whatever the values look like: a procedure's name, a
+// macro's lack of one, and an equal constant all used to read as one binding and
+// let the last import win. Racket refuses all three ("identifier already
+// required"). One library's definitions reached by several routes (directly, or
+// re-exported by one or two parents) stay a diamond, as Racket allows.
+func TestImportConflictDetectionByOrigin(t *testing.T) {
+	files := fstest.MapFS{
+		"defs-a.scm": &fstest.MapFile{Data: []byte(`(define-library (defs-a)
+  (import (scheme base))
+  (export f m v)
+  (begin (define (f) 'a) (define-syntax m (syntax-rules () ((_) 'a))) (define v 1)))
+`)},
+		"defs-b.scm": &fstest.MapFile{Data: []byte(`(define-library (defs-b)
+  (import (scheme base))
+  (export f m v)
+  (begin (define (f) 'b) (define-syntax m (syntax-rules () ((_) 'b))) (define v 1)))
+`)},
+		"relay-a.scm": &fstest.MapFile{Data: []byte(`(define-library (relay-a)
+  (import (defs-a))
+  (export f m v))
+`)},
+		"relay-a2.scm": &fstest.MapFile{Data: []byte(`(define-library (relay-a2)
+  (import (defs-a))
+  (export f m v))
+`)},
+		"uses-relays.scm": &fstest.MapFile{Data: []byte(`(define-library (uses-relays)
+  (import (scheme base) (relay-a) (relay-a2) (defs-a))
+  (export g)
+  (begin (define (g) (list (f) (m) v))))
+`)},
+	}
+	testCases := []struct {
+		name    string
+		program string
+		want    string
+		wantErr bool
+	}{
+		{name: "same-named procedures conflict", program: `(import (only (defs-a) f) (only (defs-b) f))`, wantErr: true},
+		{name: "same-named macros conflict", program: `(import (only (defs-a) m) (only (defs-b) m))`, wantErr: true},
+		{name: "equal constants conflict", program: `(import (only (defs-a) v) (only (defs-b) v))`, wantErr: true},
+		{name: "re-export is a diamond", program: `(import (defs-a) (relay-a)) (list (f) (m) v)`, want: "(a a 1)"},
+		{name: "a child through two parents is a diamond", program: `(import (relay-a) (relay-a2)) (list (f) (m) v)`, want: "(a a 1)"},
+		{name: "a library body importing a child three ways", program: `(import (uses-relays)) (g)`, want: "(a a 1)"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			ctx := context.Background()
+			eng, err := NewEngine(ctx,
+				WithProfile(KitchenSink),
+				WithSourceFS(files),
+				WithSourceFS(stdlib.FS),
+				WithLibraryPaths("."))
+			c.Assert(err, qt.IsNil)
+			result, err := eng.EvalMultiple(ctx, tc.program)
+			if tc.wantErr {
+				c.Assert(err, qt.IsNotNil)
+				c.Assert(errors.Is(err, werr.ErrDuplicateBinding), qt.IsTrue,
+					qt.Commentf("want ErrDuplicateBinding, got: %v", err))
 				return
 			}
 			c.Assert(err, qt.IsNil)

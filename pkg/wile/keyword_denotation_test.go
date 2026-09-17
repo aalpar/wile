@@ -149,15 +149,12 @@ func TestRenamedKeywordSurvivesCanonicalShadow(t *testing.T) {
 	})
 }
 
-// TestKeywordImportConflicts pins a behavior change: giving keyword bindings a
-// non-nil FormKeyword/PrimitiveExpander value (this branch) put them through
-// sameImportedBinding's EqualTo path instead of comparing values.Void ==
-// values.Void, which was true unconditionally. import conflict detection for
-// keywords is now real: two libraries that re-export the SAME keyword under one
-// name are still a diamond (EqualTo compares the denoted form, both "if"), but
-// two libraries that export DIFFERENT keywords under the SAME local name are now
-// correctly refused as a conflict, where before the branch they silently
-// last-import-won.
+// TestKeywordImportConflicts pins import conflict detection for keywords: two
+// libraries that re-export the SAME keyword under one name are a diamond (both
+// rooted at the base's if), and two libraries that export DIFFERENT keywords
+// under the SAME local name are refused as a conflict. When keyword bindings
+// held values.Void, a value comparison could not tell them apart and the later
+// import silently won.
 func TestKeywordImportConflicts(t *testing.T) {
 	t.Run("diamond: two libraries re-export the same keyword under one name", func(t *testing.T) {
 		eng, err := wile.NewEngine(context.Background(),
