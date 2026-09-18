@@ -477,10 +477,10 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 	// moves only compilation.GoSyntaxFormCompiles(), by +1, in
 	// TestPhase1BaseImportDoesNotReviveTheGoSyntaxRules and
 	// TestP2_SyntaxRulesAndERAreScheme; reverting LookupPhaseBinding's alone
-	// leaves those two green and reddens FOUR value tests, one site-COUNT ratchet
-	// (TestPhase1BaseImportMasksNoPhaseRow, whose own doc records that the value
-	// form of that question passes unfixed), and one integration program.
-	// Measured 2026-09-10; the partition is in TODO.md.
+	// leaves those two green and reddens only its site-COUNT ratchet,
+	// TestPhase1BaseImportMasksNoPhaseRow, because head dispatch
+	// (lookupHeadPrimitiveExpander) probes the sealed phase-1 row itself before
+	// reaching LookupPhaseBinding. Measured 2026-09-17; the partition is in TODO.md.
 	masked := bnd != nil && bnd.BindingType() == environment.BindingTypePrimitive
 	if p.env.PhaseLevel() > environment.PhaseExpand || masked {
 		ge := p.env.GlobalEnvironment()

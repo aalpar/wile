@@ -173,8 +173,11 @@ func RegisterPhaseBindings[F any](
 // it). That is an identity defect with its own motivation (the stale imported
 // variable, R7RS 4.3.2), filed separately. It is not this one.
 //
-// Until the export walk is fixed the gate stays, and reverting it alone is
-// measured: TODO.md carries the per-site partition.
+// Head dispatch no longer depends on this gate: lookupHeadPrimitiveExpander
+// probes the sealed phase-1 row for a head's denoted form first, so reverting
+// the fallback below alone reddens only TestPhase1BaseImportMasksNoPhaseRow,
+// which calls LookupPrimitiveExpander directly. TODO.md carries the per-site
+// partition.
 func LookupPhaseBinding[T any](
 	phaseEnv *environment.EnvironmentFrame,
 	sym *values.Symbol,
