@@ -822,8 +822,9 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   walking `PresentPhases`, `validateLibraryExports` asks the same question, and
   `TestFindLibraryBindingPrefersRuntimeOverExpand` was replaced by
   `TestFindLibraryBindingAtExportPhase`. The three mechanisms and the fourth option below
-  were designed for fork (a) and are kept as history. Whether the two gates still fire
-  after that change has not been re-measured.
+  were designed for fork (a) and are kept as history. Re-measured 2026-09-17 at `9bf60318`
+  (per-site partition below): gate 2 is unchanged, and gate 1 now reddens one ratchet only,
+  since `68cf1ca2`, not since this withdrawal.
 
   **Three mechanisms for fork (a) were designed and all three took a fatal on
   adversarial review (2026-09-13, 20 agents).** Recorded so they are not
@@ -894,7 +895,7 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   `GOWORK=off`, `make build` first]: recorded so the follow-on inherits its sensors. **Three
   SITES, two of them the reader gates**; each reverted ALONE:
 
-  | # | Site | Reverting it alone reddens |
+  | # | Site | Reverting it alone reddens (2026-09-10; row 1 superseded below) |
   |---|---|---|
   | 1 | `LookupPhaseBinding` (`pkg/machine/compilation/phase_registry.go`) | `TestPhase1BaseImportIsBehaviourNeutral` (6/6), `TestPhase1BaseImportMasksNoPhaseRow` (20 of 40 rows masked), `TestP02_ExpandOnceMirrorsTheLoop`, `TestP05_FreeIdentifierEqualShadowProbe`, `TestP2_ERRenameIsFreshPerInvocation`, `integration/TestERMacro_Mixed` |
   | 2 | `lookupMacroBinding` ARM 2b's `masked` gate (`pkg/machine/compilation/expander_time_continuation.go`) | `TestPhase1BaseImportDoesNotReviveTheGoSyntaxRules`, `TestP2_SyntaxRulesAndERAreScheme`: both `compilation.GoSyntaxFormCompiles()` COUNTER deltas of +1; every value assertion stays green |
@@ -910,6 +911,19 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   `bnd.BindingType() != BindingTypePrimitive` guard when the gate goes:** it predates the fix
   (`0d1204c6`, 2026-01-09) and keeps
   `TestLookupSyntaxCompiler_SamePhaseShadowOutranksTheSealedCompiler` green.
+
+  **Re-measured 2026-09-17 at `9bf60318`** (full `go test ./...` with each gate reverted alone,
+  plus a run logging every gate fallback that returns a value). **Row 2 is unchanged.** It fires
+  for `syntax-rules` in its two counters and in `TestP2_ERPassThroughKeepsScopes`, which does not
+  detect the revert. **Row 1 now reddens only `TestPhase1BaseImportMasksNoPhaseRow`** (the same
+  20 names) and fires in no other test. Bisected with `TestPhase1BaseImportIsBehaviourNeutral` as
+  the sensor to `68cf1ca2` (`feat/keyword-denotation-dispatch`): `lookupHeadPrimitiveExpander`
+  probes the sealed phase-1 row for a head's denoted form before calling
+  `LookupPrimitiveExpander`, so head dispatch steps around the mask without reaching the gate.
+  What still reaches it: a direct `LookupPrimitiveExpander` call (the ratchet), that method's
+  final fallback for coordinates with no sealed row, and `ExpandPrimitiveForm`, which has no
+  production caller. No tested production path fires it; that no untested one needs it is not
+  shown. Row 3 was not re-measured.
 
 - [x] **`TestPhase1BaseImportMasksNoPhaseRow`'s non-vacuity floor has 20 names of headroom**
   [measured 2026-09-10 at `c28616c1`]: `len(before)` is **40** against a floor of `> 20`. The
