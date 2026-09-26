@@ -448,11 +448,28 @@ defect at HEAD whether or not Tier 2 is ever built.
   (`compile_transformer.go:68`), so `WithInlineThreshold` and `WithMaxExpandDepth` do not reach
   transformer compilation. An embedder's expansion-depth cap is therefore not honoured on exactly
   the path that can run away — see the cubic-cost entry above.
-- [ ] **Go map-range order decides export-map slot numbering and conflict-report order**
-  [Phase / determinism, M]: `CopyLibraryBindingsToEnvAtPhase` / `copyLibraryBindingsDirect` iterate
-  a Go map, so slot numbers and the order of a conflict diagnostic vary run to run. A determinism
-  leak of exactly the kind the project's own concurrency orientation names: it is not routed
-  through a seed, so it cannot be reproduced from one. Named a Stage C blocker in the plan.
+- [x] **Go map-range order decides export-map slot numbering and conflict-report order**
+  [Phase / determinism, M, Done]: `CopyLibraryBindingsToEnvAtPhase` / `copyLibraryBindingsDirect`
+  iterated a Go map, so slot numbers and the identifier a conflict diagnostic named varied run to
+  run. A determinism leak of exactly the kind the project's own concurrency orientation names: not
+  routed through a seed, so not reproducible from one. Both loops now walk `sortedExportKeys`
+  (`library_registry.go`), ordered **phase before name** — a name exported at two phases denotes two
+  bindings, and grouping a library's phase-0 installs ahead of its phase-1 ones keeps the install
+  order the phase-shift arithmetic assumes. Measured: 20 fresh engines importing two libraries that
+  export ten conflicting names named **9 distinct identifiers → 1** (`aa`, the lexicographic first),
+  pinned by `TestImportConflictNamesTheSameIdentifierEveryTime` (pkg/wile), red before the sort.
+  THIRD SITE DELIBERATELY NOT SORTED, so this does not get re-filed as an omission:
+  `stampLibraryExportOrigins` also ranges the export map, but its body is a nil-guarded idempotent
+  `UpdateMeta`, so map order is observable only if two of one library's export keys reach ONE
+  `*Binding` with different `exportRoot` answers. The base arm provably cannot differ (no
+  `RootPhase`); only the library-scoped arm can. Paid for with a measurement instead of a sort:
+  `TestExportRootIsOneAnswerPerBinding` (pkg/wile) sweeps every library the stdlib loads — 76
+  libraries, 2574 resolved export keys, 992 of them library-scoped — and asserts no two keys
+  resolve to one binding with unequal roots. Green with and without the sort, so it pins the
+  position rather than the fix; if it ever goes red, sort the third site. The sweep needs the
+  loaded stdlib, so it lives in pkg/wile and reaches the predicate through a new exported
+  `CompiledLibrary.ExportedBindingRoot`; an in-package test cannot load the stdlib, because
+  bootstrap imports compilation.
 - [ ] **`unquote` / `unsyntax` / `with-syntax` operands are never expanded** [Correctness, M]:
   `` `(1 ,(when #t 2)) `` fails. R7RS §4.2.8 requires the unquoted expression to be an ordinary
   expression, macro uses included. Found in the renamed-inner-positions review, noted in the

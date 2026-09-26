@@ -166,6 +166,24 @@ func exportKeyNames(keys iter.Seq[ExportKey]) []string {
 	return slices.Compact(q)
 }
 
+// sortedExportKeys orders export keys by phase, then by name. The library copy
+// loops walk this instead of ranging their bindings map directly: a Go map walk
+// decides both the slot numbering an import produces and which of several
+// conflicting identifiers the R7RS §5.6 refusal names, and it decides them
+// differently on every run.
+//
+// PHASE BEFORE NAME, not the reverse. A name exported at two phases denotes two
+// bindings, and grouping a library's phase-0 installs ahead of its phase-1 ones
+// keeps the install order the phase-shift arithmetic already assumes.
+func sortedExportKeys(keys iter.Seq[ExportKey]) []ExportKey {
+	return slices.SortedFunc(keys, func(a, b ExportKey) int {
+		if a.Phase != b.Phase {
+			return cmp.Compare(a.Phase, b.Phase)
+		}
+		return cmp.Compare(a.Name, b.Name)
+	})
+}
+
 // ImportStage names which pipeline pass observed an import. A top-level
 // (import …) is seen twice: once by the expander, which resolves it so the
 // imported macros are available to expansion (expandImportForm), and once by the
