@@ -1,10 +1,14 @@
 TODO
 ----
 
-**Last Updated**: 2026-09-15: closed items collapsed to the archive form again (the 2026-07-27
-pass, `2187a734`, had left the file at 167 KB; it had regrown to 476 KB); `plans/` and `memory/`
-citations repointed after the 2026-09-14 `.local.md` → `.md` rename. Per-edit history is
-`git log -p TODO.md`; release history is [`CHANGELOG.md`](CHANGELOG.md).
+**Last Updated**: 2026-09-20: full `plans/` sweep (72 files) plus `WORK.local.md`; items not
+previously filed added under the three `plans/ sweep … (2026-09-20)` headings in Tiers 1, 4 and 5;
+the three `Redefining if` entries rewritten with **verified** mechanisms (the 2026-09-19 hypotheses
+were wrong on both counts); priorities restated against the four current design goals. Previous:
+2026-09-15, closed items collapsed to the archive form again (the 2026-07-27 pass, `2187a734`, had
+left the file at 167 KB; it had regrown to 476 KB); `plans/` and `memory/` citations repointed after
+the 2026-09-14 `.local.md` → `.md` rename. Per-edit history is `git log -p TODO.md`; release history
+is [`CHANGELOG.md`](CHANGELOG.md).
 
 ### Current Project Status
 
@@ -25,7 +29,24 @@ as an orthogonal modifier.
 (`ls pkg/stdlib/lib/wile/algebra/*.sld` for the sub-libraries).
 ### Ordering
 
-Items ordered by perceived priority for the project's success as an embedding product. Tiers: Security/Correctness → Embedding API → Tooling/DX → Performance → Tech Debt → Deferred → Nice-to-Haves. Completed items at the bottom for reference.
+**Four design goals, in rank order (restated 2026-09-20).** Everything below is ranked against
+these; the tier headings are the older, coarser axis and are kept because the file is cited by
+tier, not because they outrank this list.
+
+1. **Conformance bug fixes** — a measured divergence from R7RS, Racket, Chez or Chibi. Ranked
+   first because a silent wrong answer costs more than anything else here. Wile's own Scheme
+   failing to be portable counts.
+2. **Phase separation and load-order independence** — a unit's compiled output must depend only on
+   its own source and its declared imports. The largest single body of work
+   (`2026-07-10-climbing-tower-design.md` Tier 2) and the only one that is gated on a decision
+   rather than on effort.
+3. **Implementation simplification** — deduplication, dead-code deletion, structural reduction.
+4. **Performance** — measured, interleaved A/B, against a named baseline.
+
+Off-rank: embedding-API surface, tooling/DX, and feature work, which keep their tiers below.
+
+Tiers: Security/Correctness → Embedding API → Tooling/DX → Performance → Tech Debt → Deferred →
+Nice-to-Haves. Completed items at the bottom for reference.
 
 ### Conventions
 
@@ -142,11 +163,11 @@ because the citation is what `make indexlint` counts:
 
 | Plan | Status |
 |---|---|
-| `2026-04-17-mcp-server-sota-design.md` | Proposed, 5 phases |
+| `2026-04-17-mcp-server-sota-design.md` | **DEAD by decision, not by deletion** (2026-07-09): MCP-server work targets wile-goast's server, not `wile --mcp`. `cmd/wile/mcp.go` still builds; the plan does not. Row corrected 2026-09-20 |
 | `2026-04-21-type-constraint-extension-design.md` | Design draft; impl deferred to follow-ups |
 | `2026-06-04-srfi-204-match-design.md` | Design draft; `-impl` to follow |
-| `2026-06-05-mcp-llm-support-design.md` | Phase 1 implementation-ready |
-| `2026-06-09-polynomial-ideal-domain-design.md`<br>`2026-06-09-polynomial-ideal-domain-impl.md` | Design approved; impl steps unchecked |
+| `2026-06-05-mcp-llm-support-design.md` | **DEAD by the same 2026-07-09 decision.** "Phase 1 implementation-ready" was stale in the looks-open direction; corrected 2026-09-20 |
+| `2026-06-09-polynomial-ideal-domain-design.md`<br>`2026-06-09-polynomial-ideal-domain-impl.md` | Design approved; impl **0/30** checkboxes, zero commits. The "10/41" figure quoted in Tier 2 was never true; corrected 2026-09-20 |
 | `2026-06-24-tinyclos-object-system-design.md` | Design proposal, opt-in object system |
 | `2026-06-24-unboxed-scalar-arithmetic-design.md` | Design **A rejected**; Design B + Phase 4 is the live plan |
 | `2026-06-26-promoted-primitive-inline-registry.md` | Draft v2, awaiting human review |
@@ -162,7 +183,8 @@ because the citation is what `make indexlint` counts:
 | `2026-09-04-scheme-specified-syntax-forms-design.md` | **DESIGN, direction approved 2026-09-04, not started.** Go keeps a kernel (scope sets, resolution, core forms, body scan, dispatch loop, one transformer protocol with the intro-scope flip, `quote-syntax`, `syntax-local-value`, one-level accessors); `syntax-case`, `syntax`, `with-syntax`, `quasisyntax`, `syntax-rules`, `er-macro-transformer` are specified in Scheme in two new bootstrap sources; `pkg/internal/match/` and ten `compile_syntax_*`/`operation_syntax_*`/ER files (≈6.5k Go) are deleted. Startup is a soft constraint by decision (pre-compiled bytecode later). Three of the six 2026-09-04 macro defects die with the deleted code, one (`define-syntax` head dispatch) is the P0 prerequisite, `begin-for-syntax` visibility is out of scope, and the sixth was closed on paper. Phases P0–P4 in §7; the three open questions in §8 are not blocking. Revised 2026-09-06: 40 verified findings from the adversarial review folded in place (§2.1 item 2's library-scope premise, §2.2 ER pass-through scoping, §3.5 ER `compare` evidence, §3.6 ratchets, §4 inventory, §6 pin-fidelity timing, §7 P0.3/P0.5 pins); author decisions marked in place as `> **Open (2026-09-06 review, …)**` |
 | `2026-09-05-scheme-specified-syntax-forms-impl.md` | **IMPL PLAN 2026-09-05. Tasks 1-10 of 12 shipped** (P0.1-P0.5, P1, P2), branch per phase. P2 landed 2026-09-07 WITHOUT its default flip: `syntax-rules` and `er-macro-transformer` are specified in Scheme, but making the Scheme layer the default costs **31x startup** — 5.96 ms/engine and 87k allocations become 186 ms and 1.9M, at ~1 ms per `syntax-rules` clause over bootstrap's ~90 (F15). Both layers stay in the binary behind `WILE_SYNTAX_FORMS` / `WithSchemeSyntaxForms()`, default Go. **P3 (deletion) is blocked on the flip**, and the flip on a cheaper pattern representation or a pre-compiled bootstrap. Executing P2 also found a latent **P1** hygiene defect: `values.AddScopeToSet` aliased the caller's backing array, so two nested expansions of one macro clobbered each other's introduction scope — `(or (or #f #f) #t)` failed to compile and `(wile algebra interval)` was unloadable (F16). Twelve tasks over the design's P0.1–P0.5 and P1–P4, one branch per phase, 62 checkbox steps. §0 carries fourteen corrections to the design: the five review findings of 2026-09-05 (F1 the exclusion set is eight expander rows, ratcheted; F2 the Go producer's definition-site local arm dies at P0.1; F3 `define-syntax` docstrings exist and `,doc` reads them, so the seven `specialforms.go` rows go in P4; F4 the full deletion inventory; F5 `unsyntax`/`unsyntax-splicing` as violation-raising macros) and five measured while planning (F6 `datum->syntax` already copies the template's scopes, only the pin is at stake; F7 `GlobalIndex` is minted per query, so the P0.3 pin compares bindings; F8 P1 must take `with-syntax`/`quasisyntax` with `syntax`; F9 `WILE_SYNTAX_FORMS` as the both-ways default; F10 bootstrap macros are invisible from phase ≥ 2, closed by a kernel arm 2b). Four more (F11–F14) came from the adversarial review of 2026-09-06, folded 2026-09-06: F11 a library body is already stamped with its own scope, so §2.1 item 2's premise was false; F12 `bootstrap_nilpin_test.go` is replaced in P2, not deleted in P3; F13 `chibi/optional.sld`'s ER arm is behind a `cond-expand` Wile never selects; F14 `syntax-local-introduce` wiring belongs to P0.2, forced by `TestSyntaxLocalIntroduceIsNotWired`. That review also fixed four blocking defects: every `EvalMultiple` result in the P0 pin files asserted a `pkg/syntax` type directly on the `wile.Value` wrapper, which does not compile. Six more (F15-F20) came from EXECUTING Task 10 on 2026-09-07: F15 the startup measurement that deferred the flip; F16 the `AddScopeToSet` aliasing defect; F17 the plan's `er-contract` row cannot live in a script that must be green on both layers; F18 the nil-pin census is kept and pinned to the Go layer rather than replaced, with the behaviour rows added alongside; F19 the ER shim needs `%er-proc` to keep the definition-site arity refusal and to evaluate PROC once; F20 `pkg/registry/core/bootstrap.scm` is not executed, so editing its load-order comment fixes nothing; **F21 the `WILE_SYNTAX_FORMS=scheme` leg is no longer green** — 61 minutes for `pkg/wile` alone and seven failures in five classes, the worst being that the Scheme generators compute with USER-REPLACEABLE primitives, so `reg.Without("+")` plus an embedder's own `+` cannot load bootstrap. Nothing reaches the default; all of it is owed before the flip, and that class outranks the startup number |
 | `ARCHITECTURE.md` | 1/4 sections complete |
-| `MACRO_SYSTEM.md` | Both sections unstarted |
+| `MACRO_SYSTEM.md` | Both sections unstarted (re-verified 2026-09-20: zero `ScopeReason` / `syntax-origin` symbols in tree) |
+| `2026-09-20-core-form-override-and-import-portability-design.md` | **DESIGN 2026-09-20, no code committed.** Successor to `2026-09-19-open-directions.md` §§2–3, which it supersedes on five points. Root causes for all three `if`-capture defects **verified by instrumentation**, not hypothesised: defect 1+2 are `lookupMacroBinding`'s D2 arm discarding a resolved pin because it names a `BindingTypePrimitive` (`expander_time_continuation.go:393-401`); defect 3 is `findLibraryBinding` exporting the inherited core `if` instead of the library's own Expand-phase macro (`library_bindings.go:554-557`). Two independent sites, **not** one root cause as the recap said. Both candidate fixes measured: each reproduces Racket 9.2 and Chez byte for byte, `go test ./...` green with both active. Also: the §5.2 self-violations are **three** edits not four (`(wile strings)` already excepts `string-map`; schelog's `_` shadows a startup binding, which §5.2 does not reach), the A1 stdlib edit is applied and green in a worktree, and the superlinear expander cost is reachable with **no shadowing at all** |
 | `GRAPH-SPECTRUM.md` | Directions, not scheduled |
 
 ### Parked, gated, or blocked
@@ -175,7 +197,7 @@ because the citation is what `make indexlint` counts:
 | `2026-04-20-copilot-review-data-mining.md` | Imminent, not started |
 | `2026-04-21-wile-goast-ac-match-migration.md` | Stub; deferred follow-up in wile-goast |
 | `2026-04-23-coverage-library-tracking.md` | Blocked by algebra Tier B per `WORKSPACE-ROADMAP.md` |
-| `2026-04-23-docs-sweep-impl.md` | Planned, not started |
+| `2026-04-23-docs-sweep-impl.md` | **COMPLETE** (corrected 2026-09-20). Phases 1–10 merged as PRs #707–#719; Phases 11–12 (`docs/learn/`, `docs/coverage/`) were satisfied separately by the 2026-09-14 doc audit (`afb957b8`, `8802fdee`), which re-verified every claim against Chez/Racket and the CLI. The plan's own "Phase 11/12 Pending" markers and this row were both stale |
 | `2026-05-02-algebra-matching-many-to-many.md` | Gated on `(wile algebra matroid)` (§5.7 Tier C) |
 | `2026-05-05-iter-seq-cascade.md` | Draft; sequenced after the charsets refactor (shipped) |
 | `2026-07-11-chibi-derived-ergonomics-backlog.md` | **#5 RESOLVED 2026-09-04 — already built**, nothing to do: every primitive its "Verify first" asked about is registered in `pkg/registry/core/syntax.go` (`identifier?`, `syntax->datum`, `datum->syntax`, `generate-temporaries`, `bound-identifier=?`, `free-identifier=?`) and `er-macro-transformer` lives in `compile_er_macro.go` with `wile/er-macro-test.scm` green. #6 (chibi-ffi-style codegen) still parked |
@@ -203,10 +225,25 @@ because the citation is what `make indexlint` counts:
 | `CLAUDE.md` | Plan-file conventions and the implementation-completion workflow |
 
 ---
-## Top Priority — Triaged 2026-07-09
+## Top Priority — Retriaged 2026-09-20
 
-Promoted from the 2026-07-09 open-item triage. Unboxed arithmetic was the sole real perf lever left
-once escape-gated frame reclaim and the layered-environment carve were found already shipped.
+Ranked against the four goals in **Ordering** above. Each row names where the detail lives; none of
+them blocks another except where stated.
+
+| # | Goal | Item | Where | Size |
+|---|---|---|---|---|
+| 1 | 1 | The three `if`-capture defects. **Root causes now verified**, two independent sites, both fixes measured against Racket 9.2 and Chez | Tier 1 "Redefining `if`"; `plans/2026-09-20-core-form-override-and-import-portability-design.md` §3 | M |
+| 2 | 1 | Expander cost grows ~cubically with recursion depth, with **no shadowing involved**. Reachable by a sandboxed program in a dozen lines; the 50000 default guard never fires | Tier 1, same section | M |
+| 3 | 1 | Wile's own Scheme is not portable: `(srfi 13)` redefines an unexcepted import; two `test/wile` files do the same | same plan §2 | S |
+| 4 | 2 | Climbing-tower Tier 2. Gated on Q5/Q7 sign-off, **not** on effort. The 33-row corpus is in the plan at §8.2, not perishable | Tier 2 "Climbing-tower Tier 2"; `plans/2026-07-10-climbing-tower-design.md` §6 | L |
+| 5 | 2 | The §6.8 phase defects that were never filed: double-evaluated `define-syntax` RHS, `define-for-syntax` under ∅ scopes, ER transformer in a `let` seeing `#<void>`, map-order slot numbering | Tier 1 "plans/ sweep … (2026-09-20)" | M each |
+| 6 | 3 | `WithStrictImports()` as an opt-in §5.2 check. Costs nothing when off, needs no program-vs-REPL decision in the binding model | same plan §4 | M |
+| 7 | 4 | Two full library environments are built per file-library load, ≈5 ms each, ~99.5% of import time | Tier 4 "plans/ sweep … (2026-09-20)" | M |
+| 8 | 4 | Unboxed scalar/float arithmetic, Design B. Corrected ceiling ~16–20% on the most float-heavy benchmark; still the largest single perf lever | below | L |
+
+Below: the 2026-07-09 triage, kept because item 8 is still its conclusion. Unboxed arithmetic was
+the sole real perf lever left once escape-gated frame reclaim and the layered-environment carve
+were found already shipped.
 
 - [x] **`make planlint`: flag plan headers whose Status is stale vs reality** [Done 2026-08-07]:
   `tools/sh/planlint.sh`. A status keyword alone is never a finding; an open-sounding Status line
@@ -256,6 +293,199 @@ once escape-gated frame reclaim and the layered-environment carve were found alr
 ## Tier 1 — Security & Correctness
 
 Items that block production embedded use or prevent silent state corruption.
+
+### Redefining `if` — mechanisms VERIFIED 2026-09-20 (filed 2026-09-19)
+
+Found while probing whether a program can override core forms. The three entries below were filed
+2026-09-19 with *hypothesised* mechanisms; both hypotheses were **wrong**, and both root causes were
+located by instrumentation on 2026-09-20. Design and the two candidate fixes:
+`plans/2026-09-20-core-form-override-and-import-portability-design.md` §3.
+
+**Two independent sites, not one.** The recap called defects 1 and 3 "the same root cause seen from
+two sides". Measured: a 3-line change at the D2 pin arm fixes 1 and 2 and leaves 3; a 6-line change
+in library export resolution fixes 3 and leaves 1. Neither touches the other's file.
+
+**Oracle table**, run 2026-09-20 on HEAD `e64c43a2` against Racket 9.2 and Chez (`petite`, R6RS
+libraries). Program: a user `(define-syntax if (syntax-rules () ((_ a b c) 'mine)))` over
+`(list (cond (#f 1) (else 2)) (and 1 2) (or #f 7) (if #t 1 2) (when #t 5) (case 1 ((1) 'one) (else 'other)))`.
+
+| | Racket 9.2 | Chez | Wile HEAD |
+|---|---|---|---|
+| defect 1 | `(2 2 7 mine 5 one)` | `(2 2 7 mine 5 one)` | every slot `mine`; `when` raises "no matching clause" |
+| defect 2 | `1` | `1` | SIGKILL at 20 s |
+| defect 3 | `lib-if` | `lib-if` | `1` |
+
+Racket and Chez agree byte for byte on all three, so this is not a place where the report is silent.
+The 2026-09-19 filing listed three capturing forms; `or`, `case` and named `let` capture too.
+Controls that stay correct: a library macro named `zif` imports and dispatches fine, and a user
+`(define if 5)` or `(define (if a b c) …)` (a *variable*) leaves `cond`/`and`/`when` alone. The fault
+is a **macro** named after a special form.
+
+- [ ] **A top-level `define-syntax` of `if` captures the `if` inside stdlib macros** [Correctness /
+  hygiene, M, filed 2026-09-19, mechanism verified 2026-09-20]: after
+  `(import (scheme base) (scheme write)) (define-syntax if (syntax-rules () ((_ a b c) 'mine)))`,
+  every derived form in the oracle table above answers `mine`. Racket and Chez both answer
+  `(2 2 7 mine 5 one)`.
+  **Root cause (verified, not hypothesised).** `lookupMacroBinding`'s D2 arm,
+  `pkg/machine/compilation/expander_time_continuation.go:393-401`. The 2026-09-19 filing guessed the
+  template's `if` "gets no pin". It gets one, and it resolves — instrumented at HEAD while expanding
+  `(cond (#f 1) (else 2))`: `hasPin=true pinned=true type=BindingTypePrimitive`. D2 then **discards**
+  it, because the arm filters `pinned.BindingType() == BindingTypeSyntax` and a special-form keyword
+  is `BindingTypePrimitive`. The arm's own doc states the exclusion as deliberate. Control then falls
+  to ARM 2, `p.env.NextPhase()`, which is exactly where a top-level `define-syntax if` deposits, so
+  the user's transformer captures the stdlib template.
+  **Candidate fix, measured.** Three lines: a pin resolving to `BindingTypePrimitive` is an *answer*,
+  not a miss, so the macro search stops. Wile then prints `(2 2 7 mine 5 one)`, identical to both
+  oracles, and `go test ./...` is green (all 26 reported failures were "scheme binary not found — run
+  make build first" in the probe worktree; after building `dist/`, `./integration/...` passes too).
+  Two things to settle before shipping it, in the plan as Q2: the shipped form should return the
+  **pinned expander** rather than `nil`, so head dispatch does not re-resolve by use-site spelling;
+  and `lookupMacroBinding` has three callers (`:551`, `:860`, `expander_context.go:86` `MacroValue`),
+  of which `MacroValue` backs `(expand-once …)` and is untested under a pinned special form.
+  Under `WILE_SYNTAX_FORMS=scheme` the `define-syntax` itself still fails, "not a closure:
+  values.voidType" — separate, unverified, and out of scope until the layer flip.
+- [ ] **`(except (scheme base) if)` plus a user `if` written with `cond` expands for effectively
+  ever** [Correctness, S, filed 2026-09-19, mechanism verified 2026-09-20]: `(if #t 1 2)` with
+  `(define-syntax if (syntax-rules () ((_ a b c) (cond (a b) (else c)))))` recurses `if` → `cond` →
+  `if` through the capture above. Racket and Chez both give `1`; Wile is SIGKILLed at 20 s.
+  **Same root cause, and it dies with it**: under the candidate fix the program returns `1` in
+  **32 ms**. The superlinear expansion cost the 2026-09-19 filing bundled in here is a **separate
+  fault with its own entry below**; it is not fixed by this and does not need this to fire.
+- [ ] **An imported macro named `if` loses to the core form** [Correctness / conformance, S, filed
+  2026-09-19, mechanism verified 2026-09-20]: library `(myif)` exports
+  `(define-syntax if (syntax-rules () ((_ a b c) 'lib-if)))`; a program
+  `(import (except (scheme base) if) (myif))` gets `1` from `(if #t 1 2)` where Racket and Chez give
+  `lib-if`.
+  **Root cause (verified).** Not keyword dispatch, as filed. **Library export resolution.**
+  `findLibraryBinding`, `pkg/machine/compilation/library_bindings.go:554-557`, probes phase 0 first
+  and accepts *anything that is not* `BindingTypeSyntax`. A library's `define-syntax` writes at the
+  Expand phase, so the phase-0 probe finds the **sealed core `if`** the library inherited from its
+  own base and returns that as the export. The phase-1 keyword probe at `:562` is never reached.
+  Three measurements rule out the spelling hypothesis: (a) a *renamed* import,
+  `(rename (myif) (if qif))`, misbehaves identically — a 1-argument library macro called as `(qif 7)`
+  raises *"if requires at least 2 arguments"*, the core form's arity error under a name the core form
+  does not have; (b) the library's own body calling its own `if` answers correctly, so the macro
+  exists and only the export is wrong; (c) an identical library exporting `zif` works.
+  **Candidate fix, measured.** Six lines: when the phase-0 hit is a `BindingTypePrimitive`, prefer the
+  library's own Expand-phase `BindingTypeSyntax` row. Answers `lib-if`; full suite green with this and
+  the defect-1 fix both active. Note the asymmetry the code already carries — the phase-0 arm accepts
+  "anything not Syntax", the Expand arm "anything not Variable". **Read the `findLibraryBinding`
+  entry below (2026-09-08, wrong phase for a two-phase name) first: same function, same probe, and
+  they may be one fix** (plan Q3).
+
+- [ ] **Expander cost grows ~cubically with recursion depth, with no shadowing involved**
+  [**Security** / DoS, M, split out and re-measured 2026-09-20]: filed 2026-09-19 as part of the
+  `if` → `cond` recursion above, which made it look like a consequence of the capture. It is not.
+  Measured at HEAD with an ordinary recursive `syntax-rules` macro over a list of *n* elements — no
+  `except`, nothing redefined, nothing shadowed:
+
+  | depth | wall | ratio per doubling |
+  |---|---|---|
+  | 250 | 0.111 s | |
+  | 500 | 0.395 s | 3.6× |
+  | 1000 | 2.506 s | 6.3× |
+  | 2000 | 23.33 s | 9.3× |
+
+  Between quadratic and cubic (≈ 2^3.2 by the last step). `WithMaxExpandDepth` *does* fire, but
+  `DefaultMaxExpandDepth` is 50000, so the guard is reached only long after the process is unusable.
+  **A sandboxed program can pin a CPU in a dozen lines with no privileged operation**, which is why
+  this sits in Tier 1 rather than Tier 4. No design yet; the first step is a profile of the
+  per-level cost, not an edit.
+
+- [ ] **A top-level `include` loses the `set!` evidence and refuses legal R7RS** [Correctness, S,
+  repro constructed 2026-09-20]: this is the missing repro for **`validateInclude` never reads the
+  included file** (filed 2026-09-15 below, "unpinned — no repro constructed"). Three lines:
+
+  ```scheme
+  ;; inc.scm
+  (define y 1)
+  (define (bump) (set! y 2))
+  ;; main.scm
+  (import (scheme base) (scheme write)) (include "inc.scm") (bump) (write y)
+  ```
+
+  raises *`set!: cannot mutate immutable top-level binding "y"`*. The identical two forms written
+  directly in `main.scm` answer `2`, as do Racket and Chez. `finalizeStability`
+  (`pkg/internal/validate/errors.go:107-118`) stamps `StableInUnit` per validation unit; an included
+  file is not that unit, so the `set!` is invisible, the define is stamped `Stable`, and the
+  immutable-top-level default refuses the assignment. So the consequence is not only the stale-inline
+  hazard that entry describes: **it is a hard refusal of conforming code.** This is what breaks
+  `examples/logic/schelog/run-all-tests.scm` at `schelog.scm:641`
+  (`set!: cannot mutate immutable top-level binding "schelog:*more-k*"`), which is a *different*
+  failure from the one recorded against issue #820.
+
+### plans/ sweep — conformance and phase deltas not previously filed (2026-09-20)
+
+Whole-`plans/` sweep, 72 files plus `WORK.local.md`, run against HEAD `e64c43a2`. Every row was
+verified against source and `git log` rather than read off a plan's own status line. Only rows that
+are **not** filed anywhere else in this file appear here; simplification and performance deltas from
+the same sweep are under the matching headings in Tiers 5 and 4.
+
+Most of the phase rows come from `plans/2026-07-10-climbing-tower-design.md` §6.8, which collects
+what the Tier-2 analysis found *in passing*. They are independent of the Tier-2 decision: each is a
+defect at HEAD whether or not Tier 2 is ever built.
+
+- [ ] **Extension-library exports resolve against the live root environment** [Correctness / phase,
+  S]: so a top-level `(define acos …)` reaches an extension library's export.
+  `registerExtensionLibraries` (`pkg/wile/engine.go:1283`) resolves against the live root rather
+  than a sealed snapshot. Found during Tier-2 T2.0a, never filed.
+- [ ] **A module-level `define-syntax` RHS is evaluated twice** [Correctness, M]: Racket evaluates
+  it once. Both `compileDefineSyntaxFromSyntax` and `CompileDefineSyntax` run it, so a transformer
+  with a side effect fires twice per definition. Observable, and it makes any
+  compile-time-state reasoning arithmetically wrong by a factor of two.
+- [ ] **`er-macro-transformer` inside a `let` sees `#<void>` for the `let`'s own locals**
+  [Correctness, S]: `(let ((c 0)) (define-syntax m (er-macro-transformer (lambda (x r c*) … c …))))`
+  reads `c` as `#<void>`. `CompileERMacroTransformerExpr` evaluates the lambda before the `let`'s
+  locals exist.
+- [ ] **`define-for-syntax` binds under the empty scope set** [Correctness / hygiene, S]:
+  `runDefineForSyntax` writes with ∅ scopes, so the binding is not hygienic and a same-named
+  use-site identifier reaches it. Same family as the scope-keyed-global work already shipped.
+- [ ] **`cond-expand (library X)` instantiates X as a side effect** [Correctness, S]: the test
+  performs a real `LoadLibrary`. A feature *test* must not run a library's body; R7RS §4.2.1's
+  `(library …)` clause asks whether the library is available, not for its state.
+- [ ] **`compileTransformerValue` / `CompileERMacroTransformerExpr` ignore engine configuration**
+  [Correctness, S]: both hardcode `DefaultInlineThreshold` and `DefaultMaxExpandDepth`
+  (`compile_transformer.go:68`), so `WithInlineThreshold` and `WithMaxExpandDepth` do not reach
+  transformer compilation. An embedder's expansion-depth cap is therefore not honoured on exactly
+  the path that can run away — see the cubic-cost entry above.
+- [ ] **Go map-range order decides export-map slot numbering and conflict-report order**
+  [Phase / determinism, M]: `CopyLibraryBindingsToEnvAtPhase` / `copyLibraryBindingsDirect` iterate
+  a Go map, so slot numbers and the order of a conflict diagnostic vary run to run. A determinism
+  leak of exactly the kind the project's own concurrency orientation names: it is not routed
+  through a seed, so it cannot be reproduced from one. Named a Stage C blocker in the plan.
+- [ ] **`unquote` / `unsyntax` / `with-syntax` operands are never expanded** [Correctness, M]:
+  `` `(1 ,(when #t 2)) `` fails. R7RS §4.2.8 requires the unquoted expression to be an ordinary
+  expression, macro uses included. Found in the renamed-inner-positions review, noted in the
+  2026-09-19 recap as "found in review, not filed".
+- [ ] **`eval` into an `(environment …)` namespace is mutable; R7RS makes it immutable**
+  [Correctness, M, from `WORK.local.md:155`]: R7RS §6.12 specifies the environment returned by
+  `environment` / `scheme-report-environment` as immutable, and Wile permits definition into it.
+  Unmeasured against Racket and Chez; measure both before designing, because this is the kind of
+  restriction §1.3.2 lets an implementation relax deliberately.
+- [ ] **§5.2's ordering clause is unenforced and unmeasured** [Correctness, S, from
+  `WORK.local.md:150`]: "refer to an identifier before it is imported". Distinct from the shadowing
+  clause, which `plans/2026-09-20-core-form-override-and-import-portability-design.md` §4 handles;
+  nothing checks the ordering half and nobody has measured what Wile does. Measure first.
+- [ ] **`buildRestArg` buffer reuse is unverified against a rest-Tuple-retaining primitive**
+  [Correctness, S, from `2026-07-17-pair-gc-investigation.md` Q1]: no test references `restArgBuf`
+  or `buildRestArg`. If a variadic primitive retains the rest list, reuse mutates it under the
+  caller. Cheap adversarial test, never written.
+
+Scheme-syntax-forms layer (`WILE_SYNTAX_FORMS=scheme`, not the default). These do not reach a
+default engine today, but they are owed before the flip and three of them are plain gaps rather
+than decisions:
+
+- [ ] **No box (`#&`) arm in `%gen-match` / `%gen-template`** [Correctness, S]: a box pattern never
+  binds and a box template stays a verbatim constant. The Go layer has
+  `TestBoxInMacroTemplateAndPattern`; the Scheme layer has no twin.
+- [ ] **`%gen-ellipsis-map` raises on a constant subtemplate followed by `...`** [Correctness, S]:
+  the Go layer and Wile's reading of R7RS §4.3.2 both answer `()`.
+- [ ] **Scheme layer instantiates phase 3 at startup where Go stops at phase 2** [Phase, S,
+  undecided]: `TestStartupBindsNothingAtPhaseTwo` pins the Go layer only. Needs a decision, not a
+  fix.
+- [ ] **Cross-library pattern-literal residual: the Scheme layer refuses what Go accepts** [Phase /
+  correctness, S, undecided]: `TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding`. Which
+  answer is right is the open question; the two layers disagreeing is not acceptable either way.
 
 ### Defects from the 2026-09-14 doc-audit sweep
 
@@ -2363,6 +2593,44 @@ rather than split across tiers.
 ---
 ## Tier 4 — Performance
 
+### plans/ sweep — performance deltas not previously filed (2026-09-20)
+
+Same sweep as the Tier-1 and Tier-5 headings of this date. Every row verified against source; none
+of them contradicts a recorded revert or decline (tail-frame recycling, `unique` interning,
+callback specialization B, jump-table dispatch, Stage-B phase folding all stay closed).
+
+- [ ] **Two full library environments are built per file-library load** [Performance, M, from
+  `2026-07-10-climbing-tower-design.md` §6.8]: ≈5 ms each, and together **~99.5% of import time**.
+  `loadLibraryFromReader` and `CompileDefineLibrary` each build a scaffold
+  (`library_loader.go:213`). The largest single unexamined cost on the import path, and it is
+  duplication rather than work, so it is a Tier-3 simplification that happens to be the perf lever.
+- [ ] **Library-scope global reads take a read lock and get no peephole promotion** [Performance, M,
+  same source]: measured ~2.3× slower on fib than the namespace-scope path. The `OpLoadGlobal`
+  library-scope arm is unchanged.
+- [ ] **`lookupHeadPrimitiveExpander` repeats the `GetBinding` that `lookupMacroBinding` arm 1
+  already made** [Performance, M, from the keyword-denotation-dispatch artifacts]: a double resolve
+  on every non-macro head, at `expander_time_continuation.go` ~L360 and ~L599. This is the one
+  concrete mechanism that was flagged as the likely cause of the **+0.87% `FrontEndPhase`
+  regression** that shipped anyway (p=0.006, accepted because a same-binary A/A control showed
+  ~0.7–0.9% intrinsic harness noise). The regression was accepted as indistinguishable from the
+  floor; the mechanism was never fixed. Fix it before relying on that noise-floor argument again.
+  Touches the same function the defect-3 fix touches — sequence them.
+- [ ] **`sym.Scopes()` recomputed twice on the spelling-resolution path** [Performance, S]:
+  `pkg/internal/validate/validate.go:167` and `:309` (`resolveFormHead`).
+- [ ] **Tail-position-precise `frameReclaimable`** [Performance, S, from
+  `2026-06-18-frame-reclaim-precision-coverage.md` Open Q-A1]: only non-tail callees need be
+  non-capturing; `pkg/internal/validate/frame_reclaim.go:140-144` calls this "a documented later
+  refinement".
+- [ ] **Suppress promoted-op fusion on `Stable` bindings** [Performance / correctness margin, S,
+  from `2026-06-26-promoted-primitive-inline-registry.md` Q3]: the guard is dead code under the
+  default immutable top level, so today this is a latent hazard for a mutable-top-level engine
+  rather than a speed item. No `IsStable` reference in `pkg/machine/peephole.go`.
+- [ ] **Visit phase ≥2 of a shifted instance lazily, as Racket does** [Performance, M, climbing
+  tower Q10]: undecided, gated on Tier 2.
+- [ ] **Canonicalize retained pins symbolically** [Performance / memory, M, climbing tower Q12]:
+  Stage C, deferred, gated on Tier 2.
+
+
 - [ ] **Recover the 1.3% `MachineClosure` widening cost** [Performance, S-M — **STRUCTURE SHIPPED 2026-08-17, PERF STILL UNMEASURED**; filed 2026-08-01 as "…by splitting the legacy in-place closure into its own type", which is not the route taken]: The closure pair split (`perf(machine,environment): capture closures as shape+parent`) removed an 80-byte frame per evaluated lambda and grew `MachineClosure` 16→24B, because it carries `frame` **and** `parent` where it used to carry one `env`. Measured cost on `BenchmarkParallelScalingCompute` (fib, which never builds a closure in its loop but runs the altered apply path on every recursive call): **+1.25% / +1.56% / +1.17% at P=1/2/4, p=0.002, n=6**; indistinguishable at 8/16 where the spread is ±3%. Deliberately accepted — the same change is −20% to −38% on `…ScalingControl`. Numbers and method are in the `scaling_bench_test.go` header.
 
   **SHIPPED 2026-08-17 — `MachineClosure` is back to 16B, pinned by `TestMachineClosureIsTwoWords`** (branch `refactor/machine-closure-nil-parent-fold`). Not by splitting a type: `frame` was elided outright. The shape moved to `NativeTemplate.shape` (set by `compileClosureBody`), so `MachineClosure` is `{parent, template}` and `Apply` reads `tpl.Shape()`. `OpMakeClosure` lost an operand — codegen no longer pushes the env literal, so each closure-creation site is `PushLiteral, MakeClosure` (2 ops, 1 literal) instead of `PushLiteral, PushLiteral, MakeClosure` (3 ops, 2 literals). Free side effect: `makeClosureAnnotation` started working — it reads `code[pc-1]` for a template literal, and the env literal used to sit there, so real disassembly showed no `<lambda:name>` while `TestDisassemble_MakeClosureAnnotation` passed on a hand-built sequence codegen never emits. Gates: `go test ./...`, `make lint`, `make covercheck` green. New load-bearing ordering, commented at the site: `MaybeAppendLiteral(tpl)` must stay **before** `compileBody`, because the pool dedups templates through `EqualTo`, which does not compare shape — registering while `tpl` is empty is what makes a match impossible, and moving it later would collapse two identical lambdas onto one shape carrying the loser's binder scope sets.
@@ -2415,6 +2683,70 @@ rather than split across tiers.
 ---
 
 ## Tier 5 — Tech Debt
+
+### plans/ sweep — simplification deltas not previously filed (2026-09-20)
+
+Same sweep as the Tier-1 and Tier-4 headings of this date. The structural-reduction roadmap stays
+CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-proposes those.
+
+- [ ] **Delete the dead per-namespace module cache** [Tech debt, S, climbing tower Q13]:
+  `Namespace.moduleInstances`, `ModuleInstance` and `AttachModule` have no production caller, and
+  the docs claim a per-namespace cache exists on the strength of them. Deleting the three is
+  cheaper than correcting the docs, and it removes a false answer to "does Wile already have
+  per-namespace instances?" — it does not.
+- [ ] **`NewSyntaxSymbolForSyntaxSymbol` silently drops `ResolvedBinding`** [Tech debt, S]:
+  `pkg/syntax/syntax_symbol.go:65`, zero production callers, the gap recorded only in a test
+  comment (`coverage_extra_test.go:260`). The 2026-07-18 Stage C review said "delete it or fix it";
+  neither happened. Given the D2 pin work above, a constructor that drops a pin is a live hazard,
+  not a dormant one.
+- [ ] **`MaybeCreateLocalBinding` still says "nil means match any"** [Tech debt, S]:
+  `pkg/environment/local_environment_frame.go:169-192` keeps `matchAny := scopes == nil` and the
+  doc comment, both of which the `ScopeSet` migration eliminated on the read surface. Same
+  ambiguity, one layer down, and it contradicts the project rule that nil means NONE.
+- [ ] **Stale doc: `processLibraryImport` claims `AtPhase` routes to the parent's phase registry**
+  [Tech debt, S]: it does not.
+- [ ] **`TestDenotedForm`'s Primitive+Void case is unreachable** [Tech debt, S]: after the
+  keyword-denotation Task-6 ratchet, `pkg/environment/form_keyword_test.go:45` pins a state
+  production cannot produce.
+- [ ] **`RequireArg[T]` and `BuildValidator` type-check the same argument twice** [Tech debt, M,
+  from `2026-03-26-extension-contracts-phase2-design.md`]: with `WithContractEnforcement()` on,
+  `BuildValidator` (`pkg/registry/contract.go:46`, wired at `pkg/wile/engine.go:1053`) checks from
+  `ParamTypes`, and 116 call sites in 34 files then call `helpers.RequireArg` inside the `Prim*`
+  body. The plan calls it "redundant but harmless" and gates de-duplication on full `ParamTypes`
+  coverage, which is not reached (core ~197/208, several extension packages partial or zero).
+  Enforcement is opt-in, so this costs nothing by default — file it, do not schedule it.
+- [ ] **`pkg/values/utils.go` is a 603-line grab-bag** [Tech debt, M]: equality, list helpers,
+  formatting and predicates in one file. Distinct from the `schemeutil` grab-bag already filed.
+- [ ] **`resolveLocal` / `resolveGlobal` take `func(...) any` visitors** [Tech debt, M]:
+  `environment_frame.go:546,591`. Generics retire the `any`.
+- [ ] **Adding a primitive still touches four files with escaped-string docstrings** [Tech debt, L]:
+  `pkg/registry/core/register.go`'s own comment lists the ritual verbatim. Related to, but larger
+  than, the chibi-ffi-style codegen item parked in the plan index.
+- [ ] **Coverage-campaign test files break the 1:1 source/test mapping** [Tech debt, M]:
+  `coverage_improvement_test.go`, `near_threshold_coverage_test.go`, `expander_coverage_test.go`
+  are named for the campaign that produced them, not for what they test.
+- [ ] **Rehost `nestinglint` / `typeswitchlint` / `singlelinefunclint` as wile-goast beliefs**
+  [Tech debt, M, from `2026-07-31-go-volume-reduction-findings.md` M5]: still plain Go under
+  `tools/cmd/`. The ruleguard rehost was measured and **rejected**; these three were not, and they
+  are exactly the shape the belief DSL exists for. Cross-repo.
+- [ ] **Cold `NewCons` sites that should be `PairBlock`** [Tech debt, S, from
+  `2026-07-17-pair-gc-investigation.md` Recommendation 3]: e.g.
+  `pkg/machine/exception_raise.go:268,280-282`. The investigation makes **no perf claim** for these;
+  it is consistency with the batch-construction rule, nothing more.
+- [ ] **`extensions/process` hardcodes `/bin/sh` and a POSIX signal table** [Tech debt, M]:
+  `prim_process.go:102`, no GOOS gate. A portability gap in a pure-Go, no-CGo product.
+
+### Stale rows in this file, corrected 2026-09-20
+
+- The frame-reclaim row that reads "Phases B/C/D/G … PAUSED" is stale: B, C and D all shipped; only
+  F and G remain, which the plan index row already says correctly.
+- `setRecognizedPrimitive`'s TODO text still cites `runtime.Namespace().SealedBase()`; the code
+  reads `SealedBindingAt` (`pkg/registry/core/prim_hashtables.go:333`ff).
+- `TestLibraryExportTakesFirstPresentPhase`: the `name` and `syntax-rules` subtest comments still
+  describe the withdrawn export-phase fork (a). The refusal is now the intended answer.
+- `makeDocRegistrationObserver` looks exports up at phase 0 by local name — the same phase-0-first
+  assumption that causes defect 3 above.
+
 
 ### Sealed axis keyed by `(phase, kind)` — SHIPPED 2026-08-03 (`74c72256`)
 
