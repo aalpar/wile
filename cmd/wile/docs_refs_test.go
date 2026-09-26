@@ -415,6 +415,22 @@ var correctedDocClaims = []correctedDocClaim{
 			"right-hand side instead of switching on its head symbol — measured 2026-09-26: the " +
 			"macro-produced transformer, let-syntax and letrec-syntax shapes print 1, 42 and 43.",
 	},
+	{
+		name:  "TODO_TestMachineClosureIsTwoWords",
+		doc:   "TODO.md",
+		stale: "`TestMachineClosureIsTwoWords`",
+		why: "Absent from every .go file. The live pin is TestMachineClosureSize " +
+			"(pkg/machine/machine_closure_test.go:44), and it asserts FIVE words, not two: " +
+			"flat-closure conversion re-opened the 16 B trade deliberately, so MachineClosure is " +
+			"{link, template, free} = 40 B.",
+	},
+	{
+		name:  "TODO_applyClosure",
+		doc:   "TODO.md",
+		stale: "`applyClosure`",
+		why: "Absent from every .go file. The apply path is (*MachineContext).Apply " +
+			"(pkg/machine/machine_context_apply.go:28).",
+	},
 }
 
 // resolveRef turns a reference as written in doc into a repo-relative path.
