@@ -844,11 +844,13 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   records as refusing a legitimate prefixed re-export. `environment.SameBinding`
   (`pkg/environment/binding.go:489`) is the origin-based identity that answers it properly, and
   the reviewer measured that adding it flips exactly that one documented BOUNDARY row to the R7RS
-  answer with everything else green. Filed rather than applied because origin-based identity was
-  REJECTED for import-conflict detection (auto-memory `import-conflict-detection-shipped.md`) on a
-  failure with the opposite polarity — there it over-ACCEPTED distinct bindings as the same, here
-  it would under-accept nothing — so the rejection does not transfer and must be re-measured on
-  this consumer, not assumed either way.
+  answer with everything else green. Filed rather than applied only because nobody applied it; the
+  objection originally recorded here is dead. Provenance-root origin is what SHIPPED for
+  import-conflict detection (`5d654b3f`, auto-memory `import-conflict-detection-shipped.md`):
+  `importConflicts` (`pkg/machine/compilation/library_bindings.go`) compares `*OriginRef` and
+  nothing else. What PR #793 turned down was a SOURCE-LOCATION origin, which over-REJECTED by
+  false-flagging a legal define-over-import shadow — a failure a root comparison cannot have, since
+  `importConflicts` returns early on `!existing.IsImported()` and a define never enters one.
 
 - [ ] **`quasisyntax`'s `#,` reaches the same permissive disagreement this branch fixed for
   `quasiquote`, live on MASTER, by a different route** [Medium, M, filed 2026-09-15 during the
@@ -1448,16 +1450,23 @@ Correctness work that lived only inside plan files, invisible to a TODO scan.
 > **The load-order plan is dead (archived 2026-07-24).** Part II's motivation is discharged: the C6
 > capture is fixed by the bootstrap reorder (`1af62cd2`) plus the free-template-id-hygiene arc
 > (PR #814), and `TestBootstrapMacrosPinLateBoundReferents` is a CI ratchet reporting 0 capturable
-> nil pins — the regression guard Part II's cure would have provided. Part III is obsoleted as
-> written: origin-based identity was **rejected** for import conflict (PR #793) in favor of by-name
-> `sameImportedBinding`, so migrating all three sites onto `BindingID` would regress shipped
-> behavior. One narrow residual survives, below.
+> nil pins — the regression guard Part II's cure would have provided. Part III is obsoleted by
+> having been DONE under a different mechanism: all three sites it named compare provenance-root
+> origin today — `sameFreeIdentifier` (`pkg/registry/core/prim_syntax.go`) and `erBindingsEqual`
+> (`pkg/machine/compilation/er_macro_compare.go`) through `environment.SameBinding`, and import
+> conflict through `importConflicts` (`pkg/machine/compilation/library_bindings.go`, `5d654b3f`).
+> Nothing regressed. The value-identity type Part III proposed under that name was never built;
+> the `environment.BindingID` that does exist is an unrelated local-frame map key
+> (`{*LocalEnvironmentFrame, int}`) and cannot name an imported binding at all. One narrow
+> residual survives, below.
 
-- [~] **`free-identifier=?` and ER-compare were non-conformant on COMPLEMENTARY cases**
+- [x] **`free-identifier=?` and ER-compare were non-conformant on COMPLEMENTARY cases**
   [Correctness/conformance, M, verified 2026-07-24 vs Racket + Chez, low impact; **conformance FIXED**
-  (`70a34421` + `36e1d268`), Phase-2 consumers remain]: `free-identifier=?` compared bindings by
-  pointer, wrong on rename-aliases — two rename-imports of ONE binding answered "different" where
-  Racket and Chez say same. `erBindingsEqual` added a `BindingType()`+`Value()` fallback, wrong the
+  (`70a34421` + `36e1d268`); the checkbox closes the conformance defect, and the one Phase-2
+  consumer still open below (`,doc`) is tracked in its own right, not as unfinished work on this
+  defect]: `free-identifier=?` compared bindings by pointer, wrong on rename-aliases — two
+  rename-imports of ONE binding answered "different" where Racket and Chez say same.
+  `erBindingsEqual` added a `BindingType()`+`Value()` fallback, wrong the
   other way — two DISTINCT defines of the same value answered "same". **So pointing
   `free-identifier=?` at ER-compare was not the fix**; it swaps one wrong answer for the other.
   Neither pointer-eq nor value-eq is the correct notion. The conformant one is same binding
@@ -1470,12 +1479,12 @@ Correctness work that lived only inside plan files, invisible to a TODO scan.
   import had one. `stampLibraryExportOrigins` closes that by giving every library export its own
   self-root at library **finalization** — chosen over an import-side-effect stamp so Origin stays a
   pure function of the definition and imports never mutate library-internal state — and the value
-  fallback is deleted. Note the origin approach was rejected for import-*conflict* detection
-  (PR #793) because it false-flags a legal define-over-import shadow; that trade-off does **not**
-  transfer to identifier *equality*, where origin is the correct semantics. Design:
+  fallback is deleted. Import-*conflict* detection reached the same answer independently: PR #793
+  turned down a SOURCE-LOCATION origin there for false-flagging a legal define-over-import shadow,
+  and `5d654b3f` then shipped provenance-root origin, which cannot have that failure. Design:
   `plans/2026-07-24-free-identifier-origin-provenance-design.md` (model: "same binding" = same
   root in the provenance graph Wile already walks at import, then discards).
-  **Phase 2 — 1 of 3 shipped:**
+  **Phase 2 — 2 of 3 shipped:**
   - [x] `stampImportedInlineHOF` gates on `Origin.RootLib` [Done 2026-07-24, `9b2afa8c`]: fixed the
     latent re-export miss and a coupled miscompile, where inline dispatch keyed on the call-site
     name, so a curated HOF renamed onto another curated HOF's name inlined the wrong body. Dispatch
@@ -1497,13 +1506,16 @@ Correctness work that lived only inside plan files, invisible to a TODO scan.
     deliberately decoupled from `machine/compilation`. So the options are re-couple, inject a
     resolver into `environment`, or store a `*Binding` (rejected by D2). With no defect left
     motivating it, **re-justify before starting, or drop it.**
-  - [ ] Site 3 `sameImportedBinding` (`library_bindings.go`) still compares `*MachineClosure`/
-    `*ForeignClosure` by NAME with an `EqualTo` default. **Gated, not merely unstarted** — its own
-    doc comment frames the by-name conflation as a deliberate irreducible gap, and origin was
-    rejected here by PR #793 for false-flagging define-over-import. The gate is re-reading #793's
-    actual objection: an import-edge origin is a different signal than the source location it
-    rejected (a define-over-import shadow is a non-imported local with nil `Origin`, so it never
-    enters an import-vs-import root comparison) — a hypothesis to verify, not a claim.
+  - [x] Site 3, import-conflict detection [Done 2026-09-16, merge `5d654b3f`]: the by-name/`EqualTo`
+    comparison and the "irreducible gap" it documented are gone. `importConflicts`
+    (`pkg/machine/compilation/library_bindings.go`) compares provenance roots (`*OriginRef`) and
+    nothing else, matching Racket's "identifier already required" rule. The gate this row set — go
+    re-read PR #793's actual objection before adopting origin here — was discharged, and the
+    hypothesis it recorded held: #793 rejected a SOURCE LOCATION, a define-over-import shadow is a
+    non-imported local, and `importConflicts` returns early on `!existing.IsImported()`, so a
+    define never reaches a root comparison. `TestImportConflictDetectionByOrigin`
+    (`pkg/wile/engine_import_composition_test.go`) pins the three cases the gap named — same-named
+    procedures, same-named macros, equal constants — as conflicts, and a diamond as legal.
 ### Layered-environment carve regressions (review `d8911c15..b04c6d74`, 2026-06-15)
 
 Sealed-base carve + immutable-top-level-default arc. Two root patterns: own-frame `Keys()`

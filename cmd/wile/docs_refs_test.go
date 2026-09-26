@@ -391,6 +391,21 @@ var correctedDocClaims = []correctedDocClaim{
 		why: "Three, not four: TestRunEval is not blind. runCLI re-execs the test binary through " +
 			"TestMain, which calls main(), so go-flags parsing is exercised end to end.",
 	},
+	{
+		name:  "TODO_sameImportedBinding",
+		doc:   "TODO.md",
+		stale: "`sameImportedBinding`",
+		why: "Deleted by 5d654b3f (2026-09-16). The live symbol is importConflicts " +
+			"(pkg/machine/compilation/library_bindings.go), which compares provenance roots.",
+	},
+	{
+		name:  "TODO_origin_rejected_for_import_conflict",
+		doc:   "TODO.md",
+		stale: "REJECTED for import-conflict detection",
+		why: "Provenance-root origin is what SHIPPED for import-conflict detection (5d654b3f); " +
+			"importConflicts compares *OriginRef and nothing else. What PR #793 rejected was a " +
+			"SOURCE-LOCATION origin, a different signal.",
+	},
 }
 
 // resolveRef turns a reference as written in doc into a repo-relative path.
