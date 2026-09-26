@@ -2873,8 +2873,6 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   F and G remain, which the plan index row already says correctly.
 - `setRecognizedPrimitive`'s TODO text still cites `runtime.Namespace().SealedBase()`; the code
   reads `SealedBindingAt` (`pkg/registry/core/prim_hashtables.go:333`ff).
-- `TestLibraryExportTakesFirstPresentPhase`: the `name` and `syntax-rules` subtest comments still
-  describe the withdrawn export-phase fork (a). The refusal is now the intended answer.
 - `makeDocRegistrationObserver` looks exports up at phase 0 by local name — the same phase-0-first
   assumption that causes defect 3 above.
 
@@ -3016,7 +3014,17 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
   `thread-join!` already do.
 - [x] **`RWMutex` and `Once` removed from the Scheme surface** [API/modeling, M, Done, deleted]: 12 primitives, `values.RWMutex`, `values.Once`, `werr.ErrNotARWMutex`, `werr.ErrNotAOnce`, and `finishBlockingSync`; `(wile gointerop)` is now the six `atomic` primitives. **A modeling decision, not a cleanup**: `gointerop` was publishing Go's shared-state model against the project's causal-chain orientation. Public API removal under the zero-consumer rule, as with `ChannelSelect`. Kept: SRFI-18 `mutex-*`/`condition-variable-*` and `atomic`. Traps: the plan's verification grep (hits only in `memory/`/`plans/`/CHANGELOG) was never satisfiable, since ~13 live `sync.RWMutex` struct fields remain; `ErrNotAOnce` was the sole pass-through-article row in `pkg/registry/helpers/args_test.go`, so that sentinel is now built inline to keep `typeNameFromSentinel`'s article path covered. `TestWithTimeoutInterruptsParkedRWMutex` was ported to `mutex-lock!`, not dropped: it is the only test spanning `callForeignCached`'s eager recheck and a primitive's error-free `#f`. Under an embedder deadline `mutex-lock!` returns `#f` and the VM's top-of-loop check surfaces `DeadlineExceeded` (`pkg/machine/machine_context.go:365`); no test covers that `cancellation.md` row. Residual: `werr.ErrOperationCancelled` was left with no producer and a rewritten comment. **DECIDE:** delete it, or keep it for a future primitive that returns a value on success and so cannot borrow the error-free-`#f` convention.
 - [x] **`ChannelSelect` was complete, tested, CHANGELOG-cited, and registered nowhere** [API/dead-code, S–M, Done, deleted]: removed `ChannelSelect`, `SelectCase`, `SelectCaseKind`, `firstDeadCase`, and 8 `TestChannelSelect*` functions (~312 lines). Exported from `values/`, so a public API removal under the zero-consumer rule. Wiring it would have needed a ctx arm, not just `done` arms, or it reintroduces the T1.3 leak at a new site (a prototype confirmed 2N+1 arms are `-race`-clean, so the decision was never technical). Released CHANGELOG sections (1.18.0, 1.3.0) were not edited; a removal note and correction went into `[Unreleased]`. If a consumer appears: `reflect.Select` panics past 65536 cases and the list would come from Scheme, so it needs an arity guard.
-- [ ] **Stale sub-context comment on `with-timeout`** [Docs, XS]: `PrimWithTimeout` (`pkg/registry/core/prim_timer.go`) header says "The sub-context pattern ... a fresh sub-context isolates the thunk's execution," but the same function's body twelve lines down (and `RunBodyUnderTimer`) says it runs the thunk **INLINE on the live chain, not in a sub-context** (the accurate description). REVIEW.md lists stale comments as a recurring trap; this one misdescribes the isolation model of the code that makes the `with-timeout` cancellation path safe. **Possible actions:** (A) delete the stale sub-context sentence; (B) rewrite it to match the inline model. **Recommendation: A (delete)** — the accurate description already exists in the same comment, so B just duplicates it.
+- [x] **Stale sub-context comment on `with-timeout`** [Docs, XS, **already fixed, closed
+  2026-09-26**]: the row said `PrimWithTimeout`'s header described a fresh sub-context isolating
+  the thunk while the body twelve lines down ran it inline, and recommended option A, deleting the
+  stale sentence. A is what the tree now has. The header of `PrimWithTimeout`
+  (`pkg/registry/core/prim_timer.go`) reads "The thunk runs inline on the live continuation chain
+  under a finalizer prompt frame (RunBodyUnderTimer), mirroring call-with-continuation-barrier
+  (prim_barrier.go): a continuation captured inside the thunk spans the finalizer frame and the
+  rest of the program rather than being truncated at a sub-context boundary." Measured 2026-09-26:
+  `grep -rn 'sub-context pattern\|fresh sub-context isolates' --include=*.go .` is empty, and the
+  callee the header names is live — `(*MachineContext).RunBodyUnderTimer`
+  (`pkg/machine/run_body_under_timer.go:38`), called at `prim_timer.go:100`.
 - [x] **Scheme-level cancellation tests added; two real defects found writing them** [Test-coverage + Correctness, S, Done, A+B+C shipped]: `extensions/gointerop/channel_cancellation_test.go` added `TestWithTimeoutInterruptsParkedReceive` and `TestTerminateUnparksBlockedThread`, both mutation-verified. Two defects surfaced:
   - **`thread-terminate!` discarded its own SRFI-18 end-exception** [Correctness, S, Done]: `Thread.Start`'s goroutine unconditionally overwrote the stored `TerminatedThreadException`, and `defer close(p.done)` ran last, so a joiner could never observe it; a thread parked in a tail-position receive was reported as having succeeded. This invalidated the design doc's claim that the ≈1024-op unwind window was itself the protection. Fix: a write-once outcome (`Thread.setOutcome`), first writer wins, which keeps SRFI-18's "if the thread is not already terminated". Prior coverage was vacuous (both tests asserted the `#t` literal they wrote). Guard: `extensions/threads/prim_threads_terminate_outcome_test.go`.
   - **`thread-join!` on a terminated but never-started thread blocked forever** [Correctness, S, Done]: `done` was closed only by the goroutine `Start` spawns. `Terminate` now closes it when ending a `ThreadNew` thread. The two closers are mutually exclusive because `Start` makes `ThreadNew → ThreadRunnable` under `p.mu` and refuses any other state, so no `sync.Once` is needed (a double close is a fatal host panic). Guards: `pkg/values/thread_lifecycle_test.go` (20000-trial `-race`) and `TestThreadTerminateNeverStartedThreadIsJoinable`, which joins with no timeout so a regression is an unbounded park rather than a misleading `JoinTimeoutException`.
@@ -3029,9 +3037,42 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
 - [x] **Machine package structural reduction** [Done 2026-05-13]: all 7 findings closed. Shipped — `Stack.Push` max-stack (PR #734), `OpKind()` discriminator (PR #735), vmState value-register consolidation + ruleguard (PR #736), correlated-field sub-records (PRs #742/#743/#745). Declined — syntaxCase marker interface (PR #731), maxCallDepth sentinel removal, tail/non-tail opcode collapse via sign-bit encoding (PR #737: geomean +2.5%, all 16 benches slower), Stage-3 sub-records (field-independence analysis found no co-variance, `9382a3b3`). `memory/2026-05-06-machine-structural-reduction.md`
 - [x] **Internal / values / environment structural reduction** [Done]: `internal/` all 7 findings (PRs #739–#741, including the `*SyntaxPair`/`SyntaxEmptyList` duality migration that restores Chez-conformant `(equal? (syntax ()) '())`); `values/` Phases 0–4 (PRs #747–#756 — 9 port types collapsed to one `*Port` with capability slots, ~900 LOC, and a `NumericTypeSpec` registry replacing the 12-step ADDING-A-NEW-NUMERIC-TYPE guide); `environment/` Phases 1–9 (PR #730), Phase 10 (`*LocalIndex` allocation audit) deferred benchmark-gated. Plans archived under `memory/2026-05-0*`.
 - [x] **vmCore sub-struct extraction** [High, M, DECLINED on re-evaluation 2026-06-05]: the genuine always-transfer set is only `{env, template, pc}`. `callDepth` is a guarded maintained counter (`SaveContinuation` ++, `PopContinuation` --, derived from the parent by both continuation constructors), so bundling it forces override-after-copy at 4 sites and risks clobbering its guards. The FCA "High" rating rested on the divergent fields (`evals`, `envPooled`, `marks`), none of which a vmCore touches, and drift is already answered by `testVmStateFieldCoverage`. Net ~6 lines saved at 3 sites on the VM's hottest path. Parallels the decline of machine SR Finding 7 Stage 3.
-- [ ] **Bidirectional opcode conversion test** [Medium, S]: Verify `operationToInstruction` and `instructionToOperation` cover the same opcode set.
+- [x] **Bidirectional opcode conversion test** [Medium, S, **ill-posed as worded, closed
+  2026-09-26**]: the row asked for a test that `operationToInstruction` and
+  `instructionToOperation` cover the *same* opcode set. They cannot, and the asymmetry is the
+  design. `operationToInstruction` (`pkg/machine/native_template.go:411`) emits
+  `Instruction{Op: op.OpKind()}`, so its range is exactly the opcodes some `Operation` type names
+  as its kind; measured 2026-09-26, none of the 41 `OpKind` implementations returns a fused or
+  promoted opcode, and `grep -E 'OpPullApply|OpPushLiteral|OpPushGlobal|OperandCachedBinding'` over
+  its body is empty. Those opcodes exist only downstream of the peephole pass (`OpPullApply` is
+  synthesized at `pkg/machine/peephole.go:152`), yet `instructionToOperation` must still accept
+  them, mapping each back to the first operation of the sequence it replaced — the lossiness its
+  own doc comment records at `native_template.go:214-223`. So `operationToInstruction`'s range is a
+  strict subset of `instructionToOperation`'s domain and a same-set assertion fails by
+  construction. Each direction is separately pinned instead: `TestOpcodeRoundTrip`
+  (`pkg/machine/native_template_test.go:259`) walks every opcode from 1 to `opCount`, skipping only
+  `OpComplex`, and asserts `instructionToOperation` is non-nil;
+  `TestOperationToInstruction_AllDirectDispatch` (`pkg/machine/instruction_test.go:149`) and
+  `…_SideTableReturnsFalse` (`:203`) cover the other. This is a scope judgment, not a
+  non-reproduction: nothing was fixed, and no existing test asserts the row's literal ask, because
+  the property it names is false.
 - [ ] **LocalEnvironmentFrame pointer ambiguity** [Low, S]: Doc comment on `NewLocalEnvironment` explaining lifecycle (value-vs-pointer ownership).
-- [ ] **Honor `WithInlineThreshold` for imported libraries** [Low, S]: The library import/load chain (`LoadLibrary` → `loadLibraryFromReader` → `compileAndExecuteLibrary`, `machine/compilation/library_loader.go:215,223`) has **no `inlineThreshold` parameter**, so imported libraries always compile at `DefaultInlineThreshold = 5`, ignoring the engine's `WithInlineThreshold(n)` (`pkg/wile/options.go:275`). Every *in-process* child compiler re-threads the parent's value via the two-line `NewCompileTimeContinuation(...)` + `SetInlineThreshold(p.inlineThreshold)` idiom (6 sites: `compile_syntax_case.go:253`, `compile_closure.go:123`, `compile_library_forms.go:109`, `compile_helpers.go:51`, `compile_time_continuation.go:347`, `expand_and_compile.go:53`); the load path is the one site that cannot reach the value. **Not a correctness bug** — inlining here is the behavior-preserving synthetic-let transform (PR #605), so results are unchanged; it is a config-honoring / debuggability inconsistency (disabling inlining, e.g. for predictable stack traces, is silently not honored across the `import` boundary). Fix: thread `inlineThreshold` through the three `LoadLibrary`/`loadLibraryFromReader`/`compileAndExecuteLibrary` signatures (or expose it via `Namespace`/`EngineServices` so the load path can read it) and `SetInlineThreshold` on the library compiler. Discovered during the `CompileTimeContinuation` God-object triage (2026-07-09); the fix also illustrates why the "stable config should be inherited, not hand-copied" refactor (staff sweep tail) has real payoff — a shared services pointer would close this gap by construction.
+- [x] **Honor `WithInlineThreshold` for imported libraries** [Low, S, **already fixed, closed
+  2026-09-26**]: the row said the library load path had no `inlineThreshold` parameter, so an
+  imported library always compiled at `DefaultInlineThreshold = 5` and silently ignored the
+  engine's `WithInlineThreshold(n)`. The gap is closed, and by the second of the two options the
+  row named — exposing the value through `Namespace` rather than threading it through three
+  signatures. The whole chain resolves, measured 2026-09-26: `pkg/wile/engine.go:595`
+  `ns.SetInlineThreshold(cfg.inlineThreshold)`; `pkg/machine/compilation/library_loader.go:291`
+  reads `libEnv.Namespace().InlineThreshold()`, falls back to `DefaultInlineThreshold` when unset
+  (a namespace not built by an Engine, e.g. a direct `LoadLibrary` in a unit test), and calls
+  `compiler.SetInlineThreshold(...)` at `:295`; the accessors are
+  `(*Namespace).SetInlineThreshold` and `.InlineThreshold`
+  (`pkg/environment/namespace.go:472`, `:481`). Three tests in
+  `pkg/wile/library_inline_threshold_test.go` cover it — `TestInlineThresholdPopulatedOnNamespace`
+  (`:34`), whose table carries the explicit-zero row that distinguishes "disabled" from "unset",
+  `TestInlineThresholdHonoredForImportedLibrary` (`:73`) and
+  `TestInlineThresholdBoundaryForImportedLibrary` (`:147`).
 - [x] **Unified binding reference (`BindingRef`) for local+global** [Medium, M, Done 2026-07-08, `229e0b72`]: `BindingRef` sum type + `ResolveBindingRef` in `environment/`; the validator's mutation set went from 3 maps to 2. **Storage stays split, deliberately**: locals are positionally addressed (`LocalIndex{over,up}`), copied every `Apply`, single-threaded, `[]Binding` by value; globals are symbolically addressed, shared across SRFI-18 threads, and `[]*Binding` pointer-stable because the lock-free `cachedBindings` read cache requires it. Only the reference type unified. **Premise correction**: the validator was not blind to top-level `set!` (the symbolic `mutatedKeys` sidecar compensated and `StableInUnit` was correct), so this was a semantics-preserving tidy, not a bug fix. The conservative over-mark (a `set!` to a local shadow still marks the top-level name non-stable) is the frame-reclaim soundness margin, pinned by `TestStableInUnit_SetToLocalShadowStillMarksTopLevel`.
 - [x] **Unify `atan2Operand` with `helpers.ToFloat64`** [Low, S, Done, PR #754]: `atan2Operand` re-implemented the Number-assert → complex-reject → float64-extract sequence just to swap the loss policy from strict to silent-truncate. Extracted shared `screenReal` into `registry/helpers/value_conv.go` and added `helpers.ToFloat64Lossy` as the lossy counterpart to strict `ToFloat64`; `atan2Operand` deleted, both `PrimAtan` sites routed through it. Lossy semantics (`(atan 1/3)`) preserved per R7RS §6.2.6.
 ### Tech Debt Plan (remaining)
@@ -3125,7 +3166,21 @@ patterns are visible.
 Items deferred for stated reasons. Re-evaluate when preconditions change.
 
 - [ ] **F11: Promote internal extensions** [Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote when extension API stabilizes and external consumers exist.
-- [ ] **Parser: unify readList + readLabeledList** [Postponed]: High risk — datum labels require in-place mutation of placeholder pairs. Structural difference is semantic, not accidental.
+- [x] **Parser: unify readList + readLabeledList** [Postponed, **blocker refuted, closed
+  2026-09-26**]: the row postponed the unification as high risk because "structural difference is
+  semantic, not accidental." It was accidental, and the difference was one parameter. Both readers
+  now delegate to a single `readListInto(head *syntax.SyntaxPair, opener)`
+  (`pkg/parser/parser.go:643`), which holds the list grammar once: `readList` (`:632`) passes a
+  fresh head (`p.wrapSyntaxPair(nil, nil, p.cur)`) and `readLabeledList` (`:317`) passes the
+  already-registered placeholder pair. The in-place mutation the row feared is exactly what
+  passing the placeholder as `head` buys: the shared loop fills that exact pair, so a `#n#`
+  encountered mid-list already resolves, and no traversal patches anything afterward. What is left
+  in the wrapper is one label re-store, for the case where the list turns out empty (`#0=()`, or
+  one whose elements were all elided by `#;`) and the result is the empty-list singleton rather
+  than the placeholder. Pinned by
+  `TestReader_CircularListResolvesSelfReference` (`pkg/parser/datum_label_test.go:100`) and
+  `TestReader_LabeledListElidedElementIsEmptyList` (`:125`), whose comment names the
+  `readList`/`readLabeledList` unification as what it guards.
 - [ ] **VM dispatch loop extraction** [Postponed]: `MachineContext.Run()` is 547 lines with 65 inlined opcode cases. Go has no computed goto; method dispatch adds measurable overhead on hot path. Intentional performance-over-readability trade-off.
 - [ ] **Match: consolidate bytecode type files** [Postponed]: Pure cosmetic reorganization.
 - [ ] **Extensions: standardize registration patterns** [Postponed]: Requires design decision on canonical pattern.

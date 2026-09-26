@@ -431,6 +431,14 @@ var correctedDocClaims = []correctedDocClaim{
 		why: "Absent from every .go file. The apply path is (*MachineContext).Apply " +
 			"(pkg/machine/machine_context_apply.go:28).",
 	},
+	{
+		name:  "TODO_TestLibraryExportTakesFirstPresentPhase",
+		doc:   "TODO.md",
+		stale: "`TestLibraryExportTakesFirstPresentPhase`",
+		why: "Renamed by d691ded5 (2026-09-17), which retired the export-phase fork the old name " +
+			"asserted. The live test is TestLibraryExportRoundTripByPhase " +
+			"(pkg/wile/library_export_phase_order_test.go:115).",
+	},
 }
 
 // resolveRef turns a reference as written in doc into a repo-relative path.
