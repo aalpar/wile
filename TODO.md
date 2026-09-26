@@ -495,8 +495,41 @@ than decisions:
 - [ ] **No box (`#&`) arm in `%gen-match` / `%gen-template`** [Correctness, S]: a box pattern never
   binds and a box template stays a verbatim constant. The Go layer has
   `TestBoxInMacroTemplateAndPattern`; the Scheme layer has no twin.
-- [ ] **`%gen-ellipsis-map` raises on a constant subtemplate followed by `...`** [Correctness, S]:
-  the Go layer and Wile's reading of R7RS §4.3.2 both answer `()`.
+- [x] **`%gen-ellipsis-map` raises on a constant subtemplate followed by `...`** [Correctness, S,
+  Done]: the two layers now AGREE, by moving the Go layer rather than the Scheme one. The row's
+  premise — "the Go layer and Wile's reading of R7RS §4.3.2 both answer `()`" — was half right and
+  the reading was wrong. §4.3.2 states only the ∀ direction (every driver must be bound at least as
+  deep as the template ellipsis depth) and is silent on the ∃ direction; both reference
+  implementations resolve that silence by refusing — petite "extra ellipsis in syntax form", exit
+  255; racket "no pattern variables before ellipsis in template", exit 1; `racket -I r5rs` the
+  same. Two oracles agreeing where the spec is silent is this project's standard for taking their
+  answer, and Wile's Go layer was alone in answering `()`. `checkEllipsisGroupDriver` no longer
+  exempts the zero-variable case: a sub-template with no pattern variable of sufficient depth has no
+  driver whether it has zero variables or only shallow ones, and the zero case was never an
+  exemption.
+  TWO SITES, not the one the plan named. `syntax-case` does not route through
+  `checkEllipsisGroupDriver` at all — its template is walked at use, by
+  `expandSyntaxEllipsis` (`pkg/internal/match`), which had the same silent drop. Refusing only the
+  `syntax-rules` site leaves the `syntax-case` shape answering `()`. Note for P2: this puts the task
+  in TWO of the seven freeze-window packages, not one.
+  TWO SENTINELS, deliberately: `werr.ErrInvalidSyntax` from the compile path and `werr.ErrExpansion`
+  from the expansion path, each the dominant sentinel of its own package — `ErrExpansion` is what
+  the adjacent arms of `expandSyntaxEllipsis` already raise.
+  REFUSAL IS AT CONSTRUCTION for `syntax-rules`, so a bad definition is refused even when the macro
+  is never used, which is what petite does with a definition-only script. The plan's stated bootstrap
+  risk (one such template anywhere in `pkg/stdlib/lib` would break the image for every engine) was
+  measured and did not materialize: `go test ./...`, `test/run-all.sh` (all Scheme suites) and
+  `make test-examples` (56 passed, 2 skipped, 0 failed) are all green with the refusal in.
+  Pinned by `TestI149_ConstantSubtemplateFollowedByEllipsisIsRefused` (pkg/wile), four shapes, each
+  verified red with the two production edits reverted and green with them in. The fourth shape is
+  definition-only. The `constant template followed by ellipsis` row in
+  `syntax_rules_depth_test.go`'s no-false-positives table, which pinned `()` with a §4.3.2 rationale
+  comment, is removed there and inverted into that gate — it was a true positive, not a false one.
+  RESIDUAL, not this row's: the `syntax-case` refusal renders as the generic "syntax: template
+  expansion error" because `operation_syntax_case.go`'s `mc.WrapError` does not surface its cause's
+  message. The `Unwrap` edge is intact (`errors.Is` reaches `ErrExpansion`, which is what the gate
+  asserts), so this is a rendering gap affecting every syntax-case template error, not a lost chain.
+  Filed for the provenance wave rather than fixed here.
 - [ ] **Scheme layer instantiates phase 3 at startup where Go stops at phase 2** [Phase, S,
   undecided]: `TestStartupBindsNothingAtPhaseTwo` pins the Go layer only. Needs a decision, not a
   fix.

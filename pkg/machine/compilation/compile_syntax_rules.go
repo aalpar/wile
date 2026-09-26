@@ -734,12 +734,22 @@ func collectTemplatePatternVars(tmpl syntax.SyntaxValue, variables syntax.Patter
 // sequence the ellipsis iterates over. A sub-template with pattern variables but
 // no driver (every variable bound shallower than requiredDepth) cannot be
 // iterated — this is the over-ellipsis violation. A sub-template with no pattern
-// variables at all is permitted (R7RS: repeated zero times, dropped).
+// variables at all has no driver either, and the zero case is not an exemption:
+// R7RS-small states only that every driver must be deep enough, and both
+// reference implementations refuse the constant sub-template rather than
+// repeating it zero times (petite: "extra ellipsis in syntax form"; racket:
+// "no pattern variables before ellipsis in template").
 func checkEllipsisGroupDriver(sub syntax.SyntaxValue, variables syntax.PatternVarSymbols, patternDepths map[string]int, ellipsis string, requiredDepth int) error {
 	vars := make(map[string]*syntax.SyntaxSymbol)
 	collectTemplatePatternVars(sub, variables, ellipsis, vars)
 	if len(vars) == 0 {
-		return nil
+		// No variable at all to iterate over, so the offending node is the
+		// sub-template itself rather than any one variable.
+		return wrapSourcedError(sub.SourceContext(), werr.WrapForeignErrorf(
+			werr.ErrInvalidSyntax,
+			"syntax-rules: ellipsis sub-template at depth %d has no pattern variable to drive iteration",
+			requiredDepth,
+		))
 	}
 	// Look for a driver; meanwhile track the most clearly offending variable
 	// (the one bound at the shallowest pattern depth) to report. The name
