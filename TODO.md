@@ -1663,11 +1663,21 @@ stay protected inside mutable children. Design:
   `(set! *schelog-use-occurs-check?* #t)`; without the occurs check the puzzle infinite-loops into
   the MCP timeout.
 
-### Macro-system defects found 2026-09-04, owned by the Scheme-specified syntax forms design
+### Macro-system defects found 2026-09-04
 
-All reproduced on v1.20.0 (`8ef4c75b`). Owner for the first four:
-`plans/2026-09-04-scheme-specified-syntax-forms-design.md` §5; they close with its
-phases, not with point fixes, except 5.2 which is the P0 prerequisite.
+All five reproduced on v1.20.0 (`8ef4c75b`); three no longer reproduce and were closed 2026-09-26,
+so neither the blanket reproduction claim nor the blanket owner survives. Three rows are open here
+and they do not share an owner.
+
+The ER-scope-stripping row (§5.1) and the lone-identifier row (§5.3) are owned by
+`plans/2026-09-04-scheme-specified-syntax-forms-design.md` §5 and close with its phases, not with
+point fixes. Both were re-measured at HEAD on 2026-09-26 and both still reproduce exactly as filed:
+the ER program returns 2 where its `syntax-rules` twin returns 11, and
+`(syntax-case #'foo () (x #'1))` still fails "pattern must be a list".
+
+The third is the phase-1 scope-refusal wording, owned by the **provenance wave** rather than by that
+design. It was lifted out of the `begin-for-syntax` row below, whose ordering half was fixed
+2026-09-14 and whose diagnostic half was not.
 
 - [ ] **ER macros strip scopes from pass-through identifiers** [Correctness / hygiene, S, design §5.1]:
   `invokeERTransformer` (`expander_time_continuation.go`) calls `UnwrapAll` on the input and re-wraps
@@ -1677,54 +1687,71 @@ phases, not with point fixes, except 5.2 which is the P0 prerequisite.
   `(let ((tmp 10)) (via-er tmp))` returns **2**; the `syntax-rules` twin returns 11. The comment at
   the site calls the asymmetry deliberate; the capture it causes was not on record. Dies with the shim
   when ER is derived from `syntax-case` (design §3.5).
-- [ ] **`define-syntax` dispatches on the transformer's head symbol** [Conformance, S, design §5.2,
-  **P0 prerequisite**]: `compileTransformerToMachineClosure` (`compile_transformer.go`) switches on
-  `syntax-rules` / `lambda` / `er-macro-transformer` and never expands the right-hand side, so a macro
-  that expands to a transformer is refused: `(define-syntax my-er (syntax-rules () ((_ p) (lambda (stx)
-  (p stx)))))` then `(define-syntax m (my-er (lambda (stx) #'1)))` fails with "unsupported transformer
-  type". R6RS requires an expression evaluated at the next phase. Same for `let-syntax`/`letrec-syntax`.
+- [x] **`define-syntax` dispatches on the transformer's head symbol** [Conformance, Done 2026-09-26,
+  does not reproduce]: filed as design §5.2 and as the P0 prerequisite. The symbol the row named
+  exists in no `.go` file; the live one is `compileTransformerValue`
+  (`pkg/machine/compilation/compile_transformer.go:60`), which expands and evaluates the right-hand
+  side as an expression one phase above `env`, as R6RS requires, instead of switching on its head
+  symbol; its own doc comment records the replacement and cites §5.2. Measured at HEAD: the
+  macro-produced transformer `(define-syntax my-er (syntax-rules () ((_ p) (lambda (stx) (p stx)))))` then
+  `(define-syntax m (my-er (lambda (stx) #'1)))` prints **1**, the `let-syntax` half **42** and the
+  `letrec-syntax` half **43**, all exit 0. Not tabled work and not a P0 prerequisite still open: the
+  behaviour is pinned in default CI by `TestP01_TransformerIsAnExpression`
+  (`pkg/wile/syntax_forms_p0_test.go:104`, six rows) and
+  `TestP01_SelfReferencePinsThroughMacroProducedTransformer` (:178), whose harness `evalSyntaxForms`
+  (:34) builds a plain `WithProfile(KitchenSink)` engine, so they run on the default (Go) layer
+  wherever `WILE_SYNTAX_FORMS` is unset, which is the case in CI.
 - [ ] **`syntax-case` rejects a lone-identifier pattern** [Conformance, XS, design §5.3]:
   `(syntax-case stx () (x #'1))` fails "pattern must be a list" (`match.CompileSyntaxPattern`). R6RS
   §12.4 allows any pattern. Dies with the Go `syntax-case`.
-- [ ] **Every free local referenced from a `syntax-case` or `with-syntax` body arrives boxed**
-  [Correctness, S, design §5.4]: `(let ((n 0)) (set! n 1) (syntax-case #'(a) () ((x) n)))` returns
-  `#&1`, the box; the same under `with-syntax` returns `#&1`; the same inside a plain `lambda` returns
-  `1`. An unassigned local procedure called from a clause body raises "expected a procedure, got
-  `#&#<machine-closure>`", so today's `syntax-case` cannot use a local helper at all, and no test
-  caught it. The clause-body compile path in `compile_syntax_case.go` / `compile_with_syntax.go`, not
-  the flat-closure boxing pass (the `lambda` control is fine). Dies with those files; pin it before
-  deletion so a general boxing regression cannot hide behind the rewrite.
-- [ ] **A `begin-for-syntax` define is invisible to a later transformer** [Conformance, M, **not**
-  owned by the design]: `(begin-for-syntax (define (helper x) x))` then `(define-syntax m (lambda (stx)
-  (helper #'7)))` fails "no such binding helper". The Tier 1 note above (2026-07-29, `lookupMacroBinding`
-  arm 1) says `begin-for-syntax` / `define-for-syntax` / `eval-when` "deliberately root the expander at
-  `p.env`"; that describes the lookup arms, not a decision that user-level phase-1 definitions should be
-  invisible to transformers, which is what R6RS §7 and Racket give. No stdlib file uses these forms
-  (Q1 of the phase-hermeticity item), so the gap has no in-tree consumer. Design §5.5 does not need it:
-  its helpers live in the sealed base.
+- [x] **Every free local referenced from a `syntax-case` or `with-syntax` body arrives boxed**
+  [Correctness, Done 2026-09-26, does not reproduce]: filed as design §5.4. All three shapes the row
+  predicted are unboxed at HEAD. `(let ((n 0)) (set! n 1) (syntax-case #'(a) () ((x) n)))` gives
+  **1**, not `#&1`; the `with-syntax` twin gives **1**, not `#&1`; and
+  `(let ((f (lambda (y) (* y 2)))) (syntax-case #'(a) () ((x) (f 21))))` gives **42**, not "expected
+  a procedure, got `#&#<machine-closure>`". The `lambda` control still gives 1. The row's "pin it
+  before deletion" instruction is honoured rather than dropped: the `syntax-case` clause-body shape
+  was already pinned by `TestBoxedSlotNeverEscapesToScheme` ("an enclosing local read in a
+  syntax-case clause body arrives unboxed"), and this close adds the missing `with-syntax` row
+  beside it. That row earns its place on a specific argument, not on coverage — `with-syntax` is
+  correct only TRANSITIVELY, because `compileWithSyntax` desugars to `syntax-case`
+  (`pkg/machine/compilation/compile_with_syntax.go:71`, "Build: `(syntax-case (list expr ...) ()
+  ((pattern ...) (begin body ...)))`"), and nothing pinned that the desugared body's free-local read
+  is unboxed. Existing `with-syntax` coverage elsewhere (`syntax_case_frame_state_test.go` and
+  friends) pins slot liveness, not boxing.
+- [x] **A `begin-for-syntax` define is invisible to a later transformer** [Conformance, Done
+  2026-09-26, does not reproduce; **not** owned by the design]: `(begin-for-syntax (define (helper x)
+  x))` then `(define-syntax m (lambda (stx) (helper #'7)))` prints **7** at HEAD, and the
+  `define-for-syntax` variant prints **7**, both exit 0. Measured in FILE delivery, which is the
+  delivery this row's own 2026-09-14 correction named as the failing one.
 
-  **Corrected 2026-09-14, measured: this is a WITHIN-UNIT ORDERING defect, not a phase or scope
-  one, and the message names neither.** The same five lines pass across unit boundaries and fail
-  inside one unit:
+  That correction reclassified the defect as a WITHIN-UNIT ORDERING one rather than a phase or scope
+  one, and named the mechanism: `begin-for-syntax` was `expandUnchanged`, so its body ran only when
+  the COMPILER reached it, while `define-syntax` compiles and evaluates its transformer during the
+  EXPANDER's body scan; within one unit the transformer was therefore built before the preceding
+  `begin-for-syntax` had run. That half is fixed, so the correction's delivery table is stale in its
+  second row and is not carried forward — file delivery now answers `7`, the same as one form per
+  REPL unit. `primitive_expanders_registry.go:52` reads
+  `{"begin-for-syntax", (*ExpanderTimeContinuation).expandBeginForSyntax}`: the expander runs the
+  compile-time half when it expands the form, and the compiler no longer runs it a second time.
+  Guarded by `pkg/wile/phase1_definition_within_unit_test.go`, written RED on `fcf7b99c` — three
+  tests, including a library-body delivery and a runs-once-per-unit guard.
 
-  | Delivery | Result |
-  |---|---|
-  | one form per REPL unit (piped to `./dist/wile`) | `7` |
-  | the identical text in a file (one `(begin …)` unit) | `no such binding "helper" with compatible scopes at phase 1` |
-
-  `begin-for-syntax` is `expandUnchanged` at expand time (`primitive_expanders_registry.go:52`)
-  and runs its body only when the COMPILER reaches it, while `define-syntax` compiles and
-  evaluates its transformer during the EXPANDER's body scan. So within one unit the transformer
-  is built before the preceding `begin-for-syntax` has run, and `helper` does not exist yet.
-  Across units the compile of unit 1 completes first and it resolves.
-
-  "with compatible scopes" is a misdiagnosis the diagnostic invites: instrumented at the raise,
-  a repeat lookup under `syntax.AllScopes()` also misses (`anyScopeHit=false`), so no scope set
-  would have found it. The scoped arm is simply the last one tried. Whatever fixes the ordering
-  should also stop that arm reporting a scope refusal when the name is absent outright.
+  The row's diagnostic residual is NOT closed with it. It is lifted to its own row below.
+- [ ] **A phase-1 lookup for an absent name reports a scope refusal** [Diagnostics, S, owned by the
+  **provenance wave**; lifted 2026-09-26 out of the `begin-for-syntax` row above, whose ordering half
+  is fixed and whose diagnostic half is not]: "with compatible scopes" is a misdiagnosis the
+  diagnostic invites. Instrumented at the raise, a repeat lookup under `syntax.AllScopes()` also
+  missed (`anyScopeHit=false`), so no scope set would have found it; the scoped arm is simply the
+  last one tried. The wording is unchanged and still fires on a name that is absent outright —
+  measured at HEAD, `(define-syntax m (lambda (stx) (totallyabsenthelper #'7)))` gives
+  `no such binding "totallyabsenthelper" with compatible scopes at phase 1 of this unit's macro
+  tower`. That arm should stop reporting a scope refusal when no binding of that name exists at the
+  phase at all.
 - [x] **A `define-syntax` at phase > 0 is unusable from every rung** [Conformance, Done
-  2026-09-13, `2e1e55c2`]: the keyword twin of the item above. `executeFormsAtCompileTime`
-  (`compile_helpers.go`, shared by `begin-for-syntax` and compile-time `eval-when`) and
+  2026-09-13, `2e1e55c2`]: the keyword twin of the `begin-for-syntax`-define item.
+  `executeFormsAtCompileTime` (`compile_helpers.go`, shared by `begin-for-syntax` and
+  compile-time `eval-when`) and
   `CompileDefineForSyntax` compiled the body against `p.env.NextPhase()` but rooted the expander
   at `p.env`, so a `define-syntax` in the body deposited at N+2 while lookup read N+1: off by
   one rung at every rung. Both sites now root the expander at `expandEnv`, as
@@ -1732,7 +1759,8 @@ phases, not with point fixes, except 5.2 which is the P0 prerequisite.
   load-bearing. Enclosing-phase macros still resolve through `lookupMacroBinding`'s ambient arm.
   Pinned by `pkg/wile/phase1_define_syntax_reach_test.go` (five rows, plus a guard that a phase-1
   keyword stays invisible at phase 0: the fix lifts the deposit, it does not flatten the tower).
-  The `begin-for-syntax`-define item above is a **different mechanism** and stays open.
+  The `begin-for-syntax`-define item above is a **different mechanism**; it was open when this one
+  closed and was itself closed 2026-09-26 as non-reproducing.
 
 ### Reader residuals of the 2026-07-31 `#` dispatch rework
 

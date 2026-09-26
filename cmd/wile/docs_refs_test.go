@@ -406,6 +406,15 @@ var correctedDocClaims = []correctedDocClaim{
 			"importConflicts compares *OriginRef and nothing else. What PR #793 rejected was a " +
 			"SOURCE-LOCATION origin, a different signal.",
 	},
+	{
+		name:  "TODO_compileTransformerToMachineClosure",
+		doc:   "TODO.md",
+		stale: "`compileTransformerToMachineClosure`",
+		why: "Absent from every .go file. The live symbol is compileTransformerValue " +
+			"(pkg/machine/compilation/compile_transformer.go:60), which expands and evaluates the " +
+			"right-hand side instead of switching on its head symbol — measured 2026-09-26: the " +
+			"macro-produced transformer, let-syntax and letrec-syntax shapes print 1, 42 and 43.",
+	},
 }
 
 // resolveRef turns a reference as written in doc into a repo-relative path.
