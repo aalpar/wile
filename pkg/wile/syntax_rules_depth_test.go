@@ -166,14 +166,16 @@ func TestSyntaxRules_TemplateEllipsisDepth_NoFalsePositives(t *testing.T) {
 			src:  "(define-syntax m (syntax-rules () ((_ (a ...) ...) (list (list a ...) ...)))) (m (1 2) (3 4 5))",
 			want: "((1 2) (3 4 5))",
 		},
-		{
-			// A constant sub-template followed by `...` has no pattern variable
-			// to drive iteration; R7RS §4.3.2 specifies repeating it zero times
-			// (dropping it), so this is NOT a depth error — it yields `()`.
-			name: "constant template followed by ellipsis (no pattern vars)",
-			src:  "(define-syntax m (syntax-rules () ((_ a ...) (list (quote z) ...)))) (m 1 2 3)",
-			want: "()",
-		},
+		// REMOVED: "constant template followed by ellipsis (no pattern vars)",
+		// which pinned `(define-syntax m (syntax-rules () ((_ a ...) (list (quote z)
+		// ...)))) (m 1 2 3)` to "()" on the reading that R7RS §4.3.2 specifies
+		// repeating a driverless sub-template zero times. That reading is refuted:
+		// §4.3.2 states only the ∀ direction (every driver must be deep enough) and
+		// is silent on the ∃ direction, and both reference implementations resolve
+		// the silence by refusing — petite "extra ellipsis in syntax form", racket
+		// "no pattern variables before ellipsis in template". The case is a true
+		// positive, not a false one, so it moved to
+		// TestI149_ConstantSubtemplateFollowedByEllipsisIsRefused below.
 		{
 			// Custom ellipsis identifier on the valid (matching-depth) path.
 			name: "custom ellipsis, depth 1 used at depth 1",

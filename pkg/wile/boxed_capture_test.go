@@ -313,6 +313,20 @@ func TestBoxedSlotNeverEscapesToScheme(t *testing.T) {
 			opts: []EngineOption{WithGoSyntaxForms()},
 		},
 		{
+			// The with-syntax twin of the row above, and the reason it is here
+			// rather than left to coverage: with-syntax is correct only
+			// TRANSITIVELY. compileWithSyntax builds "(syntax-case (list expr
+			// ...) () ((pattern ...) (begin body ...)))" (compile_with_syntax.go)
+			// and nothing pinned that the desugared body's free-local read is
+			// unboxed — the other with-syntax fixtures in the tree pin slot
+			// liveness, not boxing. This is the exact program the 2026-09-04
+			// filing predicted would answer #&1; it answers 1.
+			name: "an enclosing local read in a with-syntax body arrives unboxed",
+			code: `(let ((n 0)) (set! n 1) (with-syntax ((x (syntax a))) n))`,
+			want: "1",
+			opts: []EngineOption{WithGoSyntaxForms()},
+		},
+		{
 			// The shape it was reported as: the transformer's own input is the
 			// datum->syntax context, and it arrived as a #<box>, so datum->syntax
 			// refused it as "not an identifier, syntax object, or #f".

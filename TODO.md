@@ -433,10 +433,26 @@ defect at HEAD whether or not Tier 2 is ever built.
   it once. Both `compileDefineSyntaxFromSyntax` and `CompileDefineSyntax` run it, so a transformer
   with a side effect fires twice per definition. Observable, and it makes any
   compile-time-state reasoning arithmetically wrong by a factor of two.
-- [ ] **`er-macro-transformer` inside a `let` sees `#<void>` for the `let`'s own locals**
-  [Correctness, S]: `(let ((c 0)) (define-syntax m (er-macro-transformer (lambda (x r c*) … c …))))`
-  reads `c` as `#<void>`. `CompileERMacroTransformerExpr` evaluates the lambda before the `let`'s
-  locals exist.
+- [x] **`er-macro-transformer` inside a `let`** [INVERTED — the filed behaviour does not reproduce;
+  measured and pinned 2026-09-26]: this row claimed such a transformer body reads the `let`'s own
+  local as `#<void>`, and blamed `CompileERMacroTransformerExpr` for evaluating the lambda before
+  the locals exist. **There is no `#<void>` anywhere.** `(let ((c 0)) (define-syntax m
+  (er-macro-transformer (lambda (x r c*) c))) (m))` refuses, exit 1, `errors.Is(err,
+  werr.ErrNoSuchBinding)`, naming `c`; adding `(define-for-syntax c 99)` above the `let` answers 99,
+  exit 0. The refusal is the correct hygiene answer — `c` is a phase-0 runtime binding and the
+  transformer body runs at phase 1 — and Racket agrees, erroring on the same shape with "c:
+  undefined; cannot reference an identifier before its definition". So acting on this row as filed
+  would have replaced a correct refusal with a silent wrong answer: a hygiene regression that no
+  gate in the tree would have caught. `pkg/wile/er_macro_let_local_test.go` now pins both halves
+  (the sentinel plus `no such binding "c"`, and the `define-for-syntax` escape hatch at 99). It is
+  green the day it is written and is **not** a ratchet; its reason for existing is this row. Two
+  things it deliberately does not assert, because the provenance wave rewrites both and a pin that
+  breaks when a diagnostic improves invites its own deletion: the rendered wrap chain (nine
+  `failed to …` links) and the `line:col` offset. That makes the pin **not** independent of the
+  provenance work — its second assertion is coupled to the message text even in this narrowed form
+  — so a change that stops naming the offending identifier lands there as a deliberate edit.
+  `TestUnboundDiagnosticNamesThePhase` and `TestPhase1_ProceduralTransformerUnboundWithoutImport`
+  already pin the same mechanism for a *top-level* binder; only the let-local shape was uncovered.
 - [ ] **`define-for-syntax` binds under the empty scope set** [Correctness / hygiene, S]:
   `runDefineForSyntax` writes with ∅ scopes, so the binding is not hygienic and a same-named
   use-site identifier reaches it. Same family as the scope-keyed-global work already shipped.
@@ -448,11 +464,28 @@ defect at HEAD whether or not Tier 2 is ever built.
   (`compile_transformer.go:68`), so `WithInlineThreshold` and `WithMaxExpandDepth` do not reach
   transformer compilation. An embedder's expansion-depth cap is therefore not honoured on exactly
   the path that can run away — see the cubic-cost entry above.
-- [ ] **Go map-range order decides export-map slot numbering and conflict-report order**
-  [Phase / determinism, M]: `CopyLibraryBindingsToEnvAtPhase` / `copyLibraryBindingsDirect` iterate
-  a Go map, so slot numbers and the order of a conflict diagnostic vary run to run. A determinism
-  leak of exactly the kind the project's own concurrency orientation names: it is not routed
-  through a seed, so it cannot be reproduced from one. Named a Stage C blocker in the plan.
+- [x] **Go map-range order decides export-map slot numbering and conflict-report order**
+  [Phase / determinism, M, Done]: `CopyLibraryBindingsToEnvAtPhase` / `copyLibraryBindingsDirect`
+  iterated a Go map, so slot numbers and the identifier a conflict diagnostic named varied run to
+  run. A determinism leak of exactly the kind the project's own concurrency orientation names: not
+  routed through a seed, so not reproducible from one. Both loops now walk `sortedExportKeys`
+  (`library_registry.go`), ordered **phase before name** — a name exported at two phases denotes two
+  bindings, and grouping a library's phase-0 installs ahead of its phase-1 ones keeps the install
+  order the phase-shift arithmetic assumes. Measured: 20 fresh engines importing two libraries that
+  export ten conflicting names named **9 distinct identifiers → 1** (`aa`, the lexicographic first),
+  pinned by `TestImportConflictNamesTheSameIdentifierEveryTime` (pkg/wile), red before the sort.
+  THIRD SITE DELIBERATELY NOT SORTED, so this does not get re-filed as an omission:
+  `stampLibraryExportOrigins` also ranges the export map, but its body is a nil-guarded idempotent
+  `UpdateMeta`, so map order is observable only if two of one library's export keys reach ONE
+  `*Binding` with different `exportRoot` answers. The base arm provably cannot differ (no
+  `RootPhase`); only the library-scoped arm can. Paid for with a measurement instead of a sort:
+  `TestExportRootIsOneAnswerPerBinding` (pkg/wile) sweeps every library the stdlib loads — 76
+  libraries, 2574 resolved export keys, 992 of them library-scoped — and asserts no two keys
+  resolve to one binding with unequal roots. Green with and without the sort, so it pins the
+  position rather than the fix; if it ever goes red, sort the third site. The sweep needs the
+  loaded stdlib, so it lives in pkg/wile and reaches the predicate through a new exported
+  `CompiledLibrary.ExportedBindingRoot`; an in-package test cannot load the stdlib, because
+  bootstrap imports compilation.
 - [ ] **`unquote` / `unsyntax` / `with-syntax` operands are never expanded** [Correctness, M]:
   `` `(1 ,(when #t 2)) `` fails. R7RS §4.2.8 requires the unquoted expression to be an ordinary
   expression, macro uses included. Found in the renamed-inner-positions review, noted in the
@@ -478,8 +511,41 @@ than decisions:
 - [ ] **No box (`#&`) arm in `%gen-match` / `%gen-template`** [Correctness, S]: a box pattern never
   binds and a box template stays a verbatim constant. The Go layer has
   `TestBoxInMacroTemplateAndPattern`; the Scheme layer has no twin.
-- [ ] **`%gen-ellipsis-map` raises on a constant subtemplate followed by `...`** [Correctness, S]:
-  the Go layer and Wile's reading of R7RS §4.3.2 both answer `()`.
+- [x] **`%gen-ellipsis-map` raises on a constant subtemplate followed by `...`** [Correctness, S,
+  Done]: the two layers now AGREE, by moving the Go layer rather than the Scheme one. The row's
+  premise — "the Go layer and Wile's reading of R7RS §4.3.2 both answer `()`" — was half right and
+  the reading was wrong. §4.3.2 states only the ∀ direction (every driver must be bound at least as
+  deep as the template ellipsis depth) and is silent on the ∃ direction; both reference
+  implementations resolve that silence by refusing — petite "extra ellipsis in syntax form", exit
+  255; racket "no pattern variables before ellipsis in template", exit 1; `racket -I r5rs` the
+  same. Two oracles agreeing where the spec is silent is this project's standard for taking their
+  answer, and Wile's Go layer was alone in answering `()`. `checkEllipsisGroupDriver` no longer
+  exempts the zero-variable case: a sub-template with no pattern variable of sufficient depth has no
+  driver whether it has zero variables or only shallow ones, and the zero case was never an
+  exemption.
+  TWO SITES, not the one the plan named. `syntax-case` does not route through
+  `checkEllipsisGroupDriver` at all — its template is walked at use, by
+  `expandSyntaxEllipsis` (`pkg/internal/match`), which had the same silent drop. Refusing only the
+  `syntax-rules` site leaves the `syntax-case` shape answering `()`. Note for P2: this puts the task
+  in TWO of the seven freeze-window packages, not one.
+  TWO SENTINELS, deliberately: `werr.ErrInvalidSyntax` from the compile path and `werr.ErrExpansion`
+  from the expansion path, each the dominant sentinel of its own package — `ErrExpansion` is what
+  the adjacent arms of `expandSyntaxEllipsis` already raise.
+  REFUSAL IS AT CONSTRUCTION for `syntax-rules`, so a bad definition is refused even when the macro
+  is never used, which is what petite does with a definition-only script. The plan's stated bootstrap
+  risk (one such template anywhere in `pkg/stdlib/lib` would break the image for every engine) was
+  measured and did not materialize: `go test ./...`, `test/run-all.sh` (all Scheme suites) and
+  `make test-examples` (56 passed, 2 skipped, 0 failed) are all green with the refusal in.
+  Pinned by `TestI149_ConstantSubtemplateFollowedByEllipsisIsRefused` (pkg/wile), four shapes, each
+  verified red with the two production edits reverted and green with them in. The fourth shape is
+  definition-only. The `constant template followed by ellipsis` row in
+  `syntax_rules_depth_test.go`'s no-false-positives table, which pinned `()` with a §4.3.2 rationale
+  comment, is removed there and inverted into that gate — it was a true positive, not a false one.
+  RESIDUAL, not this row's: the `syntax-case` refusal renders as the generic "syntax: template
+  expansion error" because `operation_syntax_case.go`'s `mc.WrapError` does not surface its cause's
+  message. The `Unwrap` edge is intact (`errors.Is` reaches `ErrExpansion`, which is what the gate
+  asserts), so this is a rendering gap affecting every syntax-case template error, not a lost chain.
+  Filed for the provenance wave rather than fixed here.
 - [ ] **Scheme layer instantiates phase 3 at startup where Go stops at phase 2** [Phase, S,
   undecided]: `TestStartupBindsNothingAtPhaseTwo` pins the Go layer only. Needs a decision, not a
   fix.
@@ -592,8 +658,7 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
 - [ ] Stale: `waitOnCondCtx` (`pkg/values/cond_wait.go`) and `LockContext`
   (`pkg/values/mutex.go`) say a terminated holder's lock stays held (`Thread.Terminate`
   abandons it); tutorial chapter 06 calls C_6 and 2·K_3 cospectral, chapter 05 lists a
-  nonexistent `(wile algebra field)`; `Makefile` `bench-gabriel-compare` names `ack`;
-  `kanren-benchmark.scm` prints no "Total time".
+  nonexistent `(wile algebra field)`; `Makefile` `bench-gabriel-compare` names `ack`.
 - [ ] `read-syntax` positions do not count characters `read-char` consumed between reads (needs
   port-owned position tracking).
 - [ ] `set-current-directory!` still has a check-then-`os.Chdir` window.
@@ -827,11 +892,13 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   records as refusing a legitimate prefixed re-export. `environment.SameBinding`
   (`pkg/environment/binding.go:489`) is the origin-based identity that answers it properly, and
   the reviewer measured that adding it flips exactly that one documented BOUNDARY row to the R7RS
-  answer with everything else green. Filed rather than applied because origin-based identity was
-  REJECTED for import-conflict detection (auto-memory `import-conflict-detection-shipped.md`) on a
-  failure with the opposite polarity — there it over-ACCEPTED distinct bindings as the same, here
-  it would under-accept nothing — so the rejection does not transfer and must be re-measured on
-  this consumer, not assumed either way.
+  answer with everything else green. Filed rather than applied only because nobody applied it; the
+  objection originally recorded here is dead. Provenance-root origin is what SHIPPED for
+  import-conflict detection (`5d654b3f`, auto-memory `import-conflict-detection-shipped.md`):
+  `importConflicts` (`pkg/machine/compilation/library_bindings.go`) compares `*OriginRef` and
+  nothing else. What PR #793 turned down was a SOURCE-LOCATION origin, which over-REJECTED by
+  false-flagging a legal define-over-import shadow — a failure a root comparison cannot have, since
+  `importConflicts` returns early on `!existing.IsImported()` and a define never enters one.
 
 - [ ] **`quasisyntax`'s `#,` reaches the same permissive disagreement this branch fixed for
   `quasiquote`, live on MASTER, by a different route** [Medium, M, filed 2026-09-15 during the
@@ -1431,16 +1498,23 @@ Correctness work that lived only inside plan files, invisible to a TODO scan.
 > **The load-order plan is dead (archived 2026-07-24).** Part II's motivation is discharged: the C6
 > capture is fixed by the bootstrap reorder (`1af62cd2`) plus the free-template-id-hygiene arc
 > (PR #814), and `TestBootstrapMacrosPinLateBoundReferents` is a CI ratchet reporting 0 capturable
-> nil pins — the regression guard Part II's cure would have provided. Part III is obsoleted as
-> written: origin-based identity was **rejected** for import conflict (PR #793) in favor of by-name
-> `sameImportedBinding`, so migrating all three sites onto `BindingID` would regress shipped
-> behavior. One narrow residual survives, below.
+> nil pins — the regression guard Part II's cure would have provided. Part III is obsoleted by
+> having been DONE under a different mechanism: all three sites it named compare provenance-root
+> origin today — `sameFreeIdentifier` (`pkg/registry/core/prim_syntax.go`) and `erBindingsEqual`
+> (`pkg/machine/compilation/er_macro_compare.go`) through `environment.SameBinding`, and import
+> conflict through `importConflicts` (`pkg/machine/compilation/library_bindings.go`, `5d654b3f`).
+> Nothing regressed. The value-identity type Part III proposed under that name was never built;
+> the `environment.BindingID` that does exist is an unrelated local-frame map key
+> (`{*LocalEnvironmentFrame, int}`) and cannot name an imported binding at all. One narrow
+> residual survives, below.
 
-- [~] **`free-identifier=?` and ER-compare were non-conformant on COMPLEMENTARY cases**
+- [x] **`free-identifier=?` and ER-compare were non-conformant on COMPLEMENTARY cases**
   [Correctness/conformance, M, verified 2026-07-24 vs Racket + Chez, low impact; **conformance FIXED**
-  (`70a34421` + `36e1d268`), Phase-2 consumers remain]: `free-identifier=?` compared bindings by
-  pointer, wrong on rename-aliases — two rename-imports of ONE binding answered "different" where
-  Racket and Chez say same. `erBindingsEqual` added a `BindingType()`+`Value()` fallback, wrong the
+  (`70a34421` + `36e1d268`); the checkbox closes the conformance defect, and the one Phase-2
+  consumer still open below (`,doc`) is tracked in its own right, not as unfinished work on this
+  defect]: `free-identifier=?` compared bindings by pointer, wrong on rename-aliases — two
+  rename-imports of ONE binding answered "different" where Racket and Chez say same.
+  `erBindingsEqual` added a `BindingType()`+`Value()` fallback, wrong the
   other way — two DISTINCT defines of the same value answered "same". **So pointing
   `free-identifier=?` at ER-compare was not the fix**; it swaps one wrong answer for the other.
   Neither pointer-eq nor value-eq is the correct notion. The conformant one is same binding
@@ -1453,12 +1527,12 @@ Correctness work that lived only inside plan files, invisible to a TODO scan.
   import had one. `stampLibraryExportOrigins` closes that by giving every library export its own
   self-root at library **finalization** — chosen over an import-side-effect stamp so Origin stays a
   pure function of the definition and imports never mutate library-internal state — and the value
-  fallback is deleted. Note the origin approach was rejected for import-*conflict* detection
-  (PR #793) because it false-flags a legal define-over-import shadow; that trade-off does **not**
-  transfer to identifier *equality*, where origin is the correct semantics. Design:
+  fallback is deleted. Import-*conflict* detection reached the same answer independently: PR #793
+  turned down a SOURCE-LOCATION origin there for false-flagging a legal define-over-import shadow,
+  and `5d654b3f` then shipped provenance-root origin, which cannot have that failure. Design:
   `plans/2026-07-24-free-identifier-origin-provenance-design.md` (model: "same binding" = same
   root in the provenance graph Wile already walks at import, then discards).
-  **Phase 2 — 1 of 3 shipped:**
+  **Phase 2 — 2 of 3 shipped:**
   - [x] `stampImportedInlineHOF` gates on `Origin.RootLib` [Done 2026-07-24, `9b2afa8c`]: fixed the
     latent re-export miss and a coupled miscompile, where inline dispatch keyed on the call-site
     name, so a curated HOF renamed onto another curated HOF's name inlined the wrong body. Dispatch
@@ -1480,13 +1554,16 @@ Correctness work that lived only inside plan files, invisible to a TODO scan.
     deliberately decoupled from `machine/compilation`. So the options are re-couple, inject a
     resolver into `environment`, or store a `*Binding` (rejected by D2). With no defect left
     motivating it, **re-justify before starting, or drop it.**
-  - [ ] Site 3 `sameImportedBinding` (`library_bindings.go`) still compares `*MachineClosure`/
-    `*ForeignClosure` by NAME with an `EqualTo` default. **Gated, not merely unstarted** — its own
-    doc comment frames the by-name conflation as a deliberate irreducible gap, and origin was
-    rejected here by PR #793 for false-flagging define-over-import. The gate is re-reading #793's
-    actual objection: an import-edge origin is a different signal than the source location it
-    rejected (a define-over-import shadow is a non-imported local with nil `Origin`, so it never
-    enters an import-vs-import root comparison) — a hypothesis to verify, not a claim.
+  - [x] Site 3, import-conflict detection [Done 2026-09-16, merge `5d654b3f`]: the by-name/`EqualTo`
+    comparison and the "irreducible gap" it documented are gone. `importConflicts`
+    (`pkg/machine/compilation/library_bindings.go`) compares provenance roots (`*OriginRef`) and
+    nothing else, matching Racket's "identifier already required" rule. The gate this row set — go
+    re-read PR #793's actual objection before adopting origin here — was discharged, and the
+    hypothesis it recorded held: #793 rejected a SOURCE LOCATION, a define-over-import shadow is a
+    non-imported local, and `importConflicts` returns early on `!existing.IsImported()`, so a
+    define never reaches a root comparison. `TestImportConflictDetectionByOrigin`
+    (`pkg/wile/engine_import_composition_test.go`) pins the three cases the gap named — same-named
+    procedures, same-named macros, equal constants — as conflicts, and a diamond as legal.
 ### Layered-environment carve regressions (review `d8911c15..b04c6d74`, 2026-06-15)
 
 Sealed-base carve + immutable-top-level-default arc. Two root patterns: own-frame `Keys()`
@@ -1601,11 +1678,21 @@ stay protected inside mutable children. Design:
   `(set! *schelog-use-occurs-check?* #t)`; without the occurs check the puzzle infinite-loops into
   the MCP timeout.
 
-### Macro-system defects found 2026-09-04, owned by the Scheme-specified syntax forms design
+### Macro-system defects found 2026-09-04
 
-All reproduced on v1.20.0 (`8ef4c75b`). Owner for the first four:
-`plans/2026-09-04-scheme-specified-syntax-forms-design.md` §5; they close with its
-phases, not with point fixes, except 5.2 which is the P0 prerequisite.
+All five reproduced on v1.20.0 (`8ef4c75b`); three no longer reproduce and were closed 2026-09-26,
+so neither the blanket reproduction claim nor the blanket owner survives. Three rows are open here
+and they do not share an owner.
+
+The ER-scope-stripping row (§5.1) and the lone-identifier row (§5.3) are owned by
+`plans/2026-09-04-scheme-specified-syntax-forms-design.md` §5 and close with its phases, not with
+point fixes. Both were re-measured at HEAD on 2026-09-26 and both still reproduce exactly as filed:
+the ER program returns 2 where its `syntax-rules` twin returns 11, and
+`(syntax-case #'foo () (x #'1))` still fails "pattern must be a list".
+
+The third is the phase-1 scope-refusal wording, owned by the **provenance wave** rather than by that
+design. It was lifted out of the `begin-for-syntax` row below, whose ordering half was fixed
+2026-09-14 and whose diagnostic half was not.
 
 - [ ] **ER macros strip scopes from pass-through identifiers** [Correctness / hygiene, S, design §5.1]:
   `invokeERTransformer` (`expander_time_continuation.go`) calls `UnwrapAll` on the input and re-wraps
@@ -1615,54 +1702,71 @@ phases, not with point fixes, except 5.2 which is the P0 prerequisite.
   `(let ((tmp 10)) (via-er tmp))` returns **2**; the `syntax-rules` twin returns 11. The comment at
   the site calls the asymmetry deliberate; the capture it causes was not on record. Dies with the shim
   when ER is derived from `syntax-case` (design §3.5).
-- [ ] **`define-syntax` dispatches on the transformer's head symbol** [Conformance, S, design §5.2,
-  **P0 prerequisite**]: `compileTransformerToMachineClosure` (`compile_transformer.go`) switches on
-  `syntax-rules` / `lambda` / `er-macro-transformer` and never expands the right-hand side, so a macro
-  that expands to a transformer is refused: `(define-syntax my-er (syntax-rules () ((_ p) (lambda (stx)
-  (p stx)))))` then `(define-syntax m (my-er (lambda (stx) #'1)))` fails with "unsupported transformer
-  type". R6RS requires an expression evaluated at the next phase. Same for `let-syntax`/`letrec-syntax`.
+- [x] **`define-syntax` dispatches on the transformer's head symbol** [Conformance, Done 2026-09-26,
+  does not reproduce]: filed as design §5.2 and as the P0 prerequisite. The symbol the row named
+  exists in no `.go` file; the live one is `compileTransformerValue`
+  (`pkg/machine/compilation/compile_transformer.go:60`), which expands and evaluates the right-hand
+  side as an expression one phase above `env`, as R6RS requires, instead of switching on its head
+  symbol; its own doc comment records the replacement and cites §5.2. Measured at HEAD: the
+  macro-produced transformer `(define-syntax my-er (syntax-rules () ((_ p) (lambda (stx) (p stx)))))` then
+  `(define-syntax m (my-er (lambda (stx) #'1)))` prints **1**, the `let-syntax` half **42** and the
+  `letrec-syntax` half **43**, all exit 0. Not tabled work and not a P0 prerequisite still open: the
+  behaviour is pinned in default CI by `TestP01_TransformerIsAnExpression`
+  (`pkg/wile/syntax_forms_p0_test.go:104`, six rows) and
+  `TestP01_SelfReferencePinsThroughMacroProducedTransformer` (:178), whose harness `evalSyntaxForms`
+  (:34) builds a plain `WithProfile(KitchenSink)` engine, so they run on the default (Go) layer
+  wherever `WILE_SYNTAX_FORMS` is unset, which is the case in CI.
 - [ ] **`syntax-case` rejects a lone-identifier pattern** [Conformance, XS, design §5.3]:
   `(syntax-case stx () (x #'1))` fails "pattern must be a list" (`match.CompileSyntaxPattern`). R6RS
   §12.4 allows any pattern. Dies with the Go `syntax-case`.
-- [ ] **Every free local referenced from a `syntax-case` or `with-syntax` body arrives boxed**
-  [Correctness, S, design §5.4]: `(let ((n 0)) (set! n 1) (syntax-case #'(a) () ((x) n)))` returns
-  `#&1`, the box; the same under `with-syntax` returns `#&1`; the same inside a plain `lambda` returns
-  `1`. An unassigned local procedure called from a clause body raises "expected a procedure, got
-  `#&#<machine-closure>`", so today's `syntax-case` cannot use a local helper at all, and no test
-  caught it. The clause-body compile path in `compile_syntax_case.go` / `compile_with_syntax.go`, not
-  the flat-closure boxing pass (the `lambda` control is fine). Dies with those files; pin it before
-  deletion so a general boxing regression cannot hide behind the rewrite.
-- [ ] **A `begin-for-syntax` define is invisible to a later transformer** [Conformance, M, **not**
-  owned by the design]: `(begin-for-syntax (define (helper x) x))` then `(define-syntax m (lambda (stx)
-  (helper #'7)))` fails "no such binding helper". The Tier 1 note above (2026-07-29, `lookupMacroBinding`
-  arm 1) says `begin-for-syntax` / `define-for-syntax` / `eval-when` "deliberately root the expander at
-  `p.env`"; that describes the lookup arms, not a decision that user-level phase-1 definitions should be
-  invisible to transformers, which is what R6RS §7 and Racket give. No stdlib file uses these forms
-  (Q1 of the phase-hermeticity item), so the gap has no in-tree consumer. Design §5.5 does not need it:
-  its helpers live in the sealed base.
+- [x] **Every free local referenced from a `syntax-case` or `with-syntax` body arrives boxed**
+  [Correctness, Done 2026-09-26, does not reproduce]: filed as design §5.4. All three shapes the row
+  predicted are unboxed at HEAD. `(let ((n 0)) (set! n 1) (syntax-case #'(a) () ((x) n)))` gives
+  **1**, not `#&1`; the `with-syntax` twin gives **1**, not `#&1`; and
+  `(let ((f (lambda (y) (* y 2)))) (syntax-case #'(a) () ((x) (f 21))))` gives **42**, not "expected
+  a procedure, got `#&#<machine-closure>`". The `lambda` control still gives 1. The row's "pin it
+  before deletion" instruction is honoured rather than dropped: the `syntax-case` clause-body shape
+  was already pinned by `TestBoxedSlotNeverEscapesToScheme` ("an enclosing local read in a
+  syntax-case clause body arrives unboxed"), and this close adds the missing `with-syntax` row
+  beside it. That row earns its place on a specific argument, not on coverage — `with-syntax` is
+  correct only TRANSITIVELY, because `compileWithSyntax` desugars to `syntax-case`
+  (`pkg/machine/compilation/compile_with_syntax.go:71`, "Build: `(syntax-case (list expr ...) ()
+  ((pattern ...) (begin body ...)))`"), and nothing pinned that the desugared body's free-local read
+  is unboxed. Existing `with-syntax` coverage elsewhere (`syntax_case_frame_state_test.go` and
+  friends) pins slot liveness, not boxing.
+- [x] **A `begin-for-syntax` define is invisible to a later transformer** [Conformance, Done
+  2026-09-26, does not reproduce; **not** owned by the design]: `(begin-for-syntax (define (helper x)
+  x))` then `(define-syntax m (lambda (stx) (helper #'7)))` prints **7** at HEAD, and the
+  `define-for-syntax` variant prints **7**, both exit 0. Measured in FILE delivery, which is the
+  delivery this row's own 2026-09-14 correction named as the failing one.
 
-  **Corrected 2026-09-14, measured: this is a WITHIN-UNIT ORDERING defect, not a phase or scope
-  one, and the message names neither.** The same five lines pass across unit boundaries and fail
-  inside one unit:
+  That correction reclassified the defect as a WITHIN-UNIT ORDERING one rather than a phase or scope
+  one, and named the mechanism: `begin-for-syntax` was `expandUnchanged`, so its body ran only when
+  the COMPILER reached it, while `define-syntax` compiles and evaluates its transformer during the
+  EXPANDER's body scan; within one unit the transformer was therefore built before the preceding
+  `begin-for-syntax` had run. That half is fixed, so the correction's delivery table is stale in its
+  second row and is not carried forward — file delivery now answers `7`, the same as one form per
+  REPL unit. `primitive_expanders_registry.go:52` reads
+  `{"begin-for-syntax", (*ExpanderTimeContinuation).expandBeginForSyntax}`: the expander runs the
+  compile-time half when it expands the form, and the compiler no longer runs it a second time.
+  Guarded by `pkg/wile/phase1_definition_within_unit_test.go`, written RED on `fcf7b99c` — three
+  tests, including a library-body delivery and a runs-once-per-unit guard.
 
-  | Delivery | Result |
-  |---|---|
-  | one form per REPL unit (piped to `./dist/wile`) | `7` |
-  | the identical text in a file (one `(begin …)` unit) | `no such binding "helper" with compatible scopes at phase 1` |
-
-  `begin-for-syntax` is `expandUnchanged` at expand time (`primitive_expanders_registry.go:52`)
-  and runs its body only when the COMPILER reaches it, while `define-syntax` compiles and
-  evaluates its transformer during the EXPANDER's body scan. So within one unit the transformer
-  is built before the preceding `begin-for-syntax` has run, and `helper` does not exist yet.
-  Across units the compile of unit 1 completes first and it resolves.
-
-  "with compatible scopes" is a misdiagnosis the diagnostic invites: instrumented at the raise,
-  a repeat lookup under `syntax.AllScopes()` also misses (`anyScopeHit=false`), so no scope set
-  would have found it. The scoped arm is simply the last one tried. Whatever fixes the ordering
-  should also stop that arm reporting a scope refusal when the name is absent outright.
+  The row's diagnostic residual is NOT closed with it. It is lifted to its own row below.
+- [ ] **A phase-1 lookup for an absent name reports a scope refusal** [Diagnostics, S, owned by the
+  **provenance wave**; lifted 2026-09-26 out of the `begin-for-syntax` row above, whose ordering half
+  is fixed and whose diagnostic half is not]: "with compatible scopes" is a misdiagnosis the
+  diagnostic invites. Instrumented at the raise, a repeat lookup under `syntax.AllScopes()` also
+  missed (`anyScopeHit=false`), so no scope set would have found it; the scoped arm is simply the
+  last one tried. The wording is unchanged and still fires on a name that is absent outright —
+  measured at HEAD, `(define-syntax m (lambda (stx) (totallyabsenthelper #'7)))` gives
+  `no such binding "totallyabsenthelper" with compatible scopes at phase 1 of this unit's macro
+  tower`. That arm should stop reporting a scope refusal when no binding of that name exists at the
+  phase at all.
 - [x] **A `define-syntax` at phase > 0 is unusable from every rung** [Conformance, Done
-  2026-09-13, `2e1e55c2`]: the keyword twin of the item above. `executeFormsAtCompileTime`
-  (`compile_helpers.go`, shared by `begin-for-syntax` and compile-time `eval-when`) and
+  2026-09-13, `2e1e55c2`]: the keyword twin of the `begin-for-syntax`-define item.
+  `executeFormsAtCompileTime` (`compile_helpers.go`, shared by `begin-for-syntax` and
+  compile-time `eval-when`) and
   `CompileDefineForSyntax` compiled the body against `p.env.NextPhase()` but rooted the expander
   at `p.env`, so a `define-syntax` in the body deposited at N+2 while lookup read N+1: off by
   one rung at every rung. Both sites now root the expander at `expandEnv`, as
@@ -1670,7 +1774,8 @@ phases, not with point fixes, except 5.2 which is the P0 prerequisite.
   load-bearing. Enclosing-phase macros still resolve through `lookupMacroBinding`'s ambient arm.
   Pinned by `pkg/wile/phase1_define_syntax_reach_test.go` (five rows, plus a guard that a phase-1
   keyword stays invisible at phase 0: the fix lifts the deposit, it does not flatten the tower).
-  The `begin-for-syntax`-define item above is a **different mechanism** and stays open.
+  The `begin-for-syntax`-define item above is a **different mechanism**; it was open when this one
+  closed and was itself closed 2026-09-26 as non-reproducing.
 
 ### Reader residuals of the 2026-07-31 `#` dispatch rework
 
@@ -2463,7 +2568,7 @@ The embedding experience that differentiates Wile.
 - [ ] **A port carries no name, so everything `read` produces is file-less** [Embedding/provenance, S–M, filed 2026-08-24]: `PrimRead` and `PrimReadSyntax` (`pkg/extensions/io/prim_read_write.go:222,286`) build their parser with `parser.NewParser`, not `NewParserWithFile`, because `values.PortObject` has nothing to hand it — `portBase` is `closed`/`clsr`/`kind`/`datum` and no factory records where the stream came from. Two consequences, and the first predates the second by a long way: **every syntax object a successful `(read p)` returns has `SourceContext.File == ""`**, even from `(open-input-file "f.scm")`, so a program that reads forms and evaluates them gets diagnostics with no file; and a read *error* now reports `2:9` where it should report `f.scm:2:9` (the position half was fixed by the Tier-1 `ParserError` fallback above, and `TestReadErrorReportsPortPositionNotTheReadCall` pins the file-less form as the current answer, so closing this item means updating that assertion on purpose). Fix is a name on `PortObject` threaded from the file-opening factories into both `mkParser` closures; a string or bytevector port has no name and correctly stays `""`. **Decide first:** whether the name is the resolved path or the argument as written (`include`/`load` use the resolver's resolved path — match them), and whether `(read (current-input-port))` names stdin or nothing.
 - [ ] **Low-level file predicate reporting *why* a stat failed** [Embedding, POSTPONED 2026-08-11]: Companion to Wave 4 item 6, which makes `file-exists?` answer `#f` for permission errors — authorizer denial and OS `EACCES`/`EPERM` alike — so "absent" and "not allowed to look" become deliberately indistinguishable at that layer (R7RS §6.14 gives the predicate a boolean and no error clause, and the indistinguishability is the confidentiality property Wave 2 item 9c buys elsewhere). An embedder that needs the reason has no way to ask. **Name, signature, error vocabulary and authorizer gating are all UNDETERMINED; design and implementation are both postponed.** Item 6 ships without it and must not block on it. Note the tension to resolve when it is designed: a call that distinguishes denial from absence hands back exactly the oracle item 6 removed, so it needs its own gate — probably a distinct `Action`, not `ActionStat`. See `memory/2026-08-07-review-wave4-embedder-contracts-design.md` §6 for the decided arm table.
 - [ ] **Go FFI Phase 3 — Plugin support** [Embedding]: Dynamic extension loading via registry pattern.
-- [ ] **MCP triggering rewrite (Lever A)** [Embedding, Text-only]: Rewrite `cmd/wile/mcp.go` `WithInstructions`, 9 tool descriptions, and `prompts/wile-scheme.md` to trigger LLM tool use on algebra/modular/polynomial domains. Correct misleading `libraries` description (currently claims "loaded only" but tool returns full catalog). Validation via `algebra-accuracy` benchmark: closes `powerset_lattice` regression. No code logic changes. `memory/2026-04-18-mcp-triggering-rewrite.md`
+- [x] **MCP triggering rewrite (Lever A)** [Superseded 2026-06-05, never implemented — verified 2026-09-26]: **SUPERSEDED, not shipped.** The rewrite this row asks for (`cmd/wile/mcp.go` `WithInstructions`, 9 tool descriptions, and `cmd/wile/prompts/wile-scheme.md` retargeted at algebra/modular/polynomial domains) was never done, and a reader who takes `- [x]` for "the work landed" will be wrong. It is closed because the arc was abandoned before any code: the archive banner in `memory/2026-04-18-mcp-triggering-rewrite.md` records it "superseded before any code" by the MCP LLM-support design, whose open questions absorbed it (that design is the "MCP LLM support / SOTA server" row further down this tier, under the 2026-07-21 `plans/` sweep, which stays open and now records the supersession). And `wile --mcp` was deprecated in favour of wile-goast's MCP server (user, 2026-07-09), so MCP feature work does not land here any more and nothing will re-open this row from that direction. Three of the row's own claims no longer hold. (1) Its one concrete code claim is already done and by an unrelated commit: `cmd/wile/mcp.go:240-242` reads "List the Scheme libraries currently loaded in the session, then the libraries discoverable but not yet imported…", so the tool no longer "claims loaded only" — `ea1ffd68` ("docs(comments): correct ~250 inaccurate comments across the tree") is what changed it. (2) The exit criterion is unfalsifiable: there is no `algebra-accuracy` benchmark anywhere in the tree (`grep -rl algebra-accuracy` hits this file and nothing else), and `powerset_lattice` exists only as `validate_powerset_lattice` in `tools/sage/verify_algebra.sage:287` — a Sage cross-validator, not a benchmark that could close a regression. (3) The archive banner's own citation is stale: it names a `.local.md` path that does not exist, where the file is `plans/2026-06-05-mcp-llm-support-design.md`. Systemic, and deliberately left ungated: an archive banner can cite a plan that has since been renamed and nothing in CI will ever notice, because `plans/` and `memory/` are gitignored, so neither side of the reference resolves in a clone. The row's other two targets are NOT stale — `grep -c 'mcp.NewTool(' cmd/wile/mcp.go` is 9 and `cmd/wile/prompts/wile-scheme.md` exists; the row's path is relative to `cmd/wile/`. `memory/2026-04-18-mcp-triggering-rewrite.md`
 
 ### Algebra & Analytics Roadmap
 
@@ -2486,7 +2591,7 @@ Directions documents — identify prioritized capability extensions. Priority se
 
 - [x] **`(wile algebra matching)` library** [Algebra, Matching, Done]: Two-sided matching per Roth & Sotomayor (1990). Gale-Shapley deferred acceptance (proposer + receiver optimal), hospital/intern many-to-one via Roth's reduction, Conway distributive lattice on stable matchings via Birkhoff (load-tests §5.5), Irving rotations enumeration, egalitarian + sex-equal selectors. Many-to-many (Kelso-Crawford) deferred to follow-up gated on §5.7 matroids (`plans/2026-05-02-algebra-matching-many-to-many.md`). `memory/2026-05-02-algebra-matching-design.md`, `memory/2026-05-02-algebra-matching-impl.md`.
 - [x] **§4.2 Tropical permanent / Hungarian primitive** [Algebra, Matching, Done]: `tropical-assignment` shipped in `(wile algebra matching)` — Kuhn-Munkres O(n³) Jonker-Volgenant 1987 form. Returns `(matching . cost)`. Forbidden pairs via `+inf.0`. Unequal sides via padding. Sanity-checked on a 4×4 textbook fixture against brute-force optimum.
-- [ ] **§4.2 Maximum common subgraph** [Algebra, Matching]: True code clone detection — bipartite matching between candidate node pairs, branch-and-bound with assignment relaxation. Overlaps §5.6 combinatorial-graph. `plans/2026-04-17-algebra-foundations-directions.md` §4.2.
+- [x] **§4.2 Maximum common subgraph** [Algebra, Matching, Done — verified end to end 2026-09-26]: shipped in `pkg/stdlib/lib/wile/algebra/combinatorial-graph.scm`, exported as `graph-maximum-common-subgraph` at `combinatorial-graph.sld:27`. Repro: `(import (wile algebra combinatorial-graph)) (write (graph-maximum-common-subgraph (cycle-graph 4) (cycle-graph 4)))` → `((0 . 0) (1 . 1) (2 . 2) (3 . 3))`, exit 0. The row's clone-detection motivation is delivered too, by the `(compatible? . PROC)` option that gates which vertex pairs may match on label equality (`combinatorial-graph.scm:1862`, documented under "Isomorphism" in `docs/algebra/reference.md`). One ranking correction, since the row reads as if bipartite matching were the search: it is the **bound**. The search is McGregor (1982) MCCIS branch-and-bound, with a bipartite-matching (assignment) relaxation supplying the bound — the implementation's own header says exactly that at `combinatorial-graph.scm:1800-1802`, and `compatible?` tightens the bound as well as filtering. No new assertion added: `test/wile/algebra-combinatorial-graph-test.scm` already carries 13 `graph-maximum-common-subgraph` assertions including the `disconnected?` and empty-graph edge cases, so anything written here would be green on arrival. Overlaps §5.6 combinatorial-graph. `plans/2026-04-17-algebra-foundations-directions.md` §4.2.
 
 #### Tier C — §5.7 lower priority
 
@@ -2551,8 +2656,10 @@ rather than split across tiers.
   the code. `plans/2026-07-11-chibi-derived-ergonomics-backlog.md` #5.
 - [ ] **MCP LLM support / SOTA server** [Tooling, phased]: LLM-support phases
   (`plans/2026-06-05-mcp-llm-support-design.md`, Phase 1 impl-ready) and the bring-to-SOTA
-  design (`plans/2026-04-17-mcp-server-sota-design.md`). Distinct from the "MCP triggering
-  rewrite (Lever A)" item in Tier 2 above.
+  design (`plans/2026-04-17-mcp-server-sota-design.md`). **Supersedes**, rather than sits beside,
+  the "MCP triggering rewrite (Lever A)" item closed above: that item's archive banner names the
+  Phase 1 design here as what absorbed its open questions before any of its code was written, so
+  "distinct from" — what this sentence asserted until 2026-09-26 — had it backwards.
 - [ ] **Copilot-review data mining** [Tooling, not-started]: mine Copilot PR-review data (Tier 2
   target; Tiers 3–4 gated on Tier 2). `plans/2026-04-20-copilot-review-data-mining.md`.
 - [ ] **All-executed-code coverage tracking** [Tooling, queued]: extend Scheme coverage beyond
@@ -2621,19 +2728,58 @@ callback specialization B, jump-table dispatch, Stage-B phase folding all stay c
   `2026-06-18-frame-reclaim-precision-coverage.md` Open Q-A1]: only non-tail callees need be
   non-capturing; `pkg/internal/validate/frame_reclaim.go:140-144` calls this "a documented later
   refinement".
-- [ ] **Suppress promoted-op fusion on `Stable` bindings** [Performance / correctness margin, S,
-  from `2026-06-26-promoted-primitive-inline-registry.md` Q3]: the guard is dead code under the
-  default immutable top level, so today this is a latent hazard for a mutable-top-level engine
-  rather than a speed item. No `IsStable` reference in `pkg/machine/peephole.go`.
+- [x] **Suppress promoted-op fusion on `Stable` bindings** [Performance / correctness margin, S,
+  from `2026-06-26-promoted-primitive-inline-registry.md` Q3, **refuted and closed 2026-09-26**]:
+  the row read "no `IsStable` reference in `pkg/machine/peephole.go`" — still true — and concluded
+  that the absent suppression is a latent hazard for a mutable-top-level engine. It is not, because
+  the identity check is at **dispatch**, not at compile time. `execPromoted`
+  (`pkg/machine/call_promoted.go:360-365`) re-reads
+  `mc.template.cachedBindings[instr.Arg].Value()` on every execution and returns
+  `callPromotedFallback` the moment it is not the `*ForeignClosure` the op was promoted for.
+  Measured 2026-09-26 in the REPL, the only delivery mode where the mutation is permitted at all
+  (`cmd/wile/main.go:369` adds `WithMutableTopLevel` for an interactive session): `(define (f a b)
+  (+ a b))` disassembles to `AddTail arg=0 binding="+"`, so it **is** fused; after
+  `(set! + (lambda (a b) 999))`, `(f 1 2)` answers **999**, not 3. The fused op fell through to the
+  reassigned binding on the very next call, so no stale inline survives the mutation and there is
+  no correctness margin to recover. What is left is a cost that was already priced and accepted:
+  the per-dispatch identity load-and-compare, ~0.33% geo mean, recorded at
+  `pkg/machine/call_promoted.go:29`. Suppressing fusion on `Stable` bindings would not remove it,
+  because the check exists for the bindings that are *not* stable.
+  The measurement did turn up a real divergence, which is NOT closed with this row. It is lifted to
+  its own row below.
+- [ ] **The REPL accepts `(set! + …)`; petite and racket refuse it in both delivery modes**
+  [Conformance, S, owned by the **conformance wave**; lifted 2026-09-26 out of the promoted-op row
+  above, whose premise the same measurement refuted]: `(set! + (lambda (a b) 999))` typed at
+  `wile -i` succeeds and reaches back into already-compiled code — a previously defined
+  `(define (f a b) (+ a b))` then answers 999. Batch delivery of the same program is correct and
+  refuses: *`set!: cannot mutate imported binding "+": cannot mutate immutable binding`*. Both
+  oracles refuse in **both** modes: `petite -q` from stdin and `petite --script` give "attempt to
+  assign immutable variable +", `racket -I racket/base`, `racket -I r5rs` and a `#lang racket/base`
+  module all give "set!: cannot mutate module-required identifier / at: +". The divergence is
+  therefore not R7RS-silent territory reached by two routes; it is one mode of Wile's disagreeing
+  with the other three readings.
+  **The justification names the wrong oracle.** `cmd/wile/main.go:360-366` and
+  `docs/reference/r7rs-differences.md` (sealed-base section) both defend the interactive mutable
+  top level as the "Chez interaction-environment model", and for `define` that holds — measured,
+  all three shadow: `(define + (lambda (a b) 999))` leaves the earlier `f` answering 3 while the
+  new `+` answers 999. Chez draws a line Wile does not: a redefine of an imported name is a shadow,
+  a `set!` of one is an error. Wile's own documentation already states the intended answer for the
+  non-interactive case — "a top-level `(set! map …)` is rejected" — so the REPL contradicts the
+  documented rule rather than extending it. The fix is presumably to keep the interaction
+  environment's `define` shadowing while leaving the sealed base's `Stable` stamp enforced against
+  `set!`; that has not been designed or costed, and the two blockers the layered-environment carve
+  had to dissolve before immutability could be the default (same section of
+  `docs/reference/r7rs-differences.md`) say cost it before writing it.
 - [ ] **Visit phase ≥2 of a shifted instance lazily, as Racket does** [Performance, M, climbing
   tower Q10]: undecided, gated on Tier 2.
 - [ ] **Canonicalize retained pins symbolically** [Performance / memory, M, climbing tower Q12]:
   Stage C, deferred, gated on Tier 2.
 
+---
 
-- [ ] **Recover the 1.3% `MachineClosure` widening cost** [Performance, S-M — **STRUCTURE SHIPPED 2026-08-17, PERF STILL UNMEASURED**; filed 2026-08-01 as "…by splitting the legacy in-place closure into its own type", which is not the route taken]: The closure pair split (`perf(machine,environment): capture closures as shape+parent`) removed an 80-byte frame per evaluated lambda and grew `MachineClosure` 16→24B, because it carries `frame` **and** `parent` where it used to carry one `env`. Measured cost on `BenchmarkParallelScalingCompute` (fib, which never builds a closure in its loop but runs the altered apply path on every recursive call): **+1.25% / +1.56% / +1.17% at P=1/2/4, p=0.002, n=6**; indistinguishable at 8/16 where the spread is ±3%. Deliberately accepted — the same change is −20% to −38% on `…ScalingControl`. Numbers and method are in the `scaling_bench_test.go` header.
+- [x] **Recover the 1.3% `MachineClosure` widening cost** [Performance, S-M — **STRUCTURE SHIPPED 2026-08-17, PERF STILL UNMEASURED**; filed 2026-08-01 as "…by splitting the legacy in-place closure into its own type", which is not the route taken]: The closure pair split (`perf(machine,environment): capture closures as shape+parent`) removed an 80-byte frame per evaluated lambda and grew `MachineClosure` 16→24B, because it carries `frame` **and** `parent` where it used to carry one `env`. Measured cost on `BenchmarkParallelScalingCompute` (fib, which never builds a closure in its loop but runs the altered apply path on every recursive call): **+1.25% / +1.56% / +1.17% at P=1/2/4, p=0.002, n=6**; indistinguishable at 8/16 where the spread is ±3%. Deliberately accepted — the same change is −20% to −38% on `…ScalingControl`. Numbers and method are in the `scaling_bench_test.go` header.
 
-  **SHIPPED 2026-08-17 — `MachineClosure` is back to 16B, pinned by `TestMachineClosureIsTwoWords`** (branch `refactor/machine-closure-nil-parent-fold`). Not by splitting a type: `frame` was elided outright. The shape moved to `NativeTemplate.shape` (set by `compileClosureBody`), so `MachineClosure` is `{parent, template}` and `Apply` reads `tpl.Shape()`. `OpMakeClosure` lost an operand — codegen no longer pushes the env literal, so each closure-creation site is `PushLiteral, MakeClosure` (2 ops, 1 literal) instead of `PushLiteral, PushLiteral, MakeClosure` (3 ops, 2 literals). Free side effect: `makeClosureAnnotation` started working — it reads `code[pc-1]` for a template literal, and the env literal used to sit there, so real disassembly showed no `<lambda:name>` while `TestDisassemble_MakeClosureAnnotation` passed on a hand-built sequence codegen never emits. Gates: `go test ./...`, `make lint`, `make covercheck` green. New load-bearing ordering, commented at the site: `MaybeAppendLiteral(tpl)` must stay **before** `compileBody`, because the pool dedups templates through `EqualTo`, which does not compare shape — registering while `tpl` is empty is what makes a match impossible, and moving it later would collapse two identical lambdas onto one shape carrying the loser's binder scope sets.
+  **SHIPPED 2026-08-17 — `MachineClosure` went back to 16B** (branch `refactor/machine-closure-nil-parent-fold`, `48407078`; the two-word pin it added was replaced by `87db8e60`'s flat-closure conversion — see the close at the foot of this row). Not by splitting a type: `frame` was elided outright. The shape moved to `NativeTemplate.shape` (set by `compileClosureBody`), so `MachineClosure` became `{parent, template}` and `Apply` read `tpl.Shape()`. `OpMakeClosure` lost an operand — codegen no longer pushes the env literal, so each closure-creation site is `PushLiteral, MakeClosure` (2 ops, 1 literal) instead of `PushLiteral, PushLiteral, MakeClosure` (3 ops, 2 literals). Free side effect: `makeClosureAnnotation` started working — it reads `code[pc-1]` for a template literal, and the env literal used to sit there, so real disassembly showed no `<lambda:name>` while `TestDisassemble_MakeClosureAnnotation` passed on a hand-built sequence codegen never emits. Gates: `go test ./...`, `make lint`, `make covercheck` green. New load-bearing ordering, commented at the site: `MaybeAppendLiteral(tpl)` must stay **before** `compileBody`, because the pool dedups templates through `EqualTo`, which does not compare shape — registering while `tpl` is empty is what makes a match impossible, and moving it later would collapse two identical lambdas onto one shape carrying the loser's binder scope sets.
 
   **MEASURED 2026-08-17, and the hypothesis this entry was filed under is WRONG.** Interleaved A/B (two prebuilt `extensions/threads` test binaries alternating master/branch within each of 6 rounds, `-benchtime=2s`, benchstat), branch = fold + elide:
 
@@ -2664,7 +2810,9 @@ callback specialization B, jump-table dispatch, Stage-B phase folding all stay c
   - **Prerequisite SHIPPED 2026-08-17 — the nil-`parent` representation is folded away** (branch `refactor/machine-closure-nil-parent-fold`). `NewClosureWithTemplate` now stores `parent: env.Parent()`, so both constructors capture eagerly and `MachineClosure` has one representation. `ApplyParent` is a field read; `Env` materializes unconditionally and returns nil only for the degenerate no-environment case, which `closureBoundSymbols` already handled. **It was not free.** The old late `frame.Parent()` read doubled as a use-after-release check: a frame released after the closure was built zeroes its own parent, and the closure now keeps the stale pointer instead of faulting at apply. That check only ever covered the two `NewClosureWithTemplate` sites — `OpMakeClosure` has always captured eagerly, and it builds every closure a Scheme program makes — and both sites now build a fresh frame rather than borrowing a pooled one, which is what actually closed the `(compile …)` use-after-release the check stood in for. The live protection is `mc.envPooled = false` at `OpMakeClosure`. Gates: `go test ./...`, `make lint`, `make covercheck` all green, plus both representations exercised at the Scheme level (a `(compile …)` thunk applies and reflects; a `syntax-rules` transformer expands). Not re-run: `make test-race` — no new sharing, both reads are on the owning goroutine.
   - **Unverified: whether `NativeTemplate` can own the frame for the two `NewClosureWithTemplate` sites**, where the env is built by the caller instead of by `compileClosureBody` — `createTransformerClosure` mints one per transformer (`compile_syntax_rules.go:948`) and `PrimCompile` one per `(compile …)` (`prim_eval.go:628`). Both are 1:1 with their template today, but by construction rather than by the compiler's literal-pool pairing, so the invariant has to be re-established there, not assumed.
 
-  **Gate:** only worth doing if (a) a 16B prototype actually recovers the 1.3% under benchstat, and (b) it does not put dynamic dispatch on the apply path — this codebase has a measured preference for switch over table dispatch, and `applyClosure` is the hot path the change is trying to speed up. If (b) eats the gain, close this as WONTFIX and leave the note.
+  **Gate, as it stood:** only worth doing if (a) a 16B prototype actually recovers the 1.3% under benchstat, and (b) it does not put dynamic dispatch on the apply path — this codebase has a measured preference for switch over table dispatch, and `(*MachineContext).Apply` (`pkg/machine/machine_context_apply.go:28`) is the hot path the change is trying to speed up. If (b) eats the gain, close this as WONTFIX and leave the note.
+
+  **CLOSED 2026-09-26 — the gate has no premise left.** Gate (a) is unsatisfiable as worded: there is no 16B prototype to build, because 16B was traded away again, on purpose. At HEAD `MachineClosure` is `{link *environment.EnvironmentFrame; template *NativeTemplate; free []values.Value}` (`pkg/machine/machine_closure.go:72`) = 5 words / 40 B, pinned by `TestMachineClosureSize` (`pkg/machine/machine_closure_test.go:44`), whose comment at `:27-43` records the whole arc and states the trade: flat-closure conversion added the slice header so that a closure no longer pins an environment frame, which is a per-CLOSURE cost against a per-FRAME saving, chosen on an applies-per-creation ratio of 38.5:1 measured on the schelog backtracking workload. That comment also sets the standing rule this row would otherwise contradict: "A SIXTH word would be a new decision. Measure it, do not just update the constant." Recovering the 1.3% by shrinking the struct is therefore not an open lever but a decision already taken the other way; a future attempt is a new row against the current 5-word baseline, not this one. Two spellings in the text above are historical and resolve nowhere in the tree: `ApplyParent` survives only in a comment at `extensions/threads/scaling_bench_test.go:52`, and `mcls.frame` named the field now called `link`.
 
 - [x] **`resolveGlobal` re-locks one frame once per lexical depth** [Performance + structure, OBSOLETE 2026-08-05 by the store fold, filed 2026-07-19]: the premise (a walk of the `EnvironmentFrame` chain taking `ge.global.mu.RLock()` and a name lookup at every hop) no longer holds; `resolveGlobal` takes one read lock and runs one ranked probe against the owner's single store (`resolveRankedLocked`). Never measured; nothing to measure now. Rejected alternative, still worth knowing: making `GlobalEnvironmentFrame` satisfy an `EnvironmentFrame` interface with a permanently-nil `Parent()`. `EnvironmentFrame` is a struct, so that means a new interface and dynamic dispatch on the VM's hottest path, and a nil parent erases the sealed-base shadowing the layered carve exists to provide.
 
@@ -2673,10 +2821,10 @@ callback specialization B, jump-table dispatch, Stage-B phase folding all stay c
 
 - [ ] **Shrink `Binding` to recover the D2 atomicCell regression** [Performance, M — PUNTED 2026-07-06: too complex for the payoff, don't pick up without new evidence]: The D2 race fix (commit `fbcd7654`) grew `Binding` 32→40B (heap `atomicCell` pointer), inflating the value-embedded local frame slabs (`[]Binding`) and costing **+4.6% geomean on bench-gabriel (15/16 slower)**. Recovery lever: shrink `Binding` back so the local-frame slab footprint returns to baseline while globals keep the atomic cell (e.g. move rarely-used fields off the hot struct, or split local vs global binding representations). Gate on re-running bench-gabriel to confirm the recovery. Pure-perf follow-up; correctness is already banked. **Punt rationale (2026-07-06 analysis):** the recoverable win is *capped at the slab half* of the 4.6% — the other half is the global-read pointer hops (`*Binding → cell → atomic.Load → deref boxed value`), intrinsic to atomically publishing a 2-word `values.Value` and unrecoverable without 1-word NaN-boxing (separate `unsafe`-blocked plan). And getting the local slab to 32B soundly is not cheap: `value`/`cell` are a mutually-exclusive union but Go has no unions; pointer-tagging `bindingType`/`cell` low bits is GC-unsafe; `bindingType int`→`uint8` alone pads back to 40. The only sound mechanism is a cross-package `LocalBinding`/`*Binding` type split (ripples `environment/` + `internal/validate/` + `machine/pool`), whose natural unifier (an interface) adds dispatch to the Apply hot path and can eat the gain. Better lever for the same 4.6% is MORE frame reclamation (remove the slab allocation entirely so its size stops mattering) — but that arc is itself PAUSED (see `plans/2026-06-18-frame-reclaim-precision-coverage.md`: value core A/E shipped, tails B/C/D/F/G stopped under "limited payoff is a valid stop", resume gated on a real workload showing frame-leak pressure). **Resume this only if a representative embedding workload profiles as local-slab-allocation-bound AND the type-split measures net-positive on bench-gabriel.**
 - [ ] **Environment frame slimming** [Performance]: Reduce `EnvironmentFrame` struct for closure bodies that only need local bindings. `plans/PERFORMANCE.md`
-- [ ] **B3 effective capture refinement** [Performance, Research]: Propagate B2 escape results back into B1 capture status. A binding marked `Captured` by B1 is effectively non-captured if every lambda that references it is stored in a non-escaping binding (B2). Cross-binding analysis over B1+B2 results.
+- [x] **B3 effective capture refinement** [Performance, Research, **closed 2026-09-26 on the circularity**]: it proposed propagating B2 escape results back into B1 capture status — a binding marked `Captured` by B1 is effectively non-captured if every lambda referencing it is stored in a non-escaping binding. There is nothing to propagate into: the `markCaptured`/`.Captured` row two below DELETED B1's mark, and it cites this row as its reason for choosing deletion over unification. Verified 2026-09-26: `grep -rn 'markCaptured\|\.Captured\b\|Captured bool' --include='*.go' .` is empty tree-wide, tests included, and `pkg/internal/validate/validate_capture.go` does not exist. Only B2 survives (`markEscapedBindings`, `pkg/internal/validate/validate_escape.go:40`; `ValidatedLetBinding.Escapes`, `validated_forms.go:343`). Re-filing this needs B1 rebuilt first, which is a new decision, not a refinement.
 - [x] **`PrimitiveSpec` capture-safety capability field** [Performance, M, Done, PR #776]: shipped as `PrimitiveSpec.InvokesProcedure` (`pkg/registry/apply.go`); each primitive self-declares, the classifier stamps `Binding.CaptureSafe = !spec.InvokesProcedure`, and extension primitives self-cover. Retired the hand-maintained `captureSafePrimitiveNames` whitelist in `internal/validate/frame_reclaim_build.go`, which silently under-covered extensions. A false positive (a capturing primitive declared safe) is unacceptable, per `feedback_annotation_stability.md`. Q-1 of `memory/2026-06-12-escape-frame-validation-impl.md`.
-- [x] **`markCaptured`/`.Captured` is dead code: delete or unify** [Tech debt, S, Done]: deleted (option a) `markCapturedBindings` (`internal/validate/validate_capture.go`), `ValidatedLetBinding.Captured`, and `validate_capture_test.go`; its shared helpers moved to `internal/validate/sharedtest_test.go`. The live `markEscaped`/`.Escapes` path (let-lambda inlining) and `bodyReferencesCaptureOperator` (call/cc detection) are untouched. Unification (option b) rejected: with B1/B3 never built there is no second consumer, and folding a fail-safe predicate into a best-effort one risked the inlining contract.
-- [ ] **Benchmark coverage gaps** [Performance, S-M]: No benchmarks for compiler, expander (syntax-rules expansion), library import resolution, or continuation capture/restore cycle. Existing benchmarks cover VM dispatch, fibonacci, tokenizer, parser, environment, and symbol interning.
+- [x] **`markCaptured`/`.Captured` is dead code: delete or unify** [Tech debt, S, Done]: deleted (option a) `markCapturedBindings` (`internal/validate/validate_capture.go`), `ValidatedLetBinding.Captured`, and `validate_capture_test.go`; its shared helpers moved to `internal/validate/sharedtest_test.go`. The live `markEscaped`/`.Escapes` path (let-lambda inlining) and `bodyReferencesCaptureOperator` (call/cc detection) are untouched. Unification (option b) rejected: with B1/B3 never built there is no second consumer, and folding a fail-safe predicate into a best-effort one risked the inlining contract. **Back-reference added 2026-09-26:** the B3 row this cites as its reason is itself now closed, *on this deletion* — it proposed propagating into the mark deleted here, so the two rows were circular while both stood. Read them as one decision, not as a contradiction.
+- [x] **Benchmark coverage gaps** [Performance, S-M, **closed 2026-09-26, all four filled**]: the row named four missing benchmarks — compiler, expander, library import resolution, continuation capture/restore. Each exists, by symbol and line: `BenchmarkCompilePhase` (`pkg/machine/compilation/compile_bench_test.go:189`), `BenchmarkExpandAndCompile` (`pkg/wile/expansion_bench_test.go:115`), `BenchmarkEngineStartupWithImport` (`pkg/wile/startup_footprint_bench_test.go:106`), `BenchmarkContinuationRoundTrip` (`pkg/machine/fib_bench_test.go:55`). **The useful residue, which is why this is a close and not a deletion:** `BenchmarkExpandAndCompile` is the tree's only expander-sensitive gate — its corpus carries seven `define-syntax` forms — while the 16 canonical Gabriel programs behind `make bench-gabriel` contain zero `define-syntax` and zero `(eval `, checked per file against `CANONICAL_BENCHMARKS` in `examples/benchmarks/run-canonical.sh`. So "bench-gabriel is flat" is evidence about dispatch and arithmetic and says nothing whatever about a macro-system change; use this benchmark for that.
 - [ ] **Fused lexing/parsing** [Performance, Research]: Flap paper (PLDI 2023) — fuse tokenizer and parser into single character-level pass, eliminating per-token heap allocation. Gated on profiling confirming tokenizer is a bottleneck. `plans/PERFORMANCE.md`
 - [ ] **Inline-budget guard for `checkStackSize` and similar hot-path wrappers** [Performance, S]: `checkStackSize` (`machine/machine_context.go:1185`) is split from `reportStackOverflow` specifically to stay under Go's 80-cost inline budget (currently 67). A future innocuous edit could push it over and silently regress the VM hot path (the Gabriel suite would catch it, but only post-hoc and noisily). Write a test that runs `go build -gcflags='-m=2' ./machine/` and asserts `"can inline (*MachineContext).checkStackSize"` appears in the output. ~30 LOC test infrastructure; reusable for future hot-path wrappers. Surfaced by Finding 5 / PR #734 type-design review.
 
@@ -2742,8 +2890,6 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   F and G remain, which the plan index row already says correctly.
 - `setRecognizedPrimitive`'s TODO text still cites `runtime.Namespace().SealedBase()`; the code
   reads `SealedBindingAt` (`pkg/registry/core/prim_hashtables.go:333`ff).
-- `TestLibraryExportTakesFirstPresentPhase`: the `name` and `syntax-rules` subtest comments still
-  describe the withdrawn export-phase fork (a). The refusal is now the intended answer.
 - `makeDocRegistrationObserver` looks exports up at phase 0 by local name — the same phase-0-first
   assumption that causes defect 3 above.
 
@@ -2779,13 +2925,30 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
 
 ### `predeclareBinding` leaves an unwritten `#!void` twin slot per library-body define (2026-07-19)
 
-- [ ] **Orphan slot per library-body `define`** [Tech debt / allocation, S,
-  **count unverified**]: reported at 104 orphans in `(srfi 1)` alone. C3 (scope-keyed export
-  resolution) made them *unreachable* rather than removing them, so the correctness question
-  is closed and only the allocation remains — which is why this sits in Tier 5 and not with
-  the correctness successors in Tier 1 (see "Scope-keyed globals — successor work"). Verify
-  the count before sizing the work; it comes from the plan's review notes, not from a
-  measurement in-tree.
+- [x] **Orphan slot per library-body `define`** [Tech debt / allocation, S,
+  **count refuted, closed 2026-09-26 — no ratchet; the measurement is recorded**]: the row
+  reported 104 orphans in `(srfi 1)` alone and asked for the count to be verified before
+  sizing the work. Verified 2026-09-26, and there is no work to size: the define path leaves
+  zero orphans. An out-of-tree probe (a two-define library through `fstest.MapFS` +
+  `stdlib.FS` + `WithLibraryPaths()`, then `eng.Namespace().Store().LiveSlots()` bucketed by
+  name) gives live slots=779, sealed=779, distinct live names=587, and **f=1, g=1** —
+  exactly one live slot per library-body `define`, no `#!void` twin. Against `(srfi 1)`
+  itself, which is the library the row names: baseline live=777 / distinct=585, after
+  `(import (srfi 1))` live=926 / distinct=684 (delta 149), with
+  `fold`/`fold-right`/`delete-duplicates`/`iota`/`last`/`any`/`every` at one slot each and
+  **zero `#!void`-valued slots in the store, before or after**. The close is about the
+  OUTCOME, not the mechanism's removal: `predeclareBinding` is still live
+  (`pkg/machine/compilation/letrec_semantics.go:112`, called from `expander_body.go:105`,
+  `compile_time_continuation_include.go:223`, `compile_let.go:469`), but its global arm goes
+  through `MaybeCreateOwnGlobalBinding`, which keys the slot by its scope set **at creation**,
+  so a second predeclare of the same name lands on the slot the first one minted instead of
+  minting a twin. C3 (scope-keyed export resolution) is what made that true; it did not merely
+  make the twins unreachable. **The 192 names carrying more than one slot are a different
+  phenomenon and this close does not deny them**: they are stdlib import/re-export duplicates
+  under different scope sets — the head of that list is core primitives at exactly 2 slots
+  each (`%syntax-spine`, `%syntax-violation`, `*`, `+`, `-`, `/`, `<`, `<=`) — not unwritten
+  define twins. A number inside a closed row is documentation and nothing fails when it is
+  contradicted, so a third filing argues against these figures or re-measures them.
 
 ### `PrimitiveSpec.Mutates` has no static guard (2026-08-09)
 
@@ -2885,7 +3048,17 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
   `thread-join!` already do.
 - [x] **`RWMutex` and `Once` removed from the Scheme surface** [API/modeling, M, Done, deleted]: 12 primitives, `values.RWMutex`, `values.Once`, `werr.ErrNotARWMutex`, `werr.ErrNotAOnce`, and `finishBlockingSync`; `(wile gointerop)` is now the six `atomic` primitives. **A modeling decision, not a cleanup**: `gointerop` was publishing Go's shared-state model against the project's causal-chain orientation. Public API removal under the zero-consumer rule, as with `ChannelSelect`. Kept: SRFI-18 `mutex-*`/`condition-variable-*` and `atomic`. Traps: the plan's verification grep (hits only in `memory/`/`plans/`/CHANGELOG) was never satisfiable, since ~13 live `sync.RWMutex` struct fields remain; `ErrNotAOnce` was the sole pass-through-article row in `pkg/registry/helpers/args_test.go`, so that sentinel is now built inline to keep `typeNameFromSentinel`'s article path covered. `TestWithTimeoutInterruptsParkedRWMutex` was ported to `mutex-lock!`, not dropped: it is the only test spanning `callForeignCached`'s eager recheck and a primitive's error-free `#f`. Under an embedder deadline `mutex-lock!` returns `#f` and the VM's top-of-loop check surfaces `DeadlineExceeded` (`pkg/machine/machine_context.go:365`); no test covers that `cancellation.md` row. Residual: `werr.ErrOperationCancelled` was left with no producer and a rewritten comment. **DECIDE:** delete it, or keep it for a future primitive that returns a value on success and so cannot borrow the error-free-`#f` convention.
 - [x] **`ChannelSelect` was complete, tested, CHANGELOG-cited, and registered nowhere** [API/dead-code, S–M, Done, deleted]: removed `ChannelSelect`, `SelectCase`, `SelectCaseKind`, `firstDeadCase`, and 8 `TestChannelSelect*` functions (~312 lines). Exported from `values/`, so a public API removal under the zero-consumer rule. Wiring it would have needed a ctx arm, not just `done` arms, or it reintroduces the T1.3 leak at a new site (a prototype confirmed 2N+1 arms are `-race`-clean, so the decision was never technical). Released CHANGELOG sections (1.18.0, 1.3.0) were not edited; a removal note and correction went into `[Unreleased]`. If a consumer appears: `reflect.Select` panics past 65536 cases and the list would come from Scheme, so it needs an arity guard.
-- [ ] **Stale sub-context comment on `with-timeout`** [Docs, XS]: `PrimWithTimeout` (`pkg/registry/core/prim_timer.go`) header says "The sub-context pattern ... a fresh sub-context isolates the thunk's execution," but the same function's body twelve lines down (and `RunBodyUnderTimer`) says it runs the thunk **INLINE on the live chain, not in a sub-context** (the accurate description). REVIEW.md lists stale comments as a recurring trap; this one misdescribes the isolation model of the code that makes the `with-timeout` cancellation path safe. **Possible actions:** (A) delete the stale sub-context sentence; (B) rewrite it to match the inline model. **Recommendation: A (delete)** — the accurate description already exists in the same comment, so B just duplicates it.
+- [x] **Stale sub-context comment on `with-timeout`** [Docs, XS, **already fixed, closed
+  2026-09-26**]: the row said `PrimWithTimeout`'s header described a fresh sub-context isolating
+  the thunk while the body twelve lines down ran it inline, and recommended option A, deleting the
+  stale sentence. A is what the tree now has. The header of `PrimWithTimeout`
+  (`pkg/registry/core/prim_timer.go`) reads "The thunk runs inline on the live continuation chain
+  under a finalizer prompt frame (RunBodyUnderTimer), mirroring call-with-continuation-barrier
+  (prim_barrier.go): a continuation captured inside the thunk spans the finalizer frame and the
+  rest of the program rather than being truncated at a sub-context boundary." Measured 2026-09-26:
+  `grep -rn 'sub-context pattern\|fresh sub-context isolates' --include=*.go .` is empty, and the
+  callee the header names is live — `(*MachineContext).RunBodyUnderTimer`
+  (`pkg/machine/run_body_under_timer.go:38`), called at `prim_timer.go:100`.
 - [x] **Scheme-level cancellation tests added; two real defects found writing them** [Test-coverage + Correctness, S, Done, A+B+C shipped]: `extensions/gointerop/channel_cancellation_test.go` added `TestWithTimeoutInterruptsParkedReceive` and `TestTerminateUnparksBlockedThread`, both mutation-verified. Two defects surfaced:
   - **`thread-terminate!` discarded its own SRFI-18 end-exception** [Correctness, S, Done]: `Thread.Start`'s goroutine unconditionally overwrote the stored `TerminatedThreadException`, and `defer close(p.done)` ran last, so a joiner could never observe it; a thread parked in a tail-position receive was reported as having succeeded. This invalidated the design doc's claim that the ≈1024-op unwind window was itself the protection. Fix: a write-once outcome (`Thread.setOutcome`), first writer wins, which keeps SRFI-18's "if the thread is not already terminated". Prior coverage was vacuous (both tests asserted the `#t` literal they wrote). Guard: `extensions/threads/prim_threads_terminate_outcome_test.go`.
   - **`thread-join!` on a terminated but never-started thread blocked forever** [Correctness, S, Done]: `done` was closed only by the goroutine `Start` spawns. `Terminate` now closes it when ending a `ThreadNew` thread. The two closers are mutually exclusive because `Start` makes `ThreadNew → ThreadRunnable` under `p.mu` and refuses any other state, so no `sync.Once` is needed (a double close is a fatal host panic). Guards: `pkg/values/thread_lifecycle_test.go` (20000-trial `-race`) and `TestThreadTerminateNeverStartedThreadIsJoinable`, which joins with no timeout so a regression is an unbounded park rather than a misleading `JoinTimeoutException`.
@@ -2898,9 +3071,42 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
 - [x] **Machine package structural reduction** [Done 2026-05-13]: all 7 findings closed. Shipped — `Stack.Push` max-stack (PR #734), `OpKind()` discriminator (PR #735), vmState value-register consolidation + ruleguard (PR #736), correlated-field sub-records (PRs #742/#743/#745). Declined — syntaxCase marker interface (PR #731), maxCallDepth sentinel removal, tail/non-tail opcode collapse via sign-bit encoding (PR #737: geomean +2.5%, all 16 benches slower), Stage-3 sub-records (field-independence analysis found no co-variance, `9382a3b3`). `memory/2026-05-06-machine-structural-reduction.md`
 - [x] **Internal / values / environment structural reduction** [Done]: `internal/` all 7 findings (PRs #739–#741, including the `*SyntaxPair`/`SyntaxEmptyList` duality migration that restores Chez-conformant `(equal? (syntax ()) '())`); `values/` Phases 0–4 (PRs #747–#756 — 9 port types collapsed to one `*Port` with capability slots, ~900 LOC, and a `NumericTypeSpec` registry replacing the 12-step ADDING-A-NEW-NUMERIC-TYPE guide); `environment/` Phases 1–9 (PR #730), Phase 10 (`*LocalIndex` allocation audit) deferred benchmark-gated. Plans archived under `memory/2026-05-0*`.
 - [x] **vmCore sub-struct extraction** [High, M, DECLINED on re-evaluation 2026-06-05]: the genuine always-transfer set is only `{env, template, pc}`. `callDepth` is a guarded maintained counter (`SaveContinuation` ++, `PopContinuation` --, derived from the parent by both continuation constructors), so bundling it forces override-after-copy at 4 sites and risks clobbering its guards. The FCA "High" rating rested on the divergent fields (`evals`, `envPooled`, `marks`), none of which a vmCore touches, and drift is already answered by `testVmStateFieldCoverage`. Net ~6 lines saved at 3 sites on the VM's hottest path. Parallels the decline of machine SR Finding 7 Stage 3.
-- [ ] **Bidirectional opcode conversion test** [Medium, S]: Verify `operationToInstruction` and `instructionToOperation` cover the same opcode set.
+- [x] **Bidirectional opcode conversion test** [Medium, S, **ill-posed as worded, closed
+  2026-09-26**]: the row asked for a test that `operationToInstruction` and
+  `instructionToOperation` cover the *same* opcode set. They cannot, and the asymmetry is the
+  design. `operationToInstruction` (`pkg/machine/native_template.go:411`) emits
+  `Instruction{Op: op.OpKind()}`, so its range is exactly the opcodes some `Operation` type names
+  as its kind; measured 2026-09-26, none of the 41 `OpKind` implementations returns a fused or
+  promoted opcode, and `grep -E 'OpPullApply|OpPushLiteral|OpPushGlobal|OperandCachedBinding'` over
+  its body is empty. Those opcodes exist only downstream of the peephole pass (`OpPullApply` is
+  synthesized at `pkg/machine/peephole.go:152`), yet `instructionToOperation` must still accept
+  them, mapping each back to the first operation of the sequence it replaced — the lossiness its
+  own doc comment records at `native_template.go:214-223`. So `operationToInstruction`'s range is a
+  strict subset of `instructionToOperation`'s domain and a same-set assertion fails by
+  construction. Each direction is separately pinned instead: `TestOpcodeRoundTrip`
+  (`pkg/machine/native_template_test.go:259`) walks every opcode from 1 to `opCount`, skipping only
+  `OpComplex`, and asserts `instructionToOperation` is non-nil;
+  `TestOperationToInstruction_AllDirectDispatch` (`pkg/machine/instruction_test.go:149`) and
+  `…_SideTableReturnsFalse` (`:203`) cover the other. This is a scope judgment, not a
+  non-reproduction: nothing was fixed, and no existing test asserts the row's literal ask, because
+  the property it names is false.
 - [ ] **LocalEnvironmentFrame pointer ambiguity** [Low, S]: Doc comment on `NewLocalEnvironment` explaining lifecycle (value-vs-pointer ownership).
-- [ ] **Honor `WithInlineThreshold` for imported libraries** [Low, S]: The library import/load chain (`LoadLibrary` → `loadLibraryFromReader` → `compileAndExecuteLibrary`, `machine/compilation/library_loader.go:215,223`) has **no `inlineThreshold` parameter**, so imported libraries always compile at `DefaultInlineThreshold = 5`, ignoring the engine's `WithInlineThreshold(n)` (`pkg/wile/options.go:275`). Every *in-process* child compiler re-threads the parent's value via the two-line `NewCompileTimeContinuation(...)` + `SetInlineThreshold(p.inlineThreshold)` idiom (6 sites: `compile_syntax_case.go:253`, `compile_closure.go:123`, `compile_library_forms.go:109`, `compile_helpers.go:51`, `compile_time_continuation.go:347`, `expand_and_compile.go:53`); the load path is the one site that cannot reach the value. **Not a correctness bug** — inlining here is the behavior-preserving synthetic-let transform (PR #605), so results are unchanged; it is a config-honoring / debuggability inconsistency (disabling inlining, e.g. for predictable stack traces, is silently not honored across the `import` boundary). Fix: thread `inlineThreshold` through the three `LoadLibrary`/`loadLibraryFromReader`/`compileAndExecuteLibrary` signatures (or expose it via `Namespace`/`EngineServices` so the load path can read it) and `SetInlineThreshold` on the library compiler. Discovered during the `CompileTimeContinuation` God-object triage (2026-07-09); the fix also illustrates why the "stable config should be inherited, not hand-copied" refactor (staff sweep tail) has real payoff — a shared services pointer would close this gap by construction.
+- [x] **Honor `WithInlineThreshold` for imported libraries** [Low, S, **already fixed, closed
+  2026-09-26**]: the row said the library load path had no `inlineThreshold` parameter, so an
+  imported library always compiled at `DefaultInlineThreshold = 5` and silently ignored the
+  engine's `WithInlineThreshold(n)`. The gap is closed, and by the second of the two options the
+  row named — exposing the value through `Namespace` rather than threading it through three
+  signatures. The whole chain resolves, measured 2026-09-26: `pkg/wile/engine.go:595`
+  `ns.SetInlineThreshold(cfg.inlineThreshold)`; `pkg/machine/compilation/library_loader.go:291`
+  reads `libEnv.Namespace().InlineThreshold()`, falls back to `DefaultInlineThreshold` when unset
+  (a namespace not built by an Engine, e.g. a direct `LoadLibrary` in a unit test), and calls
+  `compiler.SetInlineThreshold(...)` at `:295`; the accessors are
+  `(*Namespace).SetInlineThreshold` and `.InlineThreshold`
+  (`pkg/environment/namespace.go:472`, `:481`). Three tests in
+  `pkg/wile/library_inline_threshold_test.go` cover it — `TestInlineThresholdPopulatedOnNamespace`
+  (`:34`), whose table carries the explicit-zero row that distinguishes "disabled" from "unset",
+  `TestInlineThresholdHonoredForImportedLibrary` (`:73`) and
+  `TestInlineThresholdBoundaryForImportedLibrary` (`:147`).
 - [x] **Unified binding reference (`BindingRef`) for local+global** [Medium, M, Done 2026-07-08, `229e0b72`]: `BindingRef` sum type + `ResolveBindingRef` in `environment/`; the validator's mutation set went from 3 maps to 2. **Storage stays split, deliberately**: locals are positionally addressed (`LocalIndex{over,up}`), copied every `Apply`, single-threaded, `[]Binding` by value; globals are symbolically addressed, shared across SRFI-18 threads, and `[]*Binding` pointer-stable because the lock-free `cachedBindings` read cache requires it. Only the reference type unified. **Premise correction**: the validator was not blind to top-level `set!` (the symbolic `mutatedKeys` sidecar compensated and `StableInUnit` was correct), so this was a semantics-preserving tidy, not a bug fix. The conservative over-mark (a `set!` to a local shadow still marks the top-level name non-stable) is the frame-reclaim soundness margin, pinned by `TestStableInUnit_SetToLocalShadowStillMarksTopLevel`.
 - [x] **Unify `atan2Operand` with `helpers.ToFloat64`** [Low, S, Done, PR #754]: `atan2Operand` re-implemented the Number-assert → complex-reject → float64-extract sequence just to swap the loss policy from strict to silent-truncate. Extracted shared `screenReal` into `registry/helpers/value_conv.go` and added `helpers.ToFloat64Lossy` as the lossy counterpart to strict `ToFloat64`; `atan2Operand` deleted, both `PrimAtan` sites routed through it. Lossy semantics (`(atan 1/3)`) preserved per R7RS §6.2.6.
 ### Tech Debt Plan (remaining)
@@ -2947,7 +3153,7 @@ Items surfaced by /crosscheck on PR #736 (consolidate value-register
 accessors on *vmState — Finding 3 of `memory/2026-05-06-machine-structural-reduction.md`).
 Deferred per scope or design choice.
 
-- [ ] **`SetValues(sub.GetValues()...)` nil-vs-empty ambiguity** [Tech debt, M, Deferred — pre-existing]: Silent-failure-hunter flagged 13 call sites that propagate a sub-context's value register into the parent via `mc.SetValues(sub.GetValues()...)`. `GetValues()` returns `nil` for an empty register (both fields nil); spreading `nil...` calls `SetValues()` with zero args, which now canonicalizes to (nil, nil) post-Q-e. Sub-contexts that exited abnormally without writing a value, sub-contexts that returned `(values)` (R7RS zero-value return), and sub-contexts that returned a real value all collapse into indistinguishable parent-side state. Call sites: `extensions/eval/prim_eval.go:104`, `extensions/files/prim_files.go:179`, `registry/core/prim_timer.go:127`, `registry/core/prim_barrier.go:72`, `registry/core/prim_cont_marks.go:187`, `registry/core/prim_prompt.go:135,149`, `registry/core/prim_control.go:87,200,365`, `registry/core/prim_exit.go:105`. Pre-existing; surfaced by but not introduced by PR #736. Fix shape: distinguish "no value produced" from "(values) zero-return" at each call site, or document the collapse as intentional R7RS behavior.
+- [x] **`SetValues(sub.GetValues()...)` nil-vs-empty ambiguity** [Tech debt, M, **closed 2026-09-26 by option (b): the collapse is intentional and is now documented**]: taking the row's own second option. `nil` IS the zero-values encoding, per auto-memory `feedback-nil-means-none-not-wildcard` (nil ≡ NONE; a wildcard, or any other distinguished state, needs an explicit named value). One sentence saying so was added to `(*vmState).GetValues` (`pkg/machine/vm_state.go`), which is the function whose return value the row reads as ambiguous. The semantics are unambiguous where it matters: `(call-with-values (lambda () (call/cc (lambda (k) (values)))) list)` round-trips to `()` in Wile, in `racket` and in `petite` (verified three ways 2026-09-26; note `racket -I r5rs -e …` fails on this program with "cannot reference an identifier before its definition" — use plain `racket -e`). **The original filing's 13-site list, quoted at the end of this row, is stale — record the pattern, not the spelling.** Four sites match `X.GetValues()...` today: `extensions/files/prim_files.go:226`, `extensions/eval/prim_eval.go:155`, `pkg/registry/core/prim_control.go:227`, `pkg/registry/core/prim_prompt.go:251`. Two of the four spell the receiver `target`, not `sub`, so a bare `sub.GetValues()` grep finds only two of them; grep the pattern. No ratchet: a Go test asserting `GetValues()` returns nil after a zero-arg `SetValues()` is green by construction (`SetValues` nils both fields on `len == 0`, `GetValues` returns nil when both are nil), so it would be a pin, not a gate. Original filing, for the record: Silent-failure-hunter flagged 13 call sites that propagate a sub-context's value register into the parent via `mc.SetValues(sub.GetValues()...)`. `GetValues()` returns `nil` for an empty register (both fields nil); spreading `nil...` calls `SetValues()` with zero args, which now canonicalizes to (nil, nil) post-Q-e. Sub-contexts that exited abnormally without writing a value, sub-contexts that returned `(values)` (R7RS zero-value return), and sub-contexts that returned a real value all collapse into indistinguishable parent-side state. Call sites: `extensions/eval/prim_eval.go:104`, `extensions/files/prim_files.go:179`, `registry/core/prim_timer.go:127`, `registry/core/prim_barrier.go:72`, `registry/core/prim_cont_marks.go:187`, `registry/core/prim_prompt.go:135,149`, `registry/core/prim_control.go:87,200,365`, `registry/core/prim_exit.go:105`. Pre-existing; surfaced by but not introduced by PR #736. Fix shape: distinguish "no value produced" from "(values) zero-return" at each call site, or document the collapse as intentional R7RS behavior.
 
 ### Continuation vmState descriptor follow-ups (#1 Tier-1 shipped `834b2db7`)
 
@@ -2986,18 +3192,32 @@ patterns are visible.
 - [ ] **Reconsider `Exact` overload for NaN/Inf identity** [API design, M, Deferred — design choice Q-6]: The `big.Accuracy` slot returned by `ToFloat64WithAccuracy` is overloaded: (a) genuinely lossless rounding, (b) NaN bit-pattern identity, (c) preserved literal infinity. Doc tightening landed in this PR at `values/conversion.go:54-60` (per design Q-6 resolution). Callers screening "is this a meaningful real number?" must use `math.IsNaN` / `math.IsInf` independently. **Trigger to revisit**: a caller reports being unable to distinguish "rounded-but-real" from "NaN-or-Inf" from the tuple alone, OR a fifth `WithAccuracy` helper is added where the overload becomes too costly to maintain. Possible fix: a 4-valued enum `LossKind { Lossless, RoundedBelow, RoundedAbove, NaNOrInf }` replacing `big.Accuracy` at the public surface; would diverge from Go's stdlib vocabulary at the cost of being self-describing.
 - [ ] **`ToFloat64Lossless` returns rounded value on error** [API design, S, Deferred]: When the conversion would round, `ToFloat64Lossless` returns `(f, ErrLossyConversion)` where `f` is the lossy float64 result — the caller can use the value if they want; the error is advisory. The nil-input error path returns `(0, ErrNotANumber)`. The asymmetry is real: lossy ⇒ best-effort value preserved; nil-input ⇒ zero. Go convention is "non-nil error ⇒ value is unspecified," which the lossy path softly violates. **Decision deferred**: changing this would force every strict-mode caller to abandon their value on rounding (which they wanted to fail-fast on anyway). Document the contract instead. Revisit if a caller reports relying on the "use the rounded value alongside the error" pattern in a way the API should officially support, OR if the asymmetry causes a bug at an FFI boundary.
 - [ ] **`ToFloat64WithAccuracy` nil-defense: error vs panic** [API design, S, Deferred]: The function returns `ErrNotANumber` (wrapped) when `n == nil`. The signature is `n Number`, so a non-Number cannot be passed — the nil case is the only reachable error path. The neighboring `LookupNumericSpec` (`values/numeric_registry.go:163-169`) panics on analogous defensive bugs (out-of-range kind). The split is a style choice: errors-for-FFI-safety vs panic-for-Go-bug. **Revisit when**: (a) the wider codebase converges on one convention for "this should never happen" defensive checks at the `values` boundary, OR (b) an FFI consumer demonstrates a real path where `n == nil` is reachable from outside the type system (unlikely but possible via reflection paths).
-- [ ] **File naming: `conversion.go` lacks `numeric_` prefix** [Tech debt, S, Deferred — taste call]: Other numeric-domain files in `values/` use the `numeric_` prefix (`numeric_kind.go`, `numeric_registry.go`, `numeric_tower.go`); test files follow suit (`numeric_dispatch_test.go`, `numeric_lattice_test.go`). The new `conversion.go` / `conversion_test.go` lacks the prefix. Counter-evidence: `promotion.go` is also unprefixed and lives in the numeric domain, so the convention isn't universal. Rename to `numeric_conversion.go` / `numeric_conversion_test.go` if `promotion.go` is also renamed for consistency, or leave both alone. Revisit when a third unprefixed numeric file is added — the convention either solidifies or breaks definitively.
+- [x] **File naming: `conversion.go` lacks `numeric_` prefix** [Tech debt, S, **premise refuted, closed 2026-09-26 — leave both alone**]: the row read the prefix as marking the numeric domain and found one exception (`promotion.go`). Counted 2026-09-26, the ratio inverts the reading: `ls pkg/values/numeric_*.go | grep -v _test` gives exactly **4** files (`numeric_kind.go`, `numeric_registry.go`, `numeric_repr.go`, `numeric_tower.go`) against **12** unprefixed numeric-domain files (`big_complex.go`, `big_float.go`, `big_integer.go`, `big_transcendental.go`, `big_transcendental_complex.go`, `complex.go`, `conversion.go`, `exact_zero.go`, `float.go`, `integer.go`, `promotion.go`, `rational.go`). The prefix marks **tower machinery** — the kind enum, the spec registry, the representation, the tower itself — not the numeric domain, so `conversion.go` and `promotion.go` are correctly unprefixed and unprefixed is the majority spelling, not the exception. The row's "revisit when a third unprefixed numeric file is added" trigger fired long ago at 12 and the convention resolved the other way. If the rule is written down at all it goes in a **tracked** file (`CODING_STYLE.md`), never `pkg/values/CLAUDE.local.md`, which `.gitignore:48` (`*.local.md`) excludes — `git ls-files pkg/values/ | grep -i claude` is empty, so CI never reads it and neither does a fresh checkout.
 - [ ] **Symbol-singleton location: `symbols_accuracy.go` separate vs co-located** [Tech debt, S, Deferred — taste call]: Prior art for state-symbol singletons in `values/` (`SymbolThreadNew` etc. in `thread.go:54-59`, `SymbolMutexNotOwned` etc. in `mutex.go:30-31`) puts them in the file of the owning type. `SymbolAccuracyBelow`/`Exact`/`Above` live in their own `symbols_accuracy.go`. The split is defensible (the symbols paraphrase `big.Accuracy`, not a Wile type; the natural owner would be `big_float.go` or `numeric_registry.go`, neither of which is a clean fit). Revisit if a third orphan symbol-set appears (then either consolidate all orphans into a single `symbols.go`, or formalize the per-domain-file convention). Update `values/CLAUDE.md` "Sentinel/Singleton Values" inventory either way.
 
 ### Postponed
 
 Items deferred for stated reasons. Re-evaluate when preconditions change.
 
-- [ ] **F11: Promote internal extensions** [Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote when extension API stabilizes and external consumers exist.
-- [ ] **Parser: unify readList + readLabeledList** [Postponed]: High risk — datum labels require in-place mutation of placeholder pairs. Structural difference is semantic, not accidental.
+- [x] **F11: Promote internal extensions** [Postponed, **premise stale, closed 2026-09-26**]: two of the three named packages are already public and the third is reachable. Measured 2026-09-26: `ls pkg/extensions/` → `io`; `eval` is public at `extensions/eval`; `ls pkg/internal/extensions/` → `all envvars iotest namespace`, so of the `{io,eval,all}` triple this row names, only `all` is still internal (`envvars`, `iotest` and `namespace` are internal too, but outside the row's scope). "Invisible to embedders" survives only for the ad-hoc `WithExtension()` route: `all.Extension` and `all.SafeExtension` are reachable through `ProfileExtensions` (`pkg/internal/bootstrap/bootstrap.go:82`, with `all.Extension` in `allExtensions` at `:65` and `all.SafeExtension` at `:91` and `:100`), which is the profile API embedders are pointed at. The narrower rewrite — promote `all` out of `pkg/internal/extensions/` — is **declined**: `ls extensions/` gives 12 entries, 11 of them extension packages and all already public, so `all` is a bundle of public parts and exporting the bundle adds surface without adding reach. Its stated precondition ("external consumers exist") is also unmet — see auto-memory `deadscan-ext-refs-are-mostly-first-party` (95 of 102 external references are first-party, so "wile-goast builds against it" is not independent-consumer evidence) and `embedding-size-cuts-deferred` (trim the surface via profiles now; defer the structural moves until a user asks).
+- [x] **Parser: unify readList + readLabeledList** [Postponed, **blocker refuted, closed
+  2026-09-26**]: the row postponed the unification as high risk because "structural difference is
+  semantic, not accidental." It was accidental, and the difference was one parameter. Both readers
+  now delegate to a single `readListInto(head *syntax.SyntaxPair, opener)`
+  (`pkg/parser/parser.go:643`), which holds the list grammar once: `readList` (`:632`) passes a
+  fresh head (`p.wrapSyntaxPair(nil, nil, p.cur)`) and `readLabeledList` (`:317`) passes the
+  already-registered placeholder pair. The in-place mutation the row feared is exactly what
+  passing the placeholder as `head` buys: the shared loop fills that exact pair, so a `#n#`
+  encountered mid-list already resolves, and no traversal patches anything afterward. What is left
+  in the wrapper is one label re-store, for the case where the list turns out empty (`#0=()`, or
+  one whose elements were all elided by `#;`) and the result is the empty-list singleton rather
+  than the placeholder. Pinned by
+  `TestReader_CircularListResolvesSelfReference` (`pkg/parser/datum_label_test.go:100`) and
+  `TestReader_LabeledListElidedElementIsEmptyList` (`:125`), whose comment names the
+  `readList`/`readLabeledList` unification as what it guards.
 - [ ] **VM dispatch loop extraction** [Postponed]: `MachineContext.Run()` is 547 lines with 65 inlined opcode cases. Go has no computed goto; method dispatch adds measurable overhead on hot path. Intentional performance-over-readability trade-off.
 - [ ] **Match: consolidate bytecode type files** [Postponed]: Pure cosmetic reorganization.
-- [ ] **Extensions: standardize registration patterns** [Postponed]: Requires design decision on canonical pattern.
+- [x] **Extensions: standardize registration patterns** [Postponed, **precondition met, closed 2026-09-26**]: the design decision the row waits on was made, and the sweep is already uniform. Per-directory measurement under `extensions/` (2026-09-26): 11 of 12 top-level entries register through `NewDescribedExtension`; the twelfth, `extensions/algebra/`, holds no `.go` file at top level. It is a container for `graph`, a pure graph-kernel package (`monotone.go`, `scc.go`) whose only non-test consumer is `extensions/algebragraph/prim_count_paths.go:20` — not an extension package, so `NewDescribedExtension` does not apply to it. State the denominator rather than an unqualified ratio: **11 of 12 entries, 11 of 11 extension packages**.
 - [ ] **Schemeutil: grab-bag reorganization** [Postponed]: Moving functions risks import cycle issues.
 
 ### plans/ sweep — refactor & tech-debt deltas (2026-07-21)
@@ -3057,10 +3277,33 @@ Open restructuring work found only in `plans/` during the 2026-07-21 triage.
   architecture direction (`memory/2026-06-13-layered-environment-architecture.md`),
   data-driven promoted-primitive inline registry
   (`plans/2026-06-26-promoted-primitive-inline-registry.md`, DRAFT v2 awaiting review).
-- [ ] **`docs/` audit sweep** [Docs/verification]: the docs-subsystem sweep
-  (`plans/2026-04-23-docs-sweep-impl.md`, follows algebra-docs). The §4 review audit AU.1
-  that shared this row was run 2026-08-09 with a negative verdict, the plan's own header says all
-  23 items are closed, and it is archived: `memory/2026-07-15-review-2026-07-13-sec4-remediation.md`.
+- [x] **`docs/` audit sweep** [Docs/verification, **goal met by another route, closed
+  2026-09-26**]: the docs-subsystem sweep (`plans/2026-04-23-docs-sweep-impl.md`, follows
+  algebra-docs). The §4 review audit AU.1 that shared this row was run 2026-08-09 with a
+  negative verdict, that plan's own header says all 23 items are closed, and it is archived:
+  `memory/2026-07-15-review-2026-07-13-sec4-remediation.md`. The sweep's own goal was met by
+  `99b8c99d` instead. Coverage at close, measured 2026-09-26: **53 `.md` across 15
+  directories** — `docs/` plus 14 documentation subdirectories. (A bare `find docs -type d`
+  reports 16; the extra one is `docs/.claude`, an empty Claude Code config directory holding
+  no files at all. Cite 15, or the next re-measurement contradicts this row.)
+  **RISK NOTE, and it is the load-bearing line here: do NOT schedule re-measuring
+  `99b8c99d`'s benchmark and profile figures as part of a documentation sweep.** That commit
+  deliberately labels un-re-measured figures with their measurement context rather than
+  presenting them as current, and re-measuring them means an interleaved A/B against a named
+  baseline — same-binary drift is +1.2% geometric mean, so a sequential before/after cannot
+  see the delta at all (auto-memory `interleaved-ab-required-for-vm-microdeltas`). That work
+  belongs to the perf wave, not here.
+  Correcting the design's "nothing cheap can gate accuracy", which is too strong:
+  `TestCorrectedDocClaimsStayCorrected` (`cmd/wile/docs_refs_test.go:229`) and
+  `TestProseCountsMatchTheirSource` (`cmd/wile/docs_counts_test.go:60`) are exactly cheap
+  accuracy gates, both already reached by `make ci` through `test` (`Makefile:146`, `:180`).
+  What they cannot do is enumerate: each gates **one named claim**, which is the honest scope
+  — this closeout phase uses six rows of the first. What is genuinely unstartable in CI is
+  the plan-header check, because `plans/` is gitignored: `head -5
+  plans/2026-04-23-docs-sweep-impl.md` still reads `status = "Planned — not started"` while
+  the goal it names has shipped. That is `plans/`-header rot, and it is the same asymmetry
+  that correctly keeps `planlint` (`tools/sh/planlint.sh`, `Makefile:685`) out of the `ci`
+  target.
 
 > **Stale-status housekeeping (planlint evidence), DONE 2026-09-04.** `2026-07-17-review-remediation.md` + `-impl.md` and `2026-07-12-numeric-zero-and-tier2-fold.md` showed unchecked boxes while fully shipped; all three archived to `memory/` in the 2026-09-04 pass with their Plan Index rows, alongside eight whose headers said shipped and the lingering rows of three earlier archives (r6rs hashtables, ambient keywords, literal-pin ambiguity).
 
@@ -3094,7 +3337,7 @@ No demand signal. Speculative or research-only.
 - [ ] **`assert` is bound by nothing, at any strictness level** [XS]: surfaced by the level-2 stdlib export sweep (`WithoutAmbientBindings`, 2026-08-04), where `(import (scheme base))` restores 17 of 18 probed forms and `assert` is the miss. It is **not** a level-2 gap: `assert` fails identically on a non-strict engine, no `(scheme …)` library exports it, and no bootstrap macro or primitive defines it. It is R6RS (`(rnrs base)`), absent from R7RS-small, so the omission is conformant and this is a feature request, not a defect. Cheapest shape is a bootstrap macro raising an error naming the source expression — the `assert-validation` idiom under Algebra library consistency already does this at the Scheme level and is the model. No demand signal; filed so the next sweep does not re-derive it.
 - [ ] **`setRecognizedPrimitive` still reads the sealed base, which is empty at level 2** [S]: `pkg/registry/core/prim_hashtables.go` resolves a name through the mutable top level and falls back to `runtime.Namespace().SealedBase()`. Under `WithoutAmbientBindings` that fallback is empty, so `hashtable-equivalence-function` answers only when the program has `equal?` bound under **that spelling**. A renaming import (`(rename (scheme base) (equal? my-eq))`) already defeats it on a non-strict engine, so level 2 widens an existing window rather than opening one. It is not an identity bug — identity already DECIDES (`recognizedBinding` checks the token and discards a same-named shadow); the name only LOCATES a candidate, and level 2 removes the environment that made a name-keyed probe reliable. A real fix needs a canonical `*ForeignClosure` reachable from a `PrimitiveIdentity` without going through any environment, which is the un-copying item's territory (see "A primitive has one identity per environment" under Tier 2). Last sealed-base reader in the tree.
 - [ ] **Logging library**: Levels, structured output, handlers.
-- [ ] **Go AST Phase 3 — Comments & generics** [S]: `Comment`/`CommentGroup` attachment, `BadExpr`/`BadStmt`/`BadDecl` error recovery, `IndexListExpr` for generics. Owned by [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans); the former `plans/GO-AST.md` moved with it.
+- [x] **Go AST Phase 3 — Comments & generics** [Done 2026-03-12, PR #481, `6791deb7`]: `Comment`/`CommentGroup` attachment, `BadExpr`/`BadStmt`/`BadDecl` error recovery, and `IndexListExpr` for generics all shipped here, in `extensions/goast/`; CHANGELOG `[1.6.0]`. **A regression repair, not a first close.** `6791deb7` itself flipped this row to `- [x]`, and `8f7d650a` deleted it when the plans moved out; `3bcc535c` ("documentation plans", 2026-03-27) then re-added it unchecked, and it has read open ever since — a wholesale reshuffle of this file restored a row it should have left closed. The residual that commit split off (file-level comment rebuild) was fixed and closed before the extraction. The code left at `2a5c9b80` and lives in [wile-goast](https://github.com/aalpar/wile-goast) now: `goast/mapper.go` carries the four arms, `goast/mapper_comments.go` and `goast/unmapper_comments.go` the attachment. The plan citation this row used to carry is dropped rather than retargeted: it resolved on neither side, wile-goast having deleted that plan as complete after the move.
 - [ ] **`continuation-mark-set-first` accepts `#f` for mark-set** [XS, Racket-compat]: Racket lets `#f` stand in for "current continuation's marks" as the first argument; Wile's `PrimContinuationMarkSetFirst` (`registry/core/prim_cont_marks.go:54`) hard-requires `*machine.ContinuationMarkSet` via `RequireType`. One-branch fix: check `values.FalseValue` before the type check and substitute `mc.CollectContinuationMarks(machine.DefaultPromptTag)`. Surfaced by the audit findings crosscheck on PR #673; no demand signal yet. Defer until the audit's Phase 4 (axis C — Racket compliance sweep) or a real consumer asks.
 
 ### Core Language
@@ -3113,7 +3356,7 @@ No demand signal. Speculative or research-only.
 
 ### Testing & Quality
 - [ ] **Unit testing expansion**: Regression test files (`test/regression/`), library-specific tests (`stdlib/lib/*/test/`), new test cases.
-- [ ] **Parser unit tests**: Unit tests for parser.
+- [x] **Parser unit tests** [Done]: `pkg/parser` carries 23 test files against 6 non-test sources (`ls pkg/parser/*_test.go`), among them the four `#`-dispatch pins the reader invariant names (`bigint_radix`, `box_read`, `float_radix`, `precision_marker`), `reader_diagnostic_test.go`, and two fuzz targets with checked-in seed corpora under `testdata/fuzz/`. Measured 2026-09-26: 92.3% statement coverage with the seeds replayed, 90.8% without them, against `make covercheck`'s 80% floor — which genuinely binds here, since `pkg/parser` is absent from `covercheck.sh`'s exclusion list. So the row asks for something CI already enforces continuously. Re-derive the figures with `go test -cover -run 'Test|Fuzz' ./pkg/parser/` rather than trusting them.
 
 ### Content
 - [ ] **Blog area in repo**: Git blog area.

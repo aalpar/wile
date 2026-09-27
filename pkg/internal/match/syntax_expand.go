@@ -609,9 +609,16 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 				"expandSyntaxEllipsis: pattern variables found but all ellipsis IDs excluded",
 			)
 		}
-		// No pattern variables at all — constant template followed by `...`.
-		// Repeating it zero times (dropping it) is correct per R7RS §4.3.2.
-		return p.expandSyntaxValue(rest, ctx, ellipsisVars, excludeEllipsisIDs, opts)
+		// No pattern variables at all — a constant sub-template followed by
+		// `...` has nothing to drive the iteration. Both petite and racket
+		// refuse it, so Wile refuses it rather than dropping it. The
+		// syntax-rules arm is refused earlier, when the transformer is
+		// compiled (checkEllipsisGroupDriver); this is the syntax-case path,
+		// where the template is only seen at use.
+		return nil, werr.WrapForeignErrorf(
+			werr.ErrExpansion,
+			"expandSyntaxEllipsis: ellipsis sub-template has no pattern variable to drive iteration",
+		)
 	}
 
 	if len(matchingIDs) == 1 {

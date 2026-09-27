@@ -129,6 +129,23 @@ func markBindingImported(target, source *environment.Binding, exportName string,
 // (it was imported into this library, so its Origin is non-nil), and is left
 // untouched. Runs once per library compile, single-threaded; the nil-guard keeps
 // it idempotent and preserves a re-export's root.
+//
+// DELIBERATELY UNSORTED, unlike the two copy loops, which walk sortedExportKeys.
+// Do not "fix" this by symmetry. The body is a nil-guarded idempotent UpdateMeta
+// per binding, so map order is observable only if two of one library's export
+// keys reach ONE *Binding with DIFFERENT exportRoot results and first-writer-wins
+// then picks between them. The base arm cannot differ: exportRoot returns
+// {RootLib: BaseOriginLib, RootName: internalName} with no RootPhase, identical
+// for every key. Only the library-scoped arm carries RootPhase, and nothing in
+// the tree exhibits two keys landing on one library-scoped binding —
+// findLibraryBinding probes phase then phase+1, and the phase-0 and phase-1
+// frames hold distinct slots for a library's own defines.
+//
+// The drop is paid for with an observable rather than a sort:
+// TestExportRootIsOneAnswerPerBinding (pkg/wile) walks every library the stdlib
+// loads and asserts no two export keys resolve to one binding with unequal
+// roots, through ExportedBindingRoot. If that goes red the position above has
+// become false, and the sort is then justified by a measurement.
 func stampLibraryExportOrigins(lib *CompiledLibrary) {
 	for key, internalName := range lib.Exports {
 		binding, phase, found := findLibraryBinding(lib, internalName, key.Phase)
@@ -490,8 +507,33 @@ func installResolvedImportSet(env *environment.EnvironmentFrame, res *ResolvedIm
 // reaching into lib.Env with a bare-name lookup, or they will disagree with what
 // an import actually installs.
 func (p *CompiledLibrary) ExportedBinding(internalName string) (*environment.Binding, bool) {
-	binding, _, found := findLibraryBinding(p, internalName, environment.PhaseRuntime)
+	binding, _, found := p.ExportedBindingRoot(internalName, environment.PhaseRuntime)
 	return binding, found
+}
+
+// ExportedBindingRoot resolves the binding an export of internalName at phase
+// denotes, and the provenance root stampLibraryExportOrigins WOULD give it. The
+// boolean reports whether a binding was found; when false both pointers are nil.
+//
+// The root is the one exportRoot computes, NOT binding.Origin(). The two differ
+// for a re-export, whose Origin already carries its true source's root and which
+// the stamp therefore leaves alone. A caller asking "what identity does this
+// library's own export of this name have" wants Origin(); a caller auditing the
+// stamp itself wants the would-be root, which is what this returns.
+//
+// Exported for that audit: stampLibraryExportOrigins walks lib.Exports in map
+// order and its first-writer-wins UpdateMeta is only order-independent while no
+// two export keys reach ONE binding with unequal roots. That is a claim about
+// the tree, so it is pinned by a measurement over the loaded stdlib rather than
+// bought with a sort (see the position recorded on the unsorted loop). The pin
+// lives in pkg/wile because loading the stdlib needs bootstrap, which imports
+// this package.
+func (p *CompiledLibrary) ExportedBindingRoot(internalName string, phase environment.Phase) (*environment.Binding, *environment.OriginRef, bool) {
+	binding, sourcePhase, found := findLibraryBinding(p, internalName, phase)
+	if !found || binding == nil {
+		return nil, nil, false
+	}
+	return binding, exportRoot(p, binding, internalName, sourcePhase), true
 }
 
 // findLibraryBinding resolves the binding an export of internalName at phase
@@ -800,7 +842,8 @@ func installImportedBinding(
 //   - targetPhase < 0: For-template import. Bindings shifted to negative phase
 //     (used for generating code that will run at a lower phase).
 func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKey]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
-	for localKey, externalName := range bindings {
+	for _, localKey := range sortedExportKeys(maps.Keys(bindings)) {
+		externalName := bindings[localKey]
 		localName := localKey.Name
 		exportPhase := localKey.Phase
 		internalName := lib.GetInternalName(ExportKey{Phase: exportPhase, Name: externalName})
@@ -960,7 +1003,8 @@ func ImportSpecInto(ctx context.Context, specVal values.Value, callerEnv, target
 // a library env is deliberately a flat island with no sealed tier of its own.
 // Collapsing the two paths takes that decision as a silent side effect.
 func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[ExportKey]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
-	for localKey, externalName := range bindings {
+	for _, localKey := range sortedExportKeys(maps.Keys(bindings)) {
+		externalName := bindings[localKey]
 		localName := localKey.Name
 		internalName := lib.GetInternalName(ExportKey{Phase: localKey.Phase, Name: externalName})
 		if internalName == "" {

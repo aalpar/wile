@@ -391,6 +391,54 @@ var correctedDocClaims = []correctedDocClaim{
 		why: "Three, not four: TestRunEval is not blind. runCLI re-execs the test binary through " +
 			"TestMain, which calls main(), so go-flags parsing is exercised end to end.",
 	},
+	{
+		name:  "TODO_sameImportedBinding",
+		doc:   "TODO.md",
+		stale: "`sameImportedBinding`",
+		why: "Deleted by 5d654b3f (2026-09-16). The live symbol is importConflicts " +
+			"(pkg/machine/compilation/library_bindings.go), which compares provenance roots.",
+	},
+	{
+		name:  "TODO_origin_rejected_for_import_conflict",
+		doc:   "TODO.md",
+		stale: "REJECTED for import-conflict detection",
+		why: "Provenance-root origin is what SHIPPED for import-conflict detection (5d654b3f); " +
+			"importConflicts compares *OriginRef and nothing else. What PR #793 rejected was a " +
+			"SOURCE-LOCATION origin, a different signal.",
+	},
+	{
+		name:  "TODO_compileTransformerToMachineClosure",
+		doc:   "TODO.md",
+		stale: "`compileTransformerToMachineClosure`",
+		why: "Absent from every .go file. The live symbol is compileTransformerValue " +
+			"(pkg/machine/compilation/compile_transformer.go:60), which expands and evaluates the " +
+			"right-hand side instead of switching on its head symbol — measured 2026-09-26: the " +
+			"macro-produced transformer, let-syntax and letrec-syntax shapes print 1, 42 and 43.",
+	},
+	{
+		name:  "TODO_TestMachineClosureIsTwoWords",
+		doc:   "TODO.md",
+		stale: "`TestMachineClosureIsTwoWords`",
+		why: "Absent from every .go file. The live pin is TestMachineClosureSize " +
+			"(pkg/machine/machine_closure_test.go:44), and it asserts FIVE words, not two: " +
+			"flat-closure conversion re-opened the 16 B trade deliberately, so MachineClosure is " +
+			"{link, template, free} = 40 B.",
+	},
+	{
+		name:  "TODO_applyClosure",
+		doc:   "TODO.md",
+		stale: "`applyClosure`",
+		why: "Absent from every .go file. The apply path is (*MachineContext).Apply " +
+			"(pkg/machine/machine_context_apply.go:28).",
+	},
+	{
+		name:  "TODO_TestLibraryExportTakesFirstPresentPhase",
+		doc:   "TODO.md",
+		stale: "`TestLibraryExportTakesFirstPresentPhase`",
+		why: "Renamed by d691ded5 (2026-09-17), which retired the export-phase fork the old name " +
+			"asserted. The live test is TestLibraryExportRoundTripByPhase " +
+			"(pkg/wile/library_export_phase_order_test.go:115).",
+	},
 }
 
 // resolveRef turns a reference as written in doc into a repo-relative path.
