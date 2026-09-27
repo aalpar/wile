@@ -2847,10 +2847,31 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   comment (`coverage_extra_test.go:260`). The 2026-07-18 Stage C review said "delete it or fix it";
   neither happened. Given the D2 pin work above, a constructor that drops a pin is a live hazard,
   not a dormant one.
-- [ ] **`MaybeCreateLocalBinding` still says "nil means match any"** [Tech debt, S]:
-  `pkg/environment/local_environment_frame.go:169-192` keeps `matchAny := scopes == nil` and the
-  doc comment, both of which the `ScopeSet` migration eliminated on the read surface. Same
-  ambiguity, one layer down, and it contradicts the project rule that nil means NONE.
+- [x] **`MaybeCreateLocalBinding` still says "nil means match any"** [Tech debt, S, Done
+  2026-09-27, `97af01a6`]: `pkg/environment/local_environment_frame.go` kept
+  `matchAny := scopes == nil` and the doc comment, both of which the `ScopeSet` migration eliminated
+  on the read surface. Same ambiguity one layer down, contradicting the nil-means-NONE rule — and
+  fail-open, since a nil create reused whichever slot came first whatever scope set it carried, so a
+  ∅-scoped binder and a `{s}`-scoped binder of one name collapsed onto one slot. **Fix**: delete the
+  two lines. The loop now reuses a slot only under `scopeSetsEqual`, which for a nil argument against
+  a meta-less slot is `len 0 == len 0` plus two vacuous `ScopesMatch` calls — still true — so every
+  reuse the suite takes keeps its answer. **Creation and lookup have opposite polarities and that is
+  the point**: "any binding of this name" is askable on the query side with `AllScopes`, and
+  meaningless on the creation side, where a binder's own scope set IS its identity.
+  Latent, and measured rather than assumed: an instrumented counter over the whole Go suite plus
+  `./integration/...` and `./test/...` found **zero** reuses that happened only because `scopes` was
+  nil. That is why the suite cannot supply the ratchet, and why this lands with three tests —
+  `TestNilCreateIsNotWildcard` (the gate: red at `a7a3461e` logging `nil slot=0 created=false`, green
+  after at `nil slot=1 created=true`), `TestLocalBindingCreateHasNoWildcard` (a `go/parser` walk
+  keeping the identifier `matchAny` out of the file, because the wildcard could return under another
+  spelling while the probe's answer stayed the same), and `TestNilCreateReusesAnEmptyScopedSlot` (the
+  control — green before AND after, pinning that this is a bug fix, not a behaviour change). Five
+  stale doc claims went with it. `AmbientScopes()` survives with its rationale rewritten: it is now
+  vacuous as documented, but it states intent where a bare nil reads as an oversight and it has a
+  live caller. `local_environment_frame.go`'s SECOND nil-vs-∅ discrimination — the
+  `if scopes != nil || source != nil` guarding the `BindingMeta` allocation — is deliberately
+  untouched and belongs to the scope-set type flip, which must re-check that no reader distinguishes
+  "meta present with ∅ scopes" from "no meta".
 - [ ] **Stale doc: `processLibraryImport` claims `AtPhase` routes to the parent's phase registry**
   [Tech debt, S]: it does not.
 - [ ] **`TestDenotedForm`'s Primitive+Void case is unreachable** [Tech debt, S]: after the
