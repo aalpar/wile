@@ -437,9 +437,13 @@ func (p *GlobalEnvironmentFrame) Bindings() []*Binding {
 // take a syntax.ScopeSet, which separates wildcard (ScopeSet.IsAll) from empty
 // structurally, and syntax.ScopesOf(nil) is the empty set rather than a
 // wildcard. (EnvironmentFrame.GetGlobalIndex takes no scope argument at all and
-// is unconditionally a wildcard.) Binding CREATION is the one surviving
-// nil-as-wildcard path (MaybeCreateLocalBinding dedups on `scopes == nil`), so
-// a creation caller that means "ambient" must pass this set rather than nil.
+// is unconditionally a wildcard.) Binding CREATION has no nil-as-wildcard path
+// either, as of the I009 fix: MaybeCreateLocalBinding reads a nil []*Scope as the
+// empty set, so a creation caller that passes nil and one that passes this set
+// now agree. That makes this function's original reason to exist vacuous, and it
+// is kept anyway — it states the intent at a call site where a bare nil would
+// read as an oversight, and it has a live caller in
+// pkg/internal/extensions/namespace.
 //
 // Every reflective read of a bare symbol wants this, not a wildcard: a
 // values.Symbol carries no scope set, so when several hygiene-distinct bindings

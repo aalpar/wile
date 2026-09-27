@@ -716,7 +716,9 @@ func (p *EnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType
 // set; any other scope set, even a compatible one, is a different variable and
 // gets its own slot (see scopeSetsEqual).
 //
-// Nil scopes means "match any" during dedup (pre-hygiene callers).
+// A nil scopes argument is the EMPTY set, not "match any" — see the forwardee's
+// doc comment for why creation and lookup have opposite polarities here, and for
+// the ratchet that keeps it that way.
 // Returns (index, true) if created, (index, false) if already existed.
 func (p *EnvironmentFrame) MaybeCreateLocalBinding(
 	key *values.Symbol, bt BindingType,
