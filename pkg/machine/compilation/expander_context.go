@@ -83,7 +83,7 @@ func (p *ExpanderContext) MacroValue(id *syntax.SyntaxSymbol) (values.Value, boo
 	if p == nil || p.expander == nil {
 		return nil, false
 	}
-	bnd := p.expander.lookupMacroBinding(id, id.Scopes())
+	bnd, _ := p.expander.lookupMacroBinding(id, id.Scopes())
 	if bnd == nil {
 		return nil, false
 	}
