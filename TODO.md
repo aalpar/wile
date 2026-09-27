@@ -2908,13 +2908,30 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
 
 ### `predeclareBinding` leaves an unwritten `#!void` twin slot per library-body define (2026-07-19)
 
-- [ ] **Orphan slot per library-body `define`** [Tech debt / allocation, S,
-  **count unverified**]: reported at 104 orphans in `(srfi 1)` alone. C3 (scope-keyed export
-  resolution) made them *unreachable* rather than removing them, so the correctness question
-  is closed and only the allocation remains — which is why this sits in Tier 5 and not with
-  the correctness successors in Tier 1 (see "Scope-keyed globals — successor work"). Verify
-  the count before sizing the work; it comes from the plan's review notes, not from a
-  measurement in-tree.
+- [x] **Orphan slot per library-body `define`** [Tech debt / allocation, S,
+  **count refuted, closed 2026-09-26 — no ratchet; the measurement is recorded**]: the row
+  reported 104 orphans in `(srfi 1)` alone and asked for the count to be verified before
+  sizing the work. Verified 2026-09-26, and there is no work to size: the define path leaves
+  zero orphans. An out-of-tree probe (a two-define library through `fstest.MapFS` +
+  `stdlib.FS` + `WithLibraryPaths()`, then `eng.Namespace().Store().LiveSlots()` bucketed by
+  name) gives live slots=779, sealed=779, distinct live names=587, and **f=1, g=1** —
+  exactly one live slot per library-body `define`, no `#!void` twin. Against `(srfi 1)`
+  itself, which is the library the row names: baseline live=777 / distinct=585, after
+  `(import (srfi 1))` live=926 / distinct=684 (delta 149), with
+  `fold`/`fold-right`/`delete-duplicates`/`iota`/`last`/`any`/`every` at one slot each and
+  **zero `#!void`-valued slots in the store, before or after**. The close is about the
+  OUTCOME, not the mechanism's removal: `predeclareBinding` is still live
+  (`pkg/machine/compilation/letrec_semantics.go:112`, called from `expander_body.go:105`,
+  `compile_time_continuation_include.go:223`, `compile_let.go:469`), but its global arm goes
+  through `MaybeCreateOwnGlobalBinding`, which keys the slot by its scope set **at creation**,
+  so a second predeclare of the same name lands on the slot the first one minted instead of
+  minting a twin. C3 (scope-keyed export resolution) is what made that true; it did not merely
+  make the twins unreachable. **The 192 names carrying more than one slot are a different
+  phenomenon and this close does not deny them**: they are stdlib import/re-export duplicates
+  under different scope sets — the head of that list is core primitives at exactly 2 slots
+  each (`%syntax-spine`, `%syntax-violation`, `*`, `+`, `-`, `/`, `<`, `<=`) — not unwritten
+  define twins. A number inside a closed row is documentation and nothing fails when it is
+  contradicted, so a third filing argues against these figures or re-measures them.
 
 ### `PrimitiveSpec.Mutates` has no static guard (2026-08-09)
 
@@ -3119,7 +3136,7 @@ Items surfaced by /crosscheck on PR #736 (consolidate value-register
 accessors on *vmState — Finding 3 of `memory/2026-05-06-machine-structural-reduction.md`).
 Deferred per scope or design choice.
 
-- [ ] **`SetValues(sub.GetValues()...)` nil-vs-empty ambiguity** [Tech debt, M, Deferred — pre-existing]: Silent-failure-hunter flagged 13 call sites that propagate a sub-context's value register into the parent via `mc.SetValues(sub.GetValues()...)`. `GetValues()` returns `nil` for an empty register (both fields nil); spreading `nil...` calls `SetValues()` with zero args, which now canonicalizes to (nil, nil) post-Q-e. Sub-contexts that exited abnormally without writing a value, sub-contexts that returned `(values)` (R7RS zero-value return), and sub-contexts that returned a real value all collapse into indistinguishable parent-side state. Call sites: `extensions/eval/prim_eval.go:104`, `extensions/files/prim_files.go:179`, `registry/core/prim_timer.go:127`, `registry/core/prim_barrier.go:72`, `registry/core/prim_cont_marks.go:187`, `registry/core/prim_prompt.go:135,149`, `registry/core/prim_control.go:87,200,365`, `registry/core/prim_exit.go:105`. Pre-existing; surfaced by but not introduced by PR #736. Fix shape: distinguish "no value produced" from "(values) zero-return" at each call site, or document the collapse as intentional R7RS behavior.
+- [x] **`SetValues(sub.GetValues()...)` nil-vs-empty ambiguity** [Tech debt, M, **closed 2026-09-26 by option (b): the collapse is intentional and is now documented**]: taking the row's own second option. `nil` IS the zero-values encoding, per auto-memory `feedback-nil-means-none-not-wildcard` (nil ≡ NONE; a wildcard, or any other distinguished state, needs an explicit named value). One sentence saying so was added to `(*vmState).GetValues` (`pkg/machine/vm_state.go`), which is the function whose return value the row reads as ambiguous. The semantics are unambiguous where it matters: `(call-with-values (lambda () (call/cc (lambda (k) (values)))) list)` round-trips to `()` in Wile, in `racket` and in `petite` (verified three ways 2026-09-26; note `racket -I r5rs -e …` fails on this program with "cannot reference an identifier before its definition" — use plain `racket -e`). **The original filing's 13-site list, quoted at the end of this row, is stale — record the pattern, not the spelling.** Four sites match `X.GetValues()...` today: `extensions/files/prim_files.go:226`, `extensions/eval/prim_eval.go:155`, `pkg/registry/core/prim_control.go:227`, `pkg/registry/core/prim_prompt.go:251`. Two of the four spell the receiver `target`, not `sub`, so a bare `sub.GetValues()` grep finds only two of them; grep the pattern. No ratchet: a Go test asserting `GetValues()` returns nil after a zero-arg `SetValues()` is green by construction (`SetValues` nils both fields on `len == 0`, `GetValues` returns nil when both are nil), so it would be a pin, not a gate. Original filing, for the record: Silent-failure-hunter flagged 13 call sites that propagate a sub-context's value register into the parent via `mc.SetValues(sub.GetValues()...)`. `GetValues()` returns `nil` for an empty register (both fields nil); spreading `nil...` calls `SetValues()` with zero args, which now canonicalizes to (nil, nil) post-Q-e. Sub-contexts that exited abnormally without writing a value, sub-contexts that returned `(values)` (R7RS zero-value return), and sub-contexts that returned a real value all collapse into indistinguishable parent-side state. Call sites: `extensions/eval/prim_eval.go:104`, `extensions/files/prim_files.go:179`, `registry/core/prim_timer.go:127`, `registry/core/prim_barrier.go:72`, `registry/core/prim_cont_marks.go:187`, `registry/core/prim_prompt.go:135,149`, `registry/core/prim_control.go:87,200,365`, `registry/core/prim_exit.go:105`. Pre-existing; surfaced by but not introduced by PR #736. Fix shape: distinguish "no value produced" from "(values) zero-return" at each call site, or document the collapse as intentional R7RS behavior.
 
 ### Continuation vmState descriptor follow-ups (#1 Tier-1 shipped `834b2db7`)
 
@@ -3158,14 +3175,14 @@ patterns are visible.
 - [ ] **Reconsider `Exact` overload for NaN/Inf identity** [API design, M, Deferred — design choice Q-6]: The `big.Accuracy` slot returned by `ToFloat64WithAccuracy` is overloaded: (a) genuinely lossless rounding, (b) NaN bit-pattern identity, (c) preserved literal infinity. Doc tightening landed in this PR at `values/conversion.go:54-60` (per design Q-6 resolution). Callers screening "is this a meaningful real number?" must use `math.IsNaN` / `math.IsInf` independently. **Trigger to revisit**: a caller reports being unable to distinguish "rounded-but-real" from "NaN-or-Inf" from the tuple alone, OR a fifth `WithAccuracy` helper is added where the overload becomes too costly to maintain. Possible fix: a 4-valued enum `LossKind { Lossless, RoundedBelow, RoundedAbove, NaNOrInf }` replacing `big.Accuracy` at the public surface; would diverge from Go's stdlib vocabulary at the cost of being self-describing.
 - [ ] **`ToFloat64Lossless` returns rounded value on error** [API design, S, Deferred]: When the conversion would round, `ToFloat64Lossless` returns `(f, ErrLossyConversion)` where `f` is the lossy float64 result — the caller can use the value if they want; the error is advisory. The nil-input error path returns `(0, ErrNotANumber)`. The asymmetry is real: lossy ⇒ best-effort value preserved; nil-input ⇒ zero. Go convention is "non-nil error ⇒ value is unspecified," which the lossy path softly violates. **Decision deferred**: changing this would force every strict-mode caller to abandon their value on rounding (which they wanted to fail-fast on anyway). Document the contract instead. Revisit if a caller reports relying on the "use the rounded value alongside the error" pattern in a way the API should officially support, OR if the asymmetry causes a bug at an FFI boundary.
 - [ ] **`ToFloat64WithAccuracy` nil-defense: error vs panic** [API design, S, Deferred]: The function returns `ErrNotANumber` (wrapped) when `n == nil`. The signature is `n Number`, so a non-Number cannot be passed — the nil case is the only reachable error path. The neighboring `LookupNumericSpec` (`values/numeric_registry.go:163-169`) panics on analogous defensive bugs (out-of-range kind). The split is a style choice: errors-for-FFI-safety vs panic-for-Go-bug. **Revisit when**: (a) the wider codebase converges on one convention for "this should never happen" defensive checks at the `values` boundary, OR (b) an FFI consumer demonstrates a real path where `n == nil` is reachable from outside the type system (unlikely but possible via reflection paths).
-- [ ] **File naming: `conversion.go` lacks `numeric_` prefix** [Tech debt, S, Deferred — taste call]: Other numeric-domain files in `values/` use the `numeric_` prefix (`numeric_kind.go`, `numeric_registry.go`, `numeric_tower.go`); test files follow suit (`numeric_dispatch_test.go`, `numeric_lattice_test.go`). The new `conversion.go` / `conversion_test.go` lacks the prefix. Counter-evidence: `promotion.go` is also unprefixed and lives in the numeric domain, so the convention isn't universal. Rename to `numeric_conversion.go` / `numeric_conversion_test.go` if `promotion.go` is also renamed for consistency, or leave both alone. Revisit when a third unprefixed numeric file is added — the convention either solidifies or breaks definitively.
+- [x] **File naming: `conversion.go` lacks `numeric_` prefix** [Tech debt, S, **premise refuted, closed 2026-09-26 — leave both alone**]: the row read the prefix as marking the numeric domain and found one exception (`promotion.go`). Counted 2026-09-26, the ratio inverts the reading: `ls pkg/values/numeric_*.go | grep -v _test` gives exactly **4** files (`numeric_kind.go`, `numeric_registry.go`, `numeric_repr.go`, `numeric_tower.go`) against **12** unprefixed numeric-domain files (`big_complex.go`, `big_float.go`, `big_integer.go`, `big_transcendental.go`, `big_transcendental_complex.go`, `complex.go`, `conversion.go`, `exact_zero.go`, `float.go`, `integer.go`, `promotion.go`, `rational.go`). The prefix marks **tower machinery** — the kind enum, the spec registry, the representation, the tower itself — not the numeric domain, so `conversion.go` and `promotion.go` are correctly unprefixed and unprefixed is the majority spelling, not the exception. The row's "revisit when a third unprefixed numeric file is added" trigger fired long ago at 12 and the convention resolved the other way. If the rule is written down at all it goes in a **tracked** file (`CODING_STYLE.md`), never `pkg/values/CLAUDE.local.md`, which `.gitignore:48` (`*.local.md`) excludes — `git ls-files pkg/values/ | grep -i claude` is empty, so CI never reads it and neither does a fresh checkout.
 - [ ] **Symbol-singleton location: `symbols_accuracy.go` separate vs co-located** [Tech debt, S, Deferred — taste call]: Prior art for state-symbol singletons in `values/` (`SymbolThreadNew` etc. in `thread.go:54-59`, `SymbolMutexNotOwned` etc. in `mutex.go:30-31`) puts them in the file of the owning type. `SymbolAccuracyBelow`/`Exact`/`Above` live in their own `symbols_accuracy.go`. The split is defensible (the symbols paraphrase `big.Accuracy`, not a Wile type; the natural owner would be `big_float.go` or `numeric_registry.go`, neither of which is a clean fit). Revisit if a third orphan symbol-set appears (then either consolidate all orphans into a single `symbols.go`, or formalize the per-domain-file convention). Update `values/CLAUDE.md` "Sentinel/Singleton Values" inventory either way.
 
 ### Postponed
 
 Items deferred for stated reasons. Re-evaluate when preconditions change.
 
-- [ ] **F11: Promote internal extensions** [Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote when extension API stabilizes and external consumers exist.
+- [x] **F11: Promote internal extensions** [Postponed, **premise stale, closed 2026-09-26**]: two of the three named packages are already public and the third is reachable. Measured 2026-09-26: `ls pkg/extensions/` → `io`; `eval` is public at `extensions/eval`; `ls pkg/internal/extensions/` → `all envvars iotest namespace`, so of the `{io,eval,all}` triple this row names, only `all` is still internal (`envvars`, `iotest` and `namespace` are internal too, but outside the row's scope). "Invisible to embedders" survives only for the ad-hoc `WithExtension()` route: `all.Extension` and `all.SafeExtension` are reachable through `ProfileExtensions` (`pkg/internal/bootstrap/bootstrap.go:82`, with `all.Extension` in `allExtensions` at `:65` and `all.SafeExtension` at `:91` and `:100`), which is the profile API embedders are pointed at. The narrower rewrite — promote `all` out of `pkg/internal/extensions/` — is **declined**: `ls extensions/` gives 12 entries, 11 of them extension packages and all already public, so `all` is a bundle of public parts and exporting the bundle adds surface without adding reach. Its stated precondition ("external consumers exist") is also unmet — see auto-memory `deadscan-ext-refs-are-mostly-first-party` (95 of 102 external references are first-party, so "wile-goast builds against it" is not independent-consumer evidence) and `embedding-size-cuts-deferred` (trim the surface via profiles now; defer the structural moves until a user asks).
 - [x] **Parser: unify readList + readLabeledList** [Postponed, **blocker refuted, closed
   2026-09-26**]: the row postponed the unification as high risk because "structural difference is
   semantic, not accidental." It was accidental, and the difference was one parameter. Both readers
@@ -3183,7 +3200,7 @@ Items deferred for stated reasons. Re-evaluate when preconditions change.
   `readList`/`readLabeledList` unification as what it guards.
 - [ ] **VM dispatch loop extraction** [Postponed]: `MachineContext.Run()` is 547 lines with 65 inlined opcode cases. Go has no computed goto; method dispatch adds measurable overhead on hot path. Intentional performance-over-readability trade-off.
 - [ ] **Match: consolidate bytecode type files** [Postponed]: Pure cosmetic reorganization.
-- [ ] **Extensions: standardize registration patterns** [Postponed]: Requires design decision on canonical pattern.
+- [x] **Extensions: standardize registration patterns** [Postponed, **precondition met, closed 2026-09-26**]: the design decision the row waits on was made, and the sweep is already uniform. Per-directory measurement under `extensions/` (2026-09-26): 11 of 12 top-level entries register through `NewDescribedExtension`; the twelfth, `extensions/algebra/`, holds no `.go` file at top level. It is a container for `graph`, a pure graph-kernel package (`monotone.go`, `scc.go`) whose only non-test consumer is `extensions/algebragraph/prim_count_paths.go:20` — not an extension package, so `NewDescribedExtension` does not apply to it. State the denominator rather than an unqualified ratio: **11 of 12 entries, 11 of 11 extension packages**.
 - [ ] **Schemeutil: grab-bag reorganization** [Postponed]: Moving functions risks import cycle issues.
 
 ### plans/ sweep — refactor & tech-debt deltas (2026-07-21)
@@ -3243,10 +3260,33 @@ Open restructuring work found only in `plans/` during the 2026-07-21 triage.
   architecture direction (`memory/2026-06-13-layered-environment-architecture.md`),
   data-driven promoted-primitive inline registry
   (`plans/2026-06-26-promoted-primitive-inline-registry.md`, DRAFT v2 awaiting review).
-- [ ] **`docs/` audit sweep** [Docs/verification]: the docs-subsystem sweep
-  (`plans/2026-04-23-docs-sweep-impl.md`, follows algebra-docs). The §4 review audit AU.1
-  that shared this row was run 2026-08-09 with a negative verdict, the plan's own header says all
-  23 items are closed, and it is archived: `memory/2026-07-15-review-2026-07-13-sec4-remediation.md`.
+- [x] **`docs/` audit sweep** [Docs/verification, **goal met by another route, closed
+  2026-09-26**]: the docs-subsystem sweep (`plans/2026-04-23-docs-sweep-impl.md`, follows
+  algebra-docs). The §4 review audit AU.1 that shared this row was run 2026-08-09 with a
+  negative verdict, that plan's own header says all 23 items are closed, and it is archived:
+  `memory/2026-07-15-review-2026-07-13-sec4-remediation.md`. The sweep's own goal was met by
+  `99b8c99d` instead. Coverage at close, measured 2026-09-26: **53 `.md` across 15
+  directories** — `docs/` plus 14 documentation subdirectories. (A bare `find docs -type d`
+  reports 16; the extra one is `docs/.claude`, an empty Claude Code config directory holding
+  no files at all. Cite 15, or the next re-measurement contradicts this row.)
+  **RISK NOTE, and it is the load-bearing line here: do NOT schedule re-measuring
+  `99b8c99d`'s benchmark and profile figures as part of a documentation sweep.** That commit
+  deliberately labels un-re-measured figures with their measurement context rather than
+  presenting them as current, and re-measuring them means an interleaved A/B against a named
+  baseline — same-binary drift is +1.2% geometric mean, so a sequential before/after cannot
+  see the delta at all (auto-memory `interleaved-ab-required-for-vm-microdeltas`). That work
+  belongs to the perf wave, not here.
+  Correcting the design's "nothing cheap can gate accuracy", which is too strong:
+  `TestCorrectedDocClaimsStayCorrected` (`cmd/wile/docs_refs_test.go:229`) and
+  `TestProseCountsMatchTheirSource` (`cmd/wile/docs_counts_test.go:60`) are exactly cheap
+  accuracy gates, both already reached by `make ci` through `test` (`Makefile:146`, `:180`).
+  What they cannot do is enumerate: each gates **one named claim**, which is the honest scope
+  — this closeout phase uses six rows of the first. What is genuinely unstartable in CI is
+  the plan-header check, because `plans/` is gitignored: `head -5
+  plans/2026-04-23-docs-sweep-impl.md` still reads `status = "Planned — not started"` while
+  the goal it names has shipped. That is `plans/`-header rot, and it is the same asymmetry
+  that correctly keeps `planlint` (`tools/sh/planlint.sh`, `Makefile:685`) out of the `ci`
+  target.
 
 > **Stale-status housekeeping (planlint evidence), DONE 2026-09-04.** `2026-07-17-review-remediation.md` + `-impl.md` and `2026-07-12-numeric-zero-and-tier2-fold.md` showed unchecked boxes while fully shipped; all three archived to `memory/` in the 2026-09-04 pass with their Plan Index rows, alongside eight whose headers said shipped and the lingering rows of three earlier archives (r6rs hashtables, ambient keywords, literal-pin ambiguity).
 

@@ -303,6 +303,12 @@ func (p *vmState) GetValue() values.Value {
 // GetValues returns all values from the value register as a MultipleValues
 // slice. For the single-value case this allocates a one-element slice; callers
 // on the hot path should use GetValue instead.
+//
+// A nil return IS the zero-values encoding, not a missing answer: nil means
+// NONE, so spreading it back through SetValues(x.GetValues()...) reproduces the
+// canonical empty register rather than losing information. A caller that needs
+// to distinguish "produced no values" from some other state needs an explicit
+// named value for that state, not a second reading of nil.
 func (p *vmState) GetValues() MultipleValues {
 	if p.multiValues != nil {
 		return p.multiValues
