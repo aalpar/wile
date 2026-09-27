@@ -207,7 +207,14 @@ To bound runaway or adversarial programs:
 - `WithMaxStackSize` — caps the evaluation stack.
 - **Context cancellation and timeouts** — the VM checks `ctx` during
   execution, so `context.WithTimeout`/`WithCancel` (and the built-in timer
-  interrupts) preempt long-running code.
+  interrupts) preempt long-running code. **The preemption granularity is the
+  primitive**: a deadline bounds when the VM next looks, not when a single
+  long-running primitive returns, so one call that runs for seconds inside Go
+  overshoots the deadline by however long it takes to finish. Measured:
+  `(with-timeout 500 …)` around `(expt 10 30000000)` answers `TIMED-OUT` after
+  3.78 s real. This is the same boundary the resource-exhaustion entry below
+  states from the other side, and `docs/concurrency/cancellation.md` describes
+  the primitive-layer policy it follows.
 
 ### What the sandbox does *not* protect against
 
