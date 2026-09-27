@@ -433,10 +433,26 @@ defect at HEAD whether or not Tier 2 is ever built.
   it once. Both `compileDefineSyntaxFromSyntax` and `CompileDefineSyntax` run it, so a transformer
   with a side effect fires twice per definition. Observable, and it makes any
   compile-time-state reasoning arithmetically wrong by a factor of two.
-- [ ] **`er-macro-transformer` inside a `let` sees `#<void>` for the `let`'s own locals**
-  [Correctness, S]: `(let ((c 0)) (define-syntax m (er-macro-transformer (lambda (x r c*) … c …))))`
-  reads `c` as `#<void>`. `CompileERMacroTransformerExpr` evaluates the lambda before the `let`'s
-  locals exist.
+- [x] **`er-macro-transformer` inside a `let`** [INVERTED — the filed behaviour does not reproduce;
+  measured and pinned 2026-09-26]: this row claimed such a transformer body reads the `let`'s own
+  local as `#<void>`, and blamed `CompileERMacroTransformerExpr` for evaluating the lambda before
+  the locals exist. **There is no `#<void>` anywhere.** `(let ((c 0)) (define-syntax m
+  (er-macro-transformer (lambda (x r c*) c))) (m))` refuses, exit 1, `errors.Is(err,
+  werr.ErrNoSuchBinding)`, naming `c`; adding `(define-for-syntax c 99)` above the `let` answers 99,
+  exit 0. The refusal is the correct hygiene answer — `c` is a phase-0 runtime binding and the
+  transformer body runs at phase 1 — and Racket agrees, erroring on the same shape with "c:
+  undefined; cannot reference an identifier before its definition". So acting on this row as filed
+  would have replaced a correct refusal with a silent wrong answer: a hygiene regression that no
+  gate in the tree would have caught. `pkg/wile/er_macro_let_local_test.go` now pins both halves
+  (the sentinel plus `no such binding "c"`, and the `define-for-syntax` escape hatch at 99). It is
+  green the day it is written and is **not** a ratchet; its reason for existing is this row. Two
+  things it deliberately does not assert, because the provenance wave rewrites both and a pin that
+  breaks when a diagnostic improves invites its own deletion: the rendered wrap chain (nine
+  `failed to …` links) and the `line:col` offset. That makes the pin **not** independent of the
+  provenance work — its second assertion is coupled to the message text even in this narrowed form
+  — so a change that stops naming the offending identifier lands there as a deliberate edit.
+  `TestUnboundDiagnosticNamesThePhase` and `TestPhase1_ProceduralTransformerUnboundWithoutImport`
+  already pin the same mechanism for a *top-level* binder; only the let-local shape was uncovered.
 - [ ] **`define-for-syntax` binds under the empty scope set** [Correctness / hygiene, S]:
   `runDefineForSyntax` writes with ∅ scopes, so the binding is not hygienic and a same-named
   use-site identifier reaches it. Same family as the scope-keyed-global work already shipped.
