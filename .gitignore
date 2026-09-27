@@ -5,7 +5,34 @@ private/
 # must never reach the public surface. Belt-and-suspenders: these are also
 # covered by a personal global gitignore on the maintainer's machine, but the
 # repo must protect itself for fresh clones, CI, and other contributors.
+#
+# /plans/ and /memory/ are restored here after being dropped in b5c0e18b. Both
+# paths are currently TRACKED SYMLINKS into ../wile-memoplans/, so these two
+# patterns are inert today — a tracked path ignores .gitignore. They exist for
+# the case the symlinks are ever replaced by real directories, which is measured
+# to make 422 of the 430 files in that archive stageable by a bare `git add -A`.
+# Protection should rest on a rule, not on a symlink's file mode.
+#
+# This does NOT retract anything. plans/ and memory/ were tracked as real files
+# from 2026-01-17 to 2026-06-11 — 542 paths, 26.5 MiB — and 9225bd32 untracked
+# them by renaming to *.local.md, which git recorded as plain deletions, so every
+# prior revision keeps its blob. All of it is reachable from origin/master and
+# from 45 published tags, is served by 3 forks, and is frozen into immutable
+# module zips on proxy.golang.org. It cannot be recalled, and a history rewrite
+# would re-SHA 3,885 of 3,911 commits to invalidate 126 of the 127 commit SHAs
+# cited in TODO.md and CHANGELOG.md while still not reaching the forks or the
+# proxy. Audited 2026-09-26: zero secrets, zero personal data, zero third-party
+# confidential material. Going forward is the only direction that works.
+/plans/
+/memory/
 /scheme-corpus/
+
+# Claude Code plugin state: skills scaffolding and the Remember plugin's rolling
+# session history. Agent working memory, not a build input, and .remember/ holds
+# verbatim session transcripts. Note .goast-beliefs/ is deliberately NOT here —
+# its nine belief files are tracked on purpose and are read by wile-goast.
+/.superpowers/
+/.remember/
 
 # Build outputs
 dist/
