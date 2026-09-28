@@ -131,3 +131,57 @@ func TestSecurityDocNamesNoAuthorizerCarveOut(t *testing.T) {
 		t.Error("SECURITY.md's two-layer paragraph does not point at docs/security/sandboxing.md's widening section")
 	}
 }
+
+// resourceLimitBullet returns the "- **<lead>" bullet of the Resource limits
+// list. Separate from postureBullet because the list lives under a different
+// heading and its first entries are plain, not bolded.
+func resourceLimitBullet(t *testing.T, doc, lead string) string {
+	t.Helper()
+	section := docSection(t, doc, "### Resource limits")
+	_, rest, found := strings.Cut(section, "- **"+lead)
+	if !found {
+		t.Fatalf("SECURITY.md: Resource limits has no %q bullet", lead)
+	}
+	bullet, _, found := strings.Cut(rest, "\n- ")
+	if !found {
+		return normalizeProse(rest)
+	}
+	return normalizeProse(bullet)
+}
+
+// TestSecurityDocScopesTimeoutPreemption is the gate for I049. The timeout
+// bullet claimed without qualification that a context deadline "preempts
+// long-running code", and the file contradicted itself two bullets later: the
+// resource-exhaustion entry under "What the sandbox does not protect against"
+// already excepts "CPU spent inside primitives". That contradiction is the
+// oracle — no external source is needed to know one of them is wrong.
+//
+// The missing fact is GRANULARITY. Preemption happens between VM steps, so a
+// deadline bounds when the VM next looks, not when a single long-running
+// primitive returns. Reproduced at e64c43a2:
+//
+//	time ./wile -e '(with-timeout 500 (lambda a (quote TIMED-OUT))
+//	                  (lambda () (begin (expt 10 30000000) (quote done))))'
+//
+// prints TIMED-OUT after 3.75 s real against a 500 ms deadline.
+//
+// Only the documentation half of the row is taken. A per-namespace
+// allocation/step budget (Racket's custodian model) is a feature across every
+// opcode and every primitive, and TODO.md's "Investigated & Rejected" already
+// declines per-category opcode limits on the grounds that WithMaxCallDepth +
+// WithMaxStackSize + a ctx deadline suffice; a budget inherits that argument
+// and needs an explicit answer to it, which is a scope decision for the author.
+//
+// The design's proposed behavioural pin, TestTimeoutDoesNotPreemptInsideOnePrimitive,
+// is deliberately NOT used: it was run and is GREEN on master (PASS in 3.72 s).
+// It costs 3.7 s of wall clock per CI run to pin a behaviour that is not
+// changing, and a wall-clock threshold inside a test is the determinism leak
+// CLAUDE.md's concurrency section says to route through an injectable.
+func TestSecurityDocScopesTimeoutPreemption(t *testing.T) {
+	bullet := resourceLimitBullet(t, securityDoc(t), "Context cancellation and timeouts")
+	for _, want := range []string{"granularity", "primitive"} {
+		if !strings.Contains(bullet, want) {
+			t.Errorf("SECURITY.md timeout bullet does not name %q; it claims preemption without stating that the granularity is the primitive, and so contradicts the resource-exhaustion bullet two entries below: %q", want, bullet)
+		}
+	}
+}
