@@ -144,7 +144,21 @@ func (p *LocalEnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt Bindin
 
 // MaybeCreateLocalBinding creates a local binding with scope-aware deduplication.
 // A slot is reused only by a binder carrying the SAME scope set; any other scope
-// set is a different variable and gets its own slot. Nil scopes means "match any".
+// set is a different variable and gets its own slot.
+//
+// A nil scopes argument is the EMPTY set, never "match any". Creation and lookup
+// have opposite polarities here and the asymmetry is deliberate: on the query
+// side a caller that means "any binding of this name" asks with AllScopes, but on
+// the creation side "all" is meaningless, because a binder's own scope set IS its
+// identity. This function held the last nil-as-wildcard read in the tree, and it
+// was fail-open — a nil create reused whichever slot came first, whatever set
+// that slot carried. Pinned by TestNilCreateIsNotWildcard and by the site-count
+// ratchet in nil_create_not_wildcard_test.go.
+//
+// Deleting the wildcard changed no measured answer: nil against a meta-less slot
+// is scopeSetsEqual's len 0 == len 0 plus two vacuous ScopesMatch calls, still
+// true, and an instrumented counter over the whole Go suite plus ./integration/...
+// and ./test/... found zero reuses that happened ONLY because scopes was nil.
 //
 // Creation compares with scopeSetsEqual, not ScopesCompatible, for the reason
 // spelled out at scopeSetsEqual (global_environment_frame.go): compatibility
@@ -171,10 +185,9 @@ func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
 	scopes []*syntax.Scope, source *syntax.SourceContext,
 ) (*LocalIndex, bool) {
 	slots := p.keys[*key]
-	matchAny := scopes == nil
 	for _, i := range slots {
 		binding := &p.bindings[i]
-		if matchAny || scopeSetsEqual(binding.Scopes(), scopes) {
+		if scopeSetsEqual(binding.Scopes(), scopes) {
 			if binding.Source() == nil && source != nil {
 				binding.UpdateMeta(func(m *BindingMeta) bool {
 					m.Source = source

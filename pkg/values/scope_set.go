@@ -24,9 +24,11 @@ package values
 // empty set" at others, plus a matchAny bool parameter and a scopeKeyed bool
 // field bolted on where the slice could not carry the distinction. The three
 // states — all / empty / specific — are now one value, so on the reference/query
-// side the same nil no longer answers two opposite questions. (The
-// binder-creation path in LocalEnvironmentFrame.MaybeCreateLocalBinding still
-// reads a nil []*Scope as "match any"; that call is not yet converted.)
+// side the same nil no longer answers two opposite questions. The
+// binder-creation path in LocalEnvironmentFrame.MaybeCreateLocalBinding was the
+// last holdout and no longer reads a nil []*Scope as "match any" either; it takes
+// nil as the empty set, which is the only reading that means anything on the
+// creation side, since a binder's scope set is its identity.
 //
 // A binder's OWN scope set is not a ScopeSet: it is always a concrete []*Scope,
 // because "all" is meaningless for identity. ScopeSet models the reference/query
