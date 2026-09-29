@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
 	"github.com/aalpar/wile/pkg/werr"
@@ -1696,7 +1697,7 @@ func TestRunDispatch_OpLoadGlobal(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
 	sym := values.NewSymbol("test-var")
-	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, syntax.Scopes{})
 
 	// Set the global binding value
 	bd := env.GetGlobalBinding(gi)
@@ -1825,7 +1826,7 @@ func TestRunDispatch_OpStoreGlobal(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
 	sym := values.NewSymbol("store-var")
-	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, syntax.Scopes{})
 
 	tpl := NewNativeTemplate(0, 0, false)
 	litVal := tpl.MaybeAppendLiteral(values.NewInteger(77))
@@ -1965,7 +1966,7 @@ func TestRunDispatch_OpPushGlobal(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
 	sym := values.NewSymbol("push-global-var")
-	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, syntax.Scopes{})
 	bd := env.GetGlobalBinding(gi)
 	bd.SetValue(values.NewInteger(99))
 
@@ -2134,7 +2135,7 @@ func TestRunDispatch_OpLoadCachedBinding(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
 	sym := values.NewSymbol("cached-var")
-	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, syntax.Scopes{})
 	bd := env.GetGlobalBinding(gi)
 	bd.SetValue(values.NewInteger(42))
 
@@ -2154,7 +2155,7 @@ func TestRunDispatch_OpPushCachedBinding(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
 	sym := values.NewSymbol("push-cached-var")
-	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, syntax.Scopes{})
 	bd := env.GetGlobalBinding(gi)
 	bd.SetValue(values.NewInteger(42))
 

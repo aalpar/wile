@@ -67,7 +67,7 @@ func TestSyntaxBoxAddScopePropagates(t *testing.T) {
 	c := qt.New(t)
 
 	sym := syntax.NewSyntaxSymbol("x", nil)
-	c.Assert(len(sym.Scopes()), qt.Equals, 0)
+	c.Assert(sym.Scopes().Len(), qt.Equals, 0)
 
 	bx := syntax.NewSyntaxBox(sym, nil)
 	scope := syntax.NewScope()
@@ -80,5 +80,5 @@ func TestSyntaxBoxAddScopePropagates(t *testing.T) {
 		qt.Commentf("the scope must reach the boxed symbol"))
 
 	// The original is untouched: every scope operation returns a new object.
-	c.Assert(len(sym.Scopes()), qt.Equals, 0)
+	c.Assert(sym.Scopes().Len(), qt.Equals, 0)
 }

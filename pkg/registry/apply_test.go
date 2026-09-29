@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
@@ -272,7 +273,7 @@ func TestApplyDocs(t *testing.T) {
 	macroEnv := env.Expand()
 	macroEnv.MaybeCreateOwnGlobalBinding(
 		values.NewSymbol("and"), environment.BindingTypeSyntax,
-		nil,
+		syntax.Scopes{},
 	)
 
 	reg.ApplyDocs(env)

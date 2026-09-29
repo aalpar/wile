@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
 
@@ -102,7 +103,7 @@ func TestOperation(t *testing.T) {
 			op: NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0),
 			setupFn: func(t *testing.T, mc *MachineContext) {
 				sym := values.NewSymbol("bindSymbolWithScopes")
-				gi, ok := mc.env.GlobalEnvironment().CreateGlobalBindingAt(sym, environment.BindingTypeVariable, nil, environment.PhaseRuntime, false)
+				gi, ok := mc.env.GlobalEnvironment().CreateGlobalBindingAt(sym, environment.BindingTypeVariable, syntax.Scopes{}, environment.PhaseRuntime, false)
 				qt.Assert(t, ok, qt.IsTrue)
 				mc.template.MaybeAppendLiteral(gi)
 				// gi is the create's PIN, so either entry point resolves it; going
@@ -122,7 +123,7 @@ func TestOperation(t *testing.T) {
 			evals: NewStack(values.NewInteger(10)),
 			setupFn: func(t *testing.T, mc *MachineContext) {
 				sym := values.NewSymbol("bindSymbolWithScopes")
-				gi, ok := mc.env.GlobalEnvironment().CreateGlobalBindingAt(sym, environment.BindingTypeVariable, nil, environment.PhaseRuntime, false)
+				gi, ok := mc.env.GlobalEnvironment().CreateGlobalBindingAt(sym, environment.BindingTypeVariable, syntax.Scopes{}, environment.PhaseRuntime, false)
 				qt.Assert(t, ok, qt.IsTrue)
 				mc.template.MaybeAppendLiteral(gi)
 			},

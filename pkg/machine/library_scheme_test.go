@@ -608,7 +608,7 @@ func TestLibraryBindingsCarryLibraryScope(t *testing.T) {
 	myFnSym := values.NewSymbol("my-fn")
 	binding := lib.Env.GetBinding(myFnSym, values.AllScopes())
 	c.Assert(binding, qt.IsNotNil, qt.Commentf("my-fn should exist in library env"))
-	c.Assert(len(binding.Scopes()) > 0, qt.IsTrue,
+	c.Assert(binding.Scopes().Len() > 0, qt.IsTrue,
 		qt.Commentf("library binding should carry at least the library scope"))
 
 	// Also check a define-syntax binding in the expand phase
@@ -625,6 +625,6 @@ func TestLibraryBindingsCarryLibraryScope(t *testing.T) {
 	myMacroSym := values.NewSymbol("my-macro")
 	syntaxBinding := lib2.Env.Expand().GetBinding(myMacroSym, values.AllScopes())
 	c.Assert(syntaxBinding, qt.IsNotNil, qt.Commentf("my-macro should exist in library expand env"))
-	c.Assert(len(syntaxBinding.Scopes()) > 0, qt.IsTrue,
+	c.Assert(syntaxBinding.Scopes().Len() > 0, qt.IsTrue,
 		qt.Commentf("library syntax binding should carry at least the library scope"))
 }

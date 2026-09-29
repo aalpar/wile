@@ -558,7 +558,7 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 
 	// Add runtime binding (variable)
 	foSym := values.NewSymbol("bindSymbolWithScopes")
-	_, _ = srcEnv.MaybeCreateOwnGlobalBinding(foSym, environment.BindingTypeVariable, nil)
+	_, _ = srcEnv.MaybeCreateOwnGlobalBinding(foSym, environment.BindingTypeVariable, syntax.Scopes{})
 	fooIdx := srcEnv.GetGlobalIndex(foSym)
 	_ = srcEnv.SetOwnGlobalValue(fooIdx, values.NewInteger(42))
 	lib.AddExport(environment.PhaseRuntime, "bindSymbolWithScopes", "")
@@ -566,7 +566,7 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 	// Add syntax binding (macro)
 	barSym := values.NewSymbol("bar")
 	expandEnv := srcEnv.Expand()
-	_, _ = expandEnv.MaybeCreateOwnGlobalBinding(barSym, environment.BindingTypeSyntax, nil)
+	_, _ = expandEnv.MaybeCreateOwnGlobalBinding(barSym, environment.BindingTypeSyntax, syntax.Scopes{})
 	barIdx := expandEnv.GetGlobalIndex(barSym)
 	mockMacro := values.NewSymbol("mock-macro")
 	_ = expandEnv.SetOwnGlobalValue(barIdx, mockMacro)
@@ -609,7 +609,7 @@ func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
 
 	// Add binding with internal name different from external
 	internalSym := values.NewSymbol("internal-bindSymbolWithScopes")
-	_, _ = srcEnv.MaybeCreateOwnGlobalBinding(internalSym, environment.BindingTypeVariable, nil)
+	_, _ = srcEnv.MaybeCreateOwnGlobalBinding(internalSym, environment.BindingTypeVariable, syntax.Scopes{})
 	idx := srcEnv.GetGlobalIndex(internalSym)
 	_ = srcEnv.SetOwnGlobalValue(idx, values.NewInteger(99))
 	lib.AddExport(environment.PhaseRuntime, "bindSymbolWithScopes", "internal-bindSymbolWithScopes")
@@ -764,7 +764,7 @@ func TestCopyLibraryBindingsToEnv_AmbientKeyword(t *testing.T) {
 
 	elseSym := values.NewSymbol("else")
 	ambient := srcEnv.SealedWriteViewAt(environment.PhaseRuntime)
-	_, _ = ambient.MaybeCreateOwnGlobalBinding(elseSym, environment.BindingTypePrimitive, nil)
+	_, _ = ambient.MaybeCreateOwnGlobalBinding(elseSym, environment.BindingTypePrimitive, syntax.Scopes{})
 	lib.AddExport(environment.PhaseRuntime, "else", "")
 
 	targetEnv := environment.NewNamespace().Runtime()

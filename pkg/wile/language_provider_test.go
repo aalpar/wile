@@ -230,10 +230,10 @@ func TestBulkRowsCarryTheEmptyScopeSet(t *testing.T) {
 
 	for store, name := range stores {
 		rows := 0
-		store.EachBulkRow(func(scopes []*syntax.Scope, phase environment.Phase, sealed bool, _ environment.BulkOrigin) bool {
-			qt.Assert(t, scopes, qt.HasLen, 0,
+		store.EachBulkRow(func(scopes syntax.Scopes, phase environment.Phase, sealed bool, _ environment.BulkOrigin) bool {
+			qt.Assert(t, scopes.Len(), qt.Equals, 0,
 				qt.Commentf("%s store: row %d at (phase %d, sealed=%v) carries %d scopes; resolveRankedLocked's miss-only consultation is then unsound",
-					name, rows, phase, sealed, len(scopes)))
+					name, rows, phase, sealed, scopes.Len()))
 			rows++
 			return true
 		})
@@ -339,7 +339,7 @@ func TestEveryOriginRowIsLanguageDeclared(t *testing.T) {
 	store := eng.Namespace().Runtime().GlobalEnvironment()
 	language := 0
 	other := 0
-	store.EachBulkRow(func(_ []*syntax.Scope, phase environment.Phase, sealed bool, origin environment.BulkOrigin) bool {
+	store.EachBulkRow(func(_ syntax.Scopes, phase environment.Phase, sealed bool, origin environment.BulkOrigin) bool {
 		// The OTHER half of the same premise, and the worse half to lose. The
 		// premise is "sealed AND language-declared, hence tierExactSealed"; an
 		// unsealed row ranks tierExactMutable and would outrank EVERY slot, where
