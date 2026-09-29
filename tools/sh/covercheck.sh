@@ -45,6 +45,7 @@ EXCLUDED_PKGS=(
 	"tools/ruleguard"
 	"tools/cmd/cxmeasure"
 	"tools/cmd/deadscan"
+	"tools/cmd/scopeopslint"
 	"tools/cxmeasure"
 	"tools/deadscan"
 	"pkg/stdlib"
