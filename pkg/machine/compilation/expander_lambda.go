@@ -187,7 +187,7 @@ func unwrapBeginBodyWithFlag(exprs []syntax.SyntaxValue) ([]syntax.SyntaxValue, 
 // formalSymbol pairs a symbol with its scopes for formal parameter tracking.
 type formalSymbol struct {
 	sym    *values.Symbol
-	scopes []*syntax.Scope
+	scopes syntax.Scopes
 	source *syntax.SourceContext
 }
 

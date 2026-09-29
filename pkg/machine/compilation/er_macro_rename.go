@@ -121,7 +121,12 @@ func symbolWithBindingScopes(key string, bnd *environment.Binding, env *environm
 		syntax.NewSourceIndexes(0, 0, 0),
 		syntax.NewSourceIndexes(0, 0, 0),
 	)
-	for _, scope := range bindingScopes {
+	// Iterated in the set's canonical (descending-id) order. The order this loop
+	// sees used to be the binding's STORED order and WithScope prepended, so the
+	// result was that order reversed; now both sides are canonical, so the loop's
+	// order and the result's order are the same thing and the reversal is gone.
+	// Set membership is all any consumer reads, so no answer moves.
+	for scope := range bindingScopes.All() {
 		sctx = sctx.WithScope(scope)
 	}
 	result := syntax.NewSyntaxSymbol(key, sctx)

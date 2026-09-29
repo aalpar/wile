@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/registry/helpers"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -126,7 +127,7 @@ func PrimNamespaceDefine(mc machine.CallContext) error {
 	val := mc.Arg(2)
 
 	env := ns.Runtime()
-	_, setErr := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, val)
+	_, setErr := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, syntax.Scopes{}, val)
 	if setErr != nil {
 		return setErr
 	}

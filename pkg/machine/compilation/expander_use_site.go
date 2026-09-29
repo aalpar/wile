@@ -239,7 +239,7 @@ func (p *ExpanderTimeContinuation) pruneDefinitionBinder(pair *syntax.SyntaxPair
 // whole expansion run, while an identifier carries a handful of scopes.
 func (p *ExpanderTimeContinuation) pruneBinderSymbol(sym *syntax.SyntaxSymbol) *syntax.SyntaxSymbol {
 	q := sym
-	for _, s := range sym.Scopes() {
+	for s := range sym.Scopes().All() {
 		if p.isUseSiteScope(s) {
 			q = q.RemoveScope(s)
 		}

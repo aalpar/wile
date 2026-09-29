@@ -170,7 +170,7 @@ func createPhaseBindingUnlessStable(
 	expandEnv *environment.EnvironmentFrame,
 	sym *values.Symbol,
 	bt environment.BindingType,
-	scopes []*syntax.Scope,
+	scopes syntax.Scopes,
 	form string,
 ) (*environment.GlobalIndex, bool, error) {
 	gi, created := expandEnv.MaybeCreateOwnGlobalBinding(sym, bt, scopes)

@@ -149,6 +149,6 @@ func registerPrimitiveExpandersWithout(env *environment.EnvironmentFrame, exclud
 //
 // This function handles hygiene by using scoped lookup - it will only match
 // bindings whose scopes are a subset of the symbol's scopes.
-func LookupPrimitiveExpander(env *environment.EnvironmentFrame, sym *values.Symbol, scopes []*syntax.Scope) *PrimitiveExpander {
+func LookupPrimitiveExpander(env *environment.EnvironmentFrame, sym *values.Symbol, scopes syntax.Scopes) *PrimitiveExpander {
 	return LookupPhaseBinding[*PrimitiveExpander](env.Expand(), sym, scopes)
 }

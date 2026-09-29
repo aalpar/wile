@@ -50,10 +50,10 @@ func TestGetLocalIndex_AmbiguousIncomparableScopesRaises(t *testing.T) {
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
 	sym := values.NewSymbol("x")
 
-	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeB}, nil)
-	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeC}, nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB}), nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeC}), nil)
 
-	ref := syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB, scopeC})
+	ref := syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB, scopeC}))
 	r := capturePanic(func() {
 		env.GetLocalIndex(sym, ref)
 	})
@@ -78,10 +78,10 @@ func TestGetBinding_AmbiguousIncomparableScopesRaises(t *testing.T) {
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
 	sym := values.NewSymbol("x")
 
-	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeB}, nil)
-	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeC}, nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB}), nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeC}), nil)
 
-	ref := syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB, scopeC})
+	ref := syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB, scopeC}))
 	r := capturePanic(func() {
 		env.GetBinding(sym, ref)
 	})
@@ -106,10 +106,10 @@ func TestGetLocalIndex_ComparableScopesNotAmbiguous(t *testing.T) {
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
 	sym := values.NewSymbol("x")
 
-	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA}, nil)         // slot 0
-	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeB}, nil) // slot 1
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scopeA}), nil)         // slot 0
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB}), nil) // slot 1
 
-	ref := syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB, scopeC})
+	ref := syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB, scopeC}))
 	var idx *LocalIndex
 	r := capturePanic(func() {
 		idx = env.GetLocalIndex(sym, ref)
@@ -133,10 +133,10 @@ func TestGetLocalIndex_PerfectMatchNotAmbiguous(t *testing.T) {
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
 	sym := values.NewSymbol("x")
 
-	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeC}, nil)         // slot 0
-	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeB, scopeC}, nil) // slot 1 (perfect)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeC}), nil)         // slot 0
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB, scopeC}), nil) // slot 1 (perfect)
 
-	ref := syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB, scopeC})
+	ref := syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB, scopeC}))
 	var idx *LocalIndex
 	r := capturePanic(func() {
 		idx = env.GetLocalIndex(sym, ref)
@@ -158,10 +158,10 @@ func TestExactBinding_LocalTieIsReportedNotRaised(t *testing.T) {
 	topEnv := NewNamespaceFrame()
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
 	sym := values.NewSymbol("x")
-	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeB}, nil)
-	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA, scopeC}, nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB}), nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeC}), nil)
 
-	ref := syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB, scopeC})
+	ref := syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB, scopeC}))
 	var bnd *Binding
 	var ambiguous bool
 	r := capturePanic(func() {
@@ -175,7 +175,7 @@ func TestExactBinding_LocalTieIsReportedNotRaised(t *testing.T) {
 func TestExactBinding_LocalWinsOverTheStore(t *testing.T) {
 	ns := NewNamespace()
 	sym := values.NewSymbol("x")
-	_, err := ns.Runtime().DefineOwnGlobal(sym, BindingTypeVariable, nil, values.NewInteger(1))
+	_, err := ns.Runtime().DefineOwnGlobal(sym, BindingTypeVariable, syntax.Scopes{}, values.NewInteger(1))
 	qt.Assert(t, err, qt.IsNil)
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), ns.Runtime())
 	_, ok := env.EnsureLocalBinding(sym, BindingTypeVariable)
@@ -198,7 +198,7 @@ func TestExactBinding_ReachesTheStoresExactTiers(t *testing.T) {
 	ns := NewNamespace()
 	sym := values.NewSymbol("else")
 	sealedIdx, created := ns.Runtime().SealedWriteViewAt(PhaseRuntime).
-		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
+		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, syntax.Scopes{})
 	qt.Assert(t, created, qt.IsTrue)
 	sealed := ns.Store().GetOwnGlobalBinding(sealedIdx)
 
@@ -214,7 +214,7 @@ func TestExactBinding_ReachesTheStoresExactTiers(t *testing.T) {
 	qt.Assert(t, bnd, qt.IsNil)
 
 	// A phase-0 mutable slot outranks the sealed one at the same phase.
-	idx, err := ns.Runtime().DefineOwnGlobal(sym, BindingTypeVariable, nil, values.NewInteger(5))
+	idx, err := ns.Runtime().DefineOwnGlobal(sym, BindingTypeVariable, syntax.Scopes{}, values.NewInteger(5))
 	qt.Assert(t, err, qt.IsNil)
 	bnd, _ = ns.Runtime().ExactBinding(sym, values.EmptyScopes())
 	qt.Assert(t, bnd, qt.Equals, ns.Store().GetOwnGlobalBinding(idx))

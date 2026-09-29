@@ -36,12 +36,12 @@ func newPrunerFixture(registered ...*syntax.Scope) *ExpanderTimeContinuation {
 }
 
 func scopedSym(name string, scopes ...*syntax.Scope) *syntax.SyntaxSymbol {
-	return syntax.NewSyntaxSymbol(name, &syntax.SourceContext{Scopes: scopes})
+	return syntax.NewSyntaxSymbol(name, &syntax.SourceContext{Scopes: syntax.ScopesFromSlice(scopes)})
 }
 
 // binderScopesOf reads the scope set off a form's binder, following both define
 // shapes, so a test can assert on the result without re-implementing the walk.
-func binderScopesOf(t *testing.T, form syntax.SyntaxValue) []*syntax.Scope {
+func binderScopesOf(t *testing.T, form syntax.SyntaxValue) syntax.Scopes {
 	t.Helper()
 	pair, ok := form.(*syntax.SyntaxPair)
 	qt.Assert(t, ok, qt.IsTrue)
@@ -76,8 +76,9 @@ func TestPruneUseSiteScopes(t *testing.T) {
 		out := p.pruneUseSiteScopes(form)
 
 		scopes := binderScopesOf(t, out)
-		qt.Assert(t, scopes, qt.HasLen, 1)
-		qt.Assert(t, scopes[0], qt.Equals, keep)
+		qt.Assert(t, scopes.Len(), qt.Equals, 1)
+		// Membership, not position: order is not part of the Scopes contract.
+		qt.Assert(t, scopes.Has(keep), qt.IsTrue)
 	})
 
 	t.Run("leaves an unregistered scope alone", func(t *testing.T) {
@@ -90,8 +91,9 @@ func TestPruneUseSiteScopes(t *testing.T) {
 		// Identity, not merely equality: nothing changed, so nothing was rebuilt.
 		qt.Assert(t, out, qt.Equals, form)
 		scopes := binderScopesOf(t, out)
-		qt.Assert(t, scopes, qt.HasLen, 1)
-		qt.Assert(t, scopes[0], qt.Equals, unregistered)
+		qt.Assert(t, scopes.Len(), qt.Equals, 1)
+		// Membership, not position: order is not part of the Scopes contract.
+		qt.Assert(t, scopes.Has(unregistered), qt.IsTrue)
 	})
 
 	t.Run("strips from the curried (define (name args) body) shape", func(t *testing.T) {
@@ -105,7 +107,7 @@ func TestPruneUseSiteScopes(t *testing.T) {
 
 		out := p.pruneUseSiteScopes(form)
 
-		qt.Assert(t, binderScopesOf(t, out), qt.HasLen, 0)
+		qt.Assert(t, binderScopesOf(t, out).Len(), qt.Equals, 0)
 	})
 
 	t.Run("strips from define-syntax, which extractDefineName excludes", func(t *testing.T) {
@@ -115,7 +117,7 @@ func TestPruneUseSiteScopes(t *testing.T) {
 
 		out := p.pruneUseSiteScopes(form)
 
-		qt.Assert(t, binderScopesOf(t, out), qt.HasLen, 0)
+		qt.Assert(t, binderScopesOf(t, out).Len(), qt.Equals, 0)
 	})
 
 	t.Run("recurses through begin", func(t *testing.T) {
@@ -132,7 +134,7 @@ func TestPruneUseSiteScopes(t *testing.T) {
 		qt.Assert(t, ok, qt.IsTrue)
 		tail, ok := rest.SyntaxCdr().(*syntax.SyntaxPair)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, binderScopesOf(t, tail.SyntaxCar()), qt.HasLen, 0)
+		qt.Assert(t, binderScopesOf(t, tail.SyntaxCar()).Len(), qt.Equals, 0)
 	})
 
 	t.Run("leaves a let binder alone: its references wear the scope too", func(t *testing.T) {

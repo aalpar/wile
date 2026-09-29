@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -45,7 +46,7 @@ import (
 func InstallBaseRow(owner *environment.EnvironmentFrame, library values.Value, phase environment.Phase) {
 	store := owner.GlobalEnvironment()
 	src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, library)
-	store.InstallBulkRow(src, nil, phase, true, environment.BulkOriginLanguage)
+	store.InstallBulkRow(src, syntax.Scopes{}, phase, true, environment.BulkOriginLanguage)
 }
 
 // InstallMacroVocabularyRow declares the macro vocabulary at EVERY macro phase
@@ -62,7 +63,7 @@ func InstallMacroVocabularyRow(owner *environment.EnvironmentFrame) {
 		MacroVocabulary(),
 		MacroVocabularyName(),
 	)
-	store.InstallMacroPhaseRow(vocab, nil, true, environment.BulkOriginLanguage)
+	store.InstallMacroPhaseRow(vocab, syntax.Scopes{}, true, environment.BulkOriginLanguage)
 }
 
 // installDefaultLanguageRows installs the default dialect's language rows: the

@@ -50,13 +50,13 @@ func TestNilCreateIsNotWildcard(t *testing.T) {
 	sym := values.NewSymbol("x")
 
 	scopedIdx, scopedCreated := env.MaybeCreateLocalBinding(
-		sym, BindingTypeVariable, []*syntax.Scope{scope}, nil,
+		sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scope}), nil,
 	)
 	t.Logf("scoped slot=%d created=%v", scopedIdx.Over(), scopedCreated)
 	c.Assert(scopedCreated, qt.IsTrue, qt.Commentf("the first create must allocate a slot"))
 
 	nilIdx, nilCreated := env.MaybeCreateLocalBinding(
-		sym, BindingTypeVariable, nil, nil,
+		sym, BindingTypeVariable, syntax.Scopes{}, nil,
 	)
 	t.Logf("nil slot=%d created=%v", nilIdx.Over(), nilCreated)
 
@@ -83,10 +83,10 @@ func TestNilCreateReusesAnEmptyScopedSlot(t *testing.T) {
 	env := NewLocalEnvironment(0)
 	sym := values.NewSymbol("x")
 
-	firstIdx, firstCreated := env.MaybeCreateLocalBinding(sym, BindingTypeVariable, nil, nil)
+	firstIdx, firstCreated := env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}, nil)
 	c.Assert(firstCreated, qt.IsTrue)
 
-	secondIdx, secondCreated := env.MaybeCreateLocalBinding(sym, BindingTypeVariable, nil, nil)
+	secondIdx, secondCreated := env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}, nil)
 	c.Assert(secondCreated, qt.IsFalse,
 		qt.Commentf("two ∅-scoped creates of one name are the same variable"))
 	c.Assert(secondIdx.Over(), qt.Equals, firstIdx.Over())

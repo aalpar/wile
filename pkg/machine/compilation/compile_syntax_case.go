@@ -450,7 +450,7 @@ func (p *CompileTimeContinuation) createPatternVarEnvironment(
 	// A pattern variable spelled exactly like the reserved key would dedup into
 	// this slot rather than reserve a new one; that program is already refused,
 	// at run time, by bindSyntaxCaseState.
-	childEnv.MaybeCreateLocalBinding(syntaxCaseStateKey, environment.BindingTypeVariable, nil, nil)
+	childEnv.MaybeCreateLocalBinding(syntaxCaseStateKey, environment.BindingTypeVariable, syntax.Scopes{}, nil)
 
 	return childEnv
 }

@@ -20,6 +20,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -167,12 +168,12 @@ func TestConstructorEquivalence(t *testing.T) {
 	c.Assert(child.Expand().PhaseLevel(), qt.Equals, PhaseExpand)
 
 	sym := values.NewSymbol("test-snap")
-	parent.Runtime().MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, nil)
+	parent.Runtime().MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, syntax.Scopes{})
 	report := parent.NewSchemeReportNamespace()
 	c.Assert(report.Runtime().GetGlobalIndex(sym), qt.IsNotNil)
 
 	sym2 := values.NewSymbol("after-snap")
-	parent.Runtime().MaybeCreateOwnGlobalBinding(sym2, BindingTypeVariable, nil)
+	parent.Runtime().MaybeCreateOwnGlobalBinding(sym2, BindingTypeVariable, syntax.Scopes{})
 	c.Assert(report.Runtime().GetGlobalIndex(sym2), qt.IsNil)
 }
 

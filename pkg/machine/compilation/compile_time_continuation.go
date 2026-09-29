@@ -304,7 +304,7 @@ func (p *CompileTimeContinuation) SetLibraryCallback(cb func(*CompiledLibrary)) 
 // through to later arms that can still reach it, lookupMacroBinding retains it as its
 // post-pin fallback. Only the ranking against the pin is shared.
 func coIntroducedByExpansion(bnd *environment.Binding) bool {
-	return bnd != nil && len(bnd.Scopes()) > 0
+	return bnd != nil && !bnd.Scopes().IsEmpty()
 }
 
 // CompileSymbol compiles a syntax symbol expression.
@@ -332,7 +332,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// goes through expandLambdaForm, which adds a lambdaScope to all body identifiers
 	// BEFORE inner expansion. A symbol with empty scopes can therefore only appear at
 	// top level, where GetLocalIndex returns nil and falls through to globals.
-	if len(symbolScopes) == 0 {
+	if symbolScopes.IsEmpty() {
 		// Try local binding first
 		li := p.env.GetLocalIndex(sym, syntax.EmptyScopes())
 		if li != nil {

@@ -221,18 +221,18 @@ type mockBindingChecker struct {
 	bindings map[string]*environment.Binding // sym -> binding (nil means no binding)
 }
 
-func (p *mockBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool {
+func (p *mockBindingChecker) HasBinding(sym string, scopes syntax.Scopes) bool {
 	binding, ok := p.bindings[sym]
 	return ok && binding != nil
 }
 
-func (p *mockBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *environment.Binding {
+func (p *mockBindingChecker) GetBinding(sym string, scopes syntax.Scopes) *environment.Binding {
 	return p.bindings[sym]
 }
 
 // The mock has one flat binding table with no phase structure, so the
 // phase-searching resolution is the plain one and never ambiguous.
-func (p *mockBindingChecker) GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool) {
+func (p *mockBindingChecker) GetLiteralBinding(sym string, scopes syntax.Scopes) (*environment.Binding, bool) {
 	return p.GetBinding(sym, scopes), true
 }
 
@@ -244,7 +244,7 @@ func TestLiteralScopesMatchWithChecker(t *testing.T) {
 	emptySrcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
 	sharedBinding := environment.NewBinding(values.NewSymbol("=>"), environment.BindingTypeVariable)
 	letScope := syntax.NewScope()
-	scopedSrcCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{letScope}}
+	scopedSrcCtx := &syntax.SourceContext{Scopes: syntax.ScopesFromSlice([]*syntax.Scope{letScope})}
 	inputBinding := environment.NewBinding(values.NewSymbol("=>"), environment.BindingTypeVariable)
 	patternBinding := environment.NewBinding(values.NewSymbol("=>"), environment.BindingTypePrimitive)
 
@@ -302,17 +302,17 @@ type mockBindingCheckerWithScopes struct {
 	patternBinding *environment.Binding
 }
 
-func (p *mockBindingCheckerWithScopes) HasBinding(sym string, scopes []*syntax.Scope) bool {
+func (p *mockBindingCheckerWithScopes) HasBinding(sym string, scopes syntax.Scopes) bool {
 	// Determine if this is input (has scopes) or pattern (no scopes)
-	if len(scopes) > 0 {
+	if scopes.Len() > 0 {
 		return p.inputBinding != nil
 	}
 	return p.patternBinding != nil
 }
 
-func (p *mockBindingCheckerWithScopes) GetBinding(sym string, scopes []*syntax.Scope) *environment.Binding {
+func (p *mockBindingCheckerWithScopes) GetBinding(sym string, scopes syntax.Scopes) *environment.Binding {
 	// Determine if this is input (has scopes) or pattern (no scopes)
-	if len(scopes) > 0 {
+	if scopes.Len() > 0 {
 		return p.inputBinding
 	}
 	return p.patternBinding
@@ -320,6 +320,6 @@ func (p *mockBindingCheckerWithScopes) GetBinding(sym string, scopes []*syntax.S
 
 // The mock has no phase structure, so the phase-searching resolution is the
 // plain one and never ambiguous.
-func (p *mockBindingCheckerWithScopes) GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool) {
+func (p *mockBindingCheckerWithScopes) GetLiteralBinding(sym string, scopes syntax.Scopes) (*environment.Binding, bool) {
 	return p.GetBinding(sym, scopes), true
 }

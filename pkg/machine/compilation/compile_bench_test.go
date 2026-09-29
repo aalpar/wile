@@ -52,7 +52,7 @@ var compileBenchCorpus = []string{
 func newCompileBenchEnv() *environment.EnvironmentFrame {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	for _, name := range []string{"<", ">", "=", "+", "-", "*", "null?", "car", "cdr", "list"} {
-		env.MaybeCreateOwnGlobalBinding(values.NewSymbol(name), environment.BindingTypeVariable, nil)
+		env.MaybeCreateOwnGlobalBinding(values.NewSymbol(name), environment.BindingTypeVariable, syntax.Scopes{})
 	}
 	return env
 }
@@ -153,7 +153,7 @@ var quasiquoteBenchCorpus = []string{
 func newQuasiquoteBenchEnv() *environment.EnvironmentFrame {
 	env := newCompileBenchEnv()
 	for _, name := range []string{"cons", "append", "list->vector"} {
-		env.MaybeCreateOwnGlobalBinding(values.NewSymbol(name), environment.BindingTypeVariable, nil)
+		env.MaybeCreateOwnGlobalBinding(values.NewSymbol(name), environment.BindingTypeVariable, syntax.Scopes{})
 	}
 	return env
 }
@@ -164,7 +164,7 @@ func newQuasiquoteBenchEnv() *environment.EnvironmentFrame {
 // environment.
 func newCondCaseBenchEnv() *environment.EnvironmentFrame {
 	env := newCompileBenchEnv()
-	env.MaybeCreateOwnGlobalBinding(values.NewSymbol("memv"), environment.BindingTypeVariable, nil)
+	env.MaybeCreateOwnGlobalBinding(values.NewSymbol("memv"), environment.BindingTypeVariable, syntax.Scopes{})
 	return env
 }
 

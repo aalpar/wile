@@ -232,11 +232,10 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 		// Add placeholder bindings for each bound identifier.
 		// The scopes include the binding scope we just created.
 		for _, id := range boundIds {
-			// Get the identifier's current scopes and add the binding scope
-			idScopes := id.Scopes()
-			newScopes := make([]*syntax.Scope, len(idScopes)+1)
-			copy(newScopes, idScopes)
-			newScopes[len(idScopes)] = bindingScope
+			// Add places the binding scope by id and shares the rest of the chain,
+			// where this hand-rolled make/copy/index allocated and copied the whole
+			// set per identifier.
+			newScopes := id.Scopes().Add(bindingScope)
 
 			sym := id.Sym
 			childExpandEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, newScopes, id.SourceContext())

@@ -977,7 +977,7 @@ func (p *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error) {
 // there, at the cost of the frame-reclaim win on user recursion.
 func (p *Engine) Define(name string, value Value) error {
 	sym := values.NewSymbol(name)
-	_, err := p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, unwrapValue(value))
+	_, err := p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, syntax.Scopes{}, unwrapValue(value))
 	return err
 }
 
@@ -1054,7 +1054,7 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 		closure.SetValidator(registry.BuildValidator(spec))
 	}
 
-	_, err = p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, closure)
+	_, err = p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, syntax.Scopes{}, closure)
 	return err
 }
 

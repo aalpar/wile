@@ -196,7 +196,7 @@ func TestRefIndexDiscriminatesByScopeNotSpelling(t *testing.T) {
 	// Asserted over the whole bucket rather than one index: the occurrences come
 	// from two walks now (the validated tree and the opaque scan), so their order
 	// is not a fact this test should depend on.
-	c.Assert(len(macroHidden.Scopes()) > 0, qt.IsTrue)
+	c.Assert(macroHidden.Scopes().Len() > 0, qt.IsTrue)
 	for i, r := range refs["hidden"] {
 		c.Assert(syntax.ScopesCompatible(macroHidden.Scopes(), r.sym.Scopes()), qt.IsFalse,
 			qt.Commentf("occurrence %d", i))

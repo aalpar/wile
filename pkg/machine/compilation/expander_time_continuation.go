@@ -181,7 +181,7 @@ func (p *ExpanderTimeContinuation) SetMaxDepth(n int) {
 // hasLocalVariableBinding delegates to EnvironmentFrame.HasLocalVariableBinding,
 // resolving the reference hygienically against its own scope set.
 // R7RS §4.2.2: let bindings shadow outer bindings including macros.
-func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, scopes []*syntax.Scope) bool {
+func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, scopes syntax.Scopes) bool {
 	return p.env.HasLocalVariableBinding(sym, syntax.ScopesOf(scopes))
 }
 
@@ -351,7 +351,7 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syn
 // environment.DenotedForm, which answers "" for nil and falls through to
 // LookupPrimitiveExpander — exactly what an unresolved head did before.
 func (p *ExpanderTimeContinuation) lookupMacroBinding(
-	sym *syntax.SyntaxSymbol, symbolScopes []*syntax.Scope,
+	sym *syntax.SyntaxSymbol, symbolScopes syntax.Scopes,
 ) (macro *environment.Binding, head *environment.Binding) {
 	sym0, ok := sym.Unwrap().(*values.Symbol)
 	if !ok {
@@ -513,7 +513,7 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	if p.env.Namespace() == nil {
 		return nil, head
 	}
-	for _, scope := range symbolScopes {
+	for scope := range symbolScopes.All() {
 		libEnv := p.env.Namespace().LookupLibraryEnv(scope)
 		if libEnv == nil {
 			continue
@@ -625,7 +625,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 // LookupPrimitiveExpander exactly as it did when this function resolved for
 // itself.
 func (p *ExpanderTimeContinuation) lookupHeadPrimitiveExpander(
-	sym *values.Symbol, scopes []*syntax.Scope, head *environment.Binding,
+	sym *values.Symbol, scopes syntax.Scopes, head *environment.Binding,
 ) *PrimitiveExpander {
 	b := head
 	denoted := environment.DenotedForm(b)
@@ -639,7 +639,7 @@ func (p *ExpanderTimeContinuation) lookupHeadPrimitiveExpander(
 	canon := values.NewSymbol(denoted)
 	expandEnv := p.env.Expand()
 	if expandEnv != nil && expandEnv.GlobalEnvironment() != nil {
-		sealed := expandEnv.GlobalEnvironment().SealedBindingAt(canon, syntax.ScopesOf(nil), expandEnv.PhaseLevel())
+		sealed := expandEnv.GlobalEnvironment().SealedBindingAt(canon, syntax.ScopesOf(syntax.Scopes{}), expandEnv.PhaseLevel())
 		if sealed != nil && sealed.BindingType() == environment.BindingTypePrimitive {
 			spe, ok := sealed.Value().(*PrimitiveExpander)
 			if ok {
@@ -647,7 +647,7 @@ func (p *ExpanderTimeContinuation) lookupHeadPrimitiveExpander(
 			}
 		}
 	}
-	return LookupPrimitiveExpander(p.env, canon, nil)
+	return LookupPrimitiveExpander(p.env, canon, syntax.Scopes{})
 }
 
 // invokeTransformerClosure is defined in machine/macro_evaluator.go

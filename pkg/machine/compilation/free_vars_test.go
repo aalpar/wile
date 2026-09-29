@@ -22,6 +22,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
@@ -38,7 +39,7 @@ var freeVarTestGlobals = []string{"+", "-", "*", "=", "car", "cdr", "cons", "lis
 func newFreeVarEnv() *environment.EnvironmentFrame {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	for _, name := range freeVarTestGlobals {
-		env.MaybeCreateOwnGlobalBinding(values.NewSymbol(name), environment.BindingTypeVariable, nil)
+		env.MaybeCreateOwnGlobalBinding(values.NewSymbol(name), environment.BindingTypeVariable, syntax.Scopes{})
 	}
 	return env
 }

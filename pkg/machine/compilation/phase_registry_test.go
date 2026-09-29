@@ -59,12 +59,12 @@ func TestRegisterAndLookupPhaseBindings(t *testing.T) {
 
 				// Lookup registered bindings
 				sym := values.NewSymbol("alpha")
-				got := LookupPhaseBinding[*PrimitiveExpander](topLevel.Expand(), sym, nil)
+				got := LookupPhaseBinding[*PrimitiveExpander](topLevel.Expand(), sym, syntax.Scopes{})
 				qt.Assert(t, got, qt.IsNotNil)
 				qt.Assert(t, got.Name(), qt.Equals, "alpha")
 
 				sym2 := values.NewSymbol("beta")
-				got2 := LookupPhaseBinding[*PrimitiveExpander](topLevel.Expand(), sym2, nil)
+				got2 := LookupPhaseBinding[*PrimitiveExpander](topLevel.Expand(), sym2, syntax.Scopes{})
 				qt.Assert(t, got2, qt.IsNotNil)
 				qt.Assert(t, got2.Name(), qt.Equals, "beta")
 			},
@@ -76,7 +76,7 @@ func TestRegisterAndLookupPhaseBindings(t *testing.T) {
 				expandEnv := topLevel.Expand()
 
 				sym := values.NewSymbol("nonexistent")
-				got := LookupPhaseBinding[*PrimitiveExpander](expandEnv, sym, nil)
+				got := LookupPhaseBinding[*PrimitiveExpander](expandEnv, sym, syntax.Scopes{})
 				qt.Assert(t, got, qt.IsNil)
 			},
 		},
@@ -107,7 +107,7 @@ func TestRegisterAndLookupPhaseBindings(t *testing.T) {
 
 				// Lookup with wrong target type — returns zero value
 				sym := values.NewSymbol("gamma")
-				got := LookupPhaseBinding[*SyntaxCompiler](topLevel.Expand(), sym, nil)
+				got := LookupPhaseBinding[*SyntaxCompiler](topLevel.Expand(), sym, syntax.Scopes{})
 				qt.Assert(t, got, qt.IsNil)
 			},
 		},

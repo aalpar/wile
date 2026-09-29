@@ -47,7 +47,7 @@ func TestResolveRankedTiers(t *testing.T) {
 	}) *GlobalEnvironmentFrame {
 		q := NewGlobalEnvironmentFrame()
 		for _, e := range entries {
-			q.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, e.phase, e.sealed)
+			q.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, e.phase, e.sealed)
 		}
 		return q
 	}
@@ -127,7 +127,7 @@ func TestResolveRankedTiers(t *testing.T) {
 func TestResolveRankedCrossPhaseNeedsABulkRow(t *testing.T) {
 	sym := values.NewSymbol("v")
 	g := NewGlobalEnvironmentFrame()
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, true)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, true)
 
 	// Anonymous function per probe so the RUnlock fires at the end of THIS
 	// probe: resolveRankedLocked's own doc requires defer release (it can panic
@@ -146,7 +146,7 @@ func TestResolveRankedCrossPhaseNeedsABulkRow(t *testing.T) {
 		qt.Commentf("a sealed phase-0 slot must not be reachable from phase 1 on its own"))
 
 	g.InstallBulkRow(NewSealedStoreBulkSource(g, PhaseRuntime, BaseSourceName()),
-		nil, PhaseExpand, true, BulkOriginLanguage)
+		syntax.Scopes{}, PhaseExpand, true, BulkOriginLanguage)
 
 	ref, ok = probeAt(PhaseExpand)
 	qt.Assert(t, ok, qt.IsTrue)
@@ -163,25 +163,25 @@ func TestResolveRankedAmbiguityScopedToWinningTier(t *testing.T) {
 	sc2 := syntax.NewScope()
 	g := NewGlobalEnvironmentFrame()
 	// Two incomparable tierExactSealed candidates...
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc1}, 0, true)
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc2}, 0, true)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{sc1}), 0, true)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{sc2}), 0, true)
 	// ...and one tierExactMutable winner.
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, false)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, 0, false)
 
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	ref, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf([]*syntax.Scope{sc1, sc2}), 0)
+	ref, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{sc1, sc2})), 0)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, ref.slot, qt.Equals, 2)
 
 	// With the mutable winner gone, the sealed tie is the winning tier and must panic.
 	g2 := NewGlobalEnvironmentFrame()
-	g2.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc1}, 0, true)
-	g2.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc2}, 0, true)
+	g2.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{sc1}), 0, true)
+	g2.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{sc2}), 0, true)
 	qt.Assert(t, func() {
 		g2.mu.RLock()
 		defer g2.mu.RUnlock()
-		g2.resolveRankedLocked(*sym, syntax.ScopesOf([]*syntax.Scope{sc1, sc2}), 0)
+		g2.resolveRankedLocked(*sym, syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{sc1, sc2})), 0)
 	}, qt.PanicMatches, ".*ambiguous.*")
 }
 
@@ -197,13 +197,13 @@ func TestCreateMatchesCoordinatesAndScopes(t *testing.T) {
 	// actually about, since it is a phase-0 define shadowing the sealed entry.
 	sym := values.NewSymbol("v")
 	g := NewGlobalEnvironmentFrame()
-	_, created := g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, true)
+	_, created := g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, 0, true)
 	qt.Assert(t, created, qt.IsTrue)
 	// Same scopes (∅), different coordinates: a NEW slot.
-	_, created = g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, false)
+	_, created = g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, 0, false)
 	qt.Assert(t, created, qt.IsTrue)
 	// Same scopes, same coordinates: reuse.
-	_, created = g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, false)
+	_, created = g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, 0, false)
 	qt.Assert(t, created, qt.IsFalse)
 }
 
@@ -220,8 +220,8 @@ func TestCreateMatchesCoordinatesAndScopes(t *testing.T) {
 func TestCopyPreservesCoordinates(t *testing.T) {
 	sym := values.NewSymbol("v")
 	g := NewGlobalEnvironmentFrame()
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, true)
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, true)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 
 	c := g.Copy()
 
@@ -247,8 +247,8 @@ func TestResolveRankedWildcard(t *testing.T) {
 		// tierExactMutable must still outrank tierExactSealed, which is what makes
 		// a phase-0 define shadow the sealed base rather than assign through it.
 		g := NewGlobalEnvironmentFrame()
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, true)  // slot 0: tierExactSealed
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, false) // slot 1: tierExactMutable
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, 0, true)  // slot 0: tierExactSealed
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, 0, false) // slot 1: tierExactMutable
 
 		g.mu.RLock()
 		defer g.mu.RUnlock()
@@ -259,7 +259,7 @@ func TestResolveRankedWildcard(t *testing.T) {
 
 	t.Run("other exact phase is not a candidate", func(t *testing.T) {
 		g := NewGlobalEnvironmentFrame()
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 1, false)
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, 1, false)
 
 		g.mu.RLock()
 		defer g.mu.RUnlock()
@@ -275,7 +275,7 @@ func TestResolveRankedWildcard(t *testing.T) {
 
 	t.Run("nil'd slot is skipped", func(t *testing.T) {
 		g := NewGlobalEnvironmentFrame()
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, 0, false)
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, 0, false)
 		// A live key pointing at a nil binding — the pre-fold wildcard path
 		// guarded exactly this state (a slot DeleteBinding emptied); the ranked
 		// probe's wildcard branch must guard it identically.
@@ -309,12 +309,12 @@ func TestResolveRankedCardinalityWithinTier(t *testing.T) {
 	scB := syntax.NewScope()
 	g := NewGlobalEnvironmentFrame()
 	// Both tierExactMutable at phase 0; {scA} subset {scA, scB}.
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{scA}, 0, false)
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{scA, scB}, 0, false)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scA}), 0, false)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scA, scB}), 0, false)
 
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	ref, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf([]*syntax.Scope{scA, scB}), 0)
+	ref, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{scA, scB})), 0)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, ref.slot, qt.Equals, 1) // the wider {scA, scB} slot wins
 }
@@ -545,7 +545,7 @@ func TestBulkRowTieRanksLikeASlotTie(t *testing.T) {
 	sym := values.NewSymbol("v")
 	sc1 := syntax.NewScope()
 	sc2 := syntax.NewScope()
-	query := syntax.ScopesOf([]*syntax.Scope{sc1, sc2})
+	query := syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{sc1, sc2}))
 
 	// Two rows over THIS store's phase-0 sealed slot, installed at phase 1 under
 	// incomparable one-element scope sets. Each is compatible with the query
@@ -553,11 +553,11 @@ func TestBulkRowTieRanksLikeASlotTie(t *testing.T) {
 	// query phase) and on cardinality, and neither set is a subset of the other.
 	mk := func() *GlobalEnvironmentFrame {
 		q := NewGlobalEnvironmentFrame()
-		q.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, true)
+		q.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, true)
 		q.InstallBulkRow(NewSealedStoreBulkSource(q, PhaseRuntime, values.NewSymbol("srcA")),
-			[]*syntax.Scope{sc1}, PhaseExpand, true, BulkOriginLanguage)
+			syntax.ScopesFromSlice([]*syntax.Scope{sc1}), PhaseExpand, true, BulkOriginLanguage)
 		q.InstallBulkRow(NewSealedStoreBulkSource(q, PhaseRuntime, values.NewSymbol("srcB")),
-			[]*syntax.Scope{sc2}, PhaseExpand, true, BulkOriginLanguage)
+			syntax.ScopesFromSlice([]*syntax.Scope{sc2}), PhaseExpand, true, BulkOriginLanguage)
 		return q
 	}
 
@@ -585,8 +585,8 @@ func TestBulkRowTieRanksLikeASlotTie(t *testing.T) {
 		// than a preference: same scope sets, same query, same phase, slots
 		// instead of rows.
 		g := NewGlobalEnvironmentFrame()
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc1}, PhaseExpand, true)
-		g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{sc2}, PhaseExpand, true)
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{sc1}), PhaseExpand, true)
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{sc2}), PhaseExpand, true)
 		qt.Assert(t, func() {
 			g.mu.RLock()
 			defer g.mu.RUnlock()
@@ -736,7 +736,7 @@ func TestBulkRowInstallersRefuseAnUndeclaredOrigin(t *testing.T) {
 		{
 			name: "InstallBulkRow",
 			install: func(g *GlobalEnvironmentFrame, src BulkSource, sealed bool, origin BulkOrigin) {
-				g.InstallBulkRow(src, nil, PhaseExpand, sealed, origin)
+				g.InstallBulkRow(src, syntax.Scopes{}, PhaseExpand, sealed, origin)
 			},
 		},
 		{
@@ -746,7 +746,7 @@ func TestBulkRowInstallersRefuseAnUndeclaredOrigin(t *testing.T) {
 			// replicated rather than isolated.
 			name: "InstallMacroPhaseRow",
 			install: func(g *GlobalEnvironmentFrame, src BulkSource, sealed bool, origin BulkOrigin) {
-				g.InstallMacroPhaseRow(src, nil, sealed, origin)
+				g.InstallMacroPhaseRow(src, syntax.Scopes{}, sealed, origin)
 			},
 		},
 	}
@@ -800,15 +800,15 @@ func TestImportedRowOutranksALanguageRow(t *testing.T) {
 	store := owner.GlobalEnvironment()
 
 	sealed := sealAt(t, owner, PhaseRuntime, "contested", values.NewInteger(1))
-	_, err := owner.DefineOwnGlobal(values.NewSymbol("contested"), BindingTypeVariable, nil, values.NewInteger(2))
+	_, err := owner.DefineOwnGlobal(values.NewSymbol("contested"), BindingTypeVariable, syntax.Scopes{}, values.NewInteger(2))
 	qt.Assert(t, err, qt.IsNil)
 
 	store.InstallBulkRow(
 		NewSealedStoreBulkSource(store, PhaseRuntime, values.NewSymbol("#%lang")),
-		nil, PhaseExpand, true, BulkOriginLanguage)
+		syntax.Scopes{}, PhaseExpand, true, BulkOriginLanguage)
 	store.InstallBulkRow(
 		NewStoreBulkSource(store, PhaseRuntime, values.NewSymbol("#%imported-lib")),
-		nil, PhaseExpand, true, BulkOriginImport)
+		syntax.Scopes{}, PhaseExpand, true, BulkOriginImport)
 
 	got, ok := resolveThroughRows(t, store, "contested", PhaseExpand)
 	qt.Assert(t, ok, qt.IsTrue,

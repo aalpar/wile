@@ -32,7 +32,7 @@ type reclaimNode struct {
 	// top-level define name's scopes, so subset — not fingerprint equality — is what
 	// resolves the edge (a let-wrapped tail self-call, e.g. (define (g n) (let (...)
 	// (g ...)))).
-	scopes []*syntax.Scope
+	scopes syntax.Scopes
 	// rebindStable reports that this producer is provably non-rebindable: it is
 	// StableInUnit (defined-once ∧ never-set!) AND the namespace enforces immutable
 	// top-level, so a cross-unit redefine/set! is forbidden. This is exactly the

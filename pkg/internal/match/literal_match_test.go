@@ -132,13 +132,13 @@ func TestCapturedValueToSyntax_FallbackPaths(t *testing.T) {
 // mockFreeIdResolver implements FreeIdResolver for testing.
 // Set only the fields relevant to each test case; zero values mean "absent."
 type mockFreeIdResolver struct {
-	localScopes     []*syntax.Scope
+	localScopes     syntax.Scopes
 	global          *environment.GlobalIndex
 	hasLocalBinding bool
 	libScope        *syntax.Scope
 }
 
-func (p mockFreeIdResolver) GetLocalScopes() []*syntax.Scope {
+func (p mockFreeIdResolver) GetLocalScopes() syntax.Scopes {
 	return p.localScopes
 }
 
@@ -166,23 +166,25 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Key(), qt.Equals, "foo")
 		scopes := ss.Scopes()
-		c.Assert(len(scopes), qt.Equals, 1)
-		c.Assert(scopes[0], qt.Equals, introScope)
+		c.Assert(scopes.Len(), qt.Equals, 1)
+		// Membership, not position: order is not part of the Scopes contract.
+		c.Assert(scopes.Has(introScope), qt.IsTrue)
 	})
 
 	c.Run("free identifier with local scopes", func(c *qt.C) {
 		defScope := syntax.NewScope()
 		sym := syntax.NewSyntaxSymbol("bar", &syntax.SourceContext{Text: "bar"})
 		freeIds := map[string]FreeIdResolver{
-			FreeIdKey("bar", sym.Scopes()): mockFreeIdResolver{localScopes: []*syntax.Scope{defScope}},
+			FreeIdKey("bar", sym.Scopes()): mockFreeIdResolver{localScopes: syntax.ScopesFromSlice([]*syntax.Scope{defScope})},
 		}
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Key(), qt.Equals, "bar")
 		// Should have definition-site scopes, not intro scope
 		scopes := ss.Scopes()
-		c.Assert(len(scopes), qt.Equals, 1)
-		c.Assert(scopes[0], qt.Equals, defScope)
+		c.Assert(scopes.Len(), qt.Equals, 1)
+		// Membership, not position: order is not part of the Scopes contract.
+		c.Assert(scopes.Has(defScope), qt.IsTrue)
 	})
 
 	c.Run("free identifier with global binding", func(c *qt.C) {
@@ -206,7 +208,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Key(), qt.Equals, "qux")
 		// Should NOT have intro scope (has local binding)
-		c.Assert(len(ss.Scopes()), qt.Equals, 0)
+		c.Assert(ss.Scopes().Len(), qt.Equals, 0)
 	})
 
 	c.Run("with useSiteCtx overrides source context", func(c *qt.C) {
@@ -230,7 +232,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		existingScope := syntax.NewScope()
 		srcCtx := &syntax.SourceContext{
 			Text:   "baz",
-			Scopes: []*syntax.Scope{existingScope},
+			Scopes: syntax.ScopesFromSlice([]*syntax.Scope{existingScope}),
 		}
 		sym := syntax.NewSyntaxSymbol("baz", srcCtx)
 		freeIds := map[string]FreeIdResolver{
@@ -249,25 +251,25 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		// plans/2026-06-15-macro-hygiene-global-shadow-fix), and so a same-named
 		// identifier at the use site stays distinct.
 		scopes := ss.Scopes()
-		c.Assert(len(scopes), qt.Equals, 2)
-		c.Assert(scopes, qt.Contains, existingScope)
-		c.Assert(scopes, qt.Contains, introScope)
+		c.Assert(scopes.Len(), qt.Equals, 2)
+		c.Assert(scopes.Has(existingScope), qt.IsTrue)
+		c.Assert(scopes.Has(introScope), qt.IsTrue)
 	})
 
 	c.Run("non-free keeps definition-site scopes and adds intro scope", func(c *qt.C) {
 		existingScope := syntax.NewScope()
 		srcCtx := &syntax.SourceContext{
 			Text:   "foo",
-			Scopes: []*syntax.Scope{existingScope},
+			Scopes: syntax.ScopesFromSlice([]*syntax.Scope{existingScope}),
 		}
 		sym := syntax.NewSyntaxSymbol("foo", srcCtx)
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope})
 		ss := result.(*syntax.SyntaxSymbol)
 		// Definition-site scope retained, intro scope added on top.
 		scopes := ss.Scopes()
-		c.Assert(len(scopes), qt.Equals, 2)
-		c.Assert(scopes, qt.Contains, existingScope)
-		c.Assert(scopes, qt.Contains, introScope)
+		c.Assert(scopes.Len(), qt.Equals, 2)
+		c.Assert(scopes.Has(existingScope), qt.IsTrue)
+		c.Assert(scopes.Has(introScope), qt.IsTrue)
 	})
 }
 
@@ -305,8 +307,9 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		ss := result.(*syntax.SyntaxSymbol)
 		scopes := ss.Scopes()
-		c.Assert(len(scopes), qt.Equals, 1)
-		c.Assert(scopes[0], qt.Equals, is)
+		c.Assert(scopes.Len(), qt.Equals, 1)
+		// Membership, not position: order is not part of the Scopes contract.
+		c.Assert(scopes.Has(is), qt.IsTrue)
 	})
 
 	c.Run("pair template recursed in escaped context", func(c *qt.C) {
@@ -357,9 +360,9 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		// identifiers under it. patternScopes ⊆ templateScopes, so it substitutes.
 		useSite := syntax.NewScope()
 		bodyBinder := syntax.NewScope()
-		templateCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{useSite, bodyBinder}}
+		templateCtx := &syntax.SourceContext{Scopes: syntax.ScopesFromSlice([]*syntax.Scope{useSite, bodyBinder})}
 		template := syntax.NewSyntaxSymbol("x", templateCtx)
-		patternCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{useSite}}
+		patternCtx := &syntax.SourceContext{Scopes: syntax.ScopesFromSlice([]*syntax.Scope{useSite})}
 		patternVarSyntax := syntax.PatternVarSymbols{
 			"x": syntax.NewSyntaxSymbol("x", patternCtx),
 		}
@@ -384,9 +387,9 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		// pattern variable, it merely shares its spelling.
 		useSite := syntax.NewScope()
 		outerScope := syntax.NewScope()
-		templateCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{outerScope}}
+		templateCtx := &syntax.SourceContext{Scopes: syntax.ScopesFromSlice([]*syntax.Scope{outerScope})}
 		template := syntax.NewSyntaxSymbol("x", templateCtx)
-		patternCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{useSite}}
+		patternCtx := &syntax.SourceContext{Scopes: syntax.ScopesFromSlice([]*syntax.Scope{useSite})}
 		patternVarSyntax := syntax.PatternVarSymbols{
 			"x": syntax.NewSyntaxSymbol("x", patternCtx),
 		}
@@ -395,8 +398,8 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Key(), qt.Equals, "x")
-		c.Assert(ss.Scopes(), qt.Contains, outerScope)
-		c.Assert(ss.Scopes(), qt.Contains, is)
+		c.Assert(ss.Scopes().Has(outerScope), qt.IsTrue)
+		c.Assert(ss.Scopes().Has(is), qt.IsTrue)
 	})
 
 	c.Run("pattern extra scope blocks substitution", func(c *qt.C) {
@@ -409,9 +412,9 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		// the binder cannot resolve for this reference.
 		templateScope := syntax.NewScope()
 		patternOnly := syntax.NewScope()
-		templateCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{templateScope}}
+		templateCtx := &syntax.SourceContext{Scopes: syntax.ScopesFromSlice([]*syntax.Scope{templateScope})}
 		template := syntax.NewSyntaxSymbol("x", templateCtx)
-		patternCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{templateScope, patternOnly}}
+		patternCtx := &syntax.SourceContext{Scopes: syntax.ScopesFromSlice([]*syntax.Scope{templateScope, patternOnly})}
 		patternVarSyntax := syntax.PatternVarSymbols{
 			"x": syntax.NewSyntaxSymbol("x", patternCtx),
 		}
@@ -423,9 +426,9 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Key(), qt.Equals, "x")
 		scopes := ss.Scopes()
-		c.Assert(len(scopes), qt.Equals, 2)
-		c.Assert(scopes, qt.Contains, templateScope)
-		c.Assert(scopes, qt.Contains, is)
+		c.Assert(scopes.Len(), qt.Equals, 2)
+		c.Assert(scopes.Has(templateScope), qt.IsTrue)
+		c.Assert(scopes.Has(is), qt.IsTrue)
 	})
 }
 

@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
@@ -60,7 +61,7 @@ func TestSyntaxCompilersRegistry(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			sym := values.NewSymbol(tc.formName)
-			sc := LookupPhaseBinding[*SyntaxCompiler](env, sym, nil)
+			sc := LookupPhaseBinding[*SyntaxCompiler](env, sym, syntax.Scopes{})
 			qt.Assert(t, sc, qt.IsNotNil, qt.Commentf("LookupPhaseBinding[*SyntaxCompiler](%q) returned nil", tc.formName))
 			qt.Assert(t, sc.Name(), qt.Equals, tc.formName)
 		})
@@ -111,7 +112,7 @@ func TestSyntaxCompilersReachTheirOwnPhasePlusBulkRowPhases(t *testing.T) {
 	// initial imports.
 	store := ns.Store()
 	src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, environment.BaseSourceName())
-	store.InstallBulkRow(src, nil, environment.PhaseExpand, true, environment.BulkOriginLanguage)
+	store.InstallBulkRow(src, syntax.Scopes{}, environment.PhaseExpand, true, environment.BulkOriginLanguage)
 
 	qt.Assert(t, ns.Expand().GetBinding(sym, values.AllScopes()), qt.IsNotNil,
 		qt.Commentf("the phase-1 row supplies what the ambient tier used to"))
@@ -128,7 +129,7 @@ func TestSyntaxCompilersRegistryLookupMiss(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	sym := values.NewSymbol("not-a-syntax-compiler")
-	sc := LookupPhaseBinding[*SyntaxCompiler](env, sym, nil)
+	sc := LookupPhaseBinding[*SyntaxCompiler](env, sym, syntax.Scopes{})
 	qt.Assert(t, sc, qt.IsNil)
 }
 
@@ -154,7 +155,7 @@ func TestSyntaxCompilersRegistryCoreFormsNotRegistered(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			sym := values.NewSymbol(tc.formName)
-			sc := LookupPhaseBinding[*SyntaxCompiler](env, sym, nil)
+			sc := LookupPhaseBinding[*SyntaxCompiler](env, sym, syntax.Scopes{})
 			qt.Assert(t, sc, qt.IsNil, qt.Commentf("%q should not be a SyntaxCompiler", tc.formName))
 		})
 	}

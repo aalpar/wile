@@ -183,7 +183,7 @@ func NewMinimalNamespace(env *environment.EnvironmentFrame) *environment.Environ
 		env.MaybeCreateOwnGlobalBinding(
 			values.NewSymbol(name),
 			environment.BindingTypePrimitive,
-			nil,
+			syntax.Scopes{},
 		)
 	}
 	err := compilation.RegisterAllPhaseHandlers(env)

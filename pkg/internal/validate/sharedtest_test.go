@@ -34,7 +34,7 @@ func makeTestEnvAndBindings(names ...string) (
 		env.MaybeCreateLocalBinding(
 			ssym.Sym,
 			environment.BindingTypeVariable,
-			nil,
+			syntax.Scopes{},
 			nil,
 		)
 		bindings = append(bindings, ValidatedLetBinding{

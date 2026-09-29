@@ -48,7 +48,7 @@ import (
 // the same as an absent key (the identifier receives the intro scope).
 // Methods return zero values when that aspect of resolution is absent.
 type FreeIdResolver interface {
-	GetLocalScopes() []*syntax.Scope
+	GetLocalScopes() syntax.Scopes
 	GetGlobal() *environment.GlobalIndex
 	GetHasLocalBinding() bool
 	GetLibraryScope() *syntax.Scope
@@ -86,13 +86,13 @@ type LiteralPin struct {
 type BindingChecker interface {
 	// HasBinding checks if sym with the given scopes has a lexical binding.
 	// Returns true if the symbol is bound (to a variable, macro, etc.).
-	HasBinding(sym string, scopes []*syntax.Scope) bool
+	HasBinding(sym string, scopes syntax.Scopes) bool
 
 	// GetBinding returns the binding for sym with the given scopes.
 	// Returns nil if no binding exists. Bindings can be compared for
 	// pointer equality to check if two identifiers have the same
 	// binding (per R7RS §4.3.2).
-	GetBinding(sym string, scopes []*syntax.Scope) *environment.Binding
+	GetBinding(sym string, scopes syntax.Scopes) *environment.Binding
 
 	// GetLiteralBinding resolves the USE-SITE side of the R7RS §4.3.2 comparison:
 	// the frame's own lexical chain at its own phase, then what the LANGUAGE
@@ -104,7 +104,7 @@ type BindingChecker interface {
 	//
 	// The implementation is compilation.lookupLiteralBinding; its doc carries the
 	// ordering argument and must agree with this one.
-	GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool)
+	GetLiteralBinding(sym string, scopes syntax.Scopes) (*environment.Binding, bool)
 }
 
 // SyntaxMatcher adapts the core Matcher to work with syntax objects and hygiene.
