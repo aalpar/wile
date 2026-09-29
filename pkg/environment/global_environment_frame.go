@@ -454,8 +454,8 @@ func (p *GlobalEnvironmentFrame) Bindings() []*Binding {
 // empty scope set, a hygiene concept that is still live and still called that;
 // the other named the deleted ANY-phase coordinate. Two senses of one word, and
 // only one of them was deleted.
-func AmbientScopes() []*syntax.Scope {
-	return []*syntax.Scope{}
+func AmbientScopes() syntax.Scopes {
+	return syntax.Scopes{}
 }
 
 // UnscopedKeysAt returns the names holding a live binding under the EMPTY scope
@@ -556,8 +556,15 @@ func (p *GlobalEnvironmentFrame) slotsFiltered(sealedOnly bool) []NamedSlot {
 // macro-introduced binder (scopes {m}) would reuse — and silently clobber — a
 // user-written binding of the same name (scopes {}). Redefining one variable is
 // precisely the equal-scope-set case; anything else is a different variable.
-func scopeSetsEqual(a, b []*syntax.Scope) bool {
-	if len(a) != len(b) {
+// Faithful translation of the slice form, deliberately: equal cardinality plus
+// mutual subset. Measured 2026-09-27, the SECOND SubsetOf is dead — equal
+// cardinality plus one direction already implies equality on duplicate-free
+// sets, and duplicate-freedom is now structural rather than maintained. It is
+// left in place here so the flip changes representation and nothing else;
+// removing it belongs with [I135-freefn], which also collapses the four
+// hand-unrolled copies of this predicate onto one exported ScopesEqual.
+func scopeSetsEqual(a, b syntax.Scopes) bool {
+	if a.Len() != b.Len() {
 		return false
 	}
 	return syntax.ScopesMatch(a, b) && syntax.ScopesMatch(b, a)
@@ -931,7 +938,7 @@ const tierHighest = tierCount - 1
 // them is not this type's job and is not implied by its existence.
 type rankedArgmax struct {
 	tier      int
-	scopes    []*syntax.Scope
+	scopes    syntax.Scopes
 	ambiguous bool
 }
 
@@ -945,8 +952,8 @@ func newRankedArgmax() rankedArgmax {
 // own candidate identity — a slotRef, or a bulkRef plus the binding it
 // supplied — only when this returns true, so neither walk builds a candidate it
 // then discards.
-func (p *rankedArgmax) consider(tier int, scopes []*syntax.Scope) bool {
-	if p.tier < 0 || tier < p.tier || (tier == p.tier && len(scopes) > len(p.scopes)) {
+func (p *rankedArgmax) consider(tier int, scopes syntax.Scopes) bool {
+	if p.tier < 0 || tier < p.tier || (tier == p.tier && scopes.Len() > p.scopes.Len()) {
 		p.tier = tier
 		p.scopes = scopes
 		// A recorded tie is dead the moment a strictly better candidate appears:
@@ -968,7 +975,7 @@ func (p *rankedArgmax) consider(tier int, scopes []*syntax.Scope) bool {
 	// case it covers: the empty set is unique, so two candidates at cardinality
 	// zero are the SAME set and ∅ ⊆ ∅ holds. Every bulk row and every unscoped
 	// slot takes it, so it skips the call on the common path.
-	if tier == p.tier && len(scopes) == len(p.scopes) && len(scopes) > 0 &&
+	if tier == p.tier && scopes.Len() == p.scopes.Len() && !scopes.IsEmpty() &&
 		!syntax.ScopesMatch(scopes, p.scopes) {
 		p.ambiguous = true
 	}
@@ -1347,7 +1354,7 @@ func (p *GlobalEnvironmentFrame) resolveAtCoordsLocked(key values.Symbol, q synt
 		if !syntax.ScopesCompatible(bindingScopes, scopes) {
 			continue
 		}
-		record, done := best.shouldRecord(bindingScopes, len(scopes))
+		record, done := best.shouldRecord(bindingScopes, scopes.Len())
 		if record {
 			best.record(s.slot, bindingScopes)
 		}
@@ -1562,7 +1569,7 @@ func (p *GlobalEnvironmentFrame) IsSealedBindingAt(key *values.Symbol, q syntax.
 // may write through it directly: it needs no paired re-resolve, and unlike a
 // bare-name index it cannot drift onto a different slot of the same name. See
 // the history note below for why it was deferred until 2026-08-06.
-func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase Phase, sealed bool) (*GlobalIndex, bool) {
+func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt BindingType, scopes syntax.Scopes, phase Phase, sealed bool) (*GlobalIndex, bool) {
 	return p.createGlobalBindingAt(key, bt, scopes, phase, sealed, false)
 }
 
@@ -1584,13 +1591,13 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt Bi
 // IsImported() to rank, so a slot that is created now and stamped later is a slot
 // that ranks as the startup set in between. Nothing reads it in that window
 // today, but the window has no reason to exist.
-func (p *GlobalEnvironmentFrame) CreateImportedGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase Phase, sealed bool) (*GlobalIndex, bool) {
+func (p *GlobalEnvironmentFrame) CreateImportedGlobalBindingAt(key *values.Symbol, bt BindingType, scopes syntax.Scopes, phase Phase, sealed bool) (*GlobalIndex, bool) {
 	return p.createGlobalBindingAt(key, bt, scopes, phase, sealed, true)
 }
 
 // createGlobalBindingAt is the shared body. imported selects both the reuse
 // predicate and the created slot's provenance stamp, so the two cannot disagree.
-func (p *GlobalEnvironmentFrame) createGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase Phase, sealed bool, imported bool) (*GlobalIndex, bool) {
+func (p *GlobalEnvironmentFrame) createGlobalBindingAt(key *values.Symbol, bt BindingType, scopes syntax.Scopes, phase Phase, sealed bool, imported bool) (*GlobalIndex, bool) {
 	// There is no runtime refusal of the ambient coordinate here any more, and
 	// nothing replaces it.
 	//
@@ -1840,7 +1847,7 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 // coordinate" premise to stay off the sealed tier. That filter is gone.
 //
 // Thread-safe: uses full Lock for write access.
-func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes []*syntax.Scope, phase Phase, sealed bool) bool {
+func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes syntax.Scopes, phase Phase, sealed bool) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
