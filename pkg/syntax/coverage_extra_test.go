@@ -104,13 +104,13 @@ func TestSourceContext_WithoutScopes(t *testing.T) {
 			File:   "test.scm",
 			Start:  NewSourceIndexes(0, 0, 1),
 			End:    NewSourceIndexes(5, 5, 1),
-			Scopes: []*Scope{scope},
+			Scopes: ScopesFromSlice([]*Scope{scope}),
 			Origin: origin,
 		}
 		result := sctx.WithoutScopes()
 		c.Assert(result.Text, qt.Equals, "hello")
 		c.Assert(result.File, qt.Equals, "test.scm")
-		c.Assert(result.Scopes, qt.IsNil)
+		c.Assert(result.Scopes.IsEmpty(), qt.IsTrue)
 		c.Assert(result.Origin, qt.Equals, origin)
 	})
 
@@ -128,14 +128,14 @@ func TestFlipScopeInSet(t *testing.T) {
 	s2 := NewScope()
 
 	t.Run("add when absent", func(t *testing.T) {
-		result := FlipScopeInSet(nil, s1)
-		c.Assert(len(result), qt.Equals, 1)
+		result := FlipScopeInSet(Scopes{}, s1)
+		c.Assert(result.Len(), qt.Equals, 1)
 		c.Assert(values.HasScope(result, s1), qt.IsTrue)
 	})
 
 	t.Run("remove when present", func(t *testing.T) {
-		result := FlipScopeInSet([]*Scope{s1, s2}, s1)
-		c.Assert(len(result), qt.Equals, 1)
+		result := FlipScopeInSet(ScopesFromSlice([]*Scope{s1, s2}), s1)
+		c.Assert(result.Len(), qt.Equals, 1)
 		c.Assert(values.HasScope(result, s1), qt.IsFalse)
 		c.Assert(values.HasScope(result, s2), qt.IsTrue)
 	})

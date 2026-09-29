@@ -73,7 +73,7 @@ var _ match.BindingChecker = (*envBindingChecker)(nil)
 // This is used by the pattern matcher to determine if an input identifier
 // should match a pattern literal. Per R7RS §4.3.2, literals match only if
 // both have the same lexical binding, or both have no lexical binding.
-func (p *envBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool {
+func (p *envBindingChecker) HasBinding(sym string, scopes syntax.Scopes) bool {
 	if p.env == nil {
 		return false
 	}
@@ -86,7 +86,7 @@ func (p *envBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool 
 // This is used for R7RS §4.3.2 auxiliary syntax hygiene: we compare the
 // actual bindings (not just whether they exist) to determine if a literal
 // matches. Two identifiers match only if they have the same binding.
-func (p *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *environment.Binding {
+func (p *envBindingChecker) GetBinding(sym string, scopes syntax.Scopes) *environment.Binding {
 	if p.env == nil {
 		return nil
 	}
@@ -98,7 +98,7 @@ func (p *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *envi
 // the frame's own lexical chain at its own phase, and what the language supplies
 // through the dialect's bulk rows last. No other phase: the use site's phase is a known, exact fact, and
 // another phase's binding of the name is a different program's.
-func (p *envBindingChecker) GetLiteralBinding(sym string, scopes []*syntax.Scope) (*environment.Binding, bool) {
+func (p *envBindingChecker) GetLiteralBinding(sym string, scopes syntax.Scopes) (*environment.Binding, bool) {
 	return lookupLiteralBinding(p.env, sym, scopes, nil)
 }
 
@@ -163,7 +163,7 @@ func definitionFallbackPhases(env *environment.EnvironmentFrame) []environment.P
 func lookupLiteralBinding(
 	env *environment.EnvironmentFrame,
 	sym string,
-	scopes []*syntax.Scope,
+	scopes syntax.Scopes,
 	fallbacks []environment.Phase,
 ) (q *environment.Binding, ok bool) {
 	if env == nil {

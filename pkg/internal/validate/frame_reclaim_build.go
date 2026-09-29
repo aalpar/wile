@@ -333,7 +333,7 @@ func classifyCallee(
 // (frame_reclaim.go: a false positive would corrupt). It is the same mapping the
 // caller gives shadowUnknown. The refusal costs reclamation only on a genuinely
 // ambiguous binder, which a sound analysis would not have reclaimed anyway.
-func resolveNodeByScopes(byIdent map[ScopedBindingKey]*reclaimNode, name string, refScopes []*syntax.Scope) *reclaimNode {
+func resolveNodeByScopes(byIdent map[ScopedBindingKey]*reclaimNode, name string, refScopes syntax.Scopes) *reclaimNode {
 	var best *reclaimNode
 	bestLen := -1
 	tie := false
@@ -347,12 +347,15 @@ func resolveNodeByScopes(byIdent map[ScopedBindingKey]*reclaimNode, name string,
 		}
 		// Equal-cardinality matches are necessarily distinct scope sets (equal sets
 		// share a ScopedBindingKey, hence one node), so incomparable ⇒ ambiguous.
+		// Cardinality only; the ranking and the tie polarity are unchanged by the
+		// representation. Len() is O(1) on the chain where len() was O(1) on the
+		// slice, so this is a spelling change and nothing else.
 		switch {
-		case len(n.scopes) > bestLen:
-			bestLen = len(n.scopes)
+		case n.scopes.Len() > bestLen:
+			bestLen = n.scopes.Len()
 			best = n
 			tie = false
-		case len(n.scopes) == bestLen:
+		case n.scopes.Len() == bestLen:
 			tie = true
 		}
 	}
@@ -459,7 +462,7 @@ type localBinding struct {
 	// entry answerable to a reference rather than to a spelling. These predicates
 	// run POST-expansion, where a macro-introduced binder and a user binder of the
 	// same name differ in nothing else.
-	scopes []*syntax.Scope
+	scopes syntax.Scopes
 }
 
 // nameSet maps an identifier Key to EVERY enclosing local binder of that name,
@@ -517,7 +520,7 @@ const (
 // the ordinary nested-let case every binder is ∅-scoped, so all of them match with
 // equal cardinality. Scanning innermost-first with a strict improvement test makes
 // the innermost one win, which is what lexical scoping means.
-func (s nameSet) shadowLookup(name string, refScopes []*syntax.Scope) (localBinding, shadowVerdict) {
+func (s nameSet) shadowLookup(name string, refScopes syntax.Scopes) (localBinding, shadowVerdict) {
 	cands := s[name]
 	best := -1
 	ambiguous := false
@@ -525,12 +528,12 @@ func (s nameSet) shadowLookup(name string, refScopes []*syntax.Scope) (localBind
 		if !syntax.ScopesCompatible(cands[i].scopes, refScopes) {
 			continue
 		}
-		if best < 0 || len(cands[i].scopes) > len(cands[best].scopes) {
+		if best < 0 || cands[i].scopes.Len() > cands[best].scopes.Len() {
 			best = i
 			ambiguous = false
 			continue
 		}
-		if len(cands[i].scopes) == len(cands[best].scopes) &&
+		if cands[i].scopes.Len() == cands[best].scopes.Len() &&
 			!syntax.ScopesMatch(cands[i].scopes, cands[best].scopes) {
 			// Equal cardinality and not the same set ⇒ incomparable.
 			ambiguous = true

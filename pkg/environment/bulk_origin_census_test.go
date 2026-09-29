@@ -78,7 +78,7 @@ import (
 // something".
 func (p *GlobalEnvironmentFrame) invalidOriginRowCensus() []string {
 	q := []string{}
-	p.EachBulkRow(func(_ []*syntax.Scope, phase Phase, sealed bool, origin BulkOrigin) bool {
+	p.EachBulkRow(func(_ syntax.Scopes, phase Phase, sealed bool, origin BulkOrigin) bool {
 		if origin.valid() {
 			return true
 		}
@@ -151,7 +151,7 @@ func TestNoInstalledRowHasAnInvalidOrigin(t *testing.T) {
 			// Both install paths, over the two phases installInitialImports uses.
 			for _, phase := range sealedAxis {
 				src := NewSealedStoreBulkSource(store, PhaseRuntime, BaseSourceName())
-				store.InstallBulkRow(src, nil, phase, true, BulkOriginLanguage)
+				store.InstallBulkRow(src, syntax.Scopes{}, phase, true, BulkOriginLanguage)
 			}
 			vocab := NewFilteredBulkSource(
 				NewSealedStoreBulkSource(store, PhaseRuntime, values.NewSymbol("#%vocab")),
@@ -161,7 +161,7 @@ func TestNoInstalledRowHasAnInvalidOrigin(t *testing.T) {
 				map[string]struct{}{},
 				values.NewSymbol("#%vocab"),
 			)
-			store.InstallMacroPhaseRow(vocab, nil, true, BulkOriginLanguage)
+			store.InstallMacroPhaseRow(vocab, syntax.Scopes{}, true, BulkOriginLanguage)
 			// Minting the phase view is what turns the template into a row; the
 			// template alone is not in bulkRows and EachBulkRow would not see it.
 			store.EnsureMacroPhaseRows(PhaseExpand)

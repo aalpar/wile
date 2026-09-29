@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
@@ -35,7 +36,7 @@ func newNamespace(env *environment.EnvironmentFrame) *environment.EnvironmentFra
 		env.MaybeCreateOwnGlobalBinding(
 			values.NewSymbol(name),
 			environment.BindingTypePrimitive,
-			nil,
+			syntax.Scopes{},
 		)
 	}
 	return env

@@ -21,6 +21,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -210,11 +211,11 @@ func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
 
 	// A user define lands at (phase 0, mutable).
 	userSym := values.NewSymbol("user-x")
-	ns.Runtime().MaybeCreateOwnGlobalBinding(userSym, BindingTypeVariable, nil)
+	ns.Runtime().MaybeCreateOwnGlobalBinding(userSym, BindingTypeVariable, syntax.Scopes{})
 
 	// A startup binding lands sealed at the SAME phase: (phase 0, sealed).
 	baseSym := values.NewSymbol("base-y")
-	ns.Runtime().SealedWriteViewAt(PhaseRuntime).MaybeCreateOwnGlobalBinding(baseSym, BindingTypeVariable, nil)
+	ns.Runtime().SealedWriteViewAt(PhaseRuntime).MaybeCreateOwnGlobalBinding(baseSym, BindingTypeVariable, syntax.Scopes{})
 
 	// Phase 1 is a candidate only against slots at exactly phase 1, so it sees
 	// NEITHER — the base is no more visible across the phase boundary than the
@@ -228,7 +229,7 @@ func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
 	store := ns.Store()
 	store.InstallBulkRow(
 		NewSealedStoreBulkSource(store, PhaseRuntime, BaseSourceName()),
-		nil, PhaseExpand, true, BulkOriginLanguage)
+		syntax.Scopes{}, PhaseExpand, true, BulkOriginLanguage)
 	qt.Assert(t, expand.GetBinding(baseSym, values.AllScopes()), qt.Not(qt.IsNil))
 	qt.Assert(t, expand.GetBinding(userSym, values.AllScopes()), qt.IsNil)
 }

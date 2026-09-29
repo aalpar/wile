@@ -402,7 +402,7 @@ func (p BulkOrigin) valid() bool {
 type bulkRef struct {
 	// scopes is the scope set a reference must be compatible with to resolve
 	// through this row: the row's own axis, not read off any binding.
-	scopes []*syntax.Scope
+	scopes syntax.Scopes
 	phase  Phase
 	sealed bool
 	// origin is the row's provenance: bulkTierOf ranks by it, EachBulkRow hands
@@ -437,7 +437,7 @@ type bulkRef struct {
 // hold: bulkTierOf would have to invent a tier for it, and every answer it could
 // invent is wrong in silence. Refusing here reports it one frame from the
 // mistake.
-func (p *GlobalEnvironmentFrame) InstallBulkRow(src BulkSource, scopes []*syntax.Scope, phase Phase, sealed bool, origin BulkOrigin) {
+func (p *GlobalEnvironmentFrame) InstallBulkRow(src BulkSource, scopes syntax.Scopes, phase Phase, sealed bool, origin BulkOrigin) {
 	if !origin.valid() {
 		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"InstallBulkRow: origin %d is not a declared BulkOrigin; name the installer (BulkOriginLanguage or BulkOriginImport)", origin))
@@ -539,7 +539,7 @@ func (p *GlobalEnvironmentFrame) BulkRowCount() int {
 // store, and it never sees p.bulkRows itself. scopes is the caller's own slice,
 // handed back for inspection — treat it as read-only; mutating it would mutate
 // the installed row.
-func (p *GlobalEnvironmentFrame) EachBulkRow(fn func(scopes []*syntax.Scope, phase Phase, sealed bool, origin BulkOrigin) bool) {
+func (p *GlobalEnvironmentFrame) EachBulkRow(fn func(scopes syntax.Scopes, phase Phase, sealed bool, origin BulkOrigin) bool) {
 	p.mu.RLock()
 	rows := make([]bulkRef, len(p.bulkRows))
 	copy(rows, p.bulkRows)
@@ -789,7 +789,7 @@ func (p *filteredBulkSource) Repoint(store *GlobalEnvironmentFrame) BulkSource {
 // its own: the template is copied into a row at every macro phase the store ever
 // reaches, so an unrankable origin installed here is replicated rather than
 // isolated.
-func (p *GlobalEnvironmentFrame) InstallMacroPhaseRow(src BulkSource, scopes []*syntax.Scope, sealed bool, origin BulkOrigin) {
+func (p *GlobalEnvironmentFrame) InstallMacroPhaseRow(src BulkSource, scopes syntax.Scopes, sealed bool, origin BulkOrigin) {
 	if !origin.valid() {
 		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"InstallMacroPhaseRow: origin %d is not a declared BulkOrigin; name the installer (BulkOriginLanguage or BulkOriginImport)", origin))

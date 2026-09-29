@@ -623,7 +623,7 @@ func (p *EnvironmentFrame) localBinding(key *values.Symbol, q syntax.ScopeSet) (
 	// candidate is just the existing *Binding pointer — so we record
 	// unconditionally on shouldRecord = true.
 	var best scopedBestOf[*Binding]
-	target := len(q.Scopes())
+	target := q.Scopes().Len()
 	p.resolveLocal(key, q, func(binding *Binding, _ int, _ int) any {
 		sc := binding.Scopes()
 		rec, done := best.shouldRecord(sc, target)
@@ -722,7 +722,7 @@ func (p *EnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType
 // Returns (index, true) if created, (index, false) if already existed.
 func (p *EnvironmentFrame) MaybeCreateLocalBinding(
 	key *values.Symbol, bt BindingType,
-	scopes []*syntax.Scope, source *syntax.SourceContext,
+	scopes syntax.Scopes, source *syntax.SourceContext,
 ) (*LocalIndex, bool) {
 	if p == nil || !p.hasLocal() {
 		return nil, false
@@ -764,7 +764,7 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) 
 	// where the candidate actually becomes the new best, instead of
 	// allocating on every parent-chain visit.
 	var best scopedBestOf[*LocalIndex]
-	target := len(q.Scopes())
+	target := q.Scopes().Len()
 	p.resolveLocal(key, q, func(binding *Binding, slot int, depth int) any {
 		sc := binding.Scopes()
 		rec, done := best.shouldRecord(sc, target)
@@ -929,7 +929,7 @@ func (p *EnvironmentFrame) writeCoordinates() (Phase, bool) {
 // and so is a top-level define-for-syntax over the expand-phase registry copy —
 // the copy sits at (1, sealed) and the define writes at (1, mutable), so the
 // phase-1 case shadows for exactly the reason the phase-0 one does.
-func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt BindingType, scopes []*syntax.Scope) (*GlobalIndex, bool) {
+func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt BindingType, scopes syntax.Scopes) (*GlobalIndex, bool) {
 	phase, sealed := p.writeCoordinates()
 	return p.global.CreateGlobalBindingAt(key, bt, scopes, phase, sealed)
 }
@@ -962,7 +962,7 @@ func (p *EnvironmentFrame) OwnGlobalIndex(key *values.Symbol, q syntax.ScopeSet)
 // Coordinates rather than tier order, for the reason DeleteBindingAt gives: a
 // ranked delete through the mutable runtime view would reach the sealed
 // primitive whenever no user shadow existed.
-func (p *EnvironmentFrame) DeleteOwnGlobal(sym *values.Symbol, scopes []*syntax.Scope) bool {
+func (p *EnvironmentFrame) DeleteOwnGlobal(sym *values.Symbol, scopes syntax.Scopes) bool {
 	phase, sealed := p.writeCoordinates()
 	return p.global.DeleteBindingAt(sym, scopes, phase, sealed)
 }
@@ -1114,7 +1114,7 @@ func (p *EnvironmentFrame) WritesOwnerRootCoordinates() bool {
 // Refusal, not panic: all three callers return an error to a caller who can act
 // on it, and the shadowing route (a define at different coordinates) is a
 // legitimate way to get the effect.
-func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, v values.Value) (*GlobalIndex, error) {
+func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, scopes syntax.Scopes, v values.Value) (*GlobalIndex, error) {
 	// The create's index is PINNED to the slot it landed on, at this view's own
 	// write coordinates, so the write addresses that slot rather than re-deriving
 	// it from the name — which over one merged store would also have to be told
@@ -1231,7 +1231,7 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 // (Verified 2026-07-10: hermeticizing the phase-0 search passes the
 // compilation/machine/wile suites but fails the integration R7RS conformance
 // suite here. Investigated as a possible "second hermeticity hole"; it is not.)
-func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
+func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes syntax.Scopes) *GlobalIndex {
 	if p.phases == nil {
 		// No phase registry — try runtime only
 		return p.GetGlobalIndexWithScopes(key, syntax.ScopesOf(scopes))
@@ -1355,11 +1355,13 @@ func (p *EnvironmentFrame) PresentPhases() []Phase {
 // The other GetGlobalIndexAcrossPhases caller (compile_syntax_rules.go) is untouched:
 // it carries the R7RS §4.3 free-template-identifier carve-out, and the
 // jabberwocky/march-hare case reaches it through that caller, not this one.
-func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
-	if p.namespace == nil || len(scopes) == 0 {
+func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, scopes syntax.Scopes) *GlobalIndex {
+	if p.namespace == nil || scopes.IsEmpty() {
 		return nil
 	}
-	for _, scope := range scopes {
+	// All() rather than ForEach: this loop both `continue`s and returns from the
+	// enclosing function, neither of which a callback can express.
+	for scope := range scopes.All() {
 		libEnv := p.namespace.LookupLibraryEnv(scope)
 		if libEnv == nil {
 			continue

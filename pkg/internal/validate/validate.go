@@ -259,7 +259,7 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 func headDenotesSpecialForm(
 	env *environment.EnvironmentFrame,
 	symVal *values.Symbol,
-	scopes []*syntax.Scope,
+	scopes syntax.Scopes,
 	b *environment.Binding,
 ) bool {
 	if b == nil {
@@ -355,13 +355,13 @@ func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, s
 func referenceReachesBinderDirectly(
 	env *environment.EnvironmentFrame,
 	symVal *values.Symbol,
-	scopes []*syntax.Scope,
+	scopes syntax.Scopes,
 	b *environment.Binding,
 ) bool {
-	if len(scopes) == 0 {
+	if scopes.IsEmpty() {
 		return true
 	}
-	if len(b.Scopes()) > 0 {
+	if !b.Scopes().IsEmpty() {
 		return true
 	}
 	libGI := env.GetGlobalIndexFromLibraryScopes(symVal, scopes)

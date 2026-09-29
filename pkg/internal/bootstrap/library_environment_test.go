@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
 
@@ -101,7 +102,7 @@ func TestNewLibraryEnvironmentFrame_BindingIsolation(t *testing.T) {
 
 	// Define a binding in the library environment
 	libSym := values.NewSymbol("lib-only-binding")
-	libEnv.MaybeCreateOwnGlobalBinding(libSym, environment.BindingTypeVariable, nil)
+	libEnv.MaybeCreateOwnGlobalBinding(libSym, environment.BindingTypeVariable, syntax.Scopes{})
 
 	// The caller environment should not see this binding
 	callerBinding := callerEnv.GetBinding(libSym, values.AllScopes())

@@ -27,7 +27,7 @@ import (
 func TestBinding_NewBindingWithScopes(t *testing.T) {
 	scope1 := syntax.NewScope()
 	scope2 := syntax.NewScope()
-	scopes := []*syntax.Scope{scope1, scope2}
+	scopes := syntax.ScopesFromSlice([]*syntax.Scope{scope1, scope2})
 
 	val := values.NewInteger(42)
 	b := NewBindingWithScopes(val, BindingTypeVariable, scopes)
@@ -35,9 +35,12 @@ func TestBinding_NewBindingWithScopes(t *testing.T) {
 	qt.Assert(t, b, qt.Not(qt.IsNil))
 	qt.Assert(t, b.Value(), valuestest.SchemeEquals, val)
 	qt.Assert(t, b.BindingType(), qt.Equals, BindingTypeVariable)
-	qt.Assert(t, b.Scopes(), qt.HasLen, 2)
-	qt.Assert(t, b.Scopes()[0], qt.Equals, scope1)
-	qt.Assert(t, b.Scopes()[1], qt.Equals, scope2)
+	// The two positional rows that stood here read the set in the constructor's
+	// argument order. Order is not part of the Scopes contract; membership and
+	// cardinality are what every consumer of a binding's scope set reads.
+	qt.Assert(t, b.Scopes().Len(), qt.Equals, 2)
+	qt.Assert(t, b.Scopes().Has(scope1), qt.IsTrue)
+	qt.Assert(t, b.Scopes().Has(scope2), qt.IsTrue)
 }
 
 func TestBinding_BindingType(t *testing.T) {
@@ -57,36 +60,41 @@ func TestBinding_SetValue(t *testing.T) {
 func TestBinding_Scopes(t *testing.T) {
 	// Test binding without scopes
 	b1 := NewBinding(values.Void, BindingTypeVariable)
-	qt.Assert(t, b1.Scopes(), qt.IsNil)
+	qt.Assert(t, b1.Scopes().IsEmpty(), qt.IsTrue)
 
 	// Test binding with scopes
 	scope := syntax.NewScope()
-	scopes := []*syntax.Scope{scope}
+	scopes := syntax.ScopesFromSlice([]*syntax.Scope{scope})
 	b2 := NewBindingWithScopes(values.Void, BindingTypeVariable, scopes)
-	qt.Assert(t, b2.Scopes(), qt.HasLen, 1)
-	qt.Assert(t, b2.Scopes()[0], qt.Equals, scope)
+	// Membership and cardinality, not position: a Scopes is a SET and storage
+	// order is not part of its contract.
+	qt.Assert(t, b2.Scopes().Len(), qt.Equals, 1)
+	qt.Assert(t, b2.Scopes().Has(scope), qt.IsTrue)
 }
 
 func TestBinding_UpdateMeta_Scopes(t *testing.T) {
 	b := NewBinding(values.Void, BindingTypeVariable)
-	qt.Assert(t, b.Scopes(), qt.IsNil)
+	qt.Assert(t, b.Scopes().IsEmpty(), qt.IsTrue)
 
 	scope1 := syntax.NewScope()
 	scope2 := syntax.NewScope()
-	scopes := []*syntax.Scope{scope1, scope2}
+	scopes := syntax.ScopesFromSlice([]*syntax.Scope{scope1, scope2})
 
 	b.UpdateMeta(func(m *BindingMeta) bool {
 		m.Scopes = scopes
 		return true
 	})
-	qt.Assert(t, b.Scopes(), qt.HasLen, 2)
-	qt.Assert(t, b.Scopes()[0], qt.Equals, scope1)
-	qt.Assert(t, b.Scopes()[1], qt.Equals, scope2)
+	// The two positional rows that stood here read the set in the constructor's
+	// argument order. Order is not part of the Scopes contract; membership and
+	// cardinality are what every consumer of a binding's scope set reads.
+	qt.Assert(t, b.Scopes().Len(), qt.Equals, 2)
+	qt.Assert(t, b.Scopes().Has(scope1), qt.IsTrue)
+	qt.Assert(t, b.Scopes().Has(scope2), qt.IsTrue)
 }
 
 func TestBinding_NewBindingWithSource(t *testing.T) {
 	scope := syntax.NewScope()
-	scopes := []*syntax.Scope{scope}
+	scopes := syntax.ScopesFromSlice([]*syntax.Scope{scope})
 	source := &syntax.SourceContext{
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(10, 5, 100),
@@ -98,7 +106,7 @@ func TestBinding_NewBindingWithSource(t *testing.T) {
 	qt.Assert(t, b, qt.Not(qt.IsNil))
 	qt.Assert(t, b.Value(), valuestest.SchemeEquals, val)
 	qt.Assert(t, b.BindingType(), qt.Equals, BindingTypeVariable)
-	qt.Assert(t, b.Scopes(), qt.HasLen, 1)
+	qt.Assert(t, b.Scopes().Len(), qt.Equals, 1)
 	qt.Assert(t, b.Source(), qt.Equals, source)
 	qt.Assert(t, b.Source().File, qt.Equals, "test.scm")
 }
@@ -113,7 +121,7 @@ func TestBinding_Source(t *testing.T) {
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(1, 1, 0),
 	}
-	b2 := NewBindingWithSource(values.Void, BindingTypeVariable, nil, source)
+	b2 := NewBindingWithSource(values.Void, BindingTypeVariable, syntax.Scopes{}, source)
 	qt.Assert(t, b2.Source(), qt.Equals, source)
 }
 
@@ -146,13 +154,13 @@ func TestBinding_UpdateMeta_Doc(t *testing.T) {
 
 func TestBinding_UpdateMeta_PreservesExistingMeta(t *testing.T) {
 	scope := syntax.NewScope()
-	b := NewBindingWithScopes(values.NewInteger(1), BindingTypeVariable, []*syntax.Scope{scope})
+	b := NewBindingWithScopes(values.NewInteger(1), BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{scope}))
 	b.UpdateMeta(func(m *BindingMeta) bool {
 		m.Doc = "A documented binding."
 		return true
 	})
 	qt.Assert(t, b.Doc(), qt.Equals, "A documented binding.")
-	qt.Assert(t, b.Scopes(), qt.HasLen, 1)
+	qt.Assert(t, b.Scopes().Len(), qt.Equals, 1)
 }
 
 func TestBinding_UpdateMeta_Imported(t *testing.T) {

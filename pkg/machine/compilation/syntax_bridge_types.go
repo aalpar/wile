@@ -34,15 +34,15 @@ import (
 // hasLocalBindingProvider, and libraryScopeProvider from the match package.
 type FreeIdResolution struct {
 	Global          *environment.GlobalIndex
-	LocalScopes     []*syntax.Scope
+	LocalScopes     syntax.Scopes
 	HasLocalBinding bool
 	LibScope        *syntax.Scope
 }
 
 // GetLocalScopes implements the localScopesProvider interface.
-func (p *FreeIdResolution) GetLocalScopes() []*syntax.Scope {
+func (p *FreeIdResolution) GetLocalScopes() syntax.Scopes {
 	if p == nil {
-		return nil
+		return syntax.Scopes{}
 	}
 	return p.LocalScopes
 }

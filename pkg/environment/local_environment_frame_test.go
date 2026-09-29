@@ -19,6 +19,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
 
@@ -178,7 +179,7 @@ func TestCopyForApplyInto_ConcurrentSourceRaceFree(t *testing.T) {
 // "expected 1 value, got 0" rather than #!void.
 func TestCopyForApplyInto_SkipsAnonymousSlots(t *testing.T) {
 	le := NewLocalEnvironment(1)
-	le.MaybeCreateLocalBinding(values.NewSymbol("d"), BindingTypeVariable, nil, nil)
+	le.MaybeCreateLocalBinding(values.NewSymbol("d"), BindingTypeVariable, syntax.Scopes{}, nil)
 	anon := le.AppendAnonymousSlot()
 
 	qt.Assert(t, len(le.Bindings()), qt.Equals, 3)

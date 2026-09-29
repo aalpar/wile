@@ -94,7 +94,7 @@ type ExpandOptions struct {
 // The fingerprint contains only [0-9,], so the first '|' unambiguously ends it —
 // the name that follows may itself contain '|' without colliding with another
 // (name, scopes) pair.
-func FreeIdKey(name string, scopes []*syntax.Scope) string {
+func FreeIdKey(name string, scopes syntax.Scopes) string {
 	return syntax.ScopeFingerprint(scopes) + "|" + name
 }
 
@@ -338,7 +338,7 @@ func syntaxListToSlice(v syntax.SyntaxValue) ([]syntax.SyntaxValue, error) {
 // use-site scope off the template, which subset refuses. The ceiling, and the
 // binder-scope log that fed it, are gone — see
 // memory/2026-08-20-use-site-scopes-impl.local.md.
-func TemplateDenotesPatternVariable(templateScopes, patternScopes []*syntax.Scope) bool {
+func TemplateDenotesPatternVariable(templateScopes, patternScopes syntax.Scopes) bool {
 	return syntax.ScopesMatch(templateScopes, patternScopes)
 }
 
@@ -376,14 +376,22 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 	// identifier distinct from a same-named one at the use site.
 	templateCtx := srcCtx
 	if opts.UseSiteCtx != nil && srcCtx != nil {
-		var defScopes []*syntax.Scope
+		var defScopes syntax.Scopes
 		defCtx := sym.SourceContext()
 		if defCtx != nil {
 			defScopes = defCtx.Scopes
 		}
-		// Pointer-wise comparison — scopes have identity, not structure. Skips the
-		// clone on the common case where the two sets already agree (both empty).
-		if !slices.Equal(srcCtx.Scopes, defScopes) {
+		// I135-orderpin CLOSES HERE, and the fix is structural rather than a repair.
+		// This was slices.Equal, an ORDER-SENSITIVE comparison standing in for set
+		// equality: two equal sets stored in different orders read as different and
+		// took a Clone that was not needed. Measured before the flip, that cost
+		// nothing — 82 of 82 rejections over a three-form probe were genuinely
+		// different sets and the whole Go suite showed zero order-only divergences —
+		// so it was a Clone never taken rather than a wrong answer. Under a
+		// canonically id-ordered chain the divergence is not merely fixed, it is
+		// INEXPRESSIBLE: equal cardinality plus one-directional subset is set
+		// equality, and no ordering survives to disagree about.
+		if srcCtx.Scopes.Len() != defScopes.Len() || !srcCtx.Scopes.SubsetOf(defScopes) {
 			templateCtx = srcCtx.Clone()
 			templateCtx.Scopes = defScopes
 		}
@@ -410,7 +418,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 
 	// Local binding — use definition-site scopes.
 	localScopes := resolution.GetLocalScopes()
-	if len(localScopes) > 0 {
+	if !localScopes.IsEmpty() {
 		scopedCtx := func() *syntax.SourceContext {
 			if srcCtx != nil {
 				return srcCtx.Clone()

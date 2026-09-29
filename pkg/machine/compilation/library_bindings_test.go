@@ -20,6 +20,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
 
@@ -109,7 +110,7 @@ func TestCopyLibraryBindingsPhaseOverflow(t *testing.T) {
 	libEnv := ns.NewChildRuntime()
 	sym := values.NewSymbol("my-macro")
 	expandEnv := libEnv.Expand()
-	expandEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeSyntax, nil)
+	expandEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeSyntax, syntax.Scopes{})
 	gi := expandEnv.GetGlobalIndex(sym)
 	qt.Assert(t, gi, qt.IsNotNil)
 	err := expandEnv.SetOwnGlobalValue(gi, values.Void)
@@ -252,7 +253,7 @@ func TestFindLibraryBindingAtExportPhase(t *testing.T) {
 
 			sym := values.NewSymbol("probe")
 			for i, b := range tc.bindings {
-				_, err := libEnv.AtPhase(b.phase).DefineOwnGlobal(sym, b.bindingType, nil, values.NewInteger(int64(i)))
+				_, err := libEnv.AtPhase(b.phase).DefineOwnGlobal(sym, b.bindingType, syntax.Scopes{}, values.NewInteger(int64(i)))
 				c.Assert(err, qt.IsNil)
 			}
 

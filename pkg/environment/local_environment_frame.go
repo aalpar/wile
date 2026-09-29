@@ -182,7 +182,7 @@ func (p *LocalEnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt Bindin
 // one in place and publish a slot to the other frame.
 func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
 	key *values.Symbol, bt BindingType,
-	scopes []*syntax.Scope, source *syntax.SourceContext,
+	scopes syntax.Scopes, source *syntax.SourceContext,
 ) (*LocalIndex, bool) {
 	slots := p.keys[*key]
 	for _, i := range slots {
@@ -204,7 +204,16 @@ func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
 	i := len(p.bindings)
 	p.keys[*key] = append(slices.Clip(slots), i)
 	b := Binding{value: values.Void, bindingType: bt}
-	if scopes != nil || source != nil {
+	// `!scopes.IsEmpty()` where this read `scopes != nil`, which is the SECOND
+	// nil-vs-empty discrimination in this function — P2.1 removed the first and
+	// deliberately left this one to the flip. The consequence: a create carrying
+	// the empty set and a nil source no longer allocates a BindingMeta, so
+	// Binding.Scopes() returns the zero Scopes instead of a non-nil empty slice.
+	// That is only safe because no reader distinguishes "meta present with an
+	// empty scope set" from "no meta" — re-verified at flip time per the plan's
+	// requirement, with a tree-wide grep for Scopes() != nil / Scopes() == nil /
+	// Meta() != nil over non-test Go returning zero hits, as it did at P2.1.
+	if !scopes.IsEmpty() || source != nil {
 		b.meta = &BindingMeta{Scopes: scopes, Source: source}
 	}
 	p.bindings = append(p.bindings, b)

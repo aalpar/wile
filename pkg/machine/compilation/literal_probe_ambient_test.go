@@ -42,13 +42,13 @@ func TestLookupLiteralBindingDescendsPhasesFromItsOwn(t *testing.T) {
 	newStore := func() (*environment.Namespace, *environment.Binding) {
 		ns := environment.NewNamespace()
 		idx, _ := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime).
-			MaybeCreateOwnGlobalBinding(values.NewSymbol(sym), environment.BindingTypePrimitive, nil)
+			MaybeCreateOwnGlobalBinding(values.NewSymbol(sym), environment.BindingTypePrimitive, syntax.Scopes{})
 		return ns, ns.Store().GetOwnGlobalBinding(idx)
 	}
 	// A user (define else …) at the given phase: an exact-phase mutable slot.
 	shadow := func(ns *environment.Namespace, phase environment.Phase) *environment.Binding {
 		view := ns.Runtime().AtPhase(phase)
-		idx, _ := view.MaybeCreateOwnGlobalBinding(values.NewSymbol(sym), environment.BindingTypeVariable, nil)
+		idx, _ := view.MaybeCreateOwnGlobalBinding(values.NewSymbol(sym), environment.BindingTypeVariable, syntax.Scopes{})
 		return ns.Store().GetOwnGlobalBinding(idx)
 	}
 
@@ -56,7 +56,7 @@ func TestLookupLiteralBindingDescendsPhasesFromItsOwn(t *testing.T) {
 		ns, _ := newStore()
 		user := shadow(ns, environment.PhaseRuntime)
 		env := ns.Runtime().AtPhase(environment.PhaseExpand)
-		got, ok := lookupLiteralBinding(env, sym, nil, definitionFallbackPhases(env))
+		got, ok := lookupLiteralBinding(env, sym, syntax.Scopes{}, definitionFallbackPhases(env))
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, got, qt.Equals, user,
 			qt.Commentf("both are at phase 0 now, so the tierExactMutable slot outranks the tierExactSealed keyword"))
@@ -64,7 +64,7 @@ func TestLookupLiteralBindingDescendsPhasesFromItsOwn(t *testing.T) {
 	t.Run("definition site at phase 1, no shadow anywhere: the keyword", func(t *testing.T) {
 		ns, keyword := newStore()
 		env := ns.Runtime().AtPhase(environment.PhaseExpand)
-		got, ok := lookupLiteralBinding(env, sym, nil, definitionFallbackPhases(env))
+		got, ok := lookupLiteralBinding(env, sym, syntax.Scopes{}, definitionFallbackPhases(env))
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, got, qt.Equals, keyword,
 			qt.Commentf("the descent, not an ambient tier, is what carries phase 1 down to the phase-0 keyword"))
@@ -74,7 +74,7 @@ func TestLookupLiteralBindingDescendsPhasesFromItsOwn(t *testing.T) {
 		_ = shadow(ns, environment.PhaseRuntime)
 		own := shadow(ns, environment.PhaseExpand)
 		env := ns.Runtime().AtPhase(environment.PhaseExpand)
-		got, _ := lookupLiteralBinding(env, sym, nil, definitionFallbackPhases(env))
+		got, _ := lookupLiteralBinding(env, sym, syntax.Scopes{}, definitionFallbackPhases(env))
 		qt.Assert(t, got, qt.Equals, own)
 	})
 	t.Run("use site: own phase, then the language's rows, and in that order", func(t *testing.T) {
@@ -86,7 +86,7 @@ func TestLookupLiteralBindingDescendsPhasesFromItsOwn(t *testing.T) {
 		user := shadow(ns, environment.PhaseRuntime)
 		env := ns.Runtime().AtPhase(environment.PhaseExpand)
 
-		got, ok := lookupLiteralBinding(env, sym, nil, nil)
+		got, ok := lookupLiteralBinding(env, sym, syntax.Scopes{}, nil)
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, got, qt.IsNil,
 			qt.Commentf("a lower phase's slot is another program's, whether it is the keyword or the shadow"))
@@ -107,13 +107,13 @@ func TestLookupLiteralBindingDescendsPhasesFromItsOwn(t *testing.T) {
 		// collapse the ordering.
 		store := ns.Store()
 		src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, environment.BaseSourceName())
-		store.InstallBulkRow(src, nil, environment.PhaseExpand, true, environment.BulkOriginLanguage)
+		store.InstallBulkRow(src, syntax.Scopes{}, environment.PhaseExpand, true, environment.BulkOriginLanguage)
 
 		qt.Assert(t, env.GetBinding(values.NewSymbol(sym), values.EmptyScopes()), qt.Equals, keyword,
 			qt.Commentf("the row is sealed-tier restricted, so it supplies the keyword and not the user shadow"))
 		qt.Assert(t, env.GetBinding(values.NewSymbol(sym), values.EmptyScopes()), qt.Not(qt.Equals), user)
 
-		got, ok = lookupLiteralBinding(env, sym, nil, nil)
+		got, ok = lookupLiteralBinding(env, sym, syntax.Scopes{}, nil)
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, got, qt.Equals, keyword,
 			qt.Commentf("the literal pin and an ordinary read must agree on what the language supplies"))
@@ -123,7 +123,7 @@ func TestLookupLiteralBindingDescendsPhasesFromItsOwn(t *testing.T) {
 	t.Run("a name bound nowhere: nil, and not a refusal", func(t *testing.T) {
 		ns := environment.NewNamespace()
 		env := ns.Runtime().AtPhase(environment.PhaseExpand)
-		got, ok := lookupLiteralBinding(env, "lit", nil, definitionFallbackPhases(env))
+		got, ok := lookupLiteralBinding(env, "lit", syntax.Scopes{}, definitionFallbackPhases(env))
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, got, qt.IsNil)
 	})
@@ -145,7 +145,7 @@ func TestLookupLiteralBindingSealedTieIsDeadUnderAMutableHit(t *testing.T) {
 	// query {A,B}: neither is THE maximal match, which is Flatt's ambiguity.
 	scopeA := syntax.NewScope()
 	scopeB := syntax.NewScope()
-	query := []*syntax.Scope{scopeA, scopeB}
+	query := syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB})
 
 	// Two sealed slots of one name at phase 0, written the way auxiliary syntax
 	// is (the phase-0 sealed-write view). CreateGlobalBindingAt reuses a slot
@@ -156,7 +156,7 @@ func TestLookupLiteralBindingSealedTieIsDeadUnderAMutableHit(t *testing.T) {
 		sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
 		for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
 			_, created := sealedRoot.MaybeCreateOwnGlobalBinding(
-				values.NewSymbol(sym), environment.BindingTypePrimitive, scopes)
+				values.NewSymbol(sym), environment.BindingTypePrimitive, syntax.ScopesFromSlice(scopes))
 			qt.Assert(t, created, qt.IsTrue)
 		}
 		return ns
@@ -165,7 +165,7 @@ func TestLookupLiteralBindingSealedTieIsDeadUnderAMutableHit(t *testing.T) {
 	t.Run("a phase-0 mutable slot answers the phase-1 definition-site probe", func(t *testing.T) {
 		ns := newTiedStore(t)
 		idx, _ := ns.Runtime().MaybeCreateOwnGlobalBinding(
-			values.NewSymbol(sym), environment.BindingTypeVariable, nil)
+			values.NewSymbol(sym), environment.BindingTypeVariable, syntax.Scopes{})
 		user := ns.Store().GetOwnGlobalBinding(idx)
 		qt.Assert(t, user, qt.IsNotNil)
 
@@ -197,7 +197,7 @@ func TestLookupLiteralBindingMutableTieIsRefusedWithNothingSealed(t *testing.T) 
 	const sym = "else"
 	scopeA := syntax.NewScope()
 	scopeB := syntax.NewScope()
-	query := []*syntax.Scope{scopeA, scopeB}
+	query := syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB})
 
 	// Two phase-0 mutable slots of one name under {A} and {B}, and no sealed
 	// slot at all.
@@ -205,7 +205,7 @@ func TestLookupLiteralBindingMutableTieIsRefusedWithNothingSealed(t *testing.T) 
 		ns := environment.NewNamespace()
 		for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
 			_, created := ns.Runtime().MaybeCreateOwnGlobalBinding(
-				values.NewSymbol(sym), environment.BindingTypeVariable, scopes)
+				values.NewSymbol(sym), environment.BindingTypeVariable, syntax.ScopesFromSlice(scopes))
 			qt.Assert(t, created, qt.IsTrue)
 		}
 		return ns
@@ -244,16 +244,16 @@ func TestLookupLiteralBindingMutableTieIsRefusedBesideASealedTie(t *testing.T) {
 	const sym = "else"
 	scopeA := syntax.NewScope()
 	scopeB := syntax.NewScope()
-	query := []*syntax.Scope{scopeA, scopeB}
+	query := syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB})
 
 	ns := environment.NewNamespace()
 	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
 	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
 		_, created := sealedRoot.MaybeCreateOwnGlobalBinding(
-			values.NewSymbol(sym), environment.BindingTypePrimitive, scopes)
+			values.NewSymbol(sym), environment.BindingTypePrimitive, syntax.ScopesFromSlice(scopes))
 		qt.Assert(t, created, qt.IsTrue)
 		_, created = ns.Runtime().MaybeCreateOwnGlobalBinding(
-			values.NewSymbol(sym), environment.BindingTypeVariable, scopes)
+			values.NewSymbol(sym), environment.BindingTypeVariable, syntax.ScopesFromSlice(scopes))
 		qt.Assert(t, created, qt.IsTrue)
 	}
 
@@ -283,7 +283,7 @@ func TestLookupLiteralBindingExactTieIsRefusedDespiteACleanLowerPhase(t *testing
 	const sym = "else"
 	scopeA := syntax.NewScope()
 	scopeB := syntax.NewScope()
-	query := []*syntax.Scope{scopeA, scopeB}
+	query := syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB})
 
 	ns := environment.NewNamespace()
 
@@ -292,7 +292,7 @@ func TestLookupLiteralBindingExactTieIsRefusedDespiteACleanLowerPhase(t *testing
 	expand := ns.Runtime().AtPhase(environment.PhaseExpand)
 	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
 		_, created := expand.MaybeCreateOwnGlobalBinding(
-			values.NewSymbol(sym), environment.BindingTypeVariable, scopes)
+			values.NewSymbol(sym), environment.BindingTypeVariable, syntax.ScopesFromSlice(scopes))
 		qt.Assert(t, created, qt.IsTrue)
 	}
 
@@ -300,13 +300,13 @@ func TestLookupLiteralBindingExactTieIsRefusedDespiteACleanLowerPhase(t *testing
 	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
 	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
 		_, created := sealedRoot.MaybeCreateOwnGlobalBinding(
-			values.NewSymbol(sym), environment.BindingTypePrimitive, scopes)
+			values.NewSymbol(sym), environment.BindingTypePrimitive, syntax.ScopesFromSlice(scopes))
 		qt.Assert(t, created, qt.IsTrue)
 	}
 
 	// Phase 0: one clean slot, unscoped, resolving under any query.
 	idx, created := ns.Runtime().MaybeCreateOwnGlobalBinding(
-		values.NewSymbol(sym), environment.BindingTypeVariable, nil)
+		values.NewSymbol(sym), environment.BindingTypeVariable, syntax.Scopes{})
 	qt.Assert(t, created, qt.IsTrue)
 	clean := ns.Store().GetOwnGlobalBinding(idx)
 	qt.Assert(t, clean, qt.IsNotNil)
@@ -337,7 +337,7 @@ func TestLookupLiteralBindingRowTieIsRefused(t *testing.T) {
 	const sym = "else"
 	scopeA := syntax.NewScope()
 	scopeB := syntax.NewScope()
-	query := []*syntax.Scope{scopeA, scopeB}
+	query := syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB})
 
 	ns := environment.NewNamespace()
 	store := ns.Store()
@@ -345,7 +345,7 @@ func TestLookupLiteralBindingRowTieIsRefused(t *testing.T) {
 	// The name the rows supply: one unscoped sealed slot at phase 0, which is
 	// what a sealed store source reads.
 	_, created := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime).
-		MaybeCreateOwnGlobalBinding(values.NewSymbol(sym), environment.BindingTypePrimitive, nil)
+		MaybeCreateOwnGlobalBinding(values.NewSymbol(sym), environment.BindingTypePrimitive, syntax.Scopes{})
 	qt.Assert(t, created, qt.IsTrue)
 
 	// Two rows at the query phase under incomparable one-element scope sets:
@@ -353,7 +353,7 @@ func TestLookupLiteralBindingRowTieIsRefused(t *testing.T) {
 	for _, sc := range []*syntax.Scope{scopeA, scopeB} {
 		src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime,
 			values.NewSymbol("lang-"+sc.String()))
-		store.InstallBulkRow(src, []*syntax.Scope{sc}, environment.PhaseExpand, true, environment.BulkOriginLanguage)
+		store.InstallBulkRow(src, syntax.ScopesFromSlice([]*syntax.Scope{sc}), environment.PhaseExpand, true, environment.BulkOriginLanguage)
 	}
 
 	// fallbacks nil, so the descent has exactly two steps: the phase-1 per-symbol

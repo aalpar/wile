@@ -15,7 +15,6 @@
 package environment
 
 import (
-	"slices"
 	"sync/atomic"
 
 	"github.com/aalpar/wile/pkg/syntax"
@@ -59,7 +58,7 @@ const BaseOriginLib = "#%base"
 // (see UpdateMeta), so a reader always sees a complete, immutable snapshot.
 // Behind a pointer so runtime Binding copies (the hot path) move a pointer.
 type BindingMeta struct {
-	Scopes []*syntax.Scope
+	Scopes syntax.Scopes
 	Source *syntax.SourceContext
 	Doc    string
 	// Stable is the conclusion of a rebind-stability proof (this binding will
@@ -256,15 +255,18 @@ func (p *atomicCell) updateMeta(fn func(*BindingMeta) bool) bool {
 // and a user-written one of the same name stay distinct variables. The set is
 // written once here and never mutated afterwards, so it needs no interaction
 // with the copy-on-write UpdateMeta path.
-func newGlobalBinding(value values.Value, bindingType BindingType, scopes []*syntax.Scope) *Binding {
-	if len(scopes) == 0 {
+func newGlobalBinding(value values.Value, bindingType BindingType, scopes syntax.Scopes) *Binding {
+	if scopes.IsEmpty() {
 		return &Binding{
 			cell:        newAtomicCell(value),
 			bindingType: bindingType,
 		}
 	}
 	return &Binding{
-		cell:        newAtomicCellWithMeta(value, &BindingMeta{Scopes: slices.Clone(scopes)}),
+		// No defensive copy: Scopes is immutable and persistent, so the caller
+		// cannot mutate what it handed us. slices.Clone here was guarding against
+		// a shared backing array that no longer exists.
+		cell:        newAtomicCellWithMeta(value, &BindingMeta{Scopes: scopes}),
 		bindingType: bindingType,
 	}
 }
@@ -295,7 +297,7 @@ func NewBinding(value values.Value, bindingType BindingType) *Binding {
 }
 
 // NewBindingWithScopes creates a binding with associated scopes (for hygiene)
-func NewBindingWithScopes(value values.Value, bindingType BindingType, scopes []*syntax.Scope) *Binding {
+func NewBindingWithScopes(value values.Value, bindingType BindingType, scopes syntax.Scopes) *Binding {
 	return &Binding{
 		value:       value,
 		bindingType: bindingType,
@@ -306,7 +308,7 @@ func NewBindingWithScopes(value values.Value, bindingType BindingType, scopes []
 }
 
 // NewBindingWithSource creates a binding with source location information.
-func NewBindingWithSource(value values.Value, bindingType BindingType, scopes []*syntax.Scope, source *syntax.SourceContext) *Binding {
+func NewBindingWithSource(value values.Value, bindingType BindingType, scopes syntax.Scopes, source *syntax.SourceContext) *Binding {
 	return &Binding{
 		value:       value,
 		bindingType: bindingType,
@@ -383,11 +385,15 @@ func (p *Binding) UpdateMeta(fn func(*BindingMeta) bool) bool {
 }
 
 // Scopes returns the hygiene scopes associated with this binding.
-// Returns nil for bindings without hygiene information.
-func (p *Binding) Scopes() []*syntax.Scope {
+//
+// A binding with no hygiene information returns the EMPTY set, not a
+// distinguishable absence. Before the Scopes flip this returned a nil slice
+// while SyntaxSymbol.Scopes() normalized its own nil away, so the two accessors
+// for one concept had opposite nil discipline; they now agree by construction.
+func (p *Binding) Scopes() syntax.Scopes {
 	m := p.Meta()
 	if m == nil {
-		return nil
+		return syntax.Scopes{}
 	}
 	return m.Scopes
 }

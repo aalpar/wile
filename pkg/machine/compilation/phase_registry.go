@@ -51,7 +51,7 @@ func RegisterPhaseBindings[F any](
 		// coordinates. Hand-building an index instead would build a bare-symbol one,
 		// which over the merged store resolves wildcard to the name's first live slot
 		// at ANY coordinates. Nothing here needs the pin it returns.
-		_, err := targetEnv.DefineOwnGlobal(sym, environment.BindingTypePrimitive, nil, val)
+		_, err := targetEnv.DefineOwnGlobal(sym, environment.BindingTypePrimitive, syntax.Scopes{}, val)
 		if err != nil {
 			return werr.WrapForeignErrorf(err,
 				"RegisterPhaseBindings: failed to bind %s", entry.Name)
@@ -181,7 +181,7 @@ func RegisterPhaseBindings[F any](
 func LookupPhaseBinding[T any](
 	phaseEnv *environment.EnvironmentFrame,
 	sym *values.Symbol,
-	scopes []*syntax.Scope,
+	scopes syntax.Scopes,
 ) T {
 	var zero T
 	q := syntax.ScopesOf(scopes)

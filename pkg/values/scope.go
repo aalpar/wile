@@ -16,9 +16,6 @@ package values
 
 import (
 	"fmt"
-	"slices"
-	"strconv"
-	"strings"
 	"sync/atomic"
 )
 
@@ -95,20 +92,17 @@ func (p *Scope) String() string {
 // by scope ID, matching ScopesMatch's pointer-identity model — scopes carry no
 // structure to compare. The empty set fingerprints to "", and a non-empty set
 // to sorted decimal IDs joined by ',', so the output contains only [0-9,].
-func ScopeFingerprint(scopes []*Scope) string {
-	if len(scopes) == 0 {
-		return ""
-	}
-	ids := make([]string, len(scopes))
-	for i, s := range scopes {
-		if s == nil {
-			ids[i] = "0"
-			continue
-		}
-		ids[i] = strconv.FormatUint(s.ID(), 10)
-	}
-	slices.Sort(ids)
-	return strings.Join(ids, ",")
+// ORDER CHANGED with the Scopes flip, deliberately. This used to format the ids
+// to strings and sort the STRINGS, so {2,10} fingerprinted to "10,2"; it now
+// walks an id-ordered chain and yields "10,9,2" where the string sort gave
+// "10,2,9". The invariant was never the exact output, it is "one total order,
+// applied by one function" — every producer routes through here, and
+// match.FreeIdName's guarantee is the [0-9,] character class, which both
+// orderings satisfy. Measured 2026-09-27: all four callers use only the
+// equivalence relation, none is order-observable. The one observable site is a
+// golden test ordering in validate's frame_reclaim_build_test.go.
+func ScopeFingerprint(scopes Scopes) string {
+	return scopes.Fingerprint()
 }
 
 // ScopesMatch checks if two sets of scopes are compatible for binding resolution.
@@ -153,22 +147,20 @@ func ScopeFingerprint(scopes []*Scope) string {
 // Scope sets are typically 0-4 elements (one per lexical form: macro invocation, lambda,
 // let-syntax, with-binding-scope). For sets this small, linear scan is faster than
 // hash-based or bitmap approaches due to cache locality and zero allocation overhead.
-func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
-	// A binding matches a use if all of the binding's scopes are present in the use's scopes.
-	// This is the subset relationship: bindingScopes ⊆ useScopes
-	//
-	// Empty binding scopes (top-level) match everything since {} ⊆ X for all X.
-
-	// A larger set cannot be a subset of a smaller one.
-	if len(bindingScopes) > len(useScopes) {
-		return false
-	}
-	for _, bindScope := range bindingScopes {
-		if !slices.Contains(useScopes, bindScope) {
-			return false
-		}
-	}
-	return true
+// It delegates to Scopes.SubsetOf and adds no rule of its own. Keeping it is
+// what lets the ~20 external call sites read as the domain operation rather than
+// as a method call in argument-reversed order; [I135-freefn] retires it.
+//
+// Implementation note that used to live here: the linear scan with pointer
+// equality was intentional while a set was a slice, on the grounds that sets are
+// "typically 0-4 elements". That premise was false outside the default
+// configuration (84 members under the Scheme syntax layer, ~250 in the
+// nested-let probe), and the scan is what made this O(n^2). SubsetOf is an
+// id-ordered merge with three O(1) rejects, the useful one being a shared spine
+// — which is the common case, since a reference's set is its binder's set plus a
+// scope.
+func ScopesMatch(useScopes, bindingScopes Scopes) bool {
+	return bindingScopes.SubsetOf(useScopes)
 }
 
 // ScopesCompatible checks whether a binding with bindingScopes can match a
@@ -205,16 +197,13 @@ func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
 // only bindings with no scopes match. Callers that want "match any" ask for it
 // with AllScopes and short-circuit on ScopeSet.IsAll() before reaching this
 // function (see EnvironmentFrame.resolveLocal).
-func ScopesCompatible(bindingScopes, useScopes []*Scope) bool {
-	if len(bindingScopes) == 0 {
-		return true
-	}
-	return ScopesMatch(useScopes, bindingScopes)
+func ScopesCompatible(bindingScopes, useScopes Scopes) bool {
+	return bindingScopes.SubsetOf(useScopes)
 }
 
-// HasScope checks if a scope set contains a specific scope
-func HasScope(scopes []*Scope, target *Scope) bool {
-	return slices.Contains(scopes, target)
+// HasScope checks if a scope set contains a specific scope.
+func HasScope(scopes Scopes, target *Scope) bool {
+	return scopes.Has(target)
 }
 
 // AddScopeToSet adds a scope to a set if not already present.
@@ -236,32 +225,28 @@ func HasScope(scopes []*Scope, target *Scope) bool {
 // failed with `no such binding "zz" with compatible scopes`; the binder held
 // intro_outer and the reference read intro_inner out of the shared array.
 // Pinned by TestAddScopeToSet_DoesNotAliasSpareCapacity.
-func AddScopeToSet(scopes []*Scope, newScope *Scope) []*Scope {
-	if slices.Contains(scopes, newScope) {
-		return scopes
-	}
-	q := make([]*Scope, len(scopes), len(scopes)+1)
-	copy(q, scopes)
-	return append(q, newScope)
+// The aliasing hazard the comment above describes is now STRUCTURALLY absent,
+// not merely guarded: a persistent chain has no spare capacity and no backing
+// array to share, so two sets cannot clobber each other's added scope however
+// they were derived. TestAddScopeToSet_DoesNotAliasSpareCapacity survives with
+// its PRECONDITION retired — it can no longer build a set carrying a spare
+// backing slot, because there is no backing array — and now asserts the property
+// directly by membership. The structural-sharing half is pinned by
+// TestScopesAddOfNewMaximumSharesTheTail.
+func AddScopeToSet(scopes Scopes, newScope *Scope) Scopes {
+	return scopes.Add(newScope)
 }
 
-// RemoveScopeFromSet removes a scope from a set
-func RemoveScopeFromSet(scopes []*Scope, target *Scope) []*Scope {
-	result := make([]*Scope, 0, len(scopes))
-	for _, s := range scopes {
-		if s != target {
-			result = append(result, s)
-		}
-	}
-	return result
+// RemoveScopeFromSet removes a scope from a set. Removing the maximum — the
+// intro-scope flip, and every removal measured in production — returns the
+// shared tail and allocates nothing.
+func RemoveScopeFromSet(scopes Scopes, target *Scope) Scopes {
+	return scopes.Remove(target)
 }
 
 // FlipScopeInSet toggles the presence of a scope in a set.
 // If the scope is present, it is removed; if absent, it is added.
 // This is the core operation for syntax-local-introduce.
-func FlipScopeInSet(scopes []*Scope, target *Scope) []*Scope {
-	if HasScope(scopes, target) {
-		return RemoveScopeFromSet(scopes, target)
-	}
-	return AddScopeToSet(scopes, target)
+func FlipScopeInSet(scopes Scopes, target *Scope) Scopes {
+	return scopes.Flip(target)
 }

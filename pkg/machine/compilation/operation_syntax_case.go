@@ -111,7 +111,7 @@ func (p *syntaxCaseState) EqualTo(other values.Value) bool {
 // indices are unchanged and the compile-time mirror frame
 // (createPatternVarEnvironment) does not need a matching slot.
 func bindSyntaxCaseState(mc *machine.MachineContext, frame *environment.EnvironmentFrame, sc *syntaxCaseState) error {
-	li, created := frame.MaybeCreateLocalBinding(syntaxCaseStateKey, environment.BindingTypeVariable, nil, nil)
+	li, created := frame.MaybeCreateLocalBinding(syntaxCaseStateKey, environment.BindingTypeVariable, syntax.Scopes{}, nil)
 	if li == nil {
 		return mc.WrapError(werr.ErrInternal, "syntax-case: pattern-variable frame has no local environment")
 	}
@@ -332,7 +332,7 @@ func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.M
 	// when expanding `(syntax (x ...))` templates.
 	for _, varName := range p.PatternVars {
 		sym := values.NewSymbol(varName)
-		li, _ := childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, nil, nil)
+		li, _ := childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, syntax.Scopes{}, nil)
 		if li == nil {
 			// No local frame to write to: nothing to bind.
 			continue

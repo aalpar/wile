@@ -22,6 +22,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
 )
@@ -159,7 +160,7 @@ func TestPhase1BaseImportMasksNoPhaseRow(t *testing.T) {
 		}
 		seen[ns.Name] = true
 		name := ns.Name
-		exp := compilation.LookupPrimitiveExpander(eng.Environment(), &name, nil)
+		exp := compilation.LookupPrimitiveExpander(eng.Environment(), &name, syntax.Scopes{})
 		if exp == nil {
 			continue
 		}
@@ -176,7 +177,7 @@ func TestPhase1BaseImportMasksNoPhaseRow(t *testing.T) {
 	masked := []string{}
 	for _, name := range before {
 		sym := name
-		exp := compilation.LookupPrimitiveExpander(eng.Environment(), &sym, nil)
+		exp := compilation.LookupPrimitiveExpander(eng.Environment(), &sym, syntax.Scopes{})
 		if exp == nil {
 			masked = append(masked, sym.Key)
 		}

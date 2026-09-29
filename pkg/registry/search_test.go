@@ -26,6 +26,7 @@ import (
 	"github.com/aalpar/wile/pkg/internal/bootstrap"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -331,7 +332,7 @@ func TestSearchDoc_EnvironmentBindingKeywordsFromValue(t *testing.T) {
 
 	// Bind it in the global environment.
 	sym := values.NewSymbol("make-widget")
-	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, syntax.Scopes{})
 	err = env.SetOwnGlobalValue(gi, fc)
 	c.Assert(err, qt.IsNil)
 

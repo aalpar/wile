@@ -97,7 +97,7 @@ func resolveERIdentifier(env *environment.EnvironmentFrame, id values.Value) (*e
 		}
 
 		scopes := v.Scopes()
-		if len(scopes) > 0 {
+		if !scopes.IsEmpty() {
 			bnd := env.GetBinding(sym, syntax.ScopesOf(scopes))
 			return bnd, sym.Key, nil
 		}

@@ -170,7 +170,7 @@ func stampLibraryExportOrigins(lib *CompiledLibrary) {
 // environment.BaseOriginLib with no phase, so every library's copy of it, at
 // every phase, is one binding.
 func exportRoot(lib *CompiledLibrary, binding *environment.Binding, internalName string, phase environment.Phase) *environment.OriginRef {
-	if lib.Scope != nil && slices.Contains(binding.Scopes(), lib.Scope) {
+	if lib.Scope != nil && binding.Scopes().Has(lib.Scope) {
 		return &environment.OriginRef{RootLib: lib.Name.Key(), RootName: internalName, RootPhase: phase}
 	}
 	return &environment.OriginRef{RootLib: environment.BaseOriginLib, RootName: internalName}
@@ -585,9 +585,9 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string, phase environ
 	// exportScopes stays a concrete slice: nil and empty are the same query under
 	// ScopeSet (values.ScopesOf), so this is the ambient (empty) set, never the
 	// wildcard.
-	exportScopes := []*syntax.Scope{}
+	exportScopes := syntax.Scopes{}
 	if lib.Scope != nil {
-		exportScopes = append(exportScopes, lib.Scope)
+		exportScopes = exportScopes.Add(lib.Scope)
 	}
 	scopes := syntax.ScopesOf(exportScopes)
 	libSym := values.NewSymbol(internalName)
@@ -787,7 +787,7 @@ func installImportedBinding(
 	phaseContext string,
 	placement importPlacement,
 ) error {
-	ambient := []*syntax.Scope{}
+	ambient := syntax.Scopes{}
 	var idx *environment.GlobalIndex
 	var created bool
 	if placement == placementShadowable && env.PhaseLevel() == environment.PhaseRuntime {

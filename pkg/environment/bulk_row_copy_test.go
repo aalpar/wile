@@ -124,7 +124,7 @@ func TestCopiedBulkRowAnswersInTheCopy(t *testing.T) {
 	store := owner.GlobalEnvironment()
 
 	own := sealAt(t, owner, PhaseRuntime, "vocab-name", values.NewInteger(1))
-	store.InstallBulkRow(vocabularyRow(store, "vocab-name"), nil, PhaseExpand, true, BulkOriginLanguage)
+	store.InstallBulkRow(vocabularyRow(store, "vocab-name"), syntax.Scopes{}, PhaseExpand, true, BulkOriginLanguage)
 
 	// The control: the parent answers at phase 1 through the row, since the name
 	// has no phase-1 slot of its own.
@@ -170,12 +170,12 @@ func TestCopiedSealedRowKeepsItsRestrictions(t *testing.T) {
 	sealAt(t, owner, PhaseRuntime, "ratchet-own", values.NewInteger(1))
 
 	// A phase-0 MUTABLE binding: below a sealed source's tier floor.
-	_, err := owner.DefineOwnGlobal(values.NewSymbol("ratchet-mutable"), BindingTypeVariable, nil, values.NewInteger(2))
+	_, err := owner.DefineOwnGlobal(values.NewSymbol("ratchet-mutable"), BindingTypeVariable, syntax.Scopes{}, values.NewInteger(2))
 	qt.Assert(t, err, qt.IsNil)
 
 	// A phase-0 IMPORTED binding: ranks at tierExactImported, below the floor.
 	gi, created := store.CreateImportedGlobalBindingAt(values.NewSymbol("ratchet-imported"),
-		BindingTypeVariable, nil, PhaseRuntime, true)
+		BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, true)
 	qt.Assert(t, created, qt.IsTrue)
 	err = store.SetOwnGlobalValue(gi, values.NewInteger(3))
 	qt.Assert(t, err, qt.IsNil)
@@ -183,7 +183,7 @@ func TestCopiedSealedRowKeepsItsRestrictions(t *testing.T) {
 
 	store.InstallBulkRow(
 		vocabularyRow(store, "ratchet-own", "ratchet-mutable", "ratchet-imported"),
-		nil, PhaseExpand, true, BulkOriginLanguage)
+		syntax.Scopes{}, PhaseExpand, true, BulkOriginLanguage)
 
 	cp := store.Copy()
 	qt.Assert(t, cp.BulkRowCount(), qt.Equals, 1)
@@ -238,7 +238,7 @@ func TestCopyCarriesMacroPhaseTemplatesWithoutDuplicating(t *testing.T) {
 	store := owner.GlobalEnvironment()
 
 	own := sealAt(t, owner, PhaseRuntime, "tower-name", values.NewInteger(7))
-	store.InstallMacroPhaseRow(vocabularyRow(store, "tower-name"), nil, true, BulkOriginLanguage)
+	store.InstallMacroPhaseRow(vocabularyRow(store, "tower-name"), syntax.Scopes{}, true, BulkOriginLanguage)
 
 	// Minting the phase-1 view materializes the template there.
 	owner.AtPhase(PhaseExpand)

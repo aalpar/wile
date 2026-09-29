@@ -144,7 +144,7 @@ func TestShadowWalkRecordsLocalBindings(t *testing.T) {
 			// Every binder here is ∅-scoped, so a nil-scoped reference resolves to it
 			// (∅ ⊆ ∅). The scope-discriminated lookup must give the same answers the
 			// membership test did for unscoped code.
-			got, verdict := bound.shadowLookup(tt.subject, nil)
+			got, verdict := bound.shadowLookup(tt.subject, syntax.Scopes{})
 			if verdict != shadowYes {
 				t.Fatalf("%q not shadowed at %q: verdict %v", tt.subject, tt.probe, verdict)
 			}
@@ -165,11 +165,11 @@ func TestShadowWalkScopesDoNotLeak(t *testing.T) {
 	right := letOf(LetKindLet, "b", lamOf(nil, lit()), call(symRef("in-right")))
 	scopes := walkScopes([]ValidatedExpr{left, right})
 
-	_, leftSeesB := scopes["in-left"].shadowLookup("b", nil)
+	_, leftSeesB := scopes["in-left"].shadowLookup("b", syntax.Scopes{})
 	if leftSeesB != shadowNo {
 		t.Error("binding from the right let leaked into the left let's scope")
 	}
-	_, rightSeesA := scopes["in-right"].shadowLookup("a", nil)
+	_, rightSeesA := scopes["in-right"].shadowLookup("a", syntax.Scopes{})
 	if rightSeesA != shadowNo {
 		t.Error("binding from the left let leaked into the right let's scope")
 	}
@@ -194,7 +194,7 @@ func TestShadowLookupRetainsOuterBinder(t *testing.T) {
 	// A use-site reference carries {use}: the inner binder's {use, intro} is not a
 	// subset of it and must be skipped, leaving the outer binder as the answer. This
 	// is repro (b)'s shape — the introduced binder must not hide the use-site name.
-	got, verdict := set.shadowLookup("loop", []*syntax.Scope{useScope})
+	got, verdict := set.shadowLookup("loop", syntax.ScopesFromSlice([]*syntax.Scope{useScope}))
 	if verdict != shadowYes {
 		t.Fatalf("use-site reference: verdict %v, want shadowYes", verdict)
 	}
@@ -204,7 +204,7 @@ func TestShadowLookupRetainsOuterBinder(t *testing.T) {
 
 	// A reference carrying BOTH scopes resolves to the inner binder, whose {use, intro}
 	// is the strictly larger matching set. Ordinary lexical shadowing, unregressed.
-	got, verdict = set.shadowLookup("loop", []*syntax.Scope{useScope, intro})
+	got, verdict = set.shadowLookup("loop", syntax.ScopesFromSlice([]*syntax.Scope{useScope, intro}))
 	if verdict != shadowYes {
 		t.Fatalf("macro-site reference: verdict %v, want shadowYes", verdict)
 	}
@@ -227,7 +227,7 @@ func TestShadowLookupAmbiguousTie(t *testing.T) {
 	set.add(first, localBinding{init: lamOf(nil, lit())})
 	set.add(second, localBinding{init: lamOf(nil, lit())})
 
-	_, verdict := set.shadowLookup("f", []*syntax.Scope{a, b})
+	_, verdict := set.shadowLookup("f", syntax.ScopesFromSlice([]*syntax.Scope{a, b}))
 	if verdict != shadowUnknown {
 		t.Errorf("equal-cardinality incomparable binders: verdict %v, want shadowUnknown", verdict)
 	}
@@ -248,7 +248,7 @@ func TestShadowSetSiblingsDoNotShareBackingArray(t *testing.T) {
 	right := parent.clone(1)
 	right.add(syntax.NewSyntaxSymbol("x", nil), localBinding{})
 
-	got, verdict := left.shadowLookup("x", nil)
+	got, verdict := left.shadowLookup("x", syntax.Scopes{})
 	if verdict != shadowYes {
 		t.Fatalf("left scope: verdict %v, want shadowYes", verdict)
 	}

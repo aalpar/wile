@@ -280,6 +280,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A hygiene scope set is now `values.Scopes`, an immutable persistent chain,
+  not a `[]*Scope` that every touch copied. BREAKING at the `pkg/values`,
+  `pkg/syntax` and `pkg/environment` surfaces.**
+
+  Compiling ordinary deeply-nested Scheme was **cubic** in nesting depth: the
+  expander performs O(n²) scope-set adds over sets averaging O(n) members, and
+  every add allocated `len+1` and copied. `SourceContext.WithScope` alone carried
+  **85% of the allocation** on a nested-`let` probe — one line,
+  `newScopes := make([]*Scope, len(p.Scopes)+1)`.
+
+  A chain sorted descending by scope id shares its tail instead. A freshly minted
+  scope is always the new maximum, so `Add` is one 24-byte cons and `Remove` of
+  that same scope — the intro-scope flip, the hottest scope-set write in the
+  expander — returns the shared tail and allocates **nothing**. That last property
+  is what hash-consing cannot give and the reason a chain was chosen.
+
+  Measured at the 375→750 doubling, allocation during `Compile`:
+
+  | probe | before | after | doubling ratio |
+  |---|---|---|---|
+  | nested `let` | 1345.4 MB | **190.6 MB** (−85.8%) | 7.00 → **3.98** |
+  | recursive `syntax-rules` | 2092.7 MB | **358.7 MB** (−82.9%) | 6.81 → **3.96** |
+
+  Racket 9.3 reads 4.69 on the macro probe at the same doubling, so Wile is now
+  ahead of the oracle there rather than merely under a threshold. Removing the
+  per-add copy collapses one factor and leaves O(n²) behind; the growth is no
+  longer cubic but it is not linear either.
+
+  **Breaking changes.** `syntax.SyntaxSymbol.Scopes()` and
+  `environment.Binding.Scopes()` return `Scopes` instead of `[]*Scope`. The seven
+  `pkg/values` scope-set functions — `ScopesMatch`, `ScopesCompatible`,
+  `HasScope`, `AddScopeToSet`, `RemoveScopeFromSet`, `FlipScopeInSet`,
+  `ScopeFingerprint` — survive as thin delegations but take and return `Scopes`,
+  as do their `pkg/syntax` re-exports, `values.ScopesOf` and the exported fields
+  `SourceContext.Scopes` and `BindingMeta.Scopes`. Permitted under this project's
+  versioning policy at v1.x with no external consumers; measured rather than
+  assumed, both sibling modules in the workspace reference zero scope-set symbols.
+
+  **There is deliberately no `Slice()` and no indexed access.** A scope set is a
+  SET — Flatt's model has no ordering and neither does the contract. The
+  descending-id order is an implementation technique, and while the set was a
+  slice, tests in five packages asserted member *positions*, so changing the
+  representation meant deciding per site what the "right" new position was — a
+  question with no principled answer. Keeping order out of the contract makes it
+  unaskable, and makes a future change of representation cost nothing outside one
+  file. Callers ask `Has`, `SubsetOf`, `Len` or `IsEmpty` for semantics,
+  `Fingerprint` for a map key, and `All()` (an `iter.Seq`) to walk.
+
+  **`ScopeFingerprint`'s output changed**, from a sort of the id *strings* to
+  id order — `{2,9,10}` was `"10,2,9"` and is now `"10,9,2"`. The invariant was
+  never the exact string, it is "one total order applied by one function": every
+  producer routes through it, and `match.FreeIdName`'s contract is the `[0-9,]`
+  character class, which both orderings satisfy. All four callers use the
+  equivalence relation alone.
+
+  Two ratchets ship with it. `TestNestedLetCompileGrowthIsQuadratic` and
+  `TestMacroRecursionGrowthIsQuadratic` assert the doubling ratio, and both were
+  verified failing at the pre-flip commit rather than assumed to. `TestScopeOpsManifest`
+  plus `tools/cmd/scopeopslint` hold the tree at **one** raw slice operation on a
+  scope set in non-test code — the `range` inside `ScopesFromSlice`, which a
+  slice-to-`Scopes` constructor cannot avoid. Its two controls ship with it, and
+  one of them matters: `syntax.Scope` is a type *alias*, so a `go/types` walk
+  without `types.Unalias` sees 118 sites where the truth is 423 and reports a
+  clean tree containing a live violation. The gate refuses to run in that mode.
+
+
 - **`GlobalEnvironmentFrame.AmbientKeysAt` is `UnscopedKeysAt`.** "Ambient" named
   two unrelated things — an empty SCOPE set and the deleted ANY-phase
   COORDINATE — and this method only ever meant the first. `AmbientScopes` keeps

@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
@@ -27,9 +28,9 @@ func TestDenotedForm(t *testing.T) {
 	ns := environment.NewNamespace()
 	env := ns.NewChildRuntime()
 	bind := func(name string, bt environment.BindingType, v values.Value) *environment.Binding {
-		_, err := env.DefineOwnGlobal(values.NewSymbol(name), bt, nil, v)
+		_, err := env.DefineOwnGlobal(values.NewSymbol(name), bt, syntax.Scopes{}, v)
 		qt.Assert(t, err, qt.IsNil)
-		return env.GetBinding(values.NewSymbol(name), values.ScopesOf(nil))
+		return env.GetBinding(values.NewSymbol(name), values.ScopesOf(syntax.Scopes{}))
 	}
 	tcs := []struct {
 		name string

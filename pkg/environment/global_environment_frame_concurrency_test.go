@@ -20,6 +20,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -45,7 +46,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 				defer wg.Done()
 				// Each goroutine creates a unique binding
 				sym := values.NewSymbol("var" + string(rune('A'+idx)))
-				_, created := env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+				_, created := env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 				c.Assert(created, qt.IsTrue)
 			}(i)
 		}
@@ -66,7 +67,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		// Pre-populate with bindings
 		for i := range 10 {
 			sym := values.NewSymbol("var" + string(rune('A'+i)))
-			env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+			env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 		}
 
 		for i := range numGoroutines {
@@ -91,7 +92,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		for i := range 10 {
 			sym := values.NewSymbol("var" + string(rune('A'+i)))
 			symbols[i] = sym
-			gi, _ := env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+			gi, _ := env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 			_ = env.global.SetOwnGlobalValue(gi, values.NewInteger(0))
 		}
 
@@ -125,7 +126,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		for i := range 10 {
 			sym := values.NewSymbol("var" + string(rune('A'+i)))
 			symbols[i] = sym
-			gi, _ := env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+			gi, _ := env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 			_ = env.global.SetOwnGlobalValue(gi, values.NewInteger(int64(i)))
 		}
 
@@ -139,7 +140,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 				case 0:
 					// Create operation
 					sym := values.NewSymbol("newvar" + string(rune('A'+idx)))
-					env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+					env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 				case 1:
 					// Lookup operation
 					gi := env.GetGlobalIndex(symbols[idx%10])
@@ -166,7 +167,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		// Pre-populate with bindings
 		for i := range 10 {
 			sym := values.NewSymbol("var" + string(rune('A'+i)))
-			gi, _ := env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+			gi, _ := env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 			_ = env.global.SetOwnGlobalValue(gi, values.NewInteger(int64(i)))
 		}
 
@@ -196,7 +197,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		for i := range 10 {
 			sym := values.NewSymbol("var" + string(rune('A'+i)))
 			symbols[i] = sym
-			gi, _ := parent.global.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+			gi, _ := parent.global.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 			_ = parent.global.SetOwnGlobalValue(gi, values.NewInteger(int64(i)))
 		}
 

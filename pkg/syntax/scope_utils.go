@@ -23,19 +23,19 @@ import "github.com/aalpar/wile/pkg/values"
 
 // ScopesMatch checks if two sets of scopes are compatible for binding resolution.
 // See values.ScopesMatch for the full hygiene-model documentation.
-func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
+func ScopesMatch(useScopes, bindingScopes Scopes) bool {
 	return values.ScopesMatch(useScopes, bindingScopes)
 }
 
 // ScopeFingerprint builds a deterministic map-key string from a scope set.
 // See values.ScopeFingerprint for the full documentation.
-func ScopeFingerprint(scopes []*Scope) string {
+func ScopeFingerprint(scopes Scopes) string {
 	return values.ScopeFingerprint(scopes)
 }
 
 // ScopesCompatible checks whether a binding's scopes can match a reference's.
 // A binding with no scopes matches any reference.
-func ScopesCompatible(bindingScopes, useScopes []*Scope) bool {
+func ScopesCompatible(bindingScopes, useScopes Scopes) bool {
 	return values.ScopesCompatible(bindingScopes, useScopes)
 }
 
@@ -44,14 +44,30 @@ func ScopesCompatible(bindingScopes, useScopes []*Scope) bool {
 // compiler code can spell it syntax.ScopeSet beside syntax.ScopesCompatible.
 type ScopeSet = values.ScopeSet
 
+// Scopes is an immutable set of *Scope, the binder-identity side of hygiene.
+// Defined in package values with the Scope type and re-exported here for the
+// same reason ScopeSet is.
+//
+// An ALIAS, necessarily, not a defined type: `type Scopes values.Scopes` would
+// be a second named type with the same underlying struct, which is NOT
+// assignable to the first, and every forwarder in this file would need an
+// explicit conversion.
+type Scopes = values.Scopes
+
+// ScopesFromSlice builds a Scopes from a slice, discarding duplicates. The
+// boundary constructor; see values.ScopesFromSlice.
+func ScopesFromSlice(scopes []*Scope) Scopes {
+	return values.ScopesFromSlice(scopes)
+}
+
 // AllScopes returns the wildcard scope-set query. See values.AllScopes.
 func AllScopes() ScopeSet {
 	return values.AllScopes()
 }
 
-// ScopesOf returns a query constrained to the given scope set (nil ≡ empty set,
-// not wildcard). See values.ScopesOf.
-func ScopesOf(scopes []*Scope) ScopeSet {
+// ScopesOf returns a query constrained to the given scope set (the zero value is
+// the empty set, not the wildcard). See values.ScopesOf.
+func ScopesOf(scopes Scopes) ScopeSet {
 	return values.ScopesOf(scopes)
 }
 
@@ -62,7 +78,7 @@ func EmptyScopes() ScopeSet {
 
 // FlipScopeInSet toggles the presence of a scope in a set.
 // It is the set-level half of FlipScope; see FlipScope.
-func FlipScopeInSet(scopes []*Scope, target *Scope) []*Scope {
+func FlipScopeInSet(scopes Scopes, target *Scope) Scopes {
 	return values.FlipScopeInSet(scopes, target)
 }
 

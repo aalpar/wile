@@ -38,7 +38,7 @@ func envWithImported(t *testing.T, names ...string) *environment.EnvironmentFram
 	env.Namespace().SetImmutableTopLevel(true)
 	for _, name := range names {
 		sym := syntax.NewSyntaxSymbol(name, nil).Sym
-		env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+		env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, syntax.Scopes{})
 		b := env.GetBinding(sym, values.AllScopes())
 		if b == nil {
 			t.Fatalf("failed to create global binding %q", name)
@@ -132,13 +132,13 @@ func TestResolveNodeByScopes_AmbiguousMaxRefusesToGuess(t *testing.T) {
 	sb := syntax.NewScope()
 
 	// {sa} and {sb} are both cardinality 1 and incomparable; refScopes ⊇ both.
-	nodeA := &reclaimNode{label: "f", scopes: []*syntax.Scope{sa}}
-	nodeB := &reclaimNode{label: "f", scopes: []*syntax.Scope{sb}}
+	nodeA := &reclaimNode{label: "f", scopes: syntax.ScopesFromSlice([]*syntax.Scope{sa})}
+	nodeB := &reclaimNode{label: "f", scopes: syntax.ScopesFromSlice([]*syntax.Scope{sb})}
 	byIdent := map[ScopedBindingKey]*reclaimNode{
 		{Key: "f", ScopeKey: syntax.ScopeFingerprint(nodeA.scopes)}: nodeA,
 		{Key: "f", ScopeKey: syntax.ScopeFingerprint(nodeB.scopes)}: nodeB,
 	}
-	refScopes := []*syntax.Scope{sa, sb}
+	refScopes := syntax.ScopesFromSlice([]*syntax.Scope{sa, sb})
 	got := resolveNodeByScopes(byIdent, "f", refScopes)
 	if got != nil {
 		t.Fatalf("ambiguous maximum must resolve to nil (unsafe), got node with scopes %v", got.scopes)
@@ -146,7 +146,7 @@ func TestResolveNodeByScopes_AmbiguousMaxRefusesToGuess(t *testing.T) {
 
 	// Control: nodeB now carries {sa,sb}, a strict superset of nodeA's {sa} ⇒ the
 	// maximum is unique and resolution succeeds.
-	nodeB.scopes = []*syntax.Scope{sa, sb}
+	nodeB.scopes = syntax.ScopesFromSlice([]*syntax.Scope{sa, sb})
 	byIdent2 := map[ScopedBindingKey]*reclaimNode{
 		{Key: "f", ScopeKey: syntax.ScopeFingerprint(nodeA.scopes)}: nodeA,
 		{Key: "f", ScopeKey: syntax.ScopeFingerprint(nodeB.scopes)}: nodeB,
@@ -177,9 +177,9 @@ func TestResolveNodeByScopes_NonSubsetNodeIsNotACandidate(t *testing.T) {
 	sb := syntax.NewScope()
 
 	// outer's {sa,sb} ⊄ {sa}: a binder nested strictly deeper than the reference.
-	outer := &reclaimNode{label: "f", scopes: []*syntax.Scope{sa, sb}}
+	outer := &reclaimNode{label: "f", scopes: syntax.ScopesFromSlice([]*syntax.Scope{sa, sb})}
 	// inner's {sa} ⊆ {sa}: the binding a reference at {sa} actually resolves to.
-	inner := &reclaimNode{label: "f", scopes: []*syntax.Scope{sa}}
+	inner := &reclaimNode{label: "f", scopes: syntax.ScopesFromSlice([]*syntax.Scope{sa})}
 
 	keyed := func(ns ...*reclaimNode) map[ScopedBindingKey]*reclaimNode {
 		m := make(map[ScopedBindingKey]*reclaimNode, len(ns))
@@ -191,7 +191,7 @@ func TestResolveNodeByScopes_NonSubsetNodeIsNotACandidate(t *testing.T) {
 
 	// Sole candidate is non-subset ⇒ "no same-unit define", the caller's cue to
 	// fall through to the capture-safe-primitive path (and then to unsafe).
-	got := resolveNodeByScopes(keyed(outer), "f", []*syntax.Scope{sa})
+	got := resolveNodeByScopes(keyed(outer), "f", syntax.ScopesFromSlice([]*syntax.Scope{sa}))
 	if got != nil {
 		t.Fatalf("a node whose scopes {sa,sb} are not a subset of the reference's {sa} must not resolve; got scopes %v", got.scopes)
 	}
@@ -199,7 +199,7 @@ func TestResolveNodeByScopes_NonSubsetNodeIsNotACandidate(t *testing.T) {
 	// Both present: the non-subset node has the LARGER scope set, so an argmax
 	// without the gate returns it in place of the correct binding.
 	both := keyed(outer, inner)
-	got = resolveNodeByScopes(both, "f", []*syntax.Scope{sa})
+	got = resolveNodeByScopes(both, "f", syntax.ScopesFromSlice([]*syntax.Scope{sa}))
 	if got != inner {
 		t.Fatalf("a reference at {sa} must resolve to the {sa} node, not the larger non-subset {sa,sb} one; got scopes %v", got)
 	}
@@ -207,7 +207,7 @@ func TestResolveNodeByScopes_NonSubsetNodeIsNotACandidate(t *testing.T) {
 	// Control: widen the reference to {sa,sb} and outer becomes a legitimate —
 	// and now unique — maximum. Passes with the gate and without it, so it says
 	// the assertions above are about the subset test and not about arity.
-	got = resolveNodeByScopes(both, "f", []*syntax.Scope{sa, sb})
+	got = resolveNodeByScopes(both, "f", syntax.ScopesFromSlice([]*syntax.Scope{sa, sb}))
 	if got != outer {
 		t.Fatalf("a reference at {sa,sb} must resolve to the maximal subset-matching node {sa,sb}; got %v", got)
 	}
@@ -399,7 +399,7 @@ func TestBuildReclaimGraph_CollidedIsScopeKeyed(t *testing.T) {
 	// Computed from syntax.ScopeFingerprint directly, NOT from ScopedBindingKeyOf:
 	// the producer under test must not also supply the expected answer.
 	keyOf := func(scopes ...*syntax.Scope) ScopedBindingKey {
-		return ScopedBindingKey{Key: "f", ScopeKey: syntax.ScopeFingerprint(scopes)}
+		return ScopedBindingKey{Key: "f", ScopeKey: syntax.ScopeFingerprint(syntax.ScopesFromSlice(scopes))}
 	}
 
 	byKey := func(k ScopedBindingKey) string {
@@ -712,7 +712,7 @@ func TestClassifyFrameReclaim_LocalShadowNotReclaimable(t *testing.T) {
 func selfIn(t *testing.T, env *environment.EnvironmentFrame, name string) *syntax.SyntaxSymbol {
 	t.Helper()
 	q := syntax.NewSyntaxSymbol(name, nil)
-	env.MaybeCreateOwnGlobalBinding(q.Sym, environment.BindingTypeVariable, nil)
+	env.MaybeCreateOwnGlobalBinding(q.Sym, environment.BindingTypeVariable, syntax.Scopes{})
 	b := env.GetBinding(q.Sym, values.AllScopes())
 	if b == nil {
 		t.Fatalf("failed to create self binding %q", name)

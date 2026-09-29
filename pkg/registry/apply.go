@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -249,7 +250,7 @@ func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingS
 	// denotes it (environment.DenotedForm). RegisterAllPhaseHandlersWithout runs
 	// after Apply and replaces the value with a *SyntaxCompiler for the names that
 	// have one; that value denotes the same form.
-	idx, _ := sealedRoot.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive, nil)
+	idx, _ := sealedRoot.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive, syntax.Scopes{})
 	err := sealedRoot.GlobalEnvironment().SetOwnGlobalValue(idx, environment.NewFormKeyword(spec.Name))
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "registerCompileTimeBinding: failed to set keyword %s", spec.Name)
@@ -294,7 +295,7 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 	// and would stamp a hygiene-distinct binding of the same name if one existed,
 	// and a ranked read from the sealed-write view would prefer a same-named
 	// MUTABLE entry.
-	gi, err := bindingEnv.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, closure)
+	gi, err := bindingEnv.DefineOwnGlobal(sym, environment.BindingTypeVariable, syntax.Scopes{}, closure)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error registering %s at phase %s", spec.Name, phase)
 	}
@@ -363,7 +364,7 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 
 func registerGlobalValue(env *environment.EnvironmentFrame, name string, value values.Value) error {
 	sym := values.NewSymbol(name)
-	_, err := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, value)
+	_, err := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, syntax.Scopes{}, value)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error registering global value %s", name)
 	}

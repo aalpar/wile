@@ -38,11 +38,11 @@ func newDynamicWindEnv() *environment.EnvironmentFrame {
 
 	// Register dynamic-wind as a primitive binding so the expander/validator recognize it
 	dwSym := values.NewSymbol("dynamic-wind")
-	env.MaybeCreateOwnGlobalBinding(dwSym, environment.BindingTypePrimitive, nil)
+	env.MaybeCreateOwnGlobalBinding(dwSym, environment.BindingTypePrimitive, syntax.Scopes{})
 
 	// Register case-lambda as a primitive binding
 	clSym := values.NewSymbol("case-lambda")
-	env.MaybeCreateOwnGlobalBinding(clSym, environment.BindingTypePrimitive, nil)
+	env.MaybeCreateOwnGlobalBinding(clSym, environment.BindingTypePrimitive, syntax.Scopes{})
 
 	return env
 }
@@ -50,7 +50,7 @@ func newDynamicWindEnv() *environment.EnvironmentFrame {
 // registerForeignFn registers a zero-argument foreign closure in the environment.
 func registerForeignFn(env *environment.EnvironmentFrame, name string, fn machine.ForeignFunction) {
 	sym := values.NewSymbol(name)
-	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, syntax.Scopes{})
 	closure := machine.NewForeignClosure(env, 0, false, fn)
 	env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure) //nolint:errcheck
 }
@@ -211,11 +211,11 @@ func newContMarkEnv() *environment.EnvironmentFrame {
 	env := newNamespace(environment.NewNamespace().Runtime())
 
 	wcmSym := values.NewSymbol("with-continuation-mark")
-	env.MaybeCreateOwnGlobalBinding(wcmSym, environment.BindingTypePrimitive, nil)
+	env.MaybeCreateOwnGlobalBinding(wcmSym, environment.BindingTypePrimitive, syntax.Scopes{})
 
 	// Register + primitive for body-is-call and nested tests
 	addSym := values.NewSymbol("+")
-	env.MaybeCreateOwnGlobalBinding(addSym, environment.BindingTypeVariable, nil)
+	env.MaybeCreateOwnGlobalBinding(addSym, environment.BindingTypeVariable, syntax.Scopes{})
 	addFn := func(mc machine.CallContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
 		b := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value().(*values.Integer).Value
@@ -358,7 +358,7 @@ func TestCompileValidatedCaseLambda_ZeroArgClause(t *testing.T) {
 
 	// Register + primitive for the test
 	addSym := values.NewSymbol("+")
-	env.MaybeCreateOwnGlobalBinding(addSym, environment.BindingTypeVariable, nil)
+	env.MaybeCreateOwnGlobalBinding(addSym, environment.BindingTypeVariable, syntax.Scopes{})
 	addFn := func(mc machine.CallContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
 		b := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value().(*values.Integer).Value

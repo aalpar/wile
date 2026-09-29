@@ -57,7 +57,7 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, gi1, qt.IsNil)
 
 	// Test adding a binding
-	gi0, ok := env.CreateGlobalBindingAt(sym0, BindingTypeVariable, nil, PhaseRuntime, false)
+	gi0, ok := env.CreateGlobalBindingAt(sym0, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi0.Index.EqualTo(values.NewSymbol("testVar0")), qt.IsTrue)
 
@@ -68,7 +68,7 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Adding a new binding should create a new index
-	gi1, ok = env.CreateGlobalBindingAt(sym1, BindingTypeVariable, nil, PhaseRuntime, false)
+	gi1, ok = env.CreateGlobalBindingAt(sym1, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi1.Index.EqualTo(values.NewSymbol("testVar1")), qt.IsTrue)
 
@@ -87,7 +87,7 @@ func TestGlobalEnvironmentFrame_Copy(t *testing.T) {
 	env := newTestGlobalEnvFrame()
 
 	sym := values.NewSymbol("test")
-	env.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+	env.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 
 	copied := env.Copy()
 	qt.Assert(t, copied, qt.Not(qt.IsNil))
@@ -103,7 +103,7 @@ func TestGlobalEnvironmentFrame_DeleteBinding(t *testing.T) {
 	env := ns.Runtime()
 
 	sym := values.NewSymbol("x")
-	_, created := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, nil)
+	_, created := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, syntax.Scopes{})
 	c.Assert(created, qt.IsTrue)
 
 	// Verify binding exists
@@ -201,11 +201,11 @@ func TestGlobalFrame_VacuousScopesAreSingleSlot(t *testing.T) {
 	names := []string{"x", "y", "z"}
 	for _, n := range names {
 		sym := values.NewSymbol(n)
-		_, created := ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+		_, created := ge.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 		c.Assert(created, qt.IsTrue, qt.Commentf("first create of %s", n))
 
 		// Redefinition of the same variable reuses the slot — R7RS §5.3.1.
-		_, created = ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+		_, created = ge.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 		c.Assert(created, qt.IsFalse, qt.Commentf("redefine of %s must reuse", n))
 	}
 
@@ -253,13 +253,13 @@ func TestGlobalFrame_ScopeSetsSeparateBindings(t *testing.T) {
 	n := syntax.NewScope()
 
 	// user-written binder: empty scope set
-	_, created := ge.CreateGlobalBindingAt(x, BindingTypeVariable, nil, PhaseRuntime, false)
+	_, created := ge.CreateGlobalBindingAt(x, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 	c.Assert(created, qt.IsTrue)
 
 	// macro-introduced binder: scope set {m}. Creation compares scope sets by
 	// EXACT equality, so this must NOT reuse the user's slot — compatibility
 	// would have, since an empty binding scope set matches anything.
-	_, created = ge.CreateGlobalBindingAt(x, BindingTypeVariable, []*syntax.Scope{m}, PhaseRuntime, false)
+	_, created = ge.CreateGlobalBindingAt(x, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{m}), PhaseRuntime, false)
 	c.Assert(created, qt.IsTrue)
 	c.Assert(len(ge.keys[*x]), qt.Equals, 2)
 
@@ -273,13 +273,13 @@ func TestGlobalFrame_ScopeSetsSeparateBindings(t *testing.T) {
 	c.Assert(gi.Slot, qt.Equals, userSlot)
 
 	// A reference carrying {m} resolves maximally to the macro's binding.
-	gi = owner.GetGlobalIndexWithScopes(x, syntax.ScopesOf([]*syntax.Scope{m}))
+	gi = owner.GetGlobalIndexWithScopes(x, syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{m})))
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Slot, qt.Equals, macroSlot)
 
 	// A reference from a DIFFERENT expansion {n} cannot see {m}: this is the
 	// collision, closed.
-	gi = owner.GetGlobalIndexWithScopes(x, syntax.ScopesOf([]*syntax.Scope{n}))
+	gi = owner.GetGlobalIndexWithScopes(x, syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{n})))
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Slot, qt.Equals, userSlot)
 
@@ -300,11 +300,11 @@ func TestGlobalIndex_EqualToDiscriminatesSlot(t *testing.T) {
 	x := values.NewSymbol("x")
 	m := syntax.NewScope()
 
-	ge.CreateGlobalBindingAt(x, BindingTypeVariable, nil, PhaseRuntime, false)
-	ge.CreateGlobalBindingAt(x, BindingTypeVariable, []*syntax.Scope{m}, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(x, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(x, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{m}), PhaseRuntime, false)
 
 	user := owner.GetGlobalIndexWithScopes(x, values.EmptyScopes())
-	macro := owner.GetGlobalIndexWithScopes(x, syntax.ScopesOf([]*syntax.Scope{m}))
+	macro := owner.GetGlobalIndexWithScopes(x, syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{m})))
 
 	c.Assert(user.EqualTo(macro), qt.IsFalse)
 	c.Assert(user.EqualTo(owner.GetGlobalIndexWithScopes(x, values.EmptyScopes())), qt.IsTrue)
@@ -327,7 +327,7 @@ func TestGlobalFrame_PinnedIndexSurvivesDelete(t *testing.T) {
 	owner := ns.Runtime()
 	sym := values.NewSymbol("x")
 
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 	gi := owner.GetGlobalIndexWithScopes(sym, values.EmptyScopes())
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Env, qt.Equals, ge)
@@ -340,7 +340,7 @@ func TestGlobalFrame_PinnedIndexSurvivesDelete(t *testing.T) {
 	c.Assert(ge.GetOwnGlobalBinding(gi), qt.IsNil)
 
 	// Redefine: the stale pinned index must re-resolve onto the new binding.
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 	c.Assert(ge.GetOwnGlobalBinding(gi), qt.IsNotNil)
 	c.Assert(ge.SetOwnGlobalValue(gi, values.NewInteger(7)), qt.IsNil)
 	c.Assert(ge.GetOwnGlobalBinding(gi).Value(), valuestest.SchemeEquals, values.NewInteger(7))
@@ -382,7 +382,7 @@ func mustDefine(
 	env *EnvironmentFrame,
 	key *values.Symbol,
 	bt BindingType,
-	scopes []*syntax.Scope,
+	scopes syntax.Scopes,
 	v values.Value,
 ) *GlobalIndex {
 	c.Helper()
@@ -401,11 +401,11 @@ func TestGlobalFrame_StalePinDoesNotHealOntoSealedSlot(t *testing.T) {
 	// through the sealed-write ROOT VIEW, so it lands at (0, sealed) the same
 	// way a real (car ...) primitive does.
 	sealedVal := values.NewInteger(-1)
-	mustDefine(c, ns.sealedWriteRoot, sym, BindingTypePrimitive, nil, sealedVal)
+	mustDefine(c, ns.sealedWriteRoot, sym, BindingTypePrimitive, syntax.Scopes{}, sealedVal)
 
 	// The user shadow: `(define car 1)` through the mutable runtime root — a
 	// new (0, mutable) slot, never the sealed one (define never lands sealed).
-	mustDefine(c, ns.runtime, sym, BindingTypeVariable, nil, values.NewInteger(1))
+	mustDefine(c, ns.runtime, sym, BindingTypeVariable, syntax.Scopes{}, values.NewInteger(1))
 
 	// Pin an index at the mutable slot, the way a compiled set!'s
 	// EnvironmentFrame.GetGlobalIndexWithScopes re-resolve does: tier-aware
@@ -447,7 +447,7 @@ func TestGlobalFrame_WildcardSkipsDeletedSlot(t *testing.T) {
 	owner := ns.Runtime()
 	sym := values.NewSymbol("x")
 
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 	c.Assert(ge.DeleteBindingAt(sym, AmbientScopes(), PhaseRuntime, false), qt.IsTrue)
 	c.Assert(owner.GetGlobalIndex(sym), qt.IsNil)
 }
@@ -479,11 +479,11 @@ func TestGlobalFrame_DeleteClearsMultiSlotNameOneScopeSetAtATime(t *testing.T) {
 
 	// A user-written binder (empty set) and a macro-introduced one (intro scope)
 	// are distinct bindings sharing a name.
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, introScopes, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice(introScopes), PhaseRuntime, false)
 
 	ambient := owner.GetGlobalIndexWithScopes(sym, values.EmptyScopes())
-	introduced := owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes))
+	introduced := owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(syntax.ScopesFromSlice(introScopes)))
 	c.Assert(ambient, qt.IsNotNil)
 	c.Assert(introduced, qt.IsNotNil)
 	c.Assert(ambient.Slot, qt.Not(qt.Equals), introduced.Slot)
@@ -496,9 +496,9 @@ func TestGlobalFrame_DeleteClearsMultiSlotNameOneScopeSetAtATime(t *testing.T) {
 
 	// Deleting under the intro scope set takes the last slot, and only now does
 	// the name stop being reported at all.
-	c.Assert(ge.DeleteBindingAt(sym, introScopes, PhaseRuntime, false), qt.IsTrue)
+	c.Assert(ge.DeleteBindingAt(sym, syntax.ScopesFromSlice(introScopes), PhaseRuntime, false), qt.IsTrue)
 	c.Assert(ge.GetOwnGlobalBinding(introduced), qt.IsNil)
-	c.Assert(owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes)), qt.IsNil)
+	c.Assert(owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(syntax.ScopesFromSlice(introScopes))), qt.IsNil)
 	c.Assert(owner.GetGlobalIndex(sym), qt.IsNil)
 }
 
@@ -518,10 +518,10 @@ func TestGlobalFrame_DeleteRemovesOnlyTheScopeMatchedSlot(t *testing.T) {
 	sym := values.NewSymbol("counter")
 	introScopes := []*syntax.Scope{syntax.NewScope()}
 
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, introScopes, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice(introScopes), PhaseRuntime, false)
 
-	introduced := owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes))
+	introduced := owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(syntax.ScopesFromSlice(introScopes)))
 	c.Assert(introduced, qt.IsNotNil)
 
 	// Delete under the ambient (empty) scope set, which is what the namespace
@@ -532,7 +532,7 @@ func TestGlobalFrame_DeleteRemovesOnlyTheScopeMatchedSlot(t *testing.T) {
 	c.Assert(owner.GetGlobalIndexWithScopes(sym, values.EmptyScopes()), qt.IsNil)
 	// ...and the hygiene-distinct one is untouched, still readable under its
 	// own scope set.
-	c.Assert(owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes)), qt.IsNotNil)
+	c.Assert(owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(syntax.ScopesFromSlice(introScopes))), qt.IsNotNil)
 	c.Assert(ge.GetOwnGlobalBinding(introduced), qt.IsNotNil)
 	// The name still exists in the frame, so the internal keys map must keep
 	// it. Dropping the map entry here would strand the consumers that treat
@@ -553,8 +553,8 @@ func TestGlobalFrame_DeleteOfMacroOnlyNameUnderAmbientScopesIsNoOp(t *testing.T)
 	sym := values.NewSymbol("counter")
 	introScopes := []*syntax.Scope{syntax.NewScope()}
 
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, introScopes, PhaseRuntime, false)
-	introduced := owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes))
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice(introScopes), PhaseRuntime, false)
+	introduced := owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(syntax.ScopesFromSlice(introScopes)))
 	c.Assert(introduced, qt.IsNotNil)
 
 	c.Assert(ge.DeleteBindingAt(sym, AmbientScopes(), PhaseRuntime, false), qt.IsFalse)
@@ -593,17 +593,17 @@ func TestGlobalFrame_StaleIndexMustNotCrossScopeSets(t *testing.T) {
 	aScopes := []*syntax.Scope{syntax.NewScope()}
 	bScopes := []*syntax.Scope{syntax.NewScope()}
 
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, aScopes, PhaseRuntime, false)
-	aIndex := owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(aScopes))
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice(aScopes), PhaseRuntime, false)
+	aIndex := owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(syntax.ScopesFromSlice(aScopes)))
 	c.Assert(aIndex, qt.IsNotNil)
 
 	// Delete under A's own scope set: the name has no ambient binding, so an
 	// ambient delete would correctly be a no-op (#805) and leave A's slot alive.
-	c.Assert(ge.DeleteBindingAt(sym, aScopes, PhaseRuntime, false), qt.IsTrue)
+	c.Assert(ge.DeleteBindingAt(sym, syntax.ScopesFromSlice(aScopes), PhaseRuntime, false), qt.IsTrue)
 
 	// A different binder, whose scope set is incompatible with A's, takes the name.
-	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, bScopes, PhaseRuntime, false)
-	bBinding := ge.GetOwnGlobalBinding(owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(bScopes)))
+	ge.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice(bScopes), PhaseRuntime, false)
+	bBinding := ge.GetOwnGlobalBinding(owner.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(syntax.ScopesFromSlice(bScopes))))
 	c.Assert(bBinding, qt.IsNotNil)
 
 	// A's dead index must not address B's binding.
@@ -630,11 +630,11 @@ func TestGlobalFrame_UnscopedKeysExcludesMacroIntroducedBinders(t *testing.T) {
 	mixed := values.NewSymbol("mixed")
 	deleted := values.NewSymbol("deleted")
 
-	ge.CreateGlobalBindingAt(ambient, BindingTypeVariable, nil, PhaseRuntime, false)
-	ge.CreateGlobalBindingAt(macroOnly, BindingTypeVariable, m, PhaseRuntime, false)
-	ge.CreateGlobalBindingAt(mixed, BindingTypeVariable, nil, PhaseRuntime, false)
-	ge.CreateGlobalBindingAt(mixed, BindingTypeVariable, m, PhaseRuntime, false)
-	ge.CreateGlobalBindingAt(deleted, BindingTypeVariable, nil, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(ambient, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(macroOnly, BindingTypeVariable, syntax.ScopesFromSlice(m), PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(mixed, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(mixed, BindingTypeVariable, syntax.ScopesFromSlice(m), PhaseRuntime, false)
+	ge.CreateGlobalBindingAt(deleted, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 	c.Assert(ge.DeleteBindingAt(deleted, AmbientScopes(), PhaseRuntime, false), qt.IsTrue)
 
 	names := values.StringSet{}
@@ -815,10 +815,10 @@ func TestSealedWriteTieIsReportedInTheExactSealedTier(t *testing.T) {
 	scopeB := syntax.NewScope()
 	sealedRoot := ns.Runtime().SealedWriteViewAt(PhaseRuntime)
 	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
-		_, created := sealedRoot.MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, scopes)
+		_, created := sealedRoot.MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, syntax.ScopesFromSlice(scopes))
 		c.Assert(created, qt.IsTrue)
 	}
-	query := syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB})
+	query := syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB}))
 
 	var bnd *Binding
 	var ambiguous bool
@@ -846,7 +846,7 @@ func TestExactBindingAtExcludesOtherPhases(t *testing.T) {
 	// A sealed phase-0 write is an exact phase-0 candidate (tierExactSealed —
 	// unstamped, so not tierExactImported)...
 	sealed0Idx, created := ns.Runtime().SealedWriteViewAt(PhaseRuntime).
-		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
+		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, syntax.Scopes{})
 	c.Assert(created, qt.IsTrue)
 	sealed0 := store.GetOwnGlobalBinding(sealed0Idx)
 	bnd, ambiguous := store.ExactBindingAt(sym, values.EmptyScopes(), PhaseRuntime)
@@ -868,7 +868,7 @@ func TestExactBindingAtExcludesOtherPhases(t *testing.T) {
 	// sealed-write view of its own (the primitive-expander coordinate), so both
 	// exact tiers can be built there.
 	sealedIdx, created := ns.Runtime().SealedWriteViewAt(PhaseExpand).
-		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, nil)
+		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, syntax.Scopes{})
 	c.Assert(created, qt.IsTrue)
 	c.Assert(store.GetOwnGlobalBinding(sealedIdx), qt.Not(qt.Equals), at1)
 	bnd, _ = store.ExactBindingAt(sym, values.EmptyScopes(), PhaseExpand)
@@ -885,10 +885,10 @@ func TestExactBindingAtReportsAnExactTie(t *testing.T) {
 	scopeA := syntax.NewScope()
 	scopeB := syntax.NewScope()
 	for _, scopes := range [][]*syntax.Scope{{scopeA}, {scopeB}} {
-		_, created := ns.Runtime().MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, scopes)
+		_, created := ns.Runtime().MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice(scopes))
 		c.Assert(created, qt.IsTrue)
 	}
-	query := syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB})
+	query := syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB}))
 
 	var bnd *Binding
 	var ambiguous bool

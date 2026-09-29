@@ -35,7 +35,7 @@ import (
 func sealAt(t *testing.T, owner *EnvironmentFrame, phase Phase, name string, v values.Value) *Binding {
 	t.Helper()
 	gi, created := owner.SealedWriteViewAt(phase).
-		MaybeCreateOwnGlobalBinding(values.NewSymbol(name), BindingTypePrimitive, nil)
+		MaybeCreateOwnGlobalBinding(values.NewSymbol(name), BindingTypePrimitive, syntax.Scopes{})
 	qt.Assert(t, created, qt.IsTrue)
 	err := owner.GlobalEnvironment().SetOwnGlobalValue(gi, v)
 	qt.Assert(t, err, qt.IsNil)
@@ -179,13 +179,13 @@ func TestCopyCarriesBulkRowsAndRepointsSelfReferential(t *testing.T) {
 
 	// A self-referential row: the source reads the very store being copied.
 	selfSrc := NewStoreBulkSource(store, PhaseRuntime, values.NewSymbol("self"))
-	store.InstallBulkRow(selfSrc, nil, PhaseRuntime, true, BulkOriginLanguage)
+	store.InstallBulkRow(selfSrc, syntax.Scopes{}, PhaseRuntime, true, BulkOriginLanguage)
 
 	// A foreign row: the source reads a DIFFERENT owner's store, which is what a
 	// genuine library import looks like.
 	other := ns.NewChildRuntime()
 	foreignSrc := NewStoreBulkSource(other.GlobalEnvironment(), PhaseRuntime, values.NewSymbol("other"))
-	store.InstallBulkRow(foreignSrc, nil, PhaseRuntime, true, BulkOriginLanguage)
+	store.InstallBulkRow(foreignSrc, syntax.Scopes{}, PhaseRuntime, true, BulkOriginLanguage)
 
 	qt.Assert(t, store.BulkRowCount(), qt.Equals, 2)
 
@@ -220,13 +220,15 @@ func TestBulkRefCarriesItsOwnScopes(t *testing.T) {
 
 	scope := syntax.NewScope()
 	src := NewStoreBulkSource(store, PhaseRuntime, values.NewSymbol("s"))
-	store.InstallBulkRow(src, []*syntax.Scope{scope}, PhaseRuntime, true, BulkOriginLanguage)
+	store.InstallBulkRow(src, syntax.ScopesFromSlice([]*syntax.Scope{scope}), PhaseRuntime, true, BulkOriginLanguage)
 
 	store.mu.RLock()
 	defer store.mu.RUnlock()
 	qt.Assert(t, store.bulkRows, qt.HasLen, 1)
-	qt.Assert(t, store.bulkRows[0].scopes, qt.HasLen, 1)
-	qt.Assert(t, store.bulkRows[0].scopes[0], qt.Equals, scope)
+	// Membership and cardinality, not position: a Scopes is a SET and storage
+	// order is not part of its contract.
+	qt.Assert(t, store.bulkRows[0].scopes.Len(), qt.Equals, 1)
+	qt.Assert(t, store.bulkRows[0].scopes.Has(scope), qt.IsTrue)
 	qt.Assert(t, store.bulkRows[0].phase, qt.Equals, PhaseRuntime)
 	qt.Assert(t, store.bulkRows[0].sealed, qt.IsTrue)
 }
@@ -269,20 +271,20 @@ func TestBulkRowsInstallWithTheScopeSetGiven(t *testing.T) {
 	ns := NewNamespace()
 	store := ns.Runtime().GlobalEnvironment()
 	src := NewSealedStoreBulkSource(store, PhaseRuntime, BaseSourceName())
-	store.InstallBulkRow(src, nil, PhaseExpand, true, BulkOriginLanguage)
+	store.InstallBulkRow(src, syntax.Scopes{}, PhaseExpand, true, BulkOriginLanguage)
 
 	sc := syntax.NewScope()
-	store.InstallBulkRow(src, []*syntax.Scope{sc}, PhaseExpand, true, BulkOriginLanguage)
+	store.InstallBulkRow(src, syntax.ScopesFromSlice([]*syntax.Scope{sc}), PhaseExpand, true, BulkOriginLanguage)
 
-	got := [][]*syntax.Scope{}
-	store.EachBulkRow(func(scopes []*syntax.Scope, _ Phase, _ bool, _ BulkOrigin) bool {
+	got := []syntax.Scopes{}
+	store.EachBulkRow(func(scopes syntax.Scopes, _ Phase, _ bool, _ BulkOrigin) bool {
 		got = append(got, scopes)
 		return true
 	})
 	qt.Assert(t, got, qt.HasLen, 2)
-	qt.Assert(t, got[0], qt.HasLen, 0)
-	qt.Assert(t, got[1], qt.HasLen, 1)
-	qt.Assert(t, got[1][0] == sc, qt.IsTrue,
+	qt.Assert(t, got[0].Len(), qt.Equals, 0)
+	qt.Assert(t, got[1].Len(), qt.Equals, 1)
+	qt.Assert(t, got[1].Has(sc), qt.IsTrue,
 		qt.Commentf("a row must keep the scope set it was installed with, or the pkg/wile gate reads a normalized value"))
 }
 

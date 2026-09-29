@@ -34,26 +34,26 @@ func TestTemplateDenotesPatternVariable(t *testing.T) {
 
 	tcs := []struct {
 		name           string
-		templateScopes []*syntax.Scope
-		patternScopes  []*syntax.Scope
+		templateScopes syntax.Scopes
+		patternScopes  syntax.Scopes
 		expected       bool
 	}{
 		{
 			name:           "both empty scopes",
-			templateScopes: nil,
-			patternScopes:  nil,
+			templateScopes: syntax.Scopes{},
+			patternScopes:  syntax.Scopes{},
 			expected:       true,
 		},
 		{
 			name:           "equal single scope",
-			templateScopes: []*syntax.Scope{scopeA},
-			patternScopes:  []*syntax.Scope{scopeA},
+			templateScopes: syntax.ScopesFromSlice([]*syntax.Scope{scopeA}),
+			patternScopes:  syntax.ScopesFromSlice([]*syntax.Scope{scopeA}),
 			expected:       true,
 		},
 		{
 			name:           "equal multiple scopes",
-			templateScopes: []*syntax.Scope{scopeA, scopeB},
-			patternScopes:  []*syntax.Scope{scopeA, scopeB},
+			templateScopes: syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB}),
+			patternScopes:  syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB}),
 			expected:       true,
 		},
 		{
@@ -62,8 +62,8 @@ func TestTemplateDenotesPatternVariable(t *testing.T) {
 			// variable's. Ordinary subset resolution admits it — the binder is
 			// visible to the reference.
 			name:           "template extra scope from a body binder",
-			templateScopes: []*syntax.Scope{scopeA, scopeB},
-			patternScopes:  []*syntax.Scope{scopeA},
+			templateScopes: syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB}),
+			patternScopes:  syntax.ScopesFromSlice([]*syntax.Scope{scopeA}),
 			expected:       true,
 		},
 		{
@@ -72,22 +72,22 @@ func TestTemplateDenotesPatternVariable(t *testing.T) {
 			// introduced never passed through that use site, so it does not carry
 			// it. Not a superset, not a reference to this pattern variable.
 			name:           "outer macro's introduction lacks the use-site scope",
-			templateScopes: []*syntax.Scope{scopeB},
-			patternScopes:  []*syntax.Scope{scopeA},
+			templateScopes: syntax.ScopesFromSlice([]*syntax.Scope{scopeB}),
+			patternScopes:  syntax.ScopesFromSlice([]*syntax.Scope{scopeA}),
 			expected:       false,
 		},
 		{
 			// The subset floor: a binder the reference never saw cannot resolve
 			// for it.
 			name:           "pattern has extra scope",
-			templateScopes: []*syntax.Scope{scopeA},
-			patternScopes:  []*syntax.Scope{scopeA, scopeB},
+			templateScopes: syntax.ScopesFromSlice([]*syntax.Scope{scopeA}),
+			patternScopes:  syntax.ScopesFromSlice([]*syntax.Scope{scopeA, scopeB}),
 			expected:       false,
 		},
 		{
 			name:           "disjoint scopes",
-			templateScopes: []*syntax.Scope{scopeA},
-			patternScopes:  []*syntax.Scope{scopeB},
+			templateScopes: syntax.ScopesFromSlice([]*syntax.Scope{scopeA}),
+			patternScopes:  syntax.ScopesFromSlice([]*syntax.Scope{scopeB}),
 			expected:       false,
 		},
 	}
@@ -314,8 +314,9 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 				c.Assert(ok, qt.IsTrue)
 				c.Assert(sym.Key(), qt.Equals, "tmp")
 				scopes := sym.Scopes()
-				c.Assert(len(scopes), qt.Equals, 1)
-				c.Assert(scopes[0], qt.Equals, introScope)
+				c.Assert(scopes.Len(), qt.Equals, 1)
+				// Membership, not position: order is not part of the Scopes contract.
+				c.Assert(scopes.Has(introScope), qt.IsTrue)
 			},
 		},
 		{
@@ -330,8 +331,9 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 				c.Assert(ok, qt.IsTrue)
 				c.Assert(sym.Key(), qt.Equals, "tmp")
 				scopes := sym.Scopes()
-				c.Assert(len(scopes), qt.Equals, 1)
-				c.Assert(scopes[0], qt.Equals, introScope)
+				c.Assert(scopes.Len(), qt.Equals, 1)
+				// Membership, not position: order is not part of the Scopes contract.
+				c.Assert(scopes.Has(introScope), qt.IsTrue)
 			},
 		},
 	}
@@ -545,7 +547,7 @@ func TestSyntaxExpandPreservesPatternVarScopes(t *testing.T) {
 
 	// Create input where the captured value has specific scopes
 	capturedScope := syntax.NewScope()
-	capturedCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{capturedScope}}
+	capturedCtx := &syntax.SourceContext{Scopes: syntax.ScopesFromSlice([]*syntax.Scope{capturedScope})}
 	capturedSym := syntax.NewSyntaxSymbol("myvar", capturedCtx)
 
 	input := syntax.NewSyntaxCons(
@@ -573,8 +575,9 @@ func TestSyntaxExpandPreservesPatternVarScopes(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(resultSym.Key(), qt.Equals, "myvar")
 	scopes := resultSym.Scopes()
-	c.Assert(len(scopes), qt.Equals, 1)
-	c.Assert(scopes[0], qt.Equals, capturedScope)
+	c.Assert(scopes.Len(), qt.Equals, 1)
+	// Membership, not position: order is not part of the Scopes contract.
+	c.Assert(scopes.Has(capturedScope), qt.IsTrue)
 }
 
 func TestSyntaxExpandScopeAwareSubstitution(t *testing.T) {
@@ -655,7 +658,7 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 	patternOnlyScope := syntax.NewScope()
 	template := syntax.NewSyntaxSymbol("x", nil)
 
-	patternCtx := &syntax.SourceContext{Scopes: []*syntax.Scope{patternOnlyScope}}
+	patternCtx := &syntax.SourceContext{Scopes: syntax.ScopesFromSlice([]*syntax.Scope{patternOnlyScope})}
 	patternVarSyntax := syntax.PatternVarSymbols{
 		"x": syntax.NewSyntaxSymbol("x", patternCtx),
 	}
@@ -2406,23 +2409,23 @@ func TestFreeIdKey_DiscriminatesScopeAndName(t *testing.T) {
 	s2 := syntax.NewScope()
 
 	// Same name, same scope set (any order) → same key.
-	c.Assert(FreeIdKey("x", []*syntax.Scope{s1, s2}),
-		qt.Equals, FreeIdKey("x", []*syntax.Scope{s2, s1}))
+	c.Assert(FreeIdKey("x", syntax.ScopesFromSlice([]*syntax.Scope{s1, s2})),
+		qt.Equals, FreeIdKey("x", syntax.ScopesFromSlice([]*syntax.Scope{s2, s1})))
 
 	// Same name, different scope sets → different keys. This is the collapse the
 	// bare-name key allowed.
-	c.Assert(FreeIdKey("x", []*syntax.Scope{s1}),
-		qt.Not(qt.Equals), FreeIdKey("x", []*syntax.Scope{s2}))
-	c.Assert(FreeIdKey("x", nil),
-		qt.Not(qt.Equals), FreeIdKey("x", []*syntax.Scope{s1}))
+	c.Assert(FreeIdKey("x", syntax.ScopesFromSlice([]*syntax.Scope{s1})),
+		qt.Not(qt.Equals), FreeIdKey("x", syntax.ScopesFromSlice([]*syntax.Scope{s2})))
+	c.Assert(FreeIdKey("x", syntax.Scopes{}),
+		qt.Not(qt.Equals), FreeIdKey("x", syntax.ScopesFromSlice([]*syntax.Scope{s1})))
 
 	// nil and empty scope sets fingerprint identically (both "no scopes").
-	c.Assert(FreeIdKey("x", nil),
-		qt.Equals, FreeIdKey("x", []*syntax.Scope{}))
+	c.Assert(FreeIdKey("x", syntax.Scopes{}),
+		qt.Equals, FreeIdKey("x", syntax.ScopesFromSlice([]*syntax.Scope{})))
 
 	// A name containing '|' does not collide with a different (name, scopes)
 	// pair. The fingerprint is digits-and-commas only, so the FIRST '|' delimits
 	// it: "<id>|a|b" decomposes only as (fp=<id>, name="a|b").
-	c.Assert(FreeIdKey("a|b", []*syntax.Scope{s1}),
-		qt.Not(qt.Equals), FreeIdKey("b", []*syntax.Scope{s1}))
+	c.Assert(FreeIdKey("a|b", syntax.ScopesFromSlice([]*syntax.Scope{s1})),
+		qt.Not(qt.Equals), FreeIdKey("b", syntax.ScopesFromSlice([]*syntax.Scope{s1})))
 }

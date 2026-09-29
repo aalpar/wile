@@ -1877,8 +1877,8 @@ func TestLetDuplicateBindingWithDifferentScopes(t *testing.T) {
 	scope1 := syntax.NewScope()
 	scope2 := syntax.NewScope()
 
-	sctx1 := &syntax.SourceContext{Scopes: []*syntax.Scope{scope1}}
-	sctx2 := &syntax.SourceContext{Scopes: []*syntax.Scope{scope2}}
+	sctx1 := &syntax.SourceContext{Scopes: syntax.ScopesFromSlice([]*syntax.Scope{scope1})}
+	sctx2 := &syntax.SourceContext{Scopes: syntax.ScopesFromSlice([]*syntax.Scope{scope2})}
 
 	// Build: (let ((x_scope1 1) (x_scope2 2)) x_scope1)
 	// where x_scope1 and x_scope2 are both "x" but with different scope sets.

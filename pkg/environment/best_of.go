@@ -103,7 +103,7 @@ func (p *bestOf[T]) Result() (T, bool) {
 // best's scope set — one slice-header assignment per record, no allocation.
 type scopedBestOf[T any] struct {
 	best       bestOf[T]
-	bestScopes []*syntax.Scope
+	bestScopes syntax.Scopes
 	ambiguous  bool
 }
 
@@ -114,8 +114,8 @@ type scopedBestOf[T any] struct {
 // ScopesMatch(scopes, bestScopes) reports bestScopes ⊆ scopes; at equal
 // cardinality that holds iff the sets are equal, so its negation is exactly
 // "different set". The caller MUST call record(item, scopes) iff rec is true.
-func (p *scopedBestOf[T]) shouldRecord(scopes []*syntax.Scope, target int) (rec, done bool) {
-	weight := len(scopes)
+func (p *scopedBestOf[T]) shouldRecord(scopes syntax.Scopes, target int) (rec, done bool) {
+	weight := scopes.Len()
 	rec, done = p.best.shouldRecord(weight, target)
 	if rec {
 		return rec, done
@@ -131,8 +131,8 @@ func (p *scopedBestOf[T]) shouldRecord(scopes []*syntax.Scope, target int) (rec,
 // strictly-greater-weight candidate is a new unique maximum that supersedes any
 // tie recorded at a lower weight. Callers MUST call shouldRecord first and only
 // invoke record when it returned rec = true.
-func (p *scopedBestOf[T]) record(item T, scopes []*syntax.Scope) {
-	p.best.record(item, len(scopes))
+func (p *scopedBestOf[T]) record(item T, scopes syntax.Scopes) {
+	p.best.record(item, scopes.Len())
 	p.bestScopes = scopes
 	p.ambiguous = false
 }

@@ -71,7 +71,7 @@ func TestPrimitiveExpandersRegistry(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			sym := values.NewSymbol(tc.formName)
-			pe := LookupPrimitiveExpander(env, sym, nil)
+			pe := LookupPrimitiveExpander(env, sym, syntax.Scopes{})
 			qt.Assert(t, pe, qt.IsNotNil, qt.Commentf("LookupPrimitiveExpander(%q) returned nil", tc.formName))
 			qt.Assert(t, pe.Name(), qt.Equals, tc.formName)
 		})
@@ -84,7 +84,7 @@ func TestPrimitiveExpandersRegistryLookupMiss(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	sym := values.NewSymbol("not-a-primitive-expander")
-	pe := LookupPrimitiveExpander(env, sym, nil)
+	pe := LookupPrimitiveExpander(env, sym, syntax.Scopes{})
 	qt.Assert(t, pe, qt.IsNil)
 }
 

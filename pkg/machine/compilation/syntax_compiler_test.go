@@ -66,16 +66,16 @@ func TestLookupSyntaxCompiler(t *testing.T) {
 
 	// Should find built-in syntax compilers
 	metaSym := values.NewSymbol("meta")
-	metaPc := LookupPhaseBinding[*SyntaxCompiler](env, metaSym, nil)
+	metaPc := LookupPhaseBinding[*SyntaxCompiler](env, metaSym, syntax.Scopes{})
 	qt.Assert(t, metaPc, qt.IsNotNil)
 
 	includeSym := values.NewSymbol("include")
-	includePc := LookupPhaseBinding[*SyntaxCompiler](env, includeSym, nil)
+	includePc := LookupPhaseBinding[*SyntaxCompiler](env, includeSym, syntax.Scopes{})
 	qt.Assert(t, includePc, qt.IsNotNil)
 
 	// Should return nil for non-existent syntax compiler
 	nonExistentSym := values.NewSymbol("nonexistent-primitive")
-	nonExistent := LookupPhaseBinding[*SyntaxCompiler](env, nonExistentSym, nil)
+	nonExistent := LookupPhaseBinding[*SyntaxCompiler](env, nonExistentSym, syntax.Scopes{})
 	qt.Assert(t, nonExistent, qt.IsNil)
 }
 
@@ -101,27 +101,27 @@ func TestLookupSyntaxCompiler_SamePhaseShadowOutranksTheSealedCompiler(t *testin
 	qt.Assert(t, err, qt.IsNil)
 
 	sym := values.NewSymbol("define-syntax")
-	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](env, sym, nil), qt.IsNotNil)
+	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](env, sym, syntax.Scopes{}), qt.IsNotNil)
 
 	// A user (define define-syntax …) at phase 0: an exact-phase MUTABLE slot,
 	// a distinct binding from the sealed one because coordinates are half of
 	// binding identity (CreateGlobalBindingAt).
-	_, created := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+	_, created := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, syntax.Scopes{})
 	qt.Assert(t, created, qt.IsTrue)
-	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](env, sym, nil), qt.IsNil,
+	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](env, sym, syntax.Scopes{}), qt.IsNil,
 		qt.Commentf("tierExactMutable outranks the tierExactSealed compiler at the shadowed phase"))
 
 	// Phase 1 reaches neither: the shadow is a phase-0 slot, and so is the
 	// compiler.
 	expand := env.AtPhase(environment.PhaseExpand)
-	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](expand, sym, nil), qt.IsNil,
+	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](expand, sym, syntax.Scopes{}), qt.IsNil,
 		qt.Commentf("no coordinate is phase-blind any more, so phase 1 supplies nothing of its own"))
 
 	// The phase-1 bulk row supplies the SEALED compiler and leaves the mutable
 	// shadow at phase 0 where it was written.
 	store := env.Namespace().Store()
 	src := environment.NewSealedStoreBulkSource(store, environment.PhaseRuntime, environment.BaseSourceName())
-	store.InstallBulkRow(src, nil, environment.PhaseExpand, true, environment.BulkOriginLanguage)
-	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](expand, sym, nil), qt.IsNotNil,
+	store.InstallBulkRow(src, syntax.Scopes{}, environment.PhaseExpand, true, environment.BulkOriginLanguage)
+	qt.Assert(t, LookupPhaseBinding[*SyntaxCompiler](expand, sym, syntax.Scopes{}), qt.IsNotNil,
 		qt.Commentf("the row is sealed-tier restricted, so a phase-0 mutable shadow does not ride it up"))
 }

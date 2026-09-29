@@ -142,7 +142,7 @@ func (p *CompileTimeContinuation) runDefineForSyntax(ctctx CompileTimeCallContex
 	// The created flag is the two define-syntax sites' concern (they predeclare
 	// before compiling a right-hand side that may fail); this site evaluates
 	// first and stores second, so it has nothing to roll back.
-	gi, _, err := createPhaseBindingUnlessStable(expandEnv, nameSym, environment.BindingTypeVariable, nil, "define-for-syntax")
+	gi, _, err := createPhaseBindingUnlessStable(expandEnv, nameSym, environment.BindingTypeVariable, syntax.Scopes{}, "define-for-syntax")
 	if err != nil {
 		return p.wrapCompilationError(err)
 	}

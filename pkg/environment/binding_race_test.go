@@ -26,7 +26,7 @@ func TestBindingConcurrentGlobalReadWrite_D2(t *testing.T) {
 	frame := NewNamespaceFrame()
 	env := frame.GlobalEnvironment()
 	sym := values.NewSymbol("x")
-	_, created := env.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, false)
+	_, created := env.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, false)
 	if !created {
 		t.Fatal("expected a fresh global binding")
 	}

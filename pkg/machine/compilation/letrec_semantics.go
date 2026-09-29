@@ -109,7 +109,7 @@ import (
 // This is the shared implementation used by both the expander
 // (ExpandBodyWithDefineSyntax) and the compiler (predeclareDefineBinding,
 // predeclareDefineFromValidatedRecursive).
-func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, scopes []*syntax.Scope, source *syntax.SourceContext) {
+func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, scopes syntax.Scopes, source *syntax.SourceContext) {
 	if env.LocalEnvironment() != nil {
 		_, _ = env.MaybeCreateLocalBinding(name, environment.BindingTypeVariable, scopes, source)
 		return

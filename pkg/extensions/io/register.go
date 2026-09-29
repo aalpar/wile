@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -306,7 +307,7 @@ func addPortState(r *registry.PrimitiveRegistry) error {
 // parameter set!-able, matching the former AddGlobalValue path.
 func registerPortParam(env *environment.EnvironmentFrame, name string, param *machine.Parameter) error {
 	sym := values.NewSymbol(name)
-	_, err := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, param)
+	_, err := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, syntax.Scopes{}, param)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "io: binding port parameter %s", name)
 	}

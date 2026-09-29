@@ -95,7 +95,7 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	ns := p.env.Namespace()
 	immTop := ns != nil && ns.ImmutableTopLevel() && p.env.WritesOwnerRootCoordinates()
 
-	if created && len(symbolScopes) == 0 && symbolSource == nil && !immTop {
+	if created && symbolScopes.IsEmpty() && symbolSource == nil && !immTop {
 		return sym, nil
 	}
 	binding := p.env.GlobalEnvironment().GetOwnGlobalBinding(ownIndex)
@@ -214,7 +214,7 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCal
 // violation is reported at the expression that produced the wrong count rather
 // than at the head of the whole define form. nil is correct for the function
 // form, whose value is a closure and can never deliver any count but one.
-func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol, scopes []*syntax.Scope, valueSrc *syntax.SourceContext) error {
+func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol, scopes syntax.Scopes, valueSrc *syntax.SourceContext) error {
 	// Push the value from the value register to the eval stack.
 	// Store operations consume from the stack, not the value register.
 	p.appendPushAt(valueSrc)

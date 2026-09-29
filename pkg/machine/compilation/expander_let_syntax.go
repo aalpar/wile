@@ -23,8 +23,6 @@ package compilation
 // Extracted from expander_time_continuation.go.
 
 import (
-	"slices"
-
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -140,9 +138,11 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 			// bare singleton. A nested same-named binder then carries a strict
 			// superset of its enclosing binder's scopes and wins resolution by
 			// maximality, instead of tying it on cardinality and falling back to
-			// collection order. Clone first: Scopes() hands back the symbol's live
-			// backing slice, so appending into it would corrupt its hygiene state.
-			keywordScopes := append(slices.Clone(keywordSym.Scopes()), letScope)
+			// No Clone: Scopes is immutable and persistent, so Add returns a new set
+			// and cannot corrupt the symbol's hygiene state. The Clone existed
+			// because Scopes() handed back a live backing slice; there is no
+			// backing slice now, which retires the hazard rather than guarding it.
+			keywordScopes := keywordSym.Scopes().Add(letScope)
 			_, _ = childExpandEnv.MaybeCreateLocalBinding(keyword, environment.BindingTypeSyntax, keywordScopes, keywordSym.SourceContext())
 
 			cdr := current.SyntaxCdr()
@@ -215,7 +215,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		// pre-register and this re-resolve must use the identical set, or
 		// MaybeCreateLocalBinding keys a second slot and the transformer lands in
 		// the wrong binding.
-		keywordScopes := append(slices.Clone(keywordSym.Scopes()), letScope)
+		keywordScopes := keywordSym.Scopes().Add(letScope)
 		localIndex, created := childExpandEnv.MaybeCreateLocalBinding(keyword, environment.BindingTypeSyntax, keywordScopes, keywordSym.SourceContext())
 		if !created {
 			// letrec-syntax pre-registered this keyword above, under the same set.

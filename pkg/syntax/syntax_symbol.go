@@ -129,16 +129,22 @@ func (p *SyntaxSymbol) WithResolvedBinding(binding ResolvedRef) *SyntaxSymbol {
 }
 
 // Scopes returns the scopes of this syntax symbol.
-// Always returns a non-nil slice (empty when the symbol has no scopes).
+//
+// The two nil normalizations this used to perform are gone, and their absence is
+// the point rather than a tidy-up: Scopes' zero value IS the empty set, so a
+// symbol with no source context and a symbol with an empty set now return the
+// same value by construction instead of by a guard. The old contract ("always
+// returns a non-nil slice") existed because a nil slice was indistinguishable
+// from an uninitialized one, and the audit found this function was the REASON no
+// consumer could observe the nil-vs-empty distinction — it normalized it away at
+// the boundary. That job no longer exists.
+//
 // Callers wrap the result in ScopesOf to form the ScopeSet query taken by
-// environment.GetBinding / GetLocalIndex; ScopesOf(nil) is the empty set,
-// never the wildcard (that is AllScopes).
-func (p *SyntaxSymbol) Scopes() []*Scope {
+// environment.GetBinding / GetLocalIndex; the empty set is never the wildcard
+// (that is AllScopes).
+func (p *SyntaxSymbol) Scopes() Scopes {
 	if p.SourceContext() == nil {
-		return []*Scope{}
-	}
-	if p.SourceContext().Scopes == nil {
-		return []*Scope{}
+		return Scopes{}
 	}
 	return p.SourceContext().Scopes
 }

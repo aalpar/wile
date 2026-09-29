@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/bootstrap"
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
 )
@@ -66,7 +67,7 @@ func envWithOpaque(t *testing.T, name string, opaque values.Value) *environment.
 	qt.Assert(t, err, qt.IsNil)
 
 	sym := values.NewSymbol(name)
-	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, syntax.Scopes{})
 	err = env.SetOwnGlobalValue(gi, opaque)
 	qt.Assert(t, err, qt.IsNil)
 

@@ -49,7 +49,7 @@ func setupGlobalEnv(n int) (*EnvironmentFrame, []*GlobalIndex) {
 	gis := make([]*GlobalIndex, n)
 	for i := range n {
 		sym := values.NewSymbol(fmt.Sprintf("g%d", i))
-		env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, nil)
+		env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, syntax.Scopes{})
 		gi := env.GetGlobalIndex(sym)
 		env.SetOwnGlobalValue(gi, values.NewInteger(int64(i)))
 		gis[i] = gi
@@ -185,10 +185,10 @@ func BenchmarkBulkRowResolution(b *testing.B) {
 			sym := values.NewSymbol("bulk-only")
 			// The one slot lives at phase 0; the query below is at phase 1, so the
 			// per-symbol probe misses and only a row can answer.
-			g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, PhaseRuntime, true)
+			g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}, PhaseRuntime, true)
 			for i := range rows {
 				src := NewSealedStoreBulkSource(g, PhaseRuntime, values.NewSymbol(fmt.Sprintf("src%d", i)))
-				g.InstallBulkRow(src, nil, PhaseExpand, true, BulkOriginLanguage)
+				g.InstallBulkRow(src, syntax.Scopes{}, PhaseExpand, true, BulkOriginLanguage)
 			}
 			q := syntax.EmptyScopes()
 			b.ReportAllocs()

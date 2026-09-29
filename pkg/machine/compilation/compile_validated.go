@@ -378,7 +378,7 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 	// Check if it's a local binding
 	// M1 fix: Use scope-aware lookup when symbol has scopes (matches CompileSymbol pattern)
 	var li *environment.LocalIndex
-	if len(symbolScopes) > 0 {
+	if !symbolScopes.IsEmpty() {
 		// Symbol has scopes (from macro expansion), use scope-aware lookup
 		li = p.env.GetLocalIndex(sym, syntax.ScopesOf(symbolScopes))
 	} else {
