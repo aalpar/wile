@@ -119,17 +119,21 @@ func TestSourceContext_WithScope(t *testing.T) {
 	scope1 := NewScope()
 	sctx2 := sctx.WithScope(scope1)
 
-	qt.Assert(t, len(sctx.Scopes), qt.Equals, 0)
-	qt.Assert(t, len(sctx2.Scopes), qt.Equals, 1)
-	qt.Assert(t, sctx2.Scopes[0], qt.Equals, scope1)
+	qt.Assert(t, sctx.Scopes.Len(), qt.Equals, 0)
+	// Membership and cardinality, not position: a Scopes is a SET and storage
+	// order is not part of its contract.
+	qt.Assert(t, sctx2.Scopes.Len(), qt.Equals, 1)
+	qt.Assert(t, sctx2.Scopes.Has(scope1), qt.IsTrue)
 	qt.Assert(t, sctx2.Text, qt.Equals, "hello")
 	qt.Assert(t, sctx2.File, qt.Equals, "test.scm")
 
 	scope2 := NewScope()
 	sctx3 := sctx2.WithScope(scope2)
-	qt.Assert(t, len(sctx3.Scopes), qt.Equals, 2)
-	qt.Assert(t, sctx3.Scopes[0], qt.Equals, scope2)
-	qt.Assert(t, sctx3.Scopes[1], qt.Equals, scope1)
+	// Membership and cardinality, not position: a Scopes is a SET and storage
+	// order is not part of its contract.
+	qt.Assert(t, sctx3.Scopes.Len(), qt.Equals, 2)
+	qt.Assert(t, sctx3.Scopes.Has(scope1), qt.IsTrue)
+	qt.Assert(t, sctx3.Scopes.Has(scope2), qt.IsTrue)
 }
 
 func TestSourceContext_WithScope_Nil(t *testing.T) {
@@ -138,8 +142,10 @@ func TestSourceContext_WithScope_Nil(t *testing.T) {
 	sctx2 := sctx.WithScope(scope)
 
 	qt.Assert(t, sctx2, qt.IsNotNil)
-	qt.Assert(t, len(sctx2.Scopes), qt.Equals, 1)
-	qt.Assert(t, sctx2.Scopes[0], qt.Equals, scope)
+	// Membership and cardinality, not position: a Scopes is a SET and storage
+	// order is not part of its contract.
+	qt.Assert(t, sctx2.Scopes.Len(), qt.Equals, 1)
+	qt.Assert(t, sctx2.Scopes.Has(scope), qt.IsTrue)
 }
 
 func TestSourceContext_WithScopes(t *testing.T) {
@@ -149,19 +155,22 @@ func TestSourceContext_WithScopes(t *testing.T) {
 
 	scope1 := NewScope()
 	scope2 := NewScope()
-	scopes := []*Scope{scope1, scope2}
+	scopes := ScopesFromSlice([]*Scope{scope1, scope2})
 
+	// The rows that used to stand here read the set positionally, in the order
+	// WithScopes concatenated its arguments. Order is not part of the Scopes
+	// contract — membership and cardinality are what every consumer reads.
 	sctx2 := sctx.WithScopes(scopes)
-	qt.Assert(t, len(sctx2.Scopes), qt.Equals, 2)
-	qt.Assert(t, sctx2.Scopes[0], qt.Equals, scope1)
-	qt.Assert(t, sctx2.Scopes[1], qt.Equals, scope2)
+	qt.Assert(t, sctx2.Scopes.Len(), qt.Equals, 2)
+	qt.Assert(t, sctx2.Scopes.Has(scope1), qt.IsTrue)
+	qt.Assert(t, sctx2.Scopes.Has(scope2), qt.IsTrue)
 
 	scope3 := NewScope()
-	sctx3 := sctx2.WithScopes([]*Scope{scope3})
-	qt.Assert(t, len(sctx3.Scopes), qt.Equals, 3)
-	qt.Assert(t, sctx3.Scopes[0], qt.Equals, scope3)
-	qt.Assert(t, sctx3.Scopes[1], qt.Equals, scope1)
-	qt.Assert(t, sctx3.Scopes[2], qt.Equals, scope2)
+	sctx3 := sctx2.WithScopes(ScopesFromSlice([]*Scope{scope3}))
+	qt.Assert(t, sctx3.Scopes.Len(), qt.Equals, 3)
+	qt.Assert(t, sctx3.Scopes.Has(scope1), qt.IsTrue)
+	qt.Assert(t, sctx3.Scopes.Has(scope2), qt.IsTrue)
+	qt.Assert(t, sctx3.Scopes.Has(scope3), qt.IsTrue)
 }
 
 func TestSourceContext_WithScopes_Empty(t *testing.T) {
@@ -169,18 +178,20 @@ func TestSourceContext_WithScopes_Empty(t *testing.T) {
 	sidx1 := NewSourceIndexes(5, 5, 1)
 	sctx := NewSourceContext("hello", "test.scm", sidx0, sidx1)
 
-	sctx2 := sctx.WithScopes([]*Scope{})
+	sctx2 := sctx.WithScopes(ScopesFromSlice([]*Scope{}))
 	qt.Assert(t, sctx2, qt.Equals, sctx)
 }
 
 func TestSourceContext_WithScopes_Nil(t *testing.T) {
 	var sctx *SourceContext
 	scope := NewScope()
-	sctx2 := sctx.WithScopes([]*Scope{scope})
+	sctx2 := sctx.WithScopes(ScopesFromSlice([]*Scope{scope}))
 
 	qt.Assert(t, sctx2, qt.IsNotNil)
-	qt.Assert(t, len(sctx2.Scopes), qt.Equals, 1)
-	qt.Assert(t, sctx2.Scopes[0], qt.Equals, scope)
+	// Membership and cardinality, not position: a Scopes is a SET and storage
+	// order is not part of its contract.
+	qt.Assert(t, sctx2.Scopes.Len(), qt.Equals, 1)
+	qt.Assert(t, sctx2.Scopes.Has(scope), qt.IsTrue)
 }
 
 // Test scope utilities
@@ -189,15 +200,15 @@ func TestScopesMatch(t *testing.T) {
 	scope2 := NewScope()
 	scope3 := NewScope()
 
-	qt.Assert(t, ScopesMatch([]*Scope{}, []*Scope{}), qt.IsTrue)
-	qt.Assert(t, ScopesMatch([]*Scope{scope1}, []*Scope{}), qt.IsTrue)
-	qt.Assert(t, ScopesMatch([]*Scope{}, []*Scope{scope1}), qt.IsFalse)
-	qt.Assert(t, ScopesMatch([]*Scope{scope1, scope2}, []*Scope{scope1}), qt.IsTrue)
-	qt.Assert(t, ScopesMatch([]*Scope{scope1}, []*Scope{scope1, scope2}), qt.IsFalse)
-	qt.Assert(t, ScopesMatch([]*Scope{scope1, scope2}, []*Scope{scope1, scope2}), qt.IsTrue)
-	qt.Assert(t, ScopesMatch([]*Scope{scope2, scope1}, []*Scope{scope1, scope2}), qt.IsTrue)
-	qt.Assert(t, ScopesMatch([]*Scope{scope1, scope2, scope3}, []*Scope{scope1, scope3}), qt.IsTrue)
-	qt.Assert(t, ScopesMatch([]*Scope{scope1, scope3}, []*Scope{scope1, scope2}), qt.IsFalse)
+	qt.Assert(t, ScopesMatch(ScopesFromSlice([]*Scope{}), ScopesFromSlice([]*Scope{})), qt.IsTrue)
+	qt.Assert(t, ScopesMatch(ScopesFromSlice([]*Scope{scope1}), ScopesFromSlice([]*Scope{})), qt.IsTrue)
+	qt.Assert(t, ScopesMatch(ScopesFromSlice([]*Scope{}), ScopesFromSlice([]*Scope{scope1})), qt.IsFalse)
+	qt.Assert(t, ScopesMatch(ScopesFromSlice([]*Scope{scope1, scope2}), ScopesFromSlice([]*Scope{scope1})), qt.IsTrue)
+	qt.Assert(t, ScopesMatch(ScopesFromSlice([]*Scope{scope1}), ScopesFromSlice([]*Scope{scope1, scope2})), qt.IsFalse)
+	qt.Assert(t, ScopesMatch(ScopesFromSlice([]*Scope{scope1, scope2}), ScopesFromSlice([]*Scope{scope1, scope2})), qt.IsTrue)
+	qt.Assert(t, ScopesMatch(ScopesFromSlice([]*Scope{scope2, scope1}), ScopesFromSlice([]*Scope{scope1, scope2})), qt.IsTrue)
+	qt.Assert(t, ScopesMatch(ScopesFromSlice([]*Scope{scope1, scope2, scope3}), ScopesFromSlice([]*Scope{scope1, scope3})), qt.IsTrue)
+	qt.Assert(t, ScopesMatch(ScopesFromSlice([]*Scope{scope1, scope3}), ScopesFromSlice([]*Scope{scope1, scope2})), qt.IsFalse)
 }
 
 func TestHasScope(t *testing.T) {
@@ -205,30 +216,30 @@ func TestHasScope(t *testing.T) {
 	scope2 := NewScope()
 	scope3 := NewScope()
 
-	qt.Assert(t, values.HasScope([]*Scope{}, scope1), qt.IsFalse)
-	qt.Assert(t, values.HasScope([]*Scope{scope1}, scope1), qt.IsTrue)
-	qt.Assert(t, values.HasScope([]*Scope{scope1}, scope2), qt.IsFalse)
-	qt.Assert(t, values.HasScope([]*Scope{scope1, scope2}, scope2), qt.IsTrue)
-	qt.Assert(t, values.HasScope([]*Scope{scope1, scope2}, scope3), qt.IsFalse)
+	qt.Assert(t, values.HasScope(ScopesFromSlice([]*Scope{}), scope1), qt.IsFalse)
+	qt.Assert(t, values.HasScope(ScopesFromSlice([]*Scope{scope1}), scope1), qt.IsTrue)
+	qt.Assert(t, values.HasScope(ScopesFromSlice([]*Scope{scope1}), scope2), qt.IsFalse)
+	qt.Assert(t, values.HasScope(ScopesFromSlice([]*Scope{scope1, scope2}), scope2), qt.IsTrue)
+	qt.Assert(t, values.HasScope(ScopesFromSlice([]*Scope{scope1, scope2}), scope3), qt.IsFalse)
 }
 
 func TestAddScopeToSet(t *testing.T) {
 	scope1 := NewScope()
 	scope2 := NewScope()
 
-	scopes := []*Scope{}
+	scopes := ScopesFromSlice([]*Scope{})
 	scopes = values.AddScopeToSet(scopes, scope1)
-	qt.Assert(t, len(scopes), qt.Equals, 1)
+	qt.Assert(t, scopes.Len(), qt.Equals, 1)
 	qt.Assert(t, values.HasScope(scopes, scope1), qt.IsTrue)
 
 	scopes = values.AddScopeToSet(scopes, scope2)
-	qt.Assert(t, len(scopes), qt.Equals, 2)
+	qt.Assert(t, scopes.Len(), qt.Equals, 2)
 	qt.Assert(t, values.HasScope(scopes, scope1), qt.IsTrue)
 	qt.Assert(t, values.HasScope(scopes, scope2), qt.IsTrue)
 
 	// Adding duplicate should not increase size
 	scopes = values.AddScopeToSet(scopes, scope1)
-	qt.Assert(t, len(scopes), qt.Equals, 2)
+	qt.Assert(t, scopes.Len(), qt.Equals, 2)
 }
 
 func TestRemoveScopeFromSet(t *testing.T) {
@@ -236,19 +247,21 @@ func TestRemoveScopeFromSet(t *testing.T) {
 	scope2 := NewScope()
 	scope3 := NewScope()
 
-	scopes := []*Scope{scope1, scope2, scope3}
+	scopes := ScopesFromSlice([]*Scope{scope1, scope2, scope3})
 	scopes = values.RemoveScopeFromSet(scopes, scope2)
-	qt.Assert(t, len(scopes), qt.Equals, 2)
+	qt.Assert(t, scopes.Len(), qt.Equals, 2)
 	qt.Assert(t, values.HasScope(scopes, scope1), qt.IsTrue)
 	qt.Assert(t, values.HasScope(scopes, scope2), qt.IsFalse)
 	qt.Assert(t, values.HasScope(scopes, scope3), qt.IsTrue)
 
 	scopes = values.RemoveScopeFromSet(scopes, scope1)
-	qt.Assert(t, len(scopes), qt.Equals, 1)
-	qt.Assert(t, scopes[0], qt.Equals, scope3)
+	// Membership and cardinality, not position: a Scopes is a SET and storage
+	// order is not part of its contract.
+	qt.Assert(t, scopes.Len(), qt.Equals, 1)
+	qt.Assert(t, values.HasScope(scopes, scope3), qt.IsTrue)
 
 	scopes = values.RemoveScopeFromSet(scopes, scope3)
-	qt.Assert(t, len(scopes), qt.Equals, 0)
+	qt.Assert(t, scopes.Len(), qt.Equals, 0)
 }
 
 // Test SyntaxComment
@@ -485,12 +498,14 @@ func TestSyntaxPair_AddScope(t *testing.T) {
 	newPair := pair.AddScope(scope)
 
 	// Pair itself should NOT have the scope (scopes only matter on symbols)
-	qt.Assert(t, len(newPair.(*SyntaxPair).SourceContext().Scopes), qt.Equals, 0)
+	qt.Assert(t, newPair.(*SyntaxPair).SourceContext().Scopes.Len(), qt.Equals, 0)
 
 	// But the nested symbol SHOULD have the scope
 	newSym := newPair.(*SyntaxPair).Car().(*SyntaxSymbol)
-	qt.Assert(t, len(newSym.Scopes()), qt.Equals, 1)
-	qt.Assert(t, newSym.Scopes()[0], qt.Equals, scope)
+	// Membership and cardinality, not position: a Scopes is a SET and storage
+	// order is not part of its contract.
+	qt.Assert(t, newSym.Scopes().Len(), qt.Equals, 1)
+	qt.Assert(t, newSym.Scopes().Has(scope), qt.IsTrue)
 }
 
 func TestSyntaxPair_SourceContext(t *testing.T) {
@@ -574,9 +589,11 @@ func TestSyntaxSymbol_AddScope(t *testing.T) {
 	scope := NewScope()
 	newSym := sym.AddScope(scope)
 
-	qt.Assert(t, len(sym.SourceContext().Scopes), qt.Equals, 0)
-	qt.Assert(t, len(newSym.(*SyntaxSymbol).SourceContext().Scopes), qt.Equals, 1)
-	qt.Assert(t, newSym.(*SyntaxSymbol).SourceContext().Scopes[0], qt.Equals, scope)
+	qt.Assert(t, sym.SourceContext().Scopes.Len(), qt.Equals, 0)
+	// Membership and cardinality, not position: a Scopes is a SET and storage
+	// order is not part of its contract.
+	qt.Assert(t, newSym.(*SyntaxSymbol).SourceContext().Scopes.Len(), qt.Equals, 1)
+	qt.Assert(t, newSym.(*SyntaxSymbol).SourceContext().Scopes.Has(scope), qt.IsTrue)
 }
 
 func TestSyntaxSymbol_Scopes(t *testing.T) {
@@ -586,8 +603,10 @@ func TestSyntaxSymbol_Scopes(t *testing.T) {
 	sym := NewSyntaxSymbol("foo", sctx)
 
 	scopes := sym.Scopes()
-	qt.Assert(t, len(scopes), qt.Equals, 1)
-	qt.Assert(t, scopes[0], qt.Equals, scope)
+	// Membership and cardinality, not position: a Scopes is a SET and storage
+	// order is not part of its contract.
+	qt.Assert(t, scopes.Len(), qt.Equals, 1)
+	qt.Assert(t, scopes.Has(scope), qt.IsTrue)
 }
 
 func TestSyntaxSymbol_Datum(t *testing.T) {
@@ -814,7 +833,7 @@ func TestSourceContext_WithScope_PreservesOrigin(t *testing.T) {
 	// Origin should be preserved
 	c.Assert(scWithScope.Origin, qt.Equals, origin)
 	// Scope should be added
-	c.Assert(len(scWithScope.Scopes), qt.Equals, 1)
+	c.Assert(scWithScope.Scopes.Len(), qt.Equals, 1)
 }
 
 // TestSourceContext_WithScopes_PreservesOrigin tests that WithScopes preserves Origin.
@@ -826,13 +845,13 @@ func TestSourceContext_WithScopes_PreservesOrigin(t *testing.T) {
 	origin := &OriginInfo{Identifier: "my-macro"}
 	sc = sc.WithOrigin(origin)
 
-	scopes := []*Scope{NewScope(), NewScope()}
+	scopes := ScopesFromSlice([]*Scope{NewScope(), NewScope()})
 	scWithScopes := sc.WithScopes(scopes)
 
 	// Origin should be preserved
 	c.Assert(scWithScopes.Origin, qt.Equals, origin)
 	// Scopes should be added
-	c.Assert(len(scWithScopes.Scopes), qt.Equals, 2)
+	c.Assert(scWithScopes.Scopes.Len(), qt.Equals, 2)
 }
 
 // TestFormatOriginChain tests the FormatOriginChain function.
@@ -914,7 +933,7 @@ func TestWithScope_Idempotent(t *testing.T) {
 	// Add scope2 — new scope, should allocate
 	sctx4 := sctx2.WithScope(scope2)
 	c.Assert(sctx4, qt.Not(qt.Equals), sctx2)
-	c.Assert(len(sctx4.Scopes), qt.Equals, 2)
+	c.Assert(sctx4.Scopes.Len(), qt.Equals, 2)
 
 	// Add scope1 again to sctx4 (which has [scope2, scope1]) — idempotent
 	sctx5 := sctx4.WithScope(scope1)
@@ -937,25 +956,25 @@ func TestWithScopes_Idempotent(t *testing.T) {
 		NewSourceIndexes(0, 0, 1), NewSourceIndexes(1, 1, 1))
 
 	// Add two scopes
-	sctx2 := sctx.WithScopes([]*Scope{scope1, scope2})
+	sctx2 := sctx.WithScopes(ScopesFromSlice([]*Scope{scope1, scope2}))
 	c.Assert(sctx2, qt.Not(qt.Equals), sctx)
-	c.Assert(len(sctx2.Scopes), qt.Equals, 2)
+	c.Assert(sctx2.Scopes.Len(), qt.Equals, 2)
 
 	// Add same two scopes again — idempotent
-	sctx3 := sctx2.WithScopes([]*Scope{scope1, scope2})
+	sctx3 := sctx2.WithScopes(ScopesFromSlice([]*Scope{scope1, scope2}))
 	c.Assert(sctx3, qt.Equals, sctx2)
 
 	// Add subset — idempotent
-	sctx4 := sctx2.WithScopes([]*Scope{scope1})
+	sctx4 := sctx2.WithScopes(ScopesFromSlice([]*Scope{scope1}))
 	c.Assert(sctx4, qt.Equals, sctx2)
 
 	// Add one new scope — should allocate
-	sctx5 := sctx2.WithScopes([]*Scope{scope3})
+	sctx5 := sctx2.WithScopes(ScopesFromSlice([]*Scope{scope3}))
 	c.Assert(sctx5, qt.Not(qt.Equals), sctx2)
-	c.Assert(len(sctx5.Scopes), qt.Equals, 3)
+	c.Assert(sctx5.Scopes.Len(), qt.Equals, 3)
 
 	// Mix of present and new — should allocate
-	sctx6 := sctx2.WithScopes([]*Scope{scope1, scope3})
+	sctx6 := sctx2.WithScopes(ScopesFromSlice([]*Scope{scope1, scope3}))
 	c.Assert(sctx6, qt.Not(qt.Equals), sctx2)
 }
 

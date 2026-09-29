@@ -21,6 +21,7 @@
 package values
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -41,7 +42,7 @@ func TestScopesEmptyIdentities(t *testing.T) {
 	c.Assert(empty.IsEmpty(), qt.IsTrue)
 	c.Assert(empty.Len(), qt.Equals, 0)
 	c.Assert(empty.Fingerprint(), qt.Equals, "")
-	c.Assert(empty.Slice(), qt.IsNil)
+	c.Assert(slices.Collect(empty.All()), qt.IsNil)
 	c.Assert(empty.Has(scopeAt(1)), qt.IsFalse)
 
 	// ∅ ⊆ X for every X, including ∅ — the rule ScopesMatch's length guard
@@ -279,14 +280,23 @@ func TestScopesFingerprintIsIdOrdered(t *testing.T) {
 	c.Assert(ScopesFromSlice([]*Scope{scopeAt(2)}).Fingerprint(), qt.Not(qt.Equals), got)
 }
 
-func TestScopesSliceRoundTrip(t *testing.T) {
+// TestScopesCollectRoundTrip also carries the ONE ordering assertion the tree is
+// allowed to make. The canonical descending-id order is an implementation
+// invariant — it is what makes Add's fast path and Fingerprint's map key work —
+// and it is NOT part of the contract. There is no Slice() and no indexed access
+// for exactly that reason. Asserting the order here, once, in the package that
+// owns the invariant, is what keeps every other test from asserting it by
+// accident; a test elsewhere that depends on a member's POSITION is a bug in
+// that test, not a fact about scope sets.
+func TestScopesCollectRoundTrip(t *testing.T) {
 	c := qt.New(t)
 
 	in := []*Scope{scopeAt(4), scopeAt(1), scopeAt(7)}
 	set := ScopesFromSlice(in)
 
-	out := set.Slice()
-	c.Assert(ids(set), qt.DeepEquals, []uint64{7, 4, 1}, qt.Commentf("Slice is descending by id, not insertion order"))
+	out := slices.Collect(set.All())
+	c.Assert(ids(set), qt.DeepEquals, []uint64{7, 4, 1},
+		qt.Commentf("canonical order: descending by id, NOT insertion order — asserted here and nowhere else"))
 	c.Assert(len(out), qt.Equals, 3)
 
 	back := ScopesFromSlice(out)

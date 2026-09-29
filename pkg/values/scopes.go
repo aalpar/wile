@@ -15,6 +15,7 @@
 package values
 
 import (
+	"iter"
 	"strconv"
 	"strings"
 )
@@ -52,6 +53,24 @@ import (
 // today. Storage order is irrelevant here because this type canonicalizes by id
 // — but do not restate the folklore that one prepending builder guarantees the
 // fast path.
+//
+// # Order is an implementation technique, not part of the contract
+//
+// A scope set is a SET — Flatt's model has no ordering, and neither does this
+// type's contract. The chain is canonically sorted because that is what buys the
+// O(1) operations above and what lets Fingerprint be a valid map key, but NO
+// CALLER OUTSIDE THIS PACKAGE MAY DEPEND ON THE ORDER. There is deliberately no
+// Slice() and no indexed access: ask Has, SubsetOf, Len or IsEmpty for semantics,
+// Fingerprint for a key, and All when you genuinely need to walk. A caller that
+// needs a materialized slice writes slices.Collect(s.All()) and owns the
+// consequences of caring.
+//
+// This is not pedantry. While the set was a []*Scope, tests across five packages
+// asserted member POSITIONS, so changing the representation meant deciding, per
+// site, what the "right" new position was — a question that has no principled
+// answer, because the object has no order. Keeping order out of the contract
+// makes the question unaskable, and makes a future change of representation
+// (ascending, hash-consed, bitmap) cost nothing outside this file.
 //
 // # The precondition the type does not enforce
 //
@@ -249,17 +268,18 @@ func (p Scopes) SubsetOf(u Scopes) bool {
 	return true
 }
 
-// Slice materializes the members as a []*Scope in descending-id order. It is the
-// boundary out of this type; it allocates, so it is not for the hot path.
-func (p Scopes) Slice() []*Scope {
-	if p.node == nil {
-		return nil
+// All returns an iterator over the members in descending-id order. Prefer it to
+// ForEach wherever the loop body needs `break`, `continue` or an early `return`
+// from the enclosing function — a callback cannot express those. Both are
+// allocation-free; see docs/dev/iteration-idioms.md for when each shape applies.
+func (p Scopes) All() iter.Seq[*Scope] {
+	return func(yield func(*Scope) bool) {
+		for n := p.node; n != nil; n = n.tail {
+			if !yield(n.scope) {
+				return
+			}
+		}
 	}
-	q := make([]*Scope, 0, p.node.size)
-	for n := p.node; n != nil; n = n.tail {
-		q = append(q, n.scope)
-	}
-	return q
 }
 
 // ForEach visits every member in descending-id order, allocation-free.
@@ -279,10 +299,16 @@ func (p Scopes) ForEach(fn func(s *Scope)) {
 // the STRINGS, so {2,10} fingerprints to "10,2"; walking an id-sorted chain
 // yields "2,10". Both cannot hold, and nothing requires the old spelling —
 // every producer routes through one function, and match.FreeIdName's guarantee
-// is the character class, which survives either ordering. The one place the
-// difference is observable is a golden ordering in
-// pkg/internal/validate/frame_reclaim_build_test.go, which sorts rows by
-// ScopeKey; expect that to move when this replaces ScopeFingerprint.
+// is the character class, which survives either ordering.
+//
+// MEASURED after the flip: all four callers use the equivalence relation alone
+// and NONE is order-observable, so the output change cost nothing. An earlier
+// version of this comment predicted that a golden ordering in
+// pkg/internal/validate/frame_reclaim_build_test.go would move with it. That
+// prediction was WRONG — the test sorts both sides with the same comparator, so
+// it is order-independent by construction — and it is corrected here rather than
+// quietly deleted, because a plausible-but-false prediction in a doc comment is
+// how a later reader acquires a wrong model.
 func (p Scopes) Fingerprint() string {
 	if p.node == nil {
 		return ""

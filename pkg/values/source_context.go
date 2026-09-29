@@ -16,7 +16,6 @@ package values
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 )
 
@@ -47,7 +46,7 @@ type SourceContext struct {
 	File   string
 	Start  SourceIndexes
 	End    SourceIndexes
-	Scopes []*Scope    // Scopes associated with this source location
+	Scopes Scopes      // Scopes associated with this source location
 	Origin *OriginInfo // Macro expansion origin chain (nil if not from macro)
 }
 
@@ -155,7 +154,7 @@ func (p *SourceContext) WithoutScopes() *SourceContext {
 		return nil
 	}
 	c := p.Clone()
-	c.Scopes = nil
+	c.Scopes = Scopes{}
 	return c
 }
 
@@ -169,24 +168,30 @@ func (p *SourceContext) WithoutScopes() *SourceContext {
 // syntax types. This treats scopes as source-location metadata, keeping the
 // syntax types simpler and the scope management centralized.
 //
-// The new scope is prepended to the list (most recent scope first). This
-// doesn't affect the ScopesMatch algorithm, which uses set membership.
+// The set is canonically ordered by scope id, so "prepend" is no longer a
+// property of this function: Scopes.Add places the scope by id and shares the
+// rest of the chain. A freshly minted scope is the new maximum, which is the
+// case every production add takes, so the common path is one 24-byte cell.
+//
+// This used to allocate len(p.Scopes)+1 and copy, which is the O(n) factor that
+// made compiling n nested lexical forms O(n^3) in total.
 //
 // Returns a NEW SourceContext (immutable design for syntax objects).
 func (p *SourceContext) WithScope(scope *Scope) *SourceContext {
 	if p == nil {
+		// Scopes{}.Add rather than ScopesFromSlice([]*Scope{scope}): the literal was
+		// the last reducible raw slice operation in non-test code, and a one-member
+		// set does not need a slice to say so.
 		return &SourceContext{
-			Scopes: []*Scope{scope},
+			Scopes: Scopes{}.Add(scope),
 		}
 	}
-	if slices.Contains(p.Scopes, scope) {
+	grown := p.Scopes.Add(scope)
+	if grown == p.Scopes {
 		return p
 	}
-	newScopes := make([]*Scope, len(p.Scopes)+1)
-	newScopes[0] = scope
-	copy(newScopes[1:], p.Scopes)
 	c := p.Clone()
-	c.Scopes = newScopes
+	c.Scopes = grown
 	return c
 }
 
@@ -200,39 +205,37 @@ func (p *SourceContext) WithScope(scope *Scope) *SourceContext {
 // Racket calls the same operation remove-scopes and drives it from a registry of
 // scopes it minted, never from a property of the scope itself.
 func (p *SourceContext) WithoutScope(scope *Scope) *SourceContext {
-	if p == nil || !slices.Contains(p.Scopes, scope) {
+	if p == nil {
+		return nil
+	}
+	shrunk := p.Scopes.Remove(scope)
+	if shrunk == p.Scopes {
 		return p
 	}
 	c := p.Clone()
-	c.Scopes = RemoveScopeFromSet(p.Scopes, scope)
+	c.Scopes = shrunk
 	return c
 }
 
-// WithScopes returns a new SourceContext with additional scopes
-func (p *SourceContext) WithScopes(scopes []*Scope) *SourceContext {
+// WithScopes returns a new SourceContext with additional scopes.
+//
+// It has zero non-test callers and is the only function that could ever build a
+// duplicate-containing set, because it concatenated without dedup. Under Scopes
+// it cannot: Add is idempotent per member. Kept for now so the flip changes one
+// thing at a time; [I135-freefn] retires it.
+func (p *SourceContext) WithScopes(scopes Scopes) *SourceContext {
 	if p == nil {
-		return &SourceContext{
-			Scopes: scopes,
-		}
+		return &SourceContext{Scopes: scopes}
 	}
-	if len(scopes) == 0 {
+	grown := p.Scopes
+	scopes.ForEach(func(s *Scope) {
+		grown = grown.Add(s)
+	})
+	if grown == p.Scopes {
 		return p
 	}
-	allPresent := true
-	for _, s := range scopes {
-		if !slices.Contains(p.Scopes, s) {
-			allPresent = false
-			break
-		}
-	}
-	if allPresent {
-		return p
-	}
-	newScopes := make([]*Scope, len(scopes)+len(p.Scopes))
-	copy(newScopes, scopes)
-	copy(newScopes[len(scopes):], p.Scopes)
 	c := p.Clone()
-	c.Scopes = newScopes
+	c.Scopes = grown
 	return c
 }
 

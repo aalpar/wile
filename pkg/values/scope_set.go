@@ -40,10 +40,10 @@ package values
 // of the type.
 type ScopeSet struct {
 	all bool
-	// scopes is meaningful only when !all. nil and an empty slice are the same
-	// here (both the empty set); the nil-vs-empty distinction the environment
-	// layer once depended on is now carried by `all`, not by the slice.
-	scopes []*Scope
+	// scopes is meaningful only when !all. Its zero value IS the empty set, so
+	// the nil-vs-empty distinction the environment layer once depended on is not
+	// merely carried by `all` — it is no longer expressible here at all.
+	scopes Scopes
 }
 
 // AllScopes returns the wildcard query: any binding of the name matches,
@@ -53,11 +53,12 @@ func AllScopes() ScopeSet {
 	return ScopeSet{all: true}
 }
 
-// ScopesOf returns a query constrained to the given scope set. A nil slice is
-// the EMPTY set here (equivalent to EmptyScopes), NOT the wildcard — use
+// ScopesOf returns a query constrained to the given scope set. The zero Scopes
+// is the EMPTY set here (equivalent to EmptyScopes), NOT the wildcard — use
 // AllScopes for that. This is the inverse of the historical footgun where a nil
-// slice silently meant "match any".
-func ScopesOf(scopes []*Scope) ScopeSet {
+// slice silently meant "match any", and under a value type the footgun is not
+// expressible: there is no third state to mistake for a wildcard.
+func ScopesOf(scopes Scopes) ScopeSet {
 	return ScopeSet{scopes: scopes}
 }
 
@@ -76,14 +77,14 @@ func (q ScopeSet) IsAll() bool {
 
 // IsEmpty reports whether this is the ambient (empty, non-wildcard) query.
 func (q ScopeSet) IsEmpty() bool {
-	return !q.all && len(q.scopes) == 0
+	return !q.all && q.scopes.IsEmpty()
 }
 
 // Scopes returns the underlying scope set for a specific or empty query. It is
-// meaningless for AllScopes and returns nil there.
-func (q ScopeSet) Scopes() []*Scope {
+// meaningless for AllScopes and returns the empty set there.
+func (q ScopeSet) Scopes() Scopes {
 	if q.all {
-		return nil
+		return Scopes{}
 	}
 	return q.scopes
 }
@@ -95,5 +96,5 @@ func (q ScopeSet) String() string {
 	if q.all {
 		return "all-scopes"
 	}
-	return "scopes{" + ScopeFingerprint(q.scopes) + "}"
+	return "scopes{" + q.scopes.Fingerprint() + "}"
 }
