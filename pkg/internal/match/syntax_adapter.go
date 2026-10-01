@@ -559,27 +559,44 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 // or user-macro literal). Falling back to sameSpelling instead keeps every
 // documented row above (all same-spelled) while refusing that cross-name case.
 //
-// BOUNDARY: the sameSpelling fallback is where this predicate's headline
-// property — a renamed or prefixed import still matches its literal — does
-// NOT hold. It holds for auxiliary keywords (defB denotes a form: spelling-
-// independent, per the paragraph above) but not for an ordinary-variable or
-// user-macro literal, since DenotedForm gives sameSpelling nothing to widen
-// past. A library that exports a macro over its own private variable literal
-// and is then imported with a prefix loses the match: with (w16lib) exporting
-// `mg`/`lit` (see the residual above), (import (prefix (w16lib) p:)) (p:mg
-// p:lit) answers OTHER, where R7RS §4.3.2 wants MATCHED-LITERAL, because
-// sameSpelling is false ("p:lit" != "lit") and DenotedForm can't substitute.
-// This is NOT a regression: before match.go's literal arm could reach a
-// mismatched spelling, EVERY renamed or prefixed literal — auxiliary keyword
-// or not — was refused the same way, by the caller's spelling gate rather than
-// by this fallback. Measured unchanged against the pre-task base (commit
-// 90c4f2c2): the same program answers OTHER there too. Pinned next to the
-// over-acceptance residual, as
-// "BOUNDARY: a prefixed re-export of a variable literal is refused" in
-// TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding
-// (pkg/wile/matcher_pattern_gaps_test.go), so a later widening of the
-// sameSpelling fallback — comparing resolved bindings across the rename
-// instead of names — is a measurable flip rather than a silent change.
+// THE ORIGIN COMPARISON, which is what the sameSpelling fallback now yields to.
+// When both sides carry an OriginRef, §4.3.2's own question is answerable
+// directly — SameBinding — and spelling stops deciding. That closes the
+// BOUNDARY case this paragraph used to record as a known limitation: with
+// (w16lib) exporting `mg`/`lit`, (import (prefix (w16lib) p:)) (p:mg p:lit)
+// answered OTHER where §4.3.2 wants MATCHED-LITERAL, because sameSpelling is
+// false ("p:lit" != "lit") and DenotedForm had nothing to widen past. A prefix
+// re-export is the SAME binding under another spelling, and the origins say so.
+// Pinned as "BOUNDARY: a prefixed re-export of a variable literal matches".
+//
+// IT ALSO NARROWS, in the opposite direction, and that is the one consequence
+// no row recorded before this change. Two origins that are PRESENT and DIFFER
+// refuse what sameSpelling accepted: a library exporting both `mg` and `lit`,
+// imported (except (w16lib) lit) alongside an unrelated library exporting its
+// own `lit`, answered MATCHED-LITERAL and now answers OTHER. That is §4.3.2's
+// answer too, and it is a partial close of the RESIDUAL over-acceptance above —
+// specifically, whenever the macro's literal happens to be EXPORTED. Pinned as
+// "NARROWING: an exported literal no longer matches another library's same
+// name". Blast radius measured at zero in the stdlib: all 70 syntax-rules forms
+// under pkg/stdlib/lib carry empty literal lists, so no stdlib macro reaches
+// this predicate at all.
+//
+// RESIDUAL STAYS TABLED, and the reason is the step NOT taken. Stamping
+// library-PRIVATE defines with a phase-bearing root would give the residual
+// case two origins to compare and close it — and OriginRef is
+// {RootLib, RootName, RootPhase} with no scope discriminator, so stamping every
+// private slot makes two hygienically distinct same-named bindings
+// SameBinding-equal. free-identifier=? (prim_syntax.go) and ER-compare
+// (er_macro_compare.go) are pure functions of that stamp, so the step would
+// reintroduce name-keyed identity inside the predicate that decides identifier
+// equality. TestImportOfOneNameFromTwoPhasesConflicts is what it would silently
+// delete. The residual's own row keeps today's answer, labelled residual.
+//
+// The sameSpelling fallback is NOT deletable, and that was measured rather than
+// assumed: replacing it with `return false` breaks
+// TestLiteralNotShadowed/any_imported_binding_of_the_same_name_is_accepted in
+// this package. That is a further behaviour change with its own pin to retire,
+// not part of this one.
 //
 // THE OTHER EDGE THE SAME THREE LINES MOVED, and unlike the boundary above it is
 // a BEHAVIOUR CHANGE rather than an unchanged limitation, so it is stated here
@@ -609,6 +626,20 @@ func literalNotShadowed(defB, useB *environment.Binding, sameSpelling bool) bool
 	}
 	denoted := environment.DenotedForm(defB)
 	if denoted == "" {
+		// R7RS §4.3.2 compares BINDINGS. When both sides carry an OriginRef the
+		// comparison is available, so take it: a prefixed or renamed re-export
+		// is the same binding under another spelling and matches, and two
+		// libraries' same-named exports are different bindings and do not.
+		//
+		// `defB != nil` is not defensiveness inherited from the snippet this
+		// replaces: Origin() reaches (*Binding).Meta(), which is NOT nil-safe,
+		// while DenotedForm and sameLiteralBinding both nil-guard. The one
+		// production call site is guarded, so a nil defB is unreachable there —
+		// but the function tolerates one today and the unit table can supply
+		// one.
+		if defB != nil && defB.Origin() != nil && useB.Origin() != nil {
+			return environment.SameBinding(defB, useB)
+		}
 		return sameSpelling
 	}
 	return denoted == environment.DenotedForm(useB)

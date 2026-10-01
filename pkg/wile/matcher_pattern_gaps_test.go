@@ -724,10 +724,10 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 			// commit 90c4f2c2. Flip this want only together with a widening
 			// of the sameSpelling fallback (e.g. comparing resolved bindings
 			// across the rename instead of names).
-			name: "BOUNDARY: a prefixed re-export of a variable literal is refused",
+			name: "BOUNDARY: a prefixed re-export of a variable literal matches",
 			libs: map[string]string{"w16lib.scm": libRulesExportingLit},
 			src:  "(import (prefix (w16lib) p:))\n(p:mg p:lit)",
-			want: "OTHER",
+			want: "MATCHED-LITERAL",
 		},
 		{
 			// FLIP, the third edge of the same rider and the only one that
@@ -752,6 +752,27 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 			libs: map[string]string{"w16else.scm": libElseVariable},
 			src:  "(import (only (scheme base) cond quote lambda define) (w16else))\n(cond (#f 1) (else => (lambda (x) x)))",
 			want: "42",
+		},
+		{
+			// NARROWING, the one answer this task changes in the opposite
+			// direction to BOUNDARY, and the only consequence of the change
+			// that no row recorded. Both sides carry an Origin here -- w16lib
+			// EXPORTS its lit, and w16other exports its own -- and the two
+			// origins are different libraries, so comparing bindings refuses
+			// what sameSpelling accepted. That is R7RS §4.3.2's answer, and it
+			// is a partial close of the RESIDUAL row above: whenever the
+			// macro's literal happens to be exported, the unrelated library's
+			// same-named binding stops matching. RESIDUAL itself stays
+			// MATCHED-LITERAL because w16lib does NOT export lit there, so defB
+			// is library-private and carries no origin to compare.
+			//
+			// (except (w16lib) lit) rather than a plain import: the unrelated
+			// library's lit has to be the one in scope at the use site for the
+			// two origins to differ.
+			name: "NARROWING: an exported literal no longer matches another library's same name",
+			libs: map[string]string{"w16lib.scm": libRulesExportingLit, "w16other.scm": libUnrelatedLit},
+			src:  "(import (except (w16lib) lit) (w16other))\n(mg lit)",
+			want: "OTHER",
 		},
 		{
 			name: "syntax-case takes the same path",
