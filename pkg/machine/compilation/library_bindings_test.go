@@ -242,6 +242,37 @@ func TestFindLibraryBindingAtExportPhase(t *testing.T) {
 			},
 			exportPhase: 1, wantFound: true, wantPhase: 2, wantIndex: 1,
 		},
+		{
+			// I134, and the row the walk was restructured for. The pair a library
+			// holding its own (define-syntax if ...) produces: Primitive at the
+			// export phase is the core form it INHERITED from its own
+			// (scheme base), written only by registerCompileTimeBinding and only
+			// into a startup set; Syntax one phase up is the row the library body
+			// wrote. The library's own row wins.
+			//
+			// Red before the fix: the phase arm returned on
+			// BindingType() != Syntax, so it answered the inherited form and the
+			// keyword probe never ran (got s"runtime" want s"expand").
+			name: "the library's own syntax row beats the core form it inherited",
+			bindings: []stored{
+				{environment.BindingTypePrimitive, 0},
+				{environment.BindingTypeSyntax, 1},
+			},
+			exportPhase: 0, wantFound: true, wantPhase: 1, wantIndex: 1,
+		},
+		{
+			// The control that keeps the row above a measurement rather than a
+			// precedence flip: ANY other pairing keeps the old order. A variable
+			// at the export phase is the library's own definition and still wins
+			// over a keyword above it, which is what leaves a non-core export
+			// name and a plain (export car) re-export untouched.
+			name: "a variable at the export phase still wins over a syntax row above it",
+			bindings: []stored{
+				{environment.BindingTypeVariable, 0},
+				{environment.BindingTypeSyntax, 1},
+			},
+			exportPhase: 0, wantFound: true, wantPhase: 0, wantIndex: 0,
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

@@ -593,19 +593,49 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string, phase environ
 	libSym := values.NewSymbol(internalName)
 	present := lib.Env.PresentPhases()
 
-	binding := libraryBindingAt(lib, present, libSym, scopes, phase)
-	if binding != nil && binding.BindingType() != environment.BindingTypeSyntax {
-		return binding, phase, true
-	}
+	// BOTH phases are probed before either can win. The old shape returned on
+	// the first acceptable hit, and the phase arm accepts BindingTypePrimitive —
+	// the type only registerCompileTimeBinding writes, and only into a startup
+	// set. So a library holding its own `(define-syntax if ...)` exported the
+	// core `if` it had inherited from its own (scheme base), including through a
+	// rename. That is I025's sibling defect and this is its fix.
+	phaseHit := libraryBindingAt(lib, present, libSym, scopes, phase)
+	phaseWins := phaseHit != nil && phaseHit.BindingType() != environment.BindingTypeSyntax
+
 	keywordPhase, err := composePhaseShift("export", phase, environment.PhaseExpand)
 	if err != nil {
+		// At the int8 ceiling there is no keyword phase to probe. The early
+		// return this replaces happened BEFORE the shift was computed, so a
+		// valid phase hit used to survive the error; it still must. Dropping it
+		// here would make an export at the tower's top silently unresolvable.
+		if phaseWins {
+			return phaseHit, phase, true
+		}
 		return nil, phase, false
 	}
-	binding = libraryBindingAt(lib, present, libSym, scopes, keywordPhase)
-	if binding != nil && binding.BindingType() != environment.BindingTypeVariable {
-		return binding, keywordPhase, true
+
+	keywordHit := libraryBindingAt(lib, present, libSym, scopes, keywordPhase)
+	keywordWins := keywordHit != nil && keywordHit.BindingType() != environment.BindingTypeVariable
+
+	// THE ONE NEW RULE: the library's OWN syntax row outranks the core form it
+	// inherited. Primitive-at-export-phase is the LANGUAGE's keyword; Syntax at
+	// keywordPhase is one the library body wrote. Any other pairing keeps the
+	// old precedence, which is why a non-core name (`zif`) and a plain
+	// re-export (`(export car)`) are unaffected — neither produces this pair.
+	ownSyntaxBeatsInheritedForm := phaseWins && keywordWins &&
+		phaseHit.BindingType() == environment.BindingTypePrimitive &&
+		keywordHit.BindingType() == environment.BindingTypeSyntax
+
+	switch {
+	case ownSyntaxBeatsInheritedForm:
+		return keywordHit, keywordPhase, true
+	case phaseWins:
+		return phaseHit, phase, true
+	case keywordWins:
+		return keywordHit, keywordPhase, true
+	default:
+		return nil, phase, false
 	}
-	return nil, phase, false
 }
 
 // libraryBindingAt resolves sym in lib's phase frame, or returns nil when present
