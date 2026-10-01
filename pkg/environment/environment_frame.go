@@ -586,21 +586,42 @@ func (p *EnvironmentFrame) resolveLocal(
 // empty-set query: a reference written outside any macro expansion must not
 // reach a binder introduced inside one.
 //
-// The RLock is released by defer because the probe can panic mid-hold on an
-// ambiguous binding (P8).
+// An ambiguous binding (P8) is raised, by tryResolveGlobal's caller here rather
+// than from inside the hold: the probe reports the tie, the RLock is released by
+// defer, and only then does this panic. The visitor still runs under the lock.
 func (p *EnvironmentFrame) resolveGlobal(
 	key values.Symbol,
 	q syntax.ScopeSet,
 	visitor func(frame *GlobalEnvironmentFrame, ref slotRef) any,
 ) any {
+	q2, ambiguity := p.tryResolveGlobal(key, q, visitor)
+	if ambiguity != nil {
+		panic(ambiguity)
+	}
+	return q2
+}
+
+// tryResolveGlobal is resolveGlobal with the incomparable tie REPORTED rather
+// than raised: ambiguity is nil unless resolution refused a tie. A miss is
+// (nil, nil), which is indistinguishable from a visitor that answered nil —
+// the same conflation resolveGlobal has always had, and every caller already
+// treats both as "nothing here".
+func (p *EnvironmentFrame) tryResolveGlobal(
+	key values.Symbol,
+	q syntax.ScopeSet,
+	visitor func(frame *GlobalEnvironmentFrame, ref slotRef) any,
+) (any, error) {
 	p.global.mu.RLock()
 	defer p.global.mu.RUnlock()
 
-	ref, ok := p.global.resolveRankedLocked(key, q, p.phaseLevel)
-	if !ok {
-		return nil
+	ref, ok, ambiguity := p.global.tryResolveRankedLocked(key, q, p.phaseLevel)
+	if ambiguity != nil {
+		return nil, ambiguity
 	}
-	return visitor(p.global, ref)
+	if !ok {
+		return nil, nil
+	}
+	return visitor(p.global, ref), nil
 }
 
 // localBinding is GetBinding's lexical-chain phase with the tie REPORTED rather
@@ -655,31 +676,67 @@ func (p *EnvironmentFrame) localBinding(key *values.Symbol, q syntax.ScopeSet) (
 //
 // Panics with a wrapped werr.ErrAmbiguousBinding when two incomparable scope
 // sets tie for the maximal match (Racket's "ambiguous binding"); the tie is
-// refused, never broken by order.
+// refused, never broken by order. TryGetBinding reports that tie instead, for
+// the readers asking what a datum denotes rather than resolving a reference.
 func (p *EnvironmentFrame) GetBinding(key *values.Symbol, q syntax.ScopeSet) *Binding {
+	bnd, ambiguity := p.tryGetBinding(key, q)
+	if ambiguity != nil {
+		panic(ambiguity)
+	}
+	return bnd
+}
+
+// TryGetBinding is GetBinding with the incomparable tie REPORTED rather than
+// raised: (nil, true) is "ambiguous", (nil, false) is "unbound", and a resolved
+// binding always comes with false.
+//
+// It exists for the readers whose question is a DATUM's, not a reference's: a
+// quasiquote marker (validate.markerName), a special-form head
+// (compilation.headFormName), a completion listing. For those, an ambiguous tie
+// is not an error in the program — nothing was referenced — so the answer is
+// "denotes no form" and the consumer falls back to the spelling. GetBinding is
+// still the form every reader resolving an actual reference wants, because
+// there the tie IS the program's error.
+//
+// Not to be confused with ExactBinding, whose doc says bulk rows are not
+// candidates: this one is all-tier, exactly as GetBinding is.
+func (p *EnvironmentFrame) TryGetBinding(key *values.Symbol, q syntax.ScopeSet) (*Binding, bool) {
+	bnd, ambiguity := p.tryGetBinding(key, q)
+	return bnd, ambiguity != nil
+}
+
+// tryGetBinding is the one body GetBinding and TryGetBinding share. The two
+// refusals keep their own messages: GetBinding's names the local chain's tie,
+// tryResolveRankedLocked's the store's, and the local one must not fall through
+// to the global phase (which would mask the ambiguity behind an unrelated
+// global of the same name).
+func (p *EnvironmentFrame) tryGetBinding(key *values.Symbol, q syntax.ScopeSet) (*Binding, error) {
 	bnd, ambiguous := p.localBinding(key, q)
 	if ambiguous {
-		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
+		return nil, werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
 			"GetBinding: identifier %q resolves ambiguously among incomparable hygienic scope sets",
-			key.Key))
+			key.Key)
 	}
 	if bnd != nil {
-		return bnd
+		return bnd, nil
 	}
 
 	// The scope filter lives in the ranked probe, which both selects the maximal
 	// match within the winning tier and rejects incompatible candidates.
-	gResult := p.resolveGlobal(*key, q, func(g *GlobalEnvironmentFrame, ref slotRef) any {
+	gResult, ambiguity := p.tryResolveGlobal(*key, q, func(g *GlobalEnvironmentFrame, ref slotRef) any {
 		binding := g.bindings[ref.slot]
 		if binding != nil {
 			return binding
 		}
 		return nil
 	})
-	if gResult != nil {
-		return gResult.(*Binding)
+	if ambiguity != nil {
+		return nil, ambiguity
 	}
-	return nil
+	if gResult != nil {
+		return gResult.(*Binding), nil
+	}
+	return nil, nil
 }
 
 // ExactBinding resolves key under q in this frame's lexical chain, then among the

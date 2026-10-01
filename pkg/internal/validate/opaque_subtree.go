@@ -227,11 +227,19 @@ const (
 // A nil env means spelling-only. That is what a node carrying no environment
 // gets (opaqueRawSyntax), and it is also what the whole walk did before markers
 // could be renamed.
+//
+// The resolution is TryGetBinding, not GetBinding, because this head is a
+// DATUM: an incomparable scope-set tie here is not a reference the program got
+// wrong, so it answers "denotes no form" and falls through to the spelling,
+// exactly as an unbound head does. GetBinding would raise out of a walk whose
+// whole job is to be conservative, turning a hygiene curiosity into a
+// compile-time crash.
 func markerName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) string {
 	if env == nil {
 		return sym.Key()
 	}
-	denoted := environment.DenotedForm(env.GetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes())))
+	bnd, _ := env.TryGetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes()))
+	denoted := environment.DenotedForm(bnd)
 	if denoted != "" {
 		return denoted
 	}
