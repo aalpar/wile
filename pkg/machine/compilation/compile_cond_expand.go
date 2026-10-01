@@ -17,6 +17,7 @@ package compilation
 import (
 	"context"
 
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 
 	"github.com/aalpar/wile/pkg/syntax"
@@ -65,7 +66,7 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 		// structural constraint on the whole clause list, so it is checked on
 		// every clause — before the matched-clause short-circuit below, which
 		// would otherwise stop scanning once an earlier clause matches.
-		if isElseClause(reqExpr) && hasNext {
+		if isElseClause(p.env, reqExpr) && hasNext {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
 				"cond-expand: else must be the last clause"))
 		}
@@ -74,7 +75,7 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 			return nil // Already found a match; keep scanning to validate else position.
 		}
 
-		req, err := parseFeatureRequirement(ctx, reqExpr)
+		req, err := parseFeatureRequirement(ctx, p.env, reqExpr)
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement"))
 		}
@@ -177,14 +178,56 @@ func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext
 	return err
 }
 
-// isElseClause reports whether a clause's feature-requirement expression is the
-// literal symbol else. Used to enforce R7RS §4.2.1's else-must-be-last constraint.
-func isElseClause(reqExpr syntax.SyntaxValue) bool {
+// featureName returns the name a cond-expand feature requirement's identifier
+// DENOTES, and its spelling when it denotes none. It is compilation.headFormName
+// for this grammar: the deciding identifier is `else`, a keyword a program can
+// rename or prefix on import, so the decision belongs to the resolved binding
+// rather than to the spelling at the use site. `cond`'s own `else` has decided
+// this way since pattern literals went binding-aware
+// (match.sameLiteralBinding, whose doc names a renamed `else` as the case it
+// exists for); `cond-expand`'s did not, which is the whole of I025. Neither
+// oracle can be asked about this form -- see the gate test for why -- so R7RS
+// section 5.6.1 and that shipped precedent are the authority.
+//
+// It resolves through TryGetBinding for the reason markerName does: a feature
+// requirement is a DATUM the compiler reads, not a reference the program
+// evaluates, so an incomparable scope-set tie answers "denotes nothing" and the
+// spelling stands rather than raising out of clause selection.
+//
+// AMBIGUITY POLARITY, decided rather than inherited. The spelling fallback makes
+// the two deciding sites opposite: in parseFeatureRequirement an ambiguous
+// identifier is not treated as `else`, so its clause does not match
+// (conservative), while in isElseClause the else-must-be-last refusal does not
+// fire (permissive). The spelling polarity is nevertheless FORCED, by the
+// `"else keyword" -> *elseRequirement` row under a bare namespace
+// (coverage_improvement_test.go) together with plain `else` having to keep
+// selecting its clause: a ""-on-ambiguity polarity turns that row red.
+//
+// The requirement grammar's other words -- library, and, or, not -- stay on
+// spelling. They are syntax of the grammar, not identifiers a program can bind.
+func featureName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) string {
+	if env == nil {
+		return sym.Key()
+	}
+	bnd, _ := env.TryGetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes()))
+	denoted := environment.DenotedForm(bnd)
+	if denoted != "" {
+		return denoted
+	}
+	return sym.Key()
+}
+
+// isElseClause reports whether a clause's feature-requirement expression
+// DENOTES else. Used to enforce R7RS section 4.2.1's else-must-be-last
+// constraint, and it must agree with parseFeatureRequirement's own else arm: a
+// renamed else that selected a clause without having to be last would accept a
+// program both oracles refuse.
+func isElseClause(env *environment.EnvironmentFrame, reqExpr syntax.SyntaxValue) bool {
 	sym, ok := reqExpr.(*syntax.SyntaxSymbol)
 	if !ok {
 		return false
 	}
-	return sym.Key() == "else"
+	return featureName(env, sym) == "else"
 }
 
 // parseFeatureRequirement parses a feature requirement expression.
@@ -195,14 +238,17 @@ func isElseClause(reqExpr syntax.SyntaxValue) bool {
 //   - (or <req> ...) - at least one must be satisfied
 //   - (not <req>) - must NOT be satisfied
 //   - else - always satisfied (only valid as the last clause)
-func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (FeatureRequirement, error) {
+func parseFeatureRequirement(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (FeatureRequirement, error) {
 	switch v := expr.(type) {
 	case *syntax.SyntaxSymbol:
-		name := v.Key()
-		if name == "else" {
+		if featureName(env, v) == "else" {
 			return NewElseRequirement(), nil
 		}
-		return NewFeatureIdentifier(name), nil
+		// A feature identifier keeps its SPELLING. It names a platform feature,
+		// not a binding -- `wile` denotes nothing, so featureName answers the
+		// spelling anyway, and a feature sharing a name with some keyword must
+		// not start selecting that keyword's clause.
+		return NewFeatureIdentifier(v.Key()), nil
 
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(v) {
@@ -234,7 +280,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 
 		case "and":
 			// (and <req> ...)
-			reqs, err := parseFeatureRequirementList(ctx, argsExpr)
+			reqs, err := parseFeatureRequirementList(ctx, env, argsExpr)
 			if err != nil {
 				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "and: invalid requirements"))
 			}
@@ -242,7 +288,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 
 		case "or":
 			// (or <req> ...)
-			reqs, err := parseFeatureRequirementList(ctx, argsExpr)
+			reqs, err := parseFeatureRequirementList(ctx, env, argsExpr)
 			if err != nil {
 				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "or: invalid requirements"))
 			}
@@ -255,7 +301,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "not: expected one requirement"))
 			}
 			reqExpr := argsPair.SyntaxCar()
-			req, err := parseFeatureRequirement(ctx, reqExpr)
+			req, err := parseFeatureRequirement(ctx, env, reqExpr)
 			if err != nil {
 				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "not: invalid requirement"))
 			}
@@ -271,7 +317,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 }
 
 // parseFeatureRequirementList parses a list of feature requirements.
-func parseFeatureRequirementList(ctx context.Context, expr syntax.SyntaxValue) ([]FeatureRequirement, error) {
+func parseFeatureRequirementList(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue) ([]FeatureRequirement, error) {
 	if syntax.IsSyntaxEmptyList(expr) {
 		return nil, nil
 	}
@@ -283,7 +329,7 @@ func parseFeatureRequirementList(ctx context.Context, expr syntax.SyntaxValue) (
 
 	var reqs []FeatureRequirement
 	_, err := syntax.SyntaxForEach(ctx, pair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
-		req, err := parseFeatureRequirement(ctx, v)
+		req, err := parseFeatureRequirement(ctx, env, v)
 		if err != nil {
 			return err
 		}

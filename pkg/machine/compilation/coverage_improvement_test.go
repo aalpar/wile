@@ -291,7 +291,7 @@ func TestParseFeatureRequirement(t *testing.T) {
 			stx, err := p.ReadSyntax(context.TODO())
 			qt.Assert(t, err, qt.IsNil)
 
-			req, err := parseFeatureRequirement(context.Background(), stx)
+			req, err := parseFeatureRequirement(context.Background(), env, stx)
 
 			if tc.expectError {
 				qt.Assert(t, err, qt.IsNotNil)
@@ -417,7 +417,7 @@ func TestParseFeatureRequirementList(t *testing.T) {
 	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	reqs, err := parseFeatureRequirementList(context.Background(), stx)
+	reqs, err := parseFeatureRequirementList(context.Background(), env, stx)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, reqs, qt.HasLen, 3)
 }
