@@ -49,6 +49,20 @@ func newDenotingLiteralTestBinding(form string, bt environment.BindingType, impo
 	return q
 }
 
+// newRootedLiteralTestBinding builds a binding that carries an OriginRef, which
+// is what the origin comparison in literalNotShadowed's denoted == "" arm needs
+// in order to answer R7RS §4.3.2's question directly instead of by spelling. An
+// import mints a fresh *Binding and copies the root, so two bindings sharing a
+// root are the same definition under any rename.
+func newRootedLiteralTestBinding(name, rootLib, rootName string, imported bool) *environment.Binding {
+	q := newLiteralTestBinding(name, environment.BindingTypeVariable, imported)
+	q.UpdateMeta(func(m *environment.BindingMeta) bool {
+		m.Origin = &environment.OriginRef{RootLib: rootLib, RootName: rootName}
+		return true
+	})
+	return q
+}
+
 // TestSameLiteralBinding pins the identity rule the definition-site pin is
 // compared with, as a truth table.
 //
@@ -188,6 +202,41 @@ func TestLiteralNotShadowed(t *testing.T) {
 			want:         false,
 		},
 		{name: "unbound at the use site", defB: pinned, useB: nil, sameSpelling: true, want: false},
+		{
+			// The nil-defB tolerance, and the reason the origin comparison is
+			// written `defB != nil && defB.Origin() != nil`. Origin() reaches
+			// (*Binding).Meta(), which dereferences its receiver, where
+			// DenotedForm and sameLiteralBinding both nil-guard. Without the
+			// guard this row PANICS; with it, the arm falls back to spelling
+			// exactly as it did before origins were consulted. The one
+			// production call site is guarded, so the tolerance is this
+			// table's, not a live path's — which is why it is pinned here.
+			name:         "an unbound definition side falls back to spelling",
+			defB:         nil,
+			useB:         importedShadow,
+			sameSpelling: true,
+			want:         true,
+		},
+		{
+			// The BOUNDARY close, at unit level: both sides carry an origin and
+			// the origins AGREE, so a prefixed re-export is the same binding
+			// under another spelling and sameSpelling stops deciding.
+			name:         "one root under two spellings is one literal",
+			defB:         newRootedLiteralTestBinding("lit", "w16lib", "lit", false),
+			useB:         newRootedLiteralTestBinding("p:lit", "w16lib", "lit", true),
+			sameSpelling: false,
+			want:         true,
+		},
+		{
+			// The NARROWING, at unit level: both origins present and DIFFERENT
+			// refuses what sameSpelling accepted. Two libraries' same-named
+			// exports are two definitions, and §4.3.2 asks about bindings.
+			name:         "two roots under one spelling are two literals",
+			defB:         newRootedLiteralTestBinding("lit", "w16lib", "lit", false),
+			useB:         newRootedLiteralTestBinding("lit", "w16other", "lit", true),
+			sameSpelling: true,
+			want:         false,
+		},
 		{
 			// defB denotes "else"; an imported binding denoting a DIFFERENT
 			// form ("=>") must not satisfy it, regardless of spelling — this is
