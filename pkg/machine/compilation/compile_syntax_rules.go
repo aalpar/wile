@@ -236,7 +236,9 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 // phase before falling back to the special-form registry phase — the literal is
 // compared at the phase where the macro is used, and a syntax-case inside a
 // (lambda (stx) ...) transformer writes its literals one phase above that. The use
-// side does not descend; see useSiteFallbackPhases.
+// side does not descend; it CLIMBS one phase, for the opposite reason — see
+// useSiteLiteralBinding. (This read "see useSiteFallbackPhases", a name no
+// revision of this tree ever defined.)
 //
 // Returns nil (no pins, today's behaviour verbatim) for a nil env or no literals.
 func resolveLiteralDefinitions(env *environment.EnvironmentFrame, literalSyntax syntax.LiteralSymbols) map[string]match.LiteralPin {
