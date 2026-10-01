@@ -668,10 +668,42 @@ func (p *GlobalEnvironmentFrame) healWriteLocked(gi *GlobalIndex) (int, bool) {
 // nothing WITHIN a tier either: two slots sharing one tier necessarily carry
 // distinct scope sets, because CreateGlobalBindingAt refuses a second slot
 // with an equal scope set at identical coordinates.
+//
+// The rule itself lives in tryResolveRankedLocked, which REPORTS the tie; this
+// is the raising form, and it keeps the name because the name is what the rest
+// of the tree cites.
 func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase) (slotRef, bool) {
-	ref, _, ok := p.probeRankedLocked(key, q, phase, tierExactMutable)
+	ref, ok, ambiguity := p.tryResolveRankedLocked(key, q, phase)
+	if ambiguity != nil {
+		panic(ambiguity)
+	}
+	return ref, ok
+}
+
+// tryResolveRankedLocked is resolveRankedLocked with the incomparable tie
+// REPORTED rather than raised: ambiguity is nil unless resolution refused a tie,
+// and carries the wrapped werr.ErrAmbiguousBinding resolveRankedLocked panics
+// with. The two refusals keep their distinct messages — a per-symbol tie and a
+// tie across bulk rows are different configurations and a diagnostic that
+// cannot tell them apart is worse than either.
+//
+// It cannot route through probeRankedLocked the way probeRankedLocked wraps
+// probeTiersLocked, because the bulk arm below does real work past the raise
+// (materializeBulkLocked, bulkResolutions.Add) and so must see the flag rather
+// than a panic.
+//
+// Caller MUST hold at least a read lock on p.mu. This function does not panic,
+// so a caller that only ever reaches it may release the lock however it likes;
+// resolveRankedLocked, which does panic, still requires defer.
+func (p *GlobalEnvironmentFrame) tryResolveRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase) (slotRef, bool, error) {
+	ref, _, ambiguous, ok := p.probeTiersLocked(key, q, phase, tierExactMutable)
+	if ambiguous {
+		return slotRef{}, false, werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
+			"resolveRankedLocked: identifier %q resolves ambiguously among incomparable hygienic scope sets",
+			key.Key)
+	}
 	if ok || len(p.bulkRows) == 0 {
-		return ref, ok
+		return ref, ok, nil
 	}
 	// THE ONE NEW RULE (design section 3.1, from Racket's
 	// syntax/binding-table.rkt): a per-symbol slot and a bulk row at EQUAL tier
@@ -725,19 +757,19 @@ func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax
 		// Consulting rows on its MISS must not resolve where it would have
 		// refused — that is the divergence Task 5 closed, and returning the
 		// first-seen row here would re-open it one layer down.
-		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
+		return slotRef{}, false, werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
 			"resolveRankedLocked: identifier %q is supplied by incomparable hygienic scope sets across bulk rows",
-			key.Key))
+			key.Key)
 	}
 	if !bulkOk {
-		return ref, false
+		return ref, false, nil
 	}
 	materialized, mok := p.materializeBulkLocked(key, bulkRow, bulkBnd)
 	if !mok {
-		return ref, false
+		return ref, false, nil
 	}
 	p.bulkResolutions.Add(1)
-	return materialized, true
+	return materialized, true, nil
 }
 
 // materializeBulkLocked turns a winning bulk row into an ordinary slotRef, so

@@ -342,6 +342,14 @@ func asFormDenoting(env *environment.EnvironmentFrame, expr syntax.SyntaxValue, 
 // resolves to no keyword binding answers with its spelling, which keeps every
 // pre-existing answer for unbound heads and variables unchanged; only a keyword
 // bound under another name answers differently.
+//
+// An incomparable scope-set tie answers with the spelling too, through
+// TryGetBinding rather than GetBinding. This function is asked what a head
+// LOOKS LIKE before anything commits to compiling it, so a tie must not raise
+// here; the reference's own resolution will raise later if the program really
+// does reference it. validate.markerName is the same function on the other side
+// of the validate → machine edge and resolves the same way; quasiHeadDepth's
+// doc states the agreement as a requirement.
 func headFormName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) string {
 	symVal, ok := sym.Unwrap().(*values.Symbol)
 	if !ok {
@@ -350,7 +358,8 @@ func headFormName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) s
 	if env == nil {
 		return symVal.Key
 	}
-	denoted := environment.DenotedForm(env.GetBinding(symVal, syntax.ScopesOf(sym.Scopes())))
+	bnd, _ := env.TryGetBinding(symVal, syntax.ScopesOf(sym.Scopes()))
+	denoted := environment.DenotedForm(bnd)
 	if denoted != "" {
 		return denoted
 	}
