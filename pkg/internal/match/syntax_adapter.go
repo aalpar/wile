@@ -98,12 +98,22 @@ type BindingChecker interface {
 	// the frame's own lexical chain at its own phase, then what the LANGUAGE
 	// supplies there (else, =>, and every special-form name sit at (phase 0,
 	// sealed); a higher phase reaches them through the dialect's declared bulk
-	// rows, not through a phase-blind coordinate), and no other phase. Searching
-	// further would let one phase's binding of the name decide another phase's
-	// literal. ok is false when resolution was ambiguous.
+	// rows, not through a phase-blind coordinate), and then — only on a clean
+	// miss — the phase ONE ABOVE. ok is false when resolution was ambiguous.
 	//
-	// The implementation is compilation.lookupLiteralBinding; its doc carries the
-	// ordering argument and must agree with this one.
+	// THE ONE PHASE ABOVE, and nothing beyond it. This read "and no other phase"
+	// until I169, on the reasoning that one phase's binding of a name must not
+	// decide another phase's literal. That reasoning is right about every phase
+	// except +1, where it is not another program's binding at all: a
+	// define-syntax binds at NextPhase(), so an identifier naming a USER MACRO
+	// is one above the use site BY CONSTRUCTION. Refusing to look there made a
+	// pattern literal that names a macro match nothing and lose its clause
+	// silently. The descent is still refused, and so is +2.
+	//
+	// The implementation is compilation.useSiteLiteralBinding over
+	// compilation.lookupLiteralBinding; their docs carry the ordering argument
+	// (own-phase per-symbol, own-phase bulk, THEN the climb) and must agree with
+	// this one.
 	GetLiteralBinding(sym string, scopes syntax.Scopes) (*environment.Binding, bool)
 }
 

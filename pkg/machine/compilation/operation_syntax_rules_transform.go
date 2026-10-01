@@ -50,6 +50,7 @@ package compilation
 
 import (
 	"fmt"
+	"math"
 	"slices"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -94,12 +95,69 @@ func (p *envBindingChecker) GetBinding(sym string, scopes syntax.Scopes) *enviro
 	return p.env.GetBinding(s, syntax.ScopesOf(scopes))
 }
 
-// GetLiteralBinding resolves the use-site side of the R7RS §4.3.2 comparison:
-// the frame's own lexical chain at its own phase, and what the language supplies
-// through the dialect's bulk rows last. No other phase: the use site's phase is a known, exact fact, and
-// another phase's binding of the name is a different program's.
+// GetLiteralBinding resolves the use-site side of the R7RS §4.3.2 comparison.
+// See useSiteLiteralBinding for the order and for why the use side climbs one
+// phase where the definition side descends.
 func (p *envBindingChecker) GetLiteralBinding(sym string, scopes syntax.Scopes) (*environment.Binding, bool) {
-	return lookupLiteralBinding(p.env, sym, scopes, nil)
+	return useSiteLiteralBinding(p.env, sym, scopes)
+}
+
+// useSiteLiteralBinding is the USE side of the §4.3.2 comparison: env's own
+// lexical chain at its own phase, then what the language supplies through the
+// dialect's bulk rows, then — and only on a clean miss — the phase ONE ABOVE.
+//
+// THE CLIMB, and why it is not an entry in lookupLiteralBinding's fallbacks
+// loop. A define-syntax binds at NextPhase(), so an identifier that names a
+// USER MACRO is not at the use site's own phase at all: it is one above. A
+// pattern literal naming such a macro therefore found nothing, and the clause
+// that should have matched silently lost to the next one — I169, where
+// (define-syntax topelse ...) beside (syntax-rules (topelse) ...) answered
+// `other` against `lit` from both petite 10.4.1 and racket.
+//
+// Folding phase+1 into the fallbacks loop was measured to change the answer for
+// a user (define-syntax else ...) shadowing the dialect's auxiliary keyword,
+// because the loop runs BEFORE the language's rows. The order has to be
+// own-phase per-symbol, own-phase bulk, then phase+1 — so the climb runs after
+// lookupLiteralBinding has finished, not inside it.
+//
+// GATED THE WAY ITS SIBLING GATES THE DESCENT. NextPhase -> NextPhaseChecked ->
+// AtPhase ends in topLevel.phases.GetOrCreate(phase), a MUTATION of the phase
+// registry, and lookupLiteralBinding's own comment forbids exactly that: a
+// phase the owner has neither instantiated nor bound anything at has nothing to
+// probe, and AtPhase would mint the view as a side effect of a search. The
+// descent honours it with slices.Contains(present, phase); so does this.
+//
+// BOTH use-side callers come through here, deliberately. The other is
+// ExpanderContext.ResolveFreeIdentifier, the free-identifier=? path, and
+// §4.3.2's pattern-literal rule is stated in terms of the same same-binding
+// question free-identifier=? answers. Installing the climb in only one of them
+// would make the two readers disagree about identity, which is the one thing
+// that rule forbids.
+func useSiteLiteralBinding(
+	env *environment.EnvironmentFrame,
+	sym string,
+	scopes syntax.Scopes,
+) (*environment.Binding, bool) {
+	q, ok := lookupLiteralBinding(env, sym, scopes, nil)
+	if q != nil || !ok || env == nil {
+		return q, ok
+	}
+	// A clean miss. int arithmetic, not Phase: Phase is int8, so own+1 at the
+	// ceiling wraps negative, and PresentPhases excludes negatives — the climb
+	// would be skipped for the right answer by the wrong reasoning.
+	next := int(env.PhaseLevel()) + 1
+	if next > math.MaxInt8 || !slices.Contains(env.PresentPhases(), environment.Phase(next)) {
+		return nil, true
+	}
+	v := env.AtPhase(environment.Phase(next))
+	if v == nil {
+		return nil, true
+	}
+	q, ambiguous := v.ExactBinding(values.NewSymbol(sym), syntax.ScopesOf(scopes))
+	if ambiguous {
+		return nil, false
+	}
+	return q, true
 }
 
 // definitionFallbackPhases is the definition site's fallback set: every phase
