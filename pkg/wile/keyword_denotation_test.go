@@ -207,3 +207,70 @@ func TestKeywordImportConflicts(t *testing.T) {
 		qt.Assert(t, err.Error(), qt.Contains, "my-if")
 	})
 }
+
+// TestRenamedElseDecidesACondExpandClause is the gate on I025. `cond-expand`'s
+// `else` is the one deciding identifier in the feature-requirement grammar that
+// a program can rename or prefix on import, so the decision belongs to the
+// binding.
+//
+// NO ORACLE ROW, and that is measured rather than omitted: petite 10.4.1 has no
+// `cond-expand` at its top level at all (`(cond-expand (else 2))` answers
+// `misplaced aux keyword`) and this machine's racket has no `r7rs` collection,
+// so neither oracle can be asked about this form. The authority is therefore
+// R7RS §5.6.1, under which `rename` applies to every exported identifier
+// including an auxiliary keyword, together with the precedent already shipped
+// one file over: this tree's `cond` decides its own `else` by denotation
+// (match.sameLiteralBinding, whose doc names a renamed `else` as the case it
+// exists for). `cond-expand` was the asymmetry.
+//
+// Two answers are red on master, in opposite directions, which is why the fix
+// has to reach both deciding sites and not just the one the item was filed
+// against:
+//
+//   - selection: `(cond-expand (otherwise 2))` raised
+//     `cond-expand: no matching clause`, so a renamed else selected nothing;
+//   - the else-must-be-last refusal: `(cond-expand (otherwise 2) (wile 6))` was
+//     ACCEPTED and answered 6, where the plainly-spelled form refuses. Fixing
+//     only selection would have made that worse, not better — the clause would
+//     then match AND still be allowed in a non-final position.
+//
+// The sibling `cond` row is the control that makes this a measurement rather
+// than a general claim about renaming: it has decided by denotation since
+// pattern literals went binding-aware, and it is green before and after.
+func TestRenamedElseDecidesACondExpandClause(t *testing.T) {
+	const renamed = `(import (scheme base) (rename (scheme base) (else otherwise)))`
+
+	runKeywordRows(t, []keywordRow{
+		{"renamed else selects its cond-expand clause",
+			renamed + ` (cond-expand (otherwise 2))`, "2"},
+		{"renamed else selects it after an unsatisfied feature",
+			renamed + ` (cond-expand (nosuchfeature 1) (otherwise 2))`, "2"},
+		{"sibling cond, the control",
+			renamed + ` (cond (#f 1) (otherwise 2))`, "2"},
+		{"plain else still selects",
+			`(import (scheme base)) (cond-expand (else 5))`, "5"},
+		{"a feature identifier still decides by spelling",
+			`(import (scheme base)) (cond-expand (wile 7) (else 8))`, "7"},
+		{"the requirement grammar's own words are untouched",
+			`(import (scheme base)) (cond-expand ((and wile (not nosuchfeature)) 3) (else 4))`, "3"},
+	})
+
+	// The else-must-be-last half. Both spellings must refuse, and with the same
+	// message: isElseClause and parseFeatureRequirement's else arm answering
+	// differently is precisely the state this task closes.
+	for _, row := range []struct {
+		name string
+		src  string
+	}{
+		{"renamed else must be last", renamed + ` (cond-expand (otherwise 2) (wile 6))`},
+		{"plain else must be last", `(import (scheme base)) (cond-expand (else 2) (wile 6))`},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			eng := keywordDenotationEngine(t)
+			_, err := eng.EvalMultiple(context.Background(), row.src)
+			qt.Assert(t, err, qt.IsNotNil,
+				qt.Commentf("a non-final else must be refused however it is spelled"))
+			qt.Assert(t, err.Error(), qt.Contains, "else must be the last clause")
+		})
+	}
+}
