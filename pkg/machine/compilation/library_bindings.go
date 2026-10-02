@@ -780,21 +780,27 @@ const (
 // strictly more machinery for the same separation the predicate already gives.
 // Recorded in the plan's Task 11.
 //
-// (phase 1, sealed) is still NOT available: bootstrap macros and primitive
-// expanders live there (primitive_expanders_registry.go registers through
-// SealedWriteViewAt(PhaseExpand); `when` is present in SealedSlots()). Relocating
-// a phase-1 install would land an imported macro on exactly a bootstrap macro's
-// coordinates with the same ambient scope set, so CreateGlobalBindingAt REUSES
-// the slot, created == false, importConflicts returns false (the bootstrap macro
-// is not IsImported()), and SetOwnGlobalValue overwrites the sealed transformer
-// IN PLACE, ENGINE-WIDE — then markBindingImported stamps the startup set as
-// imported. Every compiled pin to it would then see the import's value, and no
-// test would name it: from the outside, the import "works".
+// (phase 1, sealed) IS available, and the paragraph that used to stand here
+// argued otherwise. It said bootstrap macros and primitive expanders live at
+// that coordinate (true — primitive_expanders_registry.go registers through
+// SealedWriteViewAt(PhaseExpand), and `when` is in SealedSlots()), and
+// concluded that relocating a phase-1 install would reuse one of their slots and
+// overwrite a sealed transformer in place, engine-wide. The conclusion does not
+// follow, and the premise it skips is the whole separation this placement rests
+// on: CreateImportedGlobalBindingAt mints the slot STAMPED, and
+// createGlobalBindingAt's `sealed && IsImported() != imported` refusal carries
+// NO PHASE RESTRICTION. A bootstrap macro is not IsImported(), so the refusal
+// fires, no slot is reused, and the import gets one of its own at
+// tierExactImported — ranked between the user's mutable tier and the startup
+// set's, at every phase.
 //
-// So the phase is re-checked here rather than trusted from the call site: a
-// placementShadowable install at any phase but 0 falls back to the view. A
-// for-syntax import ((import (for (lib) expand))) routes its BASE install through
-// AtPhase(1) and would otherwise reach the hazard through the safe-looking site.
+// So the phase is NOT re-checked here. It used to be, and the cost was
+// I127: a phase-1 install fell back to the view, landed on the user's own slot,
+// and an import written after a define-for-syntax of the same name overwrote it
+// — while the same pair at phase 0 behaved correctly and both orders agree in
+// Racket. TestOrderSymmetryMatrix (pkg/wile) is the ratchet; its phase-0 rows
+// are the non-vacuity guard, and TestImportDoesNotOverwriteSealedBootstrapMacro
+// is the store-side assertion that the refusal above really is what holds.
 //
 // # One slot, four operations
 //
@@ -820,7 +826,7 @@ func installImportedBinding(
 	ambient := syntax.Scopes{}
 	var idx *environment.GlobalIndex
 	var created bool
-	if placement == placementShadowable && env.PhaseLevel() == environment.PhaseRuntime {
+	if placement == placementShadowable {
 		// CreateImportedGlobalBindingAt, not the plain form: the base's own
 		// binding sits at exactly this coordinate with an equal scope set, so the
 		// plain reuse rule hands back the STARTUP SET's slot and this function then
@@ -907,9 +913,9 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKe
 			// an empty coordinate, the startup set is at the same (phase, sealed)
 			// pair and is separated by the stamp alone. A user top-level define
 			// gets its own tierExactMutable slot above both and shadows rather than
-			// assigning through the import. At any other base phase
-			// installImportedBinding falls back to the view — see the hazard in its
-			// doc, which is where the "empty coordinate" argument was falsified.
+			// assigning through the import. This holds at EVERY base phase now: the
+			// phase re-check installImportedBinding used to apply is gone, and its
+			// doc carries both the argument and the ratchet.
 			phaseEnv := targetEnv.AtPhase(basePhase)
 			localSym := values.NewSymbol(localName)
 			err := installImportedBinding(phaseEnv, localSym, libBinding.BindingType(),
@@ -942,26 +948,27 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKe
 			// fresh but the propagated (e.g. expand) entry already exists.
 			propagateEnv := targetEnv.AtPhase(propagatePhase)
 			propagateSym := values.NewSymbol(localName)
-			// DELIBERATELY placementInPlace, and this is a REFUSAL, not an omission.
+			// Still placementInPlace, and it is now a SCHEDULING boundary rather
+			// than the safety refusal the paragraph here used to argue.
 			//
-			// The whole point of the propagation is that propagatePhase > 0, so the
-			// shadowable tier would resolve to (phase 1, sealed) — which, unlike
-			// (phase 0, sealed), is NOT an empty coordinate. Bootstrap macros
-			// and primitive expanders live there (`when` is in SealedSlots()). An
-			// imported macro of the same name would land on exactly those coordinates
-			// with the same ambient scope set, so CreateGlobalBindingAt REUSES the
-			// slot, created == false, importConflicts returns false (the bootstrap
-			// macro is not IsImported()), SetOwnGlobalValue overwrites the sealed
-			// ambient transformer IN PLACE and ENGINE-WIDE, and markBindingImported
-			// stamps the startup set as imported. From the outside the import would
-			// simply "work"; no existing test names it.
+			// That paragraph said the shadowable tier at (phase 1, sealed) would
+			// reuse a bootstrap macro's slot and overwrite a sealed transformer in
+			// place. It cannot: CreateImportedGlobalBindingAt mints the slot
+			// stamped and createGlobalBindingAt's
+			// `sealed && IsImported() != imported` refusal has no phase
+			// restriction, so the two populations never share a slot at any phase.
+			// See installImportedBinding's doc, where the argument is spelled out,
+			// and note that the recipe which used to be offered as a demonstration
+			// of the hazard — flipping this constant to placementShadowable — is a
+			// MEASURED NO-OP both before and after that gate was removed, precisely
+			// because the stamp already separates them.
 			//
-			// Relocating this site is a SEPARATE DECISION that needs its own way to
-			// keep imports off the startup set's coordinates — a distinct rank, or a
-			// scope set that is not the ambient one. It is not a matter of passing the
-			// other constant here. Until then a phase-1 define-syntax over an import
-			// still supersedes in place, which is the known residual recorded in
-			// TODO.md against the Imported arm of IsStable().
+			// What relocating THIS site changes is the shadow-versus-supersede
+			// answer for a phase-1 define-syntax over an imported macro, which is
+			// a semantic decision with two priced forks rather than a safety
+			// question. Until it is taken, such a define-syntax supersedes in
+			// place — the residual recorded in TODO.md against the Imported arm of
+			// IsStable().
 			err := installImportedBinding(propagateEnv, propagateSym, libBinding.BindingType(),
 				libBinding, externalName, internalName, lib, sourcePhase, " propagated to phase "+propagatePhase.String(),
 				placementInPlace)

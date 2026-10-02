@@ -46,25 +46,40 @@ import (
 // tierExactImported ranks it between the user's mutable tier and the startup
 // set's. See that doc for the measurement that killed the emptiness argument.
 //
-// (phase 1, sealed) is a DIFFERENT matter, and the hazard below is real.
-// Bootstrap macros and primitive expanders live there UNSTAMPED, in
-// tierExactSealed. If the PROPAGATED install (the phase-1 half of a macro
-// import) or the library-internal expand install took the same tier, an
-// imported macro would land on exactly a bootstrap macro's coordinates under
-// the same ambient scope set — so CreateGlobalBindingAt REUSES the slot,
-// `created` is false, importConflicts returns false (a bootstrap macro is not
-// IsImported()), SetOwnGlobalValue overwrites the sealed transformer IN PLACE
-// and ENGINE-WIDE, and markBindingImported then stamps the startup set as
-// imported.
+// (phase 1, sealed) is NOT a different matter, and the hazard this comment used
+// to describe does not exist. Bootstrap macros and primitive expanders do live
+// there unstamped, in tierExactSealed — but an import never reaches their slots,
+// because CreateImportedGlobalBindingAt mints its slot STAMPED and
+// createGlobalBindingAt's `sealed && IsImported() != imported` refusal carries
+// NO phase restriction. A bootstrap macro is not IsImported(), so the refusal
+// fires and the import gets a slot of its own at tierExactImported, at every
+// phase. That is the soundness argument the phase-1 relocation (I127) rests on.
 //
-// The failure is invisible from Scheme: the import "works", and every program
-// that used the bootstrap macro silently gets the imported one. Nothing else in
-// the suite would name it, which is why the assertion is on the STORE and not on
-// an evaluated value.
+// The failure this test guards would still be invisible from Scheme if it could
+// happen — the import "works", and every program using the bootstrap macro
+// silently gets the imported one — which is why the assertion is on the STORE
+// and not on an evaluated value. It stays.
 //
-// To see it fail: change either placementInPlace to placementShadowable in
-// pkg/machine/compilation/library_bindings.go. Verified — the imported=false
-// assertion below goes red.
+// THE RECIPE THIS COMMENT USED TO OFFER IS A MEASURED NO-OP, before and after
+// the phase gate was removed: flipping either placementInPlace to
+// placementShadowable leaves this test and
+// TestImportedBindingTakesTheSealedPhaseZeroTier green, because the stamp
+// already separates the two populations and the placement constant cannot
+// bridge them. The earlier claim that it went red, and the later claim that the
+// phase gate was what neutralised it, are both wrong.
+//
+// To see it fail, bypass the STAMP rather than the placement: in
+// library_bindings.go's installImportedBinding, replace the else arm's
+//
+//	env.MaybeCreateOwnGlobalBinding(localSym, bt, ambient)
+//
+// with
+//
+//	env.GlobalEnvironment().CreateGlobalBindingAt(localSym, bt, ambient, env.PhaseLevel(), true)
+//
+// Verified — the imported=false assertion below goes red. Note that it perturbs
+// the shared non-shadowable path at every phase, so it is a diagnostic
+// mutation, not a candidate change.
 
 const whenShadowLibrary = `(define-library (lib-when-shadow)
   (export when)
