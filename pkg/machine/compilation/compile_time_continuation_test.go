@@ -544,11 +544,21 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 	qt.Assert(t, cont.Template().Literals(), qt.HasLen, 2)
 	qt.Assert(t, cont.Template().Literals()[0], valuestest.SchemeEquals, values.NewString("true"))
 
-	// compileSetBang emits env.GetGlobalIndex(sym), which pins Env to the frame
-	// resolution found. Build the expectation the same way rather than reusing the
-	// create's pin above: the two agree on the slot, but this asserts the literal
-	// the compiler actually emitted, resolved the way the compiler resolves it.
-	storeGI := env.GetGlobalIndex(symX)
+	// CompileValidatedSetBang emits
+	// env.GetGlobalIndexWithScopes(sym, ScopesOf(symbolScopes)) — a SCOPED query,
+	// not the bare-symbol wildcard this comment claimed (compile_validated.go).
+	// Build the expectation the same way rather than reusing the create's pin
+	// above: the two agree on the slot, but this asserts the literal the compiler
+	// actually emitted, resolved the way the compiler resolves it.
+	//
+	// The spelling matters to the ASSERTION, not just to the comment. The pins'
+	// heal QUERIES differ between the two spellings, and SamePin now
+	// discriminates on that — but SchemeEquals routes through values.EqualTo and
+	// hence through GlobalIndex.EqualTo, which this change deliberately leaves
+	// comparing present denotation only. So this row passes either way; it is a
+	// drifted-comment fix, not a consequence of the change, and an implementer
+	// should not go looking for a red here.
+	storeGI := env.GetGlobalIndexWithScopes(symX, syntax.EmptyScopes())
 	qt.Assert(t, storeGI.Env, qt.IsNotNil)
 	qt.Assert(t, cont.Template().Literals()[1], valuestest.SchemeEquals, storeGI)
 

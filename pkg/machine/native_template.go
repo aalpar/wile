@@ -630,6 +630,18 @@ func literalIdentical(a, b values.Value) bool {
 	if reflect.TypeOf(a) != reflect.TypeOf(b) {
 		return false
 	}
+	// A *GlobalIndex is the one value whose EqualTo is NARROWER than pool
+	// interchangeability. EqualTo compares present denotation; a pin also
+	// carries the coordinates and query it will RE-RESOLVE with if its slot is
+	// deleted, and two pins agreeing on the first and differing on the second
+	// are one variable today and two tomorrow. Merging them keeps whichever was
+	// appended first. SamePin asks both halves; see its doc for why EqualTo is
+	// left alone rather than widened.
+	ga, ok := a.(*environment.GlobalIndex)
+	if ok {
+		gb, _ := b.(*environment.GlobalIndex)
+		return ga.SamePin(gb)
+	}
 	return a.EqualTo(b)
 }
 

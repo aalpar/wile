@@ -153,6 +153,48 @@ func (p *GlobalIndex) EqualTo(value values.Value) bool {
 	return v.Index.EqualTo(p.Index)
 }
 
+// SamePin reports whether two pins are interchangeable for the literal POOL:
+// the same present denotation AND the same future one.
+//
+// EqualTo is the store's denotation predicate and this is deliberately not a
+// change to it. (Index, Env, Slot) is what the VM reads and writes today, so two
+// pins agreeing there do denote the same variable NOW, and every caller asking
+// that question is right to get today's answer.
+//
+// The pool's question is different, because a pin outlives the slot it names.
+// `query`, `phase` and `sealed` are what healReadLocked and healWriteLocked
+// re-resolve with after a delete nils the slot — reachable from Scheme through
+// namespace-undefine! — so two pins differing only there have one present
+// denotation and two future ones. Merging them in the pool keeps whichever was
+// appended first and silently hands the other that one's heal.
+//
+// IsAll() is compared SEPARATELY from the members, and that is load-bearing:
+// ScopeSet.Scopes() returns the empty set for the wildcard, so AllScopes() and
+// EmptyScopes() have identical scope MEMBERS and a members-only comparison
+// merges exactly the pair that differs most in what it will heal to.
+//
+// scopeSetsEqual rather than a ScopeFingerprint comparison: the fingerprint
+// would be an exact test too (Fingerprint emits the sorted ids verbatim, so
+// there is no collision hazard, and this is the permitted "same scope set?" use
+// rather than the forbidden subset query), but it allocates two strings per
+// comparison inside an O(n) pool scan where the existing helper allocates
+// nothing.
+func (p *GlobalIndex) SamePin(other *GlobalIndex) bool {
+	if p == nil || other == nil {
+		return p == other
+	}
+	if !p.EqualTo(other) {
+		return false
+	}
+	if p.phase != other.phase || p.sealed != other.sealed {
+		return false
+	}
+	if p.query.IsAll() != other.query.IsAll() {
+		return false
+	}
+	return scopeSetsEqual(p.query.Scopes(), other.query.Scopes())
+}
+
 // slotRef locates one binding of a name and carries its resolution coordinates
 // (design §4.1). slot indexes bindings, as the bare int did; phase and sealed
 // are resolution coordinates — nothing after resolution needs them, which is
@@ -492,13 +534,30 @@ func (p *GlobalEnvironmentFrame) UnscopedKeysAt(phase Phase) []values.Symbol {
 
 	q := make([]values.Symbol, 0, len(p.keys))
 	for k := range p.keys {
-		_, ok := p.resolveRankedLocked(k, syntax.EmptyScopes(), phase)
-		if !ok {
+		if !p.resolvesUnscopedAtLocked(k, phase) {
 			continue
 		}
 		q = append(q, k)
 	}
 	return q
+}
+
+// resolvesUnscopedAtLocked reports whether key resolves under the EMPTY scope
+// set at phase — the question every enumerate-then-dereference listing is
+// really asking, since a name a source-written reference cannot reach must not
+// be offered.
+//
+// AN AMBIGUOUS TIE COUNTS AS UNRESOLVABLE, and that polarity is this consumer's
+// to choose. A listing exists to be dereferenced, so the conservative answer is
+// the one that does not offer a name whose read would raise; the opposite
+// polarity would hand a REPL a completion that panics. It also means this is
+// the non-raising probe: the raising form would turn a tab-completion keystroke
+// into a crash.
+//
+// Caller MUST hold at least a read lock on p.mu. This function does not panic.
+func (p *GlobalEnvironmentFrame) resolvesUnscopedAtLocked(key values.Symbol, phase Phase) bool {
+	_, ok, ambiguity := p.tryResolveRankedLocked(key, syntax.EmptyScopes(), phase)
+	return ok && ambiguity == nil
 }
 
 // NamedSlot pairs a name with one live binding of it. A name can own several
@@ -515,9 +574,13 @@ type NamedSlot struct {
 // walk wants, and it replaces the old union over every phase frame plus every
 // sealed frame — which, now that all of those are views over one store, would
 // range the same map once per view.
+//
+// It is deliberately UNFILTERED, so it includes binders no source-written
+// reference can reach (a macro template's, carrying the intro scope). A listing
+// offered to a user wants ResolvableLiveSlots instead.
 // Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) LiveSlots() []NamedSlot {
-	return p.slotsFiltered(false)
+	return p.slotsFiltered(nil)
 }
 
 // SealedSlots snapshots every live SEALED-tier slot in the store, at any phase.
@@ -526,11 +589,47 @@ func (p *GlobalEnvironmentFrame) LiveSlots() []NamedSlot {
 // since.
 // Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) SealedSlots() []NamedSlot {
-	return p.slotsFiltered(true)
+	keep := func(_ values.Symbol, s slotRef) bool {
+		return s.sealed
+	}
+	return p.slotsFiltered(keep)
 }
 
-// slotsFiltered is the shared body of LiveSlots and SealedSlots.
-func (p *GlobalEnvironmentFrame) slotsFiltered(sealedOnly bool) []NamedSlot {
+// ResolvableLiveSlots is LiveSlots restricted to the slots a source-written
+// reference can actually reach: each slot is kept only when its name resolves
+// under the empty scope set AT THAT SLOT'S OWN PHASE.
+//
+// THE SLOT'S OWN PHASE, not phase 0, and the difference is the whole point. A
+// phase-1 keyword (when, unless, do, case, guard, parameterize, …) does not
+// resolve under an unscoped phase-0 query, so a predicate keyed on phase 0
+// would drop every one of them and leave a listing far worse than the
+// unfiltered one.
+//
+// Filtering HERE rather than in the caller's dedup loop is what makes the
+// map-order hazard impossible instead of merely avoided. BoundNamesAcrossPhases
+// dedups by NAME, and p.keys is a Go map whose iteration order is unspecified;
+// a filter applied after a name was already recorded would make a name owning
+// both a reachable and an unreachable slot present or absent by map order —
+// address-dependent iteration order, which is the class of nondeterminism this
+// tree routes through a seed rather than tolerating. With the filter upstream of
+// every dedup there is no ordering left to get wrong.
+//
+// Cost: one ranked probe per live slot, the same per-name shape UnscopedKeysAt
+// already documents. Both consumers are REPL-completion paths.
+// Thread-safe: uses RLock for read-only access.
+func (p *GlobalEnvironmentFrame) ResolvableLiveSlots() []NamedSlot {
+	keep := func(k values.Symbol, s slotRef) bool {
+		return p.resolvesUnscopedAtLocked(k, s.phase)
+	}
+	return p.slotsFiltered(keep)
+}
+
+// slotsFiltered is the shared body of LiveSlots, SealedSlots and
+// ResolvableLiveSlots. A nil keep accepts every live slot.
+//
+// keep runs while p.mu is held, so a predicate that resolves (as
+// ResolvableLiveSlots' does) must use a *Locked probe.
+func (p *GlobalEnvironmentFrame) slotsFiltered(keep func(k values.Symbol, s slotRef) bool) []NamedSlot {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -540,7 +639,7 @@ func (p *GlobalEnvironmentFrame) slotsFiltered(sealedOnly bool) []NamedSlot {
 			if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
 				continue
 			}
-			if sealedOnly && !s.sealed {
+			if keep != nil && !keep(k, s) {
 				continue
 			}
 			q = append(q, NamedSlot{Name: k, Binding: p.bindings[s.slot]})
