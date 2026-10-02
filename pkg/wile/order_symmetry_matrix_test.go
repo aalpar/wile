@@ -53,12 +53,20 @@ const orderSymmetryLib = `(define-library (vlib)
     (define vname 'from-library)))
 `
 
+const orderSymmetryMacroLib = `(define-library (mlib)
+  (import (scheme base))
+  (export mac)
+  (begin
+    (define-syntax mac (syntax-rules () ((_) 'FROM-LIBRARY)))))
+`
+
 func orderSymmetryEngine(t *testing.T) *wile.Engine {
 	t.Helper()
 	eng, err := wile.NewEngine(context.Background(),
 		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(fstest.MapFS{
 			"vlib.scm": &fstest.MapFile{Data: []byte(orderSymmetryLib)},
+			"mlib.scm": &fstest.MapFile{Data: []byte(orderSymmetryMacroLib)},
 		}),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
@@ -135,6 +143,75 @@ vname`,
 			qt.Assert(t, err, qt.IsNil,
 				qt.Commentf("the user's own definition must win whatever the order"))
 			qt.Assert(t, v.SchemeString(), qt.Equals, "99")
+		})
+	}
+
+	// The MACRO rows, which are P3.11's half of this matrix. A macro import
+	// installs at phase 1, so these are the same question the `var/phase1` rows
+	// above ask, for a syntactic keyword — and R7RS §5.3.1 answers it directly:
+	// a definition of a name bound to a syntactic keyword binds it to a NEW
+	// location, so the user's define-syntax wins in BOTH orders.
+	//
+	// Red on master in the define-then-import order only, which is what made
+	// this a correctness question rather than a preference: master's answer
+	// depended on where the import was written, and phase 0 already shadowed.
+	//
+	// THE ORACLES SPLIT HERE, unlike every other row in this file. Racket
+	// shadows in both orders. Petite 10.4.1 answers FROM-LIBRARY for
+	// define-then-import and FROM-USER for import-then-define — exactly master's
+	// pair of answers. R7RS has spec text, so the spec decides; see
+	// docs/environment/import-and-define.md for the full comparison, including
+	// why the order-dependent reading is the intuitive one.
+	for _, row := range []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			// RED on master: FROM-LIBRARY.
+			name: "mac/phase1/define-then-import",
+			src: `(import (scheme base))
+(define-syntax mac (syntax-rules () ((_) 'FROM-USER)))
+(import (mlib))
+(mac)`,
+			want: "FROM-USER",
+		},
+		{
+			name: "mac/phase1/import-then-define",
+			src: `(import (scheme base) (mlib))
+(define-syntax mac (syntax-rules () ((_) 'FROM-USER)))
+(mac)`,
+			want: "FROM-USER",
+		},
+		{
+			// A BOOTSTRAP macro, not a library one, and the row that shows the
+			// defect was reachable without writing a library at all: on master
+			// `(when 1 2)` here answers 2, because base's `when` replaced the
+			// user's transformer in place and then evaluated its own body. It does
+			// not raise, which the ledger claimed; it silently loses.
+			name: "mac/phase1/user-when-then-base-import",
+			src: `(import (scheme base))
+(define-syntax when (syntax-rules () ((_ a b) 'user-when)))
+(import (scheme base))
+(when 1 2)`,
+			want: "user-when",
+		},
+		{
+			// The non-vacuity guard for the macro rows: an import the user never
+			// redefines still supplies the macro. Without this the three rows
+			// above would pass against a build that had stopped installing
+			// imported macros at all.
+			name: "mac/phase1/import-alone-still-supplies-the-macro",
+			src: `(import (scheme base) (mlib))
+(mac)`,
+			want: "FROM-LIBRARY",
+		},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			eng := orderSymmetryEngine(t)
+			v, err := eng.EvalMultiple(context.Background(), row.src)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, v.SchemeString(), qt.Equals, row.want)
 		})
 	}
 }

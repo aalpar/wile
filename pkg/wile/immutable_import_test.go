@@ -104,21 +104,33 @@ func TestSetBangOnShadowedImportAllowed(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "99")
 }
 
-// TestDefineSyntaxSupersedesImportClearsImported pins the syntax half of the
-// R7RS §5.3.1 supersede rule. A top-level define-syntax over an imported macro
-// reuses the import's (1, mutable) slot and writes the user's transformer, so
-// the import *provenance* has to go with it — exactly as the variable path
-// already does in compile_define.go.
+// TestDefineSyntaxShadowsImportedMacro pins the syntax half of R7RS §5.3.1,
+// which says a definition of a name bound to a syntactic keyword binds it to a
+// NEW LOCATION. So the user's define-syntax gets its own slot and OUTRANKS the
+// import; it does not reuse the import's slot and write through it.
 //
-// Before the fix the syntax path touched only m.Doc, so imported stayed true.
-// IsStable() is `m.Imported || m.Stable`, which meant validate.classifyCallee
-// and the frame-reclaim classifier were told "cannot be rebound" about a
-// binding the user had just rebound.
+// RENAMED AND RE-SPECIFIED 2026-10-02 (P3.11). This read
+// TestDefineSyntaxSupersedesImportClearsImported and asserted
+// `after == before`, pointer-identical, calling that "supersede in place". That
+// was the behaviour, and it was order-dependent: the same pair written in the
+// other order shadowed, so the two orders disagreed, and phase 0 already
+// shadowed while phase 1 superseded — two phases disagreeing about one
+// relation. The import install now takes the shadowable tier at every phase.
 //
-// The pointer equality is the non-vacuity guard: it distinguishes supersede
-// in place from a second slot that merely outranks the first, which would make
-// the flag assertions pass for the wrong reason.
-func TestDefineSyntaxSupersedesImportClearsImported(t *testing.T) {
+// THE ASSERTION IS NOW A RANKING ONE, not an identity one, and that is the
+// whole substance of the change. What must hold is that a read resolves to the
+// user's binding; which slot it lives in is the implementation of that, and
+// pinning the slot pinned the wrong thing. `after != before` is kept as the
+// non-vacuity guard, inverted: it distinguishes a real second slot from a
+// write-through that would make the resolution assertion pass for the wrong
+// reason.
+//
+// The provenance clear is still asserted, and is now about the NEW slot: a
+// binding the user just created is not imported and not stable. IsStable() is
+// `m.Imported || m.Stable`, so a stale true there tells validate.classifyCallee
+// and the frame-reclaim classifier "cannot be rebound" about a binding the user
+// had just rebound.
+func TestDefineSyntaxShadowsImportedMacro(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newEngineWithStdlib(t)
@@ -138,12 +150,16 @@ func TestDefineSyntaxSupersedesImportClearsImported(t *testing.T) {
 
 	after := eng.Namespace().Expand().GetBinding(sym, values.AllScopes())
 	c.Assert(after, qt.IsNotNil)
-	c.Assert(after, qt.Equals, before,
-		qt.Commentf("define-syntax must supersede the import in place, not shadow it"))
+	c.Assert(after, qt.Not(qt.Equals), before,
+		qt.Commentf("define-syntax binds a NEW location (R7RS §5.3.1), so it must not be the "+
+			"import's own binding written through"))
 	c.Assert(after.IsImported(), qt.IsFalse,
-		qt.Commentf("define-syntax supersedes an import, so the import provenance is dropped (R7RS §5.3.1)"))
+		qt.Commentf("the user's own slot is not an import"))
 	c.Assert(after.IsStable(), qt.IsFalse,
-		qt.Commentf("a binding the user just rebound is not stable"))
+		qt.Commentf("a binding the user just created is not stable"))
+	c.Assert(before.IsImported(), qt.IsTrue,
+		qt.Commentf("and the import's binding is UNTOUCHED: shadowing does not reach into it. "+
+			"This is the assertion that fails if the shadow ever regresses to a write-through"))
 
 	result, err := eng.EvalMultiple(ctx, `(when 1)`)
 	c.Assert(err, qt.IsNil)
@@ -240,9 +256,11 @@ func TestSupersedeClearsImportedOnlyAtAMutableCoordinate(t *testing.T) {
 				qt.IsNotNil,
 				qt.Commentf("the import's own slot lost its stamp, which is the same re-tiering seen from underneath"))
 
-			// The SYNTAX path (compile_define_syntax.go). This one really does
-			// supersede IN PLACE — pointer identity below — so the coordinate it
-			// writes through is the coordinate the clear lands on, directly.
+			// The SYNTAX path (compile_define_syntax.go). Since P3.11 this
+			// SHADOWS rather than superseding in place, so the define gets its own
+			// slot and the clear lands on THAT — the import's binding keeps its
+			// stamp. The variable arm above is the one that still re-tiers a
+			// shared slot, which is why the two arms assert different things.
 			synSym := values.NewSymbol("when")
 			before := eng.Namespace().Expand().GetBinding(synSym, values.AllScopes())
 			c.Assert(before, qt.IsNotNil)
@@ -253,13 +271,11 @@ func TestSupersedeClearsImportedOnlyAtAMutableCoordinate(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 
 			after := eng.Namespace().Expand().GetBinding(synSym, values.AllScopes())
-			c.Assert(after, qt.Equals, before,
-				qt.Commentf("premise: define-syntax supersedes in place, so the clear landed HERE"))
+			c.Assert(after, qt.Not(qt.Equals), before,
+				qt.Commentf("premise: define-syntax SHADOWS, so this is the user's own slot"))
 			c.Assert(after.IsImported(), qt.IsFalse)
-			c.Assert(store.IsSealedBindingAt(synSym, values.AllScopes(), environment.PhaseExpand),
-				qt.IsFalse,
-				qt.Commentf("the superseded transformer sits at a SEALED phase-1 coordinate; the clear "+
-					"just moved it out of the import tier and into the startup set's"))
+			c.Assert(before.IsImported(), qt.IsTrue,
+				qt.Commentf("the import's binding keeps its stamp: nothing was cleared in place"))
 		})
 	}
 }

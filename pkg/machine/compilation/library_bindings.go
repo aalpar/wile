@@ -948,30 +948,38 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKe
 			// fresh but the propagated (e.g. expand) entry already exists.
 			propagateEnv := targetEnv.AtPhase(propagatePhase)
 			propagateSym := values.NewSymbol(localName)
-			// Still placementInPlace, and it is now a SCHEDULING boundary rather
-			// than the safety refusal the paragraph here used to argue.
+			// placementShadowable, and this is the SHADOW answer to the
+			// shadow-versus-supersede fork, decided 2026-10-02.
 			//
-			// That paragraph said the shadowable tier at (phase 1, sealed) would
-			// reuse a bootstrap macro's slot and overwrite a sealed transformer in
-			// place. It cannot: CreateImportedGlobalBindingAt mints the slot
-			// stamped and createGlobalBindingAt's
-			// `sealed && IsImported() != imported` refusal has no phase
-			// restriction, so the two populations never share a slot at any phase.
-			// See installImportedBinding's doc, where the argument is spelled out,
-			// and note that the recipe which used to be offered as a demonstration
-			// of the hazard — flipping this constant to placementShadowable — is a
-			// MEASURED NO-OP both before and after that gate was removed, precisely
-			// because the stamp already separates them.
+			// A top-level define-syntax over an imported macro binds a NEW
+			// location; it does not assign through the import. R7RS §5.3.1 says
+			// so in terms, and phase 0 has always behaved that way, so the
+			// alternative made two phases disagree about one relation — and made
+			// the answer depend on whether the define was written before or after
+			// the import.
 			//
-			// What relocating THIS site changes is the shadow-versus-supersede
-			// answer for a phase-1 define-syntax over an imported macro, which is
-			// a semantic decision with two priced forks rather than a safety
-			// question. Until it is taken, such a define-syntax supersedes in
-			// place — the residual recorded in TODO.md against the Imported arm of
-			// IsStable().
+			// It is NOT a safety question, which is what the paragraph here used
+			// to argue. That paragraph said the shadowable tier at
+			// (phase 1, sealed) would reuse a bootstrap macro's slot and overwrite
+			// a sealed transformer in place. It cannot:
+			// CreateImportedGlobalBindingAt mints the slot STAMPED and
+			// createGlobalBindingAt's `sealed && IsImported() != imported` refusal
+			// has no phase restriction, so the two populations never share a slot
+			// at any phase. See installImportedBinding's doc for the argument, and
+			// TestImportDoesNotOverwriteSealedBootstrapMacro for the store-side
+			// assertion. The recipe once offered as a demonstration of the hazard
+			// — flipping this very constant — is a measured no-op for that reason.
+			//
+			// THE ORACLES SPLIT, and Chez is the deviation. Racket shadows in both
+			// orders. Petite 10.4.1 answers FROM-LIBRARY for define-then-import
+			// and FROM-USER for import-then-define, i.e. exactly what Wile used to
+			// answer: last declaration wins, order-dependent. R7RS has spec text
+			// here, so the spec decides and the agreement with Chez does not
+			// preserve it. docs/environment/import-and-define.md is the long form,
+			// including why the order-dependent reading is the intuitive one.
 			err := installImportedBinding(propagateEnv, propagateSym, libBinding.BindingType(),
 				libBinding, externalName, internalName, lib, sourcePhase, " propagated to phase "+propagatePhase.String(),
-				placementInPlace)
+				placementShadowable)
 			if err != nil {
 				return err
 			}

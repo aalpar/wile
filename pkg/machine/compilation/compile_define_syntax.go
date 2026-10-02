@@ -116,12 +116,21 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	binding := expandEnv.GlobalEnvironment().GetOwnGlobalBinding(globalIndex)
 	if binding != nil {
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
-			// Top-level define-syntax supersedes an imported binding
-			// (R7RS §5.3.1), mirroring the variable path in compile_define.go:
-			// the transformer written below lands in the SAME slot, so the
-			// import *provenance* goes with it. Without this, IsStable()
-			// (m.Imported || m.Stable) keeps reporting "cannot be rebound"
-			// about a macro the user has just rebound.
+			// DEAD for the import case since 2026-10-02 (P3.11), and kept
+			// pending one decision rather than deleted. This used to be the
+			// supersede's provenance clear: a top-level define-syntax over an
+			// imported macro reused the import's slot, so the import stamp had
+			// to go with the transformer or IsStable() (m.Imported || m.Stable)
+			// would keep reporting "cannot be rebound" about a macro the user
+			// had just rebound. R7RS §5.3.1 says such a definition binds a NEW
+			// location, so it now SHADOWS: the binding this runs on is the
+			// user's own fresh slot, never imported, and the clear writes false
+			// over false. Measured — a no-op in its place reddens nothing.
+			//
+			// What is NOT separated by that measurement is a define-syntax that
+			// REUSES a mutable slot, i.e. a second define-syntax of one name.
+			// Until someone establishes that path needs nothing here, the
+			// statement stays. Tracked in TODO.md.
 			m.Imported = false
 			if docstring != "" {
 				m.Doc = docstring
