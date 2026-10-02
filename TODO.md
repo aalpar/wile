@@ -687,12 +687,22 @@ two directions: every route that rebinds an import's slot clears the flag (item 
 a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant.
 
 - [x] **`define-syntax` over an imported macro superseded in place and left `imported=true`**
-      [Done 2026-08-09, `297bb18b`]: `m.Imported = false` on the supersede
-      (`compile_define_syntax.go`), symmetric with the variable path (R7RS §5.3.1). The
-      `UpdateMeta` call sat behind `docstring != ""`, so it now runs for every `define-syntax`.
-      Gate `TestDefineSyntaxSupersedesImportClearsImported`
-      (`pkg/wile/immutable_import_test.go`): only its `IsImported()` assertion discriminates; the
-      two premise assertions pass either way and are the non-vacuity guard.
+      [Done 2026-08-09, `297bb18b`; the SUPERSEDE it fixed was itself replaced 2026-10-02]:
+      `m.Imported = false` on the supersede (`compile_define_syntax.go`), symmetric with the
+      variable path (R7RS §5.3.1). The `UpdateMeta` call sat behind `docstring != ""`, so it now
+      runs for every `define-syntax`. Gate (renamed) `TestDefineSyntaxShadowsImportedMacro`
+      (`pkg/wile/immutable_import_test.go`).
+
+- [ ] **RE-OPENED 2026-10-02: the `m.Imported = false` clear in `compile_define_syntax.go` is now
+      DEAD CODE** [Small, filed by P3.11/I128]: since a top-level `define-syntax` over an imported
+      macro SHADOWS rather than superseding in place, the binding that `UpdateMeta` runs on is the
+      user's own freshly created slot, which was never imported — so the clear always writes
+      `false` over `false`. **Measured:** replacing the statement with a no-op reddens nothing in
+      `pkg/wile` or `pkg/machine/compilation`. Not deleted yet, deliberately: the same `UpdateMeta`
+      call still carries the docstring write, and a `define-syntax` that REUSES a mutable slot (a
+      second `define-syntax` of one name) is a path the measurement above does not separate. Decide
+      whether the clear is removable or whether that second path still needs it, and say which in
+      the comment either way — the comment currently explains a supersede that no longer happens.
 
 - [x] **The phase-1 import installs CAN take the shadowable tier, and the argument against it
       was wrong** [Done 2026-10-01, P3.10/I127, branch `fix/import-install-phase-general`]:
