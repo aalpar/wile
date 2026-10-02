@@ -359,7 +359,13 @@ func (p *Namespace) BoundNamesAcrossPhases() []string {
 	// One pass over the owner store, filtered to live slots at any phase, sealed
 	// or not — the set the pre-fold union over every phase frame plus every sealed
 	// frame produced, now that all of those are views over this one store.
-	for _, s := range p.Store().LiveSlots() {
+	// ResolvableLiveSlots, not LiveSlots: this listing is offered to a user and
+	// then dereferenced, so a name no source-written reference can reach — a
+	// macro template's binder, carrying the intro scope — must not appear. The
+	// store does the filtering, at each slot's OWN phase, which also keeps it
+	// upstream of this dedup; see ResolvableLiveSlots for why that ordering is
+	// structural rather than a rule to remember.
+	for _, s := range p.Store().ResolvableLiveSlots() {
 		dup := seen.ContainsOne(s.Name.Key)
 		if dup {
 			continue
