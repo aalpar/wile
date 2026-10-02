@@ -643,6 +643,16 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   (else) …))) (m else)))` gives `other`, Chez `lit`.
 - [ ] A macro expanding to `(begin-for-syntax (define (name x) …))` leaves `name` invisible to
   a later transformer, one form per unit.
+- [ ] A `syntax-rules` TEMPLATE can read a `define-for-syntax` binding, so a phase-0 reference
+  resolves against a phase-1 slot [filed 2026-10-01, measured against Racket]:
+  `(define-for-syntax helper 42)` then `(define-syntax use (syntax-rules () ((_) helper)))` and
+  `(use)` displays `42`; Racket with `(require (for-syntax racket/base))` answers
+  `helper: unbound identifier`. A template emits phase-0 code and a `define-for-syntax` name is
+  not bound there, so the reference should not resolve. The correct channel agrees: referencing
+  the same name from phase-1 code, `(define-for-syntax probe helper)`, compiles in both.
+  Discovered while measuring the `define-for-syntax` scopes/pruner pair — the leak is what made
+  that pair's table read `42` where Racket refuses, so **re-measure any for-syntax visibility
+  claim on the phase-1 channel, never through a template**.
 - [ ] `(eval '(begin (define-syntax m …) (m)) (environment '(scheme base)))` gives `no such
   binding "m"`; two separate `eval`s work.
 - [ ] Go ER transformers receive plain symbols, so `(datum->syntax (car f) …)` fails where the
