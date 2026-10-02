@@ -694,25 +694,24 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
       (`pkg/wile/immutable_import_test.go`): only its `IsImported()` assertion discriminates; the
       two premise assertions pass either way and are the non-vacuity guard.
 
-- [ ] **The phase-1 import installs cannot simply take the T2 tier.** This is the
-      scope the relocation explicitly refused, recorded so nobody "finishes the
-      job" by flipping a constant. `(ExactPhase(1), sealed)` is occupied by
-      bootstrap macros and primitive expanders, so an imported macro would land on
-      a bootstrap macro's exact coordinates under the same ambient scope set:
-      `CreateGlobalBindingAt` reuses the slot, `importConflicts` returns false (a
-      bootstrap macro is not `IsImported()`), and `SetOwnGlobalValue` overwrites
-      the sealed transformer **in place, engine-wide**. Relocating phase 1 needs a
-      way to keep imports off the startup set's coordinates — a distinct rank, or a
-      non-ambient scope set — not a different argument.
-      `TestImportDoesNotOverwriteSealedBootstrapMacro` (`pkg/wile/import_tier_seal_test.go`)
-      is the gate; the whole rest of the suite is blind to this, measured. The
-      file's header states the mutation that reddens it — flip either
-      `placementInPlace` to `placementShadowable` in `library_bindings.go`.
-      **The coordinate got more crowded on 2026-08-10, which raises the price of
-      getting this wrong**: item 3's fix moved the 146 expand-phase primitive
-      copies onto `(1, sealed)` beside the ~60 bootstrap names (`24e08ceb`'s
-      census; intersection 0), so an imported macro landing there now has a
-      larger startup population to collide with, not a smaller one.
+- [x] **The phase-1 import installs CAN take the shadowable tier, and the argument against it
+      was wrong** [Done 2026-10-01, P3.10/I127, branch `fix/import-install-phase-general`]:
+      `installImportedBinding`'s `&& env.PhaseLevel() == environment.PhaseRuntime` conjunct is
+      deleted, so `placementShadowable` routes through `CreateImportedGlobalBindingAt` at every
+      phase. **The refuted premise:** this row said an imported macro would land on a bootstrap
+      macro's exact coordinates and `CreateGlobalBindingAt` would reuse the slot. It cannot —
+      `createGlobalBindingAt`'s `sealed && IsImported() != imported` refusal carries **no phase
+      restriction**, and a bootstrap macro is not `IsImported()`, so the refusal fires, no slot is
+      reused, and the import gets one of its own at `tierExactImported`. The separation is the
+      STAMP, not the phase. **The mutation this row and the test header both advertised is a
+      MEASURED NO-OP**, before and after the deletion: flipping either `placementInPlace` to
+      `placementShadowable` leaves `TestImportDoesNotOverwriteSealedBootstrapMacro` and
+      `TestImportedBindingTakesTheSealedPhaseZeroTier` green, because the placement constant cannot
+      bridge the stamp. The recipe that does redden it bypasses the stamp instead, and the test
+      header now carries it. `TestOrderSymmetryMatrix` (`pkg/wile`) is the new ratchet; its two
+      phase-0 rows pass on master and are the non-vacuity guard. What relocating the PROPAGATED
+      install changes is the shadow-versus-supersede answer for a phase-1 `define-syntax` over an
+      imported macro, which is a semantic fork with two priced options, not a safety question.
 
 - [x] **The phase-1 registry copy was stamped `Stable` over an open writer set** [Done
       2026-08-10, `24e08ceb`]: `phaseTargets` bound `PhaseExpand` through `env.Expand()`, putting
@@ -1060,18 +1059,15 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   by their own harness (a bare `NewEngine` with no source FS resolves no import), a one-line
   cleanup independent of this defect.
 
-- [ ] **RESIDUAL: the writer-side defect survives, and it belongs to Stage B**
-  [Medium, M, filed 2026-09-09 by the fix above]: all three repairs are reader-side. The
-  bad `(ExactPhase(N>0), mutable)` slot is still created, so any OTHER phase-N reader of
-  that name still sees the import first. It is filed rather than fixed because there is no
-  safe writer coordinate today: `installImportedBinding`'s own doc explains that
-  `(ExactPhase(1), sealed)` would land an imported macro on exactly a bootstrap macro's
-  coordinates with the same ambient scope set, so `CreateGlobalBindingAt` REUSES the slot,
-  `created == false`, `importConflicts` returns false (the bootstrap macro is not
-  `IsImported()`), and `SetOwnGlobalValue` overwrites the sealed transformer IN PLACE,
-  ENGINE-WIDE — "from the outside, the import works". Stage A's D12 (route every import
-  through a bulk row of its own) was declined in that same comment. Reopening it is a
-  design decision, not a bugfix.
+- [x] **RESIDUAL: the writer-side defect is FIXED; the premise that blocked it was false**
+  [Done 2026-10-01, P3.10/I127; see "The phase-1 import installs CAN take the shadowable tier"
+  above, which is the same one-line change and carries the measurement]: the bad
+  `(ExactPhase(N>0), mutable)` slot is no longer created — the shadowable arm now routes through
+  `CreateImportedGlobalBindingAt` at every phase, so a phase-N import takes
+  `tierExactImported` and ranks BELOW a user define rather than above it. "There is no safe
+  writer coordinate today" was the blocker, and it rested on a hazard the Imported stamp already
+  makes unreachable. D12 (route every import through a bulk row of its own) stays declined and is
+  no longer needed for this.
   The Stage-B-shaped question underneath: should `else` at phase 1 come from an IMPORT at
   all, or from the dialect's declared initial-import rows? `pkg/machine/compilation/er_macro_compare_test.go`
   currently depends on the import supplying it, which is what killed the writer-side variant.
