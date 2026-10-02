@@ -153,6 +153,48 @@ func (p *GlobalIndex) EqualTo(value values.Value) bool {
 	return v.Index.EqualTo(p.Index)
 }
 
+// SamePin reports whether two pins are interchangeable for the literal POOL:
+// the same present denotation AND the same future one.
+//
+// EqualTo is the store's denotation predicate and this is deliberately not a
+// change to it. (Index, Env, Slot) is what the VM reads and writes today, so two
+// pins agreeing there do denote the same variable NOW, and every caller asking
+// that question is right to get today's answer.
+//
+// The pool's question is different, because a pin outlives the slot it names.
+// `query`, `phase` and `sealed` are what healReadLocked and healWriteLocked
+// re-resolve with after a delete nils the slot — reachable from Scheme through
+// namespace-undefine! — so two pins differing only there have one present
+// denotation and two future ones. Merging them in the pool keeps whichever was
+// appended first and silently hands the other that one's heal.
+//
+// IsAll() is compared SEPARATELY from the members, and that is load-bearing:
+// ScopeSet.Scopes() returns the empty set for the wildcard, so AllScopes() and
+// EmptyScopes() have identical scope MEMBERS and a members-only comparison
+// merges exactly the pair that differs most in what it will heal to.
+//
+// scopeSetsEqual rather than a ScopeFingerprint comparison: the fingerprint
+// would be an exact test too (Fingerprint emits the sorted ids verbatim, so
+// there is no collision hazard, and this is the permitted "same scope set?" use
+// rather than the forbidden subset query), but it allocates two strings per
+// comparison inside an O(n) pool scan where the existing helper allocates
+// nothing.
+func (p *GlobalIndex) SamePin(other *GlobalIndex) bool {
+	if p == nil || other == nil {
+		return p == other
+	}
+	if !p.EqualTo(other) {
+		return false
+	}
+	if p.phase != other.phase || p.sealed != other.sealed {
+		return false
+	}
+	if p.query.IsAll() != other.query.IsAll() {
+		return false
+	}
+	return scopeSetsEqual(p.query.Scopes(), other.query.Scopes())
+}
+
 // slotRef locates one binding of a name and carries its resolution coordinates
 // (design §4.1). slot indexes bindings, as the bare int did; phase and sealed
 // are resolution coordinates — nothing after resolution needs them, which is
