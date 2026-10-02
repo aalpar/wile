@@ -223,6 +223,24 @@ type LibraryImportEvent struct {
 	Imported   []string    // names that actually landed in the importer (after only/except/prefix/rename)
 	Importer   LibraryName // importing library name (zero value for top-level import)
 	Stage      ImportStage // which pipeline pass saw the import; see ImportStage
+
+	// Bindings is what ApplyToExports produced: (phase, LOCAL name) -> EXTERNAL
+	// name. It is the install map, so an observer that keys on it sees exactly
+	// what the importer will see — at the right PHASE, and under the LOCAL name
+	// a rename or prefix gave it.
+	//
+	// Imported is DERIVED from this: the external names, deduplicated and
+	// sorted, with the phase dropped. That loss is why an observer keying on
+	// Imported alone cannot work. It cannot recover the local name (so a
+	// renamed or prefixed import is unfindable) and it cannot recover the phase
+	// (so a for-syntax export is looked up at the wrong one). Both failures are
+	// silent.
+	//
+	// A SNAPSHOT, never the live map. fireImportObserver clones it, because the
+	// observer runs BEFORE CopyLibraryBindingsToEnvAtPhase at both call sites:
+	// publishing the installer's own map would let a third-party
+	// LibraryImportObserver change what gets installed, synchronously.
+	Bindings map[ExportKey]string
 }
 
 // LibraryImportObserver is called when a library is imported.
@@ -377,6 +395,10 @@ func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary,
 		Imported:   imported,
 		Importer:   importer,
 		Stage:      stage,
+		// maps.Clone, not the map itself: see the field's doc. This runs before
+		// the installer reads it, so handing out the live map would make an
+		// observer able to rewrite the import.
+		Bindings: maps.Clone(bindings),
 	})
 }
 

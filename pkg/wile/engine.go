@@ -1635,20 +1635,31 @@ func makeDocRegistrationObserver(libReg *compilation.LibraryRegistry, reg *regis
 			return
 		}
 
-		for _, name := range evt.Imported {
-			internalName := lib.GetInternalName(compilation.ExportKey{Name: name})
+		// Mirror the INSTALL loop, keying on the install map rather than on the
+		// derived name list. evt.Imported is the external names with the phase
+		// dropped and the local name lost, so a loop over it documents a
+		// renamed or prefixed import under a name the program cannot use (or,
+		// finding none, documents nothing at all) and looks a for-syntax export
+		// up at phase 0, where it is not bound.
+		for localKey, externalName := range evt.Bindings {
+			internalName := lib.GetInternalName(compilation.ExportKey{
+				Phase: localKey.Phase,
+				Name:  externalName,
+			})
 			if internalName == "" {
-				internalName = name
+				internalName = externalName
 			}
 
-			// Resolve exactly as the import path does. A bare-name lookup into
-			// lib.Env agrees only while a name has one slot per frame, so it can
-			// document a different binding than the one the import installed.
-			bnd, found := lib.ExportedBinding(internalName)
+			// Resolve exactly as the import path does, AT THE EXPORT'S OWN
+			// PHASE. A bare-name lookup into lib.Env agrees only while a name
+			// has one slot per frame, so it can document a different binding
+			// than the one the import installed.
+			bnd, _, found := lib.ExportedBindingRoot(internalName, localKey.Phase)
 			if !found {
 				continue
 			}
-			registerDocOnlyBinding(reg, name, bnd)
+			// The LOCAL name: that is what the program writes.
+			registerDocOnlyBinding(reg, localKey.Name, bnd)
 		}
 	}
 }
