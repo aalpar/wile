@@ -91,7 +91,7 @@ func addHashtables(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeProcedure,
 			Keywords: []string{"R6RS"}},
 		{Name: "hashtable-hash-function", ParamCount: 1, Impl: PrimHashtableHashFunction,
-			Doc: "Returns the hash function HT uses: for a table built by make-hashtable, the very argument it was made with, even under a rename; for make-equal-hashtable, this namespace's own equal-hash. Answers #f — not a procedure — for eq and eqv tables, which hash by identity. That #f is R6RS, not a shortcut.\n\nExamples:\n  (eq? (hashtable-hash-function (make-equal-hashtable)) equal-hash)  => #t\n  (hashtable-hash-function (make-eq-hashtable))                      => #f", ParamNames: []string{"ht"}, Category: "hashtables",
+			Doc: "Returns the hash function HT uses: for a table built by make-hashtable, the very argument it was made with, even when that is a copy the program holds under another name; for make-equal-hashtable, this namespace's own equal-hash. Answers #f — not a procedure — for eq and eqv tables, which hash by identity. That #f is R6RS, not a shortcut.\n\nExamples:\n  (eq? (hashtable-hash-function (make-equal-hashtable)) equal-hash)  => #t\n  (hashtable-hash-function (make-eq-hashtable))                      => #f", ParamNames: []string{"ht"}, Category: "hashtables",
 			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeAny,
 			Keywords: []string{"R6RS"}},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
