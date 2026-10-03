@@ -12,7 +12,7 @@ implementation notes, and educational articles for a single subsystem.
 | [coverage/](coverage/) | Scheme-side line coverage -- `--cover` reports compatible with `go tool cover` |
 | [dev/](dev/) | Developer guides -- debug methodology, iteration idioms, object pooling, foreign closures, project board |
 | [embedding/](embedding/) | Embedding Wile in Go -- public API design, source loading (FileResolver), MCP server |
-| [environment/](environment/) | Environment and namespace system -- binding scopes, phase hierarchy, environment diagram |
+| [environment/](environment/) | Environment and namespace system -- binding scopes, phase hierarchy, environment diagram, [`import` vs `define`](environment/import-and-define.md) |
 | [extensions/](extensions/) | Extension system -- architecture, authoring, R7RS library integration |
 | [learn/](learn/) | Educational deep-dives -- how hygienic macros work, Scheme debugging primitives, Python vs Scheme for algebra |
 | [numeric/](numeric/) | Numeric tower -- architecture, precision guarantees, NaN-boxing |

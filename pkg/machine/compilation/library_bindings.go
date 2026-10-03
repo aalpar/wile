@@ -582,6 +582,16 @@ func (p *CompiledLibrary) ExportedBindingRoot(internalName string, phase environ
 // accessors, any (mk name v) form) carries {libScope} like a hand-written
 // binder, so those stay exportable.
 func findLibraryBinding(lib *CompiledLibrary, internalName string, phase environment.Phase) (*environment.Binding, environment.Phase, bool) {
+	// A library carrying a resolved-export table answers from it, and a miss is a
+	// refusal rather than a fall-through to the probe below. Both halves matter:
+	// the table's bindings were resolved when the library was built, before any
+	// user code could shadow them, and the refusal is what stops a synthetic
+	// library — whose Env is the live top level — from exporting a user define.
+	if len(lib.resolvedExports) > 0 {
+		bnd, ok := lib.resolvedExports[ExportKey{Phase: phase, Name: internalName}]
+		return bnd, phase, ok && bnd != nil
+	}
+
 	// exportScopes stays a concrete slice: nil and empty are the same query under
 	// ScopeSet (values.ScopesOf), so this is the ambient (empty) set, never the
 	// wildcard.

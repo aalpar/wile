@@ -751,6 +751,19 @@ func setupLibrarySystem(
 	// snapshots (zero-extension profile, or the pre-built-namespace path where
 	// snapshots is empty) registerExtensionLibraries is a no-op, so the full apply
 	// would be wasted.
+	//
+	// THE CONDITION IS A CAPABILITY TEST, NOT A SHADOW DEFENCE, and I137 is why
+	// that distinction is worth stating. The defect was that a synthetic library
+	// re-resolved each export name in this env at IMPORT time, so at level 0,
+	// where this env is the live top level, a user define supplied the export.
+	// Widening this branch to every level would have fixed it by giving every
+	// engine a second base environment, measured at +30% ns/op, B/op and
+	// allocs/op on BenchmarkEngineStartupWithImport. registerExtensionLibraries
+	// resolves its exports HERE instead, once, floored at the sealed tier
+	// (SealedBindingAt), which no user define and no import can reach. So what
+	// this env supplies is REACH — the extension primitives are not in a strict
+	// engine's sealed base at all — and the remaining question is only whether
+	// the names are present, never whose binding wins.
 	synthEnv := env
 	if level > strictLevelOff && len(snapshots) > 0 {
 		synthEnv = ns.NewChildRuntime()
@@ -1313,6 +1326,33 @@ func registerExtensionLibraries(
 		}
 		for _, name := range names {
 			lib.AddExport(environment.PhaseRuntime, name, "")
+
+			// Resolve the export NOW, against the startup set, and record the
+			// binding on the library. Two things follow, and the task (I137) needed
+			// both:
+			//
+			//   - The lookup runs before any user code, so what it finds is the
+			//     primitive the registry just installed. Resolving lazily at import
+			//     time instead let a top-level `(define acos ...)` be exported as
+			//     (wile math)'s acos, including under a rename — a name the user
+			//     never wrote, so R7RS §5.2's "it is an error" latitude does not
+			//     reach it.
+			//   - SealedBindingAt floors the probe at the sealed tier, so a user
+			//     shadow and an import are both below it. That is what lets this
+			//     read the LIVE top level at level 0 instead of needing a second
+			//     base environment built alongside it: the primitives are in env's
+			//     sealed base already, and only the mutable tier is the user's.
+			//
+			// A nil here (a dialect's PrimitiveRemover dropped the name from the
+			// visible registry) records nothing, and the export is then unresolvable
+			// — which is what the name lookup answered too, since the name was not
+			// in env under any tier.
+			bnd := env.GlobalEnvironment().SealedBindingAt(
+				values.NewSymbol(name), values.EmptyScopes(), environment.PhaseRuntime,
+			)
+			if bnd != nil {
+				lib.SetResolvedExport(environment.PhaseRuntime, name, bnd)
+			}
 		}
 		regErr := libReg.Register(lib)
 		if regErr != nil {

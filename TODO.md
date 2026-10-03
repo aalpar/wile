@@ -425,10 +425,39 @@ Most of the phase rows come from `plans/2026-07-10-climbing-tower-design.md` §6
 what the Tier-2 analysis found *in passing*. They are independent of the Tier-2 decision: each is a
 defect at HEAD whether or not Tier 2 is ever built.
 
-- [ ] **Extension-library exports resolve against the live root environment** [Correctness / phase,
-  S]: so a top-level `(define acos …)` reaches an extension library's export.
-  `registerExtensionLibraries` (`pkg/wile/engine.go:1283`) resolves against the live root rather
-  than a sealed snapshot. Found during Tier-2 T2.0a, never filed.
+- [x] **Extension-library exports resolve against the live root environment** [Done 2026-10-02,
+  P3.13/I137, branch `fix/extension-library-export-env`]: a top-level `(define sqrt …)` reached an
+  extension library's export, including under a rename the user never wrote.
+  `registerExtensionLibraries` (`pkg/wile/engine.go`) now resolves each export ONCE, at
+  registration, through `SealedBindingAt` — the startup-set tier, which neither a user define nor
+  an import can reach — and records the binding on the `CompiledLibrary`
+  (`SetResolvedExport`/`resolvedExports`). `findLibraryBinding` answers from that table and
+  **refuses on a miss** rather than falling through to the name lookup; the refusal is the fix, not
+  the table.
+  **The shape matters, and the plan's own two options were both worse.** Shape (a), widening the
+  `level > strictLevelOff && len(snapshots) > 0` conjunct so every engine gets a second base
+  environment, is correct and costs **+29.5% ns/op, +29.9% B/op, +30.3% allocs/op** on
+  `BenchmarkEngineStartupWithImport/small` (interleaved A/B, 6 pairs, two `go test -c` binaries
+  from one tree) — measured, not inherited, and the right order of magnitude for the plan's +38%
+  CLI figure. Shape (b) as filed ("out of the registry snapshot … no second base environment at
+  all") needs new exported registry API to mint primitive bindings outside a frame. The shipped
+  shape resolves out of the environment the task already had and costs **+0.23% ns/op, +0.10%
+  B/op, +49 allocs/op** — ns/op inside the ±1.2% same-binary drift band, so only the alloc numbers
+  are resolvable at all. Tolerance was +5% / +2% / +2%. Labelled observation, not a gate: CLI
+  `-e '(display 1)'` 10.39 → 10.49 ms (30 interleaved pairs, median of best 20).
+  **So `strictLevel` and its conjunct STAY**, where the task's Change paragraph had them deleted.
+  The conjunct was never the shadow defence the paragraph read it as — it is a capability test,
+  because the extension primitives are not in a strict engine's sealed base at all. That
+  distinction is now written where it lives (`setupLibrarySystem`), and `finishEngine`'s warning
+  about moving `strictLevel` onto the `Namespace` if the second conjunct ever goes is still live.
+  **Gate:** `TestExtensionLibraryExportIgnoresUserShadow` (`pkg/wile/engine_library_test.go`), two
+  RED rows on master. It must use `EvalProgram`, not `EvalMultiple`: the CLI's unit is one
+  `(begin …)`, whose top-level hoist creates the define's slot before the import resolves, so the
+  define-AFTER-import row is red only in that shape. Under `EvalMultiple` master answers it
+  correctly by accident. **The §5.2 matrix P3.17 is sequenced on:** plain `(import (wile math))`
+  under a prior `(define (sqrt x) 'hijacked)` still answers `hijacked`, on both sides — the user
+  asked for `sqrt` and defined `sqrt`, so §1.3.2's latitude does apply and Racket agrees. Only the
+  renamed shapes changed. Found during Tier-2 T2.0a, so this is where that sub-step landed.
 - [ ] **A module-level `define-syntax` RHS is evaluated twice** [Correctness, M]: Racket evaluates
   it once. Both `compileDefineSyntaxFromSyntax` and `CompileDefineSyntax` run it, so a transformer
   with a side effect fires twice per definition. Observable, and it makes any

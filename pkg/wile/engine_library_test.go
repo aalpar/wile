@@ -206,3 +206,78 @@ func TestExtensionAsLibrary_NotEnabled(t *testing.T) {
 	_, err = engine.EvalMultiple(ctx, `(import (wile math))`)
 	c.Assert(err, qt.IsNotNil)
 }
+
+// TestExtensionLibraryExportIgnoresUserShadow pins I137: a synthetic extension
+// library's exports denote the primitives the registry installed, not whatever
+// the engine's top level happens to bind by that name now.
+//
+// A synthetic library's Env IS the live top level, so until the exports were
+// resolved at registration time the import path re-resolved each name there and
+// a user define supplied the export. The rename rows are the ones that cannot be
+// excused: `square-root` is a name the user never wrote, so R7RS §5.2's "it is
+// an error" latitude does not reach it. Oracle: racket, the same shape over
+// racket/math, answers the library's procedure under the renamed name.
+//
+// EvalProgram, not EvalMultiple, and that is load-bearing. EvalProgram is the
+// CLI's unit — repeated -e are joined into one (begin …) — and a top-level begin
+// HOISTS a slot for every define before the body compiles. So the shadow slot
+// exists while the import is being resolved whichever side of it the define is
+// written on, which is what makes the second row red too. Under EvalMultiple the
+// define-after row resolves the import before the define's slot exists and master
+// answers correctly by accident.
+//
+// The plain-import row pins what the fix does NOT change: there the user asked
+// for `sqrt` and also defined `sqrt`, so §5.2 does apply and the define keeps
+// winning.
+func TestExtensionLibraryExportIgnoresUserShadow(t *testing.T) {
+	cases := []struct {
+		name string
+		code string
+		want string
+	}{
+		{
+			name: "rename, define before import",
+			code: `(define (sqrt x) 'hijacked)
+			       (import (rename (wile math) (sqrt square-root)))
+			       (square-root 25)`,
+			want: "5",
+		},
+		{
+			name: "rename, define after import",
+			code: `(import (rename (wile math) (sqrt square-root)))
+			       (define (sqrt x) 'hijacked)
+			       (square-root 25)`,
+			want: "5",
+		},
+		{
+			name: "rename, no define",
+			code: `(import (rename (wile math) (sqrt square-root)))
+			       (square-root 25)`,
+			want: "5",
+		},
+		{
+			name: "plain import, define before, user define still wins",
+			code: `(define (sqrt x) 'hijacked)
+			       (import (wile math))
+			       (sqrt 25)`,
+			want: "hijacked",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			ctx := context.Background()
+
+			engine, err := NewEngine(ctx,
+				WithExtension(math.Extension),
+				WithLibraryPaths(),
+			)
+			c.Assert(err, qt.IsNil)
+
+			result, err := engine.EvalProgram(ctx, tc.code, "<test>")
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
