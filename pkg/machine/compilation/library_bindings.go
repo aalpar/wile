@@ -84,9 +84,9 @@ func markBindingImported(target, source *environment.Binding, exportName string,
 	target.UpdateMeta(func(m *environment.BindingMeta) bool {
 		m.Imported = true
 		// Reset any inline-HOF stamp before re-deriving it below: a re-import
-		// overwrites target's value with its source's copy, and the stamp — since
-		// dispatch selects the template by it — must track the CURRENT value, never
-		// a stale template from a prior import of this slot. stampImportedInlineHOF
+		// retargets target's value location at its new source's, and the stamp —
+		// since dispatch selects the template by it — must track the CURRENT value,
+		// never a stale template from a prior import of this slot. stampImportedInlineHOF
 		// re-adds it iff THIS import qualifies. Harmless on a first import (already
 		// unset).
 		m.InlineHOF = false
@@ -102,12 +102,12 @@ func markBindingImported(target, source *environment.Binding, exportName string,
 			m.Assigned = source.IsAssigned()
 			// Carry the docstring across the import boundary so ,doc and the doc
 			// tooling find it on the imported binding (e.g. a (wile control) macro
-			// documented at its define-syntax site). The copy path installs only
-			// the value, so without this the docstring would be lost on import.
+			// documented at its define-syntax site). The install carries only the
+			// value location, so without this the docstring would be lost on import.
 			//
 			// Assigned unconditionally, for the same reason the inline-HOF stamp is
-			// reset above: a re-import replaces target's value, and a docstring left
-			// over from the displaced value would document a value that is no longer
+			// reset above: a re-import retargets target's location, and a docstring
+			// left over from the displaced value would document a value that is no longer
 			// there. A procedure carries its own docstring on its
 			// template and so tracks its value for free; a macro has no template,
 			// making this field the macro path's only carrier — and the only one
@@ -775,9 +775,9 @@ const (
 // path was producing one: CreateGlobalBindingAt's reuse rule matches on
 // (phase, sealed, scopes), an import writes an EMPTY scope set where the base
 // carries NIL, and scopeSetsEqual(nil, []) is true. So `created == false`, the
-// SetOwnGlobalValue below replaced the startup set's value with the library
-// env's copy, and markBindingImported stamped the engine-shared base as
-// imported — after which the own-installs-only predicate refused THE BASE.
+// value install below replaced the startup set's value with the library env's
+// copy (it was a SetOwnGlobalValue then; it shares the location now), and
+// markBindingImported stamped the engine-shared base as imported — after which the own-installs-only predicate refused THE BASE.
 // Measured 2026-09-09 (verified against master, bisected to 183171a1): one slot,
 // same pointer, and `(import (scheme base))` alone stripped `not` from the
 // phase-1 macro vocabulary and made every base primitive it covered
