@@ -303,7 +303,7 @@ func TestHashtableRemembersTheProceduresItWasMadeWith(t *testing.T) {
 						(eq? (hashtable-hash-function h) equal-hash))))`,
 			want: `(#t #t)`},
 		// The pair a program reads off a table is a pair it can write back,
-		// which is what the identity gate in setRememberedOrRecognized must not
+		// which is what the identity gate in rememberedEqualPair must not
 		// break: a second copy carries the same PrimitiveIdentity.
 		{name: "the remembered pair round-trips through make-hashtable",
 			expr: `(begin (import (hashlib) (rnrs hashtables)

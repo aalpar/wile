@@ -670,7 +670,7 @@ func (p *Hashtable) Size() int {
 // The field list is explicit (a struct copy would copy the sync.Map and the
 // atomics), so EVERY write-once field has to be named here or a copy silently
 // loses it — a hazard with no compiler behind it, which is why
-// TestHashtable_CopyCarriesEveryWriteOnceField ratchets the field count. `made`
+// TestHashtableFieldSetRatchet ratchets the field set. `made`
 // is carried by pointer: it is never mutated, and Chez answers a copy's
 // accessors with the original's pair.
 func (p *Hashtable) Copy(mutable bool) *Hashtable {
