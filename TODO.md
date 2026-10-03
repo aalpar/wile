@@ -485,9 +485,25 @@ defect at HEAD whether or not Tier 2 is ever built.
 - [ ] **`define-for-syntax` binds under the empty scope set** [Correctness / hygiene, S]:
   `runDefineForSyntax` writes with ∅ scopes, so the binding is not hygienic and a same-named
   use-site identifier reaches it. Same family as the scope-keyed-global work already shipped.
-- [ ] **`cond-expand (library X)` instantiates X as a side effect** [Correctness, S]: the test
-  performs a real `LoadLibrary`. A feature *test* must not run a library's body; R7RS §4.2.1's
-  `(library …)` clause asks whether the library is available, not for its state.
+- [x] **`cond-expand (library X)` instantiates X as a side effect** [Correctness, Done 2026-10-02,
+  P3.14/I141, branch `fix/cond-expand-library-probe-purity`]: the probe was a real `LoadLibrary`,
+  so asking whether a library was available printed its output and performed its mutations. R7RS
+  §4.2.1 asks whether the library is available, not for its state. Compile and instantiate are now
+  separate steps: `CompiledLibrary` carries a `sync.Once` plus `EnsureInstantiated`, `LoadLibrary`
+  is a wrapper over `loadLibrary(…, instantiate bool)`, and the probe calls the new
+  `LibraryAvailable`, which compiles and stops. **Two consequences worth knowing before touching
+  it.** (1) **A criterion change, deliberate and documented** (`r7rs-differences.md` item 19): a
+  library that compiles but whose BODY raises now answers *available*, where it used to answer
+  *not-available* because the probe ran it and took the raise as evidence. The failure surfaces at
+  the `import`. (2) **Registration now precedes instantiation**, so a probe leaves a compiled
+  library findable with its body pending, and the first real import flushes it — exactly once,
+  however many clauses asked first, which is what the `sync.Once` is for. **Residual, pinned as a
+  labelled row:** the purity is one level deep. Probing X still instantiates the libraries X
+  imports, because a library's own `import` clauses go through the ordinary loader
+  (`resolveImportSets` is the shared prefix for the top-level and library-internal paths, and only
+  the probe's own call is parameterised). Gate
+  `TestCondExpandLibraryProbeDoesNotRunTheBody` (`pkg/wile`), five rows, **three RED on master**:
+  leaf purity, probe-then-import-runs-once, and the criterion row.
 - [ ] **`compileTransformerValue` / `CompileERMacroTransformerExpr` ignore engine configuration**
   [Correctness, S]: both hardcode `DefaultInlineThreshold` and `DefaultMaxExpandDepth`
   (`compile_transformer.go:68`), so `WithInlineThreshold` and `WithMaxExpandDepth` do not reach
