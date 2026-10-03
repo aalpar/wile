@@ -85,7 +85,8 @@ func (p *ExpanderTimeContinuation) isUseSiteScope(scope *syntax.Scope) bool {
 }
 
 // pruneUseSiteScopes strips this run's use-site scopes from the binder position
-// of every definition in a macro's output, recursing through begin.
+// of every definition in a macro's output, recursing through begin and
+// begin-for-syntax.
 //
 // **Why definitions and nothing else.** A use-site scope must be stripped
 // exactly where a binding created inside a macro use is visible OUTSIDE it. A
@@ -121,9 +122,15 @@ func (p *ExpanderTimeContinuation) pruneUseSiteScopes(stx syntax.SyntaxValue) sy
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
 		return stx
 	}
-	_, isBegin := asFormDenoting(p.env, pair, "begin")
-	if isBegin {
-		return p.pruneUseSiteScopesInBegin(pair)
+	// Both splicing heads recurse into their forms. begin-for-syntax is here and
+	// not in pruneDefinitionBinder's list because it binds nothing itself — it is
+	// a route to definitions one phase up, and those definitions are what need
+	// their binders pruned.
+	for _, splice := range []string{"begin", "begin-for-syntax"} {
+		_, isSplice := asFormDenoting(p.env, pair, splice)
+		if isSplice {
+			return p.pruneUseSiteScopesInBegin(pair)
+		}
 	}
 	return p.pruneDefinitionBinder(pair)
 }
@@ -161,12 +168,27 @@ func (p *ExpanderTimeContinuation) pruneUseSiteScopesInBegin(pair *syntax.Syntax
 
 // pruneDefinitionBinder strips use-site scopes from a definition form's binder.
 //
-// Handles the two `define` shapes and `define-syntax`. NOT handled, and named
-// here rather than left to be discovered: define-values, define-record-type, and
-// a library's export list, each of which also creates an externally visible
-// binding. A missed form fails LOUDLY — the reference outside the expansion
-// reports no such binding with compatible scopes — so this is a bug list rather
-// than a hygiene hole, but it is a list.
+// Handles the two `define` shapes, `define-syntax` and `define-for-syntax`. NOT
+// handled, and named here rather than left to be discovered: define-values,
+// define-record-type, and a library's export list, each of which also creates an
+// externally visible binding. A missed form fails LOUDLY — the reference outside
+// the expansion reports no such binding with compatible scopes — so this is a bug
+// list rather than a hygiene hole, but it is a list.
+//
+// define-values and define-record-type are now reachable by a THIRD route, and
+// that is a widening of the bug list rather than a new defect: a macro expanding
+// to (begin-for-syntax (define-values (a b) ...)) hits exactly the gap above, and
+// it did so before this form was added here too. Measured on both sides of the
+// change — refused either way, where Racket answers — so the residual is filed
+// as its own ledger row and is not what this list's third entry bought.
+//
+// define-for-syntax is handled for the reason the whole pair exists. Its binder
+// used to be created under the EMPTY scope set (runDefineForSyntax), which both
+// leaked a macro-private name to later transformers and, by accident, kept a
+// macro-SUPPLIED name reachable. Giving the binder its symbol's scopes closes the
+// leak and breaks the supplied case; pruning it here restores the supplied case
+// alone. Neither half is correct without the other: see the two gate rows in
+// TestForSyntaxBinderScopes, whose r1 and r2 move in opposite directions.
 //
 // define-syntax is handled despite extractDefineName deliberately excluding it
 // (macro bindings live in the expand environment, not the pre-declared runtime
@@ -184,7 +206,7 @@ func (p *ExpanderTimeContinuation) pruneDefinitionBinder(pair *syntax.SyntaxPair
 		return pair
 	}
 	form := headFormName(p.env, keyword)
-	if form != "define" && form != "define-syntax" {
+	if form != "define" && form != "define-syntax" && form != "define-for-syntax" {
 		return pair
 	}
 	cdrPair, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)

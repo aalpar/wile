@@ -44,7 +44,13 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(_ CompileTimeCallContex
 
 // defineForSyntaxParts returns the name a define-for-syntax form binds and the
 // expression whose value it binds, building the lambda for the procedure form.
-func (p *CompileTimeContinuation) defineForSyntaxParts(expr syntax.SyntaxValue) (*values.Symbol, syntax.SyntaxValue, error) {
+//
+// The name comes back as the *syntax.SyntaxSymbol, not its unwrapped
+// *values.Symbol, because the binder needs the symbol's SCOPES and not only its
+// spelling: a macro-introduced name and a user-written one of the same spelling
+// are the same *values.Symbol and differ only there. Unwrapping here is what made
+// runDefineForSyntax bind under the empty set, which is I140.
+func (p *CompileTimeContinuation) defineForSyntaxParts(expr syntax.SyntaxValue) (*syntax.SyntaxSymbol, syntax.SyntaxValue, error) {
 	err := p.ensureState("define-for-syntax")
 	if err != nil {
 		return nil, nil, err
@@ -83,7 +89,7 @@ func (p *CompileTimeContinuation) defineForSyntaxParts(expr syntax.SyntaxValue) 
 		params := firstPair.SyntaxCdr()
 		lambdaSym := syntax.NewSyntaxSymbol("lambda", nameSyntaxSym.SourceContext())
 		lambdaArgs := syntax.NewSyntaxCons(params, restPair, nameSyntaxSym.SourceContext())
-		return nameSyntaxSym.Unwrap().(*values.Symbol), syntax.NewSyntaxCons(lambdaSym, lambdaArgs, nameSyntaxSym.SourceContext()), nil
+		return nameSyntaxSym, syntax.NewSyntaxCons(lambdaSym, lambdaArgs, nameSyntaxSym.SourceContext()), nil
 	}
 
 	// Simple definition: (define-for-syntax name expr)
@@ -91,16 +97,17 @@ func (p *CompileTimeContinuation) defineForSyntaxParts(expr syntax.SyntaxValue) 
 	if !ok {
 		return nil, nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-for-syntax: name must be a symbol"))
 	}
-	return nameSyntaxSym.Unwrap().(*values.Symbol), restPair.SyntaxCar(), nil
+	return nameSyntaxSym, restPair.SyntaxCar(), nil
 }
 
 // runDefineForSyntax evaluates a define-for-syntax form's expression one phase up
 // and binds the result there. Called by the expander; see expandDefineForSyntax.
 func (p *CompileTimeContinuation) runDefineForSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	nameSym, valueExpr, err := p.defineForSyntaxParts(expr)
+	nameStx, valueExpr, err := p.defineForSyntaxParts(expr)
 	if err != nil {
 		return err
 	}
+	nameSym := nameStx.Unwrap().(*values.Symbol)
 
 	// Expand, compile, and execute the expression one phase up from the defining
 	// frame (relative, not the absolute expand phase) so a define-for-syntax inside
@@ -142,7 +149,23 @@ func (p *CompileTimeContinuation) runDefineForSyntax(ctctx CompileTimeCallContex
 	// The created flag is the two define-syntax sites' concern (they predeclare
 	// before compiling a right-hand side that may fail); this site evaluates
 	// first and stores second, so it has nothing to roll back.
-	gi, _, err := createPhaseBindingUnlessStable(expandEnv, nameSym, environment.BindingTypeVariable, syntax.Scopes{}, "define-for-syntax")
+	//
+	// THE SCOPES ARE THE SYMBOL'S, NOT THE EMPTY SET, and the empty set was I140.
+	// A binder at {} is reachable from every scope set, so a name a macro
+	// TEMPLATE introduced was visible to any later transformer that happened to
+	// spell it the same way — the phase-1 face of the rule in CLAUDE.local.md's
+	// "Binding Identity": two identifiers with one spelling are not one binding.
+	// Racket and Chez both refuse that reference.
+	//
+	// This alone is a REGRESSION, measured, which is why it does not ship alone. A
+	// macro-SUPPLIED name — one arriving through a pattern variable, so the user
+	// wrote it — carries the use-site scope the invocation stamped, and a later
+	// reference outside the expansion does not, so it stops resolving. The
+	// use-site pruner is what strips that scope back off, and it only prunes forms
+	// on its own list: pruneDefinitionBinder (expander_use_site.go) therefore
+	// gained define-for-syntax in the same change. Breaking either half reddens
+	// TestForSyntaxBinderScopes in the opposite direction from the other.
+	gi, _, err := createPhaseBindingUnlessStable(expandEnv, nameSym, environment.BindingTypeVariable, nameStx.Scopes(), "define-for-syntax")
 	if err != nil {
 		return p.wrapCompilationError(err)
 	}
