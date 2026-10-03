@@ -87,11 +87,11 @@ func addHashtables(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeAny,
 			Keywords: []string{"items", "pairs", "R6RS"}},
 		{Name: "hashtable-equivalence-function", ParamCount: 1, Impl: PrimHashtableEquivalenceFunction,
-			Doc: "Returns the procedure HT compares keys with: eq?, eqv? or equal?. The result is this namespace's own binding, so (eq? (hashtable-equivalence-function (make-eq-hashtable)) eq?) is #t.\n\nExamples:\n  (eq? (hashtable-equivalence-function (make-equal-hashtable)) equal?)  => #t", ParamNames: []string{"ht"}, Category: "hashtables",
+			Doc: "Returns the procedure HT compares keys with: eq?, eqv? or equal?. A table built by make-hashtable returns the very argument it was made with, even under a rename; a fixed-kind table returns this namespace's own binding, so (eq? (hashtable-equivalence-function (make-eq-hashtable)) eq?) is #t.\n\nExamples:\n  (eq? (hashtable-equivalence-function (make-equal-hashtable)) equal?)  => #t", ParamNames: []string{"ht"}, Category: "hashtables",
 			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeProcedure,
 			Keywords: []string{"R6RS"}},
 		{Name: "hashtable-hash-function", ParamCount: 1, Impl: PrimHashtableHashFunction,
-			Doc: "Returns equal-hash for an equal?-keyed table, and #f — not a procedure — for eq and eqv tables, which hash by identity. That #f is R6RS, not a shortcut.\n\nExamples:\n  (eq? (hashtable-hash-function (make-equal-hashtable)) equal-hash)  => #t\n  (hashtable-hash-function (make-eq-hashtable))                      => #f", ParamNames: []string{"ht"}, Category: "hashtables",
+			Doc: "Returns the hash function HT uses: for a table built by make-hashtable, the very argument it was made with, even under a rename; for make-equal-hashtable, this namespace's own equal-hash. Answers #f — not a procedure — for eq and eqv tables, which hash by identity. That #f is R6RS, not a shortcut.\n\nExamples:\n  (eq? (hashtable-hash-function (make-equal-hashtable)) equal-hash)  => #t\n  (hashtable-hash-function (make-eq-hashtable))                      => #f", ParamNames: []string{"ht"}, Category: "hashtables",
 			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeAny,
 			Keywords: []string{"R6RS"}},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)

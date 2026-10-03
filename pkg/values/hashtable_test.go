@@ -15,6 +15,7 @@
 package values_test
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -464,4 +465,86 @@ func TestHashtableEqualGateUsesOneSnapshot(t *testing.T) {
 		return ht
 	}
 	qt.Assert(t, values.Equal(container(), container()), qt.IsFalse)
+}
+
+// TestHashtable_RememberedFunctionsSurviveCopy pins the remembered-procedure
+// slot against (*Hashtable).Copy, which names its fields explicitly rather than
+// copying the struct — the sync.Map and the atomics forbid a struct copy — so a
+// field Copy forgets is silently dropped on every hashtable-copy.
+//
+// This is the ONLY gate on the hash side's Copy carry at the unit level; the
+// Scheme-level pin in pkg/wile covers it too, but do not delete this as
+// redundant without checking that, because an earlier version of that test
+// could not discriminate at all.
+//
+// Identity, not SchemeEquals: the point of the slot is that the accessor hands
+// back the OBJECT the table was made with, and any equal?-shaped assertion
+// would pass against a different copy of the same primitive, which is the bug.
+//
+// pkg/values only knows these are Callable. Nothing here checks WHICH procedures
+// they are; that is pkg/registry/core's job, by machine.PrimitiveIdentity, and
+// is pinned at the Scheme level in pkg/wile.
+func TestHashtable_RememberedFunctionsSurviveCopy(t *testing.T) {
+	c := qt.New(t)
+
+	hashFn := newStubCallable(values.NewSymbol("stand-in-hash"))
+	equivFn := newStubCallable(values.NewSymbol("stand-in-equiv"))
+	ht := values.NewEqualHashtableWith(hashFn, equivFn)
+
+	for _, tc := range []struct {
+		name string
+		got  *values.Hashtable
+	}{
+		{"as constructed", ht},
+		{"through a mutable copy", ht.Copy(true)},
+		{"through an immutable copy", ht.Copy(false)},
+		{"through a copy of a copy", ht.Copy(true).Copy(false)},
+	} {
+		c.Run(tc.name, func(c *qt.C) {
+			c.Assert(tc.got.HashFunction(), qt.Equals, values.Callable(hashFn))
+			c.Assert(tc.got.EquivalenceFunction(), qt.Equals, values.Callable(equivFn))
+			// The kind is not a parameter of the constructor, so a remembering
+			// table is an equal table by construction. The accessors in
+			// pkg/registry/core order their kind discriminant ahead of the
+			// remembered object on the strength of this.
+			c.Assert(tc.got.Kind(), qt.Equals, values.HashtableEqual)
+		})
+	}
+
+	// nil means NONE, and it must survive a copy as a TRUE nil interface rather
+	// than a typed one: the consumer branches on `!= nil`, which a typed nil
+	// passes. qt.IsNil would accept a typed nil here and so would not be testing
+	// the predicate the consumer uses — qt.Equals against nil is.
+	//
+	// All four cells, because the two accessors read ONE slot and must therefore
+	// answer NONE together; a diagonal pair would not catch a split.
+	plain := values.NewHashtable(values.HashtableEq)
+	for _, tc := range []struct {
+		name string
+		got  *values.Hashtable
+	}{
+		{"a fixed-kind table remembers nothing", plain},
+		{"and its copy remembers nothing", plain.Copy(true)},
+	} {
+		c.Run(tc.name, func(c *qt.C) {
+			c.Assert(tc.got.HashFunction(), qt.Equals, nil)
+			c.Assert(tc.got.EquivalenceFunction(), qt.Equals, nil)
+		})
+	}
+}
+
+// TestHashtable_CopyCarriesEveryWriteOnceField is the ratchet behind Copy's
+// explicit field list. Copy cannot be written as a struct copy, so every field
+// must be named there by hand, and nothing in the compiler notices when the next
+// one is not — the symptom is a copy that silently loses state.
+//
+// A field count is the whole check: it cannot say WHICH field was added, but it
+// fails the moment one is, which is when the author is looking. Same shape as
+// HashtableKindCount's exhaustiveness ratchet.
+//
+// reflect.TypeFor, not reflect.TypeOf(Hashtable{}): the composite literal copies
+// a sync.Map and trips go vet's copylocks.
+func TestHashtable_CopyCarriesEveryWriteOnceField(t *testing.T) {
+	qt.Assert(t, reflect.TypeFor[values.Hashtable]().NumField(), qt.Equals, 6,
+		qt.Commentf("a field was added to Hashtable: carry it in (*Hashtable).Copy, then update this count"))
 }
