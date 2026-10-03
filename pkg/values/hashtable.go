@@ -140,15 +140,29 @@ type Hashtable struct {
 	// mutable is likewise WRITE-ONCE at construction. Only hashtable-copy
 	// without a true second argument produces a false one.
 	mutable bool
-	// hashFn and equivFn are the procedure objects the table was CONSTRUCTED
-	// with, kept so hashtable-hash-function / hashtable-equivalence-function can
-	// answer R6RS §13.1 exactly — the function the table was made with, not
-	// another copy of the same primitive. nil means NONE: a fixed-kind
-	// constructor takes no procedures, so its accessors derive them from kind
-	// instead. Write-once like kind and mutable, so they stay out of the
-	// copy-on-write dance and add no concurrency surface.
-	hashFn  Value
-	equivFn Value
+	// made holds the procedure objects the table was CONSTRUCTED with, so
+	// hashtable-hash-function / hashtable-equivalence-function can hand back the
+	// function the table was made with rather than another copy of the same
+	// primitive. nil means NONE: a fixed-kind constructor takes no procedures, so
+	// its accessors derive them from kind instead. Write-once like kind and
+	// mutable, so it stays out of the copy-on-write dance and adds no
+	// concurrency surface.
+	//
+	// ONE slot, not two, and that is the point: "was this table made with a
+	// pair" is one fact. Two independently-nilable fields would make the half
+	// state representable, and the two accessors would then read from different
+	// sources — one from the remembered object, the other from the name probe —
+	// handing a program a hash function and an equivalence function with
+	// different provenance.
+	made *hashtableFunctions
+}
+
+// hashtableFunctions is the (hash, equivalence) pair a table was constructed
+// with. Unexported and never mutated after construction, so a copy shares the
+// pointer rather than duplicating it.
+type hashtableFunctions struct {
+	hash  Callable
+	equiv Callable
 }
 
 // NewEmptyHashtable creates an empty MUTABLE equal?-keyed hash table. The zero
@@ -166,28 +180,48 @@ func NewHashtable(kind HashtableKind) *Hashtable {
 	return &Hashtable{kind: kind, mutable: true}
 }
 
-// NewHashtableWithFunctions creates an empty MUTABLE table of kind that also
+// NewEqualHashtableWith creates an empty MUTABLE equal?-keyed table that also
 // REMEMBERS the hash and equivalence procedure objects it was made with, for
-// R6RS §13.1's hashtable-hash-function / hashtable-equivalence-function.
+// R6RS §13.3's hashtable-hash-function / hashtable-equivalence-function.
 //
-// The caller validates that the pair is the one kind implements — this
-// constructor stores the objects and draws no conclusion from them. Recognition
-// is pkg/registry/core's job, by machine.PrimitiveIdentity, which pkg/values
-// cannot see and must not re-model.
-func NewHashtableWithFunctions(kind HashtableKind, hashFn, equivFn Value) *Hashtable {
-	return &Hashtable{kind: kind, mutable: true, hashFn: hashFn, equivFn: equivFn}
+// There is deliberately no kind parameter. A remembered pair and a non-equal
+// kind is an incoherent table — its accessors would report a pair that was never
+// the pair in use, since an eq or eqv table keys by identity whatever it
+// remembers — and R6RS §13.3 makes the eq/eqv answers `eq?`/`eqv?` and #f, which
+// no remembered pair can override. Taking the kind as an argument would make
+// that combination constructible from outside this package; not taking it makes
+// it unrepresentable.
+//
+// Callable, not Value, because hashtable-equivalence-function declares
+// ReturnType: TypeProcedure and that type's own check is makeCheck[Callable].
+// This constructor still draws no conclusion about WHICH procedures these are:
+// recognition is pkg/registry/core's job, by machine.PrimitiveIdentity, which
+// pkg/values cannot see and must not re-model.
+func NewEqualHashtableWith(hashFn, equivFn Callable) *Hashtable {
+	return &Hashtable{
+		kind:    HashtableEqual,
+		mutable: true,
+		made:    &hashtableFunctions{hash: hashFn, equiv: equivFn},
+	}
 }
 
 // HashFunction returns the hash procedure this table was constructed with, or
 // nil for NONE — a fixed-kind table, whose accessor derives one from Kind.
-func (p *Hashtable) HashFunction() Value {
-	return p.hashFn
+func (p *Hashtable) HashFunction() Callable {
+	if p.made == nil {
+		return nil
+	}
+	return p.made.hash
 }
 
 // EquivalenceFunction returns the equivalence procedure this table was
-// constructed with, or nil for NONE, as HashFunction.
-func (p *Hashtable) EquivalenceFunction() Value {
-	return p.equivFn
+// constructed with, or nil for NONE, as HashFunction. The two answer NONE
+// together: they read one slot.
+func (p *Hashtable) EquivalenceFunction() Callable {
+	if p.made == nil {
+		return nil
+	}
+	return p.made.equiv
 }
 
 // Mutable reports whether this table accepts Set, Delete, and Clear.
@@ -620,10 +654,12 @@ func (p *Hashtable) Size() int {
 //
 // The field list is explicit (a struct copy would copy the sync.Map and the
 // atomics), so EVERY write-once field has to be named here or a copy silently
-// loses it. hashFn/equivFn are carried because R6RS §13.1 says a copy's
-// accessors answer what the original's did.
+// loses it — a hazard with no compiler behind it, which is why
+// TestHashtable_CopyCarriesEveryWriteOnceField ratchets the field count. `made`
+// is carried by pointer: it is never mutated, and Chez answers a copy's
+// accessors with the original's pair.
 func (p *Hashtable) Copy(mutable bool) *Hashtable {
-	q := &Hashtable{kind: p.kind, mutable: mutable, hashFn: p.hashFn, equivFn: p.equivFn}
+	q := &Hashtable{kind: p.kind, mutable: mutable, made: p.made}
 	p.buckets.Range(func(k, v any) bool {
 		q.buckets.Store(k, v.([]hashtableEntry))
 		return true

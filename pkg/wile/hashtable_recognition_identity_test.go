@@ -15,9 +15,16 @@
 package wile
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"testing/fstest"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // TestMakeHashtableRecognitionSurvivesImports pins that (make-hashtable
@@ -172,76 +179,240 @@ func TestHashtableAccessorsSurviveAUserShadow(t *testing.T) {
 	}
 }
 
-// TestHashtableRemembersTheProceduresItWasMadeWith pins I106: R6RS §13.1 says
-// hashtable-equivalence-function returns the equivalence function the table WAS
-// MADE WITH, and that hashtable-copy keeps it. Chez agrees — `petite -q --script`
-// on the same program answers (#t #t).
+// hashtableSecondCopyLibFS mints a SECOND copy of equal-hash reachable from
+// Scheme under a name of its own.
 //
-// The name probe in setRecognizedPrimitive cannot answer that question, and this
-// is the case that separates the two. Under a RENAMED import the program holds
-// the equal? primitive as my-eq and never binds the spelling `equal?` at all, so
-// the probe falls through to the sealed base's copy — a different closure object
-// from the one the caller passed to make-hashtable, because a library environment
-// is a flat island that mints its own. Recognition is right that the two are the
-// same PRIMITIVE; the accessor's contract is about the OBJECT.
+// A library need not EXPORT equal-hash for a second copy to exist, which is the
+// correction that makes the hash side of I106 pinnable at all. A library
+// environment is a flat island — the factory re-applies the whole registry into
+// it — so `(define my-hash equal-hash)` inside the library binds the island's
+// own closure, and exporting THAT binding hands the program an object distinct
+// from the sealed base's. The export list of (rnrs hashtables) is irrelevant.
 //
-// Both elements are load-bearing. (*values.Hashtable).Copy is an explicit field
-// list rather than a struct copy, so a remembered field that Copy does not carry
-// regresses to the probe on every hashtable-copy while the first element still
-// passes. A single-element row would be green over that bug.
+// It works because equal-hash is AMBIENT. The same trick on equal? does NOT
+// mint a second copy: a `(define my-equal equal?)` here would resolve through
+// this library's own (import (scheme base)), and a library INSTANCE is shared
+// across namespaces, so the program's (import (scheme base)) hands it the same
+// object — measured `(eq? my-equal equal?)` => #t. The equivalence side needs a
+// rename instead, which is what its own row uses.
+func hashtableSecondCopyLibFS() fstest.MapFS {
+	return fstest.MapFS{
+		"hashlib.scm": &fstest.MapFile{Data: []byte(`(define-library (hashlib)
+  (export my-hash)
+  (import (scheme base))
+  (begin
+    (define my-hash equal-hash)))
+`)},
+	}
+}
+
+func newHashtableSecondCopyEngine(t testing.TB) *Engine {
+	t.Helper()
+	eng, err := NewEngine(context.Background(),
+		WithProfile(KitchenSink),
+		WithSourceFS(hashtableSecondCopyLibFS()),
+		WithSourceFS(stdlib.FS),
+		WithLibraryPaths("."))
+	qt.Assert(t, err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = eng.Close()
+	})
+	return eng
+}
+
+// TestHashtableRemembersTheProceduresItWasMadeWith pins I106: the accessors hand
+// back the procedure OBJECT the table was made with, and hashtable-copy keeps
+// it.
+//
+// That is Chez's answer, not a conformance requirement — R6RS §13.3 says only
+// "the equivalence function used by hashtable to compare keys" and never reaches
+// object identity. The discriminating oracle is `petite -q --script` on a table
+// built from USER procedures, `(define (my-eq a b) (equal? a b))`, which answers
+// #t for the table and its copy on both accessors; the aliasing form
+// `(define my-eq equal?)` answers #t under either semantics and so proves
+// nothing. Wile defers user-supplied pairs (see PrimMakeHashtable's doc), so the
+// oracle form is not runnable here and the rows below reach the same question
+// through a second copy of a registered primitive instead.
+//
+// The name probe in setRecognizedPrimitive cannot answer this. It finds whichever
+// copy the program can NAME, so the two agree only while the caller holds the
+// primitive under its registered spelling; the rows below each arrange for the
+// caller to hold a different copy, by rename or by library island.
+//
+// Both elements of every row are load-bearing. (*values.Hashtable).Copy is an
+// explicit field list rather than a struct copy, so a field Copy forgets
+// regresses to the probe on the copy while the first element still passes.
 func TestHashtableRemembersTheProceduresItWasMadeWith(t *testing.T) {
 	c := qt.New(t)
 
 	cases := []struct {
-		name string
-		expr string
-		want string
+		name    string
+		expr    string
+		want    string
+		needLib bool
 	}{
-		// The gate. my-eq is the (scheme base) closure under a name the probe
-		// will never look up.
-		{"a renamed equivalence procedure survives the table and its copy",
-			`(begin (import (rnrs hashtables)
+		// The equivalence gate: my-eq is the (scheme base) closure under a name
+		// the probe will never look up.
+		{name: "a renamed equivalence procedure survives the table and its copy",
+			expr: `(begin (import (rnrs hashtables)
 					(only (rename (scheme base) (equal? my-eq)) my-eq))
 				(let ((h (make-hashtable equal-hash my-eq)))
 					(list (eq? (hashtable-equivalence-function h) my-eq)
 						(eq? (hashtable-equivalence-function (hashtable-copy h)) my-eq))))`,
-			`(#t #t)`},
-		// The hash side has no red row of its own, and the reason is worth
-		// recording rather than leaving as a gap: no library in the tree exports
-		// equal-hash (pkg/stdlib/lib/rnrs/hashtables.sld says so and why), so
-		// there is no second copy of it to hold under another name and the probe
-		// and the remembered object cannot disagree. It is covered here against
-		// the Copy field list, and at the unit level in pkg/values.
-		{"the hash procedure survives the table and its copy",
-			`(begin (import (rnrs hashtables)
+			want: `(#t #t)`},
+		// The hash gate, and the reason it needs a library: equal-hash is
+		// ambient, so it cannot be renamed through an import. (hashlib)'s
+		// my-hash is the island's own copy of it — a distinct object, which the
+		// third element proves rather than assumes.
+		{name: "a second copy of the hash procedure survives the table and its copy",
+			expr: `(begin (import (hashlib) (rnrs hashtables) (scheme base))
+				(let ((h (make-hashtable my-hash equal?)))
+					(list (eq? (hashtable-hash-function h) my-hash)
+						(eq? (hashtable-hash-function (hashtable-copy h)) my-hash)
+						(eq? my-hash equal-hash))))`,
+			want: `(#t #t #f)`, needLib: true},
+		// Both sides at once — island copy for the hash, rename for the
+		// equivalence — so neither accessor can be answering from the probe in
+		// the same run. Through an immutable copy, since that is the shape
+		// hashtable-copy's one-argument form produces.
+		{name: "both procedures survive together, through a copy",
+			expr: `(begin (import (hashlib) (rnrs hashtables)
 					(only (rename (scheme base) (equal? my-eq)) my-eq))
-				(let ((h (make-hashtable equal-hash my-eq)))
-					(list (eq? (hashtable-hash-function h) equal-hash)
-						(eq? (hashtable-hash-function (hashtable-copy h)) equal-hash))))`,
-			`(#t #t)`},
+				(let ((h (hashtable-copy (make-hashtable my-hash my-eq))))
+					(list (eq? (hashtable-hash-function h) my-hash)
+						(eq? (hashtable-equivalence-function h) my-eq)
+						(hashtable-mutable? h))))`,
+			want: `(#t #t #f)`, needLib: true},
 		// The control: with (scheme base) imported plainly the probe and the
 		// remembered value agree, and must keep agreeing.
-		{"the plain-import control is unchanged",
-			`(begin (import (rnrs hashtables) (scheme base))
+		{name: "the plain-import control is unchanged",
+			expr: `(begin (import (rnrs hashtables) (scheme base))
 				(let ((h (make-hashtable equal-hash equal?)))
 					(list (eq? (hashtable-equivalence-function h) equal?)
 						(eq? (hashtable-equivalence-function (hashtable-copy h)) equal?)
 						(eq? (hashtable-hash-function h) equal-hash))))`,
-			`(#t #t #t)`},
+			want: `(#t #t #t)`},
 		// A fixed-kind constructor takes no procedures, so there is nothing to
 		// remember and the probe stays the only answer. This is the residual
 		// I069 depends on, pinned so the fix cannot be mistaken for deleting it.
-		{"a fixed-kind table still answers from the probe",
-			`(begin (import (rnrs hashtables) (scheme base))
+		{name: "a fixed-kind table still answers from the probe",
+			expr: `(begin (import (rnrs hashtables) (scheme base))
 				(let ((h (make-equal-hashtable)))
 					(list (eq? (hashtable-equivalence-function h) equal?)
 						(eq? (hashtable-hash-function h) equal-hash))))`,
-			`(#t #t)`},
+			want: `(#t #t)`},
+		// The pair a program reads off a table is a pair it can write back,
+		// which is what the identity gate in setRememberedOrRecognized must not
+		// break: a second copy carries the same PrimitiveIdentity.
+		{name: "the remembered pair round-trips through make-hashtable",
+			expr: `(begin (import (hashlib) (rnrs hashtables)
+					(only (rename (scheme base) (equal? my-eq)) my-eq))
+				(let* ((h (make-hashtable my-hash my-eq))
+						(g (make-hashtable (hashtable-hash-function h)
+								(hashtable-equivalence-function h))))
+					(list (eq? (hashtable-hash-function g) my-hash)
+						(eq? (hashtable-equivalence-function g) my-eq))))`,
+			want: `(#t #t)`, needLib: true},
 	}
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
-			got := evalSRFI(c, newSRFITestEngine(t), tc.expr)
+			// A FRESH engine per case: an import mutates the top level.
+			eng := newSRFITestEngine(t)
+			if tc.needLib {
+				eng = newHashtableSecondCopyEngine(t)
+			}
+			got := evalSRFI(c, eng, tc.expr)
 			c.Assert(got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestHashtableAccessorsRefuseAnUnknownKind pins the refusal both accessors owe
+// an out-of-range kind, which is reachable only from Go: values.NewHashtable is
+// exported and validates nothing.
+//
+// It matters here because this is the guard the remembered-procedure slot must
+// not route around. equivIdentity is a switch rather than an array precisely so
+// an unknown kind refuses explicitly instead of panicking (see its doc), and an
+// accessor that answered from a remembered object BEFORE consulting the kind
+// would reach past it. hashtable-hash-function owes the same refusal, where it
+// previously answered #f for anything that was not the equal kind — a complement
+// that is only accidentally equivalent to "eq or eqv".
+func TestHashtableAccessorsRefuseAnUnknownKind(t *testing.T) {
+	c := qt.New(t)
+
+	for _, name := range []string{"hashtable-equivalence-function", "hashtable-hash-function"} {
+		c.Run(name, func(c *qt.C) {
+			eng := newSRFITestEngine(t)
+			err := eng.Define("odd-table", WrapValue(values.NewHashtable(values.HashtableKind(7))))
+			c.Assert(err, qt.IsNil)
+			_, err = eng.EvalMultiple(context.Background(), "("+name+" odd-table)")
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, werr.ErrUnsupportedHashtableKind), qt.IsTrue,
+				qt.Commentf("must match the sentinel with errors.Is, got %v", err))
+		})
+	}
+}
+
+// typedNilCallable is a POINTER type implementing values.Callable, so a nil of
+// it can be stored in a table's remembered slot while `!= nil` on the interface
+// still answers true. Nothing in Wile produces one; it exists to reach the
+// hazard an embedder can reach.
+type typedNilCallable struct{}
+
+func (*typedNilCallable) SchemeString() string {
+	return "#<typed-nil>"
+}
+
+func (*typedNilCallable) IsVoid() bool {
+	return false
+}
+
+func (*typedNilCallable) EqualTo(values.Value) bool {
+	return false
+}
+
+func (*typedNilCallable) AcceptsArity(int) bool {
+	return true
+}
+
+// TestHashtableAccessorsRejectAnUnregisteredRememberedValue pins the identity
+// gate in setRememberedOrRecognized, which is the only thing keeping the
+// remembered slot from being a hole in the accessors' contract.
+//
+// values.NewEqualHashtableWith is exported and deliberately draws no conclusion
+// about which procedures it is handed — recognition is this package's job, by
+// machine.PrimitiveIdentity. Without the gate an embedder could make
+// hashtable-equivalence-function answer a value that is not the registered
+// primitive, under its declared ReturnType: TypeProcedure.
+//
+// A TYPED nil is the sharp case, and the reason the gate cannot be replaced by a
+// nil check: `remembered != nil` is an interface test, which a typed nil passes,
+// so the raw slot would escape and render as #<typed-nil> instead of the
+// equivalence procedure. This is the hazard class the tree already paid for once
+// in readSyntax's errNoDatum.
+//
+// The gate must fail OPEN to the name probe, not refuse: the table is still a
+// perfectly good equal?-keyed table, and the probe's answer is the one a
+// fixed-kind table would get.
+func TestHashtableAccessorsRejectAnUnregisteredRememberedValue(t *testing.T) {
+	c := qt.New(t)
+
+	cases := []struct {
+		name       string
+		remembered values.Callable
+	}{
+		{"a typed nil", (*typedNilCallable)(nil)},
+		{"a procedure the registry never registered", &typedNilCallable{}},
+	}
+	for _, tc := range cases {
+		c.Run(tc.name, func(c *qt.C) {
+			eng := newSRFITestEngine(t)
+			ht := values.NewEqualHashtableWith(tc.remembered, tc.remembered)
+			c.Assert(eng.Define("odd-table", WrapValue(ht)), qt.IsNil)
+			got := evalSRFI(c, eng, `(list (eq? (hashtable-equivalence-function odd-table) equal?)
+				(eq? (hashtable-hash-function odd-table) equal-hash))`)
+			c.Assert(got, qt.Equals, `(#t #t)`)
 		})
 	}
 }

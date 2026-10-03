@@ -43,14 +43,16 @@ This document catalogs differences between the current implementation and the R7
     the registered `equal-hash`?" rather than "is this the sealed base's copy of
     it?" — a question that also stops being answerable once
     `WithStrictNamespace` or a dialect's `PrimitiveRemover` narrows the sealed
-    base. `hashtable-hash-function` and `hashtable-equivalence-function` answer
-    R6RS §13.1 exactly for a table built by `make-hashtable`: the table
-    remembers its two argument objects and hands those back, so a `rename`d
-    import reads back the name it imported under. Only a fixed-kind table
-    (`make-eq-hashtable` and friends) was made with no procedure to remember;
-    there the accessors hand back the copy visible at the namespace's mutable
-    top level, falling back to the sealed base, so the pair a program reads off
-    a table is still `eq?` to the pair it can write.
+    base. `hashtable-hash-function` and `hashtable-equivalence-function` hand
+    back the two argument objects a `make-hashtable` table was built with, so a
+    `rename`d import reads the pair back under the name it imported it under.
+    That is Chez's answer rather than a conformance requirement: R6RS §13.3 says
+    only "the equivalence function used by *hashtable* to compare keys" and never
+    reaches object identity. Only a fixed-kind table (`make-eq-hashtable` and
+    friends) was made with no procedure to remember; there the accessors hand
+    back the copy visible at the namespace's mutable top level, falling back to
+    the sealed base, so the pair a program reads off a table is still `eq?` to
+    the pair it can write.
 13. `make-equal-hashtable` is a non-standard constructor, matching Larceny,
     Vicare, and Ypsilon (Chez 10.4.1 does not bind it). R6RS spells it
     `(make-hashtable equal-hash equal?)`, which Wile also accepts. Prefer

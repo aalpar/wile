@@ -65,11 +65,24 @@ func PrimMakeHashtable(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	// The table REMEMBERS the two argument objects, which is what R6RS §13.1's
-	// accessors return. Identity has already decided they are the registered
+	// The table REMEMBERS the two argument objects, which is what R6RS §13.3's
+	// accessors hand back. Identity has already decided they are the registered
 	// equal-hash / equal?; which COPY of each the caller holds is the caller's
 	// business, and under a renamed import it is a copy no name probe can find.
-	mc.SetValue(values.NewHashtableWithFunctions(values.HashtableEqual, mc.Arg(0), mc.Arg(1)))
+	//
+	// Re-fetched through RequireArg rather than cast: the identity check above
+	// already proves both are *machine.ForeignClosure, so neither of these can
+	// fail, but an unchecked cast is what noUncheckedArgCast forbids and the
+	// constructor takes values.Callable.
+	hashFn, err := helpers.RequireArg[values.Callable](mc, 0, werr.ErrNotAProcedure, "make-hashtable")
+	if err != nil {
+		return err
+	}
+	equivFn, err := helpers.RequireArg[values.Callable](mc, 1, werr.ErrNotAProcedure, "make-hashtable")
+	if err != nil {
+		return err
+	}
+	mc.SetValue(values.NewEqualHashtableWith(hashFn, equivFn))
 	return nil
 }
 
@@ -274,32 +287,41 @@ func equivIdentity(kind values.HashtableKind) (*machine.PrimitiveIdentity, strin
 	}
 }
 
-// PrimHashtableEquivalenceFunction implements R6RS hashtable-equivalence-function:
-// §13.1 says it returns the equivalence function the table WAS MADE WITH, so a
-// table built by make-hashtable answers with that argument object itself, and a
-// hashtable-copy of it answers the same.
+// PrimHashtableEquivalenceFunction implements R6RS hashtable-equivalence-function.
 //
-// Only a FIXED-KIND table (make-eq-hashtable and friends) has nothing to answer
-// from, because it was made with no procedure at all. There the name probe
-// derives one from the kind, and the best it can do is "whichever copy of the
-// primitive the caller holds" — which is why the two paths can disagree, and why
-// the remembered object wins when there is one. See setRecognizedPrimitive.
+// §13.3 says only "the equivalence function used by hashtable to compare keys",
+// so handing back the ARGUMENT OBJECT a make-hashtable table was built with is a
+// choice, not conformance: the spec never reaches object identity. It is Chez's
+// answer, measured, and it is the useful one — a program that reads the pair off
+// a table and writes it back gets `eq?` round-tripping even when it imported the
+// primitive under another name.
+//
+// A FIXED-KIND table (make-eq-hashtable and friends) was made with no procedure
+// at all, so there is nothing to hand back and the name probe derives one from
+// the kind. That is the only path that can answer with a copy the program did
+// not supply, and setRecognizedPrimitive explains how it ranks the candidates.
+//
+// The kind discriminant runs first and the remembered object second. Do NOT read
+// that as a guard: a remembering table is always the equal kind, because
+// NewEqualHashtableWith takes no kind, so the order is unobservable and
+// swapping it fails no test (measured). It is written this way to read the same
+// as PrimHashtableHashFunction, where the kind arms DO decide. What makes
+// equivIdentity's out-of-range refusal reachable is the constructor's shape, not
+// this ordering.
+//
+// The gate that is load-bearing is inside setRememberedOrRecognized.
 func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
 	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-equivalence-function")
 	if err != nil {
 		return err
-	}
-	equivFn := ht.EquivalenceFunction()
-	if equivFn != nil {
-		mc.SetValue(equivFn)
-		return nil
 	}
 	identity, name, ok := equivIdentity(ht.Kind())
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrUnsupportedHashtableKind,
 			"hashtable-equivalence-function: table has unknown kind %d", uint8(ht.Kind()))
 	}
-	return setRecognizedPrimitive(mc, identity, name, "hashtable-equivalence-function")
+	return setRememberedOrRecognized(mc, ht.EquivalenceFunction(), identity, name,
+		"hashtable-equivalence-function")
 }
 
 // PrimHashtableHashFunction implements R6RS hashtable-hash-function, which returns
@@ -307,34 +329,66 @@ func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
 // does not expose that as a procedure. Chibi reaches the same two answers through
 // the same discriminant (lib/srfi/69/interface.scm).
 //
-// The kind check comes FIRST and the remembered object second, even though the
-// two cannot both apply: only make-hashtable remembers, and it only ever builds
-// an equal table. Guard clause first keeps that an invariant rather than a thing
-// the reader has to derive from the other file.
+// The eq/eqv arms are named POSITIVELY rather than written as `!= HashtableEqual`.
+// The two spellings coincide only while there are three kinds, and the §13.3 rule
+// is about eq and eqv tables specifically — so under the complement a fourth kind
+// would silently answer #f for a table that does have a hash function. The
+// default arm refuses instead, matching equivIdentity's policy for the same
+// question.
 func PrimHashtableHashFunction(mc machine.CallContext) error {
 	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-hash-function")
 	if err != nil {
 		return err
 	}
-	if ht.Kind() != values.HashtableEqual {
+	switch ht.Kind() {
+	case values.HashtableEq, values.HashtableEqv:
 		mc.SetValue(values.FalseValue)
 		return nil
+	case values.HashtableEqual:
+		return setRememberedOrRecognized(mc, ht.HashFunction(), identityEqualHash, "equal-hash",
+			"hashtable-hash-function")
+	default:
+		return werr.WrapForeignErrorf(werr.ErrUnsupportedHashtableKind,
+			"hashtable-hash-function: table has unknown kind %d", uint8(ht.Kind()))
 	}
-	hashFn := ht.HashFunction()
-	if hashFn != nil {
-		mc.SetValue(hashFn)
+}
+
+// setRememberedOrRecognized answers with the procedure object the table was
+// CONSTRUCTED with when there is one and it bears identity, and otherwise falls
+// through to the name probe.
+//
+// The identity gate is what keeps the remembered slot from being a hole in the
+// accessor's contract. values.NewEqualHashtableWith is exported and deliberately
+// draws no conclusion about which procedures it is handed, so without this check
+// an embedder could make hashtable-equivalence-function answer a non-procedure
+// under its declared ReturnType: TypeProcedure, or answer a typed nil — which
+// `!= nil` on an interface does not catch — as #<void>.
+//
+// It costs nothing in the case the remembered slot exists for: every closure
+// built from one PrimitiveSpec shares its *machine.PrimitiveIdentity, whichever
+// environment minted it, so a renamed import's copy passes. The gate rejects only
+// what the registry never registered.
+//
+// Named trade-off: this forecloses reusing the slot for USER-SUPPLIED hash and
+// equivalence procedures (the feature PrimMakeHashtable's doc defers), since
+// IdentityOf answers nil for a Scheme closure. That is the honest reading of what
+// the slot means today — a remembered copy of a recognized primitive — and the
+// day user pairs land, this gate is the site to revisit.
+func setRememberedOrRecognized(mc machine.CallContext, remembered values.Callable, identity *machine.PrimitiveIdentity, name, site string) error {
+	if remembered != nil && machine.IdentityOf(remembered) == identity {
+		mc.SetValue(remembered)
 		return nil
 	}
-	return setRecognizedPrimitive(mc, identityEqualHash, "equal-hash", "hashtable-hash-function")
+	return setRecognizedPrimitive(mc, identity, name, site)
 }
 
 // setRecognizedPrimitive sets the primitive bearing identity as the result,
 // preferring the copy visible at the namespace's MUTABLE TOP LEVEL over the
 // sealed base's, or raises if neither is that primitive.
 //
-// This is the FIXED-KIND path only. A table made by make-hashtable remembers its
-// two argument objects and answers from them, because R6RS §13.1 asks which
-// function the table was made with and a name probe cannot answer that: under
+// This is the fallback under setRememberedOrRecognized: it answers when the table
+// remembers nothing, which is every fixed-kind table. A name probe cannot answer
+// "which object was this table made with" — under
 // (rename (scheme base) (equal? my-eq)) the spelling `equal?` is never bound, so
 // the probe falls through to a copy the caller never saw. A fixed-kind table was
 // made with no procedure at all, so "whichever copy the program can name" is the
