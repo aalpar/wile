@@ -110,6 +110,20 @@ type CompiledLibrary struct {
 	// which case the export lookup degrades to the empty set.
 	Scope *syntax.Scope
 
+	// instantiateOnce and instantiateErr carry the body's single execution.
+	// Compiling a library and RUNNING it are separate steps because
+	// cond-expand's (library X) asks whether X is AVAILABLE, not what it does
+	// (R7RS §4.2.1): a probe compiles and does not run, and a real import later
+	// flushes the pending instantiation. The body therefore runs exactly once
+	// however many probes preceded the import.
+	instantiateOnce sync.Once
+	instantiateErr  error
+
+	// formSource is the define-library form's own location. The body's execution
+	// no longer happens in the frame that holds its syntax, so the location has
+	// to travel with the library or a failing body reports no position at all.
+	formSource *syntax.SourceContext
+
 	// resolvedExports is the export interface of a library whose exports denote
 	// bindings that were already known when the library was built — today only a
 	// synthetic extension library, whose exports ARE the primitives the registry
@@ -134,6 +148,33 @@ func (p *CompiledLibrary) SetResolvedExport(phase environment.Phase, internalNam
 		p.resolvedExports = make(map[ExportKey]*environment.Binding)
 	}
 	p.resolvedExports[ExportKey{Phase: phase, Name: internalName}] = binding
+}
+
+// EnsureInstantiated runs the library's body, at most once per library however
+// many callers ask. A synthetic library (an extension library, which has no
+// template) and a library whose template is empty are instantiated by
+// construction, so the call is a no-op for them.
+//
+// The error is REMEMBERED rather than recomputed. A library body runs once per
+// program, so a second importer of a library whose body raised must see that
+// same refusal and not a second attempt at it.
+//
+// This is the only layer that wraps the execution failure. The wrap used to be
+// applied here AND again by the compile step that performed the execution, which
+// rendered "error executing library" twice in one chain.
+func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator machine.MacroEvaluator) error {
+	p.instantiateOnce.Do(func() {
+		if p.Template == nil || p.Template.CodeLen() == 0 {
+			return
+		}
+		_, err := evaluator.EvalTemplate(ctx, p.Template, p.Env)
+		if err == nil {
+			return
+		}
+		p.instantiateErr = wrapSourcedError(p.formSource,
+			werr.WrapForeignErrorf(err, "error executing library %s", p.Name.SchemeString()))
+	})
+	return p.instantiateErr
 }
 
 // NewCompiledLibrary creates a new compiled library.

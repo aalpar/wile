@@ -8,7 +8,7 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-18 known differences exist:
+19 known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Correct for string, bytevector and regular-file ports; on a port that can block (stdin, a pipe) the `#t` is a promise the next read may break.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
@@ -95,6 +95,19 @@ This document catalogs differences between the current implementation and the R7
     and Racket both extend `unquote` to splice there, and **disagree with each
     other** on the multi-operand case, where Racket returns Wile's answer. A
     splice in any **element** position is unaffected and fully conforming.
+19. `cond-expand`'s `(library X)` requirement is decided by whether X
+    **compiles**, not by whether it runs. A library that resolves, parses,
+    expands and compiles answers *available* even if its body raises when it is
+    later imported; a library that cannot be found, is malformed, imports
+    something missing, or will not compile answers *unavailable*. R7RS §4.2.1
+    asks whether the library is available, not for its state, so probing must
+    not execute a body — the clause is decided at expansion time and an
+    executing probe would charge the program the library's effects for asking
+    about it. **Changed:** the probe used to be a full import, which both ran
+    the body and took a runtime failure in it as evidence of unavailability.
+    **Residual:** the purity is one level deep. Probing X still instantiates the
+    libraries X itself imports, because a library's own `import` clauses go
+    through the ordinary loader.
 
 ---
 
@@ -450,6 +463,46 @@ runtimes (including Go's `time` package) expose Unix time, not TAI.
 (the offset cancels). Programs that need a true atomic timescale, or that compare
 `current-second` against an external TAI source, will see the fixed offset. For
 monotonic elapsed time prefer `current-jiffy` / `jiffies-per-second`.
+
+## `(library X)` Asks Whether X Is Available, Not What X Does
+
+**Affected:** `cond-expand`'s `(library X)` feature requirement, in a program, a
+library declaration, or a body.
+
+R7RS §4.2.1 defines the requirement as satisfied when the library is
+**available**. Wile answers that by COMPILING X and stopping before it runs:
+resolution, parse, expansion, the import clauses and the body's compilation all
+have to succeed, so the answer is strictly more informative than file existence,
+and nothing in the body executes.
+
+```scheme
+;; (sfx) displays "SFX" in its body.
+(cond-expand ((library (sfx)) 'available) (else 'not-available))  ;=> available, prints nothing
+(import (sfx))                                                    ;=> prints SFX, once
+```
+
+**What changed.** The probe used to be a full `LoadLibrary`, so asking whether a
+library was available printed its output, performed its mutations, and — if the
+body raised — reported the library as *unavailable*. Both halves were wrong for
+the same reason: executing the library answers a different question than the one
+§4.2.1 asks. A library whose body fails at runtime is now *available*, which is
+the deliberate criterion change here; the failure surfaces at the `import`, where
+it belongs.
+
+**Not a free re-probe.** A successful probe leaves the COMPILED library in the
+registry with its instantiation pending, and the first real import flushes it, so
+the body still runs exactly once however many clauses asked about it first
+(`(*CompiledLibrary).EnsureInstantiated`).
+
+**Residual: the purity is one level deep.** Probing X does not run X's body, but
+it does instantiate the libraries X imports, because a library's own `import`
+clauses are resolved by the ordinary loader. `(cond-expand ((library (depper))
+…))` where `(depper)` imports `(sfx)` still runs `(sfx)`'s body. Pinned as a
+labelled row in `TestCondExpandLibraryProbeDoesNotRunTheBody` (`pkg/wile`).
+
+**No oracle.** §4.2.1's `(library X)` clause has no Racket equivalent, and the
+spec does not say what "available" costs, so the criterion is argued from the
+word rather than measured against another implementation.
 
 ## A Splice in an Unquote's Operand (`,,@x`) Stays Literal
 

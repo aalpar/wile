@@ -46,12 +46,40 @@ import (
 //
 // The function:
 // 1. Checks for circular dependencies
-// 2. Checks if already loaded (returns cached library)
+// 2. Checks if already loaded (cached library; instantiates a probed one)
 // 3. Resolves and opens the library file via FileResolver
 // 4. Parses and compiles the define-library form
-// 5. Executes the library to create runtime bindings
-// 6. Registers the library in the registry
+// 5. Registers the library in the registry
+// 6. Executes the library to create runtime bindings
 func LoadLibrary(ctx context.Context, name LibraryName, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) (*CompiledLibrary, error) {
+	return loadLibrary(ctx, name, env, evaluator, true)
+}
+
+// LibraryAvailable reports whether name can be loaded, WITHOUT running its body.
+//
+// This is cond-expand's question (R7RS §4.2.1): whether the library is
+// available, not what happens when it runs. The compile half still happens —
+// resolution, parse, expansion, the import clauses and the body's compilation
+// all have to succeed — so an unresolvable name, a malformed form, a missing
+// dependency or a body that will not compile all answer false, as they did when
+// the probe was a full load. What no longer happens is EvalTemplate, so a
+// library whose body prints, mutates, or raises does none of that at probe time.
+//
+// The evaluator is still required: compiling a library EXPANDS it, and the
+// expander and the compile-time continuation both need one (see
+// loadLibraryFromReader's two constructor calls). Only the execution is
+// deferred.
+//
+// A probe leaves the compiled library in the registry, so the later real import
+// is the instantiation and nothing more.
+func LibraryAvailable(ctx context.Context, name LibraryName, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) bool {
+	_, err := loadLibrary(ctx, name, env, evaluator, false)
+	return err == nil
+}
+
+// loadLibrary is LoadLibrary and LibraryAvailable at once; instantiate chooses
+// whether the body runs.
+func loadLibrary(ctx context.Context, name LibraryName, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, instantiate bool) (*CompiledLibrary, error) {
 	registryAny := env.LibraryRegistry()
 	if registryAny == nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "load-library: no library registry configured")
@@ -94,17 +122,25 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 			// path-containment authorizer denies, so they are skipped rather than
 			// refused for having no path. This arm sits inside the retry loop, so
 			// it covers the first-lookup hit and the post-latch-wait hit alike.
-			if cached.SourceFile == "" {
-				return cached, nil
+			if cached.SourceFile != "" {
+				authErr := security.CheckWithAuthorizer(loadAuth, security.AccessRequest{
+					Resource:     security.ResourceCode,
+					Action:       security.ActionLoad,
+					Target:       cached.SourceFile,
+					TargetSource: sourceOf(cached.SourceFile),
+				})
+				if authErr != nil {
+					return nil, werr.WrapForeignErrorf(authErr, "load-library: %s", name.SchemeString())
+				}
 			}
-			authErr := security.CheckWithAuthorizer(loadAuth, security.AccessRequest{
-				Resource:     security.ResourceCode,
-				Action:       security.ActionLoad,
-				Target:       cached.SourceFile,
-				TargetSource: sourceOf(cached.SourceFile),
-			})
-			if authErr != nil {
-				return nil, werr.WrapForeignErrorf(authErr, "load-library: %s", name.SchemeString())
+			// A hit on a library a probe compiled but did not run is where the
+			// deferred body is flushed. Both hit arms reach it — the synthetic one
+			// too, where it is a no-op — so there is one rule and not two.
+			if instantiate {
+				instErr := cached.EnsureInstantiated(ctx, evaluator)
+				if instErr != nil {
+					return nil, werr.WrapForeignErrorf(instErr, "load-library: %s", name.SchemeString())
+				}
 			}
 			return cached, nil
 		}
@@ -174,6 +210,18 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 			"error registering library %s", name.SchemeString())
 	}
 
+	// Registration precedes instantiation, where it used to follow it, so that a
+	// probe leaves the compiled library findable and the import that follows is
+	// the instantiation. A concurrent waiter cannot observe the gap: it wakes on
+	// the latch this frame closes on return, and reaches the body through the same
+	// sync.Once if it gets there first.
+	if instantiate {
+		err = lib.EnsureInstantiated(ctx, evaluator)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return lib, nil
 }
 
@@ -209,7 +257,8 @@ func propagateRegistryAcrossNamespace(child, caller *environment.EnvironmentFram
 	}
 }
 
-// loadLibraryFromReader parses, compiles, and executes a library from an open reader.
+// loadLibraryFromReader parses and compiles a library from an open reader. The
+// body is run by the caller, through EnsureInstantiated.
 func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, expectedName LibraryName, callerEnv *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) (*CompiledLibrary, error) {
 	// Track this library file on a per-load-chain stack carried on ctx, not the
 	// single LoadStack shared on the root namespace: concurrent SRFI-18 thread
@@ -255,7 +304,7 @@ func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, ex
 			"expected define-library or library form, got %T", stx)
 	}
 
-	lib, err := compileAndExecuteLibrary(ctx, stx, expectedName, libEnv, filePath, evaluator)
+	lib, err := compileLibrary(ctx, stx, expectedName, libEnv, filePath, evaluator)
 	if err != nil {
 		return nil, err
 	}
@@ -263,8 +312,10 @@ func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, ex
 	return lib, nil
 }
 
-// compileAndExecuteLibrary compiles a define-library form and executes it.
-func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expectedName LibraryName, libEnv *environment.EnvironmentFrame, filePath string, evaluator machine.MacroEvaluator) (*CompiledLibrary, error) {
+// compileLibrary compiles a define-library form. It does NOT execute the body:
+// that is (*CompiledLibrary).EnsureInstantiated, so a cond-expand probe can
+// compile a library without running it.
+func compileLibrary(ctx context.Context, stx syntax.SyntaxValue, expectedName LibraryName, libEnv *environment.EnvironmentFrame, filePath string, evaluator machine.MacroEvaluator) (*CompiledLibrary, error) {
 	// Create a template for the top-level compilation (will be empty after define-library)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
@@ -315,22 +366,15 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 			expectedName.SchemeString(), compiledLib.Name.SchemeString()))
 	}
 
-	// Record the source file for error messages
+	// Record the source file for error messages, and the form's own position for
+	// the execution that now happens elsewhere.
 	compiledLib.SourceFile = filePath
+	compiledLib.formSource = stx.SourceContext()
 
 	// Let the registry's compile observer see the template before any of it
 	// runs: coverage instruments here, and a hook after EvalTemplate would
 	// find every top-level library form already executed-but-unrecorded.
 	fireCompileObserver(libEnv, compiledLib)
-
-	// Execute the library's compiled template to populate bindings
-	// The library's code (begin blocks, defines) is in compiledLib.Template
-	if compiledLib.Template != nil && compiledLib.Template.CodeLen() > 0 {
-		_, err = evaluator.EvalTemplate(ctx, compiledLib.Template, compiledLib.Env)
-		if err != nil {
-			return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(err, "error executing library"))
-		}
-	}
 
 	return compiledLib, nil
 }

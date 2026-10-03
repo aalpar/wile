@@ -110,18 +110,20 @@ type FeatureRequirement interface {
 	// The registry parameter is used to check if a library is already loaded.
 	// The resolver parameter is used to check if a library file exists
 	// (via the FileResolver chain, supporting both OS and virtual fs.FS).
-	// The load parameter, when non-nil, lets a (library X) requirement attempt
-	// a real load (so a .sld that resolves on disk but fails to import counts
-	// as unsatisfied); when nil, library availability falls back to a
-	// file-existence check via the resolver.
+	// The load parameter, when non-nil, lets a (library X) requirement ask
+	// whether the library is available (so a .sld that resolves on disk but
+	// fails to COMPILE counts as unsatisfied); when nil, library availability
+	// falls back to a file-existence check via the resolver.
 	IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver, load LibraryLoadProbe) bool
 }
 
-// LibraryLoadProbe attempts to actually load a library by name, returning true
-// iff the load (parse + compile + execute + register) succeeds. A successful
-// probe caches the library in the registry, so the subsequent real import is
-// free. cond-expand's (library X) requirement uses this so importability — not
-// mere file presence — decides the clause (R7RS §4.2.1, plan item 5F/P6).
+// LibraryLoadProbe reports whether a library is available, returning true iff
+// resolve + parse + compile + register succeeds. EXECUTION IS NOT PART OF IT:
+// R7RS §4.2.1 asks whether the library is available, not for its state, so the
+// probe must not run a body (LibraryAvailable). A probe caches the compiled
+// library in the registry, so a subsequent real import is the instantiation
+// alone. cond-expand's (library X) requirement uses this so compilability — not
+// mere file presence — decides the clause.
 type LibraryLoadProbe func(name LibraryName) bool
 
 // featureIdentifier is a simple feature requirement.
@@ -142,9 +144,10 @@ func (p *libraryRequirement) IsSatisfied(ctx context.Context, registry *LibraryR
 	if registry != nil && registry.Lookup(p.name) != nil {
 		return true
 	}
-	// Preferred: attempt a real load so a .sld that resolves on disk but fails
-	// to import (missing dependency, body compile error) counts as unsatisfied.
-	// A successful probe caches the library, so the later real import is free.
+	// Preferred: ask whether the library is available, so a .sld that resolves
+	// on disk but fails to compile (missing dependency, body compile error)
+	// counts as unsatisfied. A successful probe caches the compiled library, so
+	// the later real import only has to run it.
 	if load != nil {
 		return load(p.name)
 	}

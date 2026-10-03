@@ -15,13 +15,17 @@
 package wile_test
 
 import (
+	"bytes"
 	"context"
+	"strings"
 	"testing"
 	"testing/fstest"
 
 	qt "github.com/frankban/quicktest"
 
+	ioext "github.com/aalpar/wile/pkg/extensions/io"
 	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -92,4 +96,129 @@ func TestCondExpandLibraryImportability(t *testing.T) {
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestCondExpandLibraryProbeDoesNotRunTheBody is P3.14's gate (I141). A
+// (library X) requirement asks whether X is AVAILABLE (R7RS §4.2.1); deciding it
+// by importing X answers a different question and charges the program X's
+// effects for asking.
+//
+// Two rows are RED on master: the leaf purity row, where the probe printed SFX,
+// and the criterion row, where a library whose BODY fails at runtime answered
+// not-available because the old probe executed it. The third row is the residual
+// this change does NOT close, pinned so it is recorded rather than discovered.
+func TestCondExpandLibraryProbeDoesNotRunTheBody(t *testing.T) {
+	ctx := context.Background()
+
+	fsys := fstest.MapFS{
+		// A body with an observable effect.
+		"probe/sfx.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (probe sfx)
+  (import (scheme base) (scheme write))
+  (export sfx-marker)
+  (begin (display "SFX") (define sfx-marker 1)))`),
+		},
+		// Imports (probe sfx), so probing THIS library instantiates that one.
+		"probe/depper.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (probe depper)
+  (import (scheme base) (probe sfx))
+  (export dep)
+  (begin (define dep sfx-marker)))`),
+		},
+		// Compiles; raises when run.
+		"probe/bust.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (probe bust)
+  (import (scheme base))
+  (export bz)
+  (begin (define bz (car (list)))))`),
+		},
+	}
+
+	// newEngine returns an engine whose current-output-port is buf, so a library
+	// body's effect is observable from Go. The port is installed before anything
+	// is evaluated, which matters: an import runs at COMPILE time of the form
+	// that contains it, outside any dynamic extent a parameterize could cover.
+	newEngine := func(t *testing.T) (*wile.Engine, *bytes.Buffer) {
+		t.Helper()
+		eng, err := wile.NewEngine(ctx,
+			wile.WithProfile(wile.KitchenSink),
+			wile.WithSourceFS(stdlib.FS),
+			wile.WithSourceFS(fsys),
+			wile.WithLibraryPaths("."),
+		)
+		qt.Assert(t, err, qt.IsNil)
+		t.Cleanup(func() {
+			_ = eng.Close()
+		})
+		st, ok := eng.Namespace().IOState().(*ioext.State)
+		qt.Assert(t, ok, qt.IsTrue)
+		buf := &bytes.Buffer{}
+		st.SetOutputPort(values.NewCharacterOutputPortFromWriter(buf))
+		return eng, buf
+	}
+
+	t.Run("a leaf probe runs no body", func(t *testing.T) {
+		eng, buf := newEngine(t)
+		v, err := eng.EvalMultiple(ctx,
+			`(cond-expand ((library (probe sfx)) 'available) (else 'not-available))`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, v.SchemeString(), qt.Equals, "available")
+		qt.Assert(t, buf.String(), qt.Equals, "",
+			qt.Commentf("RED on master, which printed SFX while deciding the clause"))
+	})
+
+	t.Run("the import that follows a probe runs the body exactly once", func(t *testing.T) {
+		eng, buf := newEngine(t)
+		_, err := eng.EvalMultiple(ctx,
+			`(cond-expand ((library (probe sfx)) 'available) (else 'not-available))`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, buf.String(), qt.Equals, "")
+
+		v, err := eng.EvalMultiple(ctx, `(import (probe sfx)) sfx-marker`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, v.SchemeString(), qt.Equals, "1")
+		// Once, not twice and not never: the probe left a compiled library whose
+		// instantiation was still pending, and the import is what flushes it.
+		qt.Assert(t, strings.Count(buf.String(), "SFX"), qt.Equals, 1)
+	})
+
+	t.Run("an absent library is still unavailable", func(t *testing.T) {
+		eng, buf := newEngine(t)
+		v, err := eng.EvalMultiple(ctx,
+			`(cond-expand ((library (probe absent)) 'available) (else 'not-available))`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, v.SchemeString(), qt.Equals, "not-available")
+		qt.Assert(t, buf.String(), qt.Equals, "")
+	})
+
+	t.Run("a library whose body raises is available", func(t *testing.T) {
+		eng, _ := newEngine(t)
+		v, err := eng.EvalMultiple(ctx,
+			`(cond-expand ((library (probe bust)) 'available) (else 'not-available))`)
+		qt.Assert(t, err, qt.IsNil)
+		// RED on master, which answered not-available because the probe ran the
+		// body and took the raise as evidence of unavailability. The criterion
+		// change is deliberate and documented in
+		// docs/reference/r7rs-differences.md: §4.2.1 asks whether the library is
+		// available, not for its state.
+		qt.Assert(t, v.SchemeString(), qt.Equals, "available",
+			qt.Commentf("RED on master, which answered not-available"))
+	})
+
+	t.Run("RESIDUAL: probing a library instantiates the libraries IT imports", func(t *testing.T) {
+		eng, buf := newEngine(t)
+		v, err := eng.EvalMultiple(ctx,
+			`(cond-expand ((library (probe depper)) 'available) (else 'not-available))`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, v.SchemeString(), qt.Equals, "available")
+		// NOT a target of this change, and pinned so the gap is recorded rather
+		// than rediscovered. The deferral is one level deep by construction: a
+		// library's own import clauses go through LoadLibrary with instantiate
+		// true, because resolveImportSets is the shared parse-load-apply prefix
+		// for the top-level and library-internal paths alike, and only the
+		// probe's own call is parameterised. Closing this means threading the
+		// flag through that prefix.
+		qt.Assert(t, strings.Count(buf.String(), "SFX"), qt.Equals, 1,
+			qt.Commentf("the probe is pure at its own level only"))
+	})
 }

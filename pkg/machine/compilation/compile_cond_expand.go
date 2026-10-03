@@ -41,15 +41,17 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 	registry := registryOf(p.env)
 	resolver := p.env.FileResolver()
 
-	// A (library X) requirement is satisfied only if X actually imports, not
-	// merely if its .sld resolves on disk (5F/P6). Probe via a real LoadLibrary
-	// when we have the env + evaluator to do so; LoadLibrary caches on success,
-	// so the subsequent real import is free. nil falls back to file existence.
+	// A (library X) requirement asks whether X is AVAILABLE, not what X does
+	// (R7RS §4.2.1). LibraryAvailable answers it by compiling X and stopping
+	// short of running it, which is more than file existence (a malformed form,
+	// a missing dependency or a body that will not compile all answer false) and
+	// less than an import (nothing in the body executes). The compiled library
+	// stays in the registry, so a later real import is the instantiation alone.
+	// nil falls back to file existence, as in a unit test with no evaluator.
 	var load LibraryLoadProbe
 	if p.env != nil && p.evaluator != nil {
 		load = func(name LibraryName) bool {
-			_, loadErr := LoadLibrary(ctx, name, p.env, p.evaluator)
-			return loadErr == nil
+			return LibraryAvailable(ctx, name, p.env, p.evaluator)
 		}
 	}
 
