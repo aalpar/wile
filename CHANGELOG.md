@@ -119,6 +119,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A hashtable remembers the procedures it was made with.** R6RS §13.3 asks for
+  the equivalence function a table uses to compare keys;
+  `hashtable-equivalence-function` and `hashtable-hash-function` answered by
+  probing the namespace for `equal?` / `equal-hash` by NAME, which locates
+  whichever copy the program can name rather than the object it supplied. Under
+  `(rename (scheme base) (equal? my-eq))` that spelling is never bound, so the
+  probe fell through to the sealed base's closure and
+  `(eq? (hashtable-equivalence-function h) my-eq)` answered `#f` where Chez
+  answers `#t`. A table built by `make-hashtable` now holds its two argument
+  objects and hands those back, through `hashtable-copy` as well.
+
+  The spec is silent on object identity — §13.3 says only "the equivalence
+  function used by *hashtable* to compare keys" — so this is Chez's answer, not
+  a conformance requirement. A fixed-kind table (`make-eq-hashtable` and
+  friends) was constructed with no procedure to remember and still answers from
+  the name probe.
+
+  `hashtable-hash-function` now refuses an out-of-range `HashtableKind` instead
+  of answering `#f` for anything that was not the equal kind. Reachable only
+  from Go, via the exported `values.NewHashtable`.
+
 - **A `(wile <profile>)` environment sees the macro vocabulary at every phase.**
   The language rows (the base at phase 0, the macro vocabulary at every macro
   phase) were installed only on the engine's bootstrap path, so an environment
@@ -279,6 +300,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `let` — are affected and all five now report the structural error.
 
 ### Changed
+
+- **`pkg/values` hashtable API.** `(*Hashtable).HashFunction` and
+  `EquivalenceFunction` are new, returning `values.Callable` or nil for NONE,
+  alongside the new constructor `NewEqualHashtableWithFunctions(hashFn, equivFn
+  Callable)`. The constructor degrades a half pair (either argument nil) to
+  remembering nothing, so the two accessors always answer NONE together.
+  `pkg/values` stores the pair opaquely; whether it is the registered primitive
+  is decided in `pkg/registry/core` by `machine.PrimitiveIdentity`, and an
+  unrecognized pair falls through to the name probe rather than being returned.
 
 - **A hygiene scope set is now `values.Scopes`, an immutable persistent chain,
   not a `[]*Scope` that every touch copied. BREAKING at the `pkg/values`,

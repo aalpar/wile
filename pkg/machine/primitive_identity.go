@@ -66,9 +66,16 @@ func (p *PrimitiveIdentity) Name() string {
 // from a spec that declared one. nil means NONE: a Scheme procedure, a primitive
 // with no declared identity, and a non-procedure are all indistinguishable here,
 // which is what makes an identity compare against a non-nil token fail closed.
+//
+// TOTAL over values.Value, including a TYPED NIL, and callers depend on that:
+// they reach this with a value an embedder supplied, and the whole point of the
+// contract above is that one compare decides. Without the receiver check a nil
+// *ForeignClosure passes the assertion and Identity() dereferences it, which is
+// the opaque ErrPanicRecovery that callers use this function to avoid rather
+// than to produce.
 func IdentityOf(v values.Value) *PrimitiveIdentity {
 	fc, ok := v.(*ForeignClosure)
-	if !ok {
+	if !ok || fc == nil {
 		return nil
 	}
 	return fc.Identity()

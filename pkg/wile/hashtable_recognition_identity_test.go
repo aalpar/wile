@@ -22,6 +22,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -316,12 +317,14 @@ func TestHashtableRemembersTheProceduresItWasMadeWith(t *testing.T) {
 	}
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
-			// A FRESH engine per case: an import mutates the top level.
-			eng := newSRFITestEngine(t)
+			// A FRESH engine per case: an import mutates the top level. Built
+			// inside the branch — constructing one and discarding it would keep
+			// it alive until the parent test's cleanup runs.
+			newEngine := newSRFITestEngine
 			if tc.needLib {
-				eng = newHashtableSecondCopyEngine(t)
+				newEngine = newHashtableSecondCopyEngine
 			}
-			got := evalSRFI(c, eng, tc.expr)
+			got := evalSRFI(c, newEngine(c), tc.expr)
 			c.Assert(got, qt.Equals, tc.want)
 		})
 	}
@@ -331,20 +334,23 @@ func TestHashtableRemembersTheProceduresItWasMadeWith(t *testing.T) {
 // an out-of-range kind, which is reachable only from Go: values.NewHashtable is
 // exported and validates nothing.
 //
-// It matters here because this is the guard the remembered-procedure slot must
-// not route around. equivIdentity is a switch rather than an array precisely so
-// an unknown kind refuses explicitly instead of panicking (see its doc), and an
-// accessor that answered from a remembered object BEFORE consulting the kind
-// would reach past it. hashtable-hash-function owes the same refusal, where it
-// previously answered #f for anything that was not the equal kind — a complement
-// that is only accidentally equivalent to "eq or eqv".
+// equivIdentity is a switch rather than an array precisely so an unknown kind
+// refuses explicitly instead of panicking (see its doc), and hashtable-hash-function
+// owes the same refusal, where it previously answered #f for anything that was
+// not the equal kind — a complement only accidentally equivalent to "eq or eqv".
+//
+// This pins the REFUSAL and not the accessors' check order. The order is
+// unobservable, because a remembering table is always the equal kind: a table
+// with an out-of-range kind comes from values.NewHashtable, which never sets the
+// remembered slot. Swapping the two checks fails no test, measured — and saying
+// otherwise here is a claim this file cannot back.
 func TestHashtableAccessorsRefuseAnUnknownKind(t *testing.T) {
 	c := qt.New(t)
 
 	for _, name := range []string{"hashtable-equivalence-function", "hashtable-hash-function"} {
 		c.Run(name, func(c *qt.C) {
 			eng := newSRFITestEngine(t)
-			err := eng.Define("odd-table", WrapValue(values.NewHashtable(values.HashtableKind(7))))
+			err := eng.Define("odd-table", WrapValue(values.NewHashtable(values.HashtableKind(values.HashtableKindCount))))
 			c.Assert(err, qt.IsNil)
 			_, err = eng.EvalMultiple(context.Background(), "("+name+" odd-table)")
 			c.Assert(err, qt.IsNotNil)
@@ -376,21 +382,31 @@ func (*typedNilCallable) AcceptsArity(int) bool {
 	return true
 }
 
-// TestHashtableAccessorsRejectAnUnregisteredRememberedValue pins the identity
-// gate in setRememberedOrRecognized, which is the only thing keeping the
-// remembered slot from being a hole in the accessors' contract.
+// TestHashtableAccessorsRejectAnUnregisteredRememberedValue pins the gate in
+// rememberedEqualPair, which is the only thing keeping the remembered slot from
+// being a hole in the accessors' contract.
 //
-// values.NewEqualHashtableWith is exported and deliberately draws no conclusion
-// about which procedures it is handed — recognition is this package's job, by
-// machine.PrimitiveIdentity. Without the gate an embedder could make
-// hashtable-equivalence-function answer a value that is not the registered
-// primitive, under its declared ReturnType: TypeProcedure.
+// values.NewEqualHashtableWithFunctions is exported and deliberately draws no
+// conclusion about which procedures it is handed — recognition needs
+// machine.PrimitiveIdentity, which pkg/values cannot see. Without the gate an
+// embedder could make hashtable-equivalence-function answer a value the registry
+// never registered, under its declared ReturnType: TypeProcedure, which nothing
+// at runtime enforces.
 //
-// A TYPED nil is the sharp case, and the reason the gate cannot be replaced by a
-// nil check: `remembered != nil` is an interface test, which a typed nil passes,
-// so the raw slot would escape and render as #<typed-nil> instead of the
-// equivalence procedure. This is the hazard class the tree already paid for once
-// in readSyntax's errNoDatum.
+// Three cases, and each pins a different half of the predicate:
+//
+//   - A TYPED NIL of a non-closure type. `remembered != nil` is an interface
+//     test, which a typed nil passes, so a bare nil check would let it escape.
+//   - A typed nil of *machine.ForeignClosure, the one type the slot is BUILT to
+//     hold. This is the sharp case: IdentityOf asserts to that type and reads a
+//     field off it, so before IdentityOf was made total this panicked inside the
+//     gate rather than being rejected by it — reintroducing the opaque
+//     ErrPanicRecovery that equivIdentity's switch exists to avoid.
+//   - A REGISTERED primitive bearing the WRONG token: equal? in the hash slot
+//     and equal-hash in the equivalence slot, the transposition an embedder
+//     would actually make. Without this row the test cannot tell `== identity`
+//     from the weaker `IdentityOf(...) != nil`, and weakening the gate that way
+//     leaves every package green.
 //
 // The gate must fail OPEN to the name probe, not refuse: the table is still a
 // perfectly good equal?-keyed table, and the probe's answer is the one a
@@ -398,20 +414,95 @@ func (*typedNilCallable) AcceptsArity(int) bool {
 func TestHashtableAccessorsRejectAnUnregisteredRememberedValue(t *testing.T) {
 	c := qt.New(t)
 
+	// The registry's own equal? and equal-hash closures, reached the way a
+	// program reaches them, so the transposed row holds genuinely registered
+	// primitives rather than look-alikes.
+	registered := func(c *qt.C, eng *Engine, expr string) values.Callable {
+		v, err := eng.EvalMultiple(context.Background(), expr)
+		c.Assert(err, qt.IsNil)
+		q, ok := v.Internal().(values.Callable)
+		c.Assert(ok, qt.IsTrue)
+		return q
+	}
+
 	cases := []struct {
-		name       string
-		remembered values.Callable
+		name string
+		pair func(c *qt.C, eng *Engine) (values.Callable, values.Callable)
 	}{
-		{"a typed nil", (*typedNilCallable)(nil)},
-		{"a procedure the registry never registered", &typedNilCallable{}},
+		{"a typed nil of a non-closure type",
+			func(_ *qt.C, _ *Engine) (values.Callable, values.Callable) {
+				return (*typedNilCallable)(nil), (*typedNilCallable)(nil)
+			}},
+		{"a typed nil of the closure type the slot holds",
+			func(_ *qt.C, _ *Engine) (values.Callable, values.Callable) {
+				return (*machine.ForeignClosure)(nil), (*machine.ForeignClosure)(nil)
+			}},
+		{"a procedure the registry never registered",
+			func(_ *qt.C, _ *Engine) (values.Callable, values.Callable) {
+				return &typedNilCallable{}, &typedNilCallable{}
+			}},
+		{"registered primitives in transposed slots",
+			func(c *qt.C, eng *Engine) (values.Callable, values.Callable) {
+				return registered(c, eng, "equal?"), registered(c, eng, "equal-hash")
+			}},
+		// One good member and one bad one: the gate is ATOMIC, so this must
+		// answer from the probe on BOTH sides rather than mixing provenance.
+		{"one registered member and one unregistered",
+			func(c *qt.C, eng *Engine) (values.Callable, values.Callable) {
+				return registered(c, eng, "equal-hash"), &typedNilCallable{}
+			}},
 	}
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
-			eng := newSRFITestEngine(t)
-			ht := values.NewEqualHashtableWith(tc.remembered, tc.remembered)
+			eng := newSRFITestEngine(c)
+			hashFn, equivFn := tc.pair(c, eng)
+			ht := values.NewEqualHashtableWithFunctions(hashFn, equivFn)
 			c.Assert(eng.Define("odd-table", WrapValue(ht)), qt.IsNil)
 			got := evalSRFI(c, eng, `(list (eq? (hashtable-equivalence-function odd-table) equal?)
 				(eq? (hashtable-hash-function odd-table) equal-hash))`)
+			c.Assert(got, qt.Equals, `(#t #t)`)
+		})
+	}
+}
+
+// TestHashtableHalfRememberedPairIsNotRemembered pins that a HALF pair degrades
+// to remembering nothing, at the constructor.
+//
+// pkg/values cannot ask whether a member is the registered primitive, so the
+// claim it can hold is narrower: the two accessors answer NONE together. One
+// nil member would break that on its own, before the registry's gate ever runs,
+// and the two accessors would then read from different sources.
+//
+// Fail OPEN, like the gate: both accessors answer from the name probe, which is
+// what a fixed-kind table gets.
+func TestHashtableHalfRememberedPairIsNotRemembered(t *testing.T) {
+	c := qt.New(t)
+
+	eng := newSRFITestEngine(c)
+	equalHash, err := eng.EvalMultiple(context.Background(), "equal-hash")
+	c.Assert(err, qt.IsNil)
+	hashFn, ok := equalHash.Internal().(values.Callable)
+	c.Assert(ok, qt.IsTrue)
+
+	for _, tc := range []struct {
+		name            string
+		hashFn, equivFn values.Callable
+	}{
+		{"a remembered hash with no equivalence", hashFn, nil},
+		{"a remembered equivalence with no hash", nil, hashFn},
+		{"neither", nil, nil},
+	} {
+		c.Run(tc.name, func(c *qt.C) {
+			ht := values.NewEqualHashtableWithFunctions(tc.hashFn, tc.equivFn)
+			// Asserted at the pkg/values layer too, because this is that
+			// layer's claim: a half pair leaves the slot empty.
+			c.Assert(ht.HashFunction(), qt.Equals, nil)
+			c.Assert(ht.EquivalenceFunction(), qt.Equals, nil)
+
+			probe := newSRFITestEngine(c)
+			c.Assert(probe.Define("half-table", WrapValue(ht)), qt.IsNil)
+			got := evalSRFI(c, probe, `(list (eq? (hashtable-equivalence-function half-table) equal?)
+				(eq? (hashtable-hash-function half-table) equal-hash))`)
 			c.Assert(got, qt.Equals, `(#t #t)`)
 		})
 	}

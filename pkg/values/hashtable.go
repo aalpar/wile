@@ -72,10 +72,13 @@ const (
 
 // HashtableKindCount is the number of defined kinds. It is a ratchet:
 // TestHashtableKindsAreExhaustive fails when a kind is added without a row in
-// hashKey, keyEqual, String and equivIdentity. All four used to reach an unlisted
-// kind through a `default:` arm answering EQUAL, so a new kind would have
-// inherited equal? key identity — collapsing keys silently rather than failing
-// loudly.
+// hashKey, keyEqual, String, equivIdentity and PrimHashtableHashFunction.
+//
+// The first four used to reach an unlisted kind through a `default:` arm
+// answering EQUAL, so a new kind would have inherited equal? key identity —
+// collapsing keys silently rather than failing loudly. hashKey and keyEqual
+// still do; the two inspection sites refuse instead, which is why they are
+// listed separately from them rather than described as one policy.
 const HashtableKindCount = 3
 
 // String renders the kind as its R6RS-facing name, for error messages and
@@ -148,12 +151,18 @@ type Hashtable struct {
 	// mutable, so it stays out of the copy-on-write dance and adds no
 	// concurrency surface.
 	//
-	// ONE slot, not two, and that is the point: "was this table made with a
-	// pair" is one fact. Two independently-nilable fields would make the half
-	// state representable, and the two accessors would then read from different
-	// sources — one from the remembered object, the other from the name probe —
-	// handing a program a hash function and an equivalence function with
+	// ONE slot, not two, because "was this table made with a pair" is one fact.
+	// Two independently-nilable FIELDS would let one accessor answer from the
+	// remembered object while the other fell through to a name probe, which
+	// would hand a program a hash function and an equivalence function with
 	// different provenance.
+	//
+	// The pointer alone does not deliver that: its two members are themselves
+	// independently nilable. NewEqualHashtableWithFunctions refusing a half pair
+	// is what makes the two accessors answer NONE together. Provenance is a
+	// SECOND claim and it is not this layer's to make — a member can be non-nil
+	// and still not be the registered primitive, which only pkg/registry/core
+	// can see; it gates the pair atomically for that reason.
 	made *hashtableFunctions
 }
 
@@ -180,7 +189,7 @@ func NewHashtable(kind HashtableKind) *Hashtable {
 	return &Hashtable{kind: kind, mutable: true}
 }
 
-// NewEqualHashtableWith creates an empty MUTABLE equal?-keyed table that also
+// NewEqualHashtableWithFunctions creates an empty MUTABLE equal?-keyed table that also
 // REMEMBERS the hash and equivalence procedure objects it was made with, for
 // R6RS §13.3's hashtable-hash-function / hashtable-equivalence-function.
 //
@@ -197,12 +206,17 @@ func NewHashtable(kind HashtableKind) *Hashtable {
 // This constructor still draws no conclusion about WHICH procedures these are:
 // recognition is pkg/registry/core's job, by machine.PrimitiveIdentity, which
 // pkg/values cannot see and must not re-model.
-func NewEqualHashtableWith(hashFn, equivFn Callable) *Hashtable {
-	return &Hashtable{
-		kind:    HashtableEqual,
-		mutable: true,
-		made:    &hashtableFunctions{hash: hashFn, equiv: equivFn},
+func NewEqualHashtableWithFunctions(hashFn, equivFn Callable) *Hashtable {
+	q := &Hashtable{kind: HashtableEqual, mutable: true}
+	// A HALF pair is not a pair. Remembering one member would split the two
+	// accessors' provenance, so it degrades to remembering nothing and both fall
+	// through to the caller's fallback — the same answer a fixed-kind table
+	// gets. Fail OPEN: the table is still a perfectly good equal?-keyed table.
+	if hashFn == nil || equivFn == nil {
+		return q
 	}
+	q.made = &hashtableFunctions{hash: hashFn, equiv: equivFn}
+	return q
 }
 
 // HashFunction returns the hash procedure this table was constructed with, or
@@ -216,7 +230,8 @@ func (p *Hashtable) HashFunction() Callable {
 
 // EquivalenceFunction returns the equivalence procedure this table was
 // constructed with, or nil for NONE, as HashFunction. The two answer NONE
-// together: they read one slot.
+// together, because the constructor refuses a half pair — not merely because
+// they read one slot.
 func (p *Hashtable) EquivalenceFunction() Callable {
 	if p.made == nil {
 		return nil

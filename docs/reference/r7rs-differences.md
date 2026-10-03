@@ -45,7 +45,10 @@ This document catalogs differences between the current implementation and the R7
     `WithStrictNamespace` or a dialect's `PrimitiveRemover` narrows the sealed
     base. `hashtable-hash-function` and `hashtable-equivalence-function` hand
     back the two argument objects a `make-hashtable` table was built with, so a
-    `rename`d import reads the pair back under the name it imported it under.
+    program that holds its own copy of one reads that copy back. A `rename`d
+    import is the reachable case for `equal?`; `equal-hash` is ambient and
+    exported by no library, so it cannot be renamed, and the copy a program can
+    hold of it comes from a library that binds and re-exports it.
     That is Chez's answer rather than a conformance requirement: R6RS §13.3 says
     only "the equivalence function used by *hashtable* to compare keys" and never
     reaches object identity. Only a fixed-kind table (`make-eq-hashtable` and

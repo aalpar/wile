@@ -434,7 +434,7 @@ func TestHashtableNestedKeyTerminates(t *testing.T) {
 // kind in range renders a distinct name rather than falling to "unknown".
 func TestHashtableKindsAreExhaustive(t *testing.T) {
 	qt.Assert(t, values.HashtableKindCount, qt.Equals, 3,
-		qt.Commentf("a kind was added or removed: give it a row in hashKey, keyEqual, String and equivIdentity"))
+		qt.Commentf("a kind was added or removed: give it a row in hashKey, keyEqual, String, equivIdentity and PrimHashtableHashFunction"))
 
 	seen := make(map[string]bool, values.HashtableKindCount)
 	for i := range values.HashtableKindCount {
@@ -489,7 +489,7 @@ func TestHashtable_RememberedFunctionsSurviveCopy(t *testing.T) {
 
 	hashFn := newStubCallable(values.NewSymbol("stand-in-hash"))
 	equivFn := newStubCallable(values.NewSymbol("stand-in-equiv"))
-	ht := values.NewEqualHashtableWith(hashFn, equivFn)
+	ht := values.NewEqualHashtableWithFunctions(hashFn, equivFn)
 
 	for _, tc := range []struct {
 		name string
@@ -516,8 +516,10 @@ func TestHashtable_RememberedFunctionsSurviveCopy(t *testing.T) {
 	// passes. qt.IsNil would accept a typed nil here and so would not be testing
 	// the predicate the consumer uses — qt.Equals against nil is.
 	//
-	// All four cells, because the two accessors read ONE slot and must therefore
-	// answer NONE together; a diagonal pair would not catch a split.
+	// All four cells rather than a diagonal pair. The two accessors answer NONE
+	// together because the constructor refuses a HALF pair — not because they
+	// read one slot, which on its own would permit one nil member.
+	// TestHashtableHalfRememberedPairIsNotRemembered (pkg/wile) pins that half.
 	plain := values.NewHashtable(values.HashtableEq)
 	for _, tc := range []struct {
 		name string
@@ -533,18 +535,34 @@ func TestHashtable_RememberedFunctionsSurviveCopy(t *testing.T) {
 	}
 }
 
-// TestHashtable_CopyCarriesEveryWriteOnceField is the ratchet behind Copy's
-// explicit field list. Copy cannot be written as a struct copy, so every field
-// must be named there by hand, and nothing in the compiler notices when the next
-// one is not — the symptom is a copy that silently loses state.
+// TestHashtableFieldSetRatchet stands behind Copy's explicit field list. Copy
+// cannot be written as a struct copy — the sync.Map and the atomics forbid it —
+// so every field must be named there by hand, and nothing in the compiler
+// notices when the next one is not. The symptom is a copy that silently loses
+// state.
 //
-// A field count is the whole check: it cannot say WHICH field was added, but it
-// fails the moment one is, which is when the author is looking. Same shape as
-// HashtableKindCount's exhaustiveness ratchet.
+// It does NOT check that Copy carries anything; naming it for the carry would
+// tell a maintainer the wrong thing when they drop a field from Copy's list and
+// see this green. The carries are pinned individually:
+// TestHashtable_RememberedFunctionsSurviveCopy (made), TestHashtable_CopyClear
+// (buckets, size), TestHashtable_CopyIsImmutableWithoutTrue (mutable),
+// TestHashtableCopyResumesTheOrdinalCounter (nextSeq, in-package), and the Scheme-level
+// rows in pkg/wile.
+//
+// The field NAMES, not just the count: a field renamed or swapped one-for-one
+// holds the count and this would stay green, and naming them also tells the
+// author which one is new. Same role as HashtableKindCount's ratchet.
 //
 // reflect.TypeFor, not reflect.TypeOf(Hashtable{}): the composite literal copies
 // a sync.Map and trips go vet's copylocks.
-func TestHashtable_CopyCarriesEveryWriteOnceField(t *testing.T) {
-	qt.Assert(t, reflect.TypeFor[values.Hashtable]().NumField(), qt.Equals, 6,
-		qt.Commentf("a field was added to Hashtable: carry it in (*Hashtable).Copy, then update this count"))
+func TestHashtableFieldSetRatchet(t *testing.T) {
+	want := []string{"buckets", "size", "nextSeq", "kind", "mutable", "made"}
+
+	typ := reflect.TypeFor[values.Hashtable]()
+	got := make([]string, 0, typ.NumField())
+	for f := range typ.Fields() {
+		got = append(got, f.Name)
+	}
+	qt.Assert(t, got, qt.DeepEquals, want,
+		qt.Commentf("Hashtable's fields changed: carry any new one in (*Hashtable).Copy, give it a carry test, then update this list"))
 }

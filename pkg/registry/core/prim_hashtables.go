@@ -54,7 +54,9 @@ func PrimMakeHashtable(mc machine.CallContext) error {
 	// machine.IdentityOf answers nil for a Scheme procedure, a primitive with no
 	// declared identity, and a non-procedure alike, so comparing against a non-nil
 	// package-scope token refuses all three without a separate type check.
-	if machine.IdentityOf(mc.Arg(0)) != identityEqualHash || machine.IdentityOf(mc.Arg(1)) != identityEqualQ {
+	hashFn, hashOK := recognizedCallable(mc.Arg(0), identityEqualHash)
+	equivFn, equivOK := recognizedCallable(mc.Arg(1), identityEqualQ)
+	if !hashOK || !equivOK {
 		return werr.WrapForeignErrorf(werr.ErrUnsupportedHashtableKind,
 			"make-hashtable: only (make-hashtable equal-hash equal?) is supported; "+
 				"use make-eq-hashtable, make-eqv-hashtable or make-equal-hashtable")
@@ -69,21 +71,38 @@ func PrimMakeHashtable(mc machine.CallContext) error {
 	// accessors hand back. Identity has already decided they are the registered
 	// equal-hash / equal?; which COPY of each the caller holds is the caller's
 	// business, and under a renamed import it is a copy no name probe can find.
-	//
-	// Re-fetched through RequireArg rather than cast: the identity check above
-	// already proves both are *machine.ForeignClosure, so neither of these can
-	// fail, but an unchecked cast is what noUncheckedArgCast forbids and the
-	// constructor takes values.Callable.
-	hashFn, err := helpers.RequireArg[values.Callable](mc, 0, werr.ErrNotAProcedure, "make-hashtable")
-	if err != nil {
-		return err
-	}
-	equivFn, err := helpers.RequireArg[values.Callable](mc, 1, werr.ErrNotAProcedure, "make-hashtable")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewEqualHashtableWith(hashFn, equivFn))
+	mc.SetValue(values.NewEqualHashtableWithFunctions(hashFn, equivFn))
 	return nil
+}
+
+// recognizedCallable answers v as a values.Callable only if it IS the primitive
+// identity names, and NONE otherwise.
+//
+// One function for the two questions ("is this applicable" and "is this the
+// registered primitive") because the second subsumes the first: every closure the
+// registry mints is applicable, so a value bearing a registered identity is
+// necessarily a Callable. Asking them separately produced a type assertion whose
+// error branch could not be reached, which reads to the next author exactly like
+// one that can.
+//
+// Not helpers.RequireCallable, which is the right helper for a parameter a
+// primitive merely APPLIES. Nothing here applies these, and its diagnostic
+// ("expected a procedure") would be wrong for the case that actually occurs: a
+// procedure that is simply not this one. The caller's own refusal says that.
+func recognizedCallable(v values.Value, identity *machine.PrimitiveIdentity) (values.Callable, bool) {
+	// IdentityOf is total over values.Value — a typed nil included — so this one
+	// compare rejects a non-procedure, a Scheme closure and a different primitive
+	// alike. The assertion below can then only fail if a future primitive is
+	// registered on something that is not applicable, which is why it is still
+	// checked rather than asserted bare.
+	if machine.IdentityOf(v) != identity {
+		return nil, false
+	}
+	q, ok := v.(values.Callable)
+	if !ok {
+		return nil, false
+	}
+	return q, true
 }
 
 // makeHashtableConstructor returns the primitive for a fixed-kind R6RS
@@ -320,8 +339,12 @@ func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrUnsupportedHashtableKind,
 			"hashtable-equivalence-function: table has unknown kind %d", uint8(ht.Kind()))
 	}
-	return setRememberedOrRecognized(mc, ht.EquivalenceFunction(), identity, name,
-		"hashtable-equivalence-function")
+	_, equivFn, ok := rememberedEqualPair(ht)
+	if ok {
+		mc.SetValue(equivFn)
+		return nil
+	}
+	return setRecognizedPrimitive(mc, identity, name, "hashtable-equivalence-function")
 }
 
 // PrimHashtableHashFunction implements R6RS hashtable-hash-function, which returns
@@ -345,49 +368,63 @@ func PrimHashtableHashFunction(mc machine.CallContext) error {
 		mc.SetValue(values.FalseValue)
 		return nil
 	case values.HashtableEqual:
-		return setRememberedOrRecognized(mc, ht.HashFunction(), identityEqualHash, "equal-hash",
-			"hashtable-hash-function")
+		hashFn, _, ok := rememberedEqualPair(ht)
+		if ok {
+			mc.SetValue(hashFn)
+			return nil
+		}
+		return setRecognizedPrimitive(mc, identityEqualHash, "equal-hash", "hashtable-hash-function")
 	default:
 		return werr.WrapForeignErrorf(werr.ErrUnsupportedHashtableKind,
 			"hashtable-hash-function: table has unknown kind %d", uint8(ht.Kind()))
 	}
 }
 
-// setRememberedOrRecognized answers with the procedure object the table was
-// CONSTRUCTED with when there is one and it bears identity, and otherwise falls
-// through to the name probe.
+// rememberedEqualPair answers the (hash, equivalence) pair a table was
+// CONSTRUCTED with, and NONE unless BOTH members are the registered primitives.
 //
-// The identity gate is what keeps the remembered slot from being a hole in the
-// accessor's contract. values.NewEqualHashtableWith is exported and deliberately
-// draws no conclusion about which procedures it is handed, so without this check
-// an embedder could make hashtable-equivalence-function answer a non-procedure
-// under its declared ReturnType: TypeProcedure, or answer a typed nil — which
-// `!= nil` on an interface does not catch — as #<void>.
+// Atomic on purpose, and this is the whole reason the function exists rather than
+// a per-accessor gate. Gating each side independently lets one pass and the other
+// fail, and then hashtable-hash-function answers from the remembered object while
+// hashtable-equivalence-function answers from the name probe — one table, two
+// provenances, which is the outcome the single `made` slot is meant to prevent.
+// Resolving the pair together means both accessors agree about which source they
+// are reading, every time.
 //
-// It costs nothing in the case the remembered slot exists for: every closure
-// built from one PrimitiveSpec shares its *machine.PrimitiveIdentity, whichever
-// environment minted it, so a renamed import's copy passes. The gate rejects only
-// what the registry never registered.
+// The gate is what keeps the remembered slot from being a hole in the accessors'
+// contract. values.NewEqualHashtableWithFunctions is exported and deliberately
+// draws no conclusion about WHICH procedures it is handed — recognition needs
+// machine.PrimitiveIdentity, which pkg/values cannot see and must not re-model —
+// so without this an embedder could make hashtable-equivalence-function answer a
+// value the registry never registered, under its declared
+// ReturnType: TypeProcedure. The pair's identities are the equal ones because
+// `made` is only ever the equal pair: the constructor fixes the kind.
+//
+// It costs nothing in the case the slot exists for: every closure built from one
+// PrimitiveSpec shares its *machine.PrimitiveIdentity, whichever environment
+// minted it, so a renamed import's copy and a library island's copy both pass.
 //
 // Named trade-off: this forecloses reusing the slot for USER-SUPPLIED hash and
 // equivalence procedures (the feature PrimMakeHashtable's doc defers), since
 // IdentityOf answers nil for a Scheme closure. That is the honest reading of what
 // the slot means today — a remembered copy of a recognized primitive — and the
 // day user pairs land, this gate is the site to revisit.
-func setRememberedOrRecognized(mc machine.CallContext, remembered values.Callable, identity *machine.PrimitiveIdentity, name, site string) error {
-	if remembered != nil && machine.IdentityOf(remembered) == identity {
-		mc.SetValue(remembered)
-		return nil
+func rememberedEqualPair(ht *values.Hashtable) (values.Callable, values.Callable, bool) {
+	hashFn, hashOK := recognizedCallable(ht.HashFunction(), identityEqualHash)
+	equivFn, equivOK := recognizedCallable(ht.EquivalenceFunction(), identityEqualQ)
+	if !hashOK || !equivOK {
+		return nil, nil, false
 	}
-	return setRecognizedPrimitive(mc, identity, name, site)
+	return hashFn, equivFn, true
 }
 
 // setRecognizedPrimitive sets the primitive bearing identity as the result,
 // preferring the copy visible at the namespace's MUTABLE TOP LEVEL over the
 // sealed base's, or raises if neither is that primitive.
 //
-// This is the fallback under setRememberedOrRecognized: it answers when the table
-// remembers nothing, which is every fixed-kind table. A name probe cannot answer
+// This is the fallback under rememberedEqualPair: it answers when the table
+// remembers nothing — every fixed-kind table — and also when it remembers a pair
+// the gate REJECTS, which is the embedder path. A name probe cannot answer
 // "which object was this table made with" — under
 // (rename (scheme base) (equal? my-eq)) the spelling `equal?` is never bound, so
 // the probe falls through to a copy the caller never saw. A fixed-kind table was

@@ -40,3 +40,35 @@ func TestHashtableSizeHintClampsNegativeDrift(t *testing.T) {
 	// panicked on the negative value; it must now return cleanly.
 	c.Assert(p.snapshot(), qt.HasLen, 0)
 }
+
+// TestHashtableCopyResumesTheOrdinalCounter pins nextSeq's carry in Copy, which
+// had no test at all: deleting the Store failed nothing across pkg/values,
+// pkg/wile and pkg/registry/core.
+//
+// Asserted on the counter directly, in-package, rather than through a rendered
+// table. seq is only the TIE-BREAKER in sortHashtableEntries, applied after the
+// keys' SchemeString comparison, so a collision does not produce a wrong value
+// — it makes the comparator non-total and hands an unstable sort a tie, which
+// is a determinism loss too delicate to assert from outside. The invariant
+// itself is one comparison: a copy shares the source's buckets by reference, so
+// its counter must resume ABOVE every ordinal already in them or a later insert
+// ties with a live entry.
+func TestHashtableCopyResumesTheOrdinalCounter(t *testing.T) {
+	c := qt.New(t)
+
+	p := NewEmptyHashtable()
+	for _, k := range []string{"a", "b", "c"} {
+		p.Set(NewSymbol(k), NewInteger(1))
+	}
+	issued := p.nextSeq.Load()
+	c.Assert(issued, qt.Equals, uint64(3), qt.Commentf("three inserts, three ordinals"))
+
+	q := p.Copy(true)
+	c.Assert(q.nextSeq.Load(), qt.Equals, issued,
+		qt.Commentf("the copy shares the source's buckets, so its counter must resume above their ordinals"))
+
+	// And the next insert into the copy genuinely lands past them, rather than
+	// the counter merely holding the right number.
+	q.Set(NewSymbol("d"), NewInteger(2))
+	c.Assert(q.nextSeq.Load() > issued, qt.IsTrue)
+}
