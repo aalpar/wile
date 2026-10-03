@@ -84,9 +84,9 @@ func markBindingImported(target, source *environment.Binding, exportName string,
 	target.UpdateMeta(func(m *environment.BindingMeta) bool {
 		m.Imported = true
 		// Reset any inline-HOF stamp before re-deriving it below: a re-import
-		// overwrites target's value with its source's copy, and the stamp — since
-		// dispatch selects the template by it — must track the CURRENT value, never
-		// a stale template from a prior import of this slot. stampImportedInlineHOF
+		// retargets target's value location at its new source's, and the stamp —
+		// since dispatch selects the template by it — must track the CURRENT value,
+		// never a stale template from a prior import of this slot. stampImportedInlineHOF
 		// re-adds it iff THIS import qualifies. Harmless on a first import (already
 		// unset).
 		m.InlineHOF = false
@@ -94,14 +94,20 @@ func markBindingImported(target, source *environment.Binding, exportName string,
 		m.InlineHOFCallbackParam = 0
 		if source != nil {
 			m.CaptureSafe = source.IsCaptureSafe()
+			// The exporting unit's own set! travels with the shared value
+			// location: the value this binding reads can change, so Imported
+			// stops being evidence of rebind-stability for it (IsStable). Carried
+			// like CaptureSafe rather than re-derived, so a re-export chain keeps
+			// the fact from the unit that actually owns the variable.
+			m.Assigned = source.IsAssigned()
 			// Carry the docstring across the import boundary so ,doc and the doc
 			// tooling find it on the imported binding (e.g. a (wile control) macro
-			// documented at its define-syntax site). The copy path installs only
-			// the value, so without this the docstring would be lost on import.
+			// documented at its define-syntax site). The install carries only the
+			// value location, so without this the docstring would be lost on import.
 			//
 			// Assigned unconditionally, for the same reason the inline-HOF stamp is
-			// reset above: a re-import replaces target's value, and a docstring left
-			// over from the displaced value would document a value that is no longer
+			// reset above: a re-import retargets target's location, and a docstring
+			// left over from the displaced value would document a value that is no longer
 			// there. A procedure carries its own docstring on its
 			// template and so tracks its value for free; a macro has no template,
 			// making this field the macro path's only carrier — and the only one
@@ -769,9 +775,9 @@ const (
 // path was producing one: CreateGlobalBindingAt's reuse rule matches on
 // (phase, sealed, scopes), an import writes an EMPTY scope set where the base
 // carries NIL, and scopeSetsEqual(nil, []) is true. So `created == false`, the
-// SetOwnGlobalValue below replaced the startup set's value with the library
-// env's copy, and markBindingImported stamped the engine-shared base as
-// imported — after which the own-installs-only predicate refused THE BASE.
+// value install below replaced the startup set's value with the library env's
+// copy (it was a SetOwnGlobalValue then; it shares the location now), and
+// markBindingImported stamped the engine-shared base as imported — after which the own-installs-only predicate refused THE BASE.
 // Measured 2026-09-09 (verified against master, bisected to 183171a1): one slot,
 // same pointer, and `(import (scheme base))` alone stripped `not` from the
 // phase-1 macro vocabulary and made every base primitive it covered
@@ -862,7 +868,23 @@ func installImportedBinding(
 			localSym.Key, sourceLib.Name.SchemeString())
 	}
 
-	err := own.SetOwnGlobalValue(idx, source.Value())
+	// SHARE the exporter's value location rather than copying its value. The copy
+	// left the importer reading a snapshot taken at import time, so a library that
+	// assigned its own exported variable was invisible through the import —
+	// (importer-sees 1) against (library-sees 2). R7RS is silent on this (§5.6.1
+	// constrains what the IMPORTER may do to an imported binding and says nothing
+	// about the exporting library's own set!); of the two oracles Racket reads
+	// through and Chez refuses to export an assigned variable at all, and
+	// read-through is the only answer that keeps the programs the copy answered
+	// wrongly.
+	//
+	// target is nil only when idx addresses no slot, which is the condition
+	// SetOwnGlobalValue used to report here.
+	if target == nil {
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
+			"import: no binding to install for %s%s", localSym.Key, phaseContext)
+	}
+	err := target.ShareValueLocationWith(source)
 	if err != nil {
 		return werr.WrapForeignErrorf(err,
 			"import: failed to set binding for %s%s", localSym.Key, phaseContext)

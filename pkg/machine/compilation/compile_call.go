@@ -323,14 +323,21 @@ func (p *CompileTimeContinuation) tryInlineHOFCall(
 		return false, nil
 	}
 	cbIdx := b.InlineHOFParam()
-	if cbIdx < 0 {
-		// Only a curated HOF binding is stamped, and the two stamp seams stamp only
-		// structurally non-rebindable bindings: StampInlineHOFs sweeps the immutable
-		// sealed base, and stampImportedInlineHOF stamps imported bindings (Imported ⇒
-		// IsStable ⇒ R7RS forbids set!). So a stamped binding reaching here is always
-		// Stable — a user (define fold …) resolves to an unstamped runtime binding
-		// (cbIdx -1, handled above) and (set! fold …) on an import is rejected. No
-		// separate IsStable() gate is needed; the stamp already implies it.
+	if cbIdx < 0 || !b.IsStable() {
+		// Only a curated HOF binding is stamped: StampInlineHOFs sweeps the
+		// immutable sealed base, and stampImportedInlineHOF stamps imported
+		// bindings. A user (define fold …) resolves to an unstamped runtime binding
+		// (cbIdx -1) and (set! fold …) on an import is rejected.
+		//
+		// The IsStable() conjunct used to be omitted, on the reasoning that
+		// Imported ⇒ IsStable ⇒ the value cannot change. That implication no longer
+		// holds: an import shares the exporting library's value LOCATION, and a
+		// library may assign its own exported variable (BindingMeta.Assigned), which
+		// withdraws the Imported conclusion. No curated HOF's home library assigns
+		// it, so this conjunct refuses nothing today — it is here because the
+		// template is selected from the binding's VALUE at compile time, so
+		// "stamped" must not be the only thing standing between that selection and a
+		// value that can change under it.
 		return false, nil
 	}
 
