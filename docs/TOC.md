@@ -54,6 +54,7 @@ Every document in `docs/`, organized by topic.
 ## Environment
 
 - [system.md](environment/system.md) -- Environment system architecture
+- [import-and-define.md](environment/import-and-define.md) -- `import` and `define` over one identifier: which binding wins, and why order is not an input
 - [diagram.md](environment/diagram.md) -- Environment relationship diagram
 - [frame-allocation.md](environment/frame-allocation.md) -- Frame allocation, pooling, and why a let's parent frame is not recovered
 - [racket-namespaces.md](environment/racket-namespaces.md) -- Racket namespaces (comparative reference)
