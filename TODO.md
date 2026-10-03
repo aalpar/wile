@@ -482,9 +482,23 @@ defect at HEAD whether or not Tier 2 is ever built.
   — so a change that stops naming the offending identifier lands there as a deliberate edit.
   `TestUnboundDiagnosticNamesThePhase` and `TestPhase1_ProceduralTransformerUnboundWithoutImport`
   already pin the same mechanism for a *top-level* binder; only the let-local shape was uncovered.
-- [ ] **`define-for-syntax` binds under the empty scope set** [Correctness / hygiene, S]:
-  `runDefineForSyntax` writes with ∅ scopes, so the binding is not hygienic and a same-named
-  use-site identifier reaches it. Same family as the scope-keyed-global work already shipped.
+- [x] **`define-for-syntax` binds under the empty scope set** [Done 2026-10-02, P3.6/I140, with
+  I170, branch `fix/for-syntax-binder-scopes-and-pruning`]: `runDefineForSyntax` wrote with ∅
+  scopes, so a binder a macro TEMPLATE introduced was reachable from every scope set and leaked to
+  any later transformer spelling it the same way. `defineForSyntaxParts` now returns the
+  `*syntax.SyntaxSymbol` rather than its unwrapped `*values.Symbol` — the spelling was never the
+  question, the scopes were — and `createPhaseBindingUnlessStable` takes `nameStx.Scopes()`.
+  Racket and Chez both refuse the leaking reference.
+  **THIS HALF ALONE IS A REGRESSION, measured three ways**, and that is why it shipped with I170
+  rather than before it: a macro-SUPPLIED name wears the use-site scope the invocation stamped, so
+  under the scopes argument alone a later reference stops resolving. The use-site pruner strips
+  that scope back off, and it only prunes forms on its list, so `pruneDefinitionBinder` gained
+  `define-for-syntax` in the same change. Measured on three builds — master fails r1/r4b, the
+  scopes argument alone fails **r2**/r4b, both pass — which is the evidence the halves are
+  inseparable. Gate `TestForSyntaxBinderScopes` (`pkg/wile`), six rows, two RED on master.
+  **Read every row through a procedural transformer, never a `syntax-rules` template**: the
+  template channel is the phase-0 emission leak in the row below, and a gate written that way
+  asserts Wile keeps it.
 - [ ] **`cond-expand (library X)` instantiates X as a side effect** [Correctness, S]: the test
   performs a real `LoadLibrary`. A feature *test* must not run a library's body; R7RS §4.2.1's
   `(library …)` clause asks whether the library is available, not for its state.
@@ -670,8 +684,20 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
 - [ ] A literal's binding captured when a nested `syntax-rules` transformer compiles misses an
   enclosing `let-syntax`-bound `else`: `(let-syntax ((else …)) (let-syntax ((m (syntax-rules
   (else) …))) (m else)))` gives `other`, Chez `lit`.
-- [ ] A macro expanding to `(begin-for-syntax (define (name x) …))` leaves `name` invisible to
-  a later transformer, one form per unit.
+- [x] A macro expanding to `(begin-for-syntax (define (name x) …))` leaves `name` invisible to
+  a later transformer, one form per unit [Done 2026-10-02, P3.6/I170, with I140, branch
+  `fix/for-syntax-binder-scopes-and-pruning`]. **The row as filed is only half true, and the
+  distinction is the finding:** a name the macro's TEMPLATE writes stays invisible, and should —
+  Racket refuses the same shape, so that half was never a defect. What was broken is a
+  pattern-SUPPLIED name, which the user wrote: `((_ f) (begin-for-syntax (define (f x) …)))` then
+  `(gen trp)`. `pruneUseSiteScopes` now routes `begin-for-syntax` to
+  `pruneUseSiteScopesInBegin` alongside `begin`, so the definitions inside it get their binders
+  pruned. **Residual, deliberately left open:** `define-values` and `define-record-type` are not on
+  `pruneDefinitionBinder`'s form list, so a supplied binder under
+  `(begin-for-syntax (define-values (a b) …))` is still refused where Racket answers 3. Refused
+  before AND after, so the new route widened where that gap is reachable from rather than creating
+  it; pinned as a flip-when-closed assertion in
+  `TestForSyntaxSuppliedDefineValuesStillRefused` (`pkg/wile`).
 - [ ] A `syntax-rules` TEMPLATE can read a `define-for-syntax` binding, so a phase-0 reference
   resolves against a phase-1 slot [filed 2026-10-01, measured against Racket]:
   `(define-for-syntax helper 42)` then `(define-syntax use (syntax-rules () ((_) helper)))` and
@@ -682,6 +708,15 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   Discovered while measuring the `define-for-syntax` scopes/pruner pair — the leak is what made
   that pair's table read `42` where Racket refuses, so **re-measure any for-syntax visibility
   claim on the phase-1 channel, never through a template**.
+  **Still open after that pair shipped (P3.6, 2026-10-02), and the measurement says something
+  about how to fix it.** Of the three builds measured, the only one that REFUSES this channel is
+  the scopes argument without the pruner widening — i.e. the half that also breaks a
+  macro-supplied name. The shipped change restores the supplied name on both channels, so it
+  restores this leak too, deliberately. **Do not close this row by narrowing
+  `pruneDefinitionBinder` or `pruneUseSiteScopes`**: that reddens r2 and r4b of
+  `TestForSyntaxBinderScopes`. The fix belongs where a phase-0 reference is RESOLVED against a
+  phase-1 slot, not where the binder's scopes are decided. Chez's diagnostic names the rule best:
+  `attempt to reference out-of-context identifier helper`.
 - [ ] `(eval '(begin (define-syntax m …) (m)) (environment '(scheme base)))` gives `no such
   binding "m"`; two separate `eval`s work.
 - [ ] Go ER transformers receive plain symbols, so `(datum->syntax (car f) …)` fails where the
