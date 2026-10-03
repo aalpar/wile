@@ -3004,6 +3004,19 @@ behaviour.
   nothing documents what would make the two differ. Also: `name, site string` are adjacent and
   same-typed, so at one call site two literals sit side by side and are transposable in silence.
 
+- [ ] **`TestRegisterFuncCallbackExceptionToError` failed once under heavy concurrent load, and
+  did not reproduce** [Small, investigation]: two independent reviewers each saw one failure
+  (`expected no-error-expected but got boom`, `pkg/wile/ffi_test.go:1032`) while several agents were
+  concurrently building and editing this tree and shared worktrees; the same window produced a
+  spurious `TestBuildAxisBManifest` staleness hint, which that load explains. Not reproduced since:
+  20 sequential runs, six concurrent 3× runs, and a further 5× run are all green, and the failure is
+  NOT attributable to the P3.15 change (it is in the FFI callback path, which that change does not
+  touch). Filed rather than dropped because of the standing orientation in CLAUDE.md: a test that
+  fails once under load is nondeterminism that was never routed through an injectable, not something
+  to retry away. What to look for first: whether the callback path reads a clock, a map order, or a
+  shared registry entry that a second engine in the same process can perturb — a `-count` loop is
+  the wrong instrument, since the reproducing condition was CPU contention, not repetition.
+
 - [ ] **`pkg/wile`'s test engines are handed the parent `t` from inside a subtest** [Small, decide
   the convention]: `newSRFITestEngine`'s doc says the `testing.TB` parameter exists so a caller
   inside a `c.Run` hands over the SUBTEST's handle, because a helper given the parent's handle
