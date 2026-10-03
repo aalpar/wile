@@ -65,7 +65,11 @@ func PrimMakeHashtable(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(values.NewHashtable(values.HashtableEqual))
+	// The table REMEMBERS the two argument objects, which is what R6RS §13.1's
+	// accessors return. Identity has already decided they are the registered
+	// equal-hash / equal?; which COPY of each the caller holds is the caller's
+	// business, and under a renamed import it is a copy no name probe can find.
+	mc.SetValue(values.NewHashtableWithFunctions(values.HashtableEqual, mc.Arg(0), mc.Arg(1)))
 	return nil
 }
 
@@ -270,15 +274,25 @@ func equivIdentity(kind values.HashtableKind) (*machine.PrimitiveIdentity, strin
 	}
 }
 
-// PrimHashtableEquivalenceFunction implements R6RS hashtable-equivalence-function.
-// The returned procedure is whichever copy of the equivalence primitive the CALLER
-// holds, so (eq? (hashtable-equivalence-function h) equal?) holds on both sides of
-// an import — the same identity relation make-hashtable recognizes on the way in.
-// The two directions must stay in agreement.
+// PrimHashtableEquivalenceFunction implements R6RS hashtable-equivalence-function:
+// §13.1 says it returns the equivalence function the table WAS MADE WITH, so a
+// table built by make-hashtable answers with that argument object itself, and a
+// hashtable-copy of it answers the same.
+//
+// Only a FIXED-KIND table (make-eq-hashtable and friends) has nothing to answer
+// from, because it was made with no procedure at all. There the name probe
+// derives one from the kind, and the best it can do is "whichever copy of the
+// primitive the caller holds" — which is why the two paths can disagree, and why
+// the remembered object wins when there is one. See setRecognizedPrimitive.
 func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
 	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-equivalence-function")
 	if err != nil {
 		return err
+	}
+	equivFn := ht.EquivalenceFunction()
+	if equivFn != nil {
+		mc.SetValue(equivFn)
+		return nil
 	}
 	identity, name, ok := equivIdentity(ht.Kind())
 	if !ok {
@@ -292,6 +306,11 @@ func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
 // #f — not a procedure — for eq and eqv tables. Those hash by identity, and R6RS
 // does not expose that as a procedure. Chibi reaches the same two answers through
 // the same discriminant (lib/srfi/69/interface.scm).
+//
+// The kind check comes FIRST and the remembered object second, even though the
+// two cannot both apply: only make-hashtable remembers, and it only ever builds
+// an equal table. Guard clause first keeps that an invariant rather than a thing
+// the reader has to derive from the other file.
 func PrimHashtableHashFunction(mc machine.CallContext) error {
 	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-hash-function")
 	if err != nil {
@@ -301,12 +320,25 @@ func PrimHashtableHashFunction(mc machine.CallContext) error {
 		mc.SetValue(values.FalseValue)
 		return nil
 	}
+	hashFn := ht.HashFunction()
+	if hashFn != nil {
+		mc.SetValue(hashFn)
+		return nil
+	}
 	return setRecognizedPrimitive(mc, identityEqualHash, "equal-hash", "hashtable-hash-function")
 }
 
 // setRecognizedPrimitive sets the primitive bearing identity as the result,
 // preferring the copy visible at the namespace's MUTABLE TOP LEVEL over the
 // sealed base's, or raises if neither is that primitive.
+//
+// This is the FIXED-KIND path only. A table made by make-hashtable remembers its
+// two argument objects and answers from them, because R6RS §13.1 asks which
+// function the table was made with and a name probe cannot answer that: under
+// (rename (scheme base) (equal? my-eq)) the spelling `equal?` is never bound, so
+// the probe falls through to a copy the caller never saw. A fixed-kind table was
+// made with no procedure at all, so "whichever copy the program can name" is the
+// only available answer and the ranking below is how it is chosen.
 //
 // The top level, not the calling frame. mc.EnvironmentFrame() is parented at the
 // frame that MINTED this closure, which for a primitive reached through an import

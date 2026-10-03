@@ -465,3 +465,44 @@ func TestHashtableEqualGateUsesOneSnapshot(t *testing.T) {
 	}
 	qt.Assert(t, values.Equal(container(), container()), qt.IsFalse)
 }
+
+// TestHashtable_RememberedFunctionsSurviveCopy pins the two write-once procedure
+// fields against (*Hashtable).Copy, which names its fields explicitly rather than
+// copying the struct — the sync.Map and the atomics forbid a struct copy — so a
+// field Copy forgets is silently dropped on every hashtable-copy.
+//
+// Identity, not SchemeEquals: the point of the fields is that the accessor hands
+// back the OBJECT the table was made with, and any equal?-shaped assertion would
+// pass against a different copy of the same primitive, which is the bug.
+//
+// pkg/values stores these opaquely. Nothing here validates that the values are
+// procedures, let alone the right ones; that is pkg/registry/core's job, by
+// machine.PrimitiveIdentity, and is pinned at the Scheme level in pkg/wile.
+func TestHashtable_RememberedFunctionsSurviveCopy(t *testing.T) {
+	c := qt.New(t)
+
+	hashFn := values.NewSymbol("stand-in-hash")
+	equivFn := values.NewSymbol("stand-in-equiv")
+	ht := values.NewHashtableWithFunctions(values.HashtableEqual, hashFn, equivFn)
+
+	for _, tc := range []struct {
+		name string
+		got  *values.Hashtable
+	}{
+		{"as constructed", ht},
+		{"through a mutable copy", ht.Copy(true)},
+		{"through an immutable copy", ht.Copy(false)},
+		{"through a copy of a copy", ht.Copy(true).Copy(false)},
+	} {
+		c.Run(tc.name, func(c *qt.C) {
+			c.Assert(tc.got.HashFunction(), qt.Equals, values.Value(hashFn))
+			c.Assert(tc.got.EquivalenceFunction(), qt.Equals, values.Value(equivFn))
+		})
+	}
+
+	// nil means NONE, and it must survive a copy as nil rather than become some
+	// zero-valued stand-in: the accessors branch on exactly this.
+	plain := values.NewHashtable(values.HashtableEq)
+	c.Assert(plain.HashFunction(), qt.IsNil)
+	c.Assert(plain.Copy(true).EquivalenceFunction(), qt.IsNil)
+}

@@ -140,6 +140,15 @@ type Hashtable struct {
 	// mutable is likewise WRITE-ONCE at construction. Only hashtable-copy
 	// without a true second argument produces a false one.
 	mutable bool
+	// hashFn and equivFn are the procedure objects the table was CONSTRUCTED
+	// with, kept so hashtable-hash-function / hashtable-equivalence-function can
+	// answer R6RS §13.1 exactly — the function the table was made with, not
+	// another copy of the same primitive. nil means NONE: a fixed-kind
+	// constructor takes no procedures, so its accessors derive them from kind
+	// instead. Write-once like kind and mutable, so they stay out of the
+	// copy-on-write dance and add no concurrency surface.
+	hashFn  Value
+	equivFn Value
 }
 
 // NewEmptyHashtable creates an empty MUTABLE equal?-keyed hash table. The zero
@@ -155,6 +164,30 @@ func NewEmptyHashtable() *Hashtable {
 // zero value — unlike kind, whose zero value is deliberately the common case.
 func NewHashtable(kind HashtableKind) *Hashtable {
 	return &Hashtable{kind: kind, mutable: true}
+}
+
+// NewHashtableWithFunctions creates an empty MUTABLE table of kind that also
+// REMEMBERS the hash and equivalence procedure objects it was made with, for
+// R6RS §13.1's hashtable-hash-function / hashtable-equivalence-function.
+//
+// The caller validates that the pair is the one kind implements — this
+// constructor stores the objects and draws no conclusion from them. Recognition
+// is pkg/registry/core's job, by machine.PrimitiveIdentity, which pkg/values
+// cannot see and must not re-model.
+func NewHashtableWithFunctions(kind HashtableKind, hashFn, equivFn Value) *Hashtable {
+	return &Hashtable{kind: kind, mutable: true, hashFn: hashFn, equivFn: equivFn}
+}
+
+// HashFunction returns the hash procedure this table was constructed with, or
+// nil for NONE — a fixed-kind table, whose accessor derives one from Kind.
+func (p *Hashtable) HashFunction() Value {
+	return p.hashFn
+}
+
+// EquivalenceFunction returns the equivalence procedure this table was
+// constructed with, or nil for NONE, as HashFunction.
+func (p *Hashtable) EquivalenceFunction() Value {
+	return p.equivFn
 }
 
 // Mutable reports whether this table accepts Set, Delete, and Clear.
@@ -584,8 +617,13 @@ func (p *Hashtable) Size() int {
 
 // Copy returns a shallow copy of the hash table. Buckets are immutable, so each
 // stored slice can be shared directly with the copy without re-copying.
+//
+// The field list is explicit (a struct copy would copy the sync.Map and the
+// atomics), so EVERY write-once field has to be named here or a copy silently
+// loses it. hashFn/equivFn are carried because R6RS §13.1 says a copy's
+// accessors answer what the original's did.
 func (p *Hashtable) Copy(mutable bool) *Hashtable {
-	q := &Hashtable{kind: p.kind, mutable: mutable}
+	q := &Hashtable{kind: p.kind, mutable: mutable, hashFn: p.hashFn, equivFn: p.equivFn}
 	p.buckets.Range(func(k, v any) bool {
 		q.buckets.Store(k, v.([]hashtableEntry))
 		return true

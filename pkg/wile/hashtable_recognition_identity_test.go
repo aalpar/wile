@@ -171,3 +171,77 @@ func TestHashtableAccessorsSurviveAUserShadow(t *testing.T) {
 		})
 	}
 }
+
+// TestHashtableRemembersTheProceduresItWasMadeWith pins I106: R6RS §13.1 says
+// hashtable-equivalence-function returns the equivalence function the table WAS
+// MADE WITH, and that hashtable-copy keeps it. Chez agrees — `petite -q --script`
+// on the same program answers (#t #t).
+//
+// The name probe in setRecognizedPrimitive cannot answer that question, and this
+// is the case that separates the two. Under a RENAMED import the program holds
+// the equal? primitive as my-eq and never binds the spelling `equal?` at all, so
+// the probe falls through to the sealed base's copy — a different closure object
+// from the one the caller passed to make-hashtable, because a library environment
+// is a flat island that mints its own. Recognition is right that the two are the
+// same PRIMITIVE; the accessor's contract is about the OBJECT.
+//
+// Both elements are load-bearing. (*values.Hashtable).Copy is an explicit field
+// list rather than a struct copy, so a remembered field that Copy does not carry
+// regresses to the probe on every hashtable-copy while the first element still
+// passes. A single-element row would be green over that bug.
+func TestHashtableRemembersTheProceduresItWasMadeWith(t *testing.T) {
+	c := qt.New(t)
+
+	cases := []struct {
+		name string
+		expr string
+		want string
+	}{
+		// The gate. my-eq is the (scheme base) closure under a name the probe
+		// will never look up.
+		{"a renamed equivalence procedure survives the table and its copy",
+			`(begin (import (rnrs hashtables)
+					(only (rename (scheme base) (equal? my-eq)) my-eq))
+				(let ((h (make-hashtable equal-hash my-eq)))
+					(list (eq? (hashtable-equivalence-function h) my-eq)
+						(eq? (hashtable-equivalence-function (hashtable-copy h)) my-eq))))`,
+			`(#t #t)`},
+		// The hash side has no red row of its own, and the reason is worth
+		// recording rather than leaving as a gap: no library in the tree exports
+		// equal-hash (pkg/stdlib/lib/rnrs/hashtables.sld says so and why), so
+		// there is no second copy of it to hold under another name and the probe
+		// and the remembered object cannot disagree. It is covered here against
+		// the Copy field list, and at the unit level in pkg/values.
+		{"the hash procedure survives the table and its copy",
+			`(begin (import (rnrs hashtables)
+					(only (rename (scheme base) (equal? my-eq)) my-eq))
+				(let ((h (make-hashtable equal-hash my-eq)))
+					(list (eq? (hashtable-hash-function h) equal-hash)
+						(eq? (hashtable-hash-function (hashtable-copy h)) equal-hash))))`,
+			`(#t #t)`},
+		// The control: with (scheme base) imported plainly the probe and the
+		// remembered value agree, and must keep agreeing.
+		{"the plain-import control is unchanged",
+			`(begin (import (rnrs hashtables) (scheme base))
+				(let ((h (make-hashtable equal-hash equal?)))
+					(list (eq? (hashtable-equivalence-function h) equal?)
+						(eq? (hashtable-equivalence-function (hashtable-copy h)) equal?)
+						(eq? (hashtable-hash-function h) equal-hash))))`,
+			`(#t #t #t)`},
+		// A fixed-kind constructor takes no procedures, so there is nothing to
+		// remember and the probe stays the only answer. This is the residual
+		// I069 depends on, pinned so the fix cannot be mistaken for deleting it.
+		{"a fixed-kind table still answers from the probe",
+			`(begin (import (rnrs hashtables) (scheme base))
+				(let ((h (make-equal-hashtable)))
+					(list (eq? (hashtable-equivalence-function h) equal?)
+						(eq? (hashtable-hash-function h) equal-hash))))`,
+			`(#t #t)`},
+	}
+	for _, tc := range cases {
+		c.Run(tc.name, func(c *qt.C) {
+			got := evalSRFI(c, newSRFITestEngine(t), tc.expr)
+			c.Assert(got, qt.Equals, tc.want)
+		})
+	}
+}
