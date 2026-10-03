@@ -176,6 +176,15 @@ func TestForSyntaxBinderScopes(t *testing.T) {
 // widens where that gap is reachable from. Refused before AND after this change,
 // where racket answers 3 — so it is a real open item, not a shared refusal, and
 // it has its own ledger row. Flip the assertion when that row closes.
+//
+// The form list is the cause for THIS shape and not for the hand-written one.
+// Measured 2026-10-02: `(begin-for-syntax (define-values (pp qq) (values 1 2)))`
+// with no macro at all is refused on `values`, which pkg/registry/core/control.go
+// registers PhaseSetRuntime alone, so it never reaches the pruner. The program
+// below compiles its phase-1 body only because a free TEMPLATE identifier
+// resolves at its definition site, which is phase 0 — a leak racket refuses.
+// Both facts are on the ledger rows; adding the two forms to the list closes the
+// macro route alone.
 func TestForSyntaxSuppliedDefineValuesStillRefused(t *testing.T) {
 	eng := forSyntaxBinderEngine(t)
 	_, err := eng.EvalProgram(context.Background(),
