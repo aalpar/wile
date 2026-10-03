@@ -109,6 +109,31 @@ type CompiledLibrary struct {
 	// library only re-exports. Nil for a library built without a body scope, in
 	// which case the export lookup degrades to the empty set.
 	Scope *syntax.Scope
+
+	// resolvedExports is the export interface of a library whose exports denote
+	// bindings that were already known when the library was built — today only a
+	// synthetic extension library, whose exports ARE the primitives the registry
+	// just installed. Keyed by (phase, INTERNAL name), the pair findLibraryBinding
+	// is asked about.
+	//
+	// When it is non-empty it is AUTHORITATIVE: findLibraryBinding answers from it
+	// and never falls through to a name lookup in Env. That refusal is the point.
+	// A synthetic library's Env is the engine's live top level, so a fall-through
+	// would let a user `(define acos ...)` supply the export of (wile math) — which
+	// it did, under a rename the user never wrote (I137).
+	resolvedExports map[ExportKey]*environment.Binding
+}
+
+// SetResolvedExport records the binding an export of internalName at phase
+// denotes, so the export lookup answers from the record instead of resolving the
+// name in Env. See resolvedExports: the first call makes the table authoritative
+// for this library, so a caller must record EVERY export it intends to be
+// reachable.
+func (p *CompiledLibrary) SetResolvedExport(phase environment.Phase, internalName string, binding *environment.Binding) {
+	if p.resolvedExports == nil {
+		p.resolvedExports = make(map[ExportKey]*environment.Binding)
+	}
+	p.resolvedExports[ExportKey{Phase: phase, Name: internalName}] = binding
 }
 
 // NewCompiledLibrary creates a new compiled library.
