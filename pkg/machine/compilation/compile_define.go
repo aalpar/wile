@@ -117,6 +117,16 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 			)
 		}
 	}
+	// Supersede de-aliases FIRST. An imported binding shares the exporting
+	// library's value location, so the define's value write below would land on
+	// the library's own variable. Reading IsImported() here rather than inside the
+	// fold is deliberate: UpdateMeta's fn may be re-run on CAS contention and must
+	// stay a pure function of the meta it is handed, and by the time it has run the
+	// evidence is gone (it clears Imported). A non-imported binding shares with no
+	// one and this is a no-op.
+	if binding.IsImported() {
+		binding.UnshareValueLocation()
+	}
 	// This binding is a shared global under concurrent SRFI-18 compiles, so the
 	// metadata write goes through UpdateMeta (copy-on-write CAS) rather than a
 	// write-through pointer that a lock-free reader could tear.

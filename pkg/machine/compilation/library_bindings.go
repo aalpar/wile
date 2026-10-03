@@ -94,6 +94,12 @@ func markBindingImported(target, source *environment.Binding, exportName string,
 		m.InlineHOFCallbackParam = 0
 		if source != nil {
 			m.CaptureSafe = source.IsCaptureSafe()
+			// The exporting unit's own set! travels with the shared value
+			// location: the value this binding reads can change, so Imported
+			// stops being evidence of rebind-stability for it (IsStable). Carried
+			// like CaptureSafe rather than re-derived, so a re-export chain keeps
+			// the fact from the unit that actually owns the variable.
+			m.Assigned = source.IsAssigned()
 			// Carry the docstring across the import boundary so ,doc and the doc
 			// tooling find it on the imported binding (e.g. a (wile control) macro
 			// documented at its define-syntax site). The copy path installs only
@@ -862,7 +868,23 @@ func installImportedBinding(
 			localSym.Key, sourceLib.Name.SchemeString())
 	}
 
-	err := own.SetOwnGlobalValue(idx, source.Value())
+	// SHARE the exporter's value location rather than copying its value. The copy
+	// left the importer reading a snapshot taken at import time, so a library that
+	// assigned its own exported variable was invisible through the import —
+	// (importer-sees 1) against (library-sees 2). R7RS is silent on this (§5.6.1
+	// constrains what the IMPORTER may do to an imported binding and says nothing
+	// about the exporting library's own set!); of the two oracles Racket reads
+	// through and Chez refuses to export an assigned variable at all, and
+	// read-through is the only answer that keeps the programs the copy answered
+	// wrongly.
+	//
+	// target is nil only when idx addresses no slot, which is the condition
+	// SetOwnGlobalValue used to report here.
+	if target == nil {
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
+			"import: no binding to install for %s%s", localSym.Key, phaseContext)
+	}
+	err := target.ShareValueLocationWith(source)
 	if err != nil {
 		return werr.WrapForeignErrorf(err,
 			"import: failed to set binding for %s%s", localSym.Key, phaseContext)

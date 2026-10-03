@@ -394,6 +394,25 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 		// macro-introduced binder is stored under its intro scope, a wildcard
 		// lookup here would resolve to the name's first slot and mutate the
 		// user's variable instead.
+		// Record that the unit owning this binding assigns it. The set! is
+		// syntactic evidence and is stamped whether or not it ever executes, which
+		// is what Chez's export refusal and Racket's loss of known-value
+		// reasoning both key on. The flag matters at the import edge: an imported
+		// binding shares this value location, so IsStable() must stop treating
+		// Imported as evidence that the value is fixed (BindingMeta.Assigned).
+		//
+		// Here rather than in a body pre-pass because this is where the BINDING is
+		// in hand: a pre-pass over the library's forms would have to re-resolve
+		// the target, and would miss a set! that arrived through include or a
+		// macro expansion. The two refusals above mean the binding stamped is
+		// always the owner's own.
+		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
+			if m.Assigned {
+				return false
+			}
+			m.Assigned = true
+			return true
+		})
 		gi := p.env.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
 		if gi == nil {
 			// Stamped with its two siblings above for consistency, but UNTESTED and

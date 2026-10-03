@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // OriginRef identifies the provenance ROOT of a binding with library identity:
@@ -79,6 +80,27 @@ type BindingMeta struct {
 	// redefine guard treats a Stable ambient primitive as frozen, stricter than
 	// Imported, which a top-level define may still supersede per R7RS §5.3.1.
 	Imported, Stable bool
+	// Assigned records that the unit which OWNS this binding contains a set!
+	// targeting it — syntactically, whether or not that set! ever runs. It is
+	// owner-side by construction: set! on an imported binding is refused
+	// (compile_validated.go), so the only set! that can stamp a binding is one
+	// compiled against the binding itself.
+	//
+	// It exists because of the import edge. An imported binding shares its
+	// exporter's value LOCATION (valueLoc), so Imported stopped being evidence
+	// that the value will not change: R7RS §5.6.1 forbids the IMPORTER's set!,
+	// and says nothing about the exporting library's own. IsStable() therefore
+	// withdraws the Imported conclusion for a binding carrying this flag, and
+	// markBindingImported propagates it across the edge beside CaptureSafe.
+	//
+	// NOT StableInUnit, which cannot answer this question at library
+	// granularity: a library body is validated FORM BY FORM
+	// (processFormsWithLetrecSemantics), so the unit holding (define c 1) does
+	// not contain the sibling form's (set! c 2) and StableInUnit answers "stable"
+	// for an assigned variable. This flag is stamped at the set! site instead,
+	// where the binding is in hand, which also picks up a set! that arrived
+	// through include or a macro expansion.
+	Assigned bool
 	// CaptureSafe marks a binding whose callee cannot invoke a Scheme procedure and
 	// therefore cannot transitively capture a continuation. Two writers stamp it: a
 	// Go primitive at registration from !PrimitiveSpec.InvokesProcedure
@@ -161,9 +183,24 @@ type Binding struct {
 	meta        *BindingMeta // local bindings only; a global's meta lives in cell
 }
 
-// atomicCell holds a global binding's mutable, thread-shared state — its value
-// and its compile-time metadata — behind atomic pointers. Global bindings are
-// shared across SRFI-18 threads two ways:
+// valueLoc is a global variable's VALUE LOCATION, one level below the binding
+// that names it. It exists so that two bindings can BE the same variable: an
+// import points its cell at the exporting library's loc, so the library's own
+// assignment is visible through the import and the importer is not reading a
+// snapshot taken at import time.
+//
+// It holds only the value. Everything that distinguishes the two bindings —
+// provenance, scopes, the optimizer's capability stamps — stays per-binding in
+// atomicCell.m, which is why the sharing is sound: see BindingMeta.Assigned for
+// the one meta field that is a claim about the VALUE and therefore has to travel
+// across the edge.
+type valueLoc struct {
+	v atomic.Pointer[values.Value]
+}
+
+// atomicCell holds a global binding's mutable, thread-shared state — WHICH
+// location its value lives in, and its own compile-time metadata — behind atomic
+// pointers. Global bindings are shared across SRFI-18 threads two ways:
 //
 //   - The VM's cachedBindings cache holds the *Binding and reads its value
 //     lock-free (no frame mutex) while set! publishes a new value.
@@ -177,29 +214,41 @@ type Binding struct {
 // value via a lock-free load/store, meta via copy-on-write CAS (updateMeta) so a
 // reader always sees a complete, immutable BindingMeta snapshot.
 //
+// loc is an atomic pointer rather than a plain field for ONE reason: the import
+// edge retargets it, and it retargets it on a binding that is already published
+// in a global frame and may already sit in another thread's cachedBindings. A
+// plain pointer store there is a data race that -race cannot be relied on to
+// show (see the Binding.meta → cell migration that preceded this). Keeping loc
+// atomic is what makes shareValueLocWith callable at any time instead of only
+// before publication, so the import path needs no second rule for a slot that
+// already existed.
+//
 // The noCopy inside atomic.Pointer lives HERE, in a heap object that is never
 // value-copied, so Binding itself stays copylocks-clean for the value-embedded
 // local frame ([]Binding). Local bindings are single-threaded and never share a
 // *Binding, so they keep the plain value/meta fields (cell == nil) and pay no
 // atomic op or box allocation on the hot Apply arg-bind path.
 type atomicCell struct {
-	v atomic.Pointer[values.Value]
-	m atomic.Pointer[BindingMeta]
+	loc atomic.Pointer[valueLoc]
+	m   atomic.Pointer[BindingMeta]
 }
 
 func newAtomicCell(v values.Value) *atomicCell {
-	q := &atomicCell{}
-	q.v.Store(&v)
-	return q
+	return newAtomicCellWithMeta(v, nil)
 }
 
 // newAtomicCellWithMeta builds a cell holding both an initial value and an
 // initial metadata pointer. meta may be nil (no metadata yet). Used when a
 // binding is promoted or copied into a global frame and its existing meta must
 // travel into the cell rather than the (now global-invisible) plain field.
+//
+// The loc it mints is this binding's own and unshared; an import replaces it
+// afterwards through shareValueLocWith.
 func newAtomicCellWithMeta(v values.Value, meta *BindingMeta) *atomicCell {
 	q := &atomicCell{}
-	q.v.Store(&v)
+	loc := &valueLoc{}
+	loc.v.Store(&v)
+	q.loc.Store(loc)
 	if meta != nil {
 		q.m.Store(meta)
 	}
@@ -207,7 +256,7 @@ func newAtomicCellWithMeta(v values.Value, meta *BindingMeta) *atomicCell {
 }
 
 func (p *atomicCell) load() values.Value {
-	boxed := p.v.Load()
+	boxed := p.loc.Load().v.Load()
 	if boxed == nil {
 		return nil
 	}
@@ -215,7 +264,26 @@ func (p *atomicCell) load() values.Value {
 }
 
 func (p *atomicCell) store(v values.Value) {
-	p.v.Store(&v)
+	p.loc.Load().v.Store(&v)
+}
+
+// shareValueLocWith makes p address the same value location as src, so a later
+// store through either cell is seen by both. Metadata is untouched.
+func (p *atomicCell) shareValueLocWith(src *atomicCell) {
+	p.loc.Store(src.loc.Load())
+}
+
+// unshareValueLoc gives p a private location again, carrying the current value
+// across so the de-aliasing itself changes nothing observable. A store through
+// p afterwards is invisible to whoever p was sharing with.
+func (p *atomicCell) unshareValueLoc() {
+	loc := &valueLoc{}
+	// The box is immutable once stored, so handing the new loc the SAME box is
+	// safe: a later store through either loc replaces that loc's box pointer and
+	// leaves the other's alone. Copying the box would be the same answer, one
+	// allocation dearer.
+	loc.v.Store(p.loc.Load().v.Load())
+	p.loc.Store(loc)
 }
 
 // loadMeta returns the current metadata snapshot, or nil if none is attached.
@@ -334,6 +402,49 @@ func (p *Binding) BindingType() BindingType {
 	return p.bindingType
 }
 
+// ShareValueLocationWith makes this binding and src BE the same variable: both
+// address one value location, so a store through either is seen by the other.
+// Metadata stays per-binding, which is the point — the importer keeps its own
+// provenance, scopes and capability stamps while reading the exporter's value.
+//
+// This is the import edge (installImportedBinding). It replaces a value COPY,
+// which left the importer reading a snapshot taken at import time: a library that
+// assigns its own exported variable was invisible to its importers. R7RS is
+// silent (§5.6.1 constrains the importer, not the exporter); Racket reads
+// through, Chez refuses the library.
+//
+// Both bindings must be global (in a global frame, hence cell != nil). A local
+// binding has no cell to share and is single-threaded by construction, so asking
+// is a caller bug rather than a runtime condition.
+//
+// Safe on a published binding: the retarget is one atomic store, which is why
+// the import path needs no separate rule for a slot that already existed.
+func (p *Binding) ShareValueLocationWith(src *Binding) error {
+	if p.cell == nil || src == nil || src.cell == nil {
+		return werr.WrapForeignErrorf(werr.ErrInternal,
+			"ShareValueLocationWith: both bindings must be global")
+	}
+	p.cell.shareValueLocWith(src.cell)
+	return nil
+}
+
+// UnshareValueLocation gives this binding a private value location again,
+// carrying the current value across so the call itself changes nothing
+// observable.
+//
+// It is the supersede path's de-alias (compile_define.go): a top-level define
+// over an imported name drops the import provenance and then writes the
+// define's value into the slot, which with a shared location would land on the
+// exporting library's variable. One call before the provenance is cleared keeps
+// supersede meaning "this name is mine now" rather than "assign the library's
+// variable". A no-op on a local binding and on a global that shares with no one.
+func (p *Binding) UnshareValueLocation() {
+	if p.cell == nil {
+		return
+	}
+	p.cell.unshareValueLoc()
+}
+
 // SetValue updates the value stored in this binding. Global bindings publish
 // atomically (paired with the lock-free reader in Value); local bindings write
 // the plain field.
@@ -428,17 +539,33 @@ func (p *Binding) IsImported() bool {
 }
 
 // IsStable reports the rebind-stability conclusion: the binding will not be
-// rebound. Imported is standing evidence for that conclusion (R7RS forbids set!
-// on imports); Stable carries it when a proof discharges it by other means.
-// This is NOT a set!-permission — that is IsImported alone (R7RS §5.2). Read by
-// the frame-reclaim classifier (validate.classifyCallee). Renamed from the
-// retired IsConstant, which falsely asserted "value known at compile time".
+// rebound. Imported is standing evidence for that conclusion (R7RS §5.6.1
+// forbids set! on imports) UNLESS the exporting unit assigns the variable
+// itself, which that sentence does not forbid and which the shared value
+// location makes visible here; Stable carries the conclusion when a proof
+// discharges it by other means. This is NOT a set!-permission — that is
+// IsImported alone (R7RS §5.2). Read by the frame-reclaim classifier
+// (validate.classifyCallee) and by checkCallArity, which reads the binding's
+// VALUE at compile time and so is the consumer the Assigned withdrawal exists
+// for. Renamed from the retired IsConstant, which falsely asserted "value known
+// at compile time".
 func (p *Binding) IsStable() bool {
 	m := p.Meta()
 	if m == nil {
 		return false
 	}
-	return m.Imported || m.Stable
+	return m.Stable || (m.Imported && !m.Assigned)
+}
+
+// IsAssigned reports whether the unit owning this binding assigns it with set!
+// (BindingMeta.Assigned). Read by the import path, which carries the fact across
+// the edge so the importer's IsStable() answers from the same evidence.
+func (p *Binding) IsAssigned() bool {
+	m := p.Meta()
+	if m == nil {
+		return false
+	}
+	return m.Assigned
 }
 
 // IsCaptureSafe reports whether this binding's callee cannot invoke a Scheme

@@ -8,7 +8,7 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-19 known differences exist:
+20 known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Correct for string, bytevector and regular-file ports; on a port that can block (stdin, a pipe) the `#t` is a promise the next read may break.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
@@ -108,6 +108,19 @@ This document catalogs differences between the current implementation and the R7
     **Residual:** the purity is one level deep. Probing X still instantiates the
     libraries X itself imports, because a library's own `import` clauses go
     through the ordinary loader.
+20. An import transports the exporting library's value **location**, not a copy
+    of its value, so a library that `set!`s its own exported variable is visible
+    through the import. R7RS §5.6.1 forbids the IMPORTER's `set!` and is silent
+    on the exporter's, and the two oracles disagree — Racket reads through, Chez
+    refuses to export an assigned variable at all (the R6RS rule). Read-through
+    is the only one of the three answers that keeps such a program working.
+    **Changed:** Wile copied the value at import time, so the importer silently
+    read a snapshot and agreed with neither oracle. The import stays read-only
+    from the importer (`set!` on it is still refused), and a top-level `define`
+    over the name de-aliases, so superseding an import does not write the
+    library's variable. One consequence is visible in compile-time diagnostics:
+    the arity check no longer treats an imported binding as non-rebindable when
+    its library assigns it.
 
 ---
 
@@ -351,6 +364,53 @@ as `caar`/`map`) is rejected with `ErrImmutableBinding`. This is ordinary Scheme
 **Implementation:** a binding's identity is its provenance root: the library that defines it, the name it is defined under there, and the phase that library stores it at (`OriginRef`, `pkg/environment/binding.go`). A re-export, a renamed import and a phase-shifted import all carry their source's root. A binding no library defines (a primitive, a bootstrap procedure or macro, a core form keyword) is rooted at the engine base, however many libraries export it. The conflict check (`importConflicts` in `library_bindings.go`) compares the two roots and nothing else. Values cannot decide it: each library environment holds its own copy of a base definition, so `cddr` from `(scheme base)` and from `(scheme cxr)` are two closures of one binding, while two libraries that each `(define v 1)` hold equal values of two bindings, and two libraries that each define a procedure `f` or a macro `m` are two bindings as well. So is one library's `x` at two phases (a library exporting `x` and `(for-syntax x)`, imported plainly and `for-syntax`). Racket decides by binding identity too, and refuses the same programs ("identifier already required").
 
 **Shadowing is unaffected.** The check compares an import only with an earlier import: `(import (scheme base))` followed by `(define (zero? x) …)` shadows the imported `zero?`.
+
+---
+## An Import Shares the Exporter's Variable, Not a Copy (R7RS silent)
+
+**Affected:** every imported variable whose defining library assigns it with
+`set!`.
+
+R7RS §5.6.1 says it is an error "to redefine or mutate an imported binding with a
+definition or with `set!`" — a constraint on the IMPORTER. It says nothing about
+the exporting library assigning its own exported variable, which is the only
+writer left. Wile reads through: an import transports the exporter's value
+LOCATION, so the assignment is visible.
+
+```scheme
+(define-library (counter)
+  (export c get bump!)
+  (import (scheme base))
+  (begin (define c 1) (define (get) c) (define (bump!) (set! c 2))))
+
+(import (counter))
+(bump!)
+(list c (get))   ;=> (2 2)   — Wile and Racket;  (1 2) before this change
+```
+
+**Oracles disagree, and the spec does not choose.** Racket reads through, as
+above. Chez refuses the library outright at its export clause ("attempt to export
+assigned variable c") — the R6RS rule, not an R7RS one. Wile previously agreed
+with neither: it copied the value at import time, so the importer silently read a
+snapshot. Read-through is the only one of the three answers that keeps such a
+program working and gives it the value the library has.
+
+**The exported variable stays immutable FROM the importer.** Sharing a location is
+not permission to write it: `(set! c 3)` after the import is still refused
+(§5.6.1), so the sharing is a one-way read-through.
+
+**A top-level `define` over an imported name still takes the name for itself.**
+Superseding an import (R7RS §5.3.1, and see *Shadowing is unaffected* above)
+de-aliases first, so `(define c 99)` after the import binds the program's own
+variable and leaves the library's alone — `(list c (get))` answers `(99 2)` even
+after `(bump!)`.
+
+**Consequence for compile-time checks.** Wile reports an arity mismatch against a
+callee it can prove non-rebindable at compile time, and an imported binding used
+to qualify unconditionally. It no longer does when the defining library assigns
+it: `(c 1 2)` against a library that `set!`s `c` to a two-argument procedure is
+accepted and answers at run time, as it does in Racket. An imported binding its
+library never assigns is still checked.
 
 ---
 
