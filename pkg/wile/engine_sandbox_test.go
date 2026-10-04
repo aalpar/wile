@@ -1421,14 +1421,15 @@ func TestProfileEnvironmentCannotWidenSandboxedEngine(t *testing.T) {
 // half had TestR6RSHashProceduresAreReachableAtPhaseOne.
 //
 // The decision: the R6RS hash quartet holds REACHABILITY, not field uniformity,
-// and both of the registration fields that split with its two-file placement are
-// ACCEPTED as split. Category is one of them. equal-hash, string-hash and
-// symbol-hash are "hashtables" (pkg/registry/core/hashes.go); string-ci-hash is
-// "strings", because it lives beside string-ci=? whose full Unicode fold it must
-// share and cannot move to pkg/registry/core (go.mod confines x/text to internal
-// packages). So WithoutCategory("hashtables") removes three of four and the
-// survivor is deliberate, not an oversight: it is a pure function on strings that
-// needs no hashtable.
+// and Category, the one registration field that still splits with its two-file
+// placement (all four share PhaseSetRuntime since 2026-10-04), is ACCEPTED as
+// split. equal-hash, string-hash and symbol-hash are "hashtables"
+// (pkg/registry/core/hashes.go); string-ci-hash is "strings", because it lives
+// beside string-ci=? whose full Unicode fold it must share and cannot move to
+// pkg/registry/core (go.mod confines x/text to internal packages). So
+// WithoutCategory("hashtables") removes three of four and the survivor is
+// deliberate, not an oversight: it is a pure function on strings that needs no
+// hashtable.
 //
 // Two configuration facts this test depends on, both measured, because getting
 // either wrong makes it pass for the wrong reason:

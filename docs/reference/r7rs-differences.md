@@ -46,9 +46,9 @@ This document catalogs differences between the current implementation and the R7
     base. `hashtable-hash-function` and `hashtable-equivalence-function` hand
     back the two argument objects a `make-hashtable` table was built with, so a
     program that holds its own copy of one reads that copy back. A `rename`d
-    import is the reachable case for `equal?`; `equal-hash` is ambient and
-    exported by no library, so it cannot be renamed, and the copy a program can
-    hold of it comes from a library that binds and re-exports it.
+    import is the reachable case for both: `(rnrs hashtables)` exports
+    `equal-hash`, and a library that binds and re-exports either hands its
+    importer that library's copy.
     That is Chez's answer rather than a conformance requirement: R6RS §13.3 says
     only "the equivalence function used by *hashtable* to compare keys" and never
     reaches object identity. Only a fixed-kind table (`make-eq-hashtable` and
@@ -77,27 +77,20 @@ This document catalogs differences between the current implementation and the R7
     Nothing is matched against, because Wile carries no library version
     metadata: every version reference is vacuously satisfied, and the contents
     are unvalidated for the same reason.
-16. The `(rnrs hashtables)` library does **not export**
-    `equal-hash`, `string-hash` or `symbol-hash`, which R6RS lists in it — those
-    three are bound in the sealed base at both phase 0 and phase 1 and remain
-    callable after the import, from ordinary code and from a macro body alike, so
-    for them this is a completeness gap, not a reachability one. It was formerly
-    load-bearing (exporting them broke `make-hashtable`, see item 12); under
-    identity recognition it no longer is. The one consequence left to weigh
-    before closing it is that `(srfi 13)` exports a different, bounded
-    `string-hash`, so a program importing both libraries would meet the R7RS
-    §5.6 conflict — correctly, but newly.
+16. The four R6RS hash procedures, `equal-hash`, `string-hash`,
+    `string-ci-hash` and `symbol-hash`, are ambient at phase 0 but **not in a
+    macro body**: a transformer or `begin-for-syntax` reaches them with
+    `(import (for-syntax (rnrs hashtables)))`, as it reaches `string-ci=?` with
+    `(import (for-syntax (scheme char)))`. That is a trade, not a gap: the
+    import lets each environment choose whether it includes the hashes, at the
+    price of verbosity and of every environment being built alike. Until
+    2026-10-04, `equal-hash`, `string-hash` and `symbol-hash` were ambient at
+    phase 1 as well.
 
-    `string-ci-hash` **is** exported, since 2026-10-03, and for a phase reason
-    rather than a completeness one. It is registered at phase 0 only, because it
-    lives beside `string-ci=?` to share that procedure's full Unicode fold and
-    nothing in that package is registered at phase 1 — so unlike its three
-    siblings it was reachable from a macro body by no route at all. The export
-    gives it the one its contract partner already has:
-    `(import (for-syntax (rnrs hashtables)))` reaches the hash as
-    `(import (for-syntax (scheme char)))` reaches `string-ci=?`. The remaining
-    asymmetry is deliberate — three of the four are callable bare in a macro
-    body and this one needs a `for-syntax` import.
+    Exporting `string-hash` meets `(srfi 13)`, which exports a different,
+    bounded `string-hash`: a program importing both libraries gets the R7RS
+    §5.6 conflict and narrows one side with `except`, `only` or `rename`.
+    R6RS's own `(rnrs hashtables)` has the same conflict.
 17. Under `WithDialect(NoMutation)` (opt-in), a `define-record-type` that
     **declares a modifier** fails at **definition** time, not at the modifier's
     first use. The dialect removes `record-modifier`, and

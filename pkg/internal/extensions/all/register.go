@@ -179,24 +179,21 @@ func addMoreStrings(r *registry.PrimitiveRegistry) error {
 	// string-hash in registry/core, because it must fold case exactly as
 	// string-ci=? does — see PrimStringCIHash.
 	//
-	// PhaseSetRuntime, like everything else in this package, and the phase gap it
-	// leaves against the other three R6RS hashes (both-phase, in
-	// registry/core/hashes.go) is closed by an EXPORT rather than by widening this
-	// registration. (rnrs hashtables) exports string-ci-hash, so
-	// (import (for-syntax (rnrs hashtables))) reaches it at phase 1 — the same
-	// route its contract partner already has via (import (for-syntax (scheme char))),
-	// and the R7RS-sanctioned way to get any binding at phase 1.
+	// PhaseSetRuntime, like everything else in this package and like the other
+	// three R6RS hashes (registry/core/hashes.go). (rnrs hashtables) exports all
+	// four, so (import (for-syntax (rnrs hashtables))) reaches this one at phase 1,
+	// the same route its contract partner has via
+	// (import (for-syntax (scheme char))).
 	//
-	// It WAS widened here on 2026-10-03 and reverted the same day. The widening
-	// bought AMBIENT parity (callable bare in a macro body) and made this the only
-	// both-phase registration outside pkg/registry/core; a PhaseSet
-	// governs ambient availability alone, so the export buys the parity that
-	// actually matters without touching the layer pattern. Do not re-widen it
-	// without re-deciding that: the remaining asymmetry (three callable bare, this
-	// one needing an import) is the accepted outcome, not an oversight. See
-	// pkg/stdlib/lib/rnrs/hashtables.sld's NOT EXPORTED note for the whole record.
+	// It WAS widened here on 2026-10-03 and reverted the same day: the widening
+	// bought ambient availability in a macro body and made this the only
+	// both-phase registration outside pkg/registry/core. Do not re-widen it
+	// without re-deciding that. Needing the import is not a deficit: it lets each
+	// environment choose whether it includes the hash, trading verbosity and
+	// uniform environment construction for that flexibility. See
+	// pkg/stdlib/lib/rnrs/hashtables.sld's note on the hash procedures.
 	//
-	// Category is a THIRD question and its split is also deliberately not held.
+	// Category is a separate question, and its split is deliberate.
 	// Category answers where a reader finds a procedure (and what an embedder
 	// attenuates by name), which for this one is "beside string-ci=?, whose fold it
 	// shares". See TODO.md's row on the quartet under WithoutCategory("hashtables").

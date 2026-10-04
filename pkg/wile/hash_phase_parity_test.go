@@ -14,31 +14,24 @@
 
 package wile_test
 
-// All four R6RS hash procedures are callable from a macro body. Their ROUTES
-// differ, deliberately, and each row names its own.
+// All four R6RS hash procedures are callable from a macro body, by ONE route:
+// (import (for-syntax (rnrs hashtables))). All four register PhaseSetRuntime, so
+// none is ambient at phase 1, and the export is how a phase-1 environment
+// includes them, as (scheme char) is how it includes string-ci=?. Needing the
+// import is a trade, not a cost: each environment chooses whether it includes
+// the hashes, at the price of verbosity and of every environment being built
+// alike.
 //
-// RED on master on EXACTLY ONE ROW: string-ci-hash. equal-hash, string-hash and
-// symbol-hash register PhaseSetRuntime|PhaseSetExpand in
-// pkg/registry/core/hashes.go, so they are callable bare. string-ci-hash
-// registers PhaseSetRuntime, because it lives in pkg/internal/extensions/all
-// beside string-ci=? whose x/text FULL fold it must share and nothing in that
-// package is registered at phase 1 — and no library exported it, so it was
-// reachable from phase 1 by NO route. (rnrs hashtables) now exports it.
+// History: string-ci-hash was the filed row (I066, 2026-10-03), reachable from
+// phase 1 by no route until (rnrs hashtables) exported it. The other three were
+// ambient at phase 1 (PhaseSetRuntime|PhaseSetExpand in
+// pkg/registry/core/hashes.go) until 2026-10-04, when they moved to the same
+// route.
 //
-// WHY AN EXPORT AND NOT A WIDER PhaseSet. A PhaseSet governs AMBIENT
-// availability; a for-syntax import is the R7RS-sanctioned way to get a binding
-// at phase 1, and string-ci=? itself is only reachable at phase 1 that way
-// (via (scheme char)). Widening the registration was the first fix and was
-// reverted: it bought ambient parity at the price of making string-ci-hash the
-// only both-phase registration outside pkg/registry/core. So this test does NOT
-// assert one phase set across the family. It asserts that each member is
-// reachable, by its documented route, and the asymmetry in the `prologue` column
-// is the decision rather than a gap in it.
-//
-// The route is pinned, not just the reachability: the prologue imports
-// string-ci-hash BY NAME through `only`, which fails if (rnrs hashtables) stops
-// exporting it. A plain (for-syntax (rnrs hashtables)) import stayed green with
-// the export removed and the registration widened, the reverted fix.
+// The route is pinned, not just the reachability: each prologue imports its hash
+// BY NAME through `only`, which fails if (rnrs hashtables) stops exporting it. A
+// plain (for-syntax (rnrs hashtables)) import stayed green with string-ci-hash's
+// export removed and its registration widened.
 //
 // Each row reveals the phase-1 value at phase 0 through an er-macro-transformer,
 // the technique TestPhase1DefineSyntaxIsReachableFromItsOwnRung uses: a
@@ -59,27 +52,21 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
+// r6rsHashCalls is the quartet, one deterministic call each.
+var r6rsHashCalls = []struct {
+	name string
+	call string
+}{
+	{name: "equal-hash", call: `(equal-hash (list 1 2))`},
+	{name: "string-hash", call: `(string-hash "abc")`},
+	{name: "string-ci-hash", call: `(string-ci-hash "ABC")`},
+	{name: "symbol-hash", call: `(symbol-hash 'foo)`},
+}
+
 func TestR6RSHashProceduresAreReachableAtPhaseOne(t *testing.T) {
-	tests := []struct {
-		name string
-		// prologue is the import a macro body needs to see this procedure, or
-		// empty when the sealed base carries it at phase 1 already.
-		prologue string
-		call     string
-	}{
-		{name: "equal-hash (ambient)", call: `(equal-hash (list 1 2))`},
-		{name: "string-hash (ambient)", call: `(string-hash "abc")`},
-		{name: "symbol-hash (ambient)", call: `(symbol-hash 'foo)`},
-		// The filed row, and the only one with a prologue.
-		{
-			name:     "string-ci-hash (for-syntax import)",
-			prologue: `(import (for-syntax (only (rnrs hashtables) string-ci-hash)))`,
-			call:     `(string-ci-hash "ABC")`,
-		},
-	}
-	for _, tt := range tests {
+	for _, tt := range r6rsHashCalls {
 		t.Run(tt.name, func(t *testing.T) {
-			src := tt.prologue + `
+			src := `(import (for-syntax (only (rnrs hashtables) ` + tt.name + `)))
 			        (begin-for-syntax (define zz ` + tt.call + `))
 			        (define-syntax reveal (er-macro-transformer (lambda (form rename compare) zz)))
 			        (and (exact-integer? (reveal)) (>= (reveal) 0) (= (reveal) ` + tt.call + `))`
@@ -113,23 +100,26 @@ func TestStringCiPairAgreesAtPhaseOne(t *testing.T) {
 	qt.Assert(t, got, qt.Equals, "#t")
 }
 
-// string-ci-hash is NOT ambient at phase 1: without the import, a macro body
-// cannot see it. This is the other half of the decision the reachability test's
-// `prologue` column encodes, and the only thing that pins "do not widen" (see
-// pkg/internal/extensions/all/register.go): widening the registration to
-// PhaseSetRuntime|PhaseSetExpand keeps every other test green and flips this one.
-// If the open TODO.md row on that package decides for purity over layer, this
-// test flips with it, on purpose.
-func TestStringCiHashIsNotAmbientAtPhaseOne(t *testing.T) {
-	// Positive control, same configuration: the name exists at phase 0, so the
-	// refusal below is about the phase and not a missing registration.
-	got, err := evalPhaseDistinctness(t, `(exact-integer? (string-ci-hash "ABC"))`)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, got, qt.Equals, "#t")
+// None of the four is ambient at phase 1: without the import, a macro body cannot
+// see it. This is the other half of the route the reachability test pins, and the
+// only thing that pins "do not widen" (pkg/registry/core/hashes.go,
+// pkg/internal/extensions/all/register.go): widening any one registration to
+// PhaseSetRuntime|PhaseSetExpand keeps every other test green and flips its row
+// here.
+func TestR6RSHashesAreNotAmbientAtPhaseOne(t *testing.T) {
+	for _, tt := range r6rsHashCalls {
+		t.Run(tt.name, func(t *testing.T) {
+			// Positive control, same configuration: the name exists at phase 0, so
+			// the refusal below is about the phase and not a missing registration.
+			got, err := evalPhaseDistinctness(t, `(exact-integer? `+tt.call+`)`)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, "#t")
 
-	_, err = evalPhaseDistinctness(t, `
-		(begin-for-syntax (define zz (string-ci-hash "ABC")))`)
-	qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSuchBinding)
-	// By name as well: the sentinel alone is satisfied by any unbound identifier.
-	qt.Assert(t, err, qt.ErrorMatches, `(?s).*"string-ci-hash" at phase 1.*`)
+			_, err = evalPhaseDistinctness(t, `(begin-for-syntax (define zz `+tt.call+`))`)
+			qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSuchBinding)
+			// By name as well: the sentinel alone is satisfied by any unbound
+			// identifier.
+			qt.Assert(t, err, qt.ErrorMatches, `(?s).*"`+tt.name+`" at phase 1.*`)
+		})
+	}
 }

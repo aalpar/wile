@@ -15,9 +15,12 @@
 package wile
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // TestStringHashSRFI13StillShadows is the collision guard for the R6RS
@@ -68,6 +71,41 @@ func TestStringHashSRFI13StillShadows(t *testing.T) {
 			eng := newSRFITestEngine(c)
 			got := evalSRFI(c, eng, tc.expr)
 			c.Assert(got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestStringHashConflictsBetweenRnrsHashtablesAndSRFI13 pins the cost of
+// exporting string-hash from (rnrs hashtables) (2026-10-04): (srfi 13) exports a
+// DIFFERENT string-hash, so importing both is the R7RS §5.6 conflict, and either
+// side narrowed away resolves it to the other's procedure. R6RS's own
+// (rnrs hashtables) carries the same conflict. A fresh engine per row, for the
+// reason TestStringHashSRFI13StillShadows gives.
+func TestStringHashConflictsBetweenRnrsHashtablesAndSRFI13(t *testing.T) {
+	c := qt.New(t)
+
+	c.Run("importing both is refused", func(c *qt.C) {
+		eng := newSRFITestEngine(c)
+		_, err := eng.EvalMultiple(context.Background(), `(import (rnrs hashtables) (srfi 13))`)
+		c.Assert(err, qt.ErrorIs, werr.ErrDuplicateBinding)
+		// By name: any other duplicate would satisfy the sentinel.
+		c.Assert(err, qt.ErrorMatches, `(?s).*"string-hash" from \(srfi 13\) conflicts.*`)
+	})
+
+	cases := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{"except on srfi 13 leaves the unbounded R6RS form",
+			`(begin (import (rnrs hashtables) (except (srfi 13) string-hash)) (> (string-hash "abc") 4194304))`, `#t`},
+		{"except on rnrs hashtables leaves the bounded SRFI-13 form",
+			`(begin (import (except (rnrs hashtables) string-hash) (srfi 13)) (< (string-hash "abcdefghij" 16) 16))`, `#t`},
+	}
+	for _, tc := range cases {
+		c.Run(tc.name, func(c *qt.C) {
+			eng := newSRFITestEngine(c)
+			c.Assert(evalSRFI(c, eng, tc.expr), qt.Equals, tc.want)
 		})
 	}
 }
