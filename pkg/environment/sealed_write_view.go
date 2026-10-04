@@ -14,6 +14,10 @@
 
 package environment
 
+import (
+	"github.com/aalpar/wile/pkg/werr"
+)
+
 // The sealed axis: the phases that own a SEALED-WRITE view.
 //
 // A view's sealed flag says which tier its writes land in; the axis says which phases
@@ -60,6 +64,24 @@ package environment
 // reached, and that coordinate no longer exists. A sealed phase-0 write lands at
 // (phase 0, sealed) like any other, and what carries it to another phase is a
 // declared bulk row.
+// This array is the ONLY statement of which phases own a sealed-write view, and
+// it is deliberately not summarized by a bound. The membership test is
+// sealedViewAt's second return value; a `phase > ceiling` comparison answers the
+// same question for 2 and up, says nothing at PhaseTemplate (-1), and would
+// re-open phase 2 the moment the rows stopped being contiguous. All three of
+// those are holes an `ok` test does not have, so the rows need no ordering
+// premise and there is no derived ceiling constant to keep in step with them.
+//
+// Phases off the axis have no sealed tier at all. For phase 2 and up that is
+// deliberate: adding a row buys the D3 property (a macro's own compile-time
+// helper is not user-overwritable) only once a bootstrap macro has a PROCEDURAL
+// transformer body that defines a macro, and none does, so the row would be
+// construction with no consumer and would force an unanswered question about the
+// new frame's parent. See TODO.md, "The seal is exactly one level deep".
+//
+// What the axis DOES get is a direction-dependent answer to sealedViewAt's miss:
+// a write refuses (SealedWriteViewAt), a read falls through (AtPhase's climb).
+// Those are the function's only two consumers.
 var sealedAxis = [...]Phase{PhaseRuntime, PhaseExpand}
 
 // IsNamespaceRuntime reports whether this frame is its namespace's own runtime
@@ -78,9 +100,37 @@ func (p *EnvironmentFrame) IsNamespaceRuntime() bool {
 
 // SealedWriteViewAt returns the view sealed registrations write through at this
 // phase: this owner's sealed-write view over its one store, whose writes land in
-// the sealed tier. A phase with no such view (2 and up) falls back to the
-// receiver's own view at that phase, which is what leaves a library's primitive
-// expanders exactly where they were.
+// the sealed tier.
+//
+// An owner root asking for a phase OFF the sealed axis is REFUSED with a wrapped
+// ErrNoSealedWriteView panic. There is no sealed tier there, so the
+// pre-2026-10-03 answer — the ordinary mutable view — was a silent downgrade at
+// the one call whose whole job is to name a sealed target: a registration meant
+// for the seal landed where user code can overwrite it and nothing said so.
+// Unreachable from production today (every non-test caller passes a literal
+// PhaseRuntime or PhaseExpand), which is what makes this a ratchet rather than a
+// behaviour change.
+//
+// The condition is sealedViewAt's MISS, not an upper bound, and the difference is
+// load-bearing in both directions: PhaseTemplate (-1) is a named phase below the
+// first row and owns no sealed view, so a `phase > ceiling` test falls through
+// there and reproduces the whole defect at a constant the package exports; and a
+// non-contiguous axis would put a gap inside the bound. `ok` is the membership
+// test already, and it is the complete refusal condition — sealedViewAt's own doc
+// says a false answer means "this phase has no row", never "this owner skipped
+// one".
+//
+// The refusal is the OWNER-ROOT path only, and that is the honest bound: the test
+// sits inside the ownsSealedAxis arm, so a non-owner receiver still falls through
+// to unsealedTargetAt at every phase, as its own paragraph below documents. A
+// non-owner never had a sealed view to downgrade from, so there is nothing there
+// to refuse.
+//
+// A READ off the axis keeps falling through — AtPhase's climb from a sealed view
+// leaves the sealed axis above phase 1 rather than raising. Opposite polarity on
+// the same sealedViewAt miss, because the questions differ: a read asking for a
+// frame that does not exist can be answered with the one that does, a write
+// cannot.
 //
 // The receiver must OWN a sealed axis — be the phase-0 entry of its own phase
 // registry. Any other frame gets its own view at that phase instead. The
@@ -100,9 +150,14 @@ func (p *EnvironmentFrame) IsNamespaceRuntime() bool {
 func (p *EnvironmentFrame) SealedWriteViewAt(phase Phase) *EnvironmentFrame {
 	if p.ownsSealedAxis() {
 		sealed, ok := p.phases.sealedViewAt(phase)
-		if ok {
-			return sealed
+		if !ok {
+			panic(werr.WrapForeignErrorf(
+				werr.ErrNoSealedWriteView,
+				"SealedWriteViewAt: phase %d (%s) owns no sealed-write view; the sealed axis is %v",
+				int8(phase), phase, sealedAxis,
+			))
 		}
+		return sealed
 	}
 	return p.unsealedTargetAt(phase)
 }

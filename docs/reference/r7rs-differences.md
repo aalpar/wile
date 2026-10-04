@@ -78,14 +78,26 @@ This document catalogs differences between the current implementation and the R7
     metadata: every version reference is vacuously satisfied, and the contents
     are unvalidated for the same reason.
 16. The `(rnrs hashtables)` library does **not export**
-    `equal-hash`, `string-hash`, `string-ci-hash` or `symbol-hash`, which R6RS
-    lists in it — those four are bound in the sealed base and remain callable
-    after the import, so this is a completeness gap, not a reachability one. It
-    was formerly load-bearing (exporting them broke `make-hashtable`, see item
-    12); under identity recognition it no longer is. The one consequence left to
-    weigh before closing it is that `(srfi 13)` exports a different, bounded
+    `equal-hash`, `string-hash` or `symbol-hash`, which R6RS lists in it — those
+    three are bound in the sealed base at both phase 0 and phase 1 and remain
+    callable after the import, from ordinary code and from a macro body alike, so
+    for them this is a completeness gap, not a reachability one. It was formerly
+    load-bearing (exporting them broke `make-hashtable`, see item 12); under
+    identity recognition it no longer is. The one consequence left to weigh
+    before closing it is that `(srfi 13)` exports a different, bounded
     `string-hash`, so a program importing both libraries would meet the R7RS
     §5.6 conflict — correctly, but newly.
+
+    `string-ci-hash` **is** exported, since 2026-10-03, and for a phase reason
+    rather than a completeness one. It is registered at phase 0 only, because it
+    lives beside `string-ci=?` to share that procedure's full Unicode fold and
+    nothing in that package is registered at phase 1 — so unlike its three
+    siblings it was reachable from a macro body by no route at all. The export
+    gives it the one its contract partner already has:
+    `(import (for-syntax (rnrs hashtables)))` reaches the hash as
+    `(import (for-syntax (scheme char)))` reaches `string-ci=?`. The remaining
+    asymmetry is deliberate — three of the four are callable bare in a macro
+    body and this one needs a `for-syntax` import.
 17. Under `WithDialect(NoMutation)` (opt-in), a `define-record-type` that
     **declares a modifier** fails at **definition** time, not at the modifier's
     first use. The dialect removes `record-modifier`, and

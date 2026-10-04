@@ -15,9 +15,12 @@
 package environment
 
 import (
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // A library env is a full OWNER: its own store, its own registry, its own views.
@@ -104,7 +107,24 @@ func TestChildRuntimeMirrorsTheWholeSealedAxis(t *testing.T) {
 	// Whether an expand-phase primitive lands sealed or mutable is not askable
 	// here — that placement is registry.Apply's phaseTargets (apply.go), which
 	// writes through the ordinary expand view.
-	c.Assert(lib.SealedWriteViewAt(Phase(2)), qt.Equals, lib.AtPhase(Phase(2)))
+	//
+	// Off the axis the library env is an owner root like any other, so it is
+	// REFUSED rather than handed its ordinary phase-2 view. This asserted the
+	// fall-through until 2026-10-03; the rule and its bounds are in
+	// TestSealedWriteOffTheAxisIsRefused.
+	//
+	// By SENTINEL, not by message text: ErrNoSealedWriteView exists so this is
+	// matchable by identity, and a regexp over the rendering would pass for a bare
+	// errors.New carrying the same words — and would break on any reword of the
+	// diagnostic. capturePanic is this package's own helper for a sentinel-carrying
+	// panic (ambiguous_binding_test.go); sealedWriteRefusal is in the external test
+	// package and is not reachable here.
+	r := capturePanic(func() {
+		_ = lib.SealedWriteViewAt(Phase(2))
+	})
+	err, ok := r.(error)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("recovered %T, want an error", r))
+	c.Assert(errors.Is(err, werr.ErrNoSealedWriteView), qt.IsTrue)
 }
 
 // EVERY write lands at (phase = the writing view's phase, the view's sealed
