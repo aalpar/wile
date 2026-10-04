@@ -199,9 +199,8 @@ func TestSealedWriteViewAtRequiresAnOwnerRoot(t *testing.T) {
 	c.Assert(inner.SealedWriteViewAt(PhaseRuntime).sealed, qt.IsFalse)
 
 	// A sealed-write view is answered from the registry like its owner, in both
-	// directions along the axis. It already writes the sealed tier, so this
-	// grants nothing; routing it through AtPhase instead handed it the MUTABLE
-	// root on the way down.
+	// directions along the axis. Routing it through AtPhase instead handed it the
+	// MUTABLE root on the way down.
 	sealedExpand, _ := ns.phases.sealedViewAt(PhaseExpand)
 	c.Assert(sealedRoot.SealedWriteViewAt(PhaseExpand), qt.Equals, sealedExpand)
 	c.Assert(sealedExpand.SealedWriteViewAt(PhaseRuntime), qt.Equals, sealedRoot)

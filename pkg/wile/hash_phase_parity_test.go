@@ -55,6 +55,8 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 func TestR6RSHashProceduresAreReachableAtPhaseOne(t *testing.T) {
@@ -96,10 +98,12 @@ func TestR6RSHashProceduresAreReachableAtPhaseOne(t *testing.T) {
 // input.
 //
 // Both halves need an import at phase 1 and they are DIFFERENT imports:
-// string-ci=? comes from (scheme char), the hash from (rnrs hashtables).
+// string-ci=? comes from (scheme char), the hash from (rnrs hashtables). The
+// import is the plain whole-library one the records document as the route; the
+// reachability test above narrows it with `only` to pin the export itself.
 func TestStringCiPairAgreesAtPhaseOne(t *testing.T) {
 	got, err := evalPhaseDistinctness(t, `
-		(import (for-syntax (scheme char)) (for-syntax (only (rnrs hashtables) string-ci-hash)))
+		(import (for-syntax (scheme char)) (for-syntax (rnrs hashtables)))
 		(begin-for-syntax
 		  (define zz (and (string-ci=? "ß" "SS")
 		                  (= (string-ci-hash "ß") (string-ci-hash "SS")))))
@@ -107,4 +111,17 @@ func TestStringCiPairAgreesAtPhaseOne(t *testing.T) {
 		(reveal)`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, got, qt.Equals, "#t")
+}
+
+// string-ci-hash is NOT ambient at phase 1: without the import, a macro body
+// cannot see it. This is the other half of the decision the reachability test's
+// `prologue` column encodes, and the only thing that pins "do not widen" (see
+// pkg/internal/extensions/all/register.go): widening the registration to
+// PhaseSetRuntime|PhaseSetExpand keeps every other test green and flips this one.
+// If the open TODO.md row on that package decides for purity over layer, this
+// test flips with it, on purpose.
+func TestStringCiHashIsNotAmbientAtPhaseOne(t *testing.T) {
+	_, err := evalPhaseDistinctness(t, `
+		(begin-for-syntax (define zz (string-ci-hash "ABC")))`)
+	qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSuchBinding)
 }

@@ -94,9 +94,9 @@ func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
 // initializers, then init functions.
 //
 // env must be an owner root (the phase-0 entry of its own PhaseRegistry), as
-// LoadBootstrapCore passes for the engine root and for every library env. Any
-// other receiver makes SealedWriteViewAt fall back to that receiver's own mutable
-// view, which lands every compile-time keyword at (0, mutable) instead of the
+// LoadBootstrapCore passes for the engine root and for every library env. A
+// receiver that is neither an owner root nor a sealed-write view makes
+// SealedWriteViewAt fall back to that receiver's own mutable view, which lands every compile-time keyword at (0, mutable) instead of the
 // sealed (phase 0, sealed) coordinate; a later user define of the name
 // would then reuse the keyword's slot rather than shadow it.
 func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.EnvironmentFrame, opts ...ApplyOption) error {
@@ -239,8 +239,9 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 // than the phase-2 era's "no such binding".
 //
 // env must be an owner root (the phase-0 entry of its own PhaseRegistry), which
-// every production Apply passes (LoadBootstrapCore). For any other receiver
-// SealedWriteViewAt falls back to the receiver's own mutable view, and the keyword
+// every production Apply passes (LoadBootstrapCore). For a receiver that is
+// neither an owner root nor a sealed-write view, SealedWriteViewAt falls back to
+// the receiver's own mutable view, and the keyword
 // would land at (0, mutable), where a later user define of the name would reuse
 // its slot.
 func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingSpec) error {

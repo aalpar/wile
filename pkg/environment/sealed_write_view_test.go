@@ -232,13 +232,18 @@ func TestBoundNamesAcrossPhases(t *testing.T) {
 	qt.Assert(t, seen["caar"], qt.IsTrue, qt.Commentf("bootstrap caar must appear"))
 }
 
-// TestSealedClimbStopsAboveExpand pins the depth of the sealed axis: a climb rooted
-// at a sealed-write view stays sealed while a sealed-write view exists for the target
-// phase, and leaves it where none does. A bootstrap define-syntax (env == the
-// sealed-write root) climbs into the phase-1 sealed-write view, but a define-syntax
-// inside a transformer body (env == that phase-1 view) climbs into the MUTABLE
-// phase-2 view, because phase 2 has no row. That is the shipped behavior, not an
-// aspiration: the seal is exactly one level deep, and the exit is silent.
+// TestSealedClimbStopsAboveExpand pins the depth of the sealed axis for a climb
+// whose receiver IS a sealed-write view: it stays sealed while a sealed-write view
+// exists for the target phase, and leaves it where none does. A top-level
+// bootstrap define-syntax (env == the sealed-write root) climbs into the phase-1
+// sealed-write view; the phase-1 view itself climbs into the MUTABLE phase-2 view,
+// because phase 2 has no row. That is the shipped behavior, not an aspiration, and
+// the exit is silent.
+//
+// It does NOT model a define-syntax inside a transformer body. That form runs in a
+// lexical child of the sealed view, which does not inherit `sealed`, so its climb
+// never consults the axis at all. See TODO.md, "The seal is exactly one level
+// deep".
 func TestSealedClimbStopsAboveExpand(t *testing.T) {
 	ns := environment.NewNamespace()
 	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
@@ -256,7 +261,7 @@ func TestSealedClimbStopsAboveExpand(t *testing.T) {
 }
 
 // TestSealedWriteViewAtFallbacks pins SealedWriteViewAt's answers for the two shapes
-// that own a store, and for the phases the axis leaves unsealed (phase 2 and up).
+// that own a store, and for phases with no sealedAxis row.
 // Both shapes answer the same way — a library env routes to its OWN views, never the
 // namespace's — because an owner does not pick a subset of the axis. Whether an
 // expand-phase primitive lands sealed or mutable is not this call's question any
@@ -307,13 +312,14 @@ func sealedWriteRefusal(f func()) (q error) {
 	return nil
 }
 
-// TestSealedWriteOffTheAxisIsRefused pins which phases own a sealed-write view,
-// and the direction-dependent answer to a sealedViewAt miss.
+// TestSealedWriteOffTheAxisIsRefused pins which phases own a sealed-write view, and
+// which receivers are refused off the axis.
 //
-// RED on master: every owner-root and sealed-view row answers with the ordinary
-// MUTABLE view and nothing says so, so a registration aimed at the seal lands where user code can
-// overwrite it — the one call whose entire job is to name a sealed target,
-// silently handing back an unsealed one.
+// RED on master: every off-axis row, and the phase-1 sealed view's phase-0
+// answer. Each comes back as the ordinary MUTABLE view and nothing says so, so a
+// registration aimed at the seal lands where user code can overwrite it — the one
+// call whose entire job is to name a sealed target, silently handing back an
+// unsealed one.
 //
 // OFF THE AXIS IS BOTH DIRECTIONS, and the PhaseTemplate row is the reason this
 // test is not a table of 2-and-up. The first cut of the fix compared against a
@@ -331,14 +337,16 @@ func sealedWriteRefusal(f func()) (q error) {
 //
 // What is NOT covered, stated so it is not read as an oversight:
 //
-//   - An UNSEALED non-owner (an inner lexical frame) still falls through at
-//     every phase. It never had a sealed view to downgrade from, and it is the
-//     documented precondition. Asserted below as "does not panic"; asserting
-//     WHICH frame it returns would restate unsealedTargetAt's implementation,
-//     since for such a frame SealedWriteViewAt IS AtPhase.
-//   - AtPhase's climb off the axis still falls through, silently, and it is
-//     define-syntax's write path (NextPhase). TestSealedClimbStopsAboveExpand
-//     pins it and TODO.md keeps it open; it is not restated here.
+//   - An UNSEALED non-owner (an inner lexical frame, including one under a
+//     sealed-write view) still falls through at every phase, by the documented
+//     precondition; refusing it too is filed in TODO.md. Asserted below as "does
+//     not panic", plus, under a sealed view, that the answer is not the owner's
+//     sealed view: `sealed` must not be inherited, or every body under a sealed
+//     view would be admitted. Asserting WHICH frame it returns would restate
+//     unsealedTargetAt's implementation.
+//   - AtPhase's climb still falls through, silently, and it is the write path of
+//     define-syntax, define-for-syntax and begin-for-syntax.
+//     TestSealedClimbStopsAboveExpand pins it and TODO.md keeps it open.
 //
 // Unreachable from production: all five non-test SealedWriteViewAt callers pass a
 // literal PhaseRuntime or PhaseExpand (bootstrap_core.go, syntax_compilers_registry.go,
@@ -424,13 +432,28 @@ func TestSealedWriteOffTheAxisIsRefused(t *testing.T) {
 		}
 	}
 
-	// An unsealed non-owner receiver is NOT refused, at any phase off the axis.
-	inner := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), ns.Runtime())
-	for _, phase := range []environment.Phase{environment.PhaseTemplate, 2} {
-		t.Run(fmt.Sprintf("non-owner/phase %d", phase), func(t *testing.T) {
-			qt.Assert(t, sealedWriteRefusal(func() {
-				_ = inner.SealedWriteViewAt(phase)
-			}), qt.IsNil)
+	// An unsealed non-owner receiver is NOT refused, at any phase off the axis,
+	// including one whose parent is a sealed-write view. Under a sealed view it is
+	// not ADMITTED either: it gets its own view, not the owner's sealed one.
+	sealedExpand := ns.Runtime().SealedWriteViewAt(environment.PhaseExpand)
+	for _, parent := range []struct {
+		name  string
+		frame *environment.EnvironmentFrame
+	}{
+		{name: "under the runtime", frame: ns.Runtime()},
+		{name: "under the sealed root", frame: ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)},
+		{name: "under the sealed expand view", frame: sealedExpand},
+	} {
+		inner := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), parent.frame)
+		t.Run(fmt.Sprintf("non-owner %s/not admitted", parent.name), func(t *testing.T) {
+			qt.Assert(t, inner.SealedWriteViewAt(environment.PhaseExpand), qt.Not(qt.Equals), sealedExpand)
 		})
+		for _, phase := range []environment.Phase{environment.PhaseTemplate, 2} {
+			t.Run(fmt.Sprintf("non-owner %s/phase %d", parent.name, phase), func(t *testing.T) {
+				qt.Assert(t, sealedWriteRefusal(func() {
+					_ = inner.SealedWriteViewAt(phase)
+				}), qt.IsNil)
+			})
+		}
 	}
 }

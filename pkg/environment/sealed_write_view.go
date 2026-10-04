@@ -73,19 +73,21 @@ import (
 // those are holes an `ok` test does not have, so the rows need no ordering
 // premise and there is no derived ceiling constant to keep in step with them.
 //
-// Phases off the axis have no sealed tier at all. For phase 2 and up that is
-// deliberate: adding a row buys the D3 property (a macro's own compile-time
-// helper is not user-overwritable) only once a bootstrap macro has a PROCEDURAL
-// transformer body that defines a macro, and none does, so the row would be
-// construction with no consumer and would force an unanswered question about the
-// new frame's parent. See TODO.md, "The seal is exactly one level deep".
+// Phases off the axis have no sealed-write view. (They can still hold sealed
+// BINDINGS: an import at phase 2 or -1 installs its bindings sealed through the
+// store, not through a view.) For phase 2 and up that is deliberate, and a row
+// alone would not buy the D3 property (a macro's own compile-time helper is not
+// user-overwritable); see the climb below. See TODO.md, "The seal is exactly one
+// level deep".
 //
 // sealedViewAt's miss has two consumers, and only one of them is loud.
 // SealedWriteViewAt refuses. AtPhase's climb falls through to the mutable view,
-// and that climb is a write path too: NextPhase is where define-syntax stores its
-// transformer, so a define-syntax inside a transformer body still lands in
-// mutable phase 2 with nothing said. That is the open half of the TODO.md row
-// cited above.
+// and that climb is a WRITE path: NextPhase is where define-syntax,
+// define-for-syntax and begin-for-syntax store what they define. It also stays
+// sealed only when the receiver IS a sealed-write view. A lexical child does not
+// inherit `sealed`, so the same forms in any body under a sealed view (a
+// transformer body included) climb unsealed even onto a row. Both exits are the
+// open TODO.md row cited above.
 var sealedAxis = [...]Phase{PhaseRuntime, PhaseExpand}
 
 // IsNamespaceRuntime reports whether this frame is its namespace's own runtime
@@ -107,7 +109,7 @@ func (p *EnvironmentFrame) IsNamespaceRuntime() bool {
 // the sealed tier.
 //
 // A phase OFF the sealed axis is REFUSED with a wrapped ErrNoSealedWriteView
-// panic. There is no sealed tier there, so the pre-2026-10-03 answer — the
+// panic. There is no sealed-write view there, so the pre-2026-10-03 answer — the
 // ordinary mutable view — was a silent downgrade at the one call whose whole job
 // is to name a sealed target: a registration meant for the seal landed where user
 // code can overwrite it and nothing said so. Unreachable from production today
@@ -132,18 +134,16 @@ func (p *EnvironmentFrame) IsNamespaceRuntime() bool {
 // receiver.
 //
 // Any other frame gets its own view at that phase and is refused nowhere. The
-// precondition is what makes this a registration API rather than a way to obtain
-// a sealed writer: `phases` is inherited by every lexical child
+// precondition keeps a lambda body from being handed the owner's sealed-write
+// view by accident: `phases` is inherited by every lexical child
 // (NewEnvironmentFrameWithParent) and `sealed` is not, so testing `phases` alone
-// would let a lambda body hand out the owner's sealed-write view and write past
-// the mutable tier. Rank living on the view rather than in the topology removed
-// the frame identity this guard once protected; it did not remove the capability
-// it gates. Admitting sealed-write views grants no new capability: each already
-// writes the sealed tier of the same store.
+// would let any body write past the mutable tier. It is an accident guard, not a
+// capability boundary: the store's exported writes (CreateGlobalBindingAt) take
+// the sealed flag directly. Admitting sealed-write views does open one route
+// AtPhase does not, a phase-1 sealed view reaching the phase-0 seal; no caller in
+// the tree passes a sealed-write view.
 //
-// AtPhase's climb from a sealed-write view is NOT covered, and it is a write
-// path: define-syntax stores its transformer through it (NextPhase), and off the
-// axis it falls through to the mutable view with nothing said. See sealedAxis.
+// AtPhase's climb is NOT covered, and it is a write path; see sealedAxis.
 //
 // The fallback resolves through the PhaseRegistry for any phase but the
 // receiver's own and must not be called while holding the registry's lock.
