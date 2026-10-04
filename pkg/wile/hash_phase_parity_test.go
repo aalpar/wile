@@ -121,7 +121,15 @@ func TestStringCiPairAgreesAtPhaseOne(t *testing.T) {
 // If the open TODO.md row on that package decides for purity over layer, this
 // test flips with it, on purpose.
 func TestStringCiHashIsNotAmbientAtPhaseOne(t *testing.T) {
-	_, err := evalPhaseDistinctness(t, `
+	// Positive control, same configuration: the name exists at phase 0, so the
+	// refusal below is about the phase and not a missing registration.
+	got, err := evalPhaseDistinctness(t, `(exact-integer? (string-ci-hash "ABC"))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, got, qt.Equals, "#t")
+
+	_, err = evalPhaseDistinctness(t, `
 		(begin-for-syntax (define zz (string-ci-hash "ABC")))`)
 	qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSuchBinding)
+	// By name as well: the sentinel alone is satisfied by any unbound identifier.
+	qt.Assert(t, err, qt.ErrorMatches, `(?s).*"string-ci-hash" at phase 1.*`)
 }

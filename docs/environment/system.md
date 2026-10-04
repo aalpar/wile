@@ -509,9 +509,12 @@ These invariants must be maintained:
    - **`AtPhase`'s climb stays sealed only when the receiver IS a sealed-write
      view**, and only onto a phase with a row; everywhere else it falls through
      to the ordinary phase view, silently. A lexical child does not inherit
-     `sealed`, so `define-syntax`, `define-for-syntax` and `begin-for-syntax` in
-     any body under a sealed view (a transformer body included) climb unsealed.
-     Latent, and open in `TODO.md` ("The seal is exactly one level deep"). Bootstrap macros compile with
+     `sealed`, so the compile-time writers (`define-syntax`,
+     `define-for-syntax`, `begin-for-syntax`, `eval-when`, `meta`) in any body
+     under a sealed view (a transformer body included) climb unsealed, and
+     `meta` (an absolute phase 1) from the phase-1 sealed view lands mutable on
+     the axis itself. Latent, and open in `TODO.md` ("The seal is exactly one
+     level deep"). Bootstrap macros compile with
      `env == the sealed-write ROOT VIEW` (phase 0), so their `define-syntax`
      writes climb via `NextPhase()`/`AtPhase` into the phase-1 sealed-write view;
      special-form expanders register there directly via

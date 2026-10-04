@@ -184,10 +184,9 @@ var (
 	// comparison answers for 2 and up and silently falls through at -1, which is
 	// the same silent downgrade at a named constant.
 	//
-	// Raised by SealedWriteViewAt only. AtPhase's climb still falls through to the
-	// mutable view without it, and that climb is the write path of define-syntax,
-	// define-for-syntax and begin-for-syntax; see the environment package's
-	// sealedAxis.
+	// Raised by SealedWriteViewAt only. AtPhase still falls through to the mutable
+	// view without it, and it is the compile-time writers' route; see the
+	// environment package's sealedAxis.
 	ErrNoSealedWriteView = NewStaticError("no sealed-write view at this phase")
 
 	// Panic recovery errors

@@ -40,9 +40,8 @@ import (
 // reg.Apply does not — see apply.go's phaseTargets bullet.)
 //
 // The rows are ONE FLAT set, not a hierarchy of phases: no phase ever resolves
-// into the phase below it. A phase with no row has no sealed-write view: a
-// define-syntax inside a transformer body climbs off the sealed axis into the
-// mutable phase-2 view.
+// into the phase below it. A phase with no row has no sealed-write view; what
+// that does and does not cause is the climb paragraph below.
 //
 // "Flat" rather than "ambient", deliberately, and the claim is about PHASE
 // STRUCTURE: these are sealedAxis's phase rows, and no phase resolves into the
@@ -81,13 +80,16 @@ import (
 // level deep".
 //
 // sealedViewAt's miss has two consumers, and only one of them is loud.
-// SealedWriteViewAt refuses. AtPhase's climb falls through to the mutable view,
-// and that climb is a WRITE path: NextPhase is where define-syntax,
-// define-for-syntax and begin-for-syntax store what they define. It also stays
-// sealed only when the receiver IS a sealed-write view. A lexical child does not
-// inherit `sealed`, so the same forms in any body under a sealed view (a
-// transformer body included) climb unsealed even onto a row. Both exits are the
-// open TODO.md row cited above.
+// SealedWriteViewAt refuses. AtPhase falls through to the mutable view, and it is
+// a WRITE path: the compile-time writers reach their target phase through it,
+// define-syntax, define-for-syntax, begin-for-syntax and eval-when
+// (expand/compile) via NextPhase, and meta via Expand(). AtPhase stays sealed
+// only when the receiver IS a sealed-write view and the target is above it, on a
+// row. So three exits are silent: a sealed view climbing off the axis; any
+// lexical child of a sealed view, which does not inherit `sealed`, even onto a
+// row (a transformer body is one); and meta from the phase-1 sealed view, whose
+// absolute phase 1 is no climb and resolves to the mutable view. All three are
+// latent, and open in the TODO.md row cited above.
 var sealedAxis = [...]Phase{PhaseRuntime, PhaseExpand}
 
 // IsNamespaceRuntime reports whether this frame is its namespace's own runtime
@@ -140,8 +142,8 @@ func (p *EnvironmentFrame) IsNamespaceRuntime() bool {
 // would let any body write past the mutable tier. It is an accident guard, not a
 // capability boundary: the store's exported writes (CreateGlobalBindingAt) take
 // the sealed flag directly. Admitting sealed-write views does open one route
-// AtPhase does not, a phase-1 sealed view reaching the phase-0 seal; no caller in
-// the tree passes a sealed-write view.
+// AtPhase does not, a phase-1 sealed view reaching the phase-0 seal; no non-test
+// caller passes a sealed-write view.
 //
 // AtPhase's climb is NOT covered, and it is a write path; see sealedAxis.
 //

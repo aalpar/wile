@@ -161,8 +161,8 @@ func NewNamespaceFrame() *EnvironmentFrame {
 // The global environment frame is inherited from the parent. This is used for creating child frames within a phase
 // (e.g., lambda bodies, let-syntax). The phase level, registry, and namespace are inherited from the parent. sealed is
 // NOT inherited — the new frame is always mutable (the zero value), because a lexical child (a lambda body)
-// is never a registration target, only a sealed-write view is. Panics if parent is nil - use NewNamespaceFrame()
-// instead.
+// is not a SealedWriteViewAt receiver, only a sealed-write view is. Its compile-time writes still climb through
+// AtPhase, and climb unsealed; see sealedAxis. Panics if parent is nil - use NewNamespaceFrame() instead.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
 	if parent == nil {
 		panic(werr.WrapForeignErrorf(
@@ -318,9 +318,10 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 // one, resolves through the shared PhaseRegistry. That is what routes a
 // bootstrap-macro define-syntax (compiled with env == the sealed-write root, so
 // NextPhase() lands here at phase 1) into the phase-1 sealed-write view, while user
-// code (env == the ordinary root view) writes the mutable tier. Above phase 1 there
-// is no sealed-write view, so a transformer body that defines a macro climbs off
-// the sealed axis.
+// code (env == the ordinary root view) writes the mutable tier. The climb stays
+// sealed only from the sealed-write view itself: a lexical child (a transformer
+// body included) does not inherit `sealed` and climbs unsealed, and above phase 1
+// there is no sealed-write view to stay on. Both exits are silent; see sealedAxis.
 //
 // This is the primary method for cross-phase access with O(1) lookup time.
 // The environment must have been created via NewNamespace().
