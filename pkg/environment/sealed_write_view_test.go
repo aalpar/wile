@@ -241,9 +241,14 @@ func TestBoundNamesAcrossPhases(t *testing.T) {
 //
 //   - the phase-1 view climbing to phase 2, which has no row;
 //   - a lexical child of a sealed view, which does not inherit `sealed`, even
-//     onto a row: a define-syntax inside a transformer body runs in one;
+//     onto a row: a define-syntax in a bootstrap procedure body runs in one (a
+//     transformer body is a lexical child at phase 1, so its climb to phase 2
+//     takes this exit and the first at once);
 //   - the phase-1 view asked for phase 1 itself, which is meta's route
 //     (Expand(), an absolute phase) and no climb at all.
+//
+// Each is asserted through AtPhase and, where a writer uses it, NextPhase, so a
+// fix in either moves this test. A fix at the compiler's write sites would not.
 func TestSealedClimbStopsAboveExpand(t *testing.T) {
 	ns := environment.NewNamespace()
 	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
@@ -254,10 +259,12 @@ func TestSealedClimbStopsAboveExpand(t *testing.T) {
 
 	// Phase 1 sealed-write view climbing to phase 2: leaves the sealed axis.
 	qt.Assert(t, sealedExpand.AtPhase(environment.Phase(2)), qt.Equals, ns.AtPhase(environment.Phase(2)))
+	qt.Assert(t, sealedExpand.NextPhase(), qt.Equals, ns.AtPhase(environment.Phase(2)))
 
 	// A lexical child of the sealed root climbs UNSEALED, even onto a row.
 	inner := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), sealedRoot)
 	qt.Assert(t, inner.AtPhase(environment.PhaseExpand), qt.Equals, ns.AtPhase(environment.PhaseExpand))
+	qt.Assert(t, inner.NextPhase(), qt.Equals, ns.AtPhase(environment.PhaseExpand))
 
 	// meta's route from the phase-1 view: an absolute phase 1, not a climb, so the
 	// mutable phase-1 view.
@@ -349,10 +356,10 @@ func sealedWriteRefusal(f func()) (q error) {
 //   - An UNSEALED non-owner (an inner lexical frame, including one under a
 //     sealed-write view) still falls through at every phase, by the documented
 //     precondition; refusing it too is filed in TODO.md. Asserted below as "does
-//     not panic", plus, under a sealed view, that the answer is not the owner's
-//     sealed view: `sealed` must not be inherited, or every body under a sealed
-//     view would be admitted. Asserting WHICH frame it returns would restate
-//     unsealedTargetAt's implementation.
+//     not panic" off the axis, and on it as a non-nil frame at the asked phase
+//     that is not the owner's sealed view: `sealed` must not be inherited, or
+//     every body under a sealed view would be admitted. Asserting WHICH frame it
+//     returns would restate unsealedTargetAt's implementation.
 //   - AtPhase still falls through, silently, and it is the compile-time writers'
 //     route (see sealedAxis). TestSealedClimbStopsAboveExpand pins its exits and
 //     TODO.md keeps them open.

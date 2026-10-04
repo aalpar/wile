@@ -161,8 +161,8 @@ func NewNamespaceFrame() *EnvironmentFrame {
 // The global environment frame is inherited from the parent. This is used for creating child frames within a phase
 // (e.g., lambda bodies, let-syntax). The phase level, registry, and namespace are inherited from the parent. sealed is
 // NOT inherited — the new frame is always mutable (the zero value), because a lexical child (a lambda body)
-// is not a SealedWriteViewAt receiver, only a sealed-write view is. Its compile-time writes still climb through
-// AtPhase, and climb unsealed; see sealedAxis. Panics if parent is nil - use NewNamespaceFrame() instead.
+// is never admitted by SealedWriteViewAt (only owner roots and sealed-write views are). Its compile-time writes
+// still go through AtPhase, unsealed; see sealedAxis. Panics if parent is nil - use NewNamespaceFrame() instead.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
 	if parent == nil {
 		panic(werr.WrapForeignErrorf(
@@ -313,15 +313,13 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 // constant pins the target to one level and silently collapses the tower for
 // every frame that is not already at level 0.
 //
-// A climb rooted at a SEALED-WRITE view stays sealed wherever the target phase has
-// a sealed-write view of its own; every other receiver, and every phase without
-// one, resolves through the shared PhaseRegistry. That is what routes a
+// A SEALED-WRITE view asking for a phase above its own that has a sealed-write view
+// gets that view; every other request resolves through the shared PhaseRegistry. That is what routes a
 // bootstrap-macro define-syntax (compiled with env == the sealed-write root, so
 // NextPhase() lands here at phase 1) into the phase-1 sealed-write view, while user
-// code (env == the ordinary root view) writes the mutable tier. The climb stays
-// sealed only from the sealed-write view itself: a lexical child (a transformer
-// body included) does not inherit `sealed` and climbs unsealed, and above phase 1
-// there is no sealed-write view to stay on. Both exits are silent; see sealedAxis.
+// code (env == the ordinary root view) writes the mutable tier. Every other request
+// from under a seal falls through to a mutable view, silently; sealedAxis names the
+// exits.
 //
 // This is the primary method for cross-phase access with O(1) lookup time.
 // The environment must have been created via NewNamespace().

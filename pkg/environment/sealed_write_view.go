@@ -87,9 +87,11 @@ import (
 // only when the receiver IS a sealed-write view and the target is above it, on a
 // row. So three exits are silent: a sealed view climbing off the axis; any
 // lexical child of a sealed view, which does not inherit `sealed`, even onto a
-// row (a transformer body is one); and meta from the phase-1 sealed view, whose
-// absolute phase 1 is no climb and resolves to the mutable view. All three are
-// latent, and open in the TODO.md row cited above.
+// row (a bootstrap procedure body is one; a transformer body is a lexical child
+// at phase 1, so its climb to phase 2 takes this exit and the first at once); and
+// meta from the phase-1 sealed view, whose absolute phase 1 is no climb and
+// resolves to the mutable view. All three are latent, and open in the TODO.md row
+// cited above.
 var sealedAxis = [...]Phase{PhaseRuntime, PhaseExpand}
 
 // IsNamespaceRuntime reports whether this frame is its namespace's own runtime

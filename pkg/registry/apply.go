@@ -96,13 +96,11 @@ func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
 // env must be an owner root: the phase-0 entry of its own PhaseRegistry (the
 // environment package's ownsSealedAxis, which the exported IsOwnerRoot does NOT
 // answer), as LoadBootstrapCore passes for the engine root and for every library
-// env. Any other receiver misplaces bindings. A lexical child makes
-// SealedWriteViewAt fall back to its own mutable view, so every compile-time
-// keyword lands at (0, mutable) instead of (0, sealed), and a later user define of
-// the name reuses the keyword's slot rather than shadowing it. A sealed-write
-// view seats the keywords correctly but becomes the closureEnv every primitive
-// captures, which phaseTargets below requires to be the mutable runtime; the
-// phase-1 view also seats runtime primitives at phase 1.
+// env. Nothing checks it. Any other receiver misplaces bindings: a sealed-write
+// view becomes the runtime primitives' closureEnv, which phaseTargets below
+// requires to be the mutable runtime, and any other frame lands every
+// compile-time keyword at (0, mutable), where a later user define of the name
+// reuses the keyword's slot rather than shadowing it.
 func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.EnvironmentFrame, opts ...ApplyOption) error {
 	var cfg applyConfig
 	for _, opt := range opts {
@@ -244,9 +242,9 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 //
 // env must be an owner root (the phase-0 entry of its own PhaseRegistry), which
 // every production Apply passes (LoadBootstrapCore). For a receiver that is
-// neither an owner root nor a sealed-write view, SealedWriteViewAt falls back to
-// the receiver's own mutable view, and the keyword would land at (0, mutable),
-// where a later user define of the name would reuse its slot.
+// neither an owner root nor a sealed-write view, SealedWriteViewAt answers with a
+// mutable view, and the keyword would land at (0, mutable), where a later user
+// define of the name would reuse its slot.
 func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingSpec) error {
 	sealedRoot := env.SealedWriteViewAt(environment.PhaseRuntime)
 	sym := values.NewSymbol(spec.Name)

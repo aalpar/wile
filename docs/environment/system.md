@@ -507,9 +507,9 @@ These invariants must be maintained:
      top-level `(define-for-syntax car …)` a shadow at (1, mutable) rather than a
      write through the registry's copy.
    - **`AtPhase`'s climb stays sealed only when the receiver IS a sealed-write
-     view**, and only onto a phase with a row; everywhere else it falls through
-     to the ordinary phase view, silently. A lexical child does not inherit
-     `sealed`, so the compile-time writers (`define-syntax`,
+     view**, and only onto a phase above it with a row; everywhere else it
+     falls through to the ordinary phase view, silently. A lexical child does
+     not inherit `sealed`, so the compile-time writers (`define-syntax`,
      `define-for-syntax`, `begin-for-syntax`, `eval-when`, `meta`) in any body
      under a sealed view (a transformer body included) climb unsealed, and
      `meta` (an absolute phase 1) from the phase-1 sealed view lands mutable on
