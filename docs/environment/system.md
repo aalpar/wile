@@ -512,8 +512,9 @@ These invariants must be maintained:
      not inherit `sealed`, so the compile-time writers (listed on `sealedAxis`)
      in any body under a sealed view climb unsealed, and `meta` (an absolute
      phase 1) from the phase-1 sealed view lands mutable on the axis itself.
-     Latent, and open in `TODO.md` ("The seal is exactly one level deep"). Bootstrap macros compile with
-     `env == the sealed-write ROOT VIEW` (phase 0), so their `define-syntax`
+     Latent, and open in `TODO.md` ("The seal is exactly one level deep").
+     Bootstrap macros compile with `env == the sealed-write ROOT VIEW` (phase
+     0), so their `define-syntax`
      writes climb via `NextPhase()`/`AtPhase` into the phase-1 sealed-write view;
      special-form expanders register there directly via
      `SealedWriteViewAt(PhaseExpand)`. Above phase 1, the climb lands on the

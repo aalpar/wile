@@ -250,36 +250,48 @@ func TestBoundNamesAcrossPhases(t *testing.T) {
 // Each is asserted through AtPhase and through the writer's own entry (NextPhase,
 // or Expand for meta), so a fix at either layer moves this test; NextPhase also
 // serves macro lookup. A fix at the compiler's write sites would not.
+//
+// qt.Check, not qt.Assert: a fix moves several rows at once, and each should
+// report rather than hide behind the first.
 func TestSealedClimbStopsAboveExpand(t *testing.T) {
 	ns := environment.NewNamespace()
 	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
 	sealedExpand := ns.Runtime().SealedWriteViewAt(environment.PhaseExpand)
-
-	// Phase 0 sealed-write view climbing to phase 1: stays sealed.
-	qt.Assert(t, sealedRoot.AtPhase(environment.PhaseExpand), qt.Equals, sealedExpand)
-
-	// Phase 1 sealed-write view climbing to phase 2: leaves the sealed axis.
-	qt.Assert(t, sealedExpand.AtPhase(environment.Phase(2)), qt.Equals, ns.AtPhase(environment.Phase(2)))
-	qt.Assert(t, sealedExpand.NextPhase(), qt.Equals, ns.AtPhase(environment.Phase(2)))
-
-	// A lexical child of the sealed root climbs UNSEALED, even onto a row.
-	inner := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), sealedRoot)
-	qt.Assert(t, inner.AtPhase(environment.PhaseExpand), qt.Equals, ns.AtPhase(environment.PhaseExpand))
-	qt.Assert(t, inner.NextPhase(), qt.Equals, ns.AtPhase(environment.PhaseExpand))
-
-	// A transformer body: a lexical child of the phase-1 view, climbing to phase 2.
-	// It takes the lexical-child and off-axis exits at once, so this goes red only
-	// when both are fixed.
-	transformerBody := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), sealedExpand)
-	qt.Assert(t, transformerBody.NextPhase(), qt.Equals, ns.AtPhase(environment.Phase(2)))
-
-	// meta's route from the phase-1 view: an absolute phase 1, not a climb, so the
-	// mutable phase-1 view.
-	qt.Assert(t, sealedExpand.Expand(), qt.Equals, ns.AtPhase(environment.PhaseExpand))
+	mutable1 := ns.AtPhase(environment.PhaseExpand)
+	mutable2 := ns.AtPhase(environment.Phase(2))
 
 	// The redirect is a CLIMB: it never rewrites a lookup at or below the receiver's
 	// own level, so the sealed-write root still reaches the ordinary view at phase 0.
-	qt.Assert(t, sealedRoot.AtPhase(environment.PhaseRuntime), qt.Equals, ns.Runtime())
+	// An invariant, not an exit; listed first so it never reads as one.
+	qt.Check(t, sealedRoot.AtPhase(environment.PhaseRuntime), qt.Equals, ns.Runtime())
+
+	// Phase 0 sealed-write view climbing to phase 1: stays sealed.
+	qt.Check(t, sealedRoot.AtPhase(environment.PhaseExpand), qt.Equals, sealedExpand)
+
+	// Phase 1 sealed-write view climbing to phase 2: leaves the sealed axis.
+	qt.Check(t, sealedExpand.AtPhase(environment.Phase(2)), qt.Equals, mutable2)
+	qt.Check(t, sealedExpand.NextPhase(), qt.Equals, mutable2)
+
+	// A lexical child of the sealed root climbs UNSEALED, even onto a row, and so
+	// does a child of that child.
+	inner := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), sealedRoot)
+	qt.Check(t, inner.AtPhase(environment.PhaseExpand), qt.Equals, mutable1)
+	qt.Check(t, inner.NextPhase(), qt.Equals, mutable1)
+	grandchild := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), inner)
+	qt.Check(t, grandchild.AtPhase(environment.PhaseExpand), qt.Equals, mutable1)
+	qt.Check(t, grandchild.NextPhase(), qt.Equals, mutable1)
+
+	// A transformer body: a lexical child of the phase-1 view, climbing to phase 2.
+	// It takes the lexical-child and off-axis exits at once, so these go red only
+	// when both are fixed.
+	transformerBody := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), sealedExpand)
+	qt.Check(t, transformerBody.AtPhase(environment.Phase(2)), qt.Equals, mutable2)
+	qt.Check(t, transformerBody.NextPhase(), qt.Equals, mutable2)
+
+	// meta's route from the phase-1 view: an absolute phase 1, not a climb, so the
+	// mutable phase-1 view.
+	qt.Check(t, sealedExpand.AtPhase(environment.PhaseExpand), qt.Equals, mutable1)
+	qt.Check(t, sealedExpand.Expand(), qt.Equals, mutable1)
 }
 
 // TestSealedWriteViewAtFallbacks pins SealedWriteViewAt's answers for the two shapes
@@ -364,8 +376,10 @@ func sealedWriteRefusal(f func()) (q error) {
 //     sealed-write view) still falls through at every phase, by the documented
 //     precondition; refusing it too is filed in TODO.md. Asserted below as "does
 //     not panic" off the axis, and at both axis phases as a non-nil frame at the
-//     asked phase that is not the owner's sealed view: `sealed` must not be
-//     inherited, or every body under a sealed view would be admitted. Asserting WHICH frame it
+//     asked phase that is not the owner's sealed view. That guards admission by
+//     either route, an inherited `sealed` or unsealedTargetAt's climb; because it
+//     compares identity, it pins non-inheritance only while admission keys on
+//     `sealed`. Asserting WHICH frame it
 //     returns would restate unsealedTargetAt's implementation.
 //   - AtPhase still falls through, silently, and it is the compile-time writers'
 //     route (see sealedAxis). TestSealedClimbStopsAboveExpand pins its exits and

@@ -84,15 +84,14 @@ import (
 // a WRITE path: the compile-time writers reach their target phase through it,
 // define-syntax, define-for-syntax, begin-for-syntax, eval-when (expand/compile)
 // and a define in any transformer right-hand side via NextPhase, and meta via
-// Expand(). AtPhase stays sealed
-// only when the receiver IS a sealed-write view and the target is above it, on a
-// row. So three exits are silent: a sealed view climbing off the axis; any
-// lexical child of a sealed view, which does not inherit `sealed`, even onto a
-// row (a bootstrap procedure body is one; a transformer body is a lexical child
-// at phase 1, so its climb to phase 2 takes this exit and the off-axis one); and
-// meta from the phase-1 sealed view, whose absolute phase 1 is no climb and
-// resolves to the mutable view. All three are latent, and open in the TODO.md row
-// cited above.
+// Expand(). AtPhase stays sealed only when the receiver IS a sealed-write view
+// and the target is above it, on a row. So three exits are silent: a sealed view
+// climbing off the axis; any lexical child of a sealed view, which does not
+// inherit `sealed`, even onto a row (a bootstrap procedure body is one; a
+// transformer body is a lexical child at phase 1, so its climb to phase 2 takes
+// this exit and the off-axis one); and meta from the phase-1 sealed view, whose
+// absolute phase 1 is no climb and resolves to the mutable view. All three are
+// latent, and open in the TODO.md row cited above.
 var sealedAxis = [...]Phase{PhaseRuntime, PhaseExpand}
 
 // IsNamespaceRuntime reports whether this frame is its namespace's own runtime

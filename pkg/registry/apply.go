@@ -96,8 +96,10 @@ func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
 // env must be an owner root: the phase-0 entry of its own PhaseRegistry (the
 // environment package's ownsSealedAxis, which the exported IsOwnerRoot does NOT
 // answer), as LoadBootstrapCore passes for the engine root and for every library
-// env. Nothing checks it, and any other receiver, a sealed-write view included,
-// misplaces bindings or closure envs at both phases.
+// env. Nothing checks it, and any other receiver misplaces bindings or closure
+// envs, at one phase or both depending on the receiver: a sealed-write view, for
+// one, hands the runtime primitives a sealed closureEnv, which phaseTargets below
+// requires to be the mutable runtime.
 func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.EnvironmentFrame, opts ...ApplyOption) error {
 	var cfg applyConfig
 	for _, opt := range opts {
