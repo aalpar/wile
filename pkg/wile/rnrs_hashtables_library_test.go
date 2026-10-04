@@ -46,8 +46,9 @@ func TestRnrsHashtablesLibrary(t *testing.T) {
 			`(begin (import (rnrs hashtables)) (let ((h (make-equal-hashtable))) (hashtable-update! h 'a (lambda (v) (+ v 1)) 0) (hashtable-ref h 'a #f)))`, `1`},
 		{"the inspection procedures round-trip",
 			`(begin (import (rnrs hashtables)) (let ((h (make-eqv-hashtable))) (and (eq? (hashtable-equivalence-function h) eqv?) (not (hashtable-hash-function h)) (hashtable-mutable? h))))`, `#t`},
-		// The hash procedures are reachable after the import even though the
-		// library does NOT export them — they are sealed-base bindings.
+		// The hash procedures are reachable after the import. Three are NOT
+		// exported and resolve to sealed-base bindings; string-ci-hash is exported
+		// (for phase 1, see the .sld's NOT EXPORTED note).
 		{"the hash functions are still reachable",
 			`(begin (import (rnrs hashtables)) (and (= (equal-hash '(1 2)) (equal-hash (list 1 2))) (= (string-ci-hash "A") (string-ci-hash "a")) (= (symbol-hash 'q) (symbol-hash 'q)) (>= (string-hash "s") 0)))`, `#t`},
 		{"immutability reaches through the library",

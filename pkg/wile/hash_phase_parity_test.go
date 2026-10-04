@@ -30,10 +30,15 @@ package wile_test
 // at phase 1, and string-ci=? itself is only reachable at phase 1 that way
 // (via (scheme char)). Widening the registration was the first fix and was
 // reverted: it bought ambient parity at the price of making string-ci-hash the
-// only both-phase registration outside pkg/registry/core, 1 against 34. So this
-// test does NOT assert one phase set across the family. It asserts that each
-// member is reachable, by its documented route, and the asymmetry in the
-// `prologue` column is the decision rather than a gap in it.
+// only both-phase registration outside pkg/registry/core. So this test does NOT
+// assert one phase set across the family. It asserts that each member is
+// reachable, by its documented route, and the asymmetry in the `prologue` column
+// is the decision rather than a gap in it.
+//
+// The route is pinned, not just the reachability: the prologue imports
+// string-ci-hash BY NAME through `only`, which fails if (rnrs hashtables) stops
+// exporting it. A plain (for-syntax (rnrs hashtables)) import stayed green with
+// the export removed and the registration widened, the reverted fix.
 //
 // Each row reveals the phase-1 value at phase 0 through an er-macro-transformer,
 // the technique TestPhase1DefineSyntaxIsReachableFromItsOwnRung uses: a
@@ -66,7 +71,7 @@ func TestR6RSHashProceduresAreReachableAtPhaseOne(t *testing.T) {
 		// The filed row, and the only one with a prologue.
 		{
 			name:     "string-ci-hash (for-syntax import)",
-			prologue: `(import (for-syntax (rnrs hashtables)))`,
+			prologue: `(import (for-syntax (only (rnrs hashtables) string-ci-hash)))`,
 			call:     `(string-ci-hash "ABC")`,
 		},
 	}
@@ -94,7 +99,7 @@ func TestR6RSHashProceduresAreReachableAtPhaseOne(t *testing.T) {
 // string-ci=? comes from (scheme char), the hash from (rnrs hashtables).
 func TestStringCiPairAgreesAtPhaseOne(t *testing.T) {
 	got, err := evalPhaseDistinctness(t, `
-		(import (for-syntax (scheme char)) (for-syntax (rnrs hashtables)))
+		(import (for-syntax (scheme char)) (for-syntax (only (rnrs hashtables) string-ci-hash)))
 		(begin-for-syntax
 		  (define zz (and (string-ci=? "ß" "SS")
 		                  (= (string-ci-hash "ß") (string-ci-hash "SS")))))

@@ -1139,6 +1139,15 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   its status cannot go red**, so read `pattern` and `total`, and `.goast-beliefs/` is run by
   neither `make lint` nor `make ci`. History: `memory/2026-10-03-p3-16-first-cuts-refuted.md`.
 
+- [ ] **Unexport `NewPrimitiveExpander`, so the single-builder premise is enforced, not observed**
+  [Low, S, filed 2026-10-03 from the P3.16 crosscheck; hypothesis, not compiled]: the precondition
+  above holds only while the expander table has one builder, and the belief can only watch that.
+  `NewPrimitiveExpander` (`primitive_expander.go`) and `RegisterPhaseBindings` are exported, so any
+  importer can build a second table at another phase. Unexported, a builder outside
+  `pkg/machine/compilation` is a compile error and the belief only has to watch the package. The one
+  non-test caller is in-package; the cost is `pkg/machine/value_methods_test.go`, whose six uses are
+  in an external test package.
+
 ### `bootstrap_syntax{,_procedures}.scm` and the phase-1 vocabulary (2026-09-09)
 
 - [ ] **Re-derive the macro vocabulary when the Scheme syntax layer flips**
@@ -2747,11 +2756,18 @@ Directions documents — identify prioritized capability extensions. Priority se
 - [ ] **§5.7 Category theory extensions** [Algebra, Low]: Functors, natural transformations, general adjunctions beyond `galois.sld`'s Galois-connection special case. Formalizes abstract-interpretation composition (Cousot & Cousot 1977). ~400 LOC. `plans/2026-04-17-algebra-foundations-directions.md` §5.7.
 - [ ] **§5.7 Connes-Kreimer Hopf algebra on rooted trees** [Algebra, Low]: Coproduct cuts subtrees — matches `ast-transform`/`ast-splice` primitive operation in wile-goast's `utils.scm`. Formalizes rewrite-rule composition. ~300 LOC. `plans/2026-04-17-algebra-foundations-directions.md` §5.7. **Reassessed 2026-08-03 — do not fund as scoped.** The coproduct/subtree-cut resemblance is vocabulary, not structure: the antipode is what makes it a Hopf algebra and has no refactoring analogue. What `ast-transform`/`ast-splice` actually want is the one-hole context (Huet's zipper), where contexts form a monoid under plugging, and a Lawvere theory for multi-hole templates. Same job, far less machinery. Rewrite-rule *composition* with preconditions is a guarded category, filed separately.
 - [ ] **`equal-hash` has no docstring-example harness, and the hashtable family just proved it needs one** [S]: five `Doc` examples in `pkg/registry/core/hashtables.go` called `(make-hashtable)` after the same change made that an arity error, and nothing caught it — `prim_reflection_test.go` string-compares one `Doc` and never RUNS an example. These strings are what `wile doc`, `apropos` and the REPL show. A test that extracts every `Examples:` line from `Registry().Primitives()` and evaluates it would have failed loudly; it would also police the `=> result` claims, which nothing checks today. Scope it to primitives whose examples are self-contained.
-- [x] **Phase asymmetry across the four R6RS hash procedures** [XS, Done 2026-10-03, P3.16/I066, branch `fix/phase-parity-and-sealed-ceiling`]: `(rnrs hashtables)` exports `string-ci-hash`, so `(import (for-syntax (rnrs hashtables)))` reaches it at phase 1, as `(import (for-syntax (scheme char)))` reaches its contract partner `string-ci=?`. Its registration stays `PhaseSetRuntime`: a `PhaseSet` governs ambient availability only, and widening it would make `string-ci-hash` the only both-phase registration outside `pkg/registry/core` (1 against 34). **Do not widen it.** The gap was reachability, not capability: the other three hashes are in the sealed base at phases 0 and 1, while `string-ci-hash` was in neither the phase-1 base nor any export list. The residual asymmetry (three callable bare, one needing an import) is accepted. Pinned by `TestR6RSHashProceduresAreReachableAtPhaseOne`, whose rows name each hash's route, and `TestStringCiPairAgreesAtPhaseOne` (the phase-1 pair agrees on `"ß"`/`"SS"`). No `(srfi 13)` conflict: it exports `string-hash` alone. History: `memory/2026-10-03-p3-16-first-cuts-refuted.md`.
+- [x] **Phase asymmetry across the four R6RS hash procedures** [XS, Done 2026-10-03, P3.16/I066, branch `fix/phase-parity-and-sealed-ceiling`]: `(rnrs hashtables)` exports `string-ci-hash`, so `(import (for-syntax (rnrs hashtables)))` reaches it at phase 1, as `(import (for-syntax (scheme char)))` reaches its contract partner `string-ci=?`. Its registration stays `PhaseSetRuntime`: a `PhaseSet` governs ambient availability only, and widening it would make `string-ci-hash` the only both-phase registration outside `pkg/registry/core`. **Do not widen it.** The gap was reachability, not capability: the other three hashes are in the sealed base at phases 0 and 1, while `string-ci-hash` was in neither the phase-1 base nor any export list. The residual asymmetry (three callable bare, one needing an import) is accepted. Pinned by `TestR6RSHashProceduresAreReachableAtPhaseOne`, whose rows name each hash's route, and `TestStringCiPairAgreesAtPhaseOne` (the phase-1 pair agrees on `"ß"`/`"SS"`). No `(srfi 13)` conflict: it exports `string-hash` alone. Accepted cost: `(rnrs hashtables)` now needs `string-ci-hash` registered to load at all (the `.sld`'s NOT EXPORTED note). History: `memory/2026-10-03-p3-16-first-cuts-refuted.md`.
 - [x] **`equal-hash`/`string-hash`/`symbol-hash` carry `Category: "hashtables"`** [XS, Decided 2026-10-03, P3.16/I066, branch `fix/phase-parity-and-sealed-ceiling`]: **split ACCEPTED explicitly**, recorded on `addHashes` (`registry/core/hashes.go`) and on the `string-ci-hash` registration (`internal/extensions/all/register.go`). `Category` is declared as `// optional: grouping category` and has two consumers that want different things — `PrimitivesByCategory`/`SearchDoc` (where does a reader look) and `WithoutCategory` (what does an embedder attenuate by name) — and no single value for one primitive reconciles them. For `string-ci-hash` the honest answer to both is "beside `string-ci=?`, whose fold it shares", so `WithoutCategory("hashtables")` removes three of four deliberately: the survivor is a pure function on strings that needs no hashtable, and removing a working string procedure to tidy a filter is the wrong trade. (The filed count was off by one: three carry `"hashtables"`, not two.) **Pinned by `TestWithoutCategoryKeepsStringCiHash`** (`pkg/wile/engine_sandbox_test.go`). Two configuration facts the test depends on, both measured: `string-ci-hash` is absent from the DEFAULT engine (it ships in `pkg/internal/extensions/all`), so the registry must come from a KitchenSink engine or the survivor row is vacuous; and `WithProfile(KitchenSink)` alongside `WithRegistry` fails construction with `cannot redefine immutable top-level binding "call-with-port"`.
 - [ ] **Nothing in `pkg/internal/extensions/all` is callable from a macro body, and all of it is pure** [S, filed 2026-10-03]: every registration in that package passes `PhaseSetRuntime` — the five `string-ci` and five `char-ci` comparisons, `force`/`make-promise`/`promise?`, the `record-*` surface, `char-upcase`/`char-downcase`/`char-foldcase`/`digit-value`/`char-alphabetic?`, `string-upcase`/`string-downcase`/`string-foldcase`, `string-copy!`/`string-fill!`. The package imports **nothing** from `os`, `io`, `net`, `syscall`, `time` or `math/rand`, so the sandbox reason that makes `PhaseSetRuntime` a real decision for `files`/`process`/`eval`/`io`/`threads` does not apply to any of it; `pkg/registry`'s own doc example (`doc.go:33`) uses `PhaseSetRuntime|PhaseSetExpand`, so both-phase is the documented default rather than the exception. Net effect: `(char-upcase #\a)` and `(force p)` are unavailable in a macro fender unless the program writes a `for-syntax` import, which is a defensible place to land but was never decided.
 
   Low priority: no consumer is pressing it, and I066 supplied the hash quartet's phase-1 reachability by export without touching this package's phase sets. The open question is only whether ambient phase-1 availability should follow the layer (status quo: core yes, extensions no) or purity (every pure primitive both-phase). Decide it for the package, not per primitive, and note the consequences are one-sided — widening a pure primitive adds a phase-1 binding and nothing depends on its absence. Related: `make-hashtable` supports only the `(equal-hash equal?)` pair today, so no case-insensitive table is constructible at any phase, which is why the ci comparisons' phase-1 absence has had no reported consumer.
+
+- [ ] **Ratchet "no `PhaseSetExpand` registration outside `pkg/registry/core`"** [Low, XS, filed
+  2026-10-03 from the P3.16 crosscheck; hypothesis]: the rule that ambient phase-1 availability
+  follows the layer is stated in four places (`hashes.go`, `all/register.go`, `hashtables.sld`,
+  `hash_phase_parity_test.go`, which says "do not re-widen") and enforced by none. It holds today. A
+  test in `pkg/internal/extensions/all` walking its registry's specs would make it a gate. Moot if
+  the row above decides for purity over layer.
 
 - [ ] **`(rnrs hashtables)` should export `equal-hash`, `string-hash`, `symbol-hash`** [XS, **`string-ci-hash` DONE 2026-10-03** by P3.16/I066 — exported for a PHASE reason, not a completeness one: it was the one member reachable from phase 1 by no route, see that row]: R6RS lists all four in the library and Wile withholds the other three. The reason is gone — the export list was a workaround for closure-pointer recognition, which identity-token recognition replaced (`machine.PrimitiveIdentity`), and `TestRnrsHashtablesRecognitionIsIndependentOfTheExportList` pins that the list can no longer affect `make-hashtable`. Verified by hand: a library that re-exports both `equal-hash` and `equal?` no longer breaks the pair. **The one thing to decide first:** `(srfi 13)` exports a DIFFERENT, bounded `string-hash` (a Scheme case-lambda taking an optional bound), so a program importing both libraries would meet the R7RS §5.6 conflict — correct behaviour, newly reachable. Either accept it, or export the other three and leave `string-hash` out with that reason recorded. `docs/reference/r7rs-differences.md` item 16.
 - [ ] **A primitive has one identity per environment, and library envs are engine-sized islands** [L]: `Namespace.NewChildRuntime` gives a library env `parent: nil` and a fresh global, so the library env factory (`engine.go:526`) re-runs `LoadBootstrapCore` into it — full registry apply, phase handlers, and the whole bootstrap Scheme — minting a private `*ForeignClosure` for every primitive. Consequences: `eq?` on a primitive is not stable across the import boundary (`(eq? a-car car)` is `#f` when `a-car` came from a library and `car` is ambient), and **each loaded library costs ~7 ms and ~1.7 MB RSS** — measured, 8 `(scheme …)` imports take an engine from 0.01s/23.7MB to 0.07s/42.4MB, so one library load costs more than a whole engine's startup. For names the library imports, its private copy is overwritten by the import and was pure waste. The identity token addresses the ONE consumer that compared pointers (`make-hashtable`); it does not make `eq?` agree, and does not recover the time or the memory. The fix is to stop copying: parent library envs at a full sealed frame instead of re-applying the registry. **Blocked on** the visible-vs-registered split — `WithStrictNamespace` (`engine.go:194`) and a dialect's `PrimitiveRemover` (`engine.go:208`) deliberately give the sealed base a NARROWER registry than library envs get, so a naive reparent starves `(scheme write)` of `display`. Needs a full frame that library envs parent to, with the narrowed top level as a sibling view. **Its price is now paid by every level-2 program**: `WithoutAmbientBindings` binds nothing, so reaching `car` costs one import minimum — re-measured in-process 2026-08-04, `(import (scheme base))` is **9.38 ms** against **3.93 ms / 1.20 MB heap** for a whole `Small` engine, and an eight-library R7RS preamble is **58.57 ms / 7.93 MB heap**. Per-library spread is narrow (6.0–9.4 ms), so the cost is per-import overhead, not library size. This item is what would make level 2 cheap; level 2 shipped without it, tax documented and accepted.
@@ -3133,26 +3149,34 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   `(ANY, sealed)` one: the two differ in `closureEnv` (`apply.go`), which is load-bearing for `compile`,
   `expand` and `free-identifier=?`. `memory/2026-08-07-review-wave1-silent-corruption-impl.md` Phase 5b.
 
-- [x] **The seal is exactly one level deep, and the exit is no longer silent** [Design, S,
-  Done 2026-10-03, P3.16/I045, branch `fix/phase-parity-and-sealed-ceiling`]: phases off the sealed
-  axis still have no seal, and the WRITE is now loud. An owner root asking `SealedWriteViewAt` for a
-  phase with no `sealedAxis` row panics with a wrapped `werr.ErrNoSealedWriteView`; a READ
-  (`AtPhase`'s climb from a sealed-write view) keeps its fall-through, which
-  `TestSealedClimbStopsAboveExpand` pins. A read asking for a frame that does not exist can be
-  answered with the one that does; a write cannot.
+- [ ] **The seal is exactly one level deep, and the `define-syntax` climb exits silently** [Design, S,
+  deliberate — decide before Tier 2 of the climbing tower]: phases ≥ 2 have no seal, so a
+  `define-syntax` inside a transformer body (env == the phase-1 sealed-write view, `NextPhase()` →
+  phase 2) climbs off the sealed axis into the **mutable** compile frame, and nothing says so.
+  Pinned by `TestSealedClimbStopsAboveExpand`, so it is documented behavior rather than an accident,
+  and latent today because the climb engages only for **procedural** transformers and no bootstrap
+  macro has one. It becomes live if a bootstrap macro ever gets a procedural transformer body that
+  defines a macro: that macro's own compile-time helper would be user-overwritable, the property D3
+  exists to prevent one phase lower.
 
-  **The condition is `sealedViewAt`'s miss. Do not replace it with a ceiling comparison:**
-  `PhaseTemplate` (-1) is a named phase below the first axis row, so `phase > ceiling` falls through
-  there and reproduces the defect; a non-contiguous axis would also put a gap inside the bound.
-  `sealedAxis` is the only statement of the bound. Pinned by `TestSealedWriteOffTheAxisIsRefused`,
-  including negative phases. Owner-root path only (a non-owner falls through by its documented
-  precondition), and unreachable from production: all five non-test callers pass a literal
-  `PhaseRuntime` or `PhaseExpand`.
+  **No phase-2 row until then, deliberately.** Adding one forces an unanswered question: is the new
+  frame's parent the phase-0 seal (flat, mirroring the mutable axis's no-phase→phase-edge rule) or
+  the phase-1 seal (chained, mirroring the phase tower)? The construction site is `newPhaseRegistry`
+  (`namespace.go`); `wireRuntimeFrames` no longer exists. A loud exit without the row would refuse
+  at the write site (`compile_define_syntax.go`, when a sealed `p.env` climbs to an unsealed frame),
+  NOT in `AtPhase`, whose climb also serves lookups (`expander_body.go`). Untested.
 
-  **No phase-2 row, deliberately.** It buys the D3 property only once a bootstrap macro has a
-  PROCEDURAL transformer body that defines a macro, and none does, and it forces the unanswered
-  parent question (flat vs chained). The construction site is `newPhaseRegistry` (`namespace.go`);
-  `wireRuntimeFrames` no longer exists. History: `memory/2026-10-03-p3-16-first-cuts-refuted.md`.
+  **A different exit is closed** (2026-10-03, P3.16/I045, branch `fix/phase-parity-and-sealed-ceiling`):
+  `SealedWriteViewAt` no longer hands back a mutable view. Asked for a phase with no `sealedAxis` row
+  by an owner root or by a sealed-write view, it panics with a wrapped `werr.ErrNoSealedWriteView`;
+  an unsealed non-owner falls through by its documented precondition. That is not this row's climb,
+  and this row was first closed as `[x]` on that branch by calling the climb a "read". Crosscheck
+  refuted it: the climb is `define-syntax`'s write path. **The refusal condition is `sealedViewAt`'s
+  miss; do not replace it with a ceiling comparison:** `PhaseTemplate` (-1) is a named phase below
+  the first axis row, so `phase > ceiling` falls through there and reproduces the defect. Pinned by
+  `TestSealedWriteOffTheAxisIsRefused`, including negative phases and both sealed receivers.
+  Unreachable from production: all five non-test callers pass a literal `PhaseRuntime` or
+  `PhaseExpand`. History: `memory/2026-10-03-p3-16-first-cuts-refuted.md`.
 
 ### `predeclareBinding` leaves an unwritten `#!void` twin slot per library-body define (2026-07-19)
 

@@ -189,7 +189,7 @@ func addMoreStrings(r *registry.PrimitiveRegistry) error {
 	//
 	// It WAS widened here on 2026-10-03 and reverted the same day. The widening
 	// bought AMBIENT parity (callable bare in a macro body) and made this the only
-	// both-phase registration outside pkg/registry/core, 1 against 34; a PhaseSet
+	// both-phase registration outside pkg/registry/core; a PhaseSet
 	// governs ambient availability alone, so the export buys the parity that
 	// actually matters without touching the layer pattern. Do not re-widen it
 	// without re-deciding that: the remaining asymmetry (three callable bare, this

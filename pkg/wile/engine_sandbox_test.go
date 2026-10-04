@@ -32,6 +32,7 @@ import (
 	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -1471,7 +1472,8 @@ func TestWithoutCategoryKeepsStringCiHash(t *testing.T) {
 				qt.Assert(t, err, qt.IsNil)
 				return
 			}
-			qt.Assert(t, err, qt.IsNotNil)
+			// By sentinel: any error, an arity error included, would satisfy IsNotNil.
+			qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSuchBinding)
 		})
 	}
 }

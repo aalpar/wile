@@ -178,11 +178,12 @@ func TestChildRuntimeSealedClimbReachesItsExpandView(t *testing.T) {
 	c.Assert(expandBase.AtPhase(Phase(2)), qt.Equals, lib.AtPhase(Phase(2)))
 }
 
-// SealedWriteViewAt answers only an OWNER ROOT — the phase-0 entry of its own
-// registry. A namespace's runtime and a library env's each own one; an inner
-// lexical frame merely inherits the `phases` pointer and must NOT be able to
-// obtain a sealed writer through it. Testing `phases != nil` alone made every
-// lambda body a route to the sealed tier.
+// SealedWriteViewAt answers from the registry only for an OWNER ROOT — the
+// phase-0 entry of its own registry — or one of its sealed-write views. A
+// namespace's runtime and a library env's each own one; an inner lexical frame
+// merely inherits the `phases` pointer and must NOT be able to obtain a sealed
+// writer through it. Testing `phases != nil` alone made every lambda body a route
+// to the sealed tier.
 func TestSealedWriteViewAtRequiresAnOwnerRoot(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
@@ -197,11 +198,13 @@ func TestSealedWriteViewAtRequiresAnOwnerRoot(t *testing.T) {
 	c.Assert(inner.SealedWriteViewAt(PhaseRuntime), qt.Equals, inner)
 	c.Assert(inner.SealedWriteViewAt(PhaseRuntime).sealed, qt.IsFalse)
 
-	// The reach a sealed-write view has by climbing is unaffected: AtPhase from a
-	// sealed view stays sealed wherever the axis has a row, so the guard costs
-	// this path nothing.
+	// A sealed-write view is answered from the registry like its owner, in both
+	// directions along the axis. It already writes the sealed tier, so this
+	// grants nothing; routing it through AtPhase instead handed it the MUTABLE
+	// root on the way down.
 	sealedExpand, _ := ns.phases.sealedViewAt(PhaseExpand)
 	c.Assert(sealedRoot.SealedWriteViewAt(PhaseExpand), qt.Equals, sealedExpand)
+	c.Assert(sealedExpand.SealedWriteViewAt(PhaseRuntime), qt.Equals, sealedRoot)
 
 	// A frame with no registry at all has nothing to ask, so it falls back to its
 	// own view at that phase.

@@ -31,11 +31,18 @@
 ;;
 ;; This was first fixed by widening the registration to
 ;; PhaseSetRuntime|PhaseSetExpand, which would have made string-ci-hash the only
-;; both-phase registration outside pkg/registry/core (1 against 34) and bought
+;; both-phase registration outside pkg/registry/core and bought
 ;; AMBIENT parity at the cost of the layer pattern. Reverted in favour of this,
 ;; which buys REACHABILITY parity and leaves ambient availability following the
 ;; layer. The residual asymmetry is deliberate: three of the four are callable
 ;; bare in a macro body and this one needs a for-syntax import.
+;;
+;; The export has one cost the widening did not, and it is ACCEPTED: this library
+;; now needs string-ci-hash registered to load at all. An engine built with
+;; (Registry).Without("string-ci-hash") fails (import (rnrs hashtables)) with
+;; "exports 1 identifier(s) with no binding", where before the export only that
+;; one name went missing. Every profile that can load (scheme base) registers it,
+;; and (scheme char) already depends on string-ci=? the same way.
 ;;
 ;; It used to be load-bearing. make-hashtable recognized its (hash, equiv) pair by
 ;; CLOSURE POINTER against the sealed base, and an import installs the exporting

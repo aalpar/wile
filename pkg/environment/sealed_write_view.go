@@ -40,7 +40,7 @@ import (
 // reg.Apply does not — see apply.go's phaseTargets bullet.)
 //
 // The rows are ONE FLAT set, not a hierarchy of phases: no phase ever resolves
-// into the phase below it. Phases at or above 2 have no sealed-write view: a
+// into the phase below it. A phase with no row has no sealed-write view: a
 // define-syntax inside a transformer body climbs off the sealed axis into the
 // mutable phase-2 view.
 //
@@ -64,6 +64,7 @@ import (
 // reached, and that coordinate no longer exists. A sealed phase-0 write lands at
 // (phase 0, sealed) like any other, and what carries it to another phase is a
 // declared bulk row.
+//
 // This array is the ONLY statement of which phases own a sealed-write view, and
 // it is deliberately not summarized by a bound. The membership test is
 // sealedViewAt's second return value; a `phase > ceiling` comparison answers the
@@ -79,9 +80,12 @@ import (
 // construction with no consumer and would force an unanswered question about the
 // new frame's parent. See TODO.md, "The seal is exactly one level deep".
 //
-// What the axis DOES get is a direction-dependent answer to sealedViewAt's miss:
-// a write refuses (SealedWriteViewAt), a read falls through (AtPhase's climb).
-// Those are the function's only two consumers.
+// sealedViewAt's miss has two consumers, and only one of them is loud.
+// SealedWriteViewAt refuses. AtPhase's climb falls through to the mutable view,
+// and that climb is a write path too: NextPhase is where define-syntax stores its
+// transformer, so a define-syntax inside a transformer body still lands in
+// mutable phase 2 with nothing said. That is the open half of the TODO.md row
+// cited above.
 var sealedAxis = [...]Phase{PhaseRuntime, PhaseExpand}
 
 // IsNamespaceRuntime reports whether this frame is its namespace's own runtime
@@ -99,17 +103,16 @@ func (p *EnvironmentFrame) IsNamespaceRuntime() bool {
 }
 
 // SealedWriteViewAt returns the view sealed registrations write through at this
-// phase: this owner's sealed-write view over its one store, whose writes land in
+// phase: the owner's sealed-write view over its one store, whose writes land in
 // the sealed tier.
 //
-// An owner root asking for a phase OFF the sealed axis is REFUSED with a wrapped
-// ErrNoSealedWriteView panic. There is no sealed tier there, so the
-// pre-2026-10-03 answer — the ordinary mutable view — was a silent downgrade at
-// the one call whose whole job is to name a sealed target: a registration meant
-// for the seal landed where user code can overwrite it and nothing said so.
-// Unreachable from production today (every non-test caller passes a literal
-// PhaseRuntime or PhaseExpand), which is what makes this a ratchet rather than a
-// behaviour change.
+// A phase OFF the sealed axis is REFUSED with a wrapped ErrNoSealedWriteView
+// panic. There is no sealed tier there, so the pre-2026-10-03 answer — the
+// ordinary mutable view — was a silent downgrade at the one call whose whole job
+// is to name a sealed target: a registration meant for the seal landed where user
+// code can overwrite it and nothing said so. Unreachable from production today
+// (every non-test caller passes a literal PhaseRuntime or PhaseExpand), which is
+// what makes this a ratchet rather than a behaviour change.
 //
 // The condition is sealedViewAt's MISS, not an upper bound, and the difference is
 // load-bearing in both directions: PhaseTemplate (-1) is a named phase below the
@@ -120,46 +123,43 @@ func (p *EnvironmentFrame) IsNamespaceRuntime() bool {
 // says a false answer means "this phase has no row", never "this owner skipped
 // one".
 //
-// The refusal is the OWNER-ROOT path only, and that is the honest bound: the test
-// sits inside the ownsSealedAxis arm, so a non-owner receiver still falls through
-// to unsealedTargetAt at every phase, as its own paragraph below documents. A
-// non-owner never had a sealed view to downgrade from, so there is nothing there
-// to refuse.
+// Two kinds of receiver are answered from the registry, and so refused off the
+// axis: an owner root (the phase-0 entry of its own phase registry), and a
+// sealed-write view, which shares its owner's registry. A sealed-write view was
+// once routed through AtPhase instead, whose climb stays sealed only UPWARD and
+// only onto a row, so it was handed a mutable view below its own phase and off
+// the axis: the downgrade the refusal closes, reached through the other sealed
+// receiver.
 //
-// A READ off the axis keeps falling through — AtPhase's climb from a sealed view
-// leaves the sealed axis above phase 1 rather than raising. Opposite polarity on
-// the same sealedViewAt miss, because the questions differ: a read asking for a
-// frame that does not exist can be answered with the one that does, a write
-// cannot.
-//
-// The receiver must OWN a sealed axis — be the phase-0 entry of its own phase
-// registry. Any other frame gets its own view at that phase instead. The
+// Any other frame gets its own view at that phase and is refused nowhere. The
 // precondition is what makes this a registration API rather than a way to obtain
 // a sealed writer: `phases` is inherited by every lexical child
-// (NewEnvironmentFrameWithParent), so testing it alone would let a lambda body
-// hand out the owner's sealed-write view and write past the mutable tier. Rank
-// living on the view rather than in the topology removed the frame identity this
-// guard once protected; it did not remove the capability it gates.
+// (NewEnvironmentFrameWithParent) and `sealed` is not, so testing `phases` alone
+// would let a lambda body hand out the owner's sealed-write view and write past
+// the mutable tier. Rank living on the view rather than in the topology removed
+// the frame identity this guard once protected; it did not remove the capability
+// it gates. Admitting sealed-write views grants no new capability: each already
+// writes the sealed tier of the same store.
 //
-// Restoring it costs no reach. A sealed-write view asking for a HIGHER phase
-// falls through to unsealedTargetAt → AtPhase, whose climb from a sealed view
-// stays sealed, so it lands on the same frame either way.
+// AtPhase's climb from a sealed-write view is NOT covered, and it is a write
+// path: define-syntax stores its transformer through it (NextPhase), and off the
+// axis it falls through to the mutable view with nothing said. See sealedAxis.
 //
 // The fallback resolves through the PhaseRegistry for any phase but the
 // receiver's own and must not be called while holding the registry's lock.
 func (p *EnvironmentFrame) SealedWriteViewAt(phase Phase) *EnvironmentFrame {
-	if p.ownsSealedAxis() {
-		sealed, ok := p.phases.sealedViewAt(phase)
-		if !ok {
-			panic(werr.WrapForeignErrorf(
-				werr.ErrNoSealedWriteView,
-				"SealedWriteViewAt: phase %d (%s) owns no sealed-write view; the sealed axis is %v",
-				int8(phase), phase, sealedAxis,
-			))
-		}
-		return sealed
+	if !p.ownsSealedAxis() && !p.sealed {
+		return p.unsealedTargetAt(phase)
 	}
-	return p.unsealedTargetAt(phase)
+	sealed, ok := p.phases.sealedViewAt(phase)
+	if !ok {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrNoSealedWriteView,
+			"SealedWriteViewAt: phase %d (%s) owns no sealed-write view; the sealed axis is %v",
+			int8(phase), phase, sealedAxis,
+		))
+	}
+	return sealed
 }
 
 // ownsSealedAxis reports whether this frame is the phase-0 entry of its OWN phase

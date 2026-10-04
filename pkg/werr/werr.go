@@ -184,8 +184,9 @@ var (
 	// comparison answers for 2 and up and silently falls through at -1, which is
 	// the same silent downgrade at a named constant.
 	//
-	// A READ off the axis is a different question and still falls through; see
-	// EnvironmentFrame.SealedWriteViewAt.
+	// Raised by SealedWriteViewAt only. AtPhase's climb off the axis still falls
+	// through to the mutable view without it, and that climb is define-syntax's
+	// write path; see EnvironmentFrame.SealedWriteViewAt.
 	ErrNoSealedWriteView = NewStaticError("no sealed-write view at this phase")
 
 	// Panic recovery errors
