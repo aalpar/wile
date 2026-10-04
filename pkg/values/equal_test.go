@@ -149,10 +149,10 @@ func TestEqual_ShortListsUnchanged(t *testing.T) {
 // that host-safety, NOT any transactional guarantee (data landing is the user's
 // responsibility to synchronize — see the Hashtable type comment).
 //
-// Must run under -race: per memory/srfi18-parentmc-race-fix.md a green `make ci`
-// is not evidence of race-freedom. If a future change reintroduced an in-place
-// map/slice write this test is a hard failure under -race and a probabilistic
-// host kill.
+// Must run under -race: per auto-memory `srfi18-parentmc-race-fix.md` a green
+// `make ci` is not evidence of race-freedom. If a future change reintroduced
+// an in-place map/slice write this test is a hard failure under -race and a
+// probabilistic host kill.
 func TestHashtable_ConcurrentReadWrite(t *testing.T) {
 	h := values.NewEmptyHashtable()
 	const iterations = 500

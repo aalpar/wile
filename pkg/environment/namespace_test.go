@@ -431,7 +431,7 @@ func TestNamespace_ChildEnvMapIsolatedFromParentMutation(t *testing.T) {
 // regardless of the root setting — the "compilation units only" scope (Chez
 // interaction-environment model), so a redefine there is a permitted shadow, not a
 // rejected rebind. See ImmutableTopLevel and
-// plans/2026-06-13-immutable-toplevel-by-default-scoping.local.md:357-370.
+// memory/2026-06-13-immutable-toplevel-by-default-scoping.md:357-370.
 func TestNamespace_ImmutableTopLevelScopedToRoot(t *testing.T) {
 	root := NewNamespace()
 	if root.ImmutableTopLevel() {

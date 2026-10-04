@@ -493,28 +493,32 @@ These invariants must be maintained:
      (`sealed_write_view.go`): `{PhaseRuntime, PhaseExpand}`, in construction
      order. Every owner's `PhaseRegistry` mints every row (`newPhaseRegistry`);
      owners differ only in what gets applied *through* those views, never in
-     which phases have one. Phase 2 and above have no sealed-write view at all,
-     so a `define-syntax` inside a transformer body climbs off the sealed axis
-     into the ordinary mutable phase-2 view.
+     which phases have one. A phase with no row has no sealed-write view.
    - **`SealedWriteViewAt(phase)` is what registration writes through.** It
      returns the owner's cached sealed-write view for `phase` when the receiver
      is an owner root (`ownsSealedAxis`: the phase-0 entry of its own registry)
-     and the axis has a row there, else falls back to the receiver's own ordinary
-     view at that phase (`unsealedTargetAt`). Both `sealedAxis` rows are owned by
-     every owner, a library env included, so for an owner-root receiver that
-     fallback is dead for phases 0 and 1; a lexical child or a sealed-write view
-     always takes it. `registry.Apply`'s `phaseTargets` therefore
+     or one of its sealed-write views, and panics with a wrapped
+     `werr.ErrNoSealedWriteView` when the axis has no row there (in either
+     direction: `PhaseTemplate` is refused too). Any other receiver, a lexical
+     child included, falls back to its own ordinary view at that phase
+     (`unsealedTargetAt`). Pinned by `TestSealedWriteOffTheAxisIsRefused`.
+     `registry.Apply`'s `phaseTargets` therefore
      seats its expand-phase primitives at **(1, sealed)**, which is what makes a
      top-level `(define-for-syntax car …)` a shadow at (1, mutable) rather than a
      write through the registry's copy.
-   - **`AtPhase`'s climb from a sealed-write view stays sealed** wherever the
-     target phase has a sealed-write view of its own, and falls through to the
-     ordinary phase view everywhere else. Bootstrap macros compile with
-     `env == the sealed-write ROOT VIEW` (phase 0), so their `define-syntax`
-     writes climb via `NextPhase()`/`AtPhase` into the phase-1 sealed-write view;
-     special-form expanders register there directly via
-     `SealedWriteViewAt(PhaseExpand)`. Above phase 1, the climb lands on the
-     ordinary mutable view — there is nothing left to stay sealed onto.
+   - **`AtPhase`'s climb stays sealed only when the receiver IS a sealed-write
+     view**, and only onto a phase above it with a row; everywhere else it
+     falls through to the ordinary phase view, silently. A lexical child does
+     not inherit `sealed`, so the compile-time writers (listed on `sealedAxis`)
+     in any body under a sealed view climb unsealed, and `meta` (an absolute
+     phase 1) from the phase-1 sealed view lands mutable on the axis itself.
+     Latent, and open in `TODO.md` ("The seal is exactly one level deep").
+     Bootstrap macros compile with `env == the sealed-write ROOT VIEW` (phase
+     0), so their `define-syntax` writes climb via `NextPhase()`/`AtPhase` into
+     the phase-1 sealed-write view; special-form expanders register there
+     directly via `SealedWriteViewAt(PhaseExpand)`. Above phase 1, the climb
+     lands on the ordinary mutable view — there is nothing left to stay sealed
+     onto.
    - **Hermeticity is a property of every owner of a store, library environments
      included.** A `NewChildRuntime` library env is a full OWNER: its own store,
      its own `PhaseRegistry`, its own sealed-write views over every `sealedAxis`

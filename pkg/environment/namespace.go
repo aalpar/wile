@@ -512,7 +512,7 @@ func (p *Namespace) MaxExpandDepth() (int, bool) {
 // optimizer's Stable anchors. CHILD namespaces (parent != nil) are mutable
 // interaction/eval scratch spaces — (environment ...), scheme-report-environment,
 // profile children — modeled on Chez's mutable interaction-environment (see
-// plans/2026-06-13-immutable-toplevel-by-default-scoping.local.md:357-370): a define
+// memory/2026-06-13-immutable-toplevel-by-default-scoping.md:357-370): a define
 // there shadows/redefines freely and its bindings are never stamped Stable. This is
 // the "compilation units only" scope: immutability is for the compiled program, not
 // for interactive eval. Reclaim soundness is preserved because set! of a Stable
@@ -1081,7 +1081,7 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 // A flat frame could not express that: it held primitives and user defines together,
 // so there was no way to see the first without the second, and a for-syntax body that
 // lost the defines lost car and list with them. See
-// plans/2026-08-04-library-phase-isolation-{design,impl}.local.md.
+// memory/2026-08-04-library-phase-isolation-{design,impl}.md.
 //
 // Nothing else has to change to FILL the sealed tier: LoadBootstrapCore already
 // routes the registry apply through env.SealedWriteViewAt(PhaseRuntime) and the

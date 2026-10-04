@@ -160,9 +160,11 @@ func NewNamespaceFrame() *EnvironmentFrame {
 //
 // The global environment frame is inherited from the parent. This is used for creating child frames within a phase
 // (e.g., lambda bodies, let-syntax). The phase level, registry, and namespace are inherited from the parent. sealed is
-// NOT inherited — the new frame is always mutable (the zero value), because a lexical child (a lambda body)
-// is never a registration target, only a sealed-write view is. Panics if parent is nil - use NewNamespaceFrame()
-// instead.
+// NOT inherited — the new frame is always mutable (the zero value), so a lexical child's own writes land
+// mutable and SealedWriteViewAt never admits it. TopLevel() still reaches the sealed view, so this guards
+// accidents, not capability. Its compile-time writes go through AtPhase, unsealed; see sealedAxis.
+//
+// Panics if parent is nil - use NewNamespaceFrame() instead.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
 	if parent == nil {
 		panic(werr.WrapForeignErrorf(
@@ -313,14 +315,13 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 // constant pins the target to one level and silently collapses the tower for
 // every frame that is not already at level 0.
 //
-// A climb rooted at a SEALED-WRITE view stays sealed wherever the target phase has
-// a sealed-write view of its own; every other receiver, and every phase without
-// one, resolves through the shared PhaseRegistry. That is what routes a
+// A SEALED-WRITE view asking for a phase above its own that has a sealed-write view
+// gets that view; every other request resolves through the shared PhaseRegistry. That is what routes a
 // bootstrap-macro define-syntax (compiled with env == the sealed-write root, so
 // NextPhase() lands here at phase 1) into the phase-1 sealed-write view, while user
-// code (env == the ordinary root view) writes the mutable tier. Above phase 1 there
-// is no sealed-write view, so a transformer body that defines a macro climbs off
-// the sealed axis.
+// code (env == the ordinary root view) writes the mutable tier. Every other request
+// from under a seal falls through to a mutable view, silently; sealedAxis names the
+// exits.
 //
 // This is the primary method for cross-phase access with O(1) lookup time.
 // The environment must have been created via NewNamespace().
@@ -1393,7 +1394,7 @@ func (p *EnvironmentFrame) PresentPhases() []Phase {
 // phase-0 code resolved a phase-1 define and phase-1 code resolved a phase-0 one,
 // where the top level refuses both — silently, producing a wrong value in the first
 // case and a #!void from a predeclared-unwritten slot in the second. See
-// memory/2026-08-04-library-phase-isolation-design.local.md §1.
+// memory/2026-08-04-library-phase-isolation-design.md §1.
 //
 // Reaching the library's PRIMITIVES from phase 1 is not this search's job — it
 // falls out of GetGlobalIndexWithScopes's own reach, not a mechanism this

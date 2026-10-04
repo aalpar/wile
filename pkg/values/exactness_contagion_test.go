@@ -380,7 +380,7 @@ func TestIEEE754SignedZeroPreservation(t *testing.T) {
 // CORRECTED 2026-07-12: cases 3–5 previously asserted (* 0 +inf.0) => +nan.0,
 // encoding a false "the exact-zero rule requires a finite operand" invariant
 // that Chez, Racket and R7RS all contradict. This test was what kept the bug
-// green. See plans/2026-07-12-numeric-zero-and-tier2-fold.local.md.
+// green. See memory/2026-07-12-numeric-zero-and-tier2-fold.md.
 func TestMultiplicationExactZeroOptimization(t *testing.T) {
 	c := qt.New(t)
 

@@ -314,7 +314,7 @@ func coIntroducedByExpansion(bnd *environment.Binding) bool {
 // This lets a binding co-introduced by a template — which carries the same intro
 // scope as the reference — shadow a same-named global. The ResolvedBinding and
 // library-scope fallbacks fire only when no lexical binding shadows.
-// See plans/2026-06-15-macro-hygiene-global-shadow-fix.local.md (Change 2).
+// See memory/2026-06-15-macro-hygiene-global-shadow-fix.md (Change 2).
 func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, expr *syntax.SyntaxSymbol) error {
 	sym := expr.Sym
 
@@ -620,7 +620,7 @@ func (p *CompileTimeContinuation) emitCachedBindingLoad(src *syntax.SourceContex
 // (GetLocalIndex), so a binding co-introduced by the same template shadows the
 // recorded global. A ResolvedBinding that is not a *GlobalIndex (or is nil)
 // returns false so the caller falls through to normal resolution.
-// See plans/2026-06-15-macro-hygiene-global-shadow-fix.local.md (Change 2).
+// See memory/2026-06-15-macro-hygiene-global-shadow-fix.md (Change 2).
 func (p *CompileTimeContinuation) tryResolvedBinding(expr *syntax.SyntaxSymbol) bool {
 	if expr.ResolvedBinding == nil {
 		return false

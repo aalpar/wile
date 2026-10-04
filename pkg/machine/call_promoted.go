@@ -23,7 +23,7 @@ package machine
 // The 34 switch cases in Run() are deliberately hand-unrolled: Go compiles
 // them to a jump table. Replacing them with a table lookup in the default
 // branch was benchmarked and rejected (~1.5% geo mean regression). See
-// memory/2026-04-05-structural-reduction.local.md.
+// memory/2026-04-05-structural-reduction.md.
 //
 // Passing each op's facts as a *promotedOp instead of as call-site immediates
 // costs a further ~0.33% geo mean (two interleaved A/B passes, min-of-8,

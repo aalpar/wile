@@ -10,7 +10,7 @@
 ;;; from algebraic structures (monoid->theory, lattice->theory, etc.)
 ;;; that select and reorder axioms for specific normalization strategies.
 ;;;
-;;; See plans/2026-04-10-symbolic-algebra-design.md for design context.
+;;; See memory/2026-04-10-symbolic-algebra-design.md for design context.
 
 ;; ─── Local helpers ─────────────────────────
 ;;

@@ -26,7 +26,7 @@ import (
 // and hands it to InstallForms, which may add, remove, or rename special forms
 // for that engine only. This is how a non-R7RS standard (a strict R5RS, R6RS, or
 // a bespoke embedding dialect) plugs in like an extension — see the dialect
-// roadmap in plans/ARCHITECTURE.local.md.
+// roadmap in plans/ARCHITECTURE.md.
 //
 // The registry passed to InstallForms is a per-engine clone, copy-on-write over
 // the shared default: mutating it (fr.Remove, fr.RegisterValidator,

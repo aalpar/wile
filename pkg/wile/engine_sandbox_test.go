@@ -32,6 +32,7 @@ import (
 	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -1413,4 +1414,66 @@ func TestProfileEnvironmentCannotWidenSandboxedEngine(t *testing.T) {
 		_, err = engine.Eval(ctx, engine.MustParse(ctx, `(environment '(wile kitchen-sink))`))
 		c.Assert(err, qt.IsNil)
 	})
+}
+
+// TestWithoutCategoryKeepsStringCiHash pins the CATEGORY half of the 2026-10-03
+// hash-quartet decision, which had prose in two files and no test while the phase
+// half had TestR6RSHashProceduresAreReachableAtPhaseOne.
+//
+// The decision: the R6RS hash quartet holds REACHABILITY, not field uniformity,
+// and both of the registration fields that split with its two-file placement are
+// ACCEPTED as split. Category is one of them. equal-hash, string-hash and
+// symbol-hash are "hashtables" (pkg/registry/core/hashes.go); string-ci-hash is
+// "strings", because it lives beside string-ci=? whose full Unicode fold it must
+// share and cannot move to pkg/registry/core (go.mod confines x/text to internal
+// packages). So WithoutCategory("hashtables") removes three of four and the
+// survivor is deliberate, not an oversight: it is a pure function on strings that
+// needs no hashtable.
+//
+// Two configuration facts this test depends on, both measured, because getting
+// either wrong makes it pass for the wrong reason:
+//
+//   - string-ci-hash is NOT in the default engine. It ships in
+//     pkg/internal/extensions/all, so the registry must come from a KitchenSink
+//     engine or the survivor row is vacuous.
+//   - WithProfile(KitchenSink) alongside WithRegistry fails engine construction
+//     ("cannot redefine immutable top-level binding \"call-with-port\""), so the
+//     restricted engine takes WithRegistry alone.
+func TestWithoutCategoryKeepsStringCiHash(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	full, err := NewEngine(ctx, WithProfile(KitchenSink))
+	c.Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = full.Close()
+	})
+
+	engine, err := NewEngine(ctx, WithRegistry(full.Registry().WithoutCategory("hashtables")))
+	c.Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = engine.Close()
+	})
+
+	tests := []struct {
+		name     string
+		code     string
+		survives bool
+	}{
+		{name: "string-ci-hash survives", code: `(string-ci-hash "ABC")`, survives: true},
+		{name: "string-hash removed", code: `(string-hash "ABC")`, survives: false},
+		{name: "equal-hash removed", code: `(equal-hash (list 1 2))`, survives: false},
+		{name: "symbol-hash removed", code: `(symbol-hash 'foo)`, survives: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := engine.EvalMultiple(ctx, tt.code)
+			if tt.survives {
+				qt.Assert(t, err, qt.IsNil)
+				return
+			}
+			// By sentinel: any error, an arity error included, would satisfy IsNotNil.
+			qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSuchBinding)
+		})
+	}
 }

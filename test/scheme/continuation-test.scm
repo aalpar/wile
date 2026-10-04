@@ -1,6 +1,6 @@
 ;;; continuation-test.scm - First-class continuations, dynamic-wind, guard, prompts.
 ;;;
-;;; Item 5 of plans/2026-06-28-continuation-testing-enhancement.md: exercise the
+;;; Item 5 of memory/2026-06-28-continuation-testing-enhancement.md: exercise the
 ;;; continuation subsystem through the CLI / run-all.sh path (EvalMultiple, begin-wrapped
 ;;; top level), which is DISTINCT from the Go internal-pipeline test path and is where
 ;;; two regressions in the reification+flip arc surfaced that `go test ./...` did not

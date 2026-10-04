@@ -637,7 +637,7 @@ func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 	c := qt.New(t)
 
 	// Post-Phase-1: AddDocOnlyPrimitive routes into the dedicated
-	// docPrimitives slice (per Q-b of plans/2026-05-18-registry-structural-reduction.md
+	// docPrimitives slice (per Q-b of memory/2026-05-18-registry-structural-reduction.md
 	// — "separate tier for documentation"). The full PrimitiveSpec metadata
 	// is preserved. FindPrimitive / PrimitiveByName fall back to docPrimitives
 	// when no real primitive with that name exists, so existing callers

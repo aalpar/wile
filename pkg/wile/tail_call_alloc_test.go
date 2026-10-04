@@ -24,7 +24,7 @@ import (
 )
 
 // Allocation-slope tests for the escape-gated frame-reclamation optimizer
-// (plans/2026-06-11-escape-gated-frame-allocation.local.md). Authored as Phase-3
+// (memory/2026-06-11-escape-gated-frame-allocation.md). Authored as Phase-3
 // TDD RED probes; Phase 4 codegen has since SHIPPED and turned them green, so they
 // now guard both directions: a leak creeping back (slope rising) and the release
 // over-firing on a still-live frame (a control's slope collapsing).
@@ -51,7 +51,7 @@ import (
 // to release (call/cc in body, escaping closure, mutated callee). They allocate
 // and must KEEP allocating — a collapsed slope there means the release opcode
 // over-fired on a frame a continuation can still reach (the exact corruption that
-// killed the abandoned runtime recycler, see tail-frame-recycling.local.md
+// killed the abandoned runtime recycler, see memory/2026-06-10-tail-frame-recycling.md
 // Phase 3). They PASS regardless of the optimization.
 //
 // Engine config: KitchenSink + WithImmutableTopLevel(). The flag is load-bearing,

@@ -33,7 +33,7 @@ import (
 //   - composable continuations from call-with-composable  — applyComposableContinuation
 //
 // WHY THIS IS LOAD-BEARING (do not relax without reading
-// plans/2026-06-08-per-thread-pools-invariant.md):
+// memory/2026-06-08-per-thread-pools-invariant.md):
 //
 // The per-thread frame-pool design anchors allocation pools at each thread's
 // root MachineContext, with NO mutex, precisely because a frame allocated by

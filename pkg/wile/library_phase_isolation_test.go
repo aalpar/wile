@@ -33,7 +33,7 @@ import (
 // library half would pass against an implementation that had merely become
 // uniformly wrong.
 //
-// See plans/2026-08-04-library-phase-isolation-{design,impl}.local.md.
+// See memory/2026-08-04-library-phase-isolation-{design,impl}.md.
 func phaseIsolationEngine(t *testing.T, files fstest.MapFS) *wile.Engine {
 	t.Helper()
 	ctx := context.Background()

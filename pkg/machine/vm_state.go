@@ -87,7 +87,7 @@ type markEntry struct {
 // all five sites — NewMachineContinuationFromMachineContext, SaveContinuation,
 // Restore, RestoreAndRelease, and Copy — and every field here plus
 // the MachineContinuation-only fields (parent, shared, promptHandler, inlineEvals).
-// See plans/2026-07-02-continuation-vmstate-descriptor-oracle.md. Do not re-inline
+// See memory/2026-07-02-continuation-vmstate-descriptor-oracle.md. Do not re-inline
 // a summary grid here: the ASCII table formerly at this spot drifted (it omitted
 // Copy, and the barrierValid/promptHandler/inlineEvals/shared fields entirely).
 type vmState struct {

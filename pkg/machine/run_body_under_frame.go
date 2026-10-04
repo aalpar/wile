@@ -44,7 +44,7 @@ package machine
 // (RunResumable), giving O(1) Go frames and a single winding reconcile. Full history
 // (the 4 CRITICALs that forced the atomic landing, and the later crosscheck that
 // caught the sticky-isolatedMarks escalation bug) in
-// plans/2026-06-28-continuation-cluster-reification-impl.local.md and memory
+// memory/2026-06-28-continuation-cluster-reification-impl.md and memory
 // continuation-cwv-reification-validated-coupling-mapped.
 
 import "github.com/aalpar/wile/pkg/values"

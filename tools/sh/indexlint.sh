@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Check that TODO.md, the index of record, is complete in both directions.
 #
-# TODO.md is the index into plans/ (plans/CLAUDE.local.md, "Where the index
+# TODO.md is the index into plans/ (plans/CLAUDE.md, "Where the index
 # lives") and, at synthesis time, into a review run's confirmed findings. Every
 # other process gate in this tree is keyed on that index -- planlint.sh's
 # "index" signal is a TODO.md lookup (planlint.sh:144-150) -- so a gate keyed on

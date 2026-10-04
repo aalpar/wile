@@ -16,6 +16,7 @@ package environment_test
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 	"github.com/aalpar/wile/pkg/values"
 	valuestest "github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // runSteps evaluates each step as a SEPARATE compilation unit against one shared
@@ -230,31 +232,73 @@ func TestBoundNamesAcrossPhases(t *testing.T) {
 	qt.Assert(t, seen["caar"], qt.IsTrue, qt.Commentf("bootstrap caar must appear"))
 }
 
-// TestSealedClimbStopsAboveExpand pins the depth of the sealed axis: a climb rooted
-// at a sealed-write view stays sealed while a sealed-write view exists for the target
-// phase, and leaves it where none does. A bootstrap define-syntax (env == the
-// sealed-write root) climbs into the phase-1 sealed-write view, but a define-syntax
-// inside a transformer body (env == that phase-1 view) climbs into the MUTABLE
-// phase-2 view, because phase 2 has no row. That is the shipped behavior, not an
-// aspiration: the seal is exactly one level deep, and the exit is silent.
+// TestSealedClimbStopsAboveExpand pins where AtPhase leaves the seal. It stays
+// sealed only when the receiver IS a sealed-write view and the target is above it,
+// on a row: a top-level bootstrap define-syntax (env == the sealed-write root)
+// climbs into the phase-1 sealed-write view. Every other case falls through to the
+// MUTABLE view, silently, and three are pinned here as shipped behavior, not
+// endorsed (TODO.md, "The seal is exactly one level deep"):
+//
+//   - the phase-1 view climbing to phase 2, which has no row;
+//   - a lexical child of a sealed view, which does not inherit `sealed`, even
+//     onto a row: a define-syntax in a bootstrap procedure body runs in one (a
+//     transformer body is a lexical child at phase 1, so its climb to phase 2
+//     takes this exit and the off-axis one);
+//   - the phase-1 view asked for phase 1 itself, which is meta's route
+//     (Expand(), an absolute phase) and no climb at all.
+//
+// Each is asserted through AtPhase and through the writer's own entry (NextPhase,
+// or Expand for meta). For the two climb exits a fix at either layer moves this
+// test; NextPhase also serves macro lookup. meta's exit cannot be fixed in
+// AtPhase without breaking the invariant below, so only an Expand()/CompileMeta
+// fix moves its row. A fix at the compiler's write sites moves nothing here.
+//
+// qt.Check, not qt.Assert: a fix moves several rows at once, and each should
+// report rather than hide behind the first.
 func TestSealedClimbStopsAboveExpand(t *testing.T) {
 	ns := environment.NewNamespace()
 	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
 	sealedExpand := ns.Runtime().SealedWriteViewAt(environment.PhaseExpand)
-
-	// Phase 0 sealed-write view climbing to phase 1: stays sealed.
-	qt.Assert(t, sealedRoot.AtPhase(environment.PhaseExpand), qt.Equals, sealedExpand)
-
-	// Phase 1 sealed-write view climbing to phase 2: leaves the sealed axis.
-	qt.Assert(t, sealedExpand.AtPhase(environment.Phase(2)), qt.Equals, ns.AtPhase(environment.Phase(2)))
+	mutable1 := ns.AtPhase(environment.PhaseExpand)
+	mutable2 := ns.AtPhase(environment.Phase(2))
 
 	// The redirect is a CLIMB: it never rewrites a lookup at or below the receiver's
-	// own level, so the sealed-write root still reaches the ordinary view at phase 0.
-	qt.Assert(t, sealedRoot.AtPhase(environment.PhaseRuntime), qt.Equals, ns.Runtime())
+	// own level. An invariant, not an exit; listed first so it never reads as one.
+	qt.Check(t, sealedRoot.AtPhase(environment.PhaseRuntime), qt.Equals, ns.Runtime())
+	qt.Check(t, sealedExpand.AtPhase(environment.PhaseRuntime), qt.Equals, ns.Runtime())
+	qt.Check(t, sealedExpand.AtPhase(environment.PhaseExpand), qt.Equals, mutable1)
+
+	// Phase 0 sealed-write view climbing to phase 1: stays sealed.
+	qt.Check(t, sealedRoot.AtPhase(environment.PhaseExpand), qt.Equals, sealedExpand)
+
+	// Phase 1 sealed-write view climbing to phase 2: leaves the sealed axis.
+	qt.Check(t, sealedExpand.AtPhase(environment.Phase(2)), qt.Equals, mutable2)
+	qt.Check(t, sealedExpand.NextPhase(), qt.Equals, mutable2)
+
+	// A lexical child of the sealed root climbs UNSEALED, even onto a row, and so
+	// does a child of that child.
+	inner := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), sealedRoot)
+	qt.Check(t, inner.AtPhase(environment.PhaseExpand), qt.Equals, mutable1)
+	qt.Check(t, inner.NextPhase(), qt.Equals, mutable1)
+	grandchild := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), inner)
+	qt.Check(t, grandchild.AtPhase(environment.PhaseExpand), qt.Equals, mutable1)
+	qt.Check(t, grandchild.NextPhase(), qt.Equals, mutable1)
+
+	// A transformer body: a lexical child of the phase-1 view, climbing to phase 2.
+	// It takes the lexical-child and off-axis exits at once, so these go red only
+	// when both are fixed.
+	transformerBody := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), sealedExpand)
+	qt.Check(t, transformerBody.AtPhase(environment.Phase(2)), qt.Equals, mutable2)
+	qt.Check(t, transformerBody.NextPhase(), qt.Equals, mutable2)
+
+	// meta's route from the phase-1 view: an absolute phase 1, not a climb, so the
+	// mutable phase-1 view. Its AtPhase form is the invariant above.
+	qt.Check(t, sealedExpand.Expand(), qt.Equals, mutable1)
 }
 
 // TestSealedWriteViewAtFallbacks pins SealedWriteViewAt's answers for the two shapes
-// that own a store, and for the phases the axis leaves unsealed (phase 2 and up).
+// that own a store, and for phase 2, which has no sealedAxis row
+// (TestSealedWriteOffTheAxisIsRefused covers the other off-axis phases).
 // Both shapes answer the same way — a library env routes to its OWN views, never the
 // namespace's — because an owner does not pick a subset of the axis. Whether an
 // expand-phase primitive lands sealed or mutable is not this call's question any
@@ -275,8 +319,193 @@ func TestSealedWriteViewAtFallbacks(t *testing.T) {
 	qt.Assert(t, libSealedExpand, qt.Not(qt.Equals), nsSealedExpand)
 	qt.Assert(t, libSealedRoot.GlobalEnvironment(), qt.Equals, lib.GlobalEnvironment())
 	qt.Assert(t, libSealedExpand.GlobalEnvironment(), qt.Equals, lib.GlobalEnvironment())
-	qt.Assert(t, lib.SealedWriteViewAt(environment.Phase(2)), qt.Equals, lib.AtPhase(environment.Phase(2)))
 
 	qt.Assert(t, nsSealedRoot.GlobalEnvironment(), qt.Equals, ns.Store())
-	qt.Assert(t, ns.Runtime().SealedWriteViewAt(environment.Phase(2)), qt.Equals, ns.AtPhase(environment.Phase(2)))
+
+	// Off the axis: an owner root is REFUSED rather than quietly handed the
+	// ordinary view. Both of these asserted the fall-through until 2026-10-03;
+	// see TestSealedWriteOffTheAxisIsRefused for the whole rule.
+	qt.Assert(t, sealedWriteRefusal(func() {
+		_ = lib.SealedWriteViewAt(environment.Phase(2))
+	}), qt.ErrorIs, werr.ErrNoSealedWriteView)
+	qt.Assert(t, sealedWriteRefusal(func() {
+		_ = ns.Runtime().SealedWriteViewAt(environment.Phase(2))
+	}), qt.ErrorIs, werr.ErrNoSealedWriteView)
+}
+
+// sealedWriteRefusal runs f and returns the error it panicked with, or nil if it
+// returned.
+//
+// A non-error payload goes through werr.RecoverAsError — the production mechanism
+// for exactly this conversion, whose doc names ErrPanicRecovery as a recovering
+// site's sentinel — rather than a hand-rolled wrap, so an unrelated panic still
+// surfaces as a non-nil error and fails the sentinel assertion loudly instead of
+// reading as "did not panic".
+func sealedWriteRefusal(f func()) (q error) {
+	defer func() {
+		q = werr.RecoverAsError(recover(), werr.ErrPanicRecovery, "sealedWriteRefusal")
+	}()
+	f()
+	return nil
+}
+
+// TestSealedWriteOffTheAxisIsRefused pins which phases own a sealed-write view, and
+// which receivers are refused off the axis.
+//
+// RED on master: every owner and sealed-view off-axis row, and the phase-1 sealed
+// view's phase-0 answer. Each comes back as the ordinary MUTABLE view and nothing says so, so a
+// registration aimed at the seal lands where user code can overwrite it — the one
+// call whose entire job is to name a sealed target, silently handing back an
+// unsealed one.
+//
+// OFF THE AXIS IS BOTH DIRECTIONS, and the PhaseTemplate row is the reason this
+// test is not a table of 2-and-up. The first cut of the fix compared against a
+// derived ceiling, which answers for 2 and up and falls straight through at -1 —
+// a named, exported phase (wile.PhaseTemplate) with no sealed view, so the
+// comparison left the whole defect in place at a constant the package publishes.
+// The condition is the MISS.
+//
+// A SEALED-WRITE VIEW is the other sealed receiver, and it is refused like its
+// owner. It shares the owner's registry but is not an owner, so a refusal guarded
+// by ownership alone sent it through AtPhase, which stays sealed only climbing
+// UP onto a row: off the axis it was handed the mutable view, and asked for
+// phase 0 from phase 1 it was handed the mutable ROOT. The second is a downgrade
+// ON the axis, so its row asserts the sealed answer positively.
+//
+// What is NOT covered, stated so it is not read as an oversight:
+//
+//   - An UNSEALED non-owner (an inner lexical frame, including one under a
+//     sealed-write view) still falls through at every phase, by the documented
+//     precondition; refusing it too is filed in TODO.md. Asserted below as "does
+//     not panic" off the axis, and at both axis phases as a non-nil frame at the
+//     asked phase that is not the owner's sealed view. That guards admission by
+//     either route, an inherited `sealed` or unsealedTargetAt's climb; because it
+//     compares identity, it pins non-inheritance only while admission keys on
+//     `sealed` (TestSealedWriteCoordinates pins it directly). Asserting WHICH
+//     frame it returns would restate unsealedTargetAt's implementation.
+//   - AtPhase still falls through, silently, and it is the compile-time writers'
+//     route (see sealedAxis). TestSealedClimbStopsAboveExpand pins its exits and
+//     TODO.md keeps them open.
+//
+// Unreachable from production: all five non-test SealedWriteViewAt callers pass a
+// literal PhaseRuntime or PhaseExpand (bootstrap_core.go, syntax_compilers_registry.go,
+// primitive_expanders_registry.go, apply.go twice), which is what makes this a
+// ratchet rather than a behaviour change.
+func TestSealedWriteOffTheAxisIsRefused(t *testing.T) {
+	ns := environment.NewNamespace()
+	lib := ns.NewChildRuntime()
+
+	// ON the axis: the owner's own sealed view, asserted positively. Inequality
+	// against the ordinary view is not enough — nil satisfies that too.
+	for _, owner := range []struct {
+		name  string
+		frame *environment.EnvironmentFrame
+		store *environment.GlobalEnvironmentFrame
+	}{
+		{name: "namespace runtime", frame: ns.Runtime(), store: ns.Store()},
+		{name: "library env", frame: lib, store: lib.GlobalEnvironment()},
+	} {
+		for _, phase := range []environment.Phase{environment.PhaseRuntime, environment.PhaseExpand} {
+			t.Run(fmt.Sprintf("%s/on-axis phase %d", owner.name, phase), func(t *testing.T) {
+				view := owner.frame.SealedWriteViewAt(phase)
+				qt.Assert(t, view, qt.IsNotNil)
+				qt.Assert(t, view.PhaseLevel(), qt.Equals, phase)
+				qt.Assert(t, view.GlobalEnvironment(), qt.Equals, owner.store)
+				qt.Assert(t, view, qt.Not(qt.Equals), owner.frame.AtPhase(phase))
+				// Cached, not minted per call: the same view every time.
+				qt.Assert(t, owner.frame.SealedWriteViewAt(phase), qt.Equals, view)
+			})
+		}
+	}
+
+	// OFF it, in BOTH directions, for every owner root.
+	for _, owner := range []struct {
+		name  string
+		frame *environment.EnvironmentFrame
+	}{
+		{name: "namespace runtime", frame: ns.Runtime()},
+		{name: "library env", frame: lib},
+	} {
+		for _, phase := range []environment.Phase{environment.PhaseTemplate, -5, 2, 3, 7} {
+			t.Run(fmt.Sprintf("%s/off-axis phase %d", owner.name, phase), func(t *testing.T) {
+				err := sealedWriteRefusal(func() {
+					_ = owner.frame.SealedWriteViewAt(phase)
+				})
+				qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSealedWriteView,
+					qt.Commentf("SealedWriteViewAt(%d) returned a mutable view silently; want a refusal", phase))
+			})
+		}
+	}
+
+	// A sealed-write view: the owner's sealed answer on the axis, in both
+	// directions, and the same refusal off it.
+	for _, owner := range []struct {
+		name  string
+		frame *environment.EnvironmentFrame
+	}{
+		{name: "namespace runtime", frame: ns.Runtime()},
+		{name: "library env", frame: lib},
+	} {
+		sealedRoot := owner.frame.SealedWriteViewAt(environment.PhaseRuntime)
+		sealedExpand := owner.frame.SealedWriteViewAt(environment.PhaseExpand)
+		for _, receiver := range []struct {
+			name  string
+			frame *environment.EnvironmentFrame
+		}{
+			{name: "sealed phase 0", frame: sealedRoot},
+			{name: "sealed phase 1", frame: sealedExpand},
+		} {
+			t.Run(fmt.Sprintf("%s/%s/on-axis", owner.name, receiver.name), func(t *testing.T) {
+				qt.Assert(t, receiver.frame.SealedWriteViewAt(environment.PhaseRuntime), qt.Equals, sealedRoot)
+				qt.Assert(t, receiver.frame.SealedWriteViewAt(environment.PhaseExpand), qt.Equals, sealedExpand)
+			})
+			for _, phase := range []environment.Phase{environment.PhaseTemplate, 2} {
+				t.Run(fmt.Sprintf("%s/%s/off-axis phase %d", owner.name, receiver.name, phase), func(t *testing.T) {
+					err := sealedWriteRefusal(func() {
+						_ = receiver.frame.SealedWriteViewAt(phase)
+					})
+					qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSealedWriteView,
+						qt.Commentf("sealed receiver: SealedWriteViewAt(%d) returned a mutable view silently; want a refusal", phase))
+				})
+			}
+		}
+	}
+
+	// An unsealed non-owner receiver is NOT refused, at any phase off the axis,
+	// including one whose parent is a sealed-write view. Under a sealed view it is
+	// not ADMITTED either: it gets its own view, not the owner's sealed one.
+	sealedViews := map[environment.Phase]*environment.EnvironmentFrame{
+		environment.PhaseRuntime: ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime),
+		environment.PhaseExpand:  ns.Runtime().SealedWriteViewAt(environment.PhaseExpand),
+	}
+	for _, parent := range []struct {
+		name  string
+		frame *environment.EnvironmentFrame
+	}{
+		{name: "under the runtime", frame: ns.Runtime()},
+		{name: "under the sealed root", frame: sealedViews[environment.PhaseRuntime]},
+		{name: "under the sealed expand view", frame: sealedViews[environment.PhaseExpand]},
+	} {
+		inner := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), parent.frame)
+		for _, phase := range []environment.Phase{environment.PhaseRuntime, environment.PhaseExpand} {
+			t.Run(fmt.Sprintf("non-owner %s/not admitted at phase %d", parent.name, phase), func(t *testing.T) {
+				// Recovered, so a refusal reports here instead of aborting the binary;
+				// non-nil and at the asked phase, since nil satisfies the inequality.
+				var got *environment.EnvironmentFrame
+				qt.Assert(t, sealedWriteRefusal(func() {
+					got = inner.SealedWriteViewAt(phase)
+				}), qt.IsNil)
+				qt.Assert(t, got, qt.IsNotNil)
+				qt.Assert(t, got.PhaseLevel(), qt.Equals, phase)
+				qt.Assert(t, got, qt.Not(qt.Equals), sealedViews[phase])
+			})
+		}
+		for _, phase := range []environment.Phase{environment.PhaseTemplate, 2} {
+			t.Run(fmt.Sprintf("non-owner %s/phase %d", parent.name, phase), func(t *testing.T) {
+				qt.Assert(t, sealedWriteRefusal(func() {
+					_ = inner.SealedWriteViewAt(phase)
+				}), qt.IsNil)
+			})
+		}
+	}
 }

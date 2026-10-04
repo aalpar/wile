@@ -161,7 +161,7 @@ func noDirectValueRegisterAccess(m dsl.Matcher) { //nolint:unused // loaded by g
 // finding targets; interface asserts (values.Number, values.Tuple) are almost
 // always written comma-ok anyway.
 //
-// See memory/ffi-badcast-vm-boundary-recover.md.
+// See auto-memory `ffi-badcast-vm-boundary-recover.md`.
 //
 //	// Wrong (panics on wrong type → process crash):
 //	n := mc.Arg(0).(*values.Integer)

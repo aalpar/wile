@@ -31,7 +31,7 @@ import (
 // keys on the tag at the one ordinary reaching site (emitCachedBindingLoad),
 // never on which frame the walk landed in.
 //
-// See plans/2026-08-05-flat-binding-model-{design,impl}.local.md §6 / Task 1.
+// See memory/2026-08-05-flat-binding-model-{design,impl}.md §6 / Task 1.
 
 // Every syntax compiler name, in value position, at phase 0. The table is the
 // registration table itself (SyntaxCompilerNamesForTest), so a new syntax

@@ -15,7 +15,7 @@
 package wile
 
 // Phase 2.6 — ambient base-primitive immutability
-// (plans/2026-06-11-escape-gated-frame-allocation.local.md §"Phase 2.6").
+// (memory/2026-06-11-escape-gated-frame-allocation.md §"Phase 2.6").
 //
 // Phase 2 finding #1: base primitives (+, <, -) bound via the ambient
 // Registry.Apply walk carry no Imported flag, so they are set!-able, so the

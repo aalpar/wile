@@ -26,7 +26,7 @@ import (
 )
 
 // TestConcurrentSameMacroExpansionHygiene closes the residual gap named in
-// plans/2026-06-29-concurrent-library-load-crosscheck-followups.local.md.
+// memory/2026-06-29-concurrent-library-load-crosscheck-followups.md.
 // Prior -race coverage proved the syntax-rules transformer is race-free and that
 // hygiene holds sequentially, plus a matcher-level concurrent clone test
 // (match.TestSyntaxMatcher_CloneForMatchConcurrent) proved no cross-talk between

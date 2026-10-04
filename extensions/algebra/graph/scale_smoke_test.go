@@ -26,7 +26,7 @@ import (
 // machineShapedGraph constructs a synthetic graph whose scale and shape
 // approximate the wile/machine package call graph that produced the
 // 3-hour incident documented in
-// memory/feedback-counting-semiring-on-cycles.md:
+// auto-memory `feedback-counting-semiring-on-cycles.md`:
 //
 //   - 539 nodes
 //   - ~623 directed edges

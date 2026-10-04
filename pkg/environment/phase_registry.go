@@ -123,8 +123,8 @@ type PhaseRegistry struct {
 // sealedViewAt returns this owner's sealed-write view for a phase and whether the
 // phase has one.
 //
-// False means the phase has no sealedAxis row (phase 2 and up), never "this owner
-// skipped a row": every owner's registry is built with every row.
+// False means the phase has no sealedAxis row, never "this owner skipped a row":
+// every owner's registry is built with every row.
 func (p *PhaseRegistry) sealedViewAt(phase Phase) (*EnvironmentFrame, bool) {
 	frame, ok := p.sealedViews[phase]
 	return frame, ok

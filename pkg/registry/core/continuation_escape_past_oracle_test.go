@@ -24,8 +24,8 @@ package core_test
 // sub-context boundary (call-with-values producer / call-with-exit /
 // call-with-continuation-prompt) and invoked it INSIDE, asserting whether the
 // boundary's post-thunk work wrongly ran. This file is that missing oracle.
-// See plans/2026-06-27-continuation-resume-design-archaeology.local.md,
-// plans/2026-06-27-continuation-resume-trampoline-coupled-fix-design.local.md, and
+// See memory/2026-06-27-continuation-resume-design-archaeology.md,
+// memory/2026-06-27-continuation-resume-trampoline-coupled-fix-design.md, and
 // memory continuation-resume-trampoline-falsified.
 //
 // HOW TO READ IT.
@@ -294,7 +294,7 @@ func TestDynamicWindDoubleFire_TargetFiresOnce(t *testing.T) {
 // winding-from-the-escape-point, so any path still running boundary-bearing code under
 // a plain Run()/non-reconciling re-raise breaks — which is why the reification and the
 // resume flip are ONE atomic change. Spec:
-// plans/2026-06-28-continuation-cluster-reification-impl.md §7; memory
+// memory/2026-06-28-continuation-cluster-reification-impl.md §7; memory
 // continuation-cwv-reification-validated-coupling-mapped.
 // ============================================================================
 
@@ -450,7 +450,7 @@ func TestComposableEscapePastReifiedBoundary_Target(t *testing.T) {
 // Each of these is a bug found LATE in the reification+flip arc — after the full Go
 // suite, lint, and -race were all green — by the checked-in Scheme suites or the A/B
 // crosscheck. Promoting them to one-expression oracle cells makes them the cheapest,
-// most-specific guards. See plans/2026-06-28-continuation-testing-enhancement.md.
+// most-specific guards. See memory/2026-06-28-continuation-testing-enhancement.md.
 // ============================================================================
 
 // TestConsumerHandlerVisibility: a raise-continuable inside a TAIL-position
@@ -556,7 +556,7 @@ func TestKC11_ThreadCallccInBoundary(t *testing.T) {
 // crosscheck found that the full Go suite, lint, -race, this oracle, the golden corpus,
 // the invariant matrix, AND the fuzzer all passed — the exact failure mode the
 // testing-enhancement plan exists to surface
-// (plans/2026-06-28-continuation-testing-enhancement.md).
+// (memory/2026-06-28-continuation-testing-enhancement.md).
 //
 // parameterize is marks-based (with-continuation-mark); its restoration is the mark
 // falling off when the captured chain is restored. But the winding reconcile runs the

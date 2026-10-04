@@ -16,7 +16,7 @@ package wile_test
 
 // Phase distinctness: the behavioural gate for Flatt binding model Stage A.
 //
-// Plan: memory/2026-09-08-flatt-binding-model-a-impl.local.md, Task 2; design
+// Plan: memory/2026-09-08-flatt-binding-model-a-impl.md, Task 2; design
 // section 6.1. Written BEFORE any mechanism, on purpose: a change of this shape
 // fails toward the old behaviour, and the old behaviour is green. If bulk rows
 // were installed but never won a resolution, every other test in the suite
@@ -335,7 +335,10 @@ func TestPhase2_UniformRule(t *testing.T) {
 	// the absolute read's sake; it is not evidence that phase 2 owns an
 	// expander table, and it must not be "fixed" by making the read relative.
 	// A9 measured NextPhase() there breaking bootstrap loading outright, with
-	// ambient still present.
+	// ambient still present. The table's single-instance-at-phase-1 premise is
+	// stated structurally in .goast-beliefs/primitive-expander-table-is-expand-sealed.scm,
+	// which reads the taproot's phase ARGUMENT; that belief is on-demand, so it
+	// does not gate this subtest.
 	//
 	// when/unless/cond are deliberate: each has an exact-phase-1 slot and NO
 	// ambient binding, so this subtest is already independent of the tier A

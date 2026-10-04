@@ -23,7 +23,7 @@ import (
 
 // The depth axis of a LocalIndex — the "up" half of the bit-packed (slot, depth)
 // operand — is the last thing standing between the compiler and one-dimensional
-// local addressing. memory/flat-closure-baseline.local.md §7d priced its DELETION
+// local addressing. memory/flat-closure-baseline.md §7d priced its DELETION
 // at zero throughput and said to reopen it only for the structural collapse:
 // LocalIndex becomes a scalar, Encode/DecodeLocalIndex go away, and the frame
 // parent chain stops being a variable-lookup path.
@@ -236,8 +236,8 @@ func TestEmittedLocalDepthSurvivesOnlyWhereUnprovable(t *testing.T) {
 //
 // The Engine path, not a hand-built continuation: the merge decisions this
 // counts are made by compileBody and CompileValidatedLet wiring that a direct
-// call would bypass, and the optimizer runs here (memory/runschemecode-blind-to-
-// optimizer).
+// call would bypass, and the optimizer runs here (auto-memory
+// `runschemecode-blind-to-optimizer`).
 func compileForDepthCensus(t *testing.T, code string, opts ...EngineOption) *machine.NativeTemplate {
 	t.Helper()
 	ctx := context.Background()

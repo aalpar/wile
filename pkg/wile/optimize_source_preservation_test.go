@@ -49,7 +49,7 @@ import (
 // (pre-Optimize), snapshots the coverage-relevant spans across the whole
 // template tree, runs Optimize(), and asserts no span lost its last referencing
 // PC. If this ever fails, the peephole has started dropping coverage data and
-// the fix in plans/2026-06-26-editplan-preserve-collapsed-sources.local.md
+// the fix in memory/2026-06-26-editplan-preserve-collapsed-sources.md
 // (EditPlan extraSources) becomes justified.
 func TestOptimize_PreservesCoverageSpans(t *testing.T) {
 	c := qt.New(t)

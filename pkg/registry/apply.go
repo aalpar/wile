@@ -93,12 +93,13 @@ func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
 // bindings, runtime/expand-time primitives, global values, per-engine namespace
 // initializers, then init functions.
 //
-// env must be an owner root (the phase-0 entry of its own PhaseRegistry), as
-// LoadBootstrapCore passes for the engine root and for every library env. Any
-// other receiver makes SealedWriteViewAt fall back to that receiver's own mutable
-// view, which lands every compile-time keyword at (0, mutable) instead of the
-// sealed (phase 0, sealed) coordinate; a later user define of the name
-// would then reuse the keyword's slot rather than shadow it.
+// env must be an owner root: the phase-0 entry of its own PhaseRegistry (the
+// environment package's ownsSealedAxis, which the exported IsOwnerRoot does NOT
+// answer), as LoadBootstrapCore passes for the engine root and for every library
+// env. Nothing checks it, and any other receiver misplaces bindings or closure
+// envs, at one phase or both depending on the receiver: a sealed-write view, for
+// one, hands the runtime primitives a sealed closureEnv, which phaseTargets below
+// requires to be the mutable runtime.
 func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.EnvironmentFrame, opts ...ApplyOption) error {
 	var cfg applyConfig
 	for _, opt := range opts {
@@ -239,10 +240,10 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 // than the phase-2 era's "no such binding".
 //
 // env must be an owner root (the phase-0 entry of its own PhaseRegistry), which
-// every production Apply passes (LoadBootstrapCore). For any other receiver
-// SealedWriteViewAt falls back to the receiver's own mutable view, and the keyword
-// would land at (0, mutable), where a later user define of the name would reuse
-// its slot.
+// every production Apply passes (LoadBootstrapCore). For a receiver that is
+// neither an owner root nor a sealed-write view, SealedWriteViewAt answers with a
+// mutable view, and the keyword would land at (0, mutable), where a later user
+// define of the name would reuse its slot.
 func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingSpec) error {
 	sealedRoot := env.SealedWriteViewAt(environment.PhaseRuntime)
 	sym := values.NewSymbol(spec.Name)
@@ -267,7 +268,7 @@ func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingS
 // sealed only under WithRuntimeTarget; phase 1 always is. The phase parameter is
 // error-message context only.
 // This is the single registration helper shared by Runtime and Expand phases — collapsed
-// per Instance C of the dispatch-axis-as-data finding (plans/2026-05-08-dispatch-axis-as-data.md).
+// per Instance C of the dispatch-axis-as-data finding (memory/2026-05-08-dispatch-axis-as-data.md).
 func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame, phase environment.Phase, spec PrimitiveSpec, cfg applyConfig) error {
 	sym := values.NewSymbol(spec.Name)
 

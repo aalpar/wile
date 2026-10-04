@@ -15,7 +15,7 @@
 package core_test
 
 // Generative fuzzing of the continuation machinery with a crash-oracle (item 3 of
-// plans/2026-06-28-continuation-testing-enhancement.md).
+// memory/2026-06-28-continuation-testing-enhancement.md).
 //
 // The two latest bugs in the reification+flip arc — a tail-promoted-op nil-deref and a
 // runaway-loop hang — were both found by hand-poking unusual shapes. This generator does

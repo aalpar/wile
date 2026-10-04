@@ -37,7 +37,7 @@
 ;;; Go-SSA primitives it invokes — go-ssa-build and go-ssa-narrow —
 ;;; live in wile-goast.
 ;;;
-;;; See plans/2026-04-19-axis-b-analyzer-design.md for the overall design.
+;;; See memory/2026-04-19-axis-b-analyzer-design.md for the overall design.
 
 (import (wile goast)
         (wile goast ssa)
@@ -352,7 +352,7 @@
 ;; Bucket classification
 ;; ---------------------------------------------------------------------------
 
-;; Seven buckets per plans/2026-04-19-axis-b-analyzer-design.md §5.
+;; Seven buckets per memory/2026-04-19-axis-b-analyzer-design.md §5.
 ;; Decision tree:
 ;;   no-paths confidence               -> Side-effecting
 ;;   widened confidence                -> Helper-widened

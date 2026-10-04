@@ -174,6 +174,21 @@ var (
 	ErrMissingPhaseRegistry = NewStaticError("missing PhaseRegistry")
 	ErrNilParentEnvironment = NewStaticError("nil parent environment")
 
+	// ErrNoSealedWriteView marks a request for a SEALED-WRITE view at a phase that
+	// owns none — OFF the sealed axis, in either direction. The pre-2026-10-03
+	// behaviour, handing back the ordinary mutable view, made the degradation
+	// invisible at the one call that exists to name a sealed target.
+	//
+	// "Off the axis", not "above the ceiling": PhaseTemplate (-1) is a named phase
+	// below the first axis row and owns no sealed view either. An upper-bound
+	// comparison answers for 2 and up and silently falls through at -1, which is
+	// the same silent downgrade at a named constant.
+	//
+	// Raised by SealedWriteViewAt only. AtPhase still falls through to the mutable
+	// view without it, and it is the compile-time writers' route; see the
+	// environment package's sealedAxis.
+	ErrNoSealedWriteView = NewStaticError("no sealed-write view at this phase")
+
 	// Panic recovery errors
 
 	ErrThreadPanic   = NewStaticError("thread panic")

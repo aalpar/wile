@@ -15,9 +15,12 @@
 package environment
 
 import (
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // A library env is a full OWNER: its own store, its own registry, its own views.
@@ -25,8 +28,8 @@ import (
 // consistent) and nothing else, which is what gives a library body its own
 // bindings while still reaching primitives.
 //
-// See memory/2026-08-04-library-phase-isolation-impl.local.md Task 3 and
-// memory/2026-08-05-flat-binding-model-design.local.md §4.6.
+// See memory/2026-08-04-library-phase-isolation-impl.md Task 3 and
+// memory/2026-08-05-flat-binding-model-design.md §4.6.
 func TestChildRuntimeOwnsItsOwnStore(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
@@ -104,7 +107,24 @@ func TestChildRuntimeMirrorsTheWholeSealedAxis(t *testing.T) {
 	// Whether an expand-phase primitive lands sealed or mutable is not askable
 	// here — that placement is registry.Apply's phaseTargets (apply.go), which
 	// writes through the ordinary expand view.
-	c.Assert(lib.SealedWriteViewAt(Phase(2)), qt.Equals, lib.AtPhase(Phase(2)))
+	//
+	// Off the axis the library env is an owner root like any other, so it is
+	// REFUSED rather than handed its ordinary phase-2 view. This asserted the
+	// fall-through until 2026-10-03; the rule and its bounds are in
+	// TestSealedWriteOffTheAxisIsRefused.
+	//
+	// By SENTINEL, not by message text: ErrNoSealedWriteView exists so this is
+	// matchable by identity, and a regexp over the rendering would pass for a bare
+	// errors.New carrying the same words — and would break on any reword of the
+	// diagnostic. capturePanic is this package's own helper for a sentinel-carrying
+	// panic (ambiguous_binding_test.go); sealedWriteRefusal is in the external test
+	// package and is not reachable here.
+	r := capturePanic(func() {
+		_ = lib.SealedWriteViewAt(Phase(2))
+	})
+	err, ok := r.(error)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("recovered %T, want an error", r))
+	c.Assert(errors.Is(err, werr.ErrNoSealedWriteView), qt.IsTrue)
 }
 
 // EVERY write lands at (phase = the writing view's phase, the view's sealed
@@ -135,6 +155,17 @@ func TestSealedWriteCoordinates(t *testing.T) {
 	phase, sealed = ns.AtPhase(PhaseExpand).writeCoordinates()
 	c.Assert(sealed, qt.IsFalse)
 	c.Assert(phase, qt.Equals, PhaseExpand)
+
+	// A lexical child of a sealed-write view writes MUTABLE: `sealed` is not
+	// inherited. This is the pin that survives a refactor keying admission and the
+	// climb on view identity instead of the flag, which would leave every
+	// SealedWriteViewAt and AtPhase row green while a body's defines went sealed.
+	for _, p := range []Phase{PhaseRuntime, PhaseExpand} {
+		child := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), ns.Runtime().SealedWriteViewAt(p))
+		phase, sealed = child.writeCoordinates()
+		c.Assert(sealed, qt.IsFalse, qt.Commentf("child of the phase-%d sealed view", p))
+		c.Assert(phase, qt.Equals, p)
+	}
 }
 
 // A bootstrap macro compiled against a library's phase-0 sealed-write view must
@@ -158,11 +189,12 @@ func TestChildRuntimeSealedClimbReachesItsExpandView(t *testing.T) {
 	c.Assert(expandBase.AtPhase(Phase(2)), qt.Equals, lib.AtPhase(Phase(2)))
 }
 
-// SealedWriteViewAt answers only an OWNER ROOT — the phase-0 entry of its own
-// registry. A namespace's runtime and a library env's each own one; an inner
-// lexical frame merely inherits the `phases` pointer and must NOT be able to
-// obtain a sealed writer through it. Testing `phases != nil` alone made every
-// lambda body a route to the sealed tier.
+// SealedWriteViewAt answers from the registry only for an OWNER ROOT — the
+// phase-0 entry of its own registry — or one of its sealed-write views. A
+// namespace's runtime and a library env's each own one; an inner lexical frame
+// merely inherits the `phases` pointer and must NOT be able to obtain a sealed
+// writer through it. Testing `phases != nil` alone made every lambda body a route
+// to the sealed tier.
 func TestSealedWriteViewAtRequiresAnOwnerRoot(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
@@ -177,11 +209,12 @@ func TestSealedWriteViewAtRequiresAnOwnerRoot(t *testing.T) {
 	c.Assert(inner.SealedWriteViewAt(PhaseRuntime), qt.Equals, inner)
 	c.Assert(inner.SealedWriteViewAt(PhaseRuntime).sealed, qt.IsFalse)
 
-	// The reach a sealed-write view has by climbing is unaffected: AtPhase from a
-	// sealed view stays sealed wherever the axis has a row, so the guard costs
-	// this path nothing.
+	// A sealed-write view is answered from the registry like its owner, in both
+	// directions along the axis. Routing it through AtPhase instead handed it the
+	// MUTABLE root on the way down.
 	sealedExpand, _ := ns.phases.sealedViewAt(PhaseExpand)
 	c.Assert(sealedRoot.SealedWriteViewAt(PhaseExpand), qt.Equals, sealedExpand)
+	c.Assert(sealedExpand.SealedWriteViewAt(PhaseRuntime), qt.Equals, sealedRoot)
 
 	// A frame with no registry at all has nothing to ask, so it falls back to its
 	// own view at that phase.

@@ -2057,7 +2057,7 @@
 ;;; a global min-cut degenerates to isolating a single vertex, so the partition
 ;;; sizes are held by the seed and the cut is optimized via Kernighan-Lin
 ;;; pair-swaps (one vertex from each side per step, preserving |A| and |B|).
-;;; Design: plans/2026-06-08-balanced-graph-partition-design.md.
+;;; Design: memory/2026-06-08-balanced-graph-partition-design.md.
 
 ;; Edge-weight accessor over edge-data; weight-fn is always a procedure.
 (define (%weight-of weight-fn edge-data)
@@ -2232,7 +2232,7 @@ balance, via Kernighan-Lin pair-swaps.
 This is a BALANCED cut, not a minimum cut: a global min-cut degenerates to
 isolating a single vertex, so KL holds the partition sizes (set by the seed)
 and optimizes only the cut. See
-plans/2026-06-08-balanced-graph-partition-design.md.
+memory/2026-06-08-balanced-graph-partition-design.md.
 
 Opts (trailing alist):
   (method . 'kernighan-lin)  default; only value in Phase 1.

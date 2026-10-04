@@ -368,4 +368,4 @@ Steps 1 through 3 of the original path are done:
 > `let` is the standard approach. See [CPS and ANF](anf-and-cps.md)
 > for how intermediate representations relate to binding structure. The
 > core `let` and procedure-inlining implementation plans are archived as
-> `memory/CORE-LET.local.md` and `memory/PROCEDURE-INLINING.local.md`.
+> `memory/CORE-LET.md` and `memory/PROCEDURE-INLINING.md`.

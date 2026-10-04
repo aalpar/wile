@@ -76,7 +76,7 @@ import (
 //   - sec/op: no significant difference on either arm (fib 2.769m → 2.762m,
 //     p=0.505; map-sum 5.220µ → 5.387µ, p=0.574; geomean +1.46%). Inconclusive by
 //     construction, not merely by p-value: per
-//     memory/interleaved-ab-required-for-vm-microdeltas.md a same-binary
+//     auto-memory `interleaved-ab-required-for-vm-microdeltas.md` a same-binary
 //     comparison cannot resolve sub-1.5% VM deltas, and this geomean is inside
 //     that band.
 //   - allocs/op: EXACTLY equal in every sample of both arms, 81 on fib and 71 on

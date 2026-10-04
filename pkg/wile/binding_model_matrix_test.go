@@ -60,7 +60,7 @@ import (
 //     reference intact" is what discriminates the two readings; "...value
 //     visible at phase 1, by name" reads the same under either.
 //
-// See plans/2026-08-05-flat-binding-model-{design,impl}.local.md.
+// See memory/2026-08-05-flat-binding-model-{design,impl}.md.
 
 type matrixRow struct {
 	name string
