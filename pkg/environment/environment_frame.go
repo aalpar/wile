@@ -160,9 +160,9 @@ func NewNamespaceFrame() *EnvironmentFrame {
 //
 // The global environment frame is inherited from the parent. This is used for creating child frames within a phase
 // (e.g., lambda bodies, let-syntax). The phase level, registry, and namespace are inherited from the parent. sealed is
-// NOT inherited — the new frame is always mutable (the zero value), because a lexical child (a lambda body)
-// is never admitted by SealedWriteViewAt (only owner roots and sealed-write views are). Its compile-time writes
-// still go through AtPhase, unsealed; see sealedAxis. Panics if parent is nil - use NewNamespaceFrame() instead.
+// NOT inherited — the new frame is always mutable (the zero value), so a lexical child's writes land mutable
+// and SealedWriteViewAt never admits it: a lambda body must not be handed a sealed writer. Its compile-time
+// writes still go through AtPhase, unsealed; see sealedAxis. Panics if parent is nil - use NewNamespaceFrame() instead.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
 	if parent == nil {
 		panic(werr.WrapForeignErrorf(

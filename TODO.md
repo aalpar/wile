@@ -3157,18 +3157,21 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
 
 - [ ] **The seal is exactly one level deep, and the climb exits silently** [Design, S, deliberate —
   decide before Tier 2 of the climbing tower]: the compile-time writers reach their target phase
-  through `AtPhase`: `define-syntax`, `define-for-syntax`, `begin-for-syntax` and `eval-when`
-  (expand/compile) via `NextPhase()`, and `meta` via `Expand()`, an ABSOLUTE phase 1. `AtPhase`
+  through `AtPhase`: `define-syntax`, `define-for-syntax`, `begin-for-syntax`, `eval-when`
+  (expand/compile) and a `define` in any transformer right-hand side (`compileTransformerValue`) via
+  `NextPhase()`, and `meta` via `Expand()`, an ABSOLUTE phase 1. `AtPhase`
   stays sealed only when the receiver IS a sealed-write view and the target is above it, on a
   `sealedAxis` row; everywhere else it falls through to the mutable view, and nothing says so. Three
   exits follow. `TestSealedClimbStopsAboveExpand` pins the environment-layer fall-through of each
-  (through `AtPhase`, and `NextPhase` where a writer uses it), not the compiler's write sites:
+  (through `AtPhase` and the writer's own entry, `NextPhase` or `Expand`), including the
+  transformer-body case, which goes red only when both of its fixes land. It does not pin the
+  compiler's write sites:
   - **From a lexical child of a sealed view.** `NewEnvironmentFrameWithParent` does not copy
     `sealed`, so these forms in any body under a sealed view climb unsealed even onto a row.
     Measured by probe (2026-10-04): a `define-syntax` in a procedure body compiled against the
     sealed root lands in mutable phase 1, the onto-a-row case. A `define-syntax` inside an
     `er-macro-transformer` body runs in a lexical child at phase 1 and lands in mutable phase 2:
-    this exit and the next at once, so it needs both fixes.
+    this exit and the off-axis one at once, so it needs both fixes.
   - **From a sealed view itself, off the axis.** The phase-1 view climbs into mutable phase 2,
     because phase 2 has no row.
   - **`meta` from the phase-1 sealed view.** Phase 1 is not above the receiver, so there is no
@@ -3176,12 +3179,15 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
 
   Latent today: no bootstrap source nests a macro-defining form in a body (the only nested
   `define-syntax` in `bootstrap_syntax.scm` are docstring examples), and none uses
-  `begin-for-syntax`, `define-for-syntax`, `eval-when` or `meta`. A logging probe at the five writer
-  sites (the four `NextPhase` sites and `CompileMeta`) recorded zero hits on any exit across
-  `go test ./...` and `test/run-all.sh`. (A panicking probe is the wrong instrument here: the
-  engine's compile boundary recovers panics into compile errors.) The same probe fired thousands of
-  times at `compileTransformerValue`, for `let-syntax` right-hand sides inside bootstrap
-  transformers compiled against mutable phase 2: reads at expansion, not writes. It becomes live the first time a bootstrap source does one
+  `begin-for-syntax`, `define-for-syntax`, `eval-when` or `meta`. A logging probe at the climb sites
+  recorded no write through any exit across `go test ./...` and `test/run-all.sh`. (A panicking
+  probe is the wrong instrument here: the engine's compile boundary recovers panics into compile
+  errors.) `compileTransformerValue` did climb from phase-1 lexical children to mutable phase 2
+  thousands of times, only under `WithSchemeSyntaxForms` (none on a default engine), for `let-syntax`
+  right-hand sides inside bootstrap transformers; phase 2 holds no slots after boot, so those were
+  reads. No compiler-level pin exists: a probe loading `(define (probe-f) (define-syntax probe-m …)
+  …)` through `LoadBootstrapSources` against the sealed root reads the slot unsealed today and sealed
+  under either fix (measured), and is not committed. It becomes live the first time a bootstrap source does one
   of these: that macro's own compile-time helper would be user-overwritable, the property D3 exists
   to prevent one phase lower.
 
@@ -3197,8 +3203,10 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   sites (`compile_define_syntax.go`, `expander_body.go`, `compile_define_for_syntax.go`,
   `executeFormsAtCompileTime` in `compile_helpers.go`, which `begin-for-syntax` and `eval-when` run,
   `CompileMeta`, and `compileTransformerValue`, whose climb compiles a transformer's right-hand side
-  and whose defines land at phase 1); untested end to end. Neither closes the `meta` exit or the
-  phase-2 exit. A row also forces an unanswered question: is the new frame's parent
+  and whose defines land one phase above the defining frame); untested end to end. The decoupling
+  closes neither the `meta` exit nor the phase-2 exit. A structural alternative (hypothesis): move
+  `AtPhase`'s sealed branch into a write-target method used only by the writing climb sites, so the
+  writer set is a call graph rather than a hand-kept list. A row also forces an unanswered question: is the new frame's parent
   the phase-0 seal (flat, mirroring the mutable axis's no-phase→phase-edge rule) or the phase-1 seal
   (chained, mirroring the phase tower)? The construction site is `newPhaseRegistry`
   (`namespace.go`).
@@ -3219,25 +3227,31 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
 - [ ] **`SealedWriteViewAt` still answers an unsealed non-owner with a mutable view** [Low, S,
   filed 2026-10-04 from the P3.16 crosscheck; deferred]: the refusal covers owner roots and
   sealed-write views. An inner lexical frame with a registry still gets its own mutable view, with no
-  error. Ownership is observable (`env.Runtime() == env` matched `ownsSealedAxis` on 13 frame kinds,
-  measured), but nothing checks it, `sealed` is unexported, and the exported `IsOwnerRoot` answers a
-  different question; see the next row. `registry.Apply`'s doc already names the harm: keywords land at (0, mutable) and a
-  later user define reuses the slot. Two lenses mutation-tested "refuse there too": only the tests
+  error. Nothing checks ownership, `sealed` is unexported, and the exported `IsOwnerRoot` answers a
+  different question; see the next row. `registerCompileTimeBinding`'s doc (`apply.go`) names the
+  harm: keywords land at (0, mutable) and a later user define reuses the slot. Two lenses mutation-tested "refuse there too": only the tests
   that pin the fall-through on purpose went red (`TestSealedWriteViewAtRequiresAnOwnerRoot`, the
   non-owner rows of `TestSealedWriteOffTheAxisIsRefused`); `pkg/...` and `extensions/...` stayed
   green. Deferred in favor of the narrow fix; the rule would become "a sealed view or a panic", with
   the own-phase answer kept only for a frame with no registry.
 
-- [ ] **`registry.Apply` does not check its owner-root precondition, and "owner root" names two
+- [ ] **`registry.Apply` does not check its owner-root precondition, and "owner root" names three
   predicates** [Low, S, filed 2026-10-04 from the P3.16 crosscheck]: `Apply`'s doc states the
-  precondition and the harms; nothing enforces it. A guard `if env.Runtime() != env` returning a
-  wrapped `werr.ErrInvalidArgument` at the top of `Apply` passed `./pkg/...`, `./extensions/...`,
-  `./integration/...`, `./test/...` and `run-all.sh` (measured in a copy, not committed). Separately,
-  `IsOwnerRoot` (true for the namespace runtime and its sealed root) and `ownsSealedAxis` (true for
-  every owner's runtime, a library env's included) are both called "owner root". `IsOwnerRoot` has
-  no non-test caller, and two comments still say the immutable-top-level define gate uses it
-  (`IsNamespaceRuntime`'s doc, `Namespace.sealedWriteRoot`'s), though the gate moved to
-  `WritesOwnerRootCoordinates`. Renaming it (e.g. `IsNamespaceRoot`) removes the collision.
+  precondition; nothing enforces it, and a wrong receiver misplaces bindings or closure envs at both
+  phases (measured per receiver kind). A guard on the predicate itself (an exported
+  `OwnsPhaseRegistry` wrapping `ownsSealedAxis`, returning a wrapped `werr.ErrInvalidArgument`)
+  passed `./pkg/...` and `./extensions/...` (measured in a copy, not committed). `env.Runtime() ==
+  env` agrees with it wherever there is a registry, but panics on a frame without one and writes
+  inside the predicate, so it is the wrong guard. "Owner root" also means three things:
+  `ownsSealedAxis` (every owner's runtime, a library env's included), `IsOwnerRoot` (the namespace
+  runtime and its sealed root; no non-test caller), and `WritesOwnerRootCoordinates` (the define
+  gate's predicate, true for a lexical child of the root). Renaming `IsOwnerRoot` alone leaves the
+  collision in the one predicate with a caller; deleting `IsOwnerRoot` and renaming
+  `WritesOwnerRootCoordinates` would leave "owner root" meaning the registry owner only. Stale
+  citations of `IsOwnerRoot` as the define gate's predicate: its own doc, `IsNamespaceRuntime`'s,
+  `Namespace.sealedWriteRoot`'s, `NewChildRuntime`'s (which credits it with R2, now kept by
+  `WritesOwnerRootCoordinates`'s same-store check) and `initOwner`'s; and two tests assert it as the
+  gate's predicate (`sealed_write_view_test.go`, `library_seal_test.go`).
 
 ### `predeclareBinding` leaves an unwritten `#!void` twin slot per library-body define (2026-07-19)
 

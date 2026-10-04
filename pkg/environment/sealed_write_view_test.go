@@ -243,12 +243,13 @@ func TestBoundNamesAcrossPhases(t *testing.T) {
 //   - a lexical child of a sealed view, which does not inherit `sealed`, even
 //     onto a row: a define-syntax in a bootstrap procedure body runs in one (a
 //     transformer body is a lexical child at phase 1, so its climb to phase 2
-//     takes this exit and the first at once);
+//     takes this exit and the off-axis one);
 //   - the phase-1 view asked for phase 1 itself, which is meta's route
 //     (Expand(), an absolute phase) and no climb at all.
 //
-// Each is asserted through AtPhase and, where a writer uses it, NextPhase, so a
-// fix in either moves this test. A fix at the compiler's write sites would not.
+// Each is asserted through AtPhase and through the writer's own entry (NextPhase,
+// or Expand for meta), so a fix at either layer moves this test; NextPhase also
+// serves macro lookup. A fix at the compiler's write sites would not.
 func TestSealedClimbStopsAboveExpand(t *testing.T) {
 	ns := environment.NewNamespace()
 	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
@@ -265,6 +266,12 @@ func TestSealedClimbStopsAboveExpand(t *testing.T) {
 	inner := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), sealedRoot)
 	qt.Assert(t, inner.AtPhase(environment.PhaseExpand), qt.Equals, ns.AtPhase(environment.PhaseExpand))
 	qt.Assert(t, inner.NextPhase(), qt.Equals, ns.AtPhase(environment.PhaseExpand))
+
+	// A transformer body: a lexical child of the phase-1 view, climbing to phase 2.
+	// It takes the lexical-child and off-axis exits at once, so this goes red only
+	// when both are fixed.
+	transformerBody := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), sealedExpand)
+	qt.Assert(t, transformerBody.NextPhase(), qt.Equals, ns.AtPhase(environment.Phase(2)))
 
 	// meta's route from the phase-1 view: an absolute phase 1, not a climb, so the
 	// mutable phase-1 view.
@@ -356,9 +363,9 @@ func sealedWriteRefusal(f func()) (q error) {
 //   - An UNSEALED non-owner (an inner lexical frame, including one under a
 //     sealed-write view) still falls through at every phase, by the documented
 //     precondition; refusing it too is filed in TODO.md. Asserted below as "does
-//     not panic" off the axis, and on it as a non-nil frame at the asked phase
-//     that is not the owner's sealed view: `sealed` must not be inherited, or
-//     every body under a sealed view would be admitted. Asserting WHICH frame it
+//     not panic" off the axis, and at both axis phases as a non-nil frame at the
+//     asked phase that is not the owner's sealed view: `sealed` must not be
+//     inherited, or every body under a sealed view would be admitted. Asserting WHICH frame it
 //     returns would restate unsealedTargetAt's implementation.
 //   - AtPhase still falls through, silently, and it is the compile-time writers'
 //     route (see sealedAxis). TestSealedClimbStopsAboveExpand pins its exits and
@@ -451,27 +458,32 @@ func TestSealedWriteOffTheAxisIsRefused(t *testing.T) {
 	// An unsealed non-owner receiver is NOT refused, at any phase off the axis,
 	// including one whose parent is a sealed-write view. Under a sealed view it is
 	// not ADMITTED either: it gets its own view, not the owner's sealed one.
-	sealedExpand := ns.Runtime().SealedWriteViewAt(environment.PhaseExpand)
+	sealedViews := map[environment.Phase]*environment.EnvironmentFrame{
+		environment.PhaseRuntime: ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime),
+		environment.PhaseExpand:  ns.Runtime().SealedWriteViewAt(environment.PhaseExpand),
+	}
 	for _, parent := range []struct {
 		name  string
 		frame *environment.EnvironmentFrame
 	}{
 		{name: "under the runtime", frame: ns.Runtime()},
-		{name: "under the sealed root", frame: ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)},
-		{name: "under the sealed expand view", frame: sealedExpand},
+		{name: "under the sealed root", frame: sealedViews[environment.PhaseRuntime]},
+		{name: "under the sealed expand view", frame: sealedViews[environment.PhaseExpand]},
 	} {
 		inner := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), parent.frame)
-		t.Run(fmt.Sprintf("non-owner %s/not admitted", parent.name), func(t *testing.T) {
-			// Recovered, so a refusal reports here instead of aborting the binary;
-			// non-nil and at the asked phase, since nil satisfies the inequality.
-			var got *environment.EnvironmentFrame
-			qt.Assert(t, sealedWriteRefusal(func() {
-				got = inner.SealedWriteViewAt(environment.PhaseExpand)
-			}), qt.IsNil)
-			qt.Assert(t, got, qt.IsNotNil)
-			qt.Assert(t, got.PhaseLevel(), qt.Equals, environment.PhaseExpand)
-			qt.Assert(t, got, qt.Not(qt.Equals), sealedExpand)
-		})
+		for _, phase := range []environment.Phase{environment.PhaseRuntime, environment.PhaseExpand} {
+			t.Run(fmt.Sprintf("non-owner %s/not admitted at phase %d", parent.name, phase), func(t *testing.T) {
+				// Recovered, so a refusal reports here instead of aborting the binary;
+				// non-nil and at the asked phase, since nil satisfies the inequality.
+				var got *environment.EnvironmentFrame
+				qt.Assert(t, sealedWriteRefusal(func() {
+					got = inner.SealedWriteViewAt(phase)
+				}), qt.IsNil)
+				qt.Assert(t, got, qt.IsNotNil)
+				qt.Assert(t, got.PhaseLevel(), qt.Equals, phase)
+				qt.Assert(t, got, qt.Not(qt.Equals), sealedViews[phase])
+			})
+		}
 		for _, phase := range []environment.Phase{environment.PhaseTemplate, 2} {
 			t.Run(fmt.Sprintf("non-owner %s/phase %d", parent.name, phase), func(t *testing.T) {
 				qt.Assert(t, sealedWriteRefusal(func() {
