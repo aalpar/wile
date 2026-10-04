@@ -162,7 +162,9 @@ func NewNamespaceFrame() *EnvironmentFrame {
 // (e.g., lambda bodies, let-syntax). The phase level, registry, and namespace are inherited from the parent. sealed is
 // NOT inherited — the new frame is always mutable (the zero value), so a lexical child's own writes land
 // mutable and SealedWriteViewAt never admits it. TopLevel() still reaches the sealed view, so this guards
-// accidents, not capability. Its compile-time writes go through AtPhase, unsealed; see sealedAxis. Panics if parent is nil - use NewNamespaceFrame() instead.
+// accidents, not capability. Its compile-time writes go through AtPhase, unsealed; see sealedAxis.
+//
+// Panics if parent is nil - use NewNamespaceFrame() instead.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
 	if parent == nil {
 		panic(werr.WrapForeignErrorf(

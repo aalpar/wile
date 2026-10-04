@@ -248,8 +248,10 @@ func TestBoundNamesAcrossPhases(t *testing.T) {
 //     (Expand(), an absolute phase) and no climb at all.
 //
 // Each is asserted through AtPhase and through the writer's own entry (NextPhase,
-// or Expand for meta), so a fix at either layer moves this test; NextPhase also
-// serves macro lookup. A fix at the compiler's write sites would not.
+// or Expand for meta). For the two climb exits a fix at either layer moves this
+// test; NextPhase also serves macro lookup. meta's exit cannot be fixed in
+// AtPhase without breaking the invariant below, so only an Expand()/CompileMeta
+// fix moves its row. A fix at the compiler's write sites moves nothing here.
 //
 // qt.Check, not qt.Assert: a fix moves several rows at once, and each should
 // report rather than hide behind the first.
@@ -261,9 +263,10 @@ func TestSealedClimbStopsAboveExpand(t *testing.T) {
 	mutable2 := ns.AtPhase(environment.Phase(2))
 
 	// The redirect is a CLIMB: it never rewrites a lookup at or below the receiver's
-	// own level, so the sealed-write root still reaches the ordinary view at phase 0.
-	// An invariant, not an exit; listed first so it never reads as one.
+	// own level. An invariant, not an exit; listed first so it never reads as one.
 	qt.Check(t, sealedRoot.AtPhase(environment.PhaseRuntime), qt.Equals, ns.Runtime())
+	qt.Check(t, sealedExpand.AtPhase(environment.PhaseRuntime), qt.Equals, ns.Runtime())
+	qt.Check(t, sealedExpand.AtPhase(environment.PhaseExpand), qt.Equals, mutable1)
 
 	// Phase 0 sealed-write view climbing to phase 1: stays sealed.
 	qt.Check(t, sealedRoot.AtPhase(environment.PhaseExpand), qt.Equals, sealedExpand)
@@ -289,8 +292,7 @@ func TestSealedClimbStopsAboveExpand(t *testing.T) {
 	qt.Check(t, transformerBody.NextPhase(), qt.Equals, mutable2)
 
 	// meta's route from the phase-1 view: an absolute phase 1, not a climb, so the
-	// mutable phase-1 view.
-	qt.Check(t, sealedExpand.AtPhase(environment.PhaseExpand), qt.Equals, mutable1)
+	// mutable phase-1 view. Its AtPhase form is the invariant above.
 	qt.Check(t, sealedExpand.Expand(), qt.Equals, mutable1)
 }
 
@@ -379,8 +381,8 @@ func sealedWriteRefusal(f func()) (q error) {
 //     asked phase that is not the owner's sealed view. That guards admission by
 //     either route, an inherited `sealed` or unsealedTargetAt's climb; because it
 //     compares identity, it pins non-inheritance only while admission keys on
-//     `sealed`. Asserting WHICH frame it
-//     returns would restate unsealedTargetAt's implementation.
+//     `sealed` (TestSealedWriteCoordinates pins it directly). Asserting WHICH
+//     frame it returns would restate unsealedTargetAt's implementation.
 //   - AtPhase still falls through, silently, and it is the compile-time writers'
 //     route (see sealedAxis). TestSealedClimbStopsAboveExpand pins its exits and
 //     TODO.md keeps them open.

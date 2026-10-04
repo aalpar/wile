@@ -3253,7 +3253,10 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   gate's predicate: its own doc, `IsNamespaceRuntime`'s, `Namespace.sealedWriteRoot`'s,
   `NewChildRuntime`'s (which credits it with R2, now kept by `WritesOwnerRootCoordinates`'s
   same-store check) and `initOwner`'s; and two tests assert it as the gate's predicate
-  (`sealed_write_view_test.go`, `library_seal_test.go`).
+  (`sealed_write_view_test.go`, `library_seal_test.go`). Separately, `phaseTargets`' stated reason
+  that a primitive's closureEnv must be the mutable runtime (capturing the sealed view "would hide
+  every user define") did not hold in a probe: reads ignore `sealed`, so the sealed root saw a user
+  define. The dependency, if any, is on writes through that env; unverified.
 
 ### `predeclareBinding` leaves an unwritten `#!void` twin slot per library-body define (2026-07-19)
 

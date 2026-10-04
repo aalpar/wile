@@ -514,11 +514,11 @@ These invariants must be maintained:
      phase 1) from the phase-1 sealed view lands mutable on the axis itself.
      Latent, and open in `TODO.md` ("The seal is exactly one level deep").
      Bootstrap macros compile with `env == the sealed-write ROOT VIEW` (phase
-     0), so their `define-syntax`
-     writes climb via `NextPhase()`/`AtPhase` into the phase-1 sealed-write view;
-     special-form expanders register there directly via
-     `SealedWriteViewAt(PhaseExpand)`. Above phase 1, the climb lands on the
-     ordinary mutable view — there is nothing left to stay sealed onto.
+     0), so their `define-syntax` writes climb via `NextPhase()`/`AtPhase` into
+     the phase-1 sealed-write view; special-form expanders register there
+     directly via `SealedWriteViewAt(PhaseExpand)`. Above phase 1, the climb
+     lands on the ordinary mutable view — there is nothing left to stay sealed
+     onto.
    - **Hermeticity is a property of every owner of a store, library environments
      included.** A `NewChildRuntime` library env is a full OWNER: its own store,
      its own `PhaseRegistry`, its own sealed-write views over every `sealedAxis`

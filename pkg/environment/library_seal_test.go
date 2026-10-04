@@ -155,6 +155,17 @@ func TestSealedWriteCoordinates(t *testing.T) {
 	phase, sealed = ns.AtPhase(PhaseExpand).writeCoordinates()
 	c.Assert(sealed, qt.IsFalse)
 	c.Assert(phase, qt.Equals, PhaseExpand)
+
+	// A lexical child of a sealed-write view writes MUTABLE: `sealed` is not
+	// inherited. This is the pin that survives a refactor keying admission and the
+	// climb on view identity instead of the flag, which would leave every
+	// SealedWriteViewAt and AtPhase row green while a body's defines went sealed.
+	for _, p := range []Phase{PhaseRuntime, PhaseExpand} {
+		child := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), ns.Runtime().SealedWriteViewAt(p))
+		phase, sealed = child.writeCoordinates()
+		c.Assert(sealed, qt.IsFalse, qt.Commentf("child of the phase-%d sealed view", p))
+		c.Assert(phase, qt.Equals, p)
+	}
 }
 
 // A bootstrap macro compiled against a library's phase-0 sealed-write view must
