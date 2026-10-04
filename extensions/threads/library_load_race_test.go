@@ -38,7 +38,7 @@ import (
 // run under -race; this is the realistic integration smoke that exercises the
 // same maps through the full (environment …) → LoadLibrary → Register path.
 func TestConcurrentLibraryLoadFromThreads(t *testing.T) {
-	// Progress so far (plans/2026-06-25-apply-frame-cow-race.local.md):
+	// Progress so far (memory/2026-06-25-apply-frame-cow-race.md):
 	//   1. apply-frame copy-on-write race (keysShared) — FIXED, proven by
 	//      environment.TestCopyForApplyInto_ConcurrentSourceRaceFree.
 	//   2. false-circular-dependency on concurrent shared-dependency load — FIXED
@@ -62,7 +62,7 @@ func TestConcurrentLibraryLoadFromThreads(t *testing.T) {
 	//      expansion now runs on its own clause.Matcher.CloneForMatch() (the embedded
 	//      Matcher's capture/syntax stacks + bindingChecker are per-invocation).
 	// This test is the end-to-end regression guard: run under -race (the threads
-	// package is on the -race CI job). See plans/2026-06-25-apply-frame-cow-race.local.md.
+	// package is on the -race CI job). See memory/2026-06-25-apply-frame-cow-race.md.
 
 	c := qt.New(t)
 	ctx := context.Background()

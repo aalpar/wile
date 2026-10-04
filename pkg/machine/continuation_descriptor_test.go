@@ -21,7 +21,7 @@ package machine
 // oracle (continuation_descriptor_oracle_test.go) drives each real method against
 // probe state and asserts the observed behavior matches this table.
 //
-// See plans/2026-07-02-continuation-vmstate-descriptor-oracle.md for the design
+// See memory/2026-07-02-continuation-vmstate-descriptor-oracle.md for the design
 // and the per-site derivation. This supersedes the save/restore/copy rows of
 // vmStateFieldCoverage (vm_state_test.go) — that map's cells are inert strings
 // nothing checks; these rules are driven against the methods.

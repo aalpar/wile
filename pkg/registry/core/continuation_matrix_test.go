@@ -15,7 +15,7 @@
 package core_test
 
 // Continuation invariants over a combinatorial matrix (item 2 of
-// plans/2026-06-28-continuation-testing-enhancement.md).
+// memory/2026-06-28-continuation-testing-enhancement.md).
 //
 // Every regression in the reification+flip arc lived in a COMBINATION — guard-over-cwv,
 // call/cc-in-force-in-dynamic-wind, tail-promoted-op-in-proc-under-guard. These tests

@@ -37,7 +37,7 @@ import (
 // `(END 42)`; the truncation bug drops the `(list ...)` at the sub-context
 // boundary, so the program value is the truncated remainder instead.
 //
-// See plans/2026-06-25-overnight-execution-roadmap.local.md -> "BLAST RADIUS".
+// See memory/2026-06-25-overnight-execution-roadmap.md -> "BLAST RADIUS".
 const captureEscape = `(set! captured (call/cc (lambda (r) (r 42))))`
 
 // redExpected is the correct post-fix program value: a proper list (END 42).
@@ -62,7 +62,7 @@ func redExpected() values.Value {
 // landed across 6d8e7ee5..7acf4797 (dfc3504b claim-3 handler reify + the five
 // boundary reifications 71032eb8/9fa2817a/c7e50def/98c9da72/7acf4797); the gate was
 // removed once all ten passed (2026-06-29). See the design archive doc
-// 2026-06-26-subcontext-continuation-the-open-problem.local.md for the
+// 2026-06-26-subcontext-continuation-the-open-problem.md for the
 // falsification arc that produced the fix.
 //
 // The two `force` rows joined later (2026-08-18): force was the one boundary the

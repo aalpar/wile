@@ -15,7 +15,7 @@
 package wile
 
 // Phase-2 measurement harness for escape-gated tail-frame reclamation
-// (plans/2026-06-11-escape-gated-frame-allocation.local.md §"Phase 2"). It runs
+// (memory/2026-06-11-escape-gated-frame-allocation.md §"Phase 2"). It runs
 // the Phase-1 classifier over every canonical Gabriel benchmark under both
 // immutability tiers and weights each top-level function's reclaimability verdict
 // by its dynamic call count (≈ frame allocations). The output prices the hard

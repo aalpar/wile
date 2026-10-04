@@ -6,7 +6,7 @@
   ;; surfaces those ambient bindings under (scheme cxr) without redefining them.
   ;; Defining them a second time here duplicated the definitions and, under
   ;; WithImmutableTopLevel, made (import (scheme cxr)) collide with the already-
-  ;; stable ambient binding. See plans/2026-06-13-layered-environment-architecture.md.
+  ;; stable ambient binding. See memory/2026-06-13-layered-environment-architecture.md.
   (export
     caar cadr cdar cddr
     caaar caadr cadar caddr

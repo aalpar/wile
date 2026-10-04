@@ -267,7 +267,7 @@ func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingS
 // sealed only under WithRuntimeTarget; phase 1 always is. The phase parameter is
 // error-message context only.
 // This is the single registration helper shared by Runtime and Expand phases — collapsed
-// per Instance C of the dispatch-axis-as-data finding (plans/2026-05-08-dispatch-axis-as-data.md).
+// per Instance C of the dispatch-axis-as-data finding (memory/2026-05-08-dispatch-axis-as-data.md).
 func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame, phase environment.Phase, spec PrimitiveSpec, cfg applyConfig) error {
 	sym := values.NewSymbol(spec.Name)
 

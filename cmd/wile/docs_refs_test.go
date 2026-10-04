@@ -352,14 +352,15 @@ var correctedDocClaims = []correctedDocClaim{
 	{
 		name:  "sage_algebra_design_suffix",
 		doc:   "tools/sage/README.md",
-		stale: "`memory/2026-04-12-sage-algebra-validation-design.md`",
-		why:   "The archived design is memory/2026-04-12-sage-algebra-validation-design.local.md; the .md spelling names nothing.",
+		stale: "`memory/2026-04-12-sage-algebra-validation-design.local.md`",
+		why: "memory/ files dropped their .local.md suffix on 2026-09-14 (wile-memoplans c3776a3); " +
+			"the archived design is memory/2026-04-12-sage-algebra-validation-design.md.",
 	},
 	{
 		name:  "sage_oracle_coverage_location",
 		doc:   "tools/sage/README.md",
 		stale: "`plans/2026-06-07-sage-oracle-coverage-design.md`",
-		why:   "That design was archived: it is memory/2026-06-07-sage-oracle-coverage-design.local.md.",
+		why:   "That design was archived: it is memory/2026-06-07-sage-oracle-coverage-design.md.",
 	},
 	{
 		name:  "r7rs_RegisterFunc_spelling",

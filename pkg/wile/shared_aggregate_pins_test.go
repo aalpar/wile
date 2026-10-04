@@ -119,7 +119,7 @@ func TestPin3bNoAuthorizerSmallEngineReachesThreads(t *testing.T) {
 }
 
 // TestPin3bRestrictiveProfilesResolveAnAuthorizer is the archive's preferred
-// hardening (memory/2026-06-04-security-audit-remediation.local.md:140-142),
+// hardening (memory/2026-06-04-security-audit-remediation.md:140-142),
 // taken in the same sitting and in the opposite direction: under a profile
 // that does install a policy, the privileged sink resolves a non-nil
 // authorizer and the same widening request is refused.

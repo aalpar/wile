@@ -228,7 +228,7 @@ func TestFreeList_ConcurrentAcquireRelease(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // unsyncFreeList[T] — the lock-free per-thread variant. Single-goroutine by the
-// per-thread-pool invariant (plans/2026-06-08-per-thread-pools-invariant.local.md);
+// per-thread-pool invariant (memory/2026-06-08-per-thread-pools-invariant.md);
 // these pin its allocate-on-miss / reset-on-release semantics and the pool
 // independence that licenses dropping FreeList's mutex and atomic counters.
 // ---------------------------------------------------------------------------

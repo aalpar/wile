@@ -2677,7 +2677,7 @@ Stage C adversarial-review successors, left out so the arc could land. All four 
   `NewMachineContinuation` left `envPooled` false, so `RestoreAndRelease` dropped the frame
   (fixed by `transferEnvOwnership`, one owner); and `applyToValuesCode`'s `OpApply` overwrote
   `mc.env` (fixed by `OpReleaseEnvFrame` after `OpPushValues`). Both halves load-bearing.
-  Invariant H (`memory/envpooled-clear-is-invariant-h`) survives because the one Go site that
+  Invariant H (auto-memory `envpooled-clear-is-invariant-h`) survives because the one Go site that
   parents a lasting frame on a primitive's apply frame is now `MachineContext.ClosureEnv`, which
   clears the flag as `OpMakeClosure` does.
   **Measured**, 1M `(force (delay (* n 2)))`: sub-context form 0.48 s / 312 MB / 6.6M objects;

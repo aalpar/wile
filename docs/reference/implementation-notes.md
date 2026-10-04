@@ -30,7 +30,7 @@ All four binding forms are **core compiled**: the expander / validator / compile
 > Binding forms (let, let*, letrec, letrec*) are now core compiled forms,
 > handled directly by the expander/validator/compiler pipeline.
 
-(The comment also references `plans/CORE-LET.md` for "the design". That plan file has been retired; the design now lives in `docs/compiler/core-let.md`.)
+(The comment also references `memory/CORE-LET.md` for "the design". That plan file has been retired; the design now lives in `docs/compiler/core-let.md`.)
 
 **Why:**
 

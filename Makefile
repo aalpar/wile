@@ -727,7 +727,7 @@ tools-test:
 	@$(MAKE) --no-print-directory -C $(TOOLS_DIR) test
 
 # Rank the codebase's worst functions, files, or packages by cognitive
-# complexity. See plans/2026-08-22-complexity-inventory-refactor.local.md for
+# complexity. See plans/2026-08-22-complexity-inventory-refactor.md for
 # what the numbers mean and, more usefully, what they do NOT mean: a high score
 # on a wide dispatch table is an artifact of the metric, not a finding.
 #   make complexity

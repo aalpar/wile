@@ -112,7 +112,7 @@
     (test 2 (graph-query ga "A" "E"))))
 
 ;; Regression: counting semiring on a cyclic graph used to hang
-;; indefinitely (memory/feedback-counting-semiring-on-cycles.md
+;; indefinitely (auto-memory `feedback-counting-semiring-on-cycles.md'
 ;; records a 3-hour incident). compute-via-worklist now caps at
 ;; 2·V·E outer-loop iterations and raises an error pointing the
 ;; caller at (wile algebragraph) count-paths-cyclic. This test pins

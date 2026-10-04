@@ -2,7 +2,7 @@
 # Flag plan files whose Status header is stale with respect to reality.
 #
 # A plan's status lives in two places -- its own "**Status:**" header and
-# TODO.md, the index of record (see plans/CLAUDE.local.md, "Where the index
+# TODO.md, the index of record (see plans/CLAUDE.md, "Where the index
 # lives"). Only TODO.md is on the post-merge checklist, so per-file headers rot,
 # and a triage pass then inherits a false "open" verdict from the header.
 #

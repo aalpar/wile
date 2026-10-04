@@ -5,7 +5,7 @@
 ;;; that `modular-counting-semiring' and `saturating-counting-semiring'
 ;;; tractably handle the cyclic-counting case that hangs the exact
 ;;; `counting-semiring' (3-hour incident on the 539-node machine package,
-;;; documented in memory/feedback-counting-semiring-on-cycles.md).
+;;; documented in auto-memory `feedback-counting-semiring-on-cycles.md').
 ;;;
 ;;; Shape matches the incident: 539-node forward chain with 12 back-edges
 ;;; sprinkled at regular intervals. Total V=539, E≈550. Worklist safety

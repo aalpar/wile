@@ -167,7 +167,7 @@ func TestVmState(t *testing.T) {
 // (continuation_descriptor_oracle_test.go). Only NewMachineContext and
 // NewSubContext remain here: they are construction paths, not save/restore
 // transitions, and the oracle does not drive them. See
-// plans/2026-07-02-continuation-vmstate-descriptor-oracle.md.
+// memory/2026-07-02-continuation-vmstate-descriptor-oracle.md.
 //
 // Values describe the handling semantics:
 //

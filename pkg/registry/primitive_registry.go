@@ -175,7 +175,7 @@ type GlobalValue struct {
 // Apply skips them. They are appended via AddDocumentation or
 // AddDocOnlyPrimitive and are the post-Phase-1 unification of what used to
 // be a separate `docs []DocEntry` slice (collapsed per Finding 2 of
-// plans/2026-05-18-registry-structural-reduction.md).
+// memory/2026-05-18-registry-structural-reduction.md).
 type BindingSpec struct {
 	Name    string
 	Doc     string
@@ -203,7 +203,7 @@ type BindingSpec struct {
 // WithoutCategory, and WithoutBindings all assume deepCopy covers every field.
 //
 // Note: the `docs []DocEntry` slice was removed in Phase 1
-// (plans/2026-05-18-registry-structural-reduction.md, Finding 2):
+// (memory/2026-05-18-registry-structural-reduction.md, Finding 2):
 // simple AddDocumentation entries now share bindingSpecs (DocOnly=true);
 // rich AddDocOnlyPrimitive entries moved to the dedicated docPrimitives
 // slice (preserves full PrimitiveSpec metadata).

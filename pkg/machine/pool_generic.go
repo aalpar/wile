@@ -182,7 +182,7 @@ func (p *FreeList[T]) Stats() PoolSnapshot {
 // which a per-thread freelist needs, because each one is owned by exactly one
 // goroutine: a frame allocated by a thread is never released by another (the
 // per-thread-pool invariant, pinned by TestUnsyncFreeList_ConcurrentDistinctPools
-// and plans/2026-06-08-per-thread-pools-invariant.local.md). Removing that
+// and memory/2026-06-08-per-thread-pools-invariant.md). Removing that
 // synchronization is the bulk of the env-frame pool round-trip cost on hot
 // non-tail calls.
 //

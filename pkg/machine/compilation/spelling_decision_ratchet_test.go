@@ -40,7 +40,7 @@ import (
 //
 // WHY A CEILING AND NOT A LIST: a list would have to be regenerated on every
 // rename, and the regeneration is where a ratchet goes falsely green (see
-// memory/axis-b-manifest-line-drift). A ceiling cannot be satisfied by moving a
+// auto-memory `axis-b-manifest-line-drift`). A ceiling cannot be satisfied by moving a
 // decision between files or functions.
 const spellingDecisionCeiling = 5
 

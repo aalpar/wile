@@ -15,7 +15,7 @@
 package threads_test
 
 // CI-stable parallel scaling benchmarks for attributing the residual ceiling on
-// SRFI-18 thread scaling (see plans/2026-06-10-pool-parallel-scaling.local.md).
+// SRFI-18 thread scaling (see memory/2026-06-10-pool-parallel-scaling.md).
 //
 // Per-thread allocation pools (machine/pool.go) converted threads from a slowdown
 // into a real speedup. What still serializes the cores is the open question these
@@ -35,8 +35,8 @@ package threads_test
 //
 // The two-kernel discrimination has fired. Compute holds near-linear scaling
 // through 8 and still gains at 16; Control is flat from 8 on. The older shared
-// reading ("~2.5x at 8, 16 no better than 8", plans/2026-06-10-pool-parallel-
-// scaling.local.md) now describes Control alone. Not attributed: the 2026-06-10
+// reading ("~2.5x at 8, 16 no better than 8", memory/2026-06-10-pool-parallel-
+// scaling.md) now describes Control alone. Not attributed: the 2026-06-10
 // run was different hardware AND predates unsyncFreeList (PR #777), which took
 // the residual atomics out of the per-thread pools.
 //

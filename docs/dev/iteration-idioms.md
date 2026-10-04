@@ -148,5 +148,5 @@ Do not file PRs whose sole purpose is converting Tier 3 to Tier 2 — the
 mechanical cost outweighs the convention benefit when there's no
 underlying friction.
 
-See `plans/2026-05-05-iter-seq-cascade.local.md` for the active selective
+See `plans/2026-05-05-iter-seq-cascade.md` for the active selective
 migration list.

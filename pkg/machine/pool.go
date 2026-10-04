@@ -135,7 +135,7 @@ func resetEnvFramePoolEntry(f *environment.EnvironmentFrame) {
 //
 // Safe only because continuations are thread-confined (a frame allocated by one
 // thread is never released by another); see
-// plans/2026-06-08-per-thread-pools-invariant.md.
+// memory/2026-06-08-per-thread-pools-invariant.md.
 //
 // The three freelists hit on every non-tail closure call (env frame +
 // continuation frame + eval stack) are all per-thread. A nil threadPools

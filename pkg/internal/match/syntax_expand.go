@@ -337,7 +337,7 @@ func syntaxListToSlice(v syntax.SyntaxValue) ([]syntax.SyntaxValue, error) {
 // subset permits, while the outer macro's introduction leaves the pattern's
 // use-site scope off the template, which subset refuses. The ceiling, and the
 // binder-scope log that fed it, are gone — see
-// memory/2026-08-20-use-site-scopes-impl.local.md.
+// memory/2026-08-20-use-site-scopes-impl.md.
 func TemplateDenotesPatternVariable(templateScopes, patternScopes syntax.Scopes) bool {
 	return syntax.ScopesMatch(templateScopes, patternScopes)
 }
@@ -436,7 +436,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 	// global / library scope is only a fallback, consulted AFTER that local match
 	// (see CompileSymbol; Change 2). Previously this reference lacked the intro
 	// scope, so it could not match the co-introduced binder.
-	// See plans/2026-06-15-macro-hygiene-global-shadow-fix.local.md (Change 1).
+	// See memory/2026-06-15-macro-hygiene-global-shadow-fix.md (Change 1).
 	globalBinding := resolution.GetGlobal()
 	if globalBinding != nil {
 		newSym := syntax.NewSyntaxSymbol(key, templateCtx)

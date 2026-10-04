@@ -359,7 +359,7 @@ Two monoidal operations where times distributes over plus.
 
 #### Counting variants
 
-The counting semiring's exact arithmetic is intractable on cyclic graphs (the path set is infinite, so the sum diverges) and expensive on deep walks. These variants trade exactness for tractability; all four are *true semirings* (every semiring axiom holds). They declare a carrier symbol so `(wile algebra graph)` can dispatch on it. See `memory/2026-05-24-approximate-counting-semirings.local.md`.
+The counting semiring's exact arithmetic is intractable on cyclic graphs (the path set is infinite, so the sum diverges) and expensive on deep walks. These variants trade exactness for tractability; all four are *true semirings* (every semiring axiom holds). They declare a carrier symbol so `(wile algebra graph)` can dispatch on it. See `memory/2026-05-24-approximate-counting-semirings.md`.
 
 - `(bigint-counting-semiring)` -- same arithmetic as `counting-semiring`, but carrier `'big-int` opts into the `count-paths-in-dag` / `count-paths-cyclic` Go kernels when consumed by `make-graph-analysis` with a `#f` weight-fn (unit weights); any `equal?`-comparable node ids qualify. On a DAG the answers match `counting-semiring`; on a cyclic adjacency the kernel answers with entry counts where the generic worklist raises
 - `(modular-counting-semiring P)` -- carrier is Z/PZ; plus and times are arithmetic mod `P` (an exact integer >= 2); carrier `'modular`. For fingerprints, parity, and Schwartz-Zippel identity testing -- NOT approximate counts (a true count divisible by `P` reads as 0). Not cycle-safe: Z/PZ has no absorbing top, so worklist iteration on cycles hits the safety cap. `mersenne-31` (`2^31 - 1`) and `mersenne-61` (`2^61 - 1`) are provided as named modulus choices
@@ -729,7 +729,7 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 
 ## Matrix -- `(wile algebra matrix)`
 
-Semiring-parameterized dense and sparse matrices. Arithmetic follows the coefficient semiring; the same matrix type covers Boolean (reachability), tropical (shortest path), counting (ordinary arithmetic), and user-defined semirings. See `memory/2026-04-21-matrix-path-d-impl.local.md` for the polymorphism design.
+Semiring-parameterized dense and sparse matrices. Arithmetic follows the coefficient semiring; the same matrix type covers Boolean (reachability), tropical (shortest path), counting (ordinary arithmetic), and user-defined semirings. See `memory/2026-04-21-matrix-path-d-impl.md` for the polymorphism design.
 
 ### Constructors
 
@@ -916,7 +916,7 @@ Counting on cyclic graphs has no finite answer in the strict counting semiring `
 - **Counting semiring on a DAG:** topological-order single-pass propagation. Each edge relaxed exactly once. Counts exact (bignum-promoted as needed).
 - **Counting semiring on a cyclic graph:** worklist Bellman-Ford does not converge (over-counts on each re-pop); `graph-query` raises once the worklist exceeds its `2·V·E` iteration cap. Use one of:
   - **`bigint-counting-semiring`**: `make-graph-analysis` attaches the SCC-condensation kernel for that carrier (with `#f` weight-fn) and `graph-query` routes through it, so cyclic adjacencies answer without the caller touching `count-paths-cyclic`. Counts on non-trivial SCCs carry "entry count" semantics: the path-count *to* the SCC, not within it.
-  - **Approximate-counting semirings** (`saturating-counting-semiring`, `modular-counting-semiring`, `log-counting-semiring`) — bounded carriers that converge even on cycles. See `memory/2026-05-24-approximate-counting-semirings.local.md`.
+  - **Approximate-counting semirings** (`saturating-counting-semiring`, `modular-counting-semiring`, `log-counting-semiring`) — bounded carriers that converge even on cycles. See `memory/2026-05-24-approximate-counting-semirings.md`.
 
 ## SCC Condensation Fast Path -- `(wile algebragraph)`
 
@@ -947,7 +947,7 @@ Graphs as combinatorial objects. Isomorphism via 1-WL + individualization-refine
 
 ### Constructors
 
-- `(make-graph adjacency . opts)` -- adjacency given as `((v . ((w . edge-data) ...)) ...)`; opts are trailing pairs keyed `directed?`, `multi?`, `self-loops?`, `setoid`, `symmetrize?`, and, for a finitely-generated graph built from `'()`, `seed`, `neighbor-fn`, `max-size`; see `memory/2026-04-22-combinatorial-graph-impl.local.md` for the record shape
+- `(make-graph adjacency . opts)` -- adjacency given as `((v . ((w . edge-data) ...)) ...)`; opts are trailing pairs keyed `directed?`, `multi?`, `self-loops?`, `setoid`, `symmetrize?`, and, for a finitely-generated graph built from `'()`, `seed`, `neighbor-fn`, `max-size`; see `memory/2026-04-22-combinatorial-graph-impl.md` for the record shape
 
 ### Presets
 
@@ -996,7 +996,7 @@ Graphs as combinatorial objects. Isomorphism via 1-WL + individualization-refine
 ### Partition (balanced cut)
 
 - `(graph-partition G [opts...])` -- two-way partition minimizing cut weight at a fixed balance, via Kernighan-Lin pair-swaps. Returns an alist with keys `group-a`, `group-b`, `cut-weight`, `sizes` (`(NA . NB)`), and `normalized-cut` (`cut-weight / total-edge-weight`; a cost, lower is better; `0.0` if no edges).
-  - **This is a *balanced* cut, NOT a minimum cut.** A global minimum cut degenerates to isolating a single vertex, so KL holds the partition sizes (set by the seed) and optimizes only the cut. The s–t and global min-cut algorithms (Ford-Fulkerson, Dinic, Karger, Stoer-Wagner) were considered and rejected; see `memory/2026-06-08-balanced-graph-partition-design.local.md` §4 for why.
+  - **This is a *balanced* cut, NOT a minimum cut.** A global minimum cut degenerates to isolating a single vertex, so KL holds the partition sizes (set by the seed) and optimizes only the cut. The s–t and global min-cut algorithms (Ford-Fulkerson, Dinic, Karger, Stoer-Wagner) were considered and rejected; see `memory/2026-06-08-balanced-graph-partition-design.md` §4 for why.
   - Opts (trailing alist entries): `(method . 'kernighan-lin)` (default; only value), `(balance . 0.25)` (imbalance tolerance in `(0,1)`, bounding the seed ratio KL preserves), `(weight . PROC)` (`edge-data -> non-negative number`; default unit weight), `(seed . ALIST)` (`vertex -> 'a|'b`; default balanced `⌈n/2⌉` split).
 
 ### Validation

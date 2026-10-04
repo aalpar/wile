@@ -445,7 +445,7 @@ func PrimApropos(mc machine.CallContext) error {
 // libraryRegistrySearcher adapts *compilation.LibraryRegistry to
 // registry.LibrarySearcher. The adapter lives here, not in the registry
 // package, because registry/ must not import machine/compilation (Finding 7
-// of plans/2026-05-18-registry-structural-reduction.md). registry/core
+// of memory/2026-05-18-registry-structural-reduction.md). registry/core
 // already imports both packages, so the conversion belongs here.
 type libraryRegistrySearcher struct {
 	reg *compilation.LibraryRegistry

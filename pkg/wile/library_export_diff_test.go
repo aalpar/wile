@@ -343,7 +343,7 @@ get-environment-variables
 			"string-for-each", "string-length", "string-ref", "string-set!",
 			"string?",
 			// Deliberate v1 scope cuts, recorded in
-			// memory/2026-05-03-string-primitives-design.local.md §11.
+			// memory/2026-05-03-string-primitives-design.md §11.
 			"string-append/shared", "string-concatenate-reverse",
 			"string-concatenate-reverse/shared", "string-concatenate/shared",
 			"string-hash-ci", "string-titlecase!", "string-unfold",

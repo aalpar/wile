@@ -7,7 +7,7 @@
 ;; procedures or any user code runs. Provides standard R7RS
 ;; conditionals, lazy evaluation, parameters, exceptions, records, and
 ;; iteration. Binding forms (let, let*, letrec, letrec*) are core
-;; compiled — see plans/CORE-LET.md.
+;; compiled — see memory/CORE-LET.md.
 ;;
 ;; Lambda: The Ultimate Imperative (Steele & Sussman, AIM-353, 1976).
 ;; Derived forms are defined as macros over core forms per R7RS §7.3.
@@ -43,7 +43,7 @@
 
 ;; Binding forms (let, let*, letrec, letrec*) are now core compiled forms,
 ;; handled directly by the expander/validator/compiler pipeline.
-;; See plans/CORE-LET.md for the design.
+;; See memory/CORE-LET.md for the design.
 ;; with-binding-scope is retained for user-defined binding macros.
 
 ;; Conditional forms

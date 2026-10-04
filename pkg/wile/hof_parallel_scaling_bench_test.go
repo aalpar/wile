@@ -24,8 +24,8 @@ import (
 
 // Phase 5 of callback specialization (Strategy A): the real-stdlib parallel
 // confirmation of the hand-written Q3 measurement
-// (plans/2026-06-22-callback-specialization-A-impl.local.md;
-// 2026-06-22-callback-specialization-design.local.md § Q3 results).
+// (memory/2026-06-22-callback-specialization-A-impl.md;
+// 2026-06-22-callback-specialization-design.md § Q3 results).
 //
 // Q3 measured, on a hand-written drive-r loop, that inline-reclaim lifts P-core
 // effective parallelism from the Leaky ~2.7x plateau to ~3.1-3.3x and that the

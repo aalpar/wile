@@ -186,8 +186,8 @@ type MachineContext struct {
 // and whose finalizer — together with resolveTimerInterrupt on a fired
 // timer — restores the parent and cancels, as one atomic teardown.
 //
-// Finding 7 of plans/2026-05-06-machine-structural-reduction.md
-// (stage 2 of 3); see plans/2026-05-12-machine-sr-finding7-timer-impl.md.
+// Finding 7 of memory/2026-05-06-machine-structural-reduction.md
+// (stage 2 of 3); see memory/2026-05-12-machine-sr-finding7-timer-impl.md.
 // The bare install/inspect/clear API (SetTimer/ClearTimer/TimerHandler)
 // was retired once with-timeout was reified onto this linked stack: its
 // single-timer guard was incompatible with the nesting the parent pointer
@@ -207,8 +207,8 @@ type timerState struct {
 // via SetExpanderContext or SetSyntaxCaseState; nil reads return the
 // zero value through the accessors below.
 //
-// Finding 7 of plans/2026-05-06-machine-structural-reduction.md
-// (stage 1 of 3); see plans/2026-05-12-machine-sr-finding7-expansion-impl.md.
+// Finding 7 of memory/2026-05-06-machine-structural-reduction.md
+// (stage 1 of 3); see memory/2026-05-12-machine-sr-finding7-expansion-impl.md.
 //
 // The 'expanderCtx' field is typed ExpanderCtx (an interface defined in
 // machine/) so the dependency direction (compilation → machine) holds.
@@ -1719,7 +1719,7 @@ func (p *MachineContext) SetMaxStackSize(n uint64) {
 // Returns nil immediately in the unlimited-stack default (maxStackSize == 0);
 // otherwise delegates to reportStackOverflow. The split keeps this wrapper
 // under Go's inline budget — see PR #636 and Finding 5 of
-// plans/2026-05-06-machine-structural-reduction.md.
+// memory/2026-05-06-machine-structural-reduction.md.
 func (p *MachineContext) checkStackSize() error {
 	if p.maxStackSize == 0 {
 		return nil

@@ -52,7 +52,7 @@ type nilPin struct {
 // (define-syntax guard-aux …) captured guard's private helper.
 //
 // Both are now closed, so this test can certify both phases (updated 2026-07-22, the
-// free-template-id-hygiene arc — memory/2026-07-22-free-template-id-hygiene-impl.local.md):
+// free-template-id-hygiene arc — memory/2026-07-22-free-template-id-hygiene-impl.md):
 //
 //   - D1 carved a sealed EXPAND base (Namespace.SealedExpandBase, phase 1): bootstrap
 //     macros/expanders live there, immutable, so a top-level define-syntax shadows in the
