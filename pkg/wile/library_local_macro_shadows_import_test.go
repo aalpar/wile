@@ -80,7 +80,7 @@ func TestLibraryLocalMacroShadowsImportedMacro(t *testing.T) {
 	// The same shadowing must hold at the TOP LEVEL, not only for a library
 	// body: importing a macro and then redefining it with a local define-syntax
 	// must use the local one. This exercises the CopyLibraryBindingsToEnvAtPhase
-	// import path (distinct from copyLibraryBindingsDirect used by libraries).
+	// import path (distinct from planCopyDirect used by libraries).
 	t.Run("top-level local define-syntax shadows an imported macro", func(t *testing.T) {
 		eng := newEng(t)
 		v, err := eng.EvalMultiple(ctx, `(import (mb))

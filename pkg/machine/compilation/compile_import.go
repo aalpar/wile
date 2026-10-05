@@ -15,8 +15,6 @@
 package compilation
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -33,73 +31,47 @@ import (
 //   - (import (for-meta 2 (scheme base)))       ; Phase 2
 func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is (<import-set> ...) - args after 'import' keyword
-	if syntax.IsSyntaxEmptyList(expr) {
-		return nil // empty import is valid
-	}
-
-	importSets, ok := expr.(*syntax.SyntaxPair)
-	if !ok {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "import: expected list of import sets"))
-	}
-
-	// Process each import set
-	v, err := syntax.SyntaxForEach(ctctx.ctx, importSets, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		return ResolveAndInstallImportSet(ctx, importSetExpr.UnwrapAll(), p.env, ImportStageCompile, p.evaluator)
-	})
+	err := ResolveAndInstallImportSets(ctctx.ctx, expr, p.env, ImportStageCompile, p.evaluator)
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "import: error processing import sets"))
-	}
-	if !syntax.IsSyntaxEmptyList(v) {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAList, "import: unexpected return value"))
 	}
 	return nil
 }
 
-// processLibraryImport handles (import <import-set> ...) within a library.
-//
-// This shares the parse→load→apply prefix with ResolveAndInstallImportSet
-// (via resolveImportSets) but diverges at installation: library-internal
-// imports install directly into lib.Env via copyLibraryBindingsDirect,
-// because lib.Env.AtPhase() routes to the parent's phase registry.
+// processLibraryImport handles a library's (import <import-set> ...)
+// declaration. It shares planImportForm and installPendingImports with
+// ResolveAndInstallImportSets, all or none, and differs in its planner,
+// planLibraryImport: that plans into lib.Env with planCopyDirect, whose doc says
+// why a declaration installs on the mutable tier, and reports lib as the
+// importer.
 func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
-	if syntax.IsSyntaxEmptyList(args) {
-		return nil // empty import is valid
-	}
-
-	argsPair, ok := args.(*syntax.SyntaxPair)
-	if !ok {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "import: expected list of import sets"))
-	}
-
-	// Process each import set
-	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		resolved, err := resolveImportSets(ctx, importSetExpr.UnwrapAll(), p.env, p.evaluator)
-		if err != nil {
-			return wrapSourcedError(importSetExpr.SourceContext(), err)
-		}
-		for _, res := range resolved {
-			err = p.installLibraryImport(lib, res)
-			if err != nil {
-				return wrapSourcedError(importSetExpr.SourceContext(), err)
-			}
-		}
-		return nil
+	pending, err := planImportForm(ctctx.ctx, args, p.env, p.evaluator, func(res *ResolvedImportSet) ([]importInstall, func(), error) {
+		return p.planLibraryImport(lib, res)
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	return installPendingImports(pending)
 }
 
-// installLibraryImport installs one resolved library import into lib.Env for
-// processLibraryImport.
-func (p *CompileTimeContinuation) installLibraryImport(lib *CompiledLibrary, res *ResolvedImportSet) error {
-	fireImportObserver(p.env, res.Library, res.Bindings, lib.Name, ImportStageCompile)
-
+// planLibraryImport plans one resolved library import into lib.Env for
+// processLibraryImport: its installs, and the observer they fire.
+func (p *CompileTimeContinuation) planLibraryImport(lib *CompiledLibrary, res *ResolvedImportSet) ([]importInstall, func(), error) {
 	// Compose the parsed for-syntax/for-meta shift with the library env's own
-	// phase, the same composition ResolveAndInstallImportSet performs at top
+	// phase, the same composition ResolveAndInstallImportSets performs at top
 	// level. Based on lib.Env rather than p.env because lib.Env is the frame
 	// the install targets, so the base and the target cannot drift apart.
 	targetPhase, err := composePhaseShift("import", lib.Env.PhaseLevel(), res.ImportSet.PhaseShift)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	return copyLibraryBindingsDirect(res.Library, res.Bindings, lib.Env, targetPhase)
+	plan, err := planCopyDirect(res.Library, res.Bindings, lib.Env, targetPhase)
+	if err != nil {
+		return nil, nil, err
+	}
+	env := p.env
+	fire := func() {
+		fireImportObserver(env, res.Library, res.Bindings, lib.Name, ImportStageCompile)
+	}
+	return plan, fire, nil
 }

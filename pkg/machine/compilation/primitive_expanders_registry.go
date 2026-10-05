@@ -105,7 +105,7 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 // mutable-tier fallback, dies). Lookup still reaches these: LookupPrimitiveExpander
 // resolves env.Expand() through the ranked probe, and these slots are tierExactSealed at
 // phase 1. SealedWriteViewAt(PhaseExpand) yields a view whose phaseLevel is 1, and
-// writeCoordinates (environment_frame.go) stamps (phase 1, sealed), so an expander is an
+// WriteCoordinates (environment_frame.go) stamps (phase 1, sealed), so an expander is an
 // exact-phase-1 binding.
 //
 // A full engine muddies this by name: syntax-rules, quote, and import ALSO carry a

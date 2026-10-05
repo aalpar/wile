@@ -453,6 +453,13 @@ func rememberedEqualPair(ht *values.Hashtable) (values.Callable, values.Callable
 // Raising when neither candidate matches rather than returning #f is the point: a
 // profile that ships these accessors without equal-hash is misconfigured, and a
 // silent #f would be indistinguishable from the legitimate eq/eqv answer above.
+//
+// A missing registration is one cause of the miss, not the only one. Both probes
+// ask PHASE 0, whatever phase the caller runs at, so under WithoutAmbientBindings
+// the name misses unless the program imports it at phase 0 (an import at phase 1
+// does not reach either probe), and a phase-0 shadow with no sealed base beneath
+// it misses too. The message names the phase and the three causes rather than
+// guessing one.
 func setRecognizedPrimitive(mc machine.CallContext, identity *machine.PrimitiveIdentity, name, site string) error {
 	sym := values.NewSymbol(name)
 	// One namespace resolution, two frames off it — MutableRuntimeOrNil walks the
@@ -495,7 +502,7 @@ func setRecognizedPrimitive(mc machine.CallContext, identity *machine.PrimitiveI
 	}
 	if q == nil {
 		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil,
-			"%s: %s is not registered in this namespace", site, name)
+			"%s: no binding of %s at phase 0 is the primitive (it is unregistered, not imported at phase 0, or shadowed)", site, name)
 	}
 	mc.SetValue(q)
 	return nil

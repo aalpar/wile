@@ -128,7 +128,7 @@ func TestChildRuntimeMirrorsTheWholeSealedAxis(t *testing.T) {
 }
 
 // EVERY write lands at (phase = the writing view's phase, the view's sealed
-// flag) — the phase-0 sealed write included. Stage A deleted writeCoordinates'
+// flag) — the phase-0 sealed write included. Stage A deleted WriteCoordinates'
 // one special arm, which used to send a sealed phase-0 write to a phase-blind
 // ANY coordinate so that every phase's read reached it. Cross-phase visibility is now a property
 // of the dialect's declared initial imports, carried by a bulk row over the
@@ -140,19 +140,19 @@ func TestSealedWriteCoordinates(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
 
-	phase, sealed := ns.Runtime().writeCoordinates()
+	phase, sealed := ns.Runtime().WriteCoordinates()
 	c.Assert(sealed, qt.IsFalse)
 	c.Assert(phase, qt.Equals, PhaseRuntime)
 
-	phase, sealed = ns.Runtime().SealedWriteViewAt(PhaseRuntime).writeCoordinates()
+	phase, sealed = ns.Runtime().SealedWriteViewAt(PhaseRuntime).WriteCoordinates()
 	c.Assert(sealed, qt.IsTrue)
 	c.Assert(phase, qt.Equals, PhaseRuntime)
 
-	phase, sealed = ns.Runtime().SealedWriteViewAt(PhaseExpand).writeCoordinates()
+	phase, sealed = ns.Runtime().SealedWriteViewAt(PhaseExpand).WriteCoordinates()
 	c.Assert(sealed, qt.IsTrue)
 	c.Assert(phase, qt.Equals, PhaseExpand)
 
-	phase, sealed = ns.AtPhase(PhaseExpand).writeCoordinates()
+	phase, sealed = ns.AtPhase(PhaseExpand).WriteCoordinates()
 	c.Assert(sealed, qt.IsFalse)
 	c.Assert(phase, qt.Equals, PhaseExpand)
 
@@ -162,7 +162,7 @@ func TestSealedWriteCoordinates(t *testing.T) {
 	// SealedWriteViewAt and AtPhase row green while a body's defines went sealed.
 	for _, p := range []Phase{PhaseRuntime, PhaseExpand} {
 		child := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), ns.Runtime().SealedWriteViewAt(p))
-		phase, sealed = child.writeCoordinates()
+		phase, sealed = child.WriteCoordinates()
 		c.Assert(sealed, qt.IsFalse, qt.Commentf("child of the phase-%d sealed view", p))
 		c.Assert(phase, qt.Equals, p)
 	}

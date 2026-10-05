@@ -163,7 +163,7 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 		},
 		{
 			// (only LIB) with zero identifiers selects the empty subset ⇒ import nothing
-			// (R7RS §5.6: <identifier> … is zero-or-more).
+			// (R7RS §5.2: <identifier> … is zero-or-more).
 			name:      "only with no identifiers imports nothing",
 			importSet: build(only()),
 			wantKeys:  []string{},
@@ -421,4 +421,32 @@ func TestImportStageString(t *testing.T) {
 			qt.Assert(t, tc.stage.String(), qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestPendingImportWrapErr pins pendingImport's nil-wrap contract: no wrap adds
+// no context, and a wrap is applied. CopyLibraryBindingsToEnvAtPhase is the one
+// caller that passes none, and no test drives it into a check or install
+// refusal, the only refusals wrapErr sees.
+func TestPendingImportWrapErr(t *testing.T) {
+	c := qt.New(t)
+	cause := werr.WrapForeignErrorf(werr.ErrDuplicateBinding, "test: conflict")
+
+	bare := pendingImport{}.wrapErr(cause)
+	c.Assert(bare, qt.ErrorIs, werr.ErrDuplicateBinding)
+	c.Assert(bare.Error(), qt.Equals, cause.Error())
+
+	wrapped := pendingImport{wrap: func(err error) error {
+		return werr.WrapForeignErrorf(err, "test: context")
+	}}.wrapErr(cause)
+	c.Assert(wrapped, qt.ErrorIs, werr.ErrDuplicateBinding)
+	c.Assert(wrapped.Error(), qt.Matches, `test: context: .*test: conflict.*`)
+}
+
+// TestResolveAndInstallImportSetsNilIsNone pins that the exported entry point
+// takes a nil import form as one with no import sets rather than panicking: nil
+// means none.
+func TestResolveAndInstallImportSetsNilIsNone(t *testing.T) {
+	c := qt.New(t)
+	err := ResolveAndInstallImportSets(context.Background(), nil, environment.NewNamespace().Runtime(), ImportStageCompile, nil)
+	c.Assert(err, qt.IsNil)
 }

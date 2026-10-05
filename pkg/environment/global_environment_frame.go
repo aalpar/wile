@@ -1744,6 +1744,39 @@ func (p *GlobalEnvironmentFrame) createGlobalBindingAt(key *values.Symbol, bt Bi
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	s, ok := p.reusableSlotLocked(key, scopes, phase, sealed, imported)
+	if ok {
+		q := newScopeKeyedGlobalIndex(key, p, s, syntax.ScopesOf(scopes))
+		return q, false
+	}
+	i := len(p.bindings)
+	ref := slotRef{slot: i, phase: phase, sealed: sealed}
+	p.keys[*key] = append(p.keys[*key], ref)
+	p.noteExactPhaseLocked(phase)
+	// append the new binding at index i. Global bindings carry an atomicCell so
+	// they can be read lock-free from other threads (see binding.go atomicCell).
+	bnd := newGlobalBinding(values.Void, bt, scopes)
+	if imported {
+		// Stamped BEFORE publication: tierOf ranks on this, so the slot must never
+		// be visible carrying the wrong tier. The caller's markBindingImported
+		// still runs and adds the origin and export names; this sets only the bit
+		// the coordinate depends on.
+		bnd.UpdateMeta(func(m *BindingMeta) bool {
+			m.Imported = true
+			return true
+		})
+	}
+	p.bindings = append(p.bindings, bnd)
+	q := newScopeKeyedGlobalIndex(key, p, ref, syntax.ScopesOf(scopes))
+	return q, true
+}
+
+// reusableSlotLocked is createGlobalBindingAt's reuse rule: the slot a create
+// with these arguments hands back instead of minting one. It is the rule's only
+// statement, so a caller that asks before creating (ReusableImportedGlobalBindingAt)
+// and the create itself cannot disagree about which slot a write lands on.
+// Caller holds p.mu.
+func (p *GlobalEnvironmentFrame) reusableSlotLocked(key *values.Symbol, scopes syntax.Scopes, phase Phase, sealed bool, imported bool) (slotRef, bool) {
 	for _, s := range p.keys[*key] {
 		if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
 			continue
@@ -1771,30 +1804,25 @@ func (p *GlobalEnvironmentFrame) createGlobalBindingAt(key *values.Symbol, bt Bi
 			continue
 		}
 		if scopeSetsEqual(p.bindings[s.slot].Scopes(), scopes) {
-			q := newScopeKeyedGlobalIndex(key, p, s, syntax.ScopesOf(scopes))
-			return q, false
+			return s, true
 		}
 	}
-	i := len(p.bindings)
-	ref := slotRef{slot: i, phase: phase, sealed: sealed}
-	p.keys[*key] = append(p.keys[*key], ref)
-	p.noteExactPhaseLocked(phase)
-	// append the new binding at index i. Global bindings carry an atomicCell so
-	// they can be read lock-free from other threads (see binding.go atomicCell).
-	bnd := newGlobalBinding(values.Void, bt, scopes)
-	if imported {
-		// Stamped BEFORE publication: tierOf ranks on this, so the slot must never
-		// be visible carrying the wrong tier. The caller's markBindingImported
-		// still runs and adds the origin and export names; this sets only the bit
-		// the coordinate depends on.
-		bnd.UpdateMeta(func(m *BindingMeta) bool {
-			m.Imported = true
-			return true
-		})
+	return slotRef{}, false
+}
+
+// ReusableImportedGlobalBindingAt returns the binding CreateImportedGlobalBindingAt
+// would hand back for these arguments, or nil when it would create one. It
+// creates nothing, which is what lets an import form be checked whole before any
+// of it is installed.
+func (p *GlobalEnvironmentFrame) ReusableImportedGlobalBindingAt(key *values.Symbol, scopes syntax.Scopes, phase Phase, sealed bool) *Binding {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	s, ok := p.reusableSlotLocked(key, scopes, phase, sealed, true)
+	if !ok {
+		return nil
 	}
-	p.bindings = append(p.bindings, bnd)
-	q := newScopeKeyedGlobalIndex(key, p, ref, syntax.ScopesOf(scopes))
-	return q, true
+	return p.bindings[s.slot]
 }
 
 // HISTORY (2026-07-19, resolved 2026-08-06): returning the pin above is task

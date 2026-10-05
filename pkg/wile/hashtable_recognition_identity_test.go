@@ -190,7 +190,7 @@ func TestHashtableAccessorsSurviveAUserShadow(t *testing.T) {
 // own closure, and exporting THAT binding hands the program an object distinct
 // from the sealed base's. The export list of (rnrs hashtables) is irrelevant.
 //
-// It works because equal-hash is AMBIENT. The same trick on equal? does NOT
+// It works because equal-hash is AMBIENT at phase 0. The same trick on equal? does NOT
 // mint a second copy: a `(define my-equal equal?)` here would resolve through
 // this library's own (import (scheme base)), and a library INSTANCE is shared
 // across namespaces, so the program's (import (scheme base)) hands it the same
@@ -261,10 +261,9 @@ func TestHashtableRemembersTheProceduresItWasMadeWith(t *testing.T) {
 					(list (eq? (hashtable-equivalence-function h) my-eq)
 						(eq? (hashtable-equivalence-function (hashtable-copy h)) my-eq))))`,
 			want: `(#t #t)`},
-		// The hash gate, and the reason it needs a library: equal-hash is
-		// ambient, so it cannot be renamed through an import. (hashlib)'s
-		// my-hash is the island's own copy of it — a distinct object, which the
-		// third element proves rather than assumes.
+		// The hash gate through a library island: (hashlib)'s my-hash is the
+		// island's own copy of equal-hash — a distinct object, which the third
+		// element proves rather than assumes.
 		{name: "a second copy of the hash procedure survives the table and its copy",
 			expr: `(begin (import (hashlib) (rnrs hashtables) (scheme base))
 				(let ((h (make-hashtable my-hash equal?)))
@@ -272,6 +271,15 @@ func TestHashtableRemembersTheProceduresItWasMadeWith(t *testing.T) {
 						(eq? (hashtable-hash-function (hashtable-copy h)) my-hash)
 						(eq? my-hash equal-hash))))`,
 			want: `(#t #t #f)`, needLib: true},
+		// The hash gate through a rename of (rnrs hashtables)'s equal-hash
+		// export (2026-10-04).
+		{name: "a hash procedure renamed through the export survives the table and its copy",
+			expr: `(begin (import (rename (rnrs hashtables) (equal-hash my-hash)))
+				(let ((h (make-hashtable my-hash equal?)))
+					(list (eq? (hashtable-hash-function h) my-hash)
+						(eq? (hashtable-hash-function (hashtable-copy h)) my-hash)
+						(eq? my-hash equal-hash))))`,
+			want: `(#t #t #f)`},
 		// Both sides at once — island copy for the hash, rename for the
 		// equivalence — so neither accessor can be answering from the probe in
 		// the same run. Through an immutable copy, since that is the shape

@@ -31,6 +31,7 @@ import (
 	"github.com/aalpar/wile/pkg/internal/extensions/envvars"
 	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 
@@ -1421,14 +1422,15 @@ func TestProfileEnvironmentCannotWidenSandboxedEngine(t *testing.T) {
 // half had TestR6RSHashProceduresAreReachableAtPhaseOne.
 //
 // The decision: the R6RS hash quartet holds REACHABILITY, not field uniformity,
-// and both of the registration fields that split with its two-file placement are
-// ACCEPTED as split. Category is one of them. equal-hash, string-hash and
-// symbol-hash are "hashtables" (pkg/registry/core/hashes.go); string-ci-hash is
-// "strings", because it lives beside string-ci=? whose full Unicode fold it must
-// share and cannot move to pkg/registry/core (go.mod confines x/text to internal
-// packages). So WithoutCategory("hashtables") removes three of four and the
-// survivor is deliberate, not an oversight: it is a pure function on strings that
-// needs no hashtable.
+// and Category, the one registration field that still splits with its two-file
+// placement (all four share PhaseSetRuntime since 2026-10-04), is ACCEPTED as
+// split. equal-hash, string-hash and symbol-hash are "hashtables"
+// (pkg/registry/core/hashes.go); string-ci-hash is "strings", because it lives
+// beside string-ci=? whose full Unicode fold it must share and cannot move to
+// pkg/registry/core (go.mod confines x/text to internal packages). So
+// WithoutCategory("hashtables") removes three of four and the survivor is
+// deliberate, not an oversight: it is a pure function on strings that needs no
+// hashtable.
 //
 // Two configuration facts this test depends on, both measured, because getting
 // either wrong makes it pass for the wrong reason:
@@ -1474,6 +1476,132 @@ func TestWithoutCategoryKeepsStringCiHash(t *testing.T) {
 			}
 			// By sentinel: any error, an arity error included, would satisfy IsNotNil.
 			qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSuchBinding)
+		})
+	}
+}
+
+// TestRnrsHashtablesNeedsEveryExportedHash pins the load-time cost the export of
+// the hash procedures ACCEPTS (pkg/stdlib/lib/rnrs/hashtables.sld): an engine
+// whose registry lacks any one of the four cannot load (rnrs hashtables) at all,
+// where an unexported name would only have gone missing. The registry comes from
+// a KitchenSink engine, for the reason TestWithoutCategoryKeepsStringCiHash gives.
+func TestRnrsHashtablesNeedsEveryExportedHash(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	full, err := NewEngine(ctx, WithProfile(KitchenSink))
+	c.Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = full.Close()
+	})
+
+	load := func(t *testing.T, without ...string) error {
+		t.Helper()
+		engine, err := NewEngine(ctx, WithRegistry(full.Registry().Without(without...)),
+			WithLibraryPaths(), WithSourceFS(stdlib.FS))
+		qt.Assert(t, err, qt.IsNil)
+		t.Cleanup(func() {
+			_ = engine.Close()
+		})
+		_, err = engine.EvalMultiple(ctx, `(import (rnrs hashtables))`)
+		return err
+	}
+
+	// Positive control: the same configuration loads the library when nothing is
+	// removed, so the refusals below are about the missing hash.
+	c.Assert(load(t), qt.IsNil)
+
+	for _, name := range []string{"equal-hash", "string-hash", "string-ci-hash", "symbol-hash"} {
+		t.Run(name, func(t *testing.T) {
+			err := load(t, name)
+			qt.Assert(t, err, qt.ErrorIs, werr.ErrUnexportedIdentifier)
+			// By name and count: the sentinel alone is satisfied by any unbound
+			// export.
+			qt.Assert(t, err, qt.ErrorMatches, `(?s).*exports 1 identifier\(s\) with no binding.*\): `+name+`.*`)
+		})
+	}
+}
+
+// TestPhaseOneHashRouteNeedsALoadableLibrary pins where the import route to the
+// R6RS hashes exists. None is bound at phase 1 without
+// (import (for-syntax (rnrs hashtables))), and the default engine, Tiny, Console
+// and ConsoleWithLoad cannot load that library; Small and KitchenSink can.
+//
+// The accessor and template routes reach a hash at phase 1 in all six, import or
+// not, so where the library cannot load a macro body still reaches the hashes;
+// it cannot name them. Those two columns pin the same boundaries as
+// TestEqualHashReachesPhaseOneThroughTheHashtableAccessor and
+// TestTemplateIntroducedHashResolvesAtPhaseOne, across configurations.
+func TestPhaseOneHashRouteNeedsALoadableLibrary(t *testing.T) {
+	ctx := context.Background()
+	lib := []EngineOption{WithLibraryPaths(), WithSourceFS(stdlib.FS)}
+	withProfile := func(p Profile) []EngineOption {
+		return append([]EngineOption{WithProfile(p)}, lib...)
+	}
+
+	tests := []struct {
+		name string
+		opts []EngineOption
+		// want is the sentinel the import fails with, or nil when it loads.
+		want error
+		// cause, when set, must match the error too. ErrUnexportedIdentifier
+		// alone would also be satisfied by an unregistered string-ci-hash, so it
+		// names (scheme base), the library that actually fails.
+		cause string
+	}{
+		{name: "default engine", opts: lib, want: werr.ErrUnexportedIdentifier, cause: `(?s).*\(scheme base\) exports.*`},
+		{name: "Tiny", opts: withProfile(Tiny), want: werr.ErrUnexportedIdentifier, cause: `(?s).*\(scheme base\) exports.*`},
+		{name: "Console", opts: withProfile(Console), want: security.ErrAccessDenied},
+		{name: "ConsoleWithLoad", opts: withProfile(ConsoleWithLoad), want: security.ErrAccessDenied},
+		{name: "Small", opts: withProfile(Small)},
+		{name: "KitchenSink", opts: withProfile(KitchenSink)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine, err := NewEngine(ctx, tt.opts...)
+			qt.Assert(t, err, qt.IsNil)
+			t.Cleanup(func() {
+				_ = engine.Close()
+			})
+
+			// No configuration binds the hash at phase 1 without the import.
+			_, err = engine.EvalMultiple(ctx, `(begin-for-syntax (define zz (equal-hash 1)))`)
+			qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSuchBinding)
+			qt.Assert(t, err, qt.ErrorMatches, `(?s).*"equal-hash" at phase 1.*`)
+
+			// Every configuration reaches it anyway, through either route.
+			routes := []struct {
+				name string
+				src  string
+			}{
+				{name: "accessor", src: `
+					(begin-for-syntax
+					  (define za ((hashtable-hash-function (make-equal-hashtable)) (list 1 2))))
+					(define-syntax reveal-a (er-macro-transformer (lambda (form rename compare) za)))
+					(= (reveal-a) (equal-hash (list 1 2)))`},
+				{name: "template", src: `
+					(define-syntax g (syntax-rules () ((_ v) (begin-for-syntax (define v (equal-hash (list 1 2)))))))
+					(g zt)
+					(define-syntax reveal-t (er-macro-transformer (lambda (form rename compare) zt)))
+					(= (reveal-t) (equal-hash (list 1 2)))`},
+			}
+			for _, r := range routes {
+				got, err := engine.EvalMultiple(ctx, r.src)
+				qt.Assert(t, err, qt.IsNil, qt.Commentf("%s route", r.name))
+				qt.Assert(t, got.SchemeString(), qt.Equals, "#t", qt.Commentf("%s route", r.name))
+			}
+
+			_, err = engine.EvalMultiple(ctx, `(import (for-syntax (rnrs hashtables)))`)
+			if tt.want != nil {
+				qt.Assert(t, err, qt.ErrorIs, tt.want)
+				if tt.cause != "" {
+					qt.Assert(t, err, qt.ErrorMatches, tt.cause)
+				}
+				return
+			}
+			qt.Assert(t, err, qt.IsNil)
+			_, err = engine.EvalMultiple(ctx, `(begin-for-syntax (define zz (equal-hash 1)))`)
+			qt.Assert(t, err, qt.IsNil)
 		})
 	}
 }

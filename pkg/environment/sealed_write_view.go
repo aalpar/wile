@@ -58,7 +58,7 @@ import (
 // survives.
 //
 // The FIRST entry must be PhaseRuntime because that is where the base is
-// written, not because the coordinate is special: writeCoordinates once mapped a
+// written, not because the coordinate is special: WriteCoordinates once mapped a
 // sealed write there to a phase-blind ANY coordinate that every other phase
 // reached, and that coordinate no longer exists. A sealed phase-0 write lands at
 // (phase 0, sealed) like any other, and what carries it to another phase is a

@@ -266,7 +266,7 @@ var compileTimeBindingSpecs = []nameDoc{
 	{"import",
 		"Imports bindings from one or more libraries. Each IMPORT-SET\n" +
 			"may be modified with only, except, prefix, or rename.\n" +
-			"R7RS §5.6.\n" +
+			"R7RS §5.2.\n" +
 			"Syntax: (import IMPORT-SET ...)\n" +
 			"Category: libraries"},
 	{"export",

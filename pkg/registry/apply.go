@@ -219,7 +219,7 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 // keyword such as else or =>, or a special-form name carrying its docstring) as
 // a BindingTypePrimitive binding, valued with a FormKeyword naming spec.Name, at
 // the owner's SEALED PHASE-0 coordinate, (phase 0, sealed), which the phase-0
-// sealed-write view produces (EnvironmentFrame.writeCoordinates).
+// sealed-write view produces (EnvironmentFrame.WriteCoordinates).
 //
 // Until Stage A that write went to the ambient (ANY, sealed) coordinate and these
 // names were reachable from a frame at EVERY level through the ranked probe's

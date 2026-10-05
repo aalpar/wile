@@ -226,7 +226,7 @@ Two further reasons, and the first is the one that actually carries the weight:
 
 - **A second `import` of one name.** Two imports of a name still resolve to the
   last one; imports share a tier, so this is genuinely last-wins and is R7RS
-  §5.6's conflict question rather than this one. A conflicting import of two
+  §5.2's conflict question rather than this one. A conflicting import of two
   *different* bindings is still refused outright, at the import itself.
 - **`set!` on an imported variable.** Still refused —
   `set!: cannot mutate imported binding "c"`. Shadowing gives you a new location

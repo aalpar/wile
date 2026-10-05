@@ -119,6 +119,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **An `(import …)` form binds everything or nothing.** Each import set used to
+  install in turn, name by name, and a conflict or a missing library returned
+  midway, leaving the form's earlier sets and part of the failing one bound: after
+  `(import (scheme base))`, a refused `(import (srfi 13))` left every name sorting
+  before `string-map`, the first conflict, bound (`reverse-list->string`, then
+  `string-any` through `string-join`). An improper tail left more: every set was
+  installed before the form was refused. Every library is now loaded and every
+  binding checked before the first is written, and an improper tail is refused
+  before any library loads. The rule also covers a library's own import
+  declarations, where an improper tail used to be dropped silently, and each spec
+  given to `environment`, `make-namespace` or `namespace-require`, which share one
+  install path; an import observer no longer fires for a form the check refuses.
+  Unlike 1.20.0, a library declaration's `(import . foo)` is `ErrInvalidSyntax`
+  rather than `ErrNotAPair`, a refused top-level import is located at the failing
+  set rather than at the whole form, and a refusal from planning or the conflict
+  check names the library as `<op>: error importing <lib>` (`import` on both
+  syntax paths, otherwise `environment`, `make-namespace` or
+  `namespace-require`), where 1.20.0 said `error copying bindings from <lib>` for
+  a conflict or failed copy at the top level and in those three primitives, and
+  nothing in a library declaration.
+  Pinned by
+  `TestRefusedImportBindsNothing` (top level, including a conflict at phase 1),
+  `TestRefusedLibraryImportDeclarationBindsNothing`,
+  `TestRefusedNamespaceRequireBindsNothing` and `TestRefusedImportFiresNoObserver`.
+
+- **`hashtable-hash-function` and `hashtable-equivalence-function` name the phase
+  they looked at when they refuse.** On a fixed-kind table they find the
+  primitive by name at phase 0, and the refusal said "equal-hash is not
+  registered in this namespace" even when it was registered but not imported at
+  phase 0, under `WithoutAmbientBindings` or with a phase-1-only import. It now
+  says no binding at phase 0 is the primitive and lists the causes.
+
+- **A `WithoutAmbientBindings` program can import `equal-hash`, `string-hash`
+  and `symbol-hash`.** That configuration binds nothing ambient, and no library
+  exported these three procedures, so no import could bind them. `(srfi 13)`'s
+  `string-hash` is a different, bounded one. `(rnrs hashtables)` now
+  exports them (see the BREAKING entry under Changed). Pinned by
+  `TestRnrsHashtablesBindsTheHashesWithoutAmbientBindings`.
+
 - **A hashtable remembers the procedures it was made with.** R6RS §13.3 asks for
   the equivalence function a table uses to compare keys;
   `hashtable-equivalence-function` and `hashtable-hash-function` answered by
@@ -301,6 +340,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING: `equal-hash`, `string-hash` and `symbol-hash` are no longer bound
+  at phase 1 without an import.** `(rnrs hashtables)` now exports all four R6RS
+  hashes, `string-ci-hash` included, so `(import (for-syntax (rnrs hashtables)))`
+  binds them at phase 1.
+  - The default engine, `Tiny`, `Console` and `ConsoleWithLoad` cannot load
+    that library, so there the import route does not exist.
+  - Importing the library alongside `(srfi 13)` is a `string-hash` conflict
+    (R7RS §5.2); narrow one side with `except`, `only` or `rename`.
+  - The library needs all four hashes registered to load.
+
+  See `docs/reference/r7rs-differences.md` item 16.
+
+- **Import API in `pkg/machine/compilation` and `pkg/environment`.**
+  - `compilation.ResolveAndInstallImportSet(ctx, datum, …)` is replaced by
+    `ResolveAndInstallImportSets(ctx, importSets syntax.SyntaxValue, …)`, which
+    takes one whole import form's arguments so it can refuse the form whole.
+  - `EnvironmentFrame.WriteCoordinates`, formerly unexported, returns the
+    `(phase, sealed)` coordinate a write through the view lands at.
+  - `GlobalEnvironmentFrame.ReusableImportedGlobalBindingAt` is new: the slot
+    `CreateImportedGlobalBindingAt` would hand back for its arguments, or nil,
+    creating nothing.
+
 - **`pkg/values` hashtable API.** `(*Hashtable).HashFunction` and
   `EquivalenceFunction` are new, returning `values.Callable` or nil for NONE,
   alongside the new constructor `NewEqualHashtableWithFunctions(hashFn, equivFn
@@ -482,7 +543,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `GlobalEnvironmentFrame.AmbientBinding`, which read the ambient tier alone, and
   the unexported `tierAmbientSealed` it read.
 
-  Stage A had already stopped WRITING the coordinate: `writeCoordinates` sent
+  Stage A had already stopped WRITING the coordinate: `WriteCoordinates` sent
   every sealed phase-0 write to `(phase 0, sealed)`, `tierOf` classified a
   wildcard slot as no candidate, and `CreateGlobalBindingAt` panicked on one. So
   nothing here changes an answer — `tierOf` never returned `tierAmbientSealed`
@@ -509,7 +570,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`GlobalEnvironmentFrame.BulkRowSupplying`** — added and removed within this
   same unreleased cycle, so no release carried it. Zero callers since it was
   written, and its doc claimed a role it never had — that the import path asks it
-  before installing a row, per R7RS §5.6. Import-conflict detection runs on the
+  before installing a row, per R7RS §5.2. Import-conflict detection runs on the
   per-symbol install path (`installImportedBinding`'s `importConflicts`); there
   is no eager row-level check, and `probeBulkLocked`'s doc now says so instead of
   citing this.

@@ -474,7 +474,7 @@ These invariants must be maintained:
      | Tier | Coordinate | What lands here |
      |------|------------|------------------|
      | `tierExactMutable` | `(phase N, mutable)` | ordinary `define`s at phase N — user code, `define-for-syntax` bodies |
-     | `tierExactImported` | `(phase N, sealed)`, stamped `Imported` | what a phase-0 program or `(environment …)` import installs (`CopyLibraryBindingsToEnvAtPhase`, `placementShadowable`), which therefore shadows a base name of the same spelling rather than overwriting it; every other import install (another phase, a propagated phase, a library body's own imports) is `placementInPlace` and lands at `(N, mutable)` |
+     | `tierExactImported` | `(phase N, sealed)`, stamped `Imported` | what an import form or an `(environment …)` spec installs, at its base phase and at a macro's propagated phase (`planCopyAtPhase`, `placementShadowable`), which therefore shadows a base name of the same spelling rather than overwriting it; only a library's import declarations (`planCopyDirect`) are `placementInPlace` and land at `(N, mutable)` |
      | `tierExactSealed` | `(phase N, sealed)`, unstamped | the startup set: Go primitives, sealed stdlib procedures, optimizer `Stable` anchors, the syntax compilers (`RegisterSyntaxCompilers`) and the auxiliary keywords and special-form names (`registerCompileTimeBinding`) at phase 0; the bootstrap macros, special-form expanders and the registry's expand-phase primitive copies at phase 1 |
 
      A slot at any OTHER phase is **not a candidate at all** — that is
@@ -483,7 +483,7 @@ These invariants must be maintained:
      usual; an incomparable equal-cardinality tie panics with a wrapped
      `werr.ErrAmbiguousBinding`.
    - **Write coordinates come from the writing VIEW, not from an argument**
-     (`EnvironmentFrame.writeCoordinates`): every write, sealed or not, derives
+     (`EnvironmentFrame.WriteCoordinates`): every write, sealed or not, derives
      `(the view's phase, the view's sealed flag)`. The phase-0 sealed-write view
      once had a special arm that sent its writes to a phase-blind coordinate
      every other phase reached; that arm and that coordinate are both gone, so

@@ -235,7 +235,7 @@ func exportKeyNames(keys iter.Seq[ExportKey]) []string {
 // sortedExportKeys orders export keys by phase, then by name. The library copy
 // loops walk this instead of ranging their bindings map directly: a Go map walk
 // decides both the slot numbering an import produces and which of several
-// conflicting identifiers the R7RS §5.6 refusal names, and it decides them
+// conflicting identifiers the R7RS §5.2 refusal names, and it decides them
 // differently on every run.
 //
 // PHASE BEFORE NAME, not the reverse. A name exported at two phases denotes two
@@ -258,7 +258,7 @@ func sortedExportKeys(keys iter.Seq[ExportKey]) []ExportKey {
 //
 // This is not a Phase. The pass does not move along the macro tower: the
 // bindings land at env.PhaseLevel() composed with the import set's shift
-// regardless of which pass installs them (ResolveAndInstallImportSet).
+// regardless of which pass installs them (ResolveAndInstallImportSets).
 //
 // The zero value is no stage. An event a caller built without one says so
 // (String renders it import-stage(0)) rather than reading as the expander's.
@@ -302,10 +302,11 @@ type LibraryImportEvent struct {
 	// (so a for-syntax export is looked up at the wrong one). Both failures are
 	// silent.
 	//
-	// A SNAPSHOT, never the live map. fireImportObserver clones it, because the
-	// observer runs BEFORE CopyLibraryBindingsToEnvAtPhase at both call sites:
-	// publishing the installer's own map would let a third-party
-	// LibraryImportObserver change what gets installed, synchronously.
+	// A SNAPSHOT, never the live map. fireImportObserver clones it, and the
+	// observer fires only after the import is planned from the map, so a
+	// third-party LibraryImportObserver cannot change what gets installed. Until
+	// 2026-10-04 it fired before the install read the map, and the clone alone
+	// held that.
 	Bindings map[ExportKey]string
 }
 
@@ -461,9 +462,7 @@ func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary,
 		Imported:   imported,
 		Importer:   importer,
 		Stage:      stage,
-		// maps.Clone, not the map itself: see the field's doc. This runs before
-		// the installer reads it, so handing out the live map would make an
-		// observer able to rewrite the import.
+		// maps.Clone, not the map itself: see the field's doc.
 		Bindings: maps.Clone(bindings),
 	})
 }

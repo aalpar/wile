@@ -37,7 +37,7 @@ import (
 //
 // WHAT MAKES THAT SAFE IS THE TIER, NOT AN EMPTY COORDINATE, and this paragraph
 // used to say the opposite. It argued that (phase 0, sealed) was safe BECAUSE
-// nothing else was there: writeCoordinates sent a sealed phase-0 write to the
+// nothing else was there: WriteCoordinates sent a sealed phase-0 write to the
 // phase-blind ANY coordinate, so no view could produce the exact one. Stage A
 // falsified that — the base's own writes land at (phase 0, sealed), which
 // library_bindings.go's installImportedBinding doc calls "the most crowded

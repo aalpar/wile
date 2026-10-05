@@ -46,9 +46,9 @@ func TestRnrsHashtablesLibrary(t *testing.T) {
 			`(begin (import (rnrs hashtables)) (let ((h (make-equal-hashtable))) (hashtable-update! h 'a (lambda (v) (+ v 1)) 0) (hashtable-ref h 'a #f)))`, `1`},
 		{"the inspection procedures round-trip",
 			`(begin (import (rnrs hashtables)) (let ((h (make-eqv-hashtable))) (and (eq? (hashtable-equivalence-function h) eqv?) (not (hashtable-hash-function h)) (hashtable-mutable? h))))`, `#t`},
-		// The hash procedures are reachable after the import. Three are NOT
-		// exported and resolve to sealed-base bindings; string-ci-hash is exported
-		// (for phase 1, see the .sld's NOT EXPORTED note).
+		// The hash procedures are reachable after the import. The library exports
+		// all four; at phase 0 they are also ambient, and the import's copies do
+		// not conflict with the ambient ones.
 		{"the hash functions are still reachable",
 			`(begin (import (rnrs hashtables)) (and (= (equal-hash '(1 2)) (equal-hash (list 1 2))) (= (string-ci-hash "A") (string-ci-hash "a")) (= (symbol-hash 'q) (symbol-hash 'q)) (>= (string-hash "s") 0)))`, `#t`},
 		{"immutability reaches through the library",
@@ -149,10 +149,10 @@ func TestRnrsHashtablesRecognitionIsIndependentOfTheExportList(t *testing.T) {
 		{"before any import", `(hashtable? (make-hashtable equal-hash equal?))`},
 		{"after importing (rnrs hashtables)", `(begin (import (rnrs hashtables)) (hashtable? (make-hashtable equal-hash equal?)))`},
 		{"after importing (srfi 13)", `(begin (import (srfi 13)) (hashtable? (make-hashtable equal-hash equal?)))`},
-		// The library re-exporting a hash procedure under a new name must not
+		// The library re-exporting the hash procedure under a new name must not
 		// disturb the pair either — a rename installs a third copy of it.
 		{"after a renaming import of the library",
-			`(begin (import (rename (rnrs hashtables) (hashtable? ht?))) (and (ht? (make-hashtable equal-hash equal?)) #t))`},
+			`(begin (import (rename (rnrs hashtables) (equal-hash eh))) (hashtable? (make-hashtable eh equal?)))`},
 	}
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
@@ -162,4 +162,22 @@ func TestRnrsHashtablesRecognitionIsIndependentOfTheExportList(t *testing.T) {
 			c.Assert(got, qt.Equals, `#t`)
 		})
 	}
+}
+
+// TestImportRebindsAHashCapturedBeforeIt pins what exporting the hashes changed
+// for a program that captures one before importing the library: the import
+// rebinds equal-hash to the library's own copy (a library environment mints its
+// own primitives), so the captured value is no longer eq? to the name.
+// make-hashtable still accepts the captured copy, since it recognizes the pair by
+// identity.
+//
+// Fails on master, which answers (#t #t): the library did not export equal-hash,
+// so the import left the ambient binding in place.
+func TestImportRebindsAHashCapturedBeforeIt(t *testing.T) {
+	c := qt.New(t)
+	got := evalSRFI(c, newSRFITestEngine(t), `
+		(define h equal-hash)
+		(import (rnrs hashtables))
+		(list (eq? h equal-hash) (hashtable? (make-hashtable h equal?)))`)
+	c.Assert(got, qt.Equals, `(#f #t)`)
 }

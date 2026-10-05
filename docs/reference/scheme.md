@@ -1141,7 +1141,8 @@ which hashes them by identity.
 
 The optional `k` is R6RS's size hint; Wile ignores it. Hash procedures:
 `equal-hash`, `string-hash`, `string-ci-hash`, `symbol-hash`, each returning an
-exact non-negative integer. `equal-hash` terminates on cyclic input.
+exact non-negative integer. `equal-hash` terminates on cyclic input. None is
+bound at phase 1 without `(import (for-syntax (rnrs hashtables)))`.
 
 **Two behaviours worth knowing.** `(hashtable-copy ht)` with no second argument
 returns an **immutable** table, reversing Wile's pre-R6RS behaviour — pass `#t`

@@ -37,7 +37,7 @@ func compositionEngine(t *testing.T) *Engine {
 	return eng
 }
 
-// TestImportSetCompositionOrder pins R7RS §5.6: nested import-set modifiers must be
+// TestImportSetCompositionOrder pins R7RS §5.2: nested import-set modifiers must be
 // applied inside-out in written order, and same-kind nesting must compose, not
 // overwrite. Each case here was a wrong answer under the flat-collapse representation
 // (libraries-plan Task 5A / compiler-plan 7D). Covers the four 7D compositions plus the
@@ -113,7 +113,7 @@ func TestImportSetCompositionOrder(t *testing.T) {
 }
 
 // TestImportConflictDetection pins Wile's Racket-style strict resolution of aliased
-// imports (R7RS §5.6, "it is an error to import the same identifier more than once
+// imports (R7RS §5.2, "it is an error to import the same identifier more than once
 // with different bindings"): a same-name import that resolves to a DIFFERENT binding
 // is signalled as ErrDuplicateBinding rather than silently last-import-wins. The whole
 // stdlib has exactly one such genuine collision — (scheme base) string-map (variadic,
@@ -269,7 +269,7 @@ func TestImportConflictDetectionByOrigin(t *testing.T) {
 	}
 }
 
-// TestImportRenameOfNonExported pins R7RS §5.6 Task 5C: a rename whose SOURCE name
+// TestImportRenameOfNonExported pins R7RS §5.2 Task 5C: a rename whose SOURCE name
 // is not exported by the library must error, mirroring the only/except validation,
 // rather than silently no-op the rename. A valid rename of an exported name still
 // works (the new name binds; the old name is no longer available).

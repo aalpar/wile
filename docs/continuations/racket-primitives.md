@@ -564,7 +564,7 @@ all parse and install at the shifted phase. As in Racket, each takes one or more
 import sets; unlike Racket, a shift over more than one cannot be the operand of
 `only`, `except`, `prefix` or `rename`, and is refused there. `ParseImportSetsFromDatum`
 (`pkg/machine/compilation/import_set_datum.go`) records the shift on
-`ImportSet.PhaseShift`, and `ResolveAndInstallImportSet`
+`ImportSet.PhaseShift`, and `ResolveAndInstallImportSets`
 (`pkg/machine/compilation/library_bindings.go`) composes it with the importing
 environment's own level via `composePhaseShift` before installing. So
 
@@ -578,7 +578,7 @@ works, and `(for-meta 2 …)` reaches phase 2.
 
 The same holds inside a `define-library` body: `processLibraryImport`
 (`pkg/machine/compilation/compile_import.go`) composes the shift with the library
-env's phase and passes the result to `copyLibraryBindingsDirect`, so a library-body
+env's phase and passes the result to `planCopyDirect`, so a library-body
 `(import (for-syntax X))` binds X at phase 1.
 
 ## 6. Runtime Infrastructure Primitives
