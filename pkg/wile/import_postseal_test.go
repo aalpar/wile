@@ -73,7 +73,7 @@ func evalString(t *testing.T, eng *wile.Engine, code string) string {
 // executed long after bootstrap has sealed the base DOES create and overwrite
 // bindings in the runtime phase of the same engine.
 //
-// There is no seal check on this path. ResolveAndInstallImportSet computes
+// There is no seal check on this path. ResolveAndInstallImportSets computes
 // targetPhase == PhaseRuntime at top level (env.PhaseLevel() and the import set's
 // PhaseShift are both 0), and CopyLibraryBindingsToEnvAtPhase then calls
 // MaybeCreateOwnGlobalBinding / SetOwnGlobalValue on AtPhase(0), which resolves to

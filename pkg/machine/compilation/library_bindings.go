@@ -460,33 +460,41 @@ func resolveImportSets(ctx context.Context, datum values.Value, env *environment
 	return q, nil
 }
 
-// ResolveAndInstallImportSet resolves an import set and installs bindings into
-// env. Used for top-level imports (both expander and compiler). Library-internal
-// imports share the resolution step (resolveImportSets) but use
-// copyLibraryBindingsDirect for installation.
+// ResolveAndInstallImportSets resolves the import sets of one top-level import
+// form and installs their bindings into env. Used for top-level imports (both
+// expander and compiler). Library-internal imports share the resolution step
+// (resolveImportSets) but plan with planCopyDirect.
+//
+// All or none, as R7RS §5.2 makes an import declaration one unit: every library
+// is loaded and every install checked before the first binding is written, so a
+// refused form, a missing library, or a conflict between two of its sets leaves
+// env as it was. Until 2026-10-04 each set installed in turn and a conflict
+// returned midway, leaving the earlier sets and part of the failing one bound.
 //
 // The stage argument is import-observer metadata only; it does NOT select the
 // install phase. That comes from composePhaseShift below, which combines the
 // environment's own phase level with the import set's for-syntax/for-meta shift.
-func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, stage ImportStage, evaluator machine.MacroEvaluator) error {
-	resolved, err := resolveImportSets(ctx, datum, env, evaluator)
-	if err != nil {
-		return err
-	}
-	for _, res := range resolved {
-		err = installResolvedImportSet(env, res, stage)
+func ResolveAndInstallImportSets(ctx context.Context, datums []values.Value, env *environment.EnvironmentFrame, stage ImportStage, evaluator machine.MacroEvaluator) error {
+	var pending []pendingImport
+	for _, datum := range datums {
+		resolved, err := resolveImportSets(ctx, datum, env, evaluator)
 		if err != nil {
 			return err
 		}
+		for _, res := range resolved {
+			pi, err := planResolvedImportSet(env, res, stage)
+			if err != nil {
+				return err
+			}
+			pending = append(pending, pi)
+		}
 	}
-	return nil
+	return installPendingImports(pending)
 }
 
-// installResolvedImportSet installs one resolved library import into env for
-// ResolveAndInstallImportSet.
-func installResolvedImportSet(env *environment.EnvironmentFrame, res *ResolvedImportSet, stage ImportStage) error {
-	fireImportObserver(env, res.Library, res.Bindings, LibraryName{}, stage)
-
+// planResolvedImportSet plans one resolved library import into env for
+// ResolveAndInstallImportSets.
+func planResolvedImportSet(env *environment.EnvironmentFrame, res *ResolvedImportSet, stage ImportStage) (pendingImport, error) {
 	// Compose the parsed for-syntax/for-meta shift with the current expansion
 	// phase, not a hardcoded 0: an (import (for-syntax M)) written inside a
 	// phase-N transformer body places M at phase N+1. At the top level
@@ -495,16 +503,21 @@ func installResolvedImportSet(env *environment.EnvironmentFrame, res *ResolvedIm
 	// guard (werr.ErrInvalidArgument).
 	targetPhase, err := composePhaseShift("import", env.PhaseLevel(), res.ImportSet.PhaseShift)
 	if err != nil {
-		return err
+		return pendingImport{}, err
 	}
 
-	err = CopyLibraryBindingsToEnvAtPhase(res.Library, res.Bindings, env, targetPhase)
-	if err != nil {
+	wrap := func(err error) error {
 		return werr.WrapForeignErrorf(err, "import: error copying bindings from %s",
 			res.ImportSet.LibraryName.SchemeString())
 	}
-
-	return nil
+	plan, err := planCopyAtPhase(res.Library, res.Bindings, env, targetPhase)
+	if err != nil {
+		return pendingImport{}, wrap(err)
+	}
+	fire := func() {
+		fireImportObserver(env, res.Library, res.Bindings, LibraryName{}, stage)
+	}
+	return pendingImport{plan: plan, fire: fire, wrap: wrap}, nil
 }
 
 // ExportedBinding resolves the binding a phase-0 export of internalName denotes,
@@ -827,45 +840,38 @@ const (
 // hygienically distinct binding of the same name, or a parent frame's binding
 // while `created` reports on this frame, putting the guard and the write on
 // different variables.
-func installImportedBinding(
-	env *environment.EnvironmentFrame,
-	localSym *values.Symbol,
-	bt environment.BindingType,
-	source *environment.Binding,
-	exportName string,
-	internalName string,
-	sourceLib *CompiledLibrary,
-	sourcePhase environment.Phase,
-	phaseContext string,
-	placement importPlacement,
-) error {
+func installImportedBinding(in importInstall) error {
+	env := in.env
+	localSym := in.sym
 	ambient := syntax.Scopes{}
 	var idx *environment.GlobalIndex
 	var created bool
-	if placement == placementShadowable {
+	if in.placement == placementShadowable {
 		// CreateImportedGlobalBindingAt, not the plain form: the base's own
 		// binding sits at exactly this coordinate with an equal scope set, so the
 		// plain reuse rule hands back the STARTUP SET's slot and this function then
 		// writes its value and its provenance onto the base. See that method's doc
 		// for the measurement.
 		idx, created = env.GlobalEnvironment().CreateImportedGlobalBindingAt(
-			localSym, bt, ambient, env.PhaseLevel(), true)
+			localSym, in.bt, ambient, env.PhaseLevel(), true)
 	} else {
-		idx, created = env.MaybeCreateOwnGlobalBinding(localSym, bt, ambient)
+		idx, created = env.MaybeCreateOwnGlobalBinding(localSym, in.bt, ambient)
 	}
 
 	own := env.GlobalEnvironment()
 	target := own.GetOwnGlobalBinding(idx)
 
 	// A previously-imported binding of this local name that resolves to a
-	// different binding is a conflicting import (R7RS §5.6): reject rather than
+	// different binding is a conflicting import (R7RS §5.2): reject rather than
 	// silently last-wins. `created` and `target` now come from the same predicate,
 	// so the guard cannot be asked about a binding other than the one it protects.
-	origin := importOrigin(source, internalName, sourceLib, sourcePhase)
+	//
+	// checkImportInstalls has already refused every conflict it can see, before
+	// the form's first install. This guard is the backstop for a conflicting
+	// import landing between that check and this install.
+	origin := importOrigin(in.source, in.internalName, in.sourceLib, in.sourcePhase)
 	if !created && importConflicts(target, origin) {
-		return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
-			"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
-			localSym.Key, sourceLib.Name.SchemeString())
+		return conflictingImportError(in)
 	}
 
 	// SHARE the exporter's value location rather than copying its value. The copy
@@ -882,14 +888,117 @@ func installImportedBinding(
 	// SetOwnGlobalValue used to report here.
 	if target == nil {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
-			"import: no binding to install for %s%s", localSym.Key, phaseContext)
+			"import: no binding to install for %s%s", localSym.Key, in.phaseContext)
 	}
-	err := target.ShareValueLocationWith(source)
+	err := target.ShareValueLocationWith(in.source)
 	if err != nil {
 		return werr.WrapForeignErrorf(err,
-			"import: failed to set binding for %s%s", localSym.Key, phaseContext)
+			"import: failed to set binding for %s%s", localSym.Key, in.phaseContext)
 	}
-	markBindingImported(target, source, exportName, origin)
+	markBindingImported(target, in.source, in.exportName, origin)
+	return nil
+}
+
+// importInstall is one slot write an import makes. An import form plans every
+// write first, so it can be refused whole before any is made.
+type importInstall struct {
+	env          *environment.EnvironmentFrame
+	sym          *values.Symbol
+	bt           environment.BindingType
+	source       *environment.Binding
+	exportName   string
+	internalName string
+	sourceLib    *CompiledLibrary
+	sourcePhase  environment.Phase
+	phaseContext string
+	placement    importPlacement
+}
+
+// conflictingImportError is the R7RS §5.2 refusal for in.
+func conflictingImportError(in importInstall) error {
+	return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
+		"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
+		in.sym.Key, in.sourceLib.Name.SchemeString())
+}
+
+// importSlotKey names the slot an importInstall writes. Every install of one
+// import form targets views of one environment, so the store, phase, placement
+// and name fix the slot.
+type importSlotKey struct {
+	store     *environment.GlobalEnvironmentFrame
+	phase     environment.Phase
+	placement importPlacement
+	name      string
+}
+
+// existingImportSlot returns the binding in would write through, or nil when it
+// would create one. It asks the reuse rule installImportedBinding's create
+// applies, and creates nothing.
+func existingImportSlot(in importInstall) *environment.Binding {
+	ambient := syntax.Scopes{}
+	if in.placement == placementShadowable {
+		return in.env.GlobalEnvironment().ReusableImportedGlobalBindingAt(in.sym, ambient, in.env.PhaseLevel(), true)
+	}
+	return in.env.ReusableOwnGlobalBinding(in.sym, ambient)
+}
+
+// checkImportInstalls refuses plan if an install would bind its name to a
+// different binding than the import already there, or than an earlier install
+// of the same form. seen carries the earlier installs' origins across the import
+// sets of one form. It writes nothing, so a refused form leaves no binding
+// behind.
+func checkImportInstalls(seen map[importSlotKey]*environment.OriginRef, plan []importInstall) error {
+	for _, in := range plan {
+		origin := importOrigin(in.source, in.internalName, in.sourceLib, in.sourcePhase)
+		key := importSlotKey{store: in.env.GlobalEnvironment(), phase: in.env.PhaseLevel(), placement: in.placement, name: in.sym.Key}
+		prior, planned := seen[key]
+		if !planned {
+			seen[key] = origin
+			if importConflicts(existingImportSlot(in), origin) {
+				return conflictingImportError(in)
+			}
+			continue
+		}
+		// An earlier install of this form writes the slot first, so it is the
+		// binding this one would meet there.
+		if prior != nil && origin != nil && *prior != *origin {
+			return conflictingImportError(in)
+		}
+	}
+	return nil
+}
+
+// pendingImport is one import set's planned installs, with the observer it fires
+// and the context its errors carry.
+type pendingImport struct {
+	plan []importInstall
+	fire func()
+	wrap func(error) error
+}
+
+// installPendingImports installs the import sets of one form, all or none: every
+// set is checked before the first binding is written. An error from the install
+// pass is an invariant violation or a concurrent conflicting import, not a
+// refusal the check could have made.
+func installPendingImports(pending []pendingImport) error {
+	seen := map[importSlotKey]*environment.OriginRef{}
+	for _, pi := range pending {
+		err := checkImportInstalls(seen, pi.plan)
+		if err != nil {
+			return pi.wrap(err)
+		}
+	}
+	for _, pi := range pending {
+		if pi.fire != nil {
+			pi.fire()
+		}
+		for _, in := range pi.plan {
+			err := installImportedBinding(in)
+			if err != nil {
+				return pi.wrap(err)
+			}
+		}
+	}
 	return nil
 }
 
@@ -909,7 +1018,24 @@ func installImportedBinding(
 //     Syntax bindings follow the same skipBase rule: targetPhase+1 only.
 //   - targetPhase < 0: For-template import. Bindings shifted to negative phase
 //     (used for generating code that will run at a lower phase).
+//
+// All or none: a conflict refuses the whole set before any binding is written.
 func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKey]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
+	plan, err := planCopyAtPhase(lib, bindings, targetEnv, targetPhase)
+	if err != nil {
+		return err
+	}
+	return installPendingImports([]pendingImport{{plan: plan, wrap: identityWrap}})
+}
+
+// identityWrap is a pendingImport.wrap that adds no context.
+func identityWrap(err error) error {
+	return err
+}
+
+// planCopyAtPhase plans CopyLibraryBindingsToEnvAtPhase's installs.
+func planCopyAtPhase(lib *CompiledLibrary, bindings map[ExportKey]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) ([]importInstall, error) {
+	var q []importInstall
 	for _, localKey := range sortedExportKeys(maps.Keys(bindings)) {
 		externalName := bindings[localKey]
 		localName := localKey.Name
@@ -921,12 +1047,12 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKe
 
 		libBinding, sourcePhase, found := findLibraryBinding(lib, internalName, exportPhase)
 		if !found {
-			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "library %s exports %q but binding not found",
+			return nil, werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "library %s exports %q but binding not found",
 				lib.Name.SchemeString(), internalName)
 		}
 		basePhase, err := composePhaseShift("import", targetPhase, exportPhase)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		// A syntax (macro) binding is an expand-phase concept: skip the base
@@ -948,14 +1074,11 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKe
 			// assigning through the import. This holds at EVERY base phase now: the
 			// phase re-check installImportedBinding used to apply is gone, and its
 			// doc carries both the argument and the ratchet.
-			phaseEnv := targetEnv.AtPhase(basePhase)
-			localSym := values.NewSymbol(localName)
-			err := installImportedBinding(phaseEnv, localSym, libBinding.BindingType(),
-				libBinding, externalName, internalName, lib, sourcePhase, " at phase "+basePhase.String(),
-				placementShadowable)
-			if err != nil {
-				return err
-			}
+			q = append(q, importInstall{
+				env: targetEnv.AtPhase(basePhase), sym: values.NewSymbol(localName), bt: libBinding.BindingType(),
+				source: libBinding, exportName: externalName, internalName: internalName, sourceLib: lib,
+				sourcePhase: sourcePhase, phaseContext: " at phase " + basePhase.String(), placement: placementShadowable,
+			})
 		}
 
 		// Propagate to the source phase in the target so the binding is available
@@ -970,7 +1093,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKe
 			// before narrowing, mirroring composePhaseShift's parse-time check.
 			phaseSum := int(targetPhase) + int(sourcePhase)
 			if phaseSum > math.MaxInt8 {
-				return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 					"import: propagation phase %d (target %d + source %d) exceeds max phase %d for %q from %s",
 					phaseSum, int(targetPhase), int(sourcePhase), math.MaxInt8, localName, lib.Name.SchemeString())
 			}
@@ -978,8 +1101,6 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKe
 			// Same conflict guard as the base phase: the base phase catches most
 			// clashes first; this closes the case where the base entry is created
 			// fresh but the propagated (e.g. expand) entry already exists.
-			propagateEnv := targetEnv.AtPhase(propagatePhase)
-			propagateSym := values.NewSymbol(localName)
 			// placementShadowable, and this is the SHADOW answer to the
 			// shadow-versus-supersede fork, decided 2026-10-02.
 			//
@@ -1009,15 +1130,14 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKe
 			// here, so the spec decides and the agreement with Chez does not
 			// preserve it. docs/environment/import-and-define.md is the long form,
 			// including why the order-dependent reading is the intuitive one.
-			err := installImportedBinding(propagateEnv, propagateSym, libBinding.BindingType(),
-				libBinding, externalName, internalName, lib, sourcePhase, " propagated to phase "+propagatePhase.String(),
-				placementShadowable)
-			if err != nil {
-				return err
-			}
+			q = append(q, importInstall{
+				env: targetEnv.AtPhase(propagatePhase), sym: values.NewSymbol(localName), bt: libBinding.BindingType(),
+				source: libBinding, exportName: externalName, internalName: internalName, sourceLib: lib,
+				sourcePhase: sourcePhase, phaseContext: " propagated to phase " + propagatePhase.String(), placement: placementShadowable,
+			})
 		}
 	}
-	return nil
+	return q, nil
 }
 
 // ImportSpecInto parses a single import-spec datum, loads the named library,
@@ -1032,6 +1152,7 @@ func ImportSpecInto(ctx context.Context, specVal values.Value, callerEnv, target
 		return werr.WrapForeignErrorf(err, "%s: invalid import spec", op)
 	}
 
+	pending := make([]pendingImport, 0, len(importSets))
 	for _, importSet := range importSets {
 		lib, err := LoadLibrary(ctx, importSet.LibraryName, callerEnv, evaluator)
 		if err != nil {
@@ -1043,23 +1164,27 @@ func ImportSpecInto(ctx context.Context, specVal values.Value, callerEnv, target
 			return werr.WrapForeignErrorf(err, "%s: error in import set for %s", op, importSet.LibraryName.SchemeString())
 		}
 
-		err = CopyLibraryBindingsToEnvAtPhase(lib, bindings, targetEnv, importSet.PhaseShift)
-		if err != nil {
+		wrap := func(err error) error {
 			return werr.WrapForeignErrorf(err, "%s: error copying bindings from %s", op, importSet.LibraryName.SchemeString())
 		}
+		plan, err := planCopyAtPhase(lib, bindings, targetEnv, importSet.PhaseShift)
+		if err != nil {
+			return wrap(err)
+		}
+		pending = append(pending, pendingImport{plan: plan, wrap: wrap})
 	}
-	return nil
+	return installPendingImports(pending)
 }
 
-// copyLibraryBindingsDirect installs bindings from lib into targetEnv at
+// planCopyDirect plans the installs of lib's bindings into targetEnv at
 // targetPhase. It is the DECLARATION-position install inside a define-library;
-// the top-level path is ResolveAndInstallImportSet.
+// the top-level path is ResolveAndInstallImportSets.
 //
 // Imported syntax (macro) bindings install one phase above targetPhase; variable
 // bindings install at targetPhase itself. See the phase selection below.
 //
 // targetPhase composes the import set's for-syntax/for-template/for-meta shift
-// with the library env's own phase, exactly as ResolveAndInstallImportSet does.
+// with the library env's own phase, exactly as ResolveAndInstallImportSets does.
 // It used to take no phase at all: ImportSet.PhaseShift was parsed, accepted and
 // then read nowhere on this path, so every shift collapsed to 0 and a
 // declaration-position (import (for-syntax (helper))) bound helper's exports at
@@ -1067,9 +1192,9 @@ func ImportSpecInto(ctx context.Context, specVal values.Value, callerEnv, target
 // phase that asked for them stayed empty. for-template's -1 was dropped
 // identically, making a negative shift indistinguishable from no modifier, and
 // nothing reported any of it. Filed 2026-09-09; the body position, which routes
-// through ResolveAndInstallImportSet, was always correct.
+// through ResolveAndInstallImportSets, was always correct.
 //
-// WHY NOT just call ResolveAndInstallImportSet here. Not because of the env:
+// WHY NOT just call ResolveAndInstallImportSets here. Not because of the env:
 // lib.Env.AtPhase(n) is the LIBRARY's own phase-n frame — Namespace.NewChildRuntime
 // wires a registry onto the child precisely so it is not the parent's — and this
 // function's syntax arm has always gone through AtPhase via Expand(). (An earlier
@@ -1079,7 +1204,8 @@ func ImportSpecInto(ctx context.Context, specVal values.Value, callerEnv, target
 // and TestBindingModelMatrix/imported_rename_shadows_set!_special_form pins that
 // a library env is deliberately a flat island with no sealed tier of its own.
 // Collapsing the two paths takes that decision as a silent side effect.
-func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[ExportKey]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
+func planCopyDirect(lib *CompiledLibrary, bindings map[ExportKey]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) ([]importInstall, error) {
+	var q []importInstall
 	for _, localKey := range sortedExportKeys(maps.Keys(bindings)) {
 		externalName := bindings[localKey]
 		localName := localKey.Name
@@ -1090,7 +1216,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[ExportKey]stri
 
 		importedBinding, sourcePhase, found := findLibraryBinding(lib, internalName, localKey.Phase)
 		if !found {
-			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "import: %s exports %q but binding not found",
+			return nil, werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "import: %s exports %q but binding not found",
 				lib.Name.SchemeString(), internalName)
 		}
 		// The import lands at targetPhase shifted by the export's own phase, and a
@@ -1100,11 +1226,11 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[ExportKey]stri
 		// rather than wrapping negative.
 		basePhase, err := composePhaseShift("import", targetPhase, localKey.Phase)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		syntaxPhase, err := composePhaseShift("import", basePhase, environment.PhaseExpand)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		// A syntax (macro) binding is an expand-phase concept: install it into the
@@ -1122,7 +1248,6 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[ExportKey]stri
 		// CopyLibraryBindingsToEnvAtPhase, so a library declaration importing two
 		// libraries with different bindings for one name is rejected per R7RS §5.6,
 		// not just a top-level program import.
-		localSym := values.NewSymbol(localName)
 		installEnv := targetEnv.AtPhase(basePhase)
 		phaseNote := " at phase " + basePhase.String()
 		if importedBinding.BindingType() == environment.BindingTypeSyntax {
@@ -1144,12 +1269,11 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[ExportKey]stri
 		// tier change (the comment above says so). Moving it would change a working
 		// resolution for no stated defect, and split one function's two arms across
 		// two tiers on no principle. It is a separate decision.
-		err = installImportedBinding(installEnv, localSym, importedBinding.BindingType(),
-			importedBinding, externalName, internalName, lib, sourcePhase, phaseNote,
-			placementInPlace)
-		if err != nil {
-			return err
-		}
+		q = append(q, importInstall{
+			env: installEnv, sym: values.NewSymbol(localName), bt: importedBinding.BindingType(),
+			source: importedBinding, exportName: externalName, internalName: internalName, sourceLib: lib,
+			sourcePhase: sourcePhase, phaseContext: phaseNote, placement: placementInPlace,
+		})
 	}
-	return nil
+	return q, nil
 }

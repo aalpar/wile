@@ -119,6 +119,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **An `(import …)` form binds everything or nothing.** Each import set used to
+  install in turn, name by name, and a conflict or a missing library returned
+  midway, leaving the form's earlier sets and part of the failing one bound: after
+  `(import (scheme base))`, a refused `(import (srfi 13))` left `string-any`
+  through `string-fold` behind. Every library is now loaded and every binding
+  checked before the first is written. The rule also covers a library's own
+  import declarations and each spec given to `environment`, `make-namespace` or
+  `namespace-require`, and an import observer no longer fires for a refused form.
+  Pinned by `TestRefusedImportBindsNothing`.
+
+- **`hashtable-hash-function` and `hashtable-equivalence-function` name the phase
+  they looked at when they refuse.** On a fixed-kind table they find the
+  primitive by name at phase 0, and the refusal said "equal-hash is not
+  registered in this namespace" even when it was registered but not imported at
+  phase 0, under `WithoutAmbientBindings` or with a phase-1-only import. It now
+  says no binding at phase 0 is the primitive and lists the causes.
+
+- **A `WithoutAmbientBindings` program can import `equal-hash`, `string-hash`
+  and `symbol-hash`.** That configuration binds nothing ambient, and no library
+  exported these three procedures, so no import could bind them. `(srfi 13)`'s
+  `string-hash` is a different, bounded one. `(rnrs hashtables)` now
+  exports them (see the BREAKING entry under Changed). Pinned by
+  `TestRnrsHashtablesBindsTheHashesWithoutAmbientBindings`.
+
 - **A hashtable remembers the procedures it was made with.** R6RS §13.3 asks for
   the equivalence function a table uses to compare keys;
   `hashtable-equivalence-function` and `hashtable-hash-function` answered by
@@ -300,6 +324,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `let` — are affected and all five now report the structural error.
 
 ### Changed
+
+- **BREAKING: `equal-hash`, `string-hash` and `symbol-hash` are no longer bound
+  at phase 1 without an import.** `(rnrs hashtables)` now exports all four R6RS
+  hashes, `string-ci-hash` included, so `(import (for-syntax (rnrs hashtables)))`
+  binds them at phase 1.
+  - The default engine, `Tiny`, `Console` and `ConsoleWithLoad` cannot load
+    that library, so there the import route does not exist.
+  - Importing the library alongside `(srfi 13)` is a `string-hash` conflict
+    (R7RS §5.2); narrow one side with `except`, `only` or `rename`.
+  - The library needs all four hashes registered to load.
+
+  See `docs/reference/r7rs-differences.md` item 16.
 
 - **`pkg/values` hashtable API.** `(*Hashtable).HashFunction` and
   `EquivalenceFunction` are new, returning `values.Callable` or nil for NONE,
@@ -509,7 +545,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`GlobalEnvironmentFrame.BulkRowSupplying`** — added and removed within this
   same unreleased cycle, so no release carried it. Zero callers since it was
   written, and its doc claimed a role it never had — that the import path asks it
-  before installing a row, per R7RS §5.6. Import-conflict detection runs on the
+  before installing a row, per R7RS §5.2. Import-conflict detection runs on the
   per-symbol install path (`installImportedBinding`'s `importConflicts`); there
   is no eager row-level check, and `probeBulkLocked`'s doc now says so instead of
   citing this.

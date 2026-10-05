@@ -107,8 +107,9 @@ const phase1TransformerCadrSrc = `(define-syntax pick
 // cadr, NOT car. Design section 6.1's row names car, and car is not
 // discriminating: measured on a full engine, car is ambient=true AND
 // exact@1=true, because registry/apply.go's phaseTargets loop registers 155 of
-// 218 core primitives at both phases while writeCoordinates
-// (pkg/environment/environment_frame.go) diverts only the SEALED PHASE-0 write
+// 218 core primitives at both phases (152 since 2026-10-04) while
+// writeCoordinates (pkg/environment/environment_frame.go) diverts only the
+// SEALED PHASE-0 write
 // to the ANY coordinate. Stage A moves that write to phase 0 and leaves the
 // phase-1 sealed slot alone, so car keeps resolving at phase 1 after A and a
 // pin written on it could never go green. cadr is DEFINED in bootstrap Scheme

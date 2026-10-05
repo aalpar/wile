@@ -14,7 +14,7 @@ This document catalogs differences between the current implementation and the R7
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
 4. Vector and bytevector literals are **immutable** — mutating one **raises an error** (R7RS permits but does not require this detection), matching immutable string literals. Pair literals are **not** detected: the flag would have to grow the cons cell, and R7RS does not require the detection.
 5. **Default** (opt out with `WithMutableTopLevel`): a defined-once, never-`set!`-in-unit top-level `define` in the user program is immutable, so a `set!` or re-`define` of it from a later compilation unit **raises an error**, and code already compiled against a sealed base binding does not observe a later shadowing re-`define` (Chez two-environment model). User-loaded libraries stay mutable. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
-6. Importing one identifier from two libraries with **different** bindings **raises an error** (`ErrDuplicateBinding`) rather than silently letting the last import win. R7RS §5.6 makes this "an error" (undefined) but does not require signalling; Wile signals it, matching Chez/Racket. Re-export diamonds and repeated imports stay legal.
+6. Importing one identifier from two libraries with **different** bindings **raises an error** (`ErrDuplicateBinding`) rather than silently letting the last import win. R7RS §5.2 makes this "an error" (undefined) but does not require signalling; Wile signals it, matching Chez/Racket. Re-export diamonds and repeated imports stay legal.
 7. Delivering a number of values other than one into a **single-value slot** (a call argument, a `let` init, a `define` or `set!` operand) **raises an error**, whether those values come from `(values …)` or from invoking a continuation. R7RS §6.10 leaves the ≠1-value case **unspecified** for continuations not made by `call-with-values`, so this is a choice within unspecified territory; it matches Chez and Racket. `call-with-values` and the other multiple-value receivers still accept 0, 1 or N. **Changed:** Wile previously spliced the values into the slot.
 8. `current-second` returns POSIX/Unix time, not TAI. R7RS §6.13.2 specifies TAI (International Atomic Time); Wile returns seconds since the Unix epoch (leap seconds excluded), which trails TAI by a fixed offset (37 s as of 2017). A portable leap-second table is maintenance overhead with little practical benefit, so the deviation is documented rather than corrected.
 9. `equal?` is **structural** on records, hashtables, and boxes. Chez answers `#f` for distinct records and hashtables, Racket for distinct opaque records; both compare boxes by content, and Racket compares hash tables by content too. R7RS §6.1 permits either — records fall under "in all other cases, `equal?` may return either `#t` or `#f`" — so this is a deliberate choice, not a deviation from the spec. It is a deviation from most other Schemes, which is why it is listed here. **Item 14 narrows this for hashtables specifically.**
@@ -54,8 +54,8 @@ This document catalogs differences between the current implementation and the R7
     reaches object identity. Only a fixed-kind table (`make-eq-hashtable` and
     friends) was made with no procedure to remember; there the accessors hand
     back the copy visible at the namespace's mutable top level, falling back to
-    the sealed base, so the pair a program reads off a table is still `eq?` to
-    the pair it can write.
+    the sealed base, so at phase 0 the pair a program reads off a table is
+    still `eq?` to the pair it can write.
 13. `make-equal-hashtable` is a non-standard constructor, matching Larceny,
     Vicare, and Ypsilon (Chez 10.4.1 does not bind it). R6RS spells it
     `(make-hashtable equal-hash equal?)`, which Wile also accepts. Prefer
@@ -78,18 +78,21 @@ This document catalogs differences between the current implementation and the R7
     metadata: every version reference is vacuously satisfied, and the contents
     are unvalidated for the same reason.
 16. The four R6RS hash procedures, `equal-hash`, `string-hash`,
-    `string-ci-hash` and `symbol-hash`, are ambient at phase 0 but **not in a
-    macro body**: a transformer or `begin-for-syntax` reaches them with
-    `(import (for-syntax (rnrs hashtables)))`, as it reaches `string-ci=?` with
-    `(import (for-syntax (scheme char)))`. That is a trade, not a gap: the
-    import lets each environment choose whether it includes the hashes, at the
-    price of verbosity and of every environment being built alike. Until
-    2026-10-04, `equal-hash`, `string-hash` and `symbol-hash` were ambient at
-    phase 1 as well.
+    `string-ci-hash` and `symbol-hash`, are **not bound at phase 1** without
+    `(import (for-syntax (rnrs hashtables)))`, which exports all four. That is a
+    trade, not a gap: the import lets each environment choose whether it binds
+    the hashes, at the price of verbosity and of every environment being built
+    alike. The default engine, `Tiny`, `Console` and `ConsoleWithLoad` cannot
+    load the library, so there the import route does not exist. Two routes
+    reach a hash at phase 1 without the import: `hashtable-hash-function` on an
+    equal table returns `equal-hash`, and a `syntax-rules` template that
+    introduces a hash inside `begin-for-syntax` resolves it. Until 2026-10-04,
+    `equal-hash`, `string-hash` and `symbol-hash` were bound at phase 1 without
+    an import.
 
     Exporting `string-hash` meets `(srfi 13)`, which exports a different,
     bounded `string-hash`: a program importing both libraries gets the R7RS
-    §5.6 conflict and narrows one side with `except`, `only` or `rename`.
+    §5.2 conflict and narrows one side with `except`, `only` or `rename`.
     R6RS's own `(rnrs hashtables)` has the same conflict.
 17. Under `WithDialect(NoMutation)` (opt-in), a `define-record-type` that
     **declares a modifier** fails at **definition** time, not at the modifier's
@@ -124,7 +127,7 @@ This document catalogs differences between the current implementation and the R7
     through the ordinary loader.
 20. An import transports the exporting library's value **location**, not a copy
     of its value, so a library that `set!`s its own exported variable is visible
-    through the import. R7RS §5.6.1 forbids the IMPORTER's `set!` and is silent
+    through the import. R7RS §5.2 forbids the IMPORTER's `set!` and is silent
     on the exporter's, and the two oracles disagree — Racket reads through, Chez
     refuses to export an assigned variable at all (the R6RS rule). Read-through
     is the only one of the three answers that keeps such a program working.
@@ -356,9 +359,9 @@ as `caar`/`map`) is rejected with `ErrImmutableBinding`. This is ordinary Scheme
 
 ---
 
-## Conflicting Imports Signalled (R7RS §5.6)
+## Conflicting Imports Signalled (R7RS §5.2)
 
-**R7RS §5.6:** "It is an error to import the same identifier more than once with different bindings." Per §1.3.2, the phrase *"is an error"* (without *"is signalled"*) means the program is erroneous but the implementation is **not required** to detect it — only encouraged to.
+**R7RS §5.2:** "It is an error to import the same identifier more than once with different bindings." Per §1.3.2, the phrase *"is an error"* (without *"is signalled"*) means the program is erroneous but the implementation is **not required** to detect it — only encouraged to.
 
 **Wile signals it.** Importing one identifier from two libraries (or two import sets) that resolve to **different** bindings raises `werr.ErrDuplicateBinding` rather than silently letting the last import win. This matches Chez Scheme and Racket (R6RS-strict implementations signal the same situation) and avoids the fragile, order-dependent last-import-wins resolution that Guile and pre-strict Wile used.
 
@@ -385,7 +388,7 @@ as `caar`/`map`) is rejected with `ErrImmutableBinding`. This is ordinary Scheme
 **Affected:** every imported variable whose defining library assigns it with
 `set!`.
 
-R7RS §5.6.1 says it is an error "to redefine or mutate an imported binding with a
+R7RS §5.2 says it is an error "to redefine or mutate an imported binding with a
 definition or with `set!`" — a constraint on the IMPORTER. It says nothing about
 the exporting library assigning its own exported variable, which is the only
 writer left. Wile reads through: an import transports the exporter's value
@@ -411,7 +414,7 @@ program working and gives it the value the library has.
 
 **The exported variable stays immutable FROM the importer.** Sharing a location is
 not permission to write it: `(set! c 3)` after the import is still refused
-(§5.6.1), so the sharing is a one-way read-through.
+(§5.2), so the sharing is a one-way read-through.
 
 **A top-level `define` over an imported name still takes the name for itself.**
 Superseding an import (R7RS §5.3.1, and see *Shadowing is unaffected* above)

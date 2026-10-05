@@ -23,6 +23,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -97,4 +98,78 @@ func TestImportConflictNamesTheSameIdentifierEveryTime(t *testing.T) {
 	c.Assert(named, qt.HasLen, 1, qt.Commentf("distinct identifiers named across %d runs: %d %v", runs, len(named), named))
 	_, first := named["aa"]
 	c.Assert(first, qt.IsTrue, qt.Commentf("the sort is (Phase, Name) ascending, so the first conflict of ten same-phase names is %q; got %v", "aa", named))
+}
+
+// atomicLibFS adds a library to conflictingLibFS whose a0 and a1 sort before the
+// conflicting aa, so a copy loop that installs in order and stops at the conflict
+// leaves them bound.
+var atomicLibFS = fstest.MapFS{
+	"conf/three.sld": &fstest.MapFile{
+		Data: []byte(`(define-library (conf three)
+  (import (scheme base))
+  (export a0 a1 aa)
+  (begin
+    (define a0 3)
+    (define-syntax a1 (syntax-rules () ((_) 3)))
+    (define aa 3)))`),
+	},
+}
+
+// TestRefusedImportBindsNothing pins that an import form installs every binding
+// or none. Each row's form is refused, and afterwards a0 and a1 from (conf three)
+// must be unbound: a variable and a macro, because a macro's install also lands
+// one phase up.
+//
+// Fails on master, where each set installed in sorted order and a refusal
+// returned midway, leaving a0 and a1 bound.
+func TestRefusedImportBindsNothing(t *testing.T) {
+	ctx := context.Background()
+	newEngine := func(t *testing.T) *wile.Engine {
+		eng, err := wile.NewEngine(ctx,
+			wile.WithProfile(wile.KitchenSink),
+			wile.WithSourceFS(stdlib.FS),
+			wile.WithSourceFS(conflictingLibFS),
+			wile.WithSourceFS(atomicLibFS),
+			wile.WithLibraryPaths("."),
+		)
+		qt.Assert(t, err, qt.IsNil)
+		t.Cleanup(func() {
+			_ = eng.Close()
+		})
+		return eng
+	}
+
+	// Control: on its own the library binds both names, so the unbound
+	// assertions below are about the refusal.
+	t.Run("alone", func(t *testing.T) {
+		got, err := newEngine(t).EvalMultiple(ctx, `(import (conf three)) (+ a0 (a1))`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, got.SchemeString(), qt.Equals, "6")
+	})
+
+	tests := []struct {
+		name  string
+		setup string // must succeed; empty for none
+		form  string
+		want  error
+	}{
+		{name: "a later form conflicts", setup: `(import (conf one))`, form: `(import (conf three))`, want: werr.ErrDuplicateBinding},
+		{name: "a later set of the same form conflicts", form: `(import (conf three) (conf one))`, want: werr.ErrDuplicateBinding},
+		{name: "a later set of the same form is missing", form: `(import (conf three) (conf missing))`, want: werr.ErrFileNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			eng := newEngine(t)
+			if tt.setup != "" {
+				_, err := eng.EvalMultiple(ctx, tt.setup)
+				qt.Assert(t, err, qt.IsNil)
+			}
+			_, err := eng.EvalMultiple(ctx, tt.form)
+			qt.Assert(t, err, qt.ErrorIs, tt.want)
+			for _, ref := range []string{`a0`, `(a1)`} {
+				_, err = eng.EvalMultiple(ctx, ref)
+				qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSuchBinding, qt.Commentf("%s after the refused import", ref))
+			}
+		})
+	}
 }

@@ -10,24 +10,32 @@
 ;; it is not portable to a strict R6RS implementation. The portable spelling is
 ;; (make-hashtable equal-hash equal?).
 ;;
-;; THE HASH PROCEDURES. All four are exported, and that is how a macro body
-;; reaches them: equal-hash, string-hash, string-ci-hash and symbol-hash all
-;; register PhaseSetRuntime, so (import (for-syntax (rnrs hashtables))) is how a
-;; phase-1 environment includes them, as
-;; (import (for-syntax (scheme char))) includes string-ci=?. Needing the import
-;; is a trade, not a cost: each environment chooses whether it includes the
-;; hashes, at the price of verbosity and of every environment being built alike.
-;; At phase 0 all four are also ambient, and importing this library does not
-;; conflict with the ambient copies.
+;; THE HASH PROCEDURES. All four are exported: equal-hash, string-hash,
+;; string-ci-hash and symbol-hash register PhaseSetRuntime, so none is bound at
+;; phase 1 without (import (for-syntax (rnrs hashtables))), as
+;; (import (for-syntax (scheme char))) binds string-ci=?. Needing the import is a
+;; trade, not a cost: each environment chooses whether it binds the hashes, at
+;; the price of verbosity and of every environment being built alike. The
+;; default engine, Tiny, Console and ConsoleWithLoad cannot load this library,
+;; so there the import route does not exist. Pinned by
+;; TestPhaseOneHashRouteNeedsALoadableLibrary.
+;;
+;; Two routes reach a hash at phase 1 without the import, both pinned as
+;; boundaries: hashtable-hash-function on an equal table returns equal-hash
+;; (TestEqualHashReachesPhaseOneThroughTheHashtableAccessor), and a syntax-rules
+;; template that introduces a hash inside begin-for-syntax resolves it, the
+;; template leak TODO.md files on its row about values being unbound at phase 1
+;; (TestTemplateIntroducedHashResolvesAtPhaseOne).
+;;
+;; At phase 0, importing this library does not conflict with the ambient hashes.
 ;;
 ;; History. string-ci-hash was exported first (2026-10-03, I066): it lives in
 ;; pkg/internal/extensions/all beside string-ci=? whose x/text FULL fold it must
-;; share, nothing there is registered at phase 1, and no library exported it, so
-;; it was reachable from a macro body by no route. Widening its registration to
-;; PhaseSetRuntime|PhaseSetExpand was the first fix and was reverted. The other
-;; three were ambient at phase 1 and unexported until 2026-10-04, when they moved
-;; to the same route. Do not widen any of the four without re-deciding the trade
-;; above.
+;; share, nothing there is registered at phase 1, and no library exported it.
+;; Widening its registration to PhaseSetRuntime|PhaseSetExpand was the first fix
+;; and was reverted. The other three were bound at phase 1 without an import, and
+;; unexported, until 2026-10-04, when they moved to the same route. Do not widen
+;; any of the four without re-deciding the trade above.
 ;;
 ;; Two costs of the export, both ACCEPTED:
 ;;   - This library needs every hash it exports registered to load at all. An
@@ -37,7 +45,7 @@
 ;;     can load (scheme base) registers all four, and (scheme char) depends on
 ;;     string-ci=? the same way.
 ;;   - (srfi 13) exports a DIFFERENT, bounded string-hash, so a program importing
-;;     both libraries meets the R7RS §5.6 conflict and narrows one side with
+;;     both libraries meets the R7RS §5.2 conflict and narrows one side with
 ;;     except, only or rename. R6RS's own (rnrs hashtables) carries the same
 ;;     conflict. Pinned by TestStringHashConflictsBetweenRnrsHashtablesAndSRFI13.
 ;;
@@ -68,6 +76,5 @@
    ;; Inspection
    hashtable-equivalence-function hashtable-hash-function
    hashtable-mutable?
-   ;; Hash procedures. This export is how a macro body reaches them; see the
-   ;; note above.
+   ;; Hash procedures; see the note above.
    equal-hash string-hash string-ci-hash symbol-hash))

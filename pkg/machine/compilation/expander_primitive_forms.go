@@ -470,11 +470,15 @@ func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, ex
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "import: expected list of import sets"))
 	}
 
-	// Process each import set to load libraries and copy bindings
-	_, err := syntax.SyntaxForEach(p.ctx, importSets, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		return ResolveAndInstallImportSet(ctx, importSetExpr.UnwrapAll(), p.env, ImportStageExpand, p.evaluator)
+	// Collect every import set first: the form installs all of them or none.
+	var datums []values.Value
+	_, err := syntax.SyntaxForEach(p.ctx, importSets, func(_ context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
+		datums = append(datums, importSetExpr.UnwrapAll())
+		return nil
 	})
-
+	if err == nil {
+		err = ResolveAndInstallImportSets(p.ctx, datums, p.env, ImportStageExpand, p.evaluator)
+	}
 	if err != nil {
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "import: failed to resolve import set"))
 	}

@@ -372,7 +372,7 @@ frame's own `phaseLevel` via `EnvironmentFrame.NextPhase()`
 - `begin-for-syntax` / `eval-when` (`executeFormsAtCompileTime`,
   `compile_helpers.go`) and `define-for-syntax`
   (`compile_define_for_syntax.go`) body execution. `(import (for-syntax …))`
-  placement is relative by a different route: `ResolveAndInstallImportSet`
+  placement is relative by a different route: `ResolveAndInstallImportSets`
   composes the importing frame's `env.PhaseLevel()` with the import set's shift
   via `composePhaseShift` (`library_bindings.go`).
 

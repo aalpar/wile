@@ -28,14 +28,13 @@ import (
 // with it. Its PHASE SET does not:
 //
 //   - PHASE SET follows the FAMILY. All four register PhaseSetRuntime, so none
-//     is ambient in a macro body, and (import (for-syntax (rnrs hashtables)))
-//     reaches all four at phase 1. Needing that import is a trade, not a cost:
-//     each environment chooses whether it includes the hashes, at the price of
+//     is bound at phase 1 without (import (for-syntax (rnrs hashtables))).
+//     Needing the import is a trade, not a cost: each environment that can load
+//     the library chooses whether it binds the hashes, at the price of
 //     verbosity and of every environment being built alike. These three were
-//     PhaseSetRuntime|PhaseSetExpand, as most of registry/core is, until
-//     2026-10-04. Pinned by TestR6RSHashProceduresAreReachableAtPhaseOne (the
-//     route) and TestR6RSHashesAreNotAmbientAtPhaseOne (the absence), both in
-//     pkg/wile.
+//     PhaseSetRuntime|PhaseSetExpand until 2026-10-04. Pinned by
+//     TestR6RSHashProceduresAreReachableAtPhaseOne (the route) and
+//     TestR6RSHashesAreNotAmbientAtPhaseOne (the absence), both in pkg/wile.
 //   - CATEGORY follows locality, and that split is ACCEPTED. These three are
 //     "hashtables"; string-ci-hash is "strings". Category answers where a reader
 //     looks and what an embedder attenuates by name, and for that one the honest

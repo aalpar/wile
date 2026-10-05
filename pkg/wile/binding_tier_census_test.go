@@ -301,8 +301,9 @@ func TestPhaseOneVisibilityHasThreeGroups(t *testing.T) {
 // TestCorePrimitivePhaseCensus pins the SHAPE of core's phase declarations: the
 // pair/list/predicate vocabulary a transformer body would reach for is registered
 // at both phases, while the runtime-only names are the continuation, error-object,
-// parameter and introspection family. Exemplars rather than a count, so adding a
-// primitive does not fail this; the counts are logged for the record.
+// parameter and introspection family, plus, since 2026-10-04, the R6RS hash
+// procedures. Exemplars rather than a count, so adding a primitive does not fail
+// this; the counts are logged for the record.
 //
 // This is the REGISTRY's answer, which is not the store's: a runtime-only
 // primitive can still be reachable at phase 1 if the macro-vocabulary row admits
@@ -310,7 +311,8 @@ func TestPhaseOneVisibilityHasThreeGroups(t *testing.T) {
 // TestPhaseOneVisibilityHasThreeGroups.
 //
 // Measured 2026-09-08 over core.AddToRegistry: 155 names at both phases, 63
-// runtime-only, 0 expand-only.
+// runtime-only, 0 expand-only; 152 and 66 since the three hashes moved
+// (2026-10-04).
 func TestCorePrimitivePhaseCensus(t *testing.T) {
 	reg := registry.NewRegistry()
 	err := core.AddToRegistry(reg)
@@ -330,7 +332,8 @@ func TestCorePrimitivePhaseCensus(t *testing.T) {
 				qt.Commentf("%q must stay visible at phase 1", name))
 		})
 	}
-	for _, name := range []string{"call/cc", "raise", "values", "apply", "make-parameter"} {
+	for _, name := range []string{"call/cc", "raise", "values", "apply", "make-parameter",
+		"equal-hash", "string-hash", "symbol-hash"} {
 		t.Run("runtime-only/"+name, func(t *testing.T) {
 			runtimePhase, expandPhase := phasesOf(name)
 			qt.Assert(t, runtimePhase, qt.IsTrue)

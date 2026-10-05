@@ -44,7 +44,7 @@ import (
 //     wantAuthorityCount pins each list's length so an accidental edit or a
 //     duplicated name fails, but only a human re-reading the spec can catch a
 //     name transcribed wrongly in both places.
-//   - Import-time conflicts between libraries (R7RS §5.6). Covered by
+//   - Import-time conflicts between libraries (R7RS §5.2). Covered by
 //     import_conflict_test.go.
 
 // r7rsBase is R7RS Appendix A's (scheme base) export list, transcribed verbatim
@@ -368,9 +368,9 @@ get-environment-variables
 // "<lib> <id>". The heading's existence is asserted, so a rename of the section
 // fails here instead of silently exempting the ids.
 var docProseExtras = map[string]string{
-	"(scheme base) finite?":   "Conflicting Imports Signalled (R7RS §5.6)",
-	"(scheme base) infinite?": "Conflicting Imports Signalled (R7RS §5.6)",
-	"(scheme base) nan?":      "Conflicting Imports Signalled (R7RS §5.6)",
+	"(scheme base) finite?":   "Conflicting Imports Signalled (R7RS §5.2)",
+	"(scheme base) infinite?": "Conflicting Imports Signalled (R7RS §5.2)",
+	"(scheme base) nan?":      "Conflicting Imports Signalled (R7RS §5.2)",
 }
 
 // noAuthorityPrefixes are bundled library trees with no external authority to

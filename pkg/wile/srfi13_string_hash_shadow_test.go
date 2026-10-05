@@ -20,6 +20,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -77,7 +78,7 @@ func TestStringHashSRFI13StillShadows(t *testing.T) {
 
 // TestStringHashConflictsBetweenRnrsHashtablesAndSRFI13 pins the cost of
 // exporting string-hash from (rnrs hashtables) (2026-10-04): (srfi 13) exports a
-// DIFFERENT string-hash, so importing both is the R7RS §5.6 conflict, and either
+// DIFFERENT string-hash, so importing both is the R7RS §5.2 conflict, and either
 // side narrowed away resolves it to the other's procedure. R6RS's own
 // (rnrs hashtables) carries the same conflict. A fresh engine per row, for the
 // reason TestStringHashSRFI13StillShadows gives.
@@ -90,24 +91,34 @@ func TestStringHashConflictsBetweenRnrsHashtablesAndSRFI13(t *testing.T) {
 		c.Assert(err, qt.ErrorIs, werr.ErrDuplicateBinding)
 		// By name: any other duplicate would satisfy the sentinel.
 		c.Assert(err, qt.ErrorMatches, `(?s).*"string-hash" from \(srfi 13\) conflicts.*`)
+		// Refused whole: string-fold sorts before string-hash, and an import that
+		// stopped at the conflict would have bound it.
+		_, err = eng.EvalMultiple(context.Background(), `string-fold`)
+		c.Assert(err, qt.ErrorIs, werr.ErrNoSuchBinding)
 	})
 
-	cases := []struct {
-		name string
-		expr string
-		want string
-	}{
-		{"except on srfi 13 leaves the unbounded R6RS form",
-			`(begin (import (rnrs hashtables) (except (srfi 13) string-hash)) (> (string-hash "abc") 4194304))`, `#t`},
-		{"except on rnrs hashtables leaves the bounded SRFI-13 form",
-			`(begin (import (except (rnrs hashtables) string-hash) (srfi 13)) (< (string-hash "abcdefghij" 16) 16))`, `#t`},
-	}
-	for _, tc := range cases {
-		c.Run(tc.name, func(c *qt.C) {
-			eng := newSRFITestEngine(c)
-			c.Assert(evalSRFI(c, eng, tc.expr), qt.Equals, tc.want)
+	// Without ambient bindings, because the ambient phase-0 string-hash is the
+	// same unbounded R6RS procedure: on an ambient engine this row passes with
+	// string-hash dropped from (rnrs hashtables)' export list (measured
+	// 2026-10-04). Here the name has no binding but the export's.
+	c.Run("except on srfi 13 leaves the unbounded R6RS form", func(c *qt.C) {
+		eng, err := NewEngine(context.Background(),
+			WithProfile(KitchenSink), WithoutAmbientBindings(), WithLibraryPaths(), WithSourceFS(stdlib.FS))
+		c.Assert(err, qt.IsNil)
+		c.Cleanup(func() {
+			_ = eng.Close()
 		})
-	}
+		got := evalSRFI(c, eng, `
+			(import (only (scheme base) > = not) (rnrs hashtables) (except (srfi 13) string-hash))
+			(if (> (string-hash "abc") 4194304) (not (= (string-hash "ABC") (string-hash "abc"))) #f)`)
+		c.Assert(got, qt.Equals, `#t`)
+	})
+
+	c.Run("except on rnrs hashtables leaves the bounded SRFI-13 form", func(c *qt.C) {
+		eng := newSRFITestEngine(c)
+		got := evalSRFI(c, eng, `(begin (import (except (rnrs hashtables) string-hash) (srfi 13)) (< (string-hash "abcdefghij" 16) 16))`)
+		c.Assert(got, qt.Equals, `#t`)
+	})
 }
 
 // TestMakeHashtableRecognitionAcrossNamespaces pins how (make-hashtable

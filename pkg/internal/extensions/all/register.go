@@ -185,13 +185,8 @@ func addMoreStrings(r *registry.PrimitiveRegistry) error {
 	// the same route its contract partner has via
 	// (import (for-syntax (scheme char))).
 	//
-	// It WAS widened here on 2026-10-03 and reverted the same day: the widening
-	// bought ambient availability in a macro body and made this the only
-	// both-phase registration outside pkg/registry/core. Do not re-widen it
-	// without re-deciding that. Needing the import is not a deficit: it lets each
-	// environment choose whether it includes the hash, trading verbosity and
-	// uniform environment construction for that flexibility. See
-	// pkg/stdlib/lib/rnrs/hashtables.sld's note on the hash procedures.
+	// It WAS widened here on 2026-10-03 and reverted the same day. Do not
+	// re-widen it: widening this one would split the family again.
 	//
 	// Category is a separate question, and its split is deliberate.
 	// Category answers where a reader finds a procedure (and what an embedder

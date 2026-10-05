@@ -127,11 +127,11 @@ func declPhaseEngine(t *testing.T) *wile.Engine {
 // DECLARATION, (import (for-syntax X)) / (for-template X) / (for-meta n X) were
 // parsed, accepted, and then installed at phase 0 as if the modifier were absent.
 //
-// processLibraryImport ended at copyLibraryBindingsDirect, which took no phase
+// processLibraryImport ended at copyLibraryBindingsDirect (now planCopyDirect), which took no phase
 // argument and never read ImportSet.PhaseShift — the shift was computed by the
 // shared parser and discarded. The identical import at TOP LEVEL, and the
 // identical import inside the library BODY, both went through
-// ResolveAndInstallImportSet, which composes it.
+// ResolveAndInstallImportSets, which composes it.
 //
 // The failure was silent both ways: a body that wanted the shift got a phase-0
 // binding it did not ask for, and a body that relied on the shift for hygiene got

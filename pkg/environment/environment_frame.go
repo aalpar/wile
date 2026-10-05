@@ -992,6 +992,21 @@ func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt Bi
 	return p.global.CreateGlobalBindingAt(key, bt, scopes, phase, sealed)
 }
 
+// ReusableOwnGlobalBinding returns the binding MaybeCreateOwnGlobalBinding would
+// hand back for these arguments, or nil when it would create one. It creates
+// nothing.
+func (p *EnvironmentFrame) ReusableOwnGlobalBinding(key *values.Symbol, scopes syntax.Scopes) *Binding {
+	phase, sealed := p.writeCoordinates()
+	p.global.mu.RLock()
+	defer p.global.mu.RUnlock()
+
+	s, ok := p.global.reusableSlotLocked(key, scopes, phase, sealed, false)
+	if !ok {
+		return nil
+	}
+	return p.global.bindings[s.slot]
+}
+
 // OwnGlobalIndex returns a PINNED GlobalIndex for the binding of key that
 // resolves under q at THIS view's own write coordinates, or nil if there is
 // none.

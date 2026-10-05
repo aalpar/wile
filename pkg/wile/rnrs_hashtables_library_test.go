@@ -149,10 +149,10 @@ func TestRnrsHashtablesRecognitionIsIndependentOfTheExportList(t *testing.T) {
 		{"before any import", `(hashtable? (make-hashtable equal-hash equal?))`},
 		{"after importing (rnrs hashtables)", `(begin (import (rnrs hashtables)) (hashtable? (make-hashtable equal-hash equal?)))`},
 		{"after importing (srfi 13)", `(begin (import (srfi 13)) (hashtable? (make-hashtable equal-hash equal?)))`},
-		// The library re-exporting a hash procedure under a new name must not
+		// The library re-exporting the hash procedure under a new name must not
 		// disturb the pair either — a rename installs a third copy of it.
 		{"after a renaming import of the library",
-			`(begin (import (rename (rnrs hashtables) (hashtable? ht?))) (and (ht? (make-hashtable equal-hash equal?)) #t))`},
+			`(begin (import (rename (rnrs hashtables) (equal-hash eh))) (hashtable? (make-hashtable eh equal?)))`},
 	}
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
@@ -162,4 +162,22 @@ func TestRnrsHashtablesRecognitionIsIndependentOfTheExportList(t *testing.T) {
 			c.Assert(got, qt.Equals, `#t`)
 		})
 	}
+}
+
+// TestImportRebindsAHashCapturedBeforeIt pins what exporting the hashes changed
+// for a program that captures one before importing the library: the import
+// rebinds equal-hash to the library's own copy (a library environment mints its
+// own primitives), so the captured value is no longer eq? to the name.
+// make-hashtable still accepts the captured copy, since it recognizes the pair by
+// identity.
+//
+// Fails on master, which answers (#t #t): the library did not export equal-hash,
+// so the import left the ambient binding in place.
+func TestImportRebindsAHashCapturedBeforeIt(t *testing.T) {
+	c := qt.New(t)
+	got := evalSRFI(c, newSRFITestEngine(t), `
+		(define h equal-hash)
+		(import (rnrs hashtables))
+		(list (eq? h equal-hash) (hashtable? (make-hashtable h equal?)))`)
+	c.Assert(got, qt.Equals, `(#f #t)`)
 }
