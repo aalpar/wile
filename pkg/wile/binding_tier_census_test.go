@@ -37,7 +37,7 @@ import (
 // The question they answer has CHANGED TWICE under Stage A of the Flatt binding
 // model (memory/2026-09-08-flatt-binding-model-a-design).
 //
-// First, the ambient (ANY-phase, sealed) tier was deleted: writeCoordinates
+// First, the ambient (ANY-phase, sealed) tier was deleted: WriteCoordinates
 // sends every sealed phase-0 write to phase 0 instead of the ANY coordinate, and
 // probeTiersLocked no longer has a wildcard arm. "Ambient" is therefore
 // uniformly false, and the original two-column census would read as a row of

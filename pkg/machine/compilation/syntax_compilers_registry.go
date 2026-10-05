@@ -56,7 +56,7 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 // SEALED-WRITE view, which every owner of a sealed axis has: the main
 // namespace's, or a NewChildRuntime library env's own. The write lands at
 // (phase 0, sealed), like every other write through a sealed view at phase 0
-// (EnvironmentFrame.writeCoordinates).
+// (EnvironmentFrame.WriteCoordinates).
 //
 // This doc used to say these WANT the level-0 seal because it was the one write
 // routed to the phase-blind ambient coordinate, making the binding reachable

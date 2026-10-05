@@ -483,7 +483,7 @@ These invariants must be maintained:
      usual; an incomparable equal-cardinality tie panics with a wrapped
      `werr.ErrAmbiguousBinding`.
    - **Write coordinates come from the writing VIEW, not from an argument**
-     (`EnvironmentFrame.writeCoordinates`): every write, sealed or not, derives
+     (`EnvironmentFrame.WriteCoordinates`): every write, sealed or not, derives
      `(the view's phase, the view's sealed flag)`. The phase-0 sealed-write view
      once had a special arm that sent its writes to a phase-blind coordinate
      every other phase reached; that arm and that coordinate are both gone, so

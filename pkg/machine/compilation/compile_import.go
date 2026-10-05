@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/aalpar/wile/pkg/syntax"
-	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -43,19 +42,7 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "import: expected list of import sets"))
 	}
 
-	// Collect every import set first: the form installs all of them or none.
-	var datums []values.Value
-	v, err := syntax.SyntaxForEach(ctctx.ctx, importSets, func(_ context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		datums = append(datums, importSetExpr.UnwrapAll())
-		return nil
-	})
-	if err != nil {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "import: error processing import sets"))
-	}
-	if !syntax.IsSyntaxEmptyList(v) {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAList, "import: unexpected return value"))
-	}
-	err = ResolveAndInstallImportSets(ctctx.ctx, datums, p.env, ImportStageCompile, p.evaluator)
+	err := ResolveAndInstallImportSets(ctctx.ctx, importSets, p.env, ImportStageCompile, p.evaluator)
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "import: error processing import sets"))
 	}
@@ -80,7 +67,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 	}
 
 	var pending []pendingImport
-	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
+	tail, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
 		wrap := func(err error) error {
 			return wrapSourcedError(importSetExpr.SourceContext(), err)
 		}
@@ -89,11 +76,10 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 			return wrap(err)
 		}
 		for _, res := range resolved {
-			pi, err := p.planLibraryImport(lib, res)
+			pi, err := p.planLibraryImport(lib, res, wrap)
 			if err != nil {
 				return wrap(err)
 			}
-			pi.wrap = wrap
 			pending = append(pending, pi)
 		}
 		return nil
@@ -101,12 +87,16 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 	if err != nil {
 		return err
 	}
+	err = refuseImproperImportTail(tail)
+	if err != nil {
+		return wrapSourcedError(args.SourceContext(), err)
+	}
 	return installPendingImports(pending)
 }
 
 // planLibraryImport plans one resolved library import into lib.Env for
-// processLibraryImport.
-func (p *CompileTimeContinuation) planLibraryImport(lib *CompiledLibrary, res *ResolvedImportSet) (pendingImport, error) {
+// processLibraryImport; wrap is the context the import's errors carry.
+func (p *CompileTimeContinuation) planLibraryImport(lib *CompiledLibrary, res *ResolvedImportSet, wrap func(error) error) (pendingImport, error) {
 	// Compose the parsed for-syntax/for-meta shift with the library env's own
 	// phase, the same composition ResolveAndInstallImportSets performs at top
 	// level. Based on lib.Env rather than p.env because lib.Env is the frame
@@ -123,5 +113,5 @@ func (p *CompileTimeContinuation) planLibraryImport(lib *CompiledLibrary, res *R
 	fire := func() {
 		fireImportObserver(env, res.Library, res.Bindings, lib.Name, ImportStageCompile)
 	}
-	return pendingImport{plan: plan, fire: fire}, nil
+	return pendingImport{plan: plan, fire: fire, wrap: wrap}, nil
 }

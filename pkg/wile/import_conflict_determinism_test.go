@@ -27,10 +27,11 @@ import (
 	"github.com/aalpar/wile/pkg/wile"
 )
 
-// conflictNameRE lifts the identifier out of the refusal
+// conflictNameRE lifts the identifier out of the refusals
 // pkg/machine/compilation/library_bindings.go raises when two imports of one
 // name have different provenance roots: `import: identifier %q from %s
-// conflicts with a different existing import; ...`.
+// conflicts with ...`, against an earlier import or another set of the same
+// form.
 var conflictNameRE = regexp.MustCompile(`identifier "([^"]+)" from`)
 
 // conflictingLibFS is two libraries that export the same ten names from
@@ -63,7 +64,7 @@ var conflictingLibFS = fstest.MapFS{
 // was whichever key the Go map walk reached first. Twenty fresh engines running
 // ONE program named ten different identifiers.
 //
-// The assertion is determinism, not a particular name: R7RS §5.6 fixes that the
+// The assertion is determinism, not a particular name: R7RS §5.2 fixes that the
 // import is an error, not which of the ten conflicting names gets reported. The
 // lexicographic-first check below pins the comparator's direction so a later
 // change to (Phase, Name) ordering cannot silently reverse it while staying
@@ -115,28 +116,87 @@ var atomicLibFS = fstest.MapFS{
 	},
 }
 
-// TestRefusedImportBindsNothing pins that an import form installs every binding
-// or none. Each row's form is refused, and afterwards a0 and a1 from (conf three)
-// must be unbound: a variable and a macro, because a macro's install also lands
-// one phase up.
+// macroConflictLibFS is two libraries exporting different macros named mm. The
+// second also exports b0, which sorts before mm, so an import that met the
+// phase-1 conflict only while installing would leave b0 bound.
+var macroConflictLibFS = fstest.MapFS{
+	"cm/one.sld": &fstest.MapFile{
+		Data: []byte(`(define-library (cm one)
+  (import (scheme base))
+  (export mm)
+  (begin
+    (define-syntax mm (syntax-rules () ((_) 1)))))`),
+	},
+	"cm/two.sld": &fstest.MapFile{
+		Data: []byte(`(define-library (cm two)
+  (import (scheme base))
+  (export b0 mm)
+  (begin
+    (define b0 2)
+    (define-syntax mm (syntax-rules () ((_) 2)))))`),
+	},
+}
+
+// refusedImportLibFS is libraries whose own import declarations are refused.
+// Line 4 of bad/split.sld is the refused declaration.
+var refusedImportLibFS = fstest.MapFS{
+	"bad/same.sld": &fstest.MapFile{
+		Data: []byte(`(define-library (bad same)
+  (import (scheme base))
+  (import (conf three) (conf one))
+  (export x)
+  (begin (define x 1)))`),
+	},
+	"bad/split.sld": &fstest.MapFile{
+		Data: []byte(`(define-library (bad split)
+  (import (scheme base))
+  (import (conf one))
+  (import (conf three))
+  (export x)
+  (begin (define x 1)))`),
+	},
+	"bad/tail.sld": &fstest.MapFile{
+		Data: []byte(`(define-library (bad tail)
+  (import (scheme base) . foo)
+  (export x)
+  (begin (define x 1)))`),
+	},
+}
+
+// newAtomicImportEngine is an engine that can load every library this file
+// defines, with obs as its import observer when non-nil.
+func newAtomicImportEngine(t *testing.T, obs func(wile.LibraryImportEvent)) *wile.Engine {
+	opts := []wile.EngineOption{
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceFS(conflictingLibFS),
+		wile.WithSourceFS(atomicLibFS),
+		wile.WithSourceFS(macroConflictLibFS),
+		wile.WithSourceFS(refusedImportLibFS),
+		wile.WithLibraryPaths("."),
+	}
+	if obs != nil {
+		opts = append(opts, wile.WithImportObserver(obs))
+	}
+	eng, err := wile.NewEngine(context.Background(), opts...)
+	qt.Assert(t, err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = eng.Close()
+	})
+	return eng
+}
+
+// TestRefusedImportBindsNothing pins that a top-level import form installs every
+// binding or none. Each row's form is refused, and afterwards the row's
+// references must be unbound. (conf three)'s are a0 and a1, a variable and a
+// macro, because a macro's install lands one phase up.
 //
 // Fails on master, where each set installed in sorted order and a refusal
 // returned midway, leaving a0 and a1 bound.
 func TestRefusedImportBindsNothing(t *testing.T) {
 	ctx := context.Background()
 	newEngine := func(t *testing.T) *wile.Engine {
-		eng, err := wile.NewEngine(ctx,
-			wile.WithProfile(wile.KitchenSink),
-			wile.WithSourceFS(stdlib.FS),
-			wile.WithSourceFS(conflictingLibFS),
-			wile.WithSourceFS(atomicLibFS),
-			wile.WithLibraryPaths("."),
-		)
-		qt.Assert(t, err, qt.IsNil)
-		t.Cleanup(func() {
-			_ = eng.Close()
-		})
-		return eng
+		return newAtomicImportEngine(t, nil)
 	}
 
 	// Control: on its own the library binds both names, so the unbound
@@ -147,15 +207,21 @@ func TestRefusedImportBindsNothing(t *testing.T) {
 		qt.Assert(t, got.SchemeString(), qt.Equals, "6")
 	})
 
+	three := []string{`a0`, `(a1)`}
 	tests := []struct {
-		name  string
-		setup string // must succeed; empty for none
-		form  string
-		want  error
+		name    string
+		setup   string // must succeed; empty for none
+		form    string
+		want    error
+		unbound []string
 	}{
-		{name: "a later form conflicts", setup: `(import (conf one))`, form: `(import (conf three))`, want: werr.ErrDuplicateBinding},
-		{name: "a later set of the same form conflicts", form: `(import (conf three) (conf one))`, want: werr.ErrDuplicateBinding},
-		{name: "a later set of the same form is missing", form: `(import (conf three) (conf missing))`, want: werr.ErrFileNotFound},
+		{name: "a later form conflicts", setup: `(import (conf one))`, form: `(import (conf three))`, want: werr.ErrDuplicateBinding, unbound: three},
+		{name: "a later set of the same form conflicts", form: `(import (conf three) (conf one))`, want: werr.ErrDuplicateBinding, unbound: three},
+		{name: "a later set of the same form is missing", form: `(import (conf three) (conf missing))`, want: werr.ErrFileNotFound, unbound: three},
+		{name: "the form is an improper list", form: `(import (conf three) . foo)`, want: werr.ErrNotAList, unbound: three},
+		// The conflict is mm at phase 1, so only a check made at every phase
+		// refuses it before b0 is written.
+		{name: "a later form's macro conflicts at phase 1", setup: `(import (cm one))`, form: `(import (cm two))`, want: werr.ErrDuplicateBinding, unbound: []string{`b0`}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -166,10 +232,108 @@ func TestRefusedImportBindsNothing(t *testing.T) {
 			}
 			_, err := eng.EvalMultiple(ctx, tt.form)
 			qt.Assert(t, err, qt.ErrorIs, tt.want)
-			for _, ref := range []string{`a0`, `(a1)`} {
+			for _, ref := range tt.unbound {
 				_, err = eng.EvalMultiple(ctx, ref)
 				qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSuchBinding, qt.Commentf("%s after the refused import", ref))
 			}
+		})
+	}
+}
+
+// TestRefusedImportFiresNoObserver pins that a top-level import form's observer
+// events fire only once the whole form has passed, so an observer (the doc
+// registration among them) never reports a refused import.
+func TestRefusedImportFiresNoObserver(t *testing.T) {
+	ctx := context.Background()
+	var topLevel []string
+	eng := newAtomicImportEngine(t, func(evt wile.LibraryImportEvent) {
+		if evt.Importer.Key() == "" {
+			topLevel = append(topLevel, evt.Library.Key())
+		}
+	})
+	topLevel = nil
+
+	_, err := eng.EvalMultiple(ctx, `(import (conf three) (conf one))`)
+	qt.Assert(t, err, qt.ErrorIs, werr.ErrDuplicateBinding)
+	qt.Assert(t, topLevel, qt.HasLen, 0, qt.Commentf("events fired for a refused form: %v", topLevel))
+
+	// Control: the observer sees an accepted form, so the empty answer above is
+	// about the refusal.
+	_, err = eng.EvalMultiple(ctx, `(import (conf three))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, topLevel, qt.Not(qt.HasLen), 0)
+}
+
+// TestRefusedLibraryImportDeclarationBindsNothing pins all or none for a
+// library's own import declarations. A refused library leaves no binding a
+// program can reach, so the observer is the witness: a declaration fires its
+// events only once all of it has passed, and fired lists every import the
+// library made.
+func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
+	tests := []struct {
+		lib   string
+		want  error
+		fired []string
+		at    string // the refusal's location; empty for unchecked
+	}{
+		// Two sets of one declaration conflict: neither installs.
+		{lib: "same", want: werr.ErrDuplicateBinding, fired: []string{"scheme/base"}},
+		// A declaration conflicts with an earlier one: the check sees the earlier
+		// declaration's installs, and the refusal points at the declaration's set.
+		{lib: "split", want: werr.ErrDuplicateBinding, fired: []string{"scheme/base", "conf/one"}, at: "bad/split.sld:4:"},
+		{lib: "tail", want: werr.ErrNotAList},
+	}
+	for _, tt := range tests {
+		t.Run(tt.lib, func(t *testing.T) {
+			var fired []string
+			eng := newAtomicImportEngine(t, func(evt wile.LibraryImportEvent) {
+				if evt.Importer.Key() == "bad/"+tt.lib {
+					fired = append(fired, evt.Library.Key())
+				}
+			})
+			_, err := eng.EvalMultiple(context.Background(), `(import (bad `+tt.lib+`))`)
+			qt.Assert(t, err, qt.ErrorIs, tt.want)
+			if tt.at != "" {
+				qt.Assert(t, err.Error(), qt.Contains, tt.at)
+			}
+			qt.Assert(t, fired, qt.DeepEquals, tt.fired)
+		})
+	}
+}
+
+// TestRefusedNamespaceRequireBindsNothing pins all or none for namespace-require,
+// whose ImportSpecInto is also the core of environment and make-namespace.
+func TestRefusedNamespaceRequireBindsNothing(t *testing.T) {
+	ctx := context.Background()
+	t.Run("alone", func(t *testing.T) {
+		eng := newAtomicImportEngine(t, nil)
+		got, err := eng.EvalMultiple(ctx, `(define ns (make-namespace)) (namespace-require ns '(conf three)) (namespace-bound? ns 'a0)`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, got.SchemeString(), qt.Equals, "#t")
+	})
+
+	tests := []struct {
+		name  string
+		setup string // must succeed; empty for none
+		form  string
+	}{
+		{name: "a later call conflicts", setup: `(namespace-require ns '(conf one))`, form: `(namespace-require ns '(conf three))`},
+		{name: "two sets of one spec conflict", form: `(namespace-require ns '(for-meta 0 (conf three) (conf one)))`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			eng := newAtomicImportEngine(t, nil)
+			_, err := eng.EvalMultiple(ctx, `(define ns (make-namespace))`)
+			qt.Assert(t, err, qt.IsNil)
+			if tt.setup != "" {
+				_, err = eng.EvalMultiple(ctx, tt.setup)
+				qt.Assert(t, err, qt.IsNil)
+			}
+			_, err = eng.EvalMultiple(ctx, tt.form)
+			qt.Assert(t, err, qt.ErrorIs, werr.ErrDuplicateBinding)
+			got, err := eng.EvalMultiple(ctx, `(namespace-bound? ns 'a0)`)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got.SchemeString(), qt.Equals, "#f", qt.Commentf("a0 after the refused namespace-require"))
 		})
 	}
 }

@@ -91,8 +91,9 @@ func TestStringHashConflictsBetweenRnrsHashtablesAndSRFI13(t *testing.T) {
 		c.Assert(err, qt.ErrorIs, werr.ErrDuplicateBinding)
 		// By name: any other duplicate would satisfy the sentinel.
 		c.Assert(err, qt.ErrorMatches, `(?s).*"string-hash" from \(srfi 13\) conflicts.*`)
-		// Refused whole: string-fold sorts before string-hash, and an import that
-		// stopped at the conflict would have bound it.
+		// The failing set is refused whole: string-fold sorts before string-hash,
+		// and a set that stopped at the conflict would have bound it. Refusing the
+		// whole form is TestRefusedImportBindsNothing's.
 		_, err = eng.EvalMultiple(context.Background(), `string-fold`)
 		c.Assert(err, qt.ErrorIs, werr.ErrNoSuchBinding)
 	})

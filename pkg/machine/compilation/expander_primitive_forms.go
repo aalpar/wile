@@ -25,7 +25,6 @@ package compilation
 // Extracted from expander_time_continuation.go.
 
 import (
-	"context"
 	"slices"
 	"strings"
 
@@ -470,15 +469,7 @@ func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, ex
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "import: expected list of import sets"))
 	}
 
-	// Collect every import set first: the form installs all of them or none.
-	var datums []values.Value
-	_, err := syntax.SyntaxForEach(p.ctx, importSets, func(_ context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		datums = append(datums, importSetExpr.UnwrapAll())
-		return nil
-	})
-	if err == nil {
-		err = ResolveAndInstallImportSets(p.ctx, datums, p.env, ImportStageExpand, p.evaluator)
-	}
+	err := ResolveAndInstallImportSets(p.ctx, importSets, p.env, ImportStageExpand, p.evaluator)
 	if err != nil {
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "import: failed to resolve import set"))
 	}

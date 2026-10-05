@@ -461,23 +461,28 @@ func resolveImportSets(ctx context.Context, datum values.Value, env *environment
 }
 
 // ResolveAndInstallImportSets resolves the import sets of one top-level import
-// form and installs their bindings into env. Used for top-level imports (both
-// expander and compiler). Library-internal imports share the resolution step
-// (resolveImportSets) but plan with planCopyDirect.
+// form, importSets being the list after the import keyword, and installs their
+// bindings into env. Used for top-level imports (both expander and compiler).
+// Library-internal imports share the resolution step (resolveImportSets) but
+// plan with planCopyDirect.
 //
-// All or none, as R7RS §5.2 makes an import declaration one unit: every library
-// is loaded and every install checked before the first binding is written, so a
-// refused form, a missing library, or a conflict between two of its sets leaves
-// env as it was. Until 2026-10-04 each set installed in turn and a conflict
-// returned midway, leaving the earlier sets and part of the failing one bound.
+// All or none: every library is loaded and every install checked before the
+// first binding is written, so a refused form (an improper list, a missing
+// library, a conflict between two of its sets or with an earlier import) leaves
+// env as it was. R7RS §5.2 does not ask for this, it makes a conflicting import
+// "an error" and no more; Wile chooses it. Until 2026-10-04 each set installed in
+// turn and a refusal returned midway, leaving the earlier sets and part of the
+// failing one bound. The one window left is a concurrent import into env landing
+// between the check and the install: installImportedBinding still refuses that
+// conflict, but after the form's earlier installs.
 //
 // The stage argument is import-observer metadata only; it does NOT select the
 // install phase. That comes from composePhaseShift below, which combines the
 // environment's own phase level with the import set's for-syntax/for-meta shift.
-func ResolveAndInstallImportSets(ctx context.Context, datums []values.Value, env *environment.EnvironmentFrame, stage ImportStage, evaluator machine.MacroEvaluator) error {
+func ResolveAndInstallImportSets(ctx context.Context, importSets *syntax.SyntaxPair, env *environment.EnvironmentFrame, stage ImportStage, evaluator machine.MacroEvaluator) error {
 	var pending []pendingImport
-	for _, datum := range datums {
-		resolved, err := resolveImportSets(ctx, datum, env, evaluator)
+	tail, err := syntax.SyntaxForEach(ctx, importSets, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
+		resolved, err := resolveImportSets(ctx, importSetExpr.UnwrapAll(), env, evaluator)
 		if err != nil {
 			return err
 		}
@@ -488,8 +493,26 @@ func ResolveAndInstallImportSets(ctx context.Context, datums []values.Value, env
 			}
 			pending = append(pending, pi)
 		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	err = refuseImproperImportTail(tail)
+	if err != nil {
+		return err
 	}
 	return installPendingImports(pending)
+}
+
+// refuseImproperImportTail refuses an import form whose list of import sets
+// ends in anything but the empty list. It runs after the sets are planned and
+// before any is installed, so `(import (srfi 13) . foo)` binds nothing.
+func refuseImproperImportTail(tail syntax.SyntaxValue) error {
+	if syntax.IsSyntaxEmptyList(tail) {
+		return nil
+	}
+	return werr.WrapForeignErrorf(werr.ErrNotAList, "import: import form must be a proper list")
 }
 
 // planResolvedImportSet plans one resolved library import into env for
@@ -679,7 +702,7 @@ func libraryBindingAt(lib *CompiledLibrary, present []environment.Phase, sym *va
 
 // importConflicts reports whether installing an import rooted at incoming under a
 // local name whose own-frame binding already exists would bind one identifier to
-// two DIFFERENT bindings — an error per R7RS §5.6 ("it is an error to import the same identifier
+// two DIFFERENT bindings — an error per R7RS §5.2 ("it is an error to import the same identifier
 // more than once with different bindings"). Only a prior IMPORTED binding counts:
 //
 //   - a re-import of the same binding (a diamond — two libraries re-exporting one
@@ -753,7 +776,7 @@ const (
 // # Which TIER, and why it is not the same answer at every site
 //
 // Historically every install went through the view, i.e.
-// MaybeCreateOwnGlobalBinding, whose writeCoordinates yield
+// MaybeCreateOwnGlobalBinding, whose WriteCoordinates yield
 // (phase N, mutable) — tierExactMutable, the same coordinates a user top-level define
 // writes. Sharing the slot made a define an ASSIGNMENT through the import, which
 // is how (define map 1) followed by (import (scheme base)) silently clobbered the
@@ -769,9 +792,9 @@ const (
 // # THE HAZARD, and why only ONE site takes the shadowable tier
 //
 // This doc used to argue that (phase 0, sealed) is safe BECAUSE IT IS
-// EMPTY, and that no view could produce it since writeCoordinates mapped a
+// EMPTY, and that no view could produce it since WriteCoordinates mapped a
 // sealed phase-0 write to the ANY coordinate. Stage A falsified both halves: the ambient
-// tier is deleted, writeCoordinates produces (phase 0, sealed) for exactly
+// tier is deleted, WriteCoordinates produces (phase 0, sealed) for exactly
 // that write, and the sealed base now lives at this very coordinate. The
 // coordinate is the most crowded one in the store.
 //
@@ -841,25 +864,22 @@ const (
 // while `created` reports on this frame, putting the guard and the write on
 // different variables.
 func installImportedBinding(in importInstall) error {
-	env := in.env
 	localSym := in.sym
-	ambient := syntax.Scopes{}
+	slot := in.slot()
 	var idx *environment.GlobalIndex
 	var created bool
-	if in.placement == placementShadowable {
+	if slot.imported {
 		// CreateImportedGlobalBindingAt, not the plain form: the base's own
 		// binding sits at exactly this coordinate with an equal scope set, so the
 		// plain reuse rule hands back the STARTUP SET's slot and this function then
 		// writes its value and its provenance onto the base. See that method's doc
 		// for the measurement.
-		idx, created = env.GlobalEnvironment().CreateImportedGlobalBindingAt(
-			localSym, in.bt, ambient, env.PhaseLevel(), true)
+		idx, created = slot.store.CreateImportedGlobalBindingAt(localSym, in.bt, slot.scopes, slot.phase, slot.sealed)
 	} else {
-		idx, created = env.MaybeCreateOwnGlobalBinding(localSym, in.bt, ambient)
+		idx, created = slot.store.CreateGlobalBindingAt(localSym, in.bt, slot.scopes, slot.phase, slot.sealed)
 	}
 
-	own := env.GlobalEnvironment()
-	target := own.GetOwnGlobalBinding(idx)
+	target := slot.store.GetOwnGlobalBinding(idx)
 
 	// A previously-imported binding of this local name that resolves to a
 	// different binding is a conflicting import (R7RS §5.2): reject rather than
@@ -921,39 +941,79 @@ func conflictingImportError(in importInstall) error {
 		in.sym.Key, in.sourceLib.Name.SchemeString())
 }
 
-// importSlotKey names the slot an importInstall writes. Every install of one
-// import form targets views of one environment, so the store, phase, placement
-// and name fix the slot.
+// importSlot is the store coordinate an importInstall writes: the arguments of
+// the create installImportedBinding makes, and of the probe existingImportSlot
+// makes in its place.
+type importSlot struct {
+	store    *environment.GlobalEnvironmentFrame
+	phase    environment.Phase
+	sealed   bool
+	imported bool
+	scopes   syntax.Scopes
+}
+
+// slot derives in's write coordinate. It is the only derivation: the install,
+// its probe and checkImportInstalls's in-form key all read it, so they cannot
+// disagree about which slot a write lands on.
+//
+// The scope set is AMBIENT, the empty set (see installImportedBinding's doc).
+func (p importInstall) slot() importSlot {
+	q := importSlot{store: p.env.GlobalEnvironment(), scopes: syntax.Scopes{}}
+	if p.placement == placementShadowable {
+		q.phase, q.sealed, q.imported = p.env.PhaseLevel(), true, true
+		return q
+	}
+	q.phase, q.sealed = p.env.WriteCoordinates()
+	return q
+}
+
+// importSlotKey identifies an importSlot and the name written there, for the
+// in-form check. Every coordinate the reuse rule matches on is in it, the scope
+// set as a fingerprint: reuse compares scope sets for equality, which a
+// fingerprint answers.
 type importSlotKey struct {
-	store     *environment.GlobalEnvironmentFrame
-	phase     environment.Phase
-	placement importPlacement
-	name      string
+	store    *environment.GlobalEnvironmentFrame
+	phase    environment.Phase
+	sealed   bool
+	imported bool
+	scopes   string
+	name     string
+}
+
+// key returns the importSlotKey for name written at p.
+func (p importSlot) key(name string) importSlotKey {
+	return importSlotKey{store: p.store, phase: p.phase, sealed: p.sealed, imported: p.imported, scopes: syntax.ScopeFingerprint(p.scopes), name: name}
 }
 
 // existingImportSlot returns the binding in would write through, or nil when it
 // would create one. It asks the reuse rule installImportedBinding's create
 // applies, and creates nothing.
 func existingImportSlot(in importInstall) *environment.Binding {
-	ambient := syntax.Scopes{}
-	if in.placement == placementShadowable {
-		return in.env.GlobalEnvironment().ReusableImportedGlobalBindingAt(in.sym, ambient, in.env.PhaseLevel(), true)
+	slot := in.slot()
+	if slot.imported {
+		return slot.store.ReusableImportedGlobalBindingAt(in.sym, slot.scopes, slot.phase, slot.sealed)
 	}
-	return in.env.ReusableOwnGlobalBinding(in.sym, ambient)
+	return slot.store.ReusableGlobalBindingAt(in.sym, slot.scopes, slot.phase, slot.sealed)
+}
+
+// plannedImport is what checkImportInstalls remembers of the first install of a
+// slot in one form: the binding it denotes and the library it comes from.
+type plannedImport struct {
+	origin environment.OriginRef
+	from   *CompiledLibrary
 }
 
 // checkImportInstalls refuses plan if an install would bind its name to a
 // different binding than the import already there, or than an earlier install
-// of the same form. seen carries the earlier installs' origins across the import
-// sets of one form. It writes nothing, so a refused form leaves no binding
-// behind.
-func checkImportInstalls(seen map[importSlotKey]*environment.OriginRef, plan []importInstall) error {
+// of the same form. seen carries the earlier installs across the import sets of
+// one form. It writes nothing, so a refused form leaves no binding behind.
+func checkImportInstalls(seen map[importSlotKey]plannedImport, plan []importInstall) error {
 	for _, in := range plan {
 		origin := importOrigin(in.source, in.internalName, in.sourceLib, in.sourcePhase)
-		key := importSlotKey{store: in.env.GlobalEnvironment(), phase: in.env.PhaseLevel(), placement: in.placement, name: in.sym.Key}
+		key := in.slot().key(in.sym.Key)
 		prior, planned := seen[key]
 		if !planned {
-			seen[key] = origin
+			seen[key] = plannedImport{origin: *origin, from: in.sourceLib}
 			if importConflicts(existingImportSlot(in), origin) {
 				return conflictingImportError(in)
 			}
@@ -961,31 +1021,42 @@ func checkImportInstalls(seen map[importSlotKey]*environment.OriginRef, plan []i
 		}
 		// An earlier install of this form writes the slot first, so it is the
 		// binding this one would meet there.
-		if prior != nil && origin != nil && *prior != *origin {
-			return conflictingImportError(in)
+		if prior.origin != *origin {
+			return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
+				"import: identifier %q from %s conflicts with the one from %s in the same import form; disambiguate with (except ...), (prefix ...), or (rename ...)",
+				in.sym.Key, in.sourceLib.Name.SchemeString(), prior.from.Name.SchemeString())
 		}
 	}
 	return nil
 }
 
 // pendingImport is one import set's planned installs, with the observer it fires
-// and the context its errors carry.
+// and the context its errors carry. A nil fire or wrap is none.
 type pendingImport struct {
 	plan []importInstall
 	fire func()
 	wrap func(error) error
 }
 
+// wrapErr adds p's context to err.
+func (p pendingImport) wrapErr(err error) error {
+	if p.wrap == nil {
+		return err
+	}
+	return p.wrap(err)
+}
+
 // installPendingImports installs the import sets of one form, all or none: every
-// set is checked before the first binding is written. An error from the install
-// pass is an invariant violation or a concurrent conflicting import, not a
-// refusal the check could have made.
+// set is checked before the first binding is written, and observers fire only
+// once the whole form has passed. An error from the install pass is an invariant
+// violation or a concurrent conflicting import, not a refusal the check could
+// have made, and leaves the form's earlier installs in place.
 func installPendingImports(pending []pendingImport) error {
-	seen := map[importSlotKey]*environment.OriginRef{}
+	seen := map[importSlotKey]plannedImport{}
 	for _, pi := range pending {
 		err := checkImportInstalls(seen, pi.plan)
 		if err != nil {
-			return pi.wrap(err)
+			return pi.wrapErr(err)
 		}
 	}
 	for _, pi := range pending {
@@ -995,7 +1066,7 @@ func installPendingImports(pending []pendingImport) error {
 		for _, in := range pi.plan {
 			err := installImportedBinding(in)
 			if err != nil {
-				return pi.wrap(err)
+				return pi.wrapErr(err)
 			}
 		}
 	}
@@ -1025,12 +1096,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[ExportKe
 	if err != nil {
 		return err
 	}
-	return installPendingImports([]pendingImport{{plan: plan, wrap: identityWrap}})
-}
-
-// identityWrap is a pendingImport.wrap that adds no context.
-func identityWrap(err error) error {
-	return err
+	return installPendingImports([]pendingImport{{plan: plan}})
 }
 
 // planCopyAtPhase plans CopyLibraryBindingsToEnvAtPhase's installs.
@@ -1246,7 +1312,7 @@ func planCopyDirect(lib *CompiledLibrary, bindings map[ExportKey]string, targetE
 		//
 		// Conflict detection (installImportedBinding) still mirrors
 		// CopyLibraryBindingsToEnvAtPhase, so a library declaration importing two
-		// libraries with different bindings for one name is rejected per R7RS §5.6,
+		// libraries with different bindings for one name is rejected per R7RS §5.2,
 		// not just a top-level program import.
 		installEnv := targetEnv.AtPhase(basePhase)
 		phaseNote := " at phase " + basePhase.String()

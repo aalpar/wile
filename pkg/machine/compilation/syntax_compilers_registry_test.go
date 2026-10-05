@@ -71,7 +71,7 @@ func TestSyntaxCompilersRegistry(t *testing.T) {
 // Syntax compilers reach the phase they were REGISTERED at, plus whatever a bulk
 // row supplies — not every phase. The ambient (ANY, sealed) tier they used to
 // occupy is gone: RegisterSyntaxCompilers writes through the level-0 sealed-write
-// view, and EnvironmentFrame.writeCoordinates now lands every write at
+// view, and EnvironmentFrame.WriteCoordinates now lands every write at
 // (phase = view's phase, view's sealed), so the compilers sit at
 // (phase 0, sealed) and phase 1 is a foreign coordinate to them.
 //

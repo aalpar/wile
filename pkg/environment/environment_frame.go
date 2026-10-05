@@ -129,7 +129,7 @@ type EnvironmentFrame struct {
 	phaseLevel Phase
 	// sealed says which tier a write through this frame lands in. It is the same
 	// fact the store records on every slot (slotRef.sealed), stamped by
-	// writeCoordinates, which is why it is a bool here too and not a rank: the
+	// WriteCoordinates, which is why it is a bool here too and not a rank: the
 	// write axis has exactly two positions, and the third read tier (ambient)
 	// comes from the PHASE axis, not from this field.
 	//
@@ -959,8 +959,10 @@ func (p *EnvironmentFrame) SetLocalValueBySlotDepth(slot, depth int, v values.Va
 	return nil
 }
 
-// writeCoordinates derives the store coordinates a write through this view lands
-// at: exact-phase at the view's rank, sealed or not as the view is.
+// WriteCoordinates derives the store coordinates a write through this view lands
+// at: exact-phase at the view's rank, sealed or not as the view is. Exported for
+// the import path, which plans a write before making it and must name the slot
+// the write will land on.
 //
 // There is no longer an arm for the ambient set. A sealed write at phase 0 used
 // to land at (ANY, sealed) — visible from every phase — which is the tier Stage
@@ -972,7 +974,7 @@ func (p *EnvironmentFrame) SetLocalValueBySlotDepth(slot, depth int, v values.Va
 // This is where the pre-fold topology went, and now it is gone entirely. The
 // phase-0 seal's global was minted ambient and the phase-1 seal's exact, because
 // a phase frame's parent chain ran through the phase-0 seal and no further.
-func (p *EnvironmentFrame) writeCoordinates() (Phase, bool) {
+func (p *EnvironmentFrame) WriteCoordinates() (Phase, bool) {
 	return p.phaseLevel, p.sealed
 }
 
@@ -988,23 +990,8 @@ func (p *EnvironmentFrame) writeCoordinates() (Phase, bool) {
 // the copy sits at (1, sealed) and the define writes at (1, mutable), so the
 // phase-1 case shadows for exactly the reason the phase-0 one does.
 func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt BindingType, scopes syntax.Scopes) (*GlobalIndex, bool) {
-	phase, sealed := p.writeCoordinates()
+	phase, sealed := p.WriteCoordinates()
 	return p.global.CreateGlobalBindingAt(key, bt, scopes, phase, sealed)
-}
-
-// ReusableOwnGlobalBinding returns the binding MaybeCreateOwnGlobalBinding would
-// hand back for these arguments, or nil when it would create one. It creates
-// nothing.
-func (p *EnvironmentFrame) ReusableOwnGlobalBinding(key *values.Symbol, scopes syntax.Scopes) *Binding {
-	phase, sealed := p.writeCoordinates()
-	p.global.mu.RLock()
-	defer p.global.mu.RUnlock()
-
-	s, ok := p.global.reusableSlotLocked(key, scopes, phase, sealed, false)
-	if !ok {
-		return nil
-	}
-	return p.global.bindings[s.slot]
 }
 
 // OwnGlobalIndex returns a PINNED GlobalIndex for the binding of key that
@@ -1018,7 +1005,7 @@ func (p *EnvironmentFrame) ReusableOwnGlobalBinding(key *values.Symbol, scopes s
 // unscoped candidates, so a top-level (define car …) would stamp the SEALED
 // car's metadata and then refuse itself as a redefine of a Stable anchor.
 func (p *EnvironmentFrame) OwnGlobalIndex(key *values.Symbol, q syntax.ScopeSet) *GlobalIndex {
-	phase, sealed := p.writeCoordinates()
+	phase, sealed := p.WriteCoordinates()
 	p.global.mu.RLock()
 	defer p.global.mu.RUnlock()
 
@@ -1036,7 +1023,7 @@ func (p *EnvironmentFrame) OwnGlobalIndex(key *values.Symbol, q syntax.ScopeSet)
 // ranked delete through the mutable runtime view would reach the sealed
 // primitive whenever no user shadow existed.
 func (p *EnvironmentFrame) DeleteOwnGlobal(sym *values.Symbol, scopes syntax.Scopes) bool {
-	phase, sealed := p.writeCoordinates()
+	phase, sealed := p.WriteCoordinates()
 	return p.global.DeleteBindingAt(sym, scopes, phase, sealed)
 }
 
@@ -1096,7 +1083,7 @@ func (p *EnvironmentFrame) IsOwnerRoot() bool {
 //
 // It is IsOwnerRoot's question asked the way the WRITE asks it. IsOwnerRoot is a
 // frame-IDENTITY test, while the write is a COORDINATE operation
-// (writeCoordinates), and the two diverge on a lexical child: a lambda body or a
+// (WriteCoordinates), and the two diverge on a lexical child: a lambda body or a
 // compile sub-frame inherits global/phase/namespace from its parent but is not
 // the root object, so it writes the root's slot while failing the root's identity
 // test. That divergence is the whole of finding 34a — compiling
@@ -1116,7 +1103,7 @@ func (p *EnvironmentFrame) IsOwnerRoot() bool {
 //
 // Note that the fix is deliberately NOT to change `sealed` on a lexical child.
 // It is left false on purpose (see NewEnvironmentFrameWithParent), and that is
-// exactly what makes writeCoordinates resolve to
+// exactly what makes WriteCoordinates resolve to
 // (phase 0, mutable) and the write land on the runtime root's slot.
 // Setting it true would redirect the write to (phase 0, sealed) — the startup
 // set's own coordinate, a strictly worse outcome, and it would break the write
@@ -1125,12 +1112,12 @@ func (p *EnvironmentFrame) WritesOwnerRootCoordinates() bool {
 	if p.namespace == nil {
 		return false
 	}
-	phase, sealed := p.writeCoordinates()
+	phase, sealed := p.WriteCoordinates()
 	for _, root := range [...]*EnvironmentFrame{p.namespace.runtime, p.namespace.sealedWriteRoot} {
 		if root == nil || root.global != p.global {
 			continue
 		}
-		rootPhase, rootSealed := root.writeCoordinates()
+		rootPhase, rootSealed := root.WriteCoordinates()
 		if rootPhase == phase && rootSealed == sealed {
 			return true
 		}
@@ -1466,7 +1453,7 @@ func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, s
 // executing frame is whatever a closure captured. Here the caller chose the view.
 func (p *EnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Value) error {
 	if gi != nil && gi.Env == nil {
-		phase, sealed := p.writeCoordinates()
+		phase, sealed := p.WriteCoordinates()
 		return p.global.setValueAtCoords(gi.Index, gi.query, phase, sealed, v)
 	}
 	// Delegate to GlobalEnvironmentFrame's thread-safe method

@@ -125,7 +125,7 @@ func TestPhaseOneHandlerValuePositionRefused(t *testing.T) {
 //     unbound. That arm still pins ErrNoSuchBinding, negative assertion included.
 //
 // The keyword coordinate is (phase 0, sealed), not the (ANY, sealed)
-// ambient slot it used to be: writeCoordinates lost its wildcard arm when the
+// ambient slot it used to be: WriteCoordinates lost its wildcard arm when the
 // ambient tier was deleted. Phase 0 is where these are USED, so the rows below
 // answer the same as before; what changed is that the keyword no longer follows
 // the reference to an arbitrary phase.

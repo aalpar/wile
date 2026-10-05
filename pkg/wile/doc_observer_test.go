@@ -157,13 +157,13 @@ func TestDocRegistrationObserver_EveryImportShapeRegistersLocalNames(t *testing.
 	}
 }
 
-// LibraryImportEvent.Bindings is a SNAPSHOT, and a third-party observer cannot
-// rewrite the import: this deletes every entry from the map it is handed and then
-// checks that the import installed anyway. Two things hold it since 2026-10-04:
-// the import is planned before the observer fires, and fireImportObserver clones
-// the map. Until then the clone alone did, and dropping it failed this test;
-// now it fails only if both are undone.
-func TestDocRegistrationObserver_BindingsIsASnapshot(t *testing.T) {
+// A third-party observer cannot rewrite the import: this deletes every entry from
+// the LibraryImportEvent.Bindings map it is handed and then checks that the
+// import installed anyway. Two things hold it since 2026-10-04: the import is
+// planned before the observer fires, and fireImportObserver clones the map. Until
+// then the clone alone did, and dropping it failed this test; now it fails only
+// if both are undone, so the clone is a defence no test reaches.
+func TestDocRegistrationObserver_CannotRewriteTheImport(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 

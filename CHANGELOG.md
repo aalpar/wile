@@ -120,14 +120,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - **An `(import …)` form binds everything or nothing.** Each import set used to
-  install in turn, name by name, and a conflict or a missing library returned
-  midway, leaving the form's earlier sets and part of the failing one bound: after
-  `(import (scheme base))`, a refused `(import (srfi 13))` left `string-any`
-  through `string-fold` behind. Every library is now loaded and every binding
-  checked before the first is written. The rule also covers a library's own
-  import declarations and each spec given to `environment`, `make-namespace` or
-  `namespace-require`, and an import observer no longer fires for a refused form.
-  Pinned by `TestRefusedImportBindsNothing`.
+  install in turn, name by name, and a conflict, a missing library or an improper
+  tail returned midway, leaving the form's earlier sets and part of the failing
+  one bound: after `(import (scheme base))`, a refused `(import (srfi 13))` left
+  every name sorting before `string-map`, the first conflict, bound (`string-any`
+  through `string-join`). Every library is now loaded and every binding checked
+  before the first is written. The rule also covers a library's own import
+  declarations, where an improper tail used to be dropped silently, and each spec
+  given to `environment`, `make-namespace` or `namespace-require`, which share one
+  install path; an import observer no longer fires for a refused form. Pinned by
+  `TestRefusedImportBindsNothing` (top level, including a conflict at phase 1),
+  `TestRefusedLibraryImportDeclarationBindsNothing`,
+  `TestRefusedNamespaceRequireBindsNothing` and `TestRefusedImportFiresNoObserver`.
 
 - **`hashtable-hash-function` and `hashtable-equivalence-function` name the phase
   they looked at when they refuse.** On a fixed-kind table they find the
@@ -518,7 +522,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `GlobalEnvironmentFrame.AmbientBinding`, which read the ambient tier alone, and
   the unexported `tierAmbientSealed` it read.
 
-  Stage A had already stopped WRITING the coordinate: `writeCoordinates` sent
+  Stage A had already stopped WRITING the coordinate: `WriteCoordinates` sent
   every sealed phase-0 write to `(phase 0, sealed)`, `tierOf` classified a
   wildcard slot as no candidate, and `CreateGlobalBindingAt` panicked on one. So
   nothing here changes an answer — `tierOf` never returned `tierAmbientSealed`
