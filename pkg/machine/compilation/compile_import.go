@@ -38,15 +38,13 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 	return nil
 }
 
-// processLibraryImport handles (import <import-set> ...) within a library.
-//
-// This shares the parse→load→apply prefix with ResolveAndInstallImportSets
-// (via resolveImportSets) but diverges at installation: library-internal
-// imports install directly into lib.Env via planCopyDirect,
-// because lib.Env.AtPhase() routes to the parent's phase registry. All or none,
-// as at the top level.
+// processLibraryImport handles a library's (import <import-set> ...)
+// declaration. It shares planImportForm and installPendingImports with
+// ResolveAndInstallImportSets, all or none, and differs only in planning each
+// library with planCopyDirect, whose doc says why a declaration installs on the
+// mutable tier.
 func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
-	pending, err := planImportForm(ctctx.ctx, args, p.env, p.evaluator, func(res *ResolvedImportSet) (pendingImport, error) {
+	pending, err := planImportForm(ctctx.ctx, args, p.env, p.evaluator, func(res *ResolvedImportSet) ([]importInstall, func(), error) {
 		return p.planLibraryImport(lib, res)
 	})
 	if err != nil {
@@ -56,23 +54,23 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 }
 
 // planLibraryImport plans one resolved library import into lib.Env for
-// processLibraryImport. planImportForm adds the error context.
-func (p *CompileTimeContinuation) planLibraryImport(lib *CompiledLibrary, res *ResolvedImportSet) (pendingImport, error) {
+// processLibraryImport: its installs, and the observer they fire.
+func (p *CompileTimeContinuation) planLibraryImport(lib *CompiledLibrary, res *ResolvedImportSet) ([]importInstall, func(), error) {
 	// Compose the parsed for-syntax/for-meta shift with the library env's own
 	// phase, the same composition ResolveAndInstallImportSets performs at top
 	// level. Based on lib.Env rather than p.env because lib.Env is the frame
 	// the install targets, so the base and the target cannot drift apart.
 	targetPhase, err := composePhaseShift("import", lib.Env.PhaseLevel(), res.ImportSet.PhaseShift)
 	if err != nil {
-		return pendingImport{}, err
+		return nil, nil, err
 	}
 	plan, err := planCopyDirect(res.Library, res.Bindings, lib.Env, targetPhase)
 	if err != nil {
-		return pendingImport{}, err
+		return nil, nil, err
 	}
 	env := p.env
 	fire := func() {
 		fireImportObserver(env, res.Library, res.Bindings, lib.Name, ImportStageCompile)
 	}
-	return pendingImport{plan: plan, fire: fire}, nil
+	return plan, fire, nil
 }

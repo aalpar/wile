@@ -131,9 +131,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   declarations, where an improper tail used to be dropped silently, and each spec
   given to `environment`, `make-namespace` or `namespace-require`, which share one
   install path; an import observer no longer fires for a form the check refuses.
-  Since 1.20.0 a library declaration's `(import . foo)` is `ErrInvalidSyntax`
-  rather than `ErrNotAPair`, and a refused import is located at the failing set
-  rather than at the whole form. Pinned by
+  Unlike 1.20.0, a library declaration's `(import . foo)` is `ErrInvalidSyntax`
+  rather than `ErrNotAPair`, a refused top-level import is located at the failing
+  set rather than at the whole form, and a refused library import declaration
+  names the library it was copying from, as a top-level refusal already did.
+  Pinned by
   `TestRefusedImportBindsNothing` (top level, including a conflict at phase 1),
   `TestRefusedLibraryImportDeclarationBindsNothing`,
   `TestRefusedNamespaceRequireBindsNothing` and `TestRefusedImportFiresNoObserver`.

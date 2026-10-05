@@ -442,12 +442,11 @@ func TestPendingImportWrapErr(t *testing.T) {
 	c.Assert(wrapped.Error(), qt.Matches, `test: context: .*test: conflict.*`)
 }
 
-// TestImportSetFormsNilIsNone pins that a nil import form has no import sets
-// rather than panicking: ResolveAndInstallImportSets is exported, and nil means
-// none.
-func TestImportSetFormsNilIsNone(t *testing.T) {
+// TestResolveAndInstallImportSetsNilIsNone pins that the exported entry point
+// takes a nil import form as one with no import sets rather than panicking: nil
+// means none.
+func TestResolveAndInstallImportSetsNilIsNone(t *testing.T) {
 	c := qt.New(t)
-	sets, err := importSetForms(context.Background(), nil)
+	err := ResolveAndInstallImportSets(context.Background(), nil, environment.NewNamespace().Runtime(), ImportStageCompile, nil)
 	c.Assert(err, qt.IsNil)
-	c.Assert(sets, qt.HasLen, 0)
 }

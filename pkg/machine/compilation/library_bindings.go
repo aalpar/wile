@@ -481,7 +481,7 @@ func resolveImportSets(ctx context.Context, datum values.Value, env *environment
 // install phase. That comes from composePhaseShift below, which combines the
 // environment's own phase level with the import set's for-syntax/for-meta shift.
 func ResolveAndInstallImportSets(ctx context.Context, importSets syntax.SyntaxValue, env *environment.EnvironmentFrame, stage ImportStage, evaluator machine.MacroEvaluator) error {
-	pending, err := planImportForm(ctx, importSets, env, evaluator, func(res *ResolvedImportSet) (pendingImport, error) {
+	pending, err := planImportForm(ctx, importSets, env, evaluator, func(res *ResolvedImportSet) ([]importInstall, func(), error) {
 		return planResolvedImportSet(env, res, stage)
 	})
 	if err != nil {
@@ -490,13 +490,15 @@ func ResolveAndInstallImportSets(ctx context.Context, importSets syntax.SyntaxVa
 	return installPendingImports(pending)
 }
 
-// planImportForm plans every set of one import form, for both import paths:
+// planImportForm plans every set of one import form, for the two syntax import
+// paths (ImportSpecInto plans a datum, which has no source location to carry):
 // importSets is the form's arguments after the import keyword, env resolves the
-// library names, and plan plans one resolved library. A malformed form is
-// refused before anything resolves (importSetForms). Every error a set raises,
-// in resolution, planning, the check or the install, carries the set's source
-// location and the library it copies from.
-func planImportForm(ctx context.Context, importSets syntax.SyntaxValue, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, plan func(*ResolvedImportSet) (pendingImport, error)) ([]pendingImport, error) {
+// library names, and plan returns one resolved library's installs and the
+// observer they fire. A malformed form is refused before anything resolves
+// (importSetForms). Every error a set raises carries the set's source location;
+// those from planning, the check and the install also name the library the set
+// copies from, which a resolution error names only when it got that far.
+func planImportForm(ctx context.Context, importSets syntax.SyntaxValue, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, plan func(*ResolvedImportSet) ([]importInstall, func(), error)) ([]pendingImport, error) {
 	sets, err := importSetForms(ctx, importSets)
 	if err != nil {
 		return nil, err
@@ -515,12 +517,11 @@ func planImportForm(ctx context.Context, importSets syntax.SyntaxValue, env *env
 				return at(werr.WrapForeignErrorf(err, "import: error copying bindings from %s",
 					res.ImportSet.LibraryName.SchemeString()))
 			}
-			pi, err := plan(res)
+			installs, fire, err := plan(res)
 			if err != nil {
 				return nil, from(err)
 			}
-			pi.wrap = from
-			q = append(q, pi)
+			q = append(q, pendingImport{plan: installs, fire: fire, wrap: from})
 		}
 	}
 	return q, nil
@@ -552,8 +553,8 @@ func importSetForms(ctx context.Context, importSets syntax.SyntaxValue) ([]synta
 }
 
 // planResolvedImportSet plans one resolved library import into env for
-// ResolveAndInstallImportSets. planImportForm adds the error context.
-func planResolvedImportSet(env *environment.EnvironmentFrame, res *ResolvedImportSet, stage ImportStage) (pendingImport, error) {
+// ResolveAndInstallImportSets: its installs, and the observer they fire.
+func planResolvedImportSet(env *environment.EnvironmentFrame, res *ResolvedImportSet, stage ImportStage) ([]importInstall, func(), error) {
 	// Compose the parsed for-syntax/for-meta shift with the current expansion
 	// phase, not a hardcoded 0: an (import (for-syntax M)) written inside a
 	// phase-N transformer body places M at phase N+1. At the top level
@@ -562,17 +563,17 @@ func planResolvedImportSet(env *environment.EnvironmentFrame, res *ResolvedImpor
 	// guard (werr.ErrInvalidArgument).
 	targetPhase, err := composePhaseShift("import", env.PhaseLevel(), res.ImportSet.PhaseShift)
 	if err != nil {
-		return pendingImport{}, err
+		return nil, nil, err
 	}
 
 	plan, err := planCopyAtPhase(res.Library, res.Bindings, env, targetPhase)
 	if err != nil {
-		return pendingImport{}, err
+		return nil, nil, err
 	}
 	fire := func() {
 		fireImportObserver(env, res.Library, res.Bindings, LibraryName{}, stage)
 	}
-	return pendingImport{plan: plan, fire: fire}, nil
+	return plan, fire, nil
 }
 
 // ExportedBinding resolves the binding a phase-0 export of internalName denotes,
