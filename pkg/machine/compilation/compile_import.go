@@ -40,9 +40,10 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 
 // processLibraryImport handles a library's (import <import-set> ...)
 // declaration. It shares planImportForm and installPendingImports with
-// ResolveAndInstallImportSets, all or none, and differs only in planning each
-// library with planCopyDirect, whose doc says why a declaration installs on the
-// mutable tier.
+// ResolveAndInstallImportSets, all or none, and differs in its planner,
+// planLibraryImport: that plans into lib.Env with planCopyDirect, whose doc says
+// why a declaration installs on the mutable tier, and reports lib as the
+// importer.
 func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
 	pending, err := planImportForm(ctctx.ctx, args, p.env, p.evaluator, func(res *ResolvedImportSet) ([]importInstall, func(), error) {
 		return p.planLibraryImport(lib, res)

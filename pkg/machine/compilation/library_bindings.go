@@ -464,8 +464,8 @@ func resolveImportSets(ctx context.Context, datum values.Value, env *environment
 // ResolveAndInstallImportSets resolves the import sets of one top-level import
 // form, importSets being the form's arguments after the import keyword, and
 // installs their bindings into env. Used for top-level imports (both expander and compiler).
-// Library-internal imports share the resolution step (resolveImportSets) but
-// plan with planCopyDirect.
+// A library's import declarations share planImportForm and installPendingImports
+// with it, and plan with planCopyDirect.
 //
 // All or none: every library is loaded and every install checked before the
 // first binding is written, so a refused form (an improper list, a missing
@@ -491,13 +491,14 @@ func ResolveAndInstallImportSets(ctx context.Context, importSets syntax.SyntaxVa
 }
 
 // planImportForm plans every set of one import form, for the two syntax import
-// paths (ImportSpecInto plans a datum, which has no source location to carry):
+// paths (ImportSpecInto plans a datum on its own: it has no source location,
+// fires no observer and takes its phase shift uncomposed):
 // importSets is the form's arguments after the import keyword, env resolves the
 // library names, and plan returns one resolved library's installs and the
 // observer they fire. A malformed form is refused before anything resolves
 // (importSetForms). Every error a set raises carries the set's source location;
-// those from planning, the check and the install also name the library the set
-// copies from, which a resolution error names only when it got that far.
+// those from planning, the check and the install also name the library being
+// imported, which a resolution error names only when it got that far.
 func planImportForm(ctx context.Context, importSets syntax.SyntaxValue, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, plan func(*ResolvedImportSet) ([]importInstall, func(), error)) ([]pendingImport, error) {
 	sets, err := importSetForms(ctx, importSets)
 	if err != nil {
@@ -514,7 +515,7 @@ func planImportForm(ctx context.Context, importSets syntax.SyntaxValue, env *env
 		}
 		for _, res := range resolved {
 			from := func(err error) error {
-				return at(werr.WrapForeignErrorf(err, "import: error copying bindings from %s",
+				return at(werr.WrapForeignErrorf(err, "import: error importing %s",
 					res.ImportSet.LibraryName.SchemeString()))
 			}
 			installs, fire, err := plan(res)
@@ -1264,7 +1265,7 @@ func ImportSpecInto(ctx context.Context, specVal values.Value, callerEnv, target
 		}
 
 		wrap := func(err error) error {
-			return werr.WrapForeignErrorf(err, "%s: error copying bindings from %s", op, importSet.LibraryName.SchemeString())
+			return werr.WrapForeignErrorf(err, "%s: error importing %s", op, importSet.LibraryName.SchemeString())
 		}
 		plan, err := planCopyAtPhase(lib, bindings, targetEnv, importSet.PhaseShift)
 		if err != nil {

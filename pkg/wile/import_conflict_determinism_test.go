@@ -240,21 +240,25 @@ func TestRefusedImportBindsNothing(t *testing.T) {
 		unbound []string
 	}{
 		// A row whose msg starts `:2:8:` is refused at its failing set, on line 2,
-		// not at the form, naming the library that set copies from.
+		// not at the form, naming the library it was importing.
 		{name: "a later form conflicts", setup: `(import (conf one))`, form: "(import (scheme base)\n        (conf three))", want: werr.ErrDuplicateBinding,
-			msg: `(?s).*:2:8: import: error copying bindings from \(conf three\): .*"aa" from \(conf three\) conflicts with a different existing import.*`, unbound: three},
+			msg: `(?s).*:2:8: import: error importing \(conf three\): .*"aa" from \(conf three\) conflicts with a different existing import.*`, unbound: three},
 		{name: "a later set of the same form conflicts", form: "(import (conf three)\n        (conf one))", want: werr.ErrDuplicateBinding,
-			msg: `(?s).*:2:8: import: error copying bindings from \(conf one\): .*"aa" from \(conf one\) conflicts with the one from \(conf three\) in the same import form.*`, unbound: three},
+			msg: `(?s).*:2:8: import: error importing \(conf one\): .*"aa" from \(conf one\) conflicts with the one from \(conf three\) in the same import form.*`, unbound: three},
 		// The failing set is not the last: its error names it, not the set after it.
 		{name: "a middle set of the same form conflicts", form: "(import (conf three)\n        (conf one)\n        (scheme base))", want: werr.ErrDuplicateBinding,
-			msg: `(?s).*:2:8: import: error copying bindings from \(conf one\): .*`, unbound: three},
+			msg: `(?s).*:2:8: import: error importing \(conf one\): .*`, unbound: three},
 		// Refused while planning: a1's propagation one phase above 127 overflows,
 		// after the first set has planned.
 		{name: "a later set cannot be planned", form: "(import (conf three)\n        (for-meta 127 (conf three)))", want: werr.ErrInvalidArgument,
-			msg: `(?s).*:2:8: import: error copying bindings from \(conf three\): .*propagation phase 128 .*`, unbound: three},
+			msg: `(?s).*:2:8: import: error importing \(conf three\): .*propagation phase 128 .*`, unbound: three},
 		{name: "a later set of the same form is missing", form: `(import (conf three) (conf missing))`, want: werr.ErrFileNotFound, unbound: three},
 		{name: "a later set on a later line is missing", form: "(import (conf three)\n        (conf missing))", want: werr.ErrFileNotFound,
-			msg: `(?s).*:2:8: .*`, unbound: three},
+			msg: `(?s).*:2:8: import: failed to load library \(conf missing\): .*`, unbound: three},
+		// One set naming three libraries: they share its location, so only the
+		// library named tells which one failed.
+		{name: "a later library of one set conflicts", form: "(import (for-meta 0 (conf three) (conf one) (scheme base)))", want: werr.ErrDuplicateBinding,
+			msg: `(?s).*:1:8: import: error importing \(conf one\): .*`, unbound: three},
 		{name: "the form is an improper list", form: `(import (conf three) . foo)`, want: werr.ErrInvalidSyntax, unbound: three},
 		// No import set before the tail: the same refusal, at the tail.
 		{name: "the form is not a list", form: `(import . foo)`, want: werr.ErrInvalidSyntax,
@@ -320,13 +324,13 @@ func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
 		lib   string
 		want  error
 		fired []string
-		at    string // the refusal's location; empty for unchecked
+		at    string // the refusal's location and the start of its message; empty for unchecked
 	}{
 		// Two sets of one declaration conflict: neither installs.
-		{lib: "same", want: werr.ErrDuplicateBinding, fired: []string{"scheme/base"}, at: "bad/same.sld:3:23: import: error copying bindings from (conf one): "},
+		{lib: "same", want: werr.ErrDuplicateBinding, fired: []string{"scheme/base"}, at: "bad/same.sld:3:23: import: error importing (conf one): "},
 		// A declaration conflicts with an earlier one: the check sees the earlier
 		// declaration's installs, and the refusal points at the declaration's set.
-		{lib: "split", want: werr.ErrDuplicateBinding, fired: []string{"scheme/base", "conf/one"}, at: "bad/split.sld:4:10: import: error copying bindings from (conf three): "},
+		{lib: "split", want: werr.ErrDuplicateBinding, fired: []string{"scheme/base", "conf/one"}, at: "bad/split.sld:4:10: import: error importing (conf three): "},
 		// The refusal points at the tail, not at its declaration.
 		{lib: "tail", want: werr.ErrInvalidSyntax, at: "bad/tail.sld:3:"},
 		// Refused before any library loads, so (bad boom)'s body never runs.
