@@ -324,7 +324,7 @@ func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
 		lib   string
 		want  error
 		fired []string
-		at    string // the refusal's location and the start of its message; empty for unchecked
+		at    string // a substring the refusal must contain: its location and message start; empty for unchecked
 	}{
 		// Two sets of one declaration conflict: neither installs.
 		{lib: "same", want: werr.ErrDuplicateBinding, fired: []string{"scheme/base"}, at: "bad/same.sld:3:23: import: error importing (conf one): "},
@@ -332,11 +332,11 @@ func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
 		// declaration's installs, and the refusal points at the declaration's set.
 		{lib: "split", want: werr.ErrDuplicateBinding, fired: []string{"scheme/base", "conf/one"}, at: "bad/split.sld:4:10: import: error importing (conf three): "},
 		// The refusal points at the tail, not at its declaration.
-		{lib: "tail", want: werr.ErrInvalidSyntax, at: "bad/tail.sld:3:"},
+		{lib: "tail", want: werr.ErrInvalidSyntax, at: "bad/tail.sld:3:12: import: import form must be a proper list"},
 		// Refused before any library loads, so (bad boom)'s body never runs.
-		{lib: "tailboom", want: werr.ErrInvalidSyntax, at: "bad/tailboom.sld:3:"},
+		{lib: "tailboom", want: werr.ErrInvalidSyntax, at: "bad/tailboom.sld:3:12: import: import form must be a proper list"},
 		// No import set at all before the tail: the same refusal, at the tail.
-		{lib: "notalist", want: werr.ErrInvalidSyntax, at: "bad/notalist.sld:3:"},
+		{lib: "notalist", want: werr.ErrInvalidSyntax, at: "bad/notalist.sld:3:6: import: import form must be a proper list"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.lib, func(t *testing.T) {
@@ -371,9 +371,13 @@ func TestRefusedNamespaceRequireBindsNothing(t *testing.T) {
 		name  string
 		setup string // must succeed; empty for none
 		form  string
+		msg   string // a pattern the refusal must match
 	}{
-		{name: "a later call conflicts", setup: `(namespace-require ns '(conf one))`, form: `(namespace-require ns '(conf three))`},
-		{name: "two sets of one spec conflict", form: `(namespace-require ns '(for-meta 0 (conf three) (conf one)))`},
+		{name: "a later call conflicts", setup: `(namespace-require ns '(conf one))`, form: `(namespace-require ns '(conf three))`,
+			msg: `(?s).*namespace-require: error importing \(conf three\): .*conflicts with a different existing import.*`},
+		// Names the library that failed, not the spec's first.
+		{name: "two sets of one spec conflict", form: `(namespace-require ns '(for-meta 0 (conf three) (conf one)))`,
+			msg: `(?s).*namespace-require: error importing \(conf one\): .*`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -386,6 +390,7 @@ func TestRefusedNamespaceRequireBindsNothing(t *testing.T) {
 			}
 			_, err = eng.EvalMultiple(ctx, tt.form)
 			qt.Assert(t, err, qt.ErrorIs, werr.ErrDuplicateBinding)
+			qt.Assert(t, err, qt.ErrorMatches, tt.msg)
 			got, err := eng.EvalMultiple(ctx, `(namespace-bound? ns 'a0)`)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, got.SchemeString(), qt.Equals, "#f", qt.Commentf("a0 after the refused namespace-require"))

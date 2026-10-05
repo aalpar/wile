@@ -491,8 +491,9 @@ func ResolveAndInstallImportSets(ctx context.Context, importSets syntax.SyntaxVa
 }
 
 // planImportForm plans every set of one import form, for the two syntax import
-// paths (ImportSpecInto plans a datum on its own: it has no source location,
-// fires no observer and takes its phase shift uncomposed):
+// paths (ImportSpecInto plans a datum on its own, since a datum has no source
+// location to carry; it also fires no observer and takes its phase shift
+// uncomposed):
 // importSets is the form's arguments after the import keyword, env resolves the
 // library names, and plan returns one resolved library's installs and the
 // observer they fire. A malformed form is refused before anything resolves
