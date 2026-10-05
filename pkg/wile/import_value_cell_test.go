@@ -29,7 +29,7 @@ import (
 // transports the exporting library's value LOCATION, not a copy of its value, so
 // a library that assigns its own exported variable is visible through the import.
 //
-// R7RS is silent on the fork: §5.6.1 constrains what the IMPORTER may do to an
+// R7RS is silent on the fork: §5.2 constrains what the IMPORTER may do to an
 // imported binding ("to redefine or mutate an imported binding with a definition
 // or with set!") and says nothing about the exporting library's own set!. Of the
 // two oracles, Racket reads through and Chez refuses to export an assigned

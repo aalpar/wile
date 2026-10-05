@@ -15,8 +15,6 @@
 package compilation
 
 import (
-	"context"
-
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -66,12 +64,16 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "import: expected list of import sets"))
 	}
 
+	sets, err := importSetForms(ctctx.ctx, argsPair)
+	if err != nil {
+		return err
+	}
 	var pending []pendingImport
-	tail, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
+	for _, setExpr := range sets {
 		wrap := func(err error) error {
-			return wrapSourcedError(importSetExpr.SourceContext(), err)
+			return wrapSourcedError(setExpr.SourceContext(), err)
 		}
-		resolved, err := resolveImportSets(ctx, importSetExpr.UnwrapAll(), p.env, p.evaluator)
+		resolved, err := resolveImportSets(ctctx.ctx, setExpr.UnwrapAll(), p.env, p.evaluator)
 		if err != nil {
 			return wrap(err)
 		}
@@ -82,14 +84,6 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 			}
 			pending = append(pending, pi)
 		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	err = refuseImproperImportTail(tail)
-	if err != nil {
-		return wrapSourcedError(args.SourceContext(), err)
 	}
 	return installPendingImports(pending)
 }

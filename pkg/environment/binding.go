@@ -88,7 +88,7 @@ type BindingMeta struct {
 	//
 	// It exists because of the import edge. An imported binding shares its
 	// exporter's value LOCATION (valueLoc), so Imported stopped being evidence
-	// that the value will not change: R7RS §5.6.1 forbids the IMPORTER's set!,
+	// that the value will not change: R7RS §5.2 forbids the IMPORTER's set!,
 	// and says nothing about the exporting library's own. IsStable() therefore
 	// withdraws the Imported conclusion for a binding carrying this flag, and
 	// markBindingImported propagates it across the edge beside CaptureSafe.
@@ -410,7 +410,7 @@ func (p *Binding) BindingType() BindingType {
 // This is the import edge (installImportedBinding). It replaces a value COPY,
 // which left the importer reading a snapshot taken at import time: a library that
 // assigns its own exported variable was invisible to its importers. R7RS is
-// silent (§5.6.1 constrains the importer, not the exporter); Racket reads
+// silent (§5.2 constrains the importer, not the exporter); Racket reads
 // through, Chez refuses the library.
 //
 // Both bindings must be global (in a global frame, hence cell != nil). A local
@@ -539,7 +539,7 @@ func (p *Binding) IsImported() bool {
 }
 
 // IsStable reports the rebind-stability conclusion: the binding will not be
-// rebound. Imported is standing evidence for that conclusion (R7RS §5.6.1
+// rebound. Imported is standing evidence for that conclusion (R7RS §5.2
 // forbids set! on imports) UNLESS the exporting unit assigns the variable
 // itself, which that sentence does not forbid and which the shared value
 // location makes visible here; Stable carries the conclusion when a proof

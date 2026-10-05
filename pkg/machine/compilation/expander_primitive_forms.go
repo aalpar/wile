@@ -471,7 +471,7 @@ func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, ex
 
 	err := ResolveAndInstallImportSets(p.ctx, importSets, p.env, ImportStageExpand, p.evaluator)
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "import: failed to resolve import set"))
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "import: form refused"))
 	}
 
 	// Return the import form unchanged for later compilation

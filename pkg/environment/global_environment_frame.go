@@ -1773,9 +1773,9 @@ func (p *GlobalEnvironmentFrame) createGlobalBindingAt(key *values.Symbol, bt Bi
 
 // reusableSlotLocked is createGlobalBindingAt's reuse rule: the slot a create
 // with these arguments hands back instead of minting one. It is the rule's only
-// statement, so a caller that asks before creating (ReusableGlobalBindingAt,
-// ReusableImportedGlobalBindingAt) and the create itself cannot disagree about
-// which slot a write lands on. Caller holds p.mu.
+// statement, so a caller that asks before creating (ReusableImportedGlobalBindingAt)
+// and the create itself cannot disagree about which slot a write lands on.
+// Caller holds p.mu.
 func (p *GlobalEnvironmentFrame) reusableSlotLocked(key *values.Symbol, scopes syntax.Scopes, phase Phase, sealed bool, imported bool) (slotRef, bool) {
 	for _, s := range p.keys[*key] {
 		if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
@@ -1810,27 +1810,15 @@ func (p *GlobalEnvironmentFrame) reusableSlotLocked(key *values.Symbol, scopes s
 	return slotRef{}, false
 }
 
-// ReusableGlobalBindingAt returns the binding CreateGlobalBindingAt would hand
-// back for these arguments, or nil when it would create one. It creates nothing,
-// which is what lets an import form be checked whole before any of it is
-// installed.
-func (p *GlobalEnvironmentFrame) ReusableGlobalBindingAt(key *values.Symbol, scopes syntax.Scopes, phase Phase, sealed bool) *Binding {
-	return p.reusableBindingAt(key, scopes, phase, sealed, false)
-}
-
-// ReusableImportedGlobalBindingAt is ReusableGlobalBindingAt for
-// CreateImportedGlobalBindingAt.
+// ReusableImportedGlobalBindingAt returns the binding CreateImportedGlobalBindingAt
+// would hand back for these arguments, or nil when it would create one. It
+// creates nothing, which is what lets an import form be checked whole before any
+// of it is installed.
 func (p *GlobalEnvironmentFrame) ReusableImportedGlobalBindingAt(key *values.Symbol, scopes syntax.Scopes, phase Phase, sealed bool) *Binding {
-	return p.reusableBindingAt(key, scopes, phase, sealed, true)
-}
-
-// reusableBindingAt is the shared body of the two probes, as createGlobalBindingAt
-// is of the two creates.
-func (p *GlobalEnvironmentFrame) reusableBindingAt(key *values.Symbol, scopes syntax.Scopes, phase Phase, sealed bool, imported bool) *Binding {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	s, ok := p.reusableSlotLocked(key, scopes, phase, sealed, imported)
+	s, ok := p.reusableSlotLocked(key, scopes, phase, sealed, true)
 	if !ok {
 		return nil
 	}

@@ -102,7 +102,7 @@ func matrixEngine(t *testing.T, extra ...wile.EngineOption) *wile.Engine {
 			// lib-renamer/lib-setbang are the IMPORTED-RENAME half of the
 			// special-form shadow ("imported rename shadows set!" below). The
 			// except is not decoration: (scheme base) exports set! itself, and
-			// the import-conflict detector (R7RS §5.6, library_bindings.go:688)
+			// the import-conflict detector (R7RS §5.2, importConflicts)
 			// refuses two different bindings of one name, which would make the
 			// row fail for the wrong reason.
 			"lib-renamer.scm": &fstest.MapFile{Data: []byte(`(define-library (lib-renamer)

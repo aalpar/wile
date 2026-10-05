@@ -422,3 +422,21 @@ func TestImportStageString(t *testing.T) {
 		})
 	}
 }
+
+// TestPendingImportWrapErr pins pendingImport's nil-wrap contract: no wrap adds
+// no context, and a wrap is applied. CopyLibraryBindingsToEnvAtPhase is the one
+// caller that passes none, and no import path reaches its install-time refusal.
+func TestPendingImportWrapErr(t *testing.T) {
+	c := qt.New(t)
+	cause := werr.WrapForeignErrorf(werr.ErrDuplicateBinding, "test: conflict")
+
+	bare := pendingImport{}.wrapErr(cause)
+	c.Assert(bare, qt.ErrorIs, werr.ErrDuplicateBinding)
+	c.Assert(bare.Error(), qt.Equals, cause.Error())
+
+	wrapped := pendingImport{wrap: func(err error) error {
+		return werr.WrapForeignErrorf(err, "test: context")
+	}}.wrapErr(cause)
+	c.Assert(wrapped, qt.ErrorIs, werr.ErrDuplicateBinding)
+	c.Assert(wrapped.Error(), qt.Matches, `test: context: .*test: conflict.*`)
+}

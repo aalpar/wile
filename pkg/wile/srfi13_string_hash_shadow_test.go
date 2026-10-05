@@ -89,8 +89,9 @@ func TestStringHashConflictsBetweenRnrsHashtablesAndSRFI13(t *testing.T) {
 		eng := newSRFITestEngine(c)
 		_, err := eng.EvalMultiple(context.Background(), `(import (rnrs hashtables) (srfi 13))`)
 		c.Assert(err, qt.ErrorIs, werr.ErrDuplicateBinding)
-		// By name: any other duplicate would satisfy the sentinel.
-		c.Assert(err, qt.ErrorMatches, `(?s).*"string-hash" from \(srfi 13\) conflicts.*`)
+		// By name, and against the other set of the form: any other duplicate would
+		// satisfy the sentinel.
+		c.Assert(err, qt.ErrorMatches, `(?s).*"string-hash" from \(srfi 13\) conflicts with the one from \(rnrs hashtables\) in the same import form.*`)
 		// The failing set is refused whole: string-fold sorts before string-hash,
 		// and a set that stopped at the conflict would have bound it. Refusing the
 		// whole form is TestRefusedImportBindsNothing's.

@@ -22,6 +22,7 @@ package compilation
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"math"
 	"slices"
@@ -363,7 +364,7 @@ func (p *importModifier) apply(result map[ExportKey]string, lib *CompiledLibrary
 			newKey := ExportKey{Phase: key.Phase, Name: newName}
 			// Two source names collapsing to one target at one phase (e.g. (rename LIB
 			// (car kar) (cdr kar)), or a rename target shadowing a pass-through name)
-			// would bind one name to two different exports. R7RS §5.6 forbids importing a
+			// would bind one name to two different exports. R7RS §5.2 forbids importing a
 			// name with two different bindings; reject rather than silently drop one by
 			// map order.
 			existing, dup := renamed[newKey]
@@ -480,9 +481,13 @@ func resolveImportSets(ctx context.Context, datum values.Value, env *environment
 // install phase. That comes from composePhaseShift below, which combines the
 // environment's own phase level with the import set's for-syntax/for-meta shift.
 func ResolveAndInstallImportSets(ctx context.Context, importSets *syntax.SyntaxPair, env *environment.EnvironmentFrame, stage ImportStage, evaluator machine.MacroEvaluator) error {
+	sets, err := importSetForms(ctx, importSets)
+	if err != nil {
+		return err
+	}
 	var pending []pendingImport
-	tail, err := syntax.SyntaxForEach(ctx, importSets, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		resolved, err := resolveImportSets(ctx, importSetExpr.UnwrapAll(), env, evaluator)
+	for _, setExpr := range sets {
+		resolved, err := resolveImportSets(ctx, setExpr.UnwrapAll(), env, evaluator)
 		if err != nil {
 			return err
 		}
@@ -493,26 +498,30 @@ func ResolveAndInstallImportSets(ctx context.Context, importSets *syntax.SyntaxP
 			}
 			pending = append(pending, pi)
 		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	err = refuseImproperImportTail(tail)
-	if err != nil {
-		return err
 	}
 	return installPendingImports(pending)
 }
 
-// refuseImproperImportTail refuses an import form whose list of import sets
-// ends in anything but the empty list. It runs after the sets are planned and
-// before any is installed, so `(import (srfi 13) . foo)` binds nothing.
-func refuseImproperImportTail(tail syntax.SyntaxValue) error {
-	if syntax.IsSyntaxEmptyList(tail) {
+// importSetForms returns the import sets of one import form, importSets being
+// the list after the import keyword, and refuses the form if that list is
+// improper. Both import paths call it before resolving any set, so
+// `(import (srfi 13) . foo)` loads no library and binds nothing. The refusal is
+// ErrInvalidSyntax, as the validator's for the same form, and points at the
+// tail.
+func importSetForms(ctx context.Context, importSets *syntax.SyntaxPair) ([]syntax.SyntaxValue, error) {
+	var q []syntax.SyntaxValue
+	tail, err := syntax.SyntaxForEach(ctx, importSets, func(_ context.Context, _ int, _ bool, setExpr syntax.SyntaxValue) error {
+		q = append(q, setExpr)
 		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return werr.WrapForeignErrorf(werr.ErrNotAList, "import: import form must be a proper list")
+	if !syntax.IsSyntaxEmptyList(tail) {
+		return nil, wrapSourcedError(tail.SourceContext(),
+			werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "import: import form must be a proper list"))
+	}
+	return q, nil
 }
 
 // planResolvedImportSet plans one resolved library import into env for
@@ -866,18 +875,14 @@ const (
 func installImportedBinding(in importInstall) error {
 	localSym := in.sym
 	slot := in.slot()
-	var idx *environment.GlobalIndex
-	var created bool
-	if slot.imported {
-		// CreateImportedGlobalBindingAt, not the plain form: the base's own
-		// binding sits at exactly this coordinate with an equal scope set, so the
-		// plain reuse rule hands back the STARTUP SET's slot and this function then
-		// writes its value and its provenance onto the base. See that method's doc
-		// for the measurement.
-		idx, created = slot.store.CreateImportedGlobalBindingAt(localSym, in.bt, slot.scopes, slot.phase, slot.sealed)
-	} else {
-		idx, created = slot.store.CreateGlobalBindingAt(localSym, in.bt, slot.scopes, slot.phase, slot.sealed)
-	}
+	// CreateImportedGlobalBindingAt, not the plain form. At a sealed coordinate
+	// the base's own binding can sit with an equal scope set, and the plain reuse
+	// rule hands back the STARTUP SET's slot, onto which this function then writes
+	// its value and its provenance; see that method's doc for the measurement. At
+	// a mutable coordinate (placementInPlace) the two forms reuse alike, since
+	// provenance is half of the reuse rule at the sealed tier only, and the
+	// pre-publication stamp is the one markBindingImported makes below.
+	idx, created := slot.store.CreateImportedGlobalBindingAt(localSym, in.bt, slot.scopes, slot.phase, slot.sealed)
 
 	target := slot.store.GetOwnGlobalBinding(idx)
 
@@ -891,13 +896,13 @@ func installImportedBinding(in importInstall) error {
 	// import landing between that check and this install.
 	origin := importOrigin(in.source, in.internalName, in.sourceLib, in.sourcePhase)
 	if !created && importConflicts(target, origin) {
-		return conflictingImportError(in)
+		return conflictingImportError(in, nil)
 	}
 
 	// SHARE the exporter's value location rather than copying its value. The copy
 	// left the importer reading a snapshot taken at import time, so a library that
 	// assigned its own exported variable was invisible through the import —
-	// (importer-sees 1) against (library-sees 2). R7RS is silent on this (§5.6.1
+	// (importer-sees 1) against (library-sees 2). R7RS is silent on this (§5.2
 	// constrains what the IMPORTER may do to an imported binding and says nothing
 	// about the exporting library's own set!); of the two oracles Racket reads
 	// through and Chez refuses to export an assigned variable at all, and
@@ -934,22 +939,27 @@ type importInstall struct {
 	placement    importPlacement
 }
 
-// conflictingImportError is the R7RS §5.2 refusal for in.
-func conflictingImportError(in importInstall) error {
+// conflictingImportError is the R7RS §5.2 refusal for in. prior is the library
+// of an earlier set of the same import form that in conflicts with, or nil when
+// in conflicts with an import already installed.
+func conflictingImportError(in importInstall, prior *CompiledLibrary) error {
+	with := "a different existing import"
+	if prior != nil {
+		with = fmt.Sprintf("the one from %s in the same import form", prior.Name.SchemeString())
+	}
 	return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
-		"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
-		in.sym.Key, in.sourceLib.Name.SchemeString())
+		"import: identifier %q from %s conflicts with %s; disambiguate with (except ...), (prefix ...), or (rename ...)",
+		in.sym.Key, in.sourceLib.Name.SchemeString(), with)
 }
 
 // importSlot is the store coordinate an importInstall writes: the arguments of
 // the create installImportedBinding makes, and of the probe existingImportSlot
 // makes in its place.
 type importSlot struct {
-	store    *environment.GlobalEnvironmentFrame
-	phase    environment.Phase
-	sealed   bool
-	imported bool
-	scopes   syntax.Scopes
+	store  *environment.GlobalEnvironmentFrame
+	phase  environment.Phase
+	sealed bool
+	scopes syntax.Scopes
 }
 
 // slot derives in's write coordinate. It is the only derivation: the install,
@@ -960,7 +970,7 @@ type importSlot struct {
 func (p importInstall) slot() importSlot {
 	q := importSlot{store: p.env.GlobalEnvironment(), scopes: syntax.Scopes{}}
 	if p.placement == placementShadowable {
-		q.phase, q.sealed, q.imported = p.env.PhaseLevel(), true, true
+		q.phase, q.sealed = p.env.PhaseLevel(), true
 		return q
 	}
 	q.phase, q.sealed = p.env.WriteCoordinates()
@@ -972,17 +982,16 @@ func (p importInstall) slot() importSlot {
 // set as a fingerprint: reuse compares scope sets for equality, which a
 // fingerprint answers.
 type importSlotKey struct {
-	store    *environment.GlobalEnvironmentFrame
-	phase    environment.Phase
-	sealed   bool
-	imported bool
-	scopes   string
-	name     string
+	store  *environment.GlobalEnvironmentFrame
+	phase  environment.Phase
+	sealed bool
+	scopes string
+	name   string
 }
 
 // key returns the importSlotKey for name written at p.
 func (p importSlot) key(name string) importSlotKey {
-	return importSlotKey{store: p.store, phase: p.phase, sealed: p.sealed, imported: p.imported, scopes: syntax.ScopeFingerprint(p.scopes), name: name}
+	return importSlotKey{store: p.store, phase: p.phase, sealed: p.sealed, scopes: syntax.ScopeFingerprint(p.scopes), name: name}
 }
 
 // existingImportSlot returns the binding in would write through, or nil when it
@@ -990,10 +999,7 @@ func (p importSlot) key(name string) importSlotKey {
 // applies, and creates nothing.
 func existingImportSlot(in importInstall) *environment.Binding {
 	slot := in.slot()
-	if slot.imported {
-		return slot.store.ReusableImportedGlobalBindingAt(in.sym, slot.scopes, slot.phase, slot.sealed)
-	}
-	return slot.store.ReusableGlobalBindingAt(in.sym, slot.scopes, slot.phase, slot.sealed)
+	return slot.store.ReusableImportedGlobalBindingAt(in.sym, slot.scopes, slot.phase, slot.sealed)
 }
 
 // plannedImport is what checkImportInstalls remembers of the first install of a
@@ -1015,16 +1021,14 @@ func checkImportInstalls(seen map[importSlotKey]plannedImport, plan []importInst
 		if !planned {
 			seen[key] = plannedImport{origin: *origin, from: in.sourceLib}
 			if importConflicts(existingImportSlot(in), origin) {
-				return conflictingImportError(in)
+				return conflictingImportError(in, nil)
 			}
 			continue
 		}
 		// An earlier install of this form writes the slot first, so it is the
 		// binding this one would meet there.
 		if prior.origin != *origin {
-			return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
-				"import: identifier %q from %s conflicts with the one from %s in the same import form; disambiguate with (except ...), (prefix ...), or (rename ...)",
-				in.sym.Key, in.sourceLib.Name.SchemeString(), prior.from.Name.SchemeString())
+			return conflictingImportError(in, prior.from)
 		}
 	}
 	return nil
@@ -1048,9 +1052,10 @@ func (p pendingImport) wrapErr(err error) error {
 
 // installPendingImports installs the import sets of one form, all or none: every
 // set is checked before the first binding is written, and observers fire only
-// once the whole form has passed. An error from the install pass is an invariant
-// violation or a concurrent conflicting import, not a refusal the check could
-// have made, and leaves the form's earlier installs in place.
+// after the whole form has passed that check. An error from the install pass is
+// an invariant violation or a concurrent conflicting import, not a refusal the
+// check could have made; it leaves the form's earlier installs in place, and the
+// failing set's observer has already fired.
 func installPendingImports(pending []pendingImport) error {
 	seen := map[importSlotKey]plannedImport{}
 	for _, pi := range pending {

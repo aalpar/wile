@@ -235,7 +235,7 @@ func exportKeyNames(keys iter.Seq[ExportKey]) []string {
 // sortedExportKeys orders export keys by phase, then by name. The library copy
 // loops walk this instead of ranging their bindings map directly: a Go map walk
 // decides both the slot numbering an import produces and which of several
-// conflicting identifiers the R7RS §5.6 refusal names, and it decides them
+// conflicting identifiers the R7RS §5.2 refusal names, and it decides them
 // differently on every run.
 //
 // PHASE BEFORE NAME, not the reverse. A name exported at two phases denotes two

@@ -120,15 +120,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - **An `(import …)` form binds everything or nothing.** Each import set used to
-  install in turn, name by name, and a conflict, a missing library or an improper
-  tail returned midway, leaving the form's earlier sets and part of the failing
-  one bound: after `(import (scheme base))`, a refused `(import (srfi 13))` left
-  every name sorting before `string-map`, the first conflict, bound (`string-any`
-  through `string-join`). Every library is now loaded and every binding checked
-  before the first is written. The rule also covers a library's own import
+  install in turn, name by name, and a conflict or a missing library returned
+  midway, leaving the form's earlier sets and part of the failing one bound: after
+  `(import (scheme base))`, a refused `(import (srfi 13))` left every name sorting
+  before `string-map`, the first conflict, bound (`reverse-list->string`, then
+  `string-any` through `string-join`). An improper tail left more: every set was
+  installed before the form was refused. Every library is now loaded and every
+  binding checked before the first is written, and an improper tail is refused
+  before any library loads. The rule also covers a library's own import
   declarations, where an improper tail used to be dropped silently, and each spec
   given to `environment`, `make-namespace` or `namespace-require`, which share one
-  install path; an import observer no longer fires for a refused form. Pinned by
+  install path; an import observer no longer fires for a form the check refuses.
+  Pinned by
   `TestRefusedImportBindsNothing` (top level, including a conflict at phase 1),
   `TestRefusedLibraryImportDeclarationBindsNothing`,
   `TestRefusedNamespaceRequireBindsNothing` and `TestRefusedImportFiresNoObserver`.
@@ -340,6 +343,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - The library needs all four hashes registered to load.
 
   See `docs/reference/r7rs-differences.md` item 16.
+
+- **Import API in `pkg/machine/compilation` and `pkg/environment`.**
+  - `compilation.ResolveAndInstallImportSet(ctx, datum, …)` is replaced by
+    `ResolveAndInstallImportSets(ctx, importSets *syntax.SyntaxPair, …)`, which
+    takes one whole import form so it can refuse the form whole.
+  - `EnvironmentFrame.WriteCoordinates`, formerly unexported, returns the
+    `(phase, sealed)` coordinate a write through the view lands at.
+  - `GlobalEnvironmentFrame.ReusableImportedGlobalBindingAt` is new: the slot
+    `CreateImportedGlobalBindingAt` would hand back for its arguments, or nil,
+    creating nothing.
 
 - **`pkg/values` hashtable API.** `(*Hashtable).HashFunction` and
   `EquivalenceFunction` are new, returning `values.Callable` or nil for NONE,

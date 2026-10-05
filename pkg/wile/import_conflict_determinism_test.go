@@ -137,8 +137,10 @@ var macroConflictLibFS = fstest.MapFS{
 	},
 }
 
-// refusedImportLibFS is libraries whose own import declarations are refused.
-// Line 4 of bad/split.sld is the refused declaration.
+// refusedImportLibFS is libraries whose own import declarations are refused,
+// and (bad boom), whose body raises. Line 4 of bad/split.sld is the refused
+// declaration; line 3 of bad/tail.sld is the improper tail, a line below its
+// declaration.
 var refusedImportLibFS = fstest.MapFS{
 	"bad/same.sld": &fstest.MapFile{
 		Data: []byte(`(define-library (bad same)
@@ -155,9 +157,16 @@ var refusedImportLibFS = fstest.MapFS{
   (export x)
   (begin (define x 1)))`),
 	},
+	"bad/boom.sld": &fstest.MapFile{
+		Data: []byte(`(define-library (bad boom)
+  (import (scheme base))
+  (export x)
+  (begin (define x 1) (error "bad boom: body ran")))`),
+	},
 	"bad/tail.sld": &fstest.MapFile{
 		Data: []byte(`(define-library (bad tail)
-  (import (scheme base) . foo)
+  (import (scheme base)
+          . foo)
   (export x)
   (begin (define x 1)))`),
 	},
@@ -218,7 +227,10 @@ func TestRefusedImportBindsNothing(t *testing.T) {
 		{name: "a later form conflicts", setup: `(import (conf one))`, form: `(import (conf three))`, want: werr.ErrDuplicateBinding, unbound: three},
 		{name: "a later set of the same form conflicts", form: `(import (conf three) (conf one))`, want: werr.ErrDuplicateBinding, unbound: three},
 		{name: "a later set of the same form is missing", form: `(import (conf three) (conf missing))`, want: werr.ErrFileNotFound, unbound: three},
-		{name: "the form is an improper list", form: `(import (conf three) . foo)`, want: werr.ErrNotAList, unbound: three},
+		{name: "the form is an improper list", form: `(import (conf three) . foo)`, want: werr.ErrInvalidSyntax, unbound: three},
+		// Refused before any library loads, so (bad boom)'s body never runs and
+		// its error is not the one reported.
+		{name: "the improper form names a library whose body raises", form: `(import (bad boom) . foo)`, want: werr.ErrInvalidSyntax},
 		// The conflict is mm at phase 1, so only a check made at every phase
 		// refuses it before b0 is written.
 		{name: "a later form's macro conflicts at phase 1", setup: `(import (cm one))`, form: `(import (cm two))`, want: werr.ErrDuplicateBinding, unbound: []string{`b0`}},
@@ -241,8 +253,8 @@ func TestRefusedImportBindsNothing(t *testing.T) {
 }
 
 // TestRefusedImportFiresNoObserver pins that a top-level import form's observer
-// events fire only once the whole form has passed, so an observer (the doc
-// registration among them) never reports a refused import.
+// events fire only once the whole form has passed the check, so an observer (the
+// doc registration among them) never reports an import the check refused.
 func TestRefusedImportFiresNoObserver(t *testing.T) {
 	ctx := context.Background()
 	var topLevel []string
@@ -267,8 +279,8 @@ func TestRefusedImportFiresNoObserver(t *testing.T) {
 // TestRefusedLibraryImportDeclarationBindsNothing pins all or none for a
 // library's own import declarations. A refused library leaves no binding a
 // program can reach, so the observer is the witness: a declaration fires its
-// events only once all of it has passed, and fired lists every import the
-// library made.
+// events only once all of it has passed the check, and fired lists every import
+// the library made.
 func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
 	tests := []struct {
 		lib   string
@@ -281,7 +293,8 @@ func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
 		// A declaration conflicts with an earlier one: the check sees the earlier
 		// declaration's installs, and the refusal points at the declaration's set.
 		{lib: "split", want: werr.ErrDuplicateBinding, fired: []string{"scheme/base", "conf/one"}, at: "bad/split.sld:4:"},
-		{lib: "tail", want: werr.ErrNotAList},
+		// The refusal points at the tail, not at its declaration.
+		{lib: "tail", want: werr.ErrInvalidSyntax, at: "bad/tail.sld:3:"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.lib, func(t *testing.T) {

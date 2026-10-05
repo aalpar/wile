@@ -113,7 +113,7 @@ func TestImportSetCompositionOrder(t *testing.T) {
 }
 
 // TestImportConflictDetection pins Wile's Racket-style strict resolution of aliased
-// imports (R7RS §5.6, "it is an error to import the same identifier more than once
+// imports (R7RS §5.2, "it is an error to import the same identifier more than once
 // with different bindings"): a same-name import that resolves to a DIFFERENT binding
 // is signalled as ErrDuplicateBinding rather than silently last-import-wins. The whole
 // stdlib has exactly one such genuine collision — (scheme base) string-map (variadic,
