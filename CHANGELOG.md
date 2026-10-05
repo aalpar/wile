@@ -133,12 +133,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   install path; an import observer no longer fires for a form the check refuses.
   Unlike 1.20.0, a library declaration's `(import . foo)` is `ErrInvalidSyntax`
   rather than `ErrNotAPair`, a refused top-level import is located at the failing
-  set rather than at the whole form, and a refusal from planning, the conflict
-  check or the install names the library as `<op>: error importing <lib>`
-  (`import` on both syntax paths, otherwise `environment`, `make-namespace` or
-  `namespace-require`), where 1.20.0 said `error copying bindings from <lib>` at
-  the top level and in those three primitives, and nothing in a library
-  declaration.
+  set rather than at the whole form, and a refusal from planning or the conflict
+  check names the library as `<op>: error importing <lib>` (`import` on both
+  syntax paths, otherwise `environment`, `make-namespace` or
+  `namespace-require`), where 1.20.0 said `error copying bindings from <lib>` for
+  a conflict or failed copy at the top level and in those three primitives, and
+  nothing in a library declaration.
   Pinned by
   `TestRefusedImportBindsNothing` (top level, including a conflict at phase 1),
   `TestRefusedLibraryImportDeclarationBindsNothing`,

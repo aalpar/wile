@@ -324,7 +324,7 @@ func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
 		lib   string
 		want  error
 		fired []string
-		at    string // a substring the refusal must contain: its location and message start; empty for unchecked
+		at    string // a substring the refusal must contain: its location and message start
 	}{
 		// Two sets of one declaration conflict: neither installs.
 		{lib: "same", want: werr.ErrDuplicateBinding, fired: []string{"scheme/base"}, at: "bad/same.sld:3:23: import: error importing (conf one): "},
@@ -348,16 +348,15 @@ func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
 			})
 			_, err := eng.EvalMultiple(context.Background(), `(import (bad `+tt.lib+`))`)
 			qt.Assert(t, err, qt.ErrorIs, tt.want)
-			if tt.at != "" {
-				qt.Assert(t, err.Error(), qt.Contains, tt.at)
-			}
+			qt.Assert(t, err.Error(), qt.Contains, tt.at)
 			qt.Assert(t, fired, qt.DeepEquals, tt.fired)
 		})
 	}
 }
 
 // TestRefusedNamespaceRequireBindsNothing pins all or none for namespace-require,
-// whose ImportSpecInto is also the core of environment and make-namespace.
+// whose ImportSpecInto is also the core of environment and make-namespace, and
+// that each of the three names itself and the library it was importing.
 func TestRefusedNamespaceRequireBindsNothing(t *testing.T) {
 	ctx := context.Background()
 	t.Run("alone", func(t *testing.T) {
@@ -371,13 +370,21 @@ func TestRefusedNamespaceRequireBindsNothing(t *testing.T) {
 		name  string
 		setup string // must succeed; empty for none
 		form  string
+		want  error
 		msg   string // a pattern the refusal must match
 	}{
 		{name: "a later call conflicts", setup: `(namespace-require ns '(conf one))`, form: `(namespace-require ns '(conf three))`,
-			msg: `(?s).*namespace-require: error importing \(conf three\): .*conflicts with a different existing import.*`},
-		// Names the library that failed, not the spec's first.
-		{name: "two sets of one spec conflict", form: `(namespace-require ns '(for-meta 0 (conf three) (conf one)))`,
-			msg: `(?s).*namespace-require: error importing \(conf one\): .*`},
+			want: werr.ErrDuplicateBinding, msg: `(?s).*namespace-require: error importing \(conf three\): .*conflicts with a different existing import.*`},
+		// Names the library that failed, neither the spec's first nor its last.
+		{name: "two sets of one spec conflict", form: `(namespace-require ns '(for-meta 0 (conf three) (conf one) (scheme base)))`,
+			want: werr.ErrDuplicateBinding, msg: `(?s).*namespace-require: error importing \(conf one\): .*`},
+		// Refused while planning: a1's propagation one phase above 127 overflows.
+		{name: "a set cannot be planned", form: `(namespace-require ns '(for-meta 127 (conf three)))`,
+			want: werr.ErrInvalidArgument, msg: `(?s).*namespace-require: error importing \(conf three\): .*propagation phase 128 .*`},
+		{name: "environment names itself", form: `(environment '(for-meta 0 (conf three) (conf one) (scheme base)))`,
+			want: werr.ErrDuplicateBinding, msg: `(?s).*environment: error importing \(conf one\): .*`},
+		{name: "make-namespace names itself", form: `(make-namespace '(for-meta 0 (conf three) (conf one) (scheme base)))`,
+			want: werr.ErrDuplicateBinding, msg: `(?s).*make-namespace: error importing \(conf one\): .*`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -389,7 +396,7 @@ func TestRefusedNamespaceRequireBindsNothing(t *testing.T) {
 				qt.Assert(t, err, qt.IsNil)
 			}
 			_, err = eng.EvalMultiple(ctx, tt.form)
-			qt.Assert(t, err, qt.ErrorIs, werr.ErrDuplicateBinding)
+			qt.Assert(t, err, qt.ErrorIs, tt.want)
 			qt.Assert(t, err, qt.ErrorMatches, tt.msg)
 			got, err := eng.EvalMultiple(ctx, `(namespace-bound? ns 'a0)`)
 			qt.Assert(t, err, qt.IsNil)

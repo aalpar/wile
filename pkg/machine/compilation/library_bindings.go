@@ -491,15 +491,17 @@ func ResolveAndInstallImportSets(ctx context.Context, importSets syntax.SyntaxVa
 }
 
 // planImportForm plans every set of one import form, for the two syntax import
-// paths (ImportSpecInto plans a datum on its own, since a datum has no source
-// location to carry; it also fires no observer and takes its phase shift
-// uncomposed):
-// importSets is the form's arguments after the import keyword, env resolves the
-// library names, and plan returns one resolved library's installs and the
-// observer they fire. A malformed form is refused before anything resolves
-// (importSetForms). Every error a set raises carries the set's source location;
-// those from planning, the check and the install also name the library being
-// imported, which a resolution error names only when it got that far.
+// paths: importSets is the form's arguments after the import keyword, env
+// resolves the library names, and plan returns one resolved library's installs
+// and the observer they fire. A malformed form is refused before anything
+// resolves (importSetForms). Every error a set raises carries the set's source
+// location; those from planning, the check and the install also name the
+// library being imported, which a resolution error names only when it got that
+// far.
+//
+// ImportSpecInto, which plans a datum, stays apart: its messages carry the
+// primitive's name in wording of their own, it has no source location, it fires
+// no observer, and it takes its phase shift uncomposed.
 func planImportForm(ctx context.Context, importSets syntax.SyntaxValue, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, plan func(*ResolvedImportSet) ([]importInstall, func(), error)) ([]pendingImport, error) {
 	sets, err := importSetForms(ctx, importSets)
 	if err != nil {
