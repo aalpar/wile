@@ -46,33 +46,18 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 // because lib.Env.AtPhase() routes to the parent's phase registry. All or none,
 // as at the top level.
 func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
-	sets, err := importSetForms(ctctx.ctx, args)
+	pending, err := planImportForm(ctctx.ctx, args, p.env, p.evaluator, func(res *ResolvedImportSet) (pendingImport, error) {
+		return p.planLibraryImport(lib, res)
+	})
 	if err != nil {
 		return err
-	}
-	var pending []pendingImport
-	for _, setExpr := range sets {
-		wrap := func(err error) error {
-			return wrapSourcedError(setExpr.SourceContext(), err)
-		}
-		resolved, err := resolveImportSets(ctctx.ctx, setExpr.UnwrapAll(), p.env, p.evaluator)
-		if err != nil {
-			return wrap(err)
-		}
-		for _, res := range resolved {
-			pi, err := p.planLibraryImport(lib, res, wrap)
-			if err != nil {
-				return wrap(err)
-			}
-			pending = append(pending, pi)
-		}
 	}
 	return installPendingImports(pending)
 }
 
 // planLibraryImport plans one resolved library import into lib.Env for
-// processLibraryImport; wrap is the context the import's errors carry.
-func (p *CompileTimeContinuation) planLibraryImport(lib *CompiledLibrary, res *ResolvedImportSet, wrap func(error) error) (pendingImport, error) {
+// processLibraryImport. planImportForm adds the error context.
+func (p *CompileTimeContinuation) planLibraryImport(lib *CompiledLibrary, res *ResolvedImportSet) (pendingImport, error) {
 	// Compose the parsed for-syntax/for-meta shift with the library env's own
 	// phase, the same composition ResolveAndInstallImportSets performs at top
 	// level. Based on lib.Env rather than p.env because lib.Env is the frame
@@ -89,5 +74,5 @@ func (p *CompileTimeContinuation) planLibraryImport(lib *CompiledLibrary, res *R
 	fire := func() {
 		fireImportObserver(env, res.Library, res.Bindings, lib.Name, ImportStageCompile)
 	}
-	return pendingImport{plan: plan, fire: fire, wrap: wrap}, nil
+	return pendingImport{plan: plan, fire: fire}, nil
 }

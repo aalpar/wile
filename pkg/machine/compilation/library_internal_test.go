@@ -425,7 +425,8 @@ func TestImportStageString(t *testing.T) {
 
 // TestPendingImportWrapErr pins pendingImport's nil-wrap contract: no wrap adds
 // no context, and a wrap is applied. CopyLibraryBindingsToEnvAtPhase is the one
-// caller that passes none, and no test drives it into a refusal.
+// caller that passes none, and no test drives it into a check or install
+// refusal, the only refusals wrapErr sees.
 func TestPendingImportWrapErr(t *testing.T) {
 	c := qt.New(t)
 	cause := werr.WrapForeignErrorf(werr.ErrDuplicateBinding, "test: conflict")
@@ -439,4 +440,14 @@ func TestPendingImportWrapErr(t *testing.T) {
 	}}.wrapErr(cause)
 	c.Assert(wrapped, qt.ErrorIs, werr.ErrDuplicateBinding)
 	c.Assert(wrapped.Error(), qt.Matches, `test: context: .*test: conflict.*`)
+}
+
+// TestImportSetFormsNilIsNone pins that a nil import form has no import sets
+// rather than panicking: ResolveAndInstallImportSets is exported, and nil means
+// none.
+func TestImportSetFormsNilIsNone(t *testing.T) {
+	c := qt.New(t)
+	sets, err := importSetForms(context.Background(), nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sets, qt.HasLen, 0)
 }

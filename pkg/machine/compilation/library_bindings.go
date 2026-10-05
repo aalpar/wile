@@ -22,6 +22,7 @@ package compilation
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"math"
 	"slices"
@@ -480,37 +481,61 @@ func resolveImportSets(ctx context.Context, datum values.Value, env *environment
 // install phase. That comes from composePhaseShift below, which combines the
 // environment's own phase level with the import set's for-syntax/for-meta shift.
 func ResolveAndInstallImportSets(ctx context.Context, importSets syntax.SyntaxValue, env *environment.EnvironmentFrame, stage ImportStage, evaluator machine.MacroEvaluator) error {
-	sets, err := importSetForms(ctx, importSets)
+	pending, err := planImportForm(ctx, importSets, env, evaluator, func(res *ResolvedImportSet) (pendingImport, error) {
+		return planResolvedImportSet(env, res, stage)
+	})
 	if err != nil {
 		return err
-	}
-	var pending []pendingImport
-	for _, setExpr := range sets {
-		wrap := func(err error) error {
-			return wrapSourcedError(setExpr.SourceContext(), err)
-		}
-		resolved, err := resolveImportSets(ctx, setExpr.UnwrapAll(), env, evaluator)
-		if err != nil {
-			return wrap(err)
-		}
-		for _, res := range resolved {
-			pi, err := planResolvedImportSet(env, res, stage, wrap)
-			if err != nil {
-				return wrap(err)
-			}
-			pending = append(pending, pi)
-		}
 	}
 	return installPendingImports(pending)
 }
 
+// planImportForm plans every set of one import form, for both import paths:
+// importSets is the form's arguments after the import keyword, env resolves the
+// library names, and plan plans one resolved library. A malformed form is
+// refused before anything resolves (importSetForms). Every error a set raises,
+// in resolution, planning, the check or the install, carries the set's source
+// location and the library it copies from.
+func planImportForm(ctx context.Context, importSets syntax.SyntaxValue, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, plan func(*ResolvedImportSet) (pendingImport, error)) ([]pendingImport, error) {
+	sets, err := importSetForms(ctx, importSets)
+	if err != nil {
+		return nil, err
+	}
+	var q []pendingImport
+	for _, setExpr := range sets {
+		at := func(err error) error {
+			return wrapSourcedError(setExpr.SourceContext(), err)
+		}
+		resolved, err := resolveImportSets(ctx, setExpr.UnwrapAll(), env, evaluator)
+		if err != nil {
+			return nil, at(err)
+		}
+		for _, res := range resolved {
+			from := func(err error) error {
+				return at(werr.WrapForeignErrorf(err, "import: error copying bindings from %s",
+					res.ImportSet.LibraryName.SchemeString()))
+			}
+			pi, err := plan(res)
+			if err != nil {
+				return nil, from(err)
+			}
+			pi.wrap = from
+			q = append(q, pi)
+		}
+	}
+	return q, nil
+}
+
 // importSetForms returns the import sets of one import form, importSets being
-// the form's arguments after the import keyword: none for `(import)`, and a
-// refusal unless they are a proper list. Both import paths call it before
-// resolving any set, so `(import (srfi 13) . foo)` loads no library and binds
-// nothing. The refusal is ErrInvalidSyntax, as the validator's for the same
-// form, and points at the offending tail.
+// the form's arguments after the import keyword: none for `(import)` or a nil
+// importSets, and a refusal unless they are a proper list. planImportForm calls
+// it before resolving any set, so `(import (srfi 13) . foo)` loads no library
+// and binds nothing. The refusal is ErrInvalidSyntax, as the validator's for the
+// same form, and points at the offending tail.
 func importSetForms(ctx context.Context, importSets syntax.SyntaxValue) ([]syntax.SyntaxValue, error) {
+	if importSets == nil {
+		return nil, nil
+	}
 	var q []syntax.SyntaxValue
 	tail, err := syntax.SyntaxForEach(ctx, importSets, func(_ context.Context, _ int, _ bool, setExpr syntax.SyntaxValue) error {
 		q = append(q, setExpr)
@@ -527,9 +552,8 @@ func importSetForms(ctx context.Context, importSets syntax.SyntaxValue) ([]synta
 }
 
 // planResolvedImportSet plans one resolved library import into env for
-// ResolveAndInstallImportSets; setWrap is the context of the import set it came
-// from, which the plan's check and install errors carry.
-func planResolvedImportSet(env *environment.EnvironmentFrame, res *ResolvedImportSet, stage ImportStage, setWrap func(error) error) (pendingImport, error) {
+// ResolveAndInstallImportSets. planImportForm adds the error context.
+func planResolvedImportSet(env *environment.EnvironmentFrame, res *ResolvedImportSet, stage ImportStage) (pendingImport, error) {
 	// Compose the parsed for-syntax/for-meta shift with the current expansion
 	// phase, not a hardcoded 0: an (import (for-syntax M)) written inside a
 	// phase-N transformer body places M at phase N+1. At the top level
@@ -541,21 +565,14 @@ func planResolvedImportSet(env *environment.EnvironmentFrame, res *ResolvedImpor
 		return pendingImport{}, err
 	}
 
-	copying := func(err error) error {
-		return werr.WrapForeignErrorf(err, "import: error copying bindings from %s",
-			res.ImportSet.LibraryName.SchemeString())
-	}
 	plan, err := planCopyAtPhase(res.Library, res.Bindings, env, targetPhase)
 	if err != nil {
-		return pendingImport{}, copying(err)
+		return pendingImport{}, err
 	}
 	fire := func() {
 		fireImportObserver(env, res.Library, res.Bindings, LibraryName{}, stage)
 	}
-	wrap := func(err error) error {
-		return setWrap(copying(err))
-	}
-	return pendingImport{plan: plan, fire: fire, wrap: wrap}, nil
+	return pendingImport{plan: plan, fire: fire}, nil
 }
 
 // ExportedBinding resolves the binding a phase-0 export of internalName denotes,
@@ -944,16 +961,15 @@ type importInstall struct {
 func conflictingImportError(in importInstall, prior *CompiledLibrary) error {
 	with := "a different existing import"
 	if prior != nil {
-		with = "the one from " + prior.Name.SchemeString() + " in the same import form"
+		with = fmt.Sprintf("the one from %s in the same import form", prior.Name.SchemeString())
 	}
 	return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
 		"import: identifier %q from %s conflicts with %s; disambiguate with (except ...), (prefix ...), or (rename ...)",
 		in.sym.Key, in.sourceLib.Name.SchemeString(), with)
 }
 
-// importSlot is the store coordinate an importInstall writes: the arguments of
-// the create installImportedBinding makes, and of the probe existingImportSlot
-// makes in its place.
+// importSlot is the store coordinate an importInstall writes, which create and
+// its probe existing both address.
 type importSlot struct {
 	store  *environment.GlobalEnvironmentFrame
 	phase  environment.Phase

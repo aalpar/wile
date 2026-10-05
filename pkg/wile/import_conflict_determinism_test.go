@@ -239,15 +239,21 @@ func TestRefusedImportBindsNothing(t *testing.T) {
 		msg     string // a pattern the refusal must match; empty for unchecked
 		unbound []string
 	}{
-		{name: "a later form conflicts", setup: `(import (conf one))`, form: `(import (conf three))`, want: werr.ErrDuplicateBinding,
-			msg: `(?s).*"aa" from \(conf three\) conflicts with a different existing import.*`, unbound: three},
-		{name: "a later set of the same form conflicts", form: `(import (conf three) (conf one))`, want: werr.ErrDuplicateBinding,
-			msg: `(?s).*"aa" from \(conf one\) conflicts with the one from \(conf three\) in the same import form.*`, unbound: three},
+		// Each refusal below points at the failing set, on line 2, not at the form.
+		{name: "a later form conflicts", setup: `(import (conf one))`, form: "(import (scheme base)\n        (conf three))", want: werr.ErrDuplicateBinding,
+			msg: `(?s).*:2:8: .*"aa" from \(conf three\) conflicts with a different existing import.*`, unbound: three},
+		{name: "a later set of the same form conflicts", form: "(import (conf three)\n        (conf one))", want: werr.ErrDuplicateBinding,
+			msg: `(?s).*:2:8: .*"aa" from \(conf one\) conflicts with the one from \(conf three\) in the same import form.*`, unbound: three},
+		// Refused while planning: a1's propagation one phase above 127 overflows.
+		{name: "a later set cannot be planned", form: "(import (scheme base)\n        (for-meta 127 (conf three)))", want: werr.ErrInvalidArgument,
+			msg: `(?s).*:2:8: .*`},
 		{name: "a later set of the same form is missing", form: `(import (conf three) (conf missing))`, want: werr.ErrFileNotFound, unbound: three},
-		// The refusal points at the failing set, on line 2, not at the form.
 		{name: "a later set on a later line is missing", form: "(import (conf three)\n        (conf missing))", want: werr.ErrFileNotFound,
-			msg: `(?s).*:2:\d+.*`, unbound: three},
+			msg: `(?s).*:2:8: .*`, unbound: three},
 		{name: "the form is an improper list", form: `(import (conf three) . foo)`, want: werr.ErrInvalidSyntax, unbound: three},
+		// No import set before the tail: the same refusal, at the tail.
+		{name: "the form is not a list", form: `(import . foo)`, want: werr.ErrInvalidSyntax,
+			msg: `(?s).*:1:10: import: import form must be a proper list.*`},
 		// Refused before any library loads, so (bad boom)'s body never runs and
 		// its error is not the one reported.
 		{name: "the improper form names a library whose body raises", form: `(import (bad boom) . foo)`, want: werr.ErrInvalidSyntax},

@@ -5,7 +5,7 @@
    ;; SRFI-1 re-exports the R5RS list procedures unchanged, so (import (srfi 1))
    ;; alone yields a working list library. These resolve to the ambient bootstrap
    ;; bindings — same identity as (scheme base)'s, which is why importing both
-   ;; raises no R7RS §5.6 conflict (the legal re-export diamond).
+   ;; raises no R7RS §5.2 conflict (the legal re-export diamond).
    cons car cdr set-car! set-cdr! pair? null? list length append reverse
    list-ref map for-each member memq memv assoc assq assv
    ;; The c…r compositions. SRFI-1's export paragraph elides these behind an
