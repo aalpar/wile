@@ -26,7 +26,7 @@ import (
 )
 
 // A special form is recognized by what its head is BOUND to, not by its
-// spelling (R7RS §5.6.1: rename and prefix apply to keywords). Petite Chez
+// spelling (R7RS §5.2: rename and prefix apply to keywords). Petite Chez
 // 10.4.1 and Racket 9.2 accept every row below.
 
 type keywordRow struct {
@@ -217,7 +217,7 @@ func TestKeywordImportConflicts(t *testing.T) {
 // `cond-expand` at its top level at all (`(cond-expand (else 2))` answers
 // `misplaced aux keyword`) and this machine's racket has no `r7rs` collection,
 // so neither oracle can be asked about this form. The authority is therefore
-// R7RS §5.6.1, under which `rename` applies to every exported identifier
+// R7RS §5.2, under which `rename` applies to every exported identifier
 // including an auxiliary keyword, together with the precedent already shipped
 // one file over: this tree's `cond` decides its own `else` by denotation
 // (match.sameLiteralBinding, whose doc names a renamed `else` as the case it

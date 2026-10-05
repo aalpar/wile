@@ -118,7 +118,7 @@ func RegisterPhaseBindings[F any](
 // here so it is not rediscovered as a mystery. It is NOT that the ranking is
 // wrong.
 //
-// R7RS-small has no answer, structurally. Its <import set> grammar (§5.6) admits
+// R7RS-small has no answer, structurally. Its <import set> grammar (§5.2) admits
 // five forms — <library name>, only, except, prefix, rename — and the tokens
 // for-syntax, for-meta, for-template, phase and meta level appear NOWHERE in the
 // library section. for-syntax is R6RS/Racket. The collision is about a construct

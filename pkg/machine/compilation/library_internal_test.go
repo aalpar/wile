@@ -163,7 +163,7 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 		},
 		{
 			// (only LIB) with zero identifiers selects the empty subset ⇒ import nothing
-			// (R7RS §5.6: <identifier> … is zero-or-more).
+			// (R7RS §5.2: <identifier> … is zero-or-more).
 			name:      "only with no identifiers imports nothing",
 			importSet: build(only()),
 			wantKeys:  []string{},
@@ -425,7 +425,7 @@ func TestImportStageString(t *testing.T) {
 
 // TestPendingImportWrapErr pins pendingImport's nil-wrap contract: no wrap adds
 // no context, and a wrap is applied. CopyLibraryBindingsToEnvAtPhase is the one
-// caller that passes none, and no import path reaches its install-time refusal.
+// caller that passes none, and no test drives it into a refusal.
 func TestPendingImportWrapErr(t *testing.T) {
 	c := qt.New(t)
 	cause := werr.WrapForeignErrorf(werr.ErrDuplicateBinding, "test: conflict")

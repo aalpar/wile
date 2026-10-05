@@ -31,16 +31,7 @@ import (
 //   - (import (for-meta 2 (scheme base)))       ; Phase 2
 func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is (<import-set> ...) - args after 'import' keyword
-	if syntax.IsSyntaxEmptyList(expr) {
-		return nil // empty import is valid
-	}
-
-	importSets, ok := expr.(*syntax.SyntaxPair)
-	if !ok {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "import: expected list of import sets"))
-	}
-
-	err := ResolveAndInstallImportSets(ctctx.ctx, importSets, p.env, ImportStageCompile, p.evaluator)
+	err := ResolveAndInstallImportSets(ctctx.ctx, expr, p.env, ImportStageCompile, p.evaluator)
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "import: error processing import sets"))
 	}
@@ -55,16 +46,7 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 // because lib.Env.AtPhase() routes to the parent's phase registry. All or none,
 // as at the top level.
 func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
-	if syntax.IsSyntaxEmptyList(args) {
-		return nil // empty import is valid
-	}
-
-	argsPair, ok := args.(*syntax.SyntaxPair)
-	if !ok {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "import: expected list of import sets"))
-	}
-
-	sets, err := importSetForms(ctctx.ctx, argsPair)
+	sets, err := importSetForms(ctctx.ctx, args)
 	if err != nil {
 		return err
 	}

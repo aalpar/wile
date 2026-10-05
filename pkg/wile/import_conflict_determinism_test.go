@@ -139,8 +139,8 @@ var macroConflictLibFS = fstest.MapFS{
 
 // refusedImportLibFS is libraries whose own import declarations are refused,
 // and (bad boom), whose body raises. Line 4 of bad/split.sld is the refused
-// declaration; line 3 of bad/tail.sld is the improper tail, a line below its
-// declaration.
+// declaration; in bad/tail.sld, bad/tailboom.sld and bad/notalist.sld line 3 is
+// the improper tail, a line below its declaration.
 var refusedImportLibFS = fstest.MapFS{
 	"bad/same.sld": &fstest.MapFile{
 		Data: []byte(`(define-library (bad same)
@@ -162,6 +162,20 @@ var refusedImportLibFS = fstest.MapFS{
   (import (scheme base))
   (export x)
   (begin (define x 1) (error "bad boom: body ran")))`),
+	},
+	"bad/tailboom.sld": &fstest.MapFile{
+		Data: []byte(`(define-library (bad tailboom)
+  (import (scheme base) (bad boom)
+          . foo)
+  (export x)
+  (begin (define x 1)))`),
+	},
+	"bad/notalist.sld": &fstest.MapFile{
+		Data: []byte(`(define-library (bad notalist)
+  (import
+    . foo)
+  (export x)
+  (begin (define x 1)))`),
 	},
 	"bad/tail.sld": &fstest.MapFile{
 		Data: []byte(`(define-library (bad tail)
@@ -222,11 +236,17 @@ func TestRefusedImportBindsNothing(t *testing.T) {
 		setup   string // must succeed; empty for none
 		form    string
 		want    error
+		msg     string // a pattern the refusal must match; empty for unchecked
 		unbound []string
 	}{
-		{name: "a later form conflicts", setup: `(import (conf one))`, form: `(import (conf three))`, want: werr.ErrDuplicateBinding, unbound: three},
-		{name: "a later set of the same form conflicts", form: `(import (conf three) (conf one))`, want: werr.ErrDuplicateBinding, unbound: three},
+		{name: "a later form conflicts", setup: `(import (conf one))`, form: `(import (conf three))`, want: werr.ErrDuplicateBinding,
+			msg: `(?s).*"aa" from \(conf three\) conflicts with a different existing import.*`, unbound: three},
+		{name: "a later set of the same form conflicts", form: `(import (conf three) (conf one))`, want: werr.ErrDuplicateBinding,
+			msg: `(?s).*"aa" from \(conf one\) conflicts with the one from \(conf three\) in the same import form.*`, unbound: three},
 		{name: "a later set of the same form is missing", form: `(import (conf three) (conf missing))`, want: werr.ErrFileNotFound, unbound: three},
+		// The refusal points at the failing set, on line 2, not at the form.
+		{name: "a later set on a later line is missing", form: "(import (conf three)\n        (conf missing))", want: werr.ErrFileNotFound,
+			msg: `(?s).*:2:\d+.*`, unbound: three},
 		{name: "the form is an improper list", form: `(import (conf three) . foo)`, want: werr.ErrInvalidSyntax, unbound: three},
 		// Refused before any library loads, so (bad boom)'s body never runs and
 		// its error is not the one reported.
@@ -244,6 +264,9 @@ func TestRefusedImportBindsNothing(t *testing.T) {
 			}
 			_, err := eng.EvalMultiple(ctx, tt.form)
 			qt.Assert(t, err, qt.ErrorIs, tt.want)
+			if tt.msg != "" {
+				qt.Assert(t, err, qt.ErrorMatches, tt.msg)
+			}
 			for _, ref := range tt.unbound {
 				_, err = eng.EvalMultiple(ctx, ref)
 				qt.Assert(t, err, qt.ErrorIs, werr.ErrNoSuchBinding, qt.Commentf("%s after the refused import", ref))
@@ -295,6 +318,10 @@ func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
 		{lib: "split", want: werr.ErrDuplicateBinding, fired: []string{"scheme/base", "conf/one"}, at: "bad/split.sld:4:"},
 		// The refusal points at the tail, not at its declaration.
 		{lib: "tail", want: werr.ErrInvalidSyntax, at: "bad/tail.sld:3:"},
+		// Refused before any library loads, so (bad boom)'s body never runs.
+		{lib: "tailboom", want: werr.ErrInvalidSyntax, at: "bad/tailboom.sld:3:"},
+		// No import set at all before the tail: the same refusal, at the tail.
+		{lib: "notalist", want: werr.ErrInvalidSyntax, at: "bad/notalist.sld:3:"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.lib, func(t *testing.T) {

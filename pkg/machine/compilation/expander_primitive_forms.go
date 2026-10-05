@@ -459,19 +459,9 @@ func (p *ExpanderTimeContinuation) expandDefineForm(sym *syntax.SyntaxSymbol, ex
 // use the imported bindings. For macros, this means processing during expansion.
 func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// expr is the arguments after 'import': (<import-set> ...)
-	if syntax.IsSyntaxEmptyList(expr) {
-		// Empty import is valid, return unchanged
-		return formUnchanged(sym, expr)
-	}
-
-	importSets, ok := expr.(*syntax.SyntaxPair)
-	if !ok {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "import: expected list of import sets"))
-	}
-
-	err := ResolveAndInstallImportSets(p.ctx, importSets, p.env, ImportStageExpand, p.evaluator)
+	err := ResolveAndInstallImportSets(p.ctx, expr, p.env, ImportStageExpand, p.evaluator)
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "import: form refused"))
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "import: error processing import sets"))
 	}
 
 	// Return the import form unchanged for later compilation

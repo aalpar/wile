@@ -474,7 +474,7 @@ These invariants must be maintained:
      | Tier | Coordinate | What lands here |
      |------|------------|------------------|
      | `tierExactMutable` | `(phase N, mutable)` | ordinary `define`s at phase N — user code, `define-for-syntax` bodies |
-     | `tierExactImported` | `(phase N, sealed)`, stamped `Imported` | what a program or `(environment …)` import installs, at its base phase and at a macro's propagated phase (`CopyLibraryBindingsToEnvAtPhase`, `placementShadowable`), which therefore shadows a base name of the same spelling rather than overwriting it; only a library body's own imports (`planCopyDirect`) are `placementInPlace` and land at `(N, mutable)` |
+     | `tierExactImported` | `(phase N, sealed)`, stamped `Imported` | what an import form or an `(environment …)` spec installs, at its base phase and at a macro's propagated phase (`planCopyAtPhase`, `placementShadowable`), which therefore shadows a base name of the same spelling rather than overwriting it; only a library's import declarations (`planCopyDirect`) are `placementInPlace` and land at `(N, mutable)` |
      | `tierExactSealed` | `(phase N, sealed)`, unstamped | the startup set: Go primitives, sealed stdlib procedures, optimizer `Stable` anchors, the syntax compilers (`RegisterSyntaxCompilers`) and the auxiliary keywords and special-form names (`registerCompileTimeBinding`) at phase 0; the bootstrap macros, special-form expanders and the registry's expand-phase primitive copies at phase 1 |
 
      A slot at any OTHER phase is **not a candidate at all** — that is

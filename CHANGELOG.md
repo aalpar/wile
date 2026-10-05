@@ -346,8 +346,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Import API in `pkg/machine/compilation` and `pkg/environment`.**
   - `compilation.ResolveAndInstallImportSet(ctx, datum, …)` is replaced by
-    `ResolveAndInstallImportSets(ctx, importSets *syntax.SyntaxPair, …)`, which
-    takes one whole import form so it can refuse the form whole.
+    `ResolveAndInstallImportSets(ctx, importSets syntax.SyntaxValue, …)`, which
+    takes one whole import form's arguments so it can refuse the form whole.
   - `EnvironmentFrame.WriteCoordinates`, formerly unexported, returns the
     `(phase, sealed)` coordinate a write through the view lands at.
   - `GlobalEnvironmentFrame.ReusableImportedGlobalBindingAt` is new: the slot
