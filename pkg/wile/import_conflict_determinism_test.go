@@ -177,6 +177,13 @@ var refusedImportLibFS = fstest.MapFS{
   (export x)
   (begin (define x 1)))`),
 	},
+	"bad/plan.sld": &fstest.MapFile{
+		Data: []byte(`(define-library (bad plan)
+  (import (scheme base))
+  (import (for-meta 127 (conf three)))
+  (export x)
+  (begin (define x 1)))`),
+	},
 	"bad/tail.sld": &fstest.MapFile{
 		Data: []byte(`(define-library (bad tail)
   (import (scheme base)
@@ -337,6 +344,8 @@ func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
 		{lib: "tailboom", want: werr.ErrInvalidSyntax, at: "bad/tailboom.sld:3:12: import: import form must be a proper list"},
 		// No import set at all before the tail: the same refusal, at the tail.
 		{lib: "notalist", want: werr.ErrInvalidSyntax, at: "bad/notalist.sld:3:6: import: import form must be a proper list"},
+		// Refused while planning: a1 lands one phase above 127. Names the library.
+		{lib: "plan", want: werr.ErrInvalidArgument, fired: []string{"scheme/base"}, at: "bad/plan.sld:3:10: import: error importing (conf three): "},
 	}
 	for _, tt := range tests {
 		t.Run(tt.lib, func(t *testing.T) {
@@ -348,6 +357,7 @@ func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
 			})
 			_, err := eng.EvalMultiple(context.Background(), `(import (bad `+tt.lib+`))`)
 			qt.Assert(t, err, qt.ErrorIs, tt.want)
+			qt.Assert(t, tt.at, qt.Not(qt.Equals), "")
 			qt.Assert(t, err.Error(), qt.Contains, tt.at)
 			qt.Assert(t, fired, qt.DeepEquals, tt.fired)
 		})
@@ -356,7 +366,10 @@ func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
 
 // TestRefusedNamespaceRequireBindsNothing pins all or none for namespace-require,
 // whose ImportSpecInto is also the core of environment and make-namespace, and
-// that each of the three names itself and the library it was importing.
+// that each of the three names itself and the library it was importing. A row
+// with an empty unbound checks the refusal only: environment and make-namespace
+// return no namespace when refused, and a phase-127 install is invisible to
+// namespace-bound?, which looks at phase 0.
 func TestRefusedNamespaceRequireBindsNothing(t *testing.T) {
 	ctx := context.Background()
 	t.Run("alone", func(t *testing.T) {
@@ -367,17 +380,20 @@ func TestRefusedNamespaceRequireBindsNothing(t *testing.T) {
 	})
 
 	tests := []struct {
-		name  string
-		setup string // must succeed; empty for none
-		form  string
-		want  error
-		msg   string // a pattern the refusal must match
+		name    string
+		setup   string // must succeed; empty for none
+		form    string
+		want    error
+		msg     string   // a pattern the refusal must match
+		unbound []string // names ns must not bind at phase 0 afterwards
 	}{
 		{name: "a later call conflicts", setup: `(namespace-require ns '(conf one))`, form: `(namespace-require ns '(conf three))`,
-			want: werr.ErrDuplicateBinding, msg: `(?s).*namespace-require: error importing \(conf three\): .*conflicts with a different existing import.*`},
+			want: werr.ErrDuplicateBinding, msg: `(?s).*namespace-require: error importing \(conf three\): .*conflicts with a different existing import.*`,
+			unbound: []string{"a0"}},
 		// Names the library that failed, neither the spec's first nor its last.
 		{name: "two sets of one spec conflict", form: `(namespace-require ns '(for-meta 0 (conf three) (conf one) (scheme base)))`,
-			want: werr.ErrDuplicateBinding, msg: `(?s).*namespace-require: error importing \(conf one\): .*`},
+			want: werr.ErrDuplicateBinding, msg: `(?s).*namespace-require: error importing \(conf one\): .*`,
+			unbound: []string{"a0"}},
 		// Refused while planning: a1's propagation one phase above 127 overflows.
 		{name: "a set cannot be planned", form: `(namespace-require ns '(for-meta 127 (conf three)))`,
 			want: werr.ErrInvalidArgument, msg: `(?s).*namespace-require: error importing \(conf three\): .*propagation phase 128 .*`},
@@ -398,9 +414,11 @@ func TestRefusedNamespaceRequireBindsNothing(t *testing.T) {
 			_, err = eng.EvalMultiple(ctx, tt.form)
 			qt.Assert(t, err, qt.ErrorIs, tt.want)
 			qt.Assert(t, err, qt.ErrorMatches, tt.msg)
-			got, err := eng.EvalMultiple(ctx, `(namespace-bound? ns 'a0)`)
-			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, got.SchemeString(), qt.Equals, "#f", qt.Commentf("a0 after the refused namespace-require"))
+			for _, name := range tt.unbound {
+				got, err := eng.EvalMultiple(ctx, `(namespace-bound? ns '`+name+`)`)
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got.SchemeString(), qt.Equals, "#f", qt.Commentf("%s after the refused namespace-require", name))
+			}
 		})
 	}
 }

@@ -495,13 +495,15 @@ func ResolveAndInstallImportSets(ctx context.Context, importSets syntax.SyntaxVa
 // resolves the library names, and plan returns one resolved library's installs
 // and the observer they fire. A malformed form is refused before anything
 // resolves (importSetForms). Every error a set raises carries the set's source
-// location; those from planning, the check and the install also name the
-// library being imported, which a resolution error names only when it got that
-// far.
+// location; those from planning and the check also name the library being
+// imported, as does an install-pass failure (an invariant violation or a
+// concurrent import, which no test reaches). A resolution error names the
+// library only when it got that far.
 //
 // ImportSpecInto, which plans a datum, stays apart: its messages carry the
-// primitive's name in wording of their own, it has no source location, it fires
-// no observer, and it takes its phase shift uncomposed.
+// primitive's name, with load and modifier errors in wording of their own; it
+// has no source location, fires no observer, and takes its phase shift
+// uncomposed.
 func planImportForm(ctx context.Context, importSets syntax.SyntaxValue, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, plan func(*ResolvedImportSet) ([]importInstall, func(), error)) ([]pendingImport, error) {
 	sets, err := importSetForms(ctx, importSets)
 	if err != nil {
