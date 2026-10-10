@@ -87,6 +87,7 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	mc.maxStackSize = p.maxStackSize
 	mc.barrierValid = p.barrierValid // inherit barrier context
 	mc.windingStack = p.windingStack
+	mc.windingBase = len(p.windingStack)
 	// The namespace-derived engine-state snapshot travels with the child. Without
 	// it every eval, load, once-do! and parameter-converter sub-context starts on
 	// a pool-zeroed struct and reproduces the released-frame defect at a new site:
@@ -110,6 +111,7 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 func (p *MachineContext) NewSubContextWithWinding(windingStack WindingStack) *MachineContext {
 	mc := p.NewSubContext()
 	mc.windingStack = windingStack
+	mc.windingBase = len(windingStack)
 	return mc
 }
 
@@ -212,7 +214,8 @@ func (p *MachineContext) CaptureSubContextParams() SubContextParams {
 // (like map, for-each, dynamic-wind), use NewSubContext instead.
 func NewThreadSubContext(params SubContextParams, thread *values.Thread) *MachineContext {
 	sub := &MachineContext{
-		ctx: params.Ctx,
+		ctx:         params.Ctx,
+		windingBase: len(params.WindingStack),
 		vmState: vmState{
 			env:          params.Env,
 			evals:        NewStack(),

@@ -3429,19 +3429,21 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
   `TestTimerExpiryDuringEvalComputeRunsHandler`, `TestTimerSupersedesFailureButNotDenial`,
   `TestTimerInterruptNamesInnermostTimer`, `TestJoinReportsJoineeCancellationAsUncaught`,
   `TestTimerCancelledWaitInAbortAfterThunkRunsHandler`, `TestOrdinaryErrorUnderArmedTimerIsCaught`,
-  `TestEmbedderDeadlineInsideArmedTimerRaises`, `TestStaleTimerClaimsNothing` and
+  `TestEmbedderDeadlineInsideArmedTimerRaises` and
   `TestCancelledWaitInChildThreadIsCatchableThere`, `TestTimerClaimsAHandlerFailure` and
   `TestTimerClaimsAnSRFI18ConditionBelowIt`, `TestTimerDoesNotClaimAControlTransfer` and
   `TestEscapePastATimerLeavesItsExtent`, `TestReentryUnderATimerRewindsOutsideIt`,
   `TestReentryIntoAnEndedTimerKeepsTheEnclosingOne`,
   `TestAfterThunkEnteredBelowTheTimerStaysInsideIt`, `TestAfterThunkOutsideAFiredTimerKeepsItsGuard`,
   `TestWindingThunkFailureOutsideAFiredTimerIsItsOwn`, `TestUnclaimedFailureIsClaimedByAnotherOwner`,
-  `TestStaleTimerDoesNotHideALiveOne`, `TestStaleTimerLeavesTheHandlersContinuation` and
-  `TestTimerClaimsAnApplySpreadFailureBelowIt`, with `TestWindingThunkFailureMarksOnlyUnderAFiredTimer`,
-  `TestWindingThunkFailureMarksForTheInnermostTimer`, `TestJudgedUnclaimedReadsEveryMark` and
-  `TestTimerContextAnswersItsOwnDeadline` in `pkg/machine`; every mutation tried (56) fails at
-  least one, the 24 of rounds 9 to 11 on the final code, and one perf-only reordering in
-  `windingThunkContext` fails none. Round 11 found no defect in behaviour; it corrected the record of the
+  `TestEscapedTimerDoesNotHideALiveOne`, `TestEscapedTimerLeavesTheHandlersContinuation`,
+  `TestTimerClaimsAnApplySpreadFailureBelowIt`, `TestEscapeFromATimerEndsIt` and
+  `TestTimerExpiryNamesTheTimerThatFired`. **Simplified 2026-10-10**
+  (`fix/timer-identity-and-teardown`): with the two structural rows below fixed (an escape ends
+  its timer; an expiry names its timer), the code that worked around them is deleted: the
+  stale-timer skip, `entryCtx` and `windingThunkContext`, the unclaimed-failure marks and the
+  timer's own context type, with `TestStaleTimerClaimsNothing` and the four `pkg/machine` unit
+  tests that pinned them. Round 11 found no defect in behaviour; it corrected the record of the
   open decision below and pinned the mark walk, the mark's timer and the deadline caching.
   Round 10 found the unclaimed mark honoured by every context,
   so a joiner's guard caught a joinee's end and a host's caller reported a failure as itself, but
@@ -3450,15 +3452,14 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
   `with-timeout` (2 to 4 times on loops leaving stale timers); the timer's context now answers its
   own deadline, which also removes HEAD's walk. Nine mutations of round 7 to 9 code survived
   every suite and are now pinned, and three new tests flaked under `-race` and load and now have
-  wide margins. **Open, for decision:** a frame entered outside a `with-timeout` and re-entered
-  inside it by a composable continuation (or a `call/cc` continuation reinstated at an inner
-  prompt). The thunks a winding reconcile runs for it (the before thunk, an after thunk on a later
-  escape) run outside the timer when the continuation is applied in the timer's own context, so
-  the timer does not bound them (HEAD cut them short); applied inside `eval`, `load` or a host
-  callback below the owner they run under it, as at HEAD; its after thunk on a normal exit runs
-  inline under the timer, as at HEAD. One rule either way: decide by the frame's position after
-  the transfer (bounds all of them), or also step out of the parent chain's timers (bounds none
-  of the reconcile thunks). The plan record (round 10) has the trade-offs.
+  wide margins. **Decided 2026-10-10, by position** (the first of round 10's two options), as a
+  consequence of putting the timer's extent on the winding stack and of a reinstatement composing
+  its extents onto those outside its boundary: a frame re-entered inside a `with-timeout` by a
+  composable continuation, or by a `call/cc` continuation reinstated at an inner prompt, sits
+  above the timer's frame, so all its thunks run under the timer, wherever the continuation is
+  applied; a full `call/cc` continuation invoked inside the `with-timeout` leaves the extent first,
+  so its thunks run outside. Before, the answer depended on which driver ran the reconcile (the
+  review of round 11's fixes found the record had described even that by the wrong rule).
   Round 9 found a `dynamic-wind`
   entered inside `load` matching no timer (`load` wraps the timed ctx, and the match was by
   identity), so its after thunk ran outside the timer and could hang, now found through a
@@ -3512,7 +3513,10 @@ Each open row was reproduced on HEAD `4c695231` as well as on the P3.17 branch, 
 P3.17, though P3.17 changes the symptom of some (each such row says how). The shapes below are
 enough to rebuild the probes.
 
-- [ ] **An escape past a `with-timeout` leaves its timer armed** [Correctness, M]: only the finalizer
+- [x] **An escape past a `with-timeout` leaves its timer armed** [Correctness, M, Done 2026-10-10 on
+  `fix/timer-identity-and-teardown`: the timer's extent is a winding-stack frame (`newTimerFrame`)
+  above its boundary, and every unwind through it ends the timer (`exitTimer`); pinned by
+  `TestEscapeFromATimerEndsIt`. The record below is as filed]: only the finalizer
   frame and `resolveTimerInterrupt` restore `p.timer`/`p.ctx` (`run_body_under_timer.go`); a `guard`
   catching a raise outside the thunk, or a `call/cc` escape, discards the finalizer without running
   it. When the stale timer fires, the next poll, recheck or wait emits an interrupt whose boundary is
@@ -3544,7 +3548,11 @@ enough to rebuild the probes.
   (loop (+ i 1) (+ acc 1)) acc))))` returns a wrong `acc` with no error in up to 1 run in 4; HEAD
   too. No test resumes `k`. Decide: deliver `v` as the call's result and replay the stashed values
   after a poll, or document `k` as not resumable and raise a clear error.
-- [ ] **Which timer fired is not recorded** [Design, M]: every `with-timeout` cancels with the one
+- [x] **Which timer fired is not recorded** [Design, M, Done 2026-10-10 on
+  `fix/timer-identity-and-teardown`: the cause names its timer (`timerExpiry`), answered by the
+  context that arms it (`firedTimer`); pinned by `TestTimerExpiryNamesTheTimerThatFired`. A started
+  thread's busy loop under its starter's timer still dies with the poll's raw context error, as one
+  with no `with-timeout` of its own does. The record below is as filed]: every `with-timeout` cancels with the one
   `ErrTimerExpired`, so the innermost context that owns a timer answers any expiry: an outer
   timer's runs an inner handler early, and a starter thread's runs a started thread's own
   (unexpired) `with-timeout` handler. (In a busy loop the poll that interrupts runs before
@@ -3583,8 +3591,13 @@ enough to rebuild the probes.
   timer and hangs (a 10 s `thread-sleep!` sleeps its full 10 s).
   `(eval '(with-timeout 50 h (lambda () (call/cc (lambda (k0) (dynamic-wind (lambda () #f)
   (lambda () (k0 'escaped)) (lambda () (mutex-lock! m)))))))) env)` with `m` held.
-- [ ] **A rootless `call/cc` or `call-with-composable-continuation` sub-context runs its parent's
-  dynamic-wind after thunks when it completes** [Correctness, S–M]: `NewSubContext` copies the
+- [x] **A rootless `call/cc` or `call-with-composable-continuation` sub-context runs its parent's
+  dynamic-wind after thunks when it completes** [Correctness, S–M, Done 2026-10-10 on
+  `fix/timer-identity-and-teardown`, by the fix shape: a context records the depth it inherited
+  (`MachineContext.windingBase`) and its completion, or a thread's exit, unwinds to it
+  (`UnwindOwn`); pinned by `TestRootlessSubContextLeavesInheritedExtents` and
+  `TestThreadExitLeavesTheStartersExtents`. Found again as a regression of the timer frame: the
+  thread's exit ended its starter's timer. The record below is as filed]: `NewSubContext` copies the
   parent's winding stack and `RunResumable`'s normal completion runs `UnwindTo(0)`, so every
   enclosing extent's after thunk fires there and again when the parent exits. A thread root, which
   copies its starter's winding stack, does the same at thread exit. Fix shape: on a sub-context or
@@ -3613,10 +3626,15 @@ enough to rebuild the probes.
   condition, calls exit again and gets this message. Any abort to an outer tag from there fails the
   same way: `(ex 'x)` under `call-with-exit` and `(abort-current-continuation t 'v)` under an
   enclosing prompt report "no prompt found". Fix shape: on a sub-context (`parentMC != nil`),
-  re-raise a not-found abort to the enclosing driver. A stale timer's cancelled wait surfaces here
-  as this message.
-- [ ] **Applying a composable continuation runs the invoker's `dynamic-wind` after thunks**
-  [Correctness, M]: no timer involved, same on HEAD. `ReinstallSegment` reconciles the winding
+  re-raise a not-found abort to the enclosing driver. A stale timer's cancelled wait surfaced here
+  as this message, until an escape ended its timer (2026-10-10).
+- [x] **Applying a composable continuation runs the invoker's `dynamic-wind` after thunks**
+  [Correctness, M, Done 2026-10-10 on `fix/timer-identity-and-teardown` for the winding half: a
+  continuation records the depth of its delimiting prompt on the winding stack
+  (`ComposableContinuation.windingBase`), and a reinstatement re-enters the extents it carries on
+  top of those outside its boundary (`ReinstallSegment`), so the invoker's are kept; pinned by
+  `TestReentryInsideAFrameKeepsIt` and `TestReentryInsideATimerStaysUnderIt`. The handlers and
+  `parameterize` half below is STILL OPEN. The record below is as filed]: no timer involved, same on HEAD. `ReinstallSegment` reconciles the winding
   stack to the captured one as an absolute target, so frames the invoker is inside are unwound.
   With `kc` captured under a top-level prompt, `(dynamic-wind (lambda () (note 'in)) (lambda ()
   (note (list 'kc-returned (kc 7))) (note 'body-done)) (lambda () (note 'out)))` logs

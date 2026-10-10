@@ -111,7 +111,7 @@ routed by `FindPrompt`, a resume by `ReinstallSegment`.
 │    err := pending, else p.Run()  (pending = a routed signal)       │
 │    │                                                               │
 │    ├─ err == nil (normal completion)                               │
-│    │   ├─ UnwindTo(0) if winding frames remain                     │
+│    │   ├─ UnwindOwn() if winding frames remain (not inherited ones)│
 │    │   └─ return nil                                               │
 │    │                                                               │
 │    ├─ ErrPromptAbort                                               │
@@ -235,7 +235,9 @@ Concretely, `PrimCallCC`:
    `call-with-continuation-prompt` reusing the default tag it yields that
    prompt's chain frame, so only the delimited segment is captured.
 2. Copies the winding stack
-3. Creates a `ComposableContinuation` from the segment + winding stack + thread ID + barrier token
+3. Creates a `ComposableContinuation` from the segment + winding stack + the
+   depth of the capture prompt on it (the extents above are carried) + thread ID
+   + barrier token
 4. Snapshots the reachable parameter/handler marks into it
    (`SnapshotReachableMarksInto`), so resume restores the *captured* dynamic
    environment. Composable continuations deliberately do not snapshot: they
@@ -347,12 +349,12 @@ applyComposableContinuation(cc, args)
   ├─ select the escalator arms this resume revives, against p.cont
   │    (segment carries them, the invoker's live chain does not)
   │
-  └─ ReinstallSegment(cc, boundary = p.cont, p.windingStack, vals, p.isolatedMarks, revived)
+  └─ ReinstallSegment(cc, boundary = p.cont, p.windingStack, outside = p.windingStack, vals, p.isolatedMarks, revived)
        ├─ install captured marks
        ├─ segment = cc.AcquireSegment()
        │    first invocation: original frames, chain marked shared
        │    re-invocation:    deep copy, so resumes are independent
-       ├─ RestoreWithWindingFrom(nil, srcWinding, cc.WindingStack())
+       ├─ RestoreWithWindingFrom(nil, srcWinding, outside ++ cc's carried extents)
        ├─ mark the selected arms revived   // only once the reconcile succeeded
        ├─ GraftContinuation(segment, boundary)   // p.cont = EXTEND (compose)
        ├─ Restore(segment)
@@ -445,7 +447,9 @@ it loops):
 5. `Run()` returns it to `RunResumable`
 6. `boundary, _ = FindPrompt(DefaultPromptTag)` → nil (context-level boundary),
    so the reinstalled segment *replaces* the live chain
-7. `ReinstallSegment(segment, nil, [], [42], isolate = true, revivals)`:
+7. `ReinstallSegment(segment, nil, [], outside = [], [42], isolate = true, revivals)`
+   (outside: the extents the boundary keeps, the prompt frame's recorded stack or
+   the context's inherited extents at its own boundary; none at top level):
    a. install the captured mark snapshot
    b. `AcquireSegment()`: original frames on first invoke, deep copy after
    c. `RestoreWithWindingFrom(nil, [], [D1])`:

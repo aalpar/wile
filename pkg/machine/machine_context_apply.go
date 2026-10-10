@@ -516,7 +516,7 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 func (p *MachineContext) ReinstallSegment(
 	comp *ComposableContinuation,
 	boundary *MachineContinuation,
-	srcWinding WindingStack,
+	srcWinding, outside WindingStack,
 	vals []values.Value,
 	isolate bool,
 	revived []*escalatorArm,
@@ -528,11 +528,15 @@ func (p *MachineContext) ReinstallSegment(
 	// the segment shared; re-invocations deep-copy from preserved frames.
 	segment := comp.AcquireSegment()
 
-	// Reconcile dynamic-wind: unwind current extents not in the captured stack,
-	// rewind captured extents not in the current stack. srcWinding is the winding
-	// live at the invocation (k v) site, not the driver's — load-bearing for the
-	// cross-sub-context resume case.
-	err := p.RestoreWithWindingFrom(nil, srcWinding, comp.WindingStack())
+	// Reconcile dynamic-wind to the extents outside the boundary with the captured
+	// ones on top (Flatt et al. 2007: a composable continuation's frames are
+	// appended to the invoker's): unwind the live extents inside the boundary, and
+	// re-enter the captured ones. srcWinding is the winding live at the invocation
+	// (k v) site, not the driver's — load-bearing for the cross-sub-context resume
+	// case. Reconciling to the captured stack as an absolute target unwound the
+	// invoker's own extents, and a with-timeout's among them, on every re-entry.
+	target := append(slices.Clip(outside), comp.carriedWinding()...)
+	err := p.RestoreWithWindingFrom(nil, srcWinding, target)
 	if err != nil {
 		return false, err
 	}
@@ -603,7 +607,7 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	// chain the arms must be judged against; read it before ReinstallSegment, whose
 	// winding reconcile runs dynamic-wind thunks that can re-point it.
 	revived := pendingEscalatorRevivals(cc, p.cont)
-	wasEmpty, err := p.ReinstallSegment(cc, p.cont, p.windingStack, vals, p.isolatedMarks, revived)
+	wasEmpty, err := p.ReinstallSegment(cc, p.cont, p.windingStack, p.windingStack, vals, p.isolatedMarks, revived)
 	if err != nil {
 		return p, err
 	}

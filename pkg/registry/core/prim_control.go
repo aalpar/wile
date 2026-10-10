@@ -176,7 +176,7 @@ func PrimCallCC(cc machine.CallContext) error {
 	capturePrompt, _ := mc.FindPrompt(machine.DefaultPromptTag)
 	segment := mc.SliceContinuationAt(capturePrompt)
 	windingStack := mc.WindingStack().Copy()
-	comp := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
+	comp := machine.NewComposableContinuation(segment, windingStack, mc.WindingDepthAt(capturePrompt), mc.ThreadID(), mc.BarrierValid())
 	// Snapshot the reachable parameter/handler marks so a continuation captured inside
 	// a sub-context (e.g. a call-with-values producer) restores the outer environment
 	// on resume — call/cc isolates marks on resume, so without this the outer

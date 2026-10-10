@@ -140,47 +140,31 @@ which owns the timers, decides it (`supersedingTimerInterrupt`,
   error, not this one. (A joinee stopped mid-computation by the VM's poll is not
   yet reported the same way; see *Boundaries*.)
 
-A `dynamic-wind`'s before and after thunks run in the dynamic environment of the
-`dynamic-wind` call (R7RS §6.10), and a `with-timeout`'s timer is part of it. An
-escape that leaves a `with-timeout` through an enclosing `dynamic-wind` runs the
-after thunk outside that timer, and so does a re-entry from inside a later
-`with-timeout` for the before thunk. A wait there is not cancelled by a timer
-whose extent it is not in, the escape arrives, and a failure there is the thunk's
-own, caught by its `guard` or, uncaught, ending the evaluation as itself. A
-re-entry that leaves the frame inside the `with-timeout` (a composable
-continuation, or one reinstated at a prompt inside it) is an open decision
-(`TODO.md`, I050). Today the thunks a winding reconcile runs for it (the before
-thunk, and an after thunk on a later escape) run outside the timer when the
-reconcile runs in the timer's own context, so the timer does not bound them.
-Applied inside `eval`, `load` or a host callback below the timer's owner, they run
-under it, because a reconcile steps out of its own context's timers only. The
-frame's after thunk on a normal exit runs inline, under the timer and the
-invoker's parameterization, as before. A `dynamic-wind` entered inside the timer, including inside
-`eval` or `load` below its owner, keeps running its thunks under it. One entered
-inside a `with-timeout` that has since ended runs them under the next timer out
-that is still armed. The frame records the context at entry
-(`DynamicWindFrame.entryCtx`). A timer's context carries its state as a value,
-which `load`'s own wrapping does not hide, and `windingThunkContext` steps out of
-each timer that context is inside until it reaches one armed when the thunk runs.
-The driver running an escape's thunks has not yet left the timer's extent, so a
-thunk's failure that its own context did not hand to a timer is marked as such
-(`windingThunkFailure`), or that driver's state would claim it. The mark answers
-for that driver's timers only. The same failure reaching another context whose
-timer fired, a thread joining this one or the caller of a host function that ran
-it, is the timeout there.
+A `with-timeout`'s extent is a frame on the winding stack, above its boundary
+frame. A normal return pops it; any other way out (an escape, an abort, a guard's
+exit, the end of the run) unwinds through it, which cancels the timer and restores
+the context outside it (`exitTimer`). Re-entering the extent arms nothing: a timer
+once left is over.
 
-An escape past a `with-timeout` leaves its timer armed (filed in `TODO.md`). Such
-a stale timer claims nothing, and the rule skips it rather than stopping at it:
-the innermost timer whose `with-timeout` is still on the chain claims a failure
-once it fires, and its teardown cancels the stale timers inside it too
-(`liveFiredTimer`, `resolveTimerInterrupt`).
+A `dynamic-wind`'s thunks run in the dynamic environment of the `dynamic-wind` call
+(R7RS §6.10), and the winding order makes the timer part of it by position: a
+reconcile runs the thunks of frames above the timer's frame before it exits the
+timer, and those below it after. So an escape that leaves a `with-timeout` through
+an enclosing `dynamic-wind` runs the after thunk outside the timer, and a full
+continuation captured outside a `with-timeout` and invoked inside it leaves the
+extent before it re-runs the frame's before thunk. A frame spliced in above the
+timer's frame (by a composable continuation, or a continuation reinstated at a
+prompt inside the `with-timeout`) runs its thunks under the timer, and so does one
+entered inside it, including inside `eval` or `load` below its owner. One
+exception is filed in `TODO.md`: an escape from a `with-timeout` inside `eval` that
+the top driver reconciles runs the thunks above it on the top context's ctx.
 
-Which timer fired is not part of the cause: every `with-timeout` cancels with the
-one `ErrTimerExpired`, and a started thread's ctx derives from its starter's. So
-the innermost context on the chain that owns a timer answers any expiry that
-reaches it. An outer timer's expiry runs an inner `with-timeout`'s handler, and a
-starter thread's expiry runs the started thread's own `with-timeout` handler, as
-the eager recheck always did.
+The expiry names its timer (`timerExpiry`, still `errors.Is` `ErrTimerExpired`),
+so the `with-timeout` whose timer fired answers it, on the context that arms that
+timer: an outer timer's expiry runs the outer handler, past an armed inner one,
+and a starting thread's expiry reaches a started thread, which does not arm that
+timer, as an ordinary cancellation, even inside the started thread's own
+`with-timeout`.
 
 The lock waits used to answer `#f` for every source, because their timed forms
 already spend `#f` on "did not acquire", and under a timer all four returned
@@ -205,7 +189,7 @@ it, and correctness holds for a *different reason* in each case.
 
 | Source | Cause on ctx | Why the handling is safe |
 |---|---|---|
-| `with-timeout` | `ErrTimerExpired` (`WithTimeoutCause`) | **Eager recheck.** `callForeignCached` does a non-blocking `ctx.Done()` check *after every foreign return under an active timer* (`mc.timer != nil`) and, on `ErrTimerExpired`, returns `ErrTimerInterrupt` — but only on the *error-free* return path (`if err != nil` returns first). That recheck serves a primitive that returns normally after the timer fired. A failure takes the other path: the owner's bridge and driver turn it into the interrupt (`supersedingTimerInterrupt`), which also covers a failure returning from a sub-context, where the recheck cannot look. |
+| `with-timeout` | `timerExpiry`, naming the timer (`WithTimeoutCause`; `errors.Is` `ErrTimerExpired`) | **Eager recheck.** `callForeignCached` does a non-blocking `ctx.Done()` check *after every foreign return under an active timer* (`mc.timer != nil`) and, when the expiry names a timer this context arms, returns that timer's `ErrTimerInterrupt` — but only on the *error-free* return path (`if err != nil` returns first). That recheck serves a primitive that returns normally after the timer fired. A failure takes the other path: the owner's bridge and driver turn it into the interrupt (`supersedingTimerInterrupt`), which also covers a failure returning from a sub-context, where the recheck cannot look. |
 | `thread-terminate!` | `context.Canceled` (plain `cancel()`) | **The outcome is claimed, not raced.** The eager recheck is `ErrTimerExpired`-only, so it does not fire here; the parked wait raises `ErrOperationCancelled` in the terminated thread. Safety comes from `Terminate` holding the thread's own lock across both `cancel()` and the store of the SRFI-18 terminated-thread exception, so a goroutine unparked by that cancellation cannot slip its own outcome in between, plus the outcome being write-once (`Thread.setOutcome`): neither that raise nor any returned value can become the thread's result, whichever path ends the goroutine. |
 | Embedder deadline or cancel | `context.DeadlineExceeded` or `context.Canceled`, `mc.timer == nil` | **Raised at the wait.** No timer interrupt and no thread teardown; the parked wait raises `ErrOperationCancelled` carrying the cause, so an unguarded wait reaches the embedder as an error even when it is the program's last form. Code that does not park meets the VM's own top-of-loop ctx check instead, at the next poll (every 1024 ops; `contextCheckMask` is the 1023 mask), when the program runs that long. Either replaces the old **infinite hang**. Three shapes still finish normally: a `guard` that catches the raise and finishes before the next poll, a timed `mutex-lock!` whose mutex frees within its timeout, and work that ends before the next poll, including an uncontended `mutex-lock!`, which acquires without waiting (see *Boundaries*). |
 
@@ -221,22 +205,24 @@ the pass-up below it through one or two sub-contexts),
 `TestAfterThunkOutsideAFiredTimerKeepsItsGuard` (a fired timer claims only a
 failure a timer's cancellation caused: the cause check in `timerClaims`),
 `TestWindingThunkFailureOutsideAFiredTimerIsItsOwn` (nor a winding thunk's failure
-outside it: each of the four sites in the reconciles that mark one),
-`TestUnclaimedFailureIsClaimedByAnotherOwner` and `TestJudgedUnclaimedReadsEveryMark`
-(a mark answers for its own context's timers, wherever it sits in the failure's
-chain), `TestTimerClaimsAnApplySpreadFailureBelowIt`
+outside it), `TestUnclaimedFailureIsClaimedByAnotherOwner` (a failure reaching
+another context whose timer fired is the timeout there),
+`TestTimerClaimsAnApplySpreadFailureBelowIt`
 (`apply`'s own spread failures go through the bridge),
 `TestTimerCancelledWaitInRootlessCallCCRunsHandler` (the resume
 reconcile route), `TestTimerCancelledWaitInAbortAfterThunkRunsHandler` (the abort
 route, in `RunResumable` and in a sub-context's `RunWithinBoundary`),
 `TestTimerCancelledWaitInHostCallbackRunsHandler` (an uncaught-condition escape is
-claimed), `TestTimerSupersedesFailureButNotDenial` (the denial exclusion), and
-`TestStaleTimerClaimsNothing` (a timer whose boundary is gone claims nothing, and a
-live timer that has not fired, or that the embedder cancelled, claims nothing and
-draws nothing up past a guard: the cause check in `liveFiredTimer`, made on the
-live timer's own context), `TestStaleTimerDoesNotHideALiveOne`
-and `TestStaleTimerLeavesTheHandlersContinuation` (nor does it hide a live timer
-outside it, for a returned failure or one `FailureClaimedByTimer` hands back),
+claimed), `TestTimerSupersedesFailureButNotDenial` (the denial exclusion),
+`TestTimerExpiryNamesTheTimerThatFired` (the timer the expiry names answers it:
+`firedTimer`, at the poll, the rechecks and the claim), `TestEscapeFromATimerEndsIt`
+(an escape ends the timer: `exitTimer`), `TestReentryInsideATimerStaysUnderIt` (a
+re-entry inside it composes onto the timer's frame), `TestThreadExitLeavesTheStartersExtents`
+and `TestEscapeOutOfASubContextTimerKeepsTheOwners` (a thread's exit and an escape
+out of `eval`'s timer leave the owner's armed), `TestEscapedTimerDoesNotHideALiveOne`
+and `TestEscapedTimerLeavesTheHandlersContinuation` (an inner `with-timeout` left by
+an escape leaves the outer timer to claim a wait, for a returned failure or one
+`FailureClaimedByTimer` hands back),
 `TestTimerDoesNotClaimAControlTransfer`
 (an escape or abort out of `eval` after the timer fired still arrives), and
 `TestTimerClaimsAHandlerFailure` (a handler the drivers apply themselves). A wait that returned a value instead of raising is caught
@@ -359,12 +345,22 @@ Scheme (they live above `pkg/values` and cannot be reached from a Go-level test)
 - `TestTimerSupersedesFailureButNotDenial`: a primitive that outlives the timer and
   then fails becomes the timeout, unless its failure is a security denial.
 - `TestTimerInterruptNamesInnermostTimer`: with two timers on one context, and with
-  timers owned by two contexts of one chain, the innermost one's handler runs.
+  timers owned by two contexts of one chain, the inner one's handler runs when its
+  timer fires. `TestTimerExpiryNamesTheTimerThatFired`: the outer one's runs when
+  the outer timer fires, and a starting thread's expiry does not run a started
+  thread's own handler.
+- `TestEscapeFromATimerEndsIt`: a guard, `call/cc` or abort leaving a
+  `with-timeout` ends its timer, so later work in the same evaluation runs to
+  completion. `TestReentryInsideATimerStaysUnderIt`: a composable continuation, or
+  a `call/cc` one reinstated at a prompt inside the `with-timeout`, keeps the timer.
+  `TestThreadExitLeavesTheStartersExtents`, `TestEscapeOutOfASubContextTimerKeepsTheOwners`:
+  a thread exiting, or an escape out of a `with-timeout` inside `eval`, leaves the
+  enclosing timer armed.
 - `TestTimerCancelledWaitInAbortAfterThunkRunsHandler`: a guard's abort escape runs
   a dynamic-wind after thunk that waits; the handler runs with the `with-timeout` at
   top level and inside `eval`.
-- `TestOrdinaryErrorUnderArmedTimerIsCaught`, `TestEmbedderDeadlineInsideArmedTimerRaises`,
-  `TestStaleTimerClaimsNothing`: what the rule does not claim.
+- `TestOrdinaryErrorUnderArmedTimerIsCaught`, `TestEmbedderDeadlineInsideArmedTimerRaises`:
+  what the rule does not claim.
 - `TestCancelledWaitInChildThreadIsCatchableThere`: a started thread's cancelled
   wait is an ordinary condition in that thread.
 - `TestTimerClaimsAHandlerFailure`: a handler the drivers apply themselves (a
@@ -386,9 +382,10 @@ Scheme (they live above `pkg/values` and cannot be reached from a Go-level test)
   a later inner one stays inside the outer one.
   `TestReentryIntoAnEndedTimerKeepsTheEnclosingOne`: one entered inside a
   `with-timeout` that has ended re-enters under the live one outside it.
-- `TestStaleTimerDoesNotHideALiveOne`, `TestStaleTimerLeavesTheHandlersContinuation`:
-  a live timer outside a stale one claims the wait, runs its handler once, and
-  hands it the continuation it gets without the stale timer.
+- `TestEscapedTimerDoesNotHideALiveOne`, `TestEscapedTimerLeavesTheHandlersContinuation`:
+  after an inner `with-timeout` is left by an escape, the outer timer claims the
+  wait, runs its handler once, and hands it the continuation it gets without the
+  inner one.
 - `TestTimerClaimsAnApplySpreadFailureBelowIt`: `apply`'s not-a-list and
   improper-list failures inside `eval` after the timer fired pass up like a
   primitive's.

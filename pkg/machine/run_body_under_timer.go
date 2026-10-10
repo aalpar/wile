@@ -21,44 +21,6 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// timerCtxKey is the context key under which the ctx inside a with-timeout's
-// extent (timerContext) answers that timer's *timerState. A ctx derived from that
-// one (load adds a value of its own) still reaches it, so the innermost timer a ctx
-// is inside is a lookup, not an identity comparison.
-type timerCtxKey struct{}
-
-// timerContext is the ctx inside a with-timeout's extent: the timer's own ctx,
-// answering Value(timerCtxKey{}) with the timer's state. A context.WithValue layer
-// would answer as much, but its Deadline asks its parent, as does the plain cancel
-// ctx a with-timeout nested under an earlier deadline gets
-// (context.WithDeadlineCause); each layer would lengthen the walk every later
-// with-timeout makes for its parent's deadline. timerContext answers Deadline
-// itself, with the deadline its ctx had when it was made, which never changes.
-type timerContext struct {
-	context.Context
-	timer       *timerState
-	deadline    time.Time
-	hasDeadline bool
-}
-
-func newTimerContext(ctx context.Context, timer *timerState) *timerContext {
-	q := &timerContext{Context: ctx, timer: timer}
-	q.deadline, q.hasDeadline = ctx.Deadline()
-	return q
-}
-
-func (p *timerContext) Deadline() (time.Time, bool) {
-	return p.deadline, p.hasDeadline
-}
-
-func (p *timerContext) Value(key any) any {
-	_, ok := key.(timerCtxKey)
-	if ok {
-		return p.timer
-	}
-	return p.Context.Value(key)
-}
-
 // RunBodyUnderTimer reifies with-timeout. It installs a wall-clock timer for the
 // duration of thunk and runs thunk INLINE on the live chain under a finalizer prompt
 // frame (no sub-context), so a continuation captured inside thunk spans the finalizer
@@ -88,9 +50,8 @@ func (p *MachineContext) RunBodyUnderTimer(d time.Duration, thunk values.Value, 
 	// with-timeout whose timer fired, on whichever context arms it.
 	timerCtx, cancel := context.WithTimeoutCause(parentCtx, d, &timerExpiry{timer: timer})
 	timer.cancel = cancel
-	timer.ctx = timerCtx
 	p.timer = timer
-	p.ctx = newTimerContext(timerCtx, timer)
+	p.ctx = timerCtx
 
 	closureEnv := p.ClosureEnv()
 	finalizer := NewForeignClosure(closureEnv, 1, true, func(finCC CallContext) error {

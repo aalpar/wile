@@ -1037,6 +1037,10 @@ func TestTimerExpiryNamesTheTimerThatFired(t *testing.T) {
 		{"outer timer, inner one armed inside eval", `(with-timeout 50 (lambda (k) (list 'outer (vector-ref ran 0)))
   (lambda () (eval '(with-timeout 5000 (lambda (k) (vector-set! ran 0 'inner-ran) 'inner) (lambda () (mutex-lock! m)))
                    (interaction-environment))))`, "(outer #f)"},
+		{"outer timer, inner one armed, at the poll", `(with-timeout 50 (lambda (k) (list 'outer (vector-ref ran 0)))
+  (lambda () (with-timeout 5000 (lambda (k) (vector-set! ran 0 'inner-ran) 'inner) (lambda () (let loop () (loop))))))`, "(outer #f)"},
+		{"outer timer, inner one armed, at the recheck after a foreign call", `(with-timeout 50 (lambda (k) (list 'outer (vector-ref ran 0)))
+  (lambda () (with-timeout 5000 (lambda (k) (vector-set! ran 0 'inner-ran) 'inner) (lambda () (test-slow-ok)))))`, "(outer #f)"},
 		{"a starter's timer, the started thread's own armed", `(with-timeout 50
   (lambda (k) (guard (e (#t #f)) (thread-join! (vector-ref th 0))) (vector-ref ran 0))
   (lambda ()
@@ -1047,12 +1051,8 @@ func TestTimerExpiryNamesTheTimerThatFired(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
-			c.Assert(err, qt.IsNil)
-			defer func() {
-				_ = engine.Close()
-			}()
-			_, err = evalWithWatchdog(t, engine, `
+			engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "test-slow-fail: not a number"))
+			_, err := evalWithWatchdog(t, engine, `
 (define m (make-mutex))
 (mutex-lock! m)
 (define ran (vector #f))
@@ -1063,6 +1063,71 @@ func TestTimerExpiryNamesTheTimerThatFired(t *testing.T) {
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestThreadExitLeavesTheStartersExtents pins that a thread exiting unwinds only
+// the extents it entered. It inherits its starter's winding stack, and its exit
+// used to unwind all of it: the starter's after thunk ran in the thread and again
+// in the starter, and once a with-timeout's extent was a winding frame the thread's
+// exit ended the starter's timer, so the starter's next wait raised a plain
+// cancellation instead of becoming the timeout.
+func TestThreadExitLeavesTheStartersExtents(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"dynamic-wind", `(dynamic-wind (lambda () (note 'in))
+  (lambda () (thread-join! (thread-start! (make-thread (lambda () (note 'thread-done))))))
+  (lambda () (note 'out)))
+(reverse (vector-ref log 0))`, "(in thread-done out)"},
+		{"with-timeout", `(with-timeout 300 (lambda (k) 'timed-out)
+  (lambda () (thread-join! (thread-start! (make-thread (lambda () 'done)))) (mutex-lock! m) 'past-lock))`, "timed-out"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			defer func() {
+				_ = engine.Close()
+			}()
+			result, err := evalWithWatchdog(t, engine, `
+(define log (vector '()))
+(define (note x) (vector-set! log 0 (cons x (vector-ref log 0))))
+(define m (make-mutex))
+(mutex-lock! m)
+`+tc.code, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestEscapeOutOfASubContextTimerKeepsTheOwners pins that leaving a with-timeout
+// armed inside eval, by an escape the owner reconciles, ends that timer without
+// touching the owner's own: the owner exits a frame for a timer it does not arm,
+// so it cancels the timer and restores nothing. Restoring regardless set the
+// owner's timer to the inner one's parent, nil, so the owner's later expiry found
+// no armed timer and its wait raised a plain cancellation.
+func TestEscapeOutOfASubContextTimerKeepsTheOwners(t *testing.T) {
+	c := qt.New(t)
+	engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+	c.Assert(err, qt.IsNil)
+	defer func() {
+		_ = engine.Close()
+	}()
+	result, err := evalWithWatchdog(t, engine, `
+(define m (make-mutex))
+(mutex-lock! m)
+(define kv (vector #f))
+(with-timeout 100 (lambda (k) 'outer)
+  (lambda ()
+    (call/cc (lambda (k) (vector-set! kv 0 k)
+      (eval '(with-timeout 5000 (lambda (k) 'inner) (lambda () ((vector-ref kv 0) 'escaped))) (interaction-environment))))
+    (mutex-lock! m)
+    'past-lock))`, 5*time.Second)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "outer")
 }
 
 // TestEscapePastATimerLeavesItsExtent pins the dynamic environment an enclosing
@@ -1398,6 +1463,46 @@ func TestReentryUnderATimerRewindsOutsideIt(t *testing.T) {
 	// The last after is lost to the filed defect: the timer, left armed, fires during
 	// the sleep and the next recheck names its gone boundary.
 	c.Assert(logged.SchemeString(), qt.Matches, `\(before after slept before( after)?\)`)
+}
+
+// TestReentryInsideATimerStaysUnderIt pins that a continuation applied inside a
+// with-timeout, whose frames come to sit above the timer's, keeps the timer: a
+// composable continuation composes onto the invoker's winding stack, and a call/cc
+// continuation reinstated at a prompt inside the with-timeout keeps the frames
+// outside that prompt. Either used to reconcile to the captured stack as an
+// absolute target, which unwound the timer's frame and ended the timer, so the
+// wait after the re-entry was never cancelled.
+func TestReentryInsideATimerStaysUnderIt(t *testing.T) {
+	tcs := []struct {
+		name    string
+		capture string
+		reenter string
+	}{
+		{"composable continuation",
+			`(call-with-composable-continuation (lambda (k) (vector-set! kv 0 k) 0) dtag)`,
+			`((vector-ref kv 0) 7)`},
+		{"call/cc continuation at an inner prompt",
+			`(call/cc (lambda (k) (vector-set! kv 0 k) 0))`,
+			`(call-with-continuation-prompt (lambda () ((vector-ref kv 0) 7)) dtag (lambda args args))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			defer func() {
+				_ = engine.Close()
+			}()
+			result, err := evalWithWatchdog(t, engine, `
+(define m (make-mutex))
+(mutex-lock! m)
+(define dtag (default-continuation-prompt-tag))
+(define kv (vector #f))
+(call-with-continuation-prompt (lambda () (+ 1 `+tc.capture+`)) dtag (lambda args args))
+(with-timeout 50 (lambda (k) 'timed-out) (lambda () `+tc.reenter+` (mutex-lock! m) 'past-lock))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "timed-out")
+		})
+	}
 }
 
 // TestReentryIntoAnEndedTimerKeepsTheEnclosingOne pins the step out of a timer

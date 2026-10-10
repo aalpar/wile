@@ -24,7 +24,7 @@ import (
 
 func TestCapturedContinuation(t *testing.T) {
 	// Create a minimal composable continuation for test setup.
-	cc := NewComposableContinuation(nil, nil, 0, nil)
+	cc := NewComposableContinuation(nil, nil, 0, 0, nil)
 
 	tcs := []struct {
 		name    string

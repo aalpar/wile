@@ -112,7 +112,7 @@ func PrimMakeThread(cc machine.CallContext) error {
 		params.Ctx = ctx
 		sub := machine.NewThreadSubContext(params, thread)
 		thread.CleanupFunc = func() {
-			_ = sub.UnwindTo(0) // Run dynamic-wind after thunks on thread exit
+			_ = sub.UnwindOwn() // Run the thread's own dynamic-wind after thunks on exit
 		}
 		_, err := sub.ApplyCallable(thunk)
 		if err != nil {

@@ -171,6 +171,23 @@ func TestWithTimeoutDynamicWind(t *testing.T) {
 	}
 }
 
+// TestWithTimeoutReturnLeavesItsExtent pins that a with-timeout returning normally
+// pops its own winding frame: left on the stack, the enclosing dynamic-wind's
+// PopWind popped it instead, and the run's end ran the after thunk a second time.
+func TestWithTimeoutReturnLeavesItsExtent(t *testing.T) {
+	result, err := testhelpers.RunSchemeCode(t, `
+		(let ((log '()))
+			(define (note x) (set! log (cons x log)))
+			(dynamic-wind
+				(lambda () (note 'in))
+				(lambda () (with-timeout 1000 (lambda (k) 'h) (lambda () 'x)))
+				(lambda () (note 'out)))
+			(reverse log))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.List(values.NewSymbol("in"), values.NewSymbol("out")))
+}
+
 // TestWithTimeoutInSubContext is the regression guard for the timer-arm symmetry: a
 // with-timeout whose timer FIRES while it runs inside a SURVIVING sub-context (here an
 // eval sub-context, driven by RunWithinBoundary) must be resolved on that sub's OWN chain

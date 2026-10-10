@@ -80,6 +80,11 @@ type MachineContext struct {
 	capturedMarks []markEntry
 	debugger      *Debugger       // optional debugger for breakpoints and stepping
 	parentMC      *MachineContext // parent context for sub-contexts, enables call/cc escape tracking
+	// windingBase is the depth of windingStack this context started with: the
+	// extents it inherited, which lie outside its own boundary (the prompt
+	// FindPrompt answers nil for). A top-level context starts with none. Not
+	// continuation state: a context's boundary does not move with its chain.
+	windingBase int
 	// escapeCont is vestigial: it is propagated into sub-contexts and threads but
 	// never consulted. Nothing resumes from it.
 	escapeCont *MachineContinuation
@@ -198,7 +203,6 @@ type timerState struct {
 	tag      *PromptTag      // identifies this with-timeout's finalizer frame on the chain
 	parent   *timerState     // enclosing timer (nesting); restored on teardown
 	savedCtx context.Context // ctx active before this with-timeout; restored on teardown
-	ctx      context.Context // the timed ctx this timer cancels: the one inside its extent
 }
 
 // expansionState clusters the two MachineContext fields that are nil at
@@ -1894,9 +1898,9 @@ func (p *MachineContext) RunResumable() (rerr error) {
 
 		// Check for successful completion
 		if err == nil {
-			// Unwind any remaining frames (call after thunks)
+			// Unwind the frames this context entered (call their after thunks)
 			if len(p.windingStack) > 0 {
-				unwindErr := p.UnwindTo(0)
+				unwindErr := p.UnwindOwn()
 				if unwindErr != nil {
 					return unwindErr
 				}
@@ -1975,8 +1979,8 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			// p.cont is THIS driver's chain, and the (k v) site may have been a
 			// sub-context whose frames this chain never held (see escalatorRevivals).
 			wasEmpty, reErr := p.ReinstallSegment(
-				resumeErr.Segment, boundary, resumeErr.SourceWinding, resumeErr.Values, true,
-				resumeErr.escalatorRevivals)
+				resumeErr.Segment, boundary, resumeErr.SourceWinding, p.windingOutside(boundary),
+				resumeErr.Values, true, resumeErr.escalatorRevivals)
 			if reErr != nil {
 				if isControlSignal(reErr) {
 					// The winding reconcile ran an after-thunk that escaped — a raise
@@ -2290,11 +2294,12 @@ func (p *MachineContext) resolveAbort(abortErr *ErrPromptAbort, prompt *MachineC
 func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boundary *MachineContinuation) error {
 	segment := p.CaptureInterruptContinuationAt(boundary)
 	windingCopy := p.windingStack.Copy()
-	resumable := NewComposableContinuation(segment, windingCopy, p.threadID, p.barrierValid)
+	resumable := NewComposableContinuation(segment, windingCopy, len(boundary.windingStack), p.threadID, p.barrierValid)
 
 	// Hard-suspension: discard the timed-out thunk's frames un-run (no after-thunks) and
 	// land on the finalizer frame. boundary.windingStack is the winding captured at
-	// with-timeout entry (RunBodyUnderFrame), so the thunk's winding frames are dropped.
+	// with-timeout entry (enterBodyFrame), so the thunk's winding frames, the timer's
+	// own among them, are dropped.
 	// The thunk's mid-expression operand stack is already deep-copied into `segment`, so
 	// the dirty eval stack is released and a fresh one acquired for the handler.
 	p.cont = boundary
@@ -2304,11 +2309,10 @@ func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boun
 	p.releaseStack(oldEvals)
 
 	// Absolute teardown of the fired timer: cancel it and restore the outer timer + ctx.
-	// The fired timer is the one the interrupt names. It is p.timer unless the owner
-	// rule skipped stale timers inside it (liveFiredTimer); those are cancelled too,
-	// as their with-timeouts are gone. A tag on no timer of p's leaves p.timer, the
-	// timer the VM poll and the eager recheck name. The finalizer frame re-does this
-	// identically.
+	// The fired timer is the one the interrupt names (firedTimer). It is p.timer
+	// unless an outer timer fired while inner ones were armed; those are cancelled
+	// too, as the hard suspension above discards their with-timeouts, and their
+	// winding frames, with the thunk. The finalizer frame re-does this identically.
 	fired := p.timer
 	for t := p.timer; t != nil; t = t.parent {
 		if t.tag == timerErr.Tag {
@@ -2372,7 +2376,7 @@ func (p *MachineContext) resolveBreakInterrupt(breakErr *ErrBreakInterrupt, boun
 
 	segment := p.CaptureInterruptContinuationAt(boundary)
 	windingCopy := p.windingStack.Copy()
-	resumable := NewComposableContinuation(segment, windingCopy, p.threadID, p.barrierValid)
+	resumable := NewComposableContinuation(segment, windingCopy, len(boundary.windingStack), p.threadID, p.barrierValid)
 
 	p.cont = boundary
 	oldEvals := p.evals

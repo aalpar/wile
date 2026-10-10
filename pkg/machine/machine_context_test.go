@@ -953,7 +953,7 @@ func TestApplyCallable_ComposableContinuation(t *testing.T) {
 
 	// Create a simple continuation to compose
 	cont := NewMachineContinuation(nil, tpl, env)
-	cc := NewComposableContinuation(cont, nil, 0, nil)
+	cc := NewComposableContinuation(cont, nil, 0, 0, nil)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
@@ -970,7 +970,7 @@ func TestApplyCallable_ComposableContinuation_MultipleValues(t *testing.T) {
 	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 
-	cc := NewComposableContinuation(nil, nil, 0, nil)
+	cc := NewComposableContinuation(nil, nil, 0, 0, nil)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	_, err := mc.ApplyCallable(cc, values.NewInteger(1), values.NewInteger(2))
@@ -990,7 +990,7 @@ func TestApplyCallable_ComposableContinuation_ZeroValues(t *testing.T) {
 	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 
-	cc := NewComposableContinuation(nil, nil, 0, nil)
+	cc := NewComposableContinuation(nil, nil, 0, 0, nil)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	_, err := mc.ApplyCallable(cc)

@@ -221,6 +221,133 @@ func TestDynamicWindNestedContinuations(t *testing.T) {
 	}
 }
 
+// TestReentryInsideAFrameKeepsIt pins that applying a continuation inside a
+// dynamic-wind keeps the frames the invoker is inside. A composable continuation
+// composes its own frames onto the invoker's winding stack; a call/cc continuation
+// reinstated at an inner prompt keeps the frames outside that prompt. Both used to
+// reconcile to the captured stack as an absolute target, so the invoker's frame was
+// unwound (out ran before the body was done) and the body's own PopWind then found
+// the stack empty. Racket logs the expected order for both shapes.
+func TestReentryInsideAFrameKeepsIt(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name: "composable continuation",
+			Code: `
+				(let ((log '()) (kc #f) (dtag (default-continuation-prompt-tag)))
+					(define (note x) (set! log (cons x log)))
+					(call-with-continuation-prompt
+						(lambda () (+ 1 (call-with-composable-continuation (lambda (k) (set! kc k) 0) dtag)))
+						dtag (lambda args args))
+					(dynamic-wind
+						(lambda () (note 'in))
+						(lambda () (note (list 'kc-returned (kc 7))) (note 'body-done))
+						(lambda () (note 'out)))
+					(reverse log))
+			`,
+			Expected: values.List(values.NewSymbol("in"),
+				values.List(values.NewSymbol("kc-returned"), values.NewInteger(8)),
+				values.NewSymbol("body-done"), values.NewSymbol("out")),
+		},
+		{
+			Name: "call/cc continuation at an inner prompt",
+			Code: `
+				(let ((log '()) (k #f) (dtag (default-continuation-prompt-tag)))
+					(define (note x) (set! log (cons x log)))
+					(call-with-continuation-prompt
+						(lambda () (+ 1 (call/cc (lambda (c) (set! k c) 0))))
+						dtag (lambda args args))
+					(dynamic-wind
+						(lambda () (note 'in))
+						(lambda ()
+							(note (list 'k-returned (call-with-continuation-prompt (lambda () (k 7)) dtag (lambda args args))))
+							(note 'body-done))
+						(lambda () (note 'out)))
+					(reverse log))
+			`,
+			Expected: values.List(values.NewSymbol("in"),
+				values.List(values.NewSymbol("k-returned"), values.NewInteger(8)),
+				values.NewSymbol("body-done"), values.NewSymbol("out")),
+		},
+		{
+			// The extents outside the capture's prompt are the capture site's, not
+			// the continuation's: applying it elsewhere neither re-enters them (in
+			// again) nor leaves them on the stack for the run's end to exit (out again).
+			Name: "composable continuation carries only the extents inside its prompt",
+			Code: `
+				(let ((log '()) (kc #f) (dtag (default-continuation-prompt-tag)))
+					(define (note x) (set! log (cons x log)))
+					(dynamic-wind
+						(lambda () (note 'in))
+						(lambda () (call-with-continuation-prompt
+							(lambda () (call-with-composable-continuation (lambda (k) (set! kc k) 0) dtag))
+							dtag (lambda args args)))
+						(lambda () (note 'out)))
+					(kc 7)
+					(reverse log))
+			`,
+			Expected: values.List(values.NewSymbol("in"), values.NewSymbol("out")),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// TestRootlessSubContextLeavesInheritedExtents pins that a sub-context with its own
+// driver (a call/cc in tail position of a winding thunk is rootless, and runs under
+// RunResumable) exits only the extents it entered. It inherits the context's winding
+// stack, and its completion used to unwind that whole stack, so every enclosing
+// extent's after thunk ran there and again when the escape left it. A continuation
+// captured and applied inside it reinstates at its own boundary, which keeps the
+// inherited extents too.
+func TestRootlessSubContextLeavesInheritedExtents(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name: "completion",
+			Code: `
+				(let ((log '()))
+					(define (note x) (set! log (cons x log)))
+					(dynamic-wind
+						(lambda () (note 'in))
+						(lambda () (call/cc (lambda (k0)
+							(dynamic-wind (lambda () #f)
+								(lambda () (k0 'esc))
+								(lambda () (call/cc (lambda (k) (note 'inner) 'x)))))))
+						(lambda () (note 'out)))
+					(reverse log))
+			`,
+			Expected: values.List(values.NewSymbol("in"), values.NewSymbol("inner"), values.NewSymbol("out")),
+		},
+		{
+			Name: "continuation applied at its own boundary",
+			Code: `
+				(let ((log '()))
+					(define (note x) (set! log (cons x log)))
+					(dynamic-wind
+						(lambda () (note 'in))
+						(lambda () (call/cc (lambda (k0)
+							(dynamic-wind (lambda () #f)
+								(lambda () (k0 'esc))
+								(lambda () (call/cc (lambda (k) (k 'x))))))))
+						(lambda () (note 'out)))
+					(reverse log))
+			`,
+			Expected: values.List(values.NewSymbol("in"), values.NewSymbol("out")),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
 // TestDynamicWindContinuationReentry tests calling a captured continuation multiple times.
 func TestDynamicWindContinuationReentry(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{

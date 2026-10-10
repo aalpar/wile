@@ -148,14 +148,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   after thunk under the timer's context, so a wait there was cut short when the
   timer fired; a re-entry from inside a later `with-timeout` did the same to the
   before thunk. R7RS §6.10 runs the thunks in the dynamic environment of the
-  `dynamic-wind` call, which the timer is not part of. That includes a frame a
-  composable continuation re-enters inside a `with-timeout`, when the
-  continuation is applied in the timer's own context: the timer does not bound its
-  before thunk, which it used to cut short. A `dynamic-wind` entered
-  inside the timer, including inside `eval` or `load`, still runs its thunks
-  under it. Pinned by `TestEscapePastATimerLeavesItsExtent`,
-  `TestReentryUnderATimerRewindsOutsideIt` and
-  `TestAfterThunkEnteredBelowTheTimerStaysInsideIt`.
+  `dynamic-wind` call, which the timer is not part of. A frame entered inside the
+  timer, including inside `eval` or `load`, and one spliced in above it (by a
+  composable continuation, or a continuation reinstated at a prompt inside the
+  `with-timeout`) still run their thunks under it. Pinned by
+  `TestEscapePastATimerLeavesItsExtent`, `TestReentryUnderATimerRewindsOutsideIt`
+  and `TestAfterThunkEnteredBelowTheTimerStaysInsideIt`.
+
+- **An escape out of a `with-timeout` ends its timer.** A `guard`, `call/cc` or
+  abort leaving the thunk left the timer armed, and when it fired later in the
+  same evaluation it cancelled unrelated waits, or a poll reported "no boundary
+  frame found for fired timer" (an internal error). The timer's extent is now a
+  frame on the winding stack, so every way out of it ends the timer, in R7RS §6.10
+  order with the `dynamic-wind` thunks around it. Pinned by
+  `TestEscapeFromATimerEndsIt`.
+
+- **Applying a continuation inside a `dynamic-wind` keeps the invoker's extents.** A
+  composable continuation, or a `call/cc` continuation reinstated at an inner prompt,
+  reconciled the winding stack to the captured one as an absolute target, so the
+  frames the invoker was inside were unwound (their after thunks ran before the body
+  was done) and the body's own exit then found the stack empty ("pop-wind: winding
+  stack is empty", an internal error); inside a `with-timeout` it also ended the
+  timer. A continuation now carries the extents inside its delimiting prompt and
+  re-enters them on top of those outside its boundary (Flatt et al. 2007). Pinned by
+  `TestReentryInsideAFrameKeepsIt` and `TestReentryInsideATimerStaysUnderIt`.
+
+- **A thread's exit, and a rootless `call/cc` sub-context's completion, run only
+  their own after thunks.** Both inherited the winding stack of the context that
+  started them and unwound all of it, so every enclosing `dynamic-wind`'s after
+  thunk ran there and again when that context left it, and a thread's exit ended a
+  `with-timeout` it was started inside. Pinned by
+  `TestThreadExitLeavesTheStartersExtents` and
+  `TestRootlessSubContextLeavesInheritedExtents`.
+
+- **A timer expiry is answered by the `with-timeout` whose timer fired.** Every
+  `with-timeout` cancelled with the one `ErrTimerExpired`, so the innermost armed
+  one answered any expiry: an outer timer's ran an inner handler first, early.
+  The cancellation cause now names its timer, and still matches
+  `errors.Is(err, ErrTimerExpired)`. Pinned by
+  `TestTimerExpiryNamesTheTimerThatFired`.
 
 - **`thread-join!` reports a joinee that died of a cancelled wait as an uncaught
   exception.** It read any `ErrOperationCancelled` in the join's error as the
@@ -397,10 +428,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   that had not acquired. (`thread-sleep!` and `thread-join!` already raised when
   the thunk returned.) A `guard` around the wait sees an error object where it saw
   `#f`, and a join on such a thread raises an uncaught exception whose reason is
-  the wait's error. A thread that does arm its own `with-timeout` still runs that
-  handler when its starter's timer fires, because the cause does not say which
-  timer fired. Pinned by `TestCancelledLockWaitRaisesOperationCancelled` and
-  `TestTimerCancelledWaitInChildThreadRaises`.
+  the wait's error. A thread that arms its own `with-timeout` raises too: that
+  handler no longer answers its starter's expiry. Pinned by
+  `TestCancelledLockWaitRaisesOperationCancelled`,
+  `TestTimerCancelledWaitInChildThreadRaises` and
+  `TestTimerExpiryNamesTheTimerThatFired`.
 
 - **BREAKING: `equal-hash`, `string-hash` and `symbol-hash` are no longer bound
   at phase 1 without an import.** `(rnrs hashtables)` now exports all four R6RS

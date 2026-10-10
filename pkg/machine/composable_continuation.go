@@ -31,6 +31,12 @@ var _ values.Callable = (*ComposableContinuation)(nil)
 type ComposableContinuation struct {
 	cont         *MachineContinuation
 	windingStack WindingStack
+	// windingBase is the depth of windingStack outside the prompt the capture is
+	// delimited at: windingStack[windingBase:] are the dynamic-wind extents the
+	// continuation carries, the ones a reinstatement re-enters on top of the frames
+	// outside its boundary (ReinstallSegment). The frames below are the capture
+	// site's surroundings, kept for WindingStack.
+	windingBase  int
 	threadID     uint64               // SRFI-18: thread that captured this continuation (0 = primordial)
 	barrierValid *BarrierToken        // barrier context at capture time; nil = no active barrier
 	bottom       *MachineContinuation // bottom frame of segment; where a re-invocation's copy stops
@@ -77,10 +83,11 @@ func collectEscalatorArms(head *MachineContinuation) []*escalatorArm {
 // continuation chain segment and the winding stack captured at the point
 // of capture. barrierValid is mc.BarrierValid() at capture time; nil means
 // the capture happened outside any with-continuation-barrier.
-func NewComposableContinuation(cont *MachineContinuation, windingStack WindingStack, threadID uint64, barrierValid *BarrierToken) *ComposableContinuation {
+func NewComposableContinuation(cont *MachineContinuation, windingStack WindingStack, windingBase int, threadID uint64, barrierValid *BarrierToken) *ComposableContinuation {
 	q := &ComposableContinuation{
 		cont:          cont,
 		windingStack:  windingStack,
+		windingBase:   min(windingBase, len(windingStack)),
 		threadID:      threadID,
 		barrierValid:  barrierValid,
 		bottom:        bottomOfChain(cont),
@@ -97,6 +104,12 @@ func (p *ComposableContinuation) Cont() *MachineContinuation {
 // WindingStack returns the winding stack captured by this composable continuation.
 func (p *ComposableContinuation) WindingStack() WindingStack {
 	return p.windingStack
+}
+
+// carriedWinding returns the dynamic-wind extents inside the capture's delimiting
+// prompt, the ones a reinstatement re-enters.
+func (p *ComposableContinuation) carriedWinding() WindingStack {
+	return p.windingStack[p.windingBase:]
 }
 
 // BarrierValid returns the barrier identity token captured when this continuation
