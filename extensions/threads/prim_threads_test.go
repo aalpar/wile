@@ -17,12 +17,16 @@ package threads_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	extthreads "github.com/aalpar/wile/extensions/threads"
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/registry/core"
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/testutil"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -69,13 +73,19 @@ func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 // part of the assertion is what turns "the suite timed out" into a named failure.
 func evalWithWatchdog(t *testing.T, engine *wile.Engine, code string, d time.Duration) (wile.Value, error) {
 	t.Helper()
+	return evalWithWatchdogCtx(context.Background(), t, engine, code, d)
+}
+
+// evalWithWatchdogCtx is evalWithWatchdog under ctx.
+func evalWithWatchdogCtx(ctx context.Context, t *testing.T, engine *wile.Engine, code string, d time.Duration) (wile.Value, error) {
+	t.Helper()
 	type outcome struct {
 		value wile.Value
 		err   error
 	}
 	done := make(chan outcome, 1)
 	go func() {
-		v, err := engine.EvalMultiple(context.Background(), code)
+		v, err := engine.EvalMultiple(ctx, code)
 		done <- outcome{value: v, err: err}
 	}()
 
@@ -363,6 +373,1442 @@ func TestThreadSleepContextCancellation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// evalCancelledAfterReady evaluates code, which calls (test-ready!) just before
+// the wait under test, cancels the engine context with cause once it has, and
+// returns what the evaluation returned. The cause is what the primitives read, so
+// a cancel carrying context.DeadlineExceeded stands in for a deadline without
+// racing compilation against a wall clock.
+func evalCancelledAfterReady(t *testing.T, code string, cause error) (wile.Value, error) {
+	t.Helper()
+	ext, ready := testutil.ReadyExtension()
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(extthreads.Extension),
+		wile.WithExtension(ext),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = engine.Close()
+	})
+
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	type outcome struct {
+		value wile.Value
+		err   error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		v, err := engine.Eval(ctx, engine.MustParse(ctx, code))
+		done <- outcome{v, err}
+	}()
+	select {
+	case <-ready:
+	case o := <-done:
+		t.Fatalf("Eval returned before ready signal: %v", o.err)
+	}
+	cancel(cause)
+
+	select {
+	case o := <-done:
+		return o.value, o.err
+	case <-time.After(5 * time.Second):
+		t.Fatal("the wait did not respect context cancellation")
+		return nil, nil
+	}
+}
+
+// TestCancelledLockWaitRaisesOperationCancelled pins the rule the four blocking
+// waits now share: a wait cancelled by anything other than a with-timeout timer
+// armed in the waiting thread raises ErrOperationCancelled, carrying the raw ctx
+// cause. mutex-lock! and (mutex-unlock! m cv) used to report it as an error-free
+// #f, so when the wait was the program's last form the embedder got #f and a nil
+// error after its own cancellation. The with-timeout half, where the wait must run
+// the handler instead, is TestWithTimeoutInterruptsParkedMutexLock
+// (extensions/gointerop).
+//
+// The main thread holds m with no owner, and m is not recursive, so the second
+// acquire parks. Three rows reach branches the plain rows cannot:
+//   - The timed acquire parks on a path that does not watch ctx at all, so only
+//     PrimMutexLock's own check after the timeout turns the cancellation into a
+//     raise; without it the program would end on #f with a nil error. Its 1 s
+//     timeout is the margin the cancel has to land in after (test-ready!).
+//   - The timed cv wait does watch ctx, and must raise rather than answer #f.
+//   - The acquire inside with-timeout has a timer ARMED but not expired. The
+//     embedder's cancel reaches the timer's ctx with the embedder's cause, which
+//     must raise, not run the handler: only an ErrTimerExpired cause belongs to a
+//     timer (the cause checks in timerClaims and liveFiredTimer, pkg/machine).
+func TestCancelledLockWaitRaisesOperationCancelled(t *testing.T) {
+	waits := []struct {
+		name string
+		code string
+	}{
+		{"mutex-lock!",
+			`(begin (define m (make-mutex)) (mutex-lock! m) (test-ready!) (mutex-lock! m))`},
+		{"mutex-lock! with a timeout",
+			`(begin (define m (make-mutex)) (mutex-lock! m) (test-ready!) (mutex-lock! m 1))`},
+		{"mutex-lock! inside with-timeout",
+			`(begin (define m (make-mutex)) (mutex-lock! m) (test-ready!)
+			        (with-timeout 5000 (lambda (k) 'timed-out) (lambda () (mutex-lock! m))))`},
+		{"mutex-unlock! with cv",
+			`(begin (define m (make-mutex)) (define cv (make-condition-variable))
+			        (mutex-lock! m) (test-ready!) (mutex-unlock! m cv))`},
+		{"mutex-unlock! with cv and a timeout",
+			`(begin (define m (make-mutex)) (define cv (make-condition-variable))
+			        (mutex-lock! m) (test-ready!) (mutex-unlock! m cv 5))`},
+	}
+	causes := []struct {
+		name  string
+		cause error
+	}{
+		{"embedder cancel", context.Canceled},
+		{"embedder deadline", context.DeadlineExceeded},
+	}
+	for _, w := range waits {
+		for _, cs := range causes {
+			t.Run(w.name+"/"+cs.name, func(t *testing.T) {
+				c := qt.New(t)
+				_, err := evalCancelledAfterReady(t, w.code, cs.cause)
+				c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue,
+					qt.Commentf("a cancelled %s must raise ErrOperationCancelled, got %v", w.name, err))
+				c.Assert(errors.Is(err, cs.cause), qt.IsTrue,
+					qt.Commentf("the raw ctx cause must survive, got %v", err))
+			})
+		}
+	}
+}
+
+// TestCaughtCancellationCleanupUnlockReturns pins that only a wait that did not
+// complete reports the cancellation. Under a cancelled context a plain
+// mutex-unlock! releases and answers #t, and an uncontended mutex-lock! acquires
+// and answers #t, so cleanup that catches a cancelled wait and then releases or
+// takes a lock does not raise again. A lock acquired under a cancelled ctx is held;
+// raising there would leave it held with nobody told.
+func TestCaughtCancellationCleanupUnlockReturns(t *testing.T) {
+	c := qt.New(t)
+	v, err := evalCancelledAfterReady(t, `(begin (define m (make-mutex)) (define m2 (make-mutex)) (define m3 (make-mutex))
+	  (mutex-lock! m) (mutex-lock! m2) (test-ready!)
+	  (guard (e (#t (list 'cleaned (mutex-unlock! m2) (mutex-lock! m3) (mutex-state m2))))
+	    (mutex-lock! m)))`, context.Canceled)
+	c.Assert(err, qt.IsNil)
+	c.Assert(v.SchemeString(), qt.Equals, "(cleaned #t #t not-abandoned)")
+}
+
+// timerCancelledWaits are the four blocking waits, each spliced into a program
+// that begins with waitPrelude, so every wait parks until a timer cancels it. site
+// is the name the wait reports a cancellation under.
+var timerCancelledWaits = []struct {
+	name string
+	site string
+	wait string
+}{
+	{"mutex-lock!", "mutex-lock!", `(mutex-lock! m)`},
+	{"mutex-unlock! with cv", "mutex-unlock!", `(let ((m2 (make-mutex))) (mutex-lock! m2) (mutex-unlock! m2 cv))`},
+	{"thread-sleep!", "thread-sleep!", `(thread-sleep! 10)`},
+	{"thread-join!", "thread-join!", `(thread-join! blocker)`},
+}
+
+// waitPrelude defines what the timerCancelledWaits rows refer to: m, held by the
+// main thread with no owner, so a wait on it parks; cv; and blocker, a thread
+// started before any with-timeout. A timer therefore cannot cancel blocker, and a
+// thread-join! on it ends only as the joiner's own cancellation. A blocker started
+// in the timed context would die of the same timer, racing the joinee's outcome
+// against the joiner's cancellation in Join's select.
+const waitPrelude = `
+(define m (make-mutex))
+(define cv (make-condition-variable))
+(mutex-lock! m)
+(define blocker (make-thread (lambda () (thread-sleep! 10))))
+(thread-start! blocker)
+`
+
+// TestTimerCancelledWaitInChildThreadRaises pins a thread started inside a
+// with-timeout thunk. Its ctx derives from the timed one (Thread.Start), so the
+// timer's expiry cancels its parked wait with ErrTimerExpired as the cause, but no
+// timer is armed on the thread's own context chain, so nothing in it can run a
+// handler. The wait must raise. It used to return error-free, and the thread
+// carried on past it: past a mutex-lock! that had not acquired, into the critical
+// section, and then released the main thread's lock.
+//
+// The child signals on rcv just before its wait, and the thunk waits for that
+// signal before it sleeps into the timer, so the child is past its first VM poll
+// and at its wait when the timer fires. A child cancelled before its first
+// instruction would die at that poll instead, a different path (cancellation.md,
+// Boundaries); the 200 ms timer is the margin the child has to start in.
+//
+// The join reports the wait's own cancellation as the uncaught reason, the code
+// after the wait never runs, and the main thread's lock stays held ('not-owned: a
+// top-level lock has no owner thread). The child's mutex-unlock! after the wait is
+// what would release it if the wait returned.
+func TestTimerCancelledWaitInChildThreadRaises(t *testing.T) {
+	for _, w := range timerCancelledWaits {
+		t.Run(w.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			defer func() {
+				_ = engine.Close()
+			}()
+			result, err := evalWithWatchdog(t, engine, waitPrelude+`
+(define rm (make-mutex))
+(define rcv (make-condition-variable))
+(define entered (vector #f))
+(define t (make-thread (lambda ()
+  (mutex-lock! rm) (condition-variable-signal! rcv) (mutex-unlock! rm)
+  `+w.wait+`
+  (vector-set! entered 0 #t) (mutex-unlock! m) 'child-done)))
+(define h (with-timeout 200 (lambda (k) 'timed-out)
+  (lambda () (mutex-lock! rm) (thread-start! t) (mutex-unlock! rm rcv) (thread-sleep! 10))))
+(list h
+      (guard (e ((uncaught-exception? e) (error-object-message (uncaught-exception-reason e)))
+                (#t (list 'other e)))
+        (thread-join! t))
+      (vector-ref entered 0)
+      (mutex-state m))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals,
+				`(timed-out "`+w.site+`: cancelled before the wait completed" #f not-owned)`)
+		})
+	}
+}
+
+// TestTimerCancelledWaitInSubContextRunsHandler pins the same-thread case the eager
+// recheck cannot reach: a wait inside eval runs in a synchronous sub-context, which
+// shares the timed ctx but not the timer. The wait used to return error-free there,
+// so the eval'd code ran past the cancelled wait before the handler ran. The wait
+// now raises; the sub-context passes the failure up undispatched, and the context
+// that owns the timer turns it into the interrupt when eval returns it, so the
+// handler runs and nothing after the wait does. A wait that returned a value would
+// fail here, where in the timer's own context the eager recheck still rescues it.
+// The 200 ms timer leaves eval room to expand and compile before the wait parks;
+// a timer that fired earlier would still run the handler, but without reaching
+// the wait.
+func TestTimerCancelledWaitInSubContextRunsHandler(t *testing.T) {
+	for _, w := range timerCancelledWaits {
+		t.Run(w.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+			c.Assert(err, qt.IsNil)
+			defer func() {
+				_ = engine.Close()
+			}()
+			result, err := evalWithWatchdog(t, engine, waitPrelude+`
+(define after (vector #f))
+(define h (with-timeout 200 (lambda (k) 'timed-out)
+  (lambda () (eval '(begin `+w.wait+` (vector-set! after 0 #t) (mutex-unlock! m) 'evaluated)
+                   (interaction-environment)))))
+(list h (vector-ref after 0) (mutex-state m))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "(timed-out #f not-owned)")
+		})
+	}
+}
+
+// TestTimerCancelledWaitInRootlessCallCCRunsHandler pins the longest route a
+// failure takes back to the timer's owner. An after thunk run by an escape (k0
+// here) runs on a winding sub-context, and a tail call/cc in it applies its
+// procedure on a further sub-context with its own RunResumable driver. The wait
+// there raises; each sub-context passes the failure up undispatched, the after
+// thunk's failure returns through the escape's winding reconcile, and the owner's
+// driver turns it into the interrupt. HEAD answered (escaped #t not-abandoned): no
+// handler, the code after the wait ran, and it released the main thread's lock.
+func TestTimerCancelledWaitInRootlessCallCCRunsHandler(t *testing.T) {
+	for _, w := range timerCancelledWaits {
+		t.Run(w.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			defer func() {
+				_ = engine.Close()
+			}()
+			result, err := evalWithWatchdog(t, engine, waitPrelude+`
+(define after (vector #f))
+(define h (with-timeout 50 (lambda (k) 'timed-out)
+  (lambda ()
+    (call/cc (lambda (k0)
+      (dynamic-wind (lambda () #f)
+                    (lambda () (k0 'escaped))
+                    (lambda () (call/cc (lambda (k) `+w.wait+` (vector-set! after 0 #t) (mutex-unlock! m))))))))))
+(list h (vector-ref after 0) (mutex-state m))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "(timed-out #f not-owned)")
+		})
+	}
+}
+
+// TestTimerInterruptNamesInnermostTimer pins which handler a timer-cancelled wait
+// runs when two timers are armed on its chain and the inner one fires: the inner
+// one's. On one context the inner with-timeout's timer is the context's timer, its
+// outer one is that timer's parent. Across contexts the inner with-timeout runs
+// inside eval, so eval's sub-context owns the inner timer and resolves it. Both
+// answered the inner handler before the owner-side rule; the rule must keep that.
+func TestTimerInterruptNamesInnermostTimer(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"two timers on one context", `
+(define m (make-mutex))
+(mutex-lock! m)
+(with-timeout 5000 (lambda (k) 'outer)
+  (lambda () (with-timeout 50 (lambda (k) 'inner) (lambda () (mutex-lock! m)))))`},
+		{"timers on two contexts", `
+(define m (make-mutex))
+(mutex-lock! m)
+(with-timeout 5000 (lambda (k) 'outer)
+  (lambda () (eval '(with-timeout 50 (lambda (k) 'inner) (lambda () (mutex-lock! m)))
+                   (interaction-environment))))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+			c.Assert(err, qt.IsNil)
+			defer func() {
+				_ = engine.Close()
+			}()
+			result, err := evalWithWatchdog(t, engine, tc.code, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "inner")
+		})
+	}
+}
+
+// TestTimerCancelledWaitIsNeverCaught pins that no exception handler sees a wait's
+// timer cancellation, wherever the handler sits. In the timer's own context the
+// failure becomes the interrupt before it is raised, so a with-exception-handler
+// around the wait never runs; its flag is written before any foreign call, which
+// the eager recheck would otherwise get to first. A guard around the wait inside
+// eval, one inside a nested eval, and a guard outside the with-timeout altogether
+// are all reachable from the sub-context the wait runs in. If that sub-context
+// raised the failure in place, the guards inside would catch it (the caught flag),
+// and the one outside would escape past the with-timeout and leave its timer armed.
+// The sub-context passes the failure up undispatched instead, through every
+// sub-context between it and the timer's owner, so the handler runs. The eval
+// shapes use a 200 ms timer so that eval has expanded and compiled before it fires.
+func TestTimerCancelledWaitIsNeverCaught(t *testing.T) {
+	shapes := []struct {
+		name string
+		code func(wait string) string
+	}{
+		{"handler around the wait in the timer's context", func(wait string) string {
+			return `(list (with-timeout 50 (lambda (k) 'timed-out)
+  (lambda () (with-exception-handler (lambda (e) (vector-set! caught 0 #t) 'handled)
+               (lambda () ` + wait + ` (vector-set! after 0 #t)))))
+  (vector-ref caught 0) (vector-ref after 0))`
+		}},
+		{"guard around the wait inside eval", func(wait string) string {
+			return `(list (with-timeout 200 (lambda (k) 'timed-out)
+  (lambda () (eval '(guard (e (#t (vector-set! caught 0 #t) 'caught)) ` + wait + ` (vector-set! after 0 #t))
+                   (interaction-environment))))
+  (vector-ref caught 0) (vector-ref after 0))`
+		}},
+		{"guard around the wait two sub-contexts below", func(wait string) string {
+			return `(list (with-timeout 200 (lambda (k) 'timed-out)
+  (lambda () (eval '(eval '(guard (e (#t (vector-set! caught 0 #t) 'caught)) ` + wait + ` (vector-set! after 0 #t))
+                          (interaction-environment))
+                   (interaction-environment))))
+  (vector-ref caught 0) (vector-ref after 0))`
+		}},
+		{"guard outside the with-timeout", func(wait string) string {
+			return `(list (guard (e (#t (vector-set! caught 0 #t) 'caught))
+  (with-timeout 200 (lambda (k) 'timed-out)
+    (lambda () (eval '(begin ` + wait + ` (vector-set! after 0 #t)) (interaction-environment)))))
+  (vector-ref caught 0) (vector-ref after 0))`
+		}},
+	}
+	for _, sh := range shapes {
+		for _, w := range timerCancelledWaits {
+			t.Run(sh.name+"/"+w.name, func(t *testing.T) {
+				c := qt.New(t)
+				engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+				c.Assert(err, qt.IsNil)
+				defer func() {
+					_ = engine.Close()
+				}()
+				result, err := evalWithWatchdog(t, engine, waitPrelude+`
+(define caught (vector #f))
+(define after (vector #f))
+`+sh.code(w.wait), 5*time.Second)
+				c.Assert(err, qt.IsNil)
+				c.Assert(result.SchemeString(), qt.Equals, "(timed-out #f #f)")
+			})
+		}
+	}
+}
+
+// TestTimerExpiryDuringEvalComputeRunsHandler pins that the owner-side rule is not
+// only for waits. A timer that fires while eval's or load's sub-context computes, or
+// while a macro transformer loops at expansion time inside eval, stops it at a VM
+// poll or the expander's context check, neither of which has a timer to turn the
+// expiry into and so returns the raw context error. That error returns through eval
+// or load to the context that owns the timer, which turns it into the timeout. HEAD
+// reported "context deadline exceeded" to the embedder instead, and the handler
+// never ran.
+func TestTimerExpiryDuringEvalComputeRunsHandler(t *testing.T) {
+	looping := filepath.Join(t.TempDir(), "loop.scm")
+	qt.Assert(t, os.WriteFile(looping, []byte("(let loop () (loop))\n"), 0o600), qt.IsNil)
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"compute inside eval", `(eval '(let loop () (loop)) (interaction-environment))`},
+		{"compute inside load", `(load "` + looping + `")`},
+		{"a transformer looping at expansion inside eval",
+			`(eval '(let-syntax ((m (er-macro-transformer (lambda (f r c) (let loop () (loop)))))) (m)) (interaction-environment))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+			c.Assert(err, qt.IsNil)
+			defer func() {
+				_ = engine.Close()
+			}()
+			result, err := evalWithWatchdog(t, engine,
+				`(with-timeout 50 (lambda (k) 'timed-out) (lambda () `+tc.code+`))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "timed-out")
+		})
+	}
+}
+
+// TestTimerDoesNotClaimAControlTransfer pins the half of the rule that leaves
+// control flow alone. After the timer fired, an escape and an abort leave eval for
+// a continuation and a prompt outside the with-timeout; each is a control signal on
+// its way through the owner's bridge, and must arrive, not be swallowed into the
+// timeout handler. test-slow-ok returns only once the timer has fired, and the
+// timer is 500 ms so that eval has reached test-slow-ok first: fired earlier, the
+// cancellation itself reaches the owner, which claims it.
+func TestTimerDoesNotClaimAControlTransfer(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"call/cc escape", `(call/cc (lambda (k) (vector-set! kv 0 k)
+  (with-timeout 500 (lambda (h) 'timed-out)
+    (lambda () (eval '(begin (test-slow-ok) ((vector-ref kv 0) 'escaped)) (interaction-environment))))))`, "escaped"},
+		{"abort to a prompt", `(call-with-continuation-prompt
+  (lambda () (with-timeout 500 (lambda (h) 'timed-out)
+               (lambda () (eval '(begin (test-slow-ok) (abort-current-continuation tag 'aborted))
+                                (interaction-environment)))))
+  tag (lambda (v) v))`, "aborted"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "unused"))
+			result, err := evalWithWatchdog(t, engine, `
+(define kv (vector #f))
+(define tag (make-continuation-prompt-tag))
+`+tc.code, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// hiddenHostError is a host error that wraps nothing, the shape of a host that
+// reports a callback's failure in its own words.
+type hiddenHostError struct {
+	msg string
+}
+
+func (p hiddenHostError) Error() string {
+	return p.msg
+}
+
+// TestTimerCancelledWaitInHostCallbackRunsHandler pins a wait that runs inside a
+// host function: as a func() error callback the host invokes, and as a procedure
+// the host re-enters the engine with through Engine.Call, whose root is not linked
+// to the caller at all. Two hosts replace the failure with an error that wraps
+// nothing; the timer's owner does not need to recognise what comes back, since any
+// failure returning through its foreign call after its timer fired is the timeout.
+// The forwarding Engine.Call host returns the failure unchanged, and there it is an
+// uncaught-condition escape: the unlinked root has no timer above it, so the wait's
+// failure was raised in place there and escaped. An escape is a control signal the
+// owner still claims; it is the one it does.
+func TestTimerCancelledWaitInHostCallbackRunsHandler(t *testing.T) {
+	for _, via := range []string{"call-and-hide", "call-via-engine", "call-via-engine-forward"} {
+		for _, w := range timerCancelledWaits {
+			t.Run(via+"/"+w.name, func(t *testing.T) {
+				c := qt.New(t)
+				engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+				c.Assert(err, qt.IsNil)
+				defer func() {
+					_ = engine.Close()
+				}()
+				c.Assert(engine.RegisterFunc("call-and-hide", func(f func() error) error {
+					ferr := f()
+					if ferr != nil {
+						return hiddenHostError{"host: step failed"}
+					}
+					return nil
+				}), qt.IsNil)
+				c.Assert(engine.RegisterFunc("call-via-engine", func(ctx context.Context, proc wile.Value) error {
+					_, cerr := engine.Call(ctx, proc)
+					if cerr != nil {
+						return hiddenHostError{"host: call failed"}
+					}
+					return nil
+				}), qt.IsNil)
+				c.Assert(engine.RegisterFunc("call-via-engine-forward", func(ctx context.Context, proc wile.Value) error {
+					_, cerr := engine.Call(ctx, proc)
+					return cerr
+				}), qt.IsNil)
+				result, err := evalWithWatchdog(t, engine, waitPrelude+`
+(define after (vector #f))
+(list (with-timeout 50 (lambda (k) 'timed-out)
+        (lambda () (`+via+` (lambda () `+w.wait+` (vector-set! after 0 #t)))))
+      (vector-ref after 0))`, 5*time.Second)
+				c.Assert(err, qt.IsNil)
+				c.Assert(result.SchemeString(), qt.Equals, "(timed-out #f)")
+			})
+		}
+	}
+}
+
+// newSlowFailEngine builds a KitchenSink engine with three primitives that wait
+// until their context is cancelled and then ignore the cancellation:
+// test-slow-fail and test-slow-fail-1 (one ignored argument, for use as a handler)
+// return fail, and test-slow-ok returns #t 100 ms after. Each returns only once a
+// timer has fired, with no recheck or poll in between, so a row that needs the
+// timer fired never runs before it, and a row that pins what a fired timer must not
+// claim always reaches the fired-timer branch. Every use is under a timer that
+// fires.
+func newSlowFailEngine(t *testing.T, fail error) *wile.Engine {
+	t.Helper()
+	slowFail := func(mc machine.CallContext) error {
+		<-mc.Context().Done()
+		return fail
+	}
+	ext := registry.NewExtension("test-slow", func(r *registry.PrimitiveRegistry) error {
+		r.AddPrimitive(registry.PrimitiveSpec{Name: "test-slow-fail", ParamCount: 0, Impl: slowFail}, registry.PhaseSetRuntime)
+		r.AddPrimitive(registry.PrimitiveSpec{Name: "test-slow-fail-1", ParamCount: 1, Impl: slowFail}, registry.PhaseSetRuntime)
+		r.AddPrimitive(registry.PrimitiveSpec{Name: "test-slow-ok", ParamCount: 0, Impl: slowOK}, registry.PhaseSetRuntime)
+		return nil
+	})
+	engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink), wile.WithExtension(ext))
+	qt.Assert(t, err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = engine.Close()
+	})
+	return engine
+}
+
+// slowOK is test-slow-ok: it waits until its context is cancelled and returns #t
+// 100 ms after.
+func slowOK(mc machine.CallContext) error {
+	<-mc.Context().Done()
+	// Linger past the cancellation, so a thread the same timer cancelled has
+	// died (and abandoned what it owned) before the caller's next step.
+	time.Sleep(100 * time.Millisecond)
+	mc.SetValue(values.TrueValue)
+	return nil
+}
+
+// newCancelFailEngine builds a KitchenSink engine with test-slow-ok and
+// test-cancel-and-fail, which cancels the returned context and then returns
+// ErrNotANumber. Run under that context, a program can put the embedder's
+// cancellation after a timer fires and before a failure, with no clock between
+// them.
+func newCancelFailEngine(t *testing.T) (*wile.Engine, context.Context) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	ext := registry.NewExtension("test-cancel", func(r *registry.PrimitiveRegistry) error {
+		r.AddPrimitive(registry.PrimitiveSpec{Name: "test-slow-ok", ParamCount: 0, Impl: slowOK}, registry.PhaseSetRuntime)
+		r.AddPrimitive(registry.PrimitiveSpec{
+			Name:       "test-cancel-and-fail",
+			ParamCount: 0,
+			Impl: func(machine.CallContext) error {
+				cancel()
+				return werr.WrapForeignErrorf(werr.ErrNotANumber, "test-cancel-and-fail: not a number")
+			},
+		}, registry.PhaseSetRuntime)
+		return nil
+	})
+	engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink), wile.WithExtension(ext))
+	qt.Assert(t, err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = engine.Close()
+	})
+	return engine, ctx
+}
+
+// TestStaleTimerClaimsNothing pins that a timer whose with-timeout is gone claims
+// no failure, on its own context or for a context below it. An escape past a
+// with-timeout leaves its timer armed (filed in TODO.md). When that timer fires, a
+// later failure on its context would become an interrupt whose boundary no driver
+// can find, reported as a cause-less internal error; and a failure in eval below it
+// would be passed up past the guard inside eval that should catch it. A stale
+// timer owns nothing, so the failure is reported as itself, and the guard inside
+// eval catches it. The stale timer and the failure share one form: EvalMultiple
+// runs each top-level form on a fresh context, which would leave the timer behind.
+// The stale timer outlasts everything before the failing primitive by a wide margin
+// (300 ms; 1 s where an eval expands the guard first), and test-slow-fail waits for
+// it either way. Fired before its with-timeout was escaped, it would answer as a
+// live timer; fired before the primitive, a recheck would name it (the filed
+// defect).
+func TestStaleTimerClaimsNothing(t *testing.T) {
+	t.Run("on its own context", func(t *testing.T) {
+		c := qt.New(t)
+		engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "test-slow-fail: not a number"))
+		result, err := evalWithWatchdog(t, engine, `
+(list (guard (e (#t 'caught)) (with-timeout 300 (lambda (k) 'h) (lambda () (raise 'x))))
+      (test-slow-fail))`, 5*time.Second)
+		c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue,
+			qt.Commentf("a failure after a stale timer fired must be reported as itself, got %v / %v", result, err))
+	})
+	t.Run("on its own context, under a live timer that has not fired", func(t *testing.T) {
+		// The stale timer's firing cancels the context the live outer timer's
+		// with-timeout runs in, but not the outer timer's own context. Whether the
+		// live timer fired is a question about its own context.
+		c := qt.New(t)
+		engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "test-slow-fail: not a number"))
+		result, err := evalWithWatchdog(t, engine, `
+(with-timeout 20000 (lambda (k) 'outer)
+  (lambda ()
+    (guard (e (#t 'caught)) (with-timeout 300 (lambda (k) 'h) (lambda () (raise 'x))))
+    (test-slow-fail)))`, 5*time.Second)
+		c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue,
+			qt.Commentf("a live timer that has not fired claims nothing, got %v / %v", result, err))
+	})
+	t.Run("below it, inside eval", func(t *testing.T) {
+		// The guard inside eval must see the failure. How the unit then ends is the
+		// filed defect's business: the next eager recheck on the stale timer's
+		// context reports an internal error. So the guard records what it saw, and a
+		// second evaluation reads it back.
+		c := qt.New(t)
+		engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "test-slow-fail: not a number"))
+		_, _ = evalWithWatchdog(t, engine, `
+(define seen (vector #f))
+(list (guard (e (#t 'caught)) (with-timeout 1000 (lambda (k) 'h) (lambda () (raise 'x))))
+      (eval '(guard (e (#t (vector-set! seen 0 'caught-in-eval))) (test-slow-fail)) (interaction-environment)))`, 5*time.Second)
+		result, err := evalWithWatchdog(t, engine, `(vector-ref seen 0)`, 5*time.Second)
+		c.Assert(err, qt.IsNil)
+		c.Assert(result.SchemeString(), qt.Equals, "caught-in-eval")
+	})
+	t.Run("below it, under a live timer that has not fired", func(t *testing.T) {
+		// The stale timer is inside the first eval; the failure is in a nested eval,
+		// whose ctx the stale timer cancelled; a live with-timeout above both has not
+		// fired. The failure is the nested eval's own, and its guard must see it: a
+		// timer that has not fired owns no cancellation, so it does not draw the
+		// failure up past that guard.
+		c := qt.New(t)
+		engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "test-slow-fail: not a number"))
+		_, _ = evalWithWatchdog(t, engine, `
+(define seen (vector #f))
+(with-timeout 20000 (lambda (k) 'outer)
+  (lambda ()
+    (eval '(begin (guard (e (#t 'escaped)) (with-timeout 1000 (lambda (k) 'h) (lambda () (raise 'x))))
+                  (eval '(guard (e (#t (vector-set! seen 0 'nested-guard))) (test-slow-fail))
+                        (interaction-environment)))
+          (interaction-environment))))`, 5*time.Second)
+		result, err := evalWithWatchdog(t, engine, `(vector-ref seen 0)`, 5*time.Second)
+		c.Assert(err, qt.IsNil)
+		c.Assert(result.SchemeString(), qt.Equals, "nested-guard")
+	})
+	t.Run("below it, under a live timer the embedder cancelled", func(t *testing.T) {
+		// The previous row with the live timer's ctx cancelled by the embedder, after
+		// the stale timer fired and before the failure. A cancelled live timer has not
+		// fired either, so the nested guard must still see the failure.
+		c := qt.New(t)
+		engine, ctx := newCancelFailEngine(t)
+		_, _ = evalWithWatchdogCtx(ctx, t, engine, `
+(define seen (vector #f))
+(with-timeout 20000 (lambda (k) 'outer)
+  (lambda ()
+    (eval '(begin (guard (e (#t 'escaped)) (with-timeout 1000 (lambda (k) 'h) (lambda () (raise 'x))))
+                  (eval '(guard (e (#t (vector-set! seen 0 'nested-guard))) (test-slow-ok) (test-cancel-and-fail))
+                        (interaction-environment)))
+          (interaction-environment))))`, 5*time.Second)
+		result, err := evalWithWatchdog(t, engine, `(vector-ref seen 0)`, 5*time.Second)
+		c.Assert(err, qt.IsNil)
+		c.Assert(result.SchemeString(), qt.Equals, "nested-guard")
+	})
+}
+
+// TestTimerClaimsAHandlerFailure pins the handler applications the drivers make
+// themselves, where a failure comes back from the application rather than from Run.
+// A call-with-continuation-prompt handler that fails after the timer fired, applied
+// by an abort the sub-context resolves; and a with-timeout handler that fails after
+// an outer timer also fired, applied by the inner timer's resolution. Each failure
+// becomes a timer's interrupt (or, for a handler that fails without a foreign
+// call, is claimed by the fired timer), which the driver must dispatch on its own
+// chain. Returned instead, it reached the embedder as a raw interrupt or as the
+// handler's failure (top level), or reached the top driver, which could not find
+// the boundary and reported an internal error (inside eval). The arity row's inner
+// handler takes no argument; the outer timer fires first and the inner, innermost
+// handler answers it, so the outer timer has fired when that handler fails.
+func TestTimerClaimsAHandlerFailure(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"prompt handler, timer inside eval", `(eval '(with-timeout 50 (lambda (k) 'timed-out)
+  (lambda () (let ((tag (make-continuation-prompt-tag)))
+               (call-with-continuation-prompt (lambda () (abort-current-continuation tag)) tag test-slow-fail))))
+  (interaction-environment))`, "timed-out"},
+		{"inner with-timeout handler, top level", `(with-timeout 30 (lambda (k) 'outer)
+  (lambda () (with-timeout 10 test-slow-fail-1 (lambda () (thread-sleep! 10)))))`, "outer"},
+		{"inner with-timeout handler, inside eval", `(eval '(with-timeout 30 (lambda (k) 'outer)
+  (lambda () (with-timeout 10 test-slow-fail-1 (lambda () (thread-sleep! 10)))))
+  (interaction-environment))`, "outer"},
+		{"inner with-timeout handler of the wrong arity", `(with-timeout 10 (lambda (k) 'outer)
+  (lambda () (with-timeout 5000 (lambda () 'no-k) (lambda () (test-slow-ok)))))`, "outer"},
+		{"inner with-timeout handler of the wrong arity, inside eval", `(eval '(with-timeout 10 (lambda (k) 'outer)
+  (lambda () (with-timeout 5000 (lambda () 'no-k) (lambda () (test-slow-ok)))))
+  (interaction-environment))`, "outer"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "test-slow-fail: not a number"))
+			result, err := evalWithWatchdog(t, engine, tc.code, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestEscapePastATimerLeavesItsExtent pins the dynamic environment an enclosing
+// dynamic-wind's after thunk runs in when an escape leaves a with-timeout through
+// it. The after thunk belongs to the dynamic-wind's call site, outside the
+// with-timeout (R7RS §6.10), so the timer is no part of it: its 150 ms wait must
+// run to completion although the 50 ms timer fires meanwhile, the escape must
+// arrive, and the after thunk must run once. Run under the timer's context, the
+// wait was cancelled; the owner-side rule then turned that into the timeout, which
+// lost the escape and re-entered the extent so the after thunk ran again. HEAD
+// arrived, but cut the wait short. The log is read by a second evaluation: the
+// escape leaves the timer armed (filed in TODO.md), and a recheck after it reports
+// that defect instead, which is also why a guard's escape is not a row here (its
+// clause makes foreign calls after the escape).
+func TestEscapePastATimerLeavesItsExtent(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"call/cc escape", `(call/cc (lambda (return)
+  (dynamic-wind (lambda () (note 'before))
+                (lambda () (with-timeout 50 (lambda (k) 'timed-out) (lambda () (return 'escaped))))
+                (lambda () (thread-sleep! 0.15) (note 'after)))))`, "escaped"},
+		{"call/cc escape, after thunk joins a thread", `(begin (thread-start! worker) (call/cc (lambda (return)
+  (dynamic-wind (lambda () (note 'before))
+                (lambda () (with-timeout 50 (lambda (k) 'timed-out) (lambda () (return 'escaped))))
+                (lambda () (thread-join! worker) (note 'after))))))`, "escaped"},
+		{"call/cc escape past two timers", `(call/cc (lambda (return)
+  (dynamic-wind (lambda () (note 'before))
+                (lambda () (with-timeout 50 (lambda (k) 'outer)
+                             (lambda () (with-timeout 5000 (lambda (k) 'inner) (lambda () (return 'escaped))))))
+                (lambda () (thread-sleep! 0.15) (note 'after)))))`, "escaped"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			defer func() {
+				_ = engine.Close()
+			}()
+			_, err := evalWithWatchdog(t, engine, `
+(define log (vector '()))
+(define (note x) (vector-set! log 0 (cons x (vector-ref log 0))))
+(define worker (make-thread (lambda () (thread-sleep! 0.15) 'worker-done)))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			start := time.Now()
+			result, err := evalWithWatchdog(t, engine, tc.code, 5*time.Second)
+			elapsed := time.Since(start)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+			c.Assert(elapsed >= 140*time.Millisecond, qt.IsTrue,
+				qt.Commentf("the after thunk's wait was cut short: %v", elapsed))
+			logged, err := evalWithWatchdog(t, engine, `(reverse (vector-ref log 0))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(logged.SchemeString(), qt.Equals, "(before after)")
+		})
+	}
+}
+
+// TestAfterThunkEnteredBelowTheTimerStaysInsideIt pins the other side of
+// TestEscapePastATimerLeavesItsExtent. A dynamic-wind entered inside eval or load,
+// under a with-timeout in force at top level, is inside that timer, though the
+// sub-context it runs on has no timer of its own: its ctx is the timer's, and
+// load's is the timer's wrapped with load's own value. When a call/cc escape there
+// runs the after thunk (reconciled by the top driver, which owns the timer), the
+// thunk must run under the timer, so its wait is cancelled and the handler runs.
+// Recording the entering context's own timer field (nil there) read as "entered
+// outside every timer"; so did matching the recorded ctx against the timer's by
+// identity, for load. Either ran the thunk outside the timer, and a wait in it ran
+// its full length or hung. Under a with-timeout of eval's own, the frame is inside
+// that timer too, which the reconciling top driver does not arm: the thunk steps
+// out of it and stays inside the top one. The last entry is at top level, left
+// from inside a later with-timeout that is the innermost timer the driver arms:
+// the frame is inside the outer one only, which is armed but not innermost.
+func TestAfterThunkEnteredBelowTheTimerStaysInsideIt(t *testing.T) {
+	const escape = `(k0 'escaped)`
+	form := func(body, wait string) string {
+		return `(call/cc (lambda (k0)
+  (dynamic-wind (lambda () #f)
+                (lambda () ` + body + `)
+                (lambda () ` + wait + ` (vector-set! after 0 #t) (mutex-unlock! m)))))`
+	}
+	entries := []struct {
+		name  string
+		below func(t *testing.T, wait string) string
+	}{
+		{"eval", func(_ *testing.T, wait string) string {
+			return `(eval '` + form(escape, wait) + ` (interaction-environment))`
+		}},
+		{"eval, under a with-timeout of its own", func(_ *testing.T, wait string) string {
+			return `(eval '(with-timeout 5000 (lambda (k) 'inner) (lambda () ` + form(escape, wait) + `)) (interaction-environment))`
+		}},
+		{"load", func(t *testing.T, wait string) string {
+			path := filepath.Join(t.TempDir(), "after-thunk.scm")
+			qt.Assert(t, os.WriteFile(path, []byte(form(escape, wait)), 0o600), qt.IsNil)
+			return `(load "` + path + `")`
+		}},
+		{"top level, left from inside a later with-timeout", func(_ *testing.T, wait string) string {
+			return form(`(with-timeout 5000 (lambda (k) 'inner) (lambda () `+escape+`))`, wait)
+		}},
+	}
+	for _, e := range entries {
+		for _, w := range timerCancelledWaits {
+			t.Run(e.name+"/"+w.name, func(t *testing.T) {
+				c := qt.New(t)
+				engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+				c.Assert(err, qt.IsNil)
+				defer func() {
+					_ = engine.Close()
+				}()
+				result, err := evalWithWatchdog(t, engine, waitPrelude+`
+(define after (vector #f))
+(define h (with-timeout 50 (lambda (k) 'timed-out)
+  (lambda () `+e.below(t, w.wait)+`)))
+(list h (vector-ref after 0) (mutex-state m))`, 5*time.Second)
+				c.Assert(err, qt.IsNil)
+				c.Assert(result.SchemeString(), qt.Equals, "(timed-out #f not-owned)")
+			})
+		}
+	}
+}
+
+// TestAfterThunkOutsideAFiredTimerKeepsItsGuard pins what the pass-up claims. An
+// escape leaves a with-timeout through an enclosing dynamic-wind whose after thunk
+// runs outside the timer; the timer fires while the thunk sleeps, and the thunk
+// then fails. Its context was not cancelled by the timer, so the failure is
+// ordinary: the thunk's own guard catches it although a fired timer is above it,
+// and the handler never runs. Passing up every failure under a fired timer,
+// whatever cancelled the failing context, took that guard away and lost the
+// escape. The embedder row cancels the thunk's context just before the failure:
+// a context the embedder cancelled was not cancelled by the timer either.
+func TestAfterThunkOutsideAFiredTimerKeepsItsGuard(t *testing.T) {
+	tcs := []struct {
+		name string
+		fail string
+	}{
+		{"ordinary failure", `(car '())`},
+		{"failure after the embedder cancels", `(test-cancel-and-fail)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, ctx := newCancelFailEngine(t)
+			_, err := evalWithWatchdog(t, engine, `
+(define log (vector '()))
+(define (note x) (vector-set! log 0 (cons x (vector-ref log 0))))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			// The embedder row ends on its own cancellation, so only the log is asserted.
+			_, _ = evalWithWatchdogCtx(ctx, t, engine, `(call/cc (lambda (return)
+  (dynamic-wind (lambda () #f)
+                (lambda () (with-timeout 50 (lambda (k) (note 'handler) 'timed-out) (lambda () (return 'escaped))))
+                (lambda () (thread-sleep! 0.15) (guard (e (#t (note 'thunk-guard))) `+tc.fail+`)))))`, 5*time.Second)
+			logged, err := evalWithWatchdog(t, engine, `(vector-ref log 0)`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(logged.SchemeString(), qt.Equals, "(thunk-guard)")
+		})
+	}
+}
+
+// TestWindingThunkFailureOutsideAFiredTimerIsItsOwn pins the uncaught half of
+// TestAfterThunkOutsideAFiredTimerKeepsItsGuard. A winding thunk runs outside the
+// timer and fails with no handler after the timer fired. The failure is the
+// thunk's, so it ends the evaluation as itself, and the handler never runs. The
+// driver reconciling the transfer had not yet left the timer's extent, so judged by
+// its state the failure was claimed: the handler ran, the transfer was lost, and an
+// escape's after thunk ran a second time without a before. The rows fail each way a
+// reconcile can: an after thunk on an escape and on an abort, failing as it runs or
+// as it is applied (the outer frame's after thunk is car, applied to no argument,
+// once the inner one has outlived the timer); and a before thunk on a re-entry from
+// inside a later with-timeout, failing as it runs or as it is applied (newline, to
+// a port the outer before thunk closed after outliving the timer).
+func TestWindingThunkFailureOutsideAFiredTimerIsItsOwn(t *testing.T) {
+	escape := func(form string) string {
+		return `(call/cc (lambda (k0)
+  (dynamic-wind (lambda () (note 'before))
+                (lambda () (with-timeout 50 (lambda (k) (note 'handler) 'timed-out) (lambda () ` + form + `)))
+                (lambda () (note 'after) (thread-sleep! 0.15) (error "boom")))))`
+	}
+	// reenter re-enters inner from inside a 50 ms with-timeout; outer's before thunk
+	// notes before-again and outlives the timer on the re-entry, then runs again.
+	reenter := func(again, inner string) string {
+		return `(let ((r (dynamic-wind
+           (lambda () (vector-set! n 0 (+ 1 (vector-ref n 0)))
+                      (if (> (vector-ref n 0) 1)
+                          (begin (note 'before-again) (thread-sleep! 0.15) ` + again + `)
+                          (note 'before)))
+           (lambda () ` + inner + `)
+           (lambda () (note 'after)))))
+  (if (eq? r 'first)
+      (with-timeout 50 (lambda (h) (note 'handler) 'timed-out) (lambda () ((vector-ref kk 0) 'reentered)))
+      r))`
+	}
+	const capture = `(call/cc (lambda (k) (vector-set! kk 0 k) 'first))`
+	tcs := []struct {
+		name string
+		code string
+		err  string
+		log  string
+	}{
+		{"after thunk, call/cc escape", escape(`(k0 'escaped)`), `boom`, "(before after)"},
+		{"after thunk, abort", `(let ((tag (make-continuation-prompt-tag)))
+  (call-with-continuation-prompt
+    (lambda () ` + escape(`(abort-current-continuation tag 'escaped)`) + `)
+    tag
+    (lambda (v) v)))`, `boom`, "(before after)"},
+		{"after thunk applied", `(call/cc (lambda (k0)
+  (dynamic-wind (lambda () (note 'before))
+                (lambda () (dynamic-wind (lambda () #f)
+                                         (lambda () (with-timeout 50 (lambda (k) (note 'handler) 'timed-out)
+                                                      (lambda () (k0 'escaped))))
+                                         (lambda () (note 'after) (thread-sleep! 0.15))))
+                car)))`, `expected 1 argument`, "(before after)"},
+		{"before thunk, re-entry", reenter(`(car '())`, capture), `car`, "(before after before-again)"},
+		{"before thunk applied, re-entry", reenter(`(close-port p)`,
+			`(parameterize ((current-output-port p)) (dynamic-wind newline (lambda () `+capture+`) (lambda () #f)))`),
+			`newline`, "(before after before-again)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+			c.Assert(err, qt.IsNil)
+			defer func() {
+				_ = engine.Close()
+			}()
+			_, err = evalWithWatchdog(t, engine, `
+(define log (vector '()))
+(define (note x) (vector-set! log 0 (cons x (vector-ref log 0))))
+(define kk (vector #f))
+(define n (vector 0))
+(define p (open-output-string))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			result, err := evalWithWatchdog(t, engine, tc.code, 5*time.Second)
+			c.Assert(err, qt.ErrorMatches, `(?s).*`+tc.err+`.*`, qt.Commentf("result %v", result))
+			logged, err := evalWithWatchdog(t, engine, `(reverse (vector-ref log 0))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(logged.SchemeString(), qt.Equals, tc.log)
+		})
+	}
+}
+
+// TestUnclaimedFailureIsClaimedByAnotherOwner pins how far a failure's mark
+// reaches when it ran outside its context's fired timer
+// (TestWindingThunkFailureOutsideAFiredTimerIsItsOwn). The mark answers for that
+// context's timers. The same failure reaching another context after that
+// context's own timer fired is the timeout there, as any failure is. That holds in
+// a thread joining the failed one, below its timer's owner, and in the caller of a
+// host function that ran the failing code through Engine.Call. Honoured everywhere,
+// the mark let the joiner's guard catch the joinee's end, and let the host's
+// caller report the failure as itself. In both, only when the failing code's own
+// timer had happened to fire.
+func TestUnclaimedFailureIsClaimedByAnotherOwner(t *testing.T) {
+	// failing escapes a 20 ms with-timeout through a dynamic-wind whose after
+	// thunk outlives that timer and then raises, uncaught.
+	const failing = `(lambda ()
+  (call/cc (lambda (k0)
+    (dynamic-wind (lambda () #f)
+                  (lambda () (with-timeout 20 (lambda (k) 'inner) (lambda () (k0 'escaped))))
+                  (lambda () (thread-sleep! 0.25) (raise 'boom))))))`
+	t.Run("joiner below its timer's owner", func(t *testing.T) {
+		c := qt.New(t)
+		engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "unused"))
+		_, err := evalWithWatchdog(t, engine, `
+(define t (make-thread `+failing+`))
+(thread-start! t)
+(guard (e (#t 'joined)) (thread-join! t))`, 5*time.Second)
+		c.Assert(err, qt.IsNil)
+		result, err := evalWithWatchdog(t, engine, `
+(define caught (vector #f))
+(list (with-timeout 50 (lambda (k) 'timed-out)
+        (lambda () (eval '(guard (e (#t (vector-set! caught 0 #t) 'caught)) (test-slow-ok) (thread-join! t))
+                         (interaction-environment))))
+      (vector-ref caught 0))`, 5*time.Second)
+		c.Assert(err, qt.IsNil)
+		c.Assert(result.SchemeString(), qt.Equals, "(timed-out #f)")
+	})
+	t.Run("caller of an Engine.Call host", func(t *testing.T) {
+		// The host returns the failure only once its caller's timer has fired.
+		c := qt.New(t)
+		engine := newEngine(t)
+		defer func() {
+			_ = engine.Close()
+		}()
+		c.Assert(engine.RegisterFunc("call-then-wait", func(ctx context.Context, proc wile.Value) error {
+			_, cerr := engine.Call(context.Background(), proc)
+			<-ctx.Done()
+			return cerr
+		}), qt.IsNil)
+		result, err := evalWithWatchdog(t, engine, `
+(with-timeout 50 (lambda (k) 'timed-out) (lambda () (call-then-wait `+failing+`)))`, 5*time.Second)
+		c.Assert(err, qt.IsNil)
+		c.Assert(result.SchemeString(), qt.Equals, "timed-out")
+	})
+}
+
+// TestReentryUnderATimerRewindsOutsideIt pins the rewind half of
+// TestEscapePastATimerLeavesItsExtent. A dynamic-wind entered with no timer is
+// re-entered by a continuation invoked inside a later with-timeout; the before
+// thunk runs again, in the dynamic environment of the dynamic-wind call, so outside
+// that timer, and its 150 ms sleep completes although the 50 ms timer fires
+// meanwhile. Run under the timer's context, the sleep was cut short and the handler
+// ran in place of the re-entry. The jump leaves the with-timeout and its timer
+// armed (filed in TODO.md), so the form's own result is not asserted; the log is
+// read by a further evaluation.
+func TestReentryUnderATimerRewindsOutsideIt(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	defer func() {
+		_ = engine.Close()
+	}()
+	_, err := evalWithWatchdog(t, engine, `
+(define log (vector '()))
+(define (note x) (vector-set! log 0 (cons x (vector-ref log 0))))
+(define kk (vector #f))
+(define n (vector 0))`, 5*time.Second)
+	c.Assert(err, qt.IsNil)
+	start := time.Now()
+	_, _ = evalWithWatchdog(t, engine, `(let ((r (dynamic-wind
+           (lambda () (vector-set! n 0 (+ 1 (vector-ref n 0)))
+                      (if (> (vector-ref n 0) 1) (begin (thread-sleep! 0.15) (note 'slept)))
+                      (note 'before))
+           (lambda () (call/cc (lambda (k) (vector-set! kk 0 k) 'first)))
+           (lambda () (note 'after)))))
+  (if (eq? r 'first)
+      (with-timeout 50 (lambda (h) (note 'handler) 'timed-out) (lambda () ((vector-ref kk 0) 'reentered)))
+      r))`, 5*time.Second)
+	elapsed := time.Since(start)
+	c.Assert(elapsed >= 140*time.Millisecond, qt.IsTrue,
+		qt.Commentf("the before thunk's sleep was cut short: %v", elapsed))
+	logged, err := evalWithWatchdog(t, engine, `(reverse (vector-ref log 0))`, 5*time.Second)
+	c.Assert(err, qt.IsNil)
+	// The last after is lost to the filed defect: the timer, left armed, fires during
+	// the sleep and the next recheck names its gone boundary.
+	c.Assert(logged.SchemeString(), qt.Matches, `\(before after slept before( after)?\)`)
+}
+
+// TestReentryIntoAnEndedTimerKeepsTheEnclosingOne pins the step out of a timer
+// that has ended. A dynamic-wind entered inside an inner with-timeout, itself
+// inside an outer one, is re-entered after the inner one returned, from inside the
+// outer one. The inner timer is gone (its finalizer cancelled its context), so the
+// before thunk runs under the outer timer, the innermost one the frame is inside
+// that is still armed. Run under the ended timer's context, the before thunk was
+// cancelled at its first instruction and the re-entry failed.
+func TestReentryIntoAnEndedTimerKeepsTheEnclosingOne(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	defer func() {
+		_ = engine.Close()
+	}()
+	_, err := evalWithWatchdog(t, engine, `
+(define log (vector '()))
+(define (note x) (vector-set! log 0 (cons x (vector-ref log 0))))
+(define kk (vector #f))`, 5*time.Second)
+	c.Assert(err, qt.IsNil)
+	result, err := evalWithWatchdog(t, engine, `(with-timeout 5000 (lambda (h) 'outer)
+  (lambda ()
+    (let ((r (with-timeout 4000 (lambda (h) 'inner)
+               (lambda () (dynamic-wind (lambda () (note 'before))
+                                        (lambda () (call/cc (lambda (k) (vector-set! kk 0 k) 'first)))
+                                        (lambda () (note 'after)))))))
+      (if (eq? r 'first) ((vector-ref kk 0) 'reentered) r))))`, 5*time.Second)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "reentered")
+	logged, err := evalWithWatchdog(t, engine, `(reverse (vector-ref log 0))`, 5*time.Second)
+	c.Assert(err, qt.IsNil)
+	c.Assert(logged.SchemeString(), qt.Equals, "(before after before after)")
+}
+
+// TestStaleTimerDoesNotHideALiveOne pins that a stale timer is skipped, not
+// obeyed. An escape leaves an inner with-timeout, whose timer stays armed (filed in
+// TODO.md) as the context's innermost timer; the outer with-timeout is still live.
+// When the outer timer fires, a wait's cancellation is the outer timer's to claim:
+// the outer handler runs, and no handler below it sees the failure. Deciding by the
+// innermost timer alone found it stale and claimed nothing, so the cancellation
+// reached the with-exception-handler, which escaped, and the with-timeout returned
+// as if no timer had fired; with no handler, the raw cancellation reached the
+// embedder. That the handler then runs outside both timers is
+// TestStaleTimerLeavesTheHandlersContinuation's: a second application of it, under
+// the fired outer timer, is interrupted before it can count here. The last row
+// raises in place instead of returning its failure (FailureClaimedByTimer): t, a
+// thread the outer timer kills, abandons m2, and a timed mutex-lock!, which does
+// not watch the context, acquires it. Raised in place, the condition reached the
+// guard, and the recheck after it named the stale timer (an internal error). The
+// outer timer is 500 ms so that every row is at its wait when it fires; noticed
+// before, by a recheck or poll, the interrupt names the stale timer (the filed
+// defect).
+func TestStaleTimerDoesNotHideALiveOne(t *testing.T) {
+	tcs := []struct {
+		name string
+		then string
+	}{
+		{"handler around the wait", `(call/cc (lambda (k) (with-exception-handler (lambda (e) (k 'caught)) (lambda () (mutex-lock! m)))))`},
+		{"no handler", `(mutex-lock! m)`},
+		{"abandoned mutex raised in place", `(mutex-lock! rm) (thread-start! t) (mutex-unlock! rm rcv)
+          (guard (e (#t 'caught)) (mutex-lock! m2 5))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			defer func() {
+				_ = engine.Close()
+			}()
+			result, err := evalWithWatchdog(t, engine, `
+(define m (make-mutex))
+(mutex-lock! m)
+(define m2 (make-mutex))
+(define rm (make-mutex))
+(define rcv (make-condition-variable))
+(define t (make-thread (lambda ()
+  (mutex-lock! m2)
+  (mutex-lock! rm) (condition-variable-signal! rcv) (mutex-unlock! rm)
+  (mutex-lock! m))))
+(define hits (vector 0))
+(list (with-timeout 500 (lambda (k) (vector-set! hits 0 (+ 1 (vector-ref hits 0))) (thread-sleep! 0.01) 'timed-out)
+        (lambda ()
+          (guard (e (#t 'inner-caught)) (with-timeout 100000 (lambda (k) 'inner) (lambda () (raise 'x))))
+          `+tc.then+`))
+      (vector-ref hits 0))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "(timed-out 1)")
+		})
+	}
+}
+
+// TestStaleTimerLeavesTheHandlersContinuation pins what the live timer's handler
+// receives when a stale timer sits inside it: the same continuation as without
+// one, so resuming it behaves the same in both shapes. Resuming k after a wait's
+// interrupt is itself defective (filed in TODO.md), so the two shapes are compared
+// rather than either asserted. Tearing down only the stale timer applied the
+// handler under the fired outer timer; the recheck after its first foreign call
+// interrupted it and applied it again, with a k that captured that first
+// application, and resuming it underflowed the eval stack (an internal error). The
+// outer timer is 500 ms so that both shapes are at the wait when it fires.
+func TestStaleTimerLeavesTheHandlersContinuation(t *testing.T) {
+	run := func(stale string) error {
+		engine := newEngine(t)
+		defer func() {
+			_ = engine.Close()
+		}()
+		_, err := evalWithWatchdog(t, engine, `
+(define m (make-mutex))
+(mutex-lock! m)
+(define ran (vector 0))
+(with-timeout 500 (lambda (k) (vector-set! ran 0 (+ 1 (vector-ref ran 0))) (k 'resumed))
+  (lambda () `+stale+` (list 'thunk (mutex-lock! m))))`, 5*time.Second)
+		return err
+	}
+	c := qt.New(t)
+	plain := run(`#f`)
+	stale := run(`(guard (e (#t 'inner-caught)) (with-timeout 100000 (lambda (k) 'inner) (lambda () (raise 'x))))`)
+	c.Assert(stale == nil, qt.Equals, plain == nil, qt.Commentf("plain: %v; stale: %v", plain, stale))
+	c.Assert(errors.Is(stale, werr.ErrInternal), qt.Equals, errors.Is(plain, werr.ErrInternal),
+		qt.Commentf("plain: %v; stale: %v", plain, stale))
+}
+
+// TestTimerClaimsAnApplySpreadFailureBelowIt pins the two failures apply raises
+// while spreading its final argument onto the stack (OpUnpackListToStack): not a
+// list, and an improper list. Raised inside eval after the timer fired, each is a
+// failure under a fired timer above it, so it passes up to the owner like a
+// primitive's, and the guard inside eval never sees it. Raised in place, the guard
+// caught it.
+func TestTimerClaimsAnApplySpreadFailureBelowIt(t *testing.T) {
+	tcs := []struct {
+		name  string
+		apply string
+	}{
+		{"final argument not a list", `(apply + 1 2)`},
+		{"final argument an improper list", `(apply + 1 '(2 . 3))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "unused"))
+			result, err := evalWithWatchdog(t, engine, `
+(define caught (vector #f))
+(list (with-timeout 200 (lambda (k) 'timed-out)
+        (lambda () (eval '(guard (e (#t (vector-set! caught 0 #t) 'caught)) (test-slow-ok) `+tc.apply+`)
+                         (interaction-environment))))
+      (vector-ref caught 0))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "(timed-out #f)")
+		})
+	}
+}
+
+// TestTimerClaimsAnSRFI18ConditionBelowIt pins the two places a wait primitive
+// raises a condition in place instead of returning a failure: thread-join!'s
+// joinee outcome and mutex-lock!'s abandoned mutex. A thread started in the timed
+// thunk dies of the timer (its wait raises), abandoning a mutex it owned; code in
+// eval, below the timer's owner, then joins it, or acquires that mutex, after a
+// primitive that ignores the timer. Raised in place, the condition reached the
+// guard inside eval (the caught flag). It is a failure after the timer fired, so
+// the primitive hands it back to the bridge, which passes it up to the owner. The
+// thread signals once it owns m2, and the thunk waits for that before eval runs,
+// so the abandonment is certain.
+func TestTimerClaimsAnSRFI18ConditionBelowIt(t *testing.T) {
+	tcs := []struct {
+		name string
+		then string
+	}{
+		{"thread-join!", `(thread-join! t)`},
+		{"mutex-lock! of an abandoned mutex", `(mutex-lock! m2)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "unused"))
+			result, err := evalWithWatchdog(t, engine, `
+(define m (make-mutex))
+(define m2 (make-mutex))
+(mutex-lock! m)
+(define caught (vector #f))
+(define after (vector #f))
+(define rm (make-mutex))
+(define rcv (make-condition-variable))
+(define t (make-thread (lambda ()
+  (mutex-lock! m2)
+  (mutex-lock! rm) (condition-variable-signal! rcv) (mutex-unlock! rm)
+  (mutex-lock! m))))
+(list (with-timeout 200 (lambda (k) 'timed-out)
+        (lambda () (mutex-lock! rm) (thread-start! t) (mutex-unlock! rm rcv)
+                   (eval '(guard (e (#t (vector-set! caught 0 #t) 'caught))
+                            (test-slow-ok) `+tc.then+` (vector-set! after 0 #t))
+                         (interaction-environment))))
+      (vector-ref caught 0) (vector-ref after 0))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "(timed-out #f #f)")
+		})
+	}
+}
+
+// TestTimerSupersedesFailureButNotDenial pins both sides of what a fired timer
+// claims. A primitive that ignores its context outlives a short with-timeout and
+// then fails. An ordinary failure belongs to the abandoned thunk and becomes the
+// timeout. A security denial does not: it must reach the embedder however the
+// program is written, or a with-timeout around a refused operation would turn the
+// refusal into the handler's value.
+func TestTimerSupersedesFailureButNotDenial(t *testing.T) {
+	failures := []struct {
+		name   string
+		fail   error
+		denial bool
+	}{
+		{"ordinary failure", werr.WrapForeignErrorf(werr.ErrNotANumber, "test-slow-fail: not a number"), false},
+		{"security denial", werr.WrapForeignErrorf(security.ErrAccessDenied, "test-slow-fail: denied"), true},
+	}
+	for _, f := range failures {
+		t.Run(f.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newSlowFailEngine(t, f.fail)
+			result, err := evalWithWatchdog(t, engine,
+				`(with-timeout 20 (lambda (k) 'timed-out) (lambda () (test-slow-fail)))`, 5*time.Second)
+			if f.denial {
+				c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+					qt.Commentf("a denial after the timer fired must reach the embedder, got %v / %v", result, err))
+				return
+			}
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "timed-out")
+		})
+	}
+}
+
+// TestJoinReportsJoineeCancellationAsUncaught pins that a JOINEE dying of a
+// cancelled wait is the joinee's outcome, not the joiner's cancellation. Join wraps
+// every joinee error in UncaughtThreadException, whose Unwrap lets errors.Is see
+// the ErrOperationCancelled inside; reading that as the joiner's own cancellation
+// raised "thread-join!: cancelled before the wait completed" from a joiner nobody
+// cancelled. The thread-sleep! row is the one that fails on HEAD for that reason:
+// there a cancelled sleep already raised, while a cancelled mutex-lock! answered #f.
+// The thread here is started inside a with-timeout thunk that returns normally,
+// which cancels the thread's ctx (with plain context.Canceled) on the way out. The
+// thunk returns only once the thread has signalled that it is at its wait, so the
+// cancellation reaches the wait rather than the thread's first VM poll.
+func TestJoinReportsJoineeCancellationAsUncaught(t *testing.T) {
+	waits := []struct {
+		site string
+		wait string
+	}{
+		{"mutex-lock!", `(mutex-lock! m)`},
+		{"thread-sleep!", `(thread-sleep! 10)`},
+	}
+	for _, w := range waits {
+		t.Run(w.site, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			defer func() {
+				_ = engine.Close()
+			}()
+			result, err := evalWithWatchdog(t, engine, `
+(define m (make-mutex))
+(mutex-lock! m)
+(define rm (make-mutex))
+(define rcv (make-condition-variable))
+(define t (make-thread (lambda ()
+  (mutex-lock! rm) (condition-variable-signal! rcv) (mutex-unlock! rm)
+  `+w.wait+`)))
+(define h (with-timeout 5000 (lambda (k) 'timed-out)
+  (lambda () (mutex-lock! rm) (thread-start! t) (mutex-unlock! rm rcv) 'thunk-returned)))
+(list h (guard (e ((uncaught-exception? e) (error-object-message (uncaught-exception-reason e)))
+                  ((error-object? e) (list 'error-object (error-object-message e))))
+          (thread-join! t)))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals,
+				`(thunk-returned "`+w.site+`: cancelled before the wait completed: context canceled")`)
+		})
+	}
+}
+
+// TestCancelledWaitInChildThreadIsCatchableThere pins the other side of the child
+// rule: a thread started inside a timed thunk owns no timer and has none above it,
+// so its cancelled wait is an ordinary condition IN THAT THREAD, and a guard there
+// catches it. Only a timer on the waiting chain makes a cancellation uncatchable.
+func TestCancelledWaitInChildThreadIsCatchableThere(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	defer func() {
+		_ = engine.Close()
+	}()
+	result, err := evalWithWatchdog(t, engine, `
+(define m (make-mutex))
+(mutex-lock! m)
+(define rm (make-mutex))
+(define rcv (make-condition-variable))
+(define t (make-thread (lambda ()
+  (mutex-lock! rm) (condition-variable-signal! rcv) (mutex-unlock! rm)
+  (guard (e (#t (list 'child-caught (error-object-message e))))
+    (mutex-lock! m)))))
+(define h (with-timeout 200 (lambda (k) 'timed-out)
+  (lambda () (mutex-lock! rm) (thread-start! t) (mutex-unlock! rm rcv) (thread-sleep! 10))))
+(list h (thread-join! t) (mutex-state m))`, 5*time.Second)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals,
+		`(timed-out (child-caught "mutex-lock!: cancelled before the wait completed") not-owned)`)
+}
+
+// TestTimerCancelledWaitInAbortAfterThunkRunsHandler pins the abort route back to
+// the timer's owner. A guard inside the timed thunk escapes by an abort, which runs
+// the dynamic-wind after thunk on a winding sub-context; the wait there is cancelled
+// by the timer, its failure passes up from the winding sub-context, and the driver
+// resolving the abort hands it back to its loop instead of returning it. With the
+// with-timeout at top level that driver is RunResumable; inside eval it is the eval
+// sub-context's RunWithinBoundary, which owns the timer. The second shape lost the
+// handler until RunWithinBoundary was given the same route.
+func TestTimerCancelledWaitInAbortAfterThunkRunsHandler(t *testing.T) {
+	owners := []struct {
+		name string
+		wrap func(body string) string
+	}{
+		{"top level", func(body string) string {
+			return body
+		}},
+		{"inside eval", func(body string) string {
+			return `(eval '` + body + ` (interaction-environment))`
+		}},
+	}
+	for _, o := range owners {
+		for _, w := range timerCancelledWaits {
+			t.Run(o.name+"/"+w.name, func(t *testing.T) {
+				c := qt.New(t)
+				engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+				c.Assert(err, qt.IsNil)
+				defer func() {
+					_ = engine.Close()
+				}()
+				body := `(with-timeout 200 (lambda (k) 'timed-out)
+  (lambda () (guard (e (#t 'inner-guard))
+               (dynamic-wind (lambda () #f)
+                             (lambda () (raise 'x))
+                             (lambda () ` + w.wait + ` (vector-set! after 0 #t))))))`
+				result, err := evalWithWatchdog(t, engine, waitPrelude+`
+(define after (vector #f))
+(list `+o.wrap(body)+` (vector-ref after 0))`, 5*time.Second)
+				c.Assert(err, qt.IsNil)
+				c.Assert(result.SchemeString(), qt.Equals, "(timed-out #f)")
+			})
+		}
+	}
+}
+
+// TestOrdinaryErrorUnderArmedTimerIsCaught pins that the timer rule claims only a
+// timer's cancellation. Under a with-timeout that has not fired, an ordinary error
+// is caught by a guard in the timer's own context and by one inside eval below it;
+// passing every failure up from a sub-context with a timer above it would take the
+// second away.
+func TestOrdinaryErrorUnderArmedTimerIsCaught(t *testing.T) {
+	c := qt.New(t)
+	engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+	c.Assert(err, qt.IsNil)
+	defer func() {
+		_ = engine.Close()
+	}()
+	result, err := evalWithWatchdog(t, engine, `
+(list (with-timeout 5000 (lambda (k) 'timed-out)
+        (lambda () (guard (e (#t 'caught-here)) (car 1))))
+      (with-timeout 5000 (lambda (k) 'timed-out)
+        (lambda () (eval '(guard (e (#t 'caught-in-eval)) (car 1)) (interaction-environment)))))`, 5*time.Second)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "(caught-here caught-in-eval)")
+}
+
+// TestEmbedderDeadlineInsideArmedTimerRaises pins a real embedder deadline, not a
+// cancel that names DeadlineExceeded as its cause, inside a with-timeout that has
+// not fired. The timer's ctx then reports the same Err() as an expired timer
+// (DeadlineExceeded) but a different cause, and only the cause belongs to the
+// timer: the wait raises, carrying the embedder's deadline, and the handler does not
+// run.
+func TestEmbedderDeadlineInsideArmedTimerRaises(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	defer func() {
+		_ = engine.Close()
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	type outcome struct {
+		value wile.Value
+		err   error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		v, err := engine.Eval(ctx, engine.MustParse(ctx, `(begin (define m (make-mutex)) (mutex-lock! m)
+	  (with-timeout 5000 (lambda (k) 'timed-out) (lambda () (mutex-lock! m))))`))
+		done <- outcome{v, err}
+	}()
+	var result wile.Value
+	var err error
+	select {
+	case o := <-done:
+		result, err = o.value, o.err
+	case <-time.After(5 * time.Second):
+		t.Fatal("the wait did not respect the embedder's deadline")
+	}
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue,
+		qt.Commentf("an embedder deadline inside an armed with-timeout must raise, got %v / %v", result, err))
+	c.Assert(errors.Is(err, context.DeadlineExceeded), qt.IsTrue)
 }
 
 func TestMutexBasics(t *testing.T) {
@@ -1355,12 +2801,13 @@ outcome`, 12*time.Second)
 // handler rather than escaping an error to the host.
 //
 // It is TestWithTimeoutInterruptsParkedMutexLock (extensions/gointerop) ported to
-// thread-sleep!, and the port is not cosmetic: mutex-lock! reaches the handler by
-// reporting a cancelled acquire as an error-free #f, which is what lets
-// callForeignCached's eager ErrTimerExpired recheck fire. thread-sleep! returns
-// Void and so has no such value channel, and before the fix it returned the raw
-// ctx.Err() instead: the sleep aborted the whole evaluation with "context deadline
-// exceeded" and the handler never ran.
+// thread-sleep!. It proves the composition end to end, not which VM path does it:
+// the owner-side rule turns the sleep's failure into the timer's interrupt, and in
+// the timer's own context the eager recheck after the guard's own foreign calls
+// would reach the handler too (TestTimerCancelledWaitIsNeverCaught pins the rule).
+// Before defect 38's fix thread-sleep! returned the raw ctx.Err(): the sleep
+// aborted the whole evaluation with "context deadline exceeded" and the handler
+// never ran.
 //
 // Both shapes matter because the escaping error IS a catchable Scheme condition,
 // so a guard around the sleep changes which mechanism resolves the timeout. The

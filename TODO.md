@@ -3375,7 +3375,7 @@ laundering I hypothesized is blocked by the eager `ErrTimerExpired` check at
 `call_foreign_cached.go` after every foreign return: 60/60 handler-runs, 0/40
 side-effect leaks). These four items are the leftover design/API/docs/test debt.
 
-- [ ] **Is Option A (launder a cancelled wait as an ordinary result) a committed contract?**
+- [x] **Is Option A (launder a cancelled wait as an ordinary result) a committed contract?**
   [Design, S–M]: **REWRITTEN 2026-08-09; the two rows this replaces named code that no longer
   exists.** They were about `PrimChannelSend`/`PrimChannelReceive` and
   `SendOutcome`/`RecvOutcome` in `pkg/values/channel.go` — verified absent from every `.go`
@@ -3387,16 +3387,106 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
   and not a deletion: `mutex-lock!` and `(mutex-unlock! m cv)` each have a free value channel
   and report a ctx-cancelled wait as an ordinary error-free `#f`, indistinguishable from a
   legitimate failed acquire or an unsignalled wait
-  (`docs/concurrency/cancellation.md:89-98`). `thread-sleep!` and `thread-join!` do NOT
-  launder — they raise `werr.ErrOperationCancelled` carrying the raw ctx cause (:99-112).
+  (`docs/concurrency/cancellation.md`, "The primitive-layer policy: wait side vs held side"). `thread-sleep!` and `thread-join!` do NOT
+  launder — they raise `werr.ErrOperationCancelled` carrying the raw ctx cause (same section).
   The error-free `#f` is load-bearing rather than sloppy: `callForeignCached`'s eager
-  `ErrTimerExpired` recheck fires only on the error-free return path (:121). Only an
+  `ErrTimerExpired` recheck fires only on the error-free return path ("Who cancels the ctx", `with-timeout` row). Only an
   embedder-supplied deadline (`mc.timer == nil`) can observe the laundering, bounded by the
-  ~1024-op VM poll (:123, which also records that no test covers it). Decide the contract and
+  ~1024-op VM poll (the embedder-deadline row; uncovered then, covered now). Decide the contract and
   the asymmetry follows: committed ⇒ document it and stop calling it a seam; placeholder ⇒
   surface the cancellation distinctly on the two laundering waits, as `thread-sleep!` and
   `thread-join!` already do.
-- [x] **`RWMutex` and `Once` removed from the Scheme surface** [API/modeling, M, Done, deleted]: 12 primitives, `values.RWMutex`, `values.Once`, `werr.ErrNotARWMutex`, `werr.ErrNotAOnce`, and `finishBlockingSync`; `(wile gointerop)` is now the six `atomic` primitives. **A modeling decision, not a cleanup**: `gointerop` was publishing Go's shared-state model against the project's causal-chain orientation. Public API removal under the zero-consumer rule, as with `ChannelSelect`. Kept: SRFI-18 `mutex-*`/`condition-variable-*` and `atomic`. Traps: the plan's verification grep (hits only in `memory/`/`plans/`/CHANGELOG) was never satisfiable, since ~13 live `sync.RWMutex` struct fields remain; `ErrNotAOnce` was the sole pass-through-article row in `pkg/registry/helpers/args_test.go`, so that sentinel is now built inline to keep `typeNameFromSentinel`'s article path covered. `TestWithTimeoutInterruptsParkedRWMutex` was ported to `mutex-lock!`, not dropped: it is the only test spanning `callForeignCached`'s eager recheck and a primitive's error-free `#f`. Under an embedder deadline `mutex-lock!` returns `#f` and the VM's top-of-loop check surfaces `DeadlineExceeded` (`pkg/machine/machine_context.go:365`); no test covers that `cancellation.md` row. Residual: `werr.ErrOperationCancelled` was left with no producer and a rewritten comment. **DECIDE:** delete it, or keep it for a future primitive that returns a value on success and so cannot borrow the error-free-`#f` convention.
+  **RE-OPENED 2026-10-05 by a measurement (P3.17 owns it).** The poll bound holds only when a
+  poll period of work remains: when the cancelled wait is the unit's LAST form, `EvalProgram`
+  returns `#f` with a nil error after the deadline expired, for both `(mutex-lock! m)` and
+  `(mutex-unlock! m cv)`. With work after the wait, `context.DeadlineExceeded` surfaces at ~50 ms
+  under a 50 ms ctx, as documented. Options (a) commit and document the edge, (b) VM-wide
+  end-of-run ctx check, (c) source-discriminate via the existing `waitCancelled`.
+  **DECIDED (c), amended, and Done 2026-10-06 in P3.17, not yet merged.** The source
+  discrimination (c) asked for lives in the VM's owner-side rule, not in `waitCancelled`. No:
+  every cancelled wait, the
+  two lock waits included, raises `ErrOperationCancelled` with the ctx cause (`waitCancelled` no
+  longer asks what cancelled it). When a `with-timeout` armed on the waiting chain fired, the VM's
+  owner-side rule (`supersedingTimerInterrupt`) turns the failure into the timeout before any
+  exception handler on the chain sees it: at the owning context's foreign-call bridge and
+  drivers, with a sub-context below the owner passing the failure up undispatched. (A root not
+  linked to the chain, such as a procedure run through `Engine.Call`, a macro transformer or a
+  library body, sees it first; it becomes the timeout when it returns.) A thread started inside a timed
+  thunk owns no timer and simply raises. Reached in three rounds, each refuting the previous one's
+  timer path (the record in `plans/2026-09-22-defect-closeout-P3.md` has them): round 1 kept the
+  timer case error-free and let a started thread and eval'd code run past an unacquired lock, as
+  HEAD does;
+  round 2 routed a parent timer's interrupt across contexts, and round 3 found it double-resolving
+  through a copied boundary frame, losing the handler under `Engine.Call`, and leaking a raw
+  interrupt. The owner-side rule has no cross-context interrupt at all, and also makes compute and
+  macro expansion inside `eval`, waits in host callbacks, and escapes' after thunks run the
+  handler. Round 4 found the abort route missing from `RunWithinBoundary` (a `with-timeout`
+  inside `eval` whose guard escape ran a waiting after thunk lost the handler) and a stale timer
+  claiming failures; both fixed and pinned. Pinned by `TestCancelledLockWaitRaisesOperationCancelled`,
+  `TestCaughtCancellationCleanupUnlockReturns`, `TestTimerCancelledWaitInChildThreadRaises`,
+  `TestTimerCancelledWaitInSubContextRunsHandler`, `TestTimerCancelledWaitIsNeverCaught`,
+  `TestTimerCancelledWaitInRootlessCallCCRunsHandler`, `TestTimerCancelledWaitInHostCallbackRunsHandler`,
+  `TestTimerExpiryDuringEvalComputeRunsHandler`, `TestTimerSupersedesFailureButNotDenial`,
+  `TestTimerInterruptNamesInnermostTimer`, `TestJoinReportsJoineeCancellationAsUncaught`,
+  `TestTimerCancelledWaitInAbortAfterThunkRunsHandler`, `TestOrdinaryErrorUnderArmedTimerIsCaught`,
+  `TestEmbedderDeadlineInsideArmedTimerRaises`, `TestStaleTimerClaimsNothing` and
+  `TestCancelledWaitInChildThreadIsCatchableThere`, `TestTimerClaimsAHandlerFailure` and
+  `TestTimerClaimsAnSRFI18ConditionBelowIt`, `TestTimerDoesNotClaimAControlTransfer` and
+  `TestEscapePastATimerLeavesItsExtent`, `TestReentryUnderATimerRewindsOutsideIt`,
+  `TestReentryIntoAnEndedTimerKeepsTheEnclosingOne`,
+  `TestAfterThunkEnteredBelowTheTimerStaysInsideIt`, `TestAfterThunkOutsideAFiredTimerKeepsItsGuard`,
+  `TestWindingThunkFailureOutsideAFiredTimerIsItsOwn`, `TestUnclaimedFailureIsClaimedByAnotherOwner`,
+  `TestStaleTimerDoesNotHideALiveOne`, `TestStaleTimerLeavesTheHandlersContinuation` and
+  `TestTimerClaimsAnApplySpreadFailureBelowIt`, with `TestWindingThunkFailureMarksOnlyUnderAFiredTimer`,
+  `TestWindingThunkFailureMarksForTheInnermostTimer`, `TestJudgedUnclaimedReadsEveryMark` and
+  `TestTimerContextAnswersItsOwnDeadline` in `pkg/machine`; every mutation tried (56) fails at
+  least one, the 24 of rounds 9 to 11 on the final code, and one perf-only reordering in
+  `windingThunkContext` fails none. Round 11 found no defect in behaviour; it corrected the record of the
+  open decision below and pinned the mark walk, the mark's timer and the deadline caching.
+  Round 10 found the unclaimed mark honoured by every context,
+  so a joiner's guard caught a joinee's end and a host's caller reported a failure as itself, but
+  only when the failing code's own timer had fired; it now answers for the marking context's
+  timers only. It also found the round-9 value layer doubling the deadline walk of every nested
+  `with-timeout` (2 to 4 times on loops leaving stale timers); the timer's context now answers its
+  own deadline, which also removes HEAD's walk. Nine mutations of round 7 to 9 code survived
+  every suite and are now pinned, and three new tests flaked under `-race` and load and now have
+  wide margins. **Open, for decision:** a frame entered outside a `with-timeout` and re-entered
+  inside it by a composable continuation (or a `call/cc` continuation reinstated at an inner
+  prompt). The thunks a winding reconcile runs for it (the before thunk, an after thunk on a later
+  escape) run outside the timer when the continuation is applied in the timer's own context, so
+  the timer does not bound them (HEAD cut them short); applied inside `eval`, `load` or a host
+  callback below the owner they run under it, as at HEAD; its after thunk on a normal exit runs
+  inline under the timer, as at HEAD. One rule either way: decide by the frame's position after
+  the transfer (bounds all of them), or also step out of the parent chain's timers (bounds none
+  of the reconcile thunks). The plan record (round 10) has the trade-offs.
+  Round 9 found a `dynamic-wind`
+  entered inside `load` matching no timer (`load` wraps the timed ctx, and the match was by
+  identity), so its after thunk ran outside the timer and could hang, now found through a
+  context value; an after thunk's uncaught failure outside a fired timer claimed by the driver
+  still inside that timer's extent (the handler ran, the escape was lost, the after thunk ran
+  twice; HEAD reported the failure), now marked unclaimed where it occurred; and the claim's
+  chain walk paid on every failure under an armed timer (about 30% on a guard loop), now only
+  once a timer fired. Round 8 found round 7's fix recording the entering context's own timer, which is
+  nil inside `eval` below the owner, so such a `dynamic-wind`'s after thunk ran outside the
+  timer whose extent it is in and its wait could hang; the frame now records the entry context
+  and resolves it against the armed timers. It also found a stale inner timer hiding a live
+  outer one (the outer handler never ran, and a handler below saw the cancellation; HEAD
+  reported `ErrInternal`), now skipped, and `apply`'s spread failures raised in place past the
+  rule, now bridged. Round 7 found an escape leaving a `with-timeout` through an enclosing `dynamic-wind`
+  running that `dynamic-wind`'s after thunk under the timer's context, where the rule lost the
+  escape to the timeout; winding thunks now run outside any timer armed since their
+  `dynamic-wind` was entered. Round 6 found `timerAbove` counting a
+  timer that had not fired (a stale timer below then drew an ordinary failure past the guards
+  between); fixed and pinned. Round 5 also found the drivers'
+  timer arms and `RunWithinBoundary`'s abort arm returning a handler's interrupt instead of
+  dispatching it, and the SRFI-18 raise-in-place sites (join condition, abandoned mutex)
+  bypassing the rule; all fixed and pinned.
+  **Still open, documented in `cancellation.md` *Boundaries*:** a `guard` that catches the raise
+  lets a cancelled program finish with a nil error, as does work that ends before the next VM
+  poll, and a timed `mutex-lock!` can acquire after a cancellation. Only a VM-wide end-of-run ctx
+  check (option (b)) closes the first two. The pre-existing defects the rounds found are filed
+  below, under *Cancellation and with-timeout residue*.
+- [x] **`RWMutex` and `Once` removed from the Scheme surface** [API/modeling, M, Done, deleted]: 12 primitives, `values.RWMutex`, `values.Once`, `werr.ErrNotARWMutex`, `werr.ErrNotAOnce`, and `finishBlockingSync`; `(wile gointerop)` is now the six `atomic` primitives. **A modeling decision, not a cleanup**: `gointerop` was publishing Go's shared-state model against the project's causal-chain orientation. Public API removal under the zero-consumer rule, as with `ChannelSelect`. Kept: SRFI-18 `mutex-*`/`condition-variable-*` and `atomic`. Traps: the plan's verification grep (hits only in `memory/`/`plans/`/CHANGELOG) was never satisfiable, since ~13 live `sync.RWMutex` struct fields remain; `ErrNotAOnce` was the sole pass-through-article row in `pkg/registry/helpers/args_test.go`, so that sentinel is now built inline to keep `typeNameFromSentinel`'s article path covered. `TestWithTimeoutInterruptsParkedRWMutex` was ported to `mutex-lock!`, not dropped: it is the only test spanning `callForeignCached`'s eager recheck and a primitive's error-free `#f`. Under an embedder deadline `mutex-lock!` returns `#f` and the VM's top-of-loop check surfaces `DeadlineExceeded`; no test covers that `cancellation.md` row. (**Both sentences superseded 2026-10-06 by P3.17:** no wait returns an error-free `#f` any more; a cancelled wait raises `ErrOperationCancelled` carrying the cause, pinned by `TestCancelledLockWaitRaisesOperationCancelled`, and the ported test now proves only the end-to-end composition.) Residual: `werr.ErrOperationCancelled` was left with no producer and a rewritten comment. **DECIDE:** delete it, or keep it for a future primitive that returns a value on success and so cannot borrow the error-free-`#f` convention. **MOOT (noted 2026-10-05): kept, and it has producers again**: `thread-sleep!` (`489cb89b`) and `thread-join!`, timed and untimed (`be0c6369`), raise it through `waitCancelled` (`extensions/threads/prim_threads.go`) and `Thread` join (`pkg/values/thread.go`); since P3.17 so do `mutex-lock!` and `(mutex-unlock! m cv)`.
 - [x] **`ChannelSelect` was complete, tested, CHANGELOG-cited, and registered nowhere** [API/dead-code, S–M, Done, deleted]: removed `ChannelSelect`, `SelectCase`, `SelectCaseKind`, `firstDeadCase`, and 8 `TestChannelSelect*` functions (~312 lines). Exported from `values/`, so a public API removal under the zero-consumer rule. Wiring it would have needed a ctx arm, not just `done` arms, or it reintroduces the T1.3 leak at a new site (a prototype confirmed 2N+1 arms are `-race`-clean, so the decision was never technical). Released CHANGELOG sections (1.18.0, 1.3.0) were not edited; a removal note and correction went into `[Unreleased]`. If a consumer appears: `reflect.Select` panics past 65536 cases and the list would come from Scheme, so it needs an arity guard.
 - [x] **Stale sub-context comment on `with-timeout`** [Docs, XS, **already fixed, closed
   2026-09-26**]: the row said `PrimWithTimeout`'s header described a fresh sub-context isolating
@@ -3413,7 +3503,251 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
   - **`thread-terminate!` discarded its own SRFI-18 end-exception** [Correctness, S, Done]: `Thread.Start`'s goroutine unconditionally overwrote the stored `TerminatedThreadException`, and `defer close(p.done)` ran last, so a joiner could never observe it; a thread parked in a tail-position receive was reported as having succeeded. This invalidated the design doc's claim that the ≈1024-op unwind window was itself the protection. Fix: a write-once outcome (`Thread.setOutcome`), first writer wins, which keeps SRFI-18's "if the thread is not already terminated". Prior coverage was vacuous (both tests asserted the `#t` literal they wrote). Guard: `extensions/threads/prim_threads_terminate_outcome_test.go`.
   - **`thread-join!` on a terminated but never-started thread blocked forever** [Correctness, S, Done]: `done` was closed only by the goroutine `Start` spawns. `Terminate` now closes it when ending a `ThreadNew` thread. The two closers are mutually exclusive because `Start` makes `ThreadNew → ThreadRunnable` under `p.mu` and refuses any other state, so no `sync.Once` is needed (a double close is a fatal host panic). Guards: `pkg/values/thread_lifecycle_test.go` (20000-trial `-race`) and `TestThreadTerminateNeverStartedThreadIsJoinable`, which joins with no timeout so a regression is an unbounded park rather than a misleading `JoinTimeoutException`.
 
-**One decision gates the deferred sub-item:** *is Option A a committed contract?* — see the rewritten row above. The second decision this line used to name, *is `channel-select` on the roadmap?*, is spent: `ChannelSelect` was deleted with the rest of the channel surface in 1.19.1.
+**The decision that gated the deferred sub-item is taken:** Option A is NOT the contract (P3.17, (c), 2026-10-06); see the row above. The second decision this line used to name, *is `channel-select` on the roadmap?*, is spent: `ChannelSelect` was deleted with the rest of the channel surface in 1.19.1.
+
+
+### Cancellation, with-timeout and continuation residue (found by the P3.17 verification rounds, 2026-10-06 and 07)
+
+Each open row was reproduced on HEAD `4c695231` as well as on the P3.17 branch, so none is caused by
+P3.17, though P3.17 changes the symptom of some (each such row says how). The shapes below are
+enough to rebuild the probes.
+
+- [ ] **An escape past a `with-timeout` leaves its timer armed** [Correctness, M]: only the finalizer
+  frame and `resolveTimerInterrupt` restore `p.timer`/`p.ctx` (`run_body_under_timer.go`); a `guard`
+  catching a raise outside the thunk, or a `call/cc` escape, discards the finalizer without running
+  it. When the stale timer fires, the next poll, recheck or wait emits an interrupt whose boundary is
+  gone and the root driver returns `ErrInternal` ("no boundary frame found for fired timer").
+  `(define r (guard (e (#t 'caught)) (with-timeout 100 (lambda (k) 'h) (lambda () (raise 'x)))))`
+  then any 200 ms of work, in the same evaluation unit (one form, or an `EvalProgram` unit such as
+  a file run; separate `EvalMultiple` forms and REPL inputs each start a fresh context). Fix shape: tie the teardown to the boundary frame leaving the chain.
+  Since P3.17 a stale timer claims no failure and hides no live timer outside it
+  (`liveFiredTimer`, `TestStaleTimerClaimsNothing`, `TestStaleTimerDoesNotHideALiveOne`), so a
+  primitive's own failure is reported as itself; but the stale timer's done ctx still cancels
+  every later wait in the unit, which now raises a cancellation carrying `ErrTimerExpired` where
+  HEAD reported `ErrInternal`, and a poll or recheck still reports `ErrInternal`. An `eval` that
+  expands after the stale timer fired reports a raw "context deadline exceeded" from the expander.
+- [x] **The VM poll, both eager rechecks and the expander read only the running context's timer**
+  [Correctness, M, Done 2026-10-06 in P3.17, not yet merged]: a with-timeout expiry during compute
+  or macro expansion inside `eval`/`load` (a sub-context: timed ctx, no timer) surfaced as a raw,
+  catchable `context.DeadlineExceeded` and the handler never ran. Those checks still read only the
+  running context's timer, and that is now enough: the raw error returns through `eval` to the
+  context that owns the timer, whose owner-side rule (`supersedingTimerInterrupt`) turns it into the
+  timeout. Pinned by `TestTimerExpiryDuringEvalComputeRunsHandler`.
+- [ ] **Resuming a `with-timeout` handler's `k` re-dispatches a foreign call with drained operands,
+  and after a poll interrupt overwrites a live value** [Correctness, S–M]: a foreign-call interrupt
+  leaves `callForeignCached` before the call's frame is restored, with `evals` drained and pc on the
+  call, so `(k v)` fails with "expected 1 arguments, got 0" (intermittently, inside `eval` or out, a
+  stack underflow reported as `ErrInternal`). After a POLL interrupt `(k v)` resumes, but `v`
+  replaces the operand the next instruction consumes and `(k)` clears it: `resolveTimerInterrupt`
+  does not stash the value register, which `resolveBreakInterrupt` does (`breakResumeValues`).
+  `(with-timeout 20 (lambda (k) (k 0)) (lambda () (let loop ((i 0) (acc 0)) (if (< i 3000000)
+  (loop (+ i 1) (+ acc 1)) acc))))` returns a wrong `acc` with no error in up to 1 run in 4; HEAD
+  too. No test resumes `k`. Decide: deliver `v` as the call's result and replay the stashed values
+  after a poll, or document `k` as not resumable and raise a clear error.
+- [ ] **Which timer fired is not recorded** [Design, M]: every `with-timeout` cancels with the one
+  `ErrTimerExpired`, so the innermost context that owns a timer answers any expiry: an outer
+  timer's runs an inner handler early, and a starter thread's runs a started thread's own
+  (unexpired) `with-timeout` handler. (In a busy loop the poll that interrupts runs before
+  `OpsExecuted` advances, so that handler is cut off at its first instruction instead, and a
+  started thread dies with a raw "context deadline exceeded".) Documented in `cancellation.md`. Fix shape: a per-timer cause
+  carrying the boundary `Tag` (`errors.Is(ErrTimerExpired)` still true), matched in
+  `supersedingTimerInterrupt`, the poll, the rechecks and `resolveTimerInterrupt`.
+- [ ] **A joinee killed at the VM poll is classified differently from one killed in a wait, and the
+  uncaught-exception carrier hides the cause** [Correctness, S–M]: a busy joinee dies with the raw
+  ctx error, which `joinConditionFor` does not map, so the joiner's guard sees an ordinary error
+  object (the arm for the JOINER's cancellation); a parked joinee yields `uncaught-exception`. And
+  for every joinee error, `ErrExceptionEscape.Unwrap` returns nil for a `values.UncaughtException`,
+  so `errors.Is(err, werr.ErrOperationCancelled)` / `context.Canceled` fail at the embedder (Error
+  Chains: Lossless and Traversable). Fix the chain first, then map every remaining
+  `UncaughtThreadException` to `uncaught-exception`; doing it in the other order loses the cause.
+- [ ] **A zero or elapsed timeout under cancellation picks at random in `thread-sleep!` and
+  `thread-join!`** [Correctness, S]: both `select` a ready timer arm against a ready ctx arm, so
+  `(thread-join! t 0 'tv)` in a cancelled thread returns `'tv` about half the time; the lock waits
+  now raise every time. Fix shape: check `mc.Context().Err()` before honouring the timer arm.
+- [ ] **Joining a thread terminated inside a timed `mutex-lock!` blocks for up to the timeout**
+  [Correctness, S]: `Join`'s fast path watches only `done`, which closes when the goroutine exits,
+  and the timed `LockContext` path does not watch ctx. Fix shape: make the timed path ctx-aware
+  (the timed-`mutex-lock!` row below). Returning a stored `TerminatedThreadException` before the `select` is not
+  enough: it misses a joiner already parked, and breaks the "a join implies the goroutine exited"
+  guarantee `TestTerminateUnparksBlockedSyncPrimitive` relies on.
+- [ ] **A cancelled waiter can swallow a wakeup meant for another** [Correctness, S]: `waitOnCondCtx`
+  returns false when the cancel lands just after `cond.Wait` woke it for an unlock's `Signal`, and
+  `LockContext` returns without passing the signal on, so another untimed waiter stays parked on an
+  unlocked mutex. Window is a few instructions (1 hit in 20 000 stress trials). Fix: re-`Signal`
+  when returning false with the mutex free. Coordinate with `plans/2026-08-01-srfi18-sequencer-design.md`,
+  which keeps a `Signal` lost wakeup in the same lines unfixed as its Phase-4 acceptance test.
+- [ ] **An escape reconciled by the top driver runs a sub-context timer's after thunks outside its
+  timed ctx** [Correctness, M]: with the `with-timeout` itself inside `eval`, an escape inside the
+  thunk is re-raised to the top `RunResumable`, whose winding reconcile runs the after thunks on
+  the top context's ctx, not the timed one, so a wait in an after thunk is never cancelled by the
+  timer and hangs (a 10 s `thread-sleep!` sleeps its full 10 s).
+  `(eval '(with-timeout 50 h (lambda () (call/cc (lambda (k0) (dynamic-wind (lambda () #f)
+  (lambda () (k0 'escaped)) (lambda () (mutex-lock! m)))))))) env)` with `m` held.
+- [ ] **A rootless `call/cc` or `call-with-composable-continuation` sub-context runs its parent's
+  dynamic-wind after thunks when it completes** [Correctness, S–M]: `NewSubContext` copies the
+  parent's winding stack and `RunResumable`'s normal completion runs `UnwindTo(0)`, so every
+  enclosing extent's after thunk fires there and again when the parent exits. A thread root, which
+  copies its starter's winding stack, does the same at thread exit. Fix shape: on a sub-context or
+  thread root, unwind on completion only to the inherited depth.
+- [ ] **A call/cc continuation reinstated by an escape leaves its parameterization sticky**
+  [Correctness, M]: `ReinstallSegment` sets the driver's `capturedMarks`/`isolatedMarks` and nothing
+  clears them when the reinstalled frames return, so a `parameterize` value outlives its extent for
+  the rest of the evaluation. Since P3.17 a `with-timeout` handler that runs because a wait in an
+  escape's after thunk was cancelled sees the escaping continuation's parameterization (before, the
+  handler never ran in that shape). Fix shape: scope the snapshot to the reinstalled segment.
+- [ ] **A library instantiation interrupted by a cancellation is memoized** [Correctness, S]:
+  `EnsureInstantiated` keeps the body's failure as the library's `instantiateErr`, so a body
+  stopped by an importer's `with-timeout` (or any ctx cancellation) makes every later import of
+  that library in the engine fail with the stale cancellation, and a guard cannot catch it (an
+  uncaught-condition carrier). Already so for a compute-bound body on HEAD; since P3.17 a body that
+  WAITS is cancelled too, where HEAD let its wait return and the body finish. Fix shape: do not
+  memoize a failure whose cause is a ctx cancellation.
+- [ ] **A guard catching a raise from a rootless `call/cc` inside an escape's after thunk fails
+  with "exit procedure called outside dynamic extent"** [Correctness, S–M]: no timer needed.
+  `(guard (e (#t 'caught)) (call/cc (lambda (k0) (dynamic-wind (lambda () #f) (lambda () (k0 'esc))
+  (lambda () (call/cc (lambda (k) (raise 'boom))))))))`; without the inner `call/cc` the guard
+  works. Cause: the inner `call/cc` is rootless, so it runs under `RunWithEscapeHandling`
+  (`RunResumable`), whose not-found abort arm mints "no prompt found" for the guard's exit tag, which
+  lives on the outer chain, instead of re-raising it as `RunWithinBoundary` does; the exit closure
+  has already set `valid=false` (`prim_exit.go`), so the guard's handler, catching the minted
+  condition, calls exit again and gets this message. Any abort to an outer tag from there fails the
+  same way: `(ex 'x)` under `call-with-exit` and `(abort-current-continuation t 'v)` under an
+  enclosing prompt report "no prompt found". Fix shape: on a sub-context (`parentMC != nil`),
+  re-raise a not-found abort to the enclosing driver. A stale timer's cancelled wait surfaces here
+  as this message.
+- [ ] **Applying a composable continuation runs the invoker's `dynamic-wind` after thunks**
+  [Correctness, M]: no timer involved, same on HEAD. `ReinstallSegment` reconciles the winding
+  stack to the captured one as an absolute target, so frames the invoker is inside are unwound.
+  With `kc` captured under a top-level prompt, `(dynamic-wind (lambda () (note 'in)) (lambda ()
+  (note (list 'kc-returned (kc 7))) (note 'body-done)) (lambda () (note 'out)))` logs
+  `(in out (kc-returned 8) body-done)` and then fails with `ErrInternal` "pop-wind: winding stack
+  is empty"; Racket logs `(in (kc-returned 8) body-done out)`. A `call/cc` continuation reinstated
+  at an inner prompt likewise unwinds the frames outside that prompt. Fix shape: compose the
+  segment's frames onto the invoker's stack, as composable resume composes marks. Re-entered
+  thunks also see neither the invoker's handlers nor its `parameterize`: a `raise` in a before
+  thunk re-run by `(kc 1)` escapes a `guard` around `(kc 1)` (Racket catches it). The open timer
+  decision in the I050 row sits on this.
+- [ ] **`resolveTimerInterrupt` does not reset the live marks** [Correctness, S]: the hard
+  suspension restores the chain and winding stack to the boundary's but leaves `p.marks`, so a
+  `parameterize` in tail position of the thunk is visible to the handler, and so is a
+  `with-exception-handler`: one in tail position of the thunk catches the timeout handler's own
+  `raise-continuable` (`(inner-weh from-handler)`; non-tail, the outer guard does). HEAD too. Fix
+  shape: `p.marks = nil` after `p.windingStack = boundary.windingStack`. `resolveBreakInterrupt`
+  leaves them too, which a debugger handler may want.
+- [ ] **A cancelled program can still finish with a nil error** [Correctness, M]: a `guard` that
+  catches a cancelled wait's raise and finishes, work that ends before the next 1024-op poll, and
+  an uncontended `mutex-lock!` (which acquires without waiting) all return normally after the
+  embedder cancelled. The residual of I050 option (b): only a VM-wide end-of-run ctx check closes
+  it (`cancellation.md`, *Boundaries*).
+- [ ] **The timed `mutex-lock!` path ignores its context** [Correctness, S–M]: `Mutex.LockContext`'s
+  timed branch (`pkg/values/mutex.go`) never reads ctx, so `(mutex-lock! m T)` parks for up to `T`
+  after a cancellation and can acquire and answer `#t`; under a 50 ms `with-timeout` the handler
+  runs only when a 2 s timed wait ends, and under an embedder cancel the wait raises after 2 s.
+  Below the timer's owner the code after a late acquire runs until the next poll
+  (`cancellation.md`, *Boundaries*). Fix shape: select the timed wait against `ctx.Done()`; this
+  also fixes the join stall above.
+- [ ] **`error`'s own argument failure below a fired `with-timeout` reaches a `guard`**
+  [Correctness, S]: `PrimError`'s non-string-message branch (`pkg/registry/core/prim_exceptions.go`)
+  calls `RaiseInPlace` with the `ErrNotAString` condition without asking `FailureClaimedByTimer`,
+  so inside `eval`/`load` after the timer fired a guard sees `(error 5)`, while the same class of
+  failure from `car` or `apply` is claimed. Unchanged from HEAD, where both reached the guard;
+  P3.17 claims every other primitive failure there. `raise`, `raise-continuable` and a well-formed
+  `error` are exempt by design (`FailureClaimedByTimer`'s doc). Fix shape: return the condition,
+  or ask `FailureClaimedByTimer` first as `thread-join!` does; pin beside
+  `TestTimerClaimsAnApplySpreadFailureBelowIt`.
+- [ ] **A handler the driver applies itself escapes every `guard` when its application fails**
+  [Correctness, S]: `resolveTimerInterrupt` and `resolveAbort` (`pkg/machine/machine_context.go`)
+  apply the `with-timeout` handler and the prompt handler with `ApplyCallable`; its arity failure
+  never reaches `bridgeForeignError`, and the timer and abort arms of `RunResumable` return it raw
+  unless it is a control signal or a fired outer timer claims it. `(guard (e (#t 'caught))
+  (with-timeout 20 (lambda () 'x) (lambda () (expt 3 6000000))))` and `(guard (e (#t 'caught))
+  (call-with-continuation-prompt (lambda () (abort-current-continuation t 1 2)) t (lambda (x) x)))`
+  reach the embedder as "expected N arguments, got M" with no location; inside `eval` both are
+  caught. HEAD too. Fix shape: send the arms' non-control failure through `bridgeForeignError`.
+- [ ] **The VM poll returns `ctx.Err()`, dropping the cause and the location** [Correctness, S]:
+  `MachineContext.Run`'s top-of-loop check returns the bare `mc.ctx.Err()`, where a parked wait wraps
+  `context.Cause` in `ErrOperationCancelled`. Under a ctx cancelled by `WithCancelCause` with
+  `context.DeadlineExceeded`, a parked `(mutex-lock! m)` reports "...cancelled before the wait
+  completed: context deadline exceeded" at its source position, while `(let loop ((i 0)) (loop (+ i
+  1)))` reports "runtime error: context canceled" with `errors.Is(DeadlineExceeded)` false and no
+  position. HEAD too. Fix shape: wrap the cause and `ctx.Err()` through `WrapError`, located.
+- [ ] **`condition-variable-signal!` right after `thread-terminate!` of a waiter wakes no one**
+  [Correctness, S]: `Thread.Terminate` (`pkg/values/thread.go`) cancels the waiter's ctx and returns
+  while its channel is still in the cv's wait set, so `ConditionVariable.Signal` closes the dead
+  waiter's channel and the live waiter behind it stays parked (`blockOnWaiter`'s ctx arm then
+  answers `#t` to the dead thread). Waiters `a` then `b` in a `(mutex-unlock! m cv)` loop; set the
+  predicate, `(thread-terminate! a)`, `(condition-variable-signal! cv)`: `b` parked 20/20, woken
+  20/20 with a 10 ms sleep before the signal. HEAD too. Deterministic, unlike the swallowed-wakeup
+  row. Fix shape: `Signal` skips a waiter whose ctx is done.
+- [ ] **`process-wait` ignores its context's cancellation** [Correctness, S–M]: `PrimProcessWait`
+  (`extensions/process/prim_process.go`) blocks in `values.Process.Wait` and never reads
+  `mc.Context()`. A child spawned under the same ctx is killed by `exec.CommandContext` and the wait
+  answers `-1` with no error (a `guard` never fires; a program ending in it finishes nil after its
+  deadline). A child spawned under another ctx (an earlier `Eval`, or before a `with-timeout`) is
+  not killed, so the wait parks until it exits: 3 s under a 300 ms deadline, and a `with-timeout 50`
+  handler runs after 2 s. HEAD too. Fix shape: select against `ctx.Done()` and raise
+  `ErrOperationCancelled` with the cause, as the SRFI-18 waits do; decide whether cancellation
+  kills the child.
+- [ ] **A thread started inside a `with-timeout` thunk is cancelled when the thunk returns**
+  [Design, S]: `Thread.Start` (`pkg/values/thread.go`) derives the thread's ctx from the timer's,
+  and the finalizer's `cancel()` ends it, so a thread that outlives a thunk that returned normally
+  dies with "uncaught exception in thread: context canceled". HEAD too; `cancellation.md` lists it
+  as a cancellation source without saying it is intended. Decide: keep it and pin it, or give the
+  thread a ctx the expiry cancels but a normal return does not.
+- [ ] **A continuation captured and invoked inside `eval`, `load`, a `call-with-*-file` procedure or
+  a library body discards the caller** [Correctness, M]: no timer involved, same on HEAD. `eval` and
+  `load` drive their sub-context with `RunWithinBoundary`, which re-raises every
+  `ErrResumeContinuation`, and a library body runs under a bare `mc.Run()`
+  (`vmMacroEvaluator.EvalTemplate`); the top `RunResumable` then installs the captured segment,
+  which ends at that boundary, as its whole chain. `(+ 100 (eval '(call/cc (lambda (k) (k 1)))
+  (interaction-environment)))` answers `1` (Chez, Racket: `101`); in `load` the rest of the file and
+  the caller are skipped; a library body `(define z (+ 1 (call/cc (lambda (k) (k 41)))))` imported
+  through `eval` makes the program answer `#<void>`; a thread thunk loses its tail.
+  `call-with-exit`, and a `k` captured outside `eval` and invoked inside, are correct.
+  `TestSubContextNonTailEscapeTruncation` (the 2026-06 boundary-reification arc) has no row for
+  these primitives. Fix shape: resolve a resume rooted on the sub's own chain in its driver, or run
+  them on the live chain as `force` now is.
+- [ ] **Code in a sub-context cannot see its parent's prompts** [Correctness, M]: `FindPrompt`
+  (`pkg/machine/machine_context_continuation.go`) walks the running context's chain and its own
+  `promptTag`, never `parentMC`, so `eval`'d code and the winding thunks a reconcile runs on a
+  sub-context find no enclosing prompt: `(eval '(continuation-prompt-available?
+  (default-continuation-prompt-tag)) (interaction-environment))` is `#f` (`#t` outside), and
+  `call-with-composable-continuation` there or in an escape's after thunk fails "no prompt found
+  for tag"; Racket answers `#t` and captures. `abort-current-continuation` works. HEAD too. Fix
+  shape: continue the lookup through `parentMC`; capturing across the boundary is the harder half.
+- [ ] **A continuation invoked from a rootless `call/cc` in an escape's after thunk runs the rest of
+  the program, then the escape runs it again** [Correctness, M]: a `call/cc` in tail position of a
+  winding thunk sees `mc.Parent() == nil`, so `PrimCallCC` (`pkg/registry/core/prim_control.go`)
+  runs its lambda on a fresh sub-context under `RunWithEscapeHandling`, whose resume arm grafts the
+  outer continuation onto the sub's own chain and runs it to completion; the escape in flight then
+  delivers too. `(note (call/cc (lambda (ex) (call/cc (lambda (k0) (dynamic-wind (lambda () #f)
+  (lambda () (k0 'escaped)) (lambda () (call/cc (lambda (k) (ex 'exited))))))))))` logs
+  `(exited escaped)`; Chez logs `exited`. A non-tail `call/cc` there is correct. HEAD too. Shares
+  its cause with the exit-procedure row above. Fix shape: a rootless sub-context with a
+  `parentMC` re-raises a resume whose target is not on its own chain.
+- [ ] **A `guard` that catches a raise fails in a library body or a procedural macro transformer**
+  [Correctness, S–M]: both run a root context under a bare `mc.Run()` (`EvalTemplate`,
+  `invokeTransformerClosure` in `pkg/machine/macro_evaluator.go`), which resolves no prompt abort,
+  so `guard`'s exit fails with "abort-current-continuation: no prompt found for tag
+  #<continuation-prompt-tag:exit>". Shapes: a body `(define g (guard (e (#t 'guarded)) (raise
+  'boom)))`; `(er-macro-transformer (lambda (f r c) (guard (e (#t 42)) (raise 'boom))))` with
+  `(for-syntax (scheme base))` imported. A guard with no raise, or one in an exported procedure
+  called at run time, works. HEAD too. Fix shape: drive these roots with `RunWithinBoundary`.
+- [ ] **A library body's uncaught raise escapes a `guard` around the import** [Correctness, S]: the
+  raise leaves `EvalTemplate` as an `ErrExceptionEscape`, a control signal `applyCallableError`
+  passes through (`isControlSignal`, `foreign_closure.go`), so `(guard (e (#t 'caught)) (eval
+  '(begin (import (lib raiser)) x) env))` hands `boom` (body `(define x (raise 'boom))`) or a `car`
+  error to the embedder. HEAD too; the memoized-instantiation row meets this path only for a
+  cancellation. Fix shape: turn an uncaught escape from a library body into a condition at the
+  import.
+- [ ] **A host function that forwards an `Engine.Call` failure makes it uncatchable**
+  [Correctness, S–M]: an uncaught failure in the callee root leaves `RunWithEscapeHandling` as an
+  `*ErrExceptionEscape`; `Engine.callCallable` wraps it in a `RuntimeError` whose `Unwrap` keeps it,
+  and the caller's `applyCallableError` passes it through as a control signal. `(guard (e (#t
+  'caught)) (host-call (lambda () (raise 'boom))))`, with `host-call` returning `engine.Call`'s
+  error, ends the evaluation with `boom` (likewise for `car`, `error` and `with-exception-handler`);
+  a host returning its own error is caught. HEAD too; `thread-join!` already turns a joinee's
+  uncaught condition into a catchable one. Fix shape: re-raise `escape.Condition` in the caller.
 
 ### FCA-Derived
 

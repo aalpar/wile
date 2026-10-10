@@ -80,6 +80,7 @@ func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 	// not leak into the after thunk on an escape/reconcile.
 	frame := NewDynamicWindFrame(before, after)
 	frame.entryMarks = mc.collectReachableMarks()
+	frame.entryCtx = mc.ctx
 	mc.PushWindingFrame(frame)
 
 	mc.pc++

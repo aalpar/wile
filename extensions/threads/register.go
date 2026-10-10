@@ -74,7 +74,7 @@ func addThreads(r *registry.PrimitiveRegistry) error {
 			Doc: "Voluntarily yields the current thread to the Go scheduler.", Category: "threads",
 			ReturnType: values.TypeVoid},
 		{Name: "thread-sleep!", ParamCount: 1, Impl: PrimThreadSleep,
-			Doc: "Suspends the current thread. A number is a duration in seconds; a time object is an absolute wake-up instant (already-past times return immediately).", ParamNames: []string{"timeout"}, Category: "threads",
+			Doc: "Suspends the current thread. A number is a duration in seconds; a time object is an absolute wake-up instant (already-past times return immediately). The wait is cancellable: if this thread is terminated, or the engine context is cancelled, it raises an ordinary error object; a with-timeout in this thread runs its handler instead.", ParamNames: []string{"timeout"}, Category: "threads",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeVoid},
 		{Name: "thread-terminate!", ParamCount: 1, Impl: PrimThreadTerminate,
@@ -86,7 +86,7 @@ func addThreads(r *registry.PrimitiveRegistry) error {
 		// installed handler INLINE on the live chain. Costs a deopt on every call; a
 		// blocking join is not a site where frame reclaim pays.
 		{Name: "thread-join!", InvokesProcedure: true, ParamCount: 2, IsVariadic: true, Impl: PrimThreadJoin,
-			Doc: "Waits for THREAD to complete and returns its result. Optional TIMEOUT and default value. Raises a join-timeout-exception if TIMEOUT is reached and no default was supplied, a terminated-thread-exception if THREAD died via thread-terminate!, or an uncaught-exception (whose uncaught-exception-reason is the original condition) if it died via an uncaught exception. The wait is cancellable: if the JOINING thread is itself terminated, or the engine context is cancelled, the join raises an ordinary error object rather than parking forever; inside a with-timeout it runs the handler.", ParamNames: []string{"thread", "timeout"}, Category: "threads",
+			Doc: "Waits for THREAD to complete and returns its result. Optional TIMEOUT and default value. Raises a join-timeout-exception if TIMEOUT is reached and no default was supplied, a terminated-thread-exception if THREAD died via thread-terminate!, or an uncaught-exception (whose uncaught-exception-reason is the original condition) if it died via an uncaught exception. The wait is cancellable: if the JOINING thread is itself terminated, or the engine context is cancelled, the join raises an ordinary error object rather than parking forever; a with-timeout in this thread runs its handler instead.", ParamNames: []string{"thread", "timeout"}, Category: "threads",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "thread-state", ParamCount: 1, Impl: PrimThreadState,
 			Doc: "Returns THREAD's state as a symbol: new, runnable, blocked, or terminated. Not SRFI-18; follows Gambit.", ParamNames: []string{"thread"}, Category: "threads",
@@ -136,11 +136,11 @@ func addMutexes(r *registry.PrimitiveRegistry) error {
 		// InvokesProcedure: acquiring an abandoned mutex signals through
 		// machine.RaiseInPlace, same live-chain handler run as thread-join! above.
 		{Name: "mutex-lock!", InvokesProcedure: true, ParamCount: 2, IsVariadic: true, Impl: PrimMutexLock,
-			Doc: "Locks MUTEX, blocking until acquired. Optional TIMEOUT and owner (thread or #f for unowned). Acquiring a mutex abandoned by a terminated owner returns #t and additionally signals an abandoned-mutex exception.", ParamNames: []string{"mutex", "timeout"}, Category: "mutexes",
+			Doc: "Locks MUTEX, blocking until acquired. Optional TIMEOUT and owner (thread or #f for unowned). Acquiring a mutex abandoned by a terminated owner returns #t and additionally signals an abandoned-mutex exception. The untimed wait is cancellable: if this thread is terminated, or the engine context is cancelled, it raises an ordinary error object rather than parking forever; a with-timeout in this thread runs its handler instead. A timed wait notices a cancellation only when TIMEOUT elapses, and acquires if the mutex frees first.", ParamNames: []string{"mutex", "timeout"}, Category: "mutexes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny},
 			ReturnType: values.TypeBoolean},
 		{Name: "mutex-unlock!", ParamCount: 2, IsVariadic: true, Impl: PrimMutexUnlock,
-			Doc: "Unlocks MUTEX. Optional condition variable to wait on after unlocking, with optional timeout.", ParamNames: []string{"mutex", "condvar"}, Category: "mutexes",
+			Doc: "Unlocks MUTEX. Optional condition variable to wait on after unlocking, with optional timeout; the wait returns #t if signalled and #f if TIMEOUT elapsed first. The wait, timed or untimed, is cancellable: if this thread is terminated, or the engine context is cancelled, it raises an ordinary error object; a with-timeout in this thread runs its handler instead.", ParamNames: []string{"mutex", "condvar"}, Category: "mutexes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny},
 			ReturnType: values.TypeBoolean},
 	}, registry.PhaseSetRuntime)

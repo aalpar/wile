@@ -243,14 +243,13 @@ func (p *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
 //
 // ctx cancellation unparks the untimed wait so a thread blocked here is reaped by
 // thread-terminate! rather than stalling on a bare cond.Wait. A cancelled acquire
-// surfaces to mutex-lock! as #f, error-free: the timed form already spends #f on
-// "did not acquire", so cancellation needs no separate channel and no manufactured
-// error. Error-free is the load-bearing half. callForeignCached's eager
-// ErrTimerExpired recheck runs only on the error-free return path, so a wrapping
-// with-timeout gets its handler run without this call site having to special-case
-// the cancellation source (docs/concurrency/cancellation.md, "wait side vs held
-// side"). The held side is untouched: a terminated holder's lock stays held
-// (abandonment is a separate, owner-driven path via MarkAbandoned).
+// returns (false, nil) with the lock not held, and that is all this layer says:
+// how a cancellation surfaces depends on its SOURCE, which only the VM's timer
+// state can resolve. mutex-lock! reads the ctx and routes it through
+// waitCancelled (extensions/threads; docs/concurrency/cancellation.md, "wait
+// side vs held side"). The held side is untouched: a
+// terminated holder's lock stays held (abandonment is a separate, owner-driven
+// path via MarkAbandoned).
 func (p *Mutex) LockContext(ctx context.Context, timeout *time.Duration, owner *Thread) (bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

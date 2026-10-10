@@ -119,6 +119,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A `with-timeout` that fires while `eval`, `load`, a `RegisterFunc` callback or
+  an escape's after thunk is running now runs its handler, and nothing after the
+  interrupted point runs.** (A procedure a host function runs through `Engine.Call`
+  is not linked to the caller's chain, so a guard inside it still sees the
+  cancellation; the handler runs once control is back with the timer's owner,
+  which inside `eval` or `load` is when that returns or at its next poll or wait.) A timer-cancelled wait returned error-free and relied
+  on the VM's recheck after the foreign call, which reads only the calling
+  context's own timer; a sub-context shares the timed context but not the timer,
+  so the eval'd code ran on past the wait (past a `mutex-lock!` that had not
+  acquired) before the handler ran, and compute or macro expansion inside `eval`
+  reported "context deadline exceeded" with the handler never run. Now every wait
+  raises, a sub-context passes a timer's failure up without dispatching it to any
+  exception handler, and the context that owns the timer turns any failure that
+  reaches it after the timer fired into the timeout. A security denial is the
+  exception: it still reaches the embedder. Pinned by
+  `TestTimerCancelledWaitInSubContextRunsHandler`,
+  `TestTimerCancelledWaitIsNeverCaught`,
+  `TestTimerCancelledWaitInRootlessCallCCRunsHandler`,
+  `TestTimerCancelledWaitInAbortAfterThunkRunsHandler`,
+  `TestTimerCancelledWaitInHostCallbackRunsHandler`,
+  `TestTimerExpiryDuringEvalComputeRunsHandler`,
+  `TestUnclaimedFailureIsClaimedByAnotherOwner` and
+  `TestTimerSupersedesFailureButNotDenial`.
+
+- **A `dynamic-wind` that encloses a `with-timeout` runs its thunks outside the
+  timer.** An escape leaving the `with-timeout` through the `dynamic-wind` ran the
+  after thunk under the timer's context, so a wait there was cut short when the
+  timer fired; a re-entry from inside a later `with-timeout` did the same to the
+  before thunk. R7RS §6.10 runs the thunks in the dynamic environment of the
+  `dynamic-wind` call, which the timer is not part of. That includes a frame a
+  composable continuation re-enters inside a `with-timeout`, when the
+  continuation is applied in the timer's own context: the timer does not bound its
+  before thunk, which it used to cut short. A `dynamic-wind` entered
+  inside the timer, including inside `eval` or `load`, still runs its thunks
+  under it. Pinned by `TestEscapePastATimerLeavesItsExtent`,
+  `TestReentryUnderATimerRewindsOutsideIt` and
+  `TestAfterThunkEnteredBelowTheTimerStaysInsideIt`.
+
+- **`thread-join!` reports a joinee that died of a cancelled wait as an uncaught
+  exception.** It read any `ErrOperationCancelled` in the join's error as the
+  joiner's own cancellation, including one inside the joinee's outcome, and raised
+  "thread-join!: cancelled before the wait completed" from a joiner nobody had
+  cancelled. Pinned by `TestJoinReportsJoineeCancellationAsUncaught`.
+
 - **An `(import …)` form binds everything or nothing.** Each import set used to
   install in turn, name by name, and a conflict or a missing library returned
   midway, leaving the form's earlier sets and part of the failing one bound: after
@@ -339,6 +383,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `let` — are affected and all five now report the structural error.
 
 ### Changed
+
+- **BREAKING (cancellation only): a cancelled blocking wait raises instead of
+  answering a value.** `mutex-lock!` and `(mutex-unlock! m cv)` now raise
+  `ErrOperationCancelled`, carrying the raw ctx cause, when the embedder's context
+  or `thread-terminate!` cancels them, as `thread-sleep!` and `thread-join!`
+  already did. They used to answer `#f`, indistinguishable from a failed timed
+  acquire; when the wait was a program's last form the embedder received `#f` and
+  a nil error after its own deadline had expired. A thread started inside a
+  `with-timeout` thunk, with no `with-timeout` of its own, now raises at any of
+  the four waits when that thunk's timer fires, and at a lock wait when the thunk
+  returns; it used to carry on past the wait in those cases, past a `mutex-lock!`
+  that had not acquired. (`thread-sleep!` and `thread-join!` already raised when
+  the thunk returned.) A `guard` around the wait sees an error object where it saw
+  `#f`, and a join on such a thread raises an uncaught exception whose reason is
+  the wait's error. A thread that does arm its own `with-timeout` still runs that
+  handler when its starter's timer fires, because the cause does not say which
+  timer fired. Pinned by `TestCancelledLockWaitRaisesOperationCancelled` and
+  `TestTimerCancelledWaitInChildThreadRaises`.
 
 - **BREAKING: `equal-hash`, `string-hash` and `symbol-hash` are no longer bound
   at phase 1 without an import.** `(rnrs hashtables)` now exports all four R6RS

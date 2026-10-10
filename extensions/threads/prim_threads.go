@@ -214,32 +214,24 @@ func PrimThreadSleep(mc machine.CallContext) error {
 }
 
 // waitCancelled reports a blocking primitive in this extension whose context was
-// cancelled before the wait completed. Which of the two outcomes applies is
-// decided by the cancellation SOURCE, and the two callers — thread-sleep! and
-// thread-join! — need it for the same reason: neither has a spare value channel.
-// thread-sleep! returns Void; thread-join! returns the joined thread's result.
-// mutex-lock!, whose #f already means "did not acquire", needs none of this.
+// cancelled before the wait completed. All four waits route through it
+// (thread-sleep!, thread-join!, mutex-lock! and (mutex-unlock! m cv)), and the
+// rule is one: raise ErrOperationCancelled, with the raw ctx cause retained so a
+// host can still tell context.Canceled from context.DeadlineExceeded.
 //
-//   - Timer expiry (with-timeout). Return error-free. callForeignCached's eager
-//     ErrTimerExpired recheck runs only on the error-free foreign return, and it
-//     is what raises the ErrTimerInterrupt that dispatches the with-timeout
-//     handler. Returning an error here instead routes through
-//     applyCallableError, which turns it into an ordinary Scheme condition: with
-//     no guard the whole evaluation aborts and the handler never runs, which was
-//     the defect in both primitives. The Void is never observed — the interrupt
-//     discards it.
-//   - Anything else (the embedder cancelled the engine context, thread-terminate!
-//     cancelled THIS thread). Report ErrOperationCancelled, with the raw ctx cause
-//     retained so a host can still tell context.Canceled from
-//     context.DeadlineExceeded. thread-sleep! used to return ctx.Err() raw, which
-//     handed the embedder an error carrying no sentinel to match on.
+// The wait does not ask what cancelled it. When a with-timeout timer did, the
+// VM's owner-side rule (supersedingTimerInterrupt in pkg/machine) turns the
+// failure into the timer's interrupt before any exception handler sees it, so the
+// handler runs and nothing after the wait does. A thread started inside a timed
+// thunk with no with-timeout of its own has no timer on its chain, so its wait
+// simply raises. The lock waits used to answer #f here and the other two returned
+// error-free under a timer, leaning on callForeignCached's eager recheck; that
+// recheck runs only in the timer's own context, so a wait in a thread or a
+// sub-context carried on past itself, past a mutex-lock! that had not acquired,
+// and a lock wait that ended a program handed the embedder #f and a nil error
+// after its own cancellation.
 func waitCancelled(mc machine.CallContext, site string) error {
-	cause := context.Cause(mc.Context())
-	if errors.Is(cause, machine.ErrTimerExpired) {
-		mc.SetValue(values.Void)
-		return nil
-	}
-	return werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, cause,
+	return werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, context.Cause(mc.Context()),
 		"%s: cancelled before the wait completed", site)
 }
 
@@ -305,10 +297,16 @@ func PrimThreadJoin(mc machine.CallContext) error {
 	// fourth arrives as an ordinary error-object, because ErrOperationCancelled is
 	// a Go sentinel with no SRFI-18 condition to name it — SRFI-18 has none, the
 	// spec never contemplated a cancellable joiner. Under a with-timeout the
-	// fourth outcome does not reach the guard at all: waitCancelled returns
-	// error-free and the timer interrupt runs the handler instead, exactly as it
-	// does for a parked mutex-lock!.
-	if errors.Is(err, werr.ErrOperationCancelled) {
+	// fourth outcome does not reach the guard at all: the VM turns the raise into
+	// the timer's interrupt and the handler runs instead, exactly as it does for a
+	// parked mutex-lock!.
+	//
+	// Only Join's own cancellation counts. A joinee's outcome arrives wrapped in
+	// UncaughtThreadException, whose Unwrap lets errors.Is see a joinee that died
+	// of ITS cancelled wait, and reading that as the joiner's cancellation raised
+	// "cancelled before the wait completed" from a joiner nobody cancelled.
+	var joineeRaised *values.UncaughtThreadException
+	if errors.Is(err, werr.ErrOperationCancelled) && !errors.As(err, &joineeRaised) {
 		return waitCancelled(mc, "thread-join!")
 	}
 	if err != nil {
@@ -353,6 +351,13 @@ func raiseJoinCondition(mc machine.CallContext, err error, timeoutVal values.Val
 	realMC, mcErr := machine.RequireMachineContext(mc, "thread-join!")
 	if mcErr != nil {
 		return mcErr
+	}
+	// After a with-timeout on this chain fired, the joinee's end is a failure the
+	// timeout supersedes (the joinee may well have died of that timer): hand it back
+	// to the foreign-call bridge, which turns it into the timeout, rather than
+	// raising it where a guard below the timer would catch it.
+	if realMC.FailureClaimedByTimer(err) {
+		return err
 	}
 	return machine.RaiseInPlace(realMC, cond, false)
 }
@@ -498,7 +503,11 @@ var PrimMutexState = helpers.MakeUnaryAccessor(werr.ErrNotAMutex, "mutex-state",
 // (mutex-lock! mutex [timeout [thread]]) -> boolean
 // Returns #t if acquired, #f if timeout. Acquiring a mutex abandoned by a
 // terminated owner returns #t and additionally signals an abandoned-mutex
-// exception.
+// exception. A cancelled wait raises ErrOperationCancelled (waitCancelled); when a
+// with-timeout armed in this thread's chain fired, the VM turns the raise into the
+// timeout, run by the innermost with-timeout on the chain. A timed wait does not watch the context: it notices a
+// cancellation only when its timeout elapses, and acquires if the mutex frees
+// first.
 func PrimMutexLock(mc machine.CallContext) error {
 	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, werr.ErrNotAMutex, "mutex-lock!")
 	if err != nil {
@@ -549,6 +558,12 @@ func PrimMutexLock(mc machine.CallContext) error {
 	}
 
 	acquired, err := mutex.LockContext(mc.Context(), timeout, owner)
+	// An untimed acquire fails only on cancellation. A timed one that timed out
+	// while the ctx was also cancelled is reported as the cancellation: the
+	// program is being torn down either way.
+	if !acquired && mc.Context().Err() != nil {
+		return waitCancelled(mc, "mutex-lock!")
+	}
 	if err != nil {
 		// SRFI-18: "After changing the state of the mutex, an abandoned mutex
 		// exception is raised if the mutex was abandoned before the state change."
@@ -565,6 +580,11 @@ func PrimMutexLock(mc machine.CallContext) error {
 			if mcErr != nil {
 				return mcErr
 			}
+			// As for a join condition: after a with-timeout on this chain fired, the
+			// timeout supersedes the abandonment (the lock is held either way).
+			if realMC.FailureClaimedByTimer(abandoned) {
+				return abandoned
+			}
 			return machine.RaiseInPlace(realMC, abandoned, false)
 		}
 		return err
@@ -579,6 +599,10 @@ func PrimMutexLock(mc machine.CallContext) error {
 
 // PrimMutexUnlock releases the mutex
 // (mutex-unlock! mutex [condition-variable [timeout]]) -> boolean
+// Returns #t, or with a condition variable, #t if signalled and #f if the timeout
+// elapsed first. A cancelled cv wait raises ErrOperationCancelled (waitCancelled);
+// when a with-timeout armed in this thread's chain fired, the VM turns the raise
+// into the timeout, run by the innermost with-timeout on the chain.
 func PrimMutexUnlock(mc machine.CallContext) error {
 	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, werr.ErrNotAMutex, "mutex-unlock!")
 	if err != nil {
@@ -633,6 +657,12 @@ func PrimMutexUnlock(mc machine.CallContext) error {
 	}
 
 	result := mutex.UnlockContext(mc.Context(), cv, timeout)
+	// Only a cv wait can answer false, and a signal claimed at the cancellation
+	// boundary still answers true, so false under a cancelled ctx is the
+	// cancellation.
+	if !result && mc.Context().Err() != nil {
+		return waitCancelled(mc, "mutex-unlock!")
+	}
 	mc.SetValue(values.BoolToBoolean(result))
 	return nil
 }

@@ -231,16 +231,18 @@ var (
 	// Synchronization errors
 
 	// ErrOperationCancelled is for a thread unparked by ctx cancellation before a
-	// blocking operation completed. Two producers: thread-sleep!, which returns
-	// Void, and Thread.Join, which returns the joinee's result. Neither has a
-	// value channel free for "did not finish" — exactly the shape of the removed
-	// rw-mutex lock family that was this sentinel's original producer.
-	// Primitives that DO have one use it instead — mutex-lock! and
-	// (mutex-unlock! m cv) both report a cancelled wait as #f, error-free, which
-	// is also what lets a wrapping with-timeout handler run
-	// (docs/concurrency/cancellation.md). Raise this only where that convention
-	// cannot be borrowed, and pair it with the raw ctx cause so a host can still
-	// distinguish context.Canceled from context.DeadlineExceeded.
+	// blocking operation completed. Every SRFI-18 blocking wait reports its
+	// cancellation through one rule, waitCancelled in extensions/threads: thread-sleep!,
+	// thread-join! (whose joiner cancellation Thread.Join reports), mutex-lock!
+	// and (mutex-unlock! m cv). When a with-timeout armed in the waiting thread's
+	// chain fired, the VM turns the failure into the timeout, run by the innermost
+	// with-timeout on the chain, before any exception handler on the chain sees it
+	// (docs/concurrency/cancellation.md). A
+	// timed mutex-lock! notices a cancellation only when its timeout elapses. Pair it with the raw ctx cause so
+	// a host can still distinguish context.Canceled from context.DeadlineExceeded.
+	// The lock waits used to answer #f instead, which a failed timed acquire also
+	// answers, and which let a program finish with a nil error after its
+	// embedder's cancellation.
 	ErrOperationCancelled = NewStaticError("synchronization operation cancelled")
 
 	// Process errors

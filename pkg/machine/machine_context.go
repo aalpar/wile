@@ -198,6 +198,7 @@ type timerState struct {
 	tag      *PromptTag      // identifies this with-timeout's finalizer frame on the chain
 	parent   *timerState     // enclosing timer (nesting); restored on teardown
 	savedCtx context.Context // ctx active before this with-timeout; restored on teardown
+	ctx      context.Context // the timed ctx this timer cancels: the one inside its extent
 }
 
 // expansionState clusters the two MachineContext fields that are nil at
@@ -616,10 +617,11 @@ func (p *MachineContext) Run() error {
 			}
 			tup, ok := v.(values.Tuple)
 			if !ok {
-				rerr := applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
+				var berr error
+				mc, berr = bridgeForeignError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
 					"apply: final argument must be a list, got %s", v.SchemeString()))
-				if rerr != nil {
-					return rerr
+				if berr != nil {
+					return berr
 				}
 				// Bridged to an in-place handler that reconfigured mc; re-dispatch into it.
 				continue
@@ -636,16 +638,17 @@ func (p *MachineContext) Run() error {
 			if err != nil {
 				// A resource-limit breach (stack overflow, ctx deadline) is not a
 				// Scheme condition: it must reach the Go caller, not the in-place
-				// handler that applyCallableError would dispatch to. Only the
+				// handler that bridgeForeignError would dispatch to. Only the
 				// not-a-proper-list error is a Scheme-level condition.
 				if errors.Is(err, werr.ErrStackOverflow) ||
 					errors.Is(err, context.Canceled) ||
 					errors.Is(err, context.DeadlineExceeded) {
 					return err
 				}
-				rerr := applyCallableError(mc, err)
-				if rerr != nil {
-					return rerr
+				var berr error
+				mc, berr = bridgeForeignError(mc, err)
+				if berr != nil {
+					return berr
 				}
 				continue
 			}
@@ -1901,6 +1904,15 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			return nil
 		}
 
+		// A failure that reaches this driver after p's own with-timeout timer fired
+		// is that timer's interrupt (supersedingTimerInterrupt). A winding thunk's
+		// failure and an uncaught condition arrive here without crossing a
+		// foreign-call bridge, which is the other place the rule is applied.
+		superseding := p.supersedingTimerInterrupt(err)
+		if superseding != nil {
+			err = superseding
+		}
+
 		// Check for control signals (prompt abort, continuation resume, timer interrupt)
 		var abortErr *ErrPromptAbort
 		if errors.As(err, &abortErr) {
@@ -1920,6 +1932,12 @@ func (p *MachineContext) RunResumable() (rerr error) {
 					// resolveAbort runs after-thunks on the way to the prompt; one of
 					// them transferred control of its own accord. Dispatch it here
 					// rather than returning it (defect 27's second site).
+					pending = abErr
+					continue
+				}
+				if p.supersedingTimerInterrupt(abErr) != nil {
+					// A failure an after-thunk raised after p's timer fired: the
+					// loop top turns it into the timer's interrupt.
 					pending = abErr
 					continue
 				}
@@ -1968,6 +1986,13 @@ func (p *MachineContext) RunResumable() (rerr error) {
 					pending = reErr
 					continue
 				}
+				if p.supersedingTimerInterrupt(reErr) != nil {
+					// A failure an after-thunk raised after p's timer fired (a
+					// cancelled wait passes up undispatched from the thunk's
+					// sub-context): the loop top turns it into the timer's interrupt.
+					pending = reErr
+					continue
+				}
 				return reErr
 			}
 			if wasEmpty {
@@ -2000,6 +2025,15 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			}
 			applyErr := p.resolveTimerInterrupt(timerErr, boundary)
 			if applyErr != nil {
+				if isControlSignal(applyErr) || p.supersedingTimerInterrupt(applyErr) != nil {
+					// The handler's application transferred control, or failed after the
+					// outer timer it restored has also fired (a foreign handler's failure
+					// arrives already turned into that timer's interrupt by the bridge).
+					// Dispatch it here, as the break arm does, or a raw interrupt or the
+					// handler's failure reaches the embedder.
+					pending = applyErr
+					continue
+				}
 				return applyErr
 			}
 			continue
@@ -2066,10 +2100,27 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 // so it always re-raises to the top RunResumable. No DefaultPromptTag install, no
 // timer or panic handling: those belong to the one top-level RunResumable.
 func (p *MachineContext) RunWithinBoundary() error {
+	// pending re-enters dispatch with a failure an abort's after thunk raised after
+	// a timer this sub-context owns fired, as in RunResumable.
+	var pending error
 	for {
-		err := p.Run()
+		err := pending
+		pending = nil
+		if err == nil {
+			err = p.Run()
+		}
 		if err == nil {
 			return nil
+		}
+
+		// As in RunResumable: a failure reaching this driver after a timer THIS
+		// sub-context owns fired (a with-timeout inside eval or load) is that
+		// timer's interrupt, which the timer arm below resolves on this chain. A
+		// sub-context with no timer of its own claims nothing and returns the
+		// failure to the driver of the context that owns the timer.
+		superseding := p.supersedingTimerInterrupt(err)
+		if superseding != nil {
+			err = superseding
 		}
 
 		// ErrPromptAbort is the only control signal this driver resolves inline. A
@@ -2096,6 +2147,12 @@ func (p *MachineContext) RunWithinBoundary() error {
 				if found {
 					applyErr := p.resolveTimerInterrupt(timerErr, boundary)
 					if applyErr != nil {
+						if isControlSignal(applyErr) || p.supersedingTimerInterrupt(applyErr) != nil {
+							// As in RunResumable: an outer timer's interrupt, or a failure
+							// it claims, from the handler's application is dispatched.
+							pending = applyErr
+							continue
+						}
 						return applyErr
 					}
 					continue
@@ -2146,6 +2203,15 @@ func (p *MachineContext) RunWithinBoundary() error {
 		// (if carried) is the winding at the escape point, possibly deeper than this sub.
 		done, abErr := p.resolveAbort(abortErr, prompt)
 		if abErr != nil {
+			if isControlSignal(abErr) || p.supersedingTimerInterrupt(abErr) != nil {
+				// Dispatch it here rather than returning it, as RunResumable does: an
+				// after thunk or the prompt's handler transferred control (a foreign
+				// handler failing after this sub-context's timer fired becomes the
+				// timer's interrupt), or failed after it fired. Each arm below returns
+				// a signal it cannot resolve on this chain.
+				pending = abErr
+				continue
+			}
 			return abErr
 		}
 		if done {
@@ -2237,10 +2303,22 @@ func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boun
 	p.releaseStack(oldEvals)
 
 	// Absolute teardown of the fired timer: cancel it and restore the outer timer + ctx.
-	// p.timer is the innermost (fired) timer — the emit site read mc.timer, and nothing
-	// changed it between emit and here. The finalizer frame re-does this identically.
+	// The fired timer is the one the interrupt names. It is p.timer unless the owner
+	// rule skipped stale timers inside it (liveFiredTimer); those are cancelled too,
+	// as their with-timeouts are gone. A tag on no timer of p's leaves p.timer, the
+	// timer the VM poll and the eager recheck name. The finalizer frame re-does this
+	// identically.
 	fired := p.timer
+	for t := p.timer; t != nil; t = t.parent {
+		if t.tag == timerErr.Tag {
+			fired = t
+			break
+		}
+	}
 	if fired != nil {
+		for t := p.timer; t != fired; t = t.parent {
+			t.cancel()
+		}
 		fired.cancel()
 		p.timer = fired.parent
 		p.ctx = fired.savedCtx
