@@ -475,8 +475,9 @@ func (p *MachineContext) Run() error {
 		if mc.counters.OpsExecuted&contextCheckMask == 0 {
 			select {
 			case <-mc.ctx.Done():
-				if mc.timer != nil && errors.Is(context.Cause(mc.ctx), ErrTimerExpired) {
-					return &ErrTimerInterrupt{Handler: mc.timer.handler, Tag: mc.timer.tag}
+				fired := mc.firedTimer()
+				if fired != nil {
+					return &ErrTimerInterrupt{Handler: fired.handler, Tag: fired.tag}
 				}
 				return mc.ctx.Err()
 			default:

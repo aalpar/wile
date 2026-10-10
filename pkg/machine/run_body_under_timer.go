@@ -74,22 +74,23 @@ func (p *timerContext) Value(key any) any {
 // tore the fired timer down (resolveTimerInterrupt restores the same outer state). This
 // helper installs and restores p.timer directly: nesting requires pushing a child timer
 // while the parent is still live, via the linked parent pointer.
-func (p *MachineContext) RunBodyUnderTimer(
-	timerCtx context.Context, cancel context.CancelFunc,
-	thunk values.Value, handler values.Callable,
-) (*MachineContext, error) {
+func (p *MachineContext) RunBodyUnderTimer(d time.Duration, thunk values.Value, handler values.Callable) (*MachineContext, error) {
 	parentCtx := p.ctx
 	savedTimer := p.timer
 	tag := NewPromptTag("with-timeout")
-	p.timer = &timerState{
+	timer := &timerState{
 		handler:  handler,
-		cancel:   cancel,
 		tag:      tag,
 		parent:   savedTimer,
 		savedCtx: parentCtx,
-		ctx:      timerCtx,
 	}
-	p.ctx = newTimerContext(timerCtx, p.timer)
+	// The cause names the timer (timerExpiry), so an expiry is answered by the
+	// with-timeout whose timer fired, on whichever context arms it.
+	timerCtx, cancel := context.WithTimeoutCause(parentCtx, d, &timerExpiry{timer: timer})
+	timer.cancel = cancel
+	timer.ctx = timerCtx
+	p.timer = timer
+	p.ctx = newTimerContext(timerCtx, timer)
 
 	closureEnv := p.ClosureEnv()
 	finalizer := NewForeignClosure(closureEnv, 1, true, func(finCC CallContext) error {
@@ -100,6 +101,13 @@ func (p *MachineContext) RunBodyUnderTimer(
 		cancel()
 		finMC.timer = savedTimer
 		finMC.ctx = parentCtx
+		// A normal return leaves the extent: pop its winding frame. After the timer
+		// arm's hard suspension, or on a re-entry that never pushed it, the frame is
+		// not on top and there is nothing to pop.
+		ws := finMC.windingStack
+		if len(ws) > 0 && ws[len(ws)-1].timer == timer {
+			finMC.PopWindingFrame()
+		}
 		// Forward 0/1/N values: Arg(0) is the variadic rest-list of the body's values.
 		// Collected under parentCtx, which finMC.ctx was just restored to — the
 		// body's timer context may already be cancelled.
@@ -110,5 +118,10 @@ func (p *MachineContext) RunBodyUnderTimer(
 		finMC.SetValues(vals...)
 		return nil
 	})
-	return p.runBodyUnderApplyFrame(thunk, finalizer, tag)
+	// The boundary frame records the winding stack outside the extent; the timer's
+	// own frame goes on above it, so the timer arm's hard suspension, which restores
+	// the boundary's stack, drops it, and an escape unwinds through it.
+	p.enterBodyFrame(p.newApplyFrame(finalizer, tag))
+	p.PushWindingFrame(newTimerFrame(timer))
+	return p.ApplyCallable(thunk)
 }

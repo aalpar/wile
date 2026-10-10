@@ -82,6 +82,19 @@ type DynamicWindFrame struct {
 	// the pushing context's timer field, is recorded: a dynamic-wind entered inside
 	// eval runs under its owner's timed ctx with no timer of its own.
 	entryCtx context.Context
+	// timer is the with-timeout timer whose extent this frame is (newTimerFrame),
+	// nil for a dynamic-wind. It has no thunks: leaving the extent ends the timer
+	// (exitTimer), and re-entering it arms nothing, since a timer once left is over.
+	timer *timerState
+}
+
+// newTimerFrame returns the winding frame for t's extent. Putting the extent on
+// the winding stack is what makes every way out of it end the timer: a normal
+// return pops it (the with-timeout finalizer), and an escape, an abort, a guard's
+// exit or the end of the run unwinds through it, in R7RS §6.10 order with the
+// dynamic-wind thunks around it.
+func newTimerFrame(t *timerState) DynamicWindFrame {
+	return DynamicWindFrame{ID: nextWindingID.Add(1), timer: t}
 }
 
 // nextWindingID is the global counter for generating unique frame IDs.

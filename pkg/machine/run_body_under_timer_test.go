@@ -43,14 +43,14 @@ func (p *deadlineCounter) Deadline() (time.Time, bool) {
 // The timer's context is asked once, when the extent begins.
 func TestTimerContextAnswersItsOwnDeadline(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
-	p := NewMachineContext(context.Background(), NewMachineContinuation(nil, namedTemplate("timer"), env))
 	timed, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
 	counted := &deadlineCounter{Context: timed}
+	p := NewMachineContext(counted, NewMachineContinuation(nil, namedTemplate("timer"), env))
 	thunk := NewForeignClosure(env, 0, false, func(CallContext) error {
 		return nil
 	})
-	_, err := p.RunBodyUnderTimer(counted, cancel, thunk, thunk)
+	_, err := p.RunBodyUnderTimer(time.Hour, thunk, thunk)
 	qt.Assert(t, err, qt.IsNil)
 	asked := counted.calls
 	for range 3 {

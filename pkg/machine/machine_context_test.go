@@ -2315,20 +2315,21 @@ func TestMachineContext_FormatStackTrace_Empty(t *testing.T) {
 func TestRun_TimerInterruptFromBytecodeLoop(t *testing.T) {
 	// When a timerHandler is installed and the timer context has expired,
 	// Run() must return *ErrTimerInterrupt (not the raw context error).
-	// Uses WithTimeoutCause so context.Cause returns ErrTimerExpired.
+	// Uses WithTimeoutCause with a cause naming the timer, as with-timeout does.
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
-	ctx, cancel := context.WithTimeoutCause(context.Background(), 0, ErrTimerExpired)
-	defer cancel()
-	mc.SetContext(ctx)
-
 	handler := NewClosureWithTemplate(NewEmptyNativeTemplate(), env)
 	// Install a timer the way RunBodyUnderTimer does (the bare SetTimer API
-	// was retired); only the handler is read on the interrupt path.
-	mc.timer = &timerState{handler: handler, cancel: func() {}}
+	// was retired), its expiry naming it; only the handler is read on the
+	// interrupt path.
+	timer := &timerState{handler: handler, cancel: func() {}}
+	ctx, cancel := context.WithTimeoutCause(context.Background(), 0, &timerExpiry{timer: timer})
+	defer cancel()
+	mc.SetContext(ctx)
+	mc.timer = timer
 
 	tpl := NewNativeTemplate(0, 0, false, NewOperationLoadVoid())
 	mc.template = tpl

@@ -936,99 +936,6 @@ func newCancelFailEngine(t *testing.T) (*wile.Engine, context.Context) {
 	return engine, ctx
 }
 
-// TestStaleTimerClaimsNothing pins that a timer whose with-timeout is gone claims
-// no failure, on its own context or for a context below it. An escape past a
-// with-timeout leaves its timer armed (filed in TODO.md). When that timer fires, a
-// later failure on its context would become an interrupt whose boundary no driver
-// can find, reported as a cause-less internal error; and a failure in eval below it
-// would be passed up past the guard inside eval that should catch it. A stale
-// timer owns nothing, so the failure is reported as itself, and the guard inside
-// eval catches it. The stale timer and the failure share one form: EvalMultiple
-// runs each top-level form on a fresh context, which would leave the timer behind.
-// The stale timer outlasts everything before the failing primitive by a wide margin
-// (300 ms; 1 s where an eval expands the guard first), and test-slow-fail waits for
-// it either way. Fired before its with-timeout was escaped, it would answer as a
-// live timer; fired before the primitive, a recheck would name it (the filed
-// defect).
-func TestStaleTimerClaimsNothing(t *testing.T) {
-	t.Run("on its own context", func(t *testing.T) {
-		c := qt.New(t)
-		engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "test-slow-fail: not a number"))
-		result, err := evalWithWatchdog(t, engine, `
-(list (guard (e (#t 'caught)) (with-timeout 300 (lambda (k) 'h) (lambda () (raise 'x))))
-      (test-slow-fail))`, 5*time.Second)
-		c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue,
-			qt.Commentf("a failure after a stale timer fired must be reported as itself, got %v / %v", result, err))
-	})
-	t.Run("on its own context, under a live timer that has not fired", func(t *testing.T) {
-		// The stale timer's firing cancels the context the live outer timer's
-		// with-timeout runs in, but not the outer timer's own context. Whether the
-		// live timer fired is a question about its own context.
-		c := qt.New(t)
-		engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "test-slow-fail: not a number"))
-		result, err := evalWithWatchdog(t, engine, `
-(with-timeout 20000 (lambda (k) 'outer)
-  (lambda ()
-    (guard (e (#t 'caught)) (with-timeout 300 (lambda (k) 'h) (lambda () (raise 'x))))
-    (test-slow-fail)))`, 5*time.Second)
-		c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue,
-			qt.Commentf("a live timer that has not fired claims nothing, got %v / %v", result, err))
-	})
-	t.Run("below it, inside eval", func(t *testing.T) {
-		// The guard inside eval must see the failure. How the unit then ends is the
-		// filed defect's business: the next eager recheck on the stale timer's
-		// context reports an internal error. So the guard records what it saw, and a
-		// second evaluation reads it back.
-		c := qt.New(t)
-		engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "test-slow-fail: not a number"))
-		_, _ = evalWithWatchdog(t, engine, `
-(define seen (vector #f))
-(list (guard (e (#t 'caught)) (with-timeout 1000 (lambda (k) 'h) (lambda () (raise 'x))))
-      (eval '(guard (e (#t (vector-set! seen 0 'caught-in-eval))) (test-slow-fail)) (interaction-environment)))`, 5*time.Second)
-		result, err := evalWithWatchdog(t, engine, `(vector-ref seen 0)`, 5*time.Second)
-		c.Assert(err, qt.IsNil)
-		c.Assert(result.SchemeString(), qt.Equals, "caught-in-eval")
-	})
-	t.Run("below it, under a live timer that has not fired", func(t *testing.T) {
-		// The stale timer is inside the first eval; the failure is in a nested eval,
-		// whose ctx the stale timer cancelled; a live with-timeout above both has not
-		// fired. The failure is the nested eval's own, and its guard must see it: a
-		// timer that has not fired owns no cancellation, so it does not draw the
-		// failure up past that guard.
-		c := qt.New(t)
-		engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "test-slow-fail: not a number"))
-		_, _ = evalWithWatchdog(t, engine, `
-(define seen (vector #f))
-(with-timeout 20000 (lambda (k) 'outer)
-  (lambda ()
-    (eval '(begin (guard (e (#t 'escaped)) (with-timeout 1000 (lambda (k) 'h) (lambda () (raise 'x))))
-                  (eval '(guard (e (#t (vector-set! seen 0 'nested-guard))) (test-slow-fail))
-                        (interaction-environment)))
-          (interaction-environment))))`, 5*time.Second)
-		result, err := evalWithWatchdog(t, engine, `(vector-ref seen 0)`, 5*time.Second)
-		c.Assert(err, qt.IsNil)
-		c.Assert(result.SchemeString(), qt.Equals, "nested-guard")
-	})
-	t.Run("below it, under a live timer the embedder cancelled", func(t *testing.T) {
-		// The previous row with the live timer's ctx cancelled by the embedder, after
-		// the stale timer fired and before the failure. A cancelled live timer has not
-		// fired either, so the nested guard must still see the failure.
-		c := qt.New(t)
-		engine, ctx := newCancelFailEngine(t)
-		_, _ = evalWithWatchdogCtx(ctx, t, engine, `
-(define seen (vector #f))
-(with-timeout 20000 (lambda (k) 'outer)
-  (lambda ()
-    (eval '(begin (guard (e (#t 'escaped)) (with-timeout 1000 (lambda (k) 'h) (lambda () (raise 'x))))
-                  (eval '(guard (e (#t (vector-set! seen 0 'nested-guard))) (test-slow-ok) (test-cancel-and-fail))
-                        (interaction-environment)))
-          (interaction-environment))))`, 5*time.Second)
-		result, err := evalWithWatchdog(t, engine, `(vector-ref seen 0)`, 5*time.Second)
-		c.Assert(err, qt.IsNil)
-		c.Assert(result.SchemeString(), qt.Equals, "nested-guard")
-	})
-}
-
 // TestTimerClaimsAHandlerFailure pins the handler applications the drivers make
 // themselves, where a failure comes back from the application rather than from Run.
 // A call-with-continuation-prompt handler that fails after the timer fired, applied
@@ -1066,6 +973,91 @@ func TestTimerClaimsAHandlerFailure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			engine := newSlowFailEngine(t, werr.WrapForeignErrorf(werr.ErrNotANumber, "test-slow-fail: not a number"))
+			result, err := evalWithWatchdog(t, engine, tc.code, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestEscapeFromATimerEndsIt pins that leaving a with-timeout's extent by an escape
+// ends its timer, as a normal return does: the escape exits the timer's winding
+// frame, which cancels the timer and restores the context outside it. Left armed,
+// the timer fired during the later sleep, which then raised its cancellation; and a
+// poll or recheck after it named a boundary that was gone (an internal error). Each
+// row is one form: EvalMultiple runs each top-level form on a fresh context.
+func TestEscapeFromATimerEndsIt(t *testing.T) {
+	tcs := []struct {
+		name   string
+		escape string
+		want   string
+	}{
+		{"guard", `(guard (e (#t 'caught)) (with-timeout 50 (lambda (k) 'h) (lambda () (raise 'x))))`, "caught"},
+		{"call/cc", `(call/cc (lambda (out) (with-timeout 50 (lambda (k) 'h) (lambda () (out 'escaped)))))`, "escaped"},
+		{"prompt abort", `(call-with-continuation-prompt
+  (lambda () (with-timeout 50 (lambda (k) 'h)
+               (lambda () (abort-current-continuation (default-continuation-prompt-tag) 'x))))
+  (default-continuation-prompt-tag) (lambda args 'aborted))`, "aborted"},
+		{"guard, inside eval", `(eval '(guard (e (#t 'caught)) (with-timeout 50 (lambda (k) 'h) (lambda () (raise 'x))))
+  (interaction-environment))`, "caught"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+			c.Assert(err, qt.IsNil)
+			defer func() {
+				_ = engine.Close()
+			}()
+			result, err := evalWithWatchdog(t, engine, `(list `+tc.escape+`
+      (begin (thread-sleep! 0.15) 'slept)
+      (let loop ((i 0)) (if (< i 100000) (loop (+ i 1)) 'looped)))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "("+tc.want+" slept looped)")
+		})
+	}
+}
+
+// TestTimerExpiryNamesTheTimerThatFired pins that an expiry is answered by the
+// with-timeout whose timer fired, not by the innermost one armed. An outer timer's
+// expiry ran an armed inner with-timeout's handler first, early (the outer handler
+// then ran when the inner one returned under the fired outer timer, so the result
+// alone hid it); a starting thread's ran
+// the started thread's own with-timeout handler, whose timer had not fired. The
+// started thread owns no timer that fired, so its wait raises, and the starter's
+// handler, which joins it, finds its own handler never ran.
+func TestTimerExpiryNamesTheTimerThatFired(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"outer timer, inner one armed", `(with-timeout 50 (lambda (k) (list 'outer (vector-ref ran 0)))
+  (lambda () (with-timeout 5000 (lambda (k) (vector-set! ran 0 'inner-ran) 'inner) (lambda () (mutex-lock! m)))))`, "(outer #f)"},
+		{"outer timer, inner one armed inside eval", `(with-timeout 50 (lambda (k) (list 'outer (vector-ref ran 0)))
+  (lambda () (eval '(with-timeout 5000 (lambda (k) (vector-set! ran 0 'inner-ran) 'inner) (lambda () (mutex-lock! m)))
+                   (interaction-environment))))`, "(outer #f)"},
+		{"a starter's timer, the started thread's own armed", `(with-timeout 50
+  (lambda (k) (guard (e (#t #f)) (thread-join! (vector-ref th 0))) (vector-ref ran 0))
+  (lambda ()
+    (vector-set! th 0 (thread-start! (make-thread (lambda ()
+      (with-timeout 5000 (lambda (k) (vector-set! ran 0 'own-handler)) (lambda () (mutex-lock! m)))))))
+    (thread-join! (vector-ref th 0))))`, "#f"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+			c.Assert(err, qt.IsNil)
+			defer func() {
+				_ = engine.Close()
+			}()
+			_, err = evalWithWatchdog(t, engine, `
+(define m (make-mutex))
+(mutex-lock! m)
+(define ran (vector #f))
+(define th (vector #f))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
 			result, err := evalWithWatchdog(t, engine, tc.code, 5*time.Second)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)

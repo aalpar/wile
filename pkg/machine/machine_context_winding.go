@@ -44,6 +44,9 @@ func (p *MachineContext) unwindStackTo(stack WindingStack, commonDepth int) erro
 	// Run after thunks from innermost to outermost (reverse order).
 	for i := len(stack) - 1; i >= commonDepth; i-- {
 		frame := stack[i]
+		if frame.timer != nil {
+			p.exitTimer(frame.timer)
+		}
 		if frame.After != nil {
 			// Truncated stack: the after thunk runs at depth i, not the parent's full depth.
 			sub := p.NewSubContextWithWinding(stack[:i:i])
@@ -200,6 +203,19 @@ func (p *MachineContext) windingThunkContext(entryCtx context.Context) context.C
 		outside = t.savedCtx
 	}
 	return outside
+}
+
+// exitTimer ends t as control leaves its extent through the winding stack: t is
+// cancelled, and when p armed it, p's timer and ctx become the ones outside it. A
+// timer p did not arm (one a sub-context armed, its escape reconciled here) is
+// only cancelled. Timers inside t were exited before it, innermost first.
+func (p *MachineContext) exitTimer(t *timerState) {
+	t.cancel()
+	if !p.armsTimer(t) {
+		return
+	}
+	p.timer = t.parent
+	p.ctx = t.savedCtx
 }
 
 // armsTimer reports whether t is one of p's armed timers.

@@ -15,9 +15,6 @@
 package machine
 
 import (
-	"context"
-	"errors"
-
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -91,8 +88,9 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	if mc.timer != nil {
 		select {
 		case <-mc.ctx.Done():
-			if errors.Is(context.Cause(mc.ctx), ErrTimerExpired) {
-				return nil, &ErrTimerInterrupt{Handler: mc.timer.handler, Tag: mc.timer.tag}
+			fired := mc.firedTimer()
+			if fired != nil {
+				return nil, &ErrTimerInterrupt{Handler: fired.handler, Tag: fired.tag}
 			}
 		default:
 		}

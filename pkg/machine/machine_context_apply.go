@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"slices"
 
@@ -167,8 +165,9 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	if p.timer != nil {
 		select {
 		case <-p.ctx.Done():
-			if errors.Is(context.Cause(p.ctx), ErrTimerExpired) {
-				return nil, &ErrTimerInterrupt{Handler: p.timer.handler, Tag: p.timer.tag}
+			fired := p.firedTimer()
+			if fired != nil {
+				return nil, &ErrTimerInterrupt{Handler: fired.handler, Tag: fired.tag}
 			}
 		default:
 		}

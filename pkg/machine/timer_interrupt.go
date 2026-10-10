@@ -28,6 +28,44 @@ import (
 // to distinguish timer expiry from external cancellation (e.g. Ctrl+C).
 var ErrTimerExpired = werr.NewStaticError("timer expired")
 
+// timerExpiry is the cancellation cause of one with-timeout's timer. It names the
+// timer, so every ctx the expiry cancels answers which timer fired (expiredTimer):
+// the timer's own, a nested with-timeout's below it, a started thread's derived
+// from it. errors.Is(cause, ErrTimerExpired) still holds through Unwrap.
+type timerExpiry struct {
+	timer *timerState
+}
+
+func (p *timerExpiry) Error() string {
+	return ErrTimerExpired.Error()
+}
+
+func (p *timerExpiry) Unwrap() error {
+	return ErrTimerExpired
+}
+
+// expiredTimer returns the timer whose expiry cancelled ctx; nil when ctx is live
+// or something else cancelled it.
+func expiredTimer(ctx context.Context) *timerState {
+	var expiry *timerExpiry
+	if !errors.As(context.Cause(ctx), &expiry) {
+		return nil
+	}
+	return expiry.timer
+}
+
+// firedTimer returns the timer an expiry on p's ctx names when p arms it, the
+// timer whose handler answers the expiry; nil when no timer cancelled the ctx, or
+// when the one that did is not p's (an enclosing context's, a starting thread's),
+// so that its owner answers it.
+func (p *MachineContext) firedTimer() *timerState {
+	t := expiredTimer(p.ctx)
+	if t == nil || !p.armsTimer(t) {
+		return nil
+	}
+	return t
+}
+
 // ErrTimerInterrupt signals that a wall-clock timer has expired.
 // It propagates through the Go error return path and is resolved by the nearest
 // driver (RunResumable at the top level, or RunWithinBoundary in a surviving
@@ -103,17 +141,15 @@ func (p *MachineContext) supersedingTimerInterrupt(err error) error {
 // fires. That timer is not p.timer, so resolveTimerInterrupt tears down to the
 // timer the interrupt names.
 func (p *MachineContext) liveFiredTimer() *timerState {
-	for t := p.timer; t != nil; t = t.parent {
-		_, found := p.FindPrompt(t.tag)
-		if !found {
-			continue
-		}
-		if !errors.Is(context.Cause(t.ctx), ErrTimerExpired) {
-			return nil
-		}
-		return t
+	t := p.firedTimer()
+	if t == nil {
+		return nil
 	}
-	return nil
+	_, found := p.FindPrompt(t.tag)
+	if !found {
+		return nil
+	}
+	return t
 }
 
 // FailureClaimedByTimer reports whether the timer rule claims err on p: a
