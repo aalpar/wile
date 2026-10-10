@@ -382,6 +382,8 @@ as `caar`/`map`) is rejected with `ErrImmutableBinding`. This is ordinary Scheme
 
 **Shadowing is unaffected.** The check compares an import only with an earlier import: `(import (scheme base))` followed by `(define (zero? x) …)` shadows the imported `zero?`.
 
+**Import order is not checked.** §5.2 also makes it an error "to refer to an identifier before it is imported", which §1.3.2 lets an implementation leave undetected. A program (a file, or the CLI's `-e` forms) scopes each import over the whole program, so a reference written before the import resolves to it, as in a Racket module and a Chez top-level program. `EvalMultiple` compiles one form at a time and refuses such a reference, but only because it refuses every forward reference. A `define` written *before* a plain import of the same name keeps the name, the reverse-order form of the shadowing above: Racket agrees, Chez refuses the program ("multiple definitions"), and Chez run with `--script` lets the import win. The latitude covers only names the program wrote: after `(define (sqrt x) …)`, `(import (rename (wile math) (sqrt square-root)))` still binds `square-root` to the library's procedure.
+
 ---
 ## An Import Shares the Exporter's Variable, Not a Copy (R7RS silent)
 

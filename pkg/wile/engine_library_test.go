@@ -16,11 +16,15 @@ package wile
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"testing/fstest"
 
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -276,6 +280,78 @@ func TestExtensionLibraryExportIgnoresUserShadow(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 
 			result, err := engine.EvalProgram(ctx, tc.code, "<test>")
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestImportOrderingIsNotChecked pins what docs/reference/r7rs-differences.md says
+// about R7RS §5.2's ordering clause, "refer to an identifier before it is
+// imported": Wile does not check it. §1.3.2 leaves an "it is an error" clause
+// undetected at the implementation's choice, so every row here is green by
+// construction; the pin keeps the documented relaxation and the behaviour
+// together.
+//
+// A program unit (EvalProgram: a file, or the CLI's joined -e) scopes an import
+// over the whole unit, so a reference written before it resolves to it, as in a
+// Racket module and a Chez top-level program. A form-at-a-time unit
+// (EvalMultiple) refuses that reference, but only because it refuses every
+// forward reference; the last row says so by refusing one with no import in it.
+//
+// The define-before row is the §5.2 REDEFINE clause meeting an import written
+// second, for an ordinary library: the define keeps the name, as it does for the
+// extension library in TestExtensionLibraryExportIgnoresUserShadow's last row.
+// Racket agrees; Chez refuses the program ("multiple definitions"), so the doc
+// line does not claim agreement.
+func TestImportOrderingIsNotChecked(t *testing.T) {
+	libFS := fstest.MapFS{"ordlib.sld": &fstest.MapFile{Data: []byte(`(define-library (ordlib)
+  (import (scheme base))
+  (export ord-f)
+  (begin (define (ord-f) 'lib)))`)}}
+
+	cases := []struct {
+		name     string
+		multiple bool
+		code     string
+		want     string
+		wantErr  error
+	}{
+		{name: "reference before import",
+			code: `(ord-f) (import (ordlib)) (ord-f)`, want: "lib"},
+		{name: "reference before import, inside a procedure",
+			code: `(define (g) (ord-f)) (import (ordlib)) (g)`, want: "lib"},
+		{name: "define before import keeps the define",
+			code: `(define (ord-f) 'user) (import (ordlib)) (ord-f)`, want: "user"},
+		{name: "form at a time refuses any forward reference",
+			multiple: true,
+			code:     `(define (g) (ord-h)) (define (ord-h) 1) (g)`, wantErr: werr.ErrNoSuchBinding},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			ctx := context.Background()
+			engine, err := NewEngine(ctx,
+				WithProfile(KitchenSink),
+				WithSourceFS(stdlib.FS),
+				WithSourceFS(libFS),
+				WithLibraryPaths("."),
+			)
+			c.Assert(err, qt.IsNil)
+			defer func() {
+				_ = engine.Close()
+			}()
+
+			var result Value
+			if tc.multiple {
+				result, err = engine.EvalMultiple(ctx, tc.code)
+			} else {
+				result, err = engine.EvalProgram(ctx, tc.code, "<test>")
+			}
+			if tc.wantErr != nil {
+				c.Assert(errors.Is(err, tc.wantErr), qt.IsTrue, qt.Commentf("got %v", err))
+				return
+			}
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
 		})

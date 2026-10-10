@@ -590,6 +590,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 
+- **R7RS §5.2's import-order clause is documented as unchecked.** A program
+  scopes each import over the whole program, so a reference written before the
+  import resolves to it (as in a Racket module and a Chez top-level program), and
+  a `define` written before a plain import of the same name keeps it, where Chez
+  refuses the program. See `docs/reference/r7rs-differences.md`, *Import order is
+  not checked*; pinned by `TestImportOrderingIsNotChecked`.
+
 - **A splice in an unquote's operand (`` `,,@x` ``) is documented as staying
   literal.** R7RS §7.1.4 gives `unquote` exactly one operand and types it
   `⟨qq template D−1⟩`, from which `⟨splicing unquotation⟩` is unreachable: `,@`

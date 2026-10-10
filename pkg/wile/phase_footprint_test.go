@@ -27,43 +27,82 @@ import (
 	"github.com/aalpar/wile/pkg/wile"
 )
 
-// Nothing is BOUND at phase 2 when an engine starts. Every fixed coordinate the
-// registry writes is (phase 0, sealed), phase 1 (bootstrap macros and
-// primitive expanders), or the mutable runtime. This pins the retirement of the
-// phase-2 keyword coordinate: a registration that reintroduces a fixed phase-2
-// resident shows up here as a name that resolves at that view's own
-// coordinates.
+// No SLOT exists above phase 1 when an engine starts, on either syntax layer.
+// Every fixed coordinate the registry writes is (phase 0, sealed), phase 1
+// (bootstrap macros and primitive expanders), or the mutable runtime. This pins
+// the retirement of the phase-2 keyword coordinate: a registration that
+// reintroduces a fixed resident above phase 1 shows up here as a slot at that
+// phase.
 //
-// Stage A of the Flatt binding model removed the fourth possibility, the
-// ambient (ANY-phase, sealed) coordinate: a sealed phase-0 write now lands at
-// phase 0, and a phase-2 view reaches phase-0 names only if the dialect
-// declares an initial import at that phase, which none does.
+// Slots, not rows. A dialect installs its macro-phase vocabulary as row
+// templates (InstallMacroPhaseRow) copied to EVERY macro phase the store reaches,
+// so the same rows answer at phases 1, 2 and 3 alike; they are a declaration about
+// all macro phases, not a coordinate written at one. ExactBindingAt is the query
+// that separates the two: it reads per-symbol slots at every tier, sealed
+// included, and never consults a row (BulkBindingAt does that). OwnGlobalIndex,
+// which this test used until 2026-10-06, reads the mutable tier only, and every
+// startup resident is sealed, so the loop could not see the residents it was meant
+// to catch (it found nothing at any phase, phase 0 included); the phase-1 control
+// below exists so that cannot happen silently again.
 //
-// The phase-2 FRAME is present at startup, and that is a footprint fact rather
-// than a binding one. P0.1 made a transformer right-hand side an expression
-// compiled at env.NextPhase(), so every bootstrap syntax-rules definition now
-// runs an expander rooted at phase 1, and lookupMacroBinding's arm 2 probes
-// NextPhase() of that — phase 2 — which AtPhase instantiates
-// (phases.GetOrCreate). The frame is empty; the assertion below is what says so,
-// and it is the claim this test exists to make. PresentPhases() unions
-// instantiated frames with binding-bearing coordinates, so it cannot separate
-// the two on its own.
-func TestStartupBindsNothingAtPhaseTwo(t *testing.T) {
-	ctx := context.Background()
-	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
-	qt.Assert(t, err, qt.IsNil)
-	defer func() {
-		_ = eng.Close()
-	}()
+// The FRAMES above phase 1 are a footprint fact rather than a binding one, and
+// the two layers differ there. P0.1 made a transformer right-hand side an
+// expression compiled at env.NextPhase(), so every bootstrap syntax-rules
+// definition runs an expander rooted at phase 1, and lookupMacroBinding's arm 2
+// probes NextPhase() of that, phase 2, which AtPhase instantiates
+// (phases.GetOrCreate). The Scheme layer's bootstrap climbs one rung further and
+// instantiates phase 3. PresentPhases() unions instantiated frames with
+// binding-bearing coordinates, so it cannot separate the two on its own, which
+// is why the footprint is a separate per-layer ceiling: it may come down, never
+// go up. Until 2026-10-05 this test asserted the Go layer's exact PresentPhases,
+// which failed under the Scheme layer for a frame that binds nothing.
+//
+// The name universe is the store's unfiltered LiveSlots rather than BoundNames,
+// so a macro template's binder (intro-scoped, filtered out of BoundNames) is
+// probed too.
+func TestStartupBindsNothingAboveExpand(t *testing.T) {
+	layers := []struct {
+		name      string
+		opt       wile.EngineOption
+		maxPhases int
+	}{
+		{"go", wile.WithGoSyntaxForms(), 3},
+		{"scheme", wile.WithSchemeSyntaxForms(), 4},
+	}
+	for _, layer := range layers {
+		t.Run(layer.name, func(t *testing.T) {
+			ctx := context.Background()
+			eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), layer.opt)
+			qt.Assert(t, err, qt.IsNil)
+			defer func() {
+				_ = eng.Close()
+			}()
 
-	env := eng.Environment()
-	qt.Assert(t, env.PresentPhases(), qt.DeepEquals,
-		[]environment.Phase{environment.PhaseRuntime, environment.PhaseExpand, environment.Phase(2)})
+			present := eng.Environment().PresentPhases()
+			qt.Assert(t, len(present) <= layer.maxPhases, qt.IsTrue,
+				qt.Commentf("startup footprint grew past %d phases: %v", layer.maxPhases, present))
 
-	phase2 := env.AtPhase(environment.Phase(2))
-	for _, name := range eng.BoundNames() {
-		gi := phase2.OwnGlobalIndex(values.NewSymbol(name), values.AllScopes())
-		qt.Assert(t, gi, qt.IsNil, qt.Commentf("%s is bound at phase 2", name))
+			store := eng.Namespace().Store()
+			slotsAt := func(phase environment.Phase) []string {
+				var q []string
+				for _, s := range store.LiveSlots() {
+					bnd, ambiguous := store.ExactBindingAt(values.NewSymbol(s.Name.Key), values.AllScopes(), phase)
+					if bnd != nil || ambiguous {
+						q = append(q, s.Name.Key)
+					}
+				}
+				return q
+			}
+
+			qt.Assert(t, len(slotsAt(environment.PhaseExpand)) > 0, qt.IsTrue,
+				qt.Commentf("the probe finds no phase-1 slot, so it cannot see one above phase 1 either"))
+			for _, phase := range present {
+				if phase <= environment.PhaseExpand {
+					continue
+				}
+				qt.Assert(t, slotsAt(phase), qt.HasLen, 0, qt.Commentf("slots at %v", phase))
+			}
+		})
 	}
 }
 
