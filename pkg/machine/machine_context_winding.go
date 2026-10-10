@@ -14,6 +14,8 @@
 
 package machine
 
+import "context"
+
 // WindingStack returns the current winding stack.
 func (p *MachineContext) WindingStack() WindingStack {
 	return p.windingStack
@@ -55,14 +57,21 @@ func (p *MachineContext) unwindStackTo(stack WindingStack, commonDepth int) erro
 			// no mark was set above the dynamic-wind.
 			sub.capturedMarks = frame.entryMarks
 			sub.isolatedMarks = true
+			// And outside any with-timeout the dynamic-wind encloses
+			// (DynamicWindFrame.entryCtx).
+			sub.ctx = p.windingThunkContext(frame.entryCtx)
 			_, err := sub.ApplyCallable(frame.After)
 			if err != nil {
+				err = p.windingThunkFailure(sub, err)
 				ReleaseSubContext(sub)
 				// Truncate to reflect that extents > i are already exited.
 				p.windingStack = stack[:i:i]
 				return err
 			}
 			err = sub.RunWithinBoundary()
+			if err != nil {
+				err = p.windingThunkFailure(sub, err)
+			}
 			ReleaseSubContext(sub)
 			if err != nil {
 				// Propagate escapes and exceptions.
@@ -90,12 +99,17 @@ func (p *MachineContext) RewindTo(target WindingStack, commonDepth int) error {
 			// §6.10) on re-entry, mirroring the after thunk in unwindStackTo.
 			sub.capturedMarks = frame.entryMarks
 			sub.isolatedMarks = true
+			sub.ctx = p.windingThunkContext(frame.entryCtx)
 			_, err := sub.ApplyCallable(frame.Before)
 			if err != nil {
+				err = p.windingThunkFailure(sub, err)
 				ReleaseSubContext(sub)
 				return err
 			}
 			err = sub.RunWithinBoundary()
+			if err != nil {
+				err = p.windingThunkFailure(sub, err)
+			}
 			ReleaseSubContext(sub)
 			if err != nil {
 				return err
@@ -149,4 +163,66 @@ func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourc
 		p.Restore(cont)
 	}
 	return nil
+}
+
+// windingThunkContext returns the context a dynamic-wind thunk runs in during a
+// winding reconcile, given the context its dynamic-wind was entered under. R7RS
+// runs the thunks in the dynamic environment of the dynamic-wind call, so the
+// thunk keeps entryCtx when the innermost timer entryCtx is inside (timerCtxKey)
+// is one p arms now. A timer p does not arm (its with-timeout has ended, or it
+// belongs to an earlier evaluation) is stepped out of, to the context outside it,
+// and the same question asked there. Inside no timer p arms, the thunk runs in the
+// context outside every timer p arms, since none of them is part of the
+// dynamic-wind call's environment; that context is live, unlike a frame's from an
+// earlier evaluation. So does a frame with no recorded context (built by
+// NewDynamicWindFrame and pushed directly). With no timer armed, p's own context.
+//
+// Only p's own timers are stepped out of. On a context below the timer's owner
+// (eval, load) the owner's timers stay in force, as they do for the after thunk a
+// normal exit runs inline. So a frame a composable continuation, or one reinstated
+// at a prompt inside a with-timeout, re-enters inside it runs its before thunk
+// outside that timer when p owns the timer and under it otherwise; whether the
+// timer should bound such a frame is open (TODO.md, I050).
+func (p *MachineContext) windingThunkContext(entryCtx context.Context) context.Context {
+	ctx := entryCtx
+	for ctx != nil {
+		inner, _ := ctx.Value(timerCtxKey{}).(*timerState)
+		if inner == nil {
+			break
+		}
+		if p.armsTimer(inner) {
+			return ctx
+		}
+		ctx = inner.savedCtx
+	}
+	outside := p.ctx
+	for t := p.timer; t != nil; t = t.parent {
+		outside = t.savedCtx
+	}
+	return outside
+}
+
+// armsTimer reports whether t is one of p's armed timers.
+func (p *MachineContext) armsTimer(t *timerState) bool {
+	for armed := p.timer; armed != nil; armed = armed.parent {
+		if armed == t {
+			return true
+		}
+	}
+	return false
+}
+
+// windingThunkFailure returns err, the failure of a winding thunk that ran on sub,
+// marked unclaimed (unclaimedFailure) when a fired timer of p's would claim it but
+// the thunk's own context was not cancelled by a timer: the thunk ran outside that
+// timer (windingThunkContext), so its failure is its own. p reconciles the winding
+// before it leaves the with-timeout's extent, with the boundary still on its chain
+// and its ctx still the timer's, so judged by p's state the failure became the
+// timeout: the handler ran, the escape was lost, and the after thunk ran again.
+// The mark answers for p's timers alone (judgedUnclaimed).
+func (p *MachineContext) windingThunkFailure(sub *MachineContext, err error) error {
+	if !p.timerClaims(err) || sub.timerClaims(err) {
+		return err
+	}
+	return &unclaimedFailure{err: err, timer: p.timer}
 }

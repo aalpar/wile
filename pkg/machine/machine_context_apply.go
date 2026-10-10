@@ -225,7 +225,20 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 // p (reconfiguring it to continue into the handler, like call-with-values), a nil
 // return means "p was reconfigured" — the VM must continue from p, not from a nil
 // context. Returning (p, nil) here is what lets the dispatched handler run.
+//
+// A failure a fired with-timeout timer claims never reaches a guard on the timer's
+// chain: on the context that owns the timer it becomes the timer's interrupt, and
+// on a sub-context below that owner it passes up undispatched until it reaches the
+// owner (supersedingTimerInterrupt). A root not linked to that chain dispatches it
+// as usual (supersedingTimerInterrupt names those roots).
 func bridgeForeignError(p *MachineContext, err error) (*MachineContext, error) {
+	interrupt := p.supersedingTimerInterrupt(err)
+	if interrupt != nil {
+		return nil, interrupt
+	}
+	if p.timerClaims(err) && p.timerAbove() {
+		return nil, err
+	}
 	bridged := applyCallableError(p, err)
 	if bridged != nil {
 		return nil, bridged

@@ -257,11 +257,10 @@ func (p *Thread) Start(parentCtx context.Context) error {
 // and only the first of them is true. Once Terminate has stored the
 // terminated-thread exception, the goroutine it cancelled is merely unwinding,
 // and whatever that unwind produces is not a result: a thread parked in a
-// cancellable operation returns a laundered ordinary value when its context is
-// cancelled (mutex-lock! yields #f — see
-// docs/concurrency/cancellation.md), and if that return sits in tail
-// position, no further VM op runs to unwind it. Letting the completion path win
-// there reports a terminated thread as having succeeded.
+// cancellable wait raises ErrOperationCancelled when its context is cancelled
+// (docs/concurrency/cancellation.md), and a thunk that was finishing anyway
+// returns normally, with no further VM op to notice the cancellation. Letting
+// either path win reports a terminated thread as having raised or succeeded.
 //
 // SRFI-18: thread-terminate! stores a terminated-thread exception in the
 // thread's end-exception field, which thread-join! then raises. Dropping a

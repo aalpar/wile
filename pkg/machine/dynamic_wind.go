@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"slices"
 	"sync/atomic"
 
@@ -68,6 +69,19 @@ type DynamicWindFrame struct {
 	// still-live body marks (the parameterize value), not the entry environment. nil
 	// when no marks were reachable at entry (the common case — no extra cost).
 	entryMarks []markEntry
+	// entryCtx is the context in effect at the dynamic-wind call site, the other
+	// half of that dynamic environment. It is not run under directly: a frame
+	// re-entered from a later evaluation would carry that evaluation's cancelled
+	// context. MachineContext.windingThunkContext resolves it against the timers
+	// armed now: inside one of them (its timed ctx), the thunk keeps that ctx; inside
+	// none, the thunk runs outside every timer now armed, none of which is part of
+	// that dynamic environment. Without that, an escape leaving a
+	// with-timeout through an enclosing dynamic-wind ran the after thunk under the
+	// timer's context, where a wait was cancelled by a timer whose extent it is not
+	// in, and the timer then claimed the failure and lost the escape. A context, not
+	// the pushing context's timer field, is recorded: a dynamic-wind entered inside
+	// eval runs under its owner's timed ctx with no timer of its own.
+	entryCtx context.Context
 }
 
 // nextWindingID is the global counter for generating unique frame IDs.

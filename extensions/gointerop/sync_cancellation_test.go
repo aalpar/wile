@@ -116,18 +116,18 @@ func TestTerminateUnparksBlockedSyncPrimitive(t *testing.T) {
 
 // TestWithTimeoutInterruptsParkedMutexLock is the Scheme-level COMPOSITION guard
 // for cancellation: a blocking primitive parked inside a with-timeout must run the
-// handler, not return its own value or escape an error. The mechanism is non-local
-// — callForeignCached's eager ErrTimerExpired recheck fires only on the ERROR-FREE
-// foreign return, and mutex-lock! reports a cancelled acquire as an error-free #f
-// precisely so that it does — so no Go-level test of either half proves the
-// composition. Narrow the recheck, or make a cancelled acquire raise, and this is
-// the test that fails.
+// handler, not return its own value or escape an error. The mechanism is non-local:
+// the primitive raises (waitCancelled), and the VM turns the failure into the
+// timer's interrupt and runs the handler, so no Go-level test of either half proves
+// the composition. This test proves it end to end but not which VM path did the
+// work; the paths are pinned in extensions/threads (TestTimerCancelledWaitIsNeverCaught,
+// TestTimerCancelledWaitInRootlessCallCCRunsHandler). Any other cancellation source
+// raises (TestCancelledLockWaitRaisesOperationCancelled).
 //
 // Ported from TestWithTimeoutInterruptsParkedRWMutex when the rw-mutex family was
-// removed; that version guarded finishBlockingSync's ErrTimerExpired carve-out,
-// which existed only because rw-mutex locks returned Void and had no value channel
-// for "did not acquire". mutex-lock! needs no carve-out, so what survives here is
-// the composition, not the carve-out.
+// removed; that version guarded finishBlockingSync's carve-out, which returned
+// error-free under ErrTimerExpired. No wait carves anything out now: mutex-lock!
+// raises like every cancelled wait, and the VM turns the raise into the timeout.
 //
 // The main thread holds m, so the inner acquire cannot succeed and parks until the
 // timer cancels ctx.
