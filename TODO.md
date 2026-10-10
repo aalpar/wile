@@ -158,9 +158,9 @@ because the citation is what `make indexlint` counts:
 | `2026-07-20-scope-keyed-tier1-remediation.md` | **Partially implemented** (2026-07-21) |
 | `2026-07-28-alocal-capture-safe-proof-for-locals.md` | Phases 1–4 **DONE** (1–3 committed on `feat/callback-conditional-capture`); 19/68 → 42/68 capture-safe stamps, reclaim verdicts unchanged at 19/68 as predicted. Phase 5 (Lever B) open. Prerequisite `47c27f72` must land first or the two conflict textually |
 | `2026-08-01-scheme-deadline-and-cancellation-cause.md` | Phase 1 **impl-ready**; Phase 2 designed and **gated** on the plan's scoping decision. Exposes the ambient `context.Context`'s deadline and cancellation cause to Scheme |
-| `2026-09-22-defect-closeout-impl.md` | **HUB** of the defect-closeout arc, derived from `2026-09-20-defect-closeout-design.md`. **Split into 11 files 2026-10-02** (one per phase, plus the audit) because the single file had reached 5,220 lines; task IDs, branch names and every word unchanged. Carries the method, the phase map and the first branch. **32 of 97 tasks landed**: P1 all ten, P2 all five, P3 sixteen of eighteen (P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` merged 2026-10-03; P3.16 `f94806a8` merged 2026-10-04), P8.3. The plan's own task records are the status of record — P1's and P2's landings are in the tree but NOT written into their task records, and P1's branch names differ from its table |
+| `2026-09-22-defect-closeout-impl.md` | **HUB** of the defect-closeout arc, derived from `2026-09-20-defect-closeout-design.md`. **Split into 11 files 2026-10-02** (one per phase, plus the audit) because the single file had reached 5,220 lines; task IDs, branch names and every word unchanged. Carries the method, the phase map and the first branch. **33 of 97 tasks landed**: P1 all ten, P2 all five, P3 seventeen of eighteen (P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` merged 2026-10-03; P3.16 `f94806a8` merged 2026-10-04; P3.17 `4ea9b5b5` and `231d3d95` merged 2026-10-10), P8.3. The plan's own task records are the status of record — P1's and P2's landings are in the tree but NOT written into their task records, and P1's branch names differ from its table |
 | `2026-09-22-defect-closeout-audit.md` | **Read once, before the first branch.** The cross-phase audit, five topics: what serializes behind P2's merge (52 of the 82 tasks in P3–P9, measured), which edits two phases both claim, the six fault settlements (A2, C6, D1–D4), the citations and anchors that do not resolve (X1–X6, E1/E1b), and which gates go green without a fix. Fault labels are cited from the phase files, so they must not be renumbered |
-| `2026-09-22-defect-closeout-P3.md` | Binding identity: an identity decision answers from the resolved `*Binding`, not from a spelling, the empty scope set, or whichever phase was in reach. **16/18 merged, all sixteen records ARCHIVED to `memory/2026-09-22-defect-closeout-P3-landed.md`** (eleven on 2026-10-02; P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` on 2026-10-03; P3.16 `f94806a8` on 2026-10-04, after eight crosscheck rounds), the table rows left behind as the index. Live in the file: P3.17, **split 2026-10-10**: I146 and I150 committed on `docs/section-5-2-cancellation-and-phase-footprint`, not merged; I050 (decided (c), which became the VM's owner-side timer rule) moved to its own branch, `fix/cancelled-wait-raises`, stacked on it and held for a design comparison before merging. P3.18 unstarted. **NOTHING IN P3 IS GATED ANY MORE** — both Phase-0 decisions are answered (P3.11 SHADOW, P3.12 (C) share the value cell). P3.12's archived record is the one to read before touching the import edge or `Binding`: it carries the ~+0.7% Gabriel cost measured and ACCEPTED as the price of one import rule rather than two, the second hazard (`Imported` is not stability evidence under read-through), the finding that the per-form validation unit makes `StableInUnit` the WRONG source for the fact (C) needs, and the finding that ZERO of the six method bodies the plan counted actually change |
+| `2026-09-22-defect-closeout-P3.md` | Binding identity: an identity decision answers from the resolved `*Binding`, not from a spelling, the empty scope set, or whichever phase was in reach. **17/18 merged, all seventeen records ARCHIVED to `memory/2026-09-22-defect-closeout-P3-landed.md`** (eleven on 2026-10-02; P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` on 2026-10-03; P3.16 `f94806a8` on 2026-10-04, after eight crosscheck rounds; P3.17 on 2026-10-10, split in two: I146 and I150 `4ea9b5b5`, I050 `231d3d95`, after crosscheck round 1 and verification rounds 2 to 11), the table rows left behind as the index. Live in the file: P3.18, unstarted. **NOTHING IN P3 IS GATED ANY MORE** — both Phase-0 decisions are answered (P3.11 SHADOW, P3.12 (C) share the value cell). P3.12's archived record is the one to read before touching the import edge or `Binding`: it carries the ~+0.7% Gabriel cost measured and ACCEPTED as the price of one import rule rather than two, the second hazard (`Imported` is not stability evidence under read-through), the finding that the per-form validation unit makes `StableInUnit` the WRONG source for the fact (C) needs, and the finding that ZERO of the six method bodies the plan counted actually change |
 | `2026-09-22-defect-closeout-P4.md` | The expander residue: a definition-site pin decides the form, and operands get expanded. **0/8**, all after P2's window closes (unconditional). P4.3 and P4.7 are decisions |
 | `2026-09-22-defect-closeout-P5.md` | The unit boundary — an included file belongs to the enclosing expansion and validation unit — plus engine-scoped state and the library-env costs. **0/13**, all after P2's window closes (unconditional). P5.7 is a decision |
 | `2026-09-22-defect-closeout-P6.md` | The value surface answers at its edges instead of raising, splitting or silently rounding. **0/15**; five window-constrained, ten free after the registry/core carve-out. P6.7, P6.10, P6.11, P6.13, P6.15 are decisions |
@@ -563,7 +563,7 @@ defect at HEAD whether or not Tier 2 is ever built.
   `environment` / `scheme-report-environment` as immutable, and Wile permits definition into it.
   Unmeasured against Racket and Chez; measure both before designing, because this is the kind of
   restriction §1.3.2 lets an implementation relax deliberately.
-- [x] **§5.2's ordering clause is unenforced and unmeasured** [Correctness, S, Done 2026-10-06 in P3.17, not yet merged; from
+- [x] **§5.2's ordering clause is unenforced and unmeasured** [Correctness, S, Done 2026-10-06 in P3.17, merged `4ea9b5b5`; from
   `WORK.local.md:150`]: "refer to an identifier before it is imported". Distinct from the shadowing
   clause, which `plans/2026-09-20-core-form-override-and-import-portability-design.md` §4 handles;
   nothing checks the ordering half and nobody has measured what Wile does. Measure first.
@@ -623,7 +623,7 @@ than decisions:
   asserts), so this is a rendering gap affecting every syntax-case template error, not a lost chain.
   Filed for the provenance wave rather than fixed here.
 - [x] **Scheme layer instantiates phase 3 at startup where Go stops at phase 2** [Phase, S, decided
-  and Done 2026-10-06 in P3.17, not yet merged]: `TestStartupBindsNothingAtPhaseTwo` pinned the Go layer only. Needs a decision, not a
+  and Done 2026-10-06 in P3.17, merged `4ea9b5b5`]: `TestStartupBindsNothingAtPhaseTwo` pinned the Go layer only. Needs a decision, not a
   fix. **Decision proposed in P3.17 (re-measured 2026-10-05):** the phase-3 frame is a footprint
   fact, not a binding one. No SLOT exists above `PhaseExpand` on either layer (`ExactBindingAt`;
   the dialect's macro-phase rows answer at every macro phase by design and are excluded), so the
@@ -3402,7 +3402,7 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
   `(mutex-unlock! m cv)`. With work after the wait, `context.DeadlineExceeded` surfaces at ~50 ms
   under a 50 ms ctx, as documented. Options (a) commit and document the edge, (b) VM-wide
   end-of-run ctx check, (c) source-discriminate via the existing `waitCancelled`.
-  **DECIDED (c), amended, and Done 2026-10-06 in P3.17, not yet merged.** The source
+  **DECIDED (c), amended, and Done 2026-10-06 in P3.17, merged `231d3d95`.** The source
   discrimination (c) asked for lives in the VM's owner-side rule, not in `waitCancelled`. No:
   every cancelled wait, the
   two lock waits included, raises `ErrOperationCancelled` with the ctx cause (`waitCancelled` no
@@ -3527,7 +3527,7 @@ enough to rebuild the probes.
   HEAD reported `ErrInternal`, and a poll or recheck still reports `ErrInternal`. An `eval` that
   expands after the stale timer fired reports a raw "context deadline exceeded" from the expander.
 - [x] **The VM poll, both eager rechecks and the expander read only the running context's timer**
-  [Correctness, M, Done 2026-10-06 in P3.17, not yet merged]: a with-timeout expiry during compute
+  [Correctness, M, Done 2026-10-06 in P3.17, merged `231d3d95`]: a with-timeout expiry during compute
   or macro expansion inside `eval`/`load` (a sub-context: timed ctx, no timer) surfaced as a raw,
   catchable `context.DeadlineExceeded` and the handler never ran. Those checks still read only the
   running context's timer, and that is now enough: the raw error returns through `eval` to the
