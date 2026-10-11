@@ -173,15 +173,18 @@ func TestWithTimeoutDynamicWind(t *testing.T) {
 
 // TestWithTimeoutReturnLeavesItsExtent pins that a with-timeout returning normally
 // pops its own winding frame: left on the stack, the enclosing dynamic-wind's
-// PopWind popped it instead, and the run's end ran the after thunk a second time.
+// PopWind popped it instead, and the dynamic-wind's frame stayed behind, so the
+// end of the run ran its after thunk a second time. The dynamic-wind runs in a
+// thread, whose exit is that end, so the log read after the join shows it.
 func TestWithTimeoutReturnLeavesItsExtent(t *testing.T) {
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((log '()))
 			(define (note x) (set! log (cons x log)))
-			(dynamic-wind
-				(lambda () (note 'in))
-				(lambda () (with-timeout 1000 (lambda (k) 'h) (lambda () 'x)))
-				(lambda () (note 'out)))
+			(thread-join! (thread-start! (make-thread (lambda ()
+				(dynamic-wind
+					(lambda () (note 'in))
+					(lambda () (with-timeout 1000 (lambda (k) 'h) (lambda () 'x)))
+					(lambda () (note 'out)))))))
 			(reverse log))
 	`)
 	qt.Assert(t, err, qt.IsNil)
