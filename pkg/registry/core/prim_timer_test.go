@@ -171,6 +171,72 @@ func TestWithTimeoutDynamicWind(t *testing.T) {
 	}
 }
 
+// TestTimerHandlerContinuationCarriesNoTimerFrame pins that the continuation a
+// with-timeout handler receives carries the extents inside the timer's, not the
+// timer's own frame: the segment stops below the finalizer, the only code that pops
+// that frame. Carried, the frame was re-entered by a resume and left on the stack,
+// where an enclosing dynamic-wind's PopWind took it in place of its own, and the end
+// of the run (a thread's exit, here) ran that after thunk a second time. The spin
+// outlasts the 20 ms timer.
+func TestTimerHandlerContinuationCarriesNoTimerFrame(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name: "resumed inside a dynamic-wind in the handler",
+			Code: `
+				(let ((log '()))
+					(define (note x) (set! log (cons x log)))
+					(define (spin) (let loop ((i 0)) (if (< i 3000000) (loop (+ i 1)) 'done)))
+					(let ((r (thread-join! (thread-start! (make-thread (lambda ()
+							(with-timeout 20
+								(lambda (k) (dynamic-wind (lambda () (note 'hin)) (lambda () (k 'resumed)) (lambda () (note 'hout))))
+								(lambda () (list 'got (spin))))))))))
+						(list r (reverse log))))
+			`,
+			Expected: values.List(values.List(values.NewSymbol("got"), values.NewSymbol("done")),
+				values.List(values.NewSymbol("hin"), values.NewSymbol("hout"))),
+		},
+		{
+			Name: "saved, then resumed inside a later dynamic-wind",
+			Code: `
+				(let ((log '()) (saved #f))
+					(define (note x) (set! log (cons x log)))
+					(define (spin) (let loop ((i 0)) (if (< i 3000000) (loop (+ i 1)) 'done)))
+					(let ((r (thread-join! (thread-start! (make-thread (lambda ()
+							(with-timeout 20 (lambda (k) (set! saved k) 'h) (lambda () (list 'got (spin))))
+							(dynamic-wind (lambda () (note 'in)) (lambda () (note (saved 'v)) 'body) (lambda () (note 'out)))))))))
+						(list r (reverse log))))
+			`,
+			Expected: values.List(values.NewSymbol("body"),
+				values.List(values.NewSymbol("in"), values.List(values.NewSymbol("got"), values.NewSymbol("done")), values.NewSymbol("out"))),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// TestFiredTimerInsideAFrameLeavesTheFrame pins that the finalizer pops only its own
+// timer's frame. After the timer arm's hard suspension the top frame is the
+// enclosing dynamic-wind's, which must stay for its own PopWind; popped, the
+// dynamic-wind's exit found its frame gone.
+func TestFiredTimerInsideAFrameLeavesTheFrame(t *testing.T) {
+	result, err := testhelpers.RunSchemeCode(t, `
+		(let ((log '()))
+			(define (note x) (set! log (cons x log)))
+			(let ((r (dynamic-wind (lambda () (note 'in))
+					(lambda () (with-timeout 20 (lambda (k) 'timed-out) (lambda () (let loop () (loop)))))
+					(lambda () (note 'out)))))
+				(list r (reverse log))))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.List(values.NewSymbol("timed-out"),
+		values.List(values.NewSymbol("in"), values.NewSymbol("out"))))
+}
+
 // TestWithTimeoutReturnLeavesItsExtent pins that a with-timeout returning normally
 // pops its own winding frame: left on the stack, the enclosing dynamic-wind's
 // PopWind popped it instead, and the dynamic-wind's frame stayed behind, so the

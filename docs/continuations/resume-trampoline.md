@@ -67,7 +67,7 @@ The whole point of Wile's heap-based continuation chain was to *not* be limited
 by the Go stack. Yet here, resume-heavy code reintroduced exactly that limit.
 
 There was a second, quieter bug in the same code. Escaping *out* of a
-`dynamic-wind` ran its after-thunk twice — once when `ReinstallSegment`
+`dynamic-wind` ran its after-thunk twice — once when `reinstallSegment`
 reconciled the winding, and again when the abort-to-prompt unwound past it. Two
 mechanisms both thought they owned the unwind. We'll come back to why the
 trampoline fixes this for free.
@@ -105,7 +105,7 @@ segment onto *its own* live chain, and loops:
 var resumeErr *ErrResumeContinuation
 if errors.As(err, &resumeErr) {
     boundary, _ := p.FindPrompt(resumeErr.Tag)
-    wasEmpty, reErr := p.ReinstallSegment(
+    wasEmpty, reErr := p.reinstallSegment(
         resumeErr.Segment, boundary,
         resumeErr.SourceWinding, resumeErr.Values, true,
         resumeErr.escalatorRevivals)
@@ -128,7 +128,7 @@ frames no matter how many times you resume**. `ctak` now bounces off
         └───────────┬─────────────┘
                     │ Run() returns ErrResumeContinuation
                     ▼
-          ReinstallSegment(seg, boundary, ...)
+          reinstallSegment(seg, boundary, ...)
                     │ graft segment onto live chain
                     │ continue  ── bounce back up ──┐
                     └──────────────────────────────┘
@@ -139,12 +139,12 @@ frames no matter how many times you resume**. `ctak` now bounces off
 
 A single resume is four moves. Let's name the pieces, then walk them.
 
-The actor is `ReinstallSegment` (`pkg/machine/machine_context_apply.go`).
+The actor is `reinstallSegment` (`pkg/machine/machine_context_apply.go`).
 It is the *one* resume primitive — both the abortive `call/cc` resume and
 composable-continuation resume route through it. Its signature:
 
 ```go
-func (p *MachineContext) ReinstallSegment(
+func (p *MachineContext) reinstallSegment(
     comp *ComposableContinuation,   // the captured segment
     boundary *MachineContinuation,  // where to graft it (nil = replace all)
     srcWinding WindingStack,        // winding live at the (k v) call site
@@ -225,7 +225,7 @@ driver — inside an `eval`, a `call-with-output-file` procedure, or a
 `dynamic-wind` before/after thunk run by a winding reconcile. (`force`, parameter
 converters, and `dynamic-wind` bodies now run on the live chain, not in
 sub-contexts.) The frames between that call site and the driver have
-dynamic-wind extents that must be unwound. If `ReinstallSegment` reconciled
+dynamic-wind extents that must be unwound. If `reinstallSegment` reconciled
 against the *driver's* winding it would miss them, and a deeper after-thunk would
 be skipped. Carrying the source winding forward is what lets the single reconcile
 see the full picture. This is the "deeper-sub after-thunk" case, and it's why the
@@ -292,7 +292,7 @@ driver reads "absent", i.e. a revival, for a jump that never left the extent, an
 swallows the secondary exactly as the two earlier answers did. So
 `applyCapturedContinuation` computes the set and carries it on
 `ErrResumeContinuation.escalatorRevivals`; `applyComposableContinuation`, which
-resumes in place, computes it directly. `ReinstallSegment` only *applies* it, and
+resumes in place, computes it directly. `reinstallSegment` only *applies* it, and
 only *after* `RestoreWithWindingFrom` succeeds — a failed reinstatement never
 re-entered the frame, so it contributes no revival.
 
@@ -335,7 +335,7 @@ own delimited computation, and the last line reads `(r 2 count 1)`.
 First pass: `call/cc` captures the continuation "add 1, store in `r`, bump
 `count`, maybe loop" and saves it in `k`, returning `0`. So `r` becomes `1`,
 `count` becomes `1`. Then `(k 1)` resumes — bounces off the driver,
-`ReinstallSegment` deep-copies the segment (re-invocation) and delivers `1`, so
+`reinstallSegment` deep-copies the segment (re-invocation) and delivers `1`, so
 `r` becomes `2`, `count` becomes `2`. Again at `count=2`, `count=3`. At
 `count=4` the `if` is false, no resume, and we read `r=4 count=4`. Every one of
 those resumes was a trampoline bounce, not a nested Go call.
@@ -352,7 +352,7 @@ And the dynamic-wind single-fire:
 (reverse trace)   ; => (before body after)
 ```
 
-`after` appears exactly once. The single winding reconcile in `ReinstallSegment`
+`after` appears exactly once. The single winding reconcile in `reinstallSegment`
 owns the unwind; nothing else fires it.
 
 ## What Would Break

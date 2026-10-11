@@ -23,9 +23,11 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// ErrTimerExpired is the context cause set by with-timeout via
-// context.WithTimeoutCause. Interrupt check sites compare against this
-// to distinguish timer expiry from external cancellation (e.g. Ctrl+C).
+// ErrTimerExpired is what a with-timeout expiry's context cause matches with
+// errors.Is: the cause itself is a timerExpiry naming the timer, which unwraps to
+// this sentinel. A host can tell a timer expiry from an external cancellation
+// (e.g. Ctrl+C) by it. A context cancelled with the bare sentinel names no timer,
+// so no with-timeout answers it.
 var ErrTimerExpired = werr.NewStaticError("timer expired")
 
 // timerExpiry is the cancellation cause of one with-timeout's timer. It names the
@@ -136,17 +138,7 @@ func (p *MachineContext) FailureClaimedByTimer(err error) bool {
 	if p.supersedingTimerInterrupt(err) != nil {
 		return true
 	}
-	return p.timerClaims(err) && p.timerAbove()
-}
-
-// timerClaims reports whether a with-timeout expiry claims err: p's context was
-// cancelled by a timer (cause ErrTimerExpired), and err is a failure the timeout
-// supersedes (timerClaimable).
-func (p *MachineContext) timerClaims(err error) bool {
-	if !errors.Is(context.Cause(p.ctx), ErrTimerExpired) {
-		return false
-	}
-	return timerClaimable(err)
+	return p.timerAbove() && timerClaimable(err)
 }
 
 // timerClaimable reports whether err is a failure a timeout supersedes, on a

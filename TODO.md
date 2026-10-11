@@ -2613,7 +2613,7 @@ Stage C adversarial-review successors, left out so the arc could land. All four 
   2026-06-28 on `feat/continuation-resume-trampoline`]: resumed continuations ran in a nested
   sub-context and accumulated Go frames (`ctak(18,12,6)` ~40k, Gabriel loop ~525k, against Go's
   ~675k overflow); `ErrResumeContinuation` now resumes on the driver
-  (`RunResumable`/`ReinstallSegment`) in O(1) Go frames. `maxContinuationDepth`/`contNestDepth`
+  (`RunResumable`/`reinstallSegment`) in O(1) Go frames. `maxContinuationDepth`/`contNestDepth`
   retired, and the `-race` ctak skip with them. A post-landing crosscheck fixed a sticky
   `isolatedMarks` swallowing R7RS §6.11 secondary exceptions (`resumeGeneration` counter). **Why four
   attempts failed is the durable part:** a resume-side-only trampoline is *provably impossible*
@@ -3427,7 +3427,7 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
   `TestTimerCancelledWaitInSubContextRunsHandler`, `TestTimerCancelledWaitIsNeverCaught`,
   `TestTimerCancelledWaitInRootlessCallCCRunsHandler`, `TestTimerCancelledWaitInHostCallbackRunsHandler`,
   `TestTimerExpiryDuringEvalComputeRunsHandler`, `TestTimerSupersedesFailureButNotDenial`,
-  `TestTimerInterruptNamesInnermostTimer`, `TestJoinReportsJoineeCancellationAsUncaught`,
+  `TestInnerTimerExpiryRunsTheInnerHandler`, `TestJoinReportsJoineeCancellationAsUncaught`,
   `TestTimerCancelledWaitInAbortAfterThunkRunsHandler`, `TestOrdinaryErrorUnderArmedTimerIsCaught`,
   `TestEmbedderDeadlineInsideArmedTimerRaises` and
   `TestCancelledWaitInChildThreadIsCatchableThere`, `TestTimerClaimsAHandlerFailure` and
@@ -3525,7 +3525,8 @@ enough to rebuild the probes.
   then any 200 ms of work, in the same evaluation unit (one form, or an `EvalProgram` unit such as
   a file run; separate `EvalMultiple` forms and REPL inputs each start a fresh context). Fix shape: tie the teardown to the boundary frame leaving the chain.
   Since P3.17 a stale timer claims no failure and hides no live timer outside it
-  (`liveFiredTimer`, `TestStaleTimerClaimsNothing`, `TestStaleTimerDoesNotHideALiveOne`), so a
+  (`liveFiredTimer`, `TestStaleTimerClaimsNothing`, `TestStaleTimerDoesNotHideALiveOne`; the first two
+  since deleted, the third renamed `TestEscapedTimerDoesNotHideALiveOne`), so a
   primitive's own failure is reported as itself; but the stale timer's done ctx still cancels
   every later wait in the unit, which now raises a cancellation carrying `ErrTimerExpired` where
   HEAD reported `ErrInternal`, and a poll or recheck still reports `ErrInternal`. An `eval` that
@@ -3595,7 +3596,8 @@ enough to rebuild the probes.
   dynamic-wind after thunks when it completes** [Correctness, S–M, Done 2026-10-10 on
   `fix/timer-identity-and-teardown`, by the fix shape: a context records the depth it inherited
   (`MachineContext.windingBase`) and its completion, or a thread's exit, unwinds to it
-  (`UnwindOwn`); pinned by `TestRootlessSubContextLeavesInheritedExtents` and
+  (`UnwindOwn`), as does an abort to its own boundary (`resolveAbort` reconciles to
+  `windingOutside`); pinned by `TestRootlessSubContextLeavesInheritedExtents` and
   `TestThreadExitLeavesTheStartersExtents`. Found again as a regression of the timer frame: the
   thread's exit ended its starter's timer. The record below is as filed]: `NewSubContext` copies the
   parent's winding stack and `RunResumable`'s normal completion runs `UnwindTo(0)`, so every
@@ -3603,7 +3605,7 @@ enough to rebuild the probes.
   copies its starter's winding stack, does the same at thread exit. Fix shape: on a sub-context or
   thread root, unwind on completion only to the inherited depth.
 - [ ] **A call/cc continuation reinstated by an escape leaves its parameterization sticky**
-  [Correctness, M]: `ReinstallSegment` sets the driver's `capturedMarks`/`isolatedMarks` and nothing
+  [Correctness, M]: `reinstallSegment` sets the driver's `capturedMarks`/`isolatedMarks` and nothing
   clears them when the reinstalled frames return, so a `parameterize` value outlives its extent for
   the rest of the evaluation. Since P3.17 a `with-timeout` handler that runs because a wait in an
   escape's after thunk was cancelled sees the escaping continuation's parameterization (before, the
@@ -3632,9 +3634,10 @@ enough to rebuild the probes.
   [Correctness, M, Done 2026-10-10 on `fix/timer-identity-and-teardown` for the winding half: a
   continuation records the depth of its delimiting prompt on the winding stack
   (`ComposableContinuation.windingBase`), and a reinstatement re-enters the extents it carries on
-  top of those outside its boundary (`ReinstallSegment`), so the invoker's are kept; pinned by
+  top of those outside its boundary (`reinstallSegment`), so the invoker's are kept, and the prompt
+  frames it carries are rebased onto them (`rebasePrompts`); pinned by
   `TestReentryInsideAFrameKeepsIt` and `TestReentryInsideATimerStaysUnderIt`. The handlers and
-  `parameterize` half below is STILL OPEN. The record below is as filed]: no timer involved, same on HEAD. `ReinstallSegment` reconciles the winding
+  `parameterize` half below is STILL OPEN. The record below is as filed]: no timer involved, same on HEAD. `reinstallSegment` reconciles the winding
   stack to the captured one as an absolute target, so frames the invoker is inside are unwound.
   With `kc` captured under a top-level prompt, `(dynamic-wind (lambda () (note 'in)) (lambda ()
   (note (list 'kc-returned (kc 7))) (note 'body-done)) (lambda () (note 'out)))` logs
@@ -3723,7 +3726,11 @@ enough to rebuild the probes.
   through `eval` makes the program answer `#<void>`; a thread thunk loses its tail.
   `call-with-exit`, and a `k` captured outside `eval` and invoked inside, are correct.
   `TestSubContextNonTailEscapeTruncation` (the 2026-06 boundary-reification arc) has no row for
-  these primitives. Fix shape: resolve a resume rooted on the sub's own chain in its driver, or run
+  these primitives. Since 2026-10-10 the resume keeps the winding stack around the `eval` call
+  (`ResumeWindingDepth`), so a `with-timeout` around it stays armed while its boundary frame is
+  discarded with the chain: when its timer fires, the driver reports "with-timeout: no boundary frame
+  found for fired timer" (an internal error) where it raised a plain cancellation before.
+  Fix shape: resolve a resume rooted on the sub's own chain in its driver, or run
   them on the live chain as `force` now is.
 - [ ] **Code in a sub-context cannot see its parent's prompts** [Correctness, M]: `FindPrompt`
   (`pkg/machine/machine_context_continuation.go`) walks the running context's chain and its own

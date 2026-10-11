@@ -192,7 +192,7 @@ func (p *MachineContext) SetBreakHandler(handler values.Callable) {
 // BreakResumeValues returns the arguments a suspension handler must apply the
 // resumable continuation to in order to resume unchanged: the value register
 // frozen at the break point. Resuming with no arguments instead clears the
-// register, because ReinstallSegment ends with SetValues(args...) and Restore
+// register, because reinstallSegment ends with SetValues(args...) and Restore
 // does not carry a register of its own.
 func (p *MachineContext) BreakResumeValues() []values.Value {
 	return p.breakResumeValues

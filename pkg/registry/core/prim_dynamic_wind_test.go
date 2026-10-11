@@ -287,6 +287,84 @@ func TestReentryInsideAFrameKeepsIt(t *testing.T) {
 			`,
 			Expected: values.List(values.NewSymbol("in"), values.NewSymbol("out")),
 		},
+		{
+			Name: "call/cc continuation carries only the extents inside its prompt",
+			Code: `
+				(let ((log '()) (k #f) (dtag (default-continuation-prompt-tag)))
+					(define (note x) (set! log (cons x log)))
+					(dynamic-wind
+						(lambda () (note 'in))
+						(lambda () (call-with-continuation-prompt
+							(lambda () (call/cc (lambda (c) (set! k c) 0)))
+							dtag (lambda args args)))
+						(lambda () (note 'out)))
+					(call-with-continuation-prompt (lambda () (k 7)) dtag (lambda args args))
+					(reverse log))
+			`,
+			Expected: values.List(values.NewSymbol("in"), values.NewSymbol("out")),
+		},
+		{
+			// A prompt frame inside the segment recorded the capture site's winding
+			// stack; reinstated under another invoker, the record is rebased onto the
+			// invoker's. Unrebased, the abort to that prompt reconciled to the capture
+			// site's stack, unwinding the invoker's frame ("pop-wind: winding stack is
+			// empty" when the body then left it).
+			Name: "prompt carried inside a composable continuation, aborted to",
+			Code: `
+				(let ((log '()) (kc #f) (dtag (default-continuation-prompt-tag))
+				      (t (make-continuation-prompt-tag 't)))
+					(define (note x) (set! log (cons x log)))
+					(call-with-continuation-prompt
+						(lambda ()
+							(call-with-continuation-prompt
+								(lambda ()
+									(let ((v (call-with-composable-continuation (lambda (k) (set! kc k) 0) t)))
+										(if (= v 0) 0 (abort-current-continuation dtag 'aborted))))
+								dtag (lambda args (cons 'q-handler args))))
+						t (lambda args args))
+					(dynamic-wind
+						(lambda () (note 'in))
+						(lambda () (note (list 'kc-returned (kc 5))) (note 'body-done))
+						(lambda () (note 'out)))
+					(reverse log))
+			`,
+			Expected: values.List(values.NewSymbol("in"),
+				values.List(values.NewSymbol("kc-returned"),
+					values.List(values.NewSymbol("q-handler"), values.NewSymbol("aborted"))),
+				values.NewSymbol("body-done"), values.NewSymbol("out")),
+		},
+		{
+			// The same rebasing for a call/cc resume at the carried prompt: Racket logs
+			// this order; unrebased, the invoker's after thunk ran mid-body and twice.
+			Name: "prompt carried inside a composable continuation, resumed at",
+			Code: `
+				(let ((log '()) (kc #f) (dtag (default-continuation-prompt-tag))
+				      (t (make-continuation-prompt-tag 't)))
+					(define (note x) (set! log (cons x log)))
+					(call-with-continuation-prompt
+						(lambda ()
+							(dynamic-wind
+								(lambda () (note 'in-cap))
+								(lambda ()
+									(call-with-continuation-prompt
+										(lambda ()
+											(let ((v (call-with-composable-continuation (lambda (k) (set! kc k) 0) t)))
+												(if (= v 0) 0 (+ 100 (call/cc (lambda (c) (c 1)))))))
+										dtag (lambda args (cons 'q-handler args))))
+								(lambda () (note 'out-cap))))
+						t (lambda args args))
+					(note '--)
+					(dynamic-wind
+						(lambda () (note 'in-inv))
+						(lambda () (note (list 'kc-returned (kc 5))) (note 'body-done))
+						(lambda () (note 'out-inv)))
+					(reverse log))
+			`,
+			Expected: values.List(values.NewSymbol("in-cap"), values.NewSymbol("out-cap"), values.NewSymbol("--"),
+				values.NewSymbol("in-inv"), values.NewSymbol("in-cap"), values.NewSymbol("out-cap"),
+				values.List(values.NewSymbol("kc-returned"), values.NewInteger(101)),
+				values.NewSymbol("body-done"), values.NewSymbol("out-inv")),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -321,6 +399,34 @@ func TestRootlessSubContextLeavesInheritedExtents(t *testing.T) {
 					(reverse log))
 			`,
 			Expected: values.List(values.NewSymbol("in"), values.NewSymbol("inner"), values.NewSymbol("out")),
+		},
+		{
+			// A continuation captured outside the rootless sub-context and resumed inside
+			// it carries extents the sub-context inherited; its boundary is not a prompt
+			// the program wrote, so they are kept once, not re-entered on top of
+			// themselves. Only the first half of the log is asserted: the rest of the
+			// program runs a second time after the resume (filed in TODO.md).
+			Name: "continuation captured outside, resumed inside",
+			Code: `
+				(let ((log '()) (k #f) (n 0))
+					(define (note x) (set! log (cons x log)))
+					(dynamic-wind (lambda () (note 'in))
+						(lambda ()
+							(let ((v (call/cc (lambda (c) (set! k c) 'first))))
+								(note v)
+								(if (< n 1)
+									(begin (set! n (+ n 1))
+										(call/cc (lambda (k0)
+											(dynamic-wind (lambda () #f)
+												(lambda () (k0 'esc))
+												(lambda () (call/cc (lambda (c2) (k 'again))))))))
+									'done)))
+						(lambda () (note 'out)))
+					(let take ((l (reverse log)) (n 4))
+						(if (or (= n 0) (null? l)) '() (cons (car l) (take (cdr l) (- n 1))))))
+			`,
+			Expected: values.List(values.NewSymbol("in"), values.NewSymbol("first"),
+				values.NewSymbol("again"), values.NewSymbol("out")),
 		},
 		{
 			Name: "continuation applied at its own boundary",

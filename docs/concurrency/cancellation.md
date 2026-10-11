@@ -203,7 +203,8 @@ separately, each by a test that fails when that path is removed:
 `TestTimerCancelledWaitIsNeverCaught` (the bridge in the timer's own context, and
 the pass-up below it through one or two sub-contexts),
 `TestAfterThunkOutsideAFiredTimerKeepsItsGuard` (a fired timer claims only a
-failure a timer's cancellation caused: the cause check in `timerClaims`),
+failure a timer's cancellation caused: the cause check in `expiredTimer`, read by
+`firedTimer` and `timerAbove`),
 `TestWindingThunkFailureOutsideAFiredTimerIsItsOwn` (nor a winding thunk's failure
 outside it), `TestUnclaimedFailureIsClaimedByAnotherOwner` (a failure reaching
 another context whose timer fired is the timeout there),
@@ -344,7 +345,7 @@ Scheme (they live above `pkg/values` and cannot be reached from a Go-level test)
   owner like a wait's failure.
 - `TestTimerSupersedesFailureButNotDenial`: a primitive that outlives the timer and
   then fails becomes the timeout, unless its failure is a security denial.
-- `TestTimerInterruptNamesInnermostTimer`: with two timers on one context, and with
+- `TestInnerTimerExpiryRunsTheInnerHandler`: with two timers on one context, and with
   timers owned by two contexts of one chain, the inner one's handler runs when its
   timer fires. `TestTimerExpiryNamesTheTimerThatFired`: the outer one's runs when
   the outer timer fires, and a starting thread's expiry does not run a started

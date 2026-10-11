@@ -164,7 +164,7 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 	// sub-context) is handled on the SUB's chain while the call/cc trampoline reinstates
 	// on the top driver's. Judging there reads the frame as absent — a revival — for a
 	// jump that never left it, which swallows the secondary again. pendingEscalatorRevivals
-	// is therefore called by the invoker, not by ReinstallSegment.
+	// is therefore called by the invoker, not by reinstallSegment.
 	//
 	// (A context-global isolatedMarks gate was WRONG here: it stays true after ANY prior
 	// resume on the driver, so it swallowed the mandatory secondary exception for every

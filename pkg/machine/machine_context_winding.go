@@ -40,6 +40,40 @@ func (p *MachineContext) windingOutside(boundary *MachineContinuation) WindingSt
 	return p.windingStack[:p.WindingDepthAt(nil)]
 }
 
+// resumeOutside is windingOutside for a call/cc resume of comp at boundary. A
+// context's own boundary (nil) is not a prompt the program wrote: a rootless
+// call/cc's sub-context or a thread root has it only to drive the resume. So
+// extents it inherited that comp also carries, captured outside it, are kept once,
+// not re-entered on top of themselves.
+func (p *MachineContext) resumeOutside(boundary *MachineContinuation, comp *ComposableContinuation) WindingStack {
+	outside := p.windingOutside(boundary)
+	if boundary != nil {
+		return outside
+	}
+	return outside[:min(len(outside), comp.windingBase)]
+}
+
+// ResumeWindingDepth is WindingDepthAt for a call/cc capture: the depth outside
+// the prompt its resume will be reinstated at. prompt and found are this context's
+// FindPrompt(DefaultPromptTag). A sub-context with no default prompt of its own and
+// a live chain (eval, load) hands a resume up to the nearest driver (a context
+// running RunResumable), which reinstates it at that driver's default prompt; the
+// depth is that prompt's, or the extents between the driver and this context are
+// left out of the continuation and unwound by its resume.
+func (p *MachineContext) ResumeWindingDepth(prompt *MachineContinuation, found bool) int {
+	if found || p.cont == nil {
+		return p.WindingDepthAt(prompt)
+	}
+	for c := p.parentMC; c != nil; c = c.parentMC {
+		if c.promptTag != DefaultPromptTag {
+			continue
+		}
+		frame, _ := c.FindPrompt(DefaultPromptTag)
+		return c.WindingDepthAt(frame)
+	}
+	return p.WindingDepthAt(nil)
+}
+
 // PushWindingFrame adds a frame to the winding stack.
 func (p *MachineContext) PushWindingFrame(frame DynamicWindFrame) {
 	p.windingStack.Push(frame)

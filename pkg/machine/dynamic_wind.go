@@ -21,8 +21,11 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// DynamicWindFrame represents a single dynamic-wind extent.
-// Each frame tracks the before/after thunks for one dynamic-wind call.
+// DynamicWindFrame represents a single dynamic extent on the winding stack: a
+// dynamic-wind call's, with its before/after thunks, or a with-timeout's, with its
+// timer and no thunks (newTimerFrame). The reconcile below treats both alike,
+// except that it exits a timer frame by ending its timer (exitTimer) instead of
+// running a thunk.
 //
 // R7RS §6.10: dynamic-wind establishes a dynamic extent during which
 // the before and after thunks are called whenever control enters or exits.

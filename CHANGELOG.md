@@ -170,16 +170,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   was done) and the body's own exit then found the stack empty ("pop-wind: winding
   stack is empty", an internal error); inside a `with-timeout` it also ended the
   timer. A continuation now carries the extents inside its delimiting prompt and
-  re-enters them on top of those outside its boundary (Flatt et al. 2007). Pinned by
-  `TestReentryInsideAFrameKeepsIt` and `TestReentryInsideATimerStaysUnderIt`.
+  re-enters them on top of those outside its boundary (Flatt et al. 2007); a prompt
+  frame it carries is rebased onto the invoker's extents, so an abort to it, or a
+  resume at it, stays inside them. Pinned by `TestReentryInsideAFrameKeepsIt` and
+  `TestReentryInsideATimerStaysUnderIt`.
 
-- **A thread's exit, and a rootless `call/cc` sub-context's completion, run only
-  their own after thunks.** Both inherited the winding stack of the context that
-  started them and unwound all of it, so every enclosing `dynamic-wind`'s after
-  thunk ran there and again when that context left it, and a thread's exit ended a
-  `with-timeout` it was started inside. Pinned by
-  `TestThreadExitLeavesTheStartersExtents` and
+- **A thread, or a rootless `call/cc` sub-context, leaving its root runs only its
+  own after thunks.** Both inherited the winding stack of the context that started
+  them, and finishing or aborting to their own boundary unwound all of it, so every
+  enclosing `dynamic-wind`'s after thunk ran there and again when that context left
+  it, and a thread ended a `with-timeout` it was started inside. A continuation
+  captured outside a rootless sub-context and resumed inside it re-entered those
+  extents a second time. Pinned by `TestThreadExitLeavesTheStartersExtents` and
   `TestRootlessSubContextLeavesInheritedExtents`.
+
+- **A `call/cc` continuation captured inside `eval` or `load` keeps the extents
+  around the call.** Its capture was delimited at the sub-context's own boundary,
+  not at the prompt of the driver that resumes it, so the resume unwound the
+  `dynamic-wind` frames, and a `with-timeout`, between the two. Pinned by
+  `TestCallCCInEvalKeepsTheExtentsAroundIt`.
+
+- **The continuation a `with-timeout` handler receives no longer carries the
+  timer's frame, and returning through a re-entered `with-timeout` leaves the live
+  timers alone.** Resumed inside a `dynamic-wind`, the continuation left the dead
+  timer's frame on the winding stack, where the `dynamic-wind`'s exit popped it in
+  place of its own and the run's end ran that after thunk a second time. And the
+  `with-timeout` finalizer restored the timer and context saved when it began, so a
+  composable continuation returning through it inside another `with-timeout`
+  disarmed that one. Pinned by `TestTimerHandlerContinuationCarriesNoTimerFrame`,
+  `TestFiredTimerInsideAFrameLeavesTheFrame` and
+  `TestReturnThroughAReenteredTimerKeepsTheLiveOne`.
 
 - **A timer expiry is answered by the `with-timeout` whose timer fired.** Every
   `with-timeout` cancelled with the one `ErrTimerExpired`, so the innermost armed
@@ -414,6 +434,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `let` — are affected and all five now report the structural error.
 
 ### Changed
+
+- **BREAKING (Go API): `pkg/machine`'s continuation and timer seams.**
+  `RunBodyUnderTimer` takes the timeout as a `time.Duration` and creates the
+  timer's context itself, so the cancellation cause always names its timer.
+  `NewComposableContinuation` takes the depth of the delimiting prompt on the
+  winding stack (`MachineContext.WindingDepthAt`, or `ResumeWindingDepth` for a
+  `call/cc` capture), and its `WindingStack()` returns only the extents the
+  continuation carries. `ReinstallSegment` is unexported. A context cancelled with
+  the bare `ErrTimerExpired` names no timer, so no `with-timeout` answers it; the
+  cause `with-timeout` sets still matches `errors.Is(err, ErrTimerExpired)`.
 
 - **BREAKING (cancellation only): a cancelled blocking wait raises instead of
   answering a value.** `mutex-lock!` and `(mutex-unlock! m cv)` now raise

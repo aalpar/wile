@@ -91,7 +91,7 @@ func (p *CapturedContinuation) EqualTo(o values.Value) bool {
 // ran the captured chain in a fresh sub-context (sub.Run()) and aborted to
 // DefaultPromptTag with the result. That nests O(live continuation depth) Go frames
 // per resume — the ctak / -race stack overflow — and reconciles dynamic-wind winding
-// twice on an escape-out (ReinstallSegment AND the abort catch = the double-fire).
+// twice on an escape-out (reinstallSegment AND the abort catch = the double-fire).
 // Returning the segment UNRUN and letting the driver reinstall it on ITSELF (boundary
 // = nil, the abortive replace) runs the resumed chain on the driver's own Run loop:
 // O(1) Go frames, and a SINGLE winding reconcile carrying the source winding from this
@@ -138,8 +138,8 @@ func (p *MachineContext) applyCapturedContinuation(
 	// This signal is emitted only for call/cc resume, which always isolates marks on
 	// reinstall (the captured snapshot in capt.cc, taken at capture time, restores the
 	// outer parameter/handler environment). The driver passes isolate=true to
-	// ReinstallSegment accordingly. Composable resume composes the invoker's marks
-	// instead and bypasses this signal (it calls ReinstallSegment directly).
+	// reinstallSegment accordingly. Composable resume composes the invoker's marks
+	// instead and bypasses this signal (it calls reinstallSegment directly).
 	return p, &ErrResumeContinuation{
 		Tag:               DefaultPromptTag,
 		Segment:           capt.cc,

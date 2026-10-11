@@ -505,7 +505,7 @@ var PrimMutexState = helpers.MakeUnaryAccessor(werr.ErrNotAMutex, "mutex-state",
 // terminated owner returns #t and additionally signals an abandoned-mutex
 // exception. A cancelled wait raises ErrOperationCancelled (waitCancelled); when a
 // with-timeout armed in this thread's chain fired, the VM turns the raise into the
-// timeout, run by the innermost with-timeout on the chain. A timed wait does not watch the context: it notices a
+// timeout, run by the with-timeout whose timer fired. A timed wait does not watch the context: it notices a
 // cancellation only when its timeout elapses, and acquires if the mutex frees
 // first.
 func PrimMutexLock(mc machine.CallContext) error {
@@ -602,7 +602,7 @@ func PrimMutexLock(mc machine.CallContext) error {
 // Returns #t, or with a condition variable, #t if signalled and #f if the timeout
 // elapsed first. A cancelled cv wait raises ErrOperationCancelled (waitCancelled);
 // when a with-timeout armed in this thread's chain fired, the VM turns the raise
-// into the timeout, run by the innermost with-timeout on the chain.
+// into the timeout, run by the with-timeout whose timer fired.
 func PrimMutexUnlock(mc machine.CallContext) error {
 	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, werr.ErrNotAMutex, "mutex-unlock!")
 	if err != nil {

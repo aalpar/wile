@@ -235,8 +235,8 @@ var (
 	// cancellation through one rule, waitCancelled in extensions/threads: thread-sleep!,
 	// thread-join! (whose joiner cancellation Thread.Join reports), mutex-lock!
 	// and (mutex-unlock! m cv). When a with-timeout armed in the waiting thread's
-	// chain fired, the VM turns the failure into the timeout, run by the innermost
-	// with-timeout on the chain, before any exception handler on the chain sees it
+	// chain fired, the VM turns the failure into the timeout, run by the
+	// with-timeout whose timer fired, before any exception handler on the chain sees it
 	// (docs/concurrency/cancellation.md). A
 	// timed mutex-lock! notices a cancellation only when its timeout elapses. Pair it with the raw ctx cause so
 	// a host can still distinguish context.Canceled from context.DeadlineExceeded.

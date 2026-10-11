@@ -30,20 +30,21 @@ import (
 // sits, top level or inside a surviving sub-context.
 //
 // timerState is pushed as a LINKED stack (parent pointer) for nesting, and carries the
-// tag plus the saved outer ctx. The finalizer does an IDEMPOTENT ABSOLUTE teardown —
-// cancel the timer, restore the outer timer + ctx, forward the body's 0/1/N values — so
-// it is correct on normal completion AND, run a second time, after the timer arm already
-// tore the fired timer down (resolveTimerInterrupt restores the same outer state). This
-// helper installs and restores p.timer directly: nesting requires pushing a child timer
-// while the parent is still live, via the linked parent pointer.
+// tag plus the saved outer ctx. The finalizer leaves the extent the way an escape
+// does (exitTimer): it cancels the timer and restores the outer timer and ctx only
+// when the finalizing context still arms it, then forwards the body's 0/1/N values.
+// So it is right on a normal return; after the timer arm already tore the fired timer
+// down; and on a return through a re-entered extent, whose timer is over and must not
+// displace the timers armed now. This helper installs p.timer directly: nesting
+// requires pushing a child timer while the parent is still live, via the linked
+// parent pointer.
 func (p *MachineContext) RunBodyUnderTimer(d time.Duration, thunk values.Value, handler values.Callable) (*MachineContext, error) {
 	parentCtx := p.ctx
-	savedTimer := p.timer
 	tag := NewPromptTag("with-timeout")
 	timer := &timerState{
 		handler:  handler,
 		tag:      tag,
-		parent:   savedTimer,
+		parent:   p.timer,
 		savedCtx: parentCtx,
 	}
 	// The cause names the timer (timerExpiry), so an expiry is answered by the
@@ -59,19 +60,15 @@ func (p *MachineContext) RunBodyUnderTimer(d time.Duration, thunk values.Value, 
 		if ferr != nil {
 			return ferr
 		}
-		cancel()
-		finMC.timer = savedTimer
-		finMC.ctx = parentCtx
 		// A normal return leaves the extent: pop its winding frame. After the timer
-		// arm's hard suspension, or on a re-entry that never pushed it, the frame is
-		// not on top and there is nothing to pop.
+		// arm's hard suspension the frame is not on top and there is nothing to pop.
 		ws := finMC.windingStack
 		if len(ws) > 0 && ws[len(ws)-1].timer == timer {
 			finMC.PopWindingFrame()
 		}
-		// Forward 0/1/N values: Arg(0) is the variadic rest-list of the body's values.
-		// Collected under parentCtx, which finMC.ctx was just restored to — the
-		// body's timer context may already be cancelled.
+		finMC.exitTimer(timer)
+		// Forward 0/1/N values: Arg(0) is the variadic rest-list of the body's values,
+		// collected under the ctx outside the extent (the body's may be cancelled).
 		vals, cerr := values.CollectList(finMC.ctx, finMC.Arg(0), "with-timeout")
 		if cerr != nil {
 			return cerr
