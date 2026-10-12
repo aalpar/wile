@@ -132,6 +132,28 @@ func (p WindingStack) Copy() WindingStack {
 	return slices.Clone(p)
 }
 
+// holds reports whether the stack has the extent with this ID.
+func (p WindingStack) holds(id uint64) bool {
+	for _, frame := range p {
+		if frame.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// holdsTimer reports whether the stack has a frame for t's extent. A re-entry of
+// the extent from inside it pushes a second one; the timer is over only when the
+// last of them is left.
+func (p WindingStack) holdsTimer(t *timerState) bool {
+	for _, frame := range p {
+		if frame.timer == t {
+			return true
+		}
+	}
+	return false
+}
+
 // Depth returns the number of active dynamic-wind frames.
 func (p WindingStack) Depth() int {
 	return len(p)

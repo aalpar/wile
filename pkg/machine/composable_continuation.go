@@ -34,22 +34,27 @@ type ComposableContinuation struct {
 	cont *MachineContinuation
 	// windingStack is the dynamic-wind extents the continuation carries: those
 	// inside the prompt the capture is delimited at, which a reinstatement re-enters
-	// on top of the extents outside its boundary (reinstallSegment). windingBase is
-	// the depth of that prompt on the capture site's stack, the extents below it
-	// being the capture site's surroundings, not the continuation's.
+	// on top of the extents outside its boundary (reinstallSegment). The extents
+	// below that prompt are the capture site's surroundings, not the continuation's.
 	windingStack WindingStack
-	windingBase  int
-	// promptWinding is, for each prompt frame in the segment, the extents above
-	// windingBase it recorded when it was pushed. A prompt frame records its
+	// promptWinding is, for each prompt frame in the segment, the extents above the
+	// delimiting prompt it recorded when it was pushed. A prompt frame records its
 	// winding stack absolutely, as the capture site saw it; reinstated under
 	// another invoker, the record is rebased onto the extents outside the new
 	// boundary (rebasePrompts), or an abort to that prompt, or a resume at it,
 	// reconciles to the capture site's surroundings.
 	promptWinding []promptWinding
-	threadID      uint64               // SRFI-18: thread that captured this continuation (0 = primordial)
-	barrierValid  *BarrierToken        // barrier context at capture time; nil = no active barrier
-	bottom        *MachineContinuation // bottom frame of segment; where a re-invocation's copy stops
-	consumed      bool                 // true after first AcquireSegment call
+	// inPlace is the boundary a continuation is reinstated in place at: a debugger
+	// break's, whose resolution leaves the live winding stack as it was (the break's
+	// extents stay entered while the debugger has control). Its reinstatement keeps
+	// the extents outside that boundary, which the stack still holds, instead of the
+	// invoker's whole stack, or the carried extents would be entered a second time.
+	// nil for every other continuation.
+	inPlace      *MachineContinuation
+	threadID     uint64               // SRFI-18: thread that captured this continuation (0 = primordial)
+	barrierValid *BarrierToken        // barrier context at capture time; nil = no active barrier
+	bottom       *MachineContinuation // bottom frame of segment; where a re-invocation's copy stops
+	consumed     bool                 // true after first AcquireSegment call
 	// capturedMarks is the snapshot of the reachable parameter/handler mark
 	// environment at capture time — including the marks ABOVE any sub-context
 	// boundary that the captured cont chain does not itself carry. It is re-installed
@@ -101,7 +106,6 @@ func NewComposableContinuation(cont *MachineContinuation, windingStack WindingSt
 	q := &ComposableContinuation{
 		cont:          cont,
 		windingStack:  windingStack[base:],
-		windingBase:   base,
 		promptWinding: collectPromptWinding(cont, base),
 		threadID:      threadID,
 		barrierValid:  barrierValid,
@@ -141,8 +145,9 @@ func collectPromptWinding(head *MachineContinuation, base int) []promptWinding {
 
 // rebasePrompts gives the prompt frames of segment, a copy of this continuation's
 // frames or the frames themselves, the winding stack they have once reinstated on
-// top of outside: outside, then what each recorded above the capture's base.
-func (p *ComposableContinuation) rebasePrompts(segment *MachineContinuation, outside WindingStack) {
+// top of outside: outside, then what each recorded above the capture's base,
+// composed as the continuation's own extents are (composeWinding).
+func (p *ComposableContinuation) rebasePrompts(segment *MachineContinuation, outside WindingStack, shared bool) {
 	if len(p.promptWinding) == 0 {
 		return
 	}
@@ -150,16 +155,43 @@ func (p *ComposableContinuation) rebasePrompts(segment *MachineContinuation, out
 	i := 0
 	for current := segment; current != nil && next < len(p.promptWinding); current = current.parent {
 		if p.promptWinding[next].index == i {
-			current.windingStack = append(slices.Clip(outside), p.promptWinding[next].carried...)
+			current.windingStack = composeWinding(outside, p.promptWinding[next].carried, shared)
 			next++
 		}
 		i++
 	}
 }
 
+// composeWinding returns the winding stack of extents carried reinstated on top
+// of outside: a fresh stack, outside then carried. With shared, the reinstatement
+// is at a context's own boundary, which is not a prompt the program wrote (a
+// rootless call/cc's sub-context or a thread root has it only to drive the
+// resume): an extent the context inherited that the continuation also carries,
+// captured outside that boundary, is the same extent, kept once rather than
+// re-entered on top of itself.
+func composeWinding(outside, carried WindingStack, shared bool) WindingStack {
+	q := slices.Concat(outside, carried)
+	if !shared || len(outside) == 0 {
+		return q
+	}
+	q = q[:len(outside)]
+	for _, frame := range carried {
+		if !outside.holds(frame.ID) {
+			q = append(q, frame)
+		}
+	}
+	return q
+}
+
 // Cont returns the continuation segment captured by this composable continuation.
 func (p *ComposableContinuation) Cont() *MachineContinuation {
 	return p.cont
+}
+
+// ReinstateInPlace marks this continuation as one reinstated in place at boundary
+// (ComposableContinuation.inPlace): a debugger break's resumable.
+func (p *ComposableContinuation) ReinstateInPlace(boundary *MachineContinuation) {
+	p.inPlace = boundary
 }
 
 // WindingStack returns the dynamic-wind extents this composable continuation

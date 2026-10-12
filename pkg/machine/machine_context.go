@@ -1979,7 +1979,7 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			// p.cont is THIS driver's chain, and the (k v) site may have been a
 			// sub-context whose frames this chain never held (see escalatorRevivals).
 			wasEmpty, reErr := p.reinstallSegment(
-				resumeErr.Segment, boundary, resumeErr.SourceWinding, p.resumeOutside(boundary, resumeErr.Segment),
+				resumeErr.Segment, boundary, resumeErr.SourceWinding, p.windingOutside(boundary),
 				resumeErr.Values, true, resumeErr.escalatorRevivals)
 			if reErr != nil {
 				if isControlSignal(reErr) {
@@ -2287,8 +2287,8 @@ func (p *MachineContext) resolveAbort(abortErr *ErrPromptAbort, prompt *MachineC
 // the handler may resume; (2) HARD-SUSPENDS — restores past the abandoned thunk to the
 // boundary WITHOUT unwinding, so dynamic-wind after-thunks inside the timed-out thunk do
 // NOT run (Wile's deliberate timeout semantics — see prim_timer_test TestWithTimeoutDynamicWind
-// case 2); (3) tears the fired timer down to the OUTER timer/ctx (the same absolute
-// restore the finalizer frame re-does idempotently on the handler's return), so the
+// case 2); (3) tears the fired timer down to the OUTER timer/ctx (on the handler's
+// return the finalizer finds it no longer armed and only cancels it again), so the
 // handler runs under the surrounding context, not the Done timerCtx; (4) runs the handler
 // with the resumable. Because p.cont is the finalizer frame, the handler returns INTO it,
 // and the finalizer forwards the handler's value past the boundary.
@@ -2320,7 +2320,8 @@ func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boun
 	// The fired timer is the one the interrupt names (firedTimer). It is p.timer
 	// unless an outer timer fired while inner ones were armed; those are cancelled
 	// too, as the hard suspension above discards their with-timeouts, and their
-	// winding frames, with the thunk. The finalizer frame re-does this identically.
+	// winding frames, with the thunk. The finalizer, on the handler's return, finds
+	// none of them armed.
 	fired := p.timer
 	for t := p.timer; t != nil; t = t.parent {
 		if t.tag == timerErr.Tag {
@@ -2385,6 +2386,7 @@ func (p *MachineContext) resolveBreakInterrupt(breakErr *ErrBreakInterrupt, boun
 	segment := p.CaptureInterruptContinuationAt(boundary)
 	windingCopy := p.windingStack.Copy()
 	resumable := NewComposableContinuation(segment, windingCopy, len(boundary.windingStack), p.threadID, p.barrierValid)
+	resumable.ReinstateInPlace(boundary)
 
 	p.cont = boundary
 	oldEvals := p.evals

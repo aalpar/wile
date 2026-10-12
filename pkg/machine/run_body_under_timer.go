@@ -34,8 +34,9 @@ import (
 // does (exitTimer): it cancels the timer and restores the outer timer and ctx only
 // when the finalizing context still arms it, then forwards the body's 0/1/N values.
 // So it is right on a normal return; after the timer arm already tore the fired timer
-// down; and on a return through a re-entered extent, whose timer is over and must not
-// displace the timers armed now. This helper installs p.timer directly: nesting
+// down; on a return through a re-entered extent whose timer is over, which must not
+// displace the timers armed now; and on one re-entered from inside itself, whose
+// timer is still live while an earlier frame for it remains. This helper installs p.timer directly: nesting
 // requires pushing a child timer while the parent is still live, via the linked
 // parent pointer.
 func (p *MachineContext) RunBodyUnderTimer(d time.Duration, thunk values.Value, handler values.Callable) (*MachineContext, error) {
@@ -66,7 +67,11 @@ func (p *MachineContext) RunBodyUnderTimer(d time.Duration, thunk values.Value, 
 		if len(ws) > 0 && ws[len(ws)-1].timer == timer {
 			finMC.PopWindingFrame()
 		}
-		finMC.exitTimer(timer)
+		// A re-entry of the extent from inside it leaves another frame for the
+		// timer below: the extent, and the timer, are still live.
+		if !finMC.windingStack.holdsTimer(timer) {
+			finMC.exitTimer(timer)
+		}
 		// Forward 0/1/N values: Arg(0) is the variadic rest-list of the body's values,
 		// collected under the ctx outside the extent (the body's may be cancelled).
 		vals, cerr := values.CollectList(finMC.ctx, finMC.Arg(0), "with-timeout")

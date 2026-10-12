@@ -177,7 +177,10 @@ func TestWithTimeoutDynamicWind(t *testing.T) {
 // that frame. Carried, the frame was re-entered by a resume and left on the stack,
 // where an enclosing dynamic-wind's PopWind took it in place of its own, and the end
 // of the run (a thread's exit, here) ran that after thunk a second time. The spin
-// outlasts the 20 ms timer.
+// outlasts the 20 ms timer. k is resumed with a number: resumed after a poll
+// interrupt, its value overwrites the operand the next instruction consumes (filed
+// in TODO.md), and every operand the spin consumes is a number or a test value,
+// for which a number is harmless.
 func TestTimerHandlerContinuationCarriesNoTimerFrame(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
@@ -188,7 +191,7 @@ func TestTimerHandlerContinuationCarriesNoTimerFrame(t *testing.T) {
 					(define (spin) (let loop ((i 0)) (if (< i 3000000) (loop (+ i 1)) 'done)))
 					(let ((r (thread-join! (thread-start! (make-thread (lambda ()
 							(with-timeout 20
-								(lambda (k) (dynamic-wind (lambda () (note 'hin)) (lambda () (k 'resumed)) (lambda () (note 'hout))))
+								(lambda (k) (dynamic-wind (lambda () (note 'hin)) (lambda () (k 0)) (lambda () (note 'hout))))
 								(lambda () (list 'got (spin))))))))))
 						(list r (reverse log))))
 			`,
@@ -203,7 +206,7 @@ func TestTimerHandlerContinuationCarriesNoTimerFrame(t *testing.T) {
 					(define (spin) (let loop ((i 0)) (if (< i 3000000) (loop (+ i 1)) 'done)))
 					(let ((r (thread-join! (thread-start! (make-thread (lambda ()
 							(with-timeout 20 (lambda (k) (set! saved k) 'h) (lambda () (list 'got (spin))))
-							(dynamic-wind (lambda () (note 'in)) (lambda () (note (saved 'v)) 'body) (lambda () (note 'out)))))))))
+							(dynamic-wind (lambda () (note 'in)) (lambda () (note (saved 0)) 'body) (lambda () (note 'out)))))))))
 						(list r (reverse log))))
 			`,
 			Expected: values.List(values.NewSymbol("body"),

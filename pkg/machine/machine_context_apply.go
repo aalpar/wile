@@ -527,7 +527,8 @@ func (p *MachineContext) reinstallSegment(
 	// Acquire the segment: first invocation avoids DeepCopy by marking
 	// the segment shared; re-invocations deep-copy from preserved frames.
 	segment := comp.AcquireSegment()
-	comp.rebasePrompts(segment, outside)
+	shared := boundary == nil
+	comp.rebasePrompts(segment, outside, shared)
 
 	// Reconcile dynamic-wind to the extents outside the boundary with the captured
 	// ones on top (Flatt et al. 2007: a composable continuation's frames are
@@ -536,7 +537,7 @@ func (p *MachineContext) reinstallSegment(
 	// (k v) site, not the driver's — load-bearing for the cross-sub-context resume
 	// case. Reconciling to the captured stack as an absolute target unwound the
 	// invoker's own extents, and a with-timeout's among them, on every re-entry.
-	target := append(slices.Clip(outside), comp.windingStack...)
+	target := composeWinding(outside, comp.windingStack, shared)
 	err := p.RestoreWithWindingFrom(nil, srcWinding, target)
 	if err != nil {
 		return false, err
@@ -608,7 +609,11 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	// chain the arms must be judged against; read it before reinstallSegment, whose
 	// winding reconcile runs dynamic-wind thunks that can re-point it.
 	revived := pendingEscalatorRevivals(cc, p.cont)
-	wasEmpty, err := p.reinstallSegment(cc, p.cont, p.windingStack, p.windingStack, vals, p.isolatedMarks, revived)
+	outside := p.windingStack
+	if cc.inPlace != nil {
+		outside = cc.inPlace.windingStack
+	}
+	wasEmpty, err := p.reinstallSegment(cc, p.cont, p.windingStack, outside, vals, p.isolatedMarks, revived)
 	if err != nil {
 		return p, err
 	}
