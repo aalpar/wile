@@ -453,7 +453,7 @@
  ("vector-set!" "void" ("vector" "integer" "any") "github.com/aalpar/wile/pkg/registry/core.PrimVectorSet" "pkg/registry/core/prim_vectors.go:74")
  ("vector?" "boolean" ("any") "github.com/aalpar/wile/pkg/registry/helpers.MakeTypePredicate.func1" "pkg/registry/helpers/type.go:26")
  ("void?" "boolean" ("any") "github.com/aalpar/wile/pkg/registry/helpers.MakeTypePredicate.func1" "pkg/registry/helpers/type.go:26")
- ("with-timeout" "any" ("integer" "procedure" "procedure") "github.com/aalpar/wile/pkg/registry/core.PrimWithTimeout" "pkg/registry/core/prim_timer.go:39")
+ ("with-timeout" "any" ("integer" "procedure" "procedure") "github.com/aalpar/wile/pkg/registry/core.PrimWithTimeout" "pkg/registry/core/prim_timer.go:38")
  ("write" "void" ("any" "...textual-output-port") "github.com/aalpar/wile/pkg/extensions/io.makeWriteVariant.func1" "pkg/extensions/io/prim_write.go:50")
  ("write-bytevector" "void" ("bytevector" "...any") "github.com/aalpar/wile/pkg/extensions/io.PrimWriteBytevector" "pkg/extensions/io/prim_binary.go:237")
  ("write-char" "void" ("character" "...textual-output-port") "github.com/aalpar/wile/pkg/extensions/io.PrimWriteChar" "pkg/extensions/io/prim_write.go:95")

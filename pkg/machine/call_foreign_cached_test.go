@@ -134,7 +134,9 @@ func TestCallForeignCached_TimerInterruptAfterSuccess(t *testing.T) {
 	tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: cbIdx})
 
 	// Pre-expire the context with ErrTimerExpired as the cause.
-	ctx, cancel := context.WithTimeoutCause(context.Background(), 0, ErrTimerExpired)
+	// The cause names the timer, as RunBodyUnderTimer's does.
+	timer := &timerState{cancel: func() {}}
+	ctx, cancel := context.WithTimeoutCause(context.Background(), 0, &timerExpiry{timer: timer})
 	defer cancel()
 
 	mc := AcquireTopLevelContext(ctx, tpl, env)
@@ -143,7 +145,8 @@ func TestCallForeignCached_TimerInterruptAfterSuccess(t *testing.T) {
 	handler := NewClosureWithTemplate(NewEmptyNativeTemplate(), env)
 	// Install a timer the way RunBodyUnderTimer does (the bare SetTimer API
 	// was retired); only the handler is read on the interrupt path.
-	mc.timer = &timerState{handler: handler, cancel: func() {}}
+	timer.handler = handler
+	mc.timer = timer
 
 	err := mc.Run()
 

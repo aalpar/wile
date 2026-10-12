@@ -115,7 +115,7 @@ type Thread struct {
 	RunFunc func(ctx context.Context, thunk Callable) (Value, error)
 
 	// CleanupFunc is injected by the machine package to run dynamic-wind
-	// after thunks (UnwindTo(0)) on thread exit. Called on both normal exit
+	// after thunks (UnwindOwn, the thread's own extents) on thread exit. Called on both normal exit
 	// and forced termination.
 	CleanupFunc func()
 

@@ -265,7 +265,7 @@ func TestCallWithValuesTruncation_TargetReachesFullTrace(t *testing.T) {
 // TestDynamicWindDoubleFire_TargetFiresOnce is the double-fire acceptance criterion:
 // the after-thunk fires exactly once on the call/cc escape-out, so the
 // error-on-second-fire sentinel never trips and the program completes with 'done.
-// The flip collapses the two winding reconciles (ReinstallSegment + the abort catch)
+// The flip collapses the two winding reconciles (reinstallSegment + the abort catch)
 // that master fired into one.
 func TestDynamicWindDoubleFire_TargetFiresOnce(t *testing.T) {
 	const code = `

@@ -22,7 +22,7 @@ and barrier identity and then *returns* an `ErrResumeContinuation` carrying the
 segment **unrun**, the resume values, and a copy of the winding stack live at
 the `(k v)` site. That control signal rides the VM's ordinary `return err`
 plumbing to the nearest `DefaultPromptTag` driver (`RunResumable`), which
-reinstalls the segment on its own live chain via `ReinstallSegment` and keeps
+reinstalls the segment on its own live chain via `reinstallSegment` and keeps
 looping. Resuming therefore costs O(1) Go frames and reconciles `dynamic-wind`
 exactly once. See [`resume-trampoline.md`](resume-trampoline.md) for the full
 mechanism and the bugs it fixed.
@@ -51,7 +51,7 @@ reconciles `dynamic-wind` twice on an escape out of an extent.
 
 ### Dynamic-wind integration
 
-`ReinstallSegment` performs the *single* winding reconcile, calling
+`reinstallSegment` performs the *single* winding reconcile, calling
 `RestoreWithWindingFrom` with the `SourceWinding` carried on the resume signal:
 the winding live at the `(k v)` site, which may be a deeper sub-context than the
 driver's. That is what makes after thunks fire exactly once and makes a deeper
@@ -110,7 +110,7 @@ rootless.
 | `ComposableContinuation`, `AcquireSegment` | `pkg/machine/composable_continuation.go` |
 | `ErrResumeContinuation`, `ErrPromptAbort` | `pkg/machine/prompt_abort.go` |
 | `BarrierToken` | `pkg/machine/barrier_token.go` |
-| `ReinstallSegment`, `applyComposableContinuation` | `pkg/machine/machine_context_apply.go` |
+| `reinstallSegment`, `applyComposableContinuation` | `pkg/machine/machine_context_apply.go` |
 | `RunResumable`, `RunWithEscapeHandling`, `resolveAbort` | `pkg/machine/machine_context.go` |
 | `RestoreWithWindingFrom` | `pkg/machine/machine_context_winding.go` |
 

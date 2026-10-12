@@ -21,44 +21,6 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// timerCtxKey is the context key under which the ctx inside a with-timeout's
-// extent (timerContext) answers that timer's *timerState. A ctx derived from that
-// one (load adds a value of its own) still reaches it, so the innermost timer a ctx
-// is inside is a lookup, not an identity comparison.
-type timerCtxKey struct{}
-
-// timerContext is the ctx inside a with-timeout's extent: the timer's own ctx,
-// answering Value(timerCtxKey{}) with the timer's state. A context.WithValue layer
-// would answer as much, but its Deadline asks its parent, as does the plain cancel
-// ctx a with-timeout nested under an earlier deadline gets
-// (context.WithDeadlineCause); each layer would lengthen the walk every later
-// with-timeout makes for its parent's deadline. timerContext answers Deadline
-// itself, with the deadline its ctx had when it was made, which never changes.
-type timerContext struct {
-	context.Context
-	timer       *timerState
-	deadline    time.Time
-	hasDeadline bool
-}
-
-func newTimerContext(ctx context.Context, timer *timerState) *timerContext {
-	q := &timerContext{Context: ctx, timer: timer}
-	q.deadline, q.hasDeadline = ctx.Deadline()
-	return q
-}
-
-func (p *timerContext) Deadline() (time.Time, bool) {
-	return p.deadline, p.hasDeadline
-}
-
-func (p *timerContext) Value(key any) any {
-	_, ok := key.(timerCtxKey)
-	if ok {
-		return p.timer
-	}
-	return p.Context.Value(key)
-}
-
 // RunBodyUnderTimer reifies with-timeout. It installs a wall-clock timer for the
 // duration of thunk and runs thunk INLINE on the live chain under a finalizer prompt
 // frame (no sub-context), so a continuation captured inside thunk spans the finalizer
@@ -68,28 +30,30 @@ func (p *timerContext) Value(key any) any {
 // sits, top level or inside a surviving sub-context.
 //
 // timerState is pushed as a LINKED stack (parent pointer) for nesting, and carries the
-// tag plus the saved outer ctx. The finalizer does an IDEMPOTENT ABSOLUTE teardown —
-// cancel the timer, restore the outer timer + ctx, forward the body's 0/1/N values — so
-// it is correct on normal completion AND, run a second time, after the timer arm already
-// tore the fired timer down (resolveTimerInterrupt restores the same outer state). This
-// helper installs and restores p.timer directly: nesting requires pushing a child timer
-// while the parent is still live, via the linked parent pointer.
-func (p *MachineContext) RunBodyUnderTimer(
-	timerCtx context.Context, cancel context.CancelFunc,
-	thunk values.Value, handler values.Callable,
-) (*MachineContext, error) {
+// tag plus the saved outer ctx. The finalizer leaves the extent the way an escape
+// does (exitTimer): it cancels the timer and restores the outer timer and ctx only
+// when the finalizing context still arms it, then forwards the body's 0/1/N values.
+// So it is right on a normal return; after the timer arm already tore the fired timer
+// down; on a return through a re-entered extent whose timer is over, which must not
+// displace the timers armed now; and on one re-entered from inside itself, whose
+// timer is still live while an earlier frame for it remains. This helper installs p.timer directly: nesting
+// requires pushing a child timer while the parent is still live, via the linked
+// parent pointer.
+func (p *MachineContext) RunBodyUnderTimer(d time.Duration, thunk values.Value, handler values.Callable) (*MachineContext, error) {
 	parentCtx := p.ctx
-	savedTimer := p.timer
 	tag := NewPromptTag("with-timeout")
-	p.timer = &timerState{
+	timer := &timerState{
 		handler:  handler,
-		cancel:   cancel,
 		tag:      tag,
-		parent:   savedTimer,
+		parent:   p.timer,
 		savedCtx: parentCtx,
-		ctx:      timerCtx,
 	}
-	p.ctx = newTimerContext(timerCtx, p.timer)
+	// The cause names the timer (timerExpiry), so an expiry is answered by the
+	// with-timeout whose timer fired, on whichever context arms it.
+	timerCtx, cancel := context.WithTimeoutCause(parentCtx, d, &timerExpiry{timer: timer})
+	timer.cancel = cancel
+	p.timer = timer
+	p.ctx = timerCtx
 
 	closureEnv := p.ClosureEnv()
 	finalizer := NewForeignClosure(closureEnv, 1, true, func(finCC CallContext) error {
@@ -97,12 +61,19 @@ func (p *MachineContext) RunBodyUnderTimer(
 		if ferr != nil {
 			return ferr
 		}
-		cancel()
-		finMC.timer = savedTimer
-		finMC.ctx = parentCtx
-		// Forward 0/1/N values: Arg(0) is the variadic rest-list of the body's values.
-		// Collected under parentCtx, which finMC.ctx was just restored to — the
-		// body's timer context may already be cancelled.
+		// A normal return leaves the extent: pop its winding frame. After the timer
+		// arm's hard suspension the frame is not on top and there is nothing to pop.
+		ws := finMC.windingStack
+		if len(ws) > 0 && ws[len(ws)-1].timer == timer {
+			finMC.PopWindingFrame()
+		}
+		// A re-entry of the extent from inside it leaves another frame for the
+		// timer below: the extent, and the timer, are still live.
+		if !finMC.windingStack.holdsTimer(timer) {
+			finMC.exitTimer(timer)
+		}
+		// Forward 0/1/N values: Arg(0) is the variadic rest-list of the body's values,
+		// collected under the ctx outside the extent (the body's may be cancelled).
 		vals, cerr := values.CollectList(finMC.ctx, finMC.Arg(0), "with-timeout")
 		if cerr != nil {
 			return cerr
@@ -110,5 +81,10 @@ func (p *MachineContext) RunBodyUnderTimer(
 		finMC.SetValues(vals...)
 		return nil
 	})
-	return p.runBodyUnderApplyFrame(thunk, finalizer, tag)
+	// The boundary frame records the winding stack outside the extent; the timer's
+	// own frame goes on above it, so the timer arm's hard suspension, which restores
+	// the boundary's stack, drops it, and an escape unwinds through it.
+	p.enterBodyFrame(p.newApplyFrame(finalizer, tag))
+	p.PushWindingFrame(newTimerFrame(timer))
+	return p.ApplyCallable(thunk)
 }

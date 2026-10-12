@@ -253,7 +253,7 @@ Where `call/cc` now sits in this protocol: since the capture became delimited, `
 3. `RestoreAndRelease` never pools a shared frame
 4. `DeepCopyThrough` is reached only through `AcquireSegment` re-invocation, never on capture
 
-Invariant 1 is not maintained everywhere today. `AcquireSegment` marks a first-invocation segment shared while its bottom frame's parent is nil, and `ReinstallSegment` then grafts it onto a boundary (`p.cont` for composable resume, or a prompt frame) whose frames may be unshared. A later `MarkChainShared` from above the segment early-exits at the segment and leaves those frames unshared.
+Invariant 1 is not maintained everywhere today. `AcquireSegment` marks a first-invocation segment shared while its bottom frame's parent is nil, and `reinstallSegment` then grafts it onto a boundary (`p.cont` for composable resume, or a prompt frame) whose frames may be unshared. A later `MarkChainShared` from above the segment early-exits at the segment and leaves those frames unshared.
 
 ---
 

@@ -57,7 +57,7 @@ Both are declared in `pkg/machine/prompt_abort.go`.
    │ FindPrompt on OWN chain        │  │ delegates to it)               │
    │ found → resolveAbort           │  │                                │
    │ not found → re-raise           │  │ abort  → resolveAbort          │
-   │ resume signals always          │  │ resume → ReinstallSegment      │
+   │ resume signals always          │  │ resume → reinstallSegment      │
    │   re-raise                     │  │ timer  → resolveTimerInterrupt │
    │ timer/break: resolved only if  │  │ break  → resolveBreakInterrupt │
    │   the boundary is on OWN chain │  │                                │
@@ -100,7 +100,7 @@ This is the driver loop under the default prompt. It installs `DefaultPromptTag`
 on the context (so `call/cc` resumes have a target), recovers panics in a
 `defer`, then enters a `for` loop that repeatedly calls `Run()` and dispatches
 on what comes back. There is no special-case detection for call/cc: an abort is
-routed by `FindPrompt`, a resume by `ReinstallSegment`.
+routed by `FindPrompt`, a resume by `reinstallSegment`.
 
 ```
 ┌─ RunResumable ─────────────────────────────────────────────────────┐
@@ -111,7 +111,7 @@ routed by `FindPrompt`, a resume by `ReinstallSegment`.
 │    err := pending, else p.Run()  (pending = a routed signal)       │
 │    │                                                               │
 │    ├─ err == nil (normal completion)                               │
-│    │   ├─ UnwindTo(0) if winding frames remain                     │
+│    │   ├─ UnwindOwn() if winding frames remain (not inherited ones)│
 │    │   └─ return nil                                               │
 │    │                                                               │
 │    ├─ ErrPromptAbort                                               │
@@ -123,7 +123,7 @@ routed by `FindPrompt`, a resume by `ReinstallSegment`.
 │    │                                                               │
 │    ├─ ErrResumeContinuation  (the trampoline bounce)               │
 │    │   boundary := FindPrompt(tag)                                 │
-│    │   ReinstallSegment(seg, bnd, srcWinding, vals, true, arms)    │
+│    │   reinstallSegment(seg, bnd, srcWinding, vals, true, arms)    │
 │    │   control signal? → pending; continue loop                    │
 │    │   wasEmpty? boundary == nil → return nil; else Restore(bnd)   │
 │    │   continue loop                                               │
@@ -159,7 +159,7 @@ so its enclosing driver owns it.
 there caught by a `guard` placed *around* the `call/cc` escapes via
 `call-with-exit`; so does a bare `call-with-exit` with no exception anywhere.
 Both surface as `resolveAbort`'s (and, on the resume arm,
-`ReinstallSegment`'s) error return, and both are addressed to a prompt still on
+`reinstallSegment`'s) error return, and both are addressed to a prompt still on
 this chain. The driver therefore classifies that error with `isControlSignal`
 and feeds it back to the top of its own loop as `pending` rather than returning
 it — the two reconcile paths are the only places a control signal is produced
@@ -192,7 +192,7 @@ boundary, and every `ErrResumeContinuation`, re-raise unchanged. It installs no
 
 `pkg/machine/machine_context_winding.go`
 
-The central dynamic-wind transition function. Reached from `ReinstallSegment`
+The central dynamic-wind transition function. Reached from `reinstallSegment`
 (both composable and call/cc resume) and from `resolveAbort`.
 
 ```
@@ -235,7 +235,9 @@ Concretely, `PrimCallCC`:
    `call-with-continuation-prompt` reusing the default tag it yields that
    prompt's chain frame, so only the delimited segment is captured.
 2. Copies the winding stack
-3. Creates a `ComposableContinuation` from the segment + winding stack + thread ID + barrier token
+3. Creates a `ComposableContinuation` from the segment + winding stack + the
+   depth of the capture prompt on it (the extents above are carried) + thread ID
+   + barrier token
 4. Snapshots the reachable parameter/handler marks into it
    (`SnapshotReachableMarksInto`), so resume restores the *captured* dynamic
    environment. Composable continuations deliberately do not snapshot: they
@@ -347,12 +349,12 @@ applyComposableContinuation(cc, args)
   ├─ select the escalator arms this resume revives, against p.cont
   │    (segment carries them, the invoker's live chain does not)
   │
-  └─ ReinstallSegment(cc, boundary = p.cont, p.windingStack, vals, p.isolatedMarks, revived)
+  └─ reinstallSegment(cc, boundary = p.cont, p.windingStack, outside = p.windingStack, vals, p.isolatedMarks, revived)
        ├─ install captured marks
        ├─ segment = cc.AcquireSegment()
        │    first invocation: original frames, chain marked shared
        │    re-invocation:    deep copy, so resumes are independent
-       ├─ RestoreWithWindingFrom(nil, srcWinding, cc.WindingStack())
+       ├─ RestoreWithWindingFrom(nil, srcWinding, outside ++ cc's carried extents)
        ├─ mark the selected arms revived   // only once the reconcile succeeded
        ├─ GraftContinuation(segment, boundary)   // p.cont = EXTEND (compose)
        ├─ Restore(segment)
@@ -361,7 +363,7 @@ applyComposableContinuation(cc, args)
 
 `boundary = p.cont` is what makes this *composable*: the segment extends the live
 chain rather than replacing it. The abortive call/cc resume calls the same
-`ReinstallSegment` with `boundary` from `FindPrompt` (nil at the top-level
+`reinstallSegment` with `boundary` from `FindPrompt` (nil at the top-level
 context boundary = replace the whole chain).
 
 `AcquireSegment`'s share-then-copy discipline is critical: without the
@@ -398,7 +400,7 @@ re-invocation copy, a second resume would corrupt the shared frames.
 | `GraftContinuation` | `pkg/machine/machine_context_continuation.go` | Splice segment onto target chain |
 | `RestoreWithWindingFrom` | `pkg/machine/machine_context_winding.go` | Unwind/rewind + restore continuation |
 | `FindCommonWindingPrefix` | `pkg/machine/dynamic_wind.go` | Common ancestor of two winding stacks |
-| `ReinstallSegment` | `pkg/machine/machine_context_apply.go` | The single resume primitive (abortive + composable) |
+| `reinstallSegment` | `pkg/machine/machine_context_apply.go` | The single resume primitive (abortive + composable) |
 | `applyComposableContinuation` | `pkg/machine/machine_context_apply.go` | Apply composable continuation value |
 | `applyCapturedContinuation` | `pkg/machine/captured_continuation.go` | Return the resume signal (checks thread + barrier) |
 | `RunBodyUnderPrompt` | `pkg/machine/run_body_under_frame.go` | Push a transparent prompt frame, inline-apply the body |
@@ -445,7 +447,9 @@ it loops):
 5. `Run()` returns it to `RunResumable`
 6. `boundary, _ = FindPrompt(DefaultPromptTag)` → nil (context-level boundary),
    so the reinstalled segment *replaces* the live chain
-7. `ReinstallSegment(segment, nil, [], [42], isolate = true, revivals)`:
+7. `reinstallSegment(segment, nil, [], outside = [], [42], isolate = true, revivals)`
+   (outside: the extents the boundary keeps, the prompt frame's recorded stack or
+   the context's inherited extents at its own boundary; none at top level):
    a. install the captured mark snapshot
    b. `AcquireSegment()`: original frames on first invoke, deep copy after
    c. `RestoreWithWindingFrom(nil, [], [D1])`:
@@ -457,7 +461,7 @@ it loops):
 10. `Run()` returns nil, `RunResumable` returns 42
 
 The winding reconcile happens exactly once, in step 7c/9. The earlier design
-reconciled in both `ReinstallSegment` and an abort catch, and printed "after" twice.
+reconciled in both `reinstallSegment` and an abort catch, and printed "after" twice.
 
 ## End-to-end example: composable continuation
 
@@ -484,7 +488,7 @@ What happens:
    c. Create `ComposableContinuation` with segment + winding stack. No mark
       snapshot: composable resume composes the invoker's marks
    d. Apply `(lambda (k) (k 10))` **in place** on the live chain (`mc.Parent() != nil`)
-   e. `(k 10)` runs `applyComposableContinuation` → `ReinstallSegment` with
+   e. `(k 10)` runs `applyComposableContinuation` → `reinstallSegment` with
       `boundary = p.cont`, extending the live chain, then `SetValues(10)`
    f. The composed `(+ 1 10)` yields 11, which is `proc`'s result
 4. `proc`'s 11 flows in place into the *live* `(+ 1 _)` frame, which the capture

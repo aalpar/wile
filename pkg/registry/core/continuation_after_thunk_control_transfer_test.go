@@ -32,7 +32,7 @@ import (
 //	Error: runtime error: abort to prompt #<continuation-prompt-tag:exit>
 //	exit 1
 //
-// The two sites are ReinstallSegment's error in the resume arm and
+// The two sites are reinstallSegment's error in the resume arm and
 // resolveAbort's, both in machine_context.go; both now re-enter the driver's own
 // dispatch loop via isControlSignal.
 //

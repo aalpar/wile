@@ -9,7 +9,7 @@ import (
 )
 
 func TestComposableContinuation_AcceptsArity(t *testing.T) {
-	cc := NewComposableContinuation(nil, nil, 0, nil)
+	cc := NewComposableContinuation(nil, nil, 0, 0, nil)
 
 	// A continuation accepts any number of values (R7RS §6.10): zero, one, or
 	// several — it resumes with however many it is invoked with.
@@ -51,14 +51,14 @@ func TestBottomOfChain_MultiFrame(t *testing.T) {
 // --- AcquireSegment tests ---
 
 func TestAcquireSegment_NilCont(t *testing.T) {
-	cc := NewComposableContinuation(nil, nil, 0, nil)
+	cc := NewComposableContinuation(nil, nil, 0, 0, nil)
 	qt.Assert(t, cc.AcquireSegment(), qt.IsNil)
 }
 
 func TestAcquireSegment_FirstCallReturnsOriginal(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, nil, env)
-	cc := NewComposableContinuation(cont, nil, 0, nil)
+	cc := NewComposableContinuation(cont, nil, 0, 0, nil)
 
 	segment := cc.AcquireSegment()
 
@@ -74,7 +74,7 @@ func TestAcquireSegment_SecondCallDeepCopies(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	bottom := NewMachineContinuation(nil, nil, env)
 	top := NewMachineContinuation(bottom, nil, env)
-	cc := NewComposableContinuation(top, nil, 0, nil)
+	cc := NewComposableContinuation(top, nil, 0, 0, nil)
 
 	first := cc.AcquireSegment()
 	qt.Assert(t, first, qt.Equals, top)

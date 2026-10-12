@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"slices"
 
@@ -167,8 +165,9 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	if p.timer != nil {
 		select {
 		case <-p.ctx.Done():
-			if errors.Is(context.Cause(p.ctx), ErrTimerExpired) {
-				return nil, &ErrTimerInterrupt{Handler: p.timer.handler, Tag: p.timer.tag}
+			fired := p.firedTimer()
+			if fired != nil {
+				return nil, &ErrTimerInterrupt{Handler: fired.handler, Tag: fired.tag}
 			}
 		default:
 		}
@@ -236,7 +235,7 @@ func bridgeForeignError(p *MachineContext, err error) (*MachineContext, error) {
 	if interrupt != nil {
 		return nil, interrupt
 	}
-	if p.timerClaims(err) && p.timerAbove() {
+	if p.timerAbove() && timerClaimable(err) {
 		return nil, err
 	}
 	bridged := applyCallableError(p, err)
@@ -478,7 +477,7 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 	return param.Value()
 }
 
-// ReinstallSegment installs a captured/composable continuation segment into the
+// reinstallSegment installs a captured/composable continuation segment into the
 // current context. It is the single resume primitive shared by composable resume
 // (boundary = p.cont, isolate = compose) and abortive call/cc resume
 // (boundary = the matching prompt frame from FindPrompt, or nil at the
@@ -514,10 +513,10 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 // top-level forms is discharged by the pool zeroing the whole *MachineContext on
 // release (pool.go, via ReleaseTopLevelContext/ReleaseSubContext), not by this
 // per-resume reset alone — if Acquire*Context ever stops zeroing, that guard breaks.
-func (p *MachineContext) ReinstallSegment(
+func (p *MachineContext) reinstallSegment(
 	comp *ComposableContinuation,
 	boundary *MachineContinuation,
-	srcWinding WindingStack,
+	srcWinding, outside WindingStack,
 	vals []values.Value,
 	isolate bool,
 	revived []*escalatorArm,
@@ -528,12 +527,18 @@ func (p *MachineContext) ReinstallSegment(
 	// Acquire the segment: first invocation avoids DeepCopy by marking
 	// the segment shared; re-invocations deep-copy from preserved frames.
 	segment := comp.AcquireSegment()
+	shared := boundary == nil
+	comp.rebasePrompts(segment, outside, shared)
 
-	// Reconcile dynamic-wind: unwind current extents not in the captured stack,
-	// rewind captured extents not in the current stack. srcWinding is the winding
-	// live at the invocation (k v) site, not the driver's — load-bearing for the
-	// cross-sub-context resume case.
-	err := p.RestoreWithWindingFrom(nil, srcWinding, comp.WindingStack())
+	// Reconcile dynamic-wind to the extents outside the boundary with the captured
+	// ones on top (Flatt et al. 2007: a composable continuation's frames are
+	// appended to the invoker's): unwind the live extents inside the boundary, and
+	// re-enter the captured ones. srcWinding is the winding live at the invocation
+	// (k v) site, not the driver's — load-bearing for the cross-sub-context resume
+	// case. Reconciling to the captured stack as an absolute target unwound the
+	// invoker's own extents, and a with-timeout's among them, on every re-entry.
+	target := composeWinding(outside, comp.windingStack, shared)
+	err := p.RestoreWithWindingFrom(nil, srcWinding, target)
 	if err != nil {
 		return false, err
 	}
@@ -557,7 +562,7 @@ func (p *MachineContext) ReinstallSegment(
 }
 
 // applyComposableContinuation applies a composable continuation by splicing
-// its captured frames onto the current continuation chain via ReinstallSegment.
+// its captured frames onto the current continuation chain via reinstallSegment.
 // On first invocation, the segment is used directly (marked shared for frame
 // preservation); on re-invocation, the segment is deep-copied for independence.
 //
@@ -601,10 +606,14 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	// the invoker's marks; see call-with-composable-continuation, which does not
 	// snapshot.
 	// Composable resume runs directly on the invoking context, so p.cont IS the live
-	// chain the arms must be judged against; read it before ReinstallSegment, whose
+	// chain the arms must be judged against; read it before reinstallSegment, whose
 	// winding reconcile runs dynamic-wind thunks that can re-point it.
 	revived := pendingEscalatorRevivals(cc, p.cont)
-	wasEmpty, err := p.ReinstallSegment(cc, p.cont, p.windingStack, vals, p.isolatedMarks, revived)
+	outside := p.windingStack
+	if cc.inPlace != nil {
+		outside = cc.inPlace.windingStack
+	}
+	wasEmpty, err := p.reinstallSegment(cc, p.cont, p.windingStack, outside, vals, p.isolatedMarks, revived)
 	if err != nil {
 		return p, err
 	}

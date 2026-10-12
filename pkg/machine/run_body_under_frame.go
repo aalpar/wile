@@ -221,6 +221,14 @@ func transferEnvOwnership(p *MachineContext, frame *MachineContinuation) {
 // On normal completion the VM restores frame and executes its template; on abort to a
 // frame-carried tag the driver's FindPrompt routes to it.
 func (p *MachineContext) RunBodyUnderFrame(frame *MachineContinuation, body values.Value, args ...values.Value) (*MachineContext, error) {
+	p.enterBodyFrame(frame)
+	return p.ApplyCallable(body, args...)
+}
+
+// enterBodyFrame is RunBodyUnderFrame's push without the application, for a caller
+// that must change the body's dynamic state after frame recorded the caller's
+// (RunBodyUnderTimer pushes the timer's winding frame, which frame must not hold).
+func (p *MachineContext) enterBodyFrame(frame *MachineContinuation) {
 	frame.threadID = p.threadID
 	if len(p.windingStack) > 0 {
 		frame.windingStack = p.windingStack.Copy()
@@ -244,7 +252,6 @@ func (p *MachineContext) RunBodyUnderFrame(frame *MachineContinuation, body valu
 	frame.barrierValid = p.barrierValid
 	transferEnvOwnership(p, frame)
 	p.cont = frame
-	return p.ApplyCallable(body, args...)
 }
 
 // RunBodyUnderPrompt installs a continuation-chain prompt frame on top of the
@@ -270,17 +277,19 @@ func (p *MachineContext) RunBodyUnderPrompt(body values.Value, tag *PromptTag, h
 // when nil it is a plain frame. `applied` rides as literal 0 of a per-call template
 // so it travels in a captured chain via Copy() (which shares the template pointer).
 func (p *MachineContext) runBodyUnderApplyFrame(body values.Value, applied values.Value, tag *PromptTag, args ...values.Value) (*MachineContext, error) {
+	return p.RunBodyUnderFrame(p.newApplyFrame(applied, tag), body, args...)
+}
+
+// newApplyFrame builds runBodyUnderApplyFrame's frame on top of p.cont.
+func (p *MachineContext) newApplyFrame(applied values.Value, tag *PromptTag) *MachineContinuation {
 	tpl := &NativeTemplate{
 		code:     applyToValuesCode,
 		literals: MultipleValues{applied},
 	}
-	var frame *MachineContinuation
 	if tag != nil {
-		frame = NewMachineContinuationWithPrompt(p.cont, tpl, p.env, tag, nil)
-	} else {
-		frame = NewMachineContinuation(p.cont, tpl, p.env)
+		return NewMachineContinuationWithPrompt(p.cont, tpl, p.env, tag, nil)
 	}
-	return p.RunBodyUnderFrame(frame, body, args...)
+	return NewMachineContinuation(p.cont, tpl, p.env)
 }
 
 // RunBodyUnderConsumer reifies a "run a body, then apply a consumer to its result"

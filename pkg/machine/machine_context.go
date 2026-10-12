@@ -71,7 +71,7 @@ type MachineContext struct {
 	expansion *expansionState      // macro-expansion-time state, nil at runtime; see expansionState
 	// capturedMarks has two producers, both pairing it with isolatedMarks so that
 	// forEachReachableMarkFrame can consult it at the isolatedMarks stop instead of
-	// walking parentMC. ReinstallSegment copies the segment's capture-time
+	// walking parentMC. reinstallSegment copies the segment's capture-time
 	// reachable-marks snapshot (comp.capturedMarks) so a resumed continuation's
 	// outer parameter/handler marks survive resume. unwindStackTo and RewindTo
 	// copy frame.entryMarks into the dynamic-wind thunk sub-context, which is the
@@ -80,6 +80,11 @@ type MachineContext struct {
 	capturedMarks []markEntry
 	debugger      *Debugger       // optional debugger for breakpoints and stepping
 	parentMC      *MachineContext // parent context for sub-contexts, enables call/cc escape tracking
+	// windingBase is the depth of windingStack this context started with: the
+	// extents it inherited, which lie outside its own boundary (the prompt
+	// FindPrompt answers nil for). A top-level context starts with none. Not
+	// continuation state: a context's boundary does not move with its chain.
+	windingBase int
 	// escapeCont is vestigial: it is propagated into sub-contexts and threads but
 	// never consulted. Nothing resumes from it.
 	escapeCont *MachineContinuation
@@ -96,7 +101,7 @@ type MachineContext struct {
 	maxStackSize uint64           // 0 = unlimited (default), otherwise max eval stack entries
 	restArgBuf   values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
 	// isolatedMarks, when true, stops forEachReachableMarkFrame from walking parentMC.
-	// Set by ReinstallSegment (from its isolate argument) and by the dynamic-wind
+	// Set by reinstallSegment (from its isolate argument) and by the dynamic-wind
 	// thunk sub-contexts built in unwindStackTo and RewindTo.
 	isolatedMarks bool
 
@@ -198,7 +203,6 @@ type timerState struct {
 	tag      *PromptTag      // identifies this with-timeout's finalizer frame on the chain
 	parent   *timerState     // enclosing timer (nesting); restored on teardown
 	savedCtx context.Context // ctx active before this with-timeout; restored on teardown
-	ctx      context.Context // the timed ctx this timer cancels: the one inside its extent
 }
 
 // expansionState clusters the two MachineContext fields that are nil at
@@ -475,8 +479,9 @@ func (p *MachineContext) Run() error {
 		if mc.counters.OpsExecuted&contextCheckMask == 0 {
 			select {
 			case <-mc.ctx.Done():
-				if mc.timer != nil && errors.Is(context.Cause(mc.ctx), ErrTimerExpired) {
-					return &ErrTimerInterrupt{Handler: mc.timer.handler, Tag: mc.timer.tag}
+				fired := mc.firedTimer()
+				if fired != nil {
+					return &ErrTimerInterrupt{Handler: fired.handler, Tag: fired.tag}
 				}
 				return mc.ctx.Err()
 			default:
@@ -1893,9 +1898,9 @@ func (p *MachineContext) RunResumable() (rerr error) {
 
 		// Check for successful completion
 		if err == nil {
-			// Unwind any remaining frames (call after thunks)
+			// Unwind the frames this context entered (call their after thunks)
 			if len(p.windingStack) > 0 {
-				unwindErr := p.UnwindTo(0)
+				unwindErr := p.UnwindOwn()
 				if unwindErr != nil {
 					return unwindErr
 				}
@@ -1968,14 +1973,14 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			boundary, _ := p.FindPrompt(resumeErr.Tag)
 			// isolate=true: this signal is emitted only for call/cc resume, which restores
 			// the captured mark snapshot (composable resume composes marks and bypasses
-			// this signal — it calls ReinstallSegment directly).
+			// this signal — it calls reinstallSegment directly).
 			//
 			// The escalator revivals ride the signal rather than being computed here:
 			// p.cont is THIS driver's chain, and the (k v) site may have been a
 			// sub-context whose frames this chain never held (see escalatorRevivals).
-			wasEmpty, reErr := p.ReinstallSegment(
-				resumeErr.Segment, boundary, resumeErr.SourceWinding, resumeErr.Values, true,
-				resumeErr.escalatorRevivals)
+			wasEmpty, reErr := p.reinstallSegment(
+				resumeErr.Segment, boundary, resumeErr.SourceWinding, p.windingOutside(boundary),
+				resumeErr.Values, true, resumeErr.escalatorRevivals)
 			if reErr != nil {
 				if isControlSignal(reErr) {
 					// The winding reconcile ran an after-thunk that escaped — a raise
@@ -1997,7 +2002,7 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			}
 			if wasEmpty {
 				// Empty captured continuation (the call/cc sat in tail position, e.g.
-				// captured inside a force/delay thunk): ReinstallSegment delivered the
+				// captured inside a force/delay thunk): reinstallSegment delivered the
 				// values and reconciled winding but installed no frames. At the top-level
 				// context boundary the delivered values are the final result. At a
 				// delimited inner prompt the values must flow THROUGH it: restore the
@@ -2237,10 +2242,11 @@ func (p *MachineContext) RunWithinBoundary() error {
 // sub-context than this driver's own (the C3 deeper-sub after-thunk reconcile);
 // otherwise the driver's own winding is used (value-delivery aborts).
 func (p *MachineContext) resolveAbort(abortErr *ErrPromptAbort, prompt *MachineContinuation) (done bool, err error) {
-	var targetStack WindingStack
-	if prompt != nil {
-		targetStack = prompt.windingStack
-	}
+	// The extents outside the prompt: its recorded stack, or at the context-level
+	// boundary the ones this context inherited, which are its parent's to leave.
+	// Unwinding those too ran a thread's starter's after thunks in the thread, and
+	// ended a with-timeout the thread was started inside.
+	targetStack := p.windingOutside(prompt)
 	sourceStack := p.windingStack
 	if abortErr.SourceWinding != nil {
 		sourceStack = abortErr.SourceWinding
@@ -2281,19 +2287,27 @@ func (p *MachineContext) resolveAbort(abortErr *ErrPromptAbort, prompt *MachineC
 // the handler may resume; (2) HARD-SUSPENDS — restores past the abandoned thunk to the
 // boundary WITHOUT unwinding, so dynamic-wind after-thunks inside the timed-out thunk do
 // NOT run (Wile's deliberate timeout semantics — see prim_timer_test TestWithTimeoutDynamicWind
-// case 2); (3) tears the fired timer down to the OUTER timer/ctx (the same absolute
-// restore the finalizer frame re-does idempotently on the handler's return), so the
+// case 2); (3) tears the fired timer down to the OUTER timer/ctx (on the handler's
+// return the finalizer finds it no longer armed and only cancels it again), so the
 // handler runs under the surrounding context, not the Done timerCtx; (4) runs the handler
 // with the resumable. Because p.cont is the finalizer frame, the handler returns INTO it,
 // and the finalizer forwards the handler's value past the boundary.
 func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boundary *MachineContinuation) error {
 	segment := p.CaptureInterruptContinuationAt(boundary)
 	windingCopy := p.windingStack.Copy()
-	resumable := NewComposableContinuation(segment, windingCopy, p.threadID, p.barrierValid)
+	// The resumable carries the extents inside the timer's, not the timer's own
+	// frame: the segment stops below the finalizer, the only code that pops that
+	// frame, so a resume would leave it on the stack for a dynamic-wind's PopWind.
+	base := len(boundary.windingStack)
+	if base < len(windingCopy) && windingCopy[base].timer != nil {
+		base++
+	}
+	resumable := NewComposableContinuation(segment, windingCopy, base, p.threadID, p.barrierValid)
 
 	// Hard-suspension: discard the timed-out thunk's frames un-run (no after-thunks) and
 	// land on the finalizer frame. boundary.windingStack is the winding captured at
-	// with-timeout entry (RunBodyUnderFrame), so the thunk's winding frames are dropped.
+	// with-timeout entry (enterBodyFrame), so the thunk's winding frames, the timer's
+	// own among them, are dropped.
 	// The thunk's mid-expression operand stack is already deep-copied into `segment`, so
 	// the dirty eval stack is released and a fresh one acquired for the handler.
 	p.cont = boundary
@@ -2303,11 +2317,11 @@ func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boun
 	p.releaseStack(oldEvals)
 
 	// Absolute teardown of the fired timer: cancel it and restore the outer timer + ctx.
-	// The fired timer is the one the interrupt names. It is p.timer unless the owner
-	// rule skipped stale timers inside it (liveFiredTimer); those are cancelled too,
-	// as their with-timeouts are gone. A tag on no timer of p's leaves p.timer, the
-	// timer the VM poll and the eager recheck name. The finalizer frame re-does this
-	// identically.
+	// The fired timer is the one the interrupt names (firedTimer). It is p.timer
+	// unless an outer timer fired while inner ones were armed; those are cancelled
+	// too, as the hard suspension above discards their with-timeouts, and their
+	// winding frames, with the thunk. The finalizer, on the handler's return, finds
+	// none of them armed.
 	fired := p.timer
 	for t := p.timer; t != nil; t = t.parent {
 		if t.tag == timerErr.Tag {
@@ -2361,7 +2375,7 @@ func (p *MachineContext) resolveBreakInterrupt(breakErr *ErrBreakInterrupt, boun
 	// The value register at an arbitrary instruction boundary is live state, not a
 	// parameter: it holds the operand the suspended instruction is about to consume.
 	// Restore does not carry it (a continuation's values arrive as arguments), and
-	// ReinstallSegment ends with SetValues(args...), so resuming with no arguments
+	// reinstallSegment ends with SetValues(args...), so resuming with no arguments
 	// would clear it and the next OpPush would push nothing. Stash it here and hand
 	// it back as the resume arguments.
 	live := p.GetValues()
@@ -2371,7 +2385,8 @@ func (p *MachineContext) resolveBreakInterrupt(breakErr *ErrBreakInterrupt, boun
 
 	segment := p.CaptureInterruptContinuationAt(boundary)
 	windingCopy := p.windingStack.Copy()
-	resumable := NewComposableContinuation(segment, windingCopy, p.threadID, p.barrierValid)
+	resumable := NewComposableContinuation(segment, windingCopy, len(boundary.windingStack), p.threadID, p.barrierValid)
+	resumable.ReinstateInPlace(boundary)
 
 	p.cont = boundary
 	oldEvals := p.evals

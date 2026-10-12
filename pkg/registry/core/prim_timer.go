@@ -15,7 +15,6 @@
 package core
 
 import (
-	"context"
 	"time"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -82,11 +81,6 @@ func PrimWithTimeout(cc machine.CallContext) error {
 	}
 	duration := time.Duration(ms) * time.Millisecond
 
-	// Create a child context with a cause-tagged timeout deadline.
-	// The cause (ErrTimerExpired) lets interrupt check sites distinguish
-	// timer expiry from external cancellation (e.g. Ctrl+C).
-	timerCtx, timerCancel := context.WithTimeoutCause(mc.Context(), duration, machine.ErrTimerExpired)
-
 	// Reify with-timeout: run the thunk INLINE on the live chain under a finalizer
 	// prompt frame carrying a fresh tag (RunBodyUnderTimer), not in a sub-context, so a
 	// continuation captured inside the thunk spans the finalizer frame and the rest of
@@ -97,6 +91,6 @@ func PrimWithTimeout(cc machine.CallContext) error {
 	// runs the handler with a resumable composable continuation, and the finalizer tears
 	// the timer down and forwards values on every exit. Fixes the with-timeout case of
 	// continuation_subcontext_truncation_red_test.go.
-	_, err = mc.RunBodyUnderTimer(timerCtx, timerCancel, thunkVal, handlerVal)
+	_, err = mc.RunBodyUnderTimer(duration, thunkVal, handlerVal)
 	return err
 }

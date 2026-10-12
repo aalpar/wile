@@ -76,3 +76,26 @@ func TestPopWindInternalErrorStaysUncatchable(t *testing.T) {
 	qt.Assert(t, errors.As(err, &escape), qt.IsFalse,
 		qt.Commentf("pop-wind's invariant violation must not become a catchable Scheme condition"))
 }
+
+// TestPopWindRefusesATimerFrame pins that PopWind does not pop a with-timeout's
+// winding frame in place of its dynamic-wind's. Only the with-timeout's finalizer
+// pops that frame; one on top at a PopWind is a reinstatement that re-entered an
+// extent nothing will leave, and popping it would leave the dynamic-wind's frame
+// behind for a second after thunk. No reachable path produces the state now, so
+// it is built directly.
+func TestPopWindRefusesATimerFrame(t *testing.T) {
+	ctx := context.Background()
+	env := environment.NewNamespace().Runtime()
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.AppendOperations(NewOperationPopWind())
+
+	mc := AcquireTopLevelContext(ctx, tpl, env)
+	defer ReleaseTopLevelContext(mc)
+	mc.PushWindingFrame(NewDynamicWindFrame(nil, nil))
+	mc.PushWindingFrame(newTimerFrame(&timerState{cancel: func() {}}))
+
+	err := mc.Run()
+
+	qt.Assert(t, errors.Is(err, werr.ErrInternal), qt.IsTrue,
+		qt.Commentf("expected werr.ErrInternal for a timer frame on top, got %T: %v", err, err))
+}

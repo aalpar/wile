@@ -127,19 +127,19 @@ func TestComposableContinuation_Accessors(t *testing.T) {
 	cont := machine.NewMachineContinuation(nil, tpl, env)
 	ws := machine.WindingStack{machine.NewDynamicWindFrame(nil, nil)}
 
-	cc := machine.NewComposableContinuation(cont, ws, 0, nil)
+	cc := machine.NewComposableContinuation(cont, ws, 0, 0, nil)
 	c.Assert(cc.Cont(), qt.Equals, cont)
 	c.Assert(cc.WindingStack(), qt.HasLen, 1)
 }
 
 func TestComposableContinuation_SchemeString(t *testing.T) {
-	cc := machine.NewComposableContinuation(nil, nil, 0, nil)
+	cc := machine.NewComposableContinuation(nil, nil, 0, 0, nil)
 	qt.Assert(t, cc.SchemeString(), qt.Equals, "#<composable-continuation>")
 }
 
 func TestComposableContinuation_IsVoid(t *testing.T) {
 	c := qt.New(t)
-	cc := machine.NewComposableContinuation(nil, nil, 0, nil)
+	cc := machine.NewComposableContinuation(nil, nil, 0, 0, nil)
 	c.Assert(cc.IsVoid(), qt.IsFalse)
 
 	var nilCC *machine.ComposableContinuation
@@ -148,8 +148,8 @@ func TestComposableContinuation_IsVoid(t *testing.T) {
 
 func TestComposableContinuation_EqualTo(t *testing.T) {
 	c := qt.New(t)
-	cc1 := machine.NewComposableContinuation(nil, nil, 0, nil)
-	cc2 := machine.NewComposableContinuation(nil, nil, 0, nil)
+	cc1 := machine.NewComposableContinuation(nil, nil, 0, 0, nil)
+	cc2 := machine.NewComposableContinuation(nil, nil, 0, 0, nil)
 
 	c.Assert(cc1.EqualTo(cc1), qt.IsTrue)
 	c.Assert(cc1.EqualTo(cc2), qt.IsFalse)

@@ -153,7 +153,7 @@ The semantic model still follows Racket's unification: `call/cc` is composable-c
     default-prompt-tag)
 ```
 
-— but read this as the *meaning*, not the runtime path. The implementation reinstalls the captured segment directly via `ReinstallSegment` (with `boundary == nil`, the abortive "replace the whole chain" case) rather than literally raising an abort after running it.
+— but read this as the *meaning*, not the runtime path. The implementation reinstalls the captured segment directly via `reinstallSegment` (with `boundary == nil`, the abortive "replace the whole chain" case) rather than literally raising an abort after running it.
 
 **3. One apply seam, two targets.** The capture above is unconditional; the only per-mode difference is which context applies the lambda, so `PrimCallCC` selects a *target* and then calls `target.ApplyCallable(mcls, capt)` once. The selector is `mc.Parent()`, which returns the continuation chain pointer `mc.cont` (*not* a parent context):
 
@@ -187,7 +187,7 @@ func (p *MachineContext) RunResumable() error {
         var resumeErr *ErrResumeContinuation
         if errors.As(err, &resumeErr) {
             boundary, _ := p.FindPrompt(resumeErr.Tag)
-            p.ReinstallSegment(resumeErr.Segment, boundary,
+            p.reinstallSegment(resumeErr.Segment, boundary,
                 resumeErr.SourceWinding, resumeErr.Values, true,
                 resumeErr.escalatorRevivals)
             continue                     // the trampoline bounce
@@ -197,7 +197,7 @@ func (p *MachineContext) RunResumable() error {
 }
 ```
 
-So `call/cc` is still *unified* with delimited continuations — both resume through the one shared `ReinstallSegment` primitive — but the resume and the abort are now distinct signals rather than a single abort-after-running. That split is what makes the trampoline possible: returning the segment unrun (instead of running it and aborting the result) is what keeps deep resumes at O(1) Go frames.
+So `call/cc` is still *unified* with delimited continuations — both resume through the one shared `reinstallSegment` primitive — but the resume and the abort are now distinct signals rather than a single abort-after-running. That split is what makes the trampoline possible: returning the segment unrun (instead of running it and aborting the result) is what keeps deep resumes at O(1) Go frames.
 
 ## The Subtle Parts
 

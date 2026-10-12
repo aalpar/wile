@@ -80,7 +80,6 @@ func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 	// not leak into the after thunk on an escape/reconcile.
 	frame := NewDynamicWindFrame(before, after)
 	frame.entryMarks = mc.collectReachableMarks()
-	frame.entryCtx = mc.ctx
 	mc.PushWindingFrame(frame)
 
 	mc.pc++
@@ -120,12 +119,21 @@ func (*OperationPopWind) Apply(mc *MachineContext) (*MachineContext, error) {
 	// silently mis-depths, FindCommonWindingPrefix then computes the wrong
 	// common depth, and that number decides which after-thunks run on a
 	// continuation escape. Wrong cleanup, no diagnostic.
-	_, ok := mc.PopWindingFrame()
-	if !ok {
+	ws := mc.windingStack
+	if len(ws) == 0 {
 		err := mc.WrapError(werr.ErrInternal,
 			"pop-wind: winding stack is empty; PushWind/PopWind pairing is broken")
 		return mc, err
 	}
+	// A with-timeout's frame is popped by its own finalizer, never here: one on top
+	// means a reinstatement re-entered an extent nothing will leave, and popping it
+	// in place of this dynamic-wind's would leave that frame for a second after.
+	if ws[len(ws)-1].timer != nil {
+		err := mc.WrapError(werr.ErrInternal,
+			"pop-wind: a with-timeout's frame is on top of the winding stack")
+		return mc, err
+	}
+	mc.PopWindingFrame()
 	mc.pc++
 	return mc, nil
 }

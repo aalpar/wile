@@ -193,6 +193,7 @@ because the citation is what `make indexlint` counts:
 | `2026-09-05-scheme-specified-syntax-forms-impl.md` | **IMPL PLAN 2026-09-05. Tasks 1-10 of 12 shipped** (P0.1-P0.5, P1, P2), branch per phase. P2 landed 2026-09-07 WITHOUT its default flip: `syntax-rules` and `er-macro-transformer` are specified in Scheme, but making the Scheme layer the default costs **31x startup** — 5.96 ms/engine and 87k allocations become 186 ms and 1.9M, at ~1 ms per `syntax-rules` clause over bootstrap's ~90 (F15). Both layers stay in the binary behind `WILE_SYNTAX_FORMS` / `WithSchemeSyntaxForms()`, default Go. **P3 (deletion) is blocked on the flip**, and the flip on a cheaper pattern representation or a pre-compiled bootstrap. Executing P2 also found a latent **P1** hygiene defect: `values.AddScopeToSet` aliased the caller's backing array, so two nested expansions of one macro clobbered each other's introduction scope — `(or (or #f #f) #t)` failed to compile and `(wile algebra interval)` was unloadable (F16). Twelve tasks over the design's P0.1–P0.5 and P1–P4, one branch per phase, 62 checkbox steps. §0 carries fourteen corrections to the design: the five review findings of 2026-09-05 (F1 the exclusion set is eight expander rows, ratcheted; F2 the Go producer's definition-site local arm dies at P0.1; F3 `define-syntax` docstrings exist and `,doc` reads them, so the seven `specialforms.go` rows go in P4; F4 the full deletion inventory; F5 `unsyntax`/`unsyntax-splicing` as violation-raising macros) and five measured while planning (F6 `datum->syntax` already copies the template's scopes, only the pin is at stake; F7 `GlobalIndex` is minted per query, so the P0.3 pin compares bindings; F8 P1 must take `with-syntax`/`quasisyntax` with `syntax`; F9 `WILE_SYNTAX_FORMS` as the both-ways default; F10 bootstrap macros are invisible from phase ≥ 2, closed by a kernel arm 2b). Four more (F11–F14) came from the adversarial review of 2026-09-06, folded 2026-09-06: F11 a library body is already stamped with its own scope, so §2.1 item 2's premise was false; F12 `bootstrap_nilpin_test.go` is replaced in P2, not deleted in P3; F13 `chibi/optional.sld`'s ER arm is behind a `cond-expand` Wile never selects; F14 `syntax-local-introduce` wiring belongs to P0.2, forced by `TestSyntaxLocalIntroduceIsNotWired`. That review also fixed four blocking defects: every `EvalMultiple` result in the P0 pin files asserted a `pkg/syntax` type directly on the `wile.Value` wrapper, which does not compile. Six more (F15-F20) came from EXECUTING Task 10 on 2026-09-07: F15 the startup measurement that deferred the flip; F16 the `AddScopeToSet` aliasing defect; F17 the plan's `er-contract` row cannot live in a script that must be green on both layers; F18 the nil-pin census is kept and pinned to the Go layer rather than replaced, with the behaviour rows added alongside; F19 the ER shim needs `%er-proc` to keep the definition-site arity refusal and to evaluate PROC once; F20 `pkg/registry/core/bootstrap.scm` is not executed, so editing its load-order comment fixes nothing; **F21 the `WILE_SYNTAX_FORMS=scheme` leg is no longer green** — 61 minutes for `pkg/wile` alone and seven failures in five classes, the worst being that the Scheme generators compute with USER-REPLACEABLE primitives, so `reg.Without("+")` plus an embedder's own `+` cannot load bootstrap. Nothing reaches the default; all of it is owed before the flip, and that class outranks the startup number |
 | `ARCHITECTURE.md` | 1/4 sections complete |
 | `MACRO_SYSTEM.md` | Both sections unstarted (re-verified 2026-09-20: zero `ScopeReason` / `syntax-origin` symbols in tree) |
+| `2026-10-11-rootless-subcontext-winding-decision.md` | **DECISION PENDING 2026-10-11.** Why every winding fix on `fix/timer-identity-and-teardown` moves the wrong answer on the rootless-`call/cc` path (the filed "runs the rest of the program, then the escape runs it again" row), and three ways out; recommends fixing that row first, on its own branch |
 | `2026-09-20-core-form-override-and-import-portability-design.md` | **DESIGN 2026-09-20, no code committed.** Successor to `2026-09-19-open-directions.md` §§2–3, which it supersedes on five points. Root causes for all three `if`-capture defects **verified by instrumentation**, not hypothesised: defect 1+2 are `lookupMacroBinding`'s D2 arm discarding a resolved pin because it names a `BindingTypePrimitive` (`expander_time_continuation.go:393-401`); defect 3 is `findLibraryBinding` exporting the inherited core `if` instead of the library's own Expand-phase macro (`library_bindings.go:554-557`). Two independent sites, **not** one root cause as the recap said. Both candidate fixes measured: each reproduces Racket 9.2 and Chez byte for byte, `go test ./...` green with both active. Also: the §5.2 self-violations are **three** edits not four (`(wile strings)` already excepts `string-map`; schelog's `_` shadows a startup binding, which §5.2 does not reach), the A1 stdlib edit is applied and green in a worktree, and the superlinear expander cost is reachable with **no shadowing at all** |
 | `GRAPH-SPECTRUM.md` | Directions, not scheduled |
 
@@ -2613,7 +2614,7 @@ Stage C adversarial-review successors, left out so the arc could land. All four 
   2026-06-28 on `feat/continuation-resume-trampoline`]: resumed continuations ran in a nested
   sub-context and accumulated Go frames (`ctak(18,12,6)` ~40k, Gabriel loop ~525k, against Go's
   ~675k overflow); `ErrResumeContinuation` now resumes on the driver
-  (`RunResumable`/`ReinstallSegment`) in O(1) Go frames. `maxContinuationDepth`/`contNestDepth`
+  (`RunResumable`/`reinstallSegment`) in O(1) Go frames. `maxContinuationDepth`/`contNestDepth`
   retired, and the `-race` ctak skip with them. A post-landing crosscheck fixed a sticky
   `isolatedMarks` swallowing R7RS §6.11 secondary exceptions (`resumeGeneration` counter). **Why four
   attempts failed is the durable part:** a resume-side-only trampoline is *provably impossible*
@@ -3427,21 +3428,23 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
   `TestTimerCancelledWaitInSubContextRunsHandler`, `TestTimerCancelledWaitIsNeverCaught`,
   `TestTimerCancelledWaitInRootlessCallCCRunsHandler`, `TestTimerCancelledWaitInHostCallbackRunsHandler`,
   `TestTimerExpiryDuringEvalComputeRunsHandler`, `TestTimerSupersedesFailureButNotDenial`,
-  `TestTimerInterruptNamesInnermostTimer`, `TestJoinReportsJoineeCancellationAsUncaught`,
+  `TestInnerTimerExpiryRunsTheInnerHandler`, `TestJoinReportsJoineeCancellationAsUncaught`,
   `TestTimerCancelledWaitInAbortAfterThunkRunsHandler`, `TestOrdinaryErrorUnderArmedTimerIsCaught`,
-  `TestEmbedderDeadlineInsideArmedTimerRaises`, `TestStaleTimerClaimsNothing` and
+  `TestEmbedderDeadlineInsideArmedTimerRaises` and
   `TestCancelledWaitInChildThreadIsCatchableThere`, `TestTimerClaimsAHandlerFailure` and
   `TestTimerClaimsAnSRFI18ConditionBelowIt`, `TestTimerDoesNotClaimAControlTransfer` and
   `TestEscapePastATimerLeavesItsExtent`, `TestReentryUnderATimerRewindsOutsideIt`,
   `TestReentryIntoAnEndedTimerKeepsTheEnclosingOne`,
   `TestAfterThunkEnteredBelowTheTimerStaysInsideIt`, `TestAfterThunkOutsideAFiredTimerKeepsItsGuard`,
   `TestWindingThunkFailureOutsideAFiredTimerIsItsOwn`, `TestUnclaimedFailureIsClaimedByAnotherOwner`,
-  `TestStaleTimerDoesNotHideALiveOne`, `TestStaleTimerLeavesTheHandlersContinuation` and
-  `TestTimerClaimsAnApplySpreadFailureBelowIt`, with `TestWindingThunkFailureMarksOnlyUnderAFiredTimer`,
-  `TestWindingThunkFailureMarksForTheInnermostTimer`, `TestJudgedUnclaimedReadsEveryMark` and
-  `TestTimerContextAnswersItsOwnDeadline` in `pkg/machine`; every mutation tried (56) fails at
-  least one, the 24 of rounds 9 to 11 on the final code, and one perf-only reordering in
-  `windingThunkContext` fails none. Round 11 found no defect in behaviour; it corrected the record of the
+  `TestEscapedTimerDoesNotHideALiveOne`, `TestEscapedTimerLeavesTheHandlersContinuation`,
+  `TestTimerClaimsAnApplySpreadFailureBelowIt`, `TestEscapeFromATimerEndsIt` and
+  `TestTimerExpiryNamesTheTimerThatFired`. **Simplified 2026-10-10**
+  (`fix/timer-identity-and-teardown`): with the two structural rows below fixed (an escape ends
+  its timer; an expiry names its timer), the code that worked around them is deleted: the
+  stale-timer skip, `entryCtx` and `windingThunkContext`, the unclaimed-failure marks and the
+  timer's own context type, with `TestStaleTimerClaimsNothing` and the four `pkg/machine` unit
+  tests that pinned them. Round 11 found no defect in behaviour; it corrected the record of the
   open decision below and pinned the mark walk, the mark's timer and the deadline caching.
   Round 10 found the unclaimed mark honoured by every context,
   so a joiner's guard caught a joinee's end and a host's caller reported a failure as itself, but
@@ -3450,15 +3453,14 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
   `with-timeout` (2 to 4 times on loops leaving stale timers); the timer's context now answers its
   own deadline, which also removes HEAD's walk. Nine mutations of round 7 to 9 code survived
   every suite and are now pinned, and three new tests flaked under `-race` and load and now have
-  wide margins. **Open, for decision:** a frame entered outside a `with-timeout` and re-entered
-  inside it by a composable continuation (or a `call/cc` continuation reinstated at an inner
-  prompt). The thunks a winding reconcile runs for it (the before thunk, an after thunk on a later
-  escape) run outside the timer when the continuation is applied in the timer's own context, so
-  the timer does not bound them (HEAD cut them short); applied inside `eval`, `load` or a host
-  callback below the owner they run under it, as at HEAD; its after thunk on a normal exit runs
-  inline under the timer, as at HEAD. One rule either way: decide by the frame's position after
-  the transfer (bounds all of them), or also step out of the parent chain's timers (bounds none
-  of the reconcile thunks). The plan record (round 10) has the trade-offs.
+  wide margins. **Decided 2026-10-10, by position** (the first of round 10's two options), as a
+  consequence of putting the timer's extent on the winding stack and of a reinstatement composing
+  its extents onto those outside its boundary: a frame re-entered inside a `with-timeout` by a
+  composable continuation, or by a `call/cc` continuation reinstated at an inner prompt, sits
+  above the timer's frame, so all its thunks run under the timer, wherever the continuation is
+  applied; a full `call/cc` continuation invoked inside the `with-timeout` leaves the extent first,
+  so its thunks run outside. Before, the answer depended on which driver ran the reconcile (the
+  review of round 11's fixes found the record had described even that by the wrong rule).
   Round 9 found a `dynamic-wind`
   entered inside `load` matching no timer (`load` wraps the timed ctx, and the match was by
   identity), so its after thunk ran outside the timer and could hang, now found through a
@@ -3512,7 +3514,10 @@ Each open row was reproduced on HEAD `4c695231` as well as on the P3.17 branch, 
 P3.17, though P3.17 changes the symptom of some (each such row says how). The shapes below are
 enough to rebuild the probes.
 
-- [ ] **An escape past a `with-timeout` leaves its timer armed** [Correctness, M]: only the finalizer
+- [x] **An escape past a `with-timeout` leaves its timer armed** [Correctness, M, Done 2026-10-10 on
+  `fix/timer-identity-and-teardown`: the timer's extent is a winding-stack frame (`newTimerFrame`)
+  above its boundary, and every unwind through it ends the timer (`exitTimer`); pinned by
+  `TestEscapeFromATimerEndsIt`. The record below is as filed]: only the finalizer
   frame and `resolveTimerInterrupt` restore `p.timer`/`p.ctx` (`run_body_under_timer.go`); a `guard`
   catching a raise outside the thunk, or a `call/cc` escape, discards the finalizer without running
   it. When the stale timer fires, the next poll, recheck or wait emits an interrupt whose boundary is
@@ -3521,7 +3526,8 @@ enough to rebuild the probes.
   then any 200 ms of work, in the same evaluation unit (one form, or an `EvalProgram` unit such as
   a file run; separate `EvalMultiple` forms and REPL inputs each start a fresh context). Fix shape: tie the teardown to the boundary frame leaving the chain.
   Since P3.17 a stale timer claims no failure and hides no live timer outside it
-  (`liveFiredTimer`, `TestStaleTimerClaimsNothing`, `TestStaleTimerDoesNotHideALiveOne`), so a
+  (`liveFiredTimer`, `TestStaleTimerClaimsNothing`, `TestStaleTimerDoesNotHideALiveOne`; the first two
+  since deleted, the third renamed `TestEscapedTimerDoesNotHideALiveOne`), so a
   primitive's own failure is reported as itself; but the stale timer's done ctx still cancels
   every later wait in the unit, which now raises a cancellation carrying `ErrTimerExpired` where
   HEAD reported `ErrInternal`, and a poll or recheck still reports `ErrInternal`. An `eval` that
@@ -3544,7 +3550,11 @@ enough to rebuild the probes.
   (loop (+ i 1) (+ acc 1)) acc))))` returns a wrong `acc` with no error in up to 1 run in 4; HEAD
   too. No test resumes `k`. Decide: deliver `v` as the call's result and replay the stashed values
   after a poll, or document `k` as not resumable and raise a clear error.
-- [ ] **Which timer fired is not recorded** [Design, M]: every `with-timeout` cancels with the one
+- [x] **Which timer fired is not recorded** [Design, M, Done 2026-10-10 on
+  `fix/timer-identity-and-teardown`: the cause names its timer (`timerExpiry`), answered by the
+  context that arms it (`firedTimer`); pinned by `TestTimerExpiryNamesTheTimerThatFired`. A started
+  thread's busy loop under its starter's timer still dies with the poll's raw context error, as one
+  with no `with-timeout` of its own does. The record below is as filed]: every `with-timeout` cancels with the one
   `ErrTimerExpired`, so the innermost context that owns a timer answers any expiry: an outer
   timer's runs an inner handler early, and a starter thread's runs a started thread's own
   (unexpired) `with-timeout` handler. (In a busy loop the poll that interrupts runs before
@@ -3583,14 +3593,20 @@ enough to rebuild the probes.
   timer and hangs (a 10 s `thread-sleep!` sleeps its full 10 s).
   `(eval '(with-timeout 50 h (lambda () (call/cc (lambda (k0) (dynamic-wind (lambda () #f)
   (lambda () (k0 'escaped)) (lambda () (mutex-lock! m)))))))) env)` with `m` held.
-- [ ] **A rootless `call/cc` or `call-with-composable-continuation` sub-context runs its parent's
-  dynamic-wind after thunks when it completes** [Correctness, S–M]: `NewSubContext` copies the
+- [x] **A rootless `call/cc` or `call-with-composable-continuation` sub-context runs its parent's
+  dynamic-wind after thunks when it completes** [Correctness, S–M, Done 2026-10-10 on
+  `fix/timer-identity-and-teardown`, by the fix shape: a context records the depth it inherited
+  (`MachineContext.windingBase`) and its completion, or a thread's exit, unwinds to it
+  (`UnwindOwn`), as does an abort to its own boundary (`resolveAbort` reconciles to
+  `windingOutside`); pinned by `TestRootlessSubContextLeavesInheritedExtents` and
+  `TestThreadExitLeavesTheStartersExtents`. Found again as a regression of the timer frame: the
+  thread's exit ended its starter's timer. The record below is as filed]: `NewSubContext` copies the
   parent's winding stack and `RunResumable`'s normal completion runs `UnwindTo(0)`, so every
   enclosing extent's after thunk fires there and again when the parent exits. A thread root, which
   copies its starter's winding stack, does the same at thread exit. Fix shape: on a sub-context or
   thread root, unwind on completion only to the inherited depth.
 - [ ] **A call/cc continuation reinstated by an escape leaves its parameterization sticky**
-  [Correctness, M]: `ReinstallSegment` sets the driver's `capturedMarks`/`isolatedMarks` and nothing
+  [Correctness, M]: `reinstallSegment` sets the driver's `capturedMarks`/`isolatedMarks` and nothing
   clears them when the reinstalled frames return, so a `parameterize` value outlives its extent for
   the rest of the evaluation. Since P3.17 a `with-timeout` handler that runs because a wait in an
   escape's after thunk was cancelled sees the escaping continuation's parameterization (before, the
@@ -3613,10 +3629,16 @@ enough to rebuild the probes.
   condition, calls exit again and gets this message. Any abort to an outer tag from there fails the
   same way: `(ex 'x)` under `call-with-exit` and `(abort-current-continuation t 'v)` under an
   enclosing prompt report "no prompt found". Fix shape: on a sub-context (`parentMC != nil`),
-  re-raise a not-found abort to the enclosing driver. A stale timer's cancelled wait surfaces here
-  as this message.
-- [ ] **Applying a composable continuation runs the invoker's `dynamic-wind` after thunks**
-  [Correctness, M]: no timer involved, same on HEAD. `ReinstallSegment` reconciles the winding
+  re-raise a not-found abort to the enclosing driver. A stale timer's cancelled wait surfaced here
+  as this message, until an escape ended its timer (2026-10-10).
+- [x] **Applying a composable continuation runs the invoker's `dynamic-wind` after thunks**
+  [Correctness, M, Done 2026-10-10 on `fix/timer-identity-and-teardown` for the winding half: a
+  continuation records the depth of its delimiting prompt on the winding stack
+  (`ComposableContinuation.windingBase`), and a reinstatement re-enters the extents it carries on
+  top of those outside its boundary (`reinstallSegment`), so the invoker's are kept, and the prompt
+  frames it carries are rebased onto them (`rebasePrompts`); pinned by
+  `TestReentryInsideAFrameKeepsIt` and `TestReentryInsideATimerStaysUnderIt`. The handlers and
+  `parameterize` half below is STILL OPEN. The record below is as filed]: no timer involved, same on HEAD. `reinstallSegment` reconciles the winding
   stack to the captured one as an absolute target, so frames the invoker is inside are unwound.
   With `kc` captured under a top-level prompt, `(dynamic-wind (lambda () (note 'in)) (lambda ()
   (note (list 'kc-returned (kc 7))) (note 'body-done)) (lambda () (note 'out)))` logs
@@ -3705,7 +3727,11 @@ enough to rebuild the probes.
   through `eval` makes the program answer `#<void>`; a thread thunk loses its tail.
   `call-with-exit`, and a `k` captured outside `eval` and invoked inside, are correct.
   `TestSubContextNonTailEscapeTruncation` (the 2026-06 boundary-reification arc) has no row for
-  these primitives. Fix shape: resolve a resume rooted on the sub's own chain in its driver, or run
+  these primitives. Since 2026-10-10 the resume keeps the winding stack around the `eval` call
+  (`ResumeWindingDepth`), so a `with-timeout` around it stays armed while its boundary frame is
+  discarded with the chain: when its timer fires, the driver reports "with-timeout: no boundary frame
+  found for fired timer" (an internal error) where it raised a plain cancellation before.
+  Fix shape: resolve a resume rooted on the sub's own chain in its driver, or run
   them on the live chain as `force` now is.
 - [ ] **Code in a sub-context cannot see its parent's prompts** [Correctness, M]: `FindPrompt`
   (`pkg/machine/machine_context_continuation.go`) walks the running context's chain and its own

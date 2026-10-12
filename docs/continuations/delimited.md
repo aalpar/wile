@@ -177,7 +177,7 @@ This is the most complex primitive. Implementation:
 
 1. `FindPrompt(tag)`: walk the continuation chain and check the context-level prompt. No match is an error: there is nothing to delimit at.
 2. `SliceContinuationAt(prompt)`: deep-copy the continuation frames from the current position down to (but not including) the prompt. The bottom frame's parent is set to nil, creating a standalone segment. The live source chain is marked shared, since the copies alias its environment frames.
-3. Create a `ComposableContinuation` wrapping the segment and a copy of the current winding stack (plus thread ID and barrier token). No mark snapshot is taken: composable resume composes the invoker's marks, unlike `call/cc`.
+3. Create a `ComposableContinuation` wrapping the segment and a copy of the current winding stack, recording the depth of the prompt on it (`WindingDepthAt`): the extents above that depth are the ones the continuation carries (plus thread ID and barrier token). No mark snapshot is taken: composable resume composes the invoker's marks, unlike `call/cc`.
 4. Apply `proc` with the composable continuation **in place** on the live chain, mirroring `call/cc`'s inline mode (`prim_control.go`), NOT aborting. The deep copy in step 2 left the originals on the live chain, so `proc`'s result flows back through them. When the capture is rootless (`mc.Parent() == nil`), `proc` runs in a fresh sub-context under its own `DefaultPromptTag` driver instead, exactly as call/cc's sub-context mode; its value(s) are then delivered to `mc`.
 
 This is the defining behavior of a *composable* continuation (Racket semantics, verified against Racket v9.2): `proc` runs in the continuation of the `call-with-composable-continuation` call — it does not remove the current continuation — and applying the captured continuation **composes** (extends) rather than replaces, so the captured frames may legitimately run more than once. For example `(+ 1 (call-with-composable-continuation (lambda (k) (k (k 10))) tag))` under a prompt yields **13**: `(k 10)`→11, `(k 11)`→12, then `proc`'s 12 flows in place into the live `(+ 1 _)` → 13. `shift`/`control` add their own `abort-current-continuation` on top of this raw capture (`pkg/stdlib/lib/wile/control.scm`); the primitive itself must not. (Earlier versions aborted to the prompt — `control`/frame-removing semantics — which was non-conformant to the Racket primitive this primitive follows.)
@@ -189,13 +189,13 @@ When a `ComposableContinuation` is called as a procedure (dispatched by `ApplyCa
 1. Thread check: reject if invoked from a different SRFI-18 thread. Barrier check: reject if the barrier token differs.
 2. Copy the argument values off the eval stack, whose backing array `Restore` recycles.
 3. Select the escalator arms this resume revives, against `p.cont` — the invoking context's live chain, which the winding reconcile below can re-point.
-4. Delegate to `ReinstallSegment` with `boundary = p.cont`, which:
+4. Delegate to `reinstallSegment` with `boundary = p.cont`, which:
    a. installs the captured marks;
    b. calls `AcquireSegment()`: the original frames on first invocation (marking the chain shared), a deep copy on re-invocation;
-   c. reconciles dynamic-wind: `RestoreWithWindingFrom(nil, current, captured)` unwinds extents not in the captured stack and rewinds captured extents not in the current stack, then marks the selected arms revived (only a reconcile that succeeded re-entered the frame);
+   c. reconciles dynamic-wind to the invoker's current extents with the carried ones on top (Flatt et al. 2007: a composable continuation's frames are appended to the invoker's), so nothing of the invoker's is unwound and the carried extents are re-entered (their before thunks run), and rebases each prompt frame in the segment, whose winding record is the capture site's, onto those extents, then marks the selected arms revived (only a reconcile that succeeded re-entered the frame);
    d. grafts the segment's bottom frame onto `boundary`, restores from the segment's top frame, and delivers the values.
 
-`ReinstallSegment` is the *single* resume primitive: the abortive `call/cc` resume goes through it too, differing only in `boundary` (from `FindPrompt`, `nil` = replace the whole chain), `isolate` (true, restoring the captured mark snapshot), and where step 3 ran — at the `(k v)` site, carried on the signal, because the trampoline reinstates on a driver whose chain is not the invoker's.
+`reinstallSegment` is the *single* resume primitive: the abortive `call/cc` resume goes through it too, differing only in `boundary` (from `FindPrompt`, `nil` = replace the whole chain), the extents kept (those outside the boundary: the prompt frame's recorded stack, or the context's inherited extents at its own boundary, so the live extents inside the boundary are unwound), `isolate` (true, restoring the captured mark snapshot), and where step 3 ran — at the `(k v)` site, carried on the signal, because the trampoline reinstates on a driver whose chain is not the invoker's.
 
 The share-then-copy discipline in step 4b is essential in both directions. Without the first-invocation shared marking, a normal return through a reinstalled frame could pool an environment the captured segment still needs. Without the re-invocation copy, a second resume would corrupt frames the first one mutated.
 
@@ -234,7 +234,7 @@ This is correct: D2 is exited, D3 is entered, and D1 (the common ancestor) is le
 
 ## Unified continuation control flow
 
-Both kinds of continuation control flow share one resume primitive (`ReinstallSegment`) and one driver (`RunResumable`), and differ only in the signal that reaches it. Call/cc still follows Racket's model, where a call/cc escape is a composable capture delimited at the default prompt plus an abort to it, but the *mechanism* is the resume trampoline rather than an abort carrying an already-computed result. See [`resume-trampoline.md`](resume-trampoline.md).
+Both kinds of continuation control flow share one resume primitive (`reinstallSegment`) and one driver (`RunResumable`), and differ only in the signal that reaches it. Call/cc still follows Racket's model, where a call/cc escape is a composable capture delimited at the default prompt plus an abort to it, but the *mechanism* is the resume trampoline rather than an abort carrying an already-computed result. See [`resume-trampoline.md`](resume-trampoline.md).
 
 ```
 ┌──────────────────┬───────────────────────────┬─────────────────────────────┐
@@ -247,7 +247,7 @@ Both kinds of continuation control flow share one resume primitive (`ReinstallSe
 │                  │ SourceWinding             │ SourceWinding               │
 ├──────────────────┼───────────────────────────┼─────────────────────────────┤
 │ Resolved by      │ RunResumable →            │ RunResumable or             │
-│                  │ ReinstallSegment          │ RunWithinBoundary →         │
+│                  │ reinstallSegment          │ RunWithinBoundary →         │
 │                  │                           │ resolveAbort                │
 ├──────────────────┼───────────────────────────┼─────────────────────────────┤
 │ Effect           │ Reinstalls the segment;   │ Restores past the prompt;   │
@@ -323,7 +323,7 @@ Creates an independent copy of a chain from its top frame down to a given bottom
 | `pkg/machine/run_body_under_frame.go` | `RunBodyUnderPrompt` and the other reified-boundary constructors |
 | `pkg/machine/machine_context_continuation.go` | `FindPrompt`, `SliceContinuationAt`, `GraftContinuation` |
 | `pkg/machine/machine_context_winding.go` | `RestoreWithWindingFrom` |
-| `pkg/machine/machine_context_apply.go` | `ReinstallSegment`, `applyComposableContinuation` |
+| `pkg/machine/machine_context_apply.go` | `reinstallSegment`, `applyComposableContinuation` |
 | `pkg/machine/foreign_closure.go` | `applyCallableError` (control-signal passthrough) |
 | `pkg/machine/machine_context_apply.go` | `bridgeForeignError` (the only wrapper around it) |
 | `pkg/registry/core/prim_prompt.go` | Prompt primitive implementations |
