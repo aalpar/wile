@@ -96,19 +96,19 @@ frames happen to be on the stack — to the **one** loop that knows how to deal
 with it. No special unwinding path. `errors.As` finds it whether it's bare or
 wrapped inside other errors.
 
-That one loop is `RunResumable` (`pkg/machine/machine_context.go`), the
-single driver under the default prompt. It catches the signal, reinstalls the
-segment onto *its own* live chain, and loops:
+That loop is `RunResumable` (`pkg/machine/machine_context.go`), the driver
+under the default prompt at a root, or `RunWithinBoundary`, a sub-context's
+driver, when the continuation was delimited at a frame on that sub-context's
+chain or at its own boundary (`resumePrompt`; any other resume re-raises past
+it). The driver catches the signal, reinstalls the segment onto *its own* live
+chain, and loops:
 
 ```go
 // RunResumable's resume arm, pkg/machine/machine_context.go (condensed)
 var resumeErr *ErrResumeContinuation
 if errors.As(err, &resumeErr) {
-    boundary, _ := p.FindPrompt(resumeErr.Tag)
-    wasEmpty, reErr := p.reinstallSegment(
-        resumeErr.Segment, boundary,
-        resumeErr.SourceWinding, resumeErr.Values, true,
-        resumeErr.escalatorRevivals)
+    boundary, _ := p.resumePrompt(resumeErr)
+    done, reErr := p.resolveResume(resumeErr, boundary)   // reinstallSegment
     ...
     continue                          // <-- the bounce
 }
@@ -185,8 +185,8 @@ The `boundary` argument is where escape-past and delimited resume diverge — an
 it's the whole reason a *full* `call/cc` continuation behaves differently from a
 *delimited* one.
 
-`boundary` comes from `FindPrompt(tag)`. For a top-level `call/cc`, there is no
-inner prompt, so `FindPrompt` returns `nil`:
+`boundary` comes from `resumePrompt`, which asks `FindPrompt(tag)` first. For a
+top-level `call/cc`, there is no inner prompt, so the boundary is `nil`:
 
 ```
 boundary == nil  →  graft onto nothing  →  REPLACE the whole live chain
@@ -283,11 +283,12 @@ arms the segment carries and the live chain does not. "Resumed through" means
 "re-entered from outside", not "appears in the segment".
 
 The set is decided **by the invoker**, alongside `SourceWinding` and for the same
-reason: the resume trampolines to the nearest `DefaultPromptTag` driver, which is
-not the context the continuation was invoked on. A raise handled inside a
+reason: the resume trampolines to the driver that owns where the continuation was
+delimited, which is not necessarily the context the continuation was invoked on.
+A raise handled inside a
 sub-context — every `dynamic-wind` before/after thunk a winding reconcile runs is one, and `RunWithinBoundary`
-re-raises `ErrResumeContinuation` rather than resolving it — arms its finalizer
-frame on the *sub's* chain, and the top driver's chain never held it. Asking the
+re-raises an `ErrResumeContinuation` delimited outside it rather than resolving it — arms its finalizer
+frame on the *sub's* chain, and the resolving driver's chain (`resumePrompt`) need never have held it. Asking the
 driver reads "absent", i.e. a revival, for a jump that never left the extent, and
 swallows the secondary exactly as the two earlier answers did. So
 `applyCapturedContinuation` computes the set and carries it on

@@ -84,7 +84,7 @@ This is the simplest possible approach. No ANF or CPS conversion: the compiler w
 
 **Uniform call/cc handling.** In CPS, `call/cc` is trivial — it just captures the current continuation parameter and packages it as a value. In direct-style, `call/cc` requires special VM support (`SaveContinuation`, `MachineContinuation`, escape closures, prompt abort propagation). Wile carries roughly a thousand lines of continuation machinery across `machine_continuation.go`, `captured_continuation.go`, `composable_continuation.go`, and the winding files.
 
-But that machinery *already works*. It's been tested, debugged, and handles edge cases (cross-thread rejection, winding stack preservation, inline vs. sub-context modes). CPS would eliminate this machinery but replace it with closure-conversion complexity.
+But that machinery *already works*. It's been tested, debugged, and handles edge cases (cross-thread rejection, winding stack preservation). CPS would eliminate this machinery but replace it with closure-conversion complexity.
 
 **Optimization on the IR.** CPS enables "contraction" — beta-reducing continuation lambdas that are called exactly once. This eliminates temporary closures. It enables eta-reduction (removing trivial wrapper lambdas) and constant folding across continuation boundaries.
 

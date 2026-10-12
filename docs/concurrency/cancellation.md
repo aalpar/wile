@@ -112,8 +112,8 @@ which owns the timers, decides it (`supersedingTimerInterrupt`,
   not linked to the chain sees it first: a macro transformer at expansion time, a
   library body being instantiated, and the roots listed below. The owner still
   turns it into the timeout when it comes back.) In the timer's own context this happens at the foreign-call
-  bridge. A sub-context below the owner (`eval`, `load`, a rootless `call/cc`, a
-  winding thunk) has no timer of its own: it passes the failure up undispatched,
+  bridge. A sub-context below the owner (`eval`, `load`, a winding thunk) has no
+  timer of its own: it passes the failure up undispatched,
   and the owner converts it when it comes back through whatever started the
   sub-context, whether a foreign call's return, a host function's return, or an
   escape's winding reconcile. The owner does not need to recognise the failure,
@@ -227,7 +227,7 @@ an escape leaves the outer timer to claim a wait, for a returned failure or one
 `TestTimerDoesNotClaimAControlTransfer`
 (an escape or abort out of `eval` after the timer fired still arrives), and
 `TestTimerClaimsAHandlerFailure` (a handler the drivers apply themselves). A wait that returned a value instead of raising is caught
-wherever no recheck can reach: the sub-context, rootless `call/cc`, host-callback,
+wherever no recheck can reach: the sub-context, tail-position `call/cc`, host-callback,
 never-caught and child-thread tests below.
 
 ### The tail-position hole (found and fixed 2026-07-16)
@@ -334,9 +334,9 @@ Scheme (they live above `pkg/values` and cannot be reached from a Go-level test)
 - `TestTimerCancelledWaitIsNeverCaught`: a `with-exception-handler` around the wait
   in the timer's own context, a `guard` around it inside `eval`, and a `guard`
   outside the `with-timeout` altogether never see the failure; the handler runs.
-- `TestTimerCancelledWaitInRootlessCallCCRunsHandler`: a wait in a rootless
+- `TestTimerCancelledWaitInRootlessCallCCRunsHandler`: a wait in a tail-position
   `call/cc` inside an after thunk that an escape runs, the longest route back to
-  the timer's owner (two sub-contexts, then the escape's winding reconcile).
+  the timer's owner (the thunk's sub-context, then the escape's winding reconcile).
 - `TestTimerCancelledWaitInHostCallbackRunsHandler`: a wait in a `RegisterFunc`
   callback, and in a procedure a host function runs through `Engine.Call`, with a
   host that replaces the failure by an error wrapping nothing.

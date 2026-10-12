@@ -193,7 +193,7 @@ because the citation is what `make indexlint` counts:
 | `2026-09-05-scheme-specified-syntax-forms-impl.md` | **IMPL PLAN 2026-09-05. Tasks 1-10 of 12 shipped** (P0.1-P0.5, P1, P2), branch per phase. P2 landed 2026-09-07 WITHOUT its default flip: `syntax-rules` and `er-macro-transformer` are specified in Scheme, but making the Scheme layer the default costs **31x startup** — 5.96 ms/engine and 87k allocations become 186 ms and 1.9M, at ~1 ms per `syntax-rules` clause over bootstrap's ~90 (F15). Both layers stay in the binary behind `WILE_SYNTAX_FORMS` / `WithSchemeSyntaxForms()`, default Go. **P3 (deletion) is blocked on the flip**, and the flip on a cheaper pattern representation or a pre-compiled bootstrap. Executing P2 also found a latent **P1** hygiene defect: `values.AddScopeToSet` aliased the caller's backing array, so two nested expansions of one macro clobbered each other's introduction scope — `(or (or #f #f) #t)` failed to compile and `(wile algebra interval)` was unloadable (F16). Twelve tasks over the design's P0.1–P0.5 and P1–P4, one branch per phase, 62 checkbox steps. §0 carries fourteen corrections to the design: the five review findings of 2026-09-05 (F1 the exclusion set is eight expander rows, ratcheted; F2 the Go producer's definition-site local arm dies at P0.1; F3 `define-syntax` docstrings exist and `,doc` reads them, so the seven `specialforms.go` rows go in P4; F4 the full deletion inventory; F5 `unsyntax`/`unsyntax-splicing` as violation-raising macros) and five measured while planning (F6 `datum->syntax` already copies the template's scopes, only the pin is at stake; F7 `GlobalIndex` is minted per query, so the P0.3 pin compares bindings; F8 P1 must take `with-syntax`/`quasisyntax` with `syntax`; F9 `WILE_SYNTAX_FORMS` as the both-ways default; F10 bootstrap macros are invisible from phase ≥ 2, closed by a kernel arm 2b). Four more (F11–F14) came from the adversarial review of 2026-09-06, folded 2026-09-06: F11 a library body is already stamped with its own scope, so §2.1 item 2's premise was false; F12 `bootstrap_nilpin_test.go` is replaced in P2, not deleted in P3; F13 `chibi/optional.sld`'s ER arm is behind a `cond-expand` Wile never selects; F14 `syntax-local-introduce` wiring belongs to P0.2, forced by `TestSyntaxLocalIntroduceIsNotWired`. That review also fixed four blocking defects: every `EvalMultiple` result in the P0 pin files asserted a `pkg/syntax` type directly on the `wile.Value` wrapper, which does not compile. Six more (F15-F20) came from EXECUTING Task 10 on 2026-09-07: F15 the startup measurement that deferred the flip; F16 the `AddScopeToSet` aliasing defect; F17 the plan's `er-contract` row cannot live in a script that must be green on both layers; F18 the nil-pin census is kept and pinned to the Go layer rather than replaced, with the behaviour rows added alongside; F19 the ER shim needs `%er-proc` to keep the definition-site arity refusal and to evaluate PROC once; F20 `pkg/registry/core/bootstrap.scm` is not executed, so editing its load-order comment fixes nothing; **F21 the `WILE_SYNTAX_FORMS=scheme` leg is no longer green** — 61 minutes for `pkg/wile` alone and seven failures in five classes, the worst being that the Scheme generators compute with USER-REPLACEABLE primitives, so `reg.Without("+")` plus an embedder's own `+` cannot load bootstrap. Nothing reaches the default; all of it is owed before the flip, and that class outranks the startup number |
 | `ARCHITECTURE.md` | 1/4 sections complete |
 | `MACRO_SYSTEM.md` | Both sections unstarted (re-verified 2026-09-20: zero `ScopeReason` / `syntax-origin` symbols in tree) |
-| `2026-10-11-rootless-subcontext-winding-decision.md` | **DECISION PENDING 2026-10-11.** Why every winding fix on `fix/timer-identity-and-teardown` moves the wrong answer on the rootless-`call/cc` path (the filed "runs the rest of the program, then the escape runs it again" row), and three ways out; recommends fixing that row first, on its own branch |
+| `2026-10-11-rootless-subcontext-winding-decision.md` | **DECIDED 2026-10-11, option 2; implementation on `fix/rootless-resume-to-the-driver`.** Why every winding fix on the `fix/timer-identity-and-teardown` branch moved the wrong answer on one path: a `call/cc` in tail position of a dynamic-wind thunk ran its procedure under a driver of its own, whose edge acted as a default prompt nobody wrote. Three options with Mermaid diagrams; option 2 fixes the root first (resume resolved by the driver that owns where the continuation was delimited, boundary token), then the timer branch rebases. Landed in the other order: the timer branch merged first (`49ad4fc2`, 2026-10-12) and this branch rebased onto it, keeping the timer branch's winding rules (`windingBase`, `composeWinding`) |
 | `2026-09-20-core-form-override-and-import-portability-design.md` | **DESIGN 2026-09-20, no code committed.** Successor to `2026-09-19-open-directions.md` §§2–3, which it supersedes on five points. Root causes for all three `if`-capture defects **verified by instrumentation**, not hypothesised: defect 1+2 are `lookupMacroBinding`'s D2 arm discarding a resolved pin because it names a `BindingTypePrimitive` (`expander_time_continuation.go:393-401`); defect 3 is `findLibraryBinding` exporting the inherited core `if` instead of the library's own Expand-phase macro (`library_bindings.go:554-557`). Two independent sites, **not** one root cause as the recap said. Both candidate fixes measured: each reproduces Racket 9.2 and Chez byte for byte, `go test ./...` green with both active. Also: the §5.2 self-violations are **three** edits not four (`(wile strings)` already excepts `string-map`; schelog's `_` shadows a startup binding, which §5.2 does not reach), the A1 stdlib edit is applied and green in a worktree, and the superlinear expander cost is reachable with **no shadowing at all** |
 | `GRAPH-SPECTRUM.md` | Directions, not scheduled |
 
@@ -3604,7 +3604,9 @@ enough to rebuild the probes.
   parent's winding stack and `RunResumable`'s normal completion runs `UnwindTo(0)`, so every
   enclosing extent's after thunk fires there and again when the parent exits. A thread root, which
   copies its starter's winding stack, does the same at thread exit. Fix shape: on a sub-context or
-  thread root, unwind on completion only to the inherited depth.
+  thread root, unwind on completion only to the inherited depth. (Until 2026-10-11 the row also named the sub-context a
+  tail-position `call/cc` or `call-with-composable-continuation` ran its procedure on; that
+  sub-context no longer exists, the procedure runs in place.)
 - [ ] **A call/cc continuation reinstated by an escape leaves its parameterization sticky**
   [Correctness, M]: `reinstallSegment` sets the driver's `capturedMarks`/`isolatedMarks` and nothing
   clears them when the reinstalled frames return, so a `parameterize` value outlives its extent for
@@ -3618,8 +3620,9 @@ enough to rebuild the probes.
   uncaught-condition carrier). Already so for a compute-bound body on HEAD; since P3.17 a body that
   WAITS is cancelled too, where HEAD let its wait return and the body finish. Fix shape: do not
   memoize a failure whose cause is a ctx cancellation.
-- [ ] **A guard catching a raise from a rootless `call/cc` inside an escape's after thunk fails
-  with "exit procedure called outside dynamic extent"** [Correctness, S–M]: no timer needed.
+- [x] **A guard catching a raise from a rootless `call/cc` inside an escape's after thunk fails
+  with "exit procedure called outside dynamic extent"** [Correctness, S–M, **Done 2026-10-11**]:
+  no timer needed.
   `(guard (e (#t 'caught)) (call/cc (lambda (k0) (dynamic-wind (lambda () #f) (lambda () (k0 'esc))
   (lambda () (call/cc (lambda (k) (raise 'boom))))))))`; without the inner `call/cc` the guard
   works. Cause: the inner `call/cc` is rootless, so it runs under `RunWithEscapeHandling`
@@ -3628,9 +3631,10 @@ enough to rebuild the probes.
   has already set `valid=false` (`prim_exit.go`), so the guard's handler, catching the minted
   condition, calls exit again and gets this message. Any abort to an outer tag from there fails the
   same way: `(ex 'x)` under `call-with-exit` and `(abort-current-continuation t 'v)` under an
-  enclosing prompt report "no prompt found". Fix shape: on a sub-context (`parentMC != nil`),
-  re-raise a not-found abort to the enclosing driver. A stale timer's cancelled wait surfaced here
-  as this message, until an escape ended its timer (2026-10-10).
+  enclosing prompt report "no prompt found". Fixed with the resume row below: the tail `call/cc`
+  applies its procedure in place, so the abort reaches the thunk's own `RunWithinBoundary`, which
+  re-raises it to the enclosing driver. Pinned by `TestCallCCInAWindingThunkIsNotAPrompt` (guard
+  and abort rows). A stale timer's cancelled wait used to surface here as this message.
 - [x] **Applying a composable continuation runs the invoker's `dynamic-wind` after thunks**
   [Correctness, M, Done 2026-10-10 on `fix/timer-identity-and-teardown` for the winding half: a
   continuation records the depth of its delimiting prompt on the winding stack
@@ -3741,24 +3745,124 @@ enough to rebuild the probes.
   `call-with-composable-continuation` there or in an escape's after thunk fails "no prompt found
   for tag"; Racket answers `#t` and captures. `abort-current-continuation` works. HEAD too. Fix
   shape: continue the lookup through `parentMC`; capturing across the boundary is the harder half.
-- [ ] **A continuation invoked from a rootless `call/cc` in an escape's after thunk runs the rest of
-  the program, then the escape runs it again** [Correctness, M]: a `call/cc` in tail position of a
-  winding thunk sees `mc.Parent() == nil`, so `PrimCallCC` (`pkg/registry/core/prim_control.go`)
-  runs its lambda on a fresh sub-context under `RunWithEscapeHandling`, whose resume arm grafts the
-  outer continuation onto the sub's own chain and runs it to completion; the escape in flight then
-  delivers too. `(note (call/cc (lambda (ex) (call/cc (lambda (k0) (dynamic-wind (lambda () #f)
-  (lambda () (k0 'escaped)) (lambda () (call/cc (lambda (k) (ex 'exited))))))))))` logs
-  `(exited escaped)`; Chez logs `exited`. A non-tail `call/cc` there is correct. HEAD too. Shares
-  its cause with the exit-procedure row above. Fix shape: a rootless sub-context with a
-  `parentMC` re-raises a resume whose target is not on its own chain.
-- [ ] **A `guard` that catches a raise fails in a library body or a procedural macro transformer**
-  [Correctness, S–M]: both run a root context under a bare `mc.Run()` (`EvalTemplate`,
-  `invokeTransformerClosure` in `pkg/machine/macro_evaluator.go`), which resolves no prompt abort,
-  so `guard`'s exit fails with "abort-current-continuation: no prompt found for tag
-  #<continuation-prompt-tag:exit>". Shapes: a body `(define g (guard (e (#t 'guarded)) (raise
+- [x] **A continuation invoked from a rootless `call/cc` in an escape's after thunk runs the rest of
+  the program, then the escape runs it again** [Correctness, M, **Done 2026-10-11**]: a `call/cc`
+  in tail position of a winding thunk saw `mc.Parent() == nil`, so `PrimCallCC`
+  (`pkg/registry/core/prim_control.go`) ran its lambda on a fresh sub-context under
+  `RunWithEscapeHandling`, whose resume arm grafted the outer continuation onto the sub's own chain
+  and ran it to completion; the escape in flight then delivered too. `(note (call/cc (lambda (ex)
+  (call/cc (lambda (k0) (dynamic-wind (lambda () #f) (lambda () (k0 'escaped)) (lambda () (call/cc
+  (lambda (k) (ex 'exited))))))))))` logged `(exited escaped)`; Chez logs `exited`. Fix: the lambda
+  runs in place always, and a resume is resolved by the driver that owns where the continuation
+  was delimited: a default-tag frame on its chain, or its own boundary (boundary token, stamped by
+  `DelimitAt` when `FindPrompt` found no frame; `resumePrompt`). `RunWithinBoundary`
+  re-raises every other resume, so the sub-context's edge is never a prompt the program did not
+  write; a root resolves whatever reaches it. The same rule fixed the other face of the gap, not
+  filed before: a continuation captured at a sub-context's own boundary and resumed by an outer
+  driver replaced that driver's chain, so a non-tail `call/cc` inside `eval` or inside an after
+  thunk silently dropped the rest of the program. Racket agrees on both probes. Pinned by
+  `TestCallCCInAWindingThunkIsNotAPrompt`, `TestCallCCInsideEvalResumesInsideEval`,
+  `TestThreadRootIsTheThreadsOnlyImplicitPrompt`; design in
+  `plans/2026-10-11-rootless-subcontext-winding-decision.md`. Still open: a continuation captured
+  in a sub-context and invoked after it returned resolves at the root (the sub-context truncation
+  class; the root replaces its chain with the segment and the rest of the program is dropped
+  without an error). The token makes that case detectable: a token whose context has been
+  released could be marked closed in `ReleaseSubContext` and a root could raise a located error
+  instead of replaying. Not done, because a continuation captured inside one `Engine.Call` and
+  invoked from the next (a host-driven generator) takes the same route today and would start
+  failing.
+- [ ] **An expansion-time context carries neither thread nor barrier identity** [Correctness,
+  S–M]: `acquireMacroContext` and `EvalTemplate`'s `NewMachineContext` leave `threadID` at 0 and
+  `barrierValid` nil on every goroutine, so the checks in `applyCapturedContinuation` are wrong in
+  both directions on the pass-up route: a continuation captured on the main thread and invoked
+  from a transformer under `eval` in another thread passes the cross-thread check and is replayed
+  by that thread's root (the per-thread allocator invariant is broken), while a thread's own
+  continuation invoked the same way is refused ("captured in thread 1, invoked from thread 0");
+  a continuation captured outside `call-with-continuation-barrier` escapes it through a
+  transformer, and one captured inside fails from a transformer inside the same barrier. A
+  phase-1 continuation captured in one thread's expansion and invoked in another's is not refused
+  either, and which root resolves it depends on whether the capturing root's run has ended (its
+  boundary token's `closed`, atomic for this reason). Fix shape: hand the expander the invoking
+  context's thread and barrier identity (the `eval`/`load` primitive and the engine entry know
+  them) and stamp them on the contexts expansion creates. Related: with no runtime driver above
+  the expansion, the barrier error for a passed-up resume is raised at the engine's compile
+  entry, after the transformer's extents were left and out of any `guard`'s reach; raising it at
+  the `(k v)` site needs a "runtime driver above" fact the expander would carry. Found by the
+  types and errors lenses of the rootless fix's crosscheck (rounds 3 and 4); pre-existing.
+- [ ] **An abort passed up from a transformer reconciles the runtime's winding from the
+  transformer's** [Correctness, S]: `RunWithinBoundary` re-raises a not-found `ErrPromptAbort`
+  unchanged, so an abort from a transformer (run by a runtime `eval` inside a `dynamic-wind`
+  under a runtime prompt) to that prompt carries the transformer root's `SourceWinding`, which
+  started empty, and the runtime `out` thunk is skipped: `((handled from-macro) (in) ...)` where
+  the same abort from eval'd runtime code gives `(in out)`. The resume signal got this treatment
+  on 2026-10-11 (`passUpResume`, `rebaseResumeWinding`); the abort needs the same, best by
+  putting the stack and the rebase mark on one small type both signals embed. Found by the types
+  lens of the rootless fix's crosscheck (round 4); pre-existing.
+- [ ] **A raise escaping a procedural transformer under a runtime `eval` cannot be guarded**
+  [Correctness, S]: the raise leaves the transformer as an `ErrExceptionEscape` (the phase-1
+  root has no handler), and at the `eval` site `applyCallableError` passes it through as a
+  control signal instead of raising it in place, so `(guard (e (#t 'caught)) (eval '(m) env))`
+  ends the program where Racket catches it; a compile error or a runtime error inside the same
+  `eval` is caught. Fix shape: at the expansion boundary (`InvokeTransformer`/`EvalTemplate`'s
+  return, or `PrimEval`'s expand-error path), demote an `ErrExceptionEscape` to an ordinary
+  error carrying its condition. Found by the errors lens of the rootless fix's crosscheck
+  (round 4); pre-existing.
+- [ ] **A continuation captured in a phase-0 library body is replayed by a transformer's root**
+  [Correctness, S]: a library body instantiated at expansion time runs on an `EvalTemplate` root,
+  whose boundary token says "expansion-time" (it records the driver, not the phase), so a stale
+  continuation from it invoked in a transformer under a runtime `eval` is resolved there and the
+  body's remainder runs on the phase-1 root ("syntax transformer returned non-syntax value").
+  A continuation from a top-level runtime form in the same position passes up to the runtime
+  root. The bootstrap's root (`runBootstrapStx`) is classified the same way, and the guard runs
+  one way only: a phase-1 continuation shared through a library and invoked at runtime is
+  resolved by the runtime root, which runs the transformer's remainder at phase 0 without an
+  error. Fix shape: mint the token's kind from the instantiation's phase (the library registry
+  knows it) rather than from the driver, then refuse in both directions. Same crosscheck, types
+  and code lenses; pre-existing shape.
+- [ ] **A non-continuable `raise`'s secondary exception is swallowed when a handler-captured
+  continuation is invoked from a sub-context** [Correctness, S]: `applyCapturedContinuation`
+  computes the escalator revivals against the invoking context's own chain only
+  (`pendingEscalatorRevivals(capt.cc, p.cont)`; `chainCarriesEscalatorArm` never walks
+  `parentMC`), so a continuation captured inside a `with-exception-handler` handler and invoked
+  through `eval` reads its finalizer frame's arm as revived although the jump never left the
+  handler, and the handler's return is forwarded instead of raising "handler returned from
+  non-continuable exception" (the direct invocation raises, as Chez does). Fix shape: filter
+  the revivals against every chain up the `parentMC` walk; for the transformer route, which has
+  no parent, recompute them at the first driver above the expansion, as the winding is rebased
+  there. Found by the errors lens of the rootless fix's crosscheck (round 3); the `eval` route
+  is pre-existing on master.
+- [ ] **A thread's outcome forwards a control signal raw to the joining thread** [Correctness, S]:
+  `raiseJoinCondition` (`extensions/threads/prim_threads.go`) returns the thread's error unchanged
+  and `UncaughtThreadException.Unwrap` exposes it, so a control signal that ends a thread's run
+  (today: `(make-thread exit)`, whose exit signal makes the joining program exit silently on
+  `thread-join!`; until 2026-10-11 also an abort out of an inherited after thunk at thread exit,
+  now dispatched in the thread) is acted on by the joiner's driver. Fix shape: turn a control
+  signal in a thread's outcome into a located error that is not a control signal; whether `exit`
+  in a thread should end the program is the open semantics question. Found by the errors lens of
+  the rootless fix's crosscheck; pre-existing.
+- [ ] **A procedure a host function runs through `Engine.Call` is a default prompt nobody
+  wrote** [Correctness, S–M]: `callCallable` (`pkg/wile/engine.go`) drives its sub-context under
+  `RunWithEscapeHandling`, a root, so a continuation captured in the calling program and invoked
+  inside the callback is resolved there: the rest of the program runs inside the callback, the
+  host returns, and it runs again, the shape the rootless rows above had at the thunk edge. The
+  same program through a func-typed `RegisterFunc` callback (`RunWithinBoundary`,
+  `ffi_arg_converters.go`) answers as Chez and Racket do. Two fixes, the choice is the
+  embedder-facing contract: mint a `BarrierToken` for the call (Racket puts a continuation barrier
+  on every callback; a continuation crossing `Engine.Call` in either direction then fails with
+  `ErrContinuationBarrier`, including one captured in an earlier `Engine.Call`), or have the root
+  re-raise a resume `resumePrompt` does not own so a host that returns the error forwards it to the
+  outer driver (a stale continuation invoked from top-level Go then surfaces as an error). Found by
+  three crosscheck lenses of the rootless fix, 2026-10-11; pre-existing.
+- [x] **A `guard` that catches a raise fails in a library body or a procedural macro transformer**
+  [Correctness, S–M, **Done 2026-10-11**]: both ran a root context under a bare `mc.Run()`
+  (`EvalTemplate`, `invokeTransformerClosure` in `pkg/machine/macro_evaluator.go`), which resolves
+  no prompt abort, so `guard`'s exit failed with "abort-current-continuation: no prompt found for
+  tag #<continuation-prompt-tag:exit>". Shapes: a body `(define g (guard (e (#t 'guarded)) (raise
   'boom)))`; `(er-macro-transformer (lambda (f r c) (guard (e (#t 42)) (raise 'boom))))` with
-  `(for-syntax (scheme base))` imported. A guard with no raise, or one in an exported procedure
-  called at run time, works. HEAD too. Fix shape: drive these roots with `RunWithinBoundary`.
+  `(for-syntax (scheme base))` imported. Fixed with the resume row above: these roots and the
+  bootstrap's (`runBootstrapStx`) run under `RunWithinBoundary`, which also resumes a `call/cc`
+  captured in the body; a tail `call/cc` there used to work only through the deleted sub-context
+  mode, a non-tail one failed. Pinned by `TestControlInACompileTimeBody`.
 - [ ] **A library body's uncaught raise escapes a `guard` around the import** [Correctness, S]: the
   raise leaves `EvalTemplate` as an `ErrExceptionEscape`, a control signal `applyCallableError`
   passes through (`isControlSignal`, `foreign_closure.go`), so `(guard (e (#t 'caught)) (eval

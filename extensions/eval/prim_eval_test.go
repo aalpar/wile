@@ -840,3 +840,158 @@ func TestEnvironment_WileProfileStrictness(t *testing.T) {
 			qt.Commentf("want ErrWrongNumberOfArguments, got: %v", err))
 	})
 }
+
+// TestCallCCInsideEvalResumesInsideEval pins where a continuation that eval's
+// sub-context sees is resumed. One delimited at eval's own boundary is resumed
+// by that sub-context: the rest of the eval'd expression runs and eval returns
+// its value. Before the fix the top driver resumed it instead, replacing its own
+// chain with the eval'd segment, so everything after the eval call was silently
+// dropped and the evaluation ended with 2. The second row resumes a second such
+// continuation from an after thunk the first resume's reconcile runs, which
+// re-enters the driver's dispatch. The last row pins that a sub-context honours
+// a default-tag prompt frame on its own chain for a continuation delimited at
+// the root (Racket: a full continuation replaces the current one up to the
+// nearest prompt with its tag), rather than passing every root continuation up.
+// A continuation delimited at eval's own boundary and invoked under such a
+// frame gives the same answer whichever of the frame and the boundary is
+// checked first, because the eval'd template's end ends eval before the frame
+// below the graft is returned into; that is the sub-context truncation class,
+// not this rule, so no row pins the order.
+func TestCallCCInsideEvalResumesInsideEval(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{
+			name: "an operand call/cc inside eval resumes inside eval",
+			code: `(list (eval '(+ 1 (call/cc (lambda (k) (k 1)))) (interaction-environment)) 'after)`,
+			want: "(2 after)",
+		},
+		{
+			name: "an after thunk run by a resume inside eval resumes another continuation inside eval",
+			code: `(define st (vector '()))
+			       (define (note x) (vector-set! st 0 (cons x (vector-ref st 0))))
+			       (note (eval '(let ((kC #f) (n 0))
+			                      (let ((c (call/cc (lambda (k) (set! kC k) 'first))))
+			                        (set! n (+ n 1))
+			                        (if (> n 1)
+			                            (list 'resumed c)
+			                            (call/cc (lambda (kA)
+			                              (dynamic-wind (lambda () #f)
+			                                            (lambda () (kA 'fromA))
+			                                            (lambda () (kC 'viaAfter))))))))
+			                   (interaction-environment)))
+			       (note 'after)
+			       (reverse (vector-ref st 0))`,
+			want: "((resumed viaAfter) after)",
+		},
+		{
+			name: "a root continuation invoked under a default-tag prompt inside eval resumes at that prompt",
+			code: `(define st (vector #f #f '()))
+			       (define (note x) (vector-set! st 2 (cons x (vector-ref st 2))))
+			       (let ()
+			         (note (list 'got (call/cc (lambda (k) (vector-set! st 0 k) 'first))))
+			         (if (not (vector-ref st 1))
+			             (begin
+			               (vector-set! st 1 #t)
+			               (note (list 'eval-returned
+			                           (length (eval '(call-with-continuation-prompt
+			                                            (lambda () ((vector-ref st 0) 'second))
+			                                            (default-continuation-prompt-tag)
+			                                            (lambda args (cons 'h args)))
+			                                         (interaction-environment)))))))
+			         (note 'end)
+			         (reverse (vector-ref st 2)))`,
+			want: "((got first) (got second) end (eval-returned 3) end)",
+		},
+		{
+			// A default-tag prompt frame on eval's own chain delimits a call/cc inside
+			// it and resumes it, with no token: the sub-context must honour the frame
+			// rather than pass every frame-delimited resume up (which ended the
+			// evaluation with 15).
+			name: "a continuation delimited at a prompt frame inside eval resumes at that frame",
+			code: `(list (eval '(list (call-with-continuation-prompt
+			                           (lambda () (+ 10 (call/cc (lambda (k) (k 5)))))
+			                           (default-continuation-prompt-tag)
+			                           (lambda args 'handler))
+			                         'in-eval)
+			                  (interaction-environment))
+			            'after)`,
+			want: "((15 in-eval) after)",
+		},
+		{
+			// The same with the call/cc in tail position: an empty segment delivered
+			// at the frame flows THROUGH the frame, and eval returns (5 in-eval).
+			name: "an empty continuation resumed at a prompt frame inside eval flows through the frame",
+			code: `(list (eval '(list (call-with-continuation-prompt
+			                           (lambda () (call/cc (lambda (k) (k 5))))
+			                           (default-continuation-prompt-tag)
+			                           (lambda args 'handler))
+			                         'in-eval)
+			                  (interaction-environment))
+			            'after)`,
+			want: "((5 in-eval) after)",
+		},
+		{
+			// A resume resolved inside eval reconciles winding there; an after thunk
+			// that raises during that reconcile is a control transfer the sub-context
+			// re-dispatches, so a guard inside eval catches it. Returned raw, it
+			// reached the top driver as "no prompt found for tag exit".
+			name: "a raise from an after thunk run by a resume inside eval is caught inside eval",
+			code: `(list (eval '(guard (e (#t (list 'caught e)))
+			                     (let ((k0 #f))
+			                       (let ((v (call/cc (lambda (c) (set! k0 c) 'first))))
+			                         (if (eq? v 'first)
+			                             (dynamic-wind (lambda () #f)
+			                                           (lambda () (k0 'second))
+			                                           (lambda () (raise 'boom)))
+			                             (list 'resumed v)))))
+			                  (interaction-environment))
+			            'after)`,
+			want: "((caught boom) after)",
+		},
+		{
+			// A continuation delimited at an eval that has since returned has no
+			// live boundary: its token is closed and the root resolves it, replacing
+			// the root's chain with the eval'd segment (the sub-context truncation
+			// class, open in TODO.md; Chez and Racket would loop to (looped 3) here,
+			// which the counter bounds). The guard is against a reused pooled context
+			// claiming it: with the token kept across the pool's reset, the second
+			// eval resolved it and the answer was (second 11 after). Pool reuse is
+			// not guaranteed, so TestReleaseClosesTheBoundary in pkg/machine pins the
+			// reset directly.
+			name: "a continuation from a returned eval is resolved at the root, not by the next eval",
+			code: `(define saved (vector #f 0))
+			       (let ((env (interaction-environment)))
+			         (eval '(+ 1 (call/cc (lambda (k) (vector-set! saved 0 k) 1))) env)
+			         (vector-set! saved 1 (+ 1 (vector-ref saved 1)))
+			         (if (< (vector-ref saved 1) 3)
+			             (list 'second (eval '((vector-ref saved 0) 10) env) 'after)
+			             (list 'looped (vector-ref saved 1))))`,
+			want: "11",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			result := eval(t, engine, tc.code)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestCallCCInsideLoadResumesInsideLoad is load's form of
+// TestCallCCInsideEvalResumesInsideEval: a continuation delimited at load's
+// sub-context is resumed there, so the loaded file's later forms run and the
+// program continues past the load. Before the fix the program printed nothing.
+func TestCallCCInsideLoadResumesInsideLoad(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	path := writeTestFile(t, t.TempDir(), "lib.scm",
+		"(define y (+ 1 (call/cc (lambda (k) (k 1)))))\n(define z 'second-form-ran)")
+	result := eval(t, engine, fmt.Sprintf(
+		`(load %q) (list (eval '(list y z) (interaction-environment)) 'after-load)`, path))
+	c.Assert(result.SchemeString(), qt.Equals, "((2 second-form-ran) after-load)")
+}

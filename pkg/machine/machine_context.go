@@ -85,6 +85,13 @@ type MachineContext struct {
 	// FindPrompt answers nil for). A top-level context starts with none. Not
 	// continuation state: a context's boundary does not move with its chain.
 	windingBase int
+	// boundary names this context's boundary to the continuations call/cc
+	// delimits there; nil until the first such capture. See boundaryToken.
+	boundary *boundaryToken
+	// expansionRoot is set by RunWithinBoundary on a context with no parent: an
+	// expansion-time root (a transformer body, a library body, the bootstrap),
+	// which the resume rule treats differently from a runtime root (resumePrompt).
+	expansionRoot bool
 	// escapeCont is vestigial: it is propagated into sub-contexts and threads but
 	// never consulted. Nothing resumes from it.
 	escapeCont *MachineContinuation
@@ -1816,6 +1823,25 @@ func (p *MachineContext) DeleteMark(key values.Value) {
 	}
 }
 
+// completeRun ends a root's run: the extents the context entered itself are left
+// (their after thunks run; the inherited ones are its parent's to leave,
+// UnwindOwn) and the unwind's failure, if any, is the run's. Every
+// successful exit of RunResumable reaches it, the normal return and the
+// deliveries at the context boundary (an empty captured continuation resumed; an
+// abort to the context's own boundary, which arrives with the stack already
+// reconciled to empty), so a thread whose tail call/cc resumes an empty
+// continuation leaves the extents it inherited exactly as a normal return does,
+// failure included. The callers feed the result back through the driver's
+// dispatch rather than returning it: an after thunk may transfer control (an
+// abort, a resume), and returned raw, a thread's inherited after thunk's abort
+// reached the joining thread and aborted the main program.
+func (p *MachineContext) completeRun() error {
+	if len(p.windingStack) <= p.WindingDepthAt(nil) {
+		return nil
+	}
+	return p.UnwindOwn()
+}
+
 // RunResumable drives the VM loop under a DefaultPromptTag prompt, catching
 // control bounces (ErrPromptAbort and ErrResumeContinuation — the trampoline
 // resume signal) and looping. It is the single resume/abort driver shared by
@@ -1898,15 +1924,11 @@ func (p *MachineContext) RunResumable() (rerr error) {
 
 		// Check for successful completion
 		if err == nil {
-			// Unwind the frames this context entered (call their after thunks)
-			if len(p.windingStack) > 0 {
-				unwindErr := p.UnwindOwn()
-				if unwindErr != nil {
-					return unwindErr
-				}
+			pending = p.completeRun()
+			if pending == nil {
+				return nil
 			}
-
-			return nil
+			continue
 		}
 
 		// A failure that reaches this driver after p's own with-timeout timer fired
@@ -1952,7 +1974,11 @@ func (p *MachineContext) RunResumable() (rerr error) {
 				// Context-level deliver (prompt == nil): the composable continuation
 				// already ran to completion in the escape closure's sub-context; the
 				// abort value is the final result and p.pc was not advanced.
-				return nil
+				pending = p.completeRun()
+				if pending == nil {
+					return nil
+				}
+				continue
 			}
 			continue
 		}
@@ -1961,26 +1987,21 @@ func (p *MachineContext) RunResumable() (rerr error) {
 		if errors.As(err, &resumeErr) {
 			// The trampoline: a call/cc continuation was invoked (applyCapturedContinuation
 			// returned this signal instead of nesting a sub.Run()). Reinstall its captured
-			// segment at the nearest prompt with the continuation's tag (DefaultPromptTag)
-			// on THIS driver's live chain, then keep looping so the resumed chain runs on
-			// the driver itself: O(1) Go frames (no ctak overflow), and a SINGLE winding
-			// reconcile from the source winding at the (k v) site (no double-fire; deeper-
-			// sub after-thunks fire once). The boundary is the matching prompt's frame, or
-			// nil at the top-level context boundary: nil REPLACES the whole chain (the
-			// escape-past case — a full k discards the chain-resident consumer/exit/prompt
-			// frames), while an inner call-with-continuation-prompt frame receives the
-			// delimited segment's result and the chain above it is discarded.
-			boundary, _ := p.FindPrompt(resumeErr.Tag)
-			// isolate=true: this signal is emitted only for call/cc resume, which restores
-			// the captured mark snapshot (composable resume composes marks and bypasses
-			// this signal — it calls reinstallSegment directly).
+			// segment where it was delimited on THIS driver's live chain (resumePrompt),
+			// then keep looping so the resumed chain runs on the driver itself: O(1) Go
+			// frames (no ctak overflow), and a SINGLE winding reconcile from the source
+			// winding at the (k v) site (no double-fire; deeper-sub after-thunks fire
+			// once). The boundary is the matching prompt's frame, or nil at the context
+			// boundary: nil REPLACES the whole chain (the escape-past case — a full k
+			// discards the chain-resident consumer/exit/prompt frames), while an inner
+			// call-with-continuation-prompt frame receives the delimited segment's result
+			// and the chain above it is discarded.
 			//
-			// The escalator revivals ride the signal rather than being computed here:
-			// p.cont is THIS driver's chain, and the (k v) site may have been a
-			// sub-context whose frames this chain never held (see escalatorRevivals).
-			wasEmpty, reErr := p.reinstallSegment(
-				resumeErr.Segment, boundary, resumeErr.SourceWinding, p.windingOutside(boundary),
-				resumeErr.Values, true, resumeErr.escalatorRevivals)
+			p.rebaseResumeWinding(resumeErr)
+			// Always this driver's to resolve: it is a root (its promptTag is the
+			// signal's tag), and a root resolves whatever reaches it.
+			prompt, _ := p.resumePrompt(resumeErr)
+			done, reErr := p.resolveResume(resumeErr, prompt)
 			if reErr != nil {
 				if isControlSignal(reErr) {
 					// The winding reconcile ran an after-thunk that escaped — a raise
@@ -2000,18 +2021,12 @@ func (p *MachineContext) RunResumable() (rerr error) {
 				}
 				return reErr
 			}
-			if wasEmpty {
-				// Empty captured continuation (the call/cc sat in tail position, e.g.
-				// captured inside a force/delay thunk): reinstallSegment delivered the
-				// values and reconciled winding but installed no frames. At the top-level
-				// context boundary the delivered values are the final result. At a
-				// delimited inner prompt the values must flow THROUGH it: restore the
-				// prompt frame so the (transparent) prompt delivers them to its parent
-				// (e.g. an outer call-with-continuation-prompt → the rest of the program).
-				if boundary == nil {
+			if done {
+				pending = p.completeRun()
+				if pending == nil {
 					return nil
 				}
-				p.Restore(boundary)
+				continue
 			}
 			continue
 		}
@@ -2100,11 +2115,24 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 // promptTag == nil (NewSubContext does not inherit it), so FindPrompt only matches
 // a prompt FRAME pushed inside the sub by a reified boundary. An abort whose tag is
 // NOT on this chain — a full call/cc to DefaultPromptTag, or an exit targeting an
-// OUTER boundary — is re-raised unchanged so the enclosing driver owns it; and
-// ErrResumeContinuation (the call/cc trampoline signal) is never an ErrPromptAbort,
-// so it always re-raises to the top RunResumable. No DefaultPromptTag install, no
-// timer or panic handling: those belong to the one top-level RunResumable.
+// OUTER boundary — is re-raised unchanged so the enclosing driver owns it. A
+// resume (the call/cc trampoline signal) is resolved here only for a continuation
+// delimited at a frame on this chain or at this context's own boundary
+// (resumePrompt); any other re-raises to the enclosing driver, so the
+// sub-context's edge never acts as a prompt the program did not write. A context
+// with no parent (a macro transformer body, a library body, the bootstrap, run
+// at expansion time) is an expansion-time root: resumePrompt says what it
+// resolves, and what it passes up leaves its extents first and has its winding
+// rebased by the first driver above the expansion (passUpResume). No
+// DefaultPromptTag install, no panic handling: those belong to RunResumable, the
+// runtime roots' driver.
 func (p *MachineContext) RunWithinBoundary() error {
+	if p.parentMC == nil {
+		// An expansion-time root: its continuations are stale once this run ends,
+		// whether or not the context is released then (closeBoundary).
+		p.expansionRoot = true
+		defer closeBoundary(p)
+	}
 	// pending re-enters dispatch with a failure an abort's after thunk raised after
 	// a timer this sub-context owns fired, as in RunResumable.
 	var pending error
@@ -2115,7 +2143,11 @@ func (p *MachineContext) RunWithinBoundary() error {
 			err = p.Run()
 		}
 		if err == nil {
-			return nil
+			pending = p.completeOwnRun()
+			if pending == nil {
+				return nil
+			}
+			continue
 		}
 
 		// As in RunResumable: a failure reaching this driver after a timer THIS
@@ -2128,19 +2160,52 @@ func (p *MachineContext) RunWithinBoundary() error {
 			err = superseding
 		}
 
-		// ErrPromptAbort is the only control signal this driver resolves inline. A
-		// timer interrupt or a debugger break is resolved only if the boundary is on
-		// THIS sub-context's own chain; otherwise they re-raise to the enclosing
-		// driver, exactly like a not-found abort. ErrResumeContinuation is never an
-		// ErrPromptAbort, so it always re-raises to the top RunResumable.
+		// A timer interrupt, a debugger break or a resume is resolved only if its
+		// boundary is on THIS sub-context's own chain (or, for a resume, is this
+		// context's own boundary); otherwise they re-raise to the enclosing driver,
+		// exactly like a not-found abort.
 		//
 		// The enclosing driver (RunResumable) handles any other error: a foreign-call
 		// panic, an outer timer, an exception escape, or a real error.
-		//
-		// The enclosing driver is the one that installed the promptTag for this
-		// sub-context, so it owns the abort/resume driver and the timer/break arms.
 		var abortErr *ErrPromptAbort
 		if !errors.As(err, &abortErr) {
+			// A continuation delimited at a frame on this chain or at this context's
+			// boundary resumes here; one delimited outside (the program's prompt or
+			// root) is the enclosing driver's, and the escape this sub-context may be
+			// running an after thunk for is abandoned with it.
+			var resumeErr *ErrResumeContinuation
+			if errors.As(err, &resumeErr) {
+				p.rebaseResumeWinding(resumeErr)
+				prompt, ok := p.resumePrompt(resumeErr)
+				if !ok {
+					unwindErr := p.passUpResume(resumeErr)
+					if unwindErr == nil {
+						return err
+					}
+					if isControlSignal(unwindErr) || p.supersedingTimerInterrupt(unwindErr) != nil {
+						pending = unwindErr
+						continue
+					}
+					return unwindErr
+				}
+				done, reErr := p.resolveResume(resumeErr, prompt)
+				if reErr != nil {
+					if isControlSignal(reErr) || p.supersedingTimerInterrupt(reErr) != nil {
+						// As in RunResumable: an after thunk of the reconcile transferred
+						// control, or failed after a timer this sub-context owns fired.
+						pending = reErr
+						continue
+					}
+					return reErr
+				}
+				if done {
+					pending = p.completeOwnRun()
+					if pending == nil {
+						return nil
+					}
+				}
+				continue
+			}
 			// A timer whose with-timeout boundary is on THIS sub-context's own chain is
 			// resolved here — the symmetric counterpart to resolving an abort to a local
 			// prompt — so a with-timeout that sits inside a surviving sub-context still has
@@ -2189,8 +2254,8 @@ func (p *MachineContext) RunWithinBoundary() error {
 					continue
 				}
 			}
-			// ErrResumeContinuation, an outer timer, an exception escape, or a real error:
-			// the enclosing driver handles it.
+			// An outer timer, an exception escape, or a real error: the enclosing
+			// driver handles it.
 			return err
 		}
 
@@ -2220,7 +2285,10 @@ func (p *MachineContext) RunWithinBoundary() error {
 			return abErr
 		}
 		if done {
-			return nil
+			pending = p.completeOwnRun()
+			if pending == nil {
+				return nil
+			}
 		}
 		continue
 	}
@@ -2274,6 +2342,135 @@ func (p *MachineContext) resolveAbort(abortErr *ErrPromptAbort, prompt *MachineC
 	}
 	p.SetValues(abortErr.Values...)
 	return prompt == nil, nil
+}
+
+// resumePrompt reports where this driver reinstates the continuation a resume
+// signal carries (a prompt frame on its chain, or nil for its own boundary), and
+// whether the resume is this driver's to resolve at all. The order is: the
+// nearest frame with the signal's tag on THIS chain; then this context's own
+// boundary, when the continuation's token matches; then, for a root, whatever
+// reaches it.
+//
+// A call/cc continuation is delimited at a prompt frame on the chain or at the
+// capturing context's boundary (PrimCallCC, DelimitAt). The nearest frame on the
+// invoking chain comes first, as in Racket, where a full continuation replaces
+// the current one up to the nearest prompt with its tag; a segment delimited at a
+// context boundary ends with that context's template, though, so once grafted
+// onto a frame it runs the context to its end and the frame below is never
+// returned into (the sub-context truncation class, TODO.md). A sub-context driver
+// with neither a frame nor the token re-raises, so a continuation captured at the
+// top level and invoked inside a dynamic-wind thunk's sub-context replaces the
+// program's whole continuation, escape in flight included, instead of running the
+// rest of the program on the sub-context and then again on the driver that was
+// mid-escape. A runtime root (promptTag is the signal's tag: RunResumable
+// installed it) resolves whatever reaches it: a continuation captured at a
+// boundary that no longer exists has nowhere else to go. An expansion-time root
+// (expansionRoot: a parentless context RunWithinBoundary drives) resolves a
+// continuation captured under itself or under an expansion-time root whose run
+// has ended, and passes up one of a runtime root's, live or stale: it may well
+// have that runtime's driver above it on the Go stack (an eval expanding a
+// transformer), and a stale runtime continuation belongs to the runtime root
+// that replays it, not to a phase above. With no runtime driver above, the
+// passed-up resume reaches the engine's compile entry, which reports it as a
+// continuation barrier error.
+func (p *MachineContext) resumePrompt(resumeErr *ErrResumeContinuation) (prompt *MachineContinuation, ok bool) {
+	seg := resumeErr.Segment
+	if seg != nil && seg.root != nil && seg.root.runtime && !p.rootIdentity().runtime {
+		// A runtime continuation never resumes under an expansion-time root, a
+		// default-tag frame on this chain or not: the runtime's remainder would
+		// run at phase 1, inside the transformer.
+		return nil, false
+	}
+	frame, found := p.FindPrompt(resumeErr.Tag)
+	if frame != nil {
+		return frame, true
+	}
+	if seg != nil && seg.boundary != nil && seg.boundary == p.boundary {
+		return nil, true
+	}
+	if found {
+		return nil, true
+	}
+	if !p.expansionRoot || seg == nil || seg.root == nil {
+		return nil, false
+	}
+	return nil, seg.root == p.boundary || (seg.root.closed.Load() && !seg.root.runtime)
+}
+
+// passUpResume prepares a resume this driver does not own for the enclosing
+// driver. An expansion-time root leaves its own extents first (the
+// dynamic-winds entered around the (k v) site at expansion time; the runtime
+// driver above cannot see them) and marks the winding for rebase: SourceWinding
+// was this root's, and the runtime's own extents, live at the eval site, are not
+// in it. The unwind's failure, if any, is returned for the driver to dispatch.
+// A sub-context has nothing to do: its winding is its root's, inherited.
+func (p *MachineContext) passUpResume(resumeErr *ErrResumeContinuation) error {
+	if !p.expansionRoot {
+		return nil
+	}
+	unwindErr := p.unwindStackTo(resumeErr.SourceWinding, 0)
+	if unwindErr != nil {
+		return unwindErr
+	}
+	resumeErr.SourceWinding = nil
+	resumeErr.rebaseWinding = true
+	return nil
+}
+
+// rebaseResumeWinding is passUpResume's other half, run by the first driver
+// above the expansion-time root that passed the resume up: the winding at the
+// (k v) site, for the reconcile, is this driver's, not that root's. The driver
+// may itself be an expansion-time root (a transformer that ran eval on its own
+// context): then its winding is right for leaving its own extents, and if it
+// passes the resume on, passUpResume marks it again for the driver above.
+func (p *MachineContext) rebaseResumeWinding(resumeErr *ErrResumeContinuation) {
+	if !resumeErr.rebaseWinding {
+		return
+	}
+	resumeErr.SourceWinding = p.windingStack.Copy()
+	resumeErr.rebaseWinding = false
+}
+
+// completeOwnRun is RunWithinBoundary's completion. A sub-context leaves the
+// extents it inherited to its parent: nothing to do. A parentless root, whose
+// winding stack started empty, leaves whatever a resumed continuation entered, as
+// RunResumable's completeRun does.
+func (p *MachineContext) completeOwnRun() error {
+	if p.parentMC != nil {
+		return nil
+	}
+	return p.completeRun()
+}
+
+// resolveResume reinstates the continuation a resume signal carries at prompt,
+// the shared resume arm of RunResumable and RunWithinBoundary (resolveAbort's
+// counterpart); each driver asks resumePrompt first. Returns done=true when the
+// driver's run is over: an empty captured continuation (the call/cc sat in tail
+// position) delivered at the context boundary is the context's final result. At
+// a prompt frame the values must flow THROUGH it, so the frame is restored and
+// the driver keeps looping.
+func (p *MachineContext) resolveResume(resumeErr *ErrResumeContinuation, prompt *MachineContinuation) (done bool, err error) {
+	// isolate=true: this signal is emitted only for call/cc resume, which restores
+	// the captured mark snapshot (composable resume composes marks and bypasses
+	// this signal — it calls reinstallSegment directly).
+	//
+	// The escalator revivals ride the signal rather than being computed here:
+	// p.cont is THIS driver's chain, and the (k v) site may have been a
+	// sub-context whose frames this chain never held (see escalatorRevivals).
+	wasEmpty, err := p.reinstallSegment(
+		resumeErr.Segment, prompt, resumeErr.SourceWinding, p.windingOutside(prompt),
+		resumeErr.Values, true, resumeErr.escalatorRevivals)
+	if err != nil {
+		return false, err
+	}
+	if !wasEmpty {
+		return false, nil
+	}
+	if prompt == nil {
+		return true, nil
+	}
+	p.Restore(prompt)
+	return false, nil
 }
 
 // resolveTimerInterrupt is the shared timer arm of RunResumable and RunWithinBoundary

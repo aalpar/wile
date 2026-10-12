@@ -152,21 +152,20 @@ func TestPrompt_ComposableContinuation(t *testing.T) {
 	}
 }
 
-// TestPrompt_ComposableContinuationRootless exercises the rootless (sub-context)
-// arm of PrimCallWithComposableContinuation: when cwcc runs where mc.Parent() ==
-// nil, it applies proc under its OWN DefaultPromptTag driver
-// (RunWithEscapeHandling) and delivers the result back to mc via SetValues. The
-// rootless condition is reached at a thread root (the thread body's context has
-// no ambient continuation chain). The inline arm is covered by
-// TestPrompt_ComposableContinuation; this covers the parallel branch the #9
-// single-seam restructure rewrote (prim_prompt.go target-selection +
-// RunWithEscapeHandling + SetValues), which was previously uncovered.
-func TestPrompt_ComposableContinuationRootless(t *testing.T) {
+// TestPrompt_ComposableContinuationAtAThreadRoot exercises
+// PrimCallWithComposableContinuation where mc.Parent() == nil: a thread root
+// (the thread body's context has no chain above its tail call). proc is applied
+// in place there, as everywhere, and its normal return ends the thread's run;
+// (k v) inside proc composes in place. Until 2026-10 this shape selected a
+// second arm that ran proc on a fresh sub-context under a driver of its own;
+// the rows date from covering that arm and now pin that its removal changed no
+// answer here. The rows with a live chain are in TestPrompt_ComposableContinuation.
+func TestPrompt_ComposableContinuationAtAThreadRoot(t *testing.T) {
 	c := qt.New(t)
 
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			Name: "rootless cwcc composes and delivers value through sub-context",
+			Name: "cwcc at a thread root composes and delivers the value",
 			Code: `(thread-join!
 			         (thread-start!
 			           (make-thread
@@ -177,7 +176,7 @@ func TestPrompt_ComposableContinuationRootless(t *testing.T) {
 			Expected: values.NewInteger(5),
 		},
 		{
-			Name: "rootless cwcc returns proc value when k is not invoked",
+			Name: "cwcc at a thread root returns proc's value when k is not invoked",
 			Code: `(thread-join!
 			         (thread-start!
 			           (make-thread
@@ -188,11 +187,11 @@ func TestPrompt_ComposableContinuationRootless(t *testing.T) {
 			Expected: values.NewInteger(7),
 		},
 		{
-			// Discriminates compose-in-place from escape under the rootless arm:
+			// Discriminates compose-in-place from escape at a thread root:
 			// invoking k twice and summing yields 3 (each (k v) composes and
 			// returns v). An escaping continuation would abort at (k 1) and never
 			// reach (k 2).
-			Name: "rootless cwcc continuation composes in place (invoked twice)",
+			Name: "cwcc at a thread root composes in place (invoked twice)",
 			Code: `(thread-join!
 			         (thread-start!
 			           (make-thread

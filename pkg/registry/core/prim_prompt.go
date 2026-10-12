@@ -112,7 +112,7 @@ func PrimCallWithContinuationPrompt(cc machine.CallContext) error {
 // (abort-current-continuation tag v ...)
 //
 // Returns an ErrPromptAbort that propagates up through Run() to the
-// enclosing call-with-continuation-prompt or RunWithEscapeHandling.
+// driver whose chain holds the prompt's frame (RunResumable or RunWithinBoundary).
 func PrimAbortCurrentContinuation(mc machine.CallContext) error {
 	realMC, err := machine.RequireMachineContext(mc, "abort-current-continuation")
 	if err != nil {
@@ -212,8 +212,8 @@ func PrimCallWithComposableContinuation(cc machine.CallContext) error {
 	// capture time so applyComposableContinuation can detect barrier crossings.
 	comp := machine.NewComposableContinuation(segment, windingStack, mc.WindingDepthAt(prompt), mc.ThreadID(), mc.BarrierValid())
 
-	// Apply proc with the composable continuation, mirroring call/cc's two modes
-	// (prim_control.go:188-221) — NOT an abort. Racket's
+	// Apply proc with the composable continuation in place, as call/cc applies
+	// its procedure (prim_control.go) — NOT an abort. Racket's
 	// call-with-composable-continuation runs proc IN PLACE (the current continuation is
 	// not removed) and applying the continuation COMPOSES (extends), so proc's result
 	// flows through the live delimited frames and (comp v) inside proc splices the
@@ -221,34 +221,9 @@ func PrimCallWithComposableContinuation(cc machine.CallContext) error {
 	// Racket v9.2: (+ 100 (cwcc (lambda (k) (k 5)) t)) => 205, (* 2 (cwcc (lambda (k)
 	// (+ 1 (k 5))) dflt)) => 22 — compose-in-place, not the old control/frame-removing
 	// abort. This also fixes the sub-context truncation: a call/cc captured inside proc
-	// now spans the live chain.
-	// Single apply seam, mirroring call/cc (prim_control.go): capture is shared,
-	// mode is one target selection, not two hand-written apply arms (staff-sweep
-	// #9). target is the ambient context when a live chain exists (proc runs in
-	// place, composing), or a fresh sub-context when rootless.
-	target := mc
-	if mc.Parent() == nil {
-		// Rootless cwcc (inside another foreign sub-context or a thread root): run
-		// proc under its OWN DefaultPromptTag driver, exactly as call/cc's
-		// sub-context mode.
-		sub := mc.NewSubContext()
-		defer machine.ReleaseSubContext(sub)
-		target = sub
-	}
-
-	_, err = target.ApplyCallable(procCls, comp)
-	if err != nil {
-		return err
-	}
-
-	if target != mc {
-		// RunWithEscapeHandling (not RunWithinBoundary) so a call/cc or reified
-		// boundary inside proc has a driver, then deliver proc's value(s) to mc.
-		err = target.RunWithEscapeHandling()
-		if err != nil {
-			return err
-		}
-		mc.SetValues(target.GetValues()...)
-	}
-	return nil
+	// now spans the live chain. With no chain above (a thread root's tail call), proc's
+	// normal return ends the context's run, as the thunk's would have; a call/cc
+	// inside proc is resolved by the context's own driver.
+	_, err = mc.ApplyCallable(procCls, comp)
+	return err
 }

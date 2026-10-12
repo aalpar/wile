@@ -97,7 +97,7 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	}
 
 	// If the foreign function reconfigured the VM for continued execution
-	// (e.g., PrimCallCC inline mode calling Apply on a MachineClosure), let the
+	// (e.g., PrimCallCC calling Apply on a MachineClosure), let the
 	// VM continue from wherever it pointed — the closure's RestoreContinuation
 	// will handle the SaveContinuation frame. The reconfigured flag is
 	// authoritative for in-place Apply (it catches self-application, where the
@@ -126,7 +126,7 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 		// can be called from sub-contexts where cont is nil.)
 		//
 		// Guard: if the foreign function already consumed the continuation
-		// (e.g., PrimCallCC inline mode calling ApplyCallable with a
+		// (e.g., PrimCallCC calling ApplyCallable with a
 		// ForeignClosure, where applyForeign does its own RestoreAndRelease),
 		// mc.cont has already advanced past savedCont. Restoring again would
 		// double-restore from the wrong frame.

@@ -119,6 +119,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A continuation resumes at the prompt or context that delimited it, never at
+  a sub-context's edge.** A `call/cc` with no chain above it (tail position of a
+  `dynamic-wind` thunk run by an escape, of a thread's thunk, of a transformer
+  body) applied its procedure on a fresh sub-context under a driver of its own,
+  whose edge then acted as a default prompt nobody wrote: a full continuation
+  invoked there ran the rest of the program on that driver and returned into the
+  escape in flight, which ran it again (Chez and Racket run it once); a `guard`
+  around the escape failed with "exit procedure called outside dynamic extent";
+  an abort to an enclosing prompt reported "no prompt found". The other face of
+  the same gap: a continuation captured at a sub-context's own boundary, a
+  non-tail `call/cc` inside `eval` or inside an after thunk, was resumed by the
+  top driver, which replaced its own chain with the segment and silently dropped
+  the rest of the program (`(list (eval '(+ 1 (call/cc (lambda (k) (k 1)))) env)
+  'after)` ended with 2). Now `call/cc` applies its procedure in place always, a
+  continuation delimited at no prompt frame carries its context's boundary
+  token, and a resume is resolved by the driver that owns a default-tag frame on
+  its chain or that boundary; `RunWithinBoundary` re-raises every other resume to
+  the enclosing driver, and a runtime root resolves whatever reaches it. Macro
+  transformer bodies, library bodies and the bootstrap now run under
+  `RunWithinBoundary` too, so a `guard` there works and a `call/cc` in operand
+  position resumes (a tail one worked only through the deleted mode); such a
+  root resolves a continuation captured under itself or under an expansion-time
+  root whose run has ended, and passes a runtime root's up, since expansion may
+  run under a runtime `eval`; with no runtime driver above the expansion the
+  passed-up resume is reported by the engine as an `ErrContinuationBarrier`
+  compile error (an abort to a tag nothing holds as "no prompt found") rather
+  than surfacing as the raw control signal, and a library whose body exited
+  through a continuation remembers a barrier error for later importers instead
+  of the signal, which replayed the continuation on every import. A thread whose thunk
+  ends through a tail `call/cc` now completes the way a normal return does: the
+  extents it inherited are unwound and their failure reaches `thread-join!`,
+  instead of being dropped by the thread's cleanup; and a control transfer out
+  of such an after thunk (an abort to the thread's own root) is resolved in the
+  thread, where before it reached the joining thread raw and aborted the main
+  program. Unchanged: a continuation captured in a sub-context
+  and invoked after it returned still resumes at the root, and a procedure a
+  host function runs through `Engine.Call` is still a root of its own (a
+  continuation crossing it runs the rest of the program inside the call and
+  again after it; filed). (Go API: `MachineContext.DelimitAt` added.)
 - **A `with-timeout` that fires while `eval`, `load`, a `RegisterFunc` callback or
   an escape's after thunk is running now runs its handler, and nothing after the
   interrupted point runs.** (A procedure a host function runs through `Engine.Call`

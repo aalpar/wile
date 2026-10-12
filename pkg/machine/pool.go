@@ -285,6 +285,7 @@ func ReleaseSubContext(mc *MachineContext) {
 	}
 	mc.releaseStack(mc.evals) // to mc's per-thread pool before the reset zeros it
 	mc.evals = nil
+	closeBoundary(mc)
 	subContextPool.Release(mc)
 }
 
@@ -322,6 +323,7 @@ func ReleaseTopLevelContext(mc *MachineContext) {
 	}
 	mc.releaseStack(mc.evals) // to mc's per-thread pool before the reset zeros it
 	mc.evals = nil
+	closeBoundary(mc)
 	subContextPool.Release(mc)
 }
 

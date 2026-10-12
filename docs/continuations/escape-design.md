@@ -35,7 +35,7 @@ The previous design used a `continuationEscapePayload` carrier tunneled
 through `ErrPromptAbort`, with a dedicated `HandleContinuationEscapeAbort`
 function to detect and process escape payloads. This required:
 - A carrier type implementing `values.Value` (solely for transport)
-- Special-case detection in two places (PrimCallCC sub-context + RunWithEscapeHandling)
+- Special-case detection in two places (PrimCallCC sub-context + RunWithEscapeHandling; both since removed)
 - A `pendingEscape` field for nested escape scenarios
 - `escapeCont` tracking for sub-context chain breaks
 
@@ -73,33 +73,43 @@ the resume signal is built and before any continuation manipulation:
    would cross a `with-continuation-barrier` boundary. `BarrierToken` is
    an opaque identity type — only pointer identity matters.
 
-### Two execution modes in PrimCallCC
+### Where a continuation is delimited, and who resumes it
 
-The continuation is captured **once**, before the mode is chosen, and delimited
-at `FindPrompt(DefaultPromptTag)`, not unconditionally at the whole chain. At
-the top-level context boundary that lookup yields nil and the whole chain is
-sliced; inside a `call-with-continuation-prompt` reusing the default tag it
-yields that prompt's chain frame, so only the delimited segment is captured. The
-two modes then differ in one thing only: which context the lambda is applied in,
-i.e. driver provenance.
+The continuation is captured **once** and delimited at
+`FindPrompt(DefaultPromptTag)`, not unconditionally at the whole chain. Inside a
+`call-with-continuation-prompt` reusing the default tag that lookup yields the
+prompt's chain frame, so only the delimited segment is captured. With no such
+frame it yields nil and the whole chain is sliced: the continuation is delimited
+at the capturing context's **boundary**, and `DelimitAt` stamps the
+context's boundary token on it; in every case it also records the root of the
+context chain (`rootIdentity`: the nearest `RunResumable` owner, else the
+parentless context). Every context has a boundary: the top level, a thread
+root, each sub-context (a `dynamic-wind` thunk run by a winding reconcile,
+`eval`, `load`), and the expansion-time roots (a transformer body, a library
+body, the bootstrap), which have no parent but may have a runtime driver above
+them on the Go stack.
 
-**Inline mode** (`mc.Parent() != nil`): The lambda runs directly in the
-current VM context via `mc.ApplyCallable()`. This preserves the full continuation
-chain, critical for cooperative coroutines and patterns that capture/invoke
-multiple continuations. Resume is resolved by the ambient `DefaultPromptTag`
-driver already running above this frame. No PC compensation is needed:
-`applyForeign` does not post-increment `pc`.
+The lambda then runs directly in the current VM context via `mc.ApplyCallable()`,
+preserving the full continuation chain, critical for cooperative coroutines and
+patterns that capture/invoke multiple continuations. No PC compensation is
+needed: `applyForeign` does not post-increment `pc`. With no chain above
+(`cont == nil`: a tail call at the root of a context) the lambda's normal return
+ends the context's run, as the thunk's own would have.
 
-**Sub-context mode** (`mc.Parent() == nil`): call/cc is rootless (inside another
-foreign function's sub-context, or at a thread root), so there is no ambient
-driver. The lambda is applied in a fresh sub-context which then runs
-`RunWithEscapeHandling` (installing its own `DefaultPromptTag` and resolving
-this call/cc's resume signal) before its value(s) are delivered to `mc`. This
-ensures call/cc works in contexts that would otherwise call `Run()` directly.
+A resume is resolved by the driver that owns where the continuation was
+delimited (`resumePrompt`): a default-tag frame on the driver's own chain, or
+the driver's own boundary when the tokens match. `RunWithinBoundary` re-raises
+every other resume to the enclosing driver, so a sub-context's edge never acts
+as a prompt the program did not write; `RunResumable`, a root, resolves whatever
+reaches it. The consequence that motivated the rule: a continuation captured at
+the top level and invoked from an escape's after thunk replaces the whole
+program's continuation, escape in flight included, instead of running the rest
+of the program on the thunk's sub-context and then again on the driver that was
+mid-escape. Until 2026-10 a `call/cc` with no chain above it applied the lambda
+on a fresh sub-context under a `RunResumable` of its own, whose edge was exactly
+such a prompt.
 
-`PrimCallWithComposableContinuation` mirrors the same single-seam shape: capture,
-then select `mc` (proc runs in place, composing) or a fresh sub-context when
-rootless.
+`PrimCallWithComposableContinuation` applies `proc` in place the same way.
 
 ## Code Locations
 

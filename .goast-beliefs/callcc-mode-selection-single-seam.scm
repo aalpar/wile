@@ -1,5 +1,11 @@
 (import (wile goast belief))
 
+;; 2026-10-11: the sub-context arm is gone. PrimCallCC and
+;; PrimCallWithComposableContinuation apply their callback in place on every
+;; path (a resume is routed by boundary token, see resumePrompt), so each site
+;; has ONE ApplyCallable by construction. The belief stays as the guard against
+;; a re-split; the history below describes the shape it was written against.
+
 ;; Belief: every continuation-capturing primitive that applies a callback must
 ;; apply it through a SINGLE seam — one callback-application site, with mode
 ;; expressed as a target selection (ambient context vs a fresh sub-context), NOT

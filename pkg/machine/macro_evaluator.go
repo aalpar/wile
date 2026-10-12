@@ -57,7 +57,7 @@ func NewVMMacroEvaluator() MacroEvaluator {
 func (p *vmMacroEvaluator) EvalTemplate(ctx context.Context, tpl *NativeTemplate, env *environment.EnvironmentFrame) (values.Value, error) {
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(ctx, cont)
-	err := mc.Run()
+	err := mc.RunWithinBoundary()
 	if err != nil {
 		ReleaseSubContext(mc)
 		return nil, err
@@ -93,7 +93,7 @@ func invokeTransformerClosure(ctx context.Context, cls Closure, expanderCtx Expa
 			ReleaseSubContext(mc)
 			return nil, werr.WrapForeignErrorf(err, "failed to apply transformer")
 		}
-		err = mc.Run()
+		err = mc.RunWithinBoundary()
 		if err != nil {
 			ReleaseSubContext(mc)
 			return nil, err

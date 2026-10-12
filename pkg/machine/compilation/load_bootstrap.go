@@ -71,7 +71,7 @@ func runBootstrapStx(ctx context.Context, env *environment.EnvironmentFrame, stx
 
 	mc := machine.AcquireTopLevelContext(ctx, tpl, env)
 	defer machine.ReleaseTopLevelContext(mc)
-	err = mc.Run()
+	err = mc.RunWithinBoundary()
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error running bootstrap %s", kind)
 	}

@@ -102,7 +102,7 @@ func (p *ErrTimerInterrupt) Error() string {
 // cancelled blocking wait becomes the timeout: every wait raises
 // ErrOperationCancelled, and the context that arms the timer turns the raise into
 // the interrupt. A wait in a sub-context that does not arm it (eval, load, a
-// rootless call/cc, a winding thunk) has its failure passed up undispatched instead
+// winding thunk) has its failure passed up undispatched instead
 // (timerAbove), so no guard between the wait and the timer's owner sees it either,
 // and it reaches the owner when the failure returns through whatever started the
 // sub-context. So an interrupt is only ever emitted by the context that arms its
