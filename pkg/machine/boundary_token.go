@@ -67,14 +67,22 @@ func (p *MachineContext) boundaryIdentity() *boundaryToken {
 	return p.boundary
 }
 
-// rootIdentity returns the boundary token of the root of p's context chain: the
-// nearest context RunResumable drives, else the context with no parent.
-func (p *MachineContext) rootIdentity() *boundaryToken {
-	root := p
-	for root.parentMC != nil && root.promptTag != DefaultPromptTag {
-		root = root.parentMC
+// rootContext returns the root of p's context chain, p included: the nearest
+// context RunResumable drives, else the context with no parent. It is both where
+// a capture with no default prompt of its own is delimited (ResumeWindingDepth)
+// and the context whose token names the capture's owner (rootIdentity), so the
+// two cannot disagree.
+func (p *MachineContext) rootContext() *MachineContext {
+	q := p
+	for q.parentMC != nil && q.promptTag != DefaultPromptTag {
+		q = q.parentMC
 	}
-	return root.boundaryIdentity()
+	return q
+}
+
+// rootIdentity returns the boundary token of the root of p's context chain.
+func (p *MachineContext) rootIdentity() *boundaryToken {
+	return p.rootContext().boundaryIdentity()
 }
 
 // closeBoundary marks p's boundary gone, for the continuations still delimited

@@ -3225,23 +3225,21 @@ func TestThreadRootIsTheThreadsOnlyImplicitPrompt(t *testing.T) {
 }
 
 // TestThreadRootCompletesAlikeThroughATailCallCC pins that a thread whose thunk
-// ends by resuming an empty continuation (a tail call/cc at the thread root, the
-// driver's delivery-at-the-boundary exit) completes exactly as a thunk that
-// returns normally: the extents the thread inherited from its starter are left
-// the same way on both routes, and an after thunk's failure reaches thread-join!
-// on both or on neither. Before the fix the delivery exit skipped the completion
-// unwind, the inherited after thunk ran only in the thread's cleanup, and its
-// failure was dropped: the normal route joined with the failure, the tail route
-// joined with 1. The second case pins what a control transfer out of such an
-// after thunk does: an abort to the thread's own root is resolved in the thread
-// and becomes its value on both routes. Returned raw from the completion, it
-// reached the joining thread and aborted the main program.
+// ends by resuming a continuation captured at the thread's root from inside one
+// of its own extents completes as a thunk that returns normally from that
+// extent: the after thunk runs on both routes, and its failure reaches
+// thread-join! on both or on neither. On the normal route the thunk's return
+// leaves the extent; on the tail route the root driver's reconcile leaves it, and
+// that reconcile's failure must be the thread's outcome too. (The extents a thread
+// inherits from its starter are the starter's to leave, UnwindOwn, so this test
+// no longer starts the thread inside one.) The second case pins what a control
+// transfer out of such an after thunk does: an abort to the thread's own root is
+// resolved in the thread and becomes its value on both routes. Returned raw, it
+// reached the joining thread and aborted the main program. RunResumable's
+// completion on these exits is pinned at machine level
+// (TestRunResumableCompletesThroughEveryExit): no program reaches it with an
+// extent still entered.
 func TestThreadRootCompletesAlikeThroughATailCallCC(t *testing.T) {
-	// The after thunk is the thread's own: the extents a thread inherits from its
-	// starter are the starter's to leave (UnwindOwn). On the normal route the
-	// thunk's return leaves the extent; on the tail route a continuation captured
-	// at the thread's root, invoked inside the extent, leaves it in the root
-	// driver's reconcile, whose failure must be the thread's outcome too.
 	const prelude = `
 (define (try thunk)
   (guard (e (#t (list 'join-raised (uncaught-exception-reason e))))

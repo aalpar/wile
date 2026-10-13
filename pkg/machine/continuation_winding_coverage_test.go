@@ -891,3 +891,52 @@ func TestWindingStackAliasingBug_M2(t *testing.T) {
 	c.Assert(logSymbols, qt.DeepEquals, expected,
 		qt.Commentf("winding stack corruption detected: before/after thunks called in wrong order"))
 }
+
+// TestRunResumableCompletesThroughEveryExit pins the completion on RunResumable's
+// exits, on a root driven as a thread's is (its thunk applied, then run): the
+// normal return and an empty continuation resumed at the context's boundary (a
+// tail call/cc in the thunk) both leave the extents the root entered itself, and
+// an after thunk's failure is the run's on both. No Scheme program reaches either
+// exit with an extent still entered (the resumed segment or the reconcile leaves
+// it first), so the extent is pushed here by hand. The third exit, an abort to
+// the context's own boundary, needs no row: resolveAbort reconciles to the
+// inherited extents before it returns, so its completion has nothing to leave.
+func TestRunResumableCompletesThroughEveryExit(t *testing.T) {
+	const record = "(lambda () (set! after-called #t))"
+	const fail = `(lambda () (set! after-called #t) (error "after-failed"))`
+	tcs := []struct {
+		name    string
+		thunk   string
+		after   string
+		wantErr bool
+	}{
+		{"normal return", "(lambda () 1)", record, false},
+		{"tail call/cc resumed at the boundary", "(lambda () (call/cc (lambda (k) (k 1))))", record, false},
+		{"normal return, after thunk fails", "(lambda () 1)", fail, true},
+		{"tail call/cc, after thunk fails", "(lambda () (call/cc (lambda (k) (k 1))))", fail, true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			env := testhelpers.NewFullRuntimeEnv(t)
+			_, err := runSchemeExpr(t, env, "(define after-called #f)")
+			c.Assert(err, qt.IsNil)
+			thunk := compileClosure(t, env, tc.thunk)
+			after := compileClosure(t, env, tc.after)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			mc := machine.NewMachineContext(ctx, machine.NewMachineContinuation(nil, machine.NewNativeTemplate(0, 0, false), env))
+			mc.PushWindingFrame(machine.NewDynamicWindFrame(nil, after))
+			_, err = mc.ApplyCallable(thunk)
+			c.Assert(err, qt.IsNil)
+
+			err = mc.RunResumable()
+			c.Assert(err != nil, qt.Equals, tc.wantErr, qt.Commentf("%v", err))
+			c.Assert(mc.WindingStack(), qt.HasLen, 0)
+			called, err := runSchemeExpr(t, env, "after-called")
+			c.Assert(err, qt.IsNil)
+			c.Assert(called.GetValue(), valuestest.SchemeEquals, values.TrueValue)
+		})
+	}
+}

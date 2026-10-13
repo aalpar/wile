@@ -479,9 +479,9 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 
 // reinstallSegment installs a captured/composable continuation segment into the
 // current context. It is the single resume primitive shared by composable resume
-// (boundary = p.cont, isolate = compose) and abortive call/cc resume
-// (boundary = the matching prompt frame from FindPrompt, or nil at the
-// top-level context boundary; isolate = true).
+// (prompt = p.cont, isolate = compose) and abortive call/cc resume
+// (prompt = the matching prompt frame from FindPrompt, or nil at the
+// context's own boundary; isolate = true).
 //
 // Returns wasEmpty = true when the captured continuation is empty (no chain to
 // drive): the values are delivered and the CALLER performs its own post-delivery
@@ -515,7 +515,7 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 // per-resume reset alone — if Acquire*Context ever stops zeroing, that guard breaks.
 func (p *MachineContext) reinstallSegment(
 	comp *ComposableContinuation,
-	boundary *MachineContinuation,
+	prompt *MachineContinuation,
 	srcWinding, outside WindingStack,
 	vals []values.Value,
 	isolate bool,
@@ -527,12 +527,12 @@ func (p *MachineContext) reinstallSegment(
 	// Acquire the segment: first invocation avoids DeepCopy by marking
 	// the segment shared; re-invocations deep-copy from preserved frames.
 	segment := comp.AcquireSegment()
-	shared := boundary == nil
+	shared := prompt == nil
 	comp.rebasePrompts(segment, outside, shared)
 
-	// Reconcile dynamic-wind to the extents outside the boundary with the captured
+	// Reconcile dynamic-wind to the extents outside the prompt with the captured
 	// ones on top (Flatt et al. 2007: a composable continuation's frames are
-	// appended to the invoker's): unwind the live extents inside the boundary, and
+	// appended to the invoker's): unwind the live extents inside the prompt, and
 	// re-enter the captured ones. srcWinding is the winding live at the invocation
 	// (k v) site, not the driver's — load-bearing for the cross-sub-context resume
 	// case, or, for a resume an expansion-time root passed up, the winding of the
@@ -555,9 +555,9 @@ func (p *MachineContext) reinstallSegment(
 		return true, nil
 	}
 
-	// Graft the segment's bottom frame onto the boundary (nil = replace the live
+	// Graft the segment's bottom frame onto the prompt (nil = replace the live
 	// chain, the abortive case; p.cont = extend it, the composable case).
-	GraftContinuation(segment, boundary)
+	GraftContinuation(segment, prompt)
 	p.Restore(segment)
 	p.SetValues(vals...)
 	return false, nil

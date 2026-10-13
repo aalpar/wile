@@ -952,6 +952,31 @@ func TestCallCCInsideEvalResumesInsideEval(t *testing.T) {
 			want: "((caught boom) after)",
 		},
 		{
+			// A capture inside eval, which has no default prompt of its own, is
+			// delimited at the driver's nearest default-tag frame, so it carries only
+			// the extents entered inside that frame. Delimited at the driver's
+			// boundary instead, it carried outer's extent too, and the resume
+			// re-entered and left it a second time. Only the extent's log is
+			// asserted: the resumed remainder ends with eval's template (the
+			// sub-context truncation class, open in TODO.md).
+			name: "a capture inside eval under a prompt frame carries only the extents inside the frame",
+			code: `(define st (vector '() #f 0))
+			       (define (note x) (vector-set! st 0 (cons x (vector-ref st 0))))
+			       (dynamic-wind
+			         (lambda () (note 'outer-in))
+			         (lambda ()
+			           (call-with-continuation-prompt
+			             (lambda ()
+			               (eval '(call/cc (lambda (c) (vector-set! st 1 c) 'first)) (interaction-environment))
+			               (vector-set! st 2 (+ 1 (vector-ref st 2)))
+			               (if (= (vector-ref st 2) 1) ((vector-ref st 1) 'second)))
+			             (default-continuation-prompt-tag)
+			             (lambda args 'handler)))
+			         (lambda () (note 'outer-out)))
+			       (reverse (vector-ref st 0))`,
+			want: "(outer-in outer-out)",
+		},
+		{
 			// A continuation delimited at an eval that has since returned has no
 			// live boundary: its token is closed and the root resolves it, replacing
 			// the root's chain with the eval'd segment (the sub-context truncation

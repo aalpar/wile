@@ -1828,10 +1828,10 @@ func (p *MachineContext) DeleteMark(key values.Value) {
 // UnwindOwn) and the unwind's failure, if any, is the run's. Every
 // successful exit of RunResumable reaches it, the normal return and the
 // deliveries at the context boundary (an empty captured continuation resumed; an
-// abort to the context's own boundary, which arrives with the stack already
-// reconciled to empty), so a thread whose tail call/cc resumes an empty
-// continuation leaves the extents it inherited exactly as a normal return does,
-// failure included. The callers feed the result back through the driver's
+// abort to the context's own boundary, which arrives already reconciled to the
+// inherited extents, so there it has nothing to leave), so a thread whose tail
+// call/cc resumes an empty continuation leaves its own extents exactly as a
+// normal return does, failure included. The callers feed the result back through the driver's
 // dispatch rather than returning it: an after thunk may transfer control (an
 // abort, a resume), and returned raw, a thread's inherited after thunk's abort
 // reached the joining thread and aborted the main program.

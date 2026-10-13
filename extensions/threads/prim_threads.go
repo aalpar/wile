@@ -123,7 +123,8 @@ func PrimMakeThread(cc machine.CallContext) error {
 		// is a DefaultPromptTag owner (the thread's continuations are delimited here),
 		// so it uses RunWithEscapeHandling, which installs DefaultPromptTag, contains
 		// panics, resolves every resume that reaches the root, and completes the run
-		// (completeRun: the extents inherited from the starter are left on every exit).
+		// (completeRun: the extents the thread entered itself are left on every exit;
+		// the ones inherited from the starter are the starter's).
 		err = sub.RunWithEscapeHandling()
 		if err != nil {
 			return nil, err

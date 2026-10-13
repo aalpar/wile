@@ -212,6 +212,32 @@ func TestControlInACompileTimeBody(t *testing.T) {
 			want: "((got first) in out (got from-macro))",
 		},
 		{
+			// A transformer's root that owns a with-timeout passes a runtime
+			// continuation up and leaves its own extents on the way; an after thunk
+			// that waits past the deadline fails with the cancelled wait, which is the
+			// timer's interrupt, so the handler's expansion is the result. Returned
+			// raw, the expansion failed with "thread-sleep!: cancelled". with-timeout
+			// has no phase-1 library, so it arrives as a value, like k.
+			name: "an after thunk's wait cancelled while a transformer passes a resume up runs the timeout handler",
+			src: `(import (for-syntax (scheme base) (scheme cxr)))
+			      (define-syntax m (lambda (stx)
+			        (let* ((d (syntax->datum stx)) (k (cadr d)) (with-timeout (caddr d)) (sleep (cadddr d)))
+			          (with-timeout 50 (lambda (resumable) #''timed-out)
+			            (lambda ()
+			              (dynamic-wind (lambda () #f)
+			                            (lambda () (k 'from-macro))
+			                            (lambda () (sleep 10))))))))
+			      (define st (vector '() 0))
+			      (define (note x) (vector-set! st 0 (cons x (vector-ref st 0))))
+			      (let ((r (call/cc (lambda (k) k))))
+			        (vector-set! st 1 (+ 1 (vector-ref st 1)))
+			        (note (list 'r (if (procedure? r) 'k r)))
+			        (if (= (vector-ref st 1) 1)
+			            (note (list 'eval-returned (eval (list 'm r with-timeout thread-sleep!) (interaction-environment)))))
+			        (reverse (vector-ref st 0)))`,
+			want: "((r k) (eval-returned timed-out))",
+		},
+		{
 			// A default-tag prompt inside the transformer around the invocation does
 			// not capture a runtime continuation either: the runtime's remainder is
 			// never run at phase 1.
@@ -499,34 +525,63 @@ func TestControlInACompileTimeBody(t *testing.T) {
 // up and nothing resolves it, so the form fails to expand with a continuation
 // barrier error instead of replaying phase-0 code on a phase-1 root; the
 // control signal itself does not reach the embedder. Under eval the runtime root
-// replays it, as the table row above pins.
+// replays it, as the table row above pins. The error carries the innermost
+// location the cut chain held: for a macro use nested in forms that stamp their
+// own, the use, not the outermost form.
 func TestStaleRuntimeContinuationAtTopLevelExpansionIsAnError(t *testing.T) {
-	ctx := context.Background()
-	eng, err := wile.NewEngine(ctx,
-		wile.WithProfile(wile.KitchenSink),
-		wile.WithSourceFS(stdlib.FS),
-		wile.WithSourceFS(fstest.MapFS{
-			"probe/box.sld": &fstest.MapFile{
-				Data: []byte(`(define-library (probe box) (import (scheme base)) (export cell) (begin (define cell (vector #f))))`),
-			},
-		}),
-		wile.WithLibraryPaths("."),
-	)
-	qt.Assert(t, err, qt.IsNil)
-	_, err = eng.EvalMultiple(ctx, `(import (probe box) (for-syntax (scheme base) (probe box)))
-	                                (vector-set! cell 0 (call/cc (lambda (k) k)))
-	                                (begin-for-syntax ((vector-ref cell 0) 'from-phase-1))
-	                                'unreached`)
-	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsTrue, qt.Commentf("%v", err))
-	var resumeErr *machine.ErrResumeContinuation
-	qt.Assert(t, errors.As(err, &resumeErr), qt.IsFalse)
-	// This entry's conversion, not any barrier error, and with the location the
-	// cut chain would otherwise have lost.
-	qt.Assert(t, err.Error(), qt.Contains, "no runtime driver to resume it")
-	var ce *wile.CompilationError
-	qt.Assert(t, errors.As(err, &ce), qt.IsTrue)
-	qt.Assert(t, ce.Source, qt.Contains, ":3:")
+	tcs := []struct {
+		name       string
+		src        string
+		wantSource string
+	}{
+		{
+			name: "begin-for-syntax",
+			src: `(import (probe box) (for-syntax (scheme base) (probe box)))
+(vector-set! cell 0 (call/cc (lambda (k) k)))
+(begin-for-syntax ((vector-ref cell 0) 'from-phase-1))
+'unreached`,
+			wantSource: ":3:1",
+		},
+		{
+			name: "macro use nested in lets",
+			src: `(import (probe box) (for-syntax (scheme base) (probe box)))
+(vector-set! cell 0 (call/cc (lambda (k) k)))
+(define-syntax m
+  (lambda (stx) ((vector-ref cell 0) 'from-phase-1)))
+(let ()
+  (let ()
+    (m)))
+'unreached`,
+			wantSource: ":7:5",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			eng, err := wile.NewEngine(ctx,
+				wile.WithProfile(wile.KitchenSink),
+				wile.WithSourceFS(stdlib.FS),
+				wile.WithSourceFS(fstest.MapFS{
+					"probe/box.sld": &fstest.MapFile{
+						Data: []byte(`(define-library (probe box) (import (scheme base)) (export cell) (begin (define cell (vector #f))))`),
+					},
+				}),
+				wile.WithLibraryPaths("."),
+			)
+			qt.Assert(t, err, qt.IsNil)
+			_, err = eng.EvalMultiple(ctx, tc.src)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsTrue, qt.Commentf("%v", err))
+			var resumeErr *machine.ErrResumeContinuation
+			qt.Assert(t, errors.As(err, &resumeErr), qt.IsFalse)
+			// This entry's conversion, not any barrier error, and with the location the
+			// cut chain would otherwise have lost.
+			qt.Assert(t, err.Error(), qt.Contains, "no runtime driver to resume it")
+			var ce *wile.CompilationError
+			qt.Assert(t, errors.As(err, &ce), qt.IsTrue)
+			qt.Assert(t, ce.Source, qt.Equals, tc.wantSource)
+		})
+	}
 }
 
 // TestLibraryBodyThatExitedThroughAContinuationIsNotReplayedByLaterImports pins
@@ -565,6 +620,11 @@ func TestLibraryBodyThatExitedThroughAContinuationIsNotReplayedByLaterImports(t 
 	var resumeErr *machine.ErrResumeContinuation
 	qt.Assert(t, errors.As(err, &resumeErr), qt.IsFalse)
 	qt.Assert(t, err.Error(), qt.Contains, "exited through a continuation")
+	// The barrier error keeps the library's location reachable, as the first
+	// importer's error does: the cut chain must not take it along.
+	var se *compilation.SourcedError
+	qt.Assert(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, se.Source.Location(), qt.Equals, "probe/user.sld:1:0")
 	cell, ok := eng.Get("cell")
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, cell.SchemeString(), qt.Contains, " 2)")

@@ -175,7 +175,7 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 		}
 		first = wrapSourcedError(p.formSource,
 			werr.WrapForeignErrorf(err, "error executing library %s", p.Name.SchemeString()))
-		p.instantiateErr = memoizableInstantiateError(first, p.Name)
+		p.instantiateErr = p.memoizableInstantiateError(first, err)
 	})
 	if first != nil {
 		return first
@@ -189,15 +189,17 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 // fails with the control signal itself, and the first importer must receive it
 // unchanged for that driver to resolve it; remembered as is, every later import
 // would hand the same signal to whichever driver ran it, which would resume the
-// continuation again. Later importers get a continuation barrier error instead.
-func memoizableInstantiateError(err error, name LibraryName) error {
+// continuation again. Later importers get a continuation barrier error instead,
+// located at the library's form like first. first is what the first importer
+// received; cause is the body's own failure, which first wraps.
+func (p *CompiledLibrary) memoizableInstantiateError(first, cause error) error {
 	var resumeErr *machine.ErrResumeContinuation
-	if !errors.As(err, &resumeErr) {
-		return err
+	if !errors.As(cause, &resumeErr) {
+		return first
 	}
-	return werr.WrapForeignErrorf(werr.ErrContinuationBarrier,
+	return wrapSourcedError(p.formSource, werr.WrapForeignErrorf(werr.ErrContinuationBarrier,
 		"library %s: its body exited through a continuation when it was first instantiated; %v",
-		name.SchemeString(), err)
+		p.Name.SchemeString(), cause))
 }
 
 // NewCompiledLibrary creates a new compiled library.

@@ -60,6 +60,26 @@ func TestResumeWindingDepthDelimitsAtTheDriverAbove(t *testing.T) {
 		qt.Assert(t, found, qt.IsTrue)
 		qt.Assert(t, root.ResumeWindingDepth(nil, found), qt.Equals, 0)
 	})
+	t.Run("a prompt frame on the driver above", func(t *testing.T) {
+		// The capture is delimited at the frame, so only the extents entered
+		// inside it are carried: f1, outside the frame, is not re-entered.
+		root := newTestRoot(t)
+		root.promptTag = DefaultPromptTag
+		root.windingStack = WindingStack{f1, f2}
+		saved := root.cont
+		frame := NewMachineContinuationWithPrompt(saved, NewEmptyNativeTemplate(), nil, DefaultPromptTag, nil)
+		frame.windingStack = WindingStack{f1}
+		root.cont = frame
+		defer func() {
+			root.cont = saved
+		}()
+		sub := root.NewSubContextWithWinding(WindingStack{f1, f2})
+		defer ReleaseSubContext(sub)
+
+		_, found := sub.FindPrompt(DefaultPromptTag)
+		qt.Assert(t, found, qt.IsFalse)
+		qt.Assert(t, sub.ResumeWindingDepth(nil, found), qt.Equals, 1)
+	})
 	t.Run("a parentless expansion-time root above", func(t *testing.T) {
 		root := newTestRoot(t)
 		root.windingStack = WindingStack{f1}
@@ -186,6 +206,14 @@ func TestResumePromptOwnership(t *testing.T) {
 
 		fromRuntime := capture(runtime)
 		_, ok := exp.resumePrompt(fromRuntime)
+		qt.Assert(t, ok, qt.IsFalse)
+		// Not even at a default-tag frame on the expansion-time root's own chain
+		// (a prompt the transformer installed): the runtime's remainder would run
+		// at phase 1.
+		saved := exp.cont
+		exp.cont = NewMachineContinuationWithPrompt(saved, NewEmptyNativeTemplate(), nil, DefaultPromptTag, nil)
+		_, ok = exp.resumePrompt(fromRuntime)
+		exp.cont = saved
 		qt.Assert(t, ok, qt.IsFalse)
 
 		fromOwn := capture(expSub)

@@ -3593,8 +3593,8 @@ enough to rebuild the probes.
   timer and hangs (a 10 s `thread-sleep!` sleeps its full 10 s).
   `(eval '(with-timeout 50 h (lambda () (call/cc (lambda (k0) (dynamic-wind (lambda () #f)
   (lambda () (k0 'escaped)) (lambda () (mutex-lock! m)))))))) env)` with `m` held.
-- [x] **A rootless `call/cc` or `call-with-composable-continuation` sub-context runs its parent's
-  dynamic-wind after thunks when it completes** [Correctness, S–M, Done 2026-10-10 on
+- [x] **A sub-context or thread root runs its parent's dynamic-wind after thunks when it
+  completes** [Correctness, S–M, Done 2026-10-10 on
   `fix/timer-identity-and-teardown`, by the fix shape: a context records the depth it inherited
   (`MachineContext.windingBase`) and its completion, or a thread's exit, unwinds to it
   (`UnwindOwn`), as does an abort to its own boundary (`resolveAbort` reconciles to
@@ -3604,9 +3604,10 @@ enough to rebuild the probes.
   parent's winding stack and `RunResumable`'s normal completion runs `UnwindTo(0)`, so every
   enclosing extent's after thunk fires there and again when the parent exits. A thread root, which
   copies its starter's winding stack, does the same at thread exit. Fix shape: on a sub-context or
-  thread root, unwind on completion only to the inherited depth. (Until 2026-10-11 the row also named the sub-context a
-  tail-position `call/cc` or `call-with-composable-continuation` ran its procedure on; that
-  sub-context no longer exists, the procedure runs in place.)
+  thread root, unwind on completion only to the inherited depth. (Filed as "A rootless `call/cc`
+  or `call-with-composable-continuation` sub-context runs its parent's dynamic-wind after thunks
+  when it completes": the sub-context those ran their procedure on in tail position. It no longer
+  exists since 2026-10-11; the procedure runs in place.)
 - [ ] **A call/cc continuation reinstated by an escape leaves its parameterization sticky**
   [Correctness, M]: `reinstallSegment` sets the driver's `capturedMarks`/`isolatedMarks` and nothing
   clears them when the reinstalled frames return, so a `parameterize` value outlives its extent for
@@ -3853,6 +3854,29 @@ enough to rebuild the probes.
   re-raise a resume `resumePrompt` does not own so a host that returns the error forwards it to the
   outer driver (a stale continuation invoked from top-level Go then surfaces as an error). Found by
   three crosscheck lenses of the rootless fix, 2026-10-11; pre-existing.
+- [ ] **A library body that exited through an abort replays the abort on every later import**
+  [Correctness, S]: `CompiledLibrary.memoizableInstantiateError`
+  (`pkg/machine/compilation/library_registry.go`) converts a remembered resume into a
+  continuation barrier error but remembers an `ErrPromptAbort` as is, so each later import
+  re-delivers the abort to its driver and the body's after thunk runs again although the body
+  never re-ran. Fix shape: export one control-signal predicate from `pkg/machine` (today's
+  `isControlSignal`) and use it both here and in `controlSignalEscapedExpansion`
+  (`pkg/wile/engine.go`), converting every control signal a memo would replay. Found by all four
+  bug lenses of the rootless fix's crosscheck (round 5); pre-existing on master.
+- [ ] **Rootless fix, round-4 leftovers** [Cleanup, S]: Minors the round-5 crosscheck found in the
+  round-4 remediation, filed under the scoped re-review rule. (1) `controlSignalEscapedExpansion`
+  (`pkg/wile/engine.go`) formats the cut chain into its message with `%v`, so the location is
+  printed twice, and its `wrapCompilationError("compile error", …)` adds a layer `compileExpr`
+  wraps again ("expand/compile error: compile error: …"); its name also reads like a predicate.
+  (2) `TestAbortAtTopLevelExpansionIsAnError` (`pkg/wile/transformer_callcc_test.go`) asserts
+  only the sentinel, not the message, the `CompilationError` type, or the location. (3) In the
+  same file, a comment in `TestControlInACompileTimeBody` says n = 10 where the row expects 11,
+  and the `probe/user.sld` fixture is used by no row. (4) The doc of
+  `TestThreadRootIsTheThreadsOnlyImplicitPrompt` (`extensions/threads/prim_threads_test.go`)
+  opens with the test's old name. (5) `boundaryToken.runtime`'s doc
+  (`pkg/machine/boundary_token.go`) records that a capture under a Go-written transformer reads
+  as a runtime one rather than preventing it; fix shape: set `expansionRoot` where expansion
+  contexts are created, not at the driver's entry.
 - [x] **A `guard` that catches a raise fails in a library body or a procedural macro transformer**
   [Correctness, S–M, **Done 2026-10-11**]: both ran a root context under a bare `mc.Run()`
   (`EvalTemplate`, `invokeTransformerClosure` in `pkg/machine/macro_evaluator.go`), which resolves

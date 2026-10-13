@@ -30,12 +30,12 @@ func (p *MachineContext) WindingDepthAt(prompt *MachineContinuation) int {
 	return min(p.windingBase, len(p.windingStack))
 }
 
-// windingOutside returns the extents outside boundary, the ones a reinstatement
-// at boundary keeps: the stack boundary recorded when it was pushed, or the
-// extents this context inherited when boundary is nil, its own boundary.
-func (p *MachineContext) windingOutside(boundary *MachineContinuation) WindingStack {
-	if boundary != nil {
-		return boundary.windingStack
+// windingOutside returns the extents outside prompt, the ones a reinstatement
+// at prompt keeps: the stack the prompt frame recorded when it was pushed, or the
+// extents this context inherited when prompt is nil, its own boundary.
+func (p *MachineContext) windingOutside(prompt *MachineContinuation) WindingStack {
+	if prompt != nil {
+		return prompt.windingStack
 	}
 	return p.windingStack[:p.WindingDepthAt(nil)]
 }
@@ -54,14 +54,9 @@ func (p *MachineContext) ResumeWindingDepth(prompt *MachineContinuation, found b
 	if found {
 		return p.WindingDepthAt(prompt)
 	}
-	for c := p.parentMC; c != nil; c = c.parentMC {
-		if c.promptTag != DefaultPromptTag && c.parentMC != nil {
-			continue
-		}
-		frame, _ := c.FindPrompt(DefaultPromptTag)
-		return c.WindingDepthAt(frame)
-	}
-	return p.WindingDepthAt(nil)
+	root := p.rootContext()
+	frame, _ := root.FindPrompt(DefaultPromptTag)
+	return root.WindingDepthAt(frame)
 }
 
 // PushWindingFrame adds a frame to the winding stack.

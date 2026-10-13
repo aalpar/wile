@@ -1470,10 +1470,19 @@ func controlSignalEscapedExpansion(err error) error {
 		return err
 	}
 	// The original chain is cut on purpose (the signal must not stay reachable),
-	// so carry its innermost source location over by hand.
+	// so carry its innermost located source over by hand, the one
+	// wrapCompilationError would report. Only that one: re-wrapping every layer
+	// in the order this walk meets them would invert the chain and put the
+	// outermost form innermost.
+	var innermost *compilation.SourcedError
 	var se *compilation.SourcedError
 	for cause := err; errors.As(cause, &se); cause = se.Cause {
-		plain = &compilation.SourcedError{Source: se.Source, Cause: plain}
+		if se.Source.Location() != "" {
+			innermost = se
+		}
+	}
+	if innermost != nil {
+		plain = &compilation.SourcedError{Source: innermost.Source, Cause: plain}
 	}
 	return wrapCompilationError("compile error", plain)
 }

@@ -375,13 +375,14 @@ func TestReentryInsideAFrameKeepsIt(t *testing.T) {
 	}
 }
 
-// TestRootlessSubContextLeavesInheritedExtents pins that a sub-context with its own
-// driver (a call/cc in tail position of a winding thunk is rootless, and runs under
-// RunResumable) exits only the extents it entered. It inherits the context's winding
-// stack, and its completion used to unwind that whole stack, so every enclosing
-// extent's after thunk ran there and again when the escape left it. A continuation
-// captured and applied inside it reinstates at its own boundary, which keeps the
-// inherited extents too.
+// TestRootlessSubContextLeavesInheritedExtents pins that a tail call/cc in a
+// winding thunk leaves the extents the thunk's sub-context inherited to the
+// context that entered them. The call/cc once ran its procedure on a rootless
+// sub-context under a RunResumable driver of its own, whose completion unwound the
+// whole inherited stack, so every enclosing extent's after thunk ran there and
+// again when the escape left it; it is now applied in place on the thunk's
+// sub-context. A continuation captured and applied inside it reinstates at that
+// sub-context's own boundary, which keeps the inherited extents too.
 func TestRootlessSubContextLeavesInheritedExtents(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
@@ -401,11 +402,11 @@ func TestRootlessSubContextLeavesInheritedExtents(t *testing.T) {
 			Expected: values.List(values.NewSymbol("in"), values.NewSymbol("inner"), values.NewSymbol("out")),
 		},
 		{
-			// A continuation captured outside the rootless sub-context and resumed inside
-			// it carries extents the sub-context inherited; its boundary is not a prompt
-			// the program wrote, so they are kept once, not re-entered on top of
-			// themselves. Only the first half of the log is asserted: the rest of the
-			// program runs a second time after the resume (filed in TODO.md).
+			// A continuation captured outside the after thunk's sub-context and resumed
+			// inside it replaces the escape in flight: the extents are kept once, not
+			// re-entered on top of themselves, and the rest of the program runs once.
+			// The whole log is asserted: a second run of the remainder (the defect
+			// this replaced) appends to it.
 			Name: "continuation captured outside, resumed inside",
 			Code: `
 				(let ((log '()) (k #f) (n 0))
@@ -422,8 +423,7 @@ func TestRootlessSubContextLeavesInheritedExtents(t *testing.T) {
 												(lambda () (call/cc (lambda (c2) (k 'again))))))))
 									'done)))
 						(lambda () (note 'out)))
-					(let take ((l (reverse log)) (n 4))
-						(if (or (= n 0) (null? l)) '() (cons (car l) (take (cdr l) (- n 1))))))
+					(reverse log))
 			`,
 			Expected: values.List(values.NewSymbol("in"), values.NewSymbol("first"),
 				values.NewSymbol("again"), values.NewSymbol("out")),
