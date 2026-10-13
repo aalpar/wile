@@ -56,8 +56,10 @@ func mutableRuntimeFor(p *MachineContext) *environment.EnvironmentFrame {
 //
 // Note: Sub-contexts have isolated continuation chains (cont = nil). When call/cc captures a
 // continuation inside a sub-context, it captures mc.Parent() which refers to the sub-context's
-// chain (nil). For continuations to escape back to the outer context, the escape error propagates
-// up through the call stack and is handled by RunWithEscapeHandling at the top level.
+// chain (nil), delimited at this sub-context's boundary (DelimitAt). A resume of it is resolved per
+// resumePrompt: by the nearest default-tag frame on the invoking chain, else by this sub-context's
+// own driver, RunWithinBoundary; one delimited outside propagates up through the call stack to
+// the driver that owns it.
 //
 // The parentMC field tracks the parent context, allowing call/cc to find an outer continuation
 // for proper R7RS continuation semantics when captured inside sub-contexts.

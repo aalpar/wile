@@ -968,6 +968,14 @@ func TestRegisterFuncCallbacks(t *testing.T) {
 		{"square via callback", "(apply-f (lambda (x) (* x x)) 7)", "49"},
 		{"identity callback", "(apply-f (lambda (x) x) 42)", "42"},
 		{"callback success path", "(try-callback (lambda (x) (* x 3)) 10)", "30"},
+		// The callback runs on a sub-context with a driver that resumes a
+		// continuation delimited there; before, the top driver resumed it and the
+		// evaluation ended with 6.
+		{"call/cc inside a callback resumes inside the callback", "(list (apply-f (lambda (x) (+ 1 (call/cc (lambda (k) (k x))))) 5) 'after)", "(6 after)"},
+		// A parameter handed to Go as a func runs its converter on a sub-context
+		// of its own; same rule.
+		{"call/cc inside a parameter converter resumes inside the converter",
+			"(begin (define cb-param (make-parameter 0 (lambda (x) (+ 1 (call/cc (lambda (k) (k x))))))) (call-void cb-param) (list (cb-param) 'after))", "(43 after)"},
 	}
 
 	for _, tc := range tcs {

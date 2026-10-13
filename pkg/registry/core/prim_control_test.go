@@ -1108,3 +1108,197 @@ func TestApplyWithParameter(t *testing.T) {
 		})
 	}
 }
+
+// TestCallCCInAWindingThunkIsNotAPrompt pins where a call/cc in a dynamic-wind
+// thunk run by a winding reconcile transfers control. Such a thunk runs on a
+// sub-context with no chain of its own, and a call/cc in tail position there
+// used to apply its procedure under a fresh RunResumable driver whose edge then
+// acted as a default prompt nobody wrote: a full continuation invoked inside it
+// ran the rest of the program on that driver and returned into the escape in
+// flight, which ran it again; an abort to an enclosing prompt stopped there with
+// "no prompt found". The program's prompts are the frames it wrote and the true
+// root, so a resume or an abort from the thunk goes to them, and a continuation
+// captured inside the thunk resumes the thunk.
+//
+// Chez runs the first row's program once, logging (exited). The last row passes
+// before the fix; it guards that a continuation delimited at the thunk's own
+// boundary is still resolved there.
+func TestCallCCInAWindingThunkIsNotAPrompt(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name: "a full continuation invoked from an escape's after thunk replaces the escape",
+			Code: `(let ((log '()))
+				(define (note x) (set! log (cons x log)))
+				(note (call/cc (lambda (ex)
+				        (call/cc (lambda (k0)
+				          (dynamic-wind (lambda () #f)
+				                        (lambda () (k0 'escaped))
+				                        (lambda () (call/cc (lambda (k) (ex 'exited))))))))))
+				(reverse log))`,
+			Expected: values.List(values.NewSymbol("exited")),
+		},
+		{
+			Name: "the rest of the program runs once, after the outer extent is left",
+			Code: `(let ((log '()) (k #f) (n 0))
+				(define (note x) (set! log (cons x log)))
+				(let ((r (let ((v (call/cc (lambda (c) (set! k c) 'first))))
+				           (note v)
+				           (if (< n 1)
+				               (begin
+				                 (set! n (+ n 1))
+				                 (dynamic-wind
+				                   (lambda () (note 'inB))
+				                   (lambda ()
+				                     (call/cc (lambda (k0)
+				                       (dynamic-wind (lambda () #f)
+				                                     (lambda () (k0 'esc))
+				                                     (lambda () (call/cc (lambda (c2) (k 'again))))))))
+				                   (lambda () (note 'outB))))
+				               'done))))
+				  (note 'rest)
+				  (list r (reverse log))))`,
+			Expected: values.List(values.NewSymbol("done"),
+				values.List(values.NewSymbol("first"), values.NewSymbol("inB"), values.NewSymbol("outB"),
+					values.NewSymbol("again"), values.NewSymbol("rest"))),
+		},
+		{
+			Name: "a guard around the escape catches a raise from the after thunk",
+			Code: `(guard (e (#t 'caught))
+				(call/cc (lambda (k0)
+				  (dynamic-wind (lambda () #f)
+				                (lambda () (k0 'esc))
+				                (lambda () (call/cc (lambda (k) (raise 'boom))))))))`,
+			Expected: values.NewSymbol("caught"),
+		},
+		{
+			Name: "an abort from the after thunk reaches an enclosing prompt",
+			Code: `(let ((tag (make-continuation-prompt-tag 'outer)))
+				(call-with-continuation-prompt
+				  (lambda ()
+				    (call/cc (lambda (k0)
+				      (dynamic-wind (lambda () #f)
+				                    (lambda () (k0 'esc))
+				                    (lambda () (call/cc (lambda (k) (abort-current-continuation tag 'v))))))))
+				  tag
+				  (lambda (v) (list 'handled v))))`,
+			Expected: values.List(values.NewSymbol("handled"), values.NewSymbol("v")),
+		},
+		{
+			// k is delimited at a default-tag prompt FRAME, not at a boundary, so it
+			// carries no boundary token; the after thunk's sub-context must not claim
+			// it on a nil-token match, and the root resumes it at the frame.
+			Name: "a continuation delimited at a prompt frame resumes at the frame from the after thunk",
+			Code: `(let ((log '()))
+				(define (note x) (set! log (cons x log)))
+				(let ((r (call-with-continuation-prompt
+				           (lambda ()
+				             (+ 1 (call/cc (lambda (k)
+				                    (call/cc (lambda (k0)
+				                      (dynamic-wind (lambda () #f)
+				                                    (lambda () (k0 'esc))
+				                                    (lambda () (note 'after) (k 10)))))))))
+				           (default-continuation-prompt-tag)
+				           (lambda args (cons 'handler args)))))
+				  (list r (reverse log))))`,
+			Expected: values.List(values.NewInteger(11), values.List(values.NewSymbol("after"))),
+		},
+		{
+			// A before thunk run by a re-entry (RewindTo) is the same kind of
+			// sub-context: a call/cc inside it resumes inside it. Before the fix the
+			// program printed nothing.
+			Name: "a continuation captured in a before thunk on re-entry resumes the thunk",
+			Code: `(let ((log '()) (k #f) (n 0))
+				(define (note x) (set! log (cons x log)))
+				(dynamic-wind
+				  (lambda () (note (list 'before (+ 1 (call/cc (lambda (c) (c 1)))))))
+				  (lambda () (call/cc (lambda (c) (set! k c))) (note 'body))
+				  (lambda () (note 'after)))
+				(if (< n 1) (begin (set! n (+ n 1)) (k 'again)))
+				(reverse log))`,
+			Expected: values.List(
+				values.List(values.NewSymbol("before"), values.NewInteger(2)), values.NewSymbol("body"), values.NewSymbol("after"),
+				values.List(values.NewSymbol("before"), values.NewInteger(2)), values.NewSymbol("body"), values.NewSymbol("after")),
+		},
+		{
+			// A tail call/cc in a before thunk on re-entry that invokes an outer
+			// continuation replaces the re-entry; before the fix the rest of the
+			// program ran twice.
+			Name: "a full continuation invoked from a before thunk on re-entry replaces the re-entry",
+			Code: `(let ((log '()) (k #f) (n 0))
+				(define (note x) (set! log (cons x log)))
+				(note (call/cc (lambda (ex)
+				  (dynamic-wind
+				    (lambda () (note 'before) (if (> n 0) (call/cc (lambda (c) (ex 'exited-from-before)))))
+				    (lambda () (call/cc (lambda (c) (set! k c))) (note 'body) 'normal)
+				    (lambda () (note 'after))))))
+				(if (< n 1) (begin (set! n (+ n 1)) (k 'again)))
+				(reverse log))`,
+			Expected: values.List(values.NewSymbol("before"), values.NewSymbol("body"), values.NewSymbol("after"),
+				values.NewSymbol("normal"), values.NewSymbol("before"), values.NewSymbol("exited-from-before")),
+		},
+		{
+			// The deleted sub-context inherited the winding stack and unwound it to
+			// empty on completion, so the enclosing extent's after thunk fired there
+			// and again when the program left it: (inA inB outB outA outA).
+			Name: "a tail call/cc in an after thunk does not run the enclosing after thunk twice",
+			Code: `(let ((log '()))
+				(define (note x) (set! log (cons x log)))
+				(dynamic-wind (lambda () (note 'inA))
+				  (lambda ()
+				    (call/cc (lambda (k0)
+				      (dynamic-wind (lambda () (note 'inB))
+				                    (lambda () (k0 'esc))
+				                    (lambda () (note 'outB) (call/cc (lambda (k) 'r)))))))
+				  (lambda () (note 'outA)))
+				(reverse log))`,
+			Expected: values.List(values.NewSymbol("inA"), values.NewSymbol("inB"), values.NewSymbol("outB"), values.NewSymbol("outA")),
+		},
+		{
+			Name: "a continuation captured in the after thunk resumes the thunk",
+			Code: `(let ((log '()))
+				(define (note x) (set! log (cons x log)))
+				(let ((r (call/cc (lambda (k0)
+				           (dynamic-wind (lambda () (note 'in))
+				                         (lambda () (k0 'esc))
+				                         (lambda () (note (call/cc (lambda (c2) (c2 'x))))))))))
+				  (list r (reverse log))))`,
+			Expected: values.List(values.NewSymbol("esc"),
+				values.List(values.NewSymbol("in"), values.NewSymbol("x"))),
+		},
+		{
+			Name: "a continuation captured in tail position of the after thunk returns from it",
+			Code: `(let ((log '()))
+				(define (note x) (set! log (cons x log)))
+				(let ((r (call/cc (lambda (k0)
+				           (dynamic-wind (lambda () (note 'in))
+				                         (lambda () (k0 'esc))
+				                         (lambda () (note 'out) (call/cc (lambda (c2) (c2 'x)))))))))
+				  (list r (reverse log))))`,
+			Expected: values.List(values.NewSymbol("esc"),
+				values.List(values.NewSymbol("in"), values.NewSymbol("out"))),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCodeWithTimeout(t, tc.Code, 5*time.Second)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// TestEmptyContinuationResumedAtAPromptFrame pins the prompt-frame branch of the
+// drivers' resume arm: a call/cc in tail position under a default-tag prompt
+// captures an empty segment delimited at the prompt's frame, and resuming it
+// delivers the value THROUGH the frame, so the prompt returns and the program
+// continues. Treating the delivery as the context's final result instead ends
+// the evaluation with 5.
+func TestEmptyContinuationResumedAtAPromptFrame(t *testing.T) {
+	result, err := testhelpers.RunSchemeCodeWithTimeout(t, `
+		(list (call-with-continuation-prompt (lambda () (call/cc (lambda (k) (k 5))))
+		                                     (default-continuation-prompt-tag)
+		                                     (lambda args 'handler))
+		      'after)`, 5*time.Second)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.List(values.NewInteger(5), values.NewSymbol("after")))
+}

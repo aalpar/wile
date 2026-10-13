@@ -55,6 +55,15 @@ type ComposableContinuation struct {
 	barrierValid *BarrierToken        // barrier context at capture time; nil = no active barrier
 	bottom       *MachineContinuation // bottom frame of segment; where a re-invocation's copy stops
 	consumed     bool                 // true after first AcquireSegment call
+	// boundary names the context boundary this segment was delimited at,
+	// when call/cc found no prompt frame to delimit it at; nil otherwise. The
+	// driver of the context holding the same token resolves a resume of it
+	// (resumePrompt). See boundaryToken.
+	boundary *boundaryToken
+	// root names the root of the context chain the segment was captured on,
+	// for every call/cc capture; nil on a composable continuation. See
+	// boundaryToken.
+	root *boundaryToken
 	// capturedMarks is the snapshot of the reachable parameter/handler mark
 	// environment at capture time — including the marks ABOVE any sub-context
 	// boundary that the captured cont chain does not itself carry. It is re-installed
@@ -164,11 +173,11 @@ func (p *ComposableContinuation) rebasePrompts(segment *MachineContinuation, out
 
 // composeWinding returns the winding stack of extents carried reinstated on top
 // of outside: a fresh stack, outside then carried. With shared, the reinstatement
-// is at a context's own boundary, which is not a prompt the program wrote (a
-// rootless call/cc's sub-context or a thread root has it only to drive the
-// resume): an extent the context inherited that the continuation also carries,
-// captured outside that boundary, is the same extent, kept once rather than
-// re-entered on top of itself.
+// is at a context's own boundary, not a prompt the program wrote (a thread root,
+// eval, a winding thunk's sub-context): an extent the context inherited that the
+// continuation also carries (ResumeWindingDepth delimits a capture inside eval at
+// the driver's prompt above) is the same extent, kept once rather than re-entered
+// on top of itself.
 func composeWinding(outside, carried WindingStack, shared bool) WindingStack {
 	q := slices.Concat(outside, carried)
 	if !shared || len(outside) == 0 {

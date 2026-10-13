@@ -143,7 +143,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	}
 
 	// Save the template and continuation pointers before calling the foreign
-	// function. Some foreign functions (e.g., PrimCallCC inline mode) call
+	// function. Some foreign functions (e.g., PrimCallCC) call
 	// ApplyCallable on the MachineContext, which may change the template (via
 	// Apply for MachineClosure) or consume the continuation (via a nested
 	// applyForeign for ForeignClosure). We check both after the call to avoid
@@ -184,7 +184,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	}
 
 	// Restore continuation, but only if the foreign function didn't already
-	// consume it (e.g., PrimCallCC inline mode calling ApplyCallable with a
+	// consume it (e.g., PrimCallCC calling ApplyCallable with a
 	// ForeignClosure, where the nested applyForeign does its own restore).
 	if p.cont == savedCont {
 		if p.cont != nil {
@@ -479,9 +479,9 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 
 // reinstallSegment installs a captured/composable continuation segment into the
 // current context. It is the single resume primitive shared by composable resume
-// (boundary = p.cont, isolate = compose) and abortive call/cc resume
-// (boundary = the matching prompt frame from FindPrompt, or nil at the
-// top-level context boundary; isolate = true).
+// (prompt = p.cont, isolate = compose) and abortive call/cc resume
+// (prompt = the matching prompt frame from FindPrompt, or nil at the
+// context's own boundary; isolate = true).
 //
 // Returns wasEmpty = true when the captured continuation is empty (no chain to
 // drive): the values are delivered and the CALLER performs its own post-delivery
@@ -502,8 +502,8 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 //
 // revived carries that set (see pendingEscalatorRevivals). It is a caller argument
 // rather than something computed here because this context is not always the one
-// the continuation was invoked on: the call/cc trampoline re-raises out of any
-// enclosing sub-context to the top driver, so p.cont here can be a chain that never
+// the continuation was invoked on: the call/cc trampoline re-raises out of every
+// sub-context that does not own the continuation's delimiter (resumePrompt), so p.cont here can be a chain that never
 // held the arms' frames. nil for every resume that crosses no escalator, which is
 // essentially all of them.
 //
@@ -515,7 +515,7 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 // per-resume reset alone — if Acquire*Context ever stops zeroing, that guard breaks.
 func (p *MachineContext) reinstallSegment(
 	comp *ComposableContinuation,
-	boundary *MachineContinuation,
+	prompt *MachineContinuation,
 	srcWinding, outside WindingStack,
 	vals []values.Value,
 	isolate bool,
@@ -527,16 +527,18 @@ func (p *MachineContext) reinstallSegment(
 	// Acquire the segment: first invocation avoids DeepCopy by marking
 	// the segment shared; re-invocations deep-copy from preserved frames.
 	segment := comp.AcquireSegment()
-	shared := boundary == nil
+	shared := prompt == nil
 	comp.rebasePrompts(segment, outside, shared)
 
-	// Reconcile dynamic-wind to the extents outside the boundary with the captured
+	// Reconcile dynamic-wind to the extents outside the prompt with the captured
 	// ones on top (Flatt et al. 2007: a composable continuation's frames are
-	// appended to the invoker's): unwind the live extents inside the boundary, and
+	// appended to the invoker's): unwind the live extents inside the prompt, and
 	// re-enter the captured ones. srcWinding is the winding live at the invocation
 	// (k v) site, not the driver's — load-bearing for the cross-sub-context resume
-	// case. Reconciling to the captured stack as an absolute target unwound the
-	// invoker's own extents, and a with-timeout's among them, on every re-entry.
+	// case, or, for a resume an expansion-time root passed up, the winding of the
+	// next driver (ErrResumeContinuation.SourceWinding). Reconciling to the captured
+	// stack as an absolute target unwound the invoker's own extents, and a
+	// with-timeout's among them, on every re-entry.
 	target := composeWinding(outside, comp.windingStack, shared)
 	err := p.RestoreWithWindingFrom(nil, srcWinding, target)
 	if err != nil {
@@ -553,9 +555,9 @@ func (p *MachineContext) reinstallSegment(
 		return true, nil
 	}
 
-	// Graft the segment's bottom frame onto the boundary (nil = replace the live
+	// Graft the segment's bottom frame onto the prompt (nil = replace the live
 	// chain, the abortive case; p.cont = extend it, the composable case).
-	GraftContinuation(segment, boundary)
+	GraftContinuation(segment, prompt)
 	p.Restore(segment)
 	p.SetValues(vals...)
 	return false, nil
@@ -636,7 +638,7 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 //
 // live MUST be the chain of the context the continuation was INVOKED on, which is
 // not always the context that reinstates the segment: the call/cc trampoline
-// re-raises past every enclosing sub-context to the top DefaultPromptTag driver, so
+// re-raises past every sub-context that does not own the continuation's delimiter, so
 // an escalator armed inside a dynamic-wind thunk's sub-context is absent from the
 // driver's chain even though the jump never left its extent. Both call sites
 // therefore read the live chain before handing the result on — the (k v) site in

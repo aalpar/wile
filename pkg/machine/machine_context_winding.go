@@ -30,36 +30,33 @@ func (p *MachineContext) WindingDepthAt(prompt *MachineContinuation) int {
 	return min(p.windingBase, len(p.windingStack))
 }
 
-// windingOutside returns the extents outside boundary, the ones a reinstatement
-// at boundary keeps: the stack boundary recorded when it was pushed, or the
-// extents this context inherited when boundary is nil, its own boundary.
-func (p *MachineContext) windingOutside(boundary *MachineContinuation) WindingStack {
-	if boundary != nil {
-		return boundary.windingStack
+// windingOutside returns the extents outside prompt, the ones a reinstatement
+// at prompt keeps: the stack the prompt frame recorded when it was pushed, or the
+// extents this context inherited when prompt is nil, its own boundary.
+func (p *MachineContext) windingOutside(prompt *MachineContinuation) WindingStack {
+	if prompt != nil {
+		return prompt.windingStack
 	}
 	return p.windingStack[:p.WindingDepthAt(nil)]
 }
 
 // ResumeWindingDepth is WindingDepthAt for a call/cc capture: the depth outside
-// the prompt its resume will be reinstated at. prompt and found are this context's
-// FindPrompt(DefaultPromptTag). A sub-context with no default prompt of its own and
-// a live chain (eval, load, a call-with-*-file procedure) hands a resume up to the
-// nearest driver (a context
-// running RunResumable), which reinstates it at that driver's default prompt; the
-// depth is that prompt's, or the extents between the driver and this context are
-// left out of the continuation and unwound by its resume.
+// the place its resume will be reinstated at. prompt and found are this context's
+// FindPrompt(DefaultPromptTag). A sub-context with no default prompt of its own
+// (eval, load, a call-with-*-file procedure, a dynamic-wind thunk) delimits the
+// capture at the nearest driver's default prompt above it (a context running
+// RunResumable, or a parentless expansion-time root), so the continuation carries the extents between that prompt and
+// the capture, the inherited ones included: resumed at the sub-context's own
+// boundary while it lives, those are composed once with the live stack
+// (composeWinding); resumed at a root once the sub-context is gone, they are
+// re-entered, as R7RS asks, instead of being left out of the continuation.
 func (p *MachineContext) ResumeWindingDepth(prompt *MachineContinuation, found bool) int {
-	if found || p.cont == nil {
+	if found {
 		return p.WindingDepthAt(prompt)
 	}
-	for c := p.parentMC; c != nil; c = c.parentMC {
-		if c.promptTag != DefaultPromptTag {
-			continue
-		}
-		frame, _ := c.FindPrompt(DefaultPromptTag)
-		return c.WindingDepthAt(frame)
-	}
-	return p.WindingDepthAt(nil)
+	root := p.rootContext()
+	frame, _ := root.FindPrompt(DefaultPromptTag)
+	return root.WindingDepthAt(frame)
 }
 
 // PushWindingFrame adds a frame to the winding stack.
@@ -83,8 +80,8 @@ func (p *MachineContext) UnwindTo(commonDepth int) error {
 // its way out: a thread exiting, or a driver's run completing. The extents it
 // inherited (windingBase) are its parent's to leave: a thread ran the starter's
 // after thunks at exit and, once a with-timeout's extent was a winding frame,
-// ended the starter's timer; a rootless call/cc sub-context did the same for the
-// context that ran it.
+// ended the starter's timer; so did the sub-context a tail-position call/cc once
+// ran its procedure on, for the context that ran it.
 func (p *MachineContext) UnwindOwn() error {
 	return p.UnwindTo(p.WindingDepthAt(nil))
 }

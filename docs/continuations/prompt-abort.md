@@ -183,10 +183,12 @@ sub-context (a `with-continuation-barrier` thunk, a `RaiseInPlace` handler, a
 `dynamic-wind` thunk, a parameter converter). `RunWithinBoundary` drives such a
 sub-context like `Run`, but resolves an abort whose tag names a prompt on *that*
 chain inline. A timer interrupt or debugger break whose boundary frame is on that
-chain is resolved the same way. An abort (or timer/break) targeting an outer
-boundary, and every `ErrResumeContinuation`, re-raise unchanged. It installs no
-`DefaultPromptTag` and does no panic handling; those belong to the one top-level
-`RunResumable`.
+chain is resolved the same way, and so is an `ErrResumeContinuation` for a
+continuation delimited at a default-tag frame on that chain or at the
+sub-context's own boundary (`resumePrompt`). An abort (or timer/break) targeting
+an outer boundary, and a resume delimited elsewhere, re-raise unchanged. It
+installs no `DefaultPromptTag` and does no panic handling; those belong to
+`RunResumable`, the runtime roots' driver.
 
 ## RestoreWithWindingFrom
 
@@ -244,15 +246,23 @@ Concretely, `PrimCallCC`:
    compose with the invoker's marks.
 5. Builds a `CapturedContinuation` escape value via `NewCapturedContinuation`
 
-The capture above is shared by both modes below; the only per-mode difference is
-driver provenance, so mode is a single target selection rather than two
-hand-written apply arms.
+`DelimitAt` records where the continuation was delimited: at the frame
+`FindPrompt` found, or, with no frame, at this context's boundary, whose token
+it stamps on the continuation; either way it also records the root of the
+context chain (`rootIdentity`). A resume is then resolved in this order
+(`resumePrompt`): never under an expansion-time root when the continuation is a
+runtime root's; else the nearest default-tag frame on the invoking chain; else
+the context whose boundary token the continuation carries; else a root. A
+runtime root resolves whatever reaches it; an expansion-time root only what was
+captured under itself or under an expansion-time root whose run has ended (its
+token is closed and not a runtime one). A resume an expansion-time root passes
+up leaves that root's extents and has its winding rebased by the first driver
+above the expansion (`passUpResume`); with no runtime driver above, the engine's
+compile entry reports it as an `ErrContinuationBarrier` compile error.
 
-### Inline mode (mc.Parent() != nil)
-
-The lambda runs directly in the current VM context. This preserves the
-full continuation chain for coroutine patterns. Resume is resolved by the
-ambient `DefaultPromptTag` driver already running above this frame.
+The lambda runs directly in the current VM context. This preserves the full
+continuation chain for coroutine patterns. With no chain above (a tail call at
+the root of a context) its normal return ends the context's run.
 
 ```
 PrimCallCC
@@ -260,33 +270,18 @@ PrimCallCC
   segment = mc.SliceContinuationAt(capturePrompt)
   windingStack = mc.WindingStack().Copy()
   comp = NewComposableContinuation(segment, windingStack, threadID, barrierValid)
+  mc.DelimitAt(comp, capturePrompt)
   mc.SnapshotReachableMarksInto(comp)
   capt = NewCapturedContinuation(comp, threadID, barrierValid)
   mc.ApplyCallable(mcls, capt)
   return nil
 ```
 
-### Sub-context mode (mc.Parent() == nil)
-
-call/cc is rootless (invoked inside another foreign function's sub-context,
-e.g. `apply` or `dynamic-wind`, or at a thread root), so there is no ambient
-driver.
-
-```
-PrimCallCC
-  ... same capture as above ...
-  sub = mc.NewSubContext()    // inherits winding stack
-  defer ReleaseSubContext(sub)
-  sub.ApplyCallable(mcls, capt)
-  err = sub.RunWithEscapeHandling()   // installs its own DefaultPromptTag
-  if err: return err
-  mc.SetValues(sub.GetValues()...)
-```
-
-The sub-context *is* the implicit `call-with-continuation-prompt` for this
-captured continuation: `RunWithEscapeHandling` (not `RunWithinBoundary`)
-resolves this call/cc's resume signal plus any reified boundary on the sub's
-chain, so call/cc works in contexts that would otherwise call `Run()` directly.
+Every context that runs Scheme has a driver to resolve the resume: a root runs
+under `RunResumable`; a sub-context (a `dynamic-wind` thunk run by a winding
+reconcile, `eval`, `load`, a macro transformer or library body) under
+`RunWithinBoundary`, which resolves a resume delimited at a frame on its own
+chain or at its own boundary and re-raises every other.
 
 ## call/cc escape value
 

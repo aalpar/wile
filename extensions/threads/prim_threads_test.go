@@ -607,11 +607,13 @@ func TestTimerCancelledWaitInSubContextRunsHandler(t *testing.T) {
 // TestTimerCancelledWaitInRootlessCallCCRunsHandler pins the longest route a
 // failure takes back to the timer's owner. An after thunk run by an escape (k0
 // here) runs on a winding sub-context, and a tail call/cc in it applies its
-// procedure on a further sub-context with its own RunResumable driver. The wait
-// there raises; each sub-context passes the failure up undispatched, the after
-// thunk's failure returns through the escape's winding reconcile, and the owner's
-// driver turns it into the interrupt. HEAD answered (escaped #t not-abandoned): no
-// handler, the code after the wait ran, and it released the main thread's lock.
+// procedure there, with no chain above it. The wait raises; the sub-context
+// passes the failure up undispatched, the after thunk's failure returns through
+// the escape's winding reconcile, and the owner's driver turns it into the
+// interrupt. HEAD answered (escaped #t not-abandoned): no handler, the code after
+// the wait ran, and it released the main thread's lock. (Until 2026-10 the tail
+// call/cc ran its procedure on a further sub-context under a driver of its own,
+// one more hop on the same route.)
 func TestTimerCancelledWaitInRootlessCallCCRunsHandler(t *testing.T) {
 	for _, w := range timerCancelledWaits {
 		t.Run(w.name, func(t *testing.T) {
@@ -3194,4 +3196,99 @@ func TestEngineCloseReapsOwnThreadsOnSharedRegistry(t *testing.T) {
 
 	c.Assert(engine1.Close(), qt.IsNil)
 	c.Assert(th1.State(), qt.Equals, values.ThreadTerminated)
+}
+
+// TestThreadRootIsTheThreadsOnlyImplicitPrompt pins the thread root as the thread's only prompt: a
+// full continuation of the thread's, invoked from an escape's after thunk inside
+// the thread, replaces the escape in flight. Before the fix the tail call/cc in
+// the after thunk ran its procedure under a driver of its own, which resolved the
+// continuation, ran the rest of the thunk, and returned into the escape, which
+// ran it again: (exited escaped).
+func TestThreadRootIsTheThreadsOnlyImplicitPrompt(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	result := eval(t, engine, `
+(thread-join! (thread-start! (make-thread (lambda ()
+  (let ((log '()))
+    (define (note x) (set! log (cons x log)))
+    (note (call/cc (lambda (ex)
+            (call/cc (lambda (k0)
+              (dynamic-wind (lambda () #f)
+                            (lambda () (k0 'escaped))
+                            (lambda () (call/cc (lambda (k) (ex 'exited))))))))))
+    (reverse log))))))`)
+	c.Assert(result.SchemeString(), qt.Equals, "(exited)")
+	// And the plain case: a tail call/cc at the thread root resuming an empty
+	// continuation ends the thread with the value.
+	result = eval(t, engine, `(thread-join! (thread-start! (make-thread (lambda () (call/cc (lambda (k) (k 1)))))))`)
+	c.Assert(result.SchemeString(), qt.Equals, "1")
+}
+
+// TestThreadRootCompletesAlikeThroughATailCallCC pins that a thread whose thunk
+// ends by resuming a continuation captured at the thread's root from inside one
+// of its own extents completes as a thunk that returns normally from that
+// extent: the after thunk runs on both routes, and its failure reaches
+// thread-join! on both or on neither. On the normal route the thunk's return
+// leaves the extent; on the tail route the root driver's reconcile leaves it, and
+// that reconcile's failure must be the thread's outcome too. (The extents a thread
+// inherits from its starter are the starter's to leave, UnwindOwn, so this test
+// no longer starts the thread inside one.) The second case pins what a control
+// transfer out of such an after thunk does: an abort to the thread's own root is
+// resolved in the thread and becomes its value on both routes. Returned raw, it
+// reached the joining thread and aborted the main program. RunResumable's
+// completion on these exits is pinned at machine level
+// (TestRunResumableCompletesThroughEveryExit): no program reaches it with an
+// extent still entered.
+func TestThreadRootCompletesAlikeThroughATailCallCC(t *testing.T) {
+	const prelude = `
+(define (try thunk)
+  (guard (e (#t (list 'join-raised (uncaught-exception-reason e))))
+    (list 'joined (thread-join! (thread-start! (make-thread thunk))))))
+(define (both after)
+  (list (try (lambda () (dynamic-wind (lambda () #f) (lambda () 1) after)))
+        (try (lambda () (call/cc (lambda (k) (dynamic-wind (lambda () #f) (lambda () (k 1)) after)))))))`
+	t.Run("an after thunk's failure", func(t *testing.T) {
+		c := qt.New(t)
+		engine := newEngine(t)
+		result := eval(t, engine, prelude+`
+(both (lambda () (raise 'after-boom-in-thread)))`)
+		pair, ok := result.Internal().(values.Tuple)
+		c.Assert(ok, qt.IsTrue)
+		normal := pair.Car()
+		tail := pair.Cdr().(values.Tuple).Car()
+		c.Assert(normal.SchemeString(), qt.Equals, "(join-raised after-boom-in-thread)")
+		c.Assert(tail.SchemeString(), qt.Equals, normal.SchemeString())
+	})
+	t.Run("an after thunk's abort to the thread's root", func(t *testing.T) {
+		c := qt.New(t)
+		engine := newEngine(t)
+		result := eval(t, engine, prelude+`
+(list (both (lambda () (abort-current-continuation (default-continuation-prompt-tag) 'aborted)))
+      'program-continues)`)
+		c.Assert(result.SchemeString(), qt.Equals, "(((joined aborted) (joined aborted)) program-continues)")
+	})
+}
+
+// TestResumedAfterThunkWaitInsideEvalRunsTheHandler pins the other re-dispatch
+// of RunWithinBoundary's resume arm: a with-timeout inside eval whose resumed
+// continuation's reconcile runs an after thunk that waits past the deadline. The
+// wait's cancellation is the timer's failure, dispatched to the timer's own arm
+// on eval's sub-context, so the handler runs. Returned raw it was
+// "thread-sleep!: cancelled before the wait completed".
+func TestResumedAfterThunkWaitInsideEvalRunsTheHandler(t *testing.T) {
+	c := qt.New(t)
+	engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+	c.Assert(err, qt.IsNil)
+	result, err := evalWithWatchdog(t, engine, `
+(list (eval '(with-timeout 50 (lambda (k) 'timed-out)
+               (lambda ()
+                 (let ((k0 #f))
+                   (let ((v (call/cc (lambda (c) (set! k0 c) 'first))))
+                     (if (eq? v 'first)
+                         (dynamic-wind (lambda () #f) (lambda () (k0 'second)) (lambda () (thread-sleep! 10) 'slept))
+                         'resumed)))))
+            (interaction-environment))
+      'after)`, 5*time.Second)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "(timed-out after)")
 }

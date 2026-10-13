@@ -269,3 +269,17 @@ func TestWithOutputToFile(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(string(data), qt.Equals, "Z")
 }
+
+// TestCallCCInsideCallWithInputFileResumesInside pins that the procedure
+// call-with-input-file runs on a sub-context has a driver that resumes a
+// continuation delimited at that sub-context: the rest of the procedure runs
+// and the call returns its value. Before the fix the top driver resumed it,
+// replacing its own chain, and the evaluation ended with 2.
+func TestCallCCInsideCallWithInputFileResumesInside(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	path := writeTestFile(t, t.TempDir(), "in.txt", "x")
+	result := eval(t, engine, fmt.Sprintf(
+		`(list (call-with-input-file %q (lambda (port) (+ 1 (call/cc (lambda (k) (k 1)))))) 'after)`, path))
+	c.Assert(result.Internal().SchemeString(), qt.Equals, "(2 after)")
+}

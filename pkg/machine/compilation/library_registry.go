@@ -23,6 +23,7 @@ package compilation
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"iter"
@@ -163,6 +164,7 @@ func (p *CompiledLibrary) SetResolvedExport(phase environment.Phase, internalNam
 // applied here AND again by the compile step that performed the execution, which
 // rendered "error executing library" twice in one chain.
 func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator machine.MacroEvaluator) error {
+	var first error
 	p.instantiateOnce.Do(func() {
 		if p.Template == nil || p.Template.CodeLen() == 0 {
 			return
@@ -171,10 +173,33 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 		if err == nil {
 			return
 		}
-		p.instantiateErr = wrapSourcedError(p.formSource,
+		first = wrapSourcedError(p.formSource,
 			werr.WrapForeignErrorf(err, "error executing library %s", p.Name.SchemeString()))
+		p.instantiateErr = p.memoizableInstantiateError(first, err)
 	})
+	if first != nil {
+		return first
+	}
 	return p.instantiateErr
+}
+
+// memoizableInstantiateError is the form of a body's failure later importers
+// receive. A body that exited through a continuation (a resume the body's
+// expansion-time root passed up to the runtime driver above the first import)
+// fails with the control signal itself, and the first importer must receive it
+// unchanged for that driver to resolve it; remembered as is, every later import
+// would hand the same signal to whichever driver ran it, which would resume the
+// continuation again. Later importers get a continuation barrier error instead,
+// located at the library's form like first. first is what the first importer
+// received; cause is the body's own failure, which first wraps.
+func (p *CompiledLibrary) memoizableInstantiateError(first, cause error) error {
+	var resumeErr *machine.ErrResumeContinuation
+	if !errors.As(cause, &resumeErr) {
+		return first
+	}
+	return wrapSourcedError(p.formSource, werr.WrapForeignErrorf(werr.ErrContinuationBarrier,
+		"library %s: its body exited through a continuation when it was first instantiated; %v",
+		p.Name.SchemeString(), cause))
 }
 
 // NewCompiledLibrary creates a new compiled library.

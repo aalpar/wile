@@ -114,11 +114,11 @@ func PrimApply(cc machine.CallContext) error {
 //
 //	Invariant: invoking k must NOT return to f. The CapturedContinuation
 //	  returns an ErrResumeContinuation carrying the captured segment unrun;
-//	  the nearest DefaultPromptTag driver reinstalls it onto the live chain
+//	  the driver owning the place it was delimited at reinstalls it onto its live chain
 //	  (boundary == nil: replace the whole chain). Resuming the captured
 //	  continuation instead of returning to f is what gives k the B return type.
 //	Constrains: ErrResumeContinuation handling (must propagate through
-//	  foreign calls), RunResumable (the top-level resume/abort driver).
+//	  foreign calls), RunResumable and RunWithinBoundary (the drivers).
 //	Constrained by: CESK model (K must be capturable data, not Go
 //	  stack), WindingStack (captured by value for dynamic-wind thunks),
 //	  threadID (cross-thread invocation rejected).
@@ -138,19 +138,19 @@ func PrimApply(cc machine.CallContext) error {
 //	      (f (lambda (v) (abort-current-continuation default-prompt-tag (k v)))))
 //	    default-prompt-tag)
 //
-// One capture, one apply seam, two driver modes. The continuation is captured
-// once (shared by both modes); the lambda is then applied once in a selected
-// target context. The only per-mode difference is driver provenance:
-//
-//   - Inline (mc.Parent() != nil): apply in the current VM context. Preserves the
-//     full continuation chain, so continuations captured inside the lambda include
-//     the complete call stack back to top level — critical for cooperative
-//     coroutines and other multi-continuation patterns. Resume is resolved by the
-//     ambient DefaultPromptTag driver already running above this frame.
-//   - Sub-context (mc.Parent() == nil): call/cc is rootless (invoked inside another
-//     foreign function's sub-context — e.g. apply or dynamic-wind — or a thread
-//     root), so there is no ambient driver. Apply in a fresh sub-context that
-//     installs its own DefaultPromptTag driver to resolve this call/cc's resume.
+// One capture, one apply seam. The lambda is applied in the current VM context,
+// preserving the full continuation chain, so continuations captured inside it
+// include the complete call stack back to the context's boundary — critical for
+// cooperative coroutines and other multi-continuation patterns. A resume is
+// resolved by the driver that owns the nearest default-tag frame on the invoking
+// chain, else the context whose boundary delimited the continuation, else a root
+// (resumePrompt); every context has a driver: a runtime root runs under
+// RunResumable, a sub-context (a dynamic-wind thunk, eval) and an expansion-time
+// root (a transformer body) under RunWithinBoundary. A call/cc with no chain above it (cont == nil: tail
+// position at the root of a context) applies the lambda in place too; the
+// lambda's normal return then ends the context's run, as the thunk's would have.
+// It used to run the lambda on a fresh sub-context under a driver of its own,
+// whose edge acted as a default prompt nobody wrote.
 func PrimCallCC(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "call/cc")
 	if err != nil {
@@ -164,19 +164,24 @@ func PrimCallCC(cc machine.CallContext) error {
 	}
 
 	// Capture the continuation delimited at the nearest DefaultPromptTag (D5).
-	// FindPrompt(DefaultPromptTag) returns (nil, true) at the top-level context
-	// boundary — SliceContinuationAt(nil) then captures the whole chain — or a chain
-	// FRAME for a call/cc captured inside a call-with-continuation-prompt reusing the
-	// default tag; slicing at that frame captures only the delimited segment (NOT the
-	// code after the prompt, which would otherwise include the re-invocation site and
-	// loop forever — TestApplyWindingStackInheritance). The matching invocation-side
-	// reinstatement (RunResumable's ErrResumeContinuation arm) grafts this segment onto
-	// the nearest DefaultPromptTag at the (k v) site, so an inner prompt receives the
-	// segment's result while the top-level case replaces the whole chain (escape-past).
+	// FindPrompt(DefaultPromptTag) returns no frame at the context boundary — the
+	// top level, a thread root, or a sub-context — and SliceContinuationAt(nil) then
+	// captures the whole chain; or a chain FRAME for a call/cc captured inside a
+	// call-with-continuation-prompt reusing the default tag, and slicing at that
+	// frame captures only the delimited segment (NOT the code after the prompt,
+	// which would otherwise include the re-invocation site and loop forever —
+	// TestApplyWindingStackInheritance). The matching invocation-side
+	// reinstatement (the drivers' resume arms) grafts this segment onto the place
+	// it was delimited at, found again at the (k v) site: an inner prompt frame
+	// receives the segment's result, the context boundary replaces the whole chain
+	// (escape-past).
 	capturePrompt, found := mc.FindPrompt(machine.DefaultPromptTag)
 	segment := mc.SliceContinuationAt(capturePrompt)
 	windingStack := mc.WindingStack().Copy()
 	comp := machine.NewComposableContinuation(segment, windingStack, mc.ResumeWindingDepth(capturePrompt, found), mc.ThreadID(), mc.BarrierValid())
+	// Name where it was delimited (this context's boundary, when no frame) and
+	// the root it was captured under, for resumePrompt.
+	mc.DelimitAt(comp, capturePrompt)
 	// Snapshot the reachable parameter/handler marks so a continuation captured inside
 	// a sub-context (e.g. a call-with-values producer) restores the outer environment
 	// on resume — call/cc isolates marks on resume, so without this the outer
@@ -188,45 +193,16 @@ func PrimCallCC(cc machine.CallContext) error {
 
 	capt := machine.NewCapturedContinuation(comp, mc.ThreadID(), mc.BarrierValid())
 
-	// Single apply seam. The capture above is shared by both modes; the ONLY
-	// per-mode difference is driver provenance, so mode is one target selection,
-	// not two hand-written apply arms (staff-sweep #9). target is the ambient
-	// context when a live continuation chain exists above this frame
-	// (mc.Parent() != nil), or a fresh sub-context when rootless.
-	target := mc
-	if mc.Parent() == nil {
-		// Rootless (inside another foreign sub-context or a thread root): the
-		// sub-context IS the implicit call-with-continuation-prompt for this
-		// captured continuation, so it owns a DefaultPromptTag driver.
-		sub := mc.NewSubContext()
-		defer machine.ReleaseSubContext(sub)
-		target = sub
-	}
-
-	// Apply the lambda once, in the selected context. Inline (target == mc): the
-	// lambda runs directly in the current VM context, preserving the full
-	// continuation chain; on normal return RestoreContinuation pops mc.cont back
-	// to the caller of call/cc, and on continuation invocation the escape
-	// propagates through the VM to the ambient driver. No PC compensation needed
-	// (applyForeign does not post-increment pc).
-	_, err = target.ApplyCallable(mcls, capt)
-	if err != nil {
-		return err
-	}
-
-	if target != mc {
-		// Rootless: RunWithEscapeHandling installs DefaultPromptTag and resolves
-		// the call/cc resume trampoline (ErrResumeContinuation) plus any reified
-		// boundary on this sub's chain (RunWithinBoundary would re-raise the
-		// resume signal, which has no enclosing driver here), then deliver the
-		// result to mc.
-		err = target.RunWithEscapeHandling()
-		if err != nil {
-			return err
-		}
-		mc.SetValues(target.GetValues()...)
-	}
-	return nil
+	// Apply the lambda once, in place: it runs directly in the current VM
+	// context, preserving the full continuation chain. On normal return
+	// RestoreContinuation pops mc.cont back to the caller of call/cc, or ends the
+	// context's run when there is no chain above (OpRestoreContinuation on an
+	// empty chain); on continuation invocation the resume signal propagates
+	// through the VM to the driver that owns where the continuation was
+	// delimited. No PC compensation needed (applyForeign does not post-increment
+	// pc).
+	_, err = mc.ApplyCallable(mcls, capt)
+	return err
 }
 
 // PrimValues implements the values primitive.
