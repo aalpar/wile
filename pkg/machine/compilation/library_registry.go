@@ -176,6 +176,12 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 		first = wrapSourcedError(p.formSource,
 			werr.WrapForeignErrorf(err, "error executing library %s", p.Name.SchemeString()))
 		cancelled := ctx.Err() != nil && (errors.Is(err, ctx.Err()) || errors.Is(err, context.Cause(ctx)))
+		if !cancelled {
+			// The body's root has no handlers of the importer's, so its uncaught
+			// raise is uncaught only there; a cancellation is the importer's own
+			// ctx ending and stays uncaught everywhere.
+			first = machine.MarkUnlinkedRootEscape(first)
+		}
 		p.instantiateErr = p.memoizableInstantiateError(first, err, cancelled)
 	})
 	if first != nil {
