@@ -3865,17 +3865,29 @@ enough to rebuild the probes.
   importers must keep seeing as the same raise.
 - [x] **A library body cancelled by a timeout fails every later import** [Done 2026-10-12,
   branch `fix/library-abort-replay`]: `CompiledLibrary.memoizableInstantiateError`
-  (`pkg/machine/compilation/library_registry.go`) now remembers a cancelled body as
-  `werr.ErrLibraryInstantiationCancelled`, located at the library's form, with no
-  `context.DeadlineExceeded`/`Canceled` in the chain; the first importer still gets the
-  cancellation, which the owner's driver makes the timeout. Before, later imports failed with
-  `context deadline exceeded` with no deadline in force, which a fresh `with-timeout` passed
-  through uncaught. Decided: remember (the body runs at most once), not re-run (Chez re-runs the
-  body; Racket counts it instantiated with the definitions that ran). Pinned by
-  `TestLibraryBodyCancelledByATimeoutIsNotReportedAsADeadlineByLaterImports`
-  (`pkg/wile/transformer_callcc_test.go`). Timer and break interrupts themselves do not replay:
-  neither is emitted on a library body's root (`vmMacroEvaluator.EvalTemplate` builds it with no
-  timer armed and no `brk`).
+  (`pkg/machine/compilation/library_registry.go`) now remembers a body whose ctx ended while it
+  ran as `werr.ErrLibraryInstantiationCancelled`, located at the library's form, with no ctx error
+  in the chain; the first importer still gets the cancellation, which the owner's driver makes the
+  timeout. Before, later imports failed with the stale cancellation (`context deadline exceeded`
+  from the VM loop, or a SRFI-18 wait's `ErrOperationCancelled`) with no deadline in force, which
+  a fresh `with-timeout` passed through uncaught. Decided from `ctx.Err()`, not the chain: a
+  primitive's own `context.DeadlineExceeded` under a live ctx is an ordinary raise and stays one.
+  Decided: remember (the body runs at most once), not re-run (Chez re-runs the body; Racket counts
+  it instantiated with the definitions that ran). Pinned in `pkg/wile/transformer_callcc_test.go`
+  by `TestLibraryBodyCancelledByATimeoutIsNotReportedAsADeadlineByLaterImports`,
+  `TestLibraryBodyCancelledByTheEmbedderIsNotReportedAsCancelledByLaterImports`,
+  `TestLibraryBodyFailingWithItsOwnDeadlineIsRememberedAsIs` and
+  `TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise`. Timer and break interrupts themselves do
+  not replay: neither is emitted on a library body's root (`vmMacroEvaluator.EvalTemplate` builds
+  it with no timer armed and no `brk`).
+- [ ] **A top-level import of an aborting library body reports two sentinels** [Cleanup, S]: the
+  first `(import …)` of a body that aborts to a tag no expansion-time chain holds fails through
+  `controlSignalEscapedExpansion` (`pkg/wile/engine.go`) with `ErrInvalidArgument` ("no prompt
+  found … at expansion time"); later imports get the remembered `ErrContinuationBarrier` ("exited
+  through an abort"), and nothing crossed a barrier. Before `fix/library-abort-replay` both got
+  the first form, because the replayed abort hit the same conversion. Fix shape, undecided: one
+  sentinel for "this body's control-signal exit is remembered", used by the resume and abort cases.
+  Found by the code lens of that branch's crosscheck, 2026-10-12.
 - [ ] **Rootless fix, round-4 leftovers** [Cleanup, S]: Minors the round-5 crosscheck found in the
   round-4 remediation, filed under the scoped re-review rule. (1) `controlSignalEscapedExpansion`
   (`pkg/wile/engine.go`) formats the cut chain into its message with `%v`, so the location is

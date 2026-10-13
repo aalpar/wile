@@ -734,36 +734,69 @@ func TestBootstrapBodyHasADriver(t *testing.T) {
 	qt.Assert(t, v.SchemeString(), qt.Equals, "(guarded 2)")
 }
 
-// A library body cut off by an enclosing with-timeout sees the expiry as a
-// cancellation, which the owner's driver makes the timeout. Remembered as is,
-// every later import failed with "context deadline exceeded" with no deadline in
-// force: an embedder matching its own deadline misread it, and a fresh
-// with-timeout, whose timer had not fired, passed it through uncaught.
-func TestLibraryBodyCancelledByATimeoutIsNotReportedAsADeadlineByLaterImports(t *testing.T) {
-	ctx := context.Background()
-	eng, err := wile.NewEngine(ctx,
+// newLibraryBodyProbeEngine builds an engine whose (probe user) library runs
+// body. (probe box) exports cell, a counter vector, and hook, a one-slot vector
+// the importing program fills with a procedure body calls as ((vector-ref hook 0) ...),
+// so body can reach a host function or a primitive no library exports.
+func newLibraryBodyProbeEngine(t *testing.T, body string) *wile.Engine {
+	t.Helper()
+	eng, err := wile.NewEngine(context.Background(),
 		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceFS(fstest.MapFS{
 			"probe/box.sld": &fstest.MapFile{
-				Data: []byte(`(define-library (probe box) (import (scheme base)) (export cell)
-  (begin (define cell (vector 0 0))))`),
+				Data: []byte(`(define-library (probe box) (import (scheme base)) (export cell hook)
+  (begin (define cell (vector 0 0)) (define hook (vector #f))))`),
 			},
 			"probe/user.sld": &fstest.MapFile{
 				Data: []byte(`(define-library (probe user)
   (import (scheme base) (probe box))
   (export used)
   (begin (vector-set! cell 0 (+ 1 (vector-ref cell 0)))
-         (let loop () (loop))
+         ` + body + `
          (define used 'lib-body-finished)))`),
 			},
 		}),
 		wile.WithLibraryPaths("."),
 	)
 	qt.Assert(t, err, qt.IsNil)
-	_, err = eng.EvalMultiple(ctx, `(import (probe box))
+	return eng
+}
+
+// assertRememberedAsCancelled checks a later import of a body whose first run
+// was cancelled: it fails with ErrLibraryInstantiationCancelled at the library's
+// form, with no ctx error in its chain, and the body did not run again.
+func assertRememberedAsCancelled(t *testing.T, eng *wile.Engine, src string) {
+	t.Helper()
+	_, err := eng.EvalMultiple(context.Background(), src)
+	qt.Assert(t, err, qt.IsNotNil, qt.Commentf("%s", src))
+	qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationCancelled), qt.IsTrue, qt.Commentf("%s: %v", src, err))
+	qt.Assert(t, errors.Is(err, context.DeadlineExceeded), qt.IsFalse, qt.Commentf("%s: %v", src, err))
+	qt.Assert(t, errors.Is(err, context.Canceled), qt.IsFalse, qt.Commentf("%s: %v", src, err))
+	var se *compilation.SourcedError
+	qt.Assert(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("%s: %v", src, err))
+	qt.Assert(t, se.Source.Location(), qt.Equals, "probe/user.sld:1:0")
+	cell, ok := eng.Get("cell")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, cell.SchemeString(), qt.Matches, `#\(1 .*`, qt.Commentf("%s: the body ran again", src))
+}
+
+// TestLibraryBodyCancelledByATimeoutIsNotReportedAsADeadlineByLaterImports: a
+// library body cut off by an enclosing with-timeout while it waits in a SRFI-18
+// wait fails with the wait's ErrOperationCancelled, whose cause is the timer's
+// expiry, which the owner's driver makes the timeout. Remembered as is, every
+// later import failed with "thread-sleep!: cancelled before the wait completed"
+// with no timer fired, which a fresh with-timeout passed through uncaught. The
+// timeout covers compiling (probe user) too, so it is far above that (about 80ms
+// under -race); a first import that timed out before the body ran fails the cell
+// check, not a later one.
+func TestLibraryBodyCancelledByATimeoutIsNotReportedAsADeadlineByLaterImports(t *testing.T) {
+	ctx := context.Background()
+	eng := newLibraryBodyProbeEngine(t, `((vector-ref hook 0) 5)`)
+	_, err := eng.EvalMultiple(ctx, `(import (probe box))
+	                                (vector-set! hook 0 thread-sleep!)
 	                                (define (import-under-timer)
-	                                  (with-timeout 50
+	                                  (with-timeout 500
 	                                    (lambda (k) (vector-set! cell 1 (+ 1 (vector-ref cell 1))) 'timed-out)
 	                                    (lambda () (environment '(probe user)) 'imported)))
 	                                (define first-import (import-under-timer))`)
@@ -771,22 +804,71 @@ func TestLibraryBodyCancelledByATimeoutIsNotReportedAsADeadlineByLaterImports(t 
 	first, ok := eng.Get("first-import")
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, first.SchemeString(), qt.Equals, "timed-out")
-
-	for _, src := range []string{`(import-under-timer)`, `(environment '(probe user))`} {
-		_, err = eng.EvalMultiple(ctx, src)
-		qt.Assert(t, err, qt.IsNotNil, qt.Commentf("%s", src))
-		qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationCancelled), qt.IsTrue, qt.Commentf("%s: %v", src, err))
-		qt.Assert(t, errors.Is(err, context.DeadlineExceeded), qt.IsFalse, qt.Commentf("%s: %v", src, err))
-		qt.Assert(t, errors.Is(err, context.Canceled), qt.IsFalse, qt.Commentf("%s: %v", src, err))
-		var se *compilation.SourcedError
-		qt.Assert(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("%s: %v", src, err))
-		qt.Assert(t, se.Source.Location(), qt.Equals, "probe/user.sld:1:0")
-	}
 	cell, ok := eng.Get("cell")
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 1)")
 
-	v, err := eng.EvalMultiple(ctx, `(guard (e (#t 'caught)) (environment '(probe user)))`)
+	assertRememberedAsCancelled(t, eng, `(import-under-timer)`)
+	assertRememberedAsCancelled(t, eng, `(environment '(probe user))`)
+	cell, ok = eng.Get("cell")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 1)")
+}
+
+// TestLibraryBodyCancelledByTheEmbedderIsNotReportedAsCancelledByLaterImports
+// is the embedder's form: the body cancels the ctx its first import ran under
+// and the VM loop stops it with context.Canceled, which the first importer
+// receives. A later import under a live ctx must not report it.
+func TestLibraryBodyCancelledByTheEmbedderIsNotReportedAsCancelledByLaterImports(t *testing.T) {
+	eng := newLibraryBodyProbeEngine(t, `((vector-ref hook 0)) (let loop () (loop))`)
+	cctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	qt.Assert(t, eng.RegisterFunc("cancel-first-import!", func() {
+		cancel()
+	}), qt.IsNil)
+	_, err := eng.EvalMultiple(context.Background(), `(import (probe box)) (vector-set! hook 0 cancel-first-import!)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, v.SchemeString(), qt.Equals, "caught")
+	_, err = eng.EvalMultiple(cctx, `(environment '(probe user))`)
+	qt.Assert(t, errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("%v", err))
+
+	assertRememberedAsCancelled(t, eng, `(environment '(probe user))`)
+}
+
+// TestLibraryBodyFailingWithItsOwnDeadlineIsRememberedAsIs: a primitive's own
+// context.DeadlineExceeded, under a ctx that did not end, is the body's ordinary
+// failure, an uncaught raise; a later import sees the same raise, not a
+// cancellation. Decided from the chain instead of the ctx, it was converted.
+func TestLibraryBodyFailingWithItsOwnDeadlineIsRememberedAsIs(t *testing.T) {
+	eng := newLibraryBodyProbeEngine(t, `((vector-ref hook 0))`)
+	qt.Assert(t, eng.RegisterFunc("call-upstream", func() error {
+		return werr.WrapForeignErrorf(context.DeadlineExceeded, "call-upstream: upstream request timed out")
+	}), qt.IsNil)
+	_, err := eng.EvalMultiple(context.Background(), `(import (probe box)) (vector-set! hook 0 call-upstream)`)
+	qt.Assert(t, err, qt.IsNil)
+	for range 2 {
+		_, err = eng.EvalMultiple(context.Background(), `(environment '(probe user))`)
+		qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationCancelled), qt.IsFalse, qt.Commentf("%v", err))
+		var escape *machine.ErrExceptionEscape
+		qt.Assert(t, errors.As(err, &escape), qt.IsTrue, qt.Commentf("%v", err))
+		qt.Assert(t, err.Error(), qt.Contains, "upstream request timed out")
+	}
+}
+
+// TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise pins the rule
+// memoizableInstantiateError's resume and abort conversions stop short of: an
+// uncaught raise is the body's ordinary failure, and a later import sees the
+// same raise, not a continuation barrier error.
+func TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise(t *testing.T) {
+	eng := newLibraryBodyProbeEngine(t, `(raise 'boom)`)
+	_, err := eng.EvalMultiple(context.Background(), `(import (probe box))`)
+	qt.Assert(t, err, qt.IsNil)
+	var msgs []string
+	for range 2 {
+		_, err = eng.EvalMultiple(context.Background(), `(environment '(probe user))`)
+		qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsFalse, qt.Commentf("%v", err))
+		var escape *machine.ErrExceptionEscape
+		qt.Assert(t, errors.As(err, &escape), qt.IsTrue, qt.Commentf("%v", err))
+		msgs = append(msgs, err.Error())
+	}
+	qt.Assert(t, msgs[1], qt.Equals, msgs[0])
 }

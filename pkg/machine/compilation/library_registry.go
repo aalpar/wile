@@ -175,7 +175,7 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 		}
 		first = wrapSourcedError(p.formSource,
 			werr.WrapForeignErrorf(err, "error executing library %s", p.Name.SchemeString()))
-		p.instantiateErr = p.memoizableInstantiateError(first, err)
+		p.instantiateErr = p.memoizableInstantiateError(first, err, ctx.Err() != nil)
 	})
 	if first != nil {
 		return first
@@ -199,15 +199,25 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 // control signal too: it is the body's ordinary failure, which a later importer
 // must see as the same raise.
 //
-// A cancelled body (the root arms no timer, so an enclosing with-timeout's expiry
-// reaches it as its ctx's error) is converted too, to ErrLibraryInstantiationCancelled
-// without the ctx error in its chain: remembered as is, a later importer reported a
-// deadline or cancellation that was not in force for it, which an embedder matching
-// its own deadline misreads and a later with-timeout's owner treats as nobody's.
-func (p *CompiledLibrary) memoizableInstantiateError(first, cause error) error {
-	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+// A body whose ctx ended while it ran (cancelled ctx) is converted too, to
+// ErrLibraryInstantiationCancelled. The root arms no timer, so an enclosing
+// with-timeout's expiry reaches the body as its ctx ending, by a route whose
+// error says so in different ways (the VM loop's ctx.Err(), a SRFI-18 wait's
+// ErrOperationCancelled with the timer's cause); remembered as is, a later
+// importer reported a cancellation that was not in force for it, which an
+// embedder matching its own deadline misreads and a later with-timeout's owner
+// treats as nobody's. cancelled is decided from the ctx, not from the chain: a
+// primitive's own context.DeadlineExceeded in a live ctx is the body's ordinary
+// failure.
+//
+// Both conversions cut the Unwrap edge to cause on purpose, since a reachable
+// signal or ctx error is what a later importer must not see; cause's text is
+// kept so where and how the body stopped stays readable.
+func (p *CompiledLibrary) memoizableInstantiateError(first, cause error, cancelled bool) error {
+	if cancelled {
 		return wrapSourcedError(p.formSource, werr.WrapForeignErrorf(werr.ErrLibraryInstantiationCancelled,
-			"library %s: its body was cancelled when it was first instantiated", p.Name.SchemeString()))
+			"library %s: its body was cancelled when it was first instantiated; %v",
+			p.Name.SchemeString(), cause))
 	}
 	var how string
 	var resumeErr *machine.ErrResumeContinuation
