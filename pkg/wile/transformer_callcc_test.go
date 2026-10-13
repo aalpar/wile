@@ -813,6 +813,9 @@ func TestLibraryBodyCancelledByATimeoutIsNotReportedAsADeadlineByLaterImports(t 
 	cell, ok = eng.Get("cell")
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 1)")
+	v, err := eng.EvalMultiple(ctx, `(guard (e (#t 'caught)) (environment '(probe user)))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, v.SchemeString(), qt.Equals, "caught")
 }
 
 // TestLibraryBodyCancelledByTheEmbedderIsNotReportedAsCancelledByLaterImports
@@ -852,6 +855,28 @@ func TestLibraryBodyFailingWithItsOwnDeadlineIsRememberedAsIs(t *testing.T) {
 		qt.Assert(t, errors.As(err, &escape), qt.IsTrue, qt.Commentf("%v", err))
 		qt.Assert(t, err.Error(), qt.Contains, "upstream request timed out")
 	}
+}
+
+// TestLibraryBodyFailingAfterItsCtxEndedIsRememberedAsIs: a body whose own
+// failure lands after its ctx ended, before the VM noticed, failed with that
+// failure, not the cancellation, and the first importer received it so; a later
+// import sees the same raise. Decided from ctx.Err() alone, it was converted.
+func TestLibraryBodyFailingAfterItsCtxEndedIsRememberedAsIs(t *testing.T) {
+	eng := newLibraryBodyProbeEngine(t, `((vector-ref hook 0))`)
+	cctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	qt.Assert(t, eng.RegisterFunc("cancel-then-fail!", func() error {
+		cancel()
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "cancel-then-fail!: its own failure")
+	}), qt.IsNil)
+	_, err := eng.EvalMultiple(context.Background(), `(import (probe box)) (vector-set! hook 0 cancel-then-fail!)`)
+	qt.Assert(t, err, qt.IsNil)
+	_, err = eng.EvalMultiple(cctx, `(environment '(probe user))`)
+	qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, errors.Is(err, context.Canceled), qt.IsFalse, qt.Commentf("%v", err))
+	_, err = eng.EvalMultiple(context.Background(), `(environment '(probe user))`)
+	qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationCancelled), qt.IsFalse, qt.Commentf("%v", err))
+	qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue, qt.Commentf("%v", err))
 }
 
 // TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise pins the rule

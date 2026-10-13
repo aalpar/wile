@@ -175,7 +175,8 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 		}
 		first = wrapSourcedError(p.formSource,
 			werr.WrapForeignErrorf(err, "error executing library %s", p.Name.SchemeString()))
-		p.instantiateErr = p.memoizableInstantiateError(first, err, ctx.Err() != nil)
+		cancelled := ctx.Err() != nil && (errors.Is(err, ctx.Err()) || errors.Is(err, context.Cause(ctx)))
+		p.instantiateErr = p.memoizableInstantiateError(first, err, cancelled)
 	})
 	if first != nil {
 		return first
@@ -206,9 +207,10 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 // ErrOperationCancelled with the timer's cause); remembered as is, a later
 // importer reported a cancellation that was not in force for it, which an
 // embedder matching its own deadline misreads and a later with-timeout's owner
-// treats as nobody's. cancelled is decided from the ctx, not from the chain: a
-// primitive's own context.DeadlineExceeded in a live ctx is the body's ordinary
-// failure.
+// treats as nobody's. cancelled means the ctx ended AND the failure is that
+// ending (its Err or its Cause): a primitive's own context.DeadlineExceeded in a
+// live ctx, or a failure of the body's own that lands after the ctx ended but
+// before the VM noticed, is the body's ordinary failure.
 //
 // Both conversions cut the Unwrap edge to cause on purpose, since a reachable
 // signal or ctx error is what a later importer must not see; cause's text is

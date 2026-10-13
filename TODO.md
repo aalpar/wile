@@ -3870,13 +3870,16 @@ enough to rebuild the probes.
   in the chain; the first importer still gets the cancellation, which the owner's driver makes the
   timeout. Before, later imports failed with the stale cancellation (`context deadline exceeded`
   from the VM loop, or a SRFI-18 wait's `ErrOperationCancelled`) with no deadline in force, which
-  a fresh `with-timeout` passed through uncaught. Decided from `ctx.Err()`, not the chain: a
-  primitive's own `context.DeadlineExceeded` under a live ctx is an ordinary raise and stays one.
+  a fresh `with-timeout` passed through uncaught. Cancelled means the ctx ended and the failure is
+  that ending (`ctx.Err()` or `context.Cause(ctx)`), not a ctx error found anywhere in the chain: a
+  primitive's own `context.DeadlineExceeded` under a live ctx, or a failure of the body's own that
+  lands after the ctx ended, is an ordinary raise and stays one.
   Decided: remember (the body runs at most once), not re-run (Chez re-runs the body; Racket counts
   it instantiated with the definitions that ran). Pinned in `pkg/wile/transformer_callcc_test.go`
   by `TestLibraryBodyCancelledByATimeoutIsNotReportedAsADeadlineByLaterImports`,
   `TestLibraryBodyCancelledByTheEmbedderIsNotReportedAsCancelledByLaterImports`,
-  `TestLibraryBodyFailingWithItsOwnDeadlineIsRememberedAsIs` and
+  `TestLibraryBodyFailingWithItsOwnDeadlineIsRememberedAsIs`,
+  `TestLibraryBodyFailingAfterItsCtxEndedIsRememberedAsIs` and
   `TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise`. Timer and break interrupts themselves do
   not replay: neither is emitted on a library body's root (`vmMacroEvaluator.EvalTemplate` builds
   it with no timer armed and no `brk`).
@@ -3902,6 +3905,11 @@ enough to rebuild the probes.
   (`pkg/machine/boundary_token.go`) records that a capture under a Go-written transformer reads
   as a runtime one rather than preventing it; fix shape: set `expansionRoot` where expansion
   contexts are created, not at the driver's entry.
+  (6) `CompiledLibrary.memoizableInstantiateError` (`pkg/machine/compilation/library_registry.go`)
+  pastes the body's failure into both of its conversions with `%v` and no Unwrap edge, which is
+  deliberate (a reachable signal or ctx error is what later importers must not see) but is an
+  unrecorded exception to the lossless-chain rule, and it prints the cause's location and stack
+  trace a second time; same fix shape as (1). Found by the `fix/library-abort-replay` re-review.
 - [x] **A `guard` that catches a raise fails in a library body or a procedural macro transformer**
   [Correctness, S–M, **Done 2026-10-11**]: both ran a root context under a bare `mc.Run()`
   (`EvalTemplate`, `invokeTransformerClosure` in `pkg/machine/macro_evaluator.go`), which resolves
