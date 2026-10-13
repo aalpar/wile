@@ -630,6 +630,67 @@ func TestLibraryBodyThatExitedThroughAContinuationIsNotReplayedByLaterImports(t 
 	qt.Assert(t, cell.SchemeString(), qt.Contains, " 2)")
 }
 
+// TestLibraryBodyThatExitedThroughAnAbortIsNotReplayedByLaterImports is the
+// abort form of the test above. The first import, run under a runtime prompt,
+// hands the body's abort to that prompt: its handler runs once and the body's
+// after thunk runs once. A later import must not re-deliver the remembered
+// abort: the body did not run again, so neither may its after thunk nor the
+// handler of whichever prompt the later import runs under. It receives a
+// continuation barrier error instead. Remembered as is, every later import ran
+// both again (cell #(2 2), #(3 3), ...).
+func TestLibraryBodyThatExitedThroughAnAbortIsNotReplayedByLaterImports(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceFS(fstest.MapFS{
+			"probe/box.sld": &fstest.MapFile{
+				Data: []byte(`(define-library (probe box) (import (scheme base)) (export tag cell)
+  (begin (define tag (make-continuation-prompt-tag 'p)) (define cell (vector 0 0))))`),
+			},
+			"probe/user.sld": &fstest.MapFile{
+				Data: []byte(`(define-library (probe user)
+  (import (scheme base) (probe box))
+  (export used)
+  (begin (define used 'lib-body-finished)
+         (dynamic-wind
+           (lambda () #f)
+           (lambda () (abort-current-continuation tag 'from-library-body))
+           (lambda () (vector-set! cell 0 (+ 1 (vector-ref cell 0)))))))`),
+			},
+		}),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	_, err = eng.EvalMultiple(ctx, `(import (probe box))
+	                                (define (import-under-prompt)
+	                                  (call-with-continuation-prompt
+	                                    (lambda () (environment '(probe user)) 'imported)
+	                                    tag
+	                                    (lambda (v) (vector-set! cell 1 (+ 1 (vector-ref cell 1))) v)))
+	                                (define first-import (import-under-prompt))`)
+	qt.Assert(t, err, qt.IsNil)
+	first, ok := eng.Get("first-import")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, first.SchemeString(), qt.Equals, "from-library-body")
+	cell, ok := eng.Get("cell")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 1)")
+
+	_, err = eng.EvalMultiple(ctx, `(import-under-prompt)`)
+	cell, ok = eng.Get("cell")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 1)")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsTrue, qt.Commentf("%v", err))
+	var abortErr *machine.ErrPromptAbort
+	qt.Assert(t, errors.As(err, &abortErr), qt.IsFalse, qt.Commentf("%v", err))
+	qt.Assert(t, err.Error(), qt.Contains, "exited through an abort")
+	var se *compilation.SourcedError
+	qt.Assert(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, se.Source.Location(), qt.Equals, "probe/user.sld:1:0")
+}
+
 // TestAbortAtTopLevelExpansionIsAnError is the abort form of the stale-resume
 // test: a phase-1 abort to a tag no expansion-time chain holds reaches the
 // compile entry, which reports "no prompt found" as a plain error rather than

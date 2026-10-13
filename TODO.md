@@ -3854,15 +3854,20 @@ enough to rebuild the probes.
   re-raise a resume `resumePrompt` does not own so a host that returns the error forwards it to the
   outer driver (a stale continuation invoked from top-level Go then surfaces as an error). Found by
   three crosscheck lenses of the rootless fix, 2026-10-11; pre-existing.
-- [ ] **A library body that exited through an abort replays the abort on every later import**
-  [Correctness, S]: `CompiledLibrary.memoizableInstantiateError`
-  (`pkg/machine/compilation/library_registry.go`) converts a remembered resume into a
-  continuation barrier error but remembers an `ErrPromptAbort` as is, so each later import
-  re-delivers the abort to its driver and the body's after thunk runs again although the body
-  never re-ran. Fix shape: export one control-signal predicate from `pkg/machine` (today's
-  `isControlSignal`) and use it both here and in `controlSignalEscapedExpansion`
-  (`pkg/wile/engine.go`), converting every control signal a memo would replay. Found by all four
-  bug lenses of the rootless fix's crosscheck (round 5); pre-existing on master.
+- [x] **A library body that exited through an abort replays the abort on every later import**
+  [Done 2026-10-12, branch `fix/library-abort-replay`]: `CompiledLibrary.memoizableInstantiateError`
+  (`pkg/machine/compilation/library_registry.go`) now converts a remembered `ErrPromptAbort`, like a
+  resume, into a continuation barrier error for later importers; the first importer still gets
+  the abort. Pinned by `TestLibraryBodyThatExitedThroughAnAbortIsNotReplayedByLaterImports`
+  (`pkg/wile/transformer_callcc_test.go`): before the fix, each later import reran the handler
+  and the body's after thunk. The filed fix shape (convert everything `isControlSignal` matches)
+  was wrong: `ErrExceptionEscape` is an uncaught raise, the body's ordinary failure, which later
+  importers must keep seeing as the same raise.
+- [ ] **Remembered timer and break interrupts may replay on later imports** [Correctness, S]:
+  `memoizableInstantiateError` still remembers `ErrTimerInterrupt` and `ErrBreakInterrupt` as is.
+  Both are addressed to a driver by tag, like an abort, so a later import would hand a stale
+  interrupt to its driver. Inferred from code, not reproduced. `controlSignalEscapedExpansion`
+  (`pkg/wile/engine.go`) has the same two-type list (resume, abort).
 - [ ] **Rootless fix, round-4 leftovers** [Cleanup, S]: Minors the round-5 crosscheck found in the
   round-4 remediation, filed under the scoped re-review rule. (1) `controlSignalEscapedExpansion`
   (`pkg/wile/engine.go`) formats the cut chain into its message with `%v`, so the location is

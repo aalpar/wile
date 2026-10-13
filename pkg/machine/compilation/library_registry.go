@@ -185,21 +185,34 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 
 // memoizableInstantiateError is the form of a body's failure later importers
 // receive. A body that exited through a continuation (a resume the body's
-// expansion-time root passed up to the runtime driver above the first import)
-// fails with the control signal itself, and the first importer must receive it
-// unchanged for that driver to resolve it; remembered as is, every later import
-// would hand the same signal to whichever driver ran it, which would resume the
-// continuation again. Later importers get a continuation barrier error instead,
-// located at the library's form like first. first is what the first importer
-// received; cause is the body's own failure, which first wraps.
+// expansion-time root passed up to the runtime driver above the first import) or
+// through an abort (to a prompt the first import ran under) fails with the
+// control signal itself, and the first importer must receive it unchanged for
+// that driver to resolve it; remembered as is, every later import would hand the
+// same signal to whichever driver ran it, which would resume the continuation
+// again, or deliver the abort again and rerun the after thunks it carries
+// although the body never re-ran. Later importers get a continuation barrier
+// error instead, located at the library's form like first. first is what the
+// first importer received; cause is the body's own failure, which first wraps.
+//
+// An uncaught raise (ErrExceptionEscape) is NOT converted, although it is a
+// control signal too: it is the body's ordinary failure, which a later importer
+// must see as the same raise.
 func (p *CompiledLibrary) memoizableInstantiateError(first, cause error) error {
+	var how string
 	var resumeErr *machine.ErrResumeContinuation
-	if !errors.As(cause, &resumeErr) {
+	var abortErr *machine.ErrPromptAbort
+	switch {
+	case errors.As(cause, &resumeErr):
+		how = "a continuation"
+	case errors.As(cause, &abortErr):
+		how = "an abort"
+	default:
 		return first
 	}
 	return wrapSourcedError(p.formSource, werr.WrapForeignErrorf(werr.ErrContinuationBarrier,
-		"library %s: its body exited through a continuation when it was first instantiated; %v",
-		p.Name.SchemeString(), cause))
+		"library %s: its body exited through %s when it was first instantiated; %v",
+		p.Name.SchemeString(), how, cause))
 }
 
 // NewCompiledLibrary creates a new compiled library.
