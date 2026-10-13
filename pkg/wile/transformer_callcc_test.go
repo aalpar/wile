@@ -733,3 +733,60 @@ func TestBootstrapBodyHasADriver(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, v.SchemeString(), qt.Equals, "(guarded 2)")
 }
+
+// A library body cut off by an enclosing with-timeout sees the expiry as a
+// cancellation, which the owner's driver makes the timeout. Remembered as is,
+// every later import failed with "context deadline exceeded" with no deadline in
+// force: an embedder matching its own deadline misread it, and a fresh
+// with-timeout, whose timer had not fired, passed it through uncaught.
+func TestLibraryBodyCancelledByATimeoutIsNotReportedAsADeadlineByLaterImports(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceFS(fstest.MapFS{
+			"probe/box.sld": &fstest.MapFile{
+				Data: []byte(`(define-library (probe box) (import (scheme base)) (export cell)
+  (begin (define cell (vector 0 0))))`),
+			},
+			"probe/user.sld": &fstest.MapFile{
+				Data: []byte(`(define-library (probe user)
+  (import (scheme base) (probe box))
+  (export used)
+  (begin (vector-set! cell 0 (+ 1 (vector-ref cell 0)))
+         (let loop () (loop))
+         (define used 'lib-body-finished)))`),
+			},
+		}),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	_, err = eng.EvalMultiple(ctx, `(import (probe box))
+	                                (define (import-under-timer)
+	                                  (with-timeout 50
+	                                    (lambda (k) (vector-set! cell 1 (+ 1 (vector-ref cell 1))) 'timed-out)
+	                                    (lambda () (environment '(probe user)) 'imported)))
+	                                (define first-import (import-under-timer))`)
+	qt.Assert(t, err, qt.IsNil)
+	first, ok := eng.Get("first-import")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, first.SchemeString(), qt.Equals, "timed-out")
+
+	for _, src := range []string{`(import-under-timer)`, `(environment '(probe user))`} {
+		_, err = eng.EvalMultiple(ctx, src)
+		qt.Assert(t, err, qt.IsNotNil, qt.Commentf("%s", src))
+		qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationCancelled), qt.IsTrue, qt.Commentf("%s: %v", src, err))
+		qt.Assert(t, errors.Is(err, context.DeadlineExceeded), qt.IsFalse, qt.Commentf("%s: %v", src, err))
+		qt.Assert(t, errors.Is(err, context.Canceled), qt.IsFalse, qt.Commentf("%s: %v", src, err))
+		var se *compilation.SourcedError
+		qt.Assert(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("%s: %v", src, err))
+		qt.Assert(t, se.Source.Location(), qt.Equals, "probe/user.sld:1:0")
+	}
+	cell, ok := eng.Get("cell")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 1)")
+
+	v, err := eng.EvalMultiple(ctx, `(guard (e (#t 'caught)) (environment '(probe user)))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, v.SchemeString(), qt.Equals, "caught")
+}

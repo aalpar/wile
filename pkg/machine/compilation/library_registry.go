@@ -198,7 +198,17 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 // An uncaught raise (ErrExceptionEscape) is NOT converted, although it is a
 // control signal too: it is the body's ordinary failure, which a later importer
 // must see as the same raise.
+//
+// A cancelled body (the root arms no timer, so an enclosing with-timeout's expiry
+// reaches it as its ctx's error) is converted too, to ErrLibraryInstantiationCancelled
+// without the ctx error in its chain: remembered as is, a later importer reported a
+// deadline or cancellation that was not in force for it, which an embedder matching
+// its own deadline misreads and a later with-timeout's owner treats as nobody's.
 func (p *CompiledLibrary) memoizableInstantiateError(first, cause error) error {
+	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+		return wrapSourcedError(p.formSource, werr.WrapForeignErrorf(werr.ErrLibraryInstantiationCancelled,
+			"library %s: its body was cancelled when it was first instantiated", p.Name.SchemeString()))
+	}
 	var how string
 	var resumeErr *machine.ErrResumeContinuation
 	var abortErr *machine.ErrPromptAbort

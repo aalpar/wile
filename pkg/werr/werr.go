@@ -211,6 +211,13 @@ var (
 	ErrAllocationLimitExceeded = NewStaticError("allocation limit exceeded")
 	ErrNonContinuableException = NewStaticError("non-continuable exception")
 
+	// ErrLibraryInstantiationCancelled is what a later importer of a library
+	// receives when the library's body was cancelled the first time it ran. The
+	// body runs at most once, so the failure is remembered; it is not remembered
+	// as the cancellation itself, which would report a deadline or cancellation
+	// that is not in force for the later importer.
+	ErrLibraryInstantiationCancelled = NewStaticError("library instantiation was cancelled")
+
 	// Recursion depth
 
 	ErrCallDepthExceeded   = NewStaticError("call depth exceeded")

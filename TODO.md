@@ -3863,11 +3863,19 @@ enough to rebuild the probes.
   and the body's after thunk. The filed fix shape (convert everything `isControlSignal` matches)
   was wrong: `ErrExceptionEscape` is an uncaught raise, the body's ordinary failure, which later
   importers must keep seeing as the same raise.
-- [ ] **Remembered timer and break interrupts may replay on later imports** [Correctness, S]:
-  `memoizableInstantiateError` still remembers `ErrTimerInterrupt` and `ErrBreakInterrupt` as is.
-  Both are addressed to a driver by tag, like an abort, so a later import would hand a stale
-  interrupt to its driver. Inferred from code, not reproduced. `controlSignalEscapedExpansion`
-  (`pkg/wile/engine.go`) has the same two-type list (resume, abort).
+- [x] **A library body cancelled by a timeout fails every later import** [Done 2026-10-12,
+  branch `fix/library-abort-replay`]: `CompiledLibrary.memoizableInstantiateError`
+  (`pkg/machine/compilation/library_registry.go`) now remembers a cancelled body as
+  `werr.ErrLibraryInstantiationCancelled`, located at the library's form, with no
+  `context.DeadlineExceeded`/`Canceled` in the chain; the first importer still gets the
+  cancellation, which the owner's driver makes the timeout. Before, later imports failed with
+  `context deadline exceeded` with no deadline in force, which a fresh `with-timeout` passed
+  through uncaught. Decided: remember (the body runs at most once), not re-run (Chez re-runs the
+  body; Racket counts it instantiated with the definitions that ran). Pinned by
+  `TestLibraryBodyCancelledByATimeoutIsNotReportedAsADeadlineByLaterImports`
+  (`pkg/wile/transformer_callcc_test.go`). Timer and break interrupts themselves do not replay:
+  neither is emitted on a library body's root (`vmMacroEvaluator.EvalTemplate` builds it with no
+  timer armed and no `brk`).
 - [ ] **Rootless fix, round-4 leftovers** [Cleanup, S]: Minors the round-5 crosscheck found in the
   round-4 remediation, filed under the scoped re-review rule. (1) `controlSignalEscapedExpansion`
   (`pkg/wile/engine.go`) formats the cut chain into its message with `%v`, so the location is
