@@ -3920,13 +3920,20 @@ enough to rebuild the probes.
   mode, a non-tail one failed. Pinned by `TestControlInACompileTimeBody`.
 - [x] **A library body's uncaught raise escapes a `guard` around the import** [Correctness, S,
   **Done 2026-10-12**, branch `fix/library-raise-escapes-guard`]: `EnsureInstantiated` marks a
-  body's uncaught raise that is not a cancellation as `machine.ErrUnlinkedRootEscape`, and the
+  body's uncaught raise that is not a cancellation (`machine.MarkUnlinkedRootEscape`), and the
   foreign-call bridge (`applyCallableError`) raises its condition in the importer's handlers, the
-  raised object itself, as Chez and Racket do and as `thread-join!` does for a joinee. With no
-  handler it goes on uncaught WITHOUT the mark, so a bridge below a running handler (which still
-  sees that handler installed) does not hand it back: under that mutant the handler ran twice.
+  raised object itself, as Chez and Racket do (the mechanism `thread-join!` uses for a joinee).
+  With no handler it goes on uncaught, its full chain under a SETTLED mark, so a bridge below a
+  running handler (which still sees that handler installed) does not hand it back: under that
+  mutant the handler ran twice.
   Pinned by `TestLibraryBodyRaiseIsCaughtByAGuardAroundTheImport` and
   `TestLibraryBodyRaiseInAHandlerReachesTheOuterHandlersOnce` (`pkg/wile/transformer_callcc_test.go`).
+- [ ] **A guard whose clauses miss reports the guard's location, not the raise's** [Diagnostics,
+  S]: `(guard (e ((string? e) 'no)) (f))` with `f` = `(car 5)` reports the guard's line; the
+  re-raise's carrier records its own site and the `NativeError`'s own location is not what
+  renders. Since `fix/library-raise-escapes-guard` an import whose body raised takes this path
+  too, so a missed guard around `(environment '(lib))` reports the import site where master
+  reported `lib.sld:L:C`. Found by crosscheck 2026-10-13.
 - [ ] **A macro transformer's uncaught raise escapes a `guard` around `eval`** [Correctness, S]:
   `(import (for-syntax (scheme base))) (define-syntax m (lambda (stx) (raise 'boom)))` then
   `(guard (e (#t (list 'caught e))) (eval '(m) (interaction-environment)))` reports `boom` to the
@@ -3942,6 +3949,10 @@ enough to rebuild the probes.
   error, ends the evaluation with `boom` (likewise for `car`, `error` and `with-exception-handler`);
   a host returning its own error is caught. HEAD too; `thread-join!` already turns a joinee's
   uncaught condition into a catchable one. Fix shape: re-raise `escape.Condition` in the caller.
+  Since `fix/library-raise-escapes-guard` one form is caught by accident: a host forwarding
+  `EvalMultiple("(import (lib))")` of a library whose body raised hands back an error whose mark
+  is still live (no bridge on the callee root settled it), so the caller's guard catches it, while
+  forwarding `(environment '(lib))` does not. The fix here should make the two agree.
 
 ### FCA-Derived
 

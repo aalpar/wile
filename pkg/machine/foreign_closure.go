@@ -249,7 +249,7 @@ func isControlSignal(err error) bool {
 //
 // Control signals pass through unchanged; see isControlSignal. An uncaught raise
 // out of an unlinked root is not one yet: its condition is raised here, in the
-// caller's handlers (ErrUnlinkedRootEscape).
+// caller's handlers (MarkUnlinkedRootEscape).
 //
 // An authorizer denial passes through as a *SchemeError, because a security
 // denial is not a Scheme condition: it is the sandbox's answer, not the
@@ -262,9 +262,9 @@ func isControlSignal(err error) bool {
 // gates (resolver's FS and OS resolvers, library_loader) never reach this
 // function — they surface as *CompilationError and were already unswallowable.
 func applyCallableError(mc *MachineContext, err error) error {
-	var unlinked *ErrUnlinkedRootEscape
-	if errors.As(err, &unlinked) {
-		return unlinked.raiseIn(mc)
+	var unlinked *unlinkedRootEscape
+	if errors.As(err, &unlinked) && unlinked.escape != nil {
+		return unlinked.raiseIn(mc, err)
 	}
 	if isControlSignal(err) {
 		return err

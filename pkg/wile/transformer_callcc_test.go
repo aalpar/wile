@@ -893,6 +893,7 @@ func TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise(t *testing.T) {
 		qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsFalse, qt.Commentf("%v", err))
 		var escape *machine.ErrExceptionEscape
 		qt.Assert(t, errors.As(err, &escape), qt.IsTrue, qt.Commentf("%v", err))
+		qt.Assert(t, escape.Source.Location(), qt.Equals, "probe/user.sld:5:10")
 		msgs = append(msgs, err.Error())
 	}
 	qt.Assert(t, msgs[1], qt.Equals, msgs[0])
@@ -916,6 +917,11 @@ func TestLibraryBodyRaiseIsCaughtByAGuardAroundTheImport(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil, qt.Commentf("%s", src))
 		qt.Assert(t, v.SchemeString(), qt.Equals, "(caught boom)", qt.Commentf("%s", src))
 	}
+	// Uncaught, the raise keeps the import site's wraps, not only the body's.
+	_, err = eng.EvalMultiple(context.Background(), `(environment '(probe user))`)
+	var outer *werr.ForeignError
+	qt.Assert(t, errors.As(err, &outer), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, outer.Error(), qt.Matches, `(?s)environment: failed to load \(probe user\).*`)
 	cell, ok := eng.Get("cell")
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 0)")
@@ -955,4 +961,33 @@ func TestLibraryBodyRaiseInAHandlerReachesTheOuterHandlersOnce(t *testing.T) {
 	cell, ok := eng.Get("cell")
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 2)")
+
+	// The condition is raised non-continuable: a handler that returns is an error,
+	// not the import's value.
+	_, err = eng.EvalMultiple(context.Background(), `
+	  (with-exception-handler (lambda (c) 42) (lambda () (environment '(probe user))))`)
+	qt.Assert(t, err, qt.ErrorMatches, `(?s).*non-continuable.*`)
+}
+
+// TestLibraryBodyCancelledInAWaitIsNotRaisedInTheImportersHandlers: a body
+// whose wait the importer's ctx cancelled ends in an uncaught raise, but the
+// cancellation is the importer's own ctx ending, so it is not marked and a guard
+// around the import does not run.
+func TestLibraryBodyCancelledInAWaitIsNotRaisedInTheImportersHandlers(t *testing.T) {
+	eng := newLibraryBodyProbeEngine(t, `((vector-ref hook 0))`)
+	cctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	qt.Assert(t, eng.RegisterFunc("cancel-first-import!", func() {
+		cancel()
+	}), qt.IsNil)
+	_, err := eng.EvalMultiple(context.Background(), `(import (probe box))
+	  (vector-set! hook 0 (lambda () (cancel-first-import!) (thread-sleep! 5)))`)
+	qt.Assert(t, err, qt.IsNil)
+	_, err = eng.EvalMultiple(cctx, `
+	  (guard (e (#t (vector-set! cell 1 (+ 1 (vector-ref cell 1))) 'caught))
+	    (environment '(probe user)))`)
+	qt.Assert(t, errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("%v", err))
+	cell, ok := eng.Get("cell")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 0)")
 }

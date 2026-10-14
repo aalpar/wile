@@ -20,50 +20,59 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// ErrUnlinkedRootEscape marks an uncaught raise out of a root that ran
+// unlinkedRootEscape marks an uncaught raise out of a root that ran
 // synchronously for the caller but is not linked to its chain, so it searched
 // none of the caller's handlers: a library body being instantiated. Its
 // *ErrExceptionEscape means "uncaught on that root", not "uncaught": the first
 // foreign-call bridge it reaches raises the condition in the caller's handlers
-// (applyCallableError), as thread-join! does for a joinee's uncaught condition.
+// (applyCallableError), the mechanism thread-join! uses for a joinee's outcome.
 //
-// Err is the full chain, escape included, so errors.As still finds the
+// err is the full chain, escape included, so errors.As still finds the
 // *ErrExceptionEscape and the embedder still sees an uncaught raise when no
 // handler takes it.
-type ErrUnlinkedRootEscape struct {
-	Err    error
+//
+// A nil escape is a settled mark: a bridge with no handlers wrapped the chain it
+// received, and the raise is uncaught from there out. errors.As finds the
+// outermost mark, so the settled one hides the live one inside it.
+type unlinkedRootEscape struct {
+	err    error
 	escape *ErrExceptionEscape
 }
 
-// MarkUnlinkedRootEscape wraps err in an ErrUnlinkedRootEscape when it carries
-// an uncaught raise, and returns it unchanged otherwise.
+// MarkUnlinkedRootEscape marks err as an unlinked root's uncaught raise when it
+// carries one, and returns it unchanged otherwise or when it is already marked.
 func MarkUnlinkedRootEscape(err error) error {
 	var escape *ErrExceptionEscape
 	if !errors.As(err, &escape) {
 		return err
 	}
-	return &ErrUnlinkedRootEscape{Err: err, escape: escape}
+	var mark *unlinkedRootEscape
+	if errors.As(err, &mark) && mark.escape != nil {
+		return err
+	}
+	return &unlinkedRootEscape{err: err, escape: escape}
 }
 
 // Error implements the error interface.
-func (p *ErrUnlinkedRootEscape) Error() string {
-	return p.Err.Error()
+func (p *unlinkedRootEscape) Error() string {
+	return p.err.Error()
 }
 
 // Unwrap returns the marked chain.
-func (p *ErrUnlinkedRootEscape) Unwrap() error {
-	return p.Err
+func (p *unlinkedRootEscape) Unwrap() error {
+	return p.err
 }
 
 // raiseIn raises the escape's condition in mc's handlers. With none, the raise is
-// uncaught here too, and the chain goes on WITHOUT the mark: an outer bridge,
-// such as one below a handler that is running now and so is not in mc's handlers,
-// must not raise it a second time.
-func (p *ErrUnlinkedRootEscape) raiseIn(mc *MachineContext) error {
+// uncaught here too, and err, the chain the bridge received, goes on under a
+// settled mark: an outer bridge, such as one below a handler that is running now
+// and so is not in mc's handlers, must not raise it a second time. Not
+// RaiseInPlace, which would replace that chain with a fresh carrier.
+func (p *unlinkedRootEscape) raiseIn(mc *MachineContext, err error) error {
 	handlers := mc.ResolveParameterValue(exceptionHandlerParam)
 	_, ok := handlers.(*values.Pair)
 	if !ok {
-		return p.Err
+		return &unlinkedRootEscape{err: err}
 	}
 	return mc.raiseToHandlers(p.escape.Condition, false, handlers)
 }
