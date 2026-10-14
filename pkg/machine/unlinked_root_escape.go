@@ -40,14 +40,11 @@ type unlinkedRootEscape struct {
 }
 
 // MarkUnlinkedRootEscape marks err as an unlinked root's uncaught raise when it
-// carries one, and returns it unchanged otherwise or when it is already marked.
+// carries one, and returns it unchanged otherwise. A chain already marked is
+// marked again: the outer root's raise is uncaught only on that root too.
 func MarkUnlinkedRootEscape(err error) error {
 	var escape *ErrExceptionEscape
 	if !errors.As(err, &escape) {
-		return err
-	}
-	var mark *unlinkedRootEscape
-	if errors.As(err, &mark) && mark.escape != nil {
 		return err
 	}
 	return &unlinkedRootEscape{err: err, escape: escape}
