@@ -618,15 +618,13 @@ func (p *CompileTimeContinuation) emitCachedBindingLoad(src *syntax.SourceContex
 //
 // This is a FALLBACK: callers consult it only AFTER scope-set local resolution
 // (GetLocalIndex), so a binding co-introduced by the same template shadows the
-// recorded global. A ResolvedBinding that is not a *GlobalIndex (or is nil)
-// returns false so the caller falls through to normal resolution.
+// recorded global. No pin (environment.PinnedIndex answers nil) returns false
+// so the caller falls through to normal resolution.
 // See memory/2026-06-15-macro-hygiene-global-shadow-fix.md (Change 2).
 func (p *CompileTimeContinuation) tryResolvedBinding(expr *syntax.SyntaxSymbol) bool {
-	if expr.ResolvedBinding == nil {
-		return false
-	}
-	gi, ok := expr.ResolvedBinding.(*environment.GlobalIndex)
-	if !ok || gi == nil {
+	// PinnedIndex, not PinnedBinding: the miss arm below needs the index itself.
+	gi := environment.PinnedIndex(expr)
+	if gi == nil {
 		return false
 	}
 	bd := gi.Env.GetOwnGlobalBinding(gi)
