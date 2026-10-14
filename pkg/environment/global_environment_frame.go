@@ -1880,6 +1880,30 @@ func (p *GlobalEnvironmentFrame) GetOwnGlobalBinding(gi *GlobalIndex) *Binding {
 	return p.bindings[i]
 }
 
+// PinnedIndex returns sym's definition-site pin: the resolved *GlobalIndex a
+// free template identifier carries in ResolvedBinding. nil means NONE — no pin,
+// a pin of another type, or a DEFERRED index (Env == nil), which names no slot
+// to read. This is the only place that knows the pin's representation;
+// pkg/machine/compilation/pin_deref_ratchet_test.go holds everything else to it.
+func PinnedIndex(sym *syntax.SyntaxSymbol) *GlobalIndex {
+	gi, ok := sym.ResolvedBinding.(*GlobalIndex)
+	if !ok || gi == nil || gi.Env == nil {
+		return nil
+	}
+	return gi
+}
+
+// PinnedBinding returns the binding sym's definition-site pin addresses, read
+// from the pin's own store with no parent walk (GetOwnGlobalBinding). nil means
+// NONE: no pin (PinnedIndex), or a pinned slot that holds no binding.
+func PinnedBinding(sym *syntax.SyntaxSymbol) *Binding {
+	gi := PinnedIndex(sym)
+	if gi == nil {
+		return nil
+	}
+	return gi.Env.GetOwnGlobalBinding(gi)
+}
+
 // pinnedSlotLocked resolves a GlobalIndex through its pinned (Env, Slot) pair,
 // which addresses the binding directly with no re-hash of the symbol.
 //

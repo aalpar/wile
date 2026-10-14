@@ -107,12 +107,9 @@ func (p *ExpanderContext) ResolveFreeIdentifier(id *syntax.SyntaxSymbol) (*envir
 	if p == nil {
 		return nil, false
 	}
-	gi, ok := id.ResolvedBinding.(*environment.GlobalIndex)
-	if ok && gi != nil && gi.Env != nil {
-		pinned := gi.Env.GetOwnGlobalBinding(gi)
-		if pinned != nil {
-			return pinned, true
-		}
+	pinned := environment.PinnedBinding(id)
+	if pinned != nil {
+		return pinned, true
 	}
 	return useSiteLiteralBinding(p.env, id.Key(), id.Scopes())
 }

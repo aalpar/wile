@@ -88,12 +88,11 @@ func resolveERIdentifier(env *environment.EnvironmentFrame, id values.Value) (*e
 		sym := v.Sym
 
 		// Renamed symbols carry ResolvedBinding — resolve in definition-site env.
-		if v.ResolvedBinding != nil {
-			gi, ok := v.ResolvedBinding.(*environment.GlobalIndex)
-			if ok && gi.Env != nil {
-				bnd := gi.Env.GetOwnGlobalBinding(gi)
-				return bnd, sym.Key, nil
-			}
+		// A pin whose slot holds no binding still decides: it answers nil
+		// rather than falling through to a use-site lookup.
+		gi := environment.PinnedIndex(v)
+		if gi != nil {
+			return gi.Env.GetOwnGlobalBinding(gi), sym.Key, nil
 		}
 
 		scopes := v.Scopes()
