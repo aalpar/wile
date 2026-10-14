@@ -234,12 +234,19 @@ const (
 // exactly as an unbound head does. GetBinding would raise out of a walk whose
 // whole job is to be conservative, turning a hygiene curiosity into a
 // compile-time crash.
+//
+// The definition-site pin is read first, as headFormName reads it: a marker
+// renamed where its template was written is unbound where the template is used.
 func markerName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) string {
 	if env == nil {
 		return sym.Key()
 	}
+	denoted := environment.DenotedForm(environment.PinnedBinding(sym))
+	if denoted != "" {
+		return denoted
+	}
 	bnd, _ := env.TryGetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes()))
-	denoted := environment.DenotedForm(bnd)
+	denoted = environment.DenotedForm(bnd)
 	if denoted != "" {
 		return denoted
 	}

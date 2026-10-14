@@ -347,7 +347,15 @@ func asFormDenoting(env *environment.EnvironmentFrame, expr syntax.SyntaxValue, 
 // TryGetBinding rather than GetBinding. This function is asked what a head
 // LOOKS LIKE before anything commits to compiling it, so a tie must not raise
 // here; the reference's own resolution will raise later if the program really
-// does reference it. validate.markerName is the same function on the other side
+// does reference it.
+//
+// A definition-site pin decides first. A template's head can be spelled through
+// a rename that exists only where the template was written (a library's
+// (rename (scheme base) (unquote uq))), and at the use site that spelling is
+// unbound, so the scope walk alone reads it as an ordinary symbol (I028). The
+// pin cannot raise and is strictly more specific than the walk.
+//
+// validate.markerName is the same function on the other side
 // of the validate → machine edge and resolves the same way; quasiHeadDepth's
 // doc states the agreement as a requirement.
 func headFormName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) string {
@@ -358,8 +366,12 @@ func headFormName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) s
 	if env == nil {
 		return symVal.Key
 	}
+	denoted := environment.DenotedForm(environment.PinnedBinding(sym))
+	if denoted != "" {
+		return denoted
+	}
 	bnd, _ := env.TryGetBinding(symVal, syntax.ScopesOf(sym.Scopes()))
-	denoted := environment.DenotedForm(bnd)
+	denoted = environment.DenotedForm(bnd)
 	if denoted != "" {
 		return denoted
 	}
