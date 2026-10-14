@@ -239,8 +239,8 @@ func newAtomicCell(v values.Value) *atomicCell {
 
 // newAtomicCellWithMeta builds a cell holding both an initial value and an
 // initial metadata pointer. meta may be nil (no metadata yet). Used when a
-// binding is promoted or copied into a global frame and its existing meta must
-// travel into the cell rather than the (now global-invisible) plain field.
+// global binding is created (newGlobalBinding) or a global frame is copied
+// (GlobalEnvironmentFrame.Copy), so the meta travels inside the cell.
 //
 // The loc it mints is this binding's own and unshared; an import replaces it
 // afterwards through shareValueLocWith.
@@ -316,8 +316,9 @@ func (p *atomicCell) updateMeta(fn func(*BindingMeta) bool) bool {
 
 // newGlobalBinding creates a binding whose value lives in an atomicCell, for
 // installation into a GlobalEnvironmentFrame where it may be read lock-free from
-// multiple threads. Every binding entering a global frame must go through this
-// so the "in a global frame => has a cell" invariant holds.
+// multiple threads. Every binding in a global frame carries a cell, minted here
+// or by GlobalEnvironmentFrame.Copy, which snapshots value and meta into a fresh
+// one; that is the "in a global frame => has a cell" invariant.
 // scopes are the hygiene scope set the binding is created under; they become
 // part of its identity within the frame, so a macro-introduced top-level binder
 // and a user-written one of the same name stay distinct variables. The set is
