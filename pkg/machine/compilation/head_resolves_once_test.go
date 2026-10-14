@@ -18,6 +18,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"slices"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -41,18 +42,40 @@ import (
 // GlobalEnvironmentFrame.BulkResolutionCount, reads zero delta at n=1/11/101/201
 // because bulk rows are consulted only on a miss.
 //
-// It is deliberately narrow: it finds the FuncDecl and fails only on a selector
-// call named GetBinding inside it. The SealedBindingAt and
-// LookupPrimitiveExpander calls the fix keeps are untouched, so the assertion
-// goes green only when the binding is passed in rather than re-derived.
+// It finds the FuncDecl and fails on a selector call to any resolver of the
+// head: GetBinding, and the two that arrived after this test was written,
+// TryGetBinding (P3.1) and the definition-site pin reads PinnedBinding /
+// PinnedIndex (P4.1). P4.3 made lookupMacroBinding hand back the pin as the head
+// when it stops on a Primitive pin, so a pin read here would be the second probe
+// this test exists to refuse. The SealedBindingAt and LookupPrimitiveExpander
+// calls the fix keeps are untouched, so the assertion goes green only when the
+// binding is passed in rather than re-derived.
 func TestHeadPrimitiveExpanderDoesNotReResolve(t *testing.T) {
-	c := qt.New(t)
+	assertNoSelectorCalls(qt.New(t), "expander_time_continuation.go", "lookupHeadPrimitiveExpander",
+		append([]string{"GetBinding", "TryGetBinding", "PinnedBinding", "PinnedIndex"}, bindingCreators...))
+}
 
-	const (
-		path   = "expander_time_continuation.go"
-		target = "lookupHeadPrimitiveExpander"
-	)
+// TestMacroLookupCreatesNoBinding pins the window the head lookupMacroBinding
+// passes out depends on: no binding is created between its resolution and the
+// caller's use of it (CLAUDE.local.md: a *Binding is an identity only inside a
+// window that creates none). The check sees direct calls only; a creator
+// reached through a helper is not caught.
+func TestMacroLookupCreatesNoBinding(t *testing.T) {
+	assertNoSelectorCalls(qt.New(t), "expander_time_continuation.go", "lookupMacroBinding", bindingCreators)
+}
 
+// bindingCreators are the EnvironmentFrame methods that create a binding.
+var bindingCreators = []string{
+	"EnsureLocalBinding",
+	"MaybeCreateLocalBinding",
+	"PreAllocateBindings",
+	"MaybeCreateOwnGlobalBinding",
+	"DefineOwnGlobal",
+}
+
+// assertNoSelectorCalls fails when the FuncDecl named target in path calls a
+// selector named in forbidden, or when there is no such FuncDecl.
+func assertNoSelectorCalls(c *qt.C, path, target string, forbidden []string) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 	c.Assert(err, qt.IsNil)
@@ -76,8 +99,8 @@ func TestHeadPrimitiveExpanderDoesNotReResolve(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if sel.Sel.Name == "GetBinding" {
-				resolv = append(resolv, fset.Position(sel.Sel.Pos()).String())
+			if slices.Contains(forbidden, sel.Sel.Name) {
+				resolv = append(resolv, sel.Sel.Name+" at "+fset.Position(sel.Sel.Pos()).String())
 			}
 			return true
 		})
@@ -88,7 +111,7 @@ func TestHeadPrimitiveExpanderDoesNotReResolve(t *testing.T) {
 	c.Assert(found, qt.IsTrue, qt.Commentf("%s: no FuncDecl named %s; the assertion below would be vacuous", path, target))
 
 	c.Assert(resolv, qt.HasLen, 0,
-		qt.Commentf("%s must take its head binding as a parameter, not re-resolve it; sites: %v", target, resolv))
+		qt.Commentf("%s must neither re-resolve its head nor create a binding; sites: %v", target, resolv))
 }
 
 // TestLocalVariableCheckStaysAheadOfHeadResolution pins the boundary the fold

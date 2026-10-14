@@ -341,9 +341,10 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syn
 // checks. It exists because ExpandOnce once had only arms 1 and 2. (Expand-once ...) therefore
 // reported a macro reachable solely real macro call that the expander itself expands perfectly
 // well.
-// The second result is ARM 1's resolution of the head — the same key, receiver
-// and scope set a caller would otherwise re-derive one call later. It is returned
-// rather than re-asked because no arm below creates a binding, which is the window
+// The second result is the head binding dispatch reads: the pin when D2 stopped on a
+// Primitive pin, and otherwise ARM 1's resolution — the same key, receiver and scope
+// set a caller would otherwise re-derive one call later. It is returned rather than
+// re-asked because no arm below creates a binding, which is the window
 // CLAUDE.local.md requires for a *Binding to be a valid identity.
 //
 // It is nil when the head does not resolve at the current phase, and a nil head is
@@ -404,12 +405,35 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	// define-syntax cannot capture it). A directly typed reference carries no pin and falls
 	// straight through — the present/absent-pin split IS the def-site/use-site split. The
 	// pin is a specific (frame, slot) via GetOwnGlobalBinding (no parent walk), strictly
-	// more specific than the scope walk, so it cannot reintroduce a wildcard match; and the
-	// BindingTypeSyntax filter excludes compile-time handlers (primitive expanders / syntax
-	// compilers are BindingTypePrimitive), so a pin resolving to one falls through.
+	// more specific than the scope walk, so it cannot reintroduce a wildcard match.
+	//
+	// A macro pin is the macro. A Primitive pin other than a *SyntaxCompiler (a core-form
+	// keyword, a primitive expander) means the template was written against that form: the macro search stops HERE, terminally, and the pin
+	// becomes the head head dispatch reads, so no later arm and no dispatch step re-asks by
+	// the use-site spelling. That is what keeps a user (define-syntax if …) out of cond's
+	// template (I132), breaks the if → cond → if cycle under (except (scheme base) if)
+	// (I133), and lets a template's renamed wif dispatch as if where wif is unbound. It
+	// also skips the demoted-ambient fallback below: on a procedural transformer body's
+	// phase-1 frame, a phase-0 (define-syntax if …) used to win over a pinned core if, and
+	// the core form now does. Any other pin type (a variable) falls through as before.
+	//
+	// A *SyntaxCompiler pin falls through too. Eight of those Go transformer forms
+	// (schemeSyntaxFormNames: syntax, syntax-rules, er-macro-transformer, …) are what
+	// WithSchemeSyntaxForms replaces with macros sealed at phase 1, and a bootstrap
+	// template written before its macro existed carries a pin to the Go row. ARM 2b is
+	// what looks past that row to the macro; stopping here would compile the Go form
+	// under the Scheme layer (TestP2_SyntaxRulesAndERAreScheme counts it). The exemption
+	// covers every syntax compiler, not just those eight, so a use-site define-syntax can
+	// still capture a template's cond-expand or define-syntax.
 	pinned := environment.PinnedBinding(sym)
 	if pinned != nil && pinned.BindingType() == environment.BindingTypeSyntax {
 		return pinned, head
+	}
+	if pinned != nil && pinned.BindingType() == environment.BindingTypePrimitive {
+		_, compiler := pinned.Value().(*SyntaxCompiler)
+		if !compiler {
+			return nil, pinned
+		}
 	}
 
 	// ARM 1, demoted: no pin resolved, so the ambient ∅-scoped match from the current
