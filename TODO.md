@@ -3797,15 +3797,6 @@ enough to rebuild the probes.
   on 2026-10-11 (`passUpResume`, `rebaseResumeWinding`); the abort needs the same, best by
   putting the stack and the rebase mark on one small type both signals embed. Found by the types
   lens of the rootless fix's crosscheck (round 4); pre-existing.
-- [ ] **A raise escaping a procedural transformer under a runtime `eval` cannot be guarded**
-  [Correctness, S]: the raise leaves the transformer as an `ErrExceptionEscape` (the phase-1
-  root has no handler), and at the `eval` site `applyCallableError` passes it through as a
-  control signal instead of raising it in place, so `(guard (e (#t 'caught)) (eval '(m) env))`
-  ends the program where Racket catches it; a compile error or a runtime error inside the same
-  `eval` is caught. Fix shape: at the expansion boundary (`InvokeTransformer`/`EvalTemplate`'s
-  return, or `PrimEval`'s expand-error path), demote an `ErrExceptionEscape` to an ordinary
-  error carrying its condition. Found by the errors lens of the rootless fix's crosscheck
-  (round 4); pre-existing.
 - [ ] **A continuation captured in a phase-0 library body is replayed by a transformer's root**
   [Correctness, S]: a library body instantiated at expansion time runs on an `EvalTemplate` root,
   whose boundary token says "expansion-time" (it records the driver, not the phase), so a stale
@@ -3933,14 +3924,45 @@ enough to rebuild the probes.
   re-raise's carrier records its own site and the `NativeError`'s own location is not what
   renders. Since `fix/library-raise-escapes-guard` an import whose body raised takes this path
   too, so a missed guard around `(environment '(lib))` reports the import site where master
-  reported `lib.sld:L:C`. Found by crosscheck 2026-10-13.
-- [ ] **A macro transformer's uncaught raise escapes a `guard` around `eval`** [Correctness, S]:
-  `(import (for-syntax (scheme base))) (define-syntax m (lambda (stx) (raise 'boom)))` then
-  `(guard (e (#t (list 'caught e))) (eval '(m) (interaction-environment)))` reports `boom` to the
-  embedder; Racket answers `(caught boom)`. Same class as the library-body row above: the
-  transformer runs on a root not linked to the caller's chain (`invokeTransformerClosure`,
-  `pkg/machine/macro_evaluator.go`). Fix shape: mark its escape with `MarkUnlinkedRootEscape`
-  where the expansion error leaves for the caller. Found 2026-10-12.
+  reported `lib.sld:L:C`, and since `fix/transformer-raise-escapes-guard` so does a missed guard
+  around an `eval` whose transformer raised. Found by crosscheck 2026-10-13.
+- [x] **A macro transformer's uncaught raise escapes a `guard` around `eval`** [Correctness, S,
+  Done 2026-10-13]: every root `vmMacroEvaluator` runs (a transformer, a `define-syntax`
+  expression, a library body) is unlinked, so its escape is marked there (`markExpansionRootEscape`)
+  rather than per caller; `EnsureInstantiated`'s own mark is gone, its library body reaching it
+  already marked through `EvalTemplate`. A cancellation (`machine.CancelledBy`) stays unmarked.
+  Absorbs the duplicate row "A raise escaping a procedural transformer under a runtime `eval`
+  cannot be guarded", whose proposed demotion to an ordinary error would have lost the raised
+  object and the non-continuable re-raise. A primitive used as a transformer is marked too: a
+  failure `applyForeign`'s bridge converts is an escape on its handlerless sub-context (an arity
+  mismatch is not, and stays an ordinary error the `eval` primitive raises). Pinned by
+  `TestExpansionRootRaiseIsCaughtByAGuardAroundEval` and
+  `TestExpansionRootCancelledInAWaitIsNotRaisedInTheCallersHandlers`.
+- [ ] **A caught raise out of an expansion-time root skips the root's `dynamic-wind` after thunks**
+  [Correctness, S–M]: a transformer running `(dynamic-wind void (lambda () (raise 'boom)) (lambda ()
+  (display "AFTER")))`, with a `guard` around the `eval` that expands it, prints `GUARD` and never
+  `AFTER`; leaving the same extent through `call/cc` runs it. A root that ends in an uncaught raise
+  never unwinds its winders (`RunWithinBoundary` → `closeBoundary` only closes the token), which
+  was unobservable while that raise ended the program; since `fix/library-raise-escapes-guard` and
+  `fix/transformer-raise-escapes-guard` the caller's handlers take it and the program goes on, so
+  library bodies show it too. Fix shape, unverified against the winding API: unwind the root's
+  winders before the escape leaves `RunWithinBoundary`'s expansion-root arm. That runs the after
+  thunk BEFORE a `with-exception-handler` handler in the caller, where Racket runs the handler
+  first; inherent to raising after the root ended, so decide the order before fixing. Found by the
+  code lens of this fix's crosscheck, 2026-10-13.
+- [ ] **A `raise-continuable` out of an expansion-time root reports a non-continuable raise**
+  [Diagnostics, S]: `(define-syntax m (lambda (s) (raise-continuable 'boom)))` under a returning
+  `with-exception-handler` around `eval` reports "exception handler returned from non-continuable
+  exception" at the `eval` site; `unlinkedRootEscape.raiseIn` always raises non-continuable. It
+  cannot resume (the root is gone), but the message names a raise the user did not write and the
+  transformer's raise site is no longer in the error. Fix shape: carry continuability on
+  `ErrExceptionEscape` and give this case its own message. Found by the code and errors lenses of
+  this fix's crosscheck, 2026-10-13.
+- [ ] **Every transformer failure is labelled a `syntax-rules` failure** [Diagnostics, S]:
+  `expandMacroInvocation` (`expander_time_continuation.go`) wraps any `InvokeTransformer`
+  error as "syntax-rules transformer invocation failed", so a lambda, ER or primitive transformer's
+  raise reads as a `syntax-rules` one. Fix: drop "syntax-rules" from the wrap; check for tests
+  matching the text first. Found by the errors lens of this fix's remediation crosscheck, 2026-10-14.
 - [ ] **A host function that forwards an `Engine.Call` failure makes it uncatchable**
   [Correctness, S–M]: an uncaught failure in the callee root leaves `RunWithEscapeHandling` as an
   `*ErrExceptionEscape`; `Engine.callCallable` wraps it in a `RuntimeError` whose `Unwrap` keeps it,
