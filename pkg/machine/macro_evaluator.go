@@ -27,8 +27,9 @@ import (
 // without depending on the concrete MachineContext construction path.
 type MacroEvaluator interface {
 	// EvalTemplate evaluates a compiled template in the given environment
-	// and returns the resulting value. Used by compileAndEvalLambdaTransformer
-	// for define-syntax lambda transformers at compile time.
+	// and returns the resulting value: a define-syntax expression, a phase-1
+	// expression or a library body. An uncaught raise comes back marked by
+	// MarkUnlinkedRootEscape, unless it is ctx ending (CancelledBy).
 	EvalTemplate(ctx context.Context, tpl *NativeTemplate, env *environment.EnvironmentFrame) (values.Value, error)
 
 	// InvokeTransformer calls a closure as a macro transformer.
@@ -38,6 +39,7 @@ type MacroEvaluator interface {
 	// syntax-rules/lambda transformers, three for ER macros (form, rename,
 	// compare). On success, the caller receives the MachineContext with the
 	// result in the value register and must call ReleaseSubContext when done.
+	// An uncaught raise comes back marked, as from EvalTemplate.
 	InvokeTransformer(ctx context.Context, cls Closure, expanderCtx ExpanderCtx, args ...values.Value) (*MachineContext, error)
 }
 
@@ -119,7 +121,9 @@ func invokeTransformerClosure(ctx context.Context, cls Closure, expanderCtx Expa
 		_, err := mc.applyForeign(c, args...)
 		if err != nil {
 			ReleaseSubContext(mc)
-			return nil, werr.WrapForeignErrorf(err, "failed to apply transformer")
+			// mc has no handlers, so applyForeign's bridge turned a primitive's
+			// failure into an uncaught raise.
+			return nil, markExpansionRootEscape(ctx, werr.WrapForeignErrorf(err, "failed to apply transformer"))
 		}
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAClosure, "unexpected closure type: %T", cls)

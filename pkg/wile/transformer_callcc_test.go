@@ -19,7 +19,6 @@ import (
 	"errors"
 	"testing"
 	"testing/fstest"
-	"time"
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/machine/compilation"
@@ -1004,10 +1003,10 @@ func newExpansionRootProbeEngine(t *testing.T) *wile.Engine {
 	return eng
 }
 
-// TestExpansionRootRaiseIsCaughtByAGuardAroundEval: a transformer, and the
-// expression a define-syntax evaluates, run on an expansion-time root holding
-// none of the caller's handlers, so an uncaught raise there used to reach the
-// embedder past a guard around the eval. It is raised in the caller's handlers
+// TestExpansionRootRaiseIsCaughtByAGuardAroundEval: a transformer (a closure or a
+// primitive), and the expression a define-syntax evaluates, run on an
+// expansion-time root holding none of the caller's handlers, so an uncaught raise
+// there used to reach the embedder past a guard around the eval. It is raised in the caller's handlers
 // now, as Racket does, the raised object itself.
 func TestExpansionRootRaiseIsCaughtByAGuardAroundEval(t *testing.T) {
 	const raising = `(import (for-syntax (scheme base))) (define-syntax m (lambda (stx) (raise 'boom)))`
@@ -1025,6 +1024,9 @@ func TestExpansionRootRaiseIsCaughtByAGuardAroundEval(t *testing.T) {
 			"(caught boom)"},
 		{"primitive error in a transformer", `(import (for-syntax (scheme base)))
 		  (define-syntax m (lambda (stx) (car 5)))
+		  (guard (e (#t (list 'caught (error-object? e)))) (eval '(m) (interaction-environment)))`,
+			"(caught #t)"},
+		{"primitive as a transformer", `(define-syntax m vector-length)
 		  (guard (e (#t (list 'caught (error-object? e)))) (eval '(m) (interaction-environment)))`,
 			"(caught #t)"},
 		{"define-syntax expression", `(guard (e (#t (list 'caught e)))
@@ -1068,15 +1070,19 @@ func TestExpansionRootRaiseIsCaughtByAGuardAroundEval(t *testing.T) {
 // eval does not run.
 func TestExpansionRootCancelledInAWaitIsNotRaisedInTheCallersHandlers(t *testing.T) {
 	eng := newExpansionRootProbeEngine(t)
+	cctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	qt.Assert(t, eng.RegisterFunc("cancel-expansion!", func() {
+		cancel()
+	}), qt.IsNil)
 	_, err := eng.EvalMultiple(context.Background(), `(import (for-syntax (scheme base) (wile threads)))
 	  (define cell (vector 0))
-	  (define-syntax s (lambda (stx) (thread-sleep! 5) 1))`)
+	  (define-syntax s (lambda (stx) ((cadr (syntax->datum stx))) (thread-sleep! 5) 1))`)
 	qt.Assert(t, err, qt.IsNil)
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-	_, err = eng.EvalMultiple(ctx, `
-	  (guard (e (#t (vector-set! cell 0 1) 'caught)) (eval '(s) (interaction-environment)))`)
-	qt.Assert(t, errors.Is(err, context.DeadlineExceeded), qt.IsTrue, qt.Commentf("%v", err))
+	_, err = eng.EvalMultiple(cctx, `
+	  (guard (e (#t (vector-set! cell 0 1) 'caught))
+	    (eval (list 's cancel-expansion!) (interaction-environment)))`)
+	qt.Assert(t, errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("%v", err))
 	cell, ok := eng.Get("cell")
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(0)")

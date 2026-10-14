@@ -3933,8 +3933,30 @@ enough to rebuild the probes.
   already marked through `EvalTemplate`. A cancellation (`machine.CancelledBy`) stays unmarked.
   Absorbs the duplicate row "A raise escaping a procedural transformer under a runtime `eval`
   cannot be guarded", whose proposed demotion to an ordinary error would have lost the raised
-  object and the non-continuable re-raise. Pinned by `TestExpansionRootRaiseIsCaughtByAGuardAroundEval`
-  and `TestExpansionRootCancelledInAWaitIsNotRaisedInTheCallersHandlers`.
+  object and the non-continuable re-raise. A primitive used as a transformer is marked too: its
+  failure becomes an escape at `applyForeign`'s bridge on a handlerless sub-context. Pinned by
+  `TestExpansionRootRaiseIsCaughtByAGuardAroundEval` and
+  `TestExpansionRootCancelledInAWaitIsNotRaisedInTheCallersHandlers`.
+- [ ] **A caught raise out of an expansion-time root skips the root's `dynamic-wind` after thunks**
+  [Correctness, S–M]: a transformer running `(dynamic-wind void (lambda () (raise 'boom)) (lambda ()
+  (display "AFTER")))`, with a `guard` around the `eval` that expands it, prints `GUARD` and never
+  `AFTER`; leaving the same extent through `call/cc` runs it. A root that ends in an uncaught raise
+  never unwinds its winders (`RunWithinBoundary` → `closeBoundary` only closes the token), which
+  was unobservable while that raise ended the program; since `fix/library-raise-escapes-guard` and
+  `fix/transformer-raise-escapes-guard` the caller's handlers take it and the program goes on, so
+  library bodies show it too. Fix shape, unverified against the winding API: unwind the root's
+  winders before the escape leaves `RunWithinBoundary`'s expansion-root arm. That runs the after
+  thunk BEFORE a `with-exception-handler` handler in the caller, where Racket runs the handler
+  first; inherent to raising after the root ended, so decide the order before fixing. Found by the
+  code lens of this fix's crosscheck, 2026-10-13.
+- [ ] **A `raise-continuable` out of an expansion-time root reports a non-continuable raise**
+  [Diagnostics, S]: `(define-syntax m (lambda (s) (raise-continuable 'boom)))` under a returning
+  `with-exception-handler` around `eval` reports "exception handler returned from non-continuable
+  exception" at the `eval` site; `unlinkedRootEscape.raiseIn` always raises non-continuable. It
+  cannot resume (the root is gone), but the message names a raise the user did not write and the
+  transformer's raise site is no longer in the error. Fix shape: carry continuability on
+  `ErrExceptionEscape` and give this case its own message. Found by the code and errors lenses of
+  this fix's crosscheck, 2026-10-13.
 - [ ] **A host function that forwards an `Engine.Call` failure makes it uncatchable**
   [Correctness, S–M]: an uncaught failure in the callee root leaves `RunWithEscapeHandling` as an
   `*ErrExceptionEscape`; `Engine.callCallable` wraps it in a `RuntimeError` whose `Unwrap` keeps it,
