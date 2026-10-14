@@ -295,6 +295,14 @@ func headDenotesSpecialForm(
 // both mean "the spelling decides", which is what headDenotesSpecialForm's nil
 // arm and validateForm's candidacy key already give.
 //
+// A definition-site pin that denotes a form decides first, as it does in the
+// expander's head dispatch and in markerName: a template's head spelled through a
+// rename that exists only where the template was written (a library's
+// (rename (scheme base) (if wif))) is unbound at the use site, and quote's expander
+// arm passes it through untouched, so this is the only site that can classify it
+// (I132). A pin that denotes no form (a variable) leaves the use-site resolution
+// in charge, as before.
+//
 // GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
 // tie. That is deliberately not caught here: it reaches the compile path's
 // recover boundary and surfaces as a CompilationError chaining the sentinel,
@@ -306,6 +314,10 @@ func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, s
 	if env.GlobalEnvironment() == nil {
 		return nil
 	}
+	pinned := environment.PinnedBinding(sym)
+	if environment.DenotedForm(pinned) != "" {
+		return pinned
+	}
 	return env.GetBinding(symVal, syntax.ScopesOf(sym.Scopes()))
 }
 
@@ -316,9 +328,12 @@ func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, s
 // It is the hygiene half of headDenotesSpecialForm's identity rule. Subset
 // resolution (bindingScopes ⊆ useScopes) is deliberately permissive so a
 // template identifier can name an outer global at all; that permissiveness is
-// safe for ordinary names because they carry a definition-site pin, and unsafe
-// for a special form because it has none. Three footings are admitted, and each
-// is one of the shapes the shadow is claimed for (scope sets measured):
+// safe for a name that carries a definition-site pin, and unsafe for one that
+// does not. A template's special-form identifier does carry one, and
+// resolveFormHead returns it when it denotes a form, so validateForm's
+// denoted != "" never reaches this function for it: what arrives here is a head
+// with no form-denoting pin. Three footings are admitted, and each is one of
+// the shapes the shadow is claimed for (scope sets measured):
 //
 //   - THE REFERENCE HAS NO SCOPES. A scope-less identifier can only have been
 //     written at top level (CompileSymbol's empty-scope fast path states the
