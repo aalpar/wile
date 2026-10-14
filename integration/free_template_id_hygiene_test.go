@@ -17,9 +17,11 @@ package integration_test
 import (
 	"context"
 	"testing"
+	"testing/fstest"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -259,6 +261,53 @@ func TestFreeTemplateIdHygiene_Adversarial(t *testing.T) {
 			result, err := engine.EvalMultiple(context.Background(), tc.code)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.SchemeString(), qt.Equals, tc.expected)
+		})
+	}
+}
+
+// TestFreeTemplateIdHygiene_RenamedUnquoteViaLibraryTemplate is I028: a template
+// whose unquote is spelled through a library's import rename keeps it a marker
+// at the use site, where uq is unbound. The operand is live: n becomes 1, and the
+// set! of f is visible to the inliner's opaque scan, so (f) is 99.
+//
+// One row discriminates both walks: the compiler's quasiquote walk alone gives
+// (1 7) (the operand runs, the inliner keeps f's stale body), the opaque scan
+// alone gives (0 7). Racket and Petite Chez both answer (1 99). The plain-unquote
+// control separates a regression in the rename from one in quasiquote itself.
+func TestFreeTemplateIdHygiene_RenamedUnquoteViaLibraryTemplate(t *testing.T) {
+	const program = `(import (mklib))
+	  (let ((f (lambda () 7)) (n 0))
+	    (mk (begin (set! n 1) (set! f (lambda () 99))))
+	    (list n (f)))`
+	lib := func(marker, imports string) fstest.MapFS {
+		return fstest.MapFS{
+			"mklib.sld": &fstest.MapFile{Data: []byte(`(define-library (mklib)
+			  (export mk)
+			  (import ` + imports + `)
+			  (begin
+			    (define-syntax mk
+			      (syntax-rules () ((_ e) ` + "`" + `((` + marker + ` e)))))))`)},
+		}
+	}
+	tcs := []struct {
+		name string
+		fs   fstest.MapFS
+	}{
+		{"renamed_unquote_via_library_template", lib("uq", "(rename (scheme base) (unquote uq))")},
+		{"plain_unquote_control", lib("unquote", "(scheme base)")},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(),
+				wile.WithProfile(wile.KitchenSink),
+				wile.WithSourceFS(tc.fs),
+				wile.WithSourceFS(stdlib.FS),
+				wile.WithLibraryPaths("."))
+			c.Assert(err, qt.IsNil)
+			result, err := engine.EvalMultiple(context.Background(), program)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "(1 99)")
 		})
 	}
 }
