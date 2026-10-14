@@ -121,8 +121,8 @@ func invokeTransformerClosure(ctx context.Context, cls Closure, expanderCtx Expa
 		_, err := mc.applyForeign(c, args...)
 		if err != nil {
 			ReleaseSubContext(mc)
-			// mc has no handlers, so applyForeign's bridge turned a primitive's
-			// failure into an uncaught raise.
+			// mc has no handlers, so a failure applyForeign's bridge converts is an
+			// uncaught raise; one it does not (an arity mismatch) passes unmarked.
 			return nil, markExpansionRootEscape(ctx, werr.WrapForeignErrorf(err, "failed to apply transformer"))
 		}
 	default:

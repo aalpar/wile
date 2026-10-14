@@ -3933,8 +3933,9 @@ enough to rebuild the probes.
   already marked through `EvalTemplate`. A cancellation (`machine.CancelledBy`) stays unmarked.
   Absorbs the duplicate row "A raise escaping a procedural transformer under a runtime `eval`
   cannot be guarded", whose proposed demotion to an ordinary error would have lost the raised
-  object and the non-continuable re-raise. A primitive used as a transformer is marked too: its
-  failure becomes an escape at `applyForeign`'s bridge on a handlerless sub-context. Pinned by
+  object and the non-continuable re-raise. A primitive used as a transformer is marked too: a
+  failure `applyForeign`'s bridge converts is an escape on its handlerless sub-context (an arity
+  mismatch is not, and stays an ordinary error the `eval` primitive raises). Pinned by
   `TestExpansionRootRaiseIsCaughtByAGuardAroundEval` and
   `TestExpansionRootCancelledInAWaitIsNotRaisedInTheCallersHandlers`.
 - [ ] **A caught raise out of an expansion-time root skips the root's `dynamic-wind` after thunks**
@@ -3957,6 +3958,11 @@ enough to rebuild the probes.
   transformer's raise site is no longer in the error. Fix shape: carry continuability on
   `ErrExceptionEscape` and give this case its own message. Found by the code and errors lenses of
   this fix's crosscheck, 2026-10-13.
+- [ ] **Every transformer failure is labelled a `syntax-rules` failure** [Diagnostics, S]:
+  `expandMacroInvocation` (`expander_time_continuation.go`) wraps any `InvokeTransformer`
+  error as "syntax-rules transformer invocation failed", so a lambda, ER or primitive transformer's
+  raise reads as a `syntax-rules` one. Fix: drop "syntax-rules" from the wrap; check for tests
+  matching the text first. Found by the errors lens of this fix's remediation crosscheck, 2026-10-14.
 - [ ] **A host function that forwards an `Engine.Call` failure makes it uncatchable**
   [Correctness, S–M]: an uncaught failure in the callee root leaves `RunWithEscapeHandling` as an
   `*ErrExceptionEscape`; `Engine.callCallable` wraps it in a `RuntimeError` whose `Unwrap` keeps it,

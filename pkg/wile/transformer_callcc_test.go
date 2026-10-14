@@ -1006,8 +1006,8 @@ func newExpansionRootProbeEngine(t *testing.T) *wile.Engine {
 // TestExpansionRootRaiseIsCaughtByAGuardAroundEval: a transformer (a closure or a
 // primitive), and the expression a define-syntax evaluates, run on an
 // expansion-time root holding none of the caller's handlers, so an uncaught raise
-// there used to reach the embedder past a guard around the eval. It is raised in the caller's handlers
-// now, as Racket does, the raised object itself.
+// there used to reach the embedder past a guard around the eval. It is raised in
+// the caller's handlers now, as Racket does, the raised object itself.
 func TestExpansionRootRaiseIsCaughtByAGuardAroundEval(t *testing.T) {
 	const raising = `(import (for-syntax (scheme base))) (define-syntax m (lambda (stx) (raise 'boom)))`
 	for _, tc := range []struct {
@@ -1027,7 +1027,8 @@ func TestExpansionRootRaiseIsCaughtByAGuardAroundEval(t *testing.T) {
 		  (guard (e (#t (list 'caught (error-object? e)))) (eval '(m) (interaction-environment)))`,
 			"(caught #t)"},
 		{"primitive as a transformer", `(define-syntax m vector-length)
-		  (guard (e (#t (list 'caught (error-object? e)))) (eval '(m) (interaction-environment)))`,
+		  (guard (e (#t (list 'caught (string=? (substring (error-object-message e) 0 14) "vector-length:"))))
+		    (eval '(m) (interaction-environment)))`,
 			"(caught #t)"},
 		{"define-syntax expression", `(guard (e (#t (list 'caught e)))
 		  (eval '(begin (import (for-syntax (scheme base)))
