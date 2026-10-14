@@ -1884,7 +1884,7 @@ func (p *GlobalEnvironmentFrame) GetOwnGlobalBinding(gi *GlobalIndex) *Binding {
 // free template identifier carries in ResolvedBinding. nil means NONE — no pin,
 // a pin of another type, or a DEFERRED index (Env == nil), which names no slot
 // to read. This is the only place that knows the pin's representation;
-// pin_deref_sitecount_test.go holds everything else to it.
+// pkg/machine/compilation/pin_deref_ratchet_test.go holds everything else to it.
 func PinnedIndex(sym *syntax.SyntaxSymbol) *GlobalIndex {
 	gi, ok := sym.ResolvedBinding.(*GlobalIndex)
 	if !ok || gi == nil || gi.Env == nil {

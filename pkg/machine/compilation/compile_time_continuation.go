@@ -417,7 +417,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// GetOwnGlobalBinding's pinned-slot path, rather than GetGlobalBinding's
 	// re-walk: one lock, no re-hash, and no chance of a second walk landing on a
 	// different slot than the one whose scopes the guard below inspects. The
-	// Env != nil guard covers a DEFERRED index (NewDeferredGlobalIndex), which
+	// Env != nil guard covers a DEFERRED index (NewGlobalIndex), which
 	// resolveGlobal never produces but the type does not forbid.
 	coGI := p.env.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
 	if coGI != nil && coGI.Env != nil {
