@@ -563,23 +563,6 @@ func TestEnvironmentFrame_GetLocalBindingByIndex(t *testing.T) {
 	qt.Assert(t, binding.Value(), valuestest.SchemeEquals, val)
 }
 
-func TestEnvironmentFrame_SetGlobalBindingByIndex(t *testing.T) {
-	env := NewNamespaceFrame()
-
-	sym := values.NewSymbol("test-global")
-	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, syntax.Scopes{})
-
-	// SetGlobalBindingByIndex takes an int and a binding
-	newBinding := NewBinding(values.NewInteger(99), BindingTypeVariable)
-
-	// Get the index from the global environment's keys map
-	idx := env.global.keys[*gi.Index][0].slot
-	env.SetGlobalBindingByIndex(idx, newBinding)
-
-	binding := env.GetGlobalBinding(gi)
-	qt.Assert(t, binding.Value(), valuestest.SchemeEquals, values.NewInteger(99))
-}
-
 func TestEnvironmentFrame_LibraryRegistry(t *testing.T) {
 	env := NewNamespaceFrame()
 

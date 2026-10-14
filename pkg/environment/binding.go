@@ -317,7 +317,7 @@ func (p *atomicCell) updateMeta(fn func(*BindingMeta) bool) bool {
 // newGlobalBinding creates a binding whose value lives in an atomicCell, for
 // installation into a GlobalEnvironmentFrame where it may be read lock-free from
 // multiple threads. Every binding entering a global frame must go through this
-// (or ensureGlobalCell) so the "in a global frame => has a cell" invariant holds.
+// so the "in a global frame => has a cell" invariant holds.
 // scopes are the hygiene scope set the binding is created under; they become
 // part of its identity within the frame, so a macro-introduced top-level binder
 // and a user-written one of the same name stay distinct variables. The set is
@@ -337,22 +337,6 @@ func newGlobalBinding(value values.Value, bindingType BindingType, scopes syntax
 		cell:        newAtomicCellWithMeta(value, &BindingMeta{Scopes: scopes}),
 		bindingType: bindingType,
 	}
-}
-
-// ensureGlobalCell migrates a binding's value into an atomicCell if it does not
-// already have one, so it is safe to publish into a global frame. Must be called
-// before the *Binding becomes reachable from other threads (i.e. before it is
-// stored into the global bindings slice), so the migration itself is unraced.
-func (p *Binding) ensureGlobalCell() {
-	if p.cell != nil {
-		return
-	}
-	// Migrate BOTH value and meta into the cell: once cell != nil the plain
-	// fields are global-invisible (Value/Meta read only the cell), so leaving
-	// meta behind would silently drop this binding's scopes/provenance.
-	p.cell = newAtomicCellWithMeta(p.value, p.meta)
-	p.value = nil
-	p.meta = nil
 }
 
 // NewBinding creates a new binding with the given value and type.
