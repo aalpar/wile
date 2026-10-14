@@ -3614,13 +3614,11 @@ enough to rebuild the probes.
   the rest of the evaluation. Since P3.17 a `with-timeout` handler that runs because a wait in an
   escape's after thunk was cancelled sees the escaping continuation's parameterization (before, the
   handler never ran in that shape). Fix shape: scope the snapshot to the reinstalled segment.
-- [ ] **A library instantiation interrupted by a cancellation is memoized** [Correctness, S]:
-  `EnsureInstantiated` keeps the body's failure as the library's `instantiateErr`, so a body
-  stopped by an importer's `with-timeout` (or any ctx cancellation) makes every later import of
-  that library in the engine fail with the stale cancellation, and a guard cannot catch it (an
-  uncaught-condition carrier). Already so for a compute-bound body on HEAD; since P3.17 a body that
-  WAITS is cancelled too, where HEAD let its wait return and the body finish. Fix shape: do not
-  memoize a failure whose cause is a ctx cancellation.
+- [x] **A library instantiation interrupted by a cancellation is memoized** [Correctness, S,
+  **Done 2026-10-12, duplicate**]: fixed under its later row "A library body cancelled by a timeout
+  fails every later import" (`fix/library-abort-replay`), by the other fix shape: the cancellation
+  is still remembered (the body runs at most once) but as `ErrLibraryInstantiationCancelled`, which
+  a guard catches, not as the stale ctx error.
 - [x] **A guard catching a raise from a rootless `call/cc` inside an escape's after thunk fails
   with "exit procedure called outside dynamic extent"** [Correctness, S–M, **Done 2026-10-11**]:
   no timer needed.
@@ -3920,13 +3918,29 @@ enough to rebuild the probes.
   bootstrap's (`runBootstrapStx`) run under `RunWithinBoundary`, which also resumes a `call/cc`
   captured in the body; a tail `call/cc` there used to work only through the deleted sub-context
   mode, a non-tail one failed. Pinned by `TestControlInACompileTimeBody`.
-- [ ] **A library body's uncaught raise escapes a `guard` around the import** [Correctness, S]: the
-  raise leaves `EvalTemplate` as an `ErrExceptionEscape`, a control signal `applyCallableError`
-  passes through (`isControlSignal`, `foreign_closure.go`), so `(guard (e (#t 'caught)) (eval
-  '(begin (import (lib raiser)) x) env))` hands `boom` (body `(define x (raise 'boom))`) or a `car`
-  error to the embedder. HEAD too; the memoized-instantiation row meets this path only for a
-  cancellation. Fix shape: turn an uncaught escape from a library body into a condition at the
-  import.
+- [x] **A library body's uncaught raise escapes a `guard` around the import** [Correctness, S,
+  **Done 2026-10-12**, branch `fix/library-raise-escapes-guard`]: `EnsureInstantiated` marks a
+  body's uncaught raise that is not a cancellation (`machine.MarkUnlinkedRootEscape`), and the
+  foreign-call bridge (`applyCallableError`) raises its condition in the importer's handlers, the
+  raised object itself, as Chez and Racket do (the mechanism `thread-join!` uses for a joinee).
+  With no handler it goes on uncaught, its full chain under a SETTLED mark, so a bridge below a
+  running handler (which still sees that handler installed) does not hand it back: under that
+  mutant the handler ran twice.
+  Pinned by `TestLibraryBodyRaiseIsCaughtByAGuardAroundTheImport` and
+  `TestLibraryBodyRaiseInAHandlerReachesTheOuterHandlersOnce` (`pkg/wile/transformer_callcc_test.go`).
+- [ ] **A guard whose clauses miss reports the guard's location, not the raise's** [Diagnostics,
+  S]: `(guard (e ((string? e) 'no)) (f))` with `f` = `(car 5)` reports the guard's line; the
+  re-raise's carrier records its own site and the `NativeError`'s own location is not what
+  renders. Since `fix/library-raise-escapes-guard` an import whose body raised takes this path
+  too, so a missed guard around `(environment '(lib))` reports the import site where master
+  reported `lib.sld:L:C`. Found by crosscheck 2026-10-13.
+- [ ] **A macro transformer's uncaught raise escapes a `guard` around `eval`** [Correctness, S]:
+  `(import (for-syntax (scheme base))) (define-syntax m (lambda (stx) (raise 'boom)))` then
+  `(guard (e (#t (list 'caught e))) (eval '(m) (interaction-environment)))` reports `boom` to the
+  embedder; Racket answers `(caught boom)`. Same class as the library-body row above: the
+  transformer runs on a root not linked to the caller's chain (`invokeTransformerClosure`,
+  `pkg/machine/macro_evaluator.go`). Fix shape: mark its escape with `MarkUnlinkedRootEscape`
+  where the expansion error leaves for the caller. Found 2026-10-12.
 - [ ] **A host function that forwards an `Engine.Call` failure makes it uncatchable**
   [Correctness, S–M]: an uncaught failure in the callee root leaves `RunWithEscapeHandling` as an
   `*ErrExceptionEscape`; `Engine.callCallable` wraps it in a `RuntimeError` whose `Unwrap` keeps it,
@@ -3935,6 +3949,10 @@ enough to rebuild the probes.
   error, ends the evaluation with `boom` (likewise for `car`, `error` and `with-exception-handler`);
   a host returning its own error is caught. HEAD too; `thread-join!` already turns a joinee's
   uncaught condition into a catchable one. Fix shape: re-raise `escape.Condition` in the caller.
+  Since `fix/library-raise-escapes-guard` one form is caught by accident: a host forwarding
+  `EvalMultiple("(import (lib))")` of a library whose body raised hands back an error whose mark
+  is still live (no bridge on the callee root settled it), so the caller's guard catches it, while
+  forwarding `(environment '(lib))` does not. The fix here should make the two agree.
 
 ### FCA-Derived
 

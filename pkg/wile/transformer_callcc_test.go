@@ -893,7 +893,101 @@ func TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise(t *testing.T) {
 		qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsFalse, qt.Commentf("%v", err))
 		var escape *machine.ErrExceptionEscape
 		qt.Assert(t, errors.As(err, &escape), qt.IsTrue, qt.Commentf("%v", err))
+		qt.Assert(t, escape.Source.Location(), qt.Equals, "probe/user.sld:5:10")
 		msgs = append(msgs, err.Error())
 	}
 	qt.Assert(t, msgs[1], qt.Equals, msgs[0])
+}
+
+// TestLibraryBodyRaiseIsCaughtByAGuardAroundTheImport: a library body runs on a
+// root that holds none of the importer's handlers, so its uncaught raise used
+// to reach the embedder past a guard around the import. It is raised in the
+// importer's handlers now, as Chez and Racket do, the raised object itself, on
+// every import (later ones see the remembered raise).
+func TestLibraryBodyRaiseIsCaughtByAGuardAroundTheImport(t *testing.T) {
+	eng := newLibraryBodyProbeEngine(t, `(raise 'boom)`)
+	_, err := eng.EvalMultiple(context.Background(), `(import (probe box))`)
+	qt.Assert(t, err, qt.IsNil)
+	for _, src := range []string{
+		`(guard (e (#t (list 'caught e))) (environment '(probe user)))`,
+		`(guard (e (#t (list 'caught e))) (environment '(probe user)))`,
+		`(guard (e (#t (list 'caught e))) (eval '(begin (import (probe user)) used) (environment '(scheme base))))`,
+	} {
+		v, err := eng.EvalMultiple(context.Background(), src)
+		qt.Assert(t, err, qt.IsNil, qt.Commentf("%s", src))
+		qt.Assert(t, v.SchemeString(), qt.Equals, "(caught boom)", qt.Commentf("%s", src))
+	}
+	// Uncaught, the raise keeps the import site's wraps, not only the body's.
+	_, err = eng.EvalMultiple(context.Background(), `(environment '(probe user))`)
+	var outer *werr.ForeignError
+	qt.Assert(t, errors.As(err, &outer), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, outer.Error(), qt.Matches, `(?s)environment: failed to load \(probe user\).*`)
+	cell, ok := eng.Get("cell")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 0)")
+}
+
+// TestLibraryBodyRaiseInAHandlerReachesTheOuterHandlersOnce: an import inside a
+// running handler raises the body's condition in that handler's outer handlers,
+// once, not in the handler itself. The raise leaves the handler through the
+// bridges of the frames below it, which still see the handler installed; were
+// the escape still marked there, each would hand it back to the handler, which
+// imports again.
+func TestLibraryBodyRaiseInAHandlerReachesTheOuterHandlersOnce(t *testing.T) {
+	eng := newLibraryBodyProbeEngine(t, `(raise 'boom)`)
+	v, err := eng.EvalMultiple(context.Background(), `(import (probe box))
+	  (list
+	    (guard (e (#t (list 'outer e)))
+	      (with-exception-handler
+	        (lambda (c) (vector-set! cell 1 (+ 1 (vector-ref cell 1))) (environment '(probe user)))
+	        (lambda () (raise 'x))))
+	    (vector-ref cell 1))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, v.SchemeString(), qt.Equals, "((outer boom) 1)")
+
+	// try-callback's own bridge is the frame below the running handler: its
+	// activation is under with-exception-handler, not under the raise, so it still
+	// sees the handler installed.
+	qt.Assert(t, eng.RegisterFunc("try-callback", func(f func(int64) (int64, error)) (int64, error) {
+		return f(0)
+	}), qt.IsNil)
+	_, err = eng.EvalMultiple(context.Background(), `
+	  (with-exception-handler
+	    (lambda (c) (vector-set! cell 1 (+ 1 (vector-ref cell 1))) (environment '(probe user)))
+	    (lambda () (try-callback (lambda (n) (raise 'x)))))`)
+	var escape *machine.ErrExceptionEscape
+	qt.Assert(t, errors.As(err, &escape), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, escape.Condition.SchemeString(), qt.Equals, "boom")
+	cell, ok := eng.Get("cell")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 2)")
+
+	// The condition is raised non-continuable: a handler that returns is an error,
+	// not the import's value.
+	_, err = eng.EvalMultiple(context.Background(), `
+	  (with-exception-handler (lambda (c) 42) (lambda () (environment '(probe user))))`)
+	qt.Assert(t, err, qt.ErrorMatches, `(?s).*non-continuable.*`)
+}
+
+// TestLibraryBodyCancelledInAWaitIsNotRaisedInTheImportersHandlers: a body
+// whose wait the importer's ctx cancelled ends in an uncaught raise, but the
+// cancellation is the importer's own ctx ending, so it is not marked and a guard
+// around the import does not run.
+func TestLibraryBodyCancelledInAWaitIsNotRaisedInTheImportersHandlers(t *testing.T) {
+	eng := newLibraryBodyProbeEngine(t, `((vector-ref hook 0))`)
+	cctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	qt.Assert(t, eng.RegisterFunc("cancel-first-import!", func() {
+		cancel()
+	}), qt.IsNil)
+	_, err := eng.EvalMultiple(context.Background(), `(import (probe box))
+	  (vector-set! hook 0 (lambda () (cancel-first-import!) (thread-sleep! 5)))`)
+	qt.Assert(t, err, qt.IsNil)
+	_, err = eng.EvalMultiple(cctx, `
+	  (guard (e (#t (vector-set! cell 1 (+ 1 (vector-ref cell 1))) 'caught))
+	    (environment '(probe user)))`)
+	qt.Assert(t, errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("%v", err))
+	cell, ok := eng.Get("cell")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 0)")
 }
