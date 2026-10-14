@@ -16,6 +16,7 @@ package integration_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -113,8 +114,56 @@ func TestCoreFormDenotationExceptIfTerminates(t *testing.T) {
 	result, err := engine.EvalMultiple(ctx, `(import (except (scheme base) if))
 	  (define-syntax if (syntax-rules () ((_ c a b) (cond (c a) (else b)))))
 	  (if #t 1 2)`)
+	c.Assert(errors.Is(err, context.DeadlineExceeded), qt.IsFalse, qt.Commentf("the if → cond → if cycle is back"))
 	c.Assert(err == nil, qt.IsTrue)
 	c.Assert(result.SchemeString(), qt.Equals, "1")
+}
+
+// TestCoreFormDenotationTemplateLocalBinder: a template that binds a core-form
+// name itself shadows the core form it was written beside, so the pin does not
+// outrank the template's own local binder. Expected column: Racket 9.2 and Chez
+// 10.4.1, and master before P4.3.
+func TestCoreFormDenotationTemplateLocalBinder(t *testing.T) {
+	tcs := []struct {
+		name     string
+		program  string
+		expected string
+	}{
+		{
+			name:     "let_bound_if",
+			program:  `(define-syntax m (syntax-rules () ((_ x) (let ((if (lambda a (list 'proc a)))) (if x 1 2))))) (m #t)`,
+			expected: "(proc (#t 1 2))",
+		},
+		{
+			name:     "let_bound_quote",
+			program:  `(define-syntax m (syntax-rules () ((_ x) (let ((quote (lambda a (list 'proc a)))) (quote x))))) (m 5)`,
+			expected: "(proc (5))",
+		},
+		{
+			name:     "lambda_parameter_if",
+			program:  `(define-syntax m (syntax-rules () ((_ x) ((lambda (if) (if x)) (lambda (v) (* v 10)))))) (m 5)`,
+			expected: "50",
+		},
+		{
+			name:     "let_bound_quote_two_args",
+			program:  `(define-syntax m (syntax-rules () ((_ x) (let ((quote list)) (quote x 2))))) (m 5)`,
+			expected: "(5 2)",
+		},
+		{
+			name:     "internal_define_if",
+			program:  `(define-syntax m (syntax-rules () ((_ x) (let () (define (if a) (* a 3)) (if x))))) (m 5)`,
+			expected: "15",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := coreFormEngine(c, nil)
+			result, err := engine.EvalMultiple(context.Background(), tc.program)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.expected)
+		})
+	}
 }
 
 // TestCoreFormDenotationSyntaxLocalValue: syntax-local-value on a template's if,

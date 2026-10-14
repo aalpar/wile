@@ -50,29 +50,27 @@ import (
 // this test exists to refuse. The SealedBindingAt and LookupPrimitiveExpander
 // calls the fix keeps are untouched, so the assertion goes green only when the
 // binding is passed in rather than re-derived.
-//
-// lookupMacroBinding is held to the window the passed-in head depends on: no
-// binding is created between its resolution and the caller's use of it
-// (CLAUDE.local.md: a *Binding is an identity only inside a window that creates
-// none), so neither function may call EnsureLocalBinding or AddBinding.
 func TestHeadPrimitiveExpanderDoesNotReResolve(t *testing.T) {
-	c := qt.New(t)
+	assertNoSelectorCalls(qt.New(t), "expander_time_continuation.go", "lookupHeadPrimitiveExpander",
+		append([]string{"GetBinding", "TryGetBinding", "PinnedBinding", "PinnedIndex"}, bindingCreators...))
+}
 
-	const path = "expander_time_continuation.go"
-	creators := []string{"EnsureLocalBinding", "AddBinding"}
-	resolvers := append([]string{"GetBinding", "TryGetBinding", "PinnedBinding", "PinnedIndex"}, creators...)
-	tcs := []struct {
-		target    string
-		forbidden []string
-	}{
-		{"lookupHeadPrimitiveExpander", resolvers},
-		{"lookupMacroBinding", creators},
-	}
-	for _, tc := range tcs {
-		c.Run(tc.target, func(c *qt.C) {
-			assertNoSelectorCalls(c, path, tc.target, tc.forbidden)
-		})
-	}
+// TestMacroLookupCreatesNoBinding pins the window the head lookupMacroBinding
+// passes out depends on: no binding is created between its resolution and the
+// caller's use of it (CLAUDE.local.md: a *Binding is an identity only inside a
+// window that creates none). The check sees direct calls only; a creator
+// reached through a helper is not caught.
+func TestMacroLookupCreatesNoBinding(t *testing.T) {
+	assertNoSelectorCalls(qt.New(t), "expander_time_continuation.go", "lookupMacroBinding", bindingCreators)
+}
+
+// bindingCreators are the EnvironmentFrame methods that create a binding.
+var bindingCreators = []string{
+	"EnsureLocalBinding",
+	"MaybeCreateLocalBinding",
+	"PreAllocateBindings",
+	"MaybeCreateOwnGlobalBinding",
+	"DefineOwnGlobal",
 }
 
 // assertNoSelectorCalls fails when the FuncDecl named target in path calls a

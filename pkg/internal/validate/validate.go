@@ -212,15 +212,17 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 // validateCall. An imported re-export of a special form still denotes the form;
 // only a VARIABLE shadows one.
 //
-// RESOLVING BY SCOPES IS NOT ENOUGH ON ITS OWN, because a special form has no
-// binding to pin. Wile keeps a free template identifier hygienic by recording
-// its definition-site *GlobalIndex on the symbol (SyntaxSymbol.ResolvedBinding,
-// consulted by CompileSymbol.tryResolvedBinding), and collectFreeIdentifiers
-// records nothing when the name was unbound at definition time — which is
-// exactly the case for a special form. So a template's `set!` arrives here
-// carrying only an intro scope, and a user's ∅-scoped top-level (define set! …)
-// satisfies ScopesCompatible(∅, {intro}) and would capture it: (inc! n) with
-// inc! expanding to (set! v (+ v 1)) silently discarded the assignment.
+// RESOLVING BY SCOPES IS NOT ENOUGH ON ITS OWN for a template head that carries
+// no form-denoting pin. Wile keeps a free template identifier hygienic by
+// recording its definition-site *GlobalIndex on the symbol
+// (SyntaxSymbol.ResolvedBinding). Under the ordinary registry a special-form name
+// is an ambient keyword binding, so a template's set! is pinned to it and
+// resolveFormHead answers with the pin before this function runs. What still
+// arrives here unpinned is a name that was unbound where the template was
+// written (a registry without ambient keywords): it carries only an intro scope,
+// and a user's ∅-scoped top-level (define set! …) satisfies
+// ScopesCompatible(∅, {intro}) and would capture it: (inc! n) with inc! expanding
+// to (set! v (+ v 1)) silently discarded the assignment.
 // referenceReachesBinderDirectly is the guard; see its own comment for the
 // three footings it admits and the one it gives up.
 //
@@ -295,13 +297,19 @@ func headDenotesSpecialForm(
 // both mean "the spelling decides", which is what headDenotesSpecialForm's nil
 // arm and validateForm's candidacy key already give.
 //
-// A definition-site pin that denotes a form decides first, as it does in the
-// expander's head dispatch and in markerName: a template's head spelled through a
-// rename that exists only where the template was written (a library's
-// (rename (scheme base) (if wif))) is unbound at the use site, and quote's expander
-// arm passes it through untouched, so this is the only site that can classify it
-// (I132). A pin that denotes no form (a variable) leaves the use-site resolution
-// in charge, as before.
+// A local variable the head reaches decides first: a template's own
+// (let ((if f)) (if x)) shadows the core if it was written beside, as the
+// expander's hasLocalVariableBinding check already makes it. Otherwise a
+// definition-site pin that denotes a form decides: a template's head spelled
+// through a rename that exists only where the template was written (a library's
+// (rename (scheme base) (if wif))) is unbound at the use site, and quote's
+// expander arm passes it through untouched, so this is the only site that can
+// classify it (I132). A pin that denotes no form (a variable) leaves the
+// use-site resolution in charge.
+//
+// "Denotes a form" here is DenotedForm != "", which a *SyntaxCompiler pin also
+// satisfies. The expander's lookupMacroBinding lets that pin fall through to the
+// use-site macro lookup instead, so the two sites agree on every pin but that one.
 //
 // GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
 // tie. That is deliberately not caught here: it reaches the compile path's
@@ -314,11 +322,15 @@ func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, s
 	if env.GlobalEnvironment() == nil {
 		return nil
 	}
+	scopes := syntax.ScopesOf(sym.Scopes())
+	if env.HasLocalVariableBinding(symVal, scopes) {
+		return env.GetBinding(symVal, scopes)
+	}
 	pinned := environment.PinnedBinding(sym)
 	if environment.DenotedForm(pinned) != "" {
 		return pinned
 	}
-	return env.GetBinding(symVal, syntax.ScopesOf(sym.Scopes()))
+	return env.GetBinding(symVal, scopes)
 }
 
 // referenceReachesBinderDirectly reports whether the reference sym reaches the
@@ -332,7 +344,7 @@ func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, s
 // does not. A template's special-form identifier does carry one, and
 // resolveFormHead returns it when it denotes a form, so validateForm's
 // denoted != "" never reaches this function for it: what arrives here is a head
-// with no form-denoting pin. Three footings are admitted, and each is one of
+// with no form-denoting pin, or one a local variable shadows. Three footings are admitted, and each is one of
 // the shapes the shadow is claimed for (scope sets measured):
 //
 //   - THE REFERENCE HAS NO SCOPES. A scope-less identifier can only have been
