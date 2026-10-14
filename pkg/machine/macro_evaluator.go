@@ -60,11 +60,22 @@ func (p *vmMacroEvaluator) EvalTemplate(ctx context.Context, tpl *NativeTemplate
 	err := mc.RunWithinBoundary()
 	if err != nil {
 		ReleaseSubContext(mc)
-		return nil, err
+		return nil, markExpansionRootEscape(ctx, err)
 	}
 	q := mc.GetValue()
 	ReleaseSubContext(mc)
 	return q, nil
+}
+
+// markExpansionRootEscape marks err as an unlinked root's uncaught raise: every
+// root this evaluator runs (a transformer, a phase-1 expression, a library body)
+// runs synchronously for whoever is expanding but holds none of its handlers. A
+// cancellation is the caller's own ctx ending and stays uncaught everywhere.
+func markExpansionRootEscape(ctx context.Context, err error) error {
+	if CancelledBy(ctx, err) {
+		return err
+	}
+	return MarkUnlinkedRootEscape(err)
 }
 
 // InvokeTransformer delegates to invokeTransformerClosure.
@@ -96,7 +107,7 @@ func invokeTransformerClosure(ctx context.Context, cls Closure, expanderCtx Expa
 		err = mc.RunWithinBoundary()
 		if err != nil {
 			ReleaseSubContext(mc)
-			return nil, err
+			return nil, markExpansionRootEscape(ctx, err)
 		}
 	case *ForeignClosure:
 		mc = acquireSubContext()

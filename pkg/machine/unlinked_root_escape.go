@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"errors"
 
 	"github.com/aalpar/wile/pkg/values"
@@ -22,7 +23,8 @@ import (
 
 // unlinkedRootEscape marks an uncaught raise out of a root that ran
 // synchronously for the caller but is not linked to its chain, so it searched
-// none of the caller's handlers: a library body being instantiated. Its
+// none of the caller's handlers: an expansion-time root, which runs a macro
+// transformer, a phase-1 expression or a library body. Its
 // *ErrExceptionEscape means "uncaught on that root", not "uncaught": the first
 // foreign-call bridge it reaches raises the condition in the caller's handlers
 // (applyCallableError), the mechanism thread-join! uses for a joinee's outcome.
@@ -48,6 +50,16 @@ func MarkUnlinkedRootEscape(err error) error {
 		return err
 	}
 	return &unlinkedRootEscape{err: err, escape: escape}
+}
+
+// CancelledBy reports whether err is ctx ending: ctx has ended and err is its
+// Err or its Cause. A primitive's own context.DeadlineExceeded in a live ctx, or
+// a failure that lands after ctx ended but before the VM noticed, is not.
+func CancelledBy(ctx context.Context, err error) bool {
+	if ctx.Err() == nil {
+		return false
+	}
+	return errors.Is(err, ctx.Err()) || errors.Is(err, context.Cause(ctx))
 }
 
 // Error implements the error interface.
