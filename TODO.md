@@ -158,9 +158,9 @@ because the citation is what `make indexlint` counts:
 | `2026-07-20-scope-keyed-tier1-remediation.md` | **Partially implemented** (2026-07-21) |
 | `2026-07-28-alocal-capture-safe-proof-for-locals.md` | Phases 1–4 **DONE** (1–3 committed on `feat/callback-conditional-capture`); 19/68 → 42/68 capture-safe stamps, reclaim verdicts unchanged at 19/68 as predicted. Phase 5 (Lever B) open. Prerequisite `47c27f72` must land first or the two conflict textually |
 | `2026-08-01-scheme-deadline-and-cancellation-cause.md` | Phase 1 **impl-ready**; Phase 2 designed and **gated** on the plan's scoping decision. Exposes the ambient `context.Context`'s deadline and cancellation cause to Scheme |
-| `2026-09-22-defect-closeout-impl.md` | **HUB** of the defect-closeout arc, derived from `2026-09-20-defect-closeout-design.md`. **Split into 11 files 2026-10-02** (one per phase, plus the audit) because the single file had reached 5,220 lines; task IDs, branch names and every word unchanged. Carries the method, the phase map and the first branch. **38 of 97 tasks landed**: P1 all ten, P2 all five, P3 all eighteen (P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` merged 2026-10-03; P3.16 `f94806a8` merged 2026-10-04; P3.17 `4ea9b5b5` and `231d3d95` merged 2026-10-10; P3.18 `24e3b23e`, reduced to a delete, merged 2026-10-14), P4.1 (`669c7b23`, merged 2026-10-14), P4.2 (`3721b540`, merged 2026-10-14), P4.3 (`35e8866a` + `e6ee81c9`, merged 2026-10-14), P4.4 (`fix/syntax-case-whole-clause-patterns`, 2026-10-15), P8.3. The plan's own task records are the status of record — P1's and P2's landings are in the tree but NOT written into their task records, and P1's branch names differ from its table |
+| `2026-09-22-defect-closeout-impl.md` | **HUB** of the defect-closeout arc, derived from `2026-09-20-defect-closeout-design.md`. **Split into 11 files 2026-10-02** (one per phase, plus the audit) because the single file had reached 5,220 lines; task IDs, branch names and every word unchanged. Carries the method, the phase map and the first branch. **39 of 97 tasks landed**: P1 all ten, P2 all five, P3 all eighteen (P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` merged 2026-10-03; P3.16 `f94806a8` merged 2026-10-04; P3.17 `4ea9b5b5` and `231d3d95` merged 2026-10-10; P3.18 `24e3b23e`, reduced to a delete, merged 2026-10-14), P4.1 (`669c7b23`, merged 2026-10-14), P4.2 (`3721b540`, merged 2026-10-14), P4.3 (`35e8866a` + `e6ee81c9`, merged 2026-10-14), P4.4 (`fix/syntax-case-whole-clause-patterns`, 2026-10-15), P4.5 (`fix/quasi-operand-expansion`, 2026-10-15), P8.3. The plan's own task records are the status of record — P1's and P2's landings are in the tree but NOT written into their task records, and P1's branch names differ from its table |
 | `2026-09-22-defect-closeout-audit.md` | **Read once, before the first branch.** The cross-phase audit, five topics: what serializes behind P2's merge (52 of the 82 tasks in P3–P9, measured), which edits two phases both claim, the six fault settlements (A2, C6, D1–D4), the citations and anchors that do not resolve (X1–X6, E1/E1b), and which gates go green without a fix. Fault labels are cited from the phase files, so they must not be renumbered |
-| `2026-09-22-defect-closeout-P4.md` | The expander residue: a definition-site pin decides the form, and operands get expanded. **4/8** (P4.1 `669c7b23`, P4.2 `3721b540`, P4.3 `35e8866a`, P4.4 `fix/syntax-case-whole-clause-patterns`), all after P2's window closes (unconditional). P4.7 is a decision |
+| `2026-09-22-defect-closeout-P4.md` | The expander residue: a definition-site pin decides the form, and operands get expanded. **5/8** (P4.1 `669c7b23`, P4.2 `3721b540`, P4.3 `35e8866a`, P4.4 `fix/syntax-case-whole-clause-patterns`, P4.5 `fix/quasi-operand-expansion`), all after P2's window closes (unconditional). P4.7 is a decision |
 | `2026-09-22-defect-closeout-P5.md` | The unit boundary — an included file belongs to the enclosing expansion and validation unit — plus engine-scoped state and the library-env costs. **0/13**, all after P2's window closes (unconditional). P5.7 is a decision |
 | `2026-09-22-defect-closeout-P6.md` | The value surface answers at its edges instead of raising, splitting or silently rounding. **0/15**; five window-constrained, ten free after the registry/core carve-out. P6.7, P6.10, P6.11, P6.13, P6.15 are decisions |
 | `2026-09-22-defect-closeout-P7.md` | Provenance: four places that discard a fact the pipeline was already holding stop discarding it (port name, port read position, intro-scope label, origin stamp). **0/7**; T1–T5 before-or-after the window, T6 after, T7 unconstrained |
@@ -1084,6 +1084,24 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   nothing at the compiled use site, so neither `markerName` nor the compiler's `headFormName` sees
   a marker there. Both walks agree, so this is a conformance gap, not the soundness hole the
   branch fixed — Racket fires the renamed unquote through the same shape.
+
+- [ ] **The opaque scan cannot see a `set!` a macro template introduces** [High, M, filed
+  2026-10-15 with P4.5 I144]: the opaque scan over-approximates every symbol in an evaluated
+  position of the raw syntax (`opaque_subtree.go`), which covers a macro whose `set!` target is
+  written in the operand, but not one whose template names the target itself. Such a use expands
+  at compile time, after validation, so the inliner keeps the stale body. Each position, with
+  `(let ((f (lambda () 7))) (define-syntax m (syntax-rules () ((_) (set! f (lambda () 99))))) <P>
+  (f))`; Chez and Racket answer `99`, and so does `(m)` written directly:
+  - `(cond-expand (else (m)))`: `7`, live on master.
+  - `` `(,(m)) ``: `7`. Master raised "no such binding m"; P4.5 expands the operand, so it reaches
+    the hole.
+  - `(syntax-case (m) () (_ 1))`: `7`, same history as the quasiquote row; `with-syntax`'s RHS
+    likewise.
+  - `include` of a file holding `(m)`: unmeasured; the row below already covers the position.
+
+  The fix is the one the scan's own doc rules out a cheap version of: either expand these
+  positions before validation, or treat a macro use in one as an unknown set! of every captured
+  binding. Not folded into P4.5, which would widen a three-site fix into a walk redesign.
 
 - [ ] **`validateInclude` never reads the included file** [Medium, M, filed 2026-09-15 during the
   renamed-inner-positions whole-branch review]: `validateInclude`

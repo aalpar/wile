@@ -71,6 +71,14 @@ type quasiKeywords struct {
 	// 12-run interleaved). It also made quasiKeywords non-comparable, which a
 	// struct of four names and two flags has no reason to be.
 	env *environment.EnvironmentFrame
+
+	// expander expands the operand an unquote or splice fires at depth 1. The
+	// expander passes a quasi template through unexpanded (it cannot know which
+	// parts are data), so the operand reaches this walk raw, and returning it raw
+	// handed `,(when #t 2) to the compiler as a call to an unbound `when`. nil
+	// returns operands raw: the package-level tables, and the needs-runtime walk,
+	// which never fires one. Built once per expansion, not per operand.
+	expander *ExpanderTimeContinuation
 }
 
 var quasiquoteKW = quasiKeywords{
@@ -232,6 +240,19 @@ func (p quasiKeywords) resolvedBy(env *environment.EnvironmentFrame) quasiKeywor
 	q := p
 	q.env = env
 	return q
+}
+
+// operand returns the expression a depth-1 unquote or splice fires: v expanded,
+// so it is an ordinary expression like any other the compiler receives.
+func (p quasiKeywords) operand(v syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	if p.expander == nil {
+		return v, nil
+	}
+	q, err := p.expander.ExpandExpression(v)
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(err, "%s: error expanding an operand", p.nesting)
+	}
+	return q, nil
 }
 
 // headName returns the marker name a head carries: what it DENOTES when this
@@ -512,10 +533,10 @@ func (p *CompileTimeContinuation) expandQuasi(
 			switch denotedName {
 			case kw.unquote:
 				// The escape. Depth 1 is where an unquote fires, and it yields
-				// the RAW argument: `,x is x, not an expansion of x.
+				// the argument as an expression, not as template: `,x is x.
 				if depth == 1 && hasSyntaxArity(v, 2) {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					return cdr.SyntaxCar(), nil
+					return kw.operand(cdr.SyntaxCar())
 				}
 				return p.rewrapQuasiForm(ctx, v, carSymName, depth-1, kw, g)
 
@@ -633,7 +654,11 @@ func (p *CompileTimeContinuation) expandQuasiList(
 				flushRun()
 				if hasSyntaxArity(carPair, 2) {
 					cdrPair := carPair.SyntaxCdr().(*syntax.SyntaxPair)
-					appendArgs = append(appendArgs, cdrPair.SyntaxCar())
+					spliced, err := kw.operand(cdrPair.SyntaxCar())
+					if err != nil {
+						return nil, err
+					}
+					appendArgs = append(appendArgs, spliced)
 					continue
 				}
 				// Malformed: taken as an ordinary element, but the run before it

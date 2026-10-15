@@ -90,8 +90,11 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 		if !ok || rest.IsEmptyList() {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: each binding must be (pattern expr)"))
 		}
-		expr = rest.SyntaxCar()
-		exprs = append(exprs, expr)
+		expanded, err := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator).ExpandExpression(rest.SyntaxCar())
+		if err != nil {
+			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "with-syntax: error expanding binding expression"))
+		}
+		exprs = append(exprs, expanded)
 
 		// Move to next binding
 		cdr := current.SyntaxCdr()
@@ -118,17 +121,15 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 	// Build the clause: ((pattern ...) (begin body ...))
 	clause := buildQuasiSyntaxList(srcCtx, patternList, bodyBegin)
 
-	// Build the full syntax-case form:
-	// (syntax-case (list expr ...) () ((pattern ...) (begin body ...)))
-	syntaxCaseForm := buildQuasiSyntaxList(srcCtx,
-		syntax.NewSyntaxSymbol("syntax-case", srcCtx),
+	// The operands of (syntax-case (list expr ...) () ((pattern ...) (begin body ...))),
+	// compiled without re-expanding the input: the binding expressions are
+	// already expanded, and the synthesized list head must not reach the expander.
+	syntaxCaseArgs := buildQuasiSyntaxList(srcCtx,
 		listExpr,
 		syntax.SyntaxEmptyList, // empty literals list
 		clause,
 	)
-
-	// Compile the transformed form
-	return p.CompileExpression(ctctx, syntaxCaseForm)
+	return p.compileSyntaxCase(ctctx, syntaxCaseArgs, false)
 }
 
 // compileWithSyntaxBody compiles the body of with-syntax when there are no bindings.
