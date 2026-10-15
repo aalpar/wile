@@ -59,18 +59,22 @@ func TestHeadPrimitiveExpanderDoesNotReResolve(t *testing.T) {
 // passes out depends on: no binding is created between its resolution and the
 // caller's use of it (CLAUDE.local.md: a *Binding is an identity only inside a
 // window that creates none). The check sees direct calls only; a creator
-// reached through a helper is not caught.
+// reached through a helper is not caught, and NextPhase() is one such path: a
+// first visit to a phase installs that phase's bulk rows (EnsureMacroPhaseRows).
 func TestMacroLookupCreatesNoBinding(t *testing.T) {
 	assertNoSelectorCalls(qt.New(t), "expander_time_continuation.go", "lookupMacroBinding", bindingCreators)
 }
 
-// bindingCreators are the EnvironmentFrame methods that create a binding.
+// bindingCreators are the EnvironmentFrame and GlobalEnvironmentFrame methods
+// that create a binding.
 var bindingCreators = []string{
 	"EnsureLocalBinding",
 	"MaybeCreateLocalBinding",
 	"PreAllocateBindings",
 	"MaybeCreateOwnGlobalBinding",
 	"DefineOwnGlobal",
+	"CreateGlobalBindingAt",
+	"CreateImportedGlobalBindingAt",
 }
 
 // assertNoSelectorCalls fails when the FuncDecl named target in path calls a

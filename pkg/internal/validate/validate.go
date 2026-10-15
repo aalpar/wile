@@ -344,8 +344,9 @@ func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, s
 // does not. A template's special-form identifier does carry one, and
 // resolveFormHead returns it when it denotes a form, so validateForm's
 // denoted != "" never reaches this function for it: what arrives here is a head
-// with no form-denoting pin, or one a local variable shadows. Three footings are admitted, and each is one of
-// the shapes the shadow is claimed for (scope sets measured):
+// with no form-denoting pin, or one a local variable shadows. Three footings are
+// admitted, and each is one of the shapes the shadow is claimed for (scope sets
+// measured):
 //
 //   - THE REFERENCE HAS NO SCOPES. A scope-less identifier can only have been
 //     written at top level (CompileSymbol's empty-scope fast path states the
