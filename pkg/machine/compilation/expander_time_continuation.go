@@ -415,7 +415,12 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	// (I133), and lets a template's renamed wif dispatch as if where wif is unbound. It
 	// also skips the demoted-ambient fallback below: on a procedural transformer body's
 	// phase-1 frame, a phase-0 (define-syntax if …) used to win over a pinned core if, and
-	// the core form now does. Any other pin type (a variable) falls through as before.
+	// the core form now does.
+	//
+	// A Variable pin stops the search the same way: the template meant that procedure,
+	// so the use is a call. Falling through let a use-site (define-syntax list …) at
+	// phase 1 capture the Scheme syntax layer's generated (list …) as the demoted
+	// ambient, which broke that define-syntax's own syntax-rules.
 	//
 	// A *SyntaxCompiler pin falls through too. Eight of those Go transformer forms
 	// (schemeSyntaxFormNames: syntax, syntax-rules, er-macro-transformer, …) are what
@@ -434,6 +439,9 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 		if !compiler {
 			return nil, pinned
 		}
+	}
+	if pinned != nil && pinned.BindingType() == environment.BindingTypeVariable {
+		return nil, pinned
 	}
 
 	// ARM 1, demoted: no pin resolved, so the ambient ∅-scoped match from the current

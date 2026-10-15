@@ -23,6 +23,17 @@ import (
 	"github.com/aalpar/wile/pkg/wile"
 )
 
+// syntaxLayers runs each row under both syntax layers. CI sets no
+// WILE_SYNTAX_FORMS, so a row run only under the default never sees the Scheme
+// layer.
+var syntaxLayers = []struct {
+	name string
+	opt  wile.EngineOption
+}{
+	{name: "go", opt: wile.WithGoSyntaxForms()},
+	{name: "scheme", opt: wile.WithSchemeSyntaxForms()},
+}
+
 // TestI144UnquotedOperandIsAnExpression: the operand an unquote, a splice or an
 // unsyntax fires is an ordinary expression, so a macro use in it expands. The
 // expander passes these templates through whole, and the compiler used to take
@@ -43,25 +54,32 @@ func TestI144UnquotedOperandIsAnExpression(t *testing.T) {
 		{name: "local_in_operand", program: "(let ((x 5)) `(1 ,(when #t x)))", expected: "(1 5)"},
 		{name: "unsyntax", program: "(syntax->datum #`(1 #,(when #t 2)))", expected: "(1 2)"},
 		{name: "syntax_case_input", program: "(syntax-case (when #t '(a)) () ((x) 1))", expected: "1"},
+		// A non-syntax input is matched as syntax: the Scheme layer's matcher
+		// tested it with syntax-pair? and refused every compound datum.
+		{name: "syntax_case_datum_input", program: "(syntax-case (list 1 2) () ((x y) (syntax->datum #'y)))", expected: "2"},
 		{name: "with_syntax_rhs", program: "(with-syntax ((a (when #t 1))) (syntax->datum (syntax a)))", expected: "1"},
 		// The depth rule: only the depth-1 operand fires, so only it expands.
 		// Expanding the inner one as well would render (unquote 2).
 		{name: "depth2_macro_operand", program: two + "`(1 `(2 ,(two)) ,(two))", expected: "(1 (quasiquote (2 (unquote (two)))) 2)"},
 	}
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			c := qt.New(t)
-			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
-			c.Assert(err, qt.IsNil)
-			result, err := engine.EvalMultiple(context.Background(), tc.program)
-			c.Assert(err, qt.IsNil)
-			c.Assert(result.SchemeString(), qt.Equals, tc.expected)
-		})
+	for _, l := range syntaxLayers {
+		for _, tc := range tcs {
+			t.Run(l.name+"/"+tc.name, func(t *testing.T) {
+				c := qt.New(t)
+				engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink), l.opt)
+				c.Assert(err, qt.IsNil)
+				result, err := engine.EvalMultiple(context.Background(), tc.program)
+				c.Assert(err, qt.IsNil)
+				c.Assert(result.SchemeString(), qt.Equals, tc.expected)
+			})
+		}
 	}
 }
 
-// TestI144Pins are green on master and stay green. Neither discriminates the
-// fix; each guards a regression the fix could introduce.
+// TestI144Pins are green on master under the Go layer and stay green; there
+// none discriminates the fix, and each guards a regression it could introduce.
+// The two capture rows were red under the Scheme layer, which a variable pin
+// did not protect.
 func TestI144Pins(t *testing.T) {
 	tcs := []struct {
 		name     string
@@ -77,20 +95,30 @@ func TestI144Pins(t *testing.T) {
 		},
 		// with-syntax synthesizes a (list expr …) head with no scopes. Were it
 		// expanded, a user list macro would capture it. Racket also answers 1.
+		// The Scheme layer's generated code calls list through a pinned
+		// identifier. A use-site define-syntax of a pinned VARIABLE captured it,
+		// so this define-syntax failed while compiling its own syntax-rules.
+		{
+			name:     "generated_list_not_captured",
+			program:  "(define-syntax list (syntax-rules () ((_ x ...) 'captured))) (define-syntax m (syntax-rules () ((_ x ...) '(x ...)))) (cons (list 1) (m 1 2))",
+			expected: "(captured 1 2)",
+		},
 		{
 			name:     "with_syntax_synthesized_list_not_captured",
 			program:  "(define-syntax list (syntax-rules () ((_ x ...) 'captured))) (with-syntax ((a 1)) (syntax->datum (syntax a)))",
 			expected: "1",
 		},
 	}
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			c := qt.New(t)
-			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
-			c.Assert(err, qt.IsNil)
-			result, err := engine.EvalMultiple(context.Background(), tc.program)
-			c.Assert(err, qt.IsNil)
-			c.Assert(result.SchemeString(), qt.Equals, tc.expected)
-		})
+	for _, l := range syntaxLayers {
+		for _, tc := range tcs {
+			t.Run(l.name+"/"+tc.name, func(t *testing.T) {
+				c := qt.New(t)
+				engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink), l.opt)
+				c.Assert(err, qt.IsNil)
+				result, err := engine.EvalMultiple(context.Background(), tc.program)
+				c.Assert(err, qt.IsNil)
+				c.Assert(result.SchemeString(), qt.Equals, tc.expected)
+			})
+		}
 	}
 }

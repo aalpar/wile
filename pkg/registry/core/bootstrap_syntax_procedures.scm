@@ -444,6 +444,9 @@
 ;; %syntax-case-transform: (syntax-case expr (lit ...) clause ...) with ellipsis
 ;; identifier ELL. The output is wrapped with the use-site form for provenance;
 ;; every generated identifier is already syntax, so the wrap adds no scopes.
+;; The input goes through datum->syntax #f, which wraps a non-syntax value
+;; (Racket's convention) and passes syntax through: the matcher reads it with
+;; syntax-pair? and syntax-car, which refuse a plain pair.
 (define (%syntax-case-transform form ell)
   (let ((parts (syntax->list form)))
     (if (if parts (if (null? (cdr parts)) #t (null? (cdr (cdr parts)))) #t)
@@ -456,7 +459,7 @@
       (if lits #f (%syntax-violation 'syntax-case "literals must be a list" (car (cdr (cdr parts)))))
       (%check-literals lits form)
       (datum->syntax form
-        (list %k-let (list (list in expr))
+        (list %k-let (list (list in (list %k-datum->syntax #f expr)))
               (%gen-clauses clauses in lits ell))))))
 
 ;;; ---- syntax: templates to builder code (design §3.2), with quasisyntax ----
@@ -670,9 +673,7 @@
         (%syntax-violation 'with-syntax "binding must be (pattern expression)" b))))
 
 ;; (with-syntax ((p e) ...) body ...) =>
-;;   (syntax-case (datum->syntax #f (list e ...)) () ((p ...) (let () body ...)))
-;; datum->syntax #f wraps a non-syntax value of e (Racket's convention) and passes
-;; syntax through.
+;;   (syntax-case (list e ...) () ((p ...) (let () body ...)))
 (define (%with-syntax-transform form)
   (let ((parts (syntax->list form)))
     (if (if parts (null? (cdr parts)) #t)
@@ -685,7 +686,7 @@
             (exprs (%map1 (lambda (b) (%binding-part b 1 form)) bindings)))
         (datum->syntax form
           (list %k-syntax-case
-                (list %k-datum->syntax #f (cons %k-list exprs))
+                (cons %k-list exprs)
                 '()
                 (list pats (cons %k-let (cons '() body)))))))))
 

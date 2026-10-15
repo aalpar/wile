@@ -1103,6 +1103,14 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   positions before validation, or treat a macro use in one as an unknown set! of every captured
   binding. Not folded into P4.5, which would widen a three-site fix into a walk redesign.
 
+- [ ] **Go layer: a `syntax` template with an ellipsis before its last element builds a
+  malformed syntax list** [Correctness, S, filed 2026-10-15 with the P4.5 Scheme-layer follow-up]:
+  `(syntax-case #'(1 2 3) () ((x y ...) #'(y ... x)))` returns a list holding a nil element, so
+  printing it SIGSEGVs in `SyntaxObject.SchemeString` (`wile -e`), and `syntax->datum` of it renders
+  `(#<void> ... 1)`. Chez and the Scheme layer answer `(2 3 1)`; `syntax-rules` with the same
+  template is correct, so the fault is in the Go `syntax` template builder only. Live on master
+  (`2882da27`), default layer.
+
 - [ ] **`validateInclude` never reads the included file** [Medium, M, filed 2026-09-15 during the
   renamed-inner-positions whole-branch review]: `validateInclude`
   (`pkg/internal/validate/validate_macro.go:235`) calls `markOpaqueCode(env, pair, result)` on
