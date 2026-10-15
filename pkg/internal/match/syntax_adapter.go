@@ -379,8 +379,11 @@ func CompileSyntaxPattern(
 	// *SyntaxPair either and must still reach an ellipsis pattern.
 	wrapInput := !skipKeyword
 	if wrapInput {
-		// The wrap would put a leading ellipsis first in a list, where the
-		// compiler reads it as a literal compared by spelling. Chez rejects it.
+		// A list led by an ellipsis compiles it as a literal compared by
+		// spelling: a bare ... because the wrap makes it the head of one, a
+		// vector because its elements compile as one wherever it appears.
+		// Before P4.4 neither shape compiled here; Chez rejects both. Only the
+		// whole-clause position is rejected here.
 		if leadsWithEllipsis(pattern, ellipsisID) {
 			return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "CompileSyntaxPattern: misplaced ellipsis in syntax-case pattern")
 		}
