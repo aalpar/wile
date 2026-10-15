@@ -408,9 +408,9 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	// more specific than the scope walk, so it cannot reintroduce a wildcard match.
 	//
 	// A macro pin is the macro. A Primitive pin other than a *SyntaxCompiler (a core-form
-	// keyword, a primitive expander) means the template was written against that form: the macro search stops HERE, terminally, and the pin
-	// becomes the head head dispatch reads, so no later arm and no dispatch step re-asks by
-	// the use-site spelling. That is what keeps a user (define-syntax if …) out of cond's
+	// keyword, a primitive expander) means the template was written against that form:
+	// the macro search stops HERE, terminally, and the pin becomes the head head dispatch
+	// reads, so no later arm and no dispatch step re-asks by the use-site spelling. That is what keeps a user (define-syntax if …) out of cond's
 	// template (I132), breaks the if → cond → if cycle under (except (scheme base) if)
 	// (I133), and lets a template's renamed wif dispatch as if where wif is unbound. It
 	// also skips the demoted-ambient fallback below: on a procedural transformer body's
