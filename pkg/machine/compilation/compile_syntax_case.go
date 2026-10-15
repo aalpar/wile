@@ -224,6 +224,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 		LiteralDefs:      resolveLiteralDefinitions(p.env, literalSyntax),
 		EllipsisVars:     compiled.EllipsisVars,
 		EllipsisDepths:   compiled.EllipsisDepths,
+		WrapInput:        compiled.WrapInput,
 	}
 
 	// Store the clause in literals

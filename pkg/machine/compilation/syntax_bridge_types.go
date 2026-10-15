@@ -127,6 +127,9 @@ type SyntaxCaseClause struct {
 	LiteralDefs    map[string]match.LiteralPin
 	EllipsisVars   map[int]values.StringSet
 	EllipsisDepths map[int]int
+	// WrapInput is match.CompiledPattern.WrapInput, carried to the runtime
+	// matcher so it wraps the input the way the pattern was wrapped.
+	WrapInput bool
 }
 
 func (p *SyntaxCaseClause) EqualTo(other values.Value) bool {
