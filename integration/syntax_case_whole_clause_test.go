@@ -98,6 +98,23 @@ func TestI173SyntaxCaseWholeClausePatterns(t *testing.T) {
 	}
 }
 
+// TestI173SyntaxCaseLeadingEllipsisIsMisplaced: the whole-clause wrap must not
+// turn a bare ... (or a vector that starts with one) into a literal compared by
+// spelling. Chez 10.4.1 rejects all three with "misplaced ellipsis in
+// syntax-case pattern".
+func TestI173SyntaxCaseLeadingEllipsisIsMisplaced(t *testing.T) {
+	for _, pattern := range []string{"...", "#(...)", "#(... a)"} {
+		t.Run(pattern, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+			c.Assert(err, qt.IsNil)
+			_, err = engine.EvalMultiple(context.Background(), `(syntax-case #'(1 2) () (`+pattern+` 'x) (_ 'o))`)
+			c.Assert(errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue, qt.Commentf("err: %v", err))
+			c.Assert(strings.Contains(err.Error(), "misplaced ellipsis"), qt.IsTrue, qt.Commentf("err: %v", err))
+		})
+	}
+}
+
 // TestI033SyntaxCaseNonPairInputIsNoMatch: a non-pair input against a list
 // pattern is a non-match, so with no other clause syntax-case reports that no
 // clause matched (R6RS §12.4) rather than an internal matcher error.

@@ -302,8 +302,9 @@ func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input synta
 	if p.wrapInput {
 		input = syntax.NewSyntaxCons(input, syntax.SyntaxEmptyList, input.SourceContext())
 	}
-	// A non-pair input is a non-match, not a malformed call: R6RS §12.4 moves
-	// syntax-case on to its next clause.
+	// A non-pair input is a non-match, not a malformed call. Only an unwrapped
+	// matcher (syntax-rules) reaches this: syntax-case wraps every input, so its
+	// shape mismatches surface from the element-level match instead.
 	inputPair, ok := input.(*syntax.SyntaxPair)
 	if !ok {
 		return werr.WrapForeignErrorf(ErrNotAMatch, "MatchWithBindingChecker: input is not a pair")
@@ -338,9 +339,13 @@ type CompiledPattern struct {
 // CompilePatternOpts holds optional parameters for CompileSyntaxPattern.
 // A nil opts pointer means all defaults (no literals, default "...").
 type CompilePatternOpts struct {
-	Literals         syntax.LiteralSymbols
-	EllipsisID       string
-	MatchAllElements bool // false (default): skip first element (R7RS syntax-rules macro keyword); true: match all elements (syntax-case)
+	Literals   syntax.LiteralSymbols
+	EllipsisID string
+	// MatchAllElements false (default): skip the first element, the R7RS
+	// syntax-rules macro keyword. True (syntax-case): match all elements, and
+	// wrap the pattern one level so it may be any shape, which sets
+	// CompiledPattern.WrapInput.
+	MatchAllElements bool
 }
 
 // CompileSyntaxPattern compiles a syntax pattern into bytecode with optional
@@ -374,6 +379,11 @@ func CompileSyntaxPattern(
 	// *SyntaxPair either and must still reach an ellipsis pattern.
 	wrapInput := !skipKeyword
 	if wrapInput {
+		// The wrap would put a leading ellipsis first in a list, where the
+		// compiler reads it as a literal compared by spelling. Chez rejects it.
+		if leadsWithEllipsis(pattern, ellipsisID) {
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "CompileSyntaxPattern: misplaced ellipsis in syntax-case pattern")
+		}
 		pattern = syntax.NewSyntaxCons(pattern, syntax.SyntaxEmptyList, pattern.SourceContext())
 	}
 	pair, ok := pattern.(*syntax.SyntaxPair)
@@ -402,6 +412,21 @@ func CompileSyntaxPattern(
 		EllipsisID:     ellipsisID,
 		WrapInput:      wrapInput,
 	}, nil
+}
+
+// leadsWithEllipsis reports whether a whole-clause pattern is the ellipsis
+// itself or a vector whose first element is the ellipsis. The same shape nested
+// inside a list pattern is not caught here.
+func leadsWithEllipsis(pattern syntax.SyntaxValue, ellipsisID string) bool {
+	vec, ok := pattern.(*syntax.SyntaxVector)
+	if ok {
+		if len(vec.Values) == 0 {
+			return false
+		}
+		pattern = vec.Values[0]
+	}
+	sym, ok := pattern.(*syntax.SyntaxSymbol)
+	return ok && sym.Key() == ellipsisID
 }
 
 // GetBindings returns the captured pattern variable bindings from the last match.
