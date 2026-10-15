@@ -168,6 +168,7 @@ type SyntaxMatcher struct {
 	literalSyntax  syntax.LiteralSymbols // Pattern literals with their scopes for hygiene
 	literalDefs    map[string]LiteralPin // Definition-site resolution of each pattern literal; absent key = no pin
 	bindingChecker BindingChecker        // Construction-time R7RS binding lookup; nil when the caller supplies one per match instead
+	wrapInput      bool                  // Match (input) against a pattern CompileSyntaxPattern wrapped; see CompiledPattern.WrapInput
 }
 
 // SyntaxMatcherOpts holds optional parameters for NewSyntaxMatcher.
@@ -185,6 +186,9 @@ type SyntaxMatcherOpts struct {
 	// literal check. Pair it with LiteralSyntax: the check needs both, and a
 	// nil in either position turns it off.
 	BindingChecker BindingChecker
+	// WrapInput must be CompiledPattern.WrapInput of the pattern the codes came
+	// from.
+	WrapInput bool
 }
 
 // NewSyntaxMatcher creates a syntax-aware matcher that wraps the core Matcher
@@ -206,6 +210,7 @@ func NewSyntaxMatcher(
 		literalSyntax  syntax.LiteralSymbols
 		literalDefs    map[string]LiteralPin
 		bindingChecker BindingChecker
+		wrapInput      bool
 	)
 	if opts != nil {
 		ellipsisVars = opts.EllipsisVars
@@ -216,6 +221,7 @@ func NewSyntaxMatcher(
 		literalSyntax = opts.LiteralSyntax
 		literalDefs = opts.LiteralDefs
 		bindingChecker = opts.BindingChecker
+		wrapInput = opts.WrapInput
 	}
 	return &SyntaxMatcher{
 		matcher: NewMatcher(variables, codes,
@@ -227,6 +233,7 @@ func NewSyntaxMatcher(
 		literalSyntax:  literalSyntax,
 		literalDefs:    literalDefs,
 		bindingChecker: bindingChecker,
+		wrapInput:      wrapInput,
 	}
 }
 
@@ -251,6 +258,7 @@ func (p *SyntaxMatcher) CloneForMatch() *SyntaxMatcher {
 		literalSyntax:  p.literalSyntax,
 		literalDefs:    p.literalDefs,
 		bindingChecker: p.bindingChecker,
+		wrapInput:      p.wrapInput,
 	}
 }
 
@@ -291,10 +299,15 @@ func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input synta
 		checker = p.bindingChecker
 	}
 
-	// Ensure input is a pair
+	if p.wrapInput {
+		input = syntax.NewSyntaxCons(input, syntax.SyntaxEmptyList, input.SourceContext())
+	}
+	// A non-pair input is a non-match, not a malformed call. Only an unwrapped
+	// matcher (syntax-rules) reaches this: syntax-case wraps every input, so its
+	// shape mismatches surface from the element-level match instead.
 	inputPair, ok := input.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "MatchWithBindingChecker: pattern matching requires a pair")
+		return werr.WrapForeignErrorf(ErrNotAMatch, "MatchWithBindingChecker: input is not a pair")
 	}
 
 	// Create literal matcher function that uses the binding checker
@@ -317,14 +330,22 @@ type CompiledPattern struct {
 	EllipsisVars   map[int]values.StringSet
 	EllipsisDepths map[int]int // ellipsisID -> compilation order (lower = inner)
 	EllipsisID     string      // The ellipsis identifier used during compilation
+	// WrapInput: the codes match (pattern), so the matcher must match (input).
+	// The two wraps live in this file because a disagreement between them is a
+	// silent wrong answer, not a failure.
+	WrapInput bool
 }
 
 // CompilePatternOpts holds optional parameters for CompileSyntaxPattern.
 // A nil opts pointer means all defaults (no literals, default "...").
 type CompilePatternOpts struct {
-	Literals         syntax.LiteralSymbols
-	EllipsisID       string
-	MatchAllElements bool // false (default): skip first element (R7RS syntax-rules macro keyword); true: match all elements (syntax-case)
+	Literals   syntax.LiteralSymbols
+	EllipsisID string
+	// MatchAllElements false (default): skip the first element, the R7RS
+	// syntax-rules macro keyword. True (syntax-case): match all elements, and
+	// wrap the pattern one level so it may be any shape, which sets
+	// CompiledPattern.WrapInput.
+	MatchAllElements bool
 }
 
 // CompileSyntaxPattern compiles a syntax pattern into bytecode with optional
@@ -351,7 +372,20 @@ func CompileSyntaxPattern(
 		}
 	}
 
-	// Pattern must be a syntax pair
+	// A syntax-case pattern can be any R6RS §12.4 pattern (a bare variable, _,
+	// (), a vector, a constant), and its input any syntax object, including ()
+	// against (a ...). The compiler walks a list, so both sides are wrapped one
+	// level: every pattern, not only the non-pair ones, because () is not a
+	// *SyntaxPair either and must still reach an ellipsis pattern.
+	wrapInput := !skipKeyword
+	if wrapInput {
+		// The wrap would put a leading ellipsis first in a list, where the
+		// compiler reads it as a literal compared by spelling. Chez rejects it.
+		if leadsWithEllipsis(pattern, ellipsisID) {
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "CompileSyntaxPattern: misplaced ellipsis in syntax-case pattern")
+		}
+		pattern = syntax.NewSyntaxCons(pattern, syntax.SyntaxEmptyList, pattern.SourceContext())
+	}
 	pair, ok := pattern.(*syntax.SyntaxPair)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "CompileSyntaxPattern: pattern must be a list")
@@ -376,7 +410,23 @@ func CompileSyntaxPattern(
 		EllipsisVars:   compiler.ellipsisVars,
 		EllipsisDepths: compiler.ellipsisDepths,
 		EllipsisID:     ellipsisID,
+		WrapInput:      wrapInput,
 	}, nil
+}
+
+// leadsWithEllipsis reports whether a whole-clause pattern is the ellipsis
+// itself or a vector whose first element is the ellipsis. The same shape nested
+// inside a list pattern is not caught here.
+func leadsWithEllipsis(pattern syntax.SyntaxValue, ellipsisID string) bool {
+	vec, ok := pattern.(*syntax.SyntaxVector)
+	if ok {
+		if len(vec.Values) == 0 {
+			return false
+		}
+		pattern = vec.Values[0]
+	}
+	sym, ok := pattern.(*syntax.SyntaxSymbol)
+	return ok && sym.Key() == ellipsisID
 }
 
 // GetBindings returns the captured pattern variable bindings from the last match.

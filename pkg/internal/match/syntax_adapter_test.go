@@ -16,6 +16,7 @@ package match
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -97,7 +98,7 @@ func TestSyntaxMatcher(t *testing.T) {
 		qt.Assert(t, result, qt.IsNotNil)
 	})
 
-	t.Run("Match error on non-pair", func(t *testing.T) {
+	t.Run("Match non-pair input is a non-match", func(t *testing.T) {
 		variables := syntax.PatternVarSymbols{}
 		codes := []SyntaxCommand{
 			ByteCodeDone{},
@@ -108,8 +109,7 @@ func TestSyntaxMatcher(t *testing.T) {
 		input := syntax.NewSyntaxObject(values.NewInteger(42), srcCtx)
 
 		err := matcher.Match(context.Background(), input)
-		qt.Assert(t, err, qt.IsNotNil)
-		qt.Assert(t, err.Error(), qt.Contains, "requires a pair")
+		qt.Assert(t, errors.Is(err, ErrNotAMatch), qt.IsTrue, qt.Commentf("err: %v", err))
 	})
 
 	t.Run("ExpandWithIntroScope", func(t *testing.T) {

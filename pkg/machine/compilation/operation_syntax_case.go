@@ -230,6 +230,7 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *machine.MachineContext) (*machine.M
 		LiteralSyntax:  clause.LiteralSyntax,
 		LiteralDefs:    clause.LiteralDefs,
 		BindingChecker: &envBindingChecker{env: bindingEnv},
+		WrapInput:      clause.WrapInput,
 	})
 
 	// Try to match. ErrNotAMatch is normal control flow for syntax-case

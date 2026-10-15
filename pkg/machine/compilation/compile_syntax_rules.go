@@ -312,6 +312,7 @@ func compileClauseWithEllipsisAndLiterals(
 		EllipsisID:     ellipsis,
 		LiteralSyntax:  literalSyntax,
 		LiteralDefs:    literalDefs,
+		WrapInput:      compiled.WrapInput,
 	})
 
 	// Collect free identifiers from template (identifiers that are NOT pattern variables)
