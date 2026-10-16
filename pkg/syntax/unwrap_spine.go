@@ -18,70 +18,20 @@ import "github.com/aalpar/wile/pkg/values"
 
 // UnwrapSpine unwraps v's pairs, vectors and boxes to Scheme pairs, vectors and
 // boxes all the way down, keeps identifier leaves as *SyntaxSymbol, and unwraps
-// every other atom. It is the form an explicit-renaming transformer receives,
-// on both syntax layers (%syntax-spine in the Scheme one), so the two cannot
-// disagree on the shape.
+// every other atom (design §3.5, Q6). It is the form an explicit-renaming
+// transformer receives, on both syntax layers (%syntax-spine in the Scheme one),
+// so the two cannot disagree on the shape.
 //
 // Keeping the leaves is what keeps an identifier's scopes through the
 // transformer; unwrapping the spine is what keeps (pair? x) answering #t on a
 // form element, which a whole-tree pass-through of *SyntaxPair would silently
-// flip to #f while car/cdr kept working.
+// flip to #f while car/cdr kept working. It is UnwrapAll's walker with the
+// leaves kept, so it terminates on a cyclic datum and preserves shared
+// structure exactly as UnwrapAll does.
 func UnwrapSpine(v values.Value) values.Value {
-	switch s := v.(type) {
-	case *SyntaxSymbol:
-		return s
-	case *SyntaxPair:
-		return unwrapSpineList(s)
-	case *SyntaxVector:
-		elems := make([]values.Value, len(s.Values))
-		for i, e := range s.Values {
-			elems[i] = UnwrapSpine(e)
-		}
-		return values.NewVector(elems...)
-	case *SyntaxBox:
-		// Unwrap would return the content and drop the box.
-		if s.Value == nil {
-			return values.NewBox(nil)
-		}
-		return values.NewBox(UnwrapSpine(s.Value))
-	case *SyntaxDatumLabelAssignment:
-		// The parser keeps this wrapper only around a CYCLIC datum, which the
-		// spine walk would follow forever. UnwrapAll is cycle-safe; the leaves
-		// lose their scopes, which costs nothing, since a cycle is never code.
-		return s.UnwrapAll()
-	case SyntaxValue:
-		return s.Unwrap()
-	default:
+	sv, ok := v.(SyntaxValue)
+	if !ok {
 		return v
 	}
-}
-
-// unwrapSpineList walks the cdr chain iteratively: list length must not become Go
-// stack depth (the datum->syntax lesson in pkg/registry/core/prim_syntax.go).
-// Nesting still recurses, bounded by the reader's and datum->syntax's depth
-// limits.
-func unwrapSpineList(sp *SyntaxPair) values.Value {
-	var head, tail *values.Pair
-	var cur SyntaxValue = sp
-	for {
-		p, ok := cur.(*SyntaxPair)
-		if !ok || IsSyntaxEmptyList(p) {
-			break
-		}
-		cell := values.NewCons(UnwrapSpine(p.SyntaxCar()), values.EmptyList)
-		if head == nil {
-			head = cell
-		} else {
-			tail.SetCdr(cell)
-		}
-		tail = cell
-		cur = p.SyntaxCdr()
-	}
-	if head == nil {
-		return values.EmptyList
-	}
-	if !IsSyntaxEmptyList(cur) {
-		tail.SetCdr(UnwrapSpine(cur))
-	}
-	return head
+	return unwrapShared(sv, make(map[SyntaxValue]values.Value), true)
 }

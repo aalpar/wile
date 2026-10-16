@@ -401,8 +401,8 @@ func TestP2_ERSpineContainers(t *testing.T) {
 		use  string
 		want string
 	}{
-		{"box", `(probe #&(a b))`, "(#t #f #t)"},
-		{"cyclic datum", `(probe #0=(a . #0#))`, "(#f #t #t)"},
+		{"box", `(probe #&(a b))`, "(#t #f #t #t)"},
+		{"cyclic datum", `(probe #0=(a . #0#))`, "(#f #t #t #t)"},
 	}
 	for _, tc := range tcs {
 		src := `(import (for-syntax (scheme base)))  ; cadr
@@ -411,7 +411,8 @@ func TestP2_ERSpineContainers(t *testing.T) {
     (lambda (f r c)
       (let ((x (cadr f)))
         (list (r 'quote)
-              (list (box? x) (pair? x) (pair? (if (box? x) (unbox x) (cdr x)))))))))
+              (list (box? x) (pair? x) (pair? (if (box? x) (unbox x) (cdr x)))
+                    (identifier? (car (if (box? x) (unbox x) x)))))))))
 ` + tc.use
 		for _, l := range syntaxLayers {
 			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
@@ -419,6 +420,17 @@ func TestP2_ERSpineContainers(t *testing.T) {
 			})
 		}
 	}
+}
+
+// TestP2_ERSpineUnlabeledCycle: the parser's label wrapper does not fence every
+// path into a cycle (#1# reaches it past label 0), so the spine walk itself must
+// terminate. Go layer only: the Scheme layer overflows earlier, stamping scopes
+// onto the cyclic input (MapSyntaxTree), which is filed in TODO.md.
+func TestP2_ERSpineUnlabeledCycle(t *testing.T) {
+	src := `(import (for-syntax (scheme base)))  ; cadr
+(define-syntax probe (er-macro-transformer (lambda (f r c) (list (r 'quote) (pair? (cadr f))))))
+(probe #0=(#1=(x . #0#)) #1#)`
+	qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(wile.WithGoSyntaxForms())...), qt.Equals, "#t")
 }
 
 // TestP2_ERContractCrossLibrary is the same contract read across a library

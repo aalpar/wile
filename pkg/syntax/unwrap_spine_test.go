@@ -57,13 +57,34 @@ func TestUnwrapSpine(t *testing.T) {
 	}
 }
 
-// TestUnwrapSpineKeepsTheLeaf: the leaf is the input's own identifier, so its
-// scopes survive.
+// TestUnwrapSpineKeepsTheLeaf: in every container the leaf is the input's own
+// identifier, so its scopes survive.
 func TestUnwrapSpineKeepsTheLeaf(t *testing.T) {
 	a := NewSyntaxSymbol("a", NewZeroValueSourceContext().WithScope(NewScope()))
-	got, ok := UnwrapSpine(SyntaxList(nil, a)).(*values.Pair)
-	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, got.Car() == values.Value(a), qt.IsTrue)
+	car := func(v values.Value) values.Value {
+		return v.(*values.Pair).Car()
+	}
+	tcs := []struct {
+		name string
+		in   SyntaxValue
+		leaf func(values.Value) values.Value
+	}{
+		{"list", SyntaxList(nil, a), car},
+		{"improper tail", NewSyntaxCons(NewSyntaxSymbol("b", nil), a, nil), func(v values.Value) values.Value {
+			return v.(*values.Pair).Cdr()
+		}},
+		{"vector", NewSyntaxVector(nil, a), func(v values.Value) values.Value {
+			return v.(*values.Vector).Elems()[0]
+		}},
+		{"box", NewSyntaxBox(SyntaxList(nil, a), nil), func(v values.Value) values.Value {
+			return car(v.(*values.Box).Unbox())
+		}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, tc.leaf(UnwrapSpine(tc.in)) == values.Value(a), qt.IsTrue)
+		})
+	}
 }
 
 // TestUnwrapSpineCyclicLabel: a cyclic datum reaches here under its label
@@ -74,6 +95,21 @@ func TestUnwrapSpineCyclicLabel(t *testing.T) {
 	got, ok := UnwrapSpine(NewSyntaxDatumLabelAssignment(0, cell, nil)).(*values.Pair)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, got.Cdr() == values.Value(got), qt.IsTrue)
+}
+
+// TestUnwrapSpineUnlabeledCycle: a cycle with no label wrapper on the path into
+// it still terminates, and shared structure stays shared.
+func TestUnwrapSpineUnlabeledCycle(t *testing.T) {
+	cell := NewSyntaxCons(NewSyntaxSymbol("x", nil), SyntaxEmptyList, nil)
+	cell.Values[1] = cell
+	got, ok := UnwrapSpine(SyntaxList(nil, cell, cell)).(*values.Pair)
+	qt.Assert(t, ok, qt.IsTrue)
+	first, ok := got.Car().(*values.Pair)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, first.Cdr() == values.Value(first), qt.IsTrue)
+	second, ok := got.Cdr().(*values.Pair)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, second.Car() == values.Value(first), qt.IsTrue)
 }
 
 // onlySymbolSyntax reports whether v holds no syntax other than identifiers.

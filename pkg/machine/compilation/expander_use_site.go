@@ -106,9 +106,9 @@ func (p *ExpanderTimeContinuation) isUseSiteScope(scope *syntax.Scope) bool {
 // binds `foo` at {us} while the later top-level `foo` carries {}, and without
 // this pass the reference cannot reach the binding.
 //
-// **Why here.** expandMacroInvocation ends with one recursion into
-// ExpandExpression, so every macro output passes a single point before being
-// re-expanded, and a definition that only surfaces after several expansions is
+// **Why here.** Each transformer boundary (expandMacroInvocation,
+// invokeERTransformer, ExpandOnce) calls this on its output before it is
+// re-expanded, so a definition that only surfaces after several expansions is
 // pruned at its own level. A body pre-scan would see only the forms written in
 // the body.
 //
