@@ -165,7 +165,7 @@ because the citation is what `make indexlint` counts:
 | `2026-09-22-defect-closeout-impl.md` | **HUB** of the defect-closeout arc, derived from `2026-09-20-defect-closeout-design.md`. **Split into 11 files 2026-10-02** (one per phase, plus the audit) because the single file had reached 5,220 lines; task IDs, branch names and every word unchanged. Carries the method, the phase map and the first branch. **38 of 97 tasks landed**: P1 all ten, P2 all five, P3 all eighteen (P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` merged 2026-10-03; P3.16 `f94806a8` merged 2026-10-04; P3.17 `4ea9b5b5` and `231d3d95` merged 2026-10-10; P3.18 `24e3b23e`, reduced to a delete, merged 2026-10-14), P4.1 (`669c7b23`, merged 2026-10-14), P4.2 (`3721b540`, merged 2026-10-14), P4.3 (`35e8866a` + `e6ee81c9`, merged 2026-10-14), P4.4 (`9f3f5f1d` + `b5ac075d`, merged 2026-10-15), P4.5 (merged `956604f0`, 2026-10-15). The plan's own task records are the status of record — P1's and P2's landings are in the tree but NOT written into their task records, and P1's branch names differ from its table |
 | `2026-09-22-defect-closeout-audit.md` | **Read once, before the first branch.** The cross-phase audit, five topics: what serializes behind P2's merge (52 of the 82 tasks in P3–P9, measured), which edits two phases both claim, the six fault settlements (A2, C6, D1–D4), the citations and anchors that do not resolve (X1–X6, E1/E1b), and which gates go green without a fix. Fault labels are cited from the phase files, so they must not be renumbered |
 | `2026-09-22-defect-closeout-P4.md` | The expander residue: a definition-site pin decides the form, and operands get expanded. **5/8** (P4.1 `669c7b23`, P4.2 `3721b540`, P4.3 `35e8866a`, P4.4 `9f3f5f1d` + `b5ac075d`, P4.5 `2882da27` + `76e81aac` + `67a59fdc`), all after P2's window closes (unconditional). P4.7 is a decision |
-| `2026-09-22-defect-closeout-P5.md` | The unit boundary — an included file belongs to the enclosing expansion and validation unit — plus engine-scoped state and the library-env costs. **1/13**, all after P2's window closes (unconditional). P5.9 done ahead of P4's close, because P4.6 depends on it. P5.7 is a decision |
+| `2026-09-22-defect-closeout-P5.md` | The unit boundary — an included file belongs to the enclosing expansion and validation unit — plus engine-scoped state and the library-env costs. **0/13**, all after P2's window closes (unconditional). P5.9 implemented (`f3c0910b`, unmerged) ahead of P4's close, because P4.6 depends on it. P5.7 is a decision |
 | `2026-09-22-defect-closeout-P6.md` | The value surface answers at its edges instead of raising, splitting or silently rounding. **0/15**; five window-constrained, ten free after the registry/core carve-out. P6.7, P6.10, P6.11, P6.13, P6.15 are decisions |
 | `2026-09-22-defect-closeout-P7.md` | Provenance: four places that discard a fact the pipeline was already holding stop discarding it (port name, port read position, intro-scope label, origin stamp). **0/7**; T1–T5 before-or-after the window, T6 after, T7 unconstrained |
 | `2026-09-22-defect-closeout-P8.md` | No hand-maintained list stands in for something the tree can derive, and a stale citation is caught by a gate rather than by a reader. **0/14**; four window-constrained, ten free. P8.3 is NOT done — its **Sites** paragraph names `tools/sh/planlint.sh`, and the script has no reverse arm |
@@ -609,6 +609,24 @@ than decisions:
 - [ ] **No box (`#&`) arm in `%gen-match` / `%gen-template`** [Correctness, S]: a box pattern never
   binds and a box template stays a verbatim constant. The Go layer has
   `TestBoxInMacroTemplateAndPattern`; the Scheme layer has no twin.
+- [ ] **An imported `syntax-rules` is called as a closure: "not a closure: \*compilation.SyntaxCompiler"**
+  [Correctness, M, filed 2026-10-16 from P5.9's crosscheck; cause NOT established]: every
+  `syntax-rules` reached through an import fails under the layer, at `a23c4543` and on
+  `f3c0910b` alike. Measured with `wile -q -e`:
+  - `(eval '(define-syntax m (syntax-rules () ((_) 42))) (environment '(scheme base)))`, a LONE
+    define-syntax, raises `not a closure: *compilation.SyntaxCompiler`, so such a namespace
+    cannot define a `syntax-rules` macro at all. P5.9's three
+    `TestImportSetNamespaceDispatchesSpecialForms` rows fail the same way.
+  - At phase 1 via `(for-syntax (scheme base))`: `(define-syntax m (begin 1 (syntax-rules () ((_)
+    1))))` fails the same way, which is why `TestDefineSyntaxRHSRunsOnce` (P4.6) is red under the
+    layer on master too.
+  - Control: a top-level `(define-syntax m (syntax-rules () ((_) 1)))` with no import answers 1.
+
+  Hypothesis, unverified: an import copies the Go `syntax-rules` keyword row, whose value is the
+  `*SyntaxCompiler`, while the layer's macro lives only in the engine's own sealed phase-1 tier, so
+  macro dispatch finds a syntax-typed binding that is not a transformer. If so, it is the I171
+  shape for the eight `schemeSyntaxFormNames`, which P5.9's root probe deliberately skips (it
+  returns only a `*PrimitiveExpander`). Repro both layers before choosing a site.
 - [x] **`%gen-ellipsis-map` raises on a constant subtemplate followed by `...`** [Correctness, S,
   Done]: the two layers now AGREE, by moving the Go layer rather than the Scheme one. The row's
   premise — "the Go layer and Wile's reading of R7RS §4.3.2 both answer `()`" — was half right and
@@ -814,8 +832,8 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   is refused. The two halves are therefore not one fix — adding `PhaseSetExpand` legalises what
   the user wrote and leaves the template route bypassing the phase gate for everything that is
   genuinely runtime-only.
-- [x] `(eval '(begin (define-syntax m …) (m)) (environment '(scheme base)))` gives `no such
-  binding "m"`; two separate `eval`s work. [Done 2026-10-16, P5.9 (I171), branch
+- [ ] `(eval '(begin (define-syntax m …) (m)) (environment '(scheme base)))` gives `no such
+  binding "m"`; two separate `eval`s work. [Implemented f3c0910b, unmerged, P5.9 (I171), branch
   `fix/namespace-head-expander-probe`]: the namespace's store had the phase-0 keyword rows but not
   the phase-1 handler rows, so the expander read every special form there as a call while the
   compiler dispatched it. `lookupHeadPrimitiveExpander` now probes the engine root's sealed tier.
@@ -824,7 +842,9 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   phase-2 transformer body under `(environment '(scheme base) '(for-syntax (scheme base)))`
   answered 5 only because `let-syntax` was read as a call and its transformer built a phase low;
   it now refuses `list` at phase 2 and needs `(for-meta 2 (scheme base))`
-  (`TestImportSetEnvironmentIsEmptyAboveRuntime`).
+  (`TestImportSetEnvironmentIsEmptyAboveRuntime`). Covers the Go syntax layer only: under
+  `WILE_SYNTAX_FORMS=scheme` all three cases still fail as on `a23c4543` (see the "imported
+  `syntax-rules` is called as a closure" row).
 - [ ] **`null-environment` binds no syntactic keywords** [Conformance, filed 2026-10-16 as P5.9's
   follow-on]: R5RS §6.5 requires `(null-environment 5)` to bind them. `(eval 'quote
   (null-environment 5))` raises `no such local or global binding "quote"`, and `(eval '(begin

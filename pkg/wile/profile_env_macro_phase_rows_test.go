@@ -97,7 +97,7 @@ func TestProfileEnvironmentHasTheMacroVocabularyAtEveryPhase(t *testing.T) {
 func TestImportSetEnvironmentIsEmptyAboveRuntime(t *testing.T) {
 	eng := newPhaseRowsEngine(t)
 	_, err := eng.EvalMultiple(context.Background(), phaseTwoTransformerProgram("(environment '(scheme base))"))
-	qt.Assert(t, err, qt.ErrorMatches, `(?s).*no such .*binding "list".*`)
+	qt.Assert(t, err, qt.ErrorMatches, `(?s).*no such .*binding "list".*phase 2.*`)
 
 	// for-syntax reaches phase 1 only. Answered 5 until I171: the expander read
 	// let-syntax in this namespace as a call, so the compiler built its

@@ -43,6 +43,8 @@ func TestImportSetNamespaceDispatchesSpecialForms(t *testing.T) {
 		// program is evaluated with env bound to the namespace under test.
 		program string
 		want    string
+		// wantErr, when set, is the error the program must raise instead.
+		wantErr string
 	}{
 		{
 			name:    "define-syntax in a begin binds for the forms after it",
@@ -62,6 +64,31 @@ func TestImportSetNamespaceDispatchesSpecialForms(t *testing.T) {
 			program: `(eval '(define-syntax m (syntax-rules () ((_) 42))) env)
 			          (eval '(quote (m)) env)`,
 			want: "(m)",
+		},
+		// The probe looks up the form the head DENOTES, not the spelling the user
+		// wrote: q-begin and q-quote have no root row of their own.
+		{
+			name:    "prefixed define-syntax in a begin binds for the forms after it",
+			env:     "(environment '(prefix (scheme base) q-))",
+			program: `(eval '(q-begin (q-define-syntax m (q-syntax-rules () ((_) 42))) (m)) env)`,
+			want:    "42",
+		},
+		{
+			name: "prefixed quote shields its datum",
+			env:  "(environment '(prefix (scheme base) q-))",
+			program: `(eval '(q-define-syntax m (q-syntax-rules () ((_) 42))) env)
+			          (eval '(q-quote (m)) env)`,
+			want: "(m)",
+		},
+		// The widening stops at what the namespace imported: define-syntax is not
+		// in (only (scheme base) car), so the root probe must not dispatch it, and
+		// m stays unbound for the form after it. A probe by spelling for a head
+		// that denotes no form would answer 42 here.
+		{
+			name:    "refusal: a form the namespace did not import is not dispatched",
+			env:     "(environment '(only (scheme base) car))",
+			program: `(eval '(begin (define-syntax m (syntax-rules () ((_) 42))) (m)) env)`,
+			wantErr: `(?s).*no such .*binding "m".*`,
 		},
 		// Controls, green on a23c4543: these namespaces carry the handler rows in
 		// their own store and never reach the root probe.
@@ -95,6 +122,10 @@ func TestImportSetNamespaceDispatchesSpecialForms(t *testing.T) {
 			eng := newPhaseRowsEngine(t)
 			v, err := eng.EvalMultiple(context.Background(),
 				`(let ((env `+tt.env+`)) `+tt.program+`)`)
+			if tt.wantErr != "" {
+				qt.Assert(t, err, qt.ErrorMatches, tt.wantErr)
+				return
+			}
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, v.SchemeString(), qt.Equals, tt.want)
 		})

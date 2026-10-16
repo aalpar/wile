@@ -704,14 +704,12 @@ func (p *ExpanderTimeContinuation) lookupHeadPrimitiveExpander(
 	// It applies on the definition-site pin path too, where b is the pin. The
 	// sealed tier holds no user definition, so this re-asks the form b denotes,
 	// never the use-site spelling the pin exists to refuse.
+	// Root().Expand() is never nil: Expand creates the phase frame if missing.
 	ns := p.env.Namespace()
 	if ns != nil {
-		root := ns.Root().Expand()
-		if root != nil {
-			spe = sealedPrimitiveExpander(root.GlobalEnvironment(), canon, expandEnv.PhaseLevel())
-			if spe != nil {
-				return spe
-			}
+		spe = sealedPrimitiveExpander(ns.Root().Expand().GlobalEnvironment(), canon, expandEnv.PhaseLevel())
+		if spe != nil {
+			return spe
 		}
 	}
 	return LookupPrimitiveExpander(p.env, canon, syntax.Scopes{})
