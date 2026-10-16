@@ -4501,7 +4501,12 @@ No demand signal. Speculative or research-only.
 
 ### Core Language
 - [ ] **Type system**: Covers base types, expandable. Discover useful type properties. Types as distinct top-level concept.
-- [ ] **let-syntax*** [S]: Implement `let-syntax*`.
+- [x] **let-syntax*** [CLOSED, no code, 2026-10-16; defect-closeout P4.8, I111]: no spec or
+  oracle has the form, so there is nothing to conform to. Absent from R7RS and R6RS; Racket 9.3
+  refuses it (`let-syntax*: undefined; cannot reference an identifier before its definition`) and
+  Chez 10.4.1 reads it as an application (`Exception: variable a is not bound`). The row never said
+  whether it meant sequential or recursive transformer scoping, and the recursive reading is
+  `letrec-syntax`, which ships. Re-file only with a named consumer and the scoping rule stated.
 - [ ] **Scribble-style `@` reader notation** [Reader extension]: Racket-style at-expressions for rich documentation markup. `@cmd[datum ...]{text ...}` desugars to S-expressions.
 
 ### Architecture
