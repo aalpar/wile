@@ -36,6 +36,10 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
+// notDefinedHere is CompileDefineSyntax's refusal of a define-syntax the
+// expander did not reach as one.
+const notDefinedHere = `(?s).*define-syntax: m was not defined: the expander did not reach this form as define-syntax.*`
+
 func TestImportSetNamespaceDispatchesSpecialForms(t *testing.T) {
 	tests := []struct {
 		name string
@@ -82,15 +86,22 @@ func TestImportSetNamespaceDispatchesSpecialForms(t *testing.T) {
 		},
 		// The root probe fires only for a head that denotes a form. define-syntax
 		// is not in (only (scheme base) car), so DenotedForm is "" and the expander
-		// reads it as a call; m is unbound for the form after it. A probe by
-		// spelling for such a head would answer 42 here. This pins the expander's
-		// half only: the compiler still dispatches the unimported form by
-		// spelling, so a lone define-syntax there binds m (filed in TODO.md).
+		// reads it as a call and binds nothing. The compiler dispatches the same
+		// head by spelling and reaches CompileDefineSyntax, which binds nothing
+		// since I138 moved the right-hand side into the expander, so it refuses
+		// rather than accept the definition as a no-op. A root probe by spelling
+		// for such a head would bind m and answer 42 in the begin row.
 		{
 			name:    "an unbound head does not reach the root probe",
 			env:     "(environment '(only (scheme base) car))",
 			program: `(eval '(begin (define-syntax m (syntax-rules () ((_) 42))) (m)) env)`,
-			wantErr: `(?s).*no such .*binding "m".*`,
+			wantErr: notDefinedHere,
+		},
+		{
+			name:    "a lone define-syntax the expander did not reach is refused",
+			env:     "(environment '(only (scheme base) car))",
+			program: `(eval '(define-syntax m (syntax-rules () ((_) 42))) env)`,
+			wantErr: notDefinedHere,
 		},
 		// Controls, green on a23c4543: these namespaces carry the handler rows in
 		// their own store and never reach the root probe.

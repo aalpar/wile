@@ -28,9 +28,16 @@ import (
 //
 // The right-hand side has ALREADY RUN and the keyword is already bound:
 // expandDefineSyntax ran compileDefineSyntaxFromSyntax when the expander reached
-// the form. So this only re-checks the shape and emits nothing. Running it here
-// as well would evaluate the right-hand side twice, repeating its side effects
-// (I138).
+// the form. So this only re-checks the shape and the binding, and emits nothing.
+// Running it here as well would evaluate the right-hand side twice, repeating its
+// side effects (I138).
+//
+// The binding check is what keeps a form the expander did NOT reach as
+// define-syntax from compiling to a silent no-op. The compiler dispatches a head
+// by spelling, the expander by the form it denotes, so in a namespace that never
+// imported define-syntax the expander reads the form as a call and binds nothing.
+// A define-syntax inside (meta …), which the expander passes through unexpanded,
+// arrives the same way.
 //
 // Reference: R7RS Section 5.4 (Syntax definitions)
 func (p *CompileTimeContinuation) CompileDefineSyntax(_ CompileTimeCallContext, expr syntax.SyntaxValue) error {
@@ -44,13 +51,19 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(_ CompileTimeCallContext, 
 	if err != nil {
 		return p.wrapCompilationError(err)
 	}
-	_, ok := parts[0].(*syntax.SyntaxSymbol)
+	keywordSym, ok := parts[0].(*syntax.SyntaxSymbol)
 	if !ok {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-syntax: keyword must be a symbol"))
 	}
 	_, _, err = splitDefineSyntaxRest(parts[1:])
 	if err != nil {
 		return p.wrapCompilationError(err)
+	}
+	keyword := keywordSym.Unwrap().(*values.Symbol)
+	bound := p.env.NextPhase().GetBinding(keyword, syntax.ScopesOf(keywordSym.Scopes()))
+	if bound == nil || bound.BindingType() != environment.BindingTypeSyntax {
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
+			"define-syntax: %s was not defined: the expander did not reach this form as define-syntax", keyword.Key))
 	}
 	return nil
 }

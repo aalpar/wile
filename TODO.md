@@ -164,7 +164,7 @@ because the citation is what `make indexlint` counts:
 | `2026-09-20-defect-closeout-design.md` | Design behind the defect-closeout arc; status lives in the `-impl` hub and phase files |
 | `2026-09-22-defect-closeout-impl.md` | **HUB** of the defect-closeout arc, derived from `2026-09-20-defect-closeout-design.md`. **Split into 11 files 2026-10-02** (one per phase, plus the audit) because the single file had reached 5,220 lines; task IDs, branch names and every word unchanged. Carries the method, the phase map and the first branch. **38 of 97 tasks landed**: P1 all ten, P2 all five, P3 all eighteen (P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` merged 2026-10-03; P3.16 `f94806a8` merged 2026-10-04; P3.17 `4ea9b5b5` and `231d3d95` merged 2026-10-10; P3.18 `24e3b23e`, reduced to a delete, merged 2026-10-14), P4.1 (`669c7b23`, merged 2026-10-14), P4.2 (`3721b540`, merged 2026-10-14), P4.3 (`35e8866a` + `e6ee81c9`, merged 2026-10-14), P4.4 (`9f3f5f1d` + `b5ac075d`, merged 2026-10-15), P4.5 (merged `956604f0`, 2026-10-15). The plan's own task records are the status of record — P1's and P2's landings are in the tree but NOT written into their task records, and P1's branch names differ from its table |
 | `2026-09-22-defect-closeout-audit.md` | **Read once, before the first branch.** The cross-phase audit, five topics: what serializes behind P2's merge (52 of the 82 tasks in P3–P9, measured), which edits two phases both claim, the six fault settlements (A2, C6, D1–D4), the citations and anchors that do not resolve (X1–X6, E1/E1b), and which gates go green without a fix. Fault labels are cited from the phase files, so they must not be renumbered |
-| `2026-09-22-defect-closeout-P4.md` | The expander residue: a definition-site pin decides the form, and operands get expanded. **5/8** (P4.1 `669c7b23`, P4.2 `3721b540`, P4.3 `35e8866a`, P4.4 `9f3f5f1d` + `b5ac075d`, P4.5 `2882da27` + `76e81aac` + `67a59fdc`), all after P2's window closes (unconditional). P4.7 is a decision |
+| `2026-09-22-defect-closeout-P4.md` | The expander residue: a definition-site pin decides the form, and operands get expanded. **6/8** (P4.1 `669c7b23`, P4.2 `3721b540`, P4.3 `35e8866a`, P4.4 `9f3f5f1d` + `b5ac075d`, P4.5 `2882da27` + `76e81aac` + `67a59fdc`, P4.6 `e6267d8d` + remediation), all after P2's window closes (unconditional). P4.7 is a decision |
 | `2026-09-22-defect-closeout-P5.md` | The unit boundary — an included file belongs to the enclosing expansion and validation unit — plus engine-scoped state and the library-env costs. **1/13** (P5.9 `f3c0910b` + `323f2580`), all after P2's window closes (unconditional). P5.9 done ahead of P4's close, because P4.6 depends on it. P5.7 is a decision |
 | `2026-09-22-defect-closeout-P6.md` | The value surface answers at its edges instead of raising, splitting or silently rounding. **0/15**; five window-constrained, ten free after the registry/core carve-out. P6.7, P6.10, P6.11, P6.13, P6.15 are decisions |
 | `2026-09-22-defect-closeout-P7.md` | Provenance: four places that discard a fact the pipeline was already holding stop discarding it (port name, port read position, intro-scope label, origin stamp). **0/7**; T1–T5 before-or-after the window, T6 after, T7 unconstrained |
@@ -483,12 +483,25 @@ defect at HEAD whether or not Tier 2 is ever built.
   under a prior `(define (sqrt x) 'hijacked)` still answers `hijacked`, on both sides — the user
   asked for `sqrt` and defined `sqrt`, so §1.3.2's latitude does apply and Racket agrees. Only the
   renamed shapes changed. Found during Tier-2 T2.0a, so this is where that sub-step landed.
-- [ ] **A module-level `define-syntax` RHS is evaluated twice** [Correctness, M]: Racket evaluates
+- [x] **A module-level `define-syntax` RHS is evaluated twice** [Correctness, M, Done 2026-10-16,
+  P4.6/I138, `e6267d8d` + remediation, branch `fix/define-syntax-rhs-once`]: the expander now
+  evaluates the RHS when it reaches the form (`expandDefineSyntax`) and `CompileDefineSyntax` only
+  re-checks the shape and that the keyword is bound. Pinned by `TestDefineSyntaxRHSRunsOnce`. One
+  double run remains, filed below as the `expand` row. Racket evaluates
   it once. Both `compileDefineSyntaxFromSyntax` and `CompileDefineSyntax` run it, so a transformer
   with a side effect fires twice per definition. Observable, and it makes any
   compile-time-state reasoning arithmetically wrong by a factor of two. Reproduces at `956604f0`:
   `(import (scheme base) (scheme write) (for-syntax (scheme base) (scheme write))) (define-syntax m
   (begin (display "X") (er-macro-transformer (lambda (f r c) 1)))) (display (m))` prints `XX1`.
+- [ ] **`expand` of a `define-syntax` runs its RHS, and the result runs it again** [Correctness, S,
+  filed 2026-10-16 from P4.6's crosscheck]: since P4.6 the expander evaluates a define-syntax RHS
+  wherever it reaches the form, so `expand` does too. A transformer that returns `(expand
+  #'(define-syntax n (begin (display "X") …)))` prints X twice: once inside `expand`, once when the
+  outer expander reaches the returned form. A transformer that calls `expand` only to inspect such a
+  form now binds `n` in the caller's environment, where master left it unbound; likewise a
+  top-level `(expand (datum->syntax #f '(define-syntax q …)))` rebinds `q`. Racket's top-level
+  `expand` behaviour is unchecked. Options: an already-expanded marker that skips the RHS, or
+  accept and pin.
 - [x] **`er-macro-transformer` inside a `let`** [INVERTED — the filed behaviour does not reproduce;
   measured and pinned 2026-09-26]: this row claimed such a transformer body reads the `let`'s own
   local as `#<void>`, and blamed `CompileERMacroTransformerExpr` for evaluating the lambda before
@@ -860,11 +873,12 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   phase-2 rows pass under both layers.
 - [ ] **An import-set namespace compiles special forms it did not import** [Correctness, filed
   2026-10-16 from P5.9's re-review; cause NOT traced]: under `(environment '(only (scheme base)
-  car))`, `(eval 'define-syntax env)` is unbound, yet `(eval '(define-syntax m (syntax-rules ()
-  ((_) 42))) env)` then `(eval '(m) env)` answers 42, and `quote`, `if` and `begin` compile too. The
-  expander reads such a head as a call (its `DenotedForm` is `""`), so inside one `begin` the two
-  disagree and `m` is unbound for the forms after it: the I171 split from the other side. Same
-  compiler-side spelling dispatch as the `null-environment` row below; likely one site.
+  car))`, `(eval 'define-syntax env)` is unbound, yet `quote`, `if` and `begin` compile. The
+  expander reads such a head as a call (its `DenotedForm` is `""`) while the compiler dispatches it
+  by spelling: the I171 split from the other side. Same compiler-side spelling dispatch as the
+  `null-environment` row below; likely one site. `define-syntax` is the one form that now refuses
+  (P4.6): `CompileDefineSyntax` binds nothing since the RHS moved into the expander, so it raises
+  "m was not defined" rather than accept a no-op. Before P4.6 a lone one bound `m`.
 - [ ] **`null-environment` binds no syntactic keywords** [Conformance, filed 2026-10-16 as P5.9's
   follow-on]: R5RS §6.5 requires `(null-environment 5)` to bind them. `(eval 'quote
   (null-environment 5))` raises `no such local or global binding "quote"`, and `(eval '(begin

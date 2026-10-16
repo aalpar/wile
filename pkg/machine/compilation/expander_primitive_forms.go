@@ -114,7 +114,7 @@ func (p *ExpanderTimeContinuation) expandEach(expr syntax.SyntaxValue, args []sy
 //
 // Forms using this expander (see primitiveExpanderEntries for the current set):
 //   - quote: Content is literal data, not code
-//   - define-syntax, TransformerERMacro: Transformer is compiled, not expanded
+//   - TransformerERMacro: Transformer is compiled, not expanded
 //   - unquote, unquote-splicing: Only valid inside quasiquote
 //   - include, include-ci: Files are read at compile time
 //   - cond-expand: Feature expressions use special syntax, not macros
@@ -128,31 +128,44 @@ func (*ExpanderTimeContinuation) expandUnchanged(sym *syntax.SyntaxSymbol, expr 
 	return formUnchanged(sym, expr)
 }
 
+// expandDefineSyntax evaluates a define-syntax right-hand side and binds the
+// keyword when the expander reaches the form, so later forms in the same body
+// see the macro. CompileDefineSyntax re-checks the shape and emits nothing, so
+// each time the expander reaches the form the right-hand side runs once. A form
+// that is expanded again (a transformer that returns the output of expand on a
+// define-syntax) is reached twice and runs twice; filed in TODO.md.
+//
+// A malformed form is handed through unchanged, as the arity guards do, so the
+// validator reports it at the offending part.
+func (p *ExpanderTimeContinuation) expandDefineSyntax(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	form := syntax.NewSyntaxCons(sym, expr, sym.SourceContext())
+	parts, err := syntax.FormParts(form, "define-syntax", 3, 4)
+	if err != nil {
+		return formUnchanged(sym, expr)
+	}
+	_, ok := parts[1].(*syntax.SyntaxSymbol)
+	if !ok {
+		return formUnchanged(sym, expr)
+	}
+	err = compileDefineSyntaxFromSyntax(p.ctx, p.env, form, p.libraryScope, p.evaluator)
+	if err != nil {
+		return nil, err
+	}
+	return form, nil
+}
+
 // expandBeginForSyntax, expandDefineForSyntax and expandEvalWhen run a
 // phase-shifting form's compile-time half WHEN THE EXPANDER REACHES IT, then
 // return the form unchanged; the compiler's handlers for these forms no longer
 // run that half.
 //
-// The timing is the point. A define-syntax compiles its transformer during the
-// expander's body scan (ExpandBodyWithDefineSyntax), so a phase-1 definition that
+// The timing is the point. A define-syntax compiles its transformer when the
+// expander reaches it (expandDefineSyntax), so a phase-1 definition that
 // waited for the compiler did not exist yet for a define-syntax later in the SAME
 // unit — a file (one begin), a library body, or a lambda body. It resolved only
 // across unit boundaries, one form per REPL line.
 func (p *ExpanderTimeContinuation) expandBeginForSyntax(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return p.runCompileTimeHalf(sym, expr, (*CompileTimeContinuation).runBeginForSyntax)
-}
-
-// expandDefineSyntax evaluates a define-syntax right-hand side and binds the
-// keyword when the expander reaches the form, so later forms in the same body
-// see the macro. This is the only evaluation: CompileDefineSyntax re-checks the
-// shape and emits nothing.
-func (p *ExpanderTimeContinuation) expandDefineSyntax(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	form := syntax.NewSyntaxCons(sym, expr, sym.SourceContext())
-	err := compileDefineSyntaxFromSyntax(p.ctx, p.env, form, p.libraryScope, p.evaluator)
-	if err != nil {
-		return nil, err
-	}
-	return form, nil
 }
 
 func (p *ExpanderTimeContinuation) expandDefineForSyntax(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
@@ -333,9 +346,9 @@ func formatIrritants(irritants []values.Value) string {
 	return strings.Join(parts, ", ")
 }
 
-// expandBeginForm expands (begin expr ...) by expanding all subexpressions.
-// Uses ExpandBodyWithDefineSyntax to compile define-syntax forms immediately,
-// ensuring macros defined in begin are available to subsequent forms.
+// expandBeginForm expands (begin expr ...) by expanding all subexpressions in
+// order through ExpandBodyWithDefineSyntax, so a define-syntax binds (in
+// expandDefineSyntax) before the forms after it expand.
 func (p *ExpanderTimeContinuation) expandBeginForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	exprPair, ok := asNonEmptyPair(expr)
 	if !ok {
@@ -348,8 +361,6 @@ func (p *ExpanderTimeContinuation) expandBeginForm(sym *syntax.SyntaxSymbol, exp
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "failed to collect begin body"))
 	}
 
-	// Use ExpandBodyWithDefineSyntax to compile define-syntax forms immediately
-	// This ensures macros defined in begin are available to subsequent forms
 	expandedForms, err := p.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "failed to expand begin body"))

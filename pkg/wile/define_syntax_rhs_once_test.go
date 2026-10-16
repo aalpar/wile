@@ -121,6 +121,14 @@ func TestDefineSyntaxRHSRunsOnce(t *testing.T) {
 			value:   "1",
 		},
 		{
+			// Failed on a23c4543 (the body scan did not reach a let-syntax body);
+			// the expander now binds the keyword wherever it reaches the form.
+			name:    "let-syntax body",
+			program: rhsOnceImports + `(let-syntax () ` + rhsOnceDefine("m", "RHS-ls") + ` (m))`,
+			tag:     "RHS-ls",
+			value:   "1",
+		},
+		{
 			name:     "library body",
 			multiple: `(import (scheme base) (once lib)) (ml)`,
 			tag:      "RHS-lib",
