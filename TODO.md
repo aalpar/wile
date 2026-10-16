@@ -182,7 +182,6 @@ because the citation is what `make indexlint` counts:
 | `2026-06-09-polynomial-ideal-domain-design.md`<br>`2026-06-09-polynomial-ideal-domain-impl.md` | Design approved; impl **0/30** checkboxes, zero commits. The "10/41" figure quoted in Tier 2 was never true; corrected 2026-09-20 |
 | `2026-06-24-tinyclos-object-system-design.md` | Design proposal, opt-in object system |
 | `2026-06-24-unboxed-scalar-arithmetic-design.md` | Design **A rejected**; Design B + Phase 4 is the live plan |
-| `2026-06-26-promoted-primitive-inline-registry.md` | Phase 1 SHIPPED (`836f4f69`); Phase 2 and Decision 3 CLOSED; Q3 refuted and closed 2026-09-26. Nothing open; archive candidate |
 | `2026-07-10-climbing-tower-design.md` | Tier 1 **shipped** 2026-07-10 (`f92568a8`); **Tier 2 (§6) unstarted and gated** on the §9 procedural-authoring pivot plus §10 owner sign-off. The `-impl` twin is Tier-1-only and archived to `memory/` 2026-08-24 — this row is why the design is not |
 | `2026-07-10-engine-services-generic-keyed-slot-design.md` | Design only, not scheduled |
 | `2026-07-11-scheme-pipeline-seams-design.md` | `current-eval` / `current-print` / `current-read` seams |
@@ -196,7 +195,6 @@ because the citation is what `make indexlint` counts:
 | `2026-09-05-scheme-specified-syntax-forms-impl.md` | **IMPL PLAN 2026-09-05. Tasks 1-10 of 12 shipped** (P0.1-P0.5, P1, P2), branch per phase. P2 landed 2026-09-07 WITHOUT its default flip: `syntax-rules` and `er-macro-transformer` are specified in Scheme, but making the Scheme layer the default costs **31x startup** — 5.96 ms/engine and 87k allocations become 186 ms and 1.9M, at ~1 ms per `syntax-rules` clause over bootstrap's ~90 (F15). Both layers stay in the binary behind `WILE_SYNTAX_FORMS` / `WithSchemeSyntaxForms()`, default Go. **P3 (deletion) is blocked on the flip**, and the flip on a cheaper pattern representation or a pre-compiled bootstrap. Executing P2 also found a latent **P1** hygiene defect: `values.AddScopeToSet` aliased the caller's backing array, so two nested expansions of one macro clobbered each other's introduction scope — `(or (or #f #f) #t)` failed to compile and `(wile algebra interval)` was unloadable (F16). Twelve tasks over the design's P0.1–P0.5 and P1–P4, one branch per phase, 62 checkbox steps. §0 carries fourteen corrections to the design: the five review findings of 2026-09-05 (F1 the exclusion set is eight expander rows, ratcheted; F2 the Go producer's definition-site local arm dies at P0.1; F3 `define-syntax` docstrings exist and `,doc` reads them, so the seven `specialforms.go` rows go in P4; F4 the full deletion inventory; F5 `unsyntax`/`unsyntax-splicing` as violation-raising macros) and five measured while planning (F6 `datum->syntax` already copies the template's scopes, only the pin is at stake; F7 `GlobalIndex` is minted per query, so the P0.3 pin compares bindings; F8 P1 must take `with-syntax`/`quasisyntax` with `syntax`; F9 `WILE_SYNTAX_FORMS` as the both-ways default; F10 bootstrap macros are invisible from phase ≥ 2, closed by a kernel arm 2b). Four more (F11–F14) came from the adversarial review of 2026-09-06, folded 2026-09-06: F11 a library body is already stamped with its own scope, so §2.1 item 2's premise was false; F12 `bootstrap_nilpin_test.go` is replaced in P2, not deleted in P3; F13 `chibi/optional.sld`'s ER arm is behind a `cond-expand` Wile never selects; F14 `syntax-local-introduce` wiring belongs to P0.2, forced by `TestSyntaxLocalIntroduceIsNotWired`. That review also fixed four blocking defects: every `EvalMultiple` result in the P0 pin files asserted a `pkg/syntax` type directly on the `wile.Value` wrapper, which does not compile. Six more (F15-F20) came from EXECUTING Task 10 on 2026-09-07: F15 the startup measurement that deferred the flip; F16 the `AddScopeToSet` aliasing defect; F17 the plan's `er-contract` row cannot live in a script that must be green on both layers; F18 the nil-pin census is kept and pinned to the Go layer rather than replaced, with the behaviour rows added alongside; F19 the ER shim needs `%er-proc` to keep the definition-site arity refusal and to evaluate PROC once; F20 `pkg/registry/core/bootstrap.scm` is not executed, so editing its load-order comment fixes nothing; **F21 the `WILE_SYNTAX_FORMS=scheme` leg is no longer green** — 61 minutes for `pkg/wile` alone and seven failures in five classes, the worst being that the Scheme generators compute with USER-REPLACEABLE primitives, so `reg.Without("+")` plus an embedder's own `+` cannot load bootstrap. Nothing reaches the default; all of it is owed before the flip, and that class outranks the startup number |
 | `ARCHITECTURE.md` | Header says 1/4 sections complete; the Dialect System section it marks Proposed has shipped (`WithDialect`, `pkg/wile/dialect.go`), others unverified |
 | `MACRO_SYSTEM.md` | Both sections unstarted (re-verified 2026-09-20: zero `ScopeReason` / `syntax-origin` symbols in tree) |
-| `2026-10-11-rootless-subcontext-winding-decision.md` | **DECIDED 2026-10-11, option 2; SHIPPED 2026-10-12** (`8ae377b3`); archive candidate. Why every winding fix on the `fix/timer-identity-and-teardown` branch moved the wrong answer on one path: a `call/cc` in tail position of a dynamic-wind thunk ran its procedure under a driver of its own, whose edge acted as a default prompt nobody wrote. Three options with Mermaid diagrams; option 2 fixes the root first (resume resolved by the driver that owns where the continuation was delimited, boundary token), then the timer branch rebases. Landed in the other order: the timer branch merged first (`49ad4fc2`, 2026-10-12) and this branch rebased onto it, keeping the timer branch's winding rules (`windingBase`, `composeWinding`) |
 | `2026-09-20-core-form-override-and-import-portability-design.md` | **DESIGN 2026-09-20; Part B SHIPPED**: defect 3 by P3.3 (`6f5b9f6a`), defects 1+2 by P4.3 (`35e8866a`). Parts A (stdlib self-violations), C (§5.2 opt-in check), D (superlinear expansion cost) open. As designed: successor to `2026-09-19-open-directions.local.md` §§2–3, which it supersedes on five points. Root causes for all three `if`-capture defects **verified by instrumentation**, not hypothesised: defect 1+2 are `lookupMacroBinding`'s D2 arm discarding a resolved pin because it names a `BindingTypePrimitive` (`expander_time_continuation.go:393-401`); defect 3 is `findLibraryBinding` exporting the inherited core `if` instead of the library's own Expand-phase macro (`library_bindings.go:554-557`). Two independent sites, **not** one root cause as the recap said. Both candidate fixes measured: each reproduces Racket 9.2 and Chez byte for byte, `go test ./...` green with both active. Also: the §5.2 self-violations are **three** edits not four (`(wile strings)` already excepts `string-map`; schelog's `_` shadows a startup binding, which §5.2 does not reach), the A1 stdlib edit is applied and green in a worktree, and the superlinear expander cost is reachable with **no shadowing at all** |
 | `GRAPH-SPECTRUM.md` | Directions, not scheduled |
 
@@ -210,7 +208,6 @@ because the citation is what `make indexlint` counts:
 | `2026-04-20-copilot-review-data-mining.md` | Imminent, not started |
 | `2026-04-21-wile-goast-ac-match-migration.md` | Stub; deferred follow-up in wile-goast |
 | `2026-04-23-coverage-library-tracking.md` | Blocked by algebra Tier B per `WORKSPACE-ROADMAP.md` |
-| `2026-04-23-docs-sweep-impl.md` | **COMPLETE** (corrected 2026-09-20). Phases 1–10 merged as PRs #707–#719; Phases 11–12 (`docs/learn/`, `docs/coverage/`) were satisfied separately by the 2026-09-14 doc audit (`afb957b8`, `8802fdee`), which re-verified every claim against Chez/Racket and the CLI. The plan's own "Phase 11/12 Pending" markers and this row were both stale |
 | `2026-05-02-algebra-matching-many-to-many.md` | Gated on `(wile algebra matroid)` (§5.7 Tier C) |
 | `2026-05-05-iter-seq-cascade.md` | Draft; sequenced after the charsets refactor (shipped) |
 | `2026-07-11-chibi-derived-ergonomics-backlog.md` | **#5 RESOLVED 2026-09-04 — already built**, nothing to do: every primitive its "Verify first" asked about is registered in `pkg/registry/core/syntax.go` (`identifier?`, `syntax->datum`, `datum->syntax`, `generate-temporaries`, `bound-identifier=?`, `free-identifier=?`) and `er-macro-transformer` lives in `compile_er_macro.go` with `wile/er-macro-test.scm` green. #6 (chibi-ffi-style codegen) still parked |
@@ -224,8 +221,6 @@ because the citation is what `make indexlint` counts:
 
 | File | Kind |
 |---|---|
-| `2026-09-15-keyword-denotation-dispatch.md` (+ `-artifacts/`) | **SHIPPED** 2026-09-16 (`ac048a0b`); archive candidate |
-| `2026-09-15-renamed-identifiers-inner-positions.md` (+ `-artifacts/`) | **SHIPPED** 2026-09-16 (`9a9963a6`); residuals filed (`59f3f9ce`, `093679e7`); archive candidate |
 | `2026-09-19-open-directions.local.md` | Recap of the 2026-09-16→19 sessions; §§2–3 superseded by `2026-09-20-core-form-override-…-design.md` |
 | `2026-07-01-staff-engineer-sweep.md` | Whole-codebase tech-debt tracker; larger M/L findings still open |
 | `2026-07-17-pair-gc-investigation.md` | Read-only investigation of three cons-cell GC levers |
@@ -3935,7 +3930,7 @@ enough to rebuild the probes.
   thunk silently dropped the rest of the program. Racket agrees on both probes. Pinned by
   `TestCallCCInAWindingThunkIsNotAPrompt`, `TestCallCCInsideEvalResumesInsideEval`,
   `TestThreadRootIsTheThreadsOnlyImplicitPrompt`; design in
-  `plans/2026-10-11-rootless-subcontext-winding-decision.md`. Still open: a continuation captured
+  `memory/2026-10-11-rootless-subcontext-winding-decision.md`. Still open: a continuation captured
   in a sub-context and invoked after it returned resolves at the root (the sub-context truncation
   class; the root replaces its chain with the segment and the rest of the program is dropped
   without an error). The token makes that case detectable: a token whose context has been
@@ -4360,9 +4355,9 @@ Open restructuring work found only in `plans/` during the 2026-07-21 triage.
   (`plans/2026-07-10-engine-services-generic-keyed-slot-design.md`), layered-environment
   architecture direction (`memory/2026-06-13-layered-environment-architecture.md`),
   data-driven promoted-primitive inline registry
-  (`plans/2026-06-26-promoted-primitive-inline-registry.md`, DRAFT v2 awaiting review).
+  (`memory/2026-06-26-promoted-primitive-inline-registry.md`, archived 2026-10-16).
 - [x] **`docs/` audit sweep** [Docs/verification, **goal met by another route, closed
-  2026-09-26**]: the docs-subsystem sweep (`plans/2026-04-23-docs-sweep-impl.md`, follows
+  2026-09-26**]: the docs-subsystem sweep (`memory/2026-04-23-docs-sweep-impl.md`, follows
   algebra-docs). The §4 review audit AU.1 that shared this row was run 2026-08-09 with a
   negative verdict, that plan's own header says all 23 items are closed, and it is archived:
   `memory/2026-07-15-review-2026-07-13-sec4-remediation.md`. The sweep's own goal was met by
@@ -4384,7 +4379,7 @@ Open restructuring work found only in `plans/` during the 2026-07-21 triage.
   What they cannot do is enumerate: each gates **one named claim**, which is the honest scope
   — this closeout phase uses six rows of the first. What is genuinely unstartable in CI is
   the plan-header check, because `plans/` lives in the separate `wile-memoplans` repo and is absent from a CI checkout of `wile`: `head -5
-  plans/2026-04-23-docs-sweep-impl.md` still reads `status = "Planned — not started"` while
+  memory/2026-04-23-docs-sweep-impl.md` still reads `status = "Planned — not started"` while
   the goal it names has shipped. That is `plans/`-header rot, and it is the same asymmetry
   that correctly keeps `planlint` (`tools/sh/planlint.sh`, `Makefile:685`) out of the `ci`
   target.
