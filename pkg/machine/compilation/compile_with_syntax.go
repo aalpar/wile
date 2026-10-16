@@ -76,34 +76,23 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 	current := bindingsPair
 	for !syntax.IsSyntaxEmptyList(current) {
 		binding := current.SyntaxCar()
+		// Exactly (pattern expr): an extra element or an improper tail is an
+		// error, not ignored, since the expander pass left this form unexpanded.
 		bindingPair, ok := binding.(*syntax.SyntaxPair)
-		if !ok || bindingPair.IsEmptyList() {
+		if !ok || !hasSyntaxArity(bindingPair, 2) {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: each binding must be (pattern expr)"))
 		}
-
-		// Get pattern (first element)
-		pattern := bindingPair.SyntaxCar()
-		patterns = append(patterns, pattern)
-
-		// Get expr (second element)
-		rest, ok := bindingPair.SyntaxCdr().(*syntax.SyntaxPair)
-		if !ok || rest.IsEmptyList() {
-			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: each binding must be (pattern expr)"))
-		}
-		expanded, err := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator).ExpandExpression(rest.SyntaxCar())
-		if err != nil {
-			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "with-syntax: error expanding binding expression"))
-		}
-		exprs = append(exprs, expanded)
+		patterns = append(patterns, bindingPair.SyntaxCar())
+		exprs = append(exprs, bindingPair.SyntaxCdr().(*syntax.SyntaxPair).SyntaxCar())
 
 		// Move to next binding
 		cdr := current.SyntaxCdr()
 		if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		}
-		current, _ = cdr.(*syntax.SyntaxPair)
-		if current == nil {
-			break
+		current, ok = cdr.(*syntax.SyntaxPair)
+		if !ok {
+			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: bindings must be a proper list"))
 		}
 	}
 
@@ -122,14 +111,16 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 	clause := buildQuasiSyntaxList(srcCtx, patternList, bodyBegin)
 
 	// The operands of (syntax-case (list expr ...) () ((pattern ...) (begin body ...))),
-	// compiled without re-expanding the input: the binding expressions are
-	// already expanded, and the synthesized list head must not reach the expander.
+	// compiled directly rather than as a synthesized syntax-case form: the expander
+	// pass has already expanded each expr (expandWithSyntaxForm), and re-expanding
+	// the input would resolve the scopeless list head at the use site, where a user
+	// (define-syntax list …) captures it.
 	syntaxCaseArgs := buildQuasiSyntaxList(srcCtx,
 		listExpr,
 		syntax.SyntaxEmptyList, // empty literals list
 		clause,
 	)
-	return p.compileSyntaxCase(ctctx, syntaxCaseArgs, false)
+	return p.CompileSyntaxCase(ctctx, syntaxCaseArgs)
 }
 
 // compileWithSyntaxBody compiles the body of with-syntax when there are no bindings.

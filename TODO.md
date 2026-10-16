@@ -1092,16 +1092,29 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   at compile time, after validation, so the inliner keeps the stale body. Each position, with
   `(let ((f (lambda () 7))) (define-syntax m (syntax-rules () ((_) (set! f (lambda () 99))))) <P>
   (f))`; Chez and Racket answer `99`, and so does `(m)` written directly:
-  - `(cond-expand (else (m)))`: `7`, live on master.
-  - `` `(,(m)) ``: `7`. Master raised "no such binding m"; P4.5 expands the operand, so it reaches
-    the hole.
-  - `(syntax-case (m) () (_ 1))`: `7`, same history as the quasiquote row; `with-syntax`'s RHS
-    likewise.
+  - `(cond-expand (else (m)))`: `7`, live on master. **Open.**
   - `include` of a file holding `(m)`: unmeasured; the row below already covers the position.
+    **Open.**
+  - `` `(,(m)) ``, `(syntax-case (m) () (_ 1))`, and `with-syntax`'s RHS: **fixed on
+    `fix/quasi-operand-expansion`** (crosscheck remediation, 2026-10-15). The first P4.5 commit
+    expanded these operands at compile time, which reached the hole (`7`; master had raised "no
+    such binding m"). They now expand in the expander pass (`expander_quasi.go`), before
+    validation, so the scan sees the `set!`. The crosscheck found two more symptoms of the
+    compile-time timing, and the same move fixed both: a `let-syntax` keyword was out of scope in
+    an operand (the compiler's env holds no frame for it, so `` `(,(two)) `` resolved an outer
+    `two`), and a macro recursing through an operand overflowed the Go stack, because each
+    compile-time expander started a fresh depth guard. The same hole at top level: `(begin (define
+    g 1) (define-syntax setg … (set! g 2)) `(,(setg)) g)` was REJECTED under the immutable top
+    level ("cannot mutate immutable top-level binding"); it now answers `2`. Pinned by
+    `pkg/wile/quasi_operand_expansion_test.go`.
 
-  The fix is the one the scan's own doc rules out a cheap version of: either expand these
-  positions before validation, or treat a macro use in one as an unknown set! of every captured
-  binding. Not folded into P4.5, which would widen a three-site fix into a walk redesign.
+  The remaining positions need the same move: expand cond-expand's chosen clause and an included
+  file's forms before validation, or treat a macro use in one as an unknown set! of every captured
+  binding. Syntax-case clause bodies still expand at compile time (`CompileSyntaxCase`), so a
+  macro recursing through one still hangs rather than raising, live on master. The same timing
+  leaves a `let-syntax` keyword out of scope in a clause body: with a top-level `two` → 2,
+  `(let-syntax ((two (syntax-rules () ((_) 3)))) (syntax-case 'x () (_ (two))))` answers `2` on
+  master and the branch; Chez and Racket answer `3`.
 
 - [ ] **Go layer: a `syntax` template with an ellipsis before its last element builds a
   malformed syntax list** [Correctness, S, filed 2026-10-15 with the P4.5 Scheme-layer follow-up]:
@@ -1109,7 +1122,7 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   printing it SIGSEGVs in `SyntaxObject.SchemeString` (`wile -e`), and `syntax->datum` of it renders
   `(#<void> ... 1)`. Chez and the Scheme layer answer `(2 3 1)`; `syntax-rules` with the same
   template is correct, so the fault is in the Go `syntax` template builder only. Live on master
-  (`2882da27`), default layer.
+  (`c65c625b`), default layer.
 
 - [ ] **`validateInclude` never reads the included file** [Medium, M, filed 2026-09-15 during the
   renamed-inner-positions whole-branch review]: `validateInclude`

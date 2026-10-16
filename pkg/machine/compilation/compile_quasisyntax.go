@@ -90,7 +90,6 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue
 // through p.env, so a renamed or prefixed import of the markers still matches.
 func (p *CompileTimeContinuation) expandQuasisyntax(ctx context.Context, stx syntax.SyntaxValue, depth int) (syntax.SyntaxValue, error) {
 	kw := quasisyntaxKW.resolvedBy(p.env)
-	kw.expander = NewExpanderTimeContinuation(ctx, p.env, p.evaluator)
 	return p.expandQuasi(ctx, stx, depth, kw, p.newQuasiDepthGuard())
 }
 

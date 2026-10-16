@@ -48,17 +48,6 @@ import (
 //  4. If fender exists, it's evaluated as a guard condition
 func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	goSyntaxFormCompiles.Add(1)
-	return p.compileSyntaxCase(ctctx, expr, true)
-}
-
-// compileSyntaxCase is CompileSyntaxCase with the input expression's expansion
-// left to the caller. The expander passes syntax-case through unexpanded, so a
-// written input expression is expanded here (expandInput). CompileWithSyntax
-// passes false: it expands each binding's expression itself, BEFORE wrapping
-// them in a synthesized (list …) whose head carries no scopes. Expanding that
-// head would resolve it at the use site, where a user (define-syntax list …)
-// captures it.
-func (p *CompileTimeContinuation) compileSyntaxCase(ctctx CompileTimeCallContext, expr syntax.SyntaxValue, expandInput bool) error {
 	// expr is the CDR of the form (keyword stripped by syntaxCompiler in register.go).
 	// So expr = (input-expr (literals) clause ...)
 	argsPair, err := formArgs(expr, "syntax-case", "expression and clauses")
@@ -96,13 +85,6 @@ func (p *CompileTimeContinuation) compileSyntaxCase(ctctx CompileTimeCallContext
 	clausesCdr, ok := rest.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || clausesCdr.IsEmptyList() {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-case: expected at least one clause"))
-	}
-
-	if expandInput {
-		inputExpr, err = NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator).ExpandExpression(inputExpr)
-		if err != nil {
-			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "syntax-case: error expanding input expression"))
-		}
 	}
 
 	// Compile the input expression (leaves value in value register)

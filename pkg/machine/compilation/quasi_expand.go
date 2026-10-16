@@ -71,14 +71,6 @@ type quasiKeywords struct {
 	// 12-run interleaved). It also made quasiKeywords non-comparable, which a
 	// struct of four names and two flags has no reason to be.
 	env *environment.EnvironmentFrame
-
-	// expander expands the operand an unquote or splice fires at depth 1. The
-	// expander passes a quasi template through unexpanded (it cannot know which
-	// parts are data), so the operand reaches this walk raw, and returning it raw
-	// handed `,(when #t 2) to the compiler as a call to an unbound `when`. nil
-	// returns operands raw: the package-level tables, and the needs-runtime walk,
-	// which never fires one. Built once per expansion, not per operand.
-	expander *ExpanderTimeContinuation
 }
 
 var quasiquoteKW = quasiKeywords{
@@ -240,19 +232,6 @@ func (p quasiKeywords) resolvedBy(env *environment.EnvironmentFrame) quasiKeywor
 	q := p
 	q.env = env
 	return q
-}
-
-// operand returns the expression a depth-1 unquote or splice fires: v expanded,
-// so it is an ordinary expression like any other the compiler receives.
-func (p quasiKeywords) operand(v syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	if p.expander == nil {
-		return v, nil
-	}
-	q, err := p.expander.ExpandExpression(v)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "%s: error expanding an operand", p.nesting)
-	}
-	return q, nil
 }
 
 // headName returns the marker name a head carries: what it DENOTES when this
@@ -533,10 +512,11 @@ func (p *CompileTimeContinuation) expandQuasi(
 			switch denotedName {
 			case kw.unquote:
 				// The escape. Depth 1 is where an unquote fires, and it yields
-				// the argument as an expression, not as template: `,x is x.
+				// the argument as an expression, not as template: `,x is x. The
+				// expander pass has already expanded it (expander_quasi.go).
 				if depth == 1 && hasSyntaxArity(v, 2) {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-					return kw.operand(cdr.SyntaxCar())
+					return cdr.SyntaxCar(), nil
 				}
 				return p.rewrapQuasiForm(ctx, v, carSymName, depth-1, kw, g)
 
@@ -583,8 +563,8 @@ func (p *CompileTimeContinuation) expandQuasi(
 // early exit is the dotted-tail arm, and that arm requires the cell's cdr to be
 // a one-element list, so exactly one element remains and no splice can hide
 // behind it — except as that final tail expression itself, and there depth
-// decides: at depth 1 the unquote arm hands `(a . ,,@x)'s raw
-// (unquote-splicing x) to the compiler, which errors at that token, while
+// decides: at depth 1 the unquote arm hands `(a . ,,@x)'s (unquote-splicing x)
+// to the compiler as an expression, which errors at that token, while
 // deeper it is rewrapped as data like any other over-deep form.
 //
 // Two facts about the ordering here are load-bearing and neither is local:
@@ -629,7 +609,7 @@ func (p *CompileTimeContinuation) expandQuasiList(
 		// elements: `(,@x . ,y) rendered as the 4-element list (1 2 unquote y).
 		//
 		// The cell IS the tail template, so it goes to expandQuasi whole: at
-		// depth 1 an unquote arm hands back the raw expression (the escape,
+		// depth 1 an unquote arm hands back the expression (the escape,
 		// evaluated at run time exactly as a splice's expression is), deeper it
 		// rewraps at depth-1, and a nesting keyword rewraps at depth+1. Not one
 		// of those rules is restated here. See dottedTailCell for which
@@ -654,11 +634,7 @@ func (p *CompileTimeContinuation) expandQuasiList(
 				flushRun()
 				if hasSyntaxArity(carPair, 2) {
 					cdrPair := carPair.SyntaxCdr().(*syntax.SyntaxPair)
-					spliced, err := kw.operand(cdrPair.SyntaxCar())
-					if err != nil {
-						return nil, err
-					}
-					appendArgs = append(appendArgs, spliced)
+					appendArgs = append(appendArgs, cdrPair.SyntaxCar())
 					continue
 				}
 				// Malformed: taken as an ordinary element, but the run before it

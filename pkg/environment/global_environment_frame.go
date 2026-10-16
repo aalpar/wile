@@ -107,6 +107,13 @@ func newScopeKeyedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, r
 	return &GlobalIndex{Index: key, Env: env, Slot: ref.slot, query: q, phase: ref.phase, sealed: ref.sealed}
 }
 
+// Sealed reports whether the pinned slot sits in its frame's sealed tier: a
+// bootstrap definition, which no top-level redefinition replaces. A library's own
+// body definitions sit in its frame's mutable tier, so they report false.
+func (p *GlobalIndex) Sealed() bool {
+	return p.sealed
+}
+
 // SchemeString returns a string representation of this global index.
 func (p *GlobalIndex) SchemeString() string {
 	return fmt.Sprintf("<global-index %q>", p.Index.SchemeString())

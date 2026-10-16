@@ -72,7 +72,6 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 	// sit here called the SAME function with the same arguments — a branch that
 	// was reachable, redundant, and an asymmetry with the quasisyntax entry,
 	// which never had one.
-	kw.expander = NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator)
 	expanded, err := p.expandQuasi(ctctx.ctx, datum, depth, kw, g)
 	if err != nil {
 		return p.wrapCompilationError(err)

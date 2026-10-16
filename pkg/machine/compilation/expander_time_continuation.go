@@ -417,12 +417,19 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	// phase-1 frame, a phase-0 (define-syntax if …) used to win over a pinned core if, and
 	// the core form now does.
 	//
-	// A Variable pin stops the search the same way: the template meant that procedure,
-	// so the use is a call. Falling through let a use-site (define-syntax list …) at
-	// phase 1 capture the Scheme syntax layer's generated (list …) as the demoted
-	// ambient, which broke that define-syntax's own syntax-rules.
+	// A Variable pin stops the search the same way, unless a use-site define-syntax can
+	// redefine it: the use is then a call to the procedure the template meant. Falling
+	// through let a user (define-syntax list …) capture the Scheme syntax layer's
+	// generated (list …): as the demoted ambient at phase 1, which broke that
+	// define-syntax's own syntax-rules, and through ARM 2 at phase 0, in with-syntax's
+	// input. Only a pin into the use site's OWN frame, in its mutable tier, falls
+	// through: a later top-level (define-syntax helper …) redefines a top-level
+	// helper, and a template's (helper) then expands to the macro (Chez, Racket). A
+	// sealed pin is a bootstrap definition, and a pin into another frame is a library's
+	// own helper, which an importer's define-syntax of the same name does not touch
+	// (Chez and Racket call the library's helper).
 	//
-	// A *SyntaxCompiler pin falls through too. Eight of those Go transformer forms
+	// A *SyntaxCompiler pin, by contrast, falls through entirely. Eight of those Go transformer forms
 	// (schemeSyntaxFormNames: syntax, syntax-rules, er-macro-transformer, …) are what
 	// WithSchemeSyntaxForms replaces with macros sealed at phase 1, and a bootstrap
 	// template written before its macro existed carries a pin to the Go row. ARM 2b is
@@ -441,7 +448,10 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 		}
 	}
 	if pinned != nil && pinned.BindingType() == environment.BindingTypeVariable {
-		return nil, pinned
+		gi := environment.PinnedIndex(sym)
+		if gi.Sealed() || gi.Env != p.env.GlobalEnvironment() {
+			return nil, pinned
+		}
 	}
 
 	// ARM 1, demoted: no pin resolved, so the ambient ∅-scoped match from the current

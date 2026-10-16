@@ -29,7 +29,6 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	// Forms that return unchanged (no expansion needed at expand time)
 	{"quote", (*ExpanderTimeContinuation).expandUnchanged},
 	{"define-syntax", (*ExpanderTimeContinuation).expandUnchanged},
-	{"quasiquote", (*ExpanderTimeContinuation).expandUnchanged},
 	{"unquote", (*ExpanderTimeContinuation).expandUnchanged},
 	{"unquote-splicing", (*ExpanderTimeContinuation).expandUnchanged},
 	{"include", (*ExpanderTimeContinuation).expandUnchanged},
@@ -38,13 +37,10 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	{"cond-expand", (*ExpanderTimeContinuation).expandUnchanged},
 	{"syntax", (*ExpanderTimeContinuation).expandUnchanged},
 	{"quote-syntax", (*ExpanderTimeContinuation).expandUnchanged},
-	{"syntax-case", (*ExpanderTimeContinuation).expandUnchanged},
 	{TransformerSyntaxRules, (*ExpanderTimeContinuation).expandUnchanged},
 	{TransformerERMacro, (*ExpanderTimeContinuation).expandUnchanged},
-	{"quasisyntax", (*ExpanderTimeContinuation).expandUnchanged},
 	{"unsyntax", (*ExpanderTimeContinuation).expandUnchanged},
 	{"unsyntax-splicing", (*ExpanderTimeContinuation).expandUnchanged},
-	{"with-syntax", (*ExpanderTimeContinuation).expandUnchanged},
 	{"library", (*ExpanderTimeContinuation).expandUnchanged},
 	{"export", (*ExpanderTimeContinuation).expandUnchanged},
 	{"meta", (*ExpanderTimeContinuation).expandUnchanged},
@@ -53,6 +49,13 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	{"eval-when", (*ExpanderTimeContinuation).expandEvalWhen},
 	{"let-syntax", (*ExpanderTimeContinuation).expandLetSyntax},
 	{"letrec-syntax", (*ExpanderTimeContinuation).expandLetrecSyntax},
+
+	// Forms whose operands are expressions inside a template or pattern form:
+	// only those positions expand (expander_quasi.go)
+	{"quasiquote", (*ExpanderTimeContinuation).expandQuasiquoteForm},
+	{"quasisyntax", (*ExpanderTimeContinuation).expandQuasisyntaxForm},
+	{"syntax-case", (*ExpanderTimeContinuation).expandSyntaxCaseForm},
+	{"with-syntax", (*ExpanderTimeContinuation).expandWithSyntaxForm},
 
 	// Binding scope for hygienic let/letrec macros
 	{"with-binding-scope", (*ExpanderTimeContinuation).expandWithBindingScope},
