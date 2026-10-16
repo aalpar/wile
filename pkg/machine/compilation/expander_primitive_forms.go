@@ -66,15 +66,12 @@ func (p *ExpanderTimeContinuation) expandSub(expr, sub syntax.SyntaxValue, what 
 }
 
 // expectArgs collects the argument sub-expressions off args' spine (args is the
-// keyword's cdr). It reports ok=true only when the count lands in [lo, hi];
-// under- or over-arity yields ok=false so the caller bails to formUnchanged and
-// lets the validator report the arity error. Arity is checked structurally,
-// before any sub-expression is expanded.
-//
-// An improper spine is silently truncated rather than refused: the loop stops
-// at the first non-pair tail without recording it, so (if #t 1 . 2) collects two
-// arguments, reports ok=true, and the caller rebuilds a proper (if #t 1). The
-// dotted tail is dropped and never reaches the validator.
+// keyword's cdr). It reports ok=true iff args is a proper list whose length is in
+// [lo, hi]; otherwise ok=false, so the caller bails to formUnchanged and lets the
+// validator report the error. Arity is checked structurally, before any
+// sub-expression is expanded. Properness matters because the caller rebuilds a
+// proper list from the collected arguments: accepting (if #t 1 . 2) would drop
+// the dotted tail and run the form.
 func expectArgs(args syntax.SyntaxValue, lo, hi int) ([]syntax.SyntaxValue, bool) {
 	q := make([]syntax.SyntaxValue, 0, hi)
 	rest := args
@@ -88,6 +85,9 @@ func expectArgs(args syntax.SyntaxValue, lo, hi int) ([]syntax.SyntaxValue, bool
 		}
 		q = append(q, pair.SyntaxCar())
 		rest = pair.SyntaxCdr()
+	}
+	if !syntax.IsSyntaxEmptyList(rest) {
+		return nil, false // improper spine: a dotted tail follows the arguments
 	}
 	if len(q) < lo {
 		return nil, false
