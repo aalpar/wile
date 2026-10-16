@@ -650,10 +650,11 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 // here: a program can redefine the CANONICAL spelling ((define-syntax quote ...)
 // after renaming quote to core-quote) without touching the renamed head at all,
 // and that unrelated shadow must not stop core-quote from dispatching as quote.
-// The sealed probe is checked first so that shadow can never intervene; the
-// ranked LookupPrimitiveExpander call remains as the fallback for coordinates
-// with no sealed phase-1 row, such as an
-// (environment '(scheme base) '(for-syntax (scheme base))) namespace — see
+// The sealed probe is checked first so that shadow can never intervene. A
+// namespace with no sealed phase-1 row of its own, such as an
+// (environment '(scheme base)) child, is probed at the engine root's sealed
+// tier next (see the ROOT probe below), and the ranked LookupPrimitiveExpander
+// call remains as the last fallback — see TestImportSetNamespaceDispatchesSpecialForms,
 // TestPhaseShiftImportTakesEveryImportSet and
 // TestImportSetEnvironmentIsEmptyAboveRuntime.
 // head is the caller's already-resolved binding for sym — same env, same key,
@@ -675,16 +676,61 @@ func (p *ExpanderTimeContinuation) lookupHeadPrimitiveExpander(
 	}
 	canon := values.NewSymbol(denoted)
 	expandEnv := p.env.Expand()
-	if expandEnv != nil && expandEnv.GlobalEnvironment() != nil {
-		sealed := expandEnv.GlobalEnvironment().SealedBindingAt(canon, syntax.ScopesOf(syntax.Scopes{}), expandEnv.PhaseLevel())
-		if sealed != nil && sealed.BindingType() == environment.BindingTypePrimitive {
-			spe, ok := sealed.Value().(*PrimitiveExpander)
-			if ok {
-				return spe
-			}
+	if expandEnv == nil {
+		return LookupPrimitiveExpander(p.env, canon, syntax.Scopes{})
+	}
+	spe := sealedPrimitiveExpander(expandEnv.GlobalEnvironment(), canon, expandEnv.PhaseLevel())
+	if spe != nil {
+		return spe
+	}
+	// The ROOT probe. A namespace minted by (environment <import-set>) has an
+	// empty store: the import copied the phase-0 keyword row (b), but not the
+	// phase-1 handler row, so without this the expander read every special form
+	// there as a procedure call — a define-syntax in a begin never bound before
+	// the forms after it, and quote expanded its datum — while the compiler,
+	// dispatching by b's denoted form, compiled the same form correctly (I171).
+	//
+	// This is a WIDENING of what such a namespace can do, and is sound because
+	// b already decided it: the namespace imported a binding that denotes this
+	// form, and the root's sealed row is that form's handler. The question to
+	// answer is whether any namespace means to be MORE restricted than the
+	// engine root without running its own registration. None does today: a
+	// profile namespace carries its own rows and returns above; the Scheme
+	// syntax layer replaces a form's root row with a macro, which this probe
+	// does not return; and a dialect that removes a form strips its visible
+	// keyword, so a child reaches the form only through an import, which the
+	// compiler already dispatches.
+	//
+	// It applies on the definition-site pin path too, where b is the pin. The
+	// sealed tier holds no user definition, so this re-asks the form b denotes,
+	// never the use-site spelling the pin exists to refuse.
+	// Root().Expand() is never nil: Expand creates the phase frame if missing.
+	ns := p.env.Namespace()
+	if ns != nil {
+		spe = sealedPrimitiveExpander(ns.Root().Expand().GlobalEnvironment(), canon, expandEnv.PhaseLevel())
+		if spe != nil {
+			return spe
 		}
 	}
 	return LookupPrimitiveExpander(p.env, canon, syntax.Scopes{})
+}
+
+// sealedPrimitiveExpander returns the primitive expander in store's sealed tier
+// for canon at phase, or nil. A sealed slot holding anything else (the Scheme
+// syntax layer's macro for a form it replaces) is not an expander.
+func sealedPrimitiveExpander(store *environment.GlobalEnvironmentFrame, canon *values.Symbol, phase environment.Phase) *PrimitiveExpander {
+	if store == nil {
+		return nil
+	}
+	sealed := store.SealedBindingAt(canon, syntax.ScopesOf(syntax.Scopes{}), phase)
+	if sealed == nil || sealed.BindingType() != environment.BindingTypePrimitive {
+		return nil
+	}
+	spe, ok := sealed.Value().(*PrimitiveExpander)
+	if !ok {
+		return nil
+	}
+	return spe
 }
 
 // invokeTransformerClosure is defined in machine/macro_evaluator.go

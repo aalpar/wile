@@ -29,7 +29,7 @@ package wile_test
 //
 // An (environment <import-set> ...) stays empty above phase 0, as R7RS 6.12 and
 // Racket's namespaces have it: a transformer reaches car there only through
-// (for-syntax ...).
+// (for-syntax ...), and the phase-2 body below only through (for-meta 2 ...).
 
 import (
 	"context"
@@ -43,9 +43,6 @@ import (
 // phaseTwoTransformerProgram evaluates, under envExpr, a transformer whose body
 // uses a let-syntax macro, so that inner transformer's body (car, cdr, list)
 // runs at phase 2. All three names are in the macro vocabulary.
-//
-// Two evals rather than one begin: a define-syntax used in the same eval'd begin
-// is not visible under an import-set environment, a separate open defect.
 func phaseTwoTransformerProgram(envExpr string) string {
 	return `(let ((env ` + envExpr + `))
   (eval '(define-syntax second-of
@@ -100,10 +97,18 @@ func TestProfileEnvironmentHasTheMacroVocabularyAtEveryPhase(t *testing.T) {
 func TestImportSetEnvironmentIsEmptyAboveRuntime(t *testing.T) {
 	eng := newPhaseRowsEngine(t)
 	_, err := eng.EvalMultiple(context.Background(), phaseTwoTransformerProgram("(environment '(scheme base))"))
-	qt.Assert(t, err, qt.ErrorMatches, `(?s).*no such .*binding "list".*`)
+	qt.Assert(t, err, qt.ErrorMatches, `(?s).*no such .*binding "list" at phase 2 .*`)
+
+	// for-syntax reaches phase 1 only. Answered 5 until I171: the expander read
+	// let-syntax in this namespace as a call, so the compiler built its
+	// transformer one phase low, where the import had put list. Racket refuses
+	// the same program ("no #%app syntax transformer is bound at phase 2").
+	_, err = eng.EvalMultiple(context.Background(),
+		phaseTwoTransformerProgram("(environment '(scheme base) '(for-syntax (scheme base)))"))
+	qt.Assert(t, err, qt.ErrorMatches, `(?s).*no such .*binding "list" with compatible scopes at phase 2 .*`)
 
 	v, err := eng.EvalMultiple(context.Background(),
-		phaseTwoTransformerProgram("(environment '(scheme base) '(for-syntax (scheme base)))"))
+		phaseTwoTransformerProgram("(environment '(scheme base) '(for-syntax (scheme base)) '(for-meta 2 (scheme base)))"))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, v.SchemeString(), qt.Equals, "5")
 }
