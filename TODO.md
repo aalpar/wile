@@ -3283,7 +3283,7 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
 - [ ] **`RequireArg[T]` and `BuildValidator` type-check the same argument twice** [Tech debt, M,
   from `2026-03-26-extension-contracts-phase2-design.md`]: with `WithContractEnforcement()` on,
   `BuildValidator` (`pkg/registry/contract.go`, wired in `pkg/wile/engine.go`) checks from
-  `ParamTypes`, and 102 call sites in 28 files (2026-10-16) then call `helpers.RequireArg` inside the `Prim*`
+  `ParamTypes`, and 100 call sites in 26 files (2026-10-16) then call `helpers.RequireArg` inside the `Prim*`
   body. The plan calls it "redundant but harmless" and gates de-duplication on full `ParamTypes`
   coverage, which is not reached (core ~197/208, several extension packages partial or zero).
   Enforcement is opt-in, so this costs nothing by default — file it, do not schedule it.
