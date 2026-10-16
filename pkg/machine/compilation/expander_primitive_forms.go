@@ -66,14 +66,12 @@ func (p *ExpanderTimeContinuation) expandSub(expr, sub syntax.SyntaxValue, what 
 }
 
 // expectArgs collects the argument sub-expressions off args' spine (args is the
-// keyword's cdr). It reports ok=true only when the count lands in [lo, hi];
-// under- or over-arity yields ok=false so the caller bails to formUnchanged and
-// lets the validator report the arity error. Arity is checked structurally,
-// before any sub-expression is expanded.
-//
-// An improper spine also yields ok=false. The caller rebuilds a proper list from
-// the collected arguments, so accepting (if #t 1 . 2) would drop the dotted tail
-// and run the form; bailing leaves the tail for the validator to reject.
+// keyword's cdr). It reports ok=true iff args is a proper list whose length is in
+// [lo, hi]; otherwise ok=false, so the caller bails to formUnchanged and lets the
+// validator report the error. Arity is checked structurally, before any
+// sub-expression is expanded. Properness matters because the caller rebuilds a
+// proper list from the collected arguments: accepting (if #t 1 . 2) would drop
+// the dotted tail and run the form.
 func expectArgs(args syntax.SyntaxValue, lo, hi int) ([]syntax.SyntaxValue, bool) {
 	q := make([]syntax.SyntaxValue, 0, hi)
 	rest := args

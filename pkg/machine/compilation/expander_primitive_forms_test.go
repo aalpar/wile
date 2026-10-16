@@ -15,11 +15,13 @@
 package compilation_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -78,7 +80,10 @@ func TestExpanderPrimitiveFormsErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
-			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
+			// The validator's rejection, not any error: a panic or a runtime
+			// error would also satisfy RunSchemeCodeExpectError.
+			err := testhelpers.RunSchemeCodeExpectError(t, tc.Code)
+			qt.Assert(t, errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue)
 		})
 	}
 }

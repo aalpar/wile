@@ -2022,6 +2022,13 @@ design. It was lifted out of the `begin-for-syntax` row below, whose ordering ha
   `with-continuation-mark`, the other two callers. Chez: invalid syntax. The fix returns ok=false on a
   non-empty tail, leaving the tail for the validator to reject; pinned by three dotted-tail rows in
   `TestExpanderPrimitiveFormsErrors`.
+- [ ] **`define`'s variable form drops everything after the value** [Conformance, XS, found by the
+  `expectArgs` crosscheck]: the simple-variable branch of `expandDefineForm`
+  (`expander_primitive_forms.go`) expands the first operand and rebuilds `(define var value)`, so
+  `(define x 1 2 3)` and `(define x 1 . 2)` both bind `x` to 1 (measured 2026-10-15; Chez: invalid
+  syntax). `validateDefineVariable` rejects both shapes ("requires exactly 1 value") but never sees
+  them. The function-shorthand branches already refuse a dotted body. Fix: bail to `formUnchanged`
+  unless the value's cdr is `()`, or route the branch through `expectArgs`.
 
 ### Closed in Tier 1
 
