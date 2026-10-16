@@ -861,7 +861,7 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 
 	// Create a fresh intro scope for this invocation. Unbound renamed symbols
 	// (like temporary names) get this scope to prevent variable capture.
-	introScope := syntax.NewScope()
+	introScope := syntax.NewScopeWithLabel("intro")
 
 	// Create rename closure. It reads the DEFINITION-SITE store — that is what
 	// makes a rename denote at the definition site and not here — but at the

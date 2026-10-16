@@ -182,3 +182,24 @@ func noUncheckedArgCast(m dsl.Matcher) { //nolint:unused // loaded by gocritic r
 		Where(!m.File().Name.Matches(`_test\.go$`)).
 		Report(`unchecked type assertion on Arg(): a wrong-type argument panics (runtime.Error) and crashes the VM — the boundary recover catches only *werr.ForeignError. Use helpers.RequireArg[T](mc, n, sentinel, name) or the comma-ok form`)
 }
+
+// noBareScopeMint flags a scope minted without a label in production code.
+// Every production mint names what it scopes ("intro", "use-site", "lambda",
+// "library:…"), so Scope.Label is total and scope reflection can read it.
+// Matches the syntax-qualified call only: values.NewScope is the constructor
+// syntax.NewScopeWithLabel itself delegates to. The m.Import is load-bearing:
+// without it ruleguard resolves `syntax` to the stdlib regexp/syntax and the
+// rule matches nothing, silently. Skips test files, which mint anonymous scopes
+// freely.
+//
+//	// Wrong:
+//	s := syntax.NewScope()
+//
+//	// Right:
+//	s := syntax.NewScopeWithLabel("intro")
+func noBareScopeMint(m dsl.Matcher) { //nolint:unused // loaded by gocritic ruleguard checker at lint time
+	m.Import(`github.com/aalpar/wile/pkg/syntax`)
+	m.Match(`syntax.NewScope()`).
+		Where(!m.File().Name.Matches(`_test\.go$`)).
+		Report(`mint scopes with syntax.NewScopeWithLabel(label); Scope.Label is total in production`)
+}
