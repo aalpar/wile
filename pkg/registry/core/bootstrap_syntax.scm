@@ -13,8 +13,8 @@
 ;;; here become visible when P4 deletes the eight rows — which is also when a
 ;;; row's ApplyDocs pass would otherwise overwrite the macro's own docstring.
 ;;; Six of the eight are still accurate for the DEFAULT layer, so nothing
-;;; user-visible is wrong today; er-macro-transformer's row describes the Go
-;;; form contract, which is the one the default serves.
+;;; user-visible is wrong today; er-macro-transformer's row describes the spine
+;;; contract that, since I031, both layers serve.
 
 (define-syntax syntax-case
   "Pattern-matching macro transformer (R6RS §12.4). Each clause is

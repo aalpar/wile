@@ -100,7 +100,7 @@ func PrimSyntaxVectorToList(mc machine.CallContext) error {
 	return nil
 }
 
-// PrimSyntaxSpine implements (%syntax-spine stx): pairs and vectors unwrapped to
+// PrimSyntaxSpine implements (%syntax-spine stx) as syntax.UnwrapSpine: pairs and vectors unwrapped to
 // Scheme pairs and vectors all the way down, identifier leaves kept as syntax,
 // other atoms unwrapped (design §3.5, Q6). The ER shim hands its proc this
 // shape, so (identifier? x) is the test and compare the equality; (symbol? x) on
@@ -108,56 +108,8 @@ func PrimSyntaxVectorToList(mc machine.CallContext) error {
 // both arguments to be identifiers, so (compare 'sym x) raises where Chibi's
 // identifier=? would accept the quoted symbol.
 func PrimSyntaxSpine(mc machine.CallContext) error {
-	mc.SetValue(syntaxSpine(mc.Arg(0)))
+	mc.SetValue(syntax.UnwrapSpine(mc.Arg(0)))
 	return nil
-}
-
-func syntaxSpine(v values.Value) values.Value {
-	switch s := v.(type) {
-	case *syntax.SyntaxSymbol:
-		return s
-	case *syntax.SyntaxPair:
-		return syntaxSpineList(s)
-	case *syntax.SyntaxVector:
-		elems := make([]values.Value, len(s.Values))
-		for i, e := range s.Values {
-			elems[i] = syntaxSpine(e)
-		}
-		return values.NewVector(elems...)
-	case syntax.SyntaxValue:
-		return s.Unwrap()
-	default:
-		return v
-	}
-}
-
-// syntaxSpineList walks the cdr chain iteratively: list length must not become
-// Go stack depth (the datum->syntax lesson in prim_syntax.go). Nesting still
-// recurses, bounded by the reader's and datum->syntax's depth limits.
-func syntaxSpineList(sp *syntax.SyntaxPair) values.Value {
-	var head, tail *values.Pair
-	var cur syntax.SyntaxValue = sp
-	for {
-		p, ok := cur.(*syntax.SyntaxPair)
-		if !ok || syntax.IsSyntaxEmptyList(p) {
-			break
-		}
-		cell := values.NewCons(syntaxSpine(p.SyntaxCar()), values.EmptyList)
-		if head == nil {
-			head = cell
-		} else {
-			tail.SetCdr(cell)
-		}
-		tail = cell
-		cur = p.SyntaxCdr()
-	}
-	if head == nil {
-		return values.EmptyList
-	}
-	if !syntax.IsSyntaxEmptyList(cur) {
-		tail.SetCdr(syntaxSpine(cur))
-	}
-	return head
 }
 
 // syntaxViolation is the error %syntax-violation returns. It carries three
