@@ -80,7 +80,7 @@ func TestExpanderPrimitiveFormsErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
-			// The validator's rejection, not any error: a panic or a runtime
+			// A syntax rejection, not any error: a panic or a runtime
 			// error would also satisfy RunSchemeCodeExpectError.
 			err := testhelpers.RunSchemeCodeExpectError(t, tc.Code)
 			qt.Assert(t, errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue)
