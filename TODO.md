@@ -1106,14 +1106,14 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
     compile-time expander started a fresh depth guard. The same hole at top level: `(begin (define
     g 1) (define-syntax setg … (set! g 2)) `(,(setg)) g)` was REJECTED under the immutable top
     level ("cannot mutate immutable top-level binding"); it now answers `2`. A `with-syntax`
-    with no bindings expands its body in the same pass: the compile-time fallbacks this move
-    deleted had been what expanded a quasi operand in such a body, so
-    `` (with-syntax () `(a ,(when #t 1))) `` regressed to "no such binding when" until the second
-    crosscheck caught it. Pinned by `pkg/wile/quasi_operand_expansion_test.go`.
-  - The same branch narrows `lookupMacroBinding`'s Variable-pin stop: a pin into the use site's
-    own frame, in its mutable tier, no longer stops the macro search, so a later top-level
-    `(define-syntax helper …)` redefines a template's `(helper)` (`42`, as Chez and Racket; was
-    `0`). A sealed pin, or one into a library's frame, still stops it.
+    with no bindings expands its body in the same pass; on master any macro use in such a body
+    (`(with-syntax () (m 3))`) raises "no such binding". Pinned by
+    `pkg/wile/quasi_operand_expansion_test.go`.
+  - The branch adds a Variable-pin stop to `lookupMacroBinding` (needed so a user
+    `(define-syntax list …)` cannot capture the Scheme layer's generated `(list …)`), scoped so a
+    pin into the use site's own frame, in its mutable tier, does not stop the search: a later
+    top-level `(define-syntax helper …)` still redefines a template's `(helper)` (`42`, as on
+    master and in Chez and Racket). A sealed pin, or one into a library's frame, stops it.
 
   The remaining positions need the same move: expand cond-expand's chosen clause and an included
   file's forms before validation, or treat a macro use in one as an unknown set! of every captured
@@ -1153,8 +1153,15 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
 
 - [ ] **`with-syntax` with no bindings drops a dotted body tail** [Conformance, XS, filed
   2026-10-15 at the P4.5 crosscheck]: `compileWithSyntaxBody` stops at the first non-pair cdr, so
-  `(with-syntax () 1 . junk)` answers `1` instead of raising; same class as the `expectArgs` row
-  (Tier 1). Live on master.
+  `(with-syntax () 1 . junk)` answers `1` instead of raising (Chez: invalid syntax; Racket: bad
+  syntax); same class as the `expectArgs` row (Tier 1). Live on master. With a macro in the body,
+  `(with-syntax () (when #t 1) . 2)` fails as "no such binding when", because the expander pass
+  leaves an improper body unexpanded.
+
+- [ ] **An internal `define` in a `with-syntax` body panics** [Correctness, S, filed 2026-10-15
+  at the P4.5 crosscheck]: `((lambda () (with-syntax ((q 1)) (define x 1) x)))` raises
+  "recovered panic: … index out of range [2] with length 2"; it should answer `1`. A no-binding
+  body with a `define` inside a transformer panics the same way. Live on master.
 
 - [ ] **`validateInclude` never reads the included file** [Medium, M, filed 2026-09-15 during the
   renamed-inner-positions whole-branch review]: `validateInclude`

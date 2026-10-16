@@ -306,7 +306,8 @@ func (p *ExpanderTimeContinuation) expandWithSyntaxForm(sym *syntax.SyntaxSymbol
 // expandWithSyntaxBody expands the body of (with-syntax () body ...). No
 // pattern variable is bound, so CompileWithSyntax compiles each body form as an
 // ordinary expression (compileWithSyntaxBody), and each must arrive expanded. A
-// missing or improper body is left for CompileWithSyntax to report.
+// missing or improper body is left unexpanded for CompileWithSyntax, which
+// rejects a missing one and still truncates an improper one (TODO.md).
 func (p *ExpanderTimeContinuation) expandWithSyntaxBody(sym *syntax.SyntaxSymbol, pair *syntax.SyntaxPair) (syntax.SyntaxValue, error) {
 	body, ok := asNonEmptyPair(pair.SyntaxCdr())
 	if !ok {

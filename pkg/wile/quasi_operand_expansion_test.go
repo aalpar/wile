@@ -67,6 +67,9 @@ func TestI144UnquotedOperandIsAnExpression(t *testing.T) {
 		{name: "unquote", program: "`(1 ,(when #t 2))", expected: "(1 2)"},
 		{name: "splice", program: "`(1 ,@(when #t (list 2 3)))", expected: "(1 2 3)"},
 		{name: "dotted_tail", program: "`(1 . ,(when #t 2))", expected: "(1 . 2)"},
+		// The improper tail is the first part that changes, so the cells before
+		// it are back-filled.
+		{name: "improper_vector_tail", program: "`(1 2 . #(a ,(when #t 3)))", expected: "(1 2 . #(a 3))"},
 		{name: "vector", program: "`#(1 ,(when #t 2) ,@(when #t (list 3)))", expected: "#(1 2 3)"},
 		{name: "local_in_operand", program: "(let ((x 5)) `(1 ,(when #t x)))", expected: "(1 5)"},
 		{name: "unsyntax", program: "(syntax->datum #`(1 #,(when #t 2)))", expected: "(1 2)"},
@@ -134,11 +137,9 @@ func TestI144Pins(t *testing.T) {
 			program:  "(define (helper) 0) (define-syntax m (syntax-rules () ((_) (helper)))) (define-syntax helper (syntax-rules () ((_) 42))) (m)",
 			expected: "42",
 		},
-		// A bare splice does not fire, so its operand is data and stays
-		// unexpanded. Wile's answer; Chez rejects the form.
 		// A malformed marker is data, so an operand inside it does not fire.
-		// Wile's answer and Racket's; Chez rejects the first and fires the
-		// second's operand.
+		// Wile's answer. Racket and Chez reject the first; for the second,
+		// Racket agrees and Chez fires the operand.
 		{
 			name:     "malformed_unquote_is_data",
 			program:  "(define-syntax two (syntax-rules () ((_) 2))) `(1 (unquote x (unquote (two))))",
@@ -149,6 +150,8 @@ func TestI144Pins(t *testing.T) {
 			program:  "(define-syntax two (syntax-rules () ((_) 2))) `(1 (quasiquote a ,(two)))",
 			expected: "(1 (quasiquote a (unquote (two))))",
 		},
+		// A bare splice does not fire, so its operand is data and stays
+		// unexpanded. Wile's answer; Chez rejects the form.
 		{
 			name:     "bare_splice_operand_not_expanded",
 			program:  "(define-syntax two (syntax-rules () ((_) 2))) `,@(two)",
