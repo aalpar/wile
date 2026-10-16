@@ -43,9 +43,10 @@ import (
 // scopes with kind 'use-site, and prunes by object identity against a box on
 // the expand context — so a scope from make-syntax-introducer carries kind
 // 'use-site and is never pruned, same tag and opposite behaviour. Wile has its
-// own evidence that tags rot: one introduction scope is minted with a bare
-// syntax.NewScope() and carries no label at all, so any Label == "intro" test is
-// already wrong today. Do not add a kind and branch on it.
+// own evidence that tags rot: one of its three introduction-scope mints went
+// unlabelled until a lint rule (noBareScopeMint) made the label total, and a
+// Label == "intro" test written before then would have missed it silently. A
+// label is diagnostics. Do not add a kind and branch on it.
 type useSiteScopeLog struct {
 	scopes values.MapSet[*syntax.Scope]
 }
