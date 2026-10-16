@@ -3,8 +3,8 @@ TODO
 
 **Last Updated**: 2026-10-16: every open row and the Plan Index re-verified against `956604f0`
 (repros rerun, citations resolved, fixing commits found): 13 rows closed that had already shipped,
-the `if` section and Top Priority table updated, drifted citations repointed, four unindexed plans
-added. Previous: 2026-09-20: full `plans/` sweep (72 files) plus `WORK.local.md`; items not
+the `if` section and Top Priority table updated, drifted citations repointed, two unindexed plans
+added, five archived plans dropped from the index (citations repointed to `memory/`). Previous: 2026-09-20: full `plans/` sweep (72 files) plus `WORK.local.md`; items not
 previously filed added under the three `plans/ sweep … (2026-09-20)` headings in Tiers 1, 4 and 5;
 the three `Redefining if` entries rewritten with **verified** mechanisms (the 2026-09-19 hypotheses
 were wrong on both counts); priorities restated against the four current design goals. Previous:
@@ -152,7 +152,6 @@ because the citation is what `make indexlint` counts:
 
 | Plan | Status |
 |---|---|
-| `2026-09-20-defect-closeout-design.md` | Design behind the defect-closeout arc; status lives in the `-impl` hub and phase files |
 | `2026-03-26-extension-contracts-impl.md` | Phase 1 + Phase 4 (runtime enforcement) shipped; Phases 2–3 annotation rollout **partial** |
 | `2026-03-26-extension-contracts-phase2-design.md` | Infrastructure + enforcement complete; extension annotations partial |
 | `2026-06-18-frame-reclaim-precision-coverage.md` | A/E/B/D + A-local **shipped**, only A-local converted to clock (`primes` −4.2%); B/D moved verdicts, emitted ~nothing; **C deferred** 2026-07-29 (the `or` lowering removed 340 macro frames more cheaply, but reaches a disjoint set — Appendix A); F/G open. **Phase C SHIPPED 2026-08-14.** Its inbound edge was satisfied by Wave 1 §4 (`48a52a3c`), whose fix sits at the delivery instruction rather than in `OpSelfTailCall`, so C inherited it and needed no arity work. **Three corrections to the plan's own Phase C text, all measured:** (1) Step 1's *"assert 0-alloc"* target is unreachable — a `let` frame costs 3 allocations and is not pool-owned, so the landed result is 5.0 → **3.0** for one let and 8.0 → **6.0** for two, removing the fixed 2 the leaked parameter frame cost; pooling `OpPushEnv` frames is a separate, unstarted lever. (2) Q-C1 resolved to **(a)**, a bit-packed `(argCount | popCount<<16)` where `popCount == 0` encodes byte-identically to the old operand — decided not on peephole grounds but because the pops and the rebind must be inseparable, and because `OpPopEnv` clears `envPooled` as a claim about the frame it pops TO. (3) Step 2's *"analysis returns depth"* was **not implemented and should not be**: `tailExprHasSelfCall` stopped counting depth, and the count is carried by the compile-time context at the single site that pairs 1:1 with `compileValidatedLet`'s single `OpPushEnv` — one counter instead of two that must agree, which retires A.7's coupling, and per CALL SITE rather than the per-closure max the plan specified (a procedure with self calls at two depths needs both). **Ledger:** armed sites 47 → 50 over 78 corpus files, none lost; the three are outside the Gabriel suite, which is why the interleaved A/B reads geomean +0.33% against a +0.12% A/A control. A.5's disjoint-frame-sets prediction held. Only F/G remain |
@@ -160,8 +159,9 @@ because the citation is what `make indexlint` counts:
 | `2026-09-04-registry-core-tests-to-scheme-impl.md` | Executes M1 of `2026-07-31-go-volume-reduction-findings`. Pilot **shipped** on `test/scheme-list-migration` (`prim_list_test.go` → `test/scheme/lists-test.scm`, −1,820 Go LOC, both drivers green). Task 0 (`covercheck` merges the in-process Scheme suite's Go coverage) is a hard prerequisite: Go-only `registry/core` coverage projects to **40.0%** after full migration, union is 90.4%. Tasks 1–17 **not started** |
 | `2026-09-04-scheme-coverage-fidelity.md` | Design + plan, **not started**. Follows `fix/cover-library-bodies`: one `TemplateObserver` compile seam so `--cover` reports every Scheme template the engine compiles, attributes macro-expanded code to the template that produced it, and lands the Go-cover profile on the right bytes |
 | `2026-07-20-scope-keyed-tier1-remediation.md` | **Partially implemented** (2026-07-21) |
-| `2026-07-28-alocal-capture-safe-proof-for-locals.md` | Phases 1–4 **DONE** (1–3 committed on `feat/callback-conditional-capture`); 19/68 → 42/68 capture-safe stamps, reclaim verdicts unchanged at 19/68 as predicted. Phase 5 (Lever B) open. Prerequisite `47c27f72` landed (`3ae1a853`, 2026-08-07) |
+| `2026-07-28-alocal-capture-safe-proof-for-locals.md` | Phases 1–4 **DONE** (1–3 committed on `feat/callback-conditional-capture`); 19/68 → 42/68 capture-safe stamps, reclaim verdicts unchanged at 19/68 as predicted. Phase 5 (Lever B) open. Prerequisite `47c27f72` landed directly on master, 2026-07-28 |
 | `2026-08-01-scheme-deadline-and-cancellation-cause.md` | Phase 1 **impl-ready**; Phase 2 designed and **gated** on the plan's scoping decision. Exposes the ambient `context.Context`'s deadline and cancellation cause to Scheme |
+| `2026-09-20-defect-closeout-design.md` | Design behind the defect-closeout arc; status lives in the `-impl` hub and phase files |
 | `2026-09-22-defect-closeout-impl.md` | **HUB** of the defect-closeout arc, derived from `2026-09-20-defect-closeout-design.md`. **Split into 11 files 2026-10-02** (one per phase, plus the audit) because the single file had reached 5,220 lines; task IDs, branch names and every word unchanged. Carries the method, the phase map and the first branch. **38 of 97 tasks landed**: P1 all ten, P2 all five, P3 all eighteen (P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` merged 2026-10-03; P3.16 `f94806a8` merged 2026-10-04; P3.17 `4ea9b5b5` and `231d3d95` merged 2026-10-10; P3.18 `24e3b23e`, reduced to a delete, merged 2026-10-14), P4.1 (`669c7b23`, merged 2026-10-14), P4.2 (`3721b540`, merged 2026-10-14), P4.3 (`35e8866a` + `e6ee81c9`, merged 2026-10-14), P4.4 (`9f3f5f1d` + `b5ac075d`, merged 2026-10-15), P4.5 (merged `956604f0`, 2026-10-15). The plan's own task records are the status of record — P1's and P2's landings are in the tree but NOT written into their task records, and P1's branch names differ from its table |
 | `2026-09-22-defect-closeout-audit.md` | **Read once, before the first branch.** The cross-phase audit, five topics: what serializes behind P2's merge (52 of the 82 tasks in P3–P9, measured), which edits two phases both claim, the six fault settlements (A2, C6, D1–D4), the citations and anchors that do not resolve (X1–X6, E1/E1b), and which gates go green without a fix. Fault labels are cited from the phase files, so they must not be renumbered |
 | `2026-09-22-defect-closeout-P4.md` | The expander residue: a definition-site pin decides the form, and operands get expanded. **5/8** (P4.1 `669c7b23`, P4.2 `3721b540`, P4.3 `35e8866a`, P4.4 `9f3f5f1d` + `b5ac075d`, P4.5 `2882da27` + `76e81aac` + `67a59fdc`), all after P2's window closes (unconditional). P4.7 is a decision |
@@ -333,7 +333,7 @@ Controls that stay correct: a library macro named `zif` imports and dispatches f
 is a **macro** named after a special form.
 
 - [x] **A top-level `define-syntax` of `if` captures the `if` inside stdlib macros** [Correctness /
-  hygiene, M, filed 2026-09-19, **Done 2026-10-14**, P4.3/I132, `35e8866a`, merged `c4442f23`: a
+  hygiene, M, filed 2026-09-19, Done 2026-10-14, P4.3/I132, `35e8866a`, merged `c4442f23`: a
   Primitive pin stops `lookupMacroBinding`'s search and is handed to head dispatch;
   `validate.resolveFormHead` reads the pin first. Gate `integration/core_form_denotation_test.go`.
   The record below is as filed]: after
@@ -359,7 +359,7 @@ is a **macro** named after a special form.
   Under `WILE_SYNTAX_FORMS=scheme` the `define-syntax` itself still fails, "not a closure:
   values.voidType" — separate, unverified, and out of scope until the layer flip.
 - [x] **`(except (scheme base) if)` plus a user `if` written with `cond` expands for effectively
-  ever** [Correctness, S, filed 2026-09-19, **Done 2026-10-14**, P4.3/I133, `35e8866a`, merged
+  ever** [Correctness, S, filed 2026-09-19, Done 2026-10-14, P4.3/I133, `35e8866a`, merged
   `c4442f23`: died with the capture above; answers `1`. Gate
   `TestCoreFormDenotationExceptIfTerminates` (`integration/core_form_denotation_test.go`)]: `(if #t 1 2)` with
   `(define-syntax if (syntax-rules () ((_ a b c) (cond (a b) (else c)))))` recurses `if` → `cond` →
@@ -368,7 +368,7 @@ is a **macro** named after a special form.
   **32 ms**. The superlinear expansion cost the 2026-09-19 filing bundled in here is a **separate
   fault with its own entry below**; it is not fixed by this and does not need this to fire.
 - [x] **An imported macro named `if` loses to the core form** [Correctness / conformance, S, filed
-  2026-09-19, **Done 2026-09-30**, P3.3/I134, `6f5b9f6a`, merged `1f380c15`: `findLibraryBinding`
+  2026-09-19, Done 2026-09-30, P3.3/I134, `6f5b9f6a`, merged `1f380c15`: `findLibraryBinding`
   prefers the library's own Expand-phase syntax row over the inherited core form; answers `lib-if`.
   Pinned by `pkg/wile/library_own_syntax_export_test.go`]: library `(myif)` exports
   `(define-syntax if (syntax-rules () ((_ a b c) 'lib-if)))`; a program
@@ -573,7 +573,7 @@ defect at HEAD whether or not Tier 2 is ever built.
   `CompiledLibrary.ExportedBindingRoot`; an in-package test cannot load the stdlib, because
   bootstrap imports compilation.
 - [x] **`unquote` / `unsyntax` / `with-syntax` operands are never expanded** [Correctness, M,
-  **Done 2026-10-15**, P4.5/I144, `2882da27` + `76e81aac`, merged `956604f0`: operands expand in the
+  Done 2026-10-15, P4.5/I144, `2882da27` + `76e81aac`, merged `956604f0`: operands expand in the
   expander pass (`expander_quasi.go`); pinned by `pkg/wile/quasi_operand_expansion_test.go`. Residual
   positions (cond-expand clause, include, syntax-case clause bodies) are tracked in the opaque-scan
   row below]:
@@ -738,10 +738,10 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
 
 **Open, no decision needed.**
 
-- [ ] `call-with-immediate-continuation-mark` sees an outer frame's mark after a non-tail call to a
-  primitive inside a procedure: `(define (f) (wcm 'a 1 (list (cicm 'a (lambda (v) v) 'default))))`
-  gives `(1)`, Racket `(default)` (`GetImmediateMark` fallback). At top level, or with a user
-  procedure in place of `list`, it already answers `default` (re-measured 2026-10-16).
+- [ ] `call-with-immediate-continuation-mark` sees an outer frame's mark after a non-tail call
+  inside a procedure, to a primitive or a user procedure: `(define (f) (wcm 'a 1 (list (cicm 'a
+  (lambda (v) v) 'default))))` gives `(1)`, Racket `(default)` (`GetImmediateMark` fallback). At top
+  level it answers `default` (re-measured 2026-10-16).
 - [ ] `(continuation-marks k)` for a `call/cc` captured in tail position of
   `with-continuation-mark` inside a procedure omits the capturing frame's marks (Wile `()`,
   Racket `(2)`).
@@ -1038,7 +1038,7 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   principle, and it still measures flat.
 
 - [x] **A quasiquote head can now raise `ErrAmbiguousBinding` on a DATUM** [Low, S, filed
-  2026-09-15 during the renamed-inner-positions whole-branch review, **Done 2026-09-30**, P3.1/I024,
+  2026-09-15 during the renamed-inner-positions whole-branch review, Done 2026-09-30, P3.1/I024,
   `f859fff0`, merged `e48b597f`: both marker walks resolve through `TryGetBinding`, which reports the
   tie instead of raising; verified from code, no Scheme-level repro exists]: marker recognition resolves a
   template head through `env.GetBinding` (`headFormName`, `pkg/machine/compilation`;
@@ -1054,7 +1054,7 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
 
 - [x] **`(cond (otherwise 2))` works with a renamed `else` but `(cond-expand (otherwise …))` does
   not** [Low, S, filed 2026-09-15 during the renamed-inner-positions whole-branch review; an
-  inconsistency this branch CREATES by fixing one of the two; **Done 2026-09-30**, P3.2/I025,
+  inconsistency this branch CREATES by fixing one of the two; Done 2026-09-30, P3.2/I025,
   `ec8a7f75`, merged `b0f3a327`: `isElseClause` and `parseFeatureRequirement` decide `else` by
   `featureName` (denotation, spelling fallback); both forms answer by binding]: `cond`'s and `case`'s `else` are
   pattern literals and now resolve by binding, so `(rename (scheme base) (else otherwise))` makes
@@ -1070,8 +1070,8 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   a library body's. Measure that before writing the comparison.
 
 - [x] **`environment.SameBinding` is the identity `literalNotShadowed` approximates** [Low, M,
-  filed 2026-09-15 during the renamed-inner-positions whole-branch review; **step one Done
-  2026-09-30**, P3.4/I026, `f5815abc`, merged `bbdfeaf3`: when both sides carry an origin,
+  filed 2026-09-15 during the renamed-inner-positions whole-branch review; step one Done
+  2026-09-30, P3.4/I026, `f5815abc`, merged `bbdfeaf3`: when both sides carry an origin,
   `SameBinding` decides, and the BOUNDARY row answers MATCHED-LITERAL. Step two (stamping
   library-private defines) stays tabled: `OriginRef` has no scope discriminator]: the pattern-literal
   rider in `pkg/internal/match/syntax_adapter.go` accepts an imported use-site binding and then
@@ -1106,7 +1106,7 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   directly, no quasisyntax) answers `(1 99)`.
 
 - [x] **The branch's headline fix does not reach a marker introduced by a macro template** [Low,
-  M, filed 2026-09-15 during the renamed-inner-positions whole-branch review; **Done 2026-10-14**,
+  M, filed 2026-09-15 during the renamed-inner-positions whole-branch review; Done 2026-10-14,
   P4.2/I028, `3721b540`, merged `b6aacda9`: `headFormName` and `markerName` read
   `DenotedForm(PinnedBinding(sym))` before the scope walk; answers `(1 99)`, matching Racket and
   Chez. Gate `TestFreeTemplateIdHygiene_RenamedUnquoteViaLibraryTemplate`]: a library that
@@ -1679,9 +1679,9 @@ below is a separate pre-existing defect found while measuring #805.
   against ([[global-binding-cache-already-exists]]). The current behavior (undefine removes the
   NAME — `bound?`→#f, new references fail — while closures keep the captured LOCATION) is also
   defensible lexical-capture semantics. The `DeleteBinding` comment ("stale GlobalIndex references
-  … see nil, caught by resolveGlobal") was corrected to note the cached-pointer path, but the
-  correction was lost when `DeleteBinding` folded into `DeleteBindingAt` (`c6eb4302`), whose doc does
-  not mention it. Still reproduces: `(#f 7)` (2026-10-16). Needs a maintainer call on whether the hot-path cost is worth it before proceeding.
+  … see nil, caught by resolveGlobal") was corrected to note the cached-pointer path; since
+  `DeleteBinding` folded into `DeleteBindingAt` (`c6eb4302`) that NOTE lives in `removeSlotLocked`'s
+  body, not in either method's doc. Still reproduces: `(#f 7)` (2026-10-16). Needs a maintainer call on whether the hot-path cost is worth it before proceeding.
 
 - [x] **Scope-set resolution let the zero value answer an unanswerable question** [Correctness +
   API, M, Phases 0–2 done 2026-07-23, `d2e2e625` + `eaee2ed0`]: the read surface treated a nil scope
@@ -3037,7 +3037,7 @@ rather than split across tiers.
 - [ ] **`make doclint` target** [Tooling, S]: Extract `foo.go:N` citations from `docs/**/*.md` and `plans/**/*.md`; assert each file exists and `N` is within `wc -l file`. Cheap version catches the bulk of drift. Existing `check-readme-links.sh` only validates markdown link targets, not prose citations. Past multi-commit doc sweeps (PRs #707, #710, #711, #712, #713) are evidence the check would pay for itself. Stronger form would `go/ast`-parse the cited line and verify the enclosing decl name matches a nearby identifier in the doc.
 - [x] **`make planlint` target** [Tooling, S, Done 2026-08-07]: see the Top Priority entry. The central index is TODO.md itself, not `plans/CLAUDE.md`. Residual: the 2026-06-05 header audit left `2026-04-20-axis-b-annotation-bugs` unresolved (cleanup-shipped claim unverifiable from git).
 - [ ] **POSIX API / SRFI-170 remaining phases** [Standard library, 9 phases]: Phases 2-10 not started. Phase 1 (directory ops + process extension) completed in PR #565.
-- [x] **REPL tab completion still offers macro-introduced binders** [Tooling + hygiene, S, 2026-07-19, **Done 2026-10-01**, P3.7/I095, `cc7922f4`, merged `91ee84a3`: `BoundNamesAcrossPhases` ranges `ResolvableLiveSlots`, filtered at each slot's own phase, so phase-1 keywords (`when`, `unless`) stay listed. Line citations below are as filed]: `Namespace.BoundSymbolNames` (`pkg/environment/namespace.go:315`) now lists only names resolvable under the ambient scope set, via `GlobalEnvironmentFrame.AmbientKeys` (`global_environment_frame.go:267`). The completion path was deliberately left on the unfiltered walk — `Completer.collectBindingNames` (`pkg/repl/completer.go:83`) → `Engine.BoundNames` (`pkg/wile/engine.go:842`) → `Namespace.BoundNamesAcrossPhases` (`namespace.go:342`), which ranges `global.Keys()` at `:353`. The two listings now disagree, and completion can still offer a name that resolves to nothing. **Why it was not filtered alongside:** `BoundNamesAcrossPhases` also walks the expand and compile phase frames, where `define-syntax` keywords live (`compile_define_syntax.go:91`), so an ambient filter would drop any keyword whose binder carries a non-empty scope set. `ee918fd1`'s message states a top-level user binder carries the empty set, which suggests keywords survive — but that is read off a commit message, not measured, and library-defined + imported macros are unchecked. **Measure first:** apply the filter, diff the completion list before/after on a KitchenSink engine; missing macro keywords (`when`, `unless`, stdlib forms) is the disqualifying signal. Not at risk: `let-syntax`/`letrec-syntax` keywords are local bindings (`expander_let_syntax.go:137`), never in `Keys()`. Same read-path family as A1 above, which fixed the sealed-base half of this walk.
+- [x] **REPL tab completion still offers macro-introduced binders** [Tooling + hygiene, S, 2026-07-19, Done 2026-10-01, P3.7/I095, `cc7922f4`, merged `91ee84a3`: `BoundNamesAcrossPhases` ranges `ResolvableLiveSlots`, filtered at each slot's own phase, so phase-1 keywords (`when`, `unless`) stay listed. Line citations below are as filed]: `Namespace.BoundSymbolNames` (`pkg/environment/namespace.go:315`) now lists only names resolvable under the ambient scope set, via `GlobalEnvironmentFrame.AmbientKeys` (`global_environment_frame.go:267`). The completion path was deliberately left on the unfiltered walk — `Completer.collectBindingNames` (`pkg/repl/completer.go:83`) → `Engine.BoundNames` (`pkg/wile/engine.go:842`) → `Namespace.BoundNamesAcrossPhases` (`namespace.go:342`), which ranges `global.Keys()` at `:353`. The two listings now disagree, and completion can still offer a name that resolves to nothing. **Why it was not filtered alongside:** `BoundNamesAcrossPhases` also walks the expand and compile phase frames, where `define-syntax` keywords live (`compile_define_syntax.go:91`), so an ambient filter would drop any keyword whose binder carries a non-empty scope set. `ee918fd1`'s message states a top-level user binder carries the empty set, which suggests keywords survive — but that is read off a commit message, not measured, and library-defined + imported macros are unchecked. **Measure first:** apply the filter, diff the completion list before/after on a KitchenSink engine; missing macro keywords (`when`, `unless`, stdlib forms) is the disqualifying signal. Not at risk: `let-syntax`/`letrec-syntax` keywords are local bindings (`expander_let_syntax.go:137`), never in `Keys()`. Same read-path family as A1 above, which fixed the sealed-base half of this walk.
 
 ---
 ## Tier 4 — Performance
@@ -3057,8 +3057,8 @@ callback specialization B, jump-table dispatch, Stage-B phase folding all stay c
   same source]: measured ~2.3× slower on fib than the namespace-scope path. The `OpLoadGlobal`
   library-scope arm is unchanged.
 - [x] **`lookupHeadPrimitiveExpander` repeats the `GetBinding` that `lookupMacroBinding` arm 1
-  already made** [Performance, M, from the keyword-denotation-dispatch artifacts, **Done
-  2026-09-27**, `befa9502`, merged `cd023df9`: arm 1's head binding is passed through, removing 1 of
+  already made** [Performance, M, from the keyword-denotation-dispatch artifacts, Done
+  2026-09-27, `befa9502`, merged `cd023df9`: arm 1's head binding is passed through, removing 1 of
   3 per-head resolves. The +0.87% `FrontEndPhase` delta was not re-measured]: a double resolve
   on every non-macro head, at `expander_time_continuation.go` ~L360 and ~L599. This is the one
   concrete mechanism that was flagged as the likely cause of the **+0.87% `FrontEndPhase`
@@ -3230,8 +3230,8 @@ behaviour.
   the convention]: `newSRFITestEngine`'s doc says the `testing.TB` parameter exists so a caller
   inside a `c.Run` hands over the SUBTEST's handle, because a helper given the parent's handle
   "calls FailNow from a goroutine that is not running that test". Practice contradicts the doc: of
-  32 call sites, 14 are inside a `c.Run` and 5 of those pass the subtest's handle (recounted
-  2026-10-16). Either the doc is wrong and should be cut, or 9 sites are. Not a
+  32 call sites, 14 are inside a `c.Run` and 6 of those pass the subtest's handle (recounted
+  2026-10-16). Either the doc is wrong and should be cut, or 8 sites are. Not a
   live failure — the engines construct successfully — so this is a convention decision, not a bug.
 
 ### plans/ sweep — simplification deltas not previously filed (2026-09-20)
@@ -3282,8 +3282,8 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   production cannot produce.
 - [ ] **`RequireArg[T]` and `BuildValidator` type-check the same argument twice** [Tech debt, M,
   from `2026-03-26-extension-contracts-phase2-design.md`]: with `WithContractEnforcement()` on,
-  `BuildValidator` (`pkg/registry/contract.go:46`, wired in `pkg/wile/engine.go`) checks from
-  `ParamTypes`, and 106 call sites in 28 files (2026-10-16) then call `helpers.RequireArg` inside the `Prim*`
+  `BuildValidator` (`pkg/registry/contract.go`, wired in `pkg/wile/engine.go`) checks from
+  `ParamTypes`, and 102 call sites in 28 files (2026-10-16) then call `helpers.RequireArg` inside the `Prim*`
   body. The plan calls it "redundant but harmless" and gates de-duplication on full `ParamTypes`
   coverage, which is not reached (core ~197/208, several extension packages partial or zero).
   Enforcement is opt-in, so this costs nothing by default — file it, do not schedule it.
@@ -3318,7 +3318,7 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
 
 ### Sealed axis keyed by `(phase, kind)` — SHIPPED 2026-08-03 (`74c72256`)
 
-- [x] **Sealed-frame routing collapsed into one table** [Tech debt / legibility, M, Done 2026-08-03, `74c72256`]: seven sites hand-unrolled a two-row loop over the phase-0 and phase-1 sealed frames by name. `sealedAxis` (`pkg/environment/sealed_write_view.go` since `efd58d2a`) is now the single decision site, read by `SealedAt`, `sealedFrameAt`, `SealedFrames`, and `IsSealed`; call sites read as coordinates (`SealedTargetAt(PhaseRuntime, SealKindValue)`, now `SealedWriteViewAt`). `SealedBaseTarget() != env` became `IsNamespaceRuntime()`. No behavior change on any live path. Three `/crosscheck` traps, fixed in the same commit: (1) generalizing the seam turned "there is no seal here" into cover for "the seal is missing", so `SealedAt` returns `(*EnvironmentFrame, bool)` and a declared-but-absent frame panics via `mustSeal`; (2) `phaseParent` runs under the `PhaseRegistry` write lock, where a seam that can re-enter `GetOrCreate` hangs, and its parent link is kind-independent, hence `sealedFrameAt` plus the pure-pointer `IsNamespaceRuntime` guard; (3) `registry.SearchDoc` (`,apropos`) was a second hand enumeration a new row would have silently missed.
+- [x] **Sealed-frame routing collapsed into one table** [Tech debt / legibility, M, Done 2026-08-03, `74c72256`]: seven sites hand-unrolled a two-row loop over the phase-0 and phase-1 sealed frames by name. `sealedAxis` (`pkg/environment/sealed_write_view.go` since `efd58d2a`) is now the single decision site, read by `SealedAt`, `sealedFrameAt`, `SealedFrames`, and `IsSealed` (names as of `74c72256`); call sites read as coordinates (`SealedTargetAt(PhaseRuntime, SealKindValue)`, now `SealedWriteViewAt`). `SealedBaseTarget() != env` became `IsNamespaceRuntime()`. No behavior change on any live path. Three `/crosscheck` traps, fixed in the same commit: (1) generalizing the seam turned "there is no seal here" into cover for "the seal is missing", so `SealedAt` returns `(*EnvironmentFrame, bool)` and a declared-but-absent frame panics via `mustSeal`; (2) `phaseParent` runs under the `PhaseRegistry` write lock, where a seam that can re-enter `GetOrCreate` hangs, and its parent link is kind-independent, hence `sealedFrameAt` plus the pure-pointer `IsNamespaceRuntime` guard; (3) `registry.SearchDoc` (`,apropos`) was a second hand enumeration a new row would have silently missed.
 
 - [x] **Expand-phase registry primitives are NOT sealed** [Correctness, S code / M test rewrite, Done 2026-08-10,
   `693ee6f6` (`fix/w1-carve1-seal-phase1-registry`)]: `registry.Apply` bound `PhaseExpand` primitives into the
@@ -3746,7 +3746,7 @@ enough to rebuild the probes.
   when returning false with the mutex free. Coordinate with `plans/2026-08-01-srfi18-sequencer-design.md`,
   which keeps a `Signal` lost wakeup in the same lines unfixed as its Phase-4 acceptance test.
 - [x] **An escape reconciled by the top driver runs a sub-context timer's after thunks outside its
-  timed ctx** [Correctness, M, Done 2026-10-12, `8ae377b3` (fix/rootless-resume-to-the-driver): the
+  timed ctx** [Correctness, M, Done 2026-10-12, `b39a6329`, merged `8ae377b3`: the
   repro returns the handler's value in under 0.1 s; at `49ad4fc2` a 10 s `thread-sleep!` after thunk
   still ran in full. The record below is as filed]: with the `with-timeout` itself inside `eval`, an escape inside the
   thunk is re-raised to the top `RunResumable`, whose winding reconcile runs the after thunks on
@@ -3881,7 +3881,7 @@ enough to rebuild the probes.
   as a cancellation source without saying it is intended. Decide: keep it and pin it, or give the
   thread a ctx the expiry cancels but a normal return does not.
 - [x] **A continuation captured and invoked inside `eval`, `load`, a `call-with-*-file` procedure or
-  a library body discards the caller** [Correctness, M, **Done 2026-10-12**, `b39a6329`, merged
+  a library body discards the caller** [Correctness, M, Done 2026-10-12, `b39a6329`, merged
   `8ae377b3`]: fixed by the rootless-resume rule (a resume delimited at a sub-context's own boundary
   is resolved by that sub-context's driver). Re-measured 2026-10-16: the `eval` form below answers
   `101`; `load` runs the rest of the file and the caller; a library body imported through `eval`
@@ -4195,7 +4195,7 @@ enough to rebuild the probes.
 - [x] **Task 8.1: Extract `machine/compilation/resolver/`** [Done]: FileResolver implementations extracted. `LibraryEnumerator` replaced with `FileEnumerator.EnumerateFiles` (returns paths, not `LibraryName`). Type aliases in compilation for backward compat. `memory/2026-04-13-resolver-extraction-impl.md`
 - [ ] **Task 8.2: Evaluate `wile.Value` wrapper** [Low, M]: Wrapper provides minimal methods beyond `Internal()` escape hatch.
 - [ ] **Task 8.4: Make `DefaultBigFloatPrecision` configurable** [Low, M]: 256-bit precision hardcoded across 31 references (2026-10-16). No engine option.
-- [ ] **Error sentinel grouping** [Low, S]: ~131 sentinels in `werr.go` plus ~18 package-local (2026-10-16), against a ~150 trigger. Consider category-specific files now.
+- [ ] **Error sentinel grouping** [Low, S]: 131 sentinels in `werr.go` plus 23 package-local under `pkg/` and `extensions/` (2026-10-16), ~154 in all: past the ~150 trigger. Consider category-specific files now.
 - [ ] **Namespace registry typing** [Low, S]: Namespace's registry should have a type instead of `any`.
 - [ ] **ValueType refactoring** [Low]: ValueType doesn't have grounding in Scheme or Go — determine use and scope of type domains.
 - [ ] **Evaluate need for Primitive Annotation Enforcement** [Low]: Enforcement may not be needed.
@@ -4379,7 +4379,7 @@ Open restructuring work found only in `plans/` during the 2026-07-21 triage.
   What they cannot do is enumerate: each gates **one named claim**, which is the honest scope
   — this closeout phase uses six rows of the first. What is genuinely unstartable in CI is
   the plan-header check, because `plans/` lives in the separate `wile-memoplans` repo and is absent from a CI checkout of `wile`: `head -5
-  memory/2026-04-23-docs-sweep-impl.md` still reads `status = "Planned — not started"` while
+  plans/2026-04-23-docs-sweep-impl.md` (since archived to `memory/`) still reads `status = "Planned — not started"` while
   the goal it names has shipped. That is `plans/`-header rot, and it is the same asymmetry
   that correctly keeps `planlint` (`tools/sh/planlint.sh`, `Makefile:685`) out of the `ci`
   target.
@@ -4430,7 +4430,7 @@ No demand signal. Speculative or research-only.
 
 ### Architecture
 - [~] **Dialect system** [In progress]: forms layer SHIPPED (SP1 per-engine codegen fork, `WithDialect`, `DefaultDialect`). Primitive-level control SHIPPED (`PrimitiveRemover` + `BootstrapProcedureRewriter` capabilities; `NoMutation` removes all 21 destructive primitives genuinely, keyed off `PrimitiveSpec.Mutates` rather than the `!` spelling — mutating `vector-map`/`string-map` swapped for a mutation-free bootstrap fragment; inline-HOF optimizer gated on `requires` so removal deopts cleanly). `NoMutation` is the one shipped leaf dialect; it exercises the forms seam (removes `set!`) plus both cross-ceiling capabilities. NoMutation import-reexpose remains a documented language-surface boundary (dialect ≠ sandbox), not a gap. The demo leaves `R5RSStrict` and `R7RSMinimal` — and the `DisableExpandForm` expander gate that only R5RSStrict used — were pruned once no product consumer wanted restricted-surface engines; the seam + `NoMutation` remain. `plans/ARCHITECTURE.md`
-- [~] **`FormSpec.Expand` consolidation** [P1 shipped, rest deferred]: `primitive_expanders_registry.go` and `syntax_compilers_registry.go` look like a phase split and are not — they split by handler *signature*, and phase is a constant column with one value per table. The genuine gap: `forms.FormSpec` carries `Validate`+`Compile` but no `Expand`, so compile dispatch reads the forms registry while expand dispatch reads the environment. **P1 shipped** (`48f6fa25`): `RegisterValidator`/`RegisterCompiler` route through one copy-on-write `update(name, mutate)`, so field preservation stops costing a line per registrar per field. **P2–P5 deferred as marginal** — the motivating `fr.Remove` expander leak was already closed by what is now `refuseCompileTimeMeaning` (`compile_time_continuation.go`; it replaced the `compileTimeHandler` marker in `dea9bdcc`), and package layering (`validate` and `machine/compilation` both register into `forms`, which imports neither) caps the outcome at one record populated by three passes, never one table. Wiring expand *dispatch* to the field rebuilds the pruned `DisableExpandForm` gate (see Dialect system above) — do not, absent a named consumer. `plans/2026-08-03-formspec-expand-consolidation-sizing.md`
+- [~] **`FormSpec.Expand` consolidation** [P1 shipped, rest deferred]: `primitive_expanders_registry.go` and `syntax_compilers_registry.go` look like a phase split and are not — they split by handler *signature*, and phase is a constant column with one value per table. The genuine gap: `forms.FormSpec` carries `Validate`+`Compile` but no `Expand`, so compile dispatch reads the forms registry while expand dispatch reads the environment. **P1 shipped** (`48f6fa25`): `RegisterValidator`/`RegisterCompiler` route through one copy-on-write `update(name, mutate)`, so field preservation stops costing a line per registrar per field. **P2–P5 deferred as marginal** — the motivating `fr.Remove` expander leak was already closed by a refusal in the pin arm (`dea9bdcc` replaced the `compileTimeHandler` marker with it; `717df3e4` made `refuseCompileTimeMeaning` in `compile_time_continuation.go` its single authority), and package layering (`validate` and `machine/compilation` both register into `forms`, which imports neither) caps the outcome at one record populated by three passes, never one table. Wiring expand *dispatch* to the field rebuilds the pruned `DisableExpandForm` gate (see Dialect system above) — do not, absent a named consumer. `plans/2026-08-03-formspec-expand-consolidation-sizing.md`
 - [ ] **Plugin shadowing** [Proposed]: Extension primitive shadowing. Depends on public extensions. `plans/ARCHITECTURE.md`
 - [ ] **Feature flags (3-tier)** [Runtime]: Compile-time, runtime global, extension-defined.
 - [ ] **User labels/tags for FS resolvers**: Distinguish bootstrap from include/library loaders in fileResolver.
@@ -4475,7 +4475,8 @@ These items were investigated and determined not to warrant changes:
 Detailed staff-engineer assessment of cross-boundary coupling. Actionable items extracted into Tier 1 and Tier 5 above.
 
 Snapshot as filed; its line ranges are stale. The vmState copy-site finding is guarded since `834b2db7`
-(`contDescriptor`, a driven oracle and a completeness ratchet over all six sites,
+(`contDescriptor`, introduced by `9c0c3f72` and hardened by `834b2db7`: a descriptor over the five
+surviving sites, four under the completeness ratchet and `opSaveWrap` asserted explicitly,
 `pkg/machine/continuation_descriptor_oracle_test.go`), and `PopContinuation` was deleted in `91460090`.
 
 <details>
