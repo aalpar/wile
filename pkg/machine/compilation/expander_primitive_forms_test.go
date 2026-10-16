@@ -70,6 +70,11 @@ func TestExpanderPrimitiveFormsErrors(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "set! non-variable", Code: `(set! 42 1)`},
 		{Name: "set! missing value", Code: `(set!)`},
+
+		// A dotted tail is a syntax error, not a truncation (Chez: invalid syntax).
+		{Name: "if dotted tail", Code: `(if #t 1 . 2)`},
+		{Name: "set! dotted tail", Code: `(let ((x 0)) (set! x 1 . 2) x)`},
+		{Name: "with-continuation-mark dotted tail", Code: `(with-continuation-mark 'k 1 2 . 3)`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

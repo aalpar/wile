@@ -71,10 +71,9 @@ func (p *ExpanderTimeContinuation) expandSub(expr, sub syntax.SyntaxValue, what 
 // lets the validator report the arity error. Arity is checked structurally,
 // before any sub-expression is expanded.
 //
-// An improper spine is silently truncated rather than refused: the loop stops
-// at the first non-pair tail without recording it, so (if #t 1 . 2) collects two
-// arguments, reports ok=true, and the caller rebuilds a proper (if #t 1). The
-// dotted tail is dropped and never reaches the validator.
+// An improper spine also yields ok=false. The caller rebuilds a proper list from
+// the collected arguments, so accepting (if #t 1 . 2) would drop the dotted tail
+// and run the form; bailing leaves the tail for the validator to reject.
 func expectArgs(args syntax.SyntaxValue, lo, hi int) ([]syntax.SyntaxValue, bool) {
 	q := make([]syntax.SyntaxValue, 0, hi)
 	rest := args
@@ -88,6 +87,9 @@ func expectArgs(args syntax.SyntaxValue, lo, hi int) ([]syntax.SyntaxValue, bool
 		}
 		q = append(q, pair.SyntaxCar())
 		rest = pair.SyntaxCdr()
+	}
+	if !syntax.IsSyntaxEmptyList(rest) {
+		return nil, false // improper spine: a dotted tail follows the arguments
 	}
 	if len(q) < lo {
 		return nil, false
