@@ -80,12 +80,14 @@ func TestImportSetNamespaceDispatchesSpecialForms(t *testing.T) {
 			          (eval '(q-quote (m)) env)`,
 			want: "(m)",
 		},
-		// The widening stops at what the namespace imported: define-syntax is not
-		// in (only (scheme base) car), so the root probe must not dispatch it, and
-		// m stays unbound for the form after it. A probe by spelling for a head
-		// that denotes no form would answer 42 here.
+		// The root probe fires only for a head that denotes a form. define-syntax
+		// is not in (only (scheme base) car), so DenotedForm is "" and the expander
+		// reads it as a call; m is unbound for the form after it. A probe by
+		// spelling for such a head would answer 42 here. This pins the expander's
+		// half only: the compiler still dispatches the unimported form by
+		// spelling, so a lone define-syntax there binds m (filed in TODO.md).
 		{
-			name:    "refusal: a form the namespace did not import is not dispatched",
+			name:    "an unbound head does not reach the root probe",
 			env:     "(environment '(only (scheme base) car))",
 			program: `(eval '(begin (define-syntax m (syntax-rules () ((_) 42))) (m)) env)`,
 			wantErr: `(?s).*no such .*binding "m".*`,
@@ -123,6 +125,7 @@ func TestImportSetNamespaceDispatchesSpecialForms(t *testing.T) {
 			v, err := eng.EvalMultiple(context.Background(),
 				`(let ((env `+tt.env+`)) `+tt.program+`)`)
 			if tt.wantErr != "" {
+				qt.Assert(t, tt.want, qt.Equals, "", qt.Commentf("a row sets want or wantErr, not both"))
 				qt.Assert(t, err, qt.ErrorMatches, tt.wantErr)
 				return
 			}
