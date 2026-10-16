@@ -23,31 +23,28 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// CompileDefineSyntax handles (define-syntax keyword transformer-expr).
+// CompileDefineSyntax handles (define-syntax keyword [docstring] transformer-expr)
+// for the compiler.
 //
-// This is the compile-time handler for R7RS define-syntax. Unlike most
-// definitions, define-syntax is processed entirely at compile time:
+// The right-hand side has ALREADY RUN and the keyword is already bound:
+// expandDefineSyntax ran compileDefineSyntaxFromSyntax when the expander reached
+// the form. So this only re-checks the shape and the binding, and emits nothing.
+// Running it here as well would evaluate the right-hand side twice, repeating its
+// side effects (I138).
 //
-//  1. Parse the form: (define-syntax keyword (syntax-rules ...))
-//  2. Evaluate the right-hand side as an expression one phase up; the value is
-//     the transformer
-//  3. Store the transformer in the environment with BindingTypeSyntax
-//  4. Emit NO runtime operations (the binding is already established)
-//
-// The BindingTypeSyntax marker is crucial: when the expander encounters
-// a symbol, it checks if that symbol is bound to a syntax transformer.
-// If so, it invokes the transformer closure to expand the macro.
-//
-// This is how derived expressions like 'let' work: they're defined as
-// macros using define-syntax, and expand to lambda expressions:
-//
-//	(define-syntax let
-//	  (syntax-rules ()
-//	    ((let ((name val) ...) body)
-//	     ((lambda (name ...) body) val ...))))
+// The binding check refuses a form the expander did NOT reach as define-syntax
+// when nothing of that name is bound, rather than compile it to a silent no-op.
+// The compiler dispatches a head by spelling, the expander by the form it
+// denotes, so in a namespace that never imported define-syntax the expander reads
+// the form as a call and binds nothing. A define-syntax inside (meta …), which
+// the expander passes through unexpanded, arrives the same way. It asks only
+// whether the keyword is bound as syntax, not whether THIS form bound it, so a
+// keyword already bound (an imported when, an earlier phase-1 definition) still
+// passes as a no-op. Filed in TODO.md with the compiler's spelling dispatch,
+// whose fix closes both.
 //
 // Reference: R7RS Section 5.4 (Syntax definitions)
-func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+func (p *CompileTimeContinuation) CompileDefineSyntax(_ CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	err := p.ensureState("define-syntax")
 	if err != nil {
 		return err
@@ -62,99 +59,26 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	if !ok {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-syntax: keyword must be a symbol"))
 	}
+	_, _, err = splitDefineSyntaxRest(parts[1:])
+	if err != nil {
+		return p.wrapCompilationError(err)
+	}
 	keyword := keywordSym.Unwrap().(*values.Symbol)
-	transformerExpr, docstring, err := splitDefineSyntaxRest(parts[1:])
-	if err != nil {
-		return p.wrapCompilationError(err)
+	bound := p.env.NextPhase().GetBinding(keyword, syntax.ScopesOf(keywordSym.Scopes()))
+	if bound == nil || bound.BindingType() != environment.BindingTypeSyntax {
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
+			"define-syntax: %s was not defined: the expander did not reach this form as define-syntax", keyword.Key))
 	}
-
-	// Store one phase up from the defining frame (relative, not the absolute
-	// expand phase; see NextPhase). R7RS requires syntax bindings to live one
-	// phase above the code that uses them; NextPhase() keeps this relative so a
-	// define-syntax inside a transformer body climbs rather than collapsing into
-	// phase 1. Lookup (expander_time_continuation.go) consults the same
-	// NextPhase() so storage and lookup stay symmetric. At phaseLevel 0 this
-	// equals Expand() (level-0 identity).
-	//
-	// The slot is created BEFORE the right-hand side compiles so a template's
-	// reference to the macro's own name resolves to a real, pinned GlobalIndex
-	// (its Env set, its value unset until the store below): the self-reference
-	// pins to it directly, which is what pinTemplateSelfReferences used to
-	// back-patch after the fact (design §2.2).
-	//
-	// The scope set is the CREATION key, not a post-stamp. Creation dedupes with
-	// scopeSetsEqual, so creating under nil compares against the EMPTY set and a
-	// macro-introduced {intro} keyword reuses — then re-stamps — a pre-existing
-	// empty-scoped binding. The returned index is PINNED to the slot this call
-	// landed on, at the writing view's own coordinates, so the write below cannot
-	// drift onto another slot of the same name — in particular not onto a
-	// same-named mutable entry when this view is the sealed-write one (a bootstrap
-	// macro), which would write the transformer where a user can overwrite it.
-	expandEnv := p.env.NextPhase()
-	symbolScopes := keywordSym.Scopes()
-	globalIndex, created, err := createPhaseBindingUnlessStable(expandEnv, keyword, environment.BindingTypeSyntax, symbolScopes, "define-syntax")
-	if err != nil {
-		return p.wrapCompilationError(err)
-	}
-
-	transformer, err := compileTransformerValue(ctctx.ctx, p.env, transformerExpr, p.libraryScope, p.evaluator)
-	if err != nil {
-		// A failed right-hand side must not leave the keyword bound to nothing:
-		// a later reference would reach the empty slot and fail as "not a
-		// closure". Only a slot THIS call created is removed; a redefinition
-		// that fails keeps the previous transformer.
-		if created {
-			expandEnv.DeleteOwnGlobal(keyword, symbolScopes)
-		}
-		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "could not compile transformer"))
-	}
-
-	// Provenance and docstring only — the scope set is now the creation key, not
-	// a post-stamp. The metadata write goes through UpdateMeta (copy-on-write
-	// CAS) rather than a write-through pointer, because this binding is a shared
-	// global under concurrent SRFI-18 compiles.
-	binding := expandEnv.GlobalEnvironment().GetOwnGlobalBinding(globalIndex)
-	if binding != nil {
-		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
-			// DEAD for the import case since 2026-10-02 (P3.11), and kept
-			// pending one decision rather than deleted. This used to be the
-			// supersede's provenance clear: a top-level define-syntax over an
-			// imported macro reused the import's slot, so the import stamp had
-			// to go with the transformer or IsStable() (m.Imported || m.Stable)
-			// would keep reporting "cannot be rebound" about a macro the user
-			// had just rebound. R7RS §5.3.1 says such a definition binds a NEW
-			// location, so it now SHADOWS: the binding this runs on is the
-			// user's own fresh slot, never imported, and the clear writes false
-			// over false. Measured — a no-op in its place reddens nothing.
-			//
-			// What is NOT separated by that measurement is a define-syntax that
-			// REUSES a mutable slot, i.e. a second define-syntax of one name.
-			// Until someone establishes that path needs nothing here, the
-			// statement stays. Tracked in TODO.md.
-			m.Imported = false
-			if docstring != "" {
-				m.Doc = docstring
-			}
-			return true
-		})
-	}
-
-	err = expandEnv.SetOwnGlobalValue(globalIndex, transformer)
-	if err != nil {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-syntax: failed to store transformer for %s", keyword.Key))
-	}
-
-	// define-syntax is compile-time only, emit no runtime operations
 	return nil
 }
 
 // createPhaseBindingUnlessStable is the one-phase-up create used by every
 // syntax-definition writer that stores through a pinned index rather than
-// through DefineOwnGlobal: CompileDefineSyntax, CompileDefineForSyntax and
-// compileDefineSyntaxFromSyntax. It refuses a write that would land on an
+// through DefineOwnGlobal: compileDefineSyntaxFromSyntax and
+// runDefineForSyntax. It refuses a write that would land on an
 // already-Stable slot, and returns the pinned index otherwise.
 //
-// Those three sites deliberately do NOT use DefineOwnGlobal — a phase-1
+// Those sites deliberately do NOT use DefineOwnGlobal — a phase-1
 // definition is R7RS-legal whatever the name, and the user-level case writes at
 // (1, mutable) where nothing is Stable. But the SAME sites compile bootstrap
 // sources, whose defining frame is the owner's phase-0 seal, so NextPhase()
@@ -167,13 +91,13 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 // closed.
 //
 // m.Stable, not IsStable(): an IMPORTED binding must stay supersedable by a
-// define-syntax (R7RS §5.3.1), which is what the m.Imported reset below the
-// call sites exists for. registry.Apply is the only writer of the Stable field
+// define-syntax (R7RS §5.3.1), which is what compileDefineSyntaxFromSyntax's
+// m.Imported reset exists for. registry.Apply is the only writer of the Stable field
 // on a global, so this can only fire against a registry primitive copy.
 //
-// The second result reports whether THIS call created the slot. The two
-// define-syntax sites predeclare before compiling the right-hand side, so they
-// need it to know whether a failed right-hand side owes a DeleteOwnGlobal: a
+// The second result reports whether THIS call created the slot. The
+// define-syntax site predeclares before compiling the right-hand side, so it
+// needs it to know whether a failed right-hand side owes a DeleteOwnGlobal: a
 // failed redefinition must keep the previous transformer.
 func createPhaseBindingUnlessStable(
 	expandEnv *environment.EnvironmentFrame,

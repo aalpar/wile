@@ -28,7 +28,6 @@ import (
 var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	// Forms that return unchanged (no expansion needed at expand time)
 	{"quote", (*ExpanderTimeContinuation).expandUnchanged},
-	{"define-syntax", (*ExpanderTimeContinuation).expandUnchanged},
 	{"unquote", (*ExpanderTimeContinuation).expandUnchanged},
 	{"unquote-splicing", (*ExpanderTimeContinuation).expandUnchanged},
 	{"include", (*ExpanderTimeContinuation).expandUnchanged},
@@ -44,6 +43,7 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	{"library", (*ExpanderTimeContinuation).expandUnchanged},
 	{"export", (*ExpanderTimeContinuation).expandUnchanged},
 	{"meta", (*ExpanderTimeContinuation).expandUnchanged},
+	{"define-syntax", (*ExpanderTimeContinuation).expandDefineSyntax},
 	{"define-for-syntax", (*ExpanderTimeContinuation).expandDefineForSyntax},
 	{"begin-for-syntax", (*ExpanderTimeContinuation).expandBeginForSyntax},
 	{"eval-when", (*ExpanderTimeContinuation).expandEvalWhen},

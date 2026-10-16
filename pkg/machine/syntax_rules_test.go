@@ -74,6 +74,33 @@ func extractDefineSyntaxArgs(t *testing.T, form syntax.SyntaxValue) syntax.Synta
 	return args
 }
 
+// defineSyntaxForTest binds a macro from args, a define-syntax form with its
+// keyword stripped (extractDefineSyntaxArgs). The expander is where a
+// define-syntax binds its keyword; the compiler only re-checks the shape. It
+// fails when expansion succeeds but leaves the keyword unbound, so a caller that
+// checks only the error cannot pass on an expander that binds nothing.
+func defineSyntaxForTest(env *environment.EnvironmentFrame, args syntax.SyntaxValue) error {
+	form := syntax.NewSyntaxCons(syntax.NewSyntaxSymbol("define-syntax", nil), args, nil)
+	_, err := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator()).ExpandExpression(form)
+	if err != nil {
+		return err
+	}
+	argsPair, ok := args.(*syntax.SyntaxPair)
+	if !ok {
+		return nil
+	}
+	keywordSym, ok := argsPair.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return nil
+	}
+	keyword := keywordSym.Unwrap().(*values.Symbol)
+	bound := env.NextPhase().GetBinding(keyword, syntax.ScopesOf(keywordSym.Scopes()))
+	if bound == nil || bound.BindingType() != environment.BindingTypeSyntax {
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "defineSyntaxForTest: %s is not bound as syntax after expansion", keyword.Key)
+	}
+	return nil
+}
+
 func TestSyntaxRulesSimpleVariable(t *testing.T) {
 	// Test: (define-syntax bindSymbolWithScopes (syntax-rules () ((bindSymbolWithScopes x) x)))
 	// Usage: (bindSymbolWithScopes 42) => 42
@@ -85,9 +112,7 @@ func TestSyntaxRulesSimpleVariable(t *testing.T) {
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 	// Compile define-syntax
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax: %v", err)
 	}
@@ -128,9 +153,7 @@ func TestSyntaxRulesWithLiteral(t *testing.T) {
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 	// Compile define-syntax
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax: %v", err)
 	}
@@ -164,9 +187,7 @@ func TestSyntaxRulesWithEllipsis(t *testing.T) {
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 	// Compile define-syntax
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax: %v", err)
 	}
@@ -205,9 +226,7 @@ func TestSyntaxRulesWithCustomEllipsis(t *testing.T) {
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 	// Compile define-syntax
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax with custom ellipsis: %v", err)
 	}
@@ -246,9 +265,7 @@ func TestSyntaxRulesWithUnderscoreInLiterals(t *testing.T) {
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 	// Compile define-syntax
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	if err != nil {
 		t.Fatalf("failed to compile define-syntax with _ in literals: %v", err)
 	}
@@ -284,9 +301,7 @@ func TestSyntaxRulesEllipsisInLiteralsAccepted(t *testing.T) {
 		args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 		// Compile should succeed - ellipsis in literals disables ellipsis functionality
-		ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-		ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
-		err := ctc.CompileDefineSyntax(ctctx, args)
+		err := defineSyntaxForTest(env, args)
 		if err != nil {
 			t.Fatalf("expected ellipsis in literals to compile, got: %v", err)
 		}
@@ -304,9 +319,7 @@ func TestSyntaxRulesEllipsisInLiteralsAccepted(t *testing.T) {
 		args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 		// Compile should succeed - ellipsis in literals disables ellipsis functionality
-		ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-		ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
-		err := ctc.CompileDefineSyntax(ctctx, args)
+		err := defineSyntaxForTest(env, args)
 		if err != nil {
 			t.Fatalf("expected custom ellipsis in literals to compile, got: %v", err)
 		}
