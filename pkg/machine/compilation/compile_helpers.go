@@ -75,8 +75,8 @@ func (p *CompileTimeContinuation) expandCompileExecute(
 // and evaluates against, matching compileTransformerValue's phase-N+1-rooted
 // expander for a transformer right-hand side. The body is phase-(N+1) code, so
 // the keywords it may use are the ones a phase-(N+1) define-syntax deposits, and
-// that deposit lands at N+2 (CompileDefineSyntax reads its own p.env.NextPhase(),
-// and its p.env here is expandEnv). A p.env-rooted expander applies NextPhase()
+// that deposit lands at N+2 (expandDefineSyntax stores at its expander's
+// env.NextPhase(), and that expander here is rooted at expandEnv). A p.env-rooted expander applies NextPhase()
 // to N and reads N+1 — one rung low, so every (begin-for-syntax (define-syntax
 // m …)) was unreachable from every rung. Macros of the enclosing phase N still
 // resolve: they live IN expandEnv, which is lookupMacroBinding's ambient arm.

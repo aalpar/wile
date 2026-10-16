@@ -75,10 +75,10 @@ func (*FormArityError) Unwrap() error {
 // formSingleArg / formPrologue for the authoritative list):
 //
 //   - Directly, from fixed-arity special-form compilers and expanders in
-//     machine/compilation: define-syntax (both the top-level CompileDefineSyntax
-//     and the body-path compileDefineSyntaxFromSyntax), er-macro-transformer,
-//     and the (rename internal external) export specs (compile path and
-//     library-summary index).
+//     machine/compilation: define-syntax (both the compiler's shape check
+//     CompileDefineSyntax and the expander's compileDefineSyntaxFromSyntax),
+//     er-macro-transformer, and the (rename internal external) export specs
+//     (compile path and library-summary index).
 //   - Via formSingleArg, the arity-1 convenience wrapper, for single-argument
 //     forms: syntax, quasisyntax, and the (description <string>) forms.
 //   - Via internal/validate.formPrologue, which shifts these keyword-inclusive

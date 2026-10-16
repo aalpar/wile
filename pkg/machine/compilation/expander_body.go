@@ -40,8 +40,8 @@ import (
 // spelling only (see headFormName).
 //
 // Note: This intentionally excludes define-syntax forms. Macro bindings are
-// handled separately by compileDefineSyntaxFromSyntax which stores them in the
-// expand environment. We only pre-register define bindings so that macros can
+// handled separately by expandDefineSyntax, which stores them in the expand
+// environment. We only pre-register define bindings so that macros can
 // reference forward-declared variable definitions.
 //
 // Handles:
@@ -77,8 +77,9 @@ func extractDefineName(env *environment.EnvironmentFrame, form syntax.SyntaxValu
 	return nil
 }
 
-// ExpandBodyWithDefineSyntax expands a sequence of body forms, compiling
-// define-syntax forms as encountered so subsequent forms can use the macros.
+// ExpandBodyWithDefineSyntax expands a sequence of body forms in order, so a
+// define-syntax binds its keyword (expandDefineSyntax) before the forms after it
+// expand.
 //
 // This unifies the expansion pattern used by:
 // - Lambda bodies (internal define-syntax)
@@ -96,8 +97,9 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 ) ([]syntax.SyntaxValue, error) {
 	// Pre-scan: Register placeholder bindings for all define forms.
 	// This enables forward hygienic references within the body (R7RS letrec* semantics).
-	// Note: define-syntax is handled in pass 2 below — macro bindings live in the
-	// expand environment, not the runtime environment pre-declared here.
+	// Note: define-syntax is handled when the loop below reaches it — macro
+	// bindings live in the expand environment, not the runtime environment
+	// pre-declared here.
 	for _, form := range forms {
 		nameSym := extractDefineName(p.env, form)
 		if nameSym != nil {
@@ -113,24 +115,14 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 		if err != nil {
 			return nil, wrapSourcedError(form.SourceContext(), werr.WrapForeignErrorf(err, "body: failed to expand expression"))
 		}
-
-		// If define-syntax, compile it now for subsequent forms
-		_, isDefineSyntax := asFormDenoting(p.env, expanded, "define-syntax")
-		if isDefineSyntax {
-			pair := expanded.(*syntax.SyntaxPair)
-			err = compileDefineSyntaxFromSyntax(p.ctx, p.env, pair, p.libraryScope, p.evaluator)
-			if err != nil {
-				return nil, wrapSourcedError(expanded.SourceContext(), werr.WrapForeignErrorf(err, "body: failed to compile define-syntax"))
-			}
-		}
-
 		result = append(result, expanded)
 	}
 	return result, nil
 }
 
 // compileDefineSyntaxFromSyntax compiles a define-syntax form and stores the transformer
-// in the expand environment.
+// in the expand environment. Its one caller is expandDefineSyntax, so it runs once per
+// form, when the expander reaches it.
 //
 // The env parameter is used for free identifier resolution during compilation (so macros
 // can see local bindings like lambda parameters), while the actual macro binding is stored
@@ -142,8 +134,8 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	expandEnv := env.NextPhase()
 
 	// Extract (define-syntax keyword [docstring] transformer) — three or four
-	// elements counting the keyword. Matches CompileDefineSyntax on the
-	// top-level path, including the optional Guile-style docstring.
+	// elements counting the keyword, including the optional Guile-style
+	// docstring. CompileDefineSyntax re-checks the same shape.
 	parts, err := syntax.FormParts(dsPair, "define-syntax", 3, 4)
 	if err != nil {
 		return wrapSourcedError(dsPair.SourceContext(), err)
@@ -170,7 +162,7 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	// onto any pre-existing same-named binding and then re-stamps it. The returned
 	// index is PINNED to the slot this call landed on, at the writing view's own
 	// coordinates, so the write below cannot drift onto another slot of the same
-	// name. Same shape as the top-level site in compile_define_syntax.go.
+	// name.
 	globalIndex, created, err := createPhaseBindingUnlessStable(expandEnv, keyword, environment.BindingTypeSyntax, symbolScopes, "define-syntax")
 	if err != nil {
 		return wrapSourcedError(dsPair.SourceContext(), err)
@@ -183,7 +175,8 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	transformerValue, err := compileTransformerValue(ctx, env, transformer, libraryScope, evaluator)
 	if err != nil {
 		// A failed right-hand side must not leave the keyword bound to nothing;
-		// only a slot THIS call created is removed (see compile_define_syntax.go).
+		// only a slot THIS call created is removed, so a failed redefinition keeps
+		// the previous transformer.
 		if created {
 			expandEnv.DeleteOwnGlobal(keyword, symbolScopes)
 		}
@@ -193,7 +186,24 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	binding := expandEnv.GlobalEnvironment().GetOwnGlobalBinding(globalIndex)
 	if binding != nil {
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
-			changed := false
+			// DEAD for the import case since 2026-10-02 (P3.11), and kept
+			// pending one decision rather than deleted. This used to be the
+			// supersede's provenance clear: a top-level define-syntax over an
+			// imported macro reused the import's slot, so the import stamp had
+			// to go with the transformer or IsStable() (m.Imported || m.Stable)
+			// would keep reporting "cannot be rebound" about a macro the user
+			// had just rebound. R7RS §5.3.1 says such a definition binds a NEW
+			// location, so it now SHADOWS: the binding this runs on is the
+			// user's own fresh slot, never imported, and the clear writes false
+			// over false. Measured — a no-op in its place reddens nothing.
+			//
+			// What is NOT separated by that measurement is a define-syntax that
+			// REUSES a mutable slot, i.e. a second define-syntax of one name.
+			// Until someone establishes that path needs nothing here, the
+			// statement stays. Tracked in TODO.md. (Moved here from
+			// CompileDefineSyntax by I138, which made this the only writer.)
+			changed := m.Imported
+			m.Imported = false
 			symbolSource := keywordSym.SourceContext()
 			if symbolSource != nil {
 				m.Source = symbolSource

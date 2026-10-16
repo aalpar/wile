@@ -32,10 +32,10 @@ type patternVarRatchetCase struct {
 	// Emits is compilation.TemplateLocalEmits: template occurrences resolved to
 	// a local at compile time, the non-ellipsis path.
 	//
-	// It is TWICE the occurrence count, because a transformer body is compiled
-	// twice: once by the expander when it meets the define-syntax, so later body
-	// forms can use the macro, and again by the compiler. The "defined but never
-	// used" row is what isolates that — one occurrence, two emits, no use.
+	// It equals the occurrence count: a transformer body is compiled once, by
+	// the expander when it meets the define-syntax. Until I138 the compiler
+	// compiled it a second time and every row read double; the "defined but
+	// never used" row isolates that — one occurrence, one emit, no use.
 	Emits uint64
 	// Substitutions is match.PatternVarSubstitutions: template occurrences
 	// replaced by a capture at expansion time, the ellipsis and syntax-rules path.
@@ -63,13 +63,13 @@ var patternVarRatchetCorpus = []patternVarRatchetCase{
 		Substitutions: 79,
 	},
 	{
-		// One template occurrence, never used. Isolates the doubling to macro
+		// One template occurrence, never used. Isolates the count to macro
 		// DEFINITION rather than to expansion.
 		Name: "compile-time: defined but never used",
 		Code: `(begin
 			(define-syntax m0 (lambda (stx) (syntax-case stx () ((_ a) (syntax (list a))))))
 			42)`,
-		Emits:         2,
+		Emits:         1,
 		Substitutions: 79,
 	},
 	{
@@ -78,7 +78,7 @@ var patternVarRatchetCorpus = []patternVarRatchetCase{
 		Code: `(begin
 			(define-syntax m1 (lambda (stx) (syntax-case stx () ((_ a b) (syntax (list a b))))))
 			(m1 1 2))`,
-		Emits:         4,
+		Emits:         2,
 		Substitutions: 79,
 	},
 	{
@@ -87,7 +87,7 @@ var patternVarRatchetCorpus = []patternVarRatchetCase{
 		Code: `(begin
 			(define-syntax m2 (lambda (stx) (syntax-case stx () ((_ a) (syntax (list a a))))))
 			(m2 3))`,
-		Emits:         4,
+		Emits:         2,
 		Substitutions: 79,
 	},
 	{

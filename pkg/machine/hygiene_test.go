@@ -72,10 +72,8 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 		     ((lambda (name ...) body) val ...))))
 	`)
 
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, letMacro)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	if err != nil {
 		t.Fatalf("failed to compile let1 macro: %v", err)
 	}
@@ -92,10 +90,8 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 	`)
 
 	// Compile the define-syntax for swap!
-	ctc = compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx = compilation.NewCompileTimeCallContext(context.Background(), false)
 	args = extractDefineSyntaxArgs(t, defineSyntaxForm)
-	err = ctc.CompileDefineSyntax(ctctx, args)
+	err = defineSyntaxForTest(env, args)
 	if err != nil {
 		t.Fatalf("failed to compile swap! macro: %v", err)
 	}
@@ -140,10 +136,8 @@ func TestLetMacroExpansion(t *testing.T) {
 		    ((my-list x ...) (list x ...))))
 	`)
 
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, simpleMacro)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	if err != nil {
 		t.Fatalf("failed to compile my-list macro: %v", err)
 	}
@@ -179,10 +173,8 @@ func TestLetMacroSimple(t *testing.T) {
 		     ((lambda (name ...) body) val ...))))
 	`)
 
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, simpleMacro)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	if err != nil {
 		t.Fatalf("failed to compile let1 macro: %v", err)
 	}
@@ -215,10 +207,8 @@ func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
 		     (begin e1 e2 ...))))
 	`)
 
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, simpleMacro)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	if err != nil {
 		t.Fatalf("failed to compile macro: %v", err)
 	}
@@ -264,10 +254,8 @@ func TestLetMacroFull(t *testing.T) {
 		     ((lambda (name ...) (begin body ...)) val ...))))
 	`)
 
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, letMacro)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	if err != nil {
 		t.Fatalf("failed to compile my-let macro: %v", err)
 	}
@@ -298,10 +286,8 @@ func TestScopeCreation(t *testing.T) {
 		    ((bindSymbolWithScopes) 'expanded)))
 	`)
 
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Use the macro
@@ -503,10 +489,8 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 						if car != nil {
 							sym, ok := car.(*syntax.SyntaxSymbol)
 							if ok && sym.Key() == "define-syntax" {
-								ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-								ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 								args := extractDefineSyntaxArgs(t, expanded)
-								err := ctc.CompileDefineSyntax(ctctx, args)
+								err := defineSyntaxForTest(env, args)
 								if err != nil {
 									t.Fatalf("failed to compile setup define-syntax: %v", err)
 								}
@@ -584,10 +568,8 @@ func TestBoundIdentifierHygieneInNestedSyntaxRules(t *testing.T) {
 		             (n z)))))
 	`)
 
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, outerMacro)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	qt.Assert(t, err, qt.IsNil, qt.Commentf("failed to compile outer macro"))
 
 	// Test: (m k) should expand to 'bound-identifier=?
@@ -625,10 +607,8 @@ func TestVectorInMacroTemplate(t *testing.T) {
 	`
 
 	macroForm := parseString(t, env, macroCode)
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, macroForm)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	c.Assert(err, qt.IsNil, qt.Commentf("failed to compile vector-macro"))
 
 	// Test code: outer let shadows tmp, but macro's tmp should use intro scope
@@ -678,10 +658,8 @@ func TestNestedVectorInMacroTemplate(t *testing.T) {
 	`
 
 	macroForm := parseString(t, env, macroCode)
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, macroForm)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	c.Assert(err, qt.IsNil, qt.Commentf("failed to compile nested-vector-macro"))
 
 	// Test code: outer let shadows x and y, but macro should use intro scope
@@ -722,10 +700,8 @@ func TestVectorWithIdentifiers(t *testing.T) {
 	`
 
 	macroForm := parseString(t, env, macroCode)
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, macroForm)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	c.Assert(err, qt.IsNil, qt.Commentf("failed to compile vec-test macro"))
 
 	// Test code: outer let shadows the identifiers

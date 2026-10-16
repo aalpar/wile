@@ -142,6 +142,19 @@ func (p *ExpanderTimeContinuation) expandBeginForSyntax(sym *syntax.SyntaxSymbol
 	return p.runCompileTimeHalf(sym, expr, (*CompileTimeContinuation).runBeginForSyntax)
 }
 
+// expandDefineSyntax evaluates a define-syntax right-hand side and binds the
+// keyword when the expander reaches the form, so later forms in the same body
+// see the macro. This is the only evaluation: CompileDefineSyntax re-checks the
+// shape and emits nothing.
+func (p *ExpanderTimeContinuation) expandDefineSyntax(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	form := syntax.NewSyntaxCons(sym, expr, sym.SourceContext())
+	err := compileDefineSyntaxFromSyntax(p.ctx, p.env, form, p.libraryScope, p.evaluator)
+	if err != nil {
+		return nil, err
+	}
+	return form, nil
+}
+
 func (p *ExpanderTimeContinuation) expandDefineForSyntax(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return p.runCompileTimeHalf(sym, expr, (*CompileTimeContinuation).runDefineForSyntax)
 }

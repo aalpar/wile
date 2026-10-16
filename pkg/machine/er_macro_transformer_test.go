@@ -76,10 +76,8 @@ func TestCompileERMacroTransformer(t *testing.T) {
 		    (lambda (form rename compare) form)))
 	`)
 
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, form)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	c.Assert(err, qt.IsNil)
 
 	// Verify the binding is an compilation.ERMacroTransformer
@@ -104,10 +102,8 @@ func TestERMacro_EndToEnd_Constant(t *testing.T) {
 		    (lambda (form rename compare) 42)))
 	`)
 
-	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, form)
-	err := ctc.CompileDefineSyntax(ctctx, args)
+	err := defineSyntaxForTest(env, args)
 	c.Assert(err, qt.IsNil)
 
 	// Expand: (my-const anything) — transformer returns 42 regardless
