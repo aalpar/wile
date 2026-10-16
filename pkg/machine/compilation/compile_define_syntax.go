@@ -32,12 +32,16 @@ import (
 // Running it here as well would evaluate the right-hand side twice, repeating its
 // side effects (I138).
 //
-// The binding check is what keeps a form the expander did NOT reach as
-// define-syntax from compiling to a silent no-op. The compiler dispatches a head
-// by spelling, the expander by the form it denotes, so in a namespace that never
-// imported define-syntax the expander reads the form as a call and binds nothing.
-// A define-syntax inside (meta …), which the expander passes through unexpanded,
-// arrives the same way.
+// The binding check refuses a form the expander did NOT reach as define-syntax
+// when nothing of that name is bound, rather than compile it to a silent no-op.
+// The compiler dispatches a head by spelling, the expander by the form it
+// denotes, so in a namespace that never imported define-syntax the expander reads
+// the form as a call and binds nothing. A define-syntax inside (meta …), which
+// the expander passes through unexpanded, arrives the same way. It asks only
+// whether the keyword is bound as syntax, not whether THIS form bound it, so a
+// keyword already bound (an imported when, an earlier phase-1 definition) still
+// passes as a no-op. Filed in TODO.md with the compiler's spelling dispatch,
+// whose fix closes both.
 //
 // Reference: R7RS Section 5.4 (Syntax definitions)
 func (p *CompileTimeContinuation) CompileDefineSyntax(_ CompileTimeCallContext, expr syntax.SyntaxValue) error {
