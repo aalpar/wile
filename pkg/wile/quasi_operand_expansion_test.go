@@ -90,6 +90,15 @@ func TestI144UnquotedOperandIsAnExpression(t *testing.T) {
 		// The same hole at top level: a legal same-unit set! was rejected under
 		// the immutable top level.
 		{name: "toplevel_set_in_unquote", program: "(begin (define g 1) (define-syntax setg (syntax-rules () ((_) (set! g 2)))) `(,(setg)) g)", expected: "2"},
+		// quasisyntax and with-syntax under the same two timing tests.
+		{name: "let_syntax_unsyntax", program: two + "(let-syntax ((two (syntax-rules () ((_) 3)))) (syntax->datum #`(#,(two))))", expected: "(3)"},
+		{name: "set_in_unsyntax", program: "(let ((f (lambda () 7))) (define-syntax m (syntax-rules () ((_) (set! f (lambda () 99))))) #`(#,(m)) (f))", expected: "99"},
+		{name: "let_syntax_with_syntax_rhs", program: two + "(let-syntax ((two (syntax-rules () ((_) 3)))) (with-syntax ((a (two))) (syntax->datum #'a)))", expected: "3"},
+		// A with-syntax with no bindings compiles its body as plain expressions,
+		// so the body expands in the expander pass too; the zero-match ellipsis
+		// form is what a syntax-rules template emits.
+		{name: "with_syntax_no_bindings_body", program: "(with-syntax () `(a ,(when #t 1)))", expected: "(a 1)"},
+		{name: "with_syntax_zero_match_body", program: "(define-syntax m (syntax-rules () ((_ (p e) ...) (with-syntax ((p e) ...) `(r ,(when #t 1)))))) (m)", expected: "(r 1)"},
 	}
 	runUnderBothSyntaxLayers(t, tcs)
 }
@@ -127,6 +136,19 @@ func TestI144Pins(t *testing.T) {
 		},
 		// A bare splice does not fire, so its operand is data and stays
 		// unexpanded. Wile's answer; Chez rejects the form.
+		// A malformed marker is data, so an operand inside it does not fire.
+		// Wile's answer and Racket's; Chez rejects the first and fires the
+		// second's operand.
+		{
+			name:     "malformed_unquote_is_data",
+			program:  "(define-syntax two (syntax-rules () ((_) 2))) `(1 (unquote x (unquote (two))))",
+			expected: "(1 (unquote x (unquote (two))))",
+		},
+		{
+			name:     "malformed_nesting_is_data",
+			program:  "(define-syntax two (syntax-rules () ((_) 2))) `(1 (quasiquote a ,(two)))",
+			expected: "(1 (quasiquote a (unquote (two))))",
+		},
 		{
 			name:     "bare_splice_operand_not_expanded",
 			program:  "(define-syntax two (syntax-rules () ((_) 2))) `,@(two)",
@@ -175,6 +197,7 @@ func TestI144MalformedFormsRejected(t *testing.T) {
 		"(quasisyntax (1 #,(when #t 2)) . junk)",
 		"(with-syntax ((a (when #t 1) junk)) (syntax->datum (syntax a)))",
 		"(with-syntax ((a 1) . junk) (syntax->datum (syntax a)))",
+		"(with-syntax ())",
 	}
 	for _, program := range programs {
 		t.Run(program, func(t *testing.T) {

@@ -424,7 +424,8 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	// define-syntax's own syntax-rules, and through ARM 2 at phase 0, in with-syntax's
 	// input. Only a pin into the use site's OWN frame, in its mutable tier, falls
 	// through: a later top-level (define-syntax helper …) redefines a top-level
-	// helper, and a template's (helper) then expands to the macro (Chez, Racket). A
+	// helper, and a template's (helper) then expands to the macro (Chez, Racket). The
+	// frame spans every phase, so this holds for a phase-1 transformer body too. A
 	// sealed pin is a bootstrap definition, and a pin into another frame is a library's
 	// own helper, which an importer's define-syntax of the same name does not touch
 	// (Chez and Racket call the library's helper).
@@ -448,6 +449,7 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 		}
 	}
 	if pinned != nil && pinned.BindingType() == environment.BindingTypeVariable {
+		// pinned != nil implies a non-nil index: PinnedBinding reads through it.
 		gi := environment.PinnedIndex(sym)
 		if gi.Sealed() || gi.Env != p.env.GlobalEnvironment() {
 			return nil, pinned

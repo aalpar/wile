@@ -114,7 +114,9 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 	// compiled directly rather than as a synthesized syntax-case form: the expander
 	// pass has already expanded each expr (expandWithSyntaxForm), and re-expanding
 	// the input would resolve the scopeless list head at the use site, where a user
-	// (define-syntax list …) captures it.
+	// (define-syntax list …) captures it. That protects against a macro only: the
+	// head is still unpinned, so a user variable named list captures it at compile
+	// time (TODO.md).
 	syntaxCaseArgs := buildQuasiSyntaxList(srcCtx,
 		listExpr,
 		syntax.SyntaxEmptyList, // empty literals list

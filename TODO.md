@@ -1105,8 +1105,15 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
     `two`), and a macro recursing through an operand overflowed the Go stack, because each
     compile-time expander started a fresh depth guard. The same hole at top level: `(begin (define
     g 1) (define-syntax setg … (set! g 2)) `(,(setg)) g)` was REJECTED under the immutable top
-    level ("cannot mutate immutable top-level binding"); it now answers `2`. Pinned by
-    `pkg/wile/quasi_operand_expansion_test.go`.
+    level ("cannot mutate immutable top-level binding"); it now answers `2`. A `with-syntax`
+    with no bindings expands its body in the same pass: the compile-time fallbacks this move
+    deleted had been what expanded a quasi operand in such a body, so
+    `` (with-syntax () `(a ,(when #t 1))) `` regressed to "no such binding when" until the second
+    crosscheck caught it. Pinned by `pkg/wile/quasi_operand_expansion_test.go`.
+  - The same branch narrows `lookupMacroBinding`'s Variable-pin stop: a pin into the use site's
+    own frame, in its mutable tier, no longer stops the macro search, so a later top-level
+    `(define-syntax helper …)` redefines a template's `(helper)` (`42`, as Chez and Racket; was
+    `0`). A sealed pin, or one into a library's frame, still stops it.
 
   The remaining positions need the same move: expand cond-expand's chosen clause and an included
   file's forms before validation, or treat a macro use in one as an unknown set! of every captured
@@ -1123,6 +1130,31 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   `(#<void> ... 1)`. Chez and the Scheme layer answer `(2 3 1)`; `syntax-rules` with the same
   template is correct, so the fault is in the Go `syntax` template builder only. Live on master
   (`c65c625b`), default layer.
+
+- [ ] **A lexically shadowed `unquote` still fires** [Conformance, M, filed 2026-10-15 at the
+  P4.5 crosscheck]: the compiler's quasi walk (`expandQuasi`) classifies a head through
+  `headFormName` in the compiler's environment, which holds no `let` or `let-syntax` frame, so a
+  local binding of the marker's name does not shadow it. `(let ((unquote 5)) `(a ,1))` answers
+  `(a 1)`; Chez answers `(a (unquote 1))`. With `(import (rename (only (scheme base) unquote)
+  (unquote uq)))` and a top-level `two`, `(let-syntax ((uq (syntax-rules () ((_ x) 'shadowed))))
+  `(a (uq (two))))` raises "no such binding two" (the expander pass sees the let-syntax `uq` and
+  leaves `(two)` unexpanded; the compiler then fires it); Chez and Racket answer
+  `(a (uq (two)))`. Live on master. The fix is one authority for marker recognition: the expander
+  pass, which holds every frame, stamps what it classified.
+
+- [ ] **`with-syntax`'s synthesized `list` head is unpinned** [Correctness, S, filed 2026-10-15 at
+  the P4.5 crosscheck]: `CompileWithSyntax` builds `(syntax-case (list expr …) …)` with
+  `syntax.NewSyntaxSymbol("list", …)`, which carries no pin, so a user variable named `list`
+  captures it: `(define (list . xs) 'captured) (with-syntax ((a 1)) (syntax->datum (syntax a)))`
+  raises "syntax-case: no matching clause for input #'captured"; it should answer `1`. Inside a
+  procedural transformer, a user `(define-syntax list …)` makes it fail as "syntactic keyword
+  list used as a variable" (Chez `3`). Live on master. Likely fix: build the head with
+  `quasiHead("list", …)`, which pins the sealed slot.
+
+- [ ] **`with-syntax` with no bindings drops a dotted body tail** [Conformance, XS, filed
+  2026-10-15 at the P4.5 crosscheck]: `compileWithSyntaxBody` stops at the first non-pair cdr, so
+  `(with-syntax () 1 . junk)` answers `1` instead of raising; same class as the `expectArgs` row
+  (Tier 1). Live on master.
 
 - [ ] **`validateInclude` never reads the included file** [Medium, M, filed 2026-09-15 during the
   renamed-inner-positions whole-branch review]: `validateInclude`

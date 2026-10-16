@@ -131,9 +131,26 @@ func (p *ExpanderTimeContinuation) expandQuasiOperands(stx syntax.SyntaxValue, d
 // dotted-tail cell (pair spines only) handed back whole as a form, and an
 // improper tail walked as a template.
 func (p *ExpanderTimeContinuation) expandQuasiListOperands(pair *syntax.SyntaxPair, depth int, kw quasiKeywords, spine quasiSpine) (syntax.SyntaxValue, error) {
+	// cells and cars are filled only from the first change on, back-filled with
+	// the cells already walked: a template with no operand that changes, the
+	// common case, allocates nothing here.
 	var cells []*syntax.SyntaxPair
 	var cars []syntax.SyntaxValue
 	changed := false
+	walkedCells := 0
+	markChanged := func() {
+		if changed {
+			return
+		}
+		changed = true
+		for c := range syntax.Spine(pair) {
+			if len(cells) == walkedCells {
+				break
+			}
+			cells = append(cells, c)
+			cars = append(cars, c.SyntaxCar())
+		}
+	}
 	var tail syntax.SyntaxValue = syntax.SyntaxEmptyList
 	var end syntax.SpineEnd
 	for cell, e := range syntax.Spine(pair) {
@@ -143,7 +160,9 @@ func (p *ExpanderTimeContinuation) expandQuasiListOperands(pair *syntax.SyntaxPa
 			if err != nil {
 				return nil, err
 			}
-			changed = changed || walked != syntax.SyntaxValue(cell)
+			if walked != syntax.SyntaxValue(cell) {
+				markChanged()
+			}
 			tail = walked
 			end = syntax.SpineEnd{}
 			break
@@ -152,16 +171,23 @@ func (p *ExpanderTimeContinuation) expandQuasiListOperands(pair *syntax.SyntaxPa
 		if err != nil {
 			return nil, err
 		}
-		changed = changed || walked != cell.SyntaxCar()
-		cells = append(cells, cell)
-		cars = append(cars, walked)
+		if walked != cell.SyntaxCar() {
+			markChanged()
+		}
+		if changed {
+			cells = append(cells, cell)
+			cars = append(cars, walked)
+		}
+		walkedCells++
 	}
 	if end.Improper() {
 		walked, err := p.expandQuasiOperands(end.Tail, depth, kw)
 		if err != nil {
 			return nil, err
 		}
-		changed = changed || walked != end.Tail
+		if walked != end.Tail {
+			markChanged()
+		}
 		tail = walked
 	}
 	if !changed {
@@ -194,6 +220,9 @@ func (p *ExpanderTimeContinuation) expandMarkerOperand(v *syntax.SyntaxPair, kw 
 	expanded, err := p.expandSub(v, arg.SyntaxCar(), kw.nesting+": failed to expand operand")
 	if err != nil {
 		return nil, err
+	}
+	if expanded == arg.SyntaxCar() {
+		return v, nil
 	}
 	return rebuildMarker(v, arg, expanded), nil
 }
@@ -240,8 +269,11 @@ func (p *ExpanderTimeContinuation) expandWithSyntaxForm(sym *syntax.SyntaxSymbol
 	if !ok {
 		return formUnchanged(sym, expr)
 	}
+	if syntax.IsSyntaxEmptyList(pair.SyntaxCar()) {
+		return p.expandWithSyntaxBody(sym, pair)
+	}
 	bindings, ok := pair.SyntaxCar().(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(bindings) {
+	if !ok {
 		return formUnchanged(sym, expr)
 	}
 	var cells []*syntax.SyntaxPair
@@ -268,5 +300,27 @@ func (p *ExpanderTimeContinuation) expandWithSyntaxForm(sym *syntax.SyntaxSymbol
 		list = syntax.NewSyntaxCons(b, list, cells[i].SourceContext())
 	}
 	out := syntax.NewSyntaxCons(list, pair.SyntaxCdr(), pair.SourceContext())
+	return syntax.NewSyntaxCons(sym, out, sym.SourceContext()), nil
+}
+
+// expandWithSyntaxBody expands the body of (with-syntax () body ...). No
+// pattern variable is bound, so CompileWithSyntax compiles each body form as an
+// ordinary expression (compileWithSyntaxBody), and each must arrive expanded. A
+// missing or improper body is left for CompileWithSyntax to report.
+func (p *ExpanderTimeContinuation) expandWithSyntaxBody(sym *syntax.SyntaxSymbol, pair *syntax.SyntaxPair) (syntax.SyntaxValue, error) {
+	body, ok := asNonEmptyPair(pair.SyntaxCdr())
+	if !ok {
+		return formUnchanged(sym, pair)
+	}
+	for _, end := range syntax.Spine(body) {
+		if end.Improper() {
+			return formUnchanged(sym, pair)
+		}
+	}
+	expanded, err := p.ExpandSyntaxArgumentList(body)
+	if err != nil {
+		return nil, err
+	}
+	out := syntax.NewSyntaxCons(pair.SyntaxCar(), expanded, pair.SourceContext())
 	return syntax.NewSyntaxCons(sym, out, sym.SourceContext()), nil
 }

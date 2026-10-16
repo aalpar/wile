@@ -85,7 +85,9 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 // by ExpandPrimitiveForm() when the expander encounters a special form.
 //
 // Each primitive has different expansion behavior:
-//   - quote, define-syntax, define-library, quasiquote: return unchanged (no expansion)
+//   - quote, define-syntax, define-library: return unchanged (no expansion)
+//   - quasiquote, quasisyntax, syntax-case, with-syntax: expand only the operand
+//     positions (expander_quasi.go)
 //   - if: expand test, consequent, alternative separately
 //   - begin: expand all subexpressions
 //   - set!: expand only the value expression
