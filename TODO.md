@@ -158,9 +158,9 @@ because the citation is what `make indexlint` counts:
 | `2026-07-20-scope-keyed-tier1-remediation.md` | **Partially implemented** (2026-07-21) |
 | `2026-07-28-alocal-capture-safe-proof-for-locals.md` | Phases 1–4 **DONE** (1–3 committed on `feat/callback-conditional-capture`); 19/68 → 42/68 capture-safe stamps, reclaim verdicts unchanged at 19/68 as predicted. Phase 5 (Lever B) open. Prerequisite `47c27f72` must land first or the two conflict textually |
 | `2026-08-01-scheme-deadline-and-cancellation-cause.md` | Phase 1 **impl-ready**; Phase 2 designed and **gated** on the plan's scoping decision. Exposes the ambient `context.Context`'s deadline and cancellation cause to Scheme |
-| `2026-09-22-defect-closeout-impl.md` | **HUB** of the defect-closeout arc, derived from `2026-09-20-defect-closeout-design.md`. **Split into 11 files 2026-10-02** (one per phase, plus the audit) because the single file had reached 5,220 lines; task IDs, branch names and every word unchanged. Carries the method, the phase map and the first branch. **38 of 97 tasks landed**: P1 all ten, P2 all five, P3 all eighteen (P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` merged 2026-10-03; P3.16 `f94806a8` merged 2026-10-04; P3.17 `4ea9b5b5` and `231d3d95` merged 2026-10-10; P3.18 `24e3b23e`, reduced to a delete, merged 2026-10-14), P4.1 (`669c7b23`, merged 2026-10-14), P4.2 (`3721b540`, merged 2026-10-14), P4.3 (`35e8866a` + `e6ee81c9`, merged 2026-10-14), P4.4 (`9f3f5f1d` + `b5ac075d`, merged 2026-10-15), P8.3. The plan's own task records are the status of record — P1's and P2's landings are in the tree but NOT written into their task records, and P1's branch names differ from its table |
+| `2026-09-22-defect-closeout-impl.md` | **HUB** of the defect-closeout arc, derived from `2026-09-20-defect-closeout-design.md`. **Split into 11 files 2026-10-02** (one per phase, plus the audit) because the single file had reached 5,220 lines; task IDs, branch names and every word unchanged. Carries the method, the phase map and the first branch. **39 of 97 tasks landed**: P1 all ten, P2 all five, P3 all eighteen (P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` merged 2026-10-03; P3.16 `f94806a8` merged 2026-10-04; P3.17 `4ea9b5b5` and `231d3d95` merged 2026-10-10; P3.18 `24e3b23e`, reduced to a delete, merged 2026-10-14), P4.1 (`669c7b23`, merged 2026-10-14), P4.2 (`3721b540`, merged 2026-10-14), P4.3 (`35e8866a` + `e6ee81c9`, merged 2026-10-14), P4.4 (`9f3f5f1d` + `b5ac075d`, merged 2026-10-15), P4.5 (`2882da27` + `76e81aac` + `67a59fdc`, merged 2026-10-15), P8.3. The plan's own task records are the status of record — P1's and P2's landings are in the tree but NOT written into their task records, and P1's branch names differ from its table |
 | `2026-09-22-defect-closeout-audit.md` | **Read once, before the first branch.** The cross-phase audit, five topics: what serializes behind P2's merge (52 of the 82 tasks in P3–P9, measured), which edits two phases both claim, the six fault settlements (A2, C6, D1–D4), the citations and anchors that do not resolve (X1–X6, E1/E1b), and which gates go green without a fix. Fault labels are cited from the phase files, so they must not be renumbered |
-| `2026-09-22-defect-closeout-P4.md` | The expander residue: a definition-site pin decides the form, and operands get expanded. **4/8** (P4.1 `669c7b23`, P4.2 `3721b540`, P4.3 `35e8866a`, P4.4 `9f3f5f1d` + `b5ac075d`), all after P2's window closes (unconditional). P4.7 is a decision |
+| `2026-09-22-defect-closeout-P4.md` | The expander residue: a definition-site pin decides the form, and operands get expanded. **5/8** (P4.1 `669c7b23`, P4.2 `3721b540`, P4.3 `35e8866a`, P4.4 `9f3f5f1d` + `b5ac075d`, P4.5 `2882da27` + `76e81aac` + `67a59fdc`), all after P2's window closes (unconditional). P4.7 is a decision |
 | `2026-09-22-defect-closeout-P5.md` | The unit boundary — an included file belongs to the enclosing expansion and validation unit — plus engine-scoped state and the library-env costs. **0/13**, all after P2's window closes (unconditional). P5.7 is a decision |
 | `2026-09-22-defect-closeout-P6.md` | The value surface answers at its edges instead of raising, splitting or silently rounding. **0/15**; five window-constrained, ten free after the registry/core carve-out. P6.7, P6.10, P6.11, P6.13, P6.15 are decisions |
 | `2026-09-22-defect-closeout-P7.md` | Provenance: four places that discard a fact the pipeline was already holding stop discarding it (port name, port read position, intro-scope label, origin stamp). **0/7**; T1–T5 before-or-after the window, T6 after, T7 unconstrained |
@@ -1084,6 +1084,84 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   nothing at the compiled use site, so neither `markerName` nor the compiler's `headFormName` sees
   a marker there. Both walks agree, so this is a conformance gap, not the soundness hole the
   branch fixed — Racket fires the renamed unquote through the same shape.
+
+- [ ] **The opaque scan cannot see a `set!` a macro template introduces** [High, M, filed
+  2026-10-15 with P4.5 I144]: the opaque scan over-approximates every symbol in an evaluated
+  position of the raw syntax (`opaque_subtree.go`), which covers a macro whose `set!` target is
+  written in the operand, but not one whose template names the target itself. Such a use expands
+  at compile time, after validation, so the inliner keeps the stale body. Each position, with
+  `(let ((f (lambda () 7))) (define-syntax m (syntax-rules () ((_) (set! f (lambda () 99))))) <P>
+  (f))`; Chez and Racket answer `99`, and so does `(m)` written directly:
+  - `(cond-expand (else (m)))`: `7`, live on master. **Open.**
+  - `include` of a file holding `(m)`: unmeasured; the row below already covers the position.
+    **Open.**
+  - `` `(,(m)) ``, `(syntax-case (m) () (_ 1))`, and `with-syntax`'s RHS: **fixed by
+    `76e81aac`** (P4.5 crosscheck remediation, merged 2026-10-15). The first P4.5 commit
+    expanded these operands at compile time, which reached the hole (`7`; master had raised "no
+    such binding m"). They now expand in the expander pass (`expander_quasi.go`), before
+    validation, so the scan sees the `set!`. The crosscheck found two more symptoms of the
+    compile-time timing, and the same move fixed both: a `let-syntax` keyword was out of scope in
+    an operand (the compiler's env holds no frame for it, so `` `(,(two)) `` resolved an outer
+    `two`), and a macro recursing through an operand overflowed the Go stack, because each
+    compile-time expander started a fresh depth guard. The same hole at top level: `(begin (define
+    g 1) (define-syntax setg … (set! g 2)) `(,(setg)) g)` was REJECTED under the immutable top
+    level ("cannot mutate immutable top-level binding"); it now answers `2`. A `with-syntax`
+    with no bindings expands its body in the same pass; on master any macro use in such a body
+    (`(with-syntax () (m 3))`) raises "no such binding". Pinned by
+    `pkg/wile/quasi_operand_expansion_test.go`.
+  - The branch adds a Variable-pin stop to `lookupMacroBinding` (needed so a user
+    `(define-syntax list …)` cannot capture the Scheme layer's generated `(list …)`), scoped so a
+    pin into the use site's own frame, in its mutable tier, does not stop the search: a later
+    top-level `(define-syntax helper …)` still redefines a template's `(helper)` (`42`, as on
+    master and in Chez and Racket). A sealed pin, or one into a library's frame, stops it.
+
+  The remaining positions need the same move: expand cond-expand's chosen clause and an included
+  file's forms before validation, or treat a macro use in one as an unknown set! of every captured
+  binding. Syntax-case clause bodies still expand at compile time (`CompileSyntaxCase`), so a
+  macro recursing through one still hangs rather than raising, live on master. The same timing
+  leaves a `let-syntax` keyword out of scope in a clause body: with a top-level `two` → 2,
+  `(let-syntax ((two (syntax-rules () ((_) 3)))) (syntax-case 'x () (_ (two))))` answers `2` on
+  master and the branch; Chez and Racket answer `3`.
+
+- [ ] **Go layer: a `syntax` template with an ellipsis before its last element builds a
+  malformed syntax list** [Correctness, S, filed 2026-10-15 with the P4.5 Scheme-layer follow-up]:
+  `(syntax-case #'(1 2 3) () ((x y ...) #'(y ... x)))` returns a list holding a nil element, so
+  printing it SIGSEGVs in `SyntaxObject.SchemeString` (`wile -e`), and `syntax->datum` of it renders
+  `(#<void> ... 1)`. Chez and the Scheme layer answer `(2 3 1)`; `syntax-rules` with the same
+  template is correct, so the fault is in the Go `syntax` template builder only. Live on master
+  (`c65c625b`), default layer.
+
+- [ ] **A lexically shadowed `unquote` still fires** [Conformance, M, filed 2026-10-15 at the
+  P4.5 crosscheck]: the compiler's quasi walk (`expandQuasi`) classifies a head through
+  `headFormName` in the compiler's environment, which holds no `let` or `let-syntax` frame, so a
+  local binding of the marker's name does not shadow it. `(let ((unquote 5)) `(a ,1))` answers
+  `(a 1)`; Chez answers `(a (unquote 1))`. With `(import (rename (only (scheme base) unquote)
+  (unquote uq)))` and a top-level `two`, `(let-syntax ((uq (syntax-rules () ((_ x) 'shadowed))))
+  `(a (uq (two))))` raises "no such binding two" (the expander pass sees the let-syntax `uq` and
+  leaves `(two)` unexpanded; the compiler then fires it); Chez and Racket answer
+  `(a (uq (two)))`. Live on master. The fix is one authority for marker recognition: the expander
+  pass, which holds every frame, stamps what it classified.
+
+- [ ] **`with-syntax`'s synthesized `list` head is unpinned** [Correctness, S, filed 2026-10-15 at
+  the P4.5 crosscheck]: `CompileWithSyntax` builds `(syntax-case (list expr …) …)` with
+  `syntax.NewSyntaxSymbol("list", …)`, which carries no pin, so a user variable named `list`
+  captures it: `(define (list . xs) 'captured) (with-syntax ((a 1)) (syntax->datum (syntax a)))`
+  raises "syntax-case: no matching clause for input #'captured"; it should answer `1`. Inside a
+  procedural transformer, a user `(define-syntax list …)` makes it fail as "syntactic keyword
+  list used as a variable" (Chez `3`). Live on master. Likely fix: build the head with
+  `quasiHead("list", …)`, which pins the sealed slot.
+
+- [ ] **`with-syntax` with no bindings drops a dotted body tail** [Conformance, XS, filed
+  2026-10-15 at the P4.5 crosscheck]: `compileWithSyntaxBody` stops at the first non-pair cdr, so
+  `(with-syntax () 1 . junk)` answers `1` instead of raising (Chez: invalid syntax; Racket: bad
+  syntax); same class as the `expectArgs` row (Tier 1). Live on master. With a macro in the body,
+  `(with-syntax () (when #t 1) . 2)` fails as "no such binding when", because the expander pass
+  leaves an improper body unexpanded.
+
+- [ ] **An internal `define` in a `with-syntax` body panics** [Correctness, S, filed 2026-10-15
+  at the P4.5 crosscheck]: `((lambda () (with-syntax ((q 1)) (define x 1) x)))` raises
+  "recovered panic: … index out of range [2] with length 2"; it should answer `1`. A no-binding
+  body with a `define` inside a transformer panics the same way. Live on master.
 
 - [ ] **`validateInclude` never reads the included file** [Medium, M, filed 2026-09-15 during the
   renamed-inner-positions whole-branch review]: `validateInclude`

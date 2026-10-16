@@ -115,12 +115,11 @@ func (p *ExpanderTimeContinuation) expandEach(expr syntax.SyntaxValue, args []sy
 // Forms using this expander (see primitiveExpanderEntries for the current set):
 //   - quote: Content is literal data, not code
 //   - define-syntax, TransformerERMacro: Transformer is compiled, not expanded
-//   - quasiquote: Has special expansion rules handled at compile time
 //   - unquote, unquote-splicing: Only valid inside quasiquote
 //   - include, include-ci: Files are read at compile time
 //   - cond-expand: Feature expressions use special syntax, not macros
-//   - syntax, syntax-case, quasisyntax, unsyntax, unsyntax-splicing, with-syntax:
-//     Compile-time forms handled during compilation
+//   - syntax, unsyntax, unsyntax-splicing: Compile-time forms handled during
+//     compilation
 //   - define-library, library, export: Library forms handled by the library
 //     compiler, which walks the declarations itself
 //   - meta: a phase-shifting form whose body belongs to a phase this expander is

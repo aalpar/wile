@@ -512,7 +512,8 @@ func (p *CompileTimeContinuation) expandQuasi(
 			switch denotedName {
 			case kw.unquote:
 				// The escape. Depth 1 is where an unquote fires, and it yields
-				// the RAW argument: `,x is x, not an expansion of x.
+				// the argument as an expression, not as template: `,x is x. The
+				// expander pass has already expanded it (expander_quasi.go).
 				if depth == 1 && hasSyntaxArity(v, 2) {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					return cdr.SyntaxCar(), nil
@@ -562,8 +563,8 @@ func (p *CompileTimeContinuation) expandQuasi(
 // early exit is the dotted-tail arm, and that arm requires the cell's cdr to be
 // a one-element list, so exactly one element remains and no splice can hide
 // behind it — except as that final tail expression itself, and there depth
-// decides: at depth 1 the unquote arm hands `(a . ,,@x)'s raw
-// (unquote-splicing x) to the compiler, which errors at that token, while
+// decides: at depth 1 the unquote arm hands `(a . ,,@x)'s (unquote-splicing x)
+// to the compiler as an expression, which errors at that token, while
 // deeper it is rewrapped as data like any other over-deep form.
 //
 // Two facts about the ordering here are load-bearing and neither is local:
@@ -608,7 +609,7 @@ func (p *CompileTimeContinuation) expandQuasiList(
 		// elements: `(,@x . ,y) rendered as the 4-element list (1 2 unquote y).
 		//
 		// The cell IS the tail template, so it goes to expandQuasi whole: at
-		// depth 1 an unquote arm hands back the raw expression (the escape,
+		// depth 1 an unquote arm hands back the expression (the escape,
 		// evaluated at run time exactly as a splice's expression is), deeper it
 		// rewraps at depth-1, and a nesting keyword rewraps at depth+1. Not one
 		// of those rules is restated here. See dottedTailCell for which
