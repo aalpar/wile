@@ -809,9 +809,10 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 		// input and onto everything the transformer introduced (see the mint
 		// above). Then strip this run's use-site scopes from any binder the
 		// output defines, before re-expansion carries the form further. Every
-		// macro output passes this one point, so a definition that only surfaces
-		// after several expansions is pruned at its own level. Identity while
-		// nothing mints.
+		// closure transformer's output passes this point (the Go ER boundary and
+		// ExpandOnce prune at their own returns), so a definition that only
+		// surfaces after several expansions is pruned at its own level. Identity
+		// while nothing mints.
 		stx = syntax.FlipScope(stx, introScope)
 		stx = p.pruneUseSiteScopes(stx)
 		// Recursively expand the result to handle nested macro calls

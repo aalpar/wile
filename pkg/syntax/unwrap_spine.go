@@ -16,11 +16,10 @@ package syntax
 
 import "github.com/aalpar/wile/pkg/values"
 
-// UnwrapSpine unwraps v's pairs and vectors to Scheme pairs and vectors all the way
-// down, keeps identifier leaves as *SyntaxSymbol, and unwraps every other atom
-// (design §3.5, Q6). It is the form an explicit-renaming transformer receives,
-// on both syntax layers: (%syntax-spine stx) in the Scheme derivation and the
-// Go ER boundary in pkg/machine/compilation. One function, so the two cannot
+// UnwrapSpine unwraps v's pairs, vectors and boxes to Scheme pairs, vectors and
+// boxes all the way down, keeps identifier leaves as *SyntaxSymbol, and unwraps
+// every other atom. It is the form an explicit-renaming transformer receives,
+// on both syntax layers (%syntax-spine in the Scheme one), so the two cannot
 // disagree on the shape.
 //
 // Keeping the leaves is what keeps an identifier's scopes through the
@@ -39,6 +38,17 @@ func UnwrapSpine(v values.Value) values.Value {
 			elems[i] = UnwrapSpine(e)
 		}
 		return values.NewVector(elems...)
+	case *SyntaxBox:
+		// Unwrap would return the content and drop the box.
+		if s.Value == nil {
+			return values.NewBox(nil)
+		}
+		return values.NewBox(UnwrapSpine(s.Value))
+	case *SyntaxDatumLabelAssignment:
+		// The parser keeps this wrapper only around a CYCLIC datum, which the
+		// spine walk would follow forever. UnwrapAll is cycle-safe; the leaves
+		// lose their scopes, which costs nothing, since a cycle is never code.
+		return s.UnwrapAll()
 	case SyntaxValue:
 		return s.Unwrap()
 	default:

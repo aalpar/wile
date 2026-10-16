@@ -483,10 +483,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   11. The procedure now gets the form's spine, as under
   `WILE_SYNTAX_FORMS=scheme`: pairs and vectors plain, identifier leaves syntax
   objects. `(symbol? (cadr form))` is now `#f` and `(identifier? (cadr form))`
-  `#t`; `eq?` on a leaf against a quoted symbol no longer matches, so use
-  `compare` with a `rename`d name. `pair?`, `car`, `vector-ref` and a raw
-  symbol introduced without `rename` are unchanged. The boundary also prunes
-  use-site scopes from the binders it outputs, so a name reaching an ER
+  `#t`; `eq?`, `memq` or `case` on a leaf against a quoted symbol no longer
+  matches, and `symbol->string` on one raises: use `compare` with a `rename`d
+  name, or `syntax->datum` for the symbol. `pair?`, `car`, `vector-ref` and
+  `box?` are unchanged, and a raw symbol introduced without `rename` still
+  takes the keyword's context. What changes is that the user's identifiers no
+  longer collapse onto that context, so when the keyword itself came from a
+  `syntax-rules` wrapper the raw symbol carries the wrapper's scope and stops
+  meeting the user's names, as under the Scheme layer: an ER `aif` reached
+  through `(wrap 6 it)` now raises "no such binding it". The boundary also
+  prunes use-site scopes from the binders it outputs, so a name reaching an ER
   `define` through a `syntax-rules` macro is bound where it was written rather
   than nowhere.
 - **BREAKING (Go API): `pkg/machine`'s continuation and timer seams.**

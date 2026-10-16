@@ -100,9 +100,9 @@ func PrimSyntaxVectorToList(mc machine.CallContext) error {
 	return nil
 }
 
-// PrimSyntaxSpine implements (%syntax-spine stx) as syntax.UnwrapSpine: pairs and vectors unwrapped to
-// Scheme pairs and vectors all the way down, identifier leaves kept as syntax,
-// other atoms unwrapped (design §3.5, Q6). The ER shim hands its proc this
+// PrimSyntaxSpine implements (%syntax-spine stx) as syntax.UnwrapSpine: pairs,
+// vectors and boxes unwrapped all the way down, identifier leaves kept as
+// syntax, other atoms unwrapped (design §3.5, Q6). The ER shim hands its proc this
 // shape, so (identifier? x) is the test and compare the equality; (symbol? x) on
 // a form element is #f. compare is the re-homed free-identifier=?, which requires
 // both arguments to be identifiers, so (compare 'sym x) raises where Chibi's

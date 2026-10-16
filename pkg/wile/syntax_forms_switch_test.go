@@ -323,6 +323,54 @@ func TestP2_ERUseSitePrunedBinder(t *testing.T) {
 	}
 }
 
+// TestP2_ERBoundaryScopes pins what the ER boundary does and does not take from
+// the use-site triad. A raw symbol the proc introduces stays use-site: it binds
+// and is bound by the user's names (no flip), and it shares a pass-through
+// binder's scopes (no use-site stamp on the input); through a syntax-rules
+// wrapper it carries the wrapper's scope, so it no longer meets the user's x.
+// Binders the output defines are pruned in every definition shape.
+func TestP2_ERBoundaryScopes(t *testing.T) {
+	const bindref = `(define-syntax bindref (er-macro-transformer (lambda (f r c) (list (r 'let) (list (list (cadr f) 7)) 'x))))
+(define x 'global)
+`
+	const via = "(define-syntax via (syntax-rules () ((_ n) (m n))))\n"
+	tcs := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"raw ref meets a pass-through binder", bindref + `(bindref x)`, "7"},
+		{"raw ref behind a syntax-rules wrapper", bindref +
+			"(define-syntax via (syntax-rules () ((_ n) (bindref n))))\n(via x)", "global"},
+		{"raw define binds the user's name",
+			`(define-syntax def-it (er-macro-transformer (lambda (f r c) (list (r 'define) 'it 5))))
+(def-it) it`, "5"},
+		{"raw let binds the user's name",
+			`(define-syntax alet (er-macro-transformer (lambda (f r c) (list (r 'let) (list (list 'it 7)) (cadr f)))))
+(alet it)`, "7"},
+		{"prune inside begin",
+			`(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'begin) (list (r 'define) (cadr f) 1)))))
+` + via + `(via zz) zz`, "1"},
+		{"prune define-syntax",
+			`(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'define-syntax) (cadr f) (list (r 'syntax-rules) '() (list '(_) 3))))))
+` + via + `(via mm) (mm)`, "3"},
+		{"prune procedure define",
+			`(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'define) (list (cadr f)) 4))))
+` + via + `(via ff) (ff)`, "4"},
+		{"prune through two wrappers",
+			`(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'define) (cadr f) 5))))
+` + via + "(define-syntax via2 (syntax-rules () ((_ n) (via n))))\n(via2 qq) qq", "5"},
+	}
+	for _, tc := range tcs {
+		src := "(import (for-syntax (scheme base)))  ; cadr\n" + tc.src
+		for _, l := range syntaxLayers {
+			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
+				qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(l.opt)...), qt.Equals, tc.want)
+			})
+		}
+	}
+}
+
 // TestP2_ERContract (Q6): the proc receives the spine with identifier leaves
 // intact — identifier? is the test, compare the equality; symbol? is #f; pair?
 // on a form element stays #t, which is what a whole-tree pass-through of syntax
@@ -341,6 +389,35 @@ func TestP2_ERContract(t *testing.T) {
 		t.Run(l.name, func(t *testing.T) {
 			qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(l.opt)...), qt.Equals, "(#t #f #t #t 3)")
 		})
+	}
+}
+
+// TestP2_ERSpineContainers: a box and a cyclic datum in the form are plain
+// values to the proc, not syntax. A box unwrapped one level would arrive as its
+// content; a cyclic datum walked as a spine would never terminate.
+func TestP2_ERSpineContainers(t *testing.T) {
+	tcs := []struct {
+		name string
+		use  string
+		want string
+	}{
+		{"box", `(probe #&(a b))`, "(#t #f #t)"},
+		{"cyclic datum", `(probe #0=(a . #0#))`, "(#f #t #t)"},
+	}
+	for _, tc := range tcs {
+		src := `(import (for-syntax (scheme base)))  ; cadr
+(define-syntax probe
+  (er-macro-transformer
+    (lambda (f r c)
+      (let ((x (cadr f)))
+        (list (r 'quote)
+              (list (box? x) (pair? x) (pair? (if (box? x) (unbox x) (cdr x)))))))))
+` + tc.use
+		for _, l := range syntaxLayers {
+			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
+				qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(l.opt)...), qt.Equals, tc.want)
+			})
+		}
 	}
 }
 

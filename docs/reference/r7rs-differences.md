@@ -870,14 +870,20 @@ what lets a matcher written in Scheme walk a form without losing hygiene.
 `syntax-vector->list` returns a syntax *list* carrying the vector's context, so a
 vector pattern reduces to the list case.
 
-**`er-macro-transformer` hands its procedure the form's spine.** Pairs and vectors are
-plain data, so `pair?`, `car` and `vector-ref` work as usual, but identifier leaves stay
-syntax objects: `identifier?` is the test on a form element, `symbol?` answers `#f`, and
-`compare` is `free-identifier=?` over two identifiers. Keeping the leaves is what keeps
-an identifier's scopes through the transformer, so a name the procedure passes through
-unchanged is not captured by a binder an enclosing macro introduced. Both syntax-forms
-implementations hand over this shape; until the I031 fix the default Go forms unwrapped
-the whole form, so identifiers arrived as symbols.
+**`er-macro-transformer` hands its procedure the form's spine.** Pairs, vectors and
+boxes are plain data, so `pair?`, `car` and `vector-ref` work as usual, but identifier
+leaves stay syntax objects: `identifier?` is the test on a form element and `symbol?`
+answers `#f`. Keeping the leaves is what keeps an identifier's scopes through the
+transformer, so a name the procedure passes through unchanged is not captured by a binder
+an enclosing macro introduced. Both syntax-forms implementations hand over this shape;
+until the I031 fix the default Go forms unwrapped the whole form, so identifiers arrived
+as symbols.
+
+`compare` still differs by layer. Under `WithSchemeSyntaxForms` (or
+`WILE_SYNTAX_FORMS=scheme`) it is `free-identifier=?` and raises on a bare symbol. The
+default Go `compare` also accepts a bare symbol, resolved without regard to scopes, so
+`(compare (cadr form) 'else)` answers where the Scheme layer raises; compare against
+`(rename 'else)` to be correct on both.
 
 Hygiene is Flatt's sets-of-scopes model (2016), as Racket's is, rather than R6RS's
 mark-and-substitution. That is invisible through `syntax-rules` and observable through
