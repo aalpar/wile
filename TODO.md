@@ -2014,8 +2014,8 @@ design. It was lifted out of the `begin-for-syntax` row below, whose ordering ha
 
 ### Core-form arity check drops a dotted tail (2026-10-15)
 
-- [ ] **`expectArgs` truncates an improper spine instead of refusing it** [Conformance, XS, fix on
-  `fix/expectargs-improper-tail`]: the loop in `expectArgs`
+- [x] **`expectArgs` truncates an improper spine instead of refusing it** [Conformance, Done
+  2026-10-15, `4b69b233` + `951a090f`, merged `419e86c9`]: the loop in `expectArgs`
   (`expander_primitive_forms.go`) stopped at the first non-pair tail without recording it, so
   `(if #t 1 . 2)` collected two arguments, reported ok, and the caller rebuilt a proper `(if #t 1)`;
   the dotted tail never reached the validator and the form ran. Same path for `set!` and
