@@ -745,6 +745,18 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   that file is the `-f` file or itself included. A procedure defined the same way is visible.
   R7RS §4.1.7: `include` is `begin` over the file's contents, no new scope. Breaks `examples/logic/schelog/run-all-tests.scm` (`%which` unbound at line 65); its README
   instruction was removed 2026-09-15, restore it when this is fixed.
+- [ ] **An included file cannot see a binding local to its includer** [Bug, Correctness, filed
+  2026-10-16, fix with P5.7; revisit the schedule when P4 closes]: the reverse direction of the row
+  above. f.scm = `(list x (m))`; `(let ((x 5)) (define-syntax m (syntax-rules () ((_) 42)))
+  (include "f.scm"))` raises `f.scm:1:6: no such local or global binding "x"` at `a23c4543`; petite
+  and racket 9.2 answer `(5 42)`. Same refusal for a `let-syntax` keyword and a body `define`; a
+  top-level binding works only because it carries the empty scope set. Cause: `readIncludedForms`
+  returns unscoped forms and the only stamp is the library scope in
+  `processFormsWithLetrecSemantics`. The fix is P5.7's step 3 (stamp the `include` identifier's
+  scopes onto the read forms); `TestIncludedFormsSeeIncluderLocals` (not yet written) was added 2026-10-16
+  to P5.7's gate as group (4), because P5.7's other include gates pass under a splice that skips the stamp. A
+  compiler-side point fix was declined: it needs the keyword routed to `compileIncludeImpl`, a
+  dispatch seam P5.7 deletes. R7RS §4.1.7.
 - [x] **Library export of a name the library did not define** [Done 2026-09-16, branch
   `feat/export-for-syntax`; see `findLibraryBinding` entry below]: the two-phase *defined* case
   exports phase 0 (measured 2026-09-14, matches Racket). A re-exported `syntax-rules` reaches a
@@ -1173,8 +1185,8 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   - `(cond-expand (else (m)))`: `7`, live on master. **Open.**
   - `include` of a file holding `(m)`: raises "no such binding m" (measured 2026-10-16): a
     local macro is not visible to the included forms, which masks the scan question. That is the
-    reverse direction of the "A macro defined in an `include`d file …" row and not yet filed on its
-    own. **Open.**
+    reverse direction of the "A macro defined in an `include`d file …" row, filed 2026-10-16 as
+    "An included file cannot see a binding local to its includer". **Open.**
   - `` `(,(m)) ``, `(syntax-case (m) () (_ 1))`, and `with-syntax`'s RHS: **fixed by
     `76e81aac`** (P4.5 crosscheck remediation, merged 2026-10-15). The first P4.5 commit
     expanded these operands at compile time, which reached the hole (`7`; master had raised "no
