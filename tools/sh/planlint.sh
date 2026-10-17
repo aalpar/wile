@@ -42,6 +42,17 @@ PLANS_DIR="${1:-plans}"
 MEMORY_DIR="${2:-memory}"
 INDEX_FILE="${3:-TODO.md}"
 
+# The index of record is TODO.md plus the todo/*.md files it was split into on
+# 2026-10-17 (TODO.md "Layout"): the hub holds the Plan Index, the tier files
+# hold the rows. Membership is tested against their concatenation, so a row
+# counts wherever it lives. Messages keep naming $INDEX_FILE.
+INDEX_CORPUS="$INDEX_FILE"
+if [ -f "$INDEX_FILE" ] && [ -d "$(dirname "$INDEX_FILE")/todo" ]; then
+    INDEX_CORPUS="$(mktemp)"
+    trap 'rm -f "$INDEX_CORPUS"' EXIT
+    cat "$INDEX_FILE" "$(dirname "$INDEX_FILE")"/todo/*.md > "$INDEX_CORPUS"
+fi
+
 if [ ! -d "$PLANS_DIR" ]; then
     echo "planlint: no $PLANS_DIR/ directory -- nothing to check (it is gitignored)"
     exit 0
@@ -141,9 +152,11 @@ for plan in "$PLANS_DIR"/*.md; do
         done
     fi
 
-    # Signal "index": TODO.md's row for this plan reports it shipped.
+    # Signal "index": TODO.md's row for this plan reports it shipped. The Plan
+    # Index stays in TODO.md after the 2026-10-17 split, so the first match in
+    # the corpus (TODO.md, then todo/*.md) is the index row.
     if [ -f "$INDEX_FILE" ]; then
-        row="$(grep -m1 -F "$(basename "$plan")" "$INDEX_FILE" || true)"
+        row="$(grep -m1 -F "$(basename "$plan")" "$INDEX_CORPUS" || true)"
         if [ -n "$row" ] && printf '%s' "$row" | grep -qE "$done_re"; then
             signals="$signals  index: $INDEX_FILE reports this shipped"$'\n'
         fi
