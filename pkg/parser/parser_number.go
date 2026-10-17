@@ -206,8 +206,9 @@ func (p *Parser) widenToBigInteger(stx syntax.SyntaxValue, _ tokenizer.Token) (s
 // be inexact: #m5 is 5.0 at 256-bit precision, as it was before #m became an
 // introducer.
 //
-// Precision is the value's, not the literal's. #m#x1.8 widens the Float 1.5, so
-// it carries float64 precision rather than 256 bits, while the one-token decimal
+// Precision is the value's, not the literal's, floored at 256 bits and widened
+// to the operand's bit length for an exact integer or ratio. #m#x1.8 widens the
+// Float 1.5, so it carries float64 precision rather than 256 bits, while the one-token decimal
 // spelling #m1.2345678901234567890123456789 keeps every digit. Consulting how
 // the operand was spelled is exactly what the introducer model gives up, and
 // re-reading the inner token to recover it would make #m inspect its operand's
@@ -223,10 +224,23 @@ func (p *Parser) widenToBigFloat(stx syntax.SyntaxValue, _ tokenizer.Token) (syn
 		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt64(v.Value)
 		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
 	case *values.BigInteger:
-		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt(v.BigInt())
+		n := v.BigInt()
+		prec := max(uint(values.DefaultBigFloatPrecision), uint(n.BitLen()))
+		if prec > values.MaxBigFloatLiteralPrecision {
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
+				"widenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
+		}
+		bf := new(big.Float).SetPrec(prec).SetInt(n)
 		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
 	case *values.Rational:
-		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetRat(v.Rat())
+		r := v.Rat()
+		bits := max(r.Num().BitLen(), r.Denom().BitLen())
+		prec := max(uint(values.DefaultBigFloatPrecision), uint(bits))
+		if prec > values.MaxBigFloatLiteralPrecision {
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
+				"widenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
+		}
+		bf := new(big.Float).SetPrec(prec).SetRat(r)
 		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,
@@ -616,7 +630,8 @@ func (p *Parser) parseBigFloat() (syntax.SyntaxValue, tokenizer.Token, error) {
 	s := schemeutil.TrimPrefixCI(p.cur.String(), "#m")
 	q1 := values.NewBigFloatFromString(s)
 	if q1 == nil {
-		return nil, p.cur, NewParserErrorf(p.cur, "invalid big float: %s", p.cur.String())
+		return nil, p.cur, NewParserErrorWithWrapf(werr.ErrInvalidFormat, p.cur,
+			"invalid big float (malformed, or past the %d-bit precision limit): %s", values.MaxBigFloatLiteralPrecision, p.cur.String())
 	}
 	q := p.wrapSyntax(q1, p.cur)
 	return q, p.cur, nil

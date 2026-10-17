@@ -54,7 +54,7 @@ func ParseRealFloatString(s string) (values.Number, error) {
 		if bf != nil {
 			return bf, nil
 		}
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "ParseRealFloatString: invalid long-precision real number: %s", s)
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "ParseRealFloatString: invalid long-precision real number (malformed, or past the %d-bit precision limit): %s", values.MaxBigFloatLiteralPrecision, s)
 	}
 	f, err := strconv.ParseFloat(normalized, 64)
 	if err == nil {
@@ -63,7 +63,7 @@ func ParseRealFloatString(s string) (values.Number, error) {
 
 	var numErr *strconv.NumError
 	if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
-		bf := values.NewBigFloatFromString(normalized)
+		bf := values.NewBigFloatFromStringClamped(normalized)
 		if bf != nil {
 			return bf, nil
 		}

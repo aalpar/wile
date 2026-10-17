@@ -169,7 +169,7 @@ func toBigComplexPart(v values.Value, name string) (values.Number, error) {
 	case *values.Float:
 		return values.NewBigFloatFromFloat64(n.Value), nil
 	case *values.Rational:
-		return values.NewBigFloatFromString(n.Rat().FloatString(256)), nil
+		return values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetRat(n.Rat())), nil
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: expected a real number but got %T", name, v)
 	}
