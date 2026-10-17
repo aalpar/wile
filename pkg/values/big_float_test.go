@@ -60,7 +60,7 @@ func TestDecimalLiteralPrecisionIntegersAreExact(t *testing.T) {
 func TestLongDecimalFractionRoundTrips(t *testing.T) {
 	rng := rand.New(rand.NewSource(192))
 	for n := 78; n <= 130; n++ {
-		for i := 0; i < 60; i++ {
+		for range 60 {
 			var b strings.Builder
 			b.WriteByte(byte('8' + rng.Intn(2)))
 			b.WriteByte('.')
