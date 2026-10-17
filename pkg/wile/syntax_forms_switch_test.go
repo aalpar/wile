@@ -392,6 +392,22 @@ func TestP2_ERContract(t *testing.T) {
 	}
 }
 
+// TestP2_ERDatumToSyntaxOnAFormLeaf (I172): a form leaf is an identifier, so
+// it serves as datum->syntax's template-id, and the symbol it builds denotes at
+// the use site. With the leaves unwrapped the template-id was a bare symbol and
+// datum->syntax refused it. A whole-tree pass-through would also answer 99, by
+// handing over syntax pairs; TestP2_ERContract's pair? is what refuses that.
+func TestP2_ERDatumToSyntaxOnAFormLeaf(t *testing.T) {
+	src := `(define-syntax mm (er-macro-transformer (lambda (f r c) (datum->syntax (car f) 'hello))))
+(define hello 99)
+(mm)`
+	for _, l := range syntaxLayers {
+		t.Run(l.name, func(t *testing.T) {
+			qt.Assert(t, evalSyntaxForms(t, src, l.opt), qt.Equals, "99")
+		})
+	}
+}
+
 // TestP2_ERSpineContainers: a box and a cyclic datum in the form are plain
 // values to the proc, not syntax. A box unwrapped one level would arrive as its
 // content; a cyclic datum walked as a spine would never terminate.
