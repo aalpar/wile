@@ -1023,7 +1023,7 @@ enough to rebuild the probes.
 - [x] **Task 6.4: Add `typeswitchlint` to value type guide** [Low, S, Done — `a41ec0b7`]: resolved by a mechanism instead of a comment: `typeswitchlint` is opt-in, CI-gating, and drift-guarded (`tools/cmd/typeswitchlint/main_test.go`), so `knownValueTypes` diverging from the value-type set fails CI.
 - [x] **Task 8.1: Extract `machine/compilation/resolver/`** [Done]: FileResolver implementations extracted. `LibraryEnumerator` replaced with `FileEnumerator.EnumerateFiles` (returns paths, not `LibraryName`). Type aliases in compilation for backward compat. `memory/2026-04-13-resolver-extraction-impl.md`
 - [ ] **Task 8.2: Evaluate `wile.Value` wrapper** [Low, M]: Wrapper provides minimal methods beyond `Internal()` escape hatch.
-- [ ] **Task 8.4: Make `DefaultBigFloatPrecision` configurable** [Low, M]: 256-bit precision hardcoded across 31 references (2026-10-16). No engine option.
+- [ ] **Task 8.4: Make `DefaultBigFloatPrecision` configurable** [Low, M]: 256-bit precision hardcoded across 31 references (2026-10-16). No engine option. **P5.3 declined `WithBigFloatPrecision` (2026-10-17):** the user-visible defect was unconditional reader data loss, fixed by sizing a literal from its own digits (floor 256, cap `MaxBigFloatLiteralPrecision`), not configurability.
 - [ ] **Error sentinel grouping** [Low, S]: 131 sentinels in `werr.go` plus 23 package-local under `pkg/` and `extensions/` (2026-10-16), ~154 in all: past the ~150 trigger. Consider category-specific files now.
 - [ ] **Namespace registry typing** [Low, S]: Namespace's registry should have a type instead of `any`.
 - [ ] **ValueType refactoring** [Low]: ValueType doesn't have grounding in Scheme or Go — determine use and scope of type domains.

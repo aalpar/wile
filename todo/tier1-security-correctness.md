@@ -2044,6 +2044,20 @@ disagreement on one program, the internal-invariant form of a defect.
   configconstlint, nestinglint) is reachable only through `make lint`. Add a CI step for
   `make -C tools lint`.
 
+### Filed by the P5.3 crosscheck (2026-10-17)
+
+- [ ] **Runtime Integer/Rational-to-BigFloat promotion still uses a fixed 256 bits, so the reader
+  and arithmetic disagree** [Design, M]: `#m#z<100 digits>` is exact, but
+  `(exact (+ #m0 #z<100 digits>))` is not (`pkg/values/promotion.go` BigInteger and Rational
+  cases, `big_complex.go` ctor). Widening changes arithmetic results, not only literals, so it
+  needs the owner's call. `ParseRealFloatStringWithBase` (non-decimal radix) is also fixed at 256.
+- [ ] **Precision depends on spelling** [Design, S]: `(= #m1e120 #m1<120 zeros>)` and
+  `(= 1l120 1<120 zeros>.0l0)` are `#f` (exponent not counted, integer-part zeros are; 5^120 needs
+  279 bits). Options: count a non-negative exponent up to a bound, or document it.
+- [ ] **Pre-existing, found by the P5.3 crosscheck** [S each]: `(sqrt <BigFloat>)` raises "expected a
+  number but got *values.BigFloat"; `#m1/3` reads as `#m1` then symbol `/3`; the `l` marker inside a
+  complex literal falls back to float64.
+
 ### Closed in Tier 1
 
 Moved to [`closed.md`](closed.md) (2026-10-17 split).
