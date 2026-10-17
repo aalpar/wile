@@ -43,7 +43,7 @@ var ErrProfileWidensEngine = werr.NewStaticError("profile widens the engine's ca
 //
 //  1. No authorizer installed — allow. This arm IS an escalation path, and is
 //     kept as one: a Small engine reaches make-thread, and `system` (the
-//     /bin/sh -c primitive, which the process extension registers and Small
+//     host-shell primitive, which the process extension registers and Small
 //     excludes), through (environment '(wile kitchen-sink)). Measured
 //     2026-08-07 — the probe ran a shell command that wrote a file. The
 //     ground for keeping it is NOT that no such path exists — the 2026-06-04

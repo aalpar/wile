@@ -36,12 +36,16 @@ type signalSpec struct {
 // below. Both are keyed by GOOS as data rather than build tags so each row is
 // testable on any host.
 //
-// The shell is a fixed table, never SHELL or COMSPEC: gateExecutable gates the
-// resolved path as file:exec, and an env-derived path would let the program
-// choose what gets gated.
+// The shell comes from this table, never SHELL or COMSPEC, so its name does
+// not vary with the environment. A bare name (cmd.exe) is resolved against the
+// host PATH by exec.Command; gateExecutable then gates the resolved path as
+// file:exec.
 //
 // The windows rows are asserted, not measured: no workflow or release target
-// runs on Windows. os.Process.Signal on Windows delivers only Kill.
+// runs on Windows. os.Process.Signal on Windows delivers only Kill. Go quotes
+// exec arguments for CommandLineToArgvW, which cmd.exe does not follow, so a
+// command string containing a double quote reaches cmd.exe /c altered; the fix
+// is SysProcAttr.CmdLine, which only Windows builds have (filed, not done).
 var (
 	defaultShell = shellSpec{path: "/bin/sh", flag: "-c"}
 
@@ -102,7 +106,8 @@ func lookupSignal(specs []signalSpec, name string) (syscall.Signal, bool) {
 	return 0, false
 }
 
-// signalNames renders specs as "a, b, or c" for the unknown-signal message.
+// signalNames renders specs as "a", "a or b" or "a, b, or c" for the
+// unknown-signal message.
 func signalNames(specs []signalSpec) string {
 	names := make([]string, len(specs))
 	for i, s := range specs {
@@ -110,6 +115,9 @@ func signalNames(specs []signalSpec) string {
 	}
 	if len(names) < 2 {
 		return strings.Join(names, "")
+	}
+	if len(names) == 2 {
+		return names[0] + " or " + names[1]
 	}
 	last := len(names) - 1
 	return strings.Join(names[:last], ", ") + ", or " + names[last]

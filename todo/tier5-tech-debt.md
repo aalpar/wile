@@ -134,8 +134,9 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   `2026-07-17-pair-gc-investigation.md` Recommendation 3]: e.g.
   `pkg/machine/exception_raise.go:268,280-282`. The investigation makes **no perf claim** for these;
   it is consistency with the batch-construction rule, nothing more.
-- [ ] **`extensions/process` hardcodes `/bin/sh` and a POSIX signal table** [Tech debt, M]:
+- [x] **`extensions/process` hardcodes `/bin/sh` and a POSIX signal table** [Tech debt, M, Done 2026-10-17, P5.4]:
   `prim_process.go:102`, no GOOS gate. A portability gap in a pure-Go, no-CGo product.
+  Shell and signals now come from GOOS-keyed tables (`extensions/process/shell.go`); `noHardcodedShellPath` ratchets the call shape. Windows rows asserted, not measured; `cmd.exe` quoting filed in tier 1.
 
 ### Stale rows in this file, corrected 2026-09-20
 

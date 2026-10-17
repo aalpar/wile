@@ -102,6 +102,11 @@ func PrimSystem(mc machine.CallContext) error {
 	}
 	shell := hostShell()
 	cmd := exec.CommandContext(mc.Context(), shell.path, shell.flag, command.Value)
+	// A bare shell name (cmd.exe) is LookPath-resolved; report a failure here
+	// rather than gating an unresolved path. See PrimProcessSpawn.
+	if cmd.Err != nil {
+		return werr.WrapForeignProcessError(cmd.Err, "system", command.Value)
+	}
 	// The shell is a host binary this primitive names on the program's behalf.
 	// process:exec-shell above answers "may it run a shell at all"; these two
 	// answer "this shell, from this directory" — the questions a path-confining

@@ -40,15 +40,23 @@ func TestShellFor(t *testing.T) {
 	}
 }
 
+var posixOffers = map[string]syscall.Signal{
+	"term": syscall.SIGTERM,
+	"kill": syscall.SIGKILL,
+	"int":  syscall.SIGINT,
+	"hup":  syscall.SIGHUP,
+}
+
 func TestSignalsFor(t *testing.T) {
 	tcs := []struct {
 		goos      string
 		wantNames string
-		offers    map[string]bool
+		offers    map[string]syscall.Signal
+		absent    []string
 	}{
-		{"linux", "term, kill, int, or hup", map[string]bool{"term": true, "kill": true, "int": true, "hup": true}},
-		{"darwin", "term, kill, int, or hup", map[string]bool{"term": true, "kill": true, "int": true, "hup": true}},
-		{"windows", "kill", map[string]bool{"term": false, "kill": true, "int": false, "hup": false}},
+		{"linux", "term, kill, int, or hup", posixOffers, nil},
+		{"darwin", "term, kill, int, or hup", posixOffers, nil},
+		{"windows", "kill", map[string]syscall.Signal{"kill": syscall.SIGKILL}, []string{"term", "int", "hup"}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.goos, func(t *testing.T) {
@@ -56,8 +64,13 @@ func TestSignalsFor(t *testing.T) {
 			specs := signalsFor(tc.goos)
 			c.Assert(signalNames(specs), qt.Equals, tc.wantNames)
 			for name, want := range tc.offers {
+				got, ok := lookupSignal(specs, name)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("signal %q", name))
+				c.Assert(got, qt.Equals, want, qt.Commentf("signal %q", name))
+			}
+			for _, name := range tc.absent {
 				_, ok := lookupSignal(specs, name)
-				c.Assert(ok, qt.Equals, want, qt.Commentf("signal %q", name))
+				c.Assert(ok, qt.IsFalse, qt.Commentf("signal %q", name))
 			}
 		})
 	}
@@ -78,7 +91,7 @@ func TestSignalNames(t *testing.T) {
 	}{
 		{"none", nil, ""},
 		{"one", []signalSpec{{"kill", syscall.SIGKILL}}, "kill"},
-		{"two", []signalSpec{{"a", 1}, {"b", 2}}, "a, or b"},
+		{"two", []signalSpec{{"a", 1}, {"b", 2}}, "a or b"},
 		{"three", []signalSpec{{"a", 1}, {"b", 2}, {"c", 3}}, "a, b, or c"},
 	}
 	for _, tc := range tcs {

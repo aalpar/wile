@@ -43,7 +43,7 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 		// process-* primitives use TypeAny for the process argument; the
 		// impl's RequireArg still rejects non-processes.
 		{Name: "system", ParamCount: 1, Impl: PrimSystem,
-			Doc: "Runs COMMAND as a shell command via the host shell (/bin/sh -c; cmd.exe /c on Windows). Returns the exit code as an exact integer.", ParamNames: []string{"command"}, Category: "process",
+			Doc: "Runs COMMAND as a shell command via the host shell (/bin/sh -c; cmd.exe /c on Windows, where a command containing a double quote is not passed through intact). Returns the exit code as an exact integer.", ParamNames: []string{"command"}, Category: "process",
 			Keywords:   []string{"shell", "exec", "run command", "subprocess"},
 			ParamTypes: []values.TypeConstraint{values.TypeString},
 			ReturnType: values.TypeInteger},
@@ -68,7 +68,7 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeInteger},
 		{Name: "process-kill", ParamCount: 2, Impl: PrimProcessKill,
-			Doc: "Sends SIGNAL to PROCESS. SIGNAL is a symbol: term, kill, int, or hup.", ParamNames: []string{"process", "signal"}, Category: "process",
+			Doc: "Sends SIGNAL to PROCESS. SIGNAL is a symbol: term, kill, int, or hup; only kill on Windows.", ParamNames: []string{"process", "signal"}, Category: "process",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol},
 			ReturnType: values.TypeVoid},
 		{Name: "process?", ParamCount: 1, Impl: PrimProcessQ,
