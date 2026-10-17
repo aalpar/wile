@@ -64,8 +64,9 @@ func LoadBootstrapSources(ctx context.Context, env *environment.EnvironmentFrame
 // pooled top-level context. The context is released per form (a deferred release in this
 // per-iteration helper, not at the end of LoadBootstrapSources's loop).
 func runBootstrapStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, kind string) error {
-	// Deliberately the package constants, not the namespace readers: bootstrap runs
-	// before the engine forwards its configuration, and must not vary with it.
+	// Deliberately the package constants for this top-level pass, not the namespace
+	// readers: bootstrap must not vary with the engine's configuration. Nested
+	// transformer compiles still read the namespace.
 	tpl, err := ExpandAndCompileOptimized(ctx, env, stx, resolver, DefaultInlineThreshold, DefaultMaxExpandDepth)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error expanding/compiling bootstrap %s", kind)

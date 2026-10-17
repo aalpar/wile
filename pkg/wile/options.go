@@ -340,7 +340,7 @@ func WithMaxCallDepth(n int) EngineOnlyOption {
 // EvalProgram, and file/-e execution. Parsing triggered from within running
 // Scheme — (read ...), (read-syntax ...), (eval ...), (compile ...) — uses
 // DefaultMaxParseDepth regardless of this option, because the primitive layer
-// has no channel to the engine's configured value (mirrors WithMaxExpandDepth).
+// has no channel to the engine's configured value.
 // Those paths are still protected from the fatal stack overflow by the default;
 // they are simply not retunable per-engine.
 func WithMaxParseDepth(n int) EngineOnlyOption {
@@ -363,8 +363,8 @@ func WithMaxParseDepth(n int) EngineOnlyOption {
 // When not called, the expander uses DefaultMaxExpandDepth (50000).
 //
 // Scope: the bound reaches every expansion site: top-level program text,
-// transformer right-hand sides, library bodies, and (eval ...), (load ...),
-// (compile ...) issued from running Scheme.
+// transformer right-hand sides, library bodies, quasiquote, and (eval ...),
+// (load ...), (compile ...), (expand ...) issued from running Scheme.
 func WithMaxExpandDepth(n int) EngineOnlyOption {
 	return engineOnlyOption(func(cfg *engineConfig) {
 		if n < 0 {

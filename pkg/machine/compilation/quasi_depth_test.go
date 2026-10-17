@@ -21,6 +21,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -74,4 +76,35 @@ func TestQuasi_DepthLimit_NeedsRuntimeStopsDeep(t *testing.T) {
 	ccnt.quasiMaxDepth = 50
 
 	c.Assert(ccnt.quasisyntaxNeedsRuntime(buildNestedCall(200), 1), qt.IsTrue)
+}
+
+// TestQuasi_DepthLimit_FallsBackToEngineBound pins that, with no per-continuation
+// override, the quasiquote guard follows WithMaxExpandDepth: lowered trips,
+// raised past the default and explicit 0 (unlimited) both admit what the
+// default would refuse.
+func TestQuasi_DepthLimit_FallsBackToEngineBound(t *testing.T) {
+	c := qt.New(t)
+
+	c.Run("lowered", func(c *qt.C) {
+		ns := environment.NewNamespace()
+		ns.SetMaxExpandDepth(3)
+		ccnt := NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), ns.Runtime(), nil)
+		c.Assert(ccnt.effectiveQuasiMaxDepth(), qt.Equals, 3)
+	})
+
+	c.Run("unlimited", func(c *qt.C) {
+		ns := environment.NewNamespace()
+		ns.SetMaxExpandDepth(0)
+		ccnt := NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), ns.Runtime(), nil)
+		c.Assert(ccnt.effectiveQuasiMaxDepth(), qt.Equals, 0)
+		c.Assert(ccnt.newQuasiDepthGuard().max, qt.Equals, 0)
+	})
+
+	c.Run("override wins", func(c *qt.C) {
+		ns := environment.NewNamespace()
+		ns.SetMaxExpandDepth(3)
+		ccnt := NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), ns.Runtime(), nil)
+		ccnt.quasiMaxDepth = 50
+		c.Assert(ccnt.effectiveQuasiMaxDepth(), qt.Equals, 50)
+	})
 }

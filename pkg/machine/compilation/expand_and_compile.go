@@ -25,9 +25,9 @@ import (
 
 // NamespaceMaxExpandDepth returns the engine's configured WithMaxExpandDepth
 // bound as seen from env, else DefaultMaxExpandDepth. Nil-safe: frames with no
-// namespace exist (test fixtures, and the thunk frame the compile primitive
-// builds, whose Namespace does not walk to its parent), and a namespace not built
-// by an Engine reports unset. An explicit 0 (unlimited) is returned as 0.
+// namespace exist (test fixtures), and a namespace not built by an Engine reports
+// unset. An explicit 0 (unlimited) is returned as 0. This is the one reader of
+// the bound; every expander and compiler site goes through it.
 func NamespaceMaxExpandDepth(env *environment.EnvironmentFrame) int {
 	ns := env.Namespace()
 	if ns == nil {
@@ -61,7 +61,7 @@ func NamespaceInlineThreshold(env *environment.EnvironmentFrame) int {
 // it is set on the compiler for include/load file resolution. inlineThreshold
 // controls procedure inlining (0 disables). maxExpandDepth bounds expander
 // recursion to prevent a fatal Go stack overflow on deeply nested syntax
-// (0 disables the bound; pass DefaultMaxExpandDepth for the standard limit).
+// (0 disables the bound; pass NamespaceMaxExpandDepth(env) for the engine's value).
 // Errors are wrapped with phase context ("expansion" or "compilation"); callers
 // may add site-specific context on top.
 //

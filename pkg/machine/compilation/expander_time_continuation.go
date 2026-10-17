@@ -130,16 +130,11 @@ type ExpanderTimeContinuation struct {
 // an Engine (e.g., a direct unit-test compiler) reports unset and defaults to
 // DefaultMaxExpandDepth. SetMaxDepth still overrides per-run afterward.
 func NewExpanderTimeContinuation(ctx context.Context, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) *ExpanderTimeContinuation {
-	maxDepth := DefaultMaxExpandDepth
-	n, ok := env.Namespace().MaxExpandDepth()
-	if ok {
-		maxDepth = n
-	}
 	q := &ExpanderTimeContinuation{
 		ctx:           ctx,
 		env:           env,
 		evaluator:     evaluator,
-		depthGuard:    &expandDepthGuard{max: maxDepth},
+		depthGuard:    &expandDepthGuard{max: NamespaceMaxExpandDepth(env)},
 		useSiteScopes: &useSiteScopeLog{scopes: values.NewMapSet[*syntax.Scope](0)},
 	}
 	return q

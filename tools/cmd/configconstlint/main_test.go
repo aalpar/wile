@@ -60,7 +60,7 @@ func TestAllowedFile(t *testing.T) {
 	}
 }
 
-// TestScanDirSkipsTestFiles pins that _test.go files and testdata are not scanned.
+// TestScanDirSkipsTestFiles pins that _test.go files and testdata directories are not scanned.
 func TestScanDirSkipsTestFiles(t *testing.T) {
 	dir := t.TempDir()
 	src, err := os.ReadFile(filepath.Join("testdata", "sample.go"))
@@ -68,6 +68,14 @@ func TestScanDirSkipsTestFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = os.WriteFile(filepath.Join(dir, "x_test.go"), src, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Mkdir(filepath.Join(dir, "testdata"), 0o700)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(filepath.Join(dir, "testdata", "sample.go"), src, 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}

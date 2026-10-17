@@ -200,12 +200,13 @@ func (p *CompileTimeContinuation) unitFrameReclaimVerdict(id validate.ScopedBind
 }
 
 // effectiveQuasiMaxDepth returns the recursion bound for quasiquote/quasisyntax
-// expansion: the per-continuation override when set, else DefaultMaxExpandDepth.
+// expansion: the per-continuation override when set, else the engine's
+// WithMaxExpandDepth (0 there means unlimited).
 func (p *CompileTimeContinuation) effectiveQuasiMaxDepth() int {
 	if p.quasiMaxDepth > 0 {
 		return p.quasiMaxDepth
 	}
-	return DefaultMaxExpandDepth
+	return NamespaceMaxExpandDepth(p.env)
 }
 
 // newQuasiDepthGuard builds a fresh depth guard for one top-level quasiquote or
