@@ -115,3 +115,43 @@ func TestRelativePathsFollowTheEngineDirectory(t *testing.T) {
 	evalString(t, engine, `(set-current-directory! "..")`)
 	qt.Check(t, evalString(t, engine, `(file-exists? "only-in-host")`), qt.Equals, "#t")
 }
+
+// TestEmptySearchEntryFollowsTheEngineDirectory pins that an EMPTY search-path
+// entry means the engine's current directory, as "." does. filepath.SplitList
+// keeps the empty entry a stray colon leaves in SCHEME_INCLUDE_PATH, and an
+// embedder can pass "" to WithLibraryPaths; resolved as-is it cleaned to a
+// relative ".", which the stat and the authorizer both read against the host's
+// directory. load then took the host's file without error.
+func TestEmptySearchEntryFollowsTheEngineDirectory(t *testing.T) {
+	host := t.TempDir()
+	t.Chdir(host)
+	sub := filepath.Join(host, "sub")
+	qt.Assert(t, os.Mkdir(sub, 0o755), qt.IsNil)
+	qt.Assert(t, os.WriteFile(filepath.Join(host, "only-host.scm"),
+		[]byte("(define which 'host)\n"), 0o644), qt.IsNil)
+	for dir, tag := range map[string]string{host: "host", sub: "sub"} {
+		qt.Assert(t, os.WriteFile(filepath.Join(dir, "x.scm"),
+			[]byte(fmt.Sprintf("(define which-x '%s)\n", tag)), 0o644), qt.IsNil)
+	}
+
+	t.Run("SCHEME_INCLUDE_PATH trailing colon", func(t *testing.T) {
+		t.Setenv("SCHEME_INCLUDE_PATH", "/nonexistent"+string(os.PathListSeparator))
+		engine := newCurrentDirectoryEngine(t)
+		evalString(t, engine, `(set-current-directory! "sub")`)
+		_, err := engine.EvalMultiple(context.Background(), `(load "only-host.scm")`)
+		qt.Check(t, err, qt.IsNotNil, qt.Commentf("load found the host's file through the empty entry"))
+	})
+
+	t.Run("WithLibraryPaths empty entry", func(t *testing.T) {
+		engine, err := wile.NewEngine(context.Background(),
+			wile.WithProfile(wile.KitchenSink), wile.WithLibraryPaths(""))
+		qt.Assert(t, err, qt.IsNil)
+		t.Cleanup(func() {
+			_ = engine.Close()
+		})
+		evalString(t, engine, `(set-current-directory! "sub")`)
+		qt.Check(t, evalString(t, engine, `(load "x.scm") which-x`), qt.Equals, "sub")
+		_, err = engine.EvalMultiple(context.Background(), `(load "only-host.scm")`)
+		qt.Check(t, err, qt.IsNotNil, qt.Commentf("load found the host's file through the empty entry"))
+	})
+}

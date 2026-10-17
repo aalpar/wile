@@ -105,14 +105,33 @@ func (p *Completer) completeFromList(prefix string, candidates []string) ([][]ru
 }
 
 // completeFilenames returns file/directory completions for the given prefix.
+// A relative prefix is completed in the engine's current directory (engineDir),
+// the one ,edit and load resolve it against.
 //
 // The returned length is a RUNE count; see completeFromList.
+//
+// The directory is listed, not globbed: the engine directory is a path the user
+// never typed, and a "[" or "*" in it would be read as a pattern and match
+// nothing.
 func (p *Completer) completeFilenames(prefix string) ([][]rune, int) {
-	matches, _ := filepath.Glob(prefix + "*")
+	dirPart, file := filepath.Split(prefix)
+	dir := dirPart
+	if dir == "" {
+		dir = "."
+	}
+	base := engineDir(p.eng)
+	if base != "" && !filepath.IsAbs(dir) {
+		dir = filepath.Join(base, dir)
+	}
+	entries, _ := os.ReadDir(dir)
 	var results [][]rune
-	for _, m := range matches {
-		suffix := m[len(prefix):]
-		info, err := os.Stat(m)
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, file) {
+			continue
+		}
+		suffix := name[len(file):]
+		info, err := os.Stat(filepath.Join(dir, name))
 		if err == nil && info.IsDir() {
 			suffix += "/"
 		}
@@ -124,4 +143,18 @@ func (p *Completer) completeFilenames(prefix string) ([][]rune, int) {
 // BindingNames returns all binding names visible in the environment.
 func (p *Completer) BindingNames() []string {
 	return p.collectBindingNames()
+}
+
+// engineDir returns eng's current directory, the one set-current-directory!
+// moves without moving the process. "" means there is none to consult (no
+// engine, or its directory cannot be read), and the process directory applies.
+func engineDir(eng *wile.Engine) string {
+	if eng == nil {
+		return ""
+	}
+	q, err := eng.Environment().Namespace().CurrentDirectory()
+	if err != nil {
+		return ""
+	}
+	return q
 }

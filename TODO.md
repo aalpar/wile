@@ -2303,6 +2303,17 @@ disagreement on one program, the internal-invariant form of a defect.
   with `SyntaxEmptyList` before invoking the transformer, so `(m . 5)` loses the 5 under
   `expand-once`; `expandMacroInvocation` passes `expr` through.
 
+### Filed by the P5.1 crosscheck (2026-10-16)
+
+- [ ] **`Namespace.ResolvePath` mishandles Windows rooted and drive-relative paths** [Portability, S,
+  unverified on Windows]: it prefixes the engine directory to any path `filepath.IsAbs` rejects, and on
+  Windows that includes `\foo` (rooted on the current volume) and `C:foo` (relative to drive C's own
+  cwd). The joins come out as `C:\cwd\\foo` and `C:\cwd\C:foo`. The tree cross-compiles
+  (`GOOS=windows go build ./...` exits 0) but no CI job runs it, so nothing here can be tested. Fix
+  shape: `\foo` takes `filepath.VolumeName(dir)` + path; `C:foo` joins the remainder onto the engine
+  directory when the volumes match, and needs a decision when they do not (a process per-drive cwd is
+  the only other answer, and it is host state).
+
 ### Closed in Tier 1
 
 Fully closed sections, collapsed to the archive form on 2026-09-15 and moved below the

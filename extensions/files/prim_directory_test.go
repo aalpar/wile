@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"syscall"
 	"testing"
@@ -217,6 +218,41 @@ func TestSetCurrentDirectory(t *testing.T) {
 		c.Assert(err, qt.ErrorIs, syscall.ENOTDIR)
 		after := eval(t, engine, `(current-directory)`)
 		c.Assert(after.SchemeString(), qt.Equals, before.SchemeString())
+	})
+
+	// chdir requires search (x) permission on the target itself, which a stat
+	// of the target does not: stat needs x only on the parents. Read alone is
+	// not enough, and x alone is.
+	t.Run("refuses a directory it cannot search", func(t *testing.T) {
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			t.Skip("POSIX permission bits; root bypasses them")
+		}
+		for _, tc := range []struct {
+			mode   os.FileMode
+			enters bool
+		}{
+			{0o000, false},
+			{0o400, false},
+			{0o100, true},
+		} {
+			dir := filepath.Join(t.TempDir(), "d")
+			c.Assert(os.Mkdir(dir, 0o755), qt.IsNil)
+			c.Assert(os.Chmod(dir, tc.mode), qt.IsNil)
+			t.Cleanup(func() {
+				_ = os.Chmod(dir, 0o755)
+			})
+			before := eval(t, engine, `(current-directory)`)
+			_, err := engine.EvalMultiple(context.Background(),
+				fmt.Sprintf(`(set-current-directory! %q)`, dir))
+			after := eval(t, engine, `(current-directory)`)
+			if tc.enters {
+				c.Assert(err, qt.IsNil, qt.Commentf("mode %o", tc.mode))
+				c.Assert(after.SchemeString(), qt.Not(qt.Equals), before.SchemeString())
+				continue
+			}
+			c.Assert(err, qt.ErrorIs, fs.ErrPermission, qt.Commentf("mode %o", tc.mode))
+			c.Assert(after.SchemeString(), qt.Equals, before.SchemeString())
+		}
 	})
 
 	t.Run("wrong type", func(t *testing.T) {

@@ -81,7 +81,7 @@ Both sets are open: an extension may define additional resources and actions wit
 Two consequences worth stating outright:
 
 - **The gated binary is the *resolved* path, not the string the program wrote.** `exec.Command` LookPath-resolves a bare name, and a relative path is resolved against the child's working directory — so gating the caller's string would authorize one file and run another.
-- **A spawned child starts at the confinement root** when the authorizer reports one (`security.ConfinementRootOf`). Otherwise it would inherit the *host's* working directory, which the policy never saw and could not have allowed, and every relative path the child opened would resolve there.
+- **A spawned child starts at the confinement root** when the authorizer reports one (`security.ConfinementRootOf`), and otherwise in the engine's current directory (the host's working directory until `set-current-directory!` enters another). Inheriting the host's directory under confinement would hand the child a starting point the policy never saw and could not have allowed, and every relative path the child opened would resolve there.
 
 ### Gate sites
 

@@ -17,6 +17,7 @@ package files
 import (
 	"io/fs"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -185,19 +186,25 @@ func PrimSetCurrentDirectory(mc machine.CallContext) error {
 	}
 	// Record the symlink-resolved path, re-gated when it differs from the
 	// spelling, so the directory entered is the one judged and ".." after a
-	// symlink is applied after the link, as chdir would. The stat stands in for
-	// the refusals chdir made: a missing path, or one that is not a directory.
+	// symlink is applied after the link, as chdir would.
 	target, err := unconfinedTarget(mc.Authorizer(), abs, security.ActionWrite)
 	if err != nil {
 		return err
 	}
-	info, err := os.Stat(target)
+	// The stat stands in for the refusals chdir made: a missing path, one that
+	// is not a directory, and one without search permission. Statting target
+	// itself needs x only on its parents; resolving target/. needs it on target
+	// too, which is chdir's own requirement. Neither confinedStat nor
+	// filepath.Join may build the path, since both clean the "/." away. The bare
+	// stat only decides whether to record target, which is already gated, and
+	// every later access below it goes through the confined* helpers.
+	info, err := os.Stat(target + string(filepath.Separator) + ".")
 	if err != nil {
 		return werr.WrapForeignFileError(err, "set-current-directory!", path.Value)
 	}
 	if !info.IsDir() {
 		return werr.WrapForeignFileError(
-			&fs.PathError{Op: "chdir", Path: target, Err: syscall.ENOTDIR},
+			&fs.PathError{Op: "stat", Path: target, Err: syscall.ENOTDIR},
 			"set-current-directory!", path.Value)
 	}
 	mc.EnvironmentFrame().Namespace().SetCurrentDirectory(target)

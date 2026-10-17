@@ -220,9 +220,18 @@ func osSearchDirs(env *environment.EnvironmentFrame) []string {
 
 // absSearchDirs resolves each of dirs against ns's current directory and
 // cleans it, dropping the ones that cannot be resolved.
+//
+// An empty entry is the current directory, as in a POSIX PATH. filepath.SplitList
+// keeps the one a stray separator leaves in SCHEME_INCLUDE_PATH, and an embedder
+// can configure one. ResolvePath returns "" unchanged, and filepath.Clean would
+// turn it into a relative "." that the stat and the authorizer read against the
+// host's directory, so it is spelled "." before resolution.
 func absSearchDirs(ns *environment.Namespace, dirs []string) []string {
 	q := make([]string, 0, len(dirs))
 	for _, d := range dirs {
+		if d == "" {
+			d = "."
+		}
 		abs, err := ns.ResolvePath(d)
 		if err != nil {
 			continue

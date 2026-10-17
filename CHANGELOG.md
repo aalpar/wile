@@ -490,8 +490,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   spelling. The empty path is refused as absent by every file primitive (it was
   read as `"."`, so `(directory-files "")` listed the host's directory and
   `(set-current-directory! "")` would have stored a relative `"."`).
-  `pkg/security`'s containment check, REPL tab completion and the CLI's script
-  argument still resolve a relative path against the process directory.
+  The REPL's `,edit` and its filename completion follow the engine directory
+  too; `pkg/security`'s containment check and the CLI's script argument still
+  resolve a relative path against the process directory. An empty search-path
+  entry (a stray separator in `SCHEME_INCLUDE_PATH`) means the engine
+  directory, as `"."` does. `set-current-directory!` refuses a directory
+  without search permission, as `chdir` did.
   A `noProcessGlobalMutation` ruleguard rule keeps `os.Chdir` out of production
   code.
 

@@ -39,19 +39,19 @@ func openFilePort(
 	if err != nil {
 		return err
 	}
-	path, err := enginePath(mc, name, filename)
+	abs, err := enginePath(mc, name, filename)
 	if err != nil {
 		return err
 	}
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   action,
-		Target:   path,
+		Target:   abs,
 	})
 	if err != nil {
 		return err
 	}
-	file, err := confinedOpenForAction(mc.Authorizer(), path, action)
+	file, err := confinedOpenForAction(mc.Authorizer(), abs, action)
 	if err != nil {
 		return werr.WrapForeignFileError(err, name, filename.Value)
 	}
@@ -133,9 +133,14 @@ func PrimFileExistsQ(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	path, err := enginePath(mc, "file-exists?", filename)
+	abs, err := enginePath(mc, "file-exists?", filename)
 	if err != nil {
-		if statAnswersFalse(err) {
+		// Absence only: the empty path, or an engine directory that is gone,
+		// under which no relative path exists either. A directory that cannot be
+		// READ (os.Getwd's EACCES) says nothing about the file, so it raises,
+		// unlike an EACCES from the stat itself, which is the OS refusing the
+		// lookup of this file.
+		if errors.Is(err, fs.ErrNotExist) {
 			mc.SetValue(values.FalseValue)
 			return nil
 		}
@@ -144,7 +149,7 @@ func PrimFileExistsQ(mc machine.CallContext) error {
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   security.ActionStat,
-		Target:   path,
+		Target:   abs,
 	})
 	if err != nil {
 		// Deliberately dropped, and this is the whole point of the item: the
@@ -156,7 +161,7 @@ func PrimFileExistsQ(mc machine.CallContext) error {
 		mc.SetValue(values.FalseValue)
 		return nil //nolint:nilerr // a denial is reported as #f, never as an error
 	}
-	_, err = confinedStat(mc.Authorizer(), path)
+	_, err = confinedStat(mc.Authorizer(), abs)
 	if err != nil && !statAnswersFalse(err) {
 		return werr.WrapForeignFileError(err, "file-exists?", filename.Value)
 	}
@@ -171,19 +176,19 @@ func PrimDeleteFile(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	path, err := enginePath(mc, "delete-file", filename)
+	abs, err := enginePath(mc, "delete-file", filename)
 	if err != nil {
 		return err
 	}
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   security.ActionDelete,
-		Target:   path,
+		Target:   abs,
 	})
 	if err != nil {
 		return err
 	}
-	err = confinedRemove(mc.Authorizer(), path)
+	err = confinedRemove(mc.Authorizer(), abs)
 	if err != nil {
 		return werr.WrapForeignFileError(err, "delete-file", filename.Value)
 	}
@@ -212,20 +217,20 @@ func callWithFile(
 		return err
 	}
 
-	path, err := enginePath(mc, name, filename)
+	abs, err := enginePath(mc, name, filename)
 	if err != nil {
 		return err
 	}
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   action,
-		Target:   path,
+		Target:   abs,
 	})
 	if err != nil {
 		return err
 	}
 
-	file, err := confinedOpenForAction(mc.Authorizer(), path, action)
+	file, err := confinedOpenForAction(mc.Authorizer(), abs, action)
 	if err != nil {
 		return werr.WrapForeignFileError(err, name, filename.Value)
 	}

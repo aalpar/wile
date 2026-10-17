@@ -632,6 +632,9 @@ func (p *MetaCommandHandler) cmdEdit(args []string, out io.Writer) {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	// A relative file names one in the engine's current directory, the file
+	// load would then run; "" leaves the editor in the process directory.
+	cmd.Dir = engineDir(p.eng)
 
 	err := cmd.Run()
 	if err != nil {
