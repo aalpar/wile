@@ -769,11 +769,9 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 	// datum->syntax binders, including the Scheme-specified forms P1 adds, which
 	// manipulate no scopes themselves. From here on the Go syntax-rules and
 	// syntax-case transforms pass a nil intro scope of their own (Q9), so a
-	// closure transformer sees exactly one. ER stays outside the flip until P2:
-	// expandMacroInvocation returned into expandERMacroInvocation above, and
-	// invokeERTransformer's UnwrapAll hands back pass-through identifiers
-	// re-wrapped with the keyword's use-site context (no intro scope), which a
-	// flip would stamp.
+	// closure transformer sees exactly one. The Go ER transformer is outside
+	// this flip: expandMacroInvocation returns into expandERMacroInvocation
+	// above, and invokeERTransformer's own paragraph says why.
 	//
 	// Order with use-site scopes: use-site added, intro added, invoke, intro
 	// flipped, use-site pruned.
@@ -811,9 +809,10 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 		// input and onto everything the transformer introduced (see the mint
 		// above). Then strip this run's use-site scopes from any binder the
 		// output defines, before re-expansion carries the form further. Every
-		// macro output passes this one point, so a definition that only surfaces
-		// after several expansions is pruned at its own level. Identity while
-		// nothing mints.
+		// closure transformer's output passes this point (the Go ER boundary and
+		// ExpandOnce prune at their own returns), so a definition that only
+		// surfaces after several expansions is pruned at its own level. Identity
+		// while nothing mints.
 		stx = syntax.FlipScope(stx, introScope)
 		stx = p.pruneUseSiteScopes(stx)
 		// Recursively expand the result to handle nested macro calls
@@ -823,8 +822,8 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 }
 
 // expandERMacroInvocation handles expansion of explicit-renaming macro invocations.
-// It unwraps the input form to raw s-expressions, creates rename/compare closures,
-// calls the 3-arg transformer, and re-wraps the result for recursive expansion.
+// It hands the transformer the input form's spine (see invokeERTransformer),
+// creates rename/compare closures, and re-wraps the result for recursive expansion.
 func (p *ExpanderTimeContinuation) expandERMacroInvocation(
 	sym *syntax.SyntaxSymbol,
 	expr syntax.SyntaxValue,
@@ -849,15 +848,27 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// Build complete input form: (macro-name . args)
 	inputForm := syntax.NewSyntaxCons(sym, expr, sym.SourceContext())
 
-	// Unwrap to raw s-expression for the transformer.
+	// The proc receives the form's SPINE: pairs and vectors plain, identifier
+	// leaves still *SyntaxSymbol (syntax.UnwrapSpine, the function the Scheme
+	// layer's %syntax-spine calls). An identifier the proc hands back unchanged
+	// keeps the scopes it arrived with, because DatumToSyntaxValue below returns
+	// syntax as is; only a symbol the proc introduces raw takes the keyword's
+	// context. Unwrapping the leaves too would strip every scope and let a
+	// pass-through identifier be captured by a binder the enclosing macro
+	// introduced (I031).
 	//
-	// This is why use-site scopes stop here: UnwrapAll strips every scope, and
-	// DatumToSyntaxValue re-wraps the result with plain use-site context below, so
-	// an ER transformer neither receives nor returns scoped syntax. Its hygiene is
-	// the rename closure instead. Stamping inputForm above would be erased on this
-	// line — the asymmetry with expandMacroInvocation is the boundary, not an
-	// oversight to repair.
-	rawForm := inputForm.UnwrapAll()
+	// Of expandMacroInvocation's use-site triad (use-site scope and intro scope
+	// on the input, flip and prune on the output) this boundary takes only the
+	// prune, at the return below. A pass-through binder can arrive wearing an
+	// enclosing macro's use-site scope, and an ER output defines in a definition
+	// context as much as a syntax-rules output does; unpruned, (via zz) over a
+	// syntax-rules via whose expansion is an ER (define zz 5) leaves zz unbound.
+	// The rest stays out. The use-site and intro scopes tell a pass-through
+	// identifier from an introduced one, and here every introduced name is either
+	// a rename (pinned, or intro-scoped by the closure below) or a raw symbol that
+	// is use-site by contract; a flip would stamp those raw symbols and turn an
+	// anaphoric binder hygienic.
+	rawForm := syntax.UnwrapSpine(inputForm)
 
 	// Create a fresh intro scope for this invocation. Unbound renamed symbols
 	// (like temporary names) get this scope to prevent variable capture.
@@ -921,14 +932,14 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 		))
 	}
 
-	// Re-wrap the result to syntax.
-	// Already-SyntaxValue nodes (from rename) pass through unchanged.
-	// Raw symbols get use-site source context (no special scopes = use-site resolution).
+	// Re-wrap the result to syntax. Already-syntax nodes (renames, and identifiers
+	// passed through from the spine) are returned unchanged; a raw symbol takes
+	// the keyword's context, so it resolves as if written at the use site.
 	wrapped, err := schemeutil.DatumToSyntaxValue(p.ctx, sym.SourceContext(), result)
 	if err != nil {
 		return nil, wrapSourcedError(sym.SourceContext(), err)
 	}
-	return wrapped, nil
+	return p.pruneUseSiteScopes(wrapped), nil
 }
 
 // ExpandOnce performs a single step of macro expansion.

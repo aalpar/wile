@@ -258,8 +258,9 @@ func TestP1_SchemeLayerDiagnostics(t *testing.T) {
 }
 
 // TestP2_SyntaxRulesAndERAreScheme: the Go compilers for both transformer
-// producers are unreachable under the Scheme layer, and the answers agree
-// except where the ER contract deliberately changed (identifier? on a form leaf).
+// producers are unreachable under the Scheme layer. The answers agree on both
+// layers (identifier? on a form leaf is #t since the Go ER boundary hands the
+// proc the spine), so the counter is what tells the layers apart.
 func TestP2_SyntaxRulesAndERAreScheme(t *testing.T) {
 	c := qt.New(t)
 	// The for-syntax import is the subject as much as the accessor is: it used to
@@ -273,28 +274,109 @@ func TestP2_SyntaxRulesAndERAreScheme(t *testing.T) {
 	before := compilation.GoSyntaxFormCompiles()
 	c.Assert(evalSyntaxForms(t, src, withStdlibResolver(wile.WithSchemeSyntaxForms())...), qt.Equals, "((1 1) #t)")
 	c.Assert(compilation.GoSyntaxFormCompiles(), qt.Equals, before)
-	c.Assert(evalSyntaxForms(t, src, withStdlibResolver(wile.WithGoSyntaxForms())...), qt.Equals, "((1 1) #f)")
+	c.Assert(evalSyntaxForms(t, src, withStdlibResolver(wile.WithGoSyntaxForms())...), qt.Equals, "((1 1) #t)")
 	c.Assert(compilation.GoSyntaxFormCompiles() > before, qt.IsTrue)
+}
+
+// syntaxLayers is both shipped implementations of the syntax forms, for a
+// contract both must honor: two layers disagreeing on one program is the
+// internal-invariant form of a defect (I031).
+var syntaxLayers = []struct {
+	name string
+	opt  wile.EngineOption
+}{
+	{"go", wile.WithGoSyntaxForms()},
+	{"scheme", wile.WithSchemeSyntaxForms()},
 }
 
 // TestP2_ERPassThroughKeepsScopes closes design §5.1: an identifier that merely
 // passes through an ER macro keeps its scopes, so the syntax-rules twin and the
-// ER twin agree. On the Go layer the ER path answers 2 (the user's tmp is
+// ER twin agree. A boundary that strips them answers 2 (the user's tmp is
 // captured by the macro's binder).
 func TestP2_ERPassThroughKeepsScopes(t *testing.T) {
-	c := qt.New(t)
 	src := `(import (for-syntax (scheme base)))  ; cadr
 (define-syntax er-id (er-macro-transformer (lambda (f r c) (cadr f))))
 (define-syntax via-er (syntax-rules () ((_ e) (let ((tmp 1)) (er-id (+ tmp e))))))
-(let ((tmp 10)) (via-er tmp))`
-	c.Assert(evalSyntaxForms(t, src, withStdlibResolver(wile.WithSchemeSyntaxForms())...), qt.Equals, "11")
+(define-syntax via-sr (syntax-rules () ((_ e) (let ((tmp 1)) (+ tmp e)))))
+(list (let ((tmp 10)) (via-er tmp)) (let ((tmp 10)) (via-sr tmp)))`
+	for _, l := range syntaxLayers {
+		t.Run(l.name, func(t *testing.T) {
+			qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(l.opt)...), qt.Equals, "(11 11)")
+		})
+	}
+}
+
+// TestP2_ERUseSitePrunedBinder: a binder that reaches an ER define through a
+// syntax-rules macro wears that macro's use-site scope, and the ER boundary
+// prunes it as every other transformer boundary does. Unpruned, zz is unbound.
+func TestP2_ERUseSitePrunedBinder(t *testing.T) {
+	src := `(import (for-syntax (scheme base)))  ; cadr
+(define-syntax def5 (er-macro-transformer (lambda (f r c) (list (r 'define) (cadr f) 5))))
+(define-syntax via (syntax-rules () ((_ n) (def5 n))))
+(define (body) (via zz) zz)
+(via top)
+(list (body) top)`
+	for _, l := range syntaxLayers {
+		t.Run(l.name, func(t *testing.T) {
+			qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(l.opt)...), qt.Equals, "(5 5)")
+		})
+	}
+}
+
+// TestP2_ERBoundaryScopes pins what the ER boundary does and does not take from
+// the use-site triad. A raw symbol the proc introduces stays use-site: it binds
+// and is bound by the user's names (no flip), and it shares a pass-through
+// binder's scopes (no use-site stamp on the input); through a syntax-rules
+// wrapper it carries the wrapper's scope, so it no longer meets the user's x.
+// Binders the output defines are pruned in every definition shape.
+func TestP2_ERBoundaryScopes(t *testing.T) {
+	const bindref = `(define-syntax bindref (er-macro-transformer (lambda (f r c) (list (r 'let) (list (list (cadr f) 7)) 'x))))
+(define x 'global)
+`
+	const via = "(define-syntax via (syntax-rules () ((_ n) (m n))))\n"
+	tcs := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"raw ref meets a pass-through binder", bindref + `(bindref x)`, "7"},
+		{"raw ref behind a syntax-rules wrapper", bindref +
+			"(define-syntax via (syntax-rules () ((_ n) (bindref n))))\n(via x)", "global"},
+		{"raw define binds the user's name",
+			`(define-syntax def-it (er-macro-transformer (lambda (f r c) (list (r 'define) 'it 5))))
+(def-it) it`, "5"},
+		{"raw let binds the user's name",
+			`(define-syntax alet (er-macro-transformer (lambda (f r c) (list (r 'let) (list (list 'it 7)) (cadr f)))))
+(alet it)`, "7"},
+		{"prune inside begin",
+			`(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'begin) (list (r 'define) (cadr f) 1)))))
+` + via + `(via zz) zz`, "1"},
+		{"prune define-syntax",
+			`(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'define-syntax) (cadr f) (list (r 'syntax-rules) '() (list '(_) 3))))))
+` + via + `(via mm) (mm)`, "3"},
+		{"prune procedure define",
+			`(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'define) (list (cadr f)) 4))))
+` + via + `(via ff) (ff)`, "4"},
+		{"prune through two wrappers",
+			`(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'define) (cadr f) 5))))
+` + via + "(define-syntax via2 (syntax-rules () ((_ n) (via n))))\n(via2 qq) qq", "5"},
+	}
+	for _, tc := range tcs {
+		src := "(import (for-syntax (scheme base)))  ; cadr\n" + tc.src
+		for _, l := range syntaxLayers {
+			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
+				qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(l.opt)...), qt.Equals, tc.want)
+			})
+		}
+	}
 }
 
 // TestP2_ERContract (Q6): the proc receives the spine with identifier leaves
-// intact — identifier? is the test, compare the equality; symbol? is #f.
+// intact — identifier? is the test, compare the equality; symbol? is #f; pair?
+// on a form element stays #t, which is what a whole-tree pass-through of syntax
+// pairs would silently break.
 func TestP2_ERContract(t *testing.T) {
-	c := qt.New(t)
-	got := evalSyntaxForms(t, `(import (for-syntax (scheme base))  ; cadr
+	src := `(import (for-syntax (scheme base))  ; cadr
         (for-syntax (scheme cxr)))  ; caddr, cadddr — cxr.sld, not base.sld
 (define-syntax er-probe
   (er-macro-transformer
@@ -302,21 +384,66 @@ func TestP2_ERContract(t *testing.T) {
       (list (r 'list)
             (identifier? (cadr f)) (symbol? (cadr f))
             (c (cadr f) (r 'magic)) (pair? (caddr f)) (cadddr f)))))
-(er-probe magic (a b) 3)`, withStdlibResolver(wile.WithSchemeSyntaxForms())...)
-	c.Assert(got, qt.Equals, "(#t #f #t #t 3)")
+(er-probe magic (a b) 3)`
+	for _, l := range syntaxLayers {
+		t.Run(l.name, func(t *testing.T) {
+			qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(l.opt)...), qt.Equals, "(#t #f #t #t 3)")
+		})
+	}
+}
+
+// TestP2_ERSpineContainers: a box and a cyclic datum in the form are plain
+// values to the proc, not syntax. A box unwrapped one level would arrive as its
+// content; a cyclic datum walked as a spine would never terminate.
+func TestP2_ERSpineContainers(t *testing.T) {
+	tcs := []struct {
+		name string
+		use  string
+		want string
+	}{
+		{"box", `(probe #&(a b))`, "(#t #f #t #t)"},
+		{"cyclic datum", `(probe #0=(a . #0#))`, "(#f #t #t #t)"},
+	}
+	for _, tc := range tcs {
+		src := `(import (for-syntax (scheme base)))  ; cadr
+(define-syntax probe
+  (er-macro-transformer
+    (lambda (f r c)
+      (let ((x (cadr f)))
+        (list (r 'quote)
+              (list (box? x) (pair? x) (pair? (if (box? x) (unbox x) (cdr x)))
+                    (identifier? (car (if (box? x) (unbox x) x)))))))))
+` + tc.use
+		for _, l := range syntaxLayers {
+			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
+				qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(l.opt)...), qt.Equals, tc.want)
+			})
+		}
+	}
+}
+
+// TestP2_ERSpineUnlabeledCycle: the parser's label wrapper does not fence every
+// path into a cycle (#1# reaches it past label 0), so the spine walk itself must
+// terminate. Go layer only: the Scheme layer overflows earlier, stamping scopes
+// onto the cyclic input (MapSyntaxTree), which is filed in TODO.md.
+func TestP2_ERSpineUnlabeledCycle(t *testing.T) {
+	src := `(import (for-syntax (scheme base)))  ; cadr
+(define-syntax probe (er-macro-transformer (lambda (f r c) (list (r 'quote) (pair? (cadr f))))))
+(probe #0=(#1=(x . #0#)) #1#)`
+	qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(wile.WithGoSyntaxForms())...), qt.Equals, "#t")
 }
 
 // TestP2_ERContractCrossLibrary is the same contract read across a library
 // boundary — the only path on which the form leaves the engine's own namespace.
-// er-contract is exported from (wile er-macro-test); the assertion is
-// layer-specific, so it lives here rather than in
-// integration/testdata/er_macro_cross_library.scm, which must stay green under
-// both layers (the Go ER hands the proc raw symbols and answers (#f #t)).
+// er-contract is exported from (wile er-macro-test).
 func TestP2_ERContractCrossLibrary(t *testing.T) {
-	c := qt.New(t)
-	got := evalSyntaxForms(t, `(import (wile er-macro-test)) (er-contract x)`,
-		wile.WithSchemeSyntaxForms(), wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths())
-	c.Assert(got, qt.Equals, "(#t #f)")
+	for _, l := range syntaxLayers {
+		t.Run(l.name, func(t *testing.T) {
+			got := evalSyntaxForms(t, `(import (wile er-macro-test)) (er-contract x)`,
+				l.opt, wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths())
+			qt.Assert(t, got, qt.Equals, "(#t #f)")
+		})
+	}
 }
 
 // TestP2_ERRenameIsFreshPerInvocation is a guard: two uses of an ER macro that

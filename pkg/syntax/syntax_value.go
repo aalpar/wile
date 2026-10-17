@@ -144,6 +144,13 @@ func (p *SyntaxObject) EqualTo(v values.Value) bool {
 // the same SyntaxValue always unwraps to the same values.Value.
 // This also handles circular structures by pre-registering placeholders before recursing.
 func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.Value {
+	return unwrapShared(sv, cache, false)
+}
+
+// unwrapShared is the one cycle-safe walker behind UnwrapAllShared and
+// UnwrapSpine. keepIdentifiers is the only difference between them: whether an
+// identifier leaf comes back as its symbol or as itself.
+func unwrapShared(sv SyntaxValue, cache map[SyntaxValue]values.Value, keepIdentifiers bool) values.Value {
 	if sv == nil {
 		return values.Void
 	}
@@ -173,7 +180,7 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		for {
 			var car values.Value
 			if cur.Values[0] != nil {
-				car = UnwrapAllShared(cur.Values[0], cache)
+				car = unwrapShared(cur.Values[0], cache, keepIdentifiers)
 			}
 			place.SetCar(car)
 
@@ -190,7 +197,7 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 			}
 			nextPair, isPair := next.(*SyntaxPair)
 			if !isPair || nextPair.IsVoid() {
-				place.SetCdr(UnwrapAllShared(next, cache))
+				place.SetCdr(unwrapShared(next, cache, keepIdentifiers))
 				break
 			}
 			cell := values.NewCons(nil, nil)
@@ -209,7 +216,7 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		cache[sv] = vec
 		// Recursively unwrap elements
 		for i, elem := range v.Values {
-			_ = vec.Set(i, UnwrapAllShared(elem, cache))
+			_ = vec.Set(i, unwrapShared(elem, cache, keepIdentifiers))
 		}
 		return vec
 
@@ -224,14 +231,14 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		bx := values.NewBox(nil)
 		cache[sv] = bx
 		if v.Value != nil {
-			bx.Value = UnwrapAllShared(v.Value, cache)
+			bx.Value = unwrapShared(v.Value, cache, keepIdentifiers)
 		}
 		return bx
 
 	case *SyntaxObject:
 		datum, ok := v.Datum().(SyntaxValue)
 		if ok {
-			result := UnwrapAllShared(datum, cache)
+			result := unwrapShared(datum, cache, keepIdentifiers)
 			cache[sv] = result
 			return result
 		}
@@ -243,7 +250,7 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		// Unwrap the labeled value
 		datum, ok := v.Value.(SyntaxValue)
 		if ok {
-			result := UnwrapAllShared(datum, cache)
+			result := unwrapShared(datum, cache, keepIdentifiers)
 			cache[sv] = result
 			return result
 		}
@@ -251,6 +258,9 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		return v.Value
 
 	case *SyntaxSymbol:
+		if keepIdentifiers {
+			return v
+		}
 		result := v.Unwrap()
 		cache[sv] = result
 		return result
@@ -267,7 +277,7 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 
 	case *SyntaxDatumComment:
 		// Recursively unwrap the commented value
-		result := UnwrapAllShared(v.Value, cache)
+		result := unwrapShared(v.Value, cache, keepIdentifiers)
 		cache[sv] = result
 		return result
 

@@ -325,10 +325,12 @@ var compileTimeBindingSpecs = []nameDoc{
 			"Category: macros"},
 	// er-macro-transformer (Wile extension; explicit renaming, Clinger 1991)
 	{"er-macro-transformer",
-		"Explicit-renaming macro transformer. PROC receives the macro use,\n" +
-			"a RENAME procedure giving a symbol the macro definition's lexical\n" +
-			"context, and a COMPARE procedure testing two identifiers for the\n" +
-			"same binding.\n" +
+		"Explicit-renaming macro transformer. PROC receives the macro use\n" +
+			"as a form whose pairs and vectors are plain and whose identifiers\n" +
+			"stay syntax objects (identifier? is the test), a RENAME procedure\n" +
+			"giving a symbol the macro definition's lexical context, and a\n" +
+			"COMPARE procedure testing two identifiers for the same binding. A\n" +
+			"symbol PROC introduces without renaming takes the use site's context.\n" +
 			"Syntax: (er-macro-transformer PROC)\n" +
 			"Category: macros"},
 	// meta (phase-1 compilation)
