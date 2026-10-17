@@ -43,7 +43,7 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 		// process-* primitives use TypeAny for the process argument; the
 		// impl's RequireArg still rejects non-processes.
 		{Name: "system", ParamCount: 1, Impl: PrimSystem,
-			Doc: "Runs COMMAND as a shell command via /bin/sh -c. Returns the exit code as an exact integer.", ParamNames: []string{"command"}, Category: "process",
+			Doc: "Runs COMMAND as a shell command via the host shell (/bin/sh -c; cmd.exe /c on Windows). Returns the exit code as an exact integer.", ParamNames: []string{"command"}, Category: "process",
 			Keywords:   []string{"shell", "exec", "run command", "subprocess"},
 			ParamTypes: []values.TypeConstraint{values.TypeString},
 			ReturnType: values.TypeInteger},

@@ -215,3 +215,15 @@ func noProcessGlobalMutation(m dsl.Matcher) { //nolint:unused // loaded by gocri
 		Where(!m.File().Name.Matches(`_test\.go$`)).
 		Report(`os.Chdir mutates the process-global working directory: record an engine directory (Namespace.SetCurrentDirectory) instead`)
 }
+
+// noHardcodedShellPath flags exec calls that name /bin/sh directly. The path
+// exists only on POSIX hosts, yet the package compiles for Windows and
+// features.go advertises `windows` to cond-expand. The shell comes from the
+// GOOS-keyed table in extensions/process (shellByGOOS) instead. Call-shaped on
+// purpose: matching the bare literal is not expressible in the DSL. Skips test
+// files, which name /bin/sh to compare against it.
+func noHardcodedShellPath(m dsl.Matcher) { //nolint:unused // loaded by gocritic ruleguard checker at lint time
+	m.Match(`exec.CommandContext($ctx, "/bin/sh", $*_)`, `exec.Command("/bin/sh", $*_)`).
+		Where(!m.File().Name.Matches(`_test\.go$`)).
+		Report(`do not name /bin/sh: resolve the shell through shellByGOOS in extensions/process`)
+}
