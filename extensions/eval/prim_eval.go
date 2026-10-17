@@ -137,7 +137,7 @@ func PrimEval(cc machine.CallContext) error {
 		return werr.WrapForeignErrorf(err, "eval")
 	}
 
-	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, stx, nil, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
+	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, stx, nil, compilation.NamespaceInlineThreshold(env), compilation.NamespaceMaxExpandDepth(env))
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "eval")
 	}
@@ -235,7 +235,7 @@ func PrimLoad(cc machine.CallContext) error {
 			return werr.WrapForeignErrorf(err, "load: parse error in %s", filename.Value)
 		}
 
-		tpl, err := compilation.ExpandAndCompile(loadCtx, env, stx, nil, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
+		tpl, err := compilation.ExpandAndCompile(loadCtx, env, stx, nil, compilation.NamespaceInlineThreshold(env), compilation.NamespaceMaxExpandDepth(env))
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "load: in %s", filename.Value)
 		}
@@ -681,7 +681,7 @@ func PrimCompile(mc machine.CallContext) error {
 	// globals and a nil namespace.
 	env := environment.NewEnvironmentFrameWithParent(nil, mc.EnvironmentFrame().MutableRuntime())
 
-	tpl, err := compilation.ExpandAndCompileOptimized(mc.Context(), env, syntaxVal, nil, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
+	tpl, err := compilation.ExpandAndCompileOptimized(mc.Context(), env, syntaxVal, nil, compilation.NamespaceInlineThreshold(env), compilation.NamespaceMaxExpandDepth(env))
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "compile")
 	}

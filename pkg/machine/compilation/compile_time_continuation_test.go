@@ -2253,3 +2253,44 @@ func TestValidateQuotedLiteral_CircularDatumLabel(t *testing.T) {
 		qt.Assert(t, err, qt.ErrorIs, werr.ErrInvalidSyntax)
 	})
 }
+
+// TestNewCompileTimeContinuation_SeedsInlineThresholdFromNamespace pins that the
+// constructor reads the engine's WithInlineThreshold from the namespace, as
+// NewExpanderTimeContinuation does for the expansion bound. An explicit 0
+// (inlining disabled) must survive, and a nil-namespace frame must fall back to
+// the default rather than panic.
+func TestNewCompileTimeContinuation_SeedsInlineThresholdFromNamespace(t *testing.T) {
+	tpl := machine.NewNativeTemplate(0, 0, false)
+
+	t.Run("explicit zero", func(t *testing.T) {
+		ns := environment.NewNamespace()
+		ns.SetInlineThreshold(0)
+		cc := NewCompileTimeContinuation(tpl, ns.Runtime(), nil)
+		qt.Assert(t, cc.inlineThreshold, qt.Equals, 0)
+	})
+
+	t.Run("explicit non-default", func(t *testing.T) {
+		ns := environment.NewNamespace()
+		ns.SetInlineThreshold(17)
+		cc := NewCompileTimeContinuation(tpl, ns.Runtime(), nil)
+		qt.Assert(t, cc.inlineThreshold, qt.Equals, 17)
+	})
+
+	t.Run("unset namespace defaults", func(t *testing.T) {
+		cc := NewCompileTimeContinuation(tpl, environment.NewNamespace().Runtime(), nil)
+		qt.Assert(t, cc.inlineThreshold, qt.Equals, DefaultInlineThreshold)
+	})
+}
+
+// TestNamespaceReaders_NilNamespace pins nil-namespace safety: an un-namespaced
+// frame (here the zero value, as unit-test fixtures build) must not panic.
+func TestNamespaceReaders_NilNamespace(t *testing.T) {
+	env := &environment.EnvironmentFrame{}
+	qt.Assert(t, env.Namespace(), qt.IsNil)
+	qt.Assert(t, NamespaceMaxExpandDepth(env), qt.Equals, DefaultMaxExpandDepth)
+	qt.Assert(t, NamespaceInlineThreshold(env), qt.Equals, DefaultInlineThreshold)
+
+	ns := environment.NewNamespace()
+	ns.SetMaxExpandDepth(0)
+	qt.Assert(t, NamespaceMaxExpandDepth(ns.Runtime()), qt.Equals, 0)
+}

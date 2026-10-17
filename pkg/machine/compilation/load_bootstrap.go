@@ -64,6 +64,10 @@ func LoadBootstrapSources(ctx context.Context, env *environment.EnvironmentFrame
 // pooled top-level context. The context is released per form (a deferred release in this
 // per-iteration helper, not at the end of LoadBootstrapSources's loop).
 func runBootstrapStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, kind string) error {
+	// Deliberately the package constants for the expander of this top-level pass,
+	// not the namespace readers. Everything nested (transformer compiles, the
+	// compiler's quasiquote guard) reads the namespace, so on a bootstrap run after
+	// the engine forwarded its configuration those sites follow the engine.
 	tpl, err := ExpandAndCompileOptimized(ctx, env, stx, resolver, DefaultInlineThreshold, DefaultMaxExpandDepth)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error expanding/compiling bootstrap %s", kind)

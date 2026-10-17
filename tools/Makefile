@@ -70,6 +70,8 @@ vet:
 # conventions the gocritic/ruleguard DSL cannot express:
 #   - singlelinefunclint: the no-single-line-function rule (a positional rule)
 #   - typeswitchlint:     exhaustiveness of //exhaustive-marked values.Value switches
+#   - configconstlint:    DefaultMaxExpandDepth/DefaultInlineThreshold never a call argument
+#                         outside load_bootstrap.go (the engine value is read from the namespace)
 #   - nestinglint:        the shallow-nesting rule (CODING_STYLE.md "Keep
 #                         Indentation Shallow"), gated at -max $(NEST_MAX)
 #
@@ -83,6 +85,7 @@ vet:
 lint:
 	cd $(ROOT) && $(GO) run ./tools/cmd/singlelinefunclint .
 	cd $(ROOT) && $(GO) run ./tools/cmd/typeswitchlint .
+	cd $(ROOT) && $(GO) run ./tools/cmd/configconstlint .
 	cd $(ROOT) && $(GO) run ./tools/cmd/nestinglint -max $(NEST_MAX) .
 
 # Rank the worst individual functions in $(ROOT) by cognitive complexity.

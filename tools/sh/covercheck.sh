@@ -33,6 +33,7 @@ MODULE="github.com/aalpar/wile"
 EXCLUDED_PKGS=(
 	"cmd/wile"
 	"tools/cmd/typeswitchlint"
+	"tools/cmd/configconstlint"
 	"tools/cmd/singlelinefunclint"
 	"tools/cmd/nestinglint"
 	"pkg/testutil"

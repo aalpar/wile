@@ -262,11 +262,17 @@ defect at HEAD whether or not Tier 2 is ever built.
   the probe's own call is parameterised). Gate
   `TestCondExpandLibraryProbeDoesNotRunTheBody` (`pkg/wile`), five rows, **three RED on master**:
   leaf purity, probe-then-import-runs-once, and the criterion row.
-- [ ] **`compileTransformerValue` / `CompileERMacroTransformerExpr` ignore engine configuration**
-  [Correctness, S]: both hardcode `DefaultInlineThreshold` and `DefaultMaxExpandDepth`
-  (`compile_transformer.go:68`), so `WithInlineThreshold` and `WithMaxExpandDepth` do not reach
-  transformer compilation. An embedder's expansion-depth cap is therefore not honoured on exactly
-  the path that can run away — see the cubic-cost entry above.
+- [x] **`compileTransformerValue` / `CompileERMacroTransformerExpr` ignore engine configuration**
+  [Correctness, S, Done 2026-10-17]: transformer-RHS compile and the eval, load and compile
+  primitives now read the engine bounds through `compilation.NamespaceMaxExpandDepth` /
+  `NamespaceInlineThreshold`; `NewCompileTimeContinuation` seeds `inlineThreshold` from the
+  namespace; `effectiveQuasiMaxDepth` follows the engine bound, so a raised or unlimited
+  `WithMaxExpandDepth` is no longer capped at 50000 for quasiquote. With `WithMaxExpandDepth(3)` a
+  5-deep let is refused in define-syntax, let-syntax, `eval` and `compile` (accepted on master).
+  `tools/cmd/configconstlint` (in `make -C tools lint`) forbids the two constants as call
+  arguments outside `load_bootstrap.go`; it does not see struct-literal fields or returns (filed
+  below). Trap: `NewEnvironmentFrameWithParent` copies `parent.namespace`, so the compile
+  primitive's thunk frame does have a namespace; the plan's "no namespace" premise was stale.
 - [x] **Go map-range order decides export-map slot numbering and conflict-report order**
   [Phase / determinism, M, Done]: `CopyLibraryBindingsToEnvAtPhase` / `copyLibraryBindingsDirect`
   iterated a Go map, so slot numbers and the identifier a conflict diagnostic named varied run to
@@ -2017,6 +2023,26 @@ disagreement on one program, the internal-invariant form of a defect.
   shape: `\foo` takes `filepath.VolumeName(dir)` + path; `C:foo` joins the remainder onto the engine
   directory when the volumes match, and needs a decision when they do not (a process per-drive cwd is
   the only other answer, and it is host state).
+
+### Filed by the P5.2 crosscheck (2026-10-17)
+
+- [ ] **`ExpandAndCompile`'s `inlineThreshold` / `maxExpandDepth` parameters are redundant and
+  reach only the outermost pass** [Design, M]: both constructors now read the namespace, so the
+  parameters merely overwrite what the constructor read, and nested transformer compiles and ten
+  other expander sites ignore an explicit argument that differs from the namespace. Dropping them
+  changes the exported `ExpandAndCompile{,Optimized}` signature (callers are all in-tree; wile-goast
+  and wile-extension-example do not call them) and would let bootstrap take a private variant,
+  which retires `configconstlint` and its exemption. Alternative: a `maxExpandDepth` field on
+  `CompileTimeContinuation`, as `inlineThreshold` already is.
+- [ ] **`configconstlint` scope is call arguments only** [Tooling, S]: master's
+  `inlineThreshold: DefaultInlineThreshold` (struct field) and `return DefaultMaxExpandDepth` shapes
+  pass it. It also exempts any `load_bootstrap.go` by basename and skips unparsable files with
+  exit 0 (sibling lints do the same). Widen to every reference outside an allowlist (declarations,
+  the two readers, the engine defaults, the bootstrap call).
+- [ ] **CI never runs the standalone lint passes** [CI, S, predates P5.2]: `ci.yml` runs
+  `make ci SKIP_LINT=1`, and `tools/Makefile lint` (singlelinefunclint, typeswitchlint,
+  configconstlint, nestinglint) is reachable only through `make lint`. Add a CI step for
+  `make -C tools lint`.
 
 ### Closed in Tier 1
 

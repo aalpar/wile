@@ -65,7 +65,7 @@ func compileTransformerValue(
 	evaluator machine.MacroEvaluator,
 ) (values.Value, error) {
 	expandEnv := env.NextPhase()
-	tpl, err := expandAndCompileScoped(ctx, expandEnv, rhs, nil, DefaultInlineThreshold, DefaultMaxExpandDepth, libraryScope)
+	tpl, err := expandAndCompileScoped(ctx, expandEnv, rhs, nil, NamespaceInlineThreshold(expandEnv), NamespaceMaxExpandDepth(expandEnv), libraryScope)
 	if err != nil {
 		return nil, wrapSourcedError(rhs.SourceContext(), werr.WrapForeignErrorf(err, "transformer"))
 	}
