@@ -27,7 +27,8 @@ import (
 )
 
 // openFilePort implements the shared logic for open-{input,output}-file and
-// open-binary-{input,output}-file. It extracts the filename, checks security,
+// open-binary-{input,output}-file. It extracts the filename, resolves it
+// against the engine's current directory, checks security,
 // opens the file (race-free via os.Root when the authorizer confines file
 // access; see confined.go), and wraps it in a port via makePort.
 func openFilePort(
@@ -38,15 +39,19 @@ func openFilePort(
 	if err != nil {
 		return err
 	}
+	path, err := enginePath(mc, name, filename)
+	if err != nil {
+		return err
+	}
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   action,
-		Target:   filename.Value,
+		Target:   path,
 	})
 	if err != nil {
 		return err
 	}
-	file, err := confinedOpenForAction(mc.Authorizer(), filename.Value, action)
+	file, err := confinedOpenForAction(mc.Authorizer(), path, action)
 	if err != nil {
 		return werr.WrapForeignFileError(err, name, filename.Value)
 	}
@@ -128,10 +133,18 @@ func PrimFileExistsQ(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	path, err := enginePath(mc, "file-exists?", filename)
+	if err != nil {
+		if statAnswersFalse(err) {
+			mc.SetValue(values.FalseValue)
+			return nil
+		}
+		return err
+	}
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   security.ActionStat,
-		Target:   filename.Value,
+		Target:   path,
 	})
 	if err != nil {
 		// Deliberately dropped, and this is the whole point of the item: the
@@ -143,7 +156,7 @@ func PrimFileExistsQ(mc machine.CallContext) error {
 		mc.SetValue(values.FalseValue)
 		return nil //nolint:nilerr // a denial is reported as #f, never as an error
 	}
-	_, err = confinedStat(mc.Authorizer(), filename.Value)
+	_, err = confinedStat(mc.Authorizer(), path)
 	if err != nil && !statAnswersFalse(err) {
 		return werr.WrapForeignFileError(err, "file-exists?", filename.Value)
 	}
@@ -158,15 +171,19 @@ func PrimDeleteFile(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	path, err := enginePath(mc, "delete-file", filename)
+	if err != nil {
+		return err
+	}
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   security.ActionDelete,
-		Target:   filename.Value,
+		Target:   path,
 	})
 	if err != nil {
 		return err
 	}
-	err = confinedRemove(mc.Authorizer(), filename.Value)
+	err = confinedRemove(mc.Authorizer(), path)
 	if err != nil {
 		return werr.WrapForeignFileError(err, "delete-file", filename.Value)
 	}
@@ -195,16 +212,20 @@ func callWithFile(
 		return err
 	}
 
+	path, err := enginePath(mc, name, filename)
+	if err != nil {
+		return err
+	}
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   action,
-		Target:   filename.Value,
+		Target:   path,
 	})
 	if err != nil {
 		return err
 	}
 
-	file, err := confinedOpenForAction(mc.Authorizer(), filename.Value, action)
+	file, err := confinedOpenForAction(mc.Authorizer(), path, action)
 	if err != nil {
 		return werr.WrapForeignFileError(err, name, filename.Value)
 	}

@@ -15,7 +15,9 @@
 package files
 
 import (
+	"io/fs"
 	"os"
+	"syscall"
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
@@ -32,15 +34,19 @@ func PrimCreateDirectory(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	abs, err := enginePath(mc, "create-directory", path)
+	if err != nil {
+		return err
+	}
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   security.ActionWrite,
-		Target:   path.Value,
+		Target:   abs,
 	})
 	if err != nil {
 		return err
 	}
-	err = confinedMkdir(mc.Authorizer(), path.Value, 0o755)
+	err = confinedMkdir(mc.Authorizer(), abs, 0o755)
 	if err != nil {
 		return werr.WrapForeignFileError(err, "create-directory", path.Value)
 	}
@@ -55,15 +61,19 @@ func PrimDeleteDirectory(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	abs, err := enginePath(mc, "delete-directory", path)
+	if err != nil {
+		return err
+	}
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   security.ActionDelete,
-		Target:   path.Value,
+		Target:   abs,
 	})
 	if err != nil {
 		return err
 	}
-	info, err := confinedStat(mc.Authorizer(), path.Value)
+	info, err := confinedStat(mc.Authorizer(), abs)
 	if err != nil {
 		return werr.WrapForeignFileError(err, "delete-directory", path.Value)
 	}
@@ -73,7 +83,7 @@ func PrimDeleteDirectory(mc machine.CallContext) error {
 			"delete-directory: not a directory: %s", path.Value,
 		)
 	}
-	err = confinedRemove(mc.Authorizer(), path.Value)
+	err = confinedRemove(mc.Authorizer(), abs)
 	if err != nil {
 		return werr.WrapForeignFileError(err, "delete-directory", path.Value)
 	}
@@ -89,15 +99,19 @@ func PrimDirectoryFiles(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	abs, err := enginePath(mc, "directory-files", path)
+	if err != nil {
+		return err
+	}
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   security.ActionRead,
-		Target:   path.Value,
+		Target:   abs,
 	})
 	if err != nil {
 		return err
 	}
-	entries, err := confinedReadDir(mc.Authorizer(), path.Value)
+	entries, err := confinedReadDir(mc.Authorizer(), abs)
 	if err != nil {
 		return werr.WrapForeignFileError(err, "directory-files", path.Value)
 	}
@@ -114,17 +128,20 @@ func PrimDirectoryFiles(mc machine.CallContext) error {
 }
 
 // PrimCurrentDirectory implements the (current-directory) primitive.
-// Returns the current working directory as a string.
+// Returns the engine's current directory as a string: the one
+// set-current-directory! last entered, else the host process's working
+// directory (environment.Namespace.CurrentDirectory).
 func PrimCurrentDirectory(mc machine.CallContext) error {
-	wd, err := os.Getwd()
+	wd, err := mc.EnvironmentFrame().Namespace().CurrentDirectory()
 	if err != nil {
 		return werr.WrapForeignFileError(err, "current-directory", ".")
 	}
 	// Gate the working directory as a file stat so a confining authorizer can
 	// withhold it: DenyAll denies it (honouring "deny everything"), and
-	// FilesystemRoot denies it when the cwd lies outside the root (preventing a
-	// host-path leak out of the sandbox). The check runs after Getwd so the path
-	// is available to evaluate but before SetValue so a denial leaks nothing.
+	// FilesystemRoot denies it when the directory lies outside the root
+	// (preventing a host-path leak out of the sandbox). The check runs after the
+	// read so the path is available to evaluate but before SetValue so a denial
+	// leaks nothing.
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   security.ActionStat,
@@ -139,39 +156,51 @@ func PrimCurrentDirectory(mc machine.CallContext) error {
 
 // PrimSetCurrentDirectory implements the (set-current-directory!) primitive.
 //
-// WARNING: os.Chdir is process-global. Multiple engines in the same Go
-// process share a single working directory. Concurrent calls from different
-// goroutines race on the same OS state. This is inherent to POSIX — there
-// is no per-thread working directory.
+// The current directory is ENGINE state (environment.Namespace.
+// SetCurrentDirectory), not the process's: entering a directory moves this
+// engine and every namespace it owns, never the host or another engine. Every
+// relative path the engine later resolves (the file primitives, load/include,
+// a spawned process's start directory) is resolved against it.
 func PrimSetCurrentDirectory(mc machine.CallContext) error {
 	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "set-current-directory!")
 	if err != nil {
 		return err
 	}
+	abs, err := enginePath(mc, "set-current-directory!", path)
+	if err != nil {
+		return err
+	}
 	// Gate as a file write of the destination path (not an opaque
 	// {process,write,"cwd"} request, which path-confining authorizers like
-	// FilesystemRoot never inspect — letting chdir escape the root). With
-	// ResourceFile+Target=path, containment authorizers evaluate the
-	// destination, confining the new working directory to the sandbox root.
+	// FilesystemRoot never inspect — letting the directory escape the root).
+	// With ResourceFile+Target=path, containment authorizers evaluate the
+	// destination, confining the new current directory to the sandbox root.
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   security.ActionWrite,
-		Target:   path.Value,
+		Target:   abs,
 	})
 	if err != nil {
 		return err
 	}
-	// chdir has no os.Root form, so the kernel resolves whatever string it gets,
-	// symlinks and ".." included. Enter the resolved path, re-gated when it
-	// differs from the spelling, so the directory entered is the one judged.
-	target, err := unconfinedTarget(mc.Authorizer(), path.Value, security.ActionWrite)
+	// Record the symlink-resolved path, re-gated when it differs from the
+	// spelling, so the directory entered is the one judged and ".." after a
+	// symlink is applied after the link, as chdir would. The stat stands in for
+	// the refusals chdir made: a missing path, or one that is not a directory.
+	target, err := unconfinedTarget(mc.Authorizer(), abs, security.ActionWrite)
 	if err != nil {
 		return err
 	}
-	err = os.Chdir(target)
+	info, err := os.Stat(target)
 	if err != nil {
 		return werr.WrapForeignFileError(err, "set-current-directory!", path.Value)
 	}
+	if !info.IsDir() {
+		return werr.WrapForeignFileError(
+			&fs.PathError{Op: "chdir", Path: target, Err: syscall.ENOTDIR},
+			"set-current-directory!", path.Value)
+	}
+	mc.EnvironmentFrame().Namespace().SetCurrentDirectory(target)
 	mc.SetValue(values.Void)
 	return nil
 }

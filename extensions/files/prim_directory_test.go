@@ -17,9 +17,11 @@ package files_test
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
+	"syscall"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -169,24 +171,52 @@ func TestSetCurrentDirectory(t *testing.T) {
 	engine := newEngine(t)
 	c := qt.New(t)
 
-	origDir, err := os.Getwd()
+	hostBefore, err := os.Getwd()
 	c.Assert(err, qt.IsNil)
-	t.Cleanup(func() {
-		os.Chdir(origDir) //nolint:errcheck
-	})
 
-	t.Run("changes directory", func(t *testing.T) {
+	t.Run("changes the engine directory, not the host's", func(t *testing.T) {
 		target := t.TempDir()
 		eval(t, engine, fmt.Sprintf(`(set-current-directory! %q)`, target))
-		wd, err := os.Getwd()
+		resolvedTarget, err := filepath.EvalSymlinks(target)
 		c.Assert(err, qt.IsNil)
-		resolvedTarget, _ := filepath.EvalSymlinks(target)
-		resolvedWd, _ := filepath.EvalSymlinks(wd)
-		c.Assert(resolvedWd, qt.Equals, resolvedTarget)
+		result := eval(t, engine, fmt.Sprintf(
+			`(string=? (current-directory) %q)`, resolvedTarget))
+		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+		hostAfter, err := os.Getwd()
+		c.Assert(err, qt.IsNil)
+		c.Assert(hostAfter, qt.Equals, hostBefore)
 	})
 
 	t.Run("error if nonexistent", func(t *testing.T) {
 		evalExpectError(t, engine, `(set-current-directory! "/nonexistent/path/12345")`)
+	})
+
+	// "" names no file. filepath.EvalSymlinks reads it as ".", the host's
+	// directory, which once left the engine holding the relative path ".".
+	t.Run("empty path is refused", func(t *testing.T) {
+		eval(t, engine, fmt.Sprintf(`(set-current-directory! %q)`, t.TempDir()))
+		before := eval(t, engine, `(current-directory)`)
+		_, err := engine.EvalMultiple(context.Background(), `(set-current-directory! "")`)
+		c.Assert(err, qt.ErrorIs, fs.ErrNotExist)
+		after := eval(t, engine, `(current-directory)`)
+		c.Assert(after.SchemeString(), qt.Equals, before.SchemeString())
+		_, err = engine.EvalMultiple(context.Background(), `(directory-files "")`)
+		c.Assert(err, qt.ErrorIs, fs.ErrNotExist)
+		_, err = engine.EvalMultiple(context.Background(), `(open-input-file "")`)
+		c.Assert(err, qt.ErrorIs, fs.ErrNotExist)
+		result := eval(t, engine, `(file-exists? "")`)
+		c.Assert(result.Internal(), qt.Equals, values.FalseValue)
+	})
+
+	t.Run("error if not a directory", func(t *testing.T) {
+		file := filepath.Join(t.TempDir(), "f")
+		c.Assert(os.WriteFile(file, nil, 0o644), qt.IsNil)
+		before := eval(t, engine, `(current-directory)`)
+		_, err := engine.EvalMultiple(context.Background(),
+			fmt.Sprintf(`(set-current-directory! %q)`, file))
+		c.Assert(err, qt.ErrorIs, syscall.ENOTDIR)
+		after := eval(t, engine, `(current-directory)`)
+		c.Assert(after.SchemeString(), qt.Equals, before.SchemeString())
 	})
 
 	t.Run("wrong type", func(t *testing.T) {

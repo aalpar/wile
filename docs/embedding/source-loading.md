@@ -66,9 +66,11 @@ Resolves files from the OS filesystem. Resolution order:
 2. Library registry search paths (`LibraryRegistry.GetSearchPaths()`)
 3. `SCHEME_INCLUDE_PATH` environment variable (colon-separated on Unix,
    semicolon-separated on Windows)
-4. Current working directory
+4. The engine's current directory (`set-current-directory!`; the host's
+   working directory until it is set)
 
-Each directory is made absolute and duplicates are dropped. There is no
+Each directory is made absolute against the engine's current directory, not
+the host's, and duplicates are dropped. There is no
 filesystem-root fallback.
 
 Absolute paths bypass the search list and are opened directly (still

@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 
@@ -84,7 +86,8 @@ var _ values.Value = (*Namespace)(nil)
 //	Pointer-shared via *EngineServices (allocated once in NewNamespace;
 //	every child receives the same pointer at construction — no root() walk,
 //	one struct, one optional mutex for the lazy-cache block):
-//	  ioState, formRegistry, inlineThreshold, maxExpandDepth, exportIndex —
+//	  ioState, formRegistry, inlineThreshold, maxExpandDepth, currentDir,
+//	  exportIndex —
 //	  add new engine-lifetime services here (add a field on EngineServices +
 //	  two Namespace accessors; children inherit automatically because they
 //	  copy the services pointer at construction)
@@ -122,7 +125,7 @@ type Namespace struct {
 
 	// services holds the engine-lifetime, layering-opaque services (ioState,
 	// formRegistry, the forwarded inlineThreshold/maxExpandDepth compiler
-	// bounds, and the lazy exportIndex). Allocated once by the root
+	// bounds, the engine's currentDir, and the lazy exportIndex). Allocated once by the root
 	// NewNamespace and shared by pointer into every child constructor, so the
 	// whole namespace tree reads/writes one struct. See engine_services.go.
 	services *EngineServices
@@ -504,6 +507,50 @@ func (p *Namespace) SetMaxExpandDepth(n int) {
 // LoadLibrary in a unit test); the caller should fall back to its own default.
 func (p *Namespace) MaxExpandDepth() (int, bool) {
 	return p.services.maxExpandDepth, p.services.maxExpandDepthSet
+}
+
+// SetCurrentDirectory records dir, which must be absolute, as the engine's
+// current directory. It is engine state on the shared EngineServices, so it moves
+// every namespace of this engine and nothing else: not the host process, not
+// another engine.
+func (p *Namespace) SetCurrentDirectory(dir string) {
+	p.services.currentDir.Store(&dir)
+}
+
+// CurrentDirectory returns the engine's current directory: the one
+// SetCurrentDirectory last recorded, else the host process's working directory,
+// read on every call rather than captured at engine build, so an engine that
+// never sets one follows a host that chdirs. The error is os.Getwd's, unwrapped;
+// callers wrap it with their own operation.
+func (p *Namespace) CurrentDirectory() (string, error) {
+	d := p.services.currentDir.Load()
+	if d != nil {
+		return *d, nil
+	}
+	return os.Getwd()
+}
+
+// ResolvePath expresses path against CurrentDirectory: an absolute or empty path
+// is returned unchanged, a relative one is prefixed with the directory.
+//
+// The join is NOT cleaned. The kernel applies a ".." after the component it
+// follows, symlink or not, so "link/.." names the parent of link's target, while
+// filepath.Clean would erase both and name the directory itself. Leaving the
+// spelling intact keeps the resolved path denoting the file the relative one
+// denoted when the process cwd was the engine's directory. A caller that wants a
+// lexical canonical form (a search directory, say) cleans the result itself.
+func (p *Namespace) ResolvePath(path string) (string, error) {
+	if path == "" || filepath.IsAbs(path) {
+		return path, nil
+	}
+	dir, err := p.CurrentDirectory()
+	if err != nil {
+		return "", err
+	}
+	if os.IsPathSeparator(dir[len(dir)-1]) {
+		return dir + path, nil
+	}
+	return dir + string(filepath.Separator) + path, nil
 }
 
 // ImmutableTopLevel reports whether top-level-define immutability is enforced for

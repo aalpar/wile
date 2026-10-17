@@ -38,7 +38,8 @@
 //     the caller's string, joined against cmd.Dir when relative — otherwise the
 //     authorized file and the executed file can differ.
 //   - The child's start directory is the authorizer's ConfinementRoot when it
-//     reports one, not the host's inherited working directory.
+//     reports one, and otherwise the engine's current directory, never the
+//     host's inherited working directory.
 //
 // # Shell Execution
 //

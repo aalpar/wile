@@ -1355,8 +1355,8 @@ two independent reads of a lock-free table need not agree.
 | `(create-directory path)` | Create directory |
 | `(delete-directory path)` | Remove directory |
 | `(directory-files path)` | List directory entries |
-| `(current-directory)` | Process working directory |
-| `(set-current-directory! path)` | Change process working directory |
+| `(current-directory)` | Engine's current directory (the host's working directory until set) |
+| `(set-current-directory! path)` | Change the engine's current directory; the process's is untouched |
 
 ### Evaluation and Loading
 

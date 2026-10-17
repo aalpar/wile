@@ -908,7 +908,18 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   nonexistent `(wile algebra field)`; `Makefile` `bench-gabriel-compare` names `ack`.
 - [ ] `read-syntax` positions do not count characters `read-char` consumed between reads (needs
   port-owned position tracking).
-- [ ] `set-current-directory!` still has a check-then-`os.Chdir` window.
+- [x] `set-current-directory!` still has a check-then-`os.Chdir` window. [Done 2026-10-16, P5.1
+  `fix/engine-scoped-current-directory` — there is no `os.Chdir` left to race: the directory is
+  engine state and every relative path is resolved against it before the gate]. Two proposed gates
+  DROPPED, recorded rather than omitted. (1) An `os.Getwd` ruleguard ban (I186-R1b): production
+  sites went 4 → 2, not to 0. `Namespace.CurrentDirectory`'s live-read fallback is the one channel and
+  must keep it, and `pkg/security/path_containment.go` has no namespace to consult and sits under
+  the `.golangci.yml` exclusion of `pkg/security/` from gocritic, so ruleguard cannot see it; a ban
+  would be an allowlist of both survivors, not a ratchet. (2) `t.Parallel()` on the integration
+  `set-current-directory!` tests (I186-R7): those tests no longer chdir, but
+  33 sites across 9 test files (this task's own pins among them) still
+  `t.Chdir` or `os.Chdir` to arrange a host directory, so parallelizing is a separate cleanup with
+  nothing to prove here
 
 ### `Imported` is unsound evidence for `IsStable()` at phase 1 — DISCHARGED 2026-08-10, one refusal left (2026-08-09)
 

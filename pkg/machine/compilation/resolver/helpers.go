@@ -194,9 +194,16 @@ func authorizeCandidates(
 	return nil, "", sourceload.ErrNotFound
 }
 
-// osSearchDirs returns the fallback directory list for OS-based file search.
-// Search order: library registry paths, SCHEME_INCLUDE_PATH, CWD.
-// This order is shared by OSFileResolver.ResolveAndOpen and EnumerateFiles.
+// osSearchDirs returns the fallback directory list for OS-based file search,
+// each entry absolute and cleaned. Search order: library registry paths,
+// SCHEME_INCLUDE_PATH, the engine's current directory. This order is shared by
+// OSFileResolver.ResolveAndOpen and EnumerateFiles.
+//
+// A relative entry (the registry's default ".") is relative to the ENGINE's
+// current directory, not the host process's: after set-current-directory! the
+// two differ, and a "." resolved by filepath.Abs would search the host's
+// directory ahead of the engine's. An entry that cannot be resolved (the host
+// directory is unreadable and the engine never set one) is dropped.
 func osSearchDirs(env *environment.EnvironmentFrame) []string {
 	var dirs []string
 	reg := env.LibraryRegistry()
@@ -207,11 +214,22 @@ func osSearchDirs(env *environment.EnvironmentFrame) []string {
 	if includePath != "" {
 		dirs = append(dirs, filepath.SplitList(includePath)...)
 	}
-	cwd, err := os.Getwd()
-	if err == nil {
-		dirs = append(dirs, cwd)
+	dirs = append(dirs, ".")
+	return absSearchDirs(env.Namespace(), dirs)
+}
+
+// absSearchDirs resolves each of dirs against ns's current directory and
+// cleans it, dropping the ones that cannot be resolved.
+func absSearchDirs(ns *environment.Namespace, dirs []string) []string {
+	q := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		abs, err := ns.ResolvePath(d)
+		if err != nil {
+			continue
+		}
+		q = append(q, filepath.Clean(abs))
 	}
-	return dirs
+	return q
 }
 
 // openConfined opens absPath through confinedOpenFile (see confined.go) and

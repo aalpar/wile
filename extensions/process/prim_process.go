@@ -17,7 +17,6 @@ package process
 import (
 	"context"
 	"errors"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
@@ -42,14 +41,15 @@ import (
 // — and every relative path the child opened would resolve there. Pinning makes
 // the sandbox effective rather than merely obstructive.
 //
-// With no confining authorizer the target is the cwd the child would have
-// inherited anyway, so assigning it changes nothing and keeps the gated string
-// identical to the directory that is actually used.
+// With no confining authorizer the child starts in the ENGINE's current
+// directory (environment.Namespace.CurrentDirectory): the host's working
+// directory until set-current-directory! enters another, which moves the engine
+// and not the process, so the child would not inherit it by default.
 func startDirectory(mc machine.CallContext, op string) (string, error) {
 	auth := mc.Authorizer()
 	q, ok := security.ConfinementRootOf(auth)
 	if !ok {
-		wd, err := os.Getwd()
+		wd, err := mc.EnvironmentFrame().Namespace().CurrentDirectory()
 		if err != nil {
 			return "", werr.WrapForeignProcessError(err, op, ".")
 		}

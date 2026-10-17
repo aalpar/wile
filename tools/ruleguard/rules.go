@@ -203,3 +203,15 @@ func noBareScopeMint(m dsl.Matcher) { //nolint:unused // loaded by gocritic rule
 		Where(!m.File().Name.Matches(`_test\.go$`)).
 		Report(`mint scopes with syntax.NewScopeWithLabel(label); Scope.Label is total in production`)
 }
+
+// noProcessGlobalMutation flags os.Chdir in production code. The working
+// directory is process-global: every engine and goroutine in the process shares
+// it, so a Scheme program that moves it moves the host and every other engine.
+// An engine's current directory is engine state instead
+// (environment.Namespace.SetCurrentDirectory), and relative paths resolve
+// against it. Skips test files, which arrange a host directory for themselves.
+func noProcessGlobalMutation(m dsl.Matcher) { //nolint:unused // loaded by gocritic ruleguard checker at lint time
+	m.Match(`os.Chdir($*_)`).
+		Where(!m.File().Name.Matches(`_test\.go$`)).
+		Report(`os.Chdir mutates the process-global working directory: record an engine directory (Namespace.SetCurrentDirectory) instead`)
+}

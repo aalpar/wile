@@ -219,7 +219,8 @@ Library name     →  Path probed
 Within `OSFileResolver`, the directories tried for each probe are, in order: the
 current load directory from the load-path stack, the library registry's search
 paths (user-supplied first, then the default `"."`), `$SCHEME_INCLUDE_PATH`, and
-the working directory. Each candidate is authorized for `code:load` before it is
+the engine's current directory; a relative entry such as `"."` resolves against
+the engine's directory, not the host's. Each candidate is authorized for `code:load` before it is
 `os.Stat`ed (`authorizeCandidates`), so a denied path that exists answers the
 same as one that does not; a denial does not stop the search.
 
