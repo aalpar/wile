@@ -2282,9 +2282,8 @@ func TestNewCompileTimeContinuation_SeedsInlineThresholdFromNamespace(t *testing
 	})
 }
 
-// TestNamespaceReaders_NilNamespace pins the nil-safety the compile primitive
-// guards: an un-namespaced frame (here the zero value, as unit-test fixtures
-// build) must not panic.
+// TestNamespaceReaders_NilNamespace pins nil-namespace safety: an un-namespaced
+// frame (here the zero value, as unit-test fixtures build) must not panic.
 func TestNamespaceReaders_NilNamespace(t *testing.T) {
 	env := &environment.EnvironmentFrame{}
 	qt.Assert(t, env.Namespace(), qt.IsNil)

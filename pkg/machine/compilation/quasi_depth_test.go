@@ -79,9 +79,8 @@ func TestQuasi_DepthLimit_NeedsRuntimeStopsDeep(t *testing.T) {
 }
 
 // TestQuasi_DepthLimit_FallsBackToEngineBound pins that, with no per-continuation
-// override, the quasiquote guard follows WithMaxExpandDepth: lowered trips,
-// raised past the default and explicit 0 (unlimited) both admit what the
-// default would refuse.
+// override, the quasiquote guard's bound is the namespace's WithMaxExpandDepth
+// (including explicit 0, unlimited), and that an override still wins.
 func TestQuasi_DepthLimit_FallsBackToEngineBound(t *testing.T) {
 	c := qt.New(t)
 

@@ -26,8 +26,9 @@ import (
 // NamespaceMaxExpandDepth returns the engine's configured WithMaxExpandDepth
 // bound as seen from env, else DefaultMaxExpandDepth. Nil-safe: frames with no
 // namespace exist (test fixtures), and a namespace not built by an Engine reports
-// unset. An explicit 0 (unlimited) is returned as 0. This is the one reader of
-// the bound; every expander and compiler site goes through it.
+// unset. An explicit 0 (unlimited) is returned as 0. This is the reader for every
+// site without an explicit bound; the engine's top-level path passes the same
+// forwarded value as an argument.
 func NamespaceMaxExpandDepth(env *environment.EnvironmentFrame) int {
 	ns := env.Namespace()
 	if ns == nil {
