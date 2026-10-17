@@ -16,12 +16,14 @@ package parser
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -110,7 +112,8 @@ func TestWidenToBigFloatBigIntegerIsExact(t *testing.T) {
 // TestWidenToBigFloatRationalKeepsOperandBits: a ratio over a 100-digit
 // denominator must widen at no fewer bits than the denominator (or numerator).
 func TestWidenToBigFloatRationalKeepsOperandBits(t *testing.T) {
-	bits := uint(len(longDigits)) * 332 / 100
+	n, _ := new(big.Int).SetString(longDigits, 10)
+	bits := uint(n.BitLen())
 	for _, src := range []string{"#m#e1/" + longDigits, "#m#e" + longDigits + "/7"} {
 		t.Run(src[:12], func(t *testing.T) {
 			c := qt.New(t)
@@ -129,9 +132,30 @@ func TestLongPrecisionLiteralPastCapIsRefused(t *testing.T) {
 			c := qt.New(t)
 			env := environment.NewNamespace().Runtime()
 			_, err := NewParser(env, true, strings.NewReader(src)).ReadSyntax(context.TODO())
-			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, werr.ErrInvalidFormat), qt.IsTrue, qt.Commentf("err: %v", err))
 		})
 	}
 	c := qt.New(t)
 	c.Assert(readBigFloat(c, "#m"+strings.Repeat("7", 19000)), qt.IsNotNil)
+}
+
+// TestOverCapExactAndUnmarkedLiteralsStillRead: the cap bounds explicit
+// precision requests, not literals that never produce a BigFloat (#e re-reads
+// the text as a ratio) or that asked for no precision.
+func TestOverCapExactAndUnmarkedLiteralsStillRead(t *testing.T) {
+	over := strings.Repeat("7", 20000)
+	for _, src := range []string{"#e" + over + ".5", over + ".5", "#e1." + over + "e400"} {
+		t.Run(src[:8], func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			_, err := NewParser(env, true, strings.NewReader(src)).ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+		})
+	}
+}
+
+func TestTrailingFractionZerosAddNoPrecision(t *testing.T) {
+	c := qt.New(t)
+	bf := readBigFloat(c, "1."+strings.Repeat("0", 20000)+"l0")
+	c.Assert(bf.BigFloatValue().Prec(), qt.Equals, uint(values.DefaultBigFloatPrecision))
 }

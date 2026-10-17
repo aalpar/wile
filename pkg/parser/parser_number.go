@@ -234,7 +234,7 @@ func (p *Parser) widenToBigFloat(stx syntax.SyntaxValue, _ tokenizer.Token) (syn
 		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
 	case *values.Rational:
 		r := v.Rat()
-		bits := max(r.Num().BitLen(), r.Denom().BitLen()) + 2 // same round-trip margin as decimalLiteralPrecision
+		bits := max(r.Num().BitLen(), r.Denom().BitLen())
 		prec := max(uint(values.DefaultBigFloatPrecision), uint(bits))
 		if prec > values.MaxBigFloatLiteralPrecision {
 			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
@@ -630,7 +630,8 @@ func (p *Parser) parseBigFloat() (syntax.SyntaxValue, tokenizer.Token, error) {
 	s := schemeutil.TrimPrefixCI(p.cur.String(), "#m")
 	q1 := values.NewBigFloatFromString(s)
 	if q1 == nil {
-		return nil, p.cur, NewParserErrorf(p.cur, "invalid big float: %s", p.cur.String())
+		return nil, p.cur, NewParserErrorWithWrapf(werr.ErrInvalidFormat, p.cur,
+			"invalid big float (malformed, or past the %d-bit precision limit): %s", values.MaxBigFloatLiteralPrecision, p.cur.String())
 	}
 	q := p.wrapSyntax(q1, p.cur)
 	return q, p.cur, nil

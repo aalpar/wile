@@ -32,6 +32,8 @@ func TestDecimalLiteralPrecision(t *testing.T) {
 		{"1e400", DefaultBigFloatPrecision},
 		{"0." + strings.Repeat("0", 200) + "1", DefaultBigFloatPrecision},
 		{strings.Repeat("7", 100), 334},
+		{"1." + strings.Repeat("0", 5000), DefaultBigFloatPrecision},
+		{"1" + strings.Repeat("0", 300), 1001},
 		{"-1." + strings.Repeat("7", 99) + "e5", 334},
 	}
 	for _, tc := range tcs {

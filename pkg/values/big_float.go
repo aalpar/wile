@@ -89,6 +89,18 @@ func NewBigFloatFromString(s string) *BigFloat {
 	if prec > MaxBigFloatLiteralPrecision {
 		return nil
 	}
+	return parseDecimalBigFloat(s, prec)
+}
+
+// NewBigFloatFromStringClamped is NewBigFloatFromString for a literal that
+// asked for no particular precision (an unmarked decimal beyond float64 range):
+// past MaxBigFloatLiteralPrecision it keeps the leading bits rather than
+// refusing, because the caller may only want the magnitude, as #e does.
+func NewBigFloatFromStringClamped(s string) *BigFloat {
+	return parseDecimalBigFloat(s, min(decimalLiteralPrecision(s), MaxBigFloatLiteralPrecision))
+}
+
+func parseDecimalBigFloat(s string, prec uint) *BigFloat {
 	v, _, err := big.ParseFloat(s, 10, prec, big.ToNearestEven)
 	if err != nil {
 		return nil
@@ -110,12 +122,18 @@ func decimalLiteralPrecision(s string) uint {
 	if end < 0 {
 		end = len(s)
 	}
+	mantissa := s[:end]
+	if strings.Contains(mantissa, ".") {
+		// Zeros after the point are fractional and add no precision; zeros in
+		// an integer part do (10^k needs k*log2(5) bits), so only trim here.
+		mantissa = strings.TrimRight(mantissa, "0")
+	}
 	digits := strings.TrimLeft(strings.Map(func(r rune) rune {
 		if r >= '0' && r <= '9' {
 			return r
 		}
 		return -1
-	}, s[:end]), "0")
+	}, mantissa), "0")
 	// log2(10) < 3.3220, so floor(3.3220*n) + 2 > n*log2(10) + 1.
 	needed := uint(float64(len(digits))*3.3220) + 2
 	return max(uint(DefaultBigFloatPrecision), needed)
