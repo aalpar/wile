@@ -162,11 +162,11 @@ because the citation is what `make indexlint` counts:
 | `2026-07-28-alocal-capture-safe-proof-for-locals.md` | Phases 1–4 **DONE** (1–3 committed on `feat/callback-conditional-capture`); 19/68 → 42/68 capture-safe stamps, reclaim verdicts unchanged at 19/68 as predicted. Phase 5 (Lever B) open. Prerequisite `47c27f72` landed directly on master, 2026-07-28 |
 | `2026-08-01-scheme-deadline-and-cancellation-cause.md` | Phase 1 **impl-ready**; Phase 2 designed and **gated** on the plan's scoping decision. Exposes the ambient `context.Context`'s deadline and cancellation cause to Scheme |
 | `2026-09-20-defect-closeout-design.md` | Design behind the defect-closeout arc; status lives in the `-impl` hub and phase files |
-| `2026-09-22-defect-closeout-impl.md` | **HUB** of the defect-closeout arc, derived from `2026-09-20-defect-closeout-design.md`. **Split into 11 files 2026-10-02** (one per phase, plus the audit) because the single file had reached 5,220 lines; task IDs, branch names and every word unchanged. Carries the method, the phase map and the first branch. **42 of 97 tasks landed**: P1 all ten, P2 all five, P3 all eighteen (P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` merged 2026-10-03; P3.16 `f94806a8` merged 2026-10-04; P3.17 `4ea9b5b5` and `231d3d95` merged 2026-10-10; P3.18 `24e3b23e`, reduced to a delete, merged 2026-10-14), P4.1 (`669c7b23`, merged 2026-10-14), P4.2 (`3721b540`, merged 2026-10-14), P4.3 (`35e8866a` + `e6ee81c9`, merged 2026-10-14), P4.4 (`9f3f5f1d` + `b5ac075d`, merged 2026-10-15), P4.5 (merged `956604f0`, 2026-10-15), P4.6 (merged `cb4a74f3`, 2026-10-16), P5.9 (merged `775ba045`, 2026-10-16), P4.8 (`2904d82b`, merged `6eed0be2`, 2026-10-16), P7.5 (`9301850b`, merged `05830a9f`, 2026-10-16). The plan's own task records are the status of record — P1's and P2's landings are in the tree but NOT written into their task records, and P1's branch names differ from its table |
+| `2026-09-22-defect-closeout-impl.md` | **HUB** of the defect-closeout arc, derived from `2026-09-20-defect-closeout-design.md`. **Split into 11 files 2026-10-02** (one per phase, plus the audit) because the single file had reached 5,220 lines; task IDs, branch names and every word unchanged. Carries the method, the phase map and the first branch. **43 of 97 tasks landed**: P1 all ten, P2 all five, P3 all eighteen (P3.6 `c83e32c1`, P3.14 `dbb82082`, P3.12 `455ee5ed` and P3.15 `921a53ea` merged 2026-10-03; P3.16 `f94806a8` merged 2026-10-04; P3.17 `4ea9b5b5` and `231d3d95` merged 2026-10-10; P3.18 `24e3b23e`, reduced to a delete, merged 2026-10-14), P4.1 (`669c7b23`, merged 2026-10-14), P4.2 (`3721b540`, merged 2026-10-14), P4.3 (`35e8866a` + `e6ee81c9`, merged 2026-10-14), P4.4 (`9f3f5f1d` + `b5ac075d`, merged 2026-10-15), P4.5 (merged `956604f0`, 2026-10-15), P4.6 (merged `cb4a74f3`, 2026-10-16), P5.9 (merged `775ba045`, 2026-10-16), P4.8 (`2904d82b`, merged `6eed0be2`, 2026-10-16), P7.5 (`9301850b`, merged `05830a9f`, 2026-10-16), P4.7 (`50bebc5f` + `41a1fd37` + `c9bbc0c0` + `ed4597bd`, merged `9e93ca3e`, 2026-10-16). The plan's own task records are the status of record — P1's and P2's landings are in the tree but NOT written into their task records, and P1's branch names differ from its table |
 | `2026-09-22-defect-closeout-audit.md` | **Read once, before the first branch.** The cross-phase audit, five topics: what serializes behind P2's merge (52 of the 82 tasks in P3–P9, measured), which edits two phases both claim, the six fault settlements (A2, C6, D1–D4), the citations and anchors that do not resolve (X1–X6, E1/E1b), and which gates go green without a fix. Fault labels are cited from the phase files, so they must not be renumbered |
-| `2026-09-22-defect-closeout-P4.md` | The expander residue: a definition-site pin decides the form, and operands get expanded. **7/8** (P4.1 `669c7b23`, P4.2 `3721b540`, P4.3 `35e8866a`, P4.4 `9f3f5f1d` + `b5ac075d`, P4.5 `2882da27` + `76e81aac` + `67a59fdc`, P4.6 `e6267d8d` + `c7219b11` + `787a3fea`, P4.8 `2904d82b`), all after P2's window closes (unconditional). P4.7 is a decision |
+| `2026-09-22-defect-closeout-P4.md` | The expander residue: a definition-site pin decides the form, and operands get expanded. **8/8, closed** (P4.1 `669c7b23`, P4.2 `3721b540`, P4.3 `35e8866a`, P4.4 `9f3f5f1d` + `b5ac075d`, P4.5 `2882da27` + `76e81aac` + `67a59fdc`, P4.6 `e6267d8d` + `c7219b11` + `787a3fea`, P4.7 `50bebc5f` + `41a1fd37` + `c9bbc0c0` + `ed4597bd`, P4.8 `2904d82b`), all after P2's window closes (unconditional) |
 | `2026-09-22-defect-closeout-P5.md` | The unit boundary — an included file belongs to the enclosing expansion and validation unit — plus engine-scoped state and the library-env costs. **1/13** (P5.9 `f3c0910b` + `323f2580` + `70211cca`), all after P2's window closes (unconditional). P5.9 done ahead of P4's close, because P4.6 depends on it. P5.7 is a decision |
-| `2026-09-22-defect-closeout-P6.md` | The value surface answers at its edges instead of raising, splitting or silently rounding. **0/15**; five window-constrained, ten free after the registry/core carve-out. P6.7, P6.10, P6.11, P6.13, P6.15 are decisions |
+| `2026-09-22-defect-closeout-P6.md` | The value surface answers at its edges instead of raising, splitting or silently rounding. **0/15**; five window-constrained, ten free after the registry/core carve-out. P6.7, P6.10, P6.13, P6.15 are decisions; P6.11's was taken with P4.7, whose spine turned its gate green on both layers (measured 2026-10-16), so it is the differential row |
 | `2026-09-22-defect-closeout-P7.md` | Provenance: four places that discard a fact the pipeline was already holding stop discarding it (port name, port read position, intro-scope label, origin stamp). **1/7** (P7.5 `9301850b`); T1–T5 before-or-after the window, T6 after, T7 unconstrained |
 | `2026-09-22-defect-closeout-P8.md` | No hand-maintained list stands in for something the tree can derive, and a stale citation is caught by a gate rather than by a reader. **0/14**; four window-constrained, ten free. P8.3 is NOT done — its **Sites** paragraph names `tools/sh/planlint.sh`, and the script has no reverse arm |
 | `2026-09-22-defect-closeout-P9.md` | The never-fork-dependent cleanups: retire what nothing production calls. **0/7**; three window-constrained, four free, and the phase never picks a side on before-or-after |
@@ -2234,6 +2234,54 @@ design. It was lifted out of the `begin-for-syntax` row below, whose ordering ha
   `formPrologue`: "define form must be a proper list") but never sees them. The function-shorthand
   branches already refuse a dotted body. Fix: bail to `formUnchanged`
   unless the value's cdr is `()`, or route the branch through `expectArgs`.
+
+### Filed by the P4.7 crosscheck (2026-10-16)
+
+Pre-existing ER-transformer defects the five-lens review of `fix/er-transformer-keeps-scopes` measured
+on master and on the branch alike. P4.7 made the form's leaves identifiers on both layers, which is
+what makes the first two newly reachable on the default layer. Each is a Go-layer/Scheme-layer
+disagreement on one program, the internal-invariant form of a defect.
+
+- [ ] **Go `rename` of an identifier drops its scopes** [Hygiene, S]: `extractSymbolKey`
+  (`er_macro_rename.go`) reads `v.Key()` off a `*syntax.SyntaxSymbol` and re-resolves the bare name at
+  the definition site. With `(define x 'global)` and `rid` returning `(r (cadr f))`,
+  `(let ((x 'local)) (rid x))` is `global` on Go, `local` on Scheme, whose `(datum->syntax #'k sym)`
+  returns an identifier unchanged. Decide the contract first (refuse an identifier, or keep it as the
+  Scheme shim does), then add a `syntaxLayers` row.
+- [ ] **Go `compare` accepts a bare symbol and resolves it without scopes** [Hygiene, S, needs a
+  decision]: `resolveERIdentifier`'s `*values.Symbol` arm (`er_macro_compare.go`) uses
+  `syntax.AllScopes()`. `(c (cadr f) 'else)` answers on Go, raises on Scheme (`free-identifier=?`:
+  not an identifier); under `(let ((else 1)) (m else))` the Go answer is a hygiene miss. Raising
+  matches the Scheme layer and breaks Go-layer code that compares against a quoted symbol today.
+  `docs/reference/r7rs-differences.md` documents the split.
+- [ ] **A rename pinned to a definition-site binding captures when used as a binder** [Hygiene, M]:
+  `resolveRenamedSymbol` returns the binding's scopes with no intro scope when the name is bound at
+  the definition site, so `(let ((,(r 'tmp) ,a)) …)` captures a pass-through `tmp`. `swap!` of a
+  global `tmp` (`(define tmp 1) (define y 2) (swap! tmp y)`): Go `(1 2)`, Scheme `(2 1)`, on master
+  and after P4.7. The reviewing lens also reported a `syntax-rules`-wrapped variant whose wrong answer
+  changed shape across P4.7 (unverified here).
+- [ ] **Go `rename` cannot see a body-local macro** [Hygiene, S]: an ER macro that renames a
+  `define-syntax` bound in the same body (`(define (q) (define-syntax def5 …) (define-syntax via (er
+  … (r 'def5) …)) (via zz) zz)`) fails "no such binding def5" on Go and answers 5 on Scheme. The
+  rename reads `DefEnv().AtPhase(…)`, which holds no body-local rows.
+- [ ] **Neither syntax converter builds a `*SyntaxBox`, so a box an ER proc passes through comes back
+  holding syntax** [Correctness, S]: `(define-syntax pass (er-macro-transformer (lambda (f r c) (list
+  (r 'quote) (cadr f)))))`, `(pass #&(a b))` is `#&#'(#'a #'b)` on Go (master too) and, since P4.7
+  hands the proc a real box on the Scheme layer, `#&(#'a #'b)` there (master: `(a b)`, the box
+  dropped). Go: `DatumToSyntaxValue`'s box arm (`pkg/schemeutil/syntax.go`) builds
+  `SyntaxObject(Box(syntax))`; Scheme: `datumToSyntaxVisited` (`prim_syntax.go`) has no box arm and
+  treats the box as an opaque atom. Fix both to `syntax.NewSyntaxBox` (the prim_syntax arm needs the
+  vector arm's `visited` check); `TestDatumToSyntaxValue/TestBox` pins the current Go shape. A
+  reviewing lens's scratch patch of both turned the repro to `#&(a b)` on both layers.
+- [ ] **The Scheme syntax layer overflows the Go stack on a cycle reached past its label**
+  [Correctness, S]: `(m #0=(#1=(x . #0#)) #1#)`, master and branch alike. The parser's label wrapper
+  fences `#0=` (and `AddScope` leaves a label unchanged), but `#1#` reaches the raw cyclic pair, and
+  the use-site / intro stamp in `expandMacroInvocation` walks it with `MapSyntaxTree`
+  (`scope_utils.go`), which has no cycle guard. A `fatal error`, so no `recover` contains it. The Go
+  ER layer now answers it (P4.7); `TestP2_ERSpineUnlabeledCycle` is Go-only because of this.
+- [ ] **`ExpandOnce` drops a non-pair cdr** [Correctness, XS]: it replaces a non-`*SyntaxPair` cdr
+  with `SyntaxEmptyList` before invoking the transformer, so `(m . 5)` loses the 5 under
+  `expand-once`; `expandMacroInvocation` passes `expr` through.
 
 ### Closed in Tier 1
 
