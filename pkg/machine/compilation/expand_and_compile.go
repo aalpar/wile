@@ -23,6 +23,37 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
+// NamespaceMaxExpandDepth returns the engine's configured WithMaxExpandDepth
+// bound as seen from env, else DefaultMaxExpandDepth. Nil-safe: frames with no
+// namespace exist (test fixtures, and the thunk frame the compile primitive
+// builds, whose Namespace does not walk to its parent), and a namespace not built
+// by an Engine reports unset. An explicit 0 (unlimited) is returned as 0.
+func NamespaceMaxExpandDepth(env *environment.EnvironmentFrame) int {
+	ns := env.Namespace()
+	if ns == nil {
+		return DefaultMaxExpandDepth
+	}
+	n, ok := ns.MaxExpandDepth()
+	if !ok {
+		return DefaultMaxExpandDepth
+	}
+	return n
+}
+
+// NamespaceInlineThreshold is NamespaceMaxExpandDepth's counterpart for
+// WithInlineThreshold, defaulting to DefaultInlineThreshold.
+func NamespaceInlineThreshold(env *environment.EnvironmentFrame) int {
+	ns := env.Namespace()
+	if ns == nil {
+		return DefaultInlineThreshold
+	}
+	n, ok := ns.InlineThreshold()
+	if !ok {
+		return DefaultInlineThreshold
+	}
+	return n
+}
+
 // ExpandAndCompile runs the expand+compile pipeline on a single syntax value,
 // returning a ready-to-execute template.
 //

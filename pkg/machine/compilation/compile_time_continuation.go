@@ -227,7 +227,7 @@ func NewCompileTimeContinuation(tpl *machine.NativeTemplate, env *environment.En
 		template:        tpl,
 		fileResolver:    resolver,
 		evaluator:       evaluator,
-		inlineThreshold: DefaultInlineThreshold,
+		inlineThreshold: NamespaceInlineThreshold(env),
 	}
 	return q
 }

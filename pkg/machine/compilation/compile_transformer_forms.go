@@ -63,7 +63,7 @@ func (p *CompileTimeContinuation) CompileERMacroTransformerExpr(ctctx CompileTim
 	if err != nil {
 		return p.wrapCompilationError(err)
 	}
-	tpl, err := expandAndCompileScoped(ctctx.Context(), p.env, lambdaExpr, nil, DefaultInlineThreshold, DefaultMaxExpandDepth, p.libraryScope)
+	tpl, err := expandAndCompileScoped(ctctx.Context(), p.env, lambdaExpr, nil, p.inlineThreshold, NamespaceMaxExpandDepth(p.env), p.libraryScope)
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "er-macro-transformer: failed to compile lambda"))
 	}
