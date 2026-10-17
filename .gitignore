@@ -25,7 +25,6 @@ private/
 # confidential material. Going forward is the only direction that works.
 /plans/
 /memory/
-/scheme-corpus/
 
 # Claude Code plugin state: skills scaffolding and the Remember plugin's rolling
 # session history. Agent working memory, not a build input, and .remember/ holds
