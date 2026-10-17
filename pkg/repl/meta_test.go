@@ -1088,3 +1088,38 @@ func TestCmdEdit_FollowsEngineDirectory(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, string(opened), qt.Equals, "sub")
 }
+
+// TestCmdEdit_RelativeEditorFollowsTheProcessDirectory pins that a relative
+// $EDITOR is host configuration, found against the process directory, while
+// the file it is handed follows the engine's. cmd.Dir would otherwise resolve
+// the editor itself against the engine directory too.
+func TestCmdEdit_RelativeEditorFollowsTheProcessDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a /bin/sh editor script")
+	}
+	host := t.TempDir()
+	t.Chdir(host)
+	sub := filepath.Join(host, "sub")
+	qt.Assert(t, os.Mkdir(sub, 0o755), qt.IsNil)
+	qt.Assert(t, os.WriteFile(filepath.Join(sub, "x.scm"), []byte("sub"), 0o644), qt.IsNil)
+	out := filepath.Join(t.TempDir(), "opened")
+	qt.Assert(t, os.Mkdir(filepath.Join(host, "bin"), 0o755), qt.IsNil)
+	qt.Assert(t, os.WriteFile(filepath.Join(host, "bin", "ed"),
+		[]byte("#!/bin/sh\ncat \"$1\" > "+out+"\n"), 0o755), qt.IsNil)
+	t.Setenv("EDITOR", filepath.Join("bin", "ed"))
+
+	eng, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+	qt.Assert(t, err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = eng.Close()
+	})
+	_, err = eng.EvalMultiple(context.Background(), `(set-current-directory! "sub")`)
+	qt.Assert(t, err, qt.IsNil)
+
+	var buf bytes.Buffer
+	NewMetaCommandHandler(eng).cmdEdit([]string{"x.scm"}, &buf)
+	qt.Assert(t, buf.String(), qt.Equals, "")
+	opened, err := os.ReadFile(out)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, string(opened), qt.Equals, "sub")
+}

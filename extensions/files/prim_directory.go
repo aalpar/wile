@@ -15,10 +15,8 @@
 package files
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
@@ -192,20 +190,16 @@ func PrimSetCurrentDirectory(mc machine.CallContext) error {
 		return err
 	}
 	// The stat stands in for the refusals chdir made: a missing path, one that
-	// is not a directory, and one without search permission. Statting target
-	// itself needs x only on its parents; resolving target/. needs it on target
-	// too, which is chdir's own requirement. Neither confinedStat nor
+	// is not a directory (ENOTDIR, from resolving "." under a file), and one
+	// without search permission. Statting target itself needs x only on its
+	// parents; resolving target/. needs it on target too, which is chdir's own
+	// requirement. Neither confinedStat nor
 	// filepath.Join may build the path, since both clean the "/." away. The bare
 	// stat only decides whether to record target, which is already gated, and
 	// every later access below it goes through the confined* helpers.
-	info, err := os.Stat(target + string(filepath.Separator) + ".")
+	_, err = os.Stat(target + string(filepath.Separator) + ".")
 	if err != nil {
 		return werr.WrapForeignFileError(err, "set-current-directory!", path.Value)
-	}
-	if !info.IsDir() {
-		return werr.WrapForeignFileError(
-			&fs.PathError{Op: "stat", Path: target, Err: syscall.ENOTDIR},
-			"set-current-directory!", path.Value)
 	}
 	mc.EnvironmentFrame().Namespace().SetCurrentDirectory(target)
 	mc.SetValue(values.Void)

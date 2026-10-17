@@ -18,6 +18,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -238,4 +239,38 @@ func TestCompleter_FileCompletionFollowsEngineDirectory(t *testing.T) {
 		}
 		c.Assert(got, qt.DeepEquals, tc.want, qt.Commentf("prefix %q", tc.prefix))
 	}
+}
+
+// TestCompleter_FileCompletionFollowsDotDotThroughSymlink pins that a ".."
+// after a symlink in the typed prefix is applied after the link, as the kernel
+// applies it when ,edit opens the file, not erased lexically with the link.
+func TestCompleter_FileCompletionFollowsDotDotThroughSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on Windows")
+	}
+	c := qt.New(t)
+	root := t.TempDir()
+	host := filepath.Join(root, "host")
+	target := filepath.Join(root, "target")
+	c.Assert(os.MkdirAll(filepath.Join(target, "inner"), 0o755), qt.IsNil)
+	c.Assert(os.Mkdir(host, 0o755), qt.IsNil)
+	c.Assert(os.WriteFile(filepath.Join(target, "only-target.scm"), nil, 0o644), qt.IsNil)
+	c.Assert(os.WriteFile(filepath.Join(host, "only-host.scm"), nil, 0o644), qt.IsNil)
+	c.Assert(os.Symlink(filepath.Join(target, "inner"), filepath.Join(host, "link")), qt.IsNil)
+	t.Chdir(host)
+
+	eng, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+	c.Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = eng.Close()
+	})
+
+	sc := repl.NewCompleter(eng, nil)
+	line := []rune(",edit link/../only-")
+	newLines, _ := sc.Do(line, len(line))
+	var got []string
+	for _, l := range newLines {
+		got = append(got, string(l))
+	}
+	c.Assert(got, qt.DeepEquals, []string{"target.scm"})
 }

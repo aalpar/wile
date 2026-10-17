@@ -112,18 +112,24 @@ func (p *Completer) completeFromList(prefix string, candidates []string) ([][]ru
 //
 // The directory is listed, not globbed: the engine directory is a path the user
 // never typed, and a "[" or "*" in it would be read as a pattern and match
-// nothing.
+// nothing. Nor is it cleaned (filepath.Join): a ".." after a symlink must be
+// applied after the link, as the kernel applies it when ,edit opens the file,
+// not erased with it.
 func (p *Completer) completeFilenames(prefix string) ([][]rune, int) {
-	dirPart, file := filepath.Split(prefix)
-	dir := dirPart
-	if dir == "" {
-		dir = "."
-	}
+	// dir is "" (the process directory) or ends in a separator, as dirPart does.
+	dir, file := filepath.Split(prefix)
 	base := engineDir(p.eng)
 	if base != "" && !filepath.IsAbs(dir) {
-		dir = filepath.Join(base, dir)
+		if !os.IsPathSeparator(base[len(base)-1]) {
+			base += string(filepath.Separator)
+		}
+		dir = base + dir
 	}
-	entries, _ := os.ReadDir(dir)
+	listed := dir
+	if listed == "" {
+		listed = "."
+	}
+	entries, _ := os.ReadDir(listed)
 	var results [][]rune
 	for _, e := range entries {
 		name := e.Name()
@@ -131,7 +137,7 @@ func (p *Completer) completeFilenames(prefix string) ([][]rune, int) {
 			continue
 		}
 		suffix := name[len(file):]
-		info, err := os.Stat(filepath.Join(dir, name))
+		info, err := os.Stat(dir + name)
 		if err == nil && info.IsDir() {
 			suffix += "/"
 		}
