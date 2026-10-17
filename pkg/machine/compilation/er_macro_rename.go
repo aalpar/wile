@@ -37,6 +37,11 @@ import (
 // The returned closure accepts a single symbol argument and returns a
 // SyntaxSymbol that resolves to the definition-site binding.
 // Results are cached per symbol name so that (eq? (rename 'x) (rename 'x)) is #t.
+//
+// An identifier argument is returned unchanged, as the Scheme layer's
+// (datum->syntax #'k id) returns it. Its scopes are its meaning: re-resolving
+// its spelling at the definition site would turn a use-site local into the
+// definition-site global of the same name.
 func NewERRenameClosure(
 	defEnv *environment.EnvironmentFrame,
 	introScope *syntax.Scope,
@@ -44,25 +49,27 @@ func NewERRenameClosure(
 	cache := make(map[string]*syntax.SyntaxSymbol)
 
 	fn := func(mc machine.CallContext) error {
-		arg := mc.Arg(0)
-		key, err := extractSymbolKey(arg)
-		if err != nil {
-			return err
-		}
-
-		// Check cache — eq? contract requires same pointer for same symbol name.
-		cached, ok := cache[key]
-		if ok {
-			mc.SetValue(cached)
+		switch v := mc.Arg(0).(type) {
+		case *syntax.SyntaxSymbol:
+			mc.SetValue(v)
 			return nil
+		case *values.Symbol:
+			// Check cache — eq? contract requires same pointer for same symbol name.
+			cached, ok := cache[v.Key]
+			if ok {
+				mc.SetValue(cached)
+				return nil
+			}
+			result := resolveRenamedSymbol(defEnv, v, introScope)
+			cache[v.Key] = result
+			mc.SetValue(result)
+			return nil
+		default:
+			return werr.WrapForeignErrorf(
+				werr.ErrNotASymbol,
+				"er-rename: expected a symbol, got %T", v,
+			)
 		}
-
-		sym := values.NewSymbol(key)
-		result := resolveRenamedSymbol(defEnv, sym, introScope)
-
-		cache[key] = result
-		mc.SetValue(result)
-		return nil
 	}
 
 	cls := machine.NewForeignClosure(defEnv, 1, false, fn)
@@ -137,19 +144,4 @@ func symbolWithBindingScopes(key string, bnd *environment.Binding, env *environm
 	}
 
 	return result
-}
-
-// extractSymbolKey extracts the string key from a symbol or syntax symbol argument.
-func extractSymbolKey(arg values.Value) (string, error) {
-	switch v := arg.(type) {
-	case *values.Symbol:
-		return v.Key, nil
-	case *syntax.SyntaxSymbol:
-		return v.Key(), nil
-	default:
-		return "", werr.WrapForeignErrorf(
-			werr.ErrNotASymbol,
-			"er-rename: expected a symbol, got %T", arg,
-		)
-	}
 }

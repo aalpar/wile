@@ -93,10 +93,8 @@ func TestERRename_SyntaxSymbolInput(t *testing.T) {
 	_, err := mc.ApplyCallable(rename, input)
 	c.Assert(err, qt.IsNil)
 
-	result := mc.GetValue()
-	ss, ok := result.(*syntax.SyntaxSymbol)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(ss.Key(), qt.Equals, "define")
+	// An identifier comes back unchanged: its scopes are its meaning.
+	c.Assert(mc.GetValue() == values.Value(input), qt.IsTrue)
 }
 
 func TestERRename_RejectsNonSymbol(t *testing.T) {

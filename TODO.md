@@ -166,7 +166,7 @@ because the citation is what `make indexlint` counts:
 | `2026-09-22-defect-closeout-audit.md` | **Read once, before the first branch.** The cross-phase audit, five topics: what serializes behind P2's merge (52 of the 82 tasks in P3–P9, measured), which edits two phases both claim, the six fault settlements (A2, C6, D1–D4), the citations and anchors that do not resolve (X1–X6, E1/E1b), and which gates go green without a fix. Fault labels are cited from the phase files, so they must not be renumbered |
 | `2026-09-22-defect-closeout-P4.md` | The expander residue: a definition-site pin decides the form, and operands get expanded. **8/8, closed** (P4.1 `669c7b23`, P4.2 `3721b540`, P4.3 `35e8866a`, P4.4 `9f3f5f1d` + `b5ac075d`, P4.5 `2882da27` + `76e81aac` + `67a59fdc`, P4.6 `e6267d8d` + `c7219b11` + `787a3fea`, P4.7 `50bebc5f` + `41a1fd37` + `c9bbc0c0` + `ed4597bd`, P4.8 `2904d82b`), all after P2's window closes (unconditional) |
 | `2026-09-22-defect-closeout-P5.md` | The unit boundary — an included file belongs to the enclosing expansion and validation unit — plus engine-scoped state and the library-env costs. **1/13** (P5.9 `f3c0910b` + `323f2580` + `70211cca`), all after P2's window closes (unconditional). P5.9 done ahead of P4's close, because P4.6 depends on it. P5.7 is a decision |
-| `2026-09-22-defect-closeout-P6.md` | The value surface answers at its edges instead of raising, splitting or silently rounding. **1/15** (P6.11 `fddda8c2`, merged `c291cebf`: the differential row only, the code change being P4.7's spine); five window-constrained, ten free after the registry/core carve-out. P6.7, P6.10, P6.13, P6.15 are decisions. I172's rename residual stays open under "Filed by the P4.7 crosscheck" |
+| `2026-09-22-defect-closeout-P6.md` | The value surface answers at its edges instead of raising, splitting or silently rounding. **1/15** (P6.11 `fddda8c2`, merged `c291cebf`: the differential row only, the code change being P4.7's spine); five window-constrained, ten free after the registry/core carve-out. P6.7, P6.10, P6.13, P6.15 are decisions. I172's rename residual is fixed on `fix/er-rename-keeps-identifier` (unmerged), under "Filed by the P4.7 crosscheck" |
 | `2026-09-22-defect-closeout-P7.md` | Provenance: four places that discard a fact the pipeline was already holding stop discarding it (port name, port read position, intro-scope label, origin stamp). **1/7** (P7.5 `9301850b`); T1–T5 before-or-after the window, T6 after, T7 unconstrained |
 | `2026-09-22-defect-closeout-P8.md` | No hand-maintained list stands in for something the tree can derive, and a stale citation is caught by a gate rather than by a reader. **0/14**; four window-constrained, ten free. P8.3 is NOT done — its **Sites** paragraph names `tools/sh/planlint.sh`, and the script has no reverse arm |
 | `2026-09-22-defect-closeout-P9.md` | The never-fork-dependent cleanups: retire what nothing production calls. **0/7**; three window-constrained, four free, and the phase never picks a side on before-or-after |
@@ -2242,12 +2242,14 @@ on master and on the branch alike. P4.7 made the form's leaves identifiers on bo
 what makes the first two newly reachable on the default layer. Each is a Go-layer/Scheme-layer
 disagreement on one program, the internal-invariant form of a defect.
 
-- [ ] **Go `rename` of an identifier drops its scopes** [Hygiene, S]: `extractSymbolKey`
-  (`er_macro_rename.go`) reads `v.Key()` off a `*syntax.SyntaxSymbol` and re-resolves the bare name at
+- [x] **Go `rename` of an identifier drops its scopes** [Hygiene, S]: `extractSymbolKey`
+  (`er_macro_rename.go`) read `v.Key()` off a `*syntax.SyntaxSymbol` and re-resolved the bare name at
   the definition site. With `(define x 'global)` and `rid` returning `(r (cadr f))`,
-  `(let ((x 'local)) (rid x))` is `global` on Go, `local` on Scheme, whose `(datum->syntax #'k sym)`
-  returns an identifier unchanged. Decide the contract first (refuse an identifier, or keep it as the
-  Scheme shim does), then add a `syntaxLayers` row.
+  `(let ((x 'local)) (rid x))` was `global` on Go, `local` on Scheme, whose `(datum->syntax #'k sym)`
+  returns an identifier unchanged. **Contract: keep it**, as the Scheme shim does (refusing would
+  make the Go layer reject a program the Scheme layer runs). `NewERRenameClosure` returns an identifier argument unchanged
+  and caches only bare symbols; pinned by `TestP2_ERRenameOfAnIdentifierKeepsIt` (both layers).
+  Branch `fix/er-rename-keeps-identifier`, unmerged.
 - [ ] **Go `compare` accepts a bare symbol and resolves it without scopes** [Hygiene, S, needs a
   decision]: `resolveERIdentifier`'s `*values.Symbol` arm (`er_macro_compare.go`) uses
   `syntax.AllScopes()`. `(c (cadr f) 'else)` answers on Go, raises on Scheme (`free-identifier=?`:

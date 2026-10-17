@@ -408,6 +408,34 @@ func TestP2_ERDatumToSyntaxOnAFormLeaf(t *testing.T) {
 	}
 }
 
+// TestP2_ERRenameOfAnIdentifierKeepsIt (I172): rename of an identifier returns
+// it unchanged, as the Scheme shim's (datum->syntax #'k id) does. Re-resolving
+// its spelling at the definition site answers global: the use-site local is
+// lost along with the scopes.
+func TestP2_ERRenameOfAnIdentifierKeepsIt(t *testing.T) {
+	const rid = `(import (for-syntax (scheme base)))  ; cadr
+(define-syntax rid (er-macro-transformer (lambda (f r c) (r (cadr f)))))
+(define-syntax rid-eq (er-macro-transformer (lambda (f r c) (list (r 'quote) (eq? (r (cadr f)) (cadr f))))))
+(define x 'global)
+`
+	tcs := []struct {
+		name string
+		use  string
+		want string
+	}{
+		{"denotes the use-site local", `(let ((x 'local)) (rid x))`, "local"},
+		{"denotes the use-site global", `(rid x)`, "global"},
+		{"is the identifier itself", `(rid-eq x)`, "#t"},
+	}
+	for _, tc := range tcs {
+		for _, l := range syntaxLayers {
+			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
+				qt.Assert(t, evalSyntaxForms(t, rid+tc.use, withStdlibResolver(l.opt)...), qt.Equals, tc.want)
+			})
+		}
+	}
+}
+
 // TestP2_ERSpineContainers: a box and a cyclic datum in the form are plain
 // values to the proc, not syntax. A box unwrapped one level would arrive as its
 // content; a cyclic datum walked as a spine would never terminate.
