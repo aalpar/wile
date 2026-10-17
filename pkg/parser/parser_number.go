@@ -206,7 +206,8 @@ func (p *Parser) widenToBigInteger(stx syntax.SyntaxValue, _ tokenizer.Token) (s
 // be inexact: #m5 is 5.0 at 256-bit precision, as it was before #m became an
 // introducer.
 //
-// Precision is the value's, not the literal's. #m#x1.8 widens the Float 1.5, so
+// Precision is the value's, not the literal's, floored at 256 bits and widened
+// to the operand's bit length for an exact integer or ratio. #m#x1.8 widens the Float 1.5, so
 // it carries float64 precision rather than 256 bits, while the one-token decimal
 // spelling #m1.2345678901234567890123456789 keeps every digit. Consulting how
 // the operand was spelled is exactly what the introducer model gives up, and
@@ -223,10 +224,13 @@ func (p *Parser) widenToBigFloat(stx syntax.SyntaxValue, _ tokenizer.Token) (syn
 		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt64(v.Value)
 		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
 	case *values.BigInteger:
-		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt(v.BigInt())
+		n := v.BigInt()
+		bf := new(big.Float).SetPrec(max(uint(values.DefaultBigFloatPrecision), uint(n.BitLen()))).SetInt(n)
 		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
 	case *values.Rational:
-		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetRat(v.Rat())
+		r := v.Rat()
+		bits := max(r.Num().BitLen(), r.Denom().BitLen())
+		bf := new(big.Float).SetPrec(max(uint(values.DefaultBigFloatPrecision), uint(bits))).SetRat(r)
 		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,

@@ -70,14 +70,38 @@ func NewBigFloatFromFloat64(v float64) *BigFloat {
 	return &BigFloat{value: big.NewFloat(v).SetPrec(DefaultBigFloatPrecision)}
 }
 
-// NewBigFloatFromString creates a new BigFloat from a string.
+// NewBigFloatFromString creates a new BigFloat from a decimal string.
 // Returns nil if the string is not a valid number.
+//
+// Precision grows with the literal: a fixed 256 bits keeps about 77 digits, so
+// a longer literal would silently lose its tail. DefaultBigFloatPrecision is the
+// floor, so short literals are unchanged.
 func NewBigFloatFromString(s string) *BigFloat {
-	v, _, err := big.ParseFloat(s, 10, DefaultBigFloatPrecision, big.ToNearestEven)
+	v, _, err := big.ParseFloat(s, 10, decimalLiteralPrecision(s), big.ToNearestEven)
 	if err != nil {
 		return nil
 	}
 	return &BigFloat{value: v}
+}
+
+// decimalLiteralPrecision returns the bits needed to hold the significant
+// digits of a decimal literal exactly: ceil(digits * log2(10)), floored at
+// DefaultBigFloatPrecision. Only the mantissa counts; the exponent is not a
+// digit of precision.
+func decimalLiteralPrecision(s string) uint {
+	end := strings.IndexAny(s, "eE")
+	if end < 0 {
+		end = len(s)
+	}
+	digits := strings.TrimLeft(strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, s[:end]), "0")
+	// log2(10) < 3.3220, so 3.3220*n rounds up safely; the +1 covers rounding.
+	needed := uint(float64(len(digits))*3.3220) + 1
+	return max(uint(DefaultBigFloatPrecision), needed)
 }
 
 // recoverNaN wraps a big.Float operation that may panic with big.ErrNaN.
