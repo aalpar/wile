@@ -23,8 +23,8 @@
 # the directory, because the list is the thing being derived. A hand-written set
 # of expected members would make the check agree with whoever wrote the set.
 #
-# Membership test, both directions: the name appears anywhere in TODO.md, by
-# literal substring. Deliberately loose -- this asks whether the index knows the
+# Membership test, both directions: the name appears anywhere in TODO.md or
+# todo/*.md (one corpus since the 2026-10-17 split), by literal substring. Deliberately loose -- this asks whether the index knows the
 # item exists at all, not whether the row says anything true. planlint.sh is
 # what reads the row.
 #
@@ -56,6 +56,17 @@ if [ ! -f "$INDEX_FILE" ]; then
     exit 0
 fi
 
+# The index of record is TODO.md plus the todo/*.md files it was split into on
+# 2026-10-17 (TODO.md "Layout"): the hub holds the Plan Index, the tier files
+# hold the rows. Membership is tested against their concatenation, so a row
+# counts wherever it lives. Messages keep naming $INDEX_FILE.
+INDEX_CORPUS="$INDEX_FILE"
+if [ -f "$INDEX_FILE" ] && [ -d "$(dirname "$INDEX_FILE")/todo" ]; then
+    INDEX_CORPUS="$(mktemp)"
+    trap 'rm -f "$INDEX_CORPUS"' EXIT
+    cat "$INDEX_FILE" "$(dirname "$INDEX_FILE")"/todo/*.md > "$INDEX_CORPUS"
+fi
+
 findings=0
 
 # ---------------------------------------------------------------------------
@@ -70,7 +81,7 @@ if [ -d "$PLANS_DIR" ]; then
     for plan in "$PLANS_DIR"/*.md; do
         [ -f "$plan" ] || continue
         plans_total=$((plans_total + 1))
-        grep -qF "$(basename "$plan")" "$INDEX_FILE" && continue
+        grep -qF "$(basename "$plan")" "$INDEX_CORPUS" && continue
         plans_missing=$((plans_missing + 1))
         missing_list="$missing_list  $plan"$'\n'
     done
@@ -141,7 +152,7 @@ if [ -d "$REVIEWS_DIR" ]; then
         while IFS= read -r cited; do
             [ -n "$cited" ] || continue
             total=$((total + 1))
-            grep -qF "$cited" "$INDEX_FILE" && continue
+            grep -qF "$cited" "$INDEX_CORPUS" && continue
             missing=$((missing + 1))
             missing_list="$missing_list  $cited"$'\n'
         done < <(confirmed_citations "$review")

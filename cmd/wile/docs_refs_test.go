@@ -194,12 +194,22 @@ func atOrBeyondAny(path string, links []string) bool {
 // uncleanedDocs are the tracked docs that still cite gitignored working notes.
 // They predate this guard, which exists to stop the set from growing: a doc not
 // listed here must keep its references resolvable in a fresh clone. Delete an
-// entry once its references are inlined or dropped — never add one.
+// entry once its references are inlined or dropped — never add one. The
+// todo/*.md entries are not additions: they are the files TODO.md was split
+// into on 2026-10-17, carrying its rows and its citations verbatim.
 var uncleanedDocs = map[string]bool{
 	".github/pull_request_template.md":       true,
 	"CHANGELOG.md":                           true,
 	"CODING_STYLE.md":                        true,
 	"TODO.md":                                true,
+	"todo/closed.md":                         true,
+	"todo/exceptions-and-rejected.md":        true,
+	"todo/tier1-security-correctness.md":     true,
+	"todo/tier2-embedding-api.md":            true,
+	"todo/tier3-tooling-dx.md":               true,
+	"todo/tier4-performance.md":              true,
+	"todo/tier5-tech-debt.md":                true,
+	"todo/tier6-nice-to-haves.md":            true,
 	"docs/algebra/reference.md":              true,
 	"docs/compiler/inlining.md":              true,
 	"docs/compiler/macro-system.md":          true,
@@ -380,28 +390,28 @@ var correctedDocClaims = []correctedDocClaim{
 	},
 	{
 		name:  "TODO_versioned_name_rejected",
-		doc:   "TODO.md",
+		doc:   "todo/tier6-nice-to-haves.md",
 		stale: "import-set resolver rejects a list as a name part",
 		why: "The resolver accepts a list in the final position and drops it as an R6RS version " +
 			"reference; only a list elsewhere in the name is an error.",
 	},
 	{
 		name:  "TODO_four_blind_guards",
-		doc:   "TODO.md",
+		doc:   "todo/tier5-tech-debt.md",
 		stale: "and 4 more are guarded by a test",
 		why: "Three, not four: TestRunEval is not blind. runCLI re-execs the test binary through " +
 			"TestMain, which calls main(), so go-flags parsing is exercised end to end.",
 	},
 	{
 		name:  "TODO_sameImportedBinding",
-		doc:   "TODO.md",
+		doc:   "todo/tier1-security-correctness.md",
 		stale: "`sameImportedBinding`",
 		why: "Deleted by 5d654b3f (2026-09-16). The live symbol is importConflicts " +
 			"(pkg/machine/compilation/library_bindings.go), which compares provenance roots.",
 	},
 	{
 		name:  "TODO_origin_rejected_for_import_conflict",
-		doc:   "TODO.md",
+		doc:   "todo/tier1-security-correctness.md",
 		stale: "REJECTED for import-conflict detection",
 		why: "Provenance-root origin is what SHIPPED for import-conflict detection (5d654b3f); " +
 			"importConflicts compares *OriginRef and nothing else. What PR #793 rejected was a " +
@@ -409,7 +419,7 @@ var correctedDocClaims = []correctedDocClaim{
 	},
 	{
 		name:  "TODO_compileTransformerToMachineClosure",
-		doc:   "TODO.md",
+		doc:   "todo/tier1-security-correctness.md",
 		stale: "`compileTransformerToMachineClosure`",
 		why: "Absent from every .go file. The live symbol is compileTransformerValue " +
 			"(pkg/machine/compilation/compile_transformer.go:60), which expands and evaluates the " +
@@ -418,7 +428,7 @@ var correctedDocClaims = []correctedDocClaim{
 	},
 	{
 		name:  "TODO_TestMachineClosureIsTwoWords",
-		doc:   "TODO.md",
+		doc:   "todo/tier4-performance.md",
 		stale: "`TestMachineClosureIsTwoWords`",
 		why: "Absent from every .go file. The live pin is TestMachineClosureSize " +
 			"(pkg/machine/machine_closure_test.go:44), and it asserts FIVE words, not two: " +
@@ -427,14 +437,14 @@ var correctedDocClaims = []correctedDocClaim{
 	},
 	{
 		name:  "TODO_applyClosure",
-		doc:   "TODO.md",
+		doc:   "todo/tier4-performance.md",
 		stale: "`applyClosure`",
 		why: "Absent from every .go file. The apply path is (*MachineContext).Apply " +
 			"(pkg/machine/machine_context_apply.go:28).",
 	},
 	{
 		name:  "TODO_TestLibraryExportTakesFirstPresentPhase",
-		doc:   "TODO.md",
+		doc:   "todo/tier1-security-correctness.md",
 		stale: "`TestLibraryExportTakesFirstPresentPhase`",
 		why: "Renamed by d691ded5 (2026-09-17), which retired the export-phase fork the old name " +
 			"asserted. The live test is TestLibraryExportRoundTripByPhase " +
