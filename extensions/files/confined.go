@@ -18,8 +18,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // When the engine's authorizer confines file access to a root directory, the
@@ -31,9 +35,31 @@ import (
 // the root. When the authorizer imposes no root (e.g. an unrestricted engine),
 // the helpers fall back to the plain os operation on the original path.
 //
-// Exception: set-current-directory! has no os.Root counterpart for chdir. It
-// enters the path unconfinedTarget resolves and re-gates, confined or not; the
-// TOCTOU window between that resolution and os.Chdir is not closed.
+// Every path reaches these helpers absolute, resolved against the ENGINE's
+// current directory by enginePath. A relative path handed to the os package is
+// resolved against the host process's working directory instead, which is a
+// different directory once set-current-directory! has run, so the authorizer
+// would judge one file and the syscall touch another.
+
+// enginePath resolves written, a path argument of op, against the engine's
+// current directory (environment.Namespace.ResolvePath). The result is what the
+// authorizer judges and what the confined* helpers receive; written stays the
+// caller's spelling, which diagnostics report.
+//
+// The empty string names no file, and is refused as absent (ENOENT, what the
+// kernel answers for it) rather than passed on: filepath.EvalSymlinks and
+// filepath.Abs both read "" as ".", the HOST's directory, so it would reach a
+// directory the engine never entered.
+func enginePath(mc machine.CallContext, op string, written *values.String) (string, error) {
+	if written.Value == "" {
+		return "", werr.WrapForeignFileError(syscall.ENOENT, op, written.Value)
+	}
+	q, err := mc.EnvironmentFrame().Namespace().ResolvePath(written.Value)
+	if err != nil {
+		return "", werr.WrapForeignFileError(err, op, written.Value)
+	}
+	return q, nil
+}
 
 // relWithinRoot expresses target relative to root. It tolerates root itself
 // being a symlink (e.g. macOS /tmp -> /private/tmp) by retrying against the

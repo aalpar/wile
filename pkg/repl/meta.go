@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -627,11 +628,26 @@ func (p *MetaCommandHandler) cmdEdit(args []string, out io.Writer) {
 	}
 
 	parts := strings.Fields(editor)
+	// A relative $EDITOR with a directory in it is host configuration, found
+	// against the process directory; cmd.Dir below would resolve it against the
+	// engine's. A bare name is a PATH lookup and needs nothing.
+	name := parts[0]
+	if !filepath.IsAbs(name) && strings.ContainsAny(name, "/"+string(filepath.Separator)) {
+		abs, err := filepath.Abs(name)
+		if err != nil {
+			fmt.Fprintf(out, "Error: $EDITOR: %v\n", err)
+			return
+		}
+		name = abs
+	}
 	cmdArgs := append(parts[1:], args[0])
-	cmd := exec.CommandContext(context.Background(), parts[0], cmdArgs...)
+	cmd := exec.CommandContext(context.Background(), name, cmdArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	// A relative file names one in the engine's current directory, the file
+	// load would then run; "" leaves the editor in the process directory.
+	cmd.Dir = engineDir(p.eng)
 
 	err := cmd.Run()
 	if err != nil {

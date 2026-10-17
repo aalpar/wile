@@ -11,7 +11,7 @@ This document catalogs differences between the current implementation and the R7
 20 known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Correct for string, bytevector and regular-file ports; on a port that can block (stdin, a pipe) the `#t` is a promise the next read may break.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
-3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
+3. `set-current-directory!` changes an **engine-scoped** current directory, not the process's working directory: the host and every other engine are unaffected, and relative paths the engine resolves (file primitives, `load`/`include`, a spawned process's start directory) resolve against it. Until it is first called, the engine follows the host's working directory live. Host-side resolution (a relative target handed straight to `pkg/security`'s containment check, the CLI's script argument) still uses the process directory.
 4. Vector and bytevector literals are **immutable** — mutating one **raises an error** (R7RS permits but does not require this detection), matching immutable string literals. Pair literals are **not** detected: the flag would have to grow the cons cell, and R7RS does not require the detection.
 5. **Default** (opt out with `WithMutableTopLevel`): a defined-once, never-`set!`-in-unit top-level `define` in the user program is immutable, so a `set!` or re-`define` of it from a later compilation unit **raises an error**, and code already compiled against a sealed base binding does not observe a later shadowing re-`define` (Chez two-environment model). User-loaded libraries stay mutable. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
 6. Importing one identifier from two libraries with **different** bindings **raises an error** (`ErrDuplicateBinding`) rather than silently letting the last import win. R7RS §5.2 makes this "an error" (undefined) but does not require signalling; Wile signals it, matching Chez/Racket. Re-export diamonds and repeated imports stay legal.
@@ -892,13 +892,17 @@ this layer only in corner cases where the two models are known to disagree.
 The phase forms `define-for-syntax`, `begin-for-syntax`, `meta` and `eval-when` are
 also beyond R7RS-small and are documented with the environment system rather than here.
 
-### Process-Global Working Directory
+### Engine-Scoped Current Directory
 
 **Primitive:** `set-current-directory!`
 
-**Behavior:** Calls `os.Chdir`, which changes the working directory for the entire OS process. Multiple Wile engines in the same Go process share one working directory. Concurrent calls from different goroutines race on the same OS state. This is inherent to POSIX — there is no per-thread working directory.
+**Behavior:** Records the symlink-resolved destination as the engine's current directory (`environment.Namespace.SetCurrentDirectory`); the process's working directory is never changed, so neither the host nor another engine in the same process moves. Every namespace of the engine, including `(environment …)` children, shares the one directory. Relative paths are resolved against it before they reach the authorizer or a syscall, so an authorizer's `AccessRequest.Target` for a file primitive is absolute even when the program wrote a relative path. Until the first call, `(current-directory)` and every resolution read the host's working directory live, so an engine that never enters a directory follows a host that chdirs.
 
-**Mitigation:** The primitive is gated by `security.ResourceFile` / `security.ActionWrite` with the *destination path* as the target, so embedders can deny it via their authorizer, and a path-confining authorizer evaluates the new working directory rather than an opaque `"cwd"` target it would never inspect. When denied, all file operations should use absolute paths.
+**Gating:** `security.ResourceFile` / `security.ActionWrite` with the *destination path* as the target, so embedders can deny it via their authorizer, and a path-confining authorizer evaluates the new directory rather than an opaque `"cwd"` target it would never inspect.
+
+**A path, not a handle:** the engine holds the directory's path, where `chdir` held the directory itself. If the entered directory is renamed, relative paths fail (a process cwd would have followed it); if it is deleted and another is created at the same path, they resolve into the new one (a process cwd would have failed with `ENOENT`).
+
+**Host-side residue:** two resolutions have no engine to consult and still use the process directory: `pkg/security`'s containment check on a relative `Target` (it imports only `pkg/werr`, so it cannot see a namespace; Wile's own gate sites hand it absolute paths), and the script path the `wile` CLI is given. The REPL's `,edit` and its filename completion resolve against the engine's directory.
 
 R7RS does not specify directory operations. This follows SRFI-170 conventions.
 

@@ -51,6 +51,10 @@ type containmentStep struct {
 func resolveForContainment(p string) (string, bool) {
 	abs := p
 	if !filepath.IsAbs(abs) {
+		// The PROCESS directory, not an engine's: this package sees no
+		// namespace, so a relative target is judged where the host is. Wile's
+		// gate sites resolve against the engine directory first and hand over
+		// an absolute path; only an embedder's own relative request lands here.
 		wd, err := os.Getwd()
 		if err != nil {
 			return "", false

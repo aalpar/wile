@@ -18,6 +18,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -193,4 +194,83 @@ func TestCompleter_DoReturnsRuneOffset(t *testing.T) {
 			c.Assert(length, qt.Equals, tt.want)
 		})
 	}
+}
+
+// TestCompleter_FileCompletionFollowsEngineDirectory pins that a relative
+// ,edit prefix completes against the ENGINE's current directory, the one load
+// resolves against, not the host's. Each name exists in only one of the two.
+func TestCompleter_FileCompletionFollowsEngineDirectory(t *testing.T) {
+	c := qt.New(t)
+	// The host directory's name is a glob pattern ("[1]" is a character class),
+	// so completion that globs a resolved path matches nothing at all.
+	host := filepath.Join(t.TempDir(), "a[1]")
+	c.Assert(os.Mkdir(host, 0o755), qt.IsNil)
+	t.Chdir(host)
+	sub := filepath.Join(host, "sub")
+	c.Assert(os.Mkdir(sub, 0o755), qt.IsNil)
+	c.Assert(os.WriteFile(filepath.Join(host, "only-host.scm"), nil, 0o644), qt.IsNil)
+	c.Assert(os.WriteFile(filepath.Join(sub, "only-sub.scm"), nil, 0o644), qt.IsNil)
+	c.Assert(os.Mkdir(filepath.Join(sub, "inner"), 0o755), qt.IsNil)
+	c.Assert(os.WriteFile(filepath.Join(sub, "inner", "deep.scm"), nil, 0o644), qt.IsNil)
+
+	eng, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+	c.Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = eng.Close()
+	})
+	_, err = eng.EvalMultiple(context.Background(), `(set-current-directory! "sub")`)
+	c.Assert(err, qt.IsNil)
+
+	sc := repl.NewCompleter(eng, nil)
+	for _, tc := range []struct {
+		prefix string
+		want   []string
+	}{
+		{"only-", []string{"sub.scm"}},
+		{"inner/d", []string{"eep.scm"}},
+		{"./only-", []string{"sub.scm"}},
+	} {
+		line := []rune(",edit " + tc.prefix)
+		newLines, length := sc.Do(line, len(line))
+		c.Assert(length, qt.Equals, len([]rune(tc.prefix)), qt.Commentf("prefix %q", tc.prefix))
+		var got []string
+		for _, l := range newLines {
+			got = append(got, string(l))
+		}
+		c.Assert(got, qt.DeepEquals, tc.want, qt.Commentf("prefix %q", tc.prefix))
+	}
+}
+
+// TestCompleter_FileCompletionFollowsDotDotThroughSymlink pins that a ".."
+// after a symlink in the typed prefix is applied after the link, as the kernel
+// applies it when ,edit opens the file, not erased lexically with the link.
+func TestCompleter_FileCompletionFollowsDotDotThroughSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on Windows")
+	}
+	c := qt.New(t)
+	root := t.TempDir()
+	host := filepath.Join(root, "host")
+	target := filepath.Join(root, "target")
+	c.Assert(os.MkdirAll(filepath.Join(target, "inner"), 0o755), qt.IsNil)
+	c.Assert(os.Mkdir(host, 0o755), qt.IsNil)
+	c.Assert(os.WriteFile(filepath.Join(target, "only-target.scm"), nil, 0o644), qt.IsNil)
+	c.Assert(os.WriteFile(filepath.Join(host, "only-host.scm"), nil, 0o644), qt.IsNil)
+	c.Assert(os.Symlink(filepath.Join(target, "inner"), filepath.Join(host, "link")), qt.IsNil)
+	t.Chdir(host)
+
+	eng, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+	c.Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = eng.Close()
+	})
+
+	sc := repl.NewCompleter(eng, nil)
+	line := []rune(",edit link/../only-")
+	newLines, _ := sc.Do(line, len(line))
+	var got []string
+	for _, l := range newLines {
+		got = append(got, string(l))
+	}
+	c.Assert(got, qt.DeepEquals, []string{"target.scm"})
 }

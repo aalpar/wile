@@ -78,10 +78,6 @@ func TestPrivilegedExtensionsDenyUnderDenyAll(t *testing.T) {
 // a vocabulary FilesystemRoot never inspects — so chdir escaped the root. The
 // re-gate to {file, write, path} puts the destination back under containment.
 func TestSetCurrentDirectoryConfinedToRoot(t *testing.T) {
-	origWD, err := os.Getwd()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { _ = os.Chdir(origWD) }()
-
 	rootDir := t.TempDir()
 	insideDir := filepath.Join(rootDir, "sub")
 	qt.Assert(t, os.Mkdir(insideDir, 0o755), qt.IsNil)
@@ -94,7 +90,7 @@ func TestSetCurrentDirectoryConfinedToRoot(t *testing.T) {
 	)
 	qt.Assert(t, err, qt.IsNil)
 
-	// Escaping the root must be denied (no chdir happens — the gate runs first).
+	// Escaping the root must be denied (nothing is entered — the gate runs first).
 	_, err = engine.EvalMultiple(context.Background(),
 		fmt.Sprintf(`(set-current-directory! %q)`, outsideDir))
 	qt.Assert(t, err, qt.IsNotNil)
@@ -113,18 +109,10 @@ func TestSetCurrentDirectoryConfinedToRoot(t *testing.T) {
 //
 // Two authorities, two regressions. FilesystemRoot: containment used to clean
 // ".." lexically before resolving symlinks, so it admitted the spelling. The
-// lexical authorizer: set-current-directory! used to chdir to the raw string
+// lexical authorizer: set-current-directory! used to enter the raw string
 // rather than the resolved path it re-gates, so a spelling-only gate let the
 // kernel's resolution escape.
-//
-// Not parallel: os.Chdir is process-global.
 func TestSetCurrentDirectorySymlinkDotDotConfinedToRoot(t *testing.T) {
-	origWD, err := os.Getwd()
-	qt.Assert(t, err, qt.IsNil)
-	t.Cleanup(func() {
-		_ = os.Chdir(origWD)
-	})
-
 	// Resolved so the lexical authorizer can compare the re-gated real path.
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	qt.Assert(t, err, qt.IsNil)
@@ -161,17 +149,15 @@ func TestSetCurrentDirectorySymlinkDotDotConfinedToRoot(t *testing.T) {
 
 			_, err = engine.EvalMultiple(context.Background(),
 				fmt.Sprintf(`(set-current-directory! %q)`, escape))
-			wd, wdErr := os.Getwd()
-			qt.Assert(t, wdErr, qt.IsNil)
-			qt.Assert(t, err, qt.ErrorIs, security.ErrAccessDenied, qt.Commentf("cwd is now %s", wd))
+			qt.Assert(t, err, qt.ErrorIs, security.ErrAccessDenied)
 
 			// ".." after a real directory still resolves, to the root itself.
 			_, err = engine.EvalMultiple(context.Background(),
 				fmt.Sprintf(`(set-current-directory! %q)`, inside))
 			qt.Assert(t, err, qt.IsNil)
-			wd, wdErr = os.Getwd()
-			qt.Assert(t, wdErr, qt.IsNil)
-			qt.Assert(t, wd, qt.Equals, rootDir)
+			wd, err := engine.EvalMultiple(context.Background(), `(current-directory)`)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, wd.SchemeString(), qt.Equals, fmt.Sprintf("%q", rootDir))
 		})
 	}
 }

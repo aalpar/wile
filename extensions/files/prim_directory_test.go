@@ -17,9 +17,12 @@ package files_test
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"syscall"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -169,24 +172,87 @@ func TestSetCurrentDirectory(t *testing.T) {
 	engine := newEngine(t)
 	c := qt.New(t)
 
-	origDir, err := os.Getwd()
+	hostBefore, err := os.Getwd()
 	c.Assert(err, qt.IsNil)
-	t.Cleanup(func() {
-		os.Chdir(origDir) //nolint:errcheck
-	})
 
-	t.Run("changes directory", func(t *testing.T) {
+	t.Run("changes the engine directory, not the host's", func(t *testing.T) {
 		target := t.TempDir()
 		eval(t, engine, fmt.Sprintf(`(set-current-directory! %q)`, target))
-		wd, err := os.Getwd()
+		resolvedTarget, err := filepath.EvalSymlinks(target)
 		c.Assert(err, qt.IsNil)
-		resolvedTarget, _ := filepath.EvalSymlinks(target)
-		resolvedWd, _ := filepath.EvalSymlinks(wd)
-		c.Assert(resolvedWd, qt.Equals, resolvedTarget)
+		result := eval(t, engine, fmt.Sprintf(
+			`(string=? (current-directory) %q)`, resolvedTarget))
+		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+		hostAfter, err := os.Getwd()
+		c.Assert(err, qt.IsNil)
+		c.Assert(hostAfter, qt.Equals, hostBefore)
 	})
 
 	t.Run("error if nonexistent", func(t *testing.T) {
 		evalExpectError(t, engine, `(set-current-directory! "/nonexistent/path/12345")`)
+	})
+
+	// "" names no file. filepath.EvalSymlinks reads it as ".", the host's
+	// directory, which once left the engine holding the relative path ".".
+	t.Run("empty path is refused", func(t *testing.T) {
+		eval(t, engine, fmt.Sprintf(`(set-current-directory! %q)`, t.TempDir()))
+		before := eval(t, engine, `(current-directory)`)
+		_, err := engine.EvalMultiple(context.Background(), `(set-current-directory! "")`)
+		c.Assert(err, qt.ErrorIs, fs.ErrNotExist)
+		after := eval(t, engine, `(current-directory)`)
+		c.Assert(after.SchemeString(), qt.Equals, before.SchemeString())
+		_, err = engine.EvalMultiple(context.Background(), `(directory-files "")`)
+		c.Assert(err, qt.ErrorIs, fs.ErrNotExist)
+		_, err = engine.EvalMultiple(context.Background(), `(open-input-file "")`)
+		c.Assert(err, qt.ErrorIs, fs.ErrNotExist)
+		result := eval(t, engine, `(file-exists? "")`)
+		c.Assert(result.Internal(), qt.Equals, values.FalseValue)
+	})
+
+	t.Run("error if not a directory", func(t *testing.T) {
+		file := filepath.Join(t.TempDir(), "f")
+		c.Assert(os.WriteFile(file, nil, 0o644), qt.IsNil)
+		before := eval(t, engine, `(current-directory)`)
+		_, err := engine.EvalMultiple(context.Background(),
+			fmt.Sprintf(`(set-current-directory! %q)`, file))
+		c.Assert(err, qt.ErrorIs, syscall.ENOTDIR)
+		after := eval(t, engine, `(current-directory)`)
+		c.Assert(after.SchemeString(), qt.Equals, before.SchemeString())
+	})
+
+	// chdir requires search (x) permission on the target itself, which a stat
+	// of the target does not: stat needs x only on the parents. Read alone is
+	// not enough, and x alone is.
+	t.Run("refuses a directory it cannot search", func(t *testing.T) {
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			t.Skip("POSIX permission bits; root bypasses them")
+		}
+		for _, tc := range []struct {
+			mode   os.FileMode
+			enters bool
+		}{
+			{0o000, false},
+			{0o400, false},
+			{0o100, true},
+		} {
+			dir := filepath.Join(t.TempDir(), "d")
+			c.Assert(os.Mkdir(dir, 0o755), qt.IsNil)
+			c.Assert(os.Chmod(dir, tc.mode), qt.IsNil)
+			t.Cleanup(func() {
+				_ = os.Chmod(dir, 0o755)
+			})
+			before := eval(t, engine, `(current-directory)`)
+			_, err := engine.EvalMultiple(context.Background(),
+				fmt.Sprintf(`(set-current-directory! %q)`, dir))
+			after := eval(t, engine, `(current-directory)`)
+			if tc.enters {
+				c.Assert(err, qt.IsNil, qt.Commentf("mode %o", tc.mode))
+				c.Assert(after.SchemeString(), qt.Not(qt.Equals), before.SchemeString())
+				continue
+			}
+			c.Assert(err, qt.ErrorIs, fs.ErrPermission, qt.Commentf("mode %o", tc.mode))
+			c.Assert(after.SchemeString(), qt.Equals, before.SchemeString())
+		}
 	})
 
 	t.Run("wrong type", func(t *testing.T) {

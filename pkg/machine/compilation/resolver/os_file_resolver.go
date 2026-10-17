@@ -31,7 +31,7 @@ import (
 
 // OSFileResolver resolves files from the operating system filesystem,
 // using the load path stack, library registry, SCHEME_INCLUDE_PATH,
-// and CWD as fallback directories. It also enforces security authorization.
+// and the engine's current directory as fallback directories. It also enforces security authorization.
 type OSFileResolver struct {
 	env *environment.EnvironmentFrame
 }
@@ -163,12 +163,13 @@ func classifyStatFailure(candidate string, statErr error) error {
 
 // osAbsSearchDirs returns the ordered, absolute search directories:
 // load-path-stack current dir first (if set), then the configured OS search
-// dirs. Paths that fail filepath.Abs are dropped.
+// dirs. Paths that cannot be resolved are dropped.
 //
 // Duplicates are dropped after absolutization, keeping the first occurrence.
-// The library registry's default "." and the CWD entry absolutize to the same
-// directory, so without this the CWD was stat'd twice and named twice in the
-// not-found diagnostic ("searched: /home/x/, /home/x/").
+// The library registry's default "." and the current-directory entry
+// absolutize to the same directory, so without this the directory was stat'd
+// twice and named twice in the not-found diagnostic ("searched: /home/x/,
+// /home/x/").
 func (p *OSFileResolver) osAbsSearchDirs(ctx context.Context) []string {
 	var dirs []string
 
@@ -176,7 +177,7 @@ func (p *OSFileResolver) osAbsSearchDirs(ctx context.Context) []string {
 	if s != nil {
 		cur := s.CurrentDir()
 		if cur != "" && cur != "." {
-			dirs = append(dirs, cur)
+			dirs = append(dirs, absSearchDirs(p.env.Namespace(), []string{cur})...)
 		}
 	}
 
@@ -185,16 +186,12 @@ func (p *OSFileResolver) osAbsSearchDirs(ctx context.Context) []string {
 	seen := values.NewStringSet(len(dirs))
 	q := make([]string, 0, len(dirs))
 	for _, d := range dirs {
-		abs, err := filepath.Abs(d)
-		if err != nil {
-			continue
-		}
-		dup := seen.ContainsOne(abs)
+		dup := seen.ContainsOne(d)
 		if dup {
 			continue
 		}
-		seen.Set(abs)
-		q = append(q, abs)
+		seen.Set(d)
+		q = append(q, d)
 	}
 	return q
 }
@@ -210,7 +207,8 @@ func (p *OSFileResolver) buildSearchedList(dirs []string) []string {
 }
 
 // EnumerateFiles walks the OS filesystem to discover .sld/.scm files.
-// Searches osSearchDirs: library registry paths, SCHEME_INCLUDE_PATH, and CWD.
+// Searches osSearchDirs: library registry paths, SCHEME_INCLUDE_PATH, and the
+// engine's current directory.
 // Unlike ResolveAndOpen it does NOT consult the load-path stack's current
 // directory, nor fall back to the filesystem root.
 //

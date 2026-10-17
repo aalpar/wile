@@ -474,6 +474,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING: `set-current-directory!` changes an engine-scoped directory, never
+  the process's (I186).** It called `os.Chdir`, so one engine entering a
+  directory moved the host and every other engine in the process. The directory
+  is now engine state (`environment.Namespace.SetCurrentDirectory`), shared by
+  the engine's namespaces and nothing else; until it is first set, the engine
+  reads the host's working directory live, so a host that chdirs is still
+  followed. Every relative path the engine resolves goes through it: the file
+  primitives, `load`/`include`/library search (including the registry's default
+  `"."`), and a spawned process's start directory. Two embedder-visible
+  consequences: a host that relied on a Scheme `set-current-directory!` moving
+  its own directory no longer sees it move, and a file primitive's
+  `AccessRequest.Target` is now absolute (resolved against the engine directory)
+  where it used to be the program's spelling; diagnostics still report the
+  spelling. The empty path is refused as absent by every file primitive (it was
+  read as `"."`, so `(directory-files "")` listed the host's directory and
+  `(set-current-directory! "")` would have stored a relative `"."`).
+  The REPL's `,edit` and its filename completion follow the engine directory
+  too; `pkg/security`'s containment check and the CLI's script argument still
+  resolve a relative path against the process directory. An empty search-path
+  entry (a stray separator in `SCHEME_INCLUDE_PATH`) means the engine
+  directory, as `"."` does. `set-current-directory!` refuses a directory
+  without search permission, as `chdir` did.
+  A `noProcessGlobalMutation` ruleguard rule keeps `os.Chdir` out of production
+  code.
+
 - **BREAKING: `er-macro-transformer`'s procedure receives identifiers as syntax
   objects (I031).** The default Go syntax forms used to unwrap the whole macro
   use, so a form element was a symbol and an identifier passed through
