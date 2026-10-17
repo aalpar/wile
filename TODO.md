@@ -2247,9 +2247,17 @@ disagreement on one program, the internal-invariant form of a defect.
   the definition site. With `(define x 'global)` and `rid` returning `(r (cadr f))`,
   `(let ((x 'local)) (rid x))` was `global` on Go, `local` on Scheme, whose `(datum->syntax #'k sym)`
   returns an identifier unchanged. **Contract: keep it**, as the Scheme shim does (refusing would
-  make the Go layer reject a program the Scheme layer runs). `NewERRenameClosure` returns an identifier argument unchanged
-  and caches only bare symbols; pinned by `TestP2_ERRenameOfAnIdentifierKeepsIt` (both layers).
-  Branch `fix/er-rename-keeps-identifier`, unmerged.
+  make the Go layer reject a program the Scheme layer runs). `NewERRenameClosure` returns an
+  identifier argument unchanged and caches only bare symbols; pinned by
+  `TestP2_ERRenameOfAnIdentifierKeepsIt` (both layers). Branch `fix/er-rename-keeps-identifier`,
+  unmerged.
+- [ ] **Go and Scheme `rename` still disagree off the identifier path** [Hygiene, S, needs a
+  decision]: filed by the I172 crosscheck, measured on both layers. A non-symbol datum: `(r 5)` raises
+  `ErrNotASymbol` on Go (`NewERRenameClosure`'s default arm) and is `5` on Scheme, whose
+  `(datum->syntax #'k sym)` converts any datum. Two bare-symbol renames: `(eq? (r 'x) (r 'x))` is
+  `#t` on Go (the per-name cache) and `#f` on Scheme (a fresh syntax object per call). Decide the
+  contract (Go accepts any datum, or the shim refuses one; the shim memoizes, or Go stops promising
+  `eq?`), then add a `syntaxLayers` row per arm.
 - [ ] **Go `compare` accepts a bare symbol and resolves it without scopes** [Hygiene, S, needs a
   decision]: `resolveERIdentifier`'s `*values.Symbol` arm (`er_macro_compare.go`) uses
   `syntax.AllScopes()`. `(c (cadr f) 'else)` answers on Go, raises on Scheme (`free-identifier=?`:

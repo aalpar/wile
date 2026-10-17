@@ -34,14 +34,13 @@ import (
 // introScope is a fresh scope unique to this macro invocation, used to ensure
 // that renamed symbols not found in defEnv (e.g., temporary names like 'tmp)
 // get a unique identity that prevents variable capture.
-// The returned closure accepts a single symbol argument and returns a
-// SyntaxSymbol that resolves to the definition-site binding.
-// Results are cached per symbol name so that (eq? (rename 'x) (rename 'x)) is #t.
-//
-// An identifier argument is returned unchanged, as the Scheme layer's
-// (datum->syntax #'k id) returns it. Its scopes are its meaning: re-resolving
-// its spelling at the definition site would turn a use-site local into the
-// definition-site global of the same name.
+// The returned closure takes one symbol or identifier. A bare symbol becomes a
+// SyntaxSymbol resolving to the definition-site binding, cached per name so
+// that (eq? (rename 'x) (rename 'x)) is #t. An identifier is returned
+// unchanged, as the Scheme layer's (datum->syntax #'k id) returns it, and never
+// enters the cache: its scopes are its meaning, and re-resolving its spelling
+// at the definition site would turn a use-site local into the definition-site
+// global of the same name.
 func NewERRenameClosure(
 	defEnv *environment.EnvironmentFrame,
 	introScope *syntax.Scope,
@@ -67,7 +66,7 @@ func NewERRenameClosure(
 		default:
 			return werr.WrapForeignErrorf(
 				werr.ErrNotASymbol,
-				"er-rename: expected a symbol, got %T", v,
+				"er-rename: expected a symbol or identifier, got %T", v,
 			)
 		}
 	}

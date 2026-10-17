@@ -31,7 +31,7 @@ const erRenamePhase1Prologue = "(import (for-syntax (rename (scheme base) (car p
 // in, which is the phase of the `define-syntax`, NOT the phase the transformer
 // BODY runs at.
 //
-// The contract is Clinger 1991's — rename "maps an identifier into the macro's
+// The contract is Clinger 1991's — rename "maps a symbol into the macro's
 // definition environment" (BIBLIOGRAPHY.md) — read against a phase tower Clinger
 // did not have, and design §3.5 fixes the reading: rename is
 // `(lambda (sym) (datum->syntax #'k sym))`, where `k` is the

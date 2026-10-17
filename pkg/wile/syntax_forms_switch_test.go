@@ -411,11 +411,15 @@ func TestP2_ERDatumToSyntaxOnAFormLeaf(t *testing.T) {
 // TestP2_ERRenameOfAnIdentifierKeepsIt (I172): rename of an identifier returns
 // it unchanged, as the Scheme shim's (datum->syntax #'k id) does. Re-resolving
 // its spelling at the definition site answers global: the use-site local is
-// lost along with the scopes.
+// lost along with the scopes. The identifier must not enter the per-name cache
+// either, or a later (r 'x) answers the use-site local (rboth).
 func TestP2_ERRenameOfAnIdentifierKeepsIt(t *testing.T) {
 	const rid = `(import (for-syntax (scheme base)))  ; cadr
 (define-syntax rid (er-macro-transformer (lambda (f r c) (r (cadr f)))))
 (define-syntax rid-eq (er-macro-transformer (lambda (f r c) (list (r 'quote) (eq? (r (cadr f)) (cadr f))))))
+(define-syntax rboth (er-macro-transformer (lambda (f r c) (r (cadr f)) (r 'x))))
+(define-syntax rbind (er-macro-transformer (lambda (f r c) (list (r 'let) (list (list (r (cadr f)) 1)) (cadr f)))))
+(define-syntax via (syntax-rules () ((_) (let ((x 'via)) (rid x)))))
 (define x 'global)
 `
 	tcs := []struct {
@@ -426,6 +430,9 @@ func TestP2_ERRenameOfAnIdentifierKeepsIt(t *testing.T) {
 		{"denotes the use-site local", `(let ((x 'local)) (rid x))`, "local"},
 		{"denotes the use-site global", `(rid x)`, "global"},
 		{"is the identifier itself", `(rid-eq x)`, "#t"},
+		{"does not enter the symbol cache", `(let ((x 'local)) (rboth x))`, "global"},
+		{"binds the use-site name", `(rbind y)`, "1"},
+		{"keeps a syntax-rules scope", `(via)`, "via"},
 	}
 	for _, tc := range tcs {
 		for _, l := range syntaxLayers {

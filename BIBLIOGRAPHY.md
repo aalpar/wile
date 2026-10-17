@@ -363,7 +363,7 @@ Extends hygiene with the dual property: free identifiers in a macro template mus
 
 ### Explicit Renaming Macros (Clinger 1991)
 
-The procedural escape hatch beside `syntax-rules`. An `er-macro-transformer` receives the form plus a `rename` procedure (which maps an identifier into the macro's definition environment) and a `compare` procedure (which tests two identifiers for binding equivalence); hygiene becomes something the macro author invokes explicitly rather than something the pattern language guarantees. Wile implements this as a transformer kind alongside `syntax-rules`, so the same expander drives both.
+The procedural escape hatch beside `syntax-rules`. An `er-macro-transformer` receives the form plus a `rename` procedure (which maps a symbol into the macro's definition environment; Wile returns an identifier unchanged, since its scopes already say what it denotes) and a `compare` procedure (which tests two identifiers for binding equivalence); hygiene becomes something the macro author invokes explicitly rather than something the pattern language guarantees. Wile implements this as a transformer kind alongside `syntax-rules`, so the same expander drives both.
 
 - **Paper**: William Clinger, "Hygienic Macros Through Explicit Renaming", ACM SIGPLAN Lisp Pointers, Vol. IV, No. 4, 1991
 - **DOI**: https://doi.org/10.1145/1317265.1317269
