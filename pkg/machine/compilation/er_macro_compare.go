@@ -105,7 +105,7 @@ func resolveERIdentifier(env *environment.EnvironmentFrame, id values.Value) (*e
 	default:
 		return nil, "", werr.WrapForeignErrorf(
 			werr.ErrNotASymbol,
-			"er-compare: expected a symbol, got %T", id,
+			"er-compare: expected a symbol or identifier, got %T", id,
 		)
 	}
 }
