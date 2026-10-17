@@ -207,8 +207,8 @@ func (p *Parser) widenToBigInteger(stx syntax.SyntaxValue, _ tokenizer.Token) (s
 // introducer.
 //
 // Precision is the value's, not the literal's, floored at 256 bits and widened
-// to the operand's bit length for an exact integer or ratio. #m#x1.8 widens the Float 1.5, so
-// it carries float64 precision rather than 256 bits, while the one-token decimal
+// to the operand's bit length for an exact integer or ratio. #m#x1.8 widens the
+// Float 1.5, so it carries float64 precision rather than 256 bits, while the one-token decimal
 // spelling #m1.2345678901234567890123456789 keeps every digit. Consulting how
 // the operand was spelled is exactly what the introducer model gives up, and
 // re-reading the inner token to recover it would make #m inspect its operand's
@@ -225,12 +225,22 @@ func (p *Parser) widenToBigFloat(stx syntax.SyntaxValue, _ tokenizer.Token) (syn
 		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
 	case *values.BigInteger:
 		n := v.BigInt()
-		bf := new(big.Float).SetPrec(max(uint(values.DefaultBigFloatPrecision), uint(n.BitLen()))).SetInt(n)
+		prec := max(uint(values.DefaultBigFloatPrecision), uint(n.BitLen()))
+		if prec > values.MaxBigFloatLiteralPrecision {
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
+				"widenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
+		}
+		bf := new(big.Float).SetPrec(prec).SetInt(n)
 		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
 	case *values.Rational:
 		r := v.Rat()
-		bits := max(r.Num().BitLen(), r.Denom().BitLen())
-		bf := new(big.Float).SetPrec(max(uint(values.DefaultBigFloatPrecision), uint(bits))).SetRat(r)
+		bits := max(r.Num().BitLen(), r.Denom().BitLen()) + 2 // same round-trip margin as decimalLiteralPrecision
+		prec := max(uint(values.DefaultBigFloatPrecision), uint(bits))
+		if prec > values.MaxBigFloatLiteralPrecision {
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
+				"widenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
+		}
+		bf := new(big.Float).SetPrec(prec).SetRat(r)
 		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,

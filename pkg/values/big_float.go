@@ -32,6 +32,13 @@ var (
 // DefaultBigFloatPrecision is the default precision for BigFloat values.
 const DefaultBigFloatPrecision = 256
 
+// MaxBigFloatLiteralPrecision bounds the precision derived from a literal's own
+// length (about 19,700 decimal digits). Printing a big.Float is superlinear in
+// its precision and cannot be interrupted mid-call, so an unbounded derived
+// precision lets a one-line string->number input stall the VM; past the cap the
+// literal is refused rather than silently truncated.
+const MaxBigFloatLiteralPrecision = 1 << 16
+
 // LongPrecisionMarker is the R7RS §6.2.5 exponent marker for long precision,
 // which is what a BigFloat has. It is the reader's request for this type and
 // the writer's declaration of it — see BigFloat.SchemeString and
@@ -75,19 +82,29 @@ func NewBigFloatFromFloat64(v float64) *BigFloat {
 //
 // Precision grows with the literal: a fixed 256 bits keeps about 77 digits, so
 // a longer literal would silently lose its tail. DefaultBigFloatPrecision is the
-// floor, so short literals are unchanged.
+// floor, so short literals are unchanged. A literal needing more than
+// MaxBigFloatLiteralPrecision bits is refused (nil).
 func NewBigFloatFromString(s string) *BigFloat {
-	v, _, err := big.ParseFloat(s, 10, decimalLiteralPrecision(s), big.ToNearestEven)
+	prec := decimalLiteralPrecision(s)
+	if prec > MaxBigFloatLiteralPrecision {
+		return nil
+	}
+	v, _, err := big.ParseFloat(s, 10, prec, big.ToNearestEven)
 	if err != nil {
 		return nil
 	}
 	return &BigFloat{value: v}
 }
 
-// decimalLiteralPrecision returns the bits needed to hold the significant
-// digits of a decimal literal exactly: ceil(digits * log2(10)), floored at
+// decimalLiteralPrecision returns the bits needed for the significant digits of
+// a decimal literal to survive a read/print round trip, floored at
 // DefaultBigFloatPrecision. Only the mantissa counts; the exponent is not a
 // digit of precision.
+//
+// An n-digit integer is exact at ceil(n*log2(10)) bits, but a fraction must
+// also print back as the same n digits, which needs 2^(p-1) > 10^n (Matula), so
+// p >= n*log2(10) + 1. The +2 below meets that for every leading digit; +1 left
+// literals starting with 8 or 9 one unit off in the last place.
 func decimalLiteralPrecision(s string) uint {
 	end := strings.IndexAny(s, "eE")
 	if end < 0 {
@@ -99,8 +116,8 @@ func decimalLiteralPrecision(s string) uint {
 		}
 		return -1
 	}, s[:end]), "0")
-	// log2(10) < 3.3220, so 3.3220*n rounds up safely; the +1 covers rounding.
-	needed := uint(float64(len(digits))*3.3220) + 1
+	// log2(10) < 3.3220, so floor(3.3220*n) + 2 > n*log2(10) + 1.
+	needed := uint(float64(len(digits))*3.3220) + 2
 	return max(uint(DefaultBigFloatPrecision), needed)
 }
 

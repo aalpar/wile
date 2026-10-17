@@ -149,6 +149,9 @@ func TestMakeRectangularExactTypes(t *testing.T) {
 		// Rational parts (toExactBigComplexPart Rational case)
 		{"make-rectangular rational parts real", `(< (abs (- (real-part (make-rectangular 3/4 1/2)) 0.75)) 1e-10)`, values.TrueValue},
 
+		// A rational part widens at the default 256 bits, as arithmetic promotion does.
+		{"make-rectangular rational part keeps default precision", `(= (real-part (make-rectangular 1/3 #m1.0)) (* #m1.0 1/3))`, values.TrueValue},
+
 		// #e1.0+0.0i used to read as an exact BigComplex with an EXACT zero
 		// imaginary part — a value the rest of the tower says cannot exist.
 		// It passed isRealNumber and bothExact, then fell through every arm of

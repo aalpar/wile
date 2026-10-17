@@ -60,17 +60,24 @@ func TestLongPrecisionIntegerLiteralIsExact(t *testing.T) {
 // through #m, or through the R7RS l marker, come back out unchanged.
 func TestLongPrecisionLiteralRoundTrips(t *testing.T) {
 	const mantissa = "1." + longDigits
+	const nine = "9." + longDigits
+	const matula = "8.350121711170800908915733448512723488856342658525180108977596578509172053145559"
 	tcs := []struct {
-		name, src string
+		name, src, want string
 	}{
-		{"hash-m", "#m" + mantissa},
-		{"l-marker", mantissa + "l0"},
+		{"hash-m", "#m" + mantissa, mantissa},
+		{"l-marker", mantissa + "l0", mantissa},
+		// float64 overflows, so this reaches NewBigFloatFromString via ErrRange.
+		{"range-overflow", mantissa + "e400", mantissa + "l+400"},
+		{"leading-9", "#m" + nine, nine},
+		// 79 digits, leading 8: fails a +1 bit bound (Matula), found by crosscheck.
+		{"matula-79", "#m" + matula, matula},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			bf := readBigFloat(c, tc.src)
-			c.Assert(strings.Contains(bf.SchemeString(), longDigits), qt.IsTrue,
+			c.Assert(strings.HasPrefix(bf.SchemeString(), tc.want), qt.IsTrue,
 				qt.Commentf("digits lost: %s", bf.SchemeString()))
 		})
 	}
@@ -79,7 +86,7 @@ func TestLongPrecisionLiteralRoundTrips(t *testing.T) {
 // TestShortBigFloatLiteralKeepsDefaultPrecision pins the floor: the change only
 // widens, so short literals and widened small operands stay at 256 bits.
 func TestShortBigFloatLiteralKeepsDefaultPrecision(t *testing.T) {
-	for _, src := range []string{"#m1.5", "#m5", "#m#e5", "1.5l0", "#m#e5/3"} {
+	for _, src := range []string{"#m1.5", "#m5", "#m#z5", "#m#e5", "1.5l0", "#m#e5/3"} {
 		t.Run(src, func(t *testing.T) {
 			c := qt.New(t)
 			bf := readBigFloat(c, src)
@@ -92,9 +99,39 @@ func TestShortBigFloatLiteralKeepsDefaultPrecision(t *testing.T) {
 // a #z BigInteger datum widens at no less than the operand's bit length.
 func TestWidenToBigFloatBigIntegerIsExact(t *testing.T) {
 	c := qt.New(t)
-	want, _ := new(big.Int).SetString(longDigits, 10)
+	want, ok := new(big.Int).SetString(longDigits, 10)
+	c.Assert(ok, qt.IsTrue)
 	bf := readBigFloat(c, "#m#z"+longDigits)
 	got, acc := bf.BigFloatValue().Int(nil)
 	c.Assert(acc, qt.Equals, big.Exact)
 	c.Assert(got.Cmp(want), qt.Equals, 0)
+}
+
+// TestWidenToBigFloatRationalKeepsOperandBits: a ratio over a 100-digit
+// denominator must widen at no fewer bits than the denominator (or numerator).
+func TestWidenToBigFloatRationalKeepsOperandBits(t *testing.T) {
+	bits := uint(len(longDigits)) * 332 / 100
+	for _, src := range []string{"#m#e1/" + longDigits, "#m#e" + longDigits + "/7"} {
+		t.Run(src[:12], func(t *testing.T) {
+			c := qt.New(t)
+			bf := readBigFloat(c, src)
+			c.Assert(bf.BigFloatValue().Prec() >= bits, qt.IsTrue, qt.Commentf("prec %d", bf.BigFloatValue().Prec()))
+		})
+	}
+}
+
+// TestLongPrecisionLiteralPastCapIsRefused: derived precision is bounded, and
+// past the bound the reader errors instead of truncating.
+func TestLongPrecisionLiteralPastCapIsRefused(t *testing.T) {
+	over := strings.Repeat("7", 20000)
+	for _, src := range []string{"#m" + over, over + ".5l0", "#m#z" + over, "#m#e1/" + over} {
+		t.Run(src[:8], func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			_, err := NewParser(env, true, strings.NewReader(src)).ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNotNil)
+		})
+	}
+	c := qt.New(t)
+	c.Assert(readBigFloat(c, "#m"+strings.Repeat("7", 19000)), qt.IsNotNil)
 }
