@@ -21,12 +21,17 @@ recorded in that task's record in `plans/2026-09-22-defect-closeout-P5.md`.
   a mid-file read error from "earlier declarations processed" to "none processed", so it is a
   decision, not a rename. When it is made, `findFile` has no production caller left (its other two
   are tests) and goes with it.
-- [ ] **The default file resolver is spelled four times** [Tech debt, XS]: "`env.FileResolver()`,
-  else `NewOSFileResolver(env)`" is in `NewCompileTimeContinuation`,
-  `CompileTimeContinuation.SetFileResolver`, `NewExpanderTimeContinuation` and
-  `ExpanderTimeContinuation.SetFileResolver`. A `defaultFileResolver(env)` helper removes the drift
-  risk. Moot if P5.7 takes the option that makes `env.FileResolver()` the only authority and deletes
-  the expander field.
+- [ ] **`ExpandAndCompile`'s `resolver` parameter and the compiler's resolver override have no
+  caller that needs them** [Tech debt, M, API]: `CompileTimeContinuation.fileResolver` defaults to
+  `env.FileResolver()`, and the parameter is the only way to override it. Every production caller
+  passes nil (`engine.go:845`, `:1493`; `prim_eval.go:140`, `:238`, `:684`) except
+  `load_bootstrap.go:runBootstrapStx`, whose embed resolver serves seven sources that contain no
+  `(include` or `(cond-expand`. Make `env.FileResolver()` the only resolver: drop the parameter, the
+  compiler's `SetFileResolver`, and the duplicated default in `NewCompileTimeContinuation`, and have
+  bootstrap install the embed resolver on `env` for its pass. `ExpandAndCompile` is exported, so this
+  breaks any out-of-tree caller that passes a non-nil resolver; not checked, which is why it is a
+  row. Decided 2026-10-18 (owner): the expander reads `env.FileResolver()` (option A), and this wider
+  removal is filed rather than done.
 
 ### Filed by the P3.15 crosscheck (2026-10-03)
 
