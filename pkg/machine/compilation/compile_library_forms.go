@@ -68,9 +68,19 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 
 	// Create isolated library environment with primitives
 	// The library gets its own bindings but shares the Namespace for syntax interning
+	//
+	// Consume the hint FIRST, before anything in the body can compile a nested
+	// (define-library ...) on this compiler: a late clear would let that one
+	// reuse this library's environment.
 	var libEnv *environment.EnvironmentFrame
+	hint := p.libEnvHint
+	p.libEnvHint = nil
 	factory := p.env.Namespace().LibraryEnvFactory()
-	if factory != nil {
+	if hint != nil {
+		// compileLibrary already built this environment to read and expand the
+		// form; the factory would only mint a structural sibling and drop it.
+		libEnv = hint
+	} else if factory != nil {
 		libEnv, err = factory(ctctx.ctx, p.env, libName.Parts)
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-library: could not create library environment"))

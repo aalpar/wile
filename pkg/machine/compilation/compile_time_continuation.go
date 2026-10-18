@@ -62,6 +62,14 @@ type CompileTimeContinuation struct {
 	// Defaults to the resolver stored on Namespace (usually
 	// OSFileResolver); set to EmbedFileResolver for bootstrap.
 	fileResolver FileResolver
+	// libEnvHint is the library environment compileLibrary already minted to
+	// read and expand a file library's (define-library ...) form. The
+	// define-library arm of CompileDefineLibrary consumes and clears it, so the
+	// form keeps that environment instead of asking the factory for a second
+	// and discarding the first. nil on every compiler that is not compiling a
+	// file library's own form, so an inline (define-library ...) still mints
+	// its own.
+	libEnvHint *environment.EnvironmentFrame
 	// evaluator abstracts VM execution for compile-time evaluation
 	// and transformer invocation so the compiler can be tested
 	// without the concrete VM.
