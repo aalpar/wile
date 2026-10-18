@@ -16,6 +16,7 @@ package process_test
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"runtime"
 	"testing"
@@ -31,6 +32,7 @@ import (
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/testutil"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -160,6 +162,20 @@ func TestProcessKill(t *testing.T) {
 			  (process-kill proc 'term)
 			  (process-wait proc))
 		`)
+	})
+
+	t.Run("unknown signal names the host and the offered set", func(t *testing.T) {
+		// The signal lookup precedes the not-running check, so a reaped
+		// process reaches it without any cleanup.
+		expr, err := engine.Parse(context.Background(), `
+			(let ((proc (process-spawn "true")))
+			  (process-wait proc)
+			  (process-kill proc 'bogus))
+		`)
+		qt.Assert(t, err, qt.IsNil)
+		_, err = engine.Eval(context.Background(), expr)
+		qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
+		qt.Assert(t, err, qt.ErrorMatches, `(?s).*unknown signal 'bogus' on `+runtime.GOOS+` \(expected .*\).*`)
 	})
 
 	t.Run("invalid signal", func(t *testing.T) {

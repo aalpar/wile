@@ -19,7 +19,7 @@ import (
 	"errors"
 	"os/exec"
 	"path/filepath"
-	"syscall"
+	"runtime"
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
@@ -85,7 +85,8 @@ func gateExecutable(mc machine.CallContext, cmd *exec.Cmd) error {
 }
 
 // PrimSystem implements the (system) primitive.
-// Runs a shell command via /bin/sh -c and returns the exit code.
+// Runs a shell command via the host shell (/bin/sh -c; cmd.exe /c on Windows)
+// and returns the exit code.
 func PrimSystem(mc machine.CallContext) error {
 	command, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "system")
 	if err != nil {
@@ -99,7 +100,13 @@ func PrimSystem(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(mc.Context(), "/bin/sh", "-c", command.Value)
+	shell := hostShell()
+	cmd := exec.CommandContext(mc.Context(), shell.path, shell.flag, command.Value)
+	// A bare shell name (cmd.exe) is LookPath-resolved; report a failure here
+	// rather than gating an unresolved path. See PrimProcessSpawn.
+	if cmd.Err != nil {
+		return werr.WrapForeignProcessError(cmd.Err, "system", command.Value)
+	}
 	// The shell is a host binary this primitive names on the program's behalf.
 	// process:exec-shell above answers "may it run a shell at all"; these two
 	// answer "this shell, from this directory" — the questions a path-confining
@@ -273,16 +280,9 @@ func PrimProcessWait(mc machine.CallContext) error {
 	return nil
 }
 
-// signalMap maps Scheme signal symbols to OS signals.
-var signalMap = map[string]syscall.Signal{
-	"term": syscall.SIGTERM,
-	"kill": syscall.SIGKILL,
-	"int":  syscall.SIGINT,
-	"hup":  syscall.SIGHUP,
-}
-
 // PrimProcessKill implements the (process-kill) primitive.
-// Sends a signal to the process. Signal is a symbol: term, kill, int, hup.
+// Sends a signal to the process. Signal is a symbol: term, kill, int, hup;
+// only kill on Windows (see signalByGOOS).
 func PrimProcessKill(mc machine.CallContext) error {
 	proc, err := helpers.RequireArg[*values.Process](mc, 0, werr.ErrNotAProcess, "process-kill")
 	if err != nil {
@@ -292,12 +292,13 @@ func PrimProcessKill(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	sig, ok := signalMap[sigSym.Key]
+	signals := hostSignals()
+	sig, ok := lookupSignal(signals, sigSym.Key)
 	if !ok {
 		return werr.WrapForeignErrorf(
 			werr.ErrInvalidArgument,
-			"process-kill: unknown signal '%s' (expected term, kill, int, or hup)",
-			sigSym.Key,
+			"process-kill: unknown signal '%s' on %s (expected %s)",
+			sigSym.Key, runtime.GOOS, signalNames(signals),
 		)
 	}
 	cmd := proc.Cmd()

@@ -2058,6 +2058,29 @@ disagreement on one program, the internal-invariant form of a defect.
   number but got *values.BigFloat"; `#m1/3` reads as `#m1` then symbol `/3`; the `l` marker inside a
   complex literal falls back to float64.
 
+### Filed by the P5.4 crosscheck (2026-10-17)
+
+- [ ] **`system` on Windows alters commands containing `"`** [Correctness, S, unmeasured: no Windows host
+  or CI]: `exec.Command("cmd.exe", "/c", cmd)` quotes the argument for CommandLineToArgvW, which
+  `cmd.exe` does not follow (`os/exec` docs on `Command`), so `(system "echo \"a b\"")` can run a
+  different command and report its exit code as a normal result. Fix: on Windows set
+  `cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: "cmd.exe /c " + command}`; `CmdLine` exists only in
+  Windows builds, so it needs `shell_windows.go` plus a no-op elsewhere, against the GOOS-as-data
+  design of `extensions/process/shell.go`. Documented as a limitation in the `system` Doc string.
+  Verify on a real Windows host before shipping.
+- [ ] **`process-kill` on Windows calls `term`, `int`, `hup` "unknown"** [Design, S]: they are real signal
+  names Windows cannot deliver. A distinct "not supported on this platform" message, or sentinel, is
+  the owner's call; both share `ErrInvalidArgument` with a bogus name today.
+- [ ] **No test drives `PrimSystem` as another GOOS** [Test, S]: `hostShell()`, `defaultShell` and
+  `shellFor("linux")` are indistinguishable on a POSIX host, and `noHardcodedShellPath` is
+  call-shaped (silent for a const, a local, a struct field or a bare `"sh"`). A package-level GOOS
+  variable would close it at the cost of a test-only mutable seam. Also: the rule has no
+  `rules_test.go` fixture (nor does `noProcessGlobalMutation`), and the "system uses /bin/sh" skips in
+  `prim_process_test.go` and `exec_gate_test.go:152` still name `/bin/sh`.
+- [ ] **GOOS dispatch has two spellings** [Tech debt, XS]: `pkg/machine/compilation/features.go`
+  `switch runtime.GOOS` versus the GOOS-keyed tables in `extensions/process/shell.go`. Pre-existing
+  one-site convention; align only if the owner wants one.
+
 ### Closed in Tier 1
 
 Moved to [`closed.md`](closed.md) (2026-10-17 split).
