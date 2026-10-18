@@ -81,14 +81,14 @@ func TestReadIncludedForms(t *testing.T) {
 	r := NewFSFileResolver(fsys, env)
 
 	t.Run("reads every form and returns the resolved path", func(t *testing.T) {
-		forms, path, err := readIncludedForms(context.Background(), env, r, "ok.scm", false)
+		forms, path, err := readIncludedForms(context.Background(), env, r, "ok.scm", nil, false)
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, forms, qt.HasLen, 2)
 		qt.Assert(t, path, qt.Contains, "ok.scm")
 	})
 
 	t.Run("a read error names the file and keeps its cause", func(t *testing.T) {
-		_, _, err := readIncludedForms(context.Background(), env, r, "broken.scm", false)
+		_, _, err := readIncludedForms(context.Background(), env, r, "broken.scm", nil, false)
 		qt.Assert(t, err, qt.IsNotNil)
 		qt.Assert(t, err.Error(), qt.Contains, `include: error reading "broken.scm"`)
 		var parseErr *parser.ParserError
@@ -96,7 +96,7 @@ func TestReadIncludedForms(t *testing.T) {
 	})
 
 	t.Run("a missing file is wrapped as include", func(t *testing.T) {
-		_, _, err := readIncludedForms(context.Background(), env, r, "absent.scm", false)
+		_, _, err := readIncludedForms(context.Background(), env, r, "absent.scm", nil, false)
 		qt.Assert(t, err, qt.IsNotNil)
 		qt.Assert(t, err.Error(), qt.Contains, "include")
 		qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue, qt.Commentf("%v", err))

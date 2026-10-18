@@ -94,7 +94,7 @@ func (p *ExpanderTimeContinuation) expandIncludeImpl(sym *syntax.SyntaxSymbol, e
 // expandIncludedFile reads one file and expands its forms on a child expander
 // whose ctx carries the load stack with the file pushed.
 func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, r FileResolver, name string, foldCase bool) ([]syntax.SyntaxValue, error) {
-	forms, filePath, err := readIncludedForms(p.ctx, p.env, r, name, foldCase)
+	forms, filePath, err := readIncludedForms(p.ctx, p.env, r, name, sym.SourceContext(), foldCase)
 	if err != nil {
 		return nil, err
 	}

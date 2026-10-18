@@ -362,3 +362,56 @@ func TestIncludeErrorsKeepTheirLocations(t *testing.T) {
 		})
 	}
 }
+
+// TestRelativeIncludeResolvesAgainstTheFormsOwnFile pins the lexical rule: a
+// relative include resolves against the directory of the file holding the
+// include FORM, not against whatever the load stack holds when the form is
+// compiled. A cond-expand or eval-when body is compiled after the splice has
+// popped its file, so the stack rule alone read the decoy at the root (or found
+// nothing). Racket's include is lexical in the same way.
+func TestRelativeIncludeResolvesAgainstTheFormsOwnFile(t *testing.T) {
+	fsys := fstest.MapFS{
+		"sub/b.scm":  &fstest.MapFile{Data: []byte(`(cond-expand (else (include "c.scm")))`)},
+		"sub/e.scm":  &fstest.MapFile{Data: []byte(`(eval-when (load eval) (include "c.scm"))`)},
+		"sub/c.scm":  &fstest.MapFile{Data: []byte(`(define cv 9)`)},
+		"c.scm":      &fstest.MapFile{Data: []byte(`(define cv "WRONG-FILE")`)},
+		"chain.scm":  &fstest.MapFile{Data: []byte(`(include "sub/b3.scm") (define chainv (+ bv 1))`)},
+		"sub/b3.scm": &fstest.MapFile{Data: []byte(`(include "c3.scm") (define bv (+ cv3 1))`)},
+		"sub/c3.scm": &fstest.MapFile{Data: []byte(`(define cv3 9)`)},
+	}
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{name: "include under cond-expand, decoy at the root", code: `(include "sub/b.scm") cv`, want: "9"},
+		{name: "include under eval-when, decoy at the root", code: `(include "sub/e.scm") cv`, want: "9"},
+		{name: "chained include still resolves", code: `(include "chain.scm") chainv`, want: "11"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fsys, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestIncludeWithoutASourceFileFallsBack pins the fallback: a form read from a
+// string with no file name has no directory of its own, so a relative include
+// resolves as it always has (against the search paths / the FS root).
+func TestIncludeWithoutASourceFileFallsBack(t *testing.T) {
+	fsys := fstest.MapFS{
+		"x.scm": &fstest.MapFile{Data: []byte(`(define xv 4)`)},
+	}
+	ctx := context.Background()
+	engine, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithAuthorizer(nil),
+		wile.WithSourceFS(fsys),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	result, err := engine.EvalMultiple(ctx, `(include "x.scm") xv`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "4")
+}

@@ -20,6 +20,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"path"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
@@ -69,6 +70,37 @@ func includeAuthorizerContext(ctx context.Context, env *environment.EnvironmentF
 	return security.WithAuthorizer(ctx, auth)
 }
 
+// lexicalIncludeContext returns ctx with a load stack whose top is the file that
+// holds the include form, so a relative path resolves against THAT file's
+// directory (the Racket model) rather than against whatever file the load stack
+// happens to hold when the form is finally compiled. The two differ for a form
+// the splice does not expand in place, such as the body of a cond-expand or an
+// eval-when: the include's own expansion has already popped the file by then.
+//
+// It returns ctx unchanged when the form has no source file (REPL, eval, string
+// input), or when the file is a bare name with no directory: the load stack
+// (or, with none, the search paths) is the better authority there, and it is the
+// behaviour a top-level include has always had. The derived stack is a copy, so
+// no push escapes into ctx.
+func lexicalIncludeContext(ctx context.Context, src *syntax.SourceContext) context.Context {
+	if src == nil || src.File == "" {
+		return ctx
+	}
+	dir := path.Dir(src.File)
+	if dir == "." || dir == "" {
+		return ctx
+	}
+	stack := sourceload.NewLoadStack()
+	existing := resolver.SelectLoadStack(ctx)
+	if existing != nil {
+		for _, pth := range existing.Paths() {
+			stack.Push(pth)
+		}
+	}
+	stack.Push(src.File)
+	return sourceload.WithLoadStack(ctx, stack)
+}
+
 // readIncludedForms resolves name through r under the compiling namespace's
 // authorizer, reads every form of the file, and returns them with the resolved
 // path. The file is closed before it returns. foldCase reads the file as if it
@@ -77,8 +109,12 @@ func includeAuthorizerContext(ctx context.Context, env *environment.EnvironmentF
 // It neither pushes the load stack nor processes the forms: the caller owns
 // both, because the push must follow the open (a nested relative path resolves
 // against the included file) and must outlive the processing.
-func readIncludedForms(ctx context.Context, env *environment.EnvironmentFrame, r FileResolver, name string, foldCase bool) ([]syntax.SyntaxValue, string, error) {
-	file, filePath, err := r.ResolveAndOpen(includeAuthorizerContext(ctx, env), name)
+//
+// src is the source context of the include form (or of its filename operand);
+// name resolves against the directory of src's file when it has one
+// (lexicalIncludeContext).
+func readIncludedForms(ctx context.Context, env *environment.EnvironmentFrame, r FileResolver, name string, src *syntax.SourceContext, foldCase bool) ([]syntax.SyntaxValue, string, error) {
+	file, filePath, err := r.ResolveAndOpen(includeAuthorizerContext(lexicalIncludeContext(ctx, src), env), name)
 	if err != nil {
 		return nil, "", werr.WrapForeignErrorf(err, "include")
 	}
@@ -138,7 +174,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 
 		// Find, open and read the whole file. The stack push below comes after
 		// this, so the file resolves against the includer's directory.
-		forms, filePath, err := readIncludedForms(ctctx.Context(), p.env, p.fileResolver, fn.Value, foldCase)
+		forms, filePath, err := readIncludedForms(ctctx.Context(), p.env, p.fileResolver, fn.Value, car.SourceContext(), foldCase)
 		if err != nil {
 			return err
 		}
