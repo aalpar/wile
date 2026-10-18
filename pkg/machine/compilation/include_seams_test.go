@@ -144,8 +144,10 @@ func TestResolveCondExpandClause_RefusalsCarryTheSource(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			env := newNamespace(environment.NewNamespace().Runtime())
+			// args carry their own location, distinct from src, so a callee that
+			// ignored its source parameter would be seen.
 			src := syntax.NewZeroValueSourceContext()
-			args := mustDatumToSyntax(src, tc.args)
+			args := mustDatumToSyntax(syntax.NewZeroValueSourceContext(), tc.args)
 
 			_, err := resolveCondExpandClause(context.Background(), env, nil, args, src)
 

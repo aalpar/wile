@@ -123,8 +123,8 @@ type ExpanderTimeContinuation struct {
 	// splices. Defaults as NewCompileTimeContinuation's does. The resolver
 	// ExpandAndCompile is handed can differ from env.FileResolver(), so
 	// expandAndCompileScoped sets it on the expander as it does on the compiler.
-	// Carried to child expanders by newChildExpander; the other expander
-	// construction sites (compile_*.go) still take the default from env.
+	// Carried to child expanders by newChildExpander; every other
+	// NewExpanderTimeContinuation call site still takes the default from env.
 	fileResolver FileResolver
 }
 

@@ -40,11 +40,13 @@ import (
 //     file existence.
 //   - source: refusals are wrapped as a *SourcedError at this location (bare
 //     when it is nil). A plain wrap would drop the provenance the caller holds,
-//     so a caller must pass the form's own location, never nil.
+//     so a caller passes p.currentSource().
 //
 // env must be non-nil. The improper tail SyntaxForEach returns is not checked
-// here: CompileCondExpand's validator rejects it first, and a caller that
-// bypasses that validator must check it.
+// here. CompileCondExpand's validator rejects it first; processCondExpand (the
+// library-body caller) bypasses that validator, so a library-body
+// (cond-expand ... . 5) is accepted today. P5.8 retires the validator and so
+// makes the check this function's job.
 func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, args syntax.SyntaxValue, source *syntax.SourceContext) (*syntax.SyntaxPair, error) {
 	if syntax.IsSyntaxEmptyList(args) {
 		return nil, wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses"))
