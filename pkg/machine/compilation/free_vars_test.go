@@ -517,6 +517,14 @@ func TestOpaqueSubtreeStampsRetainsLexicalEnv(t *testing.T) {
 			want: true,
 		},
 		{
+			// with-syntax is still a passthrough form parked in a
+			// ValidatedLiteral: compiled later, in its own validation unit, so
+			// nothing here walked it.
+			name: "with-syntax",
+			code: "(lambda (x) (lambda (y) (with-syntax ((z 1)) (+ x y))))",
+			want: true,
+		},
+		{
 			// cond-expand splices at expand time (P5.8), so the selected body is
 			// the lambda's own code and the walk enumerates its references. Before
 			// the splice it was parked in a ValidatedLiteral, compiled later in its

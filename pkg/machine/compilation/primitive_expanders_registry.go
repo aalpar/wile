@@ -93,7 +93,9 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 //   - set!: expand only the value expression
 //   - define: expand value if simple define
 //   - lambda, case-lambda: expand body expressions
-//   - syntax-case, cond-expand: return unchanged (compile-time forms)
+//   - include, include-ci, cond-expand: splice the files' / the selected clause's
+//     forms in place as (begin ...) (expander_include.go, expander_cond_expand.go)
+//   - syntax-case: return unchanged (compile-time form)
 func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 	return registerPrimitiveExpandersWithout(env, nil)
 }

@@ -95,6 +95,11 @@ func (p *ExpanderTimeContinuation) expandIncludeImpl(sym *syntax.SyntaxSymbol, e
 // resolve to a local begin under (let ((begin ...)) (include ...)).
 func spliceBegin(sym *syntax.SyntaxSymbol, label string, forms []syntax.SyntaxValue) syntax.SyntaxValue {
 	srcCtx := sym.SourceContext()
+	if len(forms) == 0 {
+		// An empty splice (an empty file, an empty clause) is a void, not no value:
+		// (list (cond-expand (r7rs))) must see one operand.
+		forms = []syntax.SyntaxValue{syntax.NewSyntaxObject(values.Void, srcCtx)}
+	}
 	head := syntax.NewSyntaxSymbol("begin", srcCtx.WithoutScopes()).
 		AddScope(syntax.NewScopeWithLabel(label))
 	return syntax.NewSyntaxCons(head, syntax.SyntaxList(srcCtx, forms...), srcCtx)

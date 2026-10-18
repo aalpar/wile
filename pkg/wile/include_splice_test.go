@@ -368,9 +368,9 @@ func TestIncludeErrorsKeepTheirLocations(t *testing.T) {
 // TestRelativeIncludeResolvesAgainstTheFormsOwnFile pins the lexical rule: a
 // relative include resolves against the directory of the file holding the
 // include FORM, not against whatever the load stack holds when the form is
-// compiled. A cond-expand or eval-when body is compiled after the splice has
-// popped its file, so the stack rule alone read the decoy at the root (or found
-// nothing). Racket's include is lexical in the same way.
+// compiled. An eval-when body (and, before P5.8, a cond-expand body) is compiled
+// after the splice has popped its file, so the stack rule alone read the decoy at
+// the root (or found nothing). Racket's include is lexical in the same way.
 func TestRelativeIncludeResolvesAgainstTheFormsOwnFile(t *testing.T) {
 	fsys := fstest.MapFS{
 		"sub/b.scm":  &fstest.MapFile{Data: []byte(`(cond-expand (else (include "c.scm")))`)},

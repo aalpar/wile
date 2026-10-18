@@ -116,8 +116,6 @@ func (p *ExpanderTimeContinuation) expandEach(expr syntax.SyntaxValue, args []sy
 //   - quote: Content is literal data, not code
 //   - TransformerERMacro: Transformer is compiled, not expanded
 //   - unquote, unquote-splicing: Only valid inside quasiquote
-//   - include, include-ci: Files are read at compile time
-//   - cond-expand: Feature expressions use special syntax, not macros
 //   - syntax, unsyntax, unsyntax-splicing: Compile-time forms handled during
 //     compilation
 //   - define-library, library, export: Library forms handled by the library

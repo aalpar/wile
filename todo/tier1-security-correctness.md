@@ -2111,6 +2111,10 @@ disagreement on one program, the internal-invariant form of a defect.
 - [ ] **Comments in `validate`, `compile_validated.go` and `ref_index.go` still say `include` survives expansion** [Docs, XS, P5.7 crosscheck, fold into P5.8]: it now survives only when malformed or when the env has no
   file resolver. P5.8 retires `validateInclude` and should rewrite them.
 
+### Filed by the P5.8 crosscheck (2026-10-18)
+
+- [ ] **A top-level `(define cond-expand ...)` no longer overrides the keyword** [Correctness, M, P5.8 crosscheck]: head dispatch ignores phase-0 variables, so a program that defines its own `cond-expand` (or `include`, `include-ci`) as a procedure still gets the special form. `include` already behaved so on master; moving `cond-expand` to an expander row extends it to a second name, and the fix touches every splicing form (decide whether a user binding shadows a core keyword at head position, as it does for `begin` after `(define begin 9)`). Not caused by the splice for `include`; verify against `begin`/`if` before deciding the rule.
+
 ### Filed from review 2026-09-09 (indexlint, 2026-10-18)
 
 The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no row. All three reproduce on master at `08fdec30`. The other 20 are indexed elsewhere in this corpus.

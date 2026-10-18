@@ -75,8 +75,9 @@ func includeAuthorizerContext(ctx context.Context, env *environment.EnvironmentF
 // holds the include form, so a relative path resolves against THAT file's
 // directory (the Racket model) rather than against whatever file the load stack
 // happens to hold when the form is finally compiled. The two differ for a form
-// the splice does not expand in place, such as the body of a cond-expand or an
-// eval-when: the include's own expansion has already popped the file by then.
+// the splice does not expand in place, such as the body of an eval-when: the
+// include's own expansion has already popped the file by then. (cond-expand
+// splices at expand time since P5.8 and no longer needs this.)
 //
 // It returns ctx unchanged when
 //   - the form has no source file (REPL, eval, string input), or the file is a
@@ -92,8 +93,8 @@ func includeAuthorizerContext(ctx context.Context, env *environment.EnvironmentF
 //
 // KNOWN LIMITATION: with a virtual-FS resolver (relative paths are real there),
 // a live stack AND a form compiled after its file was popped, the stack rule
-// still applies and a relative include nested under cond-expand/eval-when
-// resolves against the stack's top.
+// still applies and a relative include nested under eval-when resolves
+// against the stack's top.
 //
 // The derived stack is a copy, so no push escapes into ctx.
 func lexicalIncludeContext(ctx context.Context, src *syntax.SourceContext) context.Context {

@@ -46,10 +46,21 @@ import (
 //
 // The clause body's forms already carry the enclosing scopes (the scope walk of
 // every enclosing expansion reached them), so unlike an included file's forms
-// they are not re-stamped. The head is a FRESH-scope begin for the reason
-// spliceBegin gives.
+// they are not re-stamped; their use-site scopes are pruned, as an included
+// file's are, so a macro that expands to a cond-expand can define a name the
+// caller passed. The head is a FRESH-scope begin for the reason spliceBegin
+// gives.
+//
+// No current test discriminates ExpandBodyWithDefineSyntax from expanding each
+// form with ExpandExpression: a body-treatment-only difference (predeclared
+// forward references inside the clause) has no program in the suite that
+// observes it. The choice follows expandBeginForm and is recorded in the plan.
 func (p *ExpanderTimeContinuation) expandCondExpandForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	srcCtx := expr.SourceContext()
+	if srcCtx == nil || syntax.IsSyntaxEmptyList(expr) {
+		// (cond-expand) has no operands, hence no location of their own.
+		srcCtx = sym.SourceContext()
+	}
 	matched, err := resolveCondExpandClause(p.ctx, p.env, p.evaluator, expr, srcCtx)
 	if err != nil {
 		return nil, err
@@ -61,11 +72,14 @@ func (p *ExpanderTimeContinuation) expandCondExpandForm(sym *syntax.SyntaxSymbol
 	}
 	bodyPair, ok := asNonEmptyPair(body)
 	if !ok {
-		return nil, wrapSourcedError(srcCtx, werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of expressions"))
+		return nil, wrapSourcedError(srcCtx, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "cond-expand: expected list of expressions"))
 	}
 	forms, err := collectBodyExpressions(bodyPair)
 	if err != nil {
 		return nil, wrapSourcedError(srcCtx, werr.WrapForeignErrorf(err, "cond-expand: failed to collect clause body"))
+	}
+	for i, form := range forms {
+		forms[i] = p.pruneUseSiteScopes(form)
 	}
 	expanded, err := p.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {

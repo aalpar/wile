@@ -16,6 +16,8 @@ package wile_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
 
@@ -126,17 +128,32 @@ func TestCondExpandUnselectedClauseDoesNotWithdrawImmutability(t *testing.T) {
 }
 
 // Pin (P5.8): a relative include under cond-expand in an included file resolves
-// against the file's directory, on the OS filesystem, with a decoy of the same
-// name in the includer's directory.
-func TestCondExpandIncludeChainsRelativeToTheIncludedFile(t *testing.T) {
-	fsys := fstest.MapFS{
-		"sub/b.scm": &fstest.MapFile{Data: []byte(`(cond-expand (else (include "c.scm")))`)},
-		"sub/c.scm": &fstest.MapFile{Data: []byte(`(define cv 9)`)},
-		"c.scm":     &fstest.MapFile{Data: []byte(`(define cv 1)`)},
+// against the file's directory on the OS filesystem, with a decoy of the same
+// name in the includer's directory. This guards the splice, not the fix: the
+// pre-splice compiler also pushed the load stack around the nested include.
+func TestCondExpandIncludeChainsRelativeToTheIncludedFileOnDisk(t *testing.T) {
+	tmp := t.TempDir()
+	write := func(rel, body string) {
+		full := filepath.Join(tmp, rel)
+		qt.Assert(t, os.MkdirAll(filepath.Dir(full), 0o755), qt.IsNil)
+		qt.Assert(t, os.WriteFile(full, []byte(body), 0o644), qt.IsNil)
 	}
-	got, err := evalIncludeProgram(t, fsys, `(include "sub/b.scm") cv`)
+	write("sub/b.scm", `(cond-expand (else (include "c.scm")))`)
+	write("sub/c.scm", `(define cv 9)`)
+	write("c.scm", `(define cv 1)`)
+
+	ctx := context.Background()
+	engine, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithAuthorizer(nil),
+		wile.WithSourceOS(),
+	)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, got, qt.Equals, "9")
+	loadCtx, err := engine.ContextWithLoadPath(ctx, filepath.Join(tmp, "main.scm"))
+	qt.Assert(t, err, qt.IsNil)
+	result, err := engine.EvalProgram(loadCtx, `(include "sub/b.scm") cv`, filepath.Join(tmp, "main.scm"))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "9")
 }
 
 // Entry requirement (P5.6): resolveCondExpandClause refuses an improper clause
@@ -170,22 +187,141 @@ func TestCondExpandRefusesAnImproperClauseList(t *testing.T) {
 }
 
 // Pin (P5.8): the shapes the retired validator used to refuse are refused by the
-// expander, each at the form.
+// expander, each at the offending clause or the form, line AND column, on a
+// multi-line program (0-based columns).
 func TestCondExpandMalformedForms(t *testing.T) {
 	tcs := []struct {
 		name string
 		code string
 		want string
 	}{
-		{name: "no clauses", code: `(cond-expand)`, want: `(?s).*cond-expand: no clauses.*`},
-		{name: "a clause that is not a list", code: `(cond-expand 42)`, want: `(?s).*cond-expand: clause must be a list.*`},
-		{name: "no clause matches", code: `(cond-expand (nosuchfeature 1))`, want: `(?s).*cond-expand: no matching clause.*`},
-		{name: "else is not last", code: `(cond-expand (else 1) (r7rs 2))`, want: `(?s).*else must be the last clause.*`},
+		{name: "no clauses", code: "(define a 1)\n(define b 2)\n(cond-expand)", want: `includer.scm:3:1: .*cond-expand: no clauses`},
+		{name: "a clause that is not a list", code: "(define a 1)\n(define b 2)\n(cond-expand 42)", want: `includer.scm:3:13: .*cond-expand: clause 1 must be a list`},
+		{name: "no clause matches", code: "(define a 1)\n(cond-expand\n  (nosuchfeature 1))", want: `includer.scm:2:1: .*cond-expand: no matching clause`},
+		{name: "else is not last", code: "(define a 1)\n(cond-expand\n  (else 1)\n  (r7rs 2))", want: `includer.scm:3:2: .*else must be the last clause`},
+		{name: "an unselected clause is an improper list", code: "(define a 1)\n(cond-expand\n  (r7rs 1)\n  (foo . 5))", want: `includer.scm:4:2: .*cond-expand: clause 2 must be a proper list`},
+		{name: "a non-matching clause is an improper list", code: "(define a 1)\n(cond-expand\n  (nonfeat . 5)\n  (else 1))", want: `includer.scm:3:2: .*cond-expand: clause 1 must be a proper list`},
+		{name: "not takes exactly one requirement", code: "(define a 1)\n(cond-expand\n  ((not a b) 1))", want: `includer.scm:3:3: .*not: expected exactly one requirement`},
+		{name: "library takes exactly one name", code: "(define a 1)\n(cond-expand\n  ((library (scheme base) (scheme write)) 1))", want: `includer.scm:3:3: .*library: expected exactly one library name`},
+		{name: "an improper requirement list", code: "(define a 1)\n(cond-expand\n  ((and r7rs . 5) 1))", want: `includer.scm:3:4: .*requirement list must be a proper list`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := evalIncludeProgram(t, fstest.MapFS{}, tc.code)
-			qt.Assert(t, err, qt.ErrorMatches, tc.want)
+			qt.Assert(t, err, qt.ErrorMatches, `(?s).*`+tc.want+`.*`)
+		})
+	}
+}
+
+// Pin (P5.8): an improper clause list or an improper clause is refused in every
+// position the form can appear in, selected or not.
+func TestCondExpandRefusesImproperClausesInEveryPosition(t *testing.T) {
+	forms := []string{
+		`(cond-expand (r7rs 1) (foo . 5))`,
+		`(cond-expand (nonfeat . 5) (else 1))`,
+	}
+	positions := []struct {
+		name string
+		wrap func(form string) string
+	}{
+		{name: "top level", wrap: func(form string) string { return form }},
+		{name: "body", wrap: func(form string) string { return "(define (f) " + form + ") (f)" }},
+		{name: "eval", wrap: func(form string) string { return "(eval '" + form + " (interaction-environment))" }},
+	}
+	for _, form := range forms {
+		for _, pos := range positions {
+			t.Run(pos.name+" "+form, func(t *testing.T) {
+				_, err := evalIncludeProgram(t, fstest.MapFS{}, pos.wrap(form))
+				qt.Assert(t, err, qt.ErrorMatches, `(?s).*cond-expand: clause [12] must be a proper list.*`)
+			})
+		}
+	}
+
+	for _, form := range forms {
+		t.Run("library begin "+form, func(t *testing.T) {
+			fsys := fstest.MapFS{
+				"probe/clauses.sld": &fstest.MapFile{Data: []byte(`(define-library (probe clauses)
+  (import (scheme base))
+  (export a)
+  (begin ` + form + ` (define a 1)))`)},
+			}
+			ctx := context.Background()
+			engine, err := wile.NewEngine(ctx,
+				wile.WithProfile(wile.KitchenSink),
+				wile.WithAuthorizer(nil),
+				wile.WithSourceFS(stdlib.FS),
+				wile.WithSourceFS(fsys),
+				wile.WithLibraryPaths("."),
+			)
+			qt.Assert(t, err, qt.IsNil)
+			_, err = engine.EvalMultiple(ctx, `(import (probe clauses)) a`)
+			qt.Assert(t, err, qt.ErrorMatches, `(?s).*cond-expand: clause [12] must be a proper list.*`)
+		})
+	}
+}
+
+// Pin (P5.8, code review): an empty splice is one void operand, not none, and
+// does not disturb a body that continues with a define.
+func TestEmptySpliceIsOneVoidValue(t *testing.T) {
+	fsys := fstest.MapFS{
+		"empty.scm": &fstest.MapFile{Data: []byte(``)},
+	}
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{name: "empty cond-expand clause as an operand", code: `(length (list (cond-expand (r7rs))))`, want: "1"},
+		{name: "empty include as an operand", code: `(length (list (include "empty.scm")))`, want: "1"},
+		{name: "empty clause before a body define", code: `(define (f) (cond-expand (else)) (define x 1) x) (f)`, want: "1"},
+		{name: "empty include before a body define", code: `(define (f) (include "empty.scm") (define x 2) x) (f)`, want: "2"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fsys, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// Pin (P5.8, tests review): a macro that expands to a cond-expand can define a
+// name the caller passed (the use-site scope is pruned off the clause forms),
+// and a name the macro introduces stays hidden from the caller.
+func TestMacroExpandingToCondExpand(t *testing.T) {
+	const macro = `(define-syntax m (syntax-rules () ((_ n) (cond-expand (else (define n 11))))))
+(define-syntax hide (syntax-rules () ((_) (cond-expand (else (define hid 5))))))
+`
+	t.Run("top level defines the passed name", func(t *testing.T) {
+		got, err := evalIncludeProgram(t, fstest.MapFS{}, macro+`(m q) q`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, got, qt.Equals, "11")
+	})
+	t.Run("body defines the passed name", func(t *testing.T) {
+		got, err := evalIncludeProgram(t, fstest.MapFS{}, macro+`(define (g) (m r) r) (g)`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, got, qt.Equals, "11")
+	})
+	t.Run("an introduced name stays hidden", func(t *testing.T) {
+		_, err := evalIncludeProgram(t, fstest.MapFS{}, macro+`(hide) hid`)
+		qt.Assert(t, err, qt.ErrorMatches, `(?s).*no such.*hid.*`)
+	})
+}
+
+// Pin (P5.8, tests review): every form of a multi-form clause body is spliced.
+func TestCondExpandMultiFormClauseBody(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{name: "top level", code: `(cond-expand (else (define a 1) (define b 2))) (+ a b)`},
+		{name: "body", code: `(define (f) (cond-expand (else (define a 1) (define b 2))) (+ a b)) (f)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fstest.MapFS{}, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, "3")
 		})
 	}
 }

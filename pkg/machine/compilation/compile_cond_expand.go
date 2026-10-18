@@ -72,10 +72,21 @@ func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFr
 	}
 
 	var matchedClause syntax.SyntaxValue
-	tail, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, hasNext bool, clause syntax.SyntaxValue) error {
+	tail, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, i int, hasNext bool, clause syntax.SyntaxValue) error {
+		clauseSource := source
+		if clause.SourceContext() != nil {
+			clauseSource = clause.SourceContext()
+		}
 		clausePair, ok := clause.(*syntax.SyntaxPair)
 		if !ok {
-			return wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause must be a list"))
+			return wrapSourcedError(clauseSource, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "cond-expand: clause %d must be a list", i+1))
+		}
+
+		// Every clause must be a proper list, selected or not: nothing validates
+		// the form ahead of this function, and a clause past the match is never
+		// parsed below.
+		if !clausePair.IsList() {
+			return wrapSourcedError(clauseSource, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "cond-expand: clause %d must be a proper list", i+1))
 		}
 
 		reqExpr := clausePair.SyntaxCar()
@@ -85,7 +96,7 @@ func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFr
 		// every clause — before the matched-clause short-circuit below, which
 		// would otherwise stop scanning once an earlier clause matches.
 		if isElseClause(env, reqExpr) && hasNext {
-			return wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
+			return wrapSourcedError(clauseSource, werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
 				"cond-expand: else must be the last clause"))
 		}
 
@@ -139,10 +150,16 @@ func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext
 	}
 
 	// Process each declaration
-	_, err = syntax.SyntaxForEach(ctctx.ctx, declsPair, func(_ context.Context, _ int, _ bool, decl syntax.SyntaxValue) error {
+	tail, err := syntax.SyntaxForEach(ctctx.ctx, declsPair, func(_ context.Context, _ int, _ bool, decl syntax.SyntaxValue) error {
 		return p.processLibraryDeclaration(ctctx, lib, decl)
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	if !syntax.IsSyntaxEmptyList(tail) {
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "cond-expand: declaration list must be a proper list"))
+	}
+	return nil
 }
 
 // featureName returns the name a cond-expand feature requirement's identifier
@@ -238,6 +255,9 @@ func parseFeatureRequirement(ctx context.Context, env *environment.EnvironmentFr
 			if !ok || syntax.IsSyntaxEmptyList(argsPair) {
 				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "library: expected library name"))
 			}
+			if !syntax.IsSyntaxEmptyList(argsPair.SyntaxCdr()) {
+				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "library: expected exactly one library name"))
+			}
 			libNameExpr := argsPair.SyntaxCar()
 			libName, err := ParseLibraryNameFromSyntax(ctx, libNameExpr)
 			if err != nil {
@@ -267,6 +287,9 @@ func parseFeatureRequirement(ctx context.Context, env *environment.EnvironmentFr
 			if !ok || syntax.IsSyntaxEmptyList(argsPair) {
 				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "not: expected one requirement"))
 			}
+			if !syntax.IsSyntaxEmptyList(argsPair.SyntaxCdr()) {
+				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "not: expected exactly one requirement"))
+			}
 			reqExpr := argsPair.SyntaxCar()
 			req, err := parseFeatureRequirement(ctx, env, reqExpr)
 			if err != nil {
@@ -295,7 +318,7 @@ func parseFeatureRequirementList(ctx context.Context, env *environment.Environme
 	}
 
 	var reqs []FeatureRequirement
-	_, err := syntax.SyntaxForEach(ctx, pair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
+	tail, err := syntax.SyntaxForEach(ctx, pair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
 		req, err := parseFeatureRequirement(ctx, env, v)
 		if err != nil {
 			return err
@@ -305,6 +328,9 @@ func parseFeatureRequirementList(ctx context.Context, env *environment.Environme
 	})
 	if err != nil {
 		return nil, err
+	}
+	if !syntax.IsSyntaxEmptyList(tail) {
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "requirement list must be a proper list"))
 	}
 	return reqs, nil
 }

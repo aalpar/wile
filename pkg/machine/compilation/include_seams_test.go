@@ -120,15 +120,18 @@ func TestExpandAndCompile_IncludeUsesTheGivenResolver(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 }
 
-// Pin: every refusal from the lifted resolveCondExpandClause is a *SourcedError
-// at the source the caller passed. The callers' own wraps would hide a dropped
-// source, so this calls it directly with a distinguishable one.
+// Pin: every refusal from the lifted resolveCondExpandClause is a *SourcedError.
+// A form-level refusal carries the source the caller passed; a clause-level one
+// (else not last, a malformed clause) carries the clause's own location. The
+// callers' own wraps would hide a dropped source, so this calls it directly with
+// a distinguishable one.
 func TestResolveCondExpandClause_RefusalsCarryTheSource(t *testing.T) {
 	sym := values.NewSymbol
 	tcs := []struct {
-		name string
-		args values.Value
-		want error
+		name       string
+		args       values.Value
+		want       error
+		wantClause bool
 	}{
 		{
 			name: "no matching clause",
@@ -136,9 +139,10 @@ func TestResolveCondExpandClause_RefusalsCarryTheSource(t *testing.T) {
 			want: werr.ErrNoMatchingClause,
 		},
 		{
-			name: "else not last",
-			args: values.List(values.List(sym("else"), values.NewInteger(1)), values.List(sym("r7rs"), values.NewInteger(2))),
-			want: werr.ErrInvalidSyntax,
+			name:       "else not last",
+			args:       values.List(values.List(sym("else"), values.NewInteger(1)), values.List(sym("r7rs"), values.NewInteger(2))),
+			want:       werr.ErrInvalidSyntax,
+			wantClause: true,
 		},
 	}
 	for _, tc := range tcs {
@@ -154,6 +158,10 @@ func TestResolveCondExpandClause_RefusalsCarryTheSource(t *testing.T) {
 			qt.Assert(t, errors.Is(err, tc.want), qt.IsTrue, qt.Commentf("%v", err))
 			var sourced *SourcedError
 			qt.Assert(t, errors.As(err, &sourced), qt.IsTrue)
+			if tc.wantClause {
+				qt.Assert(t, sourced.Source, qt.Equals, args.(*syntax.SyntaxPair).SyntaxCar().SourceContext())
+				return
+			}
 			qt.Assert(t, sourced.Source, qt.Equals, src)
 		})
 	}
