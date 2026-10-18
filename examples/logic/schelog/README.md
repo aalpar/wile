@@ -88,6 +88,13 @@ mapcol, games) and completes in seconds:
 ./examples/logic/schelog/run-all-tests.sh
 ```
 
+The Scheme form of the same suite, run from the repository root (its include
+paths are root-relative):
+
+```bash
+./dist/wile -f examples/logic/schelog/run-all-tests.scm
+```
+
 ## Key Concepts
 
 - **Logic variables**: Created with `%let`, represent unknowns to be unified

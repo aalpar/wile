@@ -121,9 +121,10 @@ is a **macro** named after a special form.
   this sits in Tier 1 rather than Tier 4. No design yet; the first step is a profile of the
   per-level cost, not an edit.
 
-- [ ] **A top-level `include` loses the `set!` evidence and refuses legal R7RS** [Correctness, S,
-  repro constructed 2026-09-20]: this is the missing repro for **`validateInclude` never reads the
+- [x] **A top-level `include` loses the `set!` evidence and refuses legal R7RS** [Correctness, S,
+  repro constructed 2026-09-20, Done 2026-10-18, P5.7]: this is the missing repro for **`validateInclude` never reads the
   included file** (filed 2026-09-15 below, "unpinned — no repro constructed"). Three lines:
+  **Result (P5.7, `fix/include-expands-in-place`):** the include is expanded and validated in the includer's unit: `TestTopLevelIncludeKeepsSetEvidence`, define/set! across include in each direction and both in one file.
 
   ```scheme
   ;; inc.scm
@@ -459,8 +460,8 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   `run-all-tests.sh` cases pass and the zebra bench runs. README and BIBLIOGRAPHY no longer claim
   "unmodified" or `syntax-rules` (all 14 transformers are procedural). `test-schelog` runs only in
   `make cd`, which is why CI stayed green.
-- [ ] **A macro defined in an `include`d file is unbound in the including file** [Medium, filed
-  2026-09-15 as #820, not bisected]: `t6.scm` = `(define-syntax foo (syntax-rules () ((_ x) x)))`,
+- [x] **A macro defined in an `include`d file is unbound in the including file** [Medium, filed
+  2026-09-15 as #820, not bisected, Done 2026-10-18, P5.7]: `t6.scm` = `(define-syntax foo (syntax-rules () ((_ x) x)))`,
   `t7.scm` = `(include "t6.scm") (display (foo 42))`. `wile -f t7.scm` (with or without `-i`, and
   with an explicit `(begin …)` wrap) fails "no such local or global binding foo"; `wile -i < t7.scm`
   prints 42. A *sibling* include sees it (`(include "defs.scm") (include "use.scm")` works, which is
@@ -468,8 +469,9 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   that file is the `-f` file or itself included. A procedure defined the same way is visible.
   R7RS §4.1.7: `include` is `begin` over the file's contents, no new scope. Breaks `examples/logic/schelog/run-all-tests.scm` (`%which` unbound at line 65); its README
   instruction was removed 2026-09-15, restore it when this is fixed.
-- [ ] **An included file cannot see a binding local to its includer** [Bug, Correctness, filed
-  2026-10-16, fix with P5.7; revisit the schedule when P4 closes]: the reverse direction of the row
+  **Result (P5.7, `fix/include-expands-in-place`):** `TestMacroFromIncludedFileIsBound` -> 42 under EvalProgram. `run-all-tests.scm` runs (22 pass); README instruction restored; `TestSchelogSuite` wires it into the integration suite. The suite itself had three faults of its own (name collisions across examples, two mis-indexed assertions), fixed in the same change.
+- [x] **An included file cannot see a binding local to its includer** [Bug, Correctness, filed
+  2026-10-16, fix with P5.7; revisit the schedule when P4 closes, Done 2026-10-18, P5.7]: the reverse direction of the row
   above. f.scm = `(list x (m))`; `(let ((x 5)) (define-syntax m (syntax-rules () ((_) 42)))
   (include "f.scm"))` raises `f.scm:1:6: no such local or global binding "x"` at `a23c4543`; petite
   and racket 9.2 answer `(5 42)`. Same refusal for a `let-syntax` keyword and a body `define`; a
@@ -480,6 +482,7 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   to P5.7's gate as group (4), because P5.7's other include gates pass under a splice that skips the stamp. A
   compiler-side point fix was declined: it needs the keyword routed to `compileIncludeImpl`, a
   dispatch seam P5.7 deletes. R7RS §4.1.7.
+  **Result (P5.7, `fix/include-expands-in-place`):** included forms carry the include head's scope set. `TestIncludedFormsSeeIncluderLocals`: `let` variable, body macro, `let-syntax`, body define all give `(5 42)`.
 - [x] **Library export of a name the library did not define** [Done 2026-09-16, branch
   `feat/export-for-syntax`; see `findLibraryBinding` entry below]: the two-phase *defined* case
   exports phase 0 (measured 2026-09-14, matches Racket). A re-exported `syntax-rules` reaches a
@@ -927,7 +930,7 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   - `include` of a file holding `(m)`: raises "no such binding m" (measured 2026-10-16): a
     local macro is not visible to the included forms, which masks the scan question. That is the
     reverse direction of the "A macro defined in an `include`d file …" row, filed 2026-10-16 as
-    "An included file cannot see a binding local to its includer". **Open.**
+    "An included file cannot see a binding local to its includer". **Fixed 2026-10-18 (P5.7).**
   - `` `(,(m)) ``, `(syntax-case (m) () (_ 1))`, and `with-syntax`'s RHS: **fixed by
     `76e81aac`** (P4.5 crosscheck remediation, merged 2026-10-15). The first P4.5 commit
     expanded these operands at compile time, which reached the hole (`7`; master had raised "no
@@ -996,8 +999,8 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   "recovered panic: … index out of range [2] with length 2"; it should answer `1`. A no-binding
   body with a `define` inside a transformer panics the same way. Live on master.
 
-- [ ] **`validateInclude` never reads the included file** [Medium, M, filed 2026-09-15 during the
-  renamed-inner-positions whole-branch review]: `validateInclude`
+- [x] **`validateInclude` never reads the included file** [Medium, M, filed 2026-09-15 during the
+  renamed-inner-positions whole-branch review, Done 2026-10-18, P5.7]: `validateInclude`
   (`pkg/internal/validate/validate_macro.go:235`) calls `markOpaqueCode(env, pair, result)` on
   `pair`, the `(include "f.scm")` form ITSELF — its own head symbol and string filename arguments
   — never on the forms the named file actually contains, which this validation pass does not even
@@ -1008,14 +1011,16 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   walk. Same hazard class as the fixed C1 bug (a hidden `set!` leaves a stale inline body or an
   unboxed capture). Repro: the top-level `include` row in "Redefining `if`" above (`set!: cannot
   mutate immutable top-level binding "y"`), constructed 2026-09-20.
+  **Result (P5.7, `fix/include-expands-in-place`):** the expander reads the file now (`expandIncludeImpl`), so the validator no longer stands in for it on a well-formed include; `validateInclude` survives only for malformed forms and an env with no resolver, and is retired with P5.8.
 
-- [ ] **`include` inside a procedure body skips letrec\* predeclaration** [Medium, S, filed
+- [x] **`include` inside a procedure body skips letrec\* predeclaration** [Medium, S, filed
   2026-09-15 during the keyword-denotation-dispatch whole-branch review; pre-existing on master, not
-  caused by this branch]: `(define (k) (include "x.scm") (inc-g))`, where the included file
+  caused by this branch, Done 2026-10-18, P5.7]: `(define (k) (include "x.scm") (inc-g))`, where the included file
   forward-references a later included `define`, raises `application: expected a procedure, got
   #<void>` at run time. R7RS §5.3.2 body semantics predeclare every name a body defines before any
   initializer runs (letrec\*); the body scan that does this for defines written directly in the body
   does not descend into an `include`d file's forms to find the names it will introduce.
+  **Result (P5.7, `fix/include-expands-in-place`):** `include` splices at expand time; the body forms see the file as their own, letrec* included. Pinned by `TestIncludeInBodyBoxesCapturedBinder` and `TestIncludeInBodyForwardCall` (`(#<void> 1)` -> `(1 1)`; dead forward call -> 42).
 
 - [x] **Option 2: declared per-phase export tables** [**Done 2026-09-16**, branches
   `feat/export-for-syntax` and `fix/renamed-syntax-rules-import`: decision (1) is the export
@@ -2080,6 +2085,31 @@ disagreement on one program, the internal-invariant form of a defect.
 - [ ] **GOOS dispatch has two spellings** [Tech debt, XS]: `pkg/machine/compilation/features.go`
   `switch runtime.GOOS` versus the GOOS-keyed tables in `extensions/process/shell.go`. Pre-existing
   one-site convention; align only if the owner wants one.
+
+### Filed by the P5.7 crosscheck (2026-10-18)
+
+- [ ] **A relative include under a deferred form resolves against the load stack when a stack is live and the path is relative** [Correctness, M, P5.7 re-review]: `lexicalIncludeContext`
+  (`pkg/machine/compilation/compile_time_continuation_include.go`) trusts an absolute `SourceContext.File` and
+  yields to a live load stack for a relative one, because a relative `File` is often a caller's diagnostic label
+  (`EvalProgram`'s name, which the CLI passes as typed). With a virtual-FS resolver (relative paths are real
+  there), a live stack and a `cond-expand`/`eval-when` body compiled after its file was popped, the nested include
+  still reads the stack's top, as before the lexical rule. Pinned as current behaviour by
+  `TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths`; flip it to `9` when fixed. Fix direction:
+  distinguish a label from a path at the source (the parser's file argument), not by shape.
+- [ ] **A cyclic `include` terminates after ~32 s with a ~5.9 MB error** [Robustness, S, P5.7 crosscheck]: master dies
+  with a fatal Go stack overflow; the splice is stopped only by the expansion depth guard (50000), one wrapped
+  `include: failed to expand` layer per level. Fix: a cycle check before `stack.Push(filePath)` in
+  `expandIncludedFile` (and `compileIncludeImpl`), against `LoadStack.Paths()`, raising a new `ErrIncludeCycle`
+  (not `ErrCircularDependency`, whose text says "library").
+- [ ] **Include error provenance has two gaps** [Diagnostics, S, P5.7 crosscheck]: (1) a compile-stage error from an
+  included form no longer names the include that brought it in (master wrapped `include f.scm: error compiling
+  form:`); only the innermost file shows, behind a coarse `includer.scm:1:0` prefix (general validator behaviour,
+  not caused by the splice). (2) A read or parse error in an included file renders with the includer's file name
+  but the included file's line, because `SourcedError.Error()` suppresses its prefix only for an inner
+  `SourcedError`, not a located `ParserError`; fix in `readIncludedForms` by wrapping the read error in a
+  `SourcedError` carrying the parser's location.
+- [ ] **Comments in `validate`, `compile_validated.go` and `ref_index.go` still say `include` survives expansion** [Docs, XS, P5.7 crosscheck, fold into P5.8]: it now survives only when malformed or when the env has no
+  file resolver. P5.8 retires `validateInclude` and should rewrite them.
 
 ### Filed from review 2026-09-09 (indexlint, 2026-10-18)
 
