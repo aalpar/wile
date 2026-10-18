@@ -628,7 +628,7 @@ func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename 
 	}
 }
 
-// runCheck compiles every input without running its top level, reporting the first
+// runCheck compiles every input without running its run-time top level, reporting the first
 // failure and exiting 1, or exiting 0 when everything compiles clean.
 //
 // It is a mode of its own rather than a branch inside the run paths because
@@ -667,7 +667,7 @@ func runCheck(ctx context.Context, eng *wile.Engine, files []string, evals []str
 	}
 }
 
-// checkFile compiles one source without running its top level. The file's directory goes
+// checkFile compiles one source without running its run-time top level. The file's directory goes
 // on the load path because include resolves at compile time and so is reached by
 // checking.
 func checkFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename string, shebang bool) {

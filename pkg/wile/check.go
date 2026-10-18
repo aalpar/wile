@@ -23,7 +23,7 @@ import (
 )
 
 // CheckProgram parses, expands, and compiles code as a single top-level program
-// without running its top level, and reports the first error with source location — the
+// without running its run-time top level, and reports the first error with source location — the
 // go build equivalent for a Scheme program. It returns nil when the program
 // compiles clean. source labels the code in diagnostics; pass "" if none.
 //
@@ -48,8 +48,9 @@ import (
 // but ctx. Only the checked program's own run-time top-level expressions are
 // guaranteed not to run. Running phase-1 code is inherent to a Scheme with
 // procedural macros (Racket's raco make and raco expand both run
-// begin-for-syntax); running library bodies is not, it is Wile's eager
-// instantiation (raco expand does not run a required module's phase-0 body).
+// begin-for-syntax); running the bodies of libraries imported for run time is not, it is
+// Wile's eager instantiation (raco expand does not run a required module's
+// phase-0 body; it does run one required for-syntax).
 //
 // Not read-only with respect to the engine. Compiling a top-level define
 // registers its binding — that registration is what makes forward references
