@@ -16,12 +16,14 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"testing/fstest"
 
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -37,6 +39,16 @@ func newLibraryCountEngine(ctx context.Context, fsys fstest.MapFS) (*wile.Engine
 	}
 	opts = append(opts, wile.WithLibraryPaths("lib"))
 	return wile.NewEngine(ctx, opts...)
+}
+
+// oneDefineLibrary is a file library with one define, importable as (mylib).
+var oneDefineLibrary = fstest.MapFS{
+	"lib/mylib.sld": &fstest.MapFile{
+		Data: []byte(`(define-library (mylib)
+  (import (scheme base))
+  (export answer)
+  (begin (define answer 42)))`),
+	},
 }
 
 // countingFactory wraps the engine's installed LibraryEnvFactory and counts
@@ -63,16 +75,7 @@ func TestOneLibraryEnvPerFileLibraryLoad(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	fsys := fstest.MapFS{
-		"lib/mylib.sld": &fstest.MapFile{
-			Data: []byte(`(define-library (mylib)
-  (import (scheme base))
-  (export answer)
-  (begin (define answer 42)))`),
-		},
-	}
-
-	engine, err := newLibraryCountEngine(ctx, fsys)
+	engine, err := newLibraryCountEngine(ctx, oneDefineLibrary)
 	c.Assert(err, qt.IsNil)
 
 	_, err = engine.EvalMultiple(ctx, `(import (scheme base))`)
@@ -88,22 +91,14 @@ func TestOneLibraryEnvPerFileLibraryLoad(t *testing.T) {
 
 // TestInlineDefineLibraryStillMintsItsOwnEnv guards the consume side of the
 // hint: a (define-library ...) written in a program is not a file load, so it
-// has no pre-made environment and must still take one from the factory, and
-// the hint a file load left behind must not be reused by the next form.
+// has no pre-made environment and must still take one from the factory. It
+// catches a hint installed on the top-level compiler, which would hand every
+// inline library the same environment.
 func TestInlineDefineLibraryStillMintsItsOwnEnv(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	fsys := fstest.MapFS{
-		"lib/mylib.sld": &fstest.MapFile{
-			Data: []byte(`(define-library (mylib)
-  (import (scheme base))
-  (export answer)
-  (begin (define answer 42)))`),
-		},
-	}
-
-	engine, err := newLibraryCountEngine(ctx, fsys)
+	engine, err := newLibraryCountEngine(ctx, oneDefineLibrary)
 	c.Assert(err, qt.IsNil)
 
 	_, err = engine.EvalMultiple(ctx, `(import (scheme base))`)
@@ -126,4 +121,42 @@ func TestInlineDefineLibraryStillMintsItsOwnEnv(t *testing.T) {
   (begin (define w 8)))`)
 	c.Assert(err, qt.IsNil)
 	c.Assert(*n, qt.Equals, 3)
+}
+
+// TestNestedDefineLibraryDoesNotShareTheOuterEnv pins that a (define-library
+// ...) nested in a file library's body gets its own environment. The nested
+// form compiles on the library compiler, which must not carry the outer hint;
+// if it did, the nested library's (import (dep)) would land in the outer
+// library's environment and make `depval` visible to the outer body.
+func TestNestedDefineLibraryDoesNotShareTheOuterEnv(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	fsys := fstest.MapFS{
+		"lib/dep.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (dep)
+  (import (scheme base))
+  (export depval)
+  (begin (define depval 99)))`),
+		},
+		"lib/leak.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (leak)
+  (import (scheme base))
+  (export answer)
+  (begin
+    (define-library (leak-inner)
+      (import (dep))
+      (export))
+    (define answer depval)))`),
+		},
+	}
+
+	engine, err := newLibraryCountEngine(ctx, fsys)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.EvalMultiple(ctx, `(import (scheme base))`)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.EvalMultiple(ctx, `(import (leak)) answer`)
+	c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue, qt.Commentf("err: %v", err))
 }

@@ -2118,6 +2118,12 @@ disagreement on one program, the internal-invariant form of a defect.
 - [ ] **An `include` passed to a macro as an argument captures the macro's binders** [Hygiene, M, P5.8 re-review]: the same capture the cond-expand prune fixed exists for `include`: `expandIncludedFile` (`pkg/machine/compilation/expander_include.go`) prunes the file's forms' use-site scopes itself, so a define inside an included file passed as `(m (include "f.scm"))` loses its use-site scope and binds the macro's own free `a`. The cond-expand fix prunes at the transformer boundary (`pruneUseSiteScopes` treats a cond-expand in macro output as a splicing head); an include cannot, since its forms are not visible there, so it needs its own fix (carry the use-site scopes through the read, or prune only forms the transformer introduced). Present on both P5.7 commits.
 - [ ] **`expand` output contains `(begin #<void>)` for an empty splice** [Diagnostics, XS, P5.8 re-review]: an empty clause or empty include file now splices as one void literal (so an operand position keeps its arity); `(expand ...)` shows it as `#<void>`, which does not read back after `write`. Check whether anything serializes `expand` output (nothing found in-tree); file only.
 
+### Filed by the P5.10 crosscheck (2026-10-18)
+
+- [ ] **A `define-library` nested in a library body cannot export names its own `begin` defines, and is never registered** [Correctness, M, P5.10 crosscheck]: pre-existing, verified on master. The nested form compiles on the library compiler, gets its own environment, and its result is not entered in the registry, so nothing can import it. `TestNestedDefineLibraryDoesNotShareTheOuterEnv` pins only that its environment is not the outer library's.
+
+- [ ] **`go test -race ./pkg/wile/` takes over 10 minutes** [Tooling, S, P5.10 crosscheck]: a 10-minute timeout fired during the P5.10 crosscheck. Rerun with `-timeout 30m` on the P5.10 branch: passed (ok, no DATA RACE), wall 10m21s.
+
 ### Filed from review 2026-09-09 (indexlint, 2026-10-18)
 
 The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no row. All three reproduce on master at `08fdec30`. The other 20 are indexed elsewhere in this corpus.

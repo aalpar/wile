@@ -257,6 +257,12 @@ func (p *CompileTimeContinuation) SetFileResolver(r FileResolver) {
 // inlining. A lambda body with more expressions than this is not inlined.
 const DefaultInlineThreshold = 5
 
+// setLibEnvHint records the library environment compileLibrary built for the
+// define-library form this compiler is about to compile.
+func (p *CompileTimeContinuation) setLibEnvHint(env *environment.EnvironmentFrame) {
+	p.libEnvHint = env
+}
+
 // SetInlineThreshold sets the maximum body length for procedure inlining.
 // 0 disables inlining entirely.
 func (p *CompileTimeContinuation) SetInlineThreshold(n int) {
