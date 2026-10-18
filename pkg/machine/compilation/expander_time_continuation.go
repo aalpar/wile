@@ -119,6 +119,12 @@ type ExpanderTimeContinuation struct {
 	// recognize its own. Shared by pointer with child expanders. See
 	// expander_use_site.go.
 	useSiteScopes *useSiteScopeLog
+	// fileResolver resolves include and include-ci forms the expander splices.
+	// Defaults as NewCompileTimeContinuation's does; the compiler's can differ
+	// from env.FileResolver() (pkg/registry/core/bootstrap.scm compiles with an
+	// embed resolver), so expandAndCompileScoped sets both. Carried to child
+	// expanders by newChildExpander.
+	fileResolver FileResolver
 }
 
 // NewExpanderTimeContinuation creates a new ExpanderTimeContinuation. The
@@ -130,10 +136,15 @@ type ExpanderTimeContinuation struct {
 // an Engine (e.g., a direct unit-test compiler) reports unset and defaults to
 // DefaultMaxExpandDepth. SetMaxDepth still overrides per-run afterward.
 func NewExpanderTimeContinuation(ctx context.Context, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) *ExpanderTimeContinuation {
+	resolver := env.FileResolver()
+	if resolver == nil {
+		resolver = NewOSFileResolver(env)
+	}
 	q := &ExpanderTimeContinuation{
 		ctx:           ctx,
 		env:           env,
 		evaluator:     evaluator,
+		fileResolver:  resolver,
 		depthGuard:    &expandDepthGuard{max: NamespaceMaxExpandDepth(env)},
 		useSiteScopes: &useSiteScopeLog{scopes: values.NewMapSet[*syntax.Scope](0)},
 	}
@@ -157,10 +168,24 @@ func (p *ExpanderTimeContinuation) newChildExpander(env *environment.Environment
 		ctx:           p.ctx,
 		env:           env,
 		evaluator:     p.evaluator,
+		fileResolver:  p.fileResolver,
 		depthGuard:    p.depthGuard,
 		useSiteScopes: p.useSiteScopes,
 	}
 	return q
+}
+
+// SetFileResolver overrides the file resolver used by include and include-ci.
+// Nil resets to the environment's resolver (or OSFileResolver as fallback), as
+// CompileTimeContinuation.SetFileResolver does.
+func (p *ExpanderTimeContinuation) SetFileResolver(r FileResolver) {
+	if r == nil {
+		r = p.env.FileResolver()
+		if r == nil {
+			r = NewOSFileResolver(p.env)
+		}
+	}
+	p.fileResolver = r
 }
 
 // SetMaxDepth sets the maximum structural recursion depth allowed during

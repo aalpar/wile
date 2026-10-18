@@ -248,3 +248,37 @@ func TestExpandCaseLambdaForm(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
+
+// Pin: a child expander carries the parent's fileResolver. include and
+// cond-expand splicing run inside nested bodies (lambda, let), and the resolver
+// the engine set on the expander need not be env.FileResolver()
+// (pkg/registry/core/bootstrap.scm compiles with an embed resolver), so a child
+// that rebuilt its own would read from the wrong source.
+func TestExpander_ChildCarriesFileResolver(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewNamespace().Runtime()
+	exp := NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	custom := NewOSFileResolver(env)
+	exp.SetFileResolver(custom)
+
+	child := exp.newChildExpander(env)
+
+	c.Assert(child.fileResolver, qt.Equals, FileResolver(custom))
+}
+
+// The constructor defaults the resolver as NewCompileTimeContinuation does, and
+// a nil setter argument resets to that default.
+func TestExpander_FileResolverDefaultsAndResets(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewNamespace().Runtime()
+	exp := NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	c.Assert(exp.fileResolver, qt.IsNotNil)
+
+	custom := NewOSFileResolver(env)
+	exp.SetFileResolver(custom)
+	c.Assert(exp.fileResolver, qt.Equals, FileResolver(custom))
+
+	exp.SetFileResolver(nil)
+	c.Assert(exp.fileResolver, qt.Not(qt.Equals), FileResolver(custom))
+	c.Assert(exp.fileResolver, qt.IsNotNil)
+}

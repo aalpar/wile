@@ -21,6 +21,7 @@ import (
 	"io"
 	"io/fs"
 
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
 	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 	"github.com/aalpar/wile/pkg/parser"
@@ -31,7 +32,7 @@ import (
 )
 
 func findFile(p *CompileTimeContinuation, ctctx CompileTimeCallContext, path string) (fs.File, string, error) {
-	return p.fileResolver.ResolveAndOpen(p.includeAuthorizerContext(ctctx.Context()), path)
+	return p.fileResolver.ResolveAndOpen(includeAuthorizerContext(ctctx.Context(), p.env), path)
 }
 
 // includeAuthorizerContext installs the COMPILING namespace's effective
@@ -47,14 +48,17 @@ func findFile(p *CompileTimeContinuation, ctctx CompileTimeCallContext, path str
 // nested inside a library load must stay under the authorizer LoadLibrary
 // installed for that chain. Overwriting it with the compiling env's would
 // WEAKEN the policy mid-load, which is the opposite of the fix.
-func (p *CompileTimeContinuation) includeAuthorizerContext(ctx context.Context) context.Context {
+//
+// It is a free function so the expander can install the same authorizer without
+// a CompileTimeContinuation.
+func includeAuthorizerContext(ctx context.Context, env *environment.EnvironmentFrame) context.Context {
 	if security.FromContext(ctx) != nil {
 		return ctx
 	}
-	if p.env == nil {
+	if env == nil {
 		return ctx
 	}
-	ns := p.env.Namespace()
+	ns := env.Namespace()
 	if ns == nil {
 		return ctx
 	}
@@ -63,6 +67,40 @@ func (p *CompileTimeContinuation) includeAuthorizerContext(ctx context.Context) 
 		return ctx
 	}
 	return security.WithAuthorizer(ctx, auth)
+}
+
+// readIncludedForms resolves name through r under the compiling namespace's
+// authorizer, reads every form of the file, and returns them with the resolved
+// path. The file is closed before it returns. foldCase reads the file as if it
+// began with #!fold-case (include-ci, R7RS §2.1).
+//
+// It neither pushes the load stack nor processes the forms: the caller owns
+// both, because the push must follow the open (a nested relative path resolves
+// against the included file) and must outlive the processing.
+func readIncludedForms(ctx context.Context, env *environment.EnvironmentFrame, r FileResolver, name string, foldCase bool) ([]syntax.SyntaxValue, string, error) {
+	file, filePath, err := r.ResolveAndOpen(includeAuthorizerContext(ctx, env), name)
+	if err != nil {
+		return nil, "", werr.WrapForeignErrorf(err, "include")
+	}
+	defer file.Close() //nolint:errcheck
+
+	fileParser := parser.NewParserWithFile(env, true, bufio.NewReader(file), filePath)
+	// include-ci reads the file case-insensitively (R7RS §2.1 fold-case),
+	// folding identifiers to lowercase as they are read.
+	fileParser.SetFoldCase(foldCase)
+
+	var forms []syntax.SyntaxValue
+	for {
+		stx, readErr := fileParser.ReadSyntax(ctx)
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+			return nil, "", werr.WrapForeignErrorf(readErr, "include: error reading %q", name)
+		}
+		forms = append(forms, stx)
+	}
+	return forms, filePath, nil
 }
 
 // CompileInclude compiles an include expression.
@@ -98,12 +136,12 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			return werr.WrapForeignErrorf(werr.ErrNotAPair, "include: expected a string but got a %T", car)
 		}
 
-		// Find and open the file
-		file, filePath, err := findFile(p, ctctx, fn.Value)
+		// Find, open and read the whole file. The stack push below comes after
+		// this, so the file resolves against the includer's directory.
+		forms, filePath, err := readIncludedForms(ctctx.Context(), p.env, p.fileResolver, fn.Value, foldCase)
 		if err != nil {
-			return werr.WrapForeignErrorf(err, "include")
+			return err
 		}
-		defer file.Close() //nolint:errcheck
 
 		// Push to stack after successful open, pop on exit, so a nested relative
 		// path inside the included file resolves against ITS directory rather
@@ -125,26 +163,6 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 		}
 		stack.Push(filePath)
 		defer stack.Pop()
-
-		// Create parser for the file
-		reader := bufio.NewReader(file)
-		fileParser := parser.NewParserWithFile(p.env, true, reader, filePath)
-		// include-ci reads the file case-insensitively (R7RS §2.1 fold-case),
-		// folding identifiers to lowercase as they are read.
-		fileParser.SetFoldCase(foldCase)
-
-		// Read all forms from the file first, then process them with letrec* semantics
-		var forms []syntax.SyntaxValue
-		for {
-			stx, readErr := fileParser.ReadSyntax(inner.ctx)
-			if readErr != nil {
-				if errors.Is(readErr, io.EOF) {
-					break
-				}
-				return werr.WrapForeignErrorf(readErr, "include: error reading %q", fn.Value)
-			}
-			forms = append(forms, stx)
-		}
 
 		// Process forms with letrec* semantics: pre-declare all bindings first
 		return p.processFormsWithLetrecSemantics(inner, forms, "include "+fn.Value)

@@ -28,18 +28,30 @@ import (
 // resolveCondExpandClause finds the first matching clause in a cond-expand form.
 // Handles validation, registry lookup, feature requirement parsing, and clause
 // matching. Returns the matched clause pair whose cdr contains the body forms.
-func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, args syntax.SyntaxValue) (*syntax.SyntaxPair, error) {
+//
+// It is a free function so the expander can resolve a clause without a
+// CompileTimeContinuation. Both extra parameters are load-bearing:
+//
+//   - evaluator: a (library X) requirement is answered by LibraryAvailable,
+//     which COMPILES X, and compiling needs the evaluator for
+//     NewExpanderTimeContinuation(...).ExpandExpression and
+//     NewCompileTimeContinuation inside compileLibrary (library_loader.go).
+//     Only EnsureInstantiated's EvalTemplate is deferred. nil falls back to
+//     file existence.
+//   - source: every refusal is wrapped as a *SourcedError at this location. A
+//     plain wrap would drop the provenance the caller holds.
+func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, args syntax.SyntaxValue, source *syntax.SourceContext) (*syntax.SyntaxPair, error) {
 	if syntax.IsSyntaxEmptyList(args) {
-		return nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses"))
+		return nil, wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses"))
 	}
 
 	argsPair, ok := args.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of clauses"))
+		return nil, wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of clauses"))
 	}
 
-	registry := registryOf(p.env)
-	resolver := p.env.FileResolver()
+	registry := registryOf(env)
+	resolver := env.FileResolver()
 
 	// A (library X) requirement asks whether X is AVAILABLE, not what X does
 	// (R7RS §4.2.1). LibraryAvailable answers it by compiling X and stopping
@@ -49,9 +61,9 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 	// stays in the registry, so a later real import is the instantiation alone.
 	// nil falls back to file existence, as in a unit test with no evaluator.
 	var load LibraryLoadProbe
-	if p.env != nil && p.evaluator != nil {
+	if env != nil && evaluator != nil {
 		load = func(name LibraryName) bool {
-			return LibraryAvailable(ctx, name, p.env, p.evaluator)
+			return LibraryAvailable(ctx, name, env, evaluator)
 		}
 	}
 
@@ -59,7 +71,7 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 	_, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, hasNext bool, clause syntax.SyntaxValue) error {
 		clausePair, ok := clause.(*syntax.SyntaxPair)
 		if !ok {
-			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause must be a list"))
+			return wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause must be a list"))
 		}
 
 		reqExpr := clausePair.SyntaxCar()
@@ -68,8 +80,8 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 		// structural constraint on the whole clause list, so it is checked on
 		// every clause — before the matched-clause short-circuit below, which
 		// would otherwise stop scanning once an earlier clause matches.
-		if isElseClause(p.env, reqExpr) && hasNext {
-			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
+		if isElseClause(env, reqExpr) && hasNext {
+			return wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
 				"cond-expand: else must be the last clause"))
 		}
 
@@ -77,9 +89,9 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 			return nil // Already found a match; keep scanning to validate else position.
 		}
 
-		req, err := parseFeatureRequirement(ctx, p.env, reqExpr)
+		req, err := parseFeatureRequirement(ctx, env, reqExpr)
 		if err != nil {
-			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement"))
+			return wrapSourcedError(source, werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement"))
 		}
 
 		if req.IsSatisfied(ctx, registry, resolver, load) {
@@ -93,7 +105,7 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 	}
 
 	if matchedClause == nil {
-		return nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no matching clause"))
+		return nil, wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no matching clause"))
 	}
 
 	return matchedClause.(*syntax.SyntaxPair), nil
@@ -112,7 +124,7 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 //	  (r7rs (display "R7RS"))
 //	  (else (display "other")))
 func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	matchedPair, err := p.resolveCondExpandClause(ctctx.ctx, expr)
+	matchedPair, err := resolveCondExpandClause(ctctx.ctx, p.env, p.evaluator, expr, p.currentSource())
 	if err != nil {
 		return err
 	}
@@ -157,7 +169,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 // Each clause is (<feature-requirement> <library-declaration> ...)
 // The first clause whose feature requirement is satisfied has its declarations processed.
 func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
-	matchedPair, err := p.resolveCondExpandClause(ctctx.ctx, args)
+	matchedPair, err := resolveCondExpandClause(ctctx.ctx, p.env, p.evaluator, args, p.currentSource())
 	if err != nil {
 		return err
 	}
