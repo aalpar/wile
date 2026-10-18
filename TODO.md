@@ -27,7 +27,7 @@ after it, `git log -p todo/<file>`.
 | File | Holds | Open | Closed | Lines |
 |---|---|---|---|---|
 | [`todo/tier1-security-correctness.md`](todo/tier1-security-correctness.md) | Conformance, hygiene, binding identity, phases, reader; blocks production embedded use | 57 | 78 | 2016 |
-| [`todo/tier2-embedding-api.md`](todo/tier2-embedding-api.md) | Embedding API, algebra & analytics roadmap, feature deltas | 34 | 19 | 145 |
+| [`todo/tier2-embedding-api.md`](todo/tier2-embedding-api.md) | Embedding API, algebra & analytics roadmap, feature deltas | 33 | 20 | 145 |
 | [`todo/tier3-tooling-dx.md`](todo/tier3-tooling-dx.md) | Linter, tooling, developer experience | 5 | 5 | 12 |
 | [`todo/tier4-performance.md`](todo/tier4-performance.md) | Measured perf levers; unboxed arithmetic is the largest | 12 | 8 | 133 |
 | [`todo/tier5-tech-debt.md`](todo/tier5-tech-debt.md) | Simplification, dedup, crosscheck-filed residuals, postponed items | 85 | 54 | 1213 |

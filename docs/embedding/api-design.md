@@ -71,7 +71,7 @@ Symbols are not interned per engine: `eq?` compares symbols by name, so `'foo` f
 | `EvalMultiple(ctx, code)` | `string` | Compile and run each top-level form independently, return last result. Forward references between separate `define`s do not resolve |
 | `EvalMultipleWithSource(ctx, code, source)` | `string` + source name | EvalMultiple with source attribution |
 | `EvalProgram(ctx, code, source)` | `string` + source name | Whole-program semantics: every top-level form is spliced into one `(begin ...)` and compiled as a unit, so top-level `define`s are mutually visible. The recommended entry point for a script or file |
-| `CheckProgram(ctx, code, source)` | `string` + source name | Parse, expand, and compile exactly as `EvalProgram` does, without running; returns the first error. Not side-effect-free: `(import ...)` runs library bodies, and the program's top-level `define`s stay registered on the engine |
+| `CheckProgram(ctx, code, source)` | `string` + source name | Parse, expand, and compile exactly as `EvalProgram` does, without running; returns the first error. Not side-effect-free: compilation runs macro transformers, `begin-for-syntax`/`define-for-syntax`/`eval-when` (`expand`/`compile`) bodies and imported library bodies, and the program's top-level `define`s stay registered on the engine |
 | `Compile(ctx, expr)` | `*Expression` | Compile a parsed expression without executing |
 | `Run(ctx, compiled)` | `*CompiledCode` | Execute pre-compiled code |
 | `Call(ctx, proc, args...)` | `Value` + args | Call a Scheme procedure from Go |

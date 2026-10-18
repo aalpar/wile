@@ -23,7 +23,7 @@ import (
 )
 
 // CheckProgram parses, expands, and compiles code as a single top-level program
-// without executing it, and reports the first error with source location — the
+// without running its run-time top level, and reports the first error with source location — the
 // go build equivalent for a Scheme program. It returns nil when the program
 // compiles clean. source labels the code in diagnostics; pass "" if none.
 //
@@ -37,11 +37,20 @@ import (
 //
 // Two things it is NOT:
 //
-// Not side-effect-free. (import ...) executes the imported library's body during
-// compilation of the importing form (see
-// machine/compilation/library_loader.go, compileAndExecuteLibrary), so checking
-// a program that imports a side-effecting library runs those effects. Only the
-// checked program's own top level is guaranteed not to run.
+// Not side-effect-free. Compilation executes code: macro transformers (the
+// right-hand sides of define-syntax, let-syntax and letrec-syntax, and for
+// procedural transformers their bodies at every use), begin-for-syntax,
+// define-for-syntax, eval-when (expand/compile), and the bodies of imported
+// libraries ((import ...) instantiates the library during compilation of the
+// importing form; see (*CompiledLibrary).EnsureInstantiated in
+// machine/compilation/library_registry.go). Checking a program that contains or
+// imports any of these runs their effects, and nothing bounds their running time
+// but ctx. Only the checked program's own run-time top-level expressions are
+// guaranteed not to run. Running phase-1 code is inherent to a Scheme with
+// procedural macros (Racket's raco make and raco expand both run
+// begin-for-syntax); running the bodies of libraries imported for run time is not, it is
+// Wile's eager instantiation (raco expand does not run a required module's
+// phase-0 body; it does run one required for-syntax).
 //
 // Not read-only with respect to the engine. Compiling a top-level define
 // registers its binding — that registration is what makes forward references
