@@ -23,7 +23,7 @@ import (
 )
 
 // CheckProgram parses, expands, and compiles code as a single top-level program
-// without executing it, and reports the first error with source location — the
+// without running its top level, and reports the first error with source location — the
 // go build equivalent for a Scheme program. It returns nil when the program
 // compiles clean. source labels the code in diagnostics; pass "" if none.
 //
@@ -37,16 +37,19 @@ import (
 //
 // Two things it is NOT:
 //
-// Not side-effect-free. Compilation executes code: transformer right-hand sides
-// (define-syntax, let-syntax), begin-for-syntax and define-for-syntax bodies, and
-// the bodies of imported libraries ((import ...) runs the library body during
-// compilation of the importing form; see
-// machine/compilation/library_loader.go, compileAndExecuteLibrary). Checking a
-// program that contains or imports any of these runs their effects, and
-// nothing bounds their running time but ctx. Only the checked program's own
-// run-time top-level expressions are guaranteed not to run. This is inherent to
-// any Scheme with define-syntax (Racket's raco make and raco expand both run
-// begin-for-syntax), not a gap to close.
+// Not side-effect-free. Compilation executes code: macro transformers (the
+// right-hand sides of define-syntax, let-syntax and letrec-syntax, and for
+// procedural transformers their bodies at every use), begin-for-syntax,
+// define-for-syntax, eval-when (expand/compile), and the bodies of imported
+// libraries ((import ...) instantiates the library during compilation of the
+// importing form; see (*CompiledLibrary).EnsureInstantiated in
+// machine/compilation/library_registry.go). Checking a program that contains or
+// imports any of these runs their effects, and nothing bounds their running time
+// but ctx. Only the checked program's own run-time top-level expressions are
+// guaranteed not to run. Running phase-1 code is inherent to a Scheme with
+// procedural macros (Racket's raco make and raco expand both run
+// begin-for-syntax); running library bodies is not, it is Wile's eager
+// instantiation (raco expand does not run a required module's phase-0 body).
 //
 // Not read-only with respect to the engine. Compiling a top-level define
 // registers its binding — that registration is what makes forward references

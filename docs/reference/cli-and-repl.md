@@ -27,7 +27,7 @@ the last `-f` file. A bare `-` names standard input, positionally or as
 | `-f`  | `--file`         | string (repeatable) | Load a Scheme file |
 | `-i`  | `--interactive`  | bool       | Enter REPL after loading file(s) |
 | `-L`  | `--library-path` | string     | Library search paths (colon-separated) |
-|       | `--check`        | bool       | Parse and compile without executing; report errors and exit |
+|       | `--check`        | bool       | Compile without running the program's run-time top level; report errors and exit. Compilation still executes macro transformers, begin-for-syntax, define-for-syntax, eval-when (expand/compile) and imported library bodies |
 | `-q`  | `--quiet`        | bool       | Suppress informational messages |
 |       | `--strict`       | string     | Narrow the visible top level: `core` binds only the core surface, `no-bindings` binds nothing (everything, `car` included, must be imported). See [Strict namespace](../embedding/api-design.md#strict-namespace) |
 | `-V`  | `--version`      | bool       | Print version and exit |
@@ -98,11 +98,13 @@ cannot be rebound to a different arity:
 Uncheckable calls are left to the existing run-time arity error; nothing is
 weakened, only reported earlier where it can be.
 
-**Not side-effect-free.** Compilation executes transformer right-hand sides
-(`define-syntax`, `let-syntax`), `begin-for-syntax` and `define-for-syntax`
-bodies, and the bodies of imported libraries. Checking a program that contains
-or imports any of them runs their effects, bounded in time only by the
-context. The checked program's own run-time top-level expressions never run.
+**Not side-effect-free.** Compilation executes macro transformers (the
+right-hand sides of `define-syntax`, `let-syntax` and `letrec-syntax`, and for
+procedural transformers their bodies at every use), `begin-for-syntax`,
+`define-for-syntax`, `eval-when` (`expand`/`compile`), and the bodies of
+imported libraries. Checking a program that contains or imports any of them
+runs their effects, bounded in time only by the context. The checked program's
+own run-time top-level expressions never run.
 
 ### Environment Variables
 

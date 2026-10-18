@@ -56,7 +56,7 @@ type Options struct {
 	Eval         []string `short:"e" long:"eval" description:"Evaluate Scheme expression (repeatable)" unquote:"false"`
 	File         []string `short:"f" long:"file" description:"Scheme file(s) to load (can be repeated)" unquote:"false"`
 	Interactive  bool     `short:"i" long:"interactive" description:"Enter REPL after loading file(s)"`
-	Check        bool     `long:"check" description:"Compile without running the program's top level; report errors and exit. Compilation still executes transformer right-hand sides, begin-for-syntax, define-for-syntax and imported library bodies"`
+	Check        bool     `long:"check" description:"Compile without running the program's run-time top level; report errors and exit. Compilation still executes macro transformers, begin-for-syntax, define-for-syntax, eval-when (expand/compile) and imported library bodies"`
 	LibraryPath  string   `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)" unquote:"false"`
 	Version      bool     `short:"V" long:"version" description:"Print version information and exit"`
 	Quiet        bool     `short:"q" long:"quiet" description:"Suppress informational messages"`
@@ -628,7 +628,7 @@ func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename 
 	}
 }
 
-// runCheck compiles every input without executing it, reporting the first
+// runCheck compiles every input without running its top level, reporting the first
 // failure and exiting 1, or exiting 0 when everything compiles clean.
 //
 // It is a mode of its own rather than a branch inside the run paths because
@@ -667,7 +667,7 @@ func runCheck(ctx context.Context, eng *wile.Engine, files []string, evals []str
 	}
 }
 
-// checkFile compiles one source without executing it. The file's directory goes
+// checkFile compiles one source without running its top level. The file's directory goes
 // on the load path because include resolves at compile time and so is reached by
 // checking.
 func checkFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename string, shebang bool) {
