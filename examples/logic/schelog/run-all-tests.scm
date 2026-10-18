@@ -158,23 +158,22 @@
               (schelog:deref* (car solution)))
         (test "games puzzle answer 2"
               '(richard plays tennis)
-              (schelog:deref* (cadr solution))))))
+              (schelog:deref* (cadr solution)))))))
 
-  ;; ---------------------------------------------------------------------------
-  ;; Summary
-  ;; ---------------------------------------------------------------------------
-  (newline)
-  (display "=== Test Summary ===\n")
-  (display "Passed: ")
-  (display tests-passed)
-  (newline)
-  (display "Failed: ")
-  (display tests-failed)
-  (newline)
+;; ---------------------------------------------------------------------------
+;; Summary
+;; ---------------------------------------------------------------------------
+(newline)
+(display "=== Test Summary ===\n")
+(display "Passed: ")
+(display tests-passed)
+(newline)
+(display "Failed: ")
+(display tests-failed)
+(newline)
 
-  (if (= tests-failed 0)
-      (display "\nAll tests passed! Wile is fully compatible with Schelog.\n")
-      (begin
-        (display "\nSome tests failed. See above for details.\n")
-        (exit 1))))
-
+(if (= tests-failed 0)
+    (display "\nAll tests passed! Wile is fully compatible with Schelog.\n")
+    (begin
+      (display "\nSome tests failed. See above for details.\n")
+      (exit 1)))

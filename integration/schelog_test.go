@@ -62,4 +62,8 @@ func TestSchelogSuite(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Failed: 0") {
 		t.Fatalf("schelog suite reported failures\n\nOutput:\n%s", stdout.String())
 	}
+	// A pass count guards against a block that silently stops running.
+	if !strings.Contains(stdout.String(), "Passed: 22\n") {
+		t.Fatalf("schelog suite did not report 22 passes\n\nOutput:\n%s", stdout.String())
+	}
 }

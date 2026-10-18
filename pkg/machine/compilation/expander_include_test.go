@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
+	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -94,29 +95,51 @@ func TestExpandIncludeForm_SplicesFilesInOrder(t *testing.T) {
 	qt.Assert(t, head.Scopes().Len(), qt.Equals, 1, qt.Commentf("the head carries exactly its own fresh scope"))
 }
 
-// Pin: the load stack the splice derives for a top-level include lives on the
-// child expander's ctx only; the parent's ctx is untouched afterwards.
+// Pin: the splice leaves the load stack as it found it. A top-level include
+// derives a stack on the child expander's ctx only (the parent's ctx stays
+// without one); an include under an existing stack pushes the file and pops it
+// again, so the depth is unchanged afterwards.
 func TestExpandIncludeForm_LoadStackDoesNotEscape(t *testing.T) {
 	fsys := fstest.MapFS{"a.scm": &fstest.MapFile{Data: []byte("(define a 1)")}}
 
-	p, _, err := expandIncludeFor(t, fsys, values.NewString("a.scm"))
+	t.Run("no stack yet", func(t *testing.T) {
+		p, _, err := expandIncludeFor(t, fsys, values.NewString("a.scm"))
 
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, resolver.SelectLoadStack(p.ctx), qt.IsNil)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, resolver.SelectLoadStack(p.ctx), qt.IsNil)
+	})
+
+	t.Run("existing stack", func(t *testing.T) {
+		env := newNamespace(environment.NewNamespace().Runtime())
+		env.SetFileResolver(NewFSFileResolver(fsys, env))
+		stack := sourceload.NewLoadStack()
+		ctx := sourceload.WithLoadStack(context.Background(), stack)
+		p := NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator())
+		sctx := syntax.NewZeroValueSourceContext()
+		sym := syntax.NewSyntaxSymbol("include", sctx)
+		rest := mustDatumToSyntax(sctx, values.List(values.NewString("a.scm")))
+
+		_, err := p.expandIncludeForm(sym, rest)
+
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, stack.Depth(), qt.Equals, 0)
+	})
 }
 
 // Pin: every shape the splice cannot read is returned UNCHANGED for the validator
-// and compiler to report, and so is an env with no resolver.
+// to report, and so is an env with no resolver (there the compiler's OS-resolver
+// fallback includes the file with the pre-splice semantics).
 func TestExpandIncludeForm_BailsToTheValidator(t *testing.T) {
 	fsys := fstest.MapFS{"a.scm": &fstest.MapFile{Data: []byte("(define a 1)")}}
 	tcs := []struct {
 		name string
 		fsys fstest.MapFS
 		args []values.Value
+		want string
 	}{
-		{name: "no resolver", args: []values.Value{values.NewString("a.scm")}},
-		{name: "no operands", fsys: fsys},
-		{name: "a non-string operand", fsys: fsys, args: []values.Value{values.NewInteger(5)}},
+		{name: "no resolver", args: []values.Value{values.NewString("a.scm")}, want: `(include "a.scm")`},
+		{name: "no operands", fsys: fsys, want: "(include)"},
+		{name: "a non-string operand", fsys: fsys, args: []values.Value{values.NewInteger(5)}, want: "(include 5)"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -128,6 +151,8 @@ func TestExpandIncludeForm_BailsToTheValidator(t *testing.T) {
 			head, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
 			qt.Assert(t, ok, qt.IsTrue)
 			qt.Assert(t, head.Scopes().Len(), qt.Equals, 0)
+			datum := syntax.UnwrapAllShared(got, map[syntax.SyntaxValue]values.Value{})
+			qt.Assert(t, datum.SchemeString(), qt.Equals, tc.want)
 		})
 	}
 }
@@ -147,5 +172,5 @@ func TestExpandIncludeForm_ExpansionFailureNamesTheFile(t *testing.T) {
 	_, _, err := expandIncludeFor(t, fsys, values.NewString("bad.scm"))
 
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "include bad.scm: error expanding forms")
+	qt.Assert(t, err.Error(), qt.Contains, "include: failed to expand bad.scm")
 }

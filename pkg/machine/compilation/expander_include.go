@@ -42,9 +42,11 @@ func (p *ExpanderTimeContinuation) expandIncludeCiForm(sym *syntax.SyntaxSymbol,
 // expandIncludeImpl reads each named file, expands its forms in the includer's
 // environment, and returns them as one (begin form ...).
 //
-// A form of the wrong shape (no filename, a non-string, an improper list) or an
-// environment with no file resolver is returned unchanged for the validator and
-// compiler to report, as every other arity-guarded expander here does.
+// A form of the wrong shape (no filename, a non-string, an improper list) is
+// returned unchanged for the validator to report, as every other arity-guarded
+// expander here does. So is any include in an environment with no file resolver,
+// but there nothing reports it: the compiler falls back to an OS resolver and
+// includes the file through CompileInclude, with the pre-splice semantics.
 //
 // Three properties are load-bearing:
 //
@@ -101,7 +103,7 @@ func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, 
 		for s := range sym.Scopes().All() {
 			form = syntax.AddScopeToSyntax(form, s)
 		}
-		forms[i] = form
+		forms[i] = p.pruneUseSiteScopes(form)
 	}
 
 	ctx := p.ctx
@@ -118,7 +120,7 @@ func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, 
 	child.libraryScope = p.libraryScope
 	expanded, err := child.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "include %s: error expanding forms", name)
+		return nil, werr.WrapForeignErrorf(err, "include: failed to expand %s", name)
 	}
 	return expanded, nil
 }

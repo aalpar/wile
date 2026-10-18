@@ -212,3 +212,153 @@ func TestIncludeSplicePins(t *testing.T) {
 		})
 	}
 }
+
+// TestIncludePassedThroughAMacro pins the use-site pruning of spliced forms: an
+// include handed to a macro as an operand has the macro's use-site scope on its
+// head, and the file's forms inherit it. Unpruned, the spliced binders carry the
+// scope and a reference outside the macro use cannot see them (Chez, Racket and
+// master all answer 7).
+func TestIncludePassedThroughAMacro(t *testing.T) {
+	fsys := fstest.MapFS{
+		"x.scm": &fstest.MapFile{Data: []byte(`(define (inside) 7)`)},
+	}
+	pass := `(define-syntax pass (syntax-rules () ((_ e) e))) `
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{name: "body position", code: pass + `(define (f) (pass (include "x.scm")) (inside)) (f)`},
+		{name: "top level", code: pass + `(pass (include "x.scm")) (inside)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fsys, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, "7")
+		})
+	}
+}
+
+// TestMacroIntroducedIncludeHidesItsDefinitions pins a deliberate change: an
+// include a macro's TEMPLATE introduces is hygienic, so the file's definitions
+// carry the macro's introduction scope and are invisible at the use site. Master
+// exposed them; Chez and Racket refuse, as does the splice. Pinned so it is not
+// "fixed" back.
+func TestMacroIntroducedIncludeHidesItsDefinitions(t *testing.T) {
+	fsys := fstest.MapFS{
+		"x.scm": &fstest.MapFile{Data: []byte(`(define (inside) 7)`)},
+	}
+	_, err := evalIncludeProgram(t, fsys,
+		`(define-syntax inc (syntax-rules () ((_) (include "x.scm")))) (inc) (inside)`)
+	qt.Assert(t, err, qt.IsNotNil)
+}
+
+// TestIncludeSplicePinsLoadStackAndHead pins the two properties the splice must
+// keep that TestIncludeSplicePins does not reach.
+//
+//   - The head drops the include head's scopes: with a let-bound begin, a head
+//     that kept them would resolve to the local begin.
+//   - The load stack is popped after a nested include, so a SIBLING include that
+//     follows resolves against the includer's directory, not the nested file's.
+func TestIncludeSplicePinsLoadStackAndHead(t *testing.T) {
+	fsys := fstest.MapFS{
+		"v.scm":      &fstest.MapFile{Data: []byte(`5`)},
+		"chain2.scm": &fstest.MapFile{Data: []byte(`(include "sub/b2.scm") (include "d.scm")`)},
+		"sub/b2.scm": &fstest.MapFile{Data: []byte(`(define b2 1)`)},
+		"d.scm":      &fstest.MapFile{Data: []byte(`(define dv 'root)`)},
+		"sub/d.scm":  &fstest.MapFile{Data: []byte(`(define dv 'sub)`)},
+	}
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{name: "begin bound by the includer's let", code: `(let ((begin (lambda args 'shadowed))) (include "v.scm"))`, want: "5"},
+		{name: "sibling include after a nested one", code: `(include "chain2.scm") dv`, want: "root"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fsys, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestIncludeUnitBoundaryShapes pins two further shapes the splice changes:
+// defining the same name from two includes is an ordinary redefinition (master
+// refused it as a mutation of an immutable binding), and a macro an included
+// file defines is bound in a body after the include.
+func TestIncludeUnitBoundaryShapes(t *testing.T) {
+	fsys := fstest.MapFS{
+		"a.scm": &fstest.MapFile{Data: []byte(`(define dup 1)`)},
+		"b.scm": &fstest.MapFile{Data: []byte(`(define dup 2)`)},
+		"m.scm": &fstest.MapFile{Data: []byte(`(define-syntax foo (syntax-rules () ((_) 42)))`)},
+	}
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{name: "same name defined by two includes", code: `(include "a.scm") (include "b.scm") dup`, want: "2"},
+		{name: "macro from an include used in a body", code: `(define (f) (include "m.scm") (foo)) (f)`, want: "42"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fsys, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestIncludeInLibraryBeginBody pins an include inside a library (begin ...)
+// body: that include reaches the expander (a declaration-level one goes through
+// CompileInclude), and a macro it defines is bound for the forms after it.
+func TestIncludeInLibraryBeginBody(t *testing.T) {
+	fsys := fstest.MapFS{
+		"lib/m.sld": &fstest.MapFile{Data: []byte(`(define-library (m)
+  (export get)
+  (begin
+    (define (helper) 42)
+    (include "mac.scm")
+    (define (get) (use-it))))`)},
+		"lib/mac.scm": &fstest.MapFile{Data: []byte(`(define-syntax use-it (syntax-rules () ((_) (helper))))`)},
+	}
+	ctx := context.Background()
+	engine, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // the test exercises include resolution, not the sandbox
+		wile.WithSourceFS(fsys),
+		wile.WithLibraryPaths("lib"),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	result, err := engine.EvalMultiple(ctx, `(import (m)) (get)`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "42")
+}
+
+// TestIncludeErrorsKeepTheirLocations pins where include errors point: a missing
+// file at the include form's own line, and a form of the file that fails to
+// expand at the file's own line (the includer's coarser location does not
+// replace it).
+func TestIncludeErrorsKeepTheirLocations(t *testing.T) {
+	fsys := fstest.MapFS{
+		"badexp.scm": &fstest.MapFile{Data: []byte("(define ok 1)\n(syntax-error \"boom\")")},
+	}
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{name: "missing file names the include's line", code: "(define a 1)\n(define b 2)\n(include \"absent.scm\")", want: "includer.scm:3:"},
+		{name: "expansion failure keeps the file's line", code: `(include "badexp.scm")`, want: "badexp.scm:2:"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := evalIncludeProgram(t, fsys, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, err.Error(), qt.Contains, tc.want)
+		})
+	}
+}

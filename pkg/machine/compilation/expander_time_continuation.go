@@ -150,7 +150,7 @@ func NewExpanderTimeContinuation(ctx context.Context, env *environment.Environme
 // over, env is the nested-body environment, and libraryScope is deliberately
 // left nil (these body sites never propagated it — where library scope must
 // flow into a nested expander, the code sets it explicitly, e.g.,
-// compile_time_continuation_include.go). Sharing only the depth guard keeps the
+// expander_include.go:expandIncludedFile). Sharing only the depth guard keeps the
 // hygiene behavior unchanged.
 func (p *ExpanderTimeContinuation) newChildExpander(env *environment.EnvironmentFrame) *ExpanderTimeContinuation {
 	q := &ExpanderTimeContinuation{
