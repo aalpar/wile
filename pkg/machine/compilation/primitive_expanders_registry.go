@@ -31,7 +31,6 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	{"unquote", (*ExpanderTimeContinuation).expandUnchanged},
 	{"unquote-splicing", (*ExpanderTimeContinuation).expandUnchanged},
 	{"define-library", (*ExpanderTimeContinuation).expandUnchanged},
-	{"cond-expand", (*ExpanderTimeContinuation).expandUnchanged},
 	{"syntax", (*ExpanderTimeContinuation).expandUnchanged},
 	{"quote-syntax", (*ExpanderTimeContinuation).expandUnchanged},
 	{TransformerSyntaxRules, (*ExpanderTimeContinuation).expandUnchanged},
@@ -47,6 +46,7 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	{"eval-when", (*ExpanderTimeContinuation).expandEvalWhen},
 	{"include", (*ExpanderTimeContinuation).expandIncludeForm},
 	{"include-ci", (*ExpanderTimeContinuation).expandIncludeCiForm},
+	{"cond-expand", (*ExpanderTimeContinuation).expandCondExpandForm},
 	{"let-syntax", (*ExpanderTimeContinuation).expandLetSyntax},
 	{"letrec-syntax", (*ExpanderTimeContinuation).expandLetrecSyntax},
 

@@ -696,13 +696,12 @@ func TestCondExpandRegistered(t *testing.T) {
 		t.Fatalf("RegisterSyntaxCompilers failed: %v", err)
 	}
 
-	// Check if cond-expand is registered
+	// cond-expand splices at expand time (expandCondExpandForm), so no form
+	// reaches the compiler to need a syntax compiler.
 	sym := values.NewSymbol("cond-expand")
 	pc := LookupPhaseBinding[*SyntaxCompiler](env, sym, syntax.Scopes{})
-	if pc == nil {
-		t.Errorf("cond-expand primitive compiler not found")
-	} else {
-		t.Logf("cond-expand found: %v", pc)
+	if pc != nil {
+		t.Errorf("cond-expand should NOT be registered as a syntax compiler (handled by the expander)")
 	}
 
 	// Core forms like 'if' are now handled by compileValidated* methods

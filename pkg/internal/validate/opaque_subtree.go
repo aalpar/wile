@@ -29,7 +29,8 @@ import (
 //     hold any expression: `(,(set! g 1)), `(,(call/cc k)), `(,(lambda () x)).
 //   - *ValidatedLiteral wrapping a FORM rather than self-evaluating data. The
 //     passthrough registry (register.go) and the macro validators park
-//     cond-expand, include, let-syntax, with-syntax and friends here; their
+//     let-syntax, with-syntax, an include the expander left (malformed, or no
+//     file resolver) and friends here; their
 //     bodies are compiled later, in their own validation unit.
 //
 // WalkSubExprs treats both as childless, which is correct — there are no
@@ -71,8 +72,10 @@ import (
 // A define-syntax template is therefore never runtime code in this scope — by the
 // time we validate, any use of the macro has already been substituted, and the
 // substituted set! is an ordinary validated form this unit sees. It is the forms
-// that SURVIVE expansion — cond-expand, include, and a quasiquote template — that
-// are genuinely opaque here.
+// that SURVIVE expansion — a quasiquote template, let-syntax, and an include the
+// expander left unchanged (malformed, or no file resolver) — that are genuinely
+// opaque here. cond-expand and a spliced include do not survive: the expander
+// replaces them with their forms.
 
 // opaqueRawSyntax reports whether an expression is an opaque subtree, and returns
 // the raw syntax it conceals together with the environment that syntax's heads
@@ -148,7 +151,7 @@ func IsOpaqueSubtree(expr ValidatedExpr) bool {
 // It is exported so that pkg/machine/compilation's boxing pass can ask the
 // question this package already answers, instead of concluding "nothing in
 // there" from WalkSubExprs reporting an opaque node childless. That blindness is
-// what left a `set!` inside a quasiquote or a cond-expand invisible to the ref
+// what left a `set!` inside a quasiquote or a passthrough form invisible to the ref
 // index, so a captured local was never boxed and the closure kept a stale copy —
 // (let ((n 0)) (let ((f (lambda () n))) `(,(set! n 99)) f)) returned 0.
 //
@@ -193,7 +196,7 @@ func opaqueEntryDepth(expr ValidatedExpr) int {
 }
 
 // quasiDepthCode is the entry depth for a subtree that is ordinary CODE: a
-// passthrough body, an include, a cond-expand. Every symbol in it is a live
+// passthrough body, a surviving include. Every symbol in it is a live
 // reference until a quote or quasiquote says otherwise.
 //
 // quasiDepthTemplate is the entry depth for a quasiquote TEMPLATE, which the
@@ -450,7 +453,7 @@ func dottedUnquoteTail(env *environment.EnvironmentFrame, cur *syntax.SyntaxPair
 }
 
 // markOpaqueCode marks an opaque subtree that is ordinary CODE — a passthrough
-// body, an include, a cond-expand. Every symbol in it is live until a quote or
+// body, a surviving include. Every symbol in it is live until a quote or
 // quasiquote inside it says otherwise.
 func markOpaqueCode(env *environment.EnvironmentFrame, raw values.Value, result *ValidationResult) {
 	markOpaqueSubtree(env, raw, quasiDepthCode, result)

@@ -231,7 +231,9 @@ func validateDefineLibrary(ctx context.Context, env *environment.EnvironmentFram
 }
 
 // validateInclude validates (include filename...)
-// Returns a ValidatedLiteral wrapping the original form.
+// Returns a ValidatedLiteral wrapping the original form. An include reaches it
+// only when the expander left the form unchanged: a wrong-shaped form, or an
+// environment with no file resolver (expandIncludeImpl).
 func validateInclude(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source, elements, ok := formPrologue(pair, "include", 1, -1, result)
 	if !ok {
@@ -254,34 +256,6 @@ func validateInclude(_ context.Context, env *environment.EnvironmentFrame, pair 
 	// sees them. Treat every name the form mentions as possibly set!. The file's
 	// contents are not even readable here, so this is the most that can be said —
 	// which is why the capture predicate independently disqualifies frame reuse.
-	markOpaqueCode(env, pair, result)
-	return newLiteralExpr(env, source, pair)
-}
-
-// validateCondExpand validates (cond-expand clause...)
-// Returns a ValidatedLiteral wrapping the original form.
-func validateCondExpand(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source, elements, ok := formPrologue(pair, "cond-expand", 0, -1, result)
-	if !ok {
-		return nil
-	}
-
-	// cond-expand with no clauses is technically valid but useless
-	// Each clause should be a list starting with a feature requirement
-	for i := 1; i < len(elements); i++ {
-		clausePair, ok := elements[i].(*syntax.SyntaxPair)
-		if !ok {
-			result.addErrorf(getSourceContext(elements[i]), "cond-expand", "clause %d must be a list", i)
-			continue
-		}
-		if !clausePair.IsList() {
-			result.addErrorf(getSourceContext(elements[i]), "cond-expand", "clause %d must be a proper list", i)
-		}
-	}
-
-	// The selected clause's body is runtime code in THIS scope, compiled later in
-	// its own unit. Which clause wins is not known here, so every name any clause
-	// mentions is recorded as a possible set! target. See opaque_subtree.go.
 	markOpaqueCode(env, pair, result)
 	return newLiteralExpr(env, source, pair)
 }

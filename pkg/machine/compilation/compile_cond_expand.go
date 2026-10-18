@@ -21,7 +21,6 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 
 	"github.com/aalpar/wile/pkg/syntax"
-	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -42,11 +41,9 @@ import (
 //     when it is nil). A plain wrap would drop the provenance the caller holds,
 //     so a caller passes p.currentSource().
 //
-// env must be non-nil. The improper tail SyntaxForEach returns is not checked
-// here. CompileCondExpand's validator rejects it first; processCondExpand (the
-// library-body caller) bypasses that validator, so a library-body
-// (cond-expand ... . 5) is accepted today. P5.8 retires the validator and so
-// makes the check this function's job.
+// env must be non-nil. An improper clause list is refused here (ErrNotAPair):
+// the expander and processCondExpand (the library-body caller) both reach this
+// function with no validator in front of them.
 func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, args syntax.SyntaxValue, source *syntax.SourceContext) (*syntax.SyntaxPair, error) {
 	if syntax.IsSyntaxEmptyList(args) {
 		return nil, wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses"))
@@ -75,7 +72,7 @@ func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFr
 	}
 
 	var matchedClause syntax.SyntaxValue
-	_, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, hasNext bool, clause syntax.SyntaxValue) error {
+	tail, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, hasNext bool, clause syntax.SyntaxValue) error {
 		clausePair, ok := clause.(*syntax.SyntaxPair)
 		if !ok {
 			return wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause must be a list"))
@@ -110,66 +107,15 @@ func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFr
 	if err != nil {
 		return nil, err
 	}
+	if !syntax.IsSyntaxEmptyList(tail) {
+		return nil, wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause list must be a proper list"))
+	}
 
 	if matchedClause == nil {
 		return nil, wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no matching clause"))
 	}
 
 	return matchedClause.(*syntax.SyntaxPair), nil
-}
-
-// CompileCondExpand compiles a cond-expand expression.
-// cond-expand is evaluated at compile-time and expands to the body of the first
-// clause whose feature requirement is satisfied.
-//
-// Syntax: (cond-expand <clause> ...)
-// where <clause> is (<feature-requirement> <expression> ...)
-//
-// Example:
-//
-//	(cond-expand
-//	  (r7rs (display "R7RS"))
-//	  (else (display "other")))
-func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	matchedPair, err := resolveCondExpandClause(ctctx.ctx, p.env, p.evaluator, expr, p.currentSource())
-	if err != nil {
-		return err
-	}
-
-	// Compile the expressions in the matched clause
-	bodyExpr := matchedPair.SyntaxCdr()
-	if syntax.IsSyntaxEmptyList(bodyExpr) {
-		// Empty body - emit void
-		voidIdx := p.template.MaybeAppendLiteral(values.Void)
-		p.AppendOperations(
-			machine.NewOperationLoadLiteralByLiteralIndexImmediate(voidIdx),
-		)
-		return nil
-	}
-
-	bodyPair, ok := bodyExpr.(*syntax.SyntaxPair)
-	if !ok {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of expressions"))
-	}
-
-	// Expand and compile each body expression
-	// (since cond-expand is not expanded, we must expand the body here)
-	_, err = syntax.SyntaxForEach(ctctx.ctx, bodyPair, func(_ context.Context, _ int, hasNext bool, expr syntax.SyntaxValue) error {
-		// Expand the expression
-		expanded, expandErr := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator).ExpandExpression(expr)
-		if expandErr != nil {
-			return p.wrapCompilationError(werr.WrapForeignErrorf(expandErr, "cond-expand: error expanding body expression"))
-		}
-
-		// Compile the expanded expression
-		// Use the appropriate context for tail position (only last expression is in tail position)
-		bodyCtx := ctctx
-		if hasNext {
-			bodyCtx = ctctx.NotInTail()
-		}
-		return p.CompileExpression(bodyCtx, expanded)
-	})
-	return err
 }
 
 // processCondExpand handles (cond-expand <clause> ...) within a library.

@@ -46,7 +46,6 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 	{"unsyntax", (*CompileTimeContinuation).CompileUnsyntax},
 	{"unsyntax-splicing", (*CompileTimeContinuation).CompileUnsyntaxSplicing},
 	{"with-syntax", (*CompileTimeContinuation).CompileWithSyntax},
-	{"cond-expand", (*CompileTimeContinuation).CompileCondExpand},
 	{"define-for-syntax", (*CompileTimeContinuation).CompileDefineForSyntax},
 	{"begin-for-syntax", (*CompileTimeContinuation).CompileBeginForSyntax},
 	{"eval-when", (*CompileTimeContinuation).CompileEvalWhen},

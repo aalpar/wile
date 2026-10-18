@@ -60,12 +60,12 @@ func exprReferencesCaptureOperator(
 
 	// An OPAQUE SUBTREE is raw, unvalidated syntax that WalkSubExprs does not
 	// descend into: a quasiquote's Template, and a *ValidatedLiteral that wraps a
-	// passthrough FORM (cond-expand, include, let-syntax, …) rather than
+	// passthrough FORM (let-syntax, with-syntax, a malformed or resolver-less include, …) rather than
 	// self-evaluating data. See opaque_subtree.go for what reaches the analysis
 	// this way and why.
 	//
-	// Anything can hide in there — `(,(call/cc …)), (cond-expand (else (lambda ()
-	// x))), (include "sets-it.scm") — and it can capture, escape or mutate at
+	// Anything can hide in there — `(,(call/cc …)), (let-syntax () (lambda ()
+	// x)), (include "sets-it.scm") — and it can capture, escape or mutate at
 	// runtime, invisibly to this scan and to walkCallSites. Because the subtree is
 	// un-analysable here, conservatively treat EVERY one as a capture risk: the
 	// sound-by-default stance that an un-analysed subtree counts as unsafe.
@@ -73,7 +73,7 @@ func exprReferencesCaptureOperator(
 	// Flagging it here suffices for BOTH frame-reuse arming paths (the self-tail
 	// OpSelfTailCall and the general-tail OpReleaseEnvFrame): a referencesCapture
 	// node is unsafe regardless of its other facts. Before the *ValidatedLiteral
-	// arm existed, a closure captured inside a cond-expand did not disqualify
+	// arm existed, a closure captured inside a passthrough form did not disqualify
 	// reuse, codegen rebound the parameter frame in place under a live closure,
 	// and the closure then read a slot holding another iteration's value — or a
 	// value of another type entirely.

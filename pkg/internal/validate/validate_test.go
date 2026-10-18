@@ -955,47 +955,6 @@ func TestValidateInclude(t *testing.T) {
 	}
 }
 
-// TestValidateCondExpand tests the cond-expand form validator
-func TestValidateCondExpand(t *testing.T) {
-	tests := []validationTestCase{
-		{
-			name: "valid cond-expand",
-			input: values.List(
-				values.NewSymbol("cond-expand"),
-				values.List(values.NewSymbol("r7rs"), values.List(values.NewSymbol("import"), values.NewSymbol("scheme"))),
-			),
-			wantOk: true,
-		},
-		{
-			name:   "empty cond-expand",
-			input:  values.List(values.NewSymbol("cond-expand")),
-			wantOk: true,
-		},
-		{
-			name: "clause not a list",
-			input: values.List(
-				values.NewSymbol("cond-expand"),
-				values.NewInteger(42),
-			),
-			wantOk: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := qt.New(t)
-			result := ValidateExpression(context.TODO(), nil, makeSyntax(tt.input))
-			if tt.wantOk {
-				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
-				_, ok := result.Expr.(*ValidatedLiteral)
-				c.Assert(ok, qt.IsTrue)
-			} else {
-				c.Assert(result.Ok(), qt.IsFalse)
-			}
-		})
-	}
-}
-
 // TestValidationErrorFormatting tests error message formatting
 func TestValidationErrorFormatting(t *testing.T) {
 	c := qt.New(t)
