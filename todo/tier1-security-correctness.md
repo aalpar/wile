@@ -121,7 +121,8 @@ is a **macro** named after a special form.
   this sits in Tier 1 rather than Tier 4. No design yet; the first step is a profile of the
   per-level cost, not an edit.
 
-- [ ] **A top-level `include` loses the `set!` evidence and refuses legal R7RS** [Correctness, S,
+- [x] **A top-level `include` loses the `set!` evidence and refuses legal R7RS** [Correctness, S,
+  **Done 2026-10-18 (P5.7, `fix/include-expands-in-place`):** the include is expanded and validated in the includer's unit: `TestTopLevelIncludeKeepsSetEvidence`, define/set! across include in each direction and both in one file.
   repro constructed 2026-09-20]: this is the missing repro for **`validateInclude` never reads the
   included file** (filed 2026-09-15 below, "unpinned — no repro constructed"). Three lines:
 
@@ -459,7 +460,8 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   `run-all-tests.sh` cases pass and the zebra bench runs. README and BIBLIOGRAPHY no longer claim
   "unmodified" or `syntax-rules` (all 14 transformers are procedural). `test-schelog` runs only in
   `make cd`, which is why CI stayed green.
-- [ ] **A macro defined in an `include`d file is unbound in the including file** [Medium, filed
+- [x] **A macro defined in an `include`d file is unbound in the including file** [Medium, filed
+  **Done 2026-10-18 (P5.7, `fix/include-expands-in-place`):** `TestMacroFromIncludedFileIsBound` -> 42 under EvalProgram. `run-all-tests.scm` runs (22 pass); README instruction restored; `TestSchelogSuite` wires it into the integration suite. The suite itself had three faults of its own (name collisions across examples, two mis-indexed assertions), fixed in the same change.
   2026-09-15 as #820, not bisected]: `t6.scm` = `(define-syntax foo (syntax-rules () ((_ x) x)))`,
   `t7.scm` = `(include "t6.scm") (display (foo 42))`. `wile -f t7.scm` (with or without `-i`, and
   with an explicit `(begin …)` wrap) fails "no such local or global binding foo"; `wile -i < t7.scm`
@@ -468,7 +470,8 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   that file is the `-f` file or itself included. A procedure defined the same way is visible.
   R7RS §4.1.7: `include` is `begin` over the file's contents, no new scope. Breaks `examples/logic/schelog/run-all-tests.scm` (`%which` unbound at line 65); its README
   instruction was removed 2026-09-15, restore it when this is fixed.
-- [ ] **An included file cannot see a binding local to its includer** [Bug, Correctness, filed
+- [x] **An included file cannot see a binding local to its includer** [Bug, Correctness, filed
+  **Done 2026-10-18 (P5.7, `fix/include-expands-in-place`):** included forms carry the include head's scope set. `TestIncludedFormsSeeIncluderLocals`: `let` variable, body macro, `let-syntax`, body define all give `(5 42)`.
   2026-10-16, fix with P5.7; revisit the schedule when P4 closes]: the reverse direction of the row
   above. f.scm = `(list x (m))`; `(let ((x 5)) (define-syntax m (syntax-rules () ((_) 42)))
   (include "f.scm"))` raises `f.scm:1:6: no such local or global binding "x"` at `a23c4543`; petite
@@ -927,7 +930,7 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   - `include` of a file holding `(m)`: raises "no such binding m" (measured 2026-10-16): a
     local macro is not visible to the included forms, which masks the scan question. That is the
     reverse direction of the "A macro defined in an `include`d file …" row, filed 2026-10-16 as
-    "An included file cannot see a binding local to its includer". **Open.**
+    "An included file cannot see a binding local to its includer". **Fixed 2026-10-18 (P5.7).**
   - `` `(,(m)) ``, `(syntax-case (m) () (_ 1))`, and `with-syntax`'s RHS: **fixed by
     `76e81aac`** (P4.5 crosscheck remediation, merged 2026-10-15). The first P4.5 commit
     expanded these operands at compile time, which reached the hole (`7`; master had raised "no
@@ -996,7 +999,8 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   "recovered panic: … index out of range [2] with length 2"; it should answer `1`. A no-binding
   body with a `define` inside a transformer panics the same way. Live on master.
 
-- [ ] **`validateInclude` never reads the included file** [Medium, M, filed 2026-09-15 during the
+- [x] **`validateInclude` never reads the included file** [Medium, M, filed 2026-09-15 during the
+  **Done 2026-10-18 (P5.7, `fix/include-expands-in-place`):** the expander reads the file now (`expandIncludeImpl`), so the validator no longer stands in for it on a well-formed include; `validateInclude` survives only for malformed forms and an env with no resolver, and is retired with P5.8.
   renamed-inner-positions whole-branch review]: `validateInclude`
   (`pkg/internal/validate/validate_macro.go:235`) calls `markOpaqueCode(env, pair, result)` on
   `pair`, the `(include "f.scm")` form ITSELF — its own head symbol and string filename arguments
@@ -1009,7 +1013,8 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   unboxed capture). Repro: the top-level `include` row in "Redefining `if`" above (`set!: cannot
   mutate immutable top-level binding "y"`), constructed 2026-09-20.
 
-- [ ] **`include` inside a procedure body skips letrec\* predeclaration** [Medium, S, filed
+- [x] **`include` inside a procedure body skips letrec\* predeclaration** [Medium, S, filed
+  **Done 2026-10-18 (P5.7, `fix/include-expands-in-place`):** `include` splices at expand time; the body forms see the file as their own, letrec* included. Pinned by `TestIncludeInBodyBoxesCapturedBinder` and `TestIncludeInBodyForwardCall` (`(#<void> 1)` -> `(1 1)`; dead forward call -> 42).
   2026-09-15 during the keyword-denotation-dispatch whole-branch review; pre-existing on master, not
   caused by this branch]: `(define (k) (include "x.scm") (inc-g))`, where the included file
   forward-references a later included `define`, raises `application: expected a procedure, got
