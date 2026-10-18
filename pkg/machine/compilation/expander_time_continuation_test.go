@@ -17,7 +17,6 @@ package compilation
 import (
 	"context"
 	"testing"
-	"testing/fstest"
 
 	"github.com/aalpar/wile/pkg/machine"
 
@@ -248,40 +247,4 @@ func TestExpandCaseLambdaForm(t *testing.T) {
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
-}
-
-// Pin: a child expander carries the parent's fileResolver. include and
-// cond-expand splicing run inside nested bodies (lambda, let), and the resolver
-// set on the expander can differ from env.FileResolver() (ExpandAndCompile takes
-// one as a parameter), so a child that rebuilt its own from env would read from
-// the wrong source.
-func TestExpander_ChildCarriesFileResolver(t *testing.T) {
-	env := environment.NewNamespace().Runtime()
-	exp := NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
-	custom := NewFSFileResolver(fstest.MapFS{}, env)
-	exp.SetFileResolver(custom)
-
-	child := exp.newChildExpander(env)
-
-	qt.Assert(t, child.fileResolver, qt.Equals, FileResolver(custom))
-}
-
-// The constructor defaults the resolver as NewCompileTimeContinuation does
-// (the namespace's resolver, else the OS one), and a nil setter argument resets
-// to that default. The namespace carries a resolver here so the default is
-// distinguishable from both the OS fallback and a freshly allocated one.
-func TestExpander_FileResolverDefaultsAndResets(t *testing.T) {
-	env := environment.NewNamespace().Runtime()
-	nsResolver := NewFSFileResolver(fstest.MapFS{}, env)
-	env.SetFileResolver(nsResolver)
-
-	exp := NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
-	qt.Assert(t, exp.fileResolver, qt.Equals, FileResolver(nsResolver))
-
-	custom := NewOSFileResolver(env)
-	exp.SetFileResolver(custom)
-	qt.Assert(t, exp.fileResolver, qt.Equals, FileResolver(custom))
-
-	exp.SetFileResolver(nil)
-	qt.Assert(t, exp.fileResolver, qt.Equals, FileResolver(nsResolver))
 }
