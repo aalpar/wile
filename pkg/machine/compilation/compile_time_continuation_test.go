@@ -696,13 +696,12 @@ func TestCondExpandRegistered(t *testing.T) {
 		t.Fatalf("RegisterSyntaxCompilers failed: %v", err)
 	}
 
-	// Check if cond-expand is registered
+	// cond-expand splices at expand time (expandCondExpandForm), so no form
+	// reaches the compiler to need a syntax compiler.
 	sym := values.NewSymbol("cond-expand")
 	pc := LookupPhaseBinding[*SyntaxCompiler](env, sym, syntax.Scopes{})
-	if pc == nil {
-		t.Errorf("cond-expand primitive compiler not found")
-	} else {
-		t.Logf("cond-expand found: %v", pc)
+	if pc != nil {
+		t.Errorf("cond-expand should NOT be registered as a syntax compiler (handled by the expander)")
 	}
 
 	// Core forms like 'if' are now handled by compileValidated* methods
@@ -1238,8 +1237,8 @@ func TestCompileLambdaRestOnly(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 }
 
-// TestCompileCondExpandNotFeature tests cond-expand with not feature
-func TestCompileCondExpandNotFeature(t *testing.T) {
+// TestExpandCondExpandNotFeature tests cond-expand with not feature
+func TestExpandCondExpandNotFeature(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
@@ -1254,8 +1253,8 @@ func TestCompileCondExpandNotFeature(t *testing.T) {
 	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
-// TestCompileCondExpandAndFeature tests cond-expand with and feature
-func TestCompileCondExpandAndFeature(t *testing.T) {
+// TestExpandCondExpandAndFeature tests cond-expand with and feature
+func TestExpandCondExpandAndFeature(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
@@ -1270,8 +1269,8 @@ func TestCompileCondExpandAndFeature(t *testing.T) {
 	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
-// TestCompileCondExpandOrFeature tests cond-expand with or feature
-func TestCompileCondExpandOrFeature(t *testing.T) {
+// TestExpandCondExpandOrFeature tests cond-expand with or feature
+func TestExpandCondExpandOrFeature(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
@@ -1286,8 +1285,8 @@ func TestCompileCondExpandOrFeature(t *testing.T) {
 	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
-// TestCompileCondExpandLibraryFeature tests cond-expand with library feature
-func TestCompileCondExpandLibraryFeature(t *testing.T) {
+// TestExpandCondExpandLibraryFeature tests cond-expand with library feature
+func TestExpandCondExpandLibraryFeature(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)

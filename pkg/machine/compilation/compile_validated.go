@@ -106,7 +106,7 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 		return p.CompileSymbol(ctctx, v.Symbol)
 	case *validate.ValidatedLiteral:
 		// A bare self-eval literal has no compiler and self-evaluates. A Tier-2
-		// passthrough form (cond-expand, include, import) is the SAME Go type but
+		// passthrough form (include, import) is the SAME Go type but
 		// carries a FormName a compiler claims; it must be compiled, never folded.
 		// isSelfEvaluatingLiteral is the single predicate shared with the if-fold
 		// (isLiteralFalse), so the two cannot disagree about what a literal is.
@@ -210,7 +210,7 @@ func CompileValidatedIf(p *CompileTimeContinuation, ctctx CompileTimeCallContext
 // self-evaluating datum rather than a Tier-2 passthrough form.
 //
 // *validate.ValidatedLiteral carries BOTH: real literals (5, #f, "s") and
-// passthrough forms (cond-expand, include, import), whose FormName is
+// passthrough forms (include, import), whose FormName is
 // overwritten with the keyword during validation. The only thing that separates
 // them is whether a compiler claims the FormName — which is exactly the question
 // compileValidated asks at dispatch. Asking the identical question here is what

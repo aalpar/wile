@@ -28,7 +28,7 @@ import (
 // parsing and evaluation in compile_cond_expand.go: and, or, not, library,
 // and nested combinations.
 //
-// Target: parseFeatureRequirement, resolveCondExpandClause, CompileCondExpand.
+// Target: parseFeatureRequirement, resolveCondExpandClause, expandCondExpandForm.
 func TestCondExpandCompoundRequirements(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// library requirement -- exercises the (library ...) parsing/evaluation branch.

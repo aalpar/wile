@@ -64,7 +64,6 @@ func init() {
 	registerValidator("library", validateDefineLibrary) // R6RS alias
 	registerValidator("include", validateInclude)
 	registerValidator("include-ci", validateInclude)
-	registerValidator("cond-expand", validateCondExpand)
 
 	// Forms that pass through to compiler (no validation needed)
 	registerPassthrough("let-syntax")

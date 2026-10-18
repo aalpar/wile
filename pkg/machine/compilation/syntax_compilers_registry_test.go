@@ -53,7 +53,6 @@ func TestSyntaxCompilersRegistry(t *testing.T) {
 		{name: "unsyntax", formName: "unsyntax"},
 		{name: "unsyntax-splicing", formName: "unsyntax-splicing"},
 		{name: "with-syntax", formName: "with-syntax"},
-		{name: "cond-expand", formName: "cond-expand"},
 		{name: "define-for-syntax", formName: "define-for-syntax"},
 		{name: "begin-for-syntax", formName: "begin-for-syntax"},
 		{name: "eval-when", formName: "eval-when"},

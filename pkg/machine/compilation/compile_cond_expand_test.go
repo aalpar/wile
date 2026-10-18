@@ -24,12 +24,13 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestCompileCondExpand tests cond-expand compilation with various feature
+// TestExpandCondExpand tests cond-expand compilation with various feature
 // requirement forms: simple identifiers, and, or, not, else, and library.
 //
-// Source: compile_cond_expand.go (CompileCondExpand, resolveCondExpandClause,
-// parseFeatureRequirement, parseFeatureRequirementList).
-func TestCompileCondExpand(t *testing.T) {
+// Source: expander_cond_expand.go (expandCondExpandForm) and
+// compile_cond_expand.go (resolveCondExpandClause, parseFeatureRequirement,
+// parseFeatureRequirementList).
+func TestExpandCondExpand(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Simple feature present
 		{
@@ -116,8 +117,8 @@ func TestCompileCondExpand(t *testing.T) {
 	}
 }
 
-// TestCompileCondExpandErrors tests error conditions for cond-expand.
-func TestCompileCondExpandErrors(t *testing.T) {
+// TestExpandCondExpandErrors tests error conditions for cond-expand.
+func TestExpandCondExpandErrors(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "no matching clause", Code: `(cond-expand (nonexistent 'no))`},
 		// Phase 8 Task 8G(ii): R7RS §4.2.1 — else must be the last clause. A
@@ -134,10 +135,10 @@ func TestCompileCondExpandErrors(t *testing.T) {
 	}
 }
 
-// TestCompileCondExpandElseLast pins that a final else clause is honored (the
+// TestExpandCondExpandElseLast pins that a final else clause is honored (the
 // complement of the else-not-last error): a present feature is selected before
 // else, and else is the fallback when no feature matches.
-func TestCompileCondExpandElseLast(t *testing.T) {
+func TestExpandCondExpandElseLast(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "feature before final else wins",

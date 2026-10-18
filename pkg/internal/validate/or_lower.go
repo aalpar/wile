@@ -112,8 +112,8 @@ func bindingOccursIn(expr ValidatedExpr, binder *syntax.SyntaxSymbol) bool {
 
 // opaqueSubtreeMentions is bindingOccursIn's second half, covering what
 // WalkBindingRefs structurally cannot reach: the subtrees WalkSubExprs reports
-// CHILDLESS. A quasiquote template and a passthrough form (cond-expand,
-// include, let-syntax) hold raw syntax this package never validated, so the
+// CHILDLESS. A quasiquote template and a passthrough form (let-syntax, a
+// malformed or resolver-less include) hold raw syntax this package never validated, so the
 // reference walk concludes "nothing in there" and the lowering drops a frame
 // whose binder IS referenced. Measured:
 // (let ((c (assq 'z '((a 1))))) (if c c `(missing ,c))) evaluated to

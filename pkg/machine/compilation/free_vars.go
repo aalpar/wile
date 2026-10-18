@@ -331,7 +331,7 @@ func freeVarNames(fvs []freeVar) []*values.Symbol {
 
 // bodyReadsThroughFrameChain reports whether body contains an OPAQUE SUBTREE:
 // a quasiquote template, or a passthrough form parked in a ValidatedLiteral
-// (cond-expand, include, let-syntax, with-syntax, a `syntax` template …).
+// (include, let-syntax, with-syntax, a `syntax` template …).
 //
 // WHY THIS GATES THE STATIC LINK. Pass 1 decides free-variable membership over
 // the VALIDATED tree, and an opaque subtree is raw syntax this package never

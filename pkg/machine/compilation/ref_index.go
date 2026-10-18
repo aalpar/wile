@@ -120,7 +120,7 @@ func newRefIndex(exprs []validate.ValidatedExpr) refIndex {
 		if ok {
 			q.add(binderRef{sym: setBang.Name, origin: origin, inClosure: inClosure, isSet: true})
 		}
-		// An opaque subtree — a quasiquote template, a cond-expand, an include,
+		// An opaque subtree — a quasiquote template, a surviving include,
 		// a passthrough body — is reported CHILDLESS by WalkSubExprs, so the
 		// walk below would conclude "nothing in there". It is un-analysed code,
 		// not empty code: every live symbol in it is a possible set! target and a

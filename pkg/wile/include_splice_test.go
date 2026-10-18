@@ -368,9 +368,9 @@ func TestIncludeErrorsKeepTheirLocations(t *testing.T) {
 // TestRelativeIncludeResolvesAgainstTheFormsOwnFile pins the lexical rule: a
 // relative include resolves against the directory of the file holding the
 // include FORM, not against whatever the load stack holds when the form is
-// compiled. A cond-expand or eval-when body is compiled after the splice has
-// popped its file, so the stack rule alone read the decoy at the root (or found
-// nothing). Racket's include is lexical in the same way.
+// compiled. An eval-when body (and, before P5.8, a cond-expand body) is compiled
+// after the splice has popped its file, so the stack rule alone read the decoy at
+// the root (or found nothing). Racket's include is lexical in the same way.
 func TestRelativeIncludeResolvesAgainstTheFormsOwnFile(t *testing.T) {
 	fsys := fstest.MapFS{
 		"sub/b.scm":  &fstest.MapFile{Data: []byte(`(cond-expand (else (include "c.scm")))`)},
@@ -451,20 +451,11 @@ func TestIncludeLabelDoesNotOverrideTheLoadStack(t *testing.T) {
 	qt.Assert(t, result.SchemeString(), qt.Equals, "real")
 }
 
-// TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths documents,
-// as current behaviour, what lexicalIncludeContext cannot yet do: with a virtual
-// FS (where a relative SourceContext.File IS a real path) and a live load stack,
-// a relative include nested under a form compiled after its file was popped
-// (cond-expand, eval-when) resolves against the stack's top, as it did before the
-// lexical rule. The guard cannot tell a real relative path from a caller's label.
-// Filed in todo/tier1-security-correctness.md ("Filed by the P5.7 crosscheck").
-// When that row is fixed this test should flip to want "9".
-func TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths(t *testing.T) {
-	fsys := fstest.MapFS{
-		"sub/b.scm": &fstest.MapFile{Data: []byte(`(cond-expand (else (include "c.scm")))`)},
-		"sub/c.scm": &fstest.MapFile{Data: []byte(`(define cv 9)`)},
-		"c.scm":     &fstest.MapFile{Data: []byte(`(define cv "decoy")`)},
-	}
+// deferredIncludeEngine returns an engine over fsys with the load path set to
+// main.scm, the shape the two tests below share: a virtual FS (where a relative
+// SourceContext.File IS a real path) and a live load stack.
+func deferredIncludeEngine(t *testing.T, fsys fstest.MapFS) (*wile.Engine, context.Context) {
+	t.Helper()
 	ctx := context.Background()
 	engine, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),
@@ -474,6 +465,42 @@ func TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths(t *testi
 	qt.Assert(t, err, qt.IsNil)
 	loadCtx, err := engine.ContextWithLoadPath(ctx, "main.scm")
 	qt.Assert(t, err, qt.IsNil)
+	return engine, loadCtx
+}
+
+// Pin (P5.8): a relative include under cond-expand in an included file resolves
+// against that file's directory even with a virtual FS and a live load stack.
+// cond-expand splices at expand time, so the include expands while the file is
+// still on the stack; before the splice the body compiled after the file was
+// popped and read the includer's decoy.
+func TestCondExpandIncludeUnderALiveStackWithRelativePaths(t *testing.T) {
+	fsys := fstest.MapFS{
+		"sub/b.scm": &fstest.MapFile{Data: []byte(`(cond-expand (else (include "c.scm")))`)},
+		"sub/c.scm": &fstest.MapFile{Data: []byte(`(define cv 9)`)},
+		"c.scm":     &fstest.MapFile{Data: []byte(`(define cv "decoy")`)},
+	}
+	engine, loadCtx := deferredIncludeEngine(t, fsys)
+
+	result, err := engine.EvalProgram(loadCtx, `(include "sub/b.scm") cv`, "includer.scm")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "9")
+}
+
+// TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths documents,
+// as current behaviour, what lexicalIncludeContext cannot yet do: with a virtual
+// FS and a live load stack, a relative include nested under a form compiled
+// after its file was popped (eval-when; cond-expand no longer, it splices at
+// expand time) resolves against the stack's top, as it did before the lexical
+// rule. The guard cannot tell a real relative path from a caller's label.
+// Filed in todo/tier1-security-correctness.md ("Filed by the P5.7 crosscheck").
+// When that row is fixed this test should flip to want "9".
+func TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths(t *testing.T) {
+	fsys := fstest.MapFS{
+		"sub/b.scm": &fstest.MapFile{Data: []byte(`(eval-when (load eval) (include "c.scm"))`)},
+		"sub/c.scm": &fstest.MapFile{Data: []byte(`(define cv 9)`)},
+		"c.scm":     &fstest.MapFile{Data: []byte(`(define cv "decoy")`)},
+	}
+	engine, loadCtx := deferredIncludeEngine(t, fsys)
 
 	result, err := engine.EvalProgram(loadCtx, `(include "sub/b.scm") cv`, "includer.scm")
 	qt.Assert(t, err, qt.IsNil)

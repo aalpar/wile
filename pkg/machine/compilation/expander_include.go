@@ -61,11 +61,8 @@ func (p *ExpanderTimeContinuation) expandIncludeCiForm(sym *syntax.SyntaxSymbol,
 //     a field copied by value (newChildExpander): there is nowhere else for the
 //     derived ctx to live.
 //
-//   - The result head carries a FRESH scope, as wrapInBegin's does. The head is
-//     dispatched by the binding it resolves to, so a bare begin symbol would be a
-//     call to 9 under a user's (define begin 9), and would resolve to a local
-//     begin under (let ((begin ...)) (include ...)). The head drops the include
-//     head's scopes for the second reason.
+//   - The result head is a FRESH-scope begin that drops the include head's scopes
+//     (spliceBegin).
 func (p *ExpanderTimeContinuation) expandIncludeImpl(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, foldCase bool) (syntax.SyntaxValue, error) {
 	r := p.env.FileResolver()
 	if r == nil {
@@ -85,10 +82,27 @@ func (p *ExpanderTimeContinuation) expandIncludeImpl(sym *syntax.SyntaxSymbol, e
 		spliced = append(spliced, expanded...)
 	}
 
+	return spliceBegin(sym, "include", spliced), nil
+}
+
+// spliceBegin returns (begin form ...) for forms spliced in place of the form
+// whose head is sym. It is the one place a splice builds its result, shared by
+// include and cond-expand.
+//
+// The head carries a FRESH scope labelled label, as wrapInBegin's does, and drops
+// sym's scopes. The head is dispatched by the binding it resolves to, so a bare
+// begin symbol would be a call to 9 under a user's (define begin 9), and would
+// resolve to a local begin under (let ((begin ...)) (include ...)).
+func spliceBegin(sym *syntax.SyntaxSymbol, label string, forms []syntax.SyntaxValue) syntax.SyntaxValue {
 	srcCtx := sym.SourceContext()
+	if len(forms) == 0 {
+		// An empty splice (an empty file, an empty clause) is a void, not no value:
+		// (list (cond-expand (r7rs))) must see one operand.
+		forms = []syntax.SyntaxValue{syntax.NewSyntaxObject(values.Void, srcCtx)}
+	}
 	head := syntax.NewSyntaxSymbol("begin", srcCtx.WithoutScopes()).
-		AddScope(syntax.NewScopeWithLabel("include"))
-	return syntax.NewSyntaxCons(head, syntax.SyntaxList(srcCtx, spliced...), srcCtx), nil
+		AddScope(syntax.NewScopeWithLabel(label))
+	return syntax.NewSyntaxCons(head, syntax.SyntaxList(srcCtx, forms...), srcCtx)
 }
 
 // expandIncludedFile reads one file and expands its forms on a child expander

@@ -148,7 +148,7 @@ func TestBoxedCaptureIsShared(t *testing.T) {
 // see at all.
 //
 // newRefIndex enumerates occurrences with validate.WalkSubExprs, which reports a
-// quasiquote template, a cond-expand and every other passthrough form CHILDLESS
+// quasiquote template, a let-syntax and every other passthrough form CHILDLESS
 // — correctly, since they hold no VALIDATED children, but the pass then read
 // that as "nothing in there". A set! concealed by one left the binder unboxed,
 // so the flat closure copied the raw value and kept it. Silent wrong answer:
@@ -166,8 +166,21 @@ func TestBoxedCaptureThroughOpaqueSubtree(t *testing.T) {
 		want string
 	}{
 		{
-			// The passthrough spelling: cond-expand's selected clause is compiled
-			// in its own unit, so its set! is invisible here.
+			// The passthrough spelling: let-syntax is still parked in a
+			// ValidatedLiteral, compiled in its own unit, so its set! is invisible
+			// to the validator.
+			name: "set! inside a let-syntax body reaches an earlier capture",
+			code: `(define (make-counter)
+			         (let ((counter 0))
+			           (let ((get (lambda () counter)))
+			             (let-syntax () (set! counter 10))
+			             get)))
+			       ((make-counter))`,
+			want: "10",
+		},
+		{
+			// cond-expand used to be this row; it splices at expand time now, so
+			// the set! is an ordinary visible one. Kept as the splice's pin.
 			name: "set! inside a cond-expand clause reaches an earlier capture",
 			code: `(define (make-counter)
 			         (let ((counter 0))

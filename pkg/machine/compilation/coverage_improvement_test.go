@@ -305,8 +305,8 @@ func TestParseFeatureRequirement(t *testing.T) {
 	}
 }
 
-// TestCompileCondExpand tests cond-expand compilation
-func TestCompileCondExpand(t *testing.T) {
+// TestExpandCondExpand tests cond-expand compilation
+func TestExpandCondExpand(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
@@ -443,11 +443,11 @@ func TestCompileIncludeError(t *testing.T) {
 // TestProcessCondExpand tests the processCondExpand helper function indirectly via cond-expand
 func TestProcessCondExpand(t *testing.T) {
 	// The processCondExpand function is called internally by cond-expand compilation
-	// and is tested via TestCompileCondExpand. Since it requires a library context
+	// and is tested via TestExpandCondExpand. Since it requires a library context
 	// which is only available during define-library processing, we test it indirectly.
 	// This test is here to document coverage of processCondExpand.
 
-	// See TestCompileCondExpand for functional testing of cond-expand logic
+	// See TestExpandCondExpand for functional testing of cond-expand logic
 }
 
 // TestCompileIncludeReadError tests include with a file that has syntax errors
