@@ -9,10 +9,10 @@
 
 ### Filed by the P5.6 crosscheck (2026-10-18)
 
-Two findings from the five-lens review of `refactor/include-expander-seams`, both outside a
+Two rows from the five-lens review of `refactor/include-expander-seams`, all outside a
 no-behaviour-change extraction. The third finding of that review (the expander's `fileResolver`
-reaches one construction site of about twelve) is not a row: it is an entry requirement of P5.7,
-recorded in that task's record in `plans/2026-09-22-defect-closeout-P5.md`.
+reached one construction site of about twelve) was closed by deleting the field (owner decision,
+2026-10-18); the wider removal it led to is the second row below.
 
 - [ ] **`include-library-declarations` reads an included file with its own loop** [Tech debt, S]:
   `compile_library_forms.go` opens through `findFile` and runs the same `ReadSyntax`/`io.EOF` loop
