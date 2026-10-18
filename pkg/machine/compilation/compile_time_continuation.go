@@ -457,22 +457,41 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// in the caller env, which would falsely match any reference scopes.
 	libGI := p.env.GetGlobalIndexFromLibraryScopes(sym, symbolScopes)
 	if libGI != nil {
-		// The syntactic-keyword refusal is applied HERE rather than by routing
-		// through emitCachedBindingLoad: the value must be read at execution
-		// time (see below), and a cached-binding load reads it now. Classifying
-		// the binding is compile-time work, so it can be done here without
-		// disturbing that. Env is nil for a DEFERRED index, which resolveGlobal
-		// never produces but the type does not forbid; a nil binding is not a
-		// refusal (refuseCompileTimeMeaning says why).
+		// The syntactic-keyword refusal is applied HERE, before the choice of
+		// load below, because that choice depends on what the binding is. Env
+		// is nil for a DEFERRED index, which resolveGlobal never produces but
+		// the type does not forbid; a nil binding is not a refusal
+		// (refuseCompileTimeMeaning says why).
+		var libBD *environment.Binding
 		if libGI.Env != nil {
-			libBD := libGI.Env.GetOwnGlobalBinding(libGI)
+			libBD = libGI.Env.GetOwnGlobalBinding(libGI)
 			err := refuseCompileTimeMeaning(expr.SourceContext(), sym, libBD)
 			if err != nil {
 				return err
 			}
 		}
-		// Use runtime resolution via GlobalIndex so the binding value
-		// is read at execution time (after the library template runs).
+		// An IMPORTED binding takes the cached-binding load a top-level
+		// reference gets, so the peephole promotes + - < to AddTail, Sub, NumLt
+		// (I217). The ground for keeping every library reference on the
+		// by-GlobalIndex load was that the value must be read at execution time;
+		// that does not distinguish the two loads, because AppendCachedBinding
+		// stores the *Binding and OpLoadCachedBinding reads .Value() when it
+		// runs. What the GlobalIndex load adds is a re-resolution for a name not
+		// yet defined (a forward reference inside the library), and an imported
+		// binding already exists and is not redefined by this unit.
+		//
+		// IsImported is the gate, not IsStable. Measured over a whole
+		// (wile algebra) load, the library arm saw 9809 sites imported and
+		// stable, 80 stable but not imported (names from applyBaseEnvironment's
+		// sealed base, not from an import clause), and 8 neither. IsImported
+		// covers 99.1% of the sites; IsStable would add the 80 (0.8%), which are
+		// deliberately left on the GlobalIndex load, as are the 8.
+		if libBD != nil && libBD.IsImported() {
+			return p.emitCachedBindingLoad(expr.SourceContext(), sym, libBD)
+		}
+		// Any other library-scope reference uses runtime resolution via
+		// GlobalIndex, so a name not yet defined when this form compiles (a
+		// forward reference inside the library) still resolves when it runs.
 		i := p.template.MaybeAppendLiteral(libGI)
 		p.AppendOperations(
 			machine.NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(i),

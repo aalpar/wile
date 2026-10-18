@@ -74,7 +74,10 @@ func TestInlineThresholdHonoredForImportedLibrary(t *testing.T) {
 	ctx := context.Background()
 
 	// The discriminator is f's body operator, `+`, appearing in use-helper's own
-	// disassembly — it is there iff the body was folded in.
+	// disassembly as the promoted AddTail — it is there iff the body was folded
+	// in. (An imported `+` in a library body is a cached-binding load, so the
+	// peephole promotes it exactly as it does at top level; before I217 it was a
+	// by-GlobalIndex load and the marker was `<global-index "+">`.)
 	//
 	// It replaces an earlier "CallLocal is present iff NOT inlined" test, which
 	// stopped discriminating once frame reclaim was armed inside a merged `let`
@@ -124,7 +127,7 @@ func TestInlineThresholdHonoredForImportedLibrary(t *testing.T) {
 		qt.Assert(t, ok, qt.IsTrue)
 
 		disasm := machine.DisassembleString(closure.Template())
-		return strings.Contains(disasm, `<global-index "+">`)
+		return strings.Contains(disasm, "AddTail")
 	}
 
 	// Default engine: inlining on -> f's body is folded into use-helper.
@@ -181,7 +184,7 @@ func TestInlineThresholdBoundaryForImportedLibrary(t *testing.T) {
 		closure, ok := v.Internal().(*machine.MachineClosure)
 		qt.Assert(t, ok, qt.IsTrue)
 
-		return strings.Contains(machine.DisassembleString(closure.Template()), `<global-index "+">`)
+		return strings.Contains(machine.DisassembleString(closure.Template()), "AddTail")
 	}
 
 	// threshold 2 < body length 3 -> not inlined -> f's body absent.
