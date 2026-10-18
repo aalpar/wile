@@ -21,6 +21,7 @@ import (
 	"io"
 	"io/fs"
 	"path"
+	"path/filepath"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
@@ -77,11 +78,24 @@ func includeAuthorizerContext(ctx context.Context, env *environment.EnvironmentF
 // the splice does not expand in place, such as the body of a cond-expand or an
 // eval-when: the include's own expansion has already popped the file by then.
 //
-// It returns ctx unchanged when the form has no source file (REPL, eval, string
-// input), or when the file is a bare name with no directory: the load stack
-// (or, with none, the search paths) is the better authority there, and it is the
-// behaviour a top-level include has always had. The derived stack is a copy, so
-// no push escapes into ctx.
+// It returns ctx unchanged when
+//   - the form has no source file (REPL, eval, string input), or the file is a
+//     bare name with no directory: the load stack (or, with none, the search
+//     paths) is the better authority there, and it is what a top-level include
+//     has always had;
+//   - ctx already carries a non-empty load stack and the file is a RELATIVE
+//     path. A relative SourceContext.File is often a caller's diagnostic label
+//     (EvalProgram, EvalMultipleWithSource, CheckProgram, ParseWithSource), not a
+//     location on disk; an absolute one names a real file. A live stack is the
+//     authority an embedder set (Engine.ContextWithLoadPath) or a load chain
+//     built, and a label must not override it.
+//
+// KNOWN LIMITATION: with a virtual-FS resolver (relative paths are real there),
+// a live stack AND a form compiled after its file was popped, the stack rule
+// still applies and a relative include nested under cond-expand/eval-when
+// resolves against the stack's top.
+//
+// The derived stack is a copy, so no push escapes into ctx.
 func lexicalIncludeContext(ctx context.Context, src *syntax.SourceContext) context.Context {
 	if src == nil || src.File == "" {
 		return ctx
@@ -90,8 +104,11 @@ func lexicalIncludeContext(ctx context.Context, src *syntax.SourceContext) conte
 	if dir == "." || dir == "" {
 		return ctx
 	}
-	stack := sourceload.NewLoadStack()
 	existing := resolver.SelectLoadStack(ctx)
+	if existing != nil && existing.Depth() > 0 && !filepath.IsAbs(src.File) {
+		return ctx
+	}
+	stack := sourceload.NewLoadStack()
 	if existing != nil {
 		for _, pth := range existing.Paths() {
 			stack.Push(pth)
@@ -174,7 +191,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 
 		// Find, open and read the whole file. The stack push below comes after
 		// this, so the file resolves against the includer's directory.
-		forms, filePath, err := readIncludedForms(ctctx.Context(), p.env, p.fileResolver, fn.Value, car.SourceContext(), foldCase)
+		forms, filePath, err := readIncludedForms(ctctx.Context(), p.env, p.fileResolver, fn.Value, expr.SourceContext(), foldCase)
 		if err != nil {
 			return err
 		}

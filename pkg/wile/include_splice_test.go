@@ -16,6 +16,8 @@ package wile_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -414,4 +416,66 @@ func TestIncludeWithoutASourceFileFallsBack(t *testing.T) {
 	result, err := engine.EvalMultiple(ctx, `(include "x.scm") xv`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "4")
+}
+
+// TestIncludeLabelDoesNotOverrideTheLoadStack pins the guard in
+// lexicalIncludeContext. A relative SourceContext.File is a caller's diagnostic
+// label (EvalProgram's name argument, which the CLI sets to the path as typed),
+// not a location on disk. With a live load stack (Engine.ContextWithLoadPath,
+// which the CLI installs, and whose entry the CLI computes AFTER a prior file's
+// set-current-directory!), the stack names the real file and the label must not
+// override it: here the label points at a decoy directory.
+func TestIncludeLabelDoesNotOverrideTheLoadStack(t *testing.T) {
+	tmp := t.TempDir()
+	write := func(rel, data string) {
+		full := filepath.Join(tmp, rel)
+		qt.Assert(t, os.MkdirAll(filepath.Dir(full), 0o755), qt.IsNil)
+		qt.Assert(t, os.WriteFile(full, []byte(data), 0o644), qt.IsNil)
+	}
+	write("real/inc.scm", `(define v 'real)`)
+	write("lbl/inc.scm", `(define v 'decoy)`)
+	t.Chdir(tmp)
+
+	ctx := context.Background()
+	engine, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithAuthorizer(nil),
+		wile.WithSourceOS(),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	loadCtx, err := engine.ContextWithLoadPath(ctx, filepath.Join(tmp, "real", "main.scm"))
+	qt.Assert(t, err, qt.IsNil)
+
+	result, err := engine.EvalProgram(loadCtx, `(include "inc.scm") v`, "lbl/x.scm")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "real")
+}
+
+// TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths documents,
+// as current behaviour, what lexicalIncludeContext cannot yet do: with a virtual
+// FS (where a relative SourceContext.File IS a real path) and a live load stack,
+// a relative include nested under a form compiled after its file was popped
+// (cond-expand, eval-when) resolves against the stack's top, as it did before the
+// lexical rule. The guard cannot tell a real relative path from a caller's label.
+// Filed in todo/tier1-security-correctness.md ("Filed by the P5.7 crosscheck").
+// When that row is fixed this test should flip to want "9".
+func TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths(t *testing.T) {
+	fsys := fstest.MapFS{
+		"sub/b.scm": &fstest.MapFile{Data: []byte(`(cond-expand (else (include "c.scm")))`)},
+		"sub/c.scm": &fstest.MapFile{Data: []byte(`(define cv 9)`)},
+		"c.scm":     &fstest.MapFile{Data: []byte(`(define cv "decoy")`)},
+	}
+	ctx := context.Background()
+	engine, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithAuthorizer(nil),
+		wile.WithSourceFS(fsys),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	loadCtx, err := engine.ContextWithLoadPath(ctx, "main.scm")
+	qt.Assert(t, err, qt.IsNil)
+
+	result, err := engine.EvalProgram(loadCtx, `(include "sub/b.scm") cv`, "includer.scm")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, `"decoy"`)
 }

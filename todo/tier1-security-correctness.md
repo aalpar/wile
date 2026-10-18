@@ -2086,6 +2086,31 @@ disagreement on one program, the internal-invariant form of a defect.
   `switch runtime.GOOS` versus the GOOS-keyed tables in `extensions/process/shell.go`. Pre-existing
   one-site convention; align only if the owner wants one.
 
+### Filed by the P5.7 crosscheck (2026-10-18)
+
+- [ ] **A relative include under a deferred form resolves against the load stack when a stack is live and the path is relative** [Correctness, M, P5.7 re-review]: `lexicalIncludeContext`
+  (`pkg/machine/compilation/compile_time_continuation_include.go`) trusts an absolute `SourceContext.File` and
+  yields to a live load stack for a relative one, because a relative `File` is often a caller's diagnostic label
+  (`EvalProgram`'s name, which the CLI passes as typed). With a virtual-FS resolver (relative paths are real
+  there), a live stack and a `cond-expand`/`eval-when` body compiled after its file was popped, the nested include
+  still reads the stack's top, as before the lexical rule. Pinned as current behaviour by
+  `TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths`; flip it to `9` when fixed. Fix direction:
+  distinguish a label from a path at the source (the parser's file argument), not by shape.
+- [ ] **A cyclic `include` terminates after ~32 s with a ~5.9 MB error** [Robustness, S, P5.7 crosscheck]: master dies
+  with a fatal Go stack overflow; the splice is stopped only by the expansion depth guard (50000), one wrapped
+  `include: failed to expand` layer per level. Fix: a cycle check before `stack.Push(filePath)` in
+  `expandIncludedFile` (and `compileIncludeImpl`), against `LoadStack.Paths()`, raising a new `ErrIncludeCycle`
+  (not `ErrCircularDependency`, whose text says "library").
+- [ ] **Include error provenance has two gaps** [Diagnostics, S, P5.7 crosscheck]: (1) a compile-stage error from an
+  included form no longer names the include that brought it in (master wrapped `include f.scm: error compiling
+  form:`); only the innermost file shows, behind a coarse `includer.scm:1:0` prefix (general validator behaviour,
+  not caused by the splice). (2) A read or parse error in an included file renders with the includer's file name
+  but the included file's line, because `SourcedError.Error()` suppresses its prefix only for an inner
+  `SourcedError`, not a located `ParserError`; fix in `readIncludedForms` by wrapping the read error in a
+  `SourcedError` carrying the parser's location.
+- [ ] **Comments in `validate`, `compile_validated.go` and `ref_index.go` still say `include` survives expansion** [Docs, XS, P5.7 crosscheck, fold into P5.8]: it now survives only when malformed or when the env has no
+  file resolver. P5.8 retires `validateInclude` and should rewrite them.
+
 ### Filed from review 2026-09-09 (indexlint, 2026-10-18)
 
 The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no row. All three reproduce on master at `08fdec30`. The other 20 are indexed elsewhere in this corpus.
