@@ -13,8 +13,8 @@ Same sweep as the Tier-1 and Tier-5 headings of this date. Every row verified ag
 of them contradicts a recorded revert or decline (tail-frame recycling, `unique` interning,
 callback specialization B, jump-table dispatch, Stage-B phase folding all stay closed).
 
-- [ ] **Two full library environments are built per file-library load** [Performance, M, from
-  `2026-07-10-climbing-tower-design.md` §6.8]: ≈5 ms each, and together **~99.5% of import time**.
+- [x] **Two full library environments are built per file-library load** [Performance, M, Done 2026-10-18 (P5.10), from
+  `2026-07-10-climbing-tower-design.md` §6.8]: **Done:** `compileLibrary` hands the loader's env to the define-library arm (`libEnvHint`), so a file load takes one factory call (2 to 1); `BenchmarkEngineStartupWithImport` -29% ns/op, -29% B/op, -30% allocs/op. Original description: ≈5 ms each, and together **~99.5% of import time**.
   `loadLibraryFromReader` (`library_loader.go`) and `CompileDefineLibrary`
   (`compile_library_forms.go`) each call `LibraryEnvFactory` (re-checked 2026-10-16). The largest single unexamined cost on the import path, and it is
   duplication rather than work, so it is a Tier-3 simplification that happens to be the perf lever.

@@ -66,18 +66,34 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-library: invalid library name"))
 	}
 
-	// Create isolated library environment with primitives
-	// The library gets its own bindings but shares the Namespace for syntax interning
+	// Take the library environment: the one compileLibrary built for this
+	// form when a file load is compiling it, otherwise a fresh one from the
+	// factory. Either way the library gets its own bindings and shares the
+	// Namespace for syntax interning.
+	//
+	// The hinted compiler compiles exactly one form and is then discarded, and
+	// nested (define-library ...) forms compile on libCompiler below, which is
+	// built without a hint; that construction is what
+	// TestNestedDefineLibraryDoesNotShareTheOuterEnv pins. Clearing the hint
+	// here, first, is a cheap defence on top: it keeps a second form on this
+	// compiler from adopting the environment.
 	var libEnv *environment.EnvironmentFrame
+	hint := p.libEnvHint
+	p.libEnvHint = nil
 	factory := p.env.Namespace().LibraryEnvFactory()
-	if factory != nil {
+	switch {
+	case hint != nil:
+		// compileLibrary already built this environment to read and expand the
+		// form; the factory would only mint a structural sibling and drop it.
+		libEnv = hint
+	case factory != nil:
 		libEnv, err = factory(ctctx.ctx, p.env, libName.Parts)
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-library: could not create library environment"))
 		}
 		// Share the registry only across a distinct (custom-factory) namespace.
 		propagateRegistryAcrossNamespace(libEnv, p.env)
-	} else {
+	default:
 		// Fallback for tests that don't set up the factory
 		libEnv = environment.NewNamespace().Runtime()
 	}

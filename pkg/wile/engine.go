@@ -780,7 +780,9 @@ func setupLibrarySystem(
 	}
 
 	// LibraryEnvFactory creates isolated library environments that mirror
-	// this engine's configuration — same registry, same macros.
+	// this engine's configuration — same registry, same macros. It runs once per
+	// file-library load (the compiler reuses the loader's environment for the
+	// define-library form) and once per inline (define-library ...).
 	ns.SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
 		callerTopLevel := callerEnv.Namespace()
 		if callerTopLevel == nil {

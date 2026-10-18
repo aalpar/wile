@@ -332,6 +332,7 @@ func compileLibrary(ctx context.Context, stx syntax.SyntaxValue, expectedName Li
 	// Use inTail=false for top-level expressions
 	cctx := NewCompileTimeCallContext(ctx, false)
 	compiler := NewCompileTimeContinuation(tpl, libEnv, evaluator)
+	compiler.setLibEnvHint(libEnv)
 
 	// NewCompileTimeContinuation seeds the engine-configured WithInlineThreshold
 	// from libEnv's namespace.
