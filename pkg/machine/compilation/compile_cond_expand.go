@@ -38,8 +38,13 @@ import (
 //     NewCompileTimeContinuation inside compileLibrary (library_loader.go).
 //     Only EnsureInstantiated's EvalTemplate is deferred. nil falls back to
 //     file existence.
-//   - source: every refusal is wrapped as a *SourcedError at this location. A
-//     plain wrap would drop the provenance the caller holds.
+//   - source: refusals are wrapped as a *SourcedError at this location (bare
+//     when it is nil). A plain wrap would drop the provenance the caller holds,
+//     so a caller must pass the form's own location, never nil.
+//
+// env must be non-nil. The improper tail SyntaxForEach returns is not checked
+// here: CompileCondExpand's validator rejects it first, and a caller that
+// bypasses that validator must check it.
 func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, args syntax.SyntaxValue, source *syntax.SourceContext) (*syntax.SyntaxPair, error) {
 	if syntax.IsSyntaxEmptyList(args) {
 		return nil, wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses"))
@@ -61,7 +66,7 @@ func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFr
 	// stays in the registry, so a later real import is the instantiation alone.
 	// nil falls back to file existence, as in a unit test with no evaluator.
 	var load LibraryLoadProbe
-	if env != nil && evaluator != nil {
+	if evaluator != nil {
 		load = func(name LibraryName) bool {
 			return LibraryAvailable(ctx, name, env, evaluator)
 		}

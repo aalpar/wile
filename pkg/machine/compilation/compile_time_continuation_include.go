@@ -123,7 +123,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 		return werr.WrapForeignErrorf(werr.ErrNotAPair, "include: expected a list of filenames, got %T", expr)
 	}
 	// SyntaxForEach rather than a hand-rolled cdr descent. The callback IS the
-	// per-iteration closure the two defers below need, so the immediately-invoked
+	// per-iteration closure the defer below needs, so the immediately-invoked
 	// function this replaces is gone rather than merely renamed; and the improper
 	// tail arrives as a RETURN VALUE, so the "not a list" refusal is a test on it
 	// instead of a branch buried in the descent. The loop guard that went with

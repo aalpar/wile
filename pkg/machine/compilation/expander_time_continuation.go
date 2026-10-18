@@ -119,11 +119,12 @@ type ExpanderTimeContinuation struct {
 	// recognize its own. Shared by pointer with child expanders. See
 	// expander_use_site.go.
 	useSiteScopes *useSiteScopeLog
-	// fileResolver resolves include and include-ci forms the expander splices.
-	// Defaults as NewCompileTimeContinuation's does; the compiler's can differ
-	// from env.FileResolver() (pkg/registry/core/bootstrap.scm compiles with an
-	// embed resolver), so expandAndCompileScoped sets both. Carried to child
-	// expanders by newChildExpander.
+	// fileResolver resolves the include and include-ci forms the expander
+	// splices. Defaults as NewCompileTimeContinuation's does. The resolver
+	// ExpandAndCompile is handed can differ from env.FileResolver(), so
+	// expandAndCompileScoped sets it on the expander as it does on the compiler.
+	// Carried to child expanders by newChildExpander; the other expander
+	// construction sites (compile_*.go) still take the default from env.
 	fileResolver FileResolver
 }
 

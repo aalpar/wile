@@ -2147,7 +2147,7 @@ func TestCoverageSyntaxCaseWithFender(t *testing.T) {
 }
 
 // TestCoverageInclude tests include and include-ci forms.
-// Exercises compileIncludeImpl and findFile.
+// Exercises compileIncludeImpl and readIncludedForms.
 func TestCoverageInclude(t *testing.T) {
 	// We can't easily test include without actual files, but we can test error paths
 	env := testhelpers.NewFullRuntimeEnv(t)

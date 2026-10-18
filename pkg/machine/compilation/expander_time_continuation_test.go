@@ -17,6 +17,7 @@ package compilation
 import (
 	"context"
 	"testing"
+	"testing/fstest"
 
 	"github.com/aalpar/wile/pkg/machine"
 
@@ -251,34 +252,36 @@ func TestExpandCaseLambdaForm(t *testing.T) {
 
 // Pin: a child expander carries the parent's fileResolver. include and
 // cond-expand splicing run inside nested bodies (lambda, let), and the resolver
-// the engine set on the expander need not be env.FileResolver()
-// (pkg/registry/core/bootstrap.scm compiles with an embed resolver), so a child
-// that rebuilt its own would read from the wrong source.
+// set on the expander can differ from env.FileResolver() (ExpandAndCompile takes
+// one as a parameter), so a child that rebuilt its own from env would read from
+// the wrong source.
 func TestExpander_ChildCarriesFileResolver(t *testing.T) {
-	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
 	exp := NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
-	custom := NewOSFileResolver(env)
+	custom := NewFSFileResolver(fstest.MapFS{}, env)
 	exp.SetFileResolver(custom)
 
 	child := exp.newChildExpander(env)
 
-	c.Assert(child.fileResolver, qt.Equals, FileResolver(custom))
+	qt.Assert(t, child.fileResolver, qt.Equals, FileResolver(custom))
 }
 
-// The constructor defaults the resolver as NewCompileTimeContinuation does, and
-// a nil setter argument resets to that default.
+// The constructor defaults the resolver as NewCompileTimeContinuation does
+// (the namespace's resolver, else the OS one), and a nil setter argument resets
+// to that default. The namespace carries a resolver here so the default is
+// distinguishable from both the OS fallback and a freshly allocated one.
 func TestExpander_FileResolverDefaultsAndResets(t *testing.T) {
-	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
+	nsResolver := NewFSFileResolver(fstest.MapFS{}, env)
+	env.SetFileResolver(nsResolver)
+
 	exp := NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
-	c.Assert(exp.fileResolver, qt.IsNotNil)
+	qt.Assert(t, exp.fileResolver, qt.Equals, FileResolver(nsResolver))
 
 	custom := NewOSFileResolver(env)
 	exp.SetFileResolver(custom)
-	c.Assert(exp.fileResolver, qt.Equals, FileResolver(custom))
+	qt.Assert(t, exp.fileResolver, qt.Equals, FileResolver(custom))
 
 	exp.SetFileResolver(nil)
-	c.Assert(exp.fileResolver, qt.Not(qt.Equals), FileResolver(custom))
-	c.Assert(exp.fileResolver, qt.IsNotNil)
+	qt.Assert(t, exp.fileResolver, qt.Equals, FileResolver(nsResolver))
 }
