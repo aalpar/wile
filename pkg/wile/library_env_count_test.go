@@ -92,8 +92,8 @@ func TestOneLibraryEnvPerFileLibraryLoad(t *testing.T) {
 // TestInlineDefineLibraryStillMintsItsOwnEnv guards the consume side of the
 // hint: a (define-library ...) written in a program is not a file load, so it
 // has no pre-made environment and must still take one from the factory. It
-// catches a hint installed on the top-level compiler, which would hand every
-// inline library the same environment.
+// catches a hint installed on the top-level compiler, which would hand an inline
+// library the loader's environment instead of a fresh one.
 func TestInlineDefineLibraryStillMintsItsOwnEnv(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
