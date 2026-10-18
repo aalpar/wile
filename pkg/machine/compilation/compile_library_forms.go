@@ -76,18 +76,19 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	hint := p.libEnvHint
 	p.libEnvHint = nil
 	factory := p.env.Namespace().LibraryEnvFactory()
-	if hint != nil {
+	switch {
+	case hint != nil:
 		// compileLibrary already built this environment to read and expand the
 		// form; the factory would only mint a structural sibling and drop it.
 		libEnv = hint
-	} else if factory != nil {
+	case factory != nil:
 		libEnv, err = factory(ctctx.ctx, p.env, libName.Parts)
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-library: could not create library environment"))
 		}
 		// Share the registry only across a distinct (custom-factory) namespace.
 		propagateRegistryAcrossNamespace(libEnv, p.env)
-	} else {
+	default:
 		// Fallback for tests that don't set up the factory
 		libEnv = environment.NewNamespace().Runtime()
 	}
