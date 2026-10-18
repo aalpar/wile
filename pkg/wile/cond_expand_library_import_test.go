@@ -54,6 +54,16 @@ func TestCondExpandLibraryImportability(t *testing.T) {
   (export x)
   (begin (define x 1)))`),
 		},
+		// The same probe inside a library body (processCondExpand), which must
+		// reach the evaluator as the top-level site does.
+		"probe/wrapper.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (probe wrapper)
+  (import (scheme base))
+  (export w)
+  (cond-expand
+    ((library (probe broken)) (begin (define w 'have-broken)))
+    (else (begin (define w 'fallback)))))`),
+		},
 	}
 
 	newEngine := func() *wile.Engine {
@@ -80,6 +90,11 @@ func TestCondExpandLibraryImportability(t *testing.T) {
 		{
 			name: "resolvable-but-unimportable library does not satisfy",
 			code: `(cond-expand ((library (probe broken)) 'have-broken) (else 'fallback))`,
+			want: "fallback",
+		},
+		{
+			name: "unimportable library does not satisfy inside a library body",
+			code: `(import (probe wrapper)) w`,
 			want: "fallback",
 		},
 		{

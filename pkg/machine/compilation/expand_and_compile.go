@@ -100,6 +100,9 @@ func expandAndCompileScoped(ctx context.Context, env *environment.EnvironmentFra
 	expander := NewExpanderTimeContinuation(ctx, env, evaluator)
 	expander.libraryScope = libraryScope
 	expander.SetMaxDepth(maxExpandDepth)
+	if resolver != nil {
+		expander.SetFileResolver(resolver)
+	}
 	expanded, err := expander.ExpandTopLevelExpression(stx)
 	if err != nil {
 		return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(err, "expansion"))

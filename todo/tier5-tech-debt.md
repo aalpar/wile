@@ -7,6 +7,27 @@
 
 ## Tier 5 — Tech Debt
 
+### Filed by the P5.6 crosscheck (2026-10-18)
+
+Two findings from the five-lens review of `refactor/include-expander-seams`, both outside a
+no-behaviour-change extraction. The third finding of that review (the expander's `fileResolver`
+reaches one construction site of about twelve) is not a row: it is an entry requirement of P5.7,
+recorded in that task's record in `plans/2026-09-22-defect-closeout-P5.md`.
+
+- [ ] **`include-library-declarations` reads an included file with its own loop** [Tech debt, S]:
+  `compile_library_forms.go` opens through `findFile` and runs the same `ReadSyntax`/`io.EOF` loop
+  that `readIncludedForms` now owns, but it processes each form as it reads it, where
+  `readIncludedForms` reads the whole file first. Routing it through `readIncludedForms` would move
+  a mid-file read error from "earlier declarations processed" to "none processed", so it is a
+  decision, not a rename. When it is made, `findFile` has no production caller left (its other two
+  are tests) and goes with it.
+- [ ] **The default file resolver is spelled four times** [Tech debt, XS]: "`env.FileResolver()`,
+  else `NewOSFileResolver(env)`" is in `NewCompileTimeContinuation`,
+  `CompileTimeContinuation.SetFileResolver`, `NewExpanderTimeContinuation` and
+  `ExpanderTimeContinuation.SetFileResolver`. A `defaultFileResolver(env)` helper removes the drift
+  risk. Moot if P5.7 takes the option that makes `env.FileResolver()` the only authority and deletes
+  the expander field.
+
 ### Filed by the P3.15 crosscheck (2026-10-03)
 
 Three findings from the five-lens review of `fix/hashtable-remembers-its-procedures` that are real

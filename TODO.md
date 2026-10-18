@@ -30,7 +30,7 @@ after it, `git log -p todo/<file>`.
 | [`todo/tier2-embedding-api.md`](todo/tier2-embedding-api.md) | Embedding API, algebra & analytics roadmap, feature deltas | 33 | 20 | 145 |
 | [`todo/tier3-tooling-dx.md`](todo/tier3-tooling-dx.md) | Linter, tooling, developer experience | 5 | 5 | 12 |
 | [`todo/tier4-performance.md`](todo/tier4-performance.md) | Measured perf levers; unboxed arithmetic is the largest | 12 | 8 | 133 |
-| [`todo/tier5-tech-debt.md`](todo/tier5-tech-debt.md) | Simplification, dedup, crosscheck-filed residuals, postponed items | 85 | 54 | 1213 |
+| [`todo/tier5-tech-debt.md`](todo/tier5-tech-debt.md) | Simplification, dedup, crosscheck-filed residuals, postponed items | 86 | 55 | 1242 |
 | [`todo/tier6-nice-to-haves.md`](todo/tier6-nice-to-haves.md) | Unranked wants | 17 | 4 | 50 |
 | [`todo/exceptions-and-rejected.md`](todo/exceptions-and-rejected.md) | Documented R7RS exceptions, rejected proposals, the FCA coupling assessment | 0 | 10 | 82 |
 | [`todo/closed.md`](todo/closed.md) | Archive form of closed rows; read for traps and deciding measurements | 0 | 90 | 808 |
