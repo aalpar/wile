@@ -325,3 +325,30 @@ func TestCondExpandMultiFormClauseBody(t *testing.T) {
 		})
 	}
 }
+
+// Pin (P5.8 re-review): use-site pruning happens at the transformer boundary, so
+// a cond-expand a macro merely RECEIVES as an argument keeps its use-site scopes
+// and its define cannot capture the macro's own binder. Same program with
+// (begin ...) is the control; Chez answers top.
+func TestCondExpandPassedToAMacroDoesNotCaptureTheMacrosBinder(t *testing.T) {
+	const prelude = `(define a 'top)
+(define-syntax m (syntax-rules () ((_ f) (let () f a))))
+`
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{name: "cond-expand argument", code: prelude + `(m (cond-expand (else (define a 'user))))`, want: "top"},
+		{name: "begin argument (control)", code: prelude + `(m (begin (define a 'user)))`, want: "top"},
+		{name: "macro-local binder", code: `(define-syntax m2 (syntax-rules () ((_ f) (let ((a 'macro)) (let () f a)))))
+(m2 (cond-expand (else (define a 'user))))`, want: "macro"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fstest.MapFS{}, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, tc.want)
+		})
+	}
+}

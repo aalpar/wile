@@ -133,7 +133,35 @@ func (p *ExpanderTimeContinuation) pruneUseSiteScopes(stx syntax.SyntaxValue) sy
 			return p.pruneUseSiteScopesInBegin(pair)
 		}
 	}
+	_, isCondExpand := asFormDenoting(p.env, pair, "cond-expand")
+	if isCondExpand {
+		return p.pruneUseSiteScopesInCondExpand(pair)
+	}
 	return p.pruneDefinitionBinder(pair)
+}
+
+// pruneUseSiteScopesInCondExpand prunes every clause body as a begin body.
+func (p *ExpanderTimeContinuation) pruneUseSiteScopesInCondExpand(pair *syntax.SyntaxPair) syntax.SyntaxValue {
+	var clauses []syntax.SyntaxValue
+	cur := pair.SyntaxCdr()
+	for {
+		curPair, ok := cur.(*syntax.SyntaxPair)
+		if !ok || syntax.IsSyntaxEmptyList(curPair) {
+			break
+		}
+		clause := curPair.SyntaxCar()
+		clausePair, ok := clause.(*syntax.SyntaxPair)
+		if ok && !syntax.IsSyntaxEmptyList(clausePair) {
+			clause = p.pruneUseSiteScopesInBegin(clausePair)
+		}
+		clauses = append(clauses, clause)
+		cur = curPair.SyntaxCdr()
+	}
+	q := cur
+	for _, c := range slices.Backward(clauses) {
+		q = syntax.NewSyntaxCons(c, q, c.SourceContext())
+	}
+	return syntax.NewSyntaxCons(pair.SyntaxCar(), q, pair.SourceContext())
 }
 
 // pruneUseSiteScopesInBegin maps the pruner over a begin's forms, rebuilding the

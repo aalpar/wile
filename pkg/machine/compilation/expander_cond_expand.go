@@ -46,10 +46,12 @@ import (
 //
 // The clause body's forms already carry the enclosing scopes (the scope walk of
 // every enclosing expansion reached them), so unlike an included file's forms
-// they are not re-stamped; their use-site scopes are pruned, as an included
-// file's are, so a macro that expands to a cond-expand can define a name the
-// caller passed. The head is a FRESH-scope begin for the reason spliceBegin
-// gives.
+// they are not re-stamped. Use-site scopes are NOT pruned here: pruning belongs
+// at the transformer boundary (pruneUseSiteScopes treats a cond-expand in macro
+// output as a splicing head and prunes each clause body), so a cond-expand a
+// macro merely RECEIVES as an argument keeps its use-site scopes and cannot
+// capture the macro's own binders. The head is a FRESH-scope begin for the
+// reason spliceBegin gives.
 //
 // No current test discriminates ExpandBodyWithDefineSyntax from expanding each
 // form with ExpandExpression: a body-treatment-only difference (predeclared
@@ -77,9 +79,6 @@ func (p *ExpanderTimeContinuation) expandCondExpandForm(sym *syntax.SyntaxSymbol
 	forms, err := collectBodyExpressions(bodyPair)
 	if err != nil {
 		return nil, wrapSourcedError(srcCtx, werr.WrapForeignErrorf(err, "cond-expand: failed to collect clause body"))
-	}
-	for i, form := range forms {
-		forms[i] = p.pruneUseSiteScopes(form)
 	}
 	expanded, err := p.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
