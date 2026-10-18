@@ -30,8 +30,6 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	{"quote", (*ExpanderTimeContinuation).expandUnchanged},
 	{"unquote", (*ExpanderTimeContinuation).expandUnchanged},
 	{"unquote-splicing", (*ExpanderTimeContinuation).expandUnchanged},
-	{"include", (*ExpanderTimeContinuation).expandUnchanged},
-	{"include-ci", (*ExpanderTimeContinuation).expandUnchanged},
 	{"define-library", (*ExpanderTimeContinuation).expandUnchanged},
 	{"cond-expand", (*ExpanderTimeContinuation).expandUnchanged},
 	{"syntax", (*ExpanderTimeContinuation).expandUnchanged},
@@ -47,6 +45,8 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	{"define-for-syntax", (*ExpanderTimeContinuation).expandDefineForSyntax},
 	{"begin-for-syntax", (*ExpanderTimeContinuation).expandBeginForSyntax},
 	{"eval-when", (*ExpanderTimeContinuation).expandEvalWhen},
+	{"include", (*ExpanderTimeContinuation).expandIncludeForm},
+	{"include-ci", (*ExpanderTimeContinuation).expandIncludeCiForm},
 	{"let-syntax", (*ExpanderTimeContinuation).expandLetSyntax},
 	{"letrec-syntax", (*ExpanderTimeContinuation).expandLetrecSyntax},
 
