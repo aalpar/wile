@@ -37,11 +37,16 @@ import (
 //
 // Two things it is NOT:
 //
-// Not side-effect-free. (import ...) executes the imported library's body during
-// compilation of the importing form (see
-// machine/compilation/library_loader.go, compileAndExecuteLibrary), so checking
-// a program that imports a side-effecting library runs those effects. Only the
-// checked program's own top level is guaranteed not to run.
+// Not side-effect-free. Compilation executes code: transformer right-hand sides
+// (define-syntax, let-syntax), begin-for-syntax and define-for-syntax bodies, and
+// the bodies of imported libraries ((import ...) runs the library body during
+// compilation of the importing form; see
+// machine/compilation/library_loader.go, compileAndExecuteLibrary). Checking a
+// program that contains or imports any of these runs their effects, and
+// nothing bounds their running time but ctx. Only the checked program's own
+// run-time top-level expressions are guaranteed not to run. This is inherent to
+// any Scheme with define-syntax (Racket's raco make and raco expand both run
+// begin-for-syntax), not a gap to close.
 //
 // Not read-only with respect to the engine. Compiling a top-level define
 // registers its binding — that registration is what makes forward references

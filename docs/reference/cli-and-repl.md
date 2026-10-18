@@ -98,9 +98,11 @@ cannot be rebound to a different arity:
 Uncheckable calls are left to the existing run-time arity error; nothing is
 weakened, only reported earlier where it can be.
 
-**Not fully side-effect-free.** `(import ...)` executes the imported library's
-body at compile time, so checking a program that imports a side-effecting
-library runs those effects. The checked program's own top level never runs.
+**Not side-effect-free.** Compilation executes transformer right-hand sides
+(`define-syntax`, `let-syntax`), `begin-for-syntax` and `define-for-syntax`
+bodies, and the bodies of imported libraries. Checking a program that contains
+or imports any of them runs their effects, bounded in time only by the
+context. The checked program's own run-time top-level expressions never run.
 
 ### Environment Variables
 

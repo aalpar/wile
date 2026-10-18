@@ -56,7 +56,7 @@ type Options struct {
 	Eval         []string `short:"e" long:"eval" description:"Evaluate Scheme expression (repeatable)" unquote:"false"`
 	File         []string `short:"f" long:"file" description:"Scheme file(s) to load (can be repeated)" unquote:"false"`
 	Interactive  bool     `short:"i" long:"interactive" description:"Enter REPL after loading file(s)"`
-	Check        bool     `long:"check" description:"Parse and compile without executing; report errors and exit"`
+	Check        bool     `long:"check" description:"Compile without running the program's top level; report errors and exit. Compilation still executes transformer right-hand sides, begin-for-syntax, define-for-syntax and imported library bodies"`
 	LibraryPath  string   `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)" unquote:"false"`
 	Version      bool     `short:"V" long:"version" description:"Print version information and exit"`
 	Quiet        bool     `short:"q" long:"quiet" description:"Suppress informational messages"`
