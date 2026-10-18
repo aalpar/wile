@@ -122,8 +122,7 @@ func statAnswersFalse(err error) bool {
 // program), and a predicate that distinguished the two would hand a sandboxed
 // program an oracle for the filesystem outside its sandbox. A caller that needs
 // to know WHY is not served by this procedure; a lower-level call that reports
-// the reason was declined (TODO.md "Low-level file predicate reporting why a
-// stat failed"); its re-open trigger is a named embedder plus a gate Action.
+// the reason was declined (P5.5/I056); re-open needs a named embedder and a gate Action.
 //
 // The refusals are not the whole error space. A system error that carries no
 // information about existence — EIO, ELOOP, ENAMETOOLONG, a timeout — raises,
