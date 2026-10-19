@@ -16,7 +16,6 @@ package wile_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -74,10 +73,10 @@ func TestInlineThresholdHonoredForImportedLibrary(t *testing.T) {
 	ctx := context.Background()
 
 	// The discriminator is f's body operator, `+`, appearing in use-helper's own
-	// disassembly as the promoted AddTail — it is there iff the body was folded
-	// in. (An imported `+` in a library body is a cached-binding load, so the
-	// peephole promotes it exactly as it does at top level; before I217 it was a
-	// by-GlobalIndex load and the marker was `<global-index "+">`.)
+	// disassembly — it is there iff the body was folded in. templateMentionsPlus
+	// accepts either load form (a by-GlobalIndex literal before I217, a cached
+	// binding afterwards), so an I217 regression is not mislabelled as an
+	// inlining regression.
 	//
 	// It replaces an earlier "CallLocal is present iff NOT inlined" test, which
 	// stopped discriminating once frame reclaim was armed inside a merged `let`
@@ -126,8 +125,7 @@ func TestInlineThresholdHonoredForImportedLibrary(t *testing.T) {
 		closure, ok := v.Internal().(*machine.MachineClosure)
 		qt.Assert(t, ok, qt.IsTrue)
 
-		disasm := machine.DisassembleString(closure.Template())
-		return strings.Contains(disasm, "AddTail")
+		return templateMentionsPlus(closure.Template())
 	}
 
 	// Default engine: inlining on -> f's body is folded into use-helper.
@@ -184,11 +182,24 @@ func TestInlineThresholdBoundaryForImportedLibrary(t *testing.T) {
 		closure, ok := v.Internal().(*machine.MachineClosure)
 		qt.Assert(t, ok, qt.IsTrue)
 
-		return strings.Contains(machine.DisassembleString(closure.Template()), "AddTail")
+		return templateMentionsPlus(closure.Template())
 	}
 
 	// threshold 2 < body length 3 -> not inlined -> f's body absent.
 	qt.Assert(t, bodyInlined(t, 2), qt.IsFalse)
 	// threshold 3 == body length 3 -> inlined -> f's body present.
 	qt.Assert(t, bodyInlined(t, 3), qt.IsTrue)
+}
+
+// templateMentionsPlus reports whether the template's own bytecode loads `+`,
+// as a cached binding (the form an imported name takes in a library body since
+// I217, possibly promoted to AddTail) or as a by-GlobalIndex literal (the form
+// it took before).
+func templateMentionsPlus(tpl *machine.NativeTemplate) bool {
+	for _, in := range machine.Disassemble(tpl).Instructions {
+		if in.Binding == "+" || in.Literal == `<global-index "+">` {
+			return true
+		}
+	}
+	return false
 }

@@ -457,28 +457,25 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// in the caller env, which would falsely match any reference scopes.
 	libGI := p.env.GetGlobalIndexFromLibraryScopes(sym, symbolScopes)
 	if libGI != nil {
-		// The syntactic-keyword refusal is applied HERE, before the choice of
-		// load below, because that choice depends on what the binding is. Env
-		// is nil for a DEFERRED index, which resolveGlobal never produces but
+		// Env is nil for a DEFERRED index, which resolveGlobal never produces but
 		// the type does not forbid; a nil binding is not a refusal
 		// (refuseCompileTimeMeaning says why).
 		var libBD *environment.Binding
 		if libGI.Env != nil {
 			libBD = libGI.Env.GetOwnGlobalBinding(libGI)
-			err := refuseCompileTimeMeaning(expr.SourceContext(), sym, libBD)
-			if err != nil {
-				return err
-			}
 		}
 		// An IMPORTED binding takes the cached-binding load a top-level
 		// reference gets, so the peephole promotes + - < to AddTail, Sub, NumLt
-		// (I217). The ground for keeping every library reference on the
+		// (I217). emitCachedBindingLoad applies the syntactic-keyword refusal
+		// itself. The ground for keeping every library reference on the
 		// by-GlobalIndex load was that the value must be read at execution time;
 		// that does not distinguish the two loads, because AppendCachedBinding
 		// stores the *Binding and OpLoadCachedBinding reads .Value() when it
-		// runs. What the GlobalIndex load adds is a re-resolution for a name not
-		// yet defined (a forward reference inside the library), and an imported
-		// binding already exists and is not redefined by this unit.
+		// runs. Both loads read the same *Binding the pinned index names, and
+		// nothing reachable empties a slot in a library's store, so the cached
+		// pointer cannot go stale. (A later define, include or cond-expand in the
+		// library body can shadow the import for the references compiled after
+		// it; references compiled before keep the import on either load.)
 		//
 		// IsImported is the gate, not IsStable. Measured over a whole
 		// (wile algebra) load, the library arm saw 9809 sites imported and
@@ -489,9 +486,15 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		if libBD != nil && libBD.IsImported() {
 			return p.emitCachedBindingLoad(expr.SourceContext(), sym, libBD)
 		}
-		// Any other library-scope reference uses runtime resolution via
-		// GlobalIndex, so a name not yet defined when this form compiles (a
-		// forward reference inside the library) still resolves when it runs.
+		err := refuseCompileTimeMeaning(expr.SourceContext(), sym, libBD)
+		if err != nil {
+			return err
+		}
+		// Every other library-scope reference keeps the by-GlobalIndex load. The
+		// nil-binding case (a deferred index) is the defensive one for a name
+		// not yet defined when this form compiles; it is untested, the library
+		// arm's non-imported path having been reached by 0 such sites in the
+		// whole suite.
 		i := p.template.MaybeAppendLiteral(libGI)
 		p.AppendOperations(
 			machine.NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(i),
@@ -589,7 +592,9 @@ func (p *CompileTimeContinuation) phaseSuffix() string {
 // ordinary resolution — that arm is a fallback with a path left to try, and a
 // dialect-removed form must end at ErrNoSuchBinding rather than here. Calling
 // it there rather than re-testing the tag inline is what keeps one authority
-// for "this is a compile-time meaning".
+// for "this is a compile-time meaning". The library-scope arm calls it directly
+// on its non-imported path; its imported path reaches it through
+// emitCachedBindingLoad.
 //
 // src stamps the IDENTIFIER's own location, for the reason the unbound-
 // reference arms above give: without it the error reaches
@@ -615,14 +620,14 @@ func refuseCompileTimeMeaning(src *syntax.SourceContext, sym *values.Symbol, bd 
 // and its lock, and applying refuseCompileTimeMeaning first.
 //
 // CompileSymbol reaches a resolved global on SIX arms, not three, and every one
-// of them applies refuseCompileTimeMeaning. Three funnel through here — the
-// empty-scope global, the co-introduced binder, and the scoped global. The
-// library-scope arm CANNOT: it must keep runtime resolution because the library
-// template has not run when the reference compiles, and a cached-binding load
-// would read the value too early, so it calls the refusal directly. That is why
-// the refusal is a free function rather than a step inside this one. The
-// remaining two are tryResolvedBinding's own resolved-pin paths, which call it
-// for the classification and fall through rather than raising.
+// of them applies refuseCompileTimeMeaning. Four paths funnel through here: the
+// empty-scope global, the co-introduced binder, the scoped global, and the
+// library-scope arm for an IMPORTED binding. The library arm's non-imported path
+// keeps the by-GlobalIndex load (a binding that is not an import may be defined
+// later in the library, or not at all yet) and calls the refusal directly. That
+// is why the refusal is a free function rather than a step inside this one. The
+// remaining two arms are tryResolvedBinding's own resolved-pin paths, which call
+// it for the classification and fall through rather than raising.
 //
 // (The "there are three" wording this comment carried was false for the whole
 // life of the library arm, and a library body's (list if) evaluated to

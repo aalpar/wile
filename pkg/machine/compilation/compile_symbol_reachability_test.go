@@ -406,8 +406,8 @@ func TestCompileSymbolRefusesCompileTimeMeaningOnEveryGlobalArm(t *testing.T) {
 	// Vacuity guards. If the operation constructors are renamed, or the arms are
 	// restructured so no emit is discovered, the loop below passes trivially.
 	// Five emits exist today: two in CompileSymbol (the empty-scope runtime
-	// fallback and the library-scope arm), two in tryResolvedBinding, one in
-	// emitCachedBindingLoad.
+	// fallback and the library arm's non-imported fallback), two in
+	// tryResolvedBinding, one in emitCachedBindingLoad.
 	if len(sites) < 3 {
 		t.Fatalf("discovered %d global-load emit(s) reachable from %s, want at "+
 			"least 3 — the analysis is broken (operation constructor renamed? "+

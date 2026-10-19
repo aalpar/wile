@@ -62,6 +62,10 @@ func globalLoads(h map[string]int) int {
 // load it gets at top level, so the peephole promotes + - < to AddTail, Sub and
 // NumLt. A value assertion cannot see the defect (both shapes answer 196418),
 // so the gate counts opcodes.
+//
+// The opcode-count assertions are a RATCHET on a deliberate non-optimization:
+// they pin that library code reaches the top-level shape, not that widening
+// the gate to non-imported names is unsafe (it is not shown to be).
 func TestLibraryBodyPromotesImportedPrimitiveLoads(t *testing.T) {
 	ctx := context.Background()
 
@@ -106,9 +110,9 @@ func TestLibraryBodyPromotesImportedPrimitiveLoads(t *testing.T) {
 // TestLibraryBodyKeepsGlobalLoadForNonImportedNames pins the gate's width: only
 // an imported binding is promoted. A library with no import clause gets its
 // primitives from applyBaseEnvironment's sealed base (imported=false), and those
-// sites stay on the by-GlobalIndex load, as does a forward reference to a name
-// defined later in the same library. Widening the gate to every library-scope
-// reference would flip the first assertion.
+// sites stay on the by-GlobalIndex load. Widening the gate to every library-scope
+// reference would flip the first assertion. (The nil-binding fallback for a name
+// not yet defined is defensive and untested: no site in the suite reaches it.)
 func TestLibraryBodyKeepsGlobalLoadForNonImportedNames(t *testing.T) {
 	ctx := context.Background()
 
@@ -117,14 +121,6 @@ func TestLibraryBodyKeepsGlobalLoadForNonImportedNames(t *testing.T) {
 			Data: []byte(`(define-library (probe noimport)
   (export ni-add)
   (begin (define (ni-add a b) (+ a b))))`),
-		},
-		"probe/fwd.sld": &fstest.MapFile{
-			Data: []byte(`(define-library (probe fwd)
-  (import (scheme base))
-  (export fwd-first)
-  (begin
-    (define (fwd-first n) (fwd-second n))
-    (define (fwd-second n) (+ n 1))))`),
 		},
 	}
 
@@ -136,13 +132,60 @@ func TestLibraryBodyKeepsGlobalLoadForNonImportedNames(t *testing.T) {
 	)
 	qt.Assert(t, err, qt.IsNil)
 
-	_, err = eng.EvalMultiple(ctx, `(import (probe noimport) (probe fwd))`)
+	_, err = eng.EvalMultiple(ctx, `(import (probe noimport))`)
 	qt.Assert(t, err, qt.IsNil)
 
 	h := opHistogram(t, eng, "ni-add")
 	qt.Assert(t, globalLoads(h) > 0, qt.IsTrue, qt.Commentf("no-import library histogram %v", h))
 
-	got, err := eng.EvalMultiple(ctx, `(list (ni-add 2 3) (fwd-first 41))`)
+	got, err := eng.EvalMultiple(ctx, `(ni-add 2 3)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, got.SchemeString(), qt.Equals, "(5 42)")
+	qt.Assert(t, got.SchemeString(), qt.Equals, "5")
+}
+
+// TestLibraryBodyCachedLoadSeesTheExportersSet pins that the cached-binding load
+// is late: it reads the binding's value when it runs, not when it compiles. An
+// importing library reads a variable its exporter later assigns, so a load that
+// snapshotted the value at compile time (a literal) answers 0 twice.
+func TestLibraryBodyCachedLoadSeesTheExportersSet(t *testing.T) {
+	ctx := context.Background()
+
+	fsys := fstest.MapFS{
+		"probe/cnt.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (probe cnt)
+  (import (scheme base))
+  (export counter bump!)
+  (begin
+    (define counter 0)
+    (define (bump!) (set! counter (+ counter 1)))))`),
+		},
+		"probe/usecnt.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (probe usecnt)
+  (import (scheme base) (probe cnt))
+  (export read-counter)
+  (begin (define (read-counter) counter)))`),
+		},
+	}
+
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceFS(fsys),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+
+	got, err := eng.EvalMultiple(ctx, `(import (scheme base) (probe cnt) (probe usecnt))
+(let* ((a (read-counter)) (x (bump!)) (y (bump!)) (b (read-counter))) (list a b))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, got.SchemeString(), qt.Equals, "(0 2)")
+
+	h := opHistogram(t, eng, "read-counter")
+	loads := 0
+	for op, c := range h {
+		if strings.Contains(op, "CachedBinding") {
+			loads += c
+		}
+	}
+	qt.Assert(t, loads, qt.Equals, 1, qt.Commentf("read-counter histogram %v", h))
 }
