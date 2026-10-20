@@ -612,7 +612,7 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   `+`/`-` keep the imaginary digits; a finite real part past float64 range no longer turns the sum NaN; multiply and divide
   keep the `complex128` route, filed as row I under "Filed by the P6.2 crosscheck").
 - [x] Algebra: ~~`run-analysis` returns all-`#f` outputs for a 3-block forward chain where block 1
-  should be `#t`~~ (Done 2026-10-20, P6.8 / I176, `9089ce37` `baed772c` `39ba140c` `91b44674`: a block's first visit compared its out-state against its
+  should be `#t`~~ (Done 2026-10-20, P6.8 / I176, `9089ce37` `baed772c` `39ba140c` `91b44674`, merged `b2567dd7`: a block's first visit compared its out-state against its
   own bottom seed, so a transfer that generates a fact from bottom input looked converged and never
   enqueued its successors; the convergence test now requires `(> vc 1)`. The backward direction had the same
   defect. Every block reachable from a seed block is now visited at least once (on an acyclic CFG a transfer that
