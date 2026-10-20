@@ -93,8 +93,8 @@ var isVoidExceptions = map[string]bool{
 // TestIsVoidConvention verifies that every Value implementer in the
 // allValueExemplars roster returns the documented IsVoid() value when
 // invoked on a typed nil pointer (or zero value, for the four
-// singletons). The convention is documented at values/values.go (IsVoid
-// free function) and on the Value interface in values.go.
+// singletons). The convention is documented on IsVoid and on the Value
+// interface (values.go).
 func TestIsVoidConvention(t *testing.T) {
 	for _, exemplar := range allValueExemplars {
 		typeName := exemplarTypeName(exemplar)

@@ -15,25 +15,35 @@
 package values_test
 
 import (
-	"errors"
-	"io/fs"
 	"os"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
 
 // TestValuesHasNoGrabBagFile keeps pkg/values from regrowing a catch-all file.
-// It is a filename predicate, so it refuses the obvious renames too: moving
-// utils.go to misc.go would satisfy a bare os.Stat on utils.go while doing none
-// of the work. Helpers live in the file of the type they serve.
+// It refuses exactly the five names below, compared case-insensitively against
+// a directory listing (so a case-insensitive filesystem cannot hide one). It is
+// a filename predicate: utility.go or values_utils.go pass, and the split of
+// helpers by owner is enforced by review, not by this test. Helpers live in the
+// file of the type they serve.
 func TestValuesHasNoGrabBagFile(t *testing.T) {
+	c := qt.New(t)
+	entries, err := os.ReadDir(".")
+	c.Assert(err, qt.IsNil)
+
+	present := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		present[strings.ToLower(e.Name())] = true
+	}
+	// A wrong working directory would make every absence check below vacuous.
+	c.Assert(present["values.go"], qt.IsTrue, qt.Commentf("test is not running in pkg/values"))
+
 	names := []string{"utils.go", "util.go", "helpers.go", "misc.go", "common.go"}
 	for _, name := range names {
-		t.Run(name, func(t *testing.T) {
-			_, err := os.Stat(name)
-			qt.Assert(t, errors.Is(err, fs.ErrNotExist), qt.IsTrue,
-				qt.Commentf("pkg/values/%s exists (err=%v)", name, err))
+		c.Run(name, func(c *qt.C) {
+			c.Assert(present[name], qt.IsFalse, qt.Commentf("pkg/values/%s exists", name))
 		})
 	}
 }

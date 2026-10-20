@@ -16,11 +16,6 @@ package values
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base32"
-	"fmt"
-
-	"github.com/aalpar/wile/pkg/werr"
 )
 
 // Prefix constants for Scheme value representations.
@@ -113,7 +108,7 @@ var EOFObject Value = eofType{}
 //
 // R7RS §6.1 defines eq?/eqv? on aggregates as "denote the same location in the
 // store." A Scheme object must therefore HAVE a location, and Wile spells that as
-// Go pointer identity: EqIdentity (below) special-cases *Symbol (compared by
+// Go pointer identity: EqIdentity (values.go) special-cases *Symbol (compared by
 // Key, since interning was removed) and otherwise falls through to a bare `a == b`
 // on the interface. It backs eq?, memq, and assq — the hot path. Go panics with
 // "comparing uncomparable type" when the dynamic type behind an interface is a
@@ -442,11 +437,6 @@ type RealNumber interface {
 	SignBit() bool
 }
 
-// byteCnt is the number of bytes used for generating temporary variable names.
-const (
-	byteCnt = 128 / 8
-)
-
 // EqualTo compares two values for structural equality (R7RS equal?).
 // It is the package-level spelling of Equal; see equal.go for the traversal.
 func EqualTo(a, b Value) bool {
@@ -469,27 +459,6 @@ func EqIdentity(a, b Value) bool {
 		return false
 	}
 	return a == b
-}
-
-// NewTemporaryVariableName generates a unique symbol for use as a temporary variable.
-// The symbol name has the format "__T_<base32-encoded-random-bytes>".
-// Uses 128 bits of cryptographic randomness to ensure uniqueness.
-// Thread-safe: uses crypto/rand which is safe for concurrent use.
-// Panics if random number generation fails.
-func NewTemporaryVariableName() *Symbol {
-	bs := make([]byte, byteCnt)
-	_, err := rand.Read(bs)
-	if err != nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrRandomGenerationFailed,
-			"error reading random stream: %v",
-			err,
-		))
-	}
-	q := NewSymbol(
-		fmt.Sprintf("__T_%s", base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(bs)),
-	)
-	return q
 }
 
 // IsVoid returns true if the value represents the absence of a meaningful result.
