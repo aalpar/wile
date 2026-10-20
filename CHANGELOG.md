@@ -119,6 +119,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`+`/`-` of a BigComplex and `+inf.0`/`+nan.0` keep the imaginary part's
+  digits.** `(+ (make-rectangular #m0 #m9.87654321098765432109876543210987) +inf.0)`
+  came back with an imaginary part of `9.87654321098765386…`: the imaginary
+  component was rounded to float64 on the way through, although a real Inf/NaN
+  has no imaginary part to change. It is now the operand's own, and `(- +inf.0 z)`
+  negates it exactly. A finite real part beyond float64 range no longer turns
+  `(+ (make-rectangular #m-1e400 #m1) +inf.0)` into `+nan.0`; it is `+inf.0`.
+  Multiplication and division are unchanged: there the imaginary component
+  really does depend on the Inf/NaN.
+
 - **`sqrt` takes a BigFloat.** `(sqrt #m2)` raised "expected a number but got
   *values.BigFloat". A negative operand, `-inf.0` included, takes the branch
   cut (`(sqrt (/ #m-1 #m0))` is `0.0+inf.0i`, as `(sqrt -inf.0)` is on a

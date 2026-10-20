@@ -490,8 +490,15 @@ func NumberToComplex128Lossy(n Number) complex128 {
 // case, preserving the *Float return type.
 //
 // For the Float×BigComplex → BigComplex case, the guard uses complex128
-// arithmetic but wraps the result in BigComplex (not Complex) so the imaginary
-// part of the BigComplex operand is preserved. This is the fix for issue #362.
+// arithmetic but wraps the result in BigComplex (not Complex) so the result is
+// still a BigComplex (issue #362). complex128 rounds BOTH components, though,
+// including the BigComplex operand's imaginary part, which a real Inf/NaN has no
+// way to change. bigComplexSpecialOp, when non-nil, replaces that route: it owns
+// the whole result and keeps the imaginary component at full precision (issue
+// I175). Add and subtract supply one. Multiply and divide pass nil: there the
+// imaginary component really is a function of the Inf/NaN (0*Inf makes the real
+// part NaN), so the complex128 answer is the right one, and lifting the Float
+// into big.Float arithmetic would panic with ErrNaN.
 func makeArithmeticDispatch[T Number](
 	srcKind NumericKind,
 	sameTypeOp func(T, Number) Number,
@@ -499,6 +506,7 @@ func makeArithmeticDispatch[T Number](
 	float64Op func(float64, float64) float64,
 	complex128Op func(complex128, complex128) complex128,
 	realComplexOp func(float64, complex128) complex128,
+	bigComplexSpecialOp func(p, o Number) Number,
 ) [numKinds]func(T, Number) Number {
 	ensurePromotionInit()
 	var table [numKinds]func(T, Number) Number
@@ -514,6 +522,19 @@ func makeArithmeticDispatch[T Number](
 		// IEEE 754 special-value guard: when Float is the receiver and the LUB
 		// goes beyond float64/complex128, short-circuit for Inf/NaN values.
 		lubNeedsGuard := lubKind != KindFloat && lubKind != KindComplex
+
+		// The special Float meets a BigComplex: the result stays a BigComplex so
+		// the imaginary part is not demoted to a Complex (#362).
+		specialBigComplex := func(p T, o Number) Number {
+			if bigComplexSpecialOp != nil {
+				return bigComplexSpecialOp(p, o)
+			}
+			z := complex128Op(NumberToComplex128Lossy(p), NumberToComplex128Lossy(o))
+			return NewBigComplexFromBigFloats(
+				NewBigFloatFromFloat64(real(z)),
+				NewBigFloatFromFloat64(imag(z)),
+			)
+		}
 
 		switch {
 		case dstKind == KindComplex && lubKind == KindComplex:
@@ -535,13 +556,7 @@ func makeArithmeticDispatch[T Number](
 			table[dstKind] = func(p T, o Number) Number {
 				if isSpecialFloat(any(p).(*Float)) {
 					if lubIsComplex {
-						// Return BigComplex so the imaginary part of the
-						// BigComplex operand is preserved (fix for #362).
-						z := complex128Op(NumberToComplex128Lossy(p), NumberToComplex128Lossy(o))
-						return NewBigComplexFromBigFloats(
-							NewBigFloatFromFloat64(real(z)),
-							NewBigFloatFromFloat64(imag(z)),
-						)
+						return specialBigComplex(p, o)
 					}
 					return NewFloat(float64Op(NumberToFloat64(p), NumberToFloat64(o)))
 				}
@@ -553,11 +568,7 @@ func makeArithmeticDispatch[T Number](
 			table[dstKind] = func(p T, o Number) Number {
 				if isSpecialFloat(o.(*Float)) {
 					if lubIsComplex {
-						z := complex128Op(NumberToComplex128Lossy(p), NumberToComplex128Lossy(o))
-						return NewBigComplexFromBigFloats(
-							NewBigFloatFromFloat64(real(z)),
-							NewBigFloatFromFloat64(imag(z)),
-						)
+						return specialBigComplex(p, o)
 					}
 					return NewFloat(float64Op(NumberToFloat64(p), NumberToFloat64(o)))
 				}
@@ -570,6 +581,58 @@ func makeArithmeticDispatch[T Number](
 		}
 	}
 	return table
+}
+
+// bigComplexSpecialAdd is makeAddDispatch's bigComplexSpecialOp: one operand is
+// an Inf/NaN Float, the other a BigComplex. The real component is a float64 sum,
+// where the Inf/NaN decides the answer and precision is moot. The imaginary
+// component is the BigComplex's own, untouched: a real addend has none to add,
+// and routing it through complex128 would round it to 53 bits.
+func bigComplexSpecialAdd(p, o Number) Number {
+	re := specialRealComponent(p) + specialRealComponent(o)
+	z := bigComplexOperand(p, o)
+	return NewBigComplex(NewBigFloatFromFloat64(re), z.ImagAsBigFloat())
+}
+
+// bigComplexSpecialSubtract is makeSubtractDispatch's bigComplexSpecialOp, p - o.
+// When the BigComplex is the subtrahend its imaginary component is NEGATED, not
+// subtracted from 0.0, which would turn -0.0 into +0.0 (see realSubtractComplex).
+func bigComplexSpecialSubtract(p, o Number) Number {
+	re := specialRealComponent(p) - specialRealComponent(o)
+	z, ok := p.(*BigComplex)
+	if ok {
+		return NewBigComplex(NewBigFloatFromFloat64(re), z.ImagAsBigFloat())
+	}
+	return NewBigComplex(NewBigFloatFromFloat64(re), o.(*BigComplex).ImagAsBigFloat().Negate())
+}
+
+// specialRealComponent is the float64 real component of one operand of
+// bigComplexSpecialAdd/Subtract: the Inf/NaN Float itself, or a BigComplex's real
+// part. A FINITE BigFloat real part beyond float64 range converts to +-Inf, which
+// would turn (+ (make-rectangular #m-1e400 #m1) +inf.0) into Inf + -Inf = NaN
+// instead of +inf.0. It is clamped to +-MaxFloat64 instead: still finite, and
+// the Inf/NaN on the other side decides the sum exactly as it would at any size.
+func specialRealComponent(n Number) float64 {
+	z, ok := n.(*BigComplex)
+	if !ok {
+		return NumberToFloat64(n)
+	}
+	f := real(NumberToComplex128Lossy(z))
+	if math.IsInf(f, 0) && z.Real().IsFinite() {
+		return math.Copysign(math.MaxFloat64, f)
+	}
+	return f
+}
+
+// bigComplexOperand returns whichever of p, o is the BigComplex. The dispatch
+// guard only calls its special op for a (special Float, BigComplex) pair, in
+// either order.
+func bigComplexOperand(p, o Number) *BigComplex {
+	z, ok := p.(*BigComplex)
+	if ok {
+		return z
+	}
+	return o.(*BigComplex)
 }
 
 // makeAddDispatch generates a dispatch table for the Add operation.
@@ -585,6 +648,7 @@ func makeAddDispatch[T Number](srcKind NumericKind, sameTypeAdd func(T, Number) 
 			return a + b
 		},
 		realAddComplex,
+		bigComplexSpecialAdd,
 	)
 }
 
@@ -601,6 +665,7 @@ func makeSubtractDispatch[T Number](srcKind NumericKind, sameTypeSub func(T, Num
 			return a - b
 		},
 		realSubtractComplex,
+		bigComplexSpecialSubtract,
 	)
 }
 
@@ -617,6 +682,7 @@ func makeMultiplyDispatch[T Number](srcKind NumericKind, sameTypeMul func(T, Num
 			return a * b
 		},
 		realMultiplyComplex,
+		nil,
 	)
 }
 
