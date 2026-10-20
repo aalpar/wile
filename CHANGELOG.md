@@ -853,6 +853,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **BREAKING: `read-token`, and the per-port tokenizer cache behind it
+  (I101, I100).** The primitive returned an opaque `#<simple-token ...>` with no
+  accessor: a program could test it against `eof-object` and do nothing else, so
+  it could not tokenize anything. `read-syntax` already returns source-located
+  data. Finishing the primitive instead would have published all 61 tokenizer
+  states as a Scheme-level contract, with no consumer asking. Gone with it:
+  `PrimReadToken`, `State.nextTokenCached` and the `tokenizers` /
+  `tokenizerEntry` cache (`readSyntaxCached` keeps the separate `parsers` cache).
+  A program calling `(read-token port)` now fails with `no such local or global
+  binding "read-token"`.
 - **BREAKING (Go API): `machine.CollectMarksFromContinuation`.** Exported in
   v1.20.0; its only production caller was `(continuation-marks k)`, which now needs
   the capturing activation's live marks as well and goes through

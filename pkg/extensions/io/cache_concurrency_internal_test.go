@@ -27,8 +27,8 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// TestConcurrentMapAccess_T1 verifies concurrent access to a State's tokenizers
-// and parsers caches does not race or panic (T1 from the architectural review).
+// TestConcurrentMapAccess_T1 verifies concurrent access to a State's parsers
+// cache does not race or panic (T1 from the architectural review).
 // It is an internal test because the caches and their mutex are unexported per
 // engine — run with -race. Under the former package globals this drove the
 // shared maps; now it drives one engine's per-State caches, the same locking
@@ -112,8 +112,7 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 		wg.Wait()
 	})
 
-	// NewState fully constructs the caches (no lazy init), so both are non-nil.
-	c.Assert(st.tokenizers, qt.Not(qt.IsNil))
+	// NewState fully constructs the cache (no lazy init), so it is non-nil.
 	c.Assert(st.parsers, qt.Not(qt.IsNil))
 }
 

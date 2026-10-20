@@ -131,7 +131,6 @@ var restExercise = map[string]string{
 	"read-line":         `(read-line (open-input-string "a"))`,
 	"read-string":       `(read-string 1 (open-input-string "ab"))`,
 	"read-syntax":       `(read-syntax (open-input-string "1"))`,
-	"read-token":        `(read-token (open-input-string "1"))`,
 	"read-u8":           `(read-u8 (open-input-bytevector #u8(1)))`,
 	"u8-ready?":         `(u8-ready? (open-input-bytevector #u8(1)))`,
 	"write":             `(write 1 (open-output-string))`,

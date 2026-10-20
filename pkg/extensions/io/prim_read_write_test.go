@@ -300,11 +300,6 @@ func TestReadSharesPortPosition(t *testing.T) {
 			`(let ((p (open-input-string "#!fold-case AB c CD")))
 			   (let* ((a (read p)) (b (read-char p)) (c (read p)) (d (read p))) (list a b c d)))`,
 			`(ab #\space c cd)`},
-		{"read-token leaves the delimiter too",
-			`(let ((p (open-input-string "ab cd")))
-			   (read-token p)
-			   (read-char p))`,
-			`#\space`},
 		{"default current-input-port",
 			`(parameterize ((current-input-port (open-input-string "ab cd")))
 			   (let* ((a (read)) (b (read-char)) (c (read))) (list a b c)))`,
@@ -674,51 +669,6 @@ func TestWriteShared(t *testing.T) {
 		code string
 	}{
 		{"non-port", `(write-shared 42 42)`},
-	}
-	for _, tc := range errs {
-		t.Run(tc.name, func(t *testing.T) {
-			evalExpectError(t, engine, tc.code)
-		})
-	}
-}
-
-func TestReadToken(t *testing.T) {
-	c := qt.New(t)
-	engine := newEngine(t)
-
-	tcs := []struct {
-		name string
-		code string
-		want values.Value
-	}{
-		{"returns non-eof for integer",
-			`(not (eof-object? (read-token (open-input-string "42"))))`,
-			values.TrueValue},
-		{"returns non-eof for symbol",
-			`(not (eof-object? (read-token (open-input-string "hello"))))`,
-			values.TrueValue},
-		{"empty returns eof",
-			`(eof-object? (read-token (open-input-string "")))`,
-			values.TrueValue},
-		{"successive tokens then eof",
-			`(let ((p (open-input-string "1 2")))
-			   (read-token p)
-			   (read-token p)
-			   (eof-object? (read-token p)))`,
-			values.TrueValue},
-	}
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result := eval(t, engine, tc.code)
-			c.Assert(result.Internal(), qt.Equals, tc.want)
-		})
-	}
-
-	errs := []struct {
-		name string
-		code string
-	}{
-		{"binary port", `(read-token (open-input-bytevector #u8(1 2 3)))`},
 	}
 	for _, tc := range errs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1302,30 +1252,19 @@ func TestParserCacheEviction(t *testing.T) {
 		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 	})
 
-	t.Run("read-token to eof evicts tokenizer", func(t *testing.T) {
-		eval(t, engine, `(let ((p (open-input-string "hello")))
-		   (read-token p)
-		   (read-token p))`) // second read-token hits EOF
-
-		// Verify a fresh port works after eviction
-		result := eval(t, engine, `(not (eof-object? (read-token (open-input-string "world"))))`)
-		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
-	})
-
 	t.Run("cache maps empty after eof", func(t *testing.T) {
 		// Read to EOF on a port — should add then evict the parser entry — and
 		// verify this engine's cache is back to its pre-read size (no leak).
 		eng := newEngine(t)
 		st := eng.Namespace().IOState().(*extio.State)
-		parsersBefore, tokenizersBefore := extio.ExportCacheSizes(st)
+		parsersBefore := extio.ExportParserCacheSize(st)
 
 		eval(t, eng, `(let ((p (open-input-string "1")))
 		   (read p)
 		   (read p))`)
 
-		parsersAfter, tokenizersAfter := extio.ExportCacheSizes(st)
+		parsersAfter := extio.ExportParserCacheSize(st)
 		c.Assert(parsersAfter, qt.Equals, parsersBefore)
-		c.Assert(tokenizersAfter, qt.Equals, tokenizersBefore)
 	})
 
 	t.Run("close-port evicts cache without eof", func(t *testing.T) {
@@ -1335,17 +1274,17 @@ func TestParserCacheEviction(t *testing.T) {
 		// returns to baseline.
 		eng := newEngine(t)
 		st := eng.Namespace().IOState().(*extio.State)
-		parsersBefore, _ := extio.ExportCacheSizes(st)
+		parsersBefore := extio.ExportParserCacheSize(st)
 
 		eval(t, eng, `(define p (open-input-string "1 2 3"))`)
 		eval(t, eng, `(read p)`) // caches a parser for p; no EOF
 
-		parsersMid, _ := extio.ExportCacheSizes(st)
+		parsersMid := extio.ExportParserCacheSize(st)
 		c.Assert(parsersMid, qt.Equals, parsersBefore+1) // cache actually populated
 
 		eval(t, eng, `(close-port p)`)
 
-		parsersAfter, _ := extio.ExportCacheSizes(st)
+		parsersAfter := extio.ExportParserCacheSize(st)
 		c.Assert(parsersAfter, qt.Equals, parsersBefore) // close evicted it
 	})
 }

@@ -80,16 +80,6 @@ func TestReadSyntaxEOFOnExhaustedPort(t *testing.T) {
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
-func TestReadTokenEOFOnExhaustedPort(t *testing.T) {
-	result, err := testhelpers.RunSchemeCode(t, `
-		(let ((p (open-input-string "x")))
-			(read-token p)
-			(eof-object? (read-token p)))
-	`)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
-}
-
 func TestClosePortThenRead(t *testing.T) {
 	// After close-port, reading returns eof-object (the cached parser
 	// was evicted by close-port, and a fresh read on the closed port
@@ -110,17 +100,6 @@ func TestCallWithPortClosesOnReturn(t *testing.T) {
 			(call-with-port p
 				(lambda (port) (read port)))
 			(not (input-port-open? p)))
-	`)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
-}
-
-func TestReadTokenReturnsToken(t *testing.T) {
-	// read-token should return a token object or value
-	result, err := testhelpers.RunSchemeCode(t, `
-		(let ((p (open-input-string "hello")))
-			(let ((tok (read-token p)))
-				(not (eof-object? tok))))  ; should not be eof
 	`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
