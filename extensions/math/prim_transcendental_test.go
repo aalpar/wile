@@ -328,8 +328,15 @@ func TestSqrtBigFloat(t *testing.T) {
 		{"negative finite imag part", `(= (imag-part (sqrt #m-4)) 2)`, values.TrueValue},
 		// The negative arm builds its result at the operand's precision. Going
 		// through (*BigComplex).Sqrt would open at DefaultBigFloatPrecision and
-		// return fewer digits than the positive arm.
+		// return fewer digits than the positive arm. This row holds at the
+		// default precision, where both constructions agree; the wider-literal
+		// row below is the one that tells them apart.
 		{"negative arm carries the positive arm's digits", `(equal? (imag-part (sqrt #m-2)) (sqrt #m2))`, values.TrueValue},
+		// A 120-significant-digit literal is wider than DefaultBigFloatPrecision (256 bits),
+		// so a negative arm that delegated to (*BigComplex).Sqrt would round
+		// to 256 bits and differ from the positive arm; at the default
+		// precision both arms agree whichever way they are built.
+		{"negative arm keeps a wider-than-default precision", `(equal? (imag-part (sqrt #m-2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)) (sqrt #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890))`, values.TrueValue},
 		{"positive infinity", `(let ((r (sqrt (/ #m1 #m0)))) (and (infinite? r) (> r 0)))`, values.TrueValue},
 		{"negative infinity takes the branch cut", `(let ((r (sqrt (/ #m-1 #m0)))) (and (zero? (real-part r)) (infinite? (imag-part r)) (> (imag-part r) 0)))`, values.TrueValue},
 		{"nan", `(nan? (sqrt (/ #m0 #m0)))`, values.TrueValue},
