@@ -611,9 +611,18 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   `pkg/values/promotion.go` (`lubIsComplex` branch) rounds a `BigComplex` operand to float64~~ (Done 2026-10-20, P6.2 / I175:
   `+`/`-` keep the imaginary digits; a finite real part past float64 range no longer turns the sum NaN; multiply and divide
   keep the `complex128` route, filed as row I under "Filed by the P6.2 crosscheck").
-- [ ] Algebra: `run-analysis` returns all-`#f` outputs for a 3-block forward chain where block 1
-  should be `#t`; `rewrite` treats the term comparison as boolean, `unification` as three-way
-  (`ac-match` raises `=: expected number, got #f`).
+- [x] Algebra: ~~`run-analysis` returns all-`#f` outputs for a 3-block forward chain where block 1
+  should be `#t`~~ (Done 2026-10-20, P6.8 / I176, `9089ce37` `baed772c` `39ba140c` `91b44674`: a block's first visit compared its out-state against its
+  own bottom seed, so a transfer that generates a fact from bottom input looked converged and never
+  enqueued its successors; the convergence test now requires `(> vc 1)`. The backward direction had the same
+  defect. Every block reachable from a seed block is now visited at least once (on an acyclic CFG a transfer that
+  generates nothing is called once per such block; loops can revisit); the worklist ordering also tolerates indices outside the
+  RPO, which the unconditional first-visit enqueue would otherwise crash on. "Seed every block" was not
+  taken: the shipped guard does not widen the seed set (forward-unreachable blocks stay unvisited
+  forward; backward runs do process them); seeding only the reachable blocks would also pass. The two follow-ups are filed under "Filed by the P6.8
+  crosscheck").
+- [ ] Algebra: `rewrite` treats the term comparison as boolean, `unification` as three-way
+  (`ac-match` raises `=: expected number, got #f`) (P6.9).
 - [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
   as a profile name.
 - [ ] Coverage: `stdlibPrefixes` (`coverage/gocover.go`) omits the embedded `chibi/` and `rnrs/`.
@@ -2235,6 +2244,15 @@ The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no r
 - [ ] **No renamed or prefixed `unsyntax` / `quasisyntax` row exists** [Test coverage, S, P6.6 crosscheck, unprobed]: the quasiquote side has `TestRenamedQuasiquoteMarkers` and the marker-resolution rows in `pkg/wile/renamed_inner_positions_test.go`; the quasisyntax side resolves heads through the same `markerName`/`headKey` but nothing renames `unsyntax`, `unsyntax-splicing` or `quasisyntax` (a library import with `rename`/`prefix`) and checks the scan agrees with `quasiKeywords.headName`. Not measured whether the two agree.
 - [ ] **The quasi marker names are written out twice with no drift check** [Consistency, XS, P6.6 crosscheck, owner decision]: `quasiquoteKW`/`quasisyntaxKW` in `pkg/internal/validate/opaque_subtree.go` and `quasiKeywords` in `pkg/machine/compilation/quasi_expand.go` hold the same strings, and `pkg/parser/parser.go` already exports the constants (`ConstQuasiquote` ... `ConstUnsyntaxSplicing`, unused by both). A drift test cannot reach the compilation table from validate without an import cycle; sharing the parser constants adds a `validate` → `parser` dependency, which is the owner's call.
 - [ ] **`quasiMarkers` is passed by value through the walk** [Efficiency, Info, P6.6 crosscheck, unmeasured]: three strings (48 bytes) per `forEachRawSymbol` call and per recursion. Not benchmarked; the walk is compile-time and bounded by the opaque subtree, so likely noise.
+
+### Filed by the P6.8 crosscheck (2026-10-20)
+
+- [ ] **Backward analysis silently returns all-bottom for blocks with no path to an exit** [Correctness, unsound for liveness, S/M, P6.8 crosscheck, pre-existing]: `run-analysis` seeds only exit blocks (`seed-idxs` in `dataflow.scm`) in the backward direction, so a block that cannot reach an exit is never visited. `'((0 () (1 2)) (1 (0 1) (1)) (2 (0) ()))` with an always-`#t` transfer gives out-states `(#t #f #t)` (`(1 0 1)` over a 0..1 lattice): block 1 is never visited. A CFG with no exits gets zero transfer calls (a Go function ending in `for {}`). Verified fix sketch: start the worklist from every block and keep `seed-idxs` only for `initial-state`; the rank-map tolerance added by P6.8 is the prerequisite. Forward precision trade-off to measure before applying the same to the forward direction.
+- [ ] **A non-monotone transfer without `'check-monotone` returns a non-fixpoint with no signal** [Diagnostics, S, P6.8 crosscheck, pre-existing]: the stop test asks only `out ⊑ old-out`. A two-way-equal oscillation hits the revisit cap instead, whose message blames infinite height and suggests `(widen OP)`, the wrong remedy. Reword that message to mention `'check-monotone`, or document monotonicity as a caller contract.
+- [ ] **wile-goast `TestDomainsIntervalAnalysis` goes green to red when wile-goast builds against the P6.8 wile (cross-repo; blocks wile-goast adopting P6.8, land the goast fix first or together)** [Correctness, wile-goast, S, P6.8 crosscheck]: subtests `LoopSum` and "custom threshold" hit the 100000-revisit cap after about 33s. Master's pass was vacuous: LoopSum's entry block is a lone jump, so its out-state stayed bottom and the worklist emptied after one call; every forward domain returned all-bottom for LoopSum. Root defect in `wile-goast/lib/wile/goast/domains.scm` `make-interval-analysis` (call near line 380): the transfer widens its own in-state against the out-state, `widen-interval` has both bounds the wrong way round (it keeps a growing bound instead of sending it to infinity), and `run-analysis` is called without `(widen ...)`. Verified fix on a copy: pass a pointwise `(widen (lambda (cur next) (map (lambda (o n) (cons (car n) (interval-widen (cdr o) (cdr n)))) cur next)))` at that call; all three subtests then pass in 0.47s with `sum`, `i` in `[0,+inf)`. The comment at `wile-goast/goast/belief_integration_test.go:1344-1352` ("never re-enqueues anything") is now stale.
+
+- [ ] **A forward-unreachable CYCLE run BACKWARD is never widened** [Correctness, Low, S, P6.8 re-review, pre-existing root]: `widening-points` drops indices whose `rank-or-false` is `#f`, so with `(init-state '(0 . 0))`, `(widen interval-widen)` and an incrementing transfer on `'((0 () (1)) (1 (0 9) ()) (9 (9) (1 9)))` run backward, the analysis spins about 1.2s and raises the revisit-cap error, whose remedy text says "supply (widen OP)" though widen was supplied. The same holds for an 8<->9 orphan cycle. Base and master already spin on the empty-worklist path (`'((0 ...)) (8 (8) (8 9)) (9 (8) ())`). Fix options: extend the rank map with a DFS over the blocks the RPO missed, or do not enqueue unranked indices. Cross-reference: the fix for the row "Backward analysis silently returns all-bottom..." (start the worklist from every block) would carry this hole to forward runs, so land them together.
+- [ ] **Nothing pins first-visit propagation on a revisit** [Test coverage, Info, P6.8 re-review]: replacing the guard's `(> vc 1)` with `(> vc 2)` is state-equivalent in all 561 matrix runs (it differs only in call counts on cycles), so no row distinguishes them. Optional: a call-count assertion on one cycle (the worklist order is deterministic), if the owner wants it.
 
 ### Closed in Tier 1
 

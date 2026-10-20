@@ -119,6 +119,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`run-analysis` propagates out of a block's first visit (I176).** A forward
+  chain `0 -> 1 -> 2` whose block 1 generates a fact from bottom input
+  (`(if (= (car blk) 1) #t in)`) answered `(#f #f #f)` after one transfer call;
+  it is `(#f #t #t)`. The convergence test compared a first visit's out-state
+  against the block's own bottom seed, so the successors were never enqueued;
+  it now requires a prior visit. Backward analyses had the same defect.
+
+  Behaviour change for callers: every block reachable from a seed block (in the
+  analysis direction) is visited at least once. On an acyclic CFG a transfer
+  that generates nothing is called once per such block instead of once per
+  seed; with loops a block can be visited more than once (an identity transfer:
+  a 4-block loop-exit CFG takes 5 calls). An analysis whose entry block's
+  out-state is bottom (a loop-first function, or one with no parameters) now
+  returns different, correct results whenever a later block generates a fact;
+  measured in wile-goast, reaching-definitions on `LoopSum` went from all-empty
+  to the correct sets. Backward runs on a CFG with a block the reverse
+  postorder never reaches no longer fail with "index not in rank map"; an
+  unreachable CYCLE run backward under `(widen ...)` is not widened and hits
+  the revisit cap instead (filed).
+
 - **`#,` under a quote form inside a `quasisyntax` template is seen by the
   inliner (I027).** `(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quote
   (#,(begin (set! n 1) (set! f (lambda () 99))))))) (list n (f)))` answered

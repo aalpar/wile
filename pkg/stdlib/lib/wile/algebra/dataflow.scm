@@ -283,6 +283,8 @@ Returns a per-block result alist shaped `((idx in out) ...)`. Use
 `analysis-in` / `analysis-out` / `analysis-states` to query.
 
 Terminates when no block's out-state changes across a worklist pass.
+Every block reachable from a seed block (in the analysis direction) is
+visited at least once.
 Worklist is rank-ordered by reverse postorder (forward) or reverse
 of reverse postorder (backward) for efficient propagation.
 
@@ -345,11 +347,6 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                        (if (null? os) m
                            (loop (cdr os) (+ r 1)
                                  (cons (cons (car os) r) m)))))
-           (rank-of (lambda (idx)
-                      (let ((e (assv idx rank-map)))
-                        (unless e
-                          (error "run-analysis: index not in rank map (broken CFG protocol?)" idx))
-                        (cdr e))))
            (flow-preds (lambda (b)
                          (or (if forward?
                                  (cfg-preds-of protocol b)
@@ -362,7 +359,7 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                              '())))
            ;; Widening points: a block is a back-edge target (loop header)
            ;; iff some flow-predecessor sits at or after it in flow order
-           ;; (rank-of p >= rank-of b). Widening at these points forces
+           ;; (rank p >= rank b). Widening at these points forces
            ;; termination on infinite-height lattices (design §5). Computed
            ;; once, and only when a widen operator was supplied — pure MFP
            ;; pays nothing. For irreducible CFGs this flags a sound superset
@@ -370,11 +367,14 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
            ;; precision but never termination.
            ;;
            ;; rank-or-false tolerates indices absent from the RPO rank-map —
-           ;; blocks (or predecessors) unreachable from entry. Pure MFP already
-           ;; tolerates such orphans (their out-state stays bottom and joins
-           ;; harmlessly), so the widening detector must not crash on them. An
-           ;; orphan cannot lie on a cycle reachable from entry, so it is never
-           ;; a widening point.
+           ;; blocks (or predecessors) unreachable from entry. Forward, such an
+           ;; orphan is never enqueued, its out-state stays bottom and joins
+           ;; harmlessly. Backward, orphans ARE dequeued and processed (a
+           ;; generator at an orphan gives out = top); they cannot leak into
+           ;; ranked states because the orphan set is closed under backward
+           ;; flow. An orphan is never a widening point, so an orphan cycle
+           ;; run backward is not widened (filed under "Filed by the P6.8
+           ;; crosscheck").
            (rank-or-false (lambda (idx)
                             (let ((e (assv idx rank-map)))
                               (and e (cdr e)))))
@@ -428,13 +428,19 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                      (list idx in-val out-val)
                      entry))
                states)))
+      ;; The rank map is built from the FORWARD RPO in both directions, so only a
+      ;; backward run reaches an index absent from it (a block unreachable from
+      ;; the entry, reached as a flow successor or seeded as an exit). Such an
+      ;; index sorts after every ranked one.
       (define (worklist-insert wl idx)
         (if (memv idx wl) wl
-            (let insert ((rest wl))
-              (cond ((null? rest) (list idx))
-                    ((<= (rank-of idx) (rank-of (car rest)))
-                     (cons idx rest))
-                    (else (cons (car rest) (insert (cdr rest))))))))
+            (let ((ri (rank-or-false idx)))
+              (let insert ((rest wl))
+                (cond ((null? rest) (list idx))
+                      ((let ((rc (rank-or-false (car rest))))
+                         (or (not rc) (and ri (<= ri rc))))
+                       (cons idx rest))
+                      (else (cons (car rest) (insert (cdr rest)))))))))
       (define (worklist-insert-all wl idxs)
         (let loop ((is idxs) (w wl))
           (if (null? is) w
@@ -449,6 +455,8 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
       ;; approximates ascents — fine for a guard whose only job is to turn a
       ;; silent hang into a remedy-pointing error. Mirrors graph.scm's worklist
       ;; cap, but per-block so the error can name the offending widening point.
+      ;; The counter is also what marks a block's FIRST visit (correctness, not
+      ;; only the cap): the convergence test below never suppresses vc = 1.
       (define max-revisits 100000)
       (define visits (make-equal-hashtable))
       (let loop ((wl (worklist-insert-all '() seed-idxs)))
@@ -496,7 +504,12 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                          (list 'block idx 'in in-val
                                'old-out old-out 'new-out out-val)))
                 (set-state! idx in-val out-val)
-                (if (lattice-leq? lattice out-val old-out)
+                ;; A block's first visit compares against its own bottom seed, so
+                ;; a transfer that generates a fact from bottom input would look
+                ;; converged and strand its successors. vc is 1-based: the first
+                ;; visit always propagates, later ones only when out is not below
+                ;; old-out (which also covers an incomparable out).
+                (if (and (> vc 1) (lattice-leq? lattice out-val old-out))
                     (loop rest-wl)
                     (loop (worklist-insert-all rest-wl
                             (flow-succs blk)))))))))))
