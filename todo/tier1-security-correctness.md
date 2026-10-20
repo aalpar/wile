@@ -892,7 +892,7 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
 
 - [x] **`quasisyntax`'s `#,` reaches the same permissive disagreement this branch fixed for
   `quasiquote`, live on MASTER, by a different route** [Medium, M, filed 2026-09-15 during the
-  renamed-inner-positions whole-branch review; Done 2026-10-20, P6.6/I027: `quasiHeadDepth` takes
+  renamed-inner-positions whole-branch review; Done 2026-10-20, P6.6/I027, `2966319c` + `f5b44d2c` + `a119c685`, merged `86b83d09`: `quasiHeadDepth` takes
   the marker set (`quasiMarkers`) and the walk switches to quasisyntax's at a `quasisyntax` head;
   the repro answers `(1 99)`. Same root also fixed `opaqueSubtreeMentions` (or_lower.go): an
   if-shaped let whose binder is only mentioned under that quote answered a compile error or the
