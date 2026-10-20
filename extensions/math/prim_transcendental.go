@@ -458,10 +458,9 @@ func PrimSqrt(mc machine.CallContext) error {
 // (*BigComplex).Sqrt, which opens at DefaultBigFloatPrecision and would
 // return fewer digits than the positive arm for an operand wider than that.
 //
-// Precision policy: sqrt keeps the operand's precision, which big.Float.Sqrt
-// rounds to correctly. exp, log and atan compute at DefaultBigFloatPrecision
-// instead, and so does the BigComplex arm of sqrt; sqrt of a BigFloat is the
-// one transcendental that does not.
+// Precision policy: sqrt keeps the operand's precision (big.Float.Sqrt rounds
+// at the receiver's). exp, log, atan and the makeComplexPrimitive family
+// compute at DefaultBigFloatPrecision, as does the BigComplex arm of sqrt.
 func bigFloatSqrt(bf *values.BigFloat) values.Number {
 	if bf.IsNaN() {
 		return bf

@@ -2059,8 +2059,8 @@ disagreement on one program, the internal-invariant form of a defect.
 - [ ] **Precision depends on spelling** [Design, S]: `(= #m1e120 #m1<120 zeros>)` and
   `(= 1l120 1<120 zeros>.0l0)` are `#f` (exponent not counted, integer-part zeros are; 5^120 needs
   279 bits). Options: count a non-negative exponent up to a bound, or document it.
-- [ ] **Pre-existing, found by the P5.3 crosscheck** [S each]: `(sqrt <BigFloat>)` raises "expected a
-  number but got *values.BigFloat"; `#m1/3` reads as `#m1` then symbol `/3`; the `l` marker inside a
+- [ ] **Pre-existing, found by the P5.3 crosscheck** [S each]: ~~`(sqrt <BigFloat>)` raises "expected a
+  number but got *values.BigFloat"~~ (done by P6.1, 2026-10-19); `#m1/3` reads as `#m1` then symbol `/3`; the `l` marker inside a
   complex literal falls back to float64.
 
 ### Filed by the P5.4 crosscheck (2026-10-17)
@@ -2146,9 +2146,10 @@ All repros measured on the P6.1 branch; the first four go through code this bran
 - [ ] **A NaN BigFloat loses its NaN flag at the `BigFloat` to `big.Float` boundary** [Correctness, M, P6.1 crosscheck, Med]: `numberToBigFloat` (`extensions/math/prim_transcendental.go`) and `BigComplex` `Magnitude`/`Phase`/`Sqrt` (`pkg/values/big_complex.go`) read `.value`, which is a zero for a NaN. Repro: `(exp (/ #m0 #m0))` is `1.0l0`, `(sin (/ #m0 #m0))` and `(atan (/ #m0 #m0))` are `0.0l0`, `(magnitude (make-rectangular (/ #m0 #m0) #m4))` is `4.0l0`; each should be NaN. `bigFloatSqrt` checks the flag first for exactly this reason.
 - [ ] **`sqrt` of a negative non-perfect-square BigInteger goes through float64** [Correctness, S, P6.1 crosscheck, Med]: `PrimSqrt`'s `*values.BigInteger` arm calls `NumberToFloat64`. Repro: `(sqrt (- 1 (expt 10 400)))` is `0.0+inf.0i`. Contradicts the Done row "Big-precision numeric sweep" in `todo/tier5-tech-debt.md` ("no numeric path round-trips through float64").
 - [ ] **`sqrt` of a Rational with a huge numerator or denominator goes through `Float64Truncated`** [Correctness, S, P6.1 crosscheck, Med]: Repro: `(sqrt (/ (+ 1 (expt 10 400)) 3))` is `+inf.0` and `(sqrt (/ 1 (+ 1 (expt 10 400))))` is `0.0`. Same family as the BigInteger row above; fix both in one task.
-- [ ] **`BigComplex` writes its parts without the `l` marker, so a BigComplex does not round-trip** [Correctness, S, P6.1 crosscheck, Low-Med]: `componentString` in `pkg/values/big_complex.go`. Repro: `(number->string (sqrt #m-2))` is `0.0+1.41421356237309504880...i`, which reads back as a float64 complex. The reader half is filed above (the `l` marker inside a complex literal falls back to float64, P5.3 crosscheck); the writer half had no row.
-- [ ] **Precision policy: `sqrt` of a BigFloat keeps the operand's precision while `exp`, `log`, `atan` and the `BigComplex` arm compute at `DefaultBigFloatPrecision`** [Consistency, S, P6.1 crosscheck, Low]: P6.1 kept operand precision because `big.Float.Sqrt` rounds correctly to the receiver. Decide one policy for the transcendentals and write it in `docs/numeric/tower.md`.
-- [x] **No Scheme-level test covered BigFloat `sqrt`** [Test gap, XS, P6.1 crosscheck, Done 2026-10-19]: five rows added to the `sqrt` group of `test/scheme/numbers-test.scm`.
+- [ ] **`BigComplex` writes its parts without the `l` marker, so a BigComplex does not round-trip** [Correctness, S, P6.1 crosscheck, Low-Med, depends on the reader row above (the `l` marker inside a complex literal)]: `componentString` in `pkg/values/big_complex.go`. Repro: `(number->string (sqrt #m-2))` is `0.0+1.41421356237309504880...i`, which reads back as a float64 complex. Omitting the marker inside a complex was a recorded decision (`todo/closed.md` ~811, pinned by `TestBigFloatWriteReadRoundTrip`), and the reader reads `0.0+1.5l0i` as float64, so a writer-only change would not round-trip: land it with the reader row, not before.
+- [ ] **Precision policy: `sqrt` of a BigFloat keeps the operand's precision while `exp`, `log`, `atan`, the `makeComplexPrimitive` family and the `BigComplex` arm of `sqrt` compute at `DefaultBigFloatPrecision`** [Consistency, S, P6.1 crosscheck, Low]: P6.1 kept operand precision because `big.Float.Sqrt` rounds at the receiver's precision. `expt` with a BigFloat operand does not compute in big.Float at all (next row). Decide one policy for the transcendentals and write it in `docs/numeric/tower.md`.
+- [ ] **`expt` with a BigFloat operand goes through float64** [Correctness, S, P6.1 crosscheck, Med]: Repro: `(expt #m2 #m0.5)` is `1.4142135623730951` and `(expt #m2.5 2)` is `6.25`, both Floats. Contradicts the Done row "Big-precision numeric sweep" in `todo/tier5-tech-debt.md`.
+- [x] **No Scheme-level test covered BigFloat `sqrt`** [Test gap, XS, P6.1 crosscheck, Done 2026-10-19]: `test/wile/bigfloat-sqrt-test.scm` (Wile-only: `#m` is not R7RS, so not in `test/scheme/numbers-test.scm`, which also runs under other implementations).
 
 ### Filed from review 2026-09-09 (indexlint, 2026-10-18)
 
