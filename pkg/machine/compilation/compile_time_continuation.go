@@ -471,11 +471,13 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		// by-GlobalIndex load was that the value must be read at execution time;
 		// that does not distinguish the two loads, because AppendCachedBinding
 		// stores the *Binding and OpLoadCachedBinding reads .Value() when it
-		// runs. Both loads read the same *Binding the pinned index names, and
-		// nothing reachable empties a slot in a library's store, so the cached
-		// pointer cannot go stale. (A later define, include or cond-expand in the
-		// library body can shadow the import for the references compiled after
-		// it; references compiled before keep the import on either load.)
+		// runs. Both loads read the same *Binding the pinned index names, so the
+		// cached pointer reads whatever the pinned load would. (A define in a
+		// separate, later declaration of the library body shadows the import for
+		// references compiled after it, while earlier references keep the import
+		// on either load; within one begin the define is hoisted and the earlier
+		// reference resolves to the library-local binding. include and
+		// cond-expand shadowing is untested.)
 		//
 		// IsImported is the gate, not IsStable. Measured over a whole
 		// (wile algebra) load, the library arm saw 9809 sites imported and

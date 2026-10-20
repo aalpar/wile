@@ -122,20 +122,30 @@ func TestLibraryBody_SyntacticKeywordAsVariableRefused(t *testing.T) {
 	// `define-syntax` a syntax compiler. Both carry BindingTypePrimitive
 	// (measured: define-syntax's phase-0 binding is type 3), so the refusal
 	// tags them alike and the two rows differ in what leaked, not in why.
+	//
+	// The no-import rows reach the library arm's NON-IMPORTED path (the sealed
+	// base is not an import), which applies the refusal directly rather than
+	// through emitCachedBindingLoad; deleting that call passes every other row.
 	keywords := []string{"if", "define-syntax"}
+	imports := map[string]string{
+		"imported":  "(import (scheme base))",
+		"no-import": "",
+	}
 	for _, kw := range keywords {
-		t.Run(kw, func(t *testing.T) {
-			c := qt.New(t)
-			_, err := evalWithLib(t, `(define-library (exportlib)
+		for name, imp := range imports {
+			t.Run(kw+"/"+name, func(t *testing.T) {
+				c := qt.New(t)
+				_, err := evalWithLib(t, `(define-library (exportlib)
   (export peek)
-  (import (scheme base))
+  `+imp+`
   (begin
     (define (peek) (list `+kw+`))))
 `, `(import (exportlib)) (peek)`)
-			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, werr.ErrSyntacticKeywordAsVariable), qt.IsTrue,
-				qt.Commentf("want ErrSyntacticKeywordAsVariable, got: %v", err))
-		})
+				c.Assert(err, qt.IsNotNil)
+				c.Assert(errors.Is(err, werr.ErrSyntacticKeywordAsVariable), qt.IsTrue,
+					qt.Commentf("want ErrSyntacticKeywordAsVariable, got: %v", err))
+			})
+		}
 	}
 }
 

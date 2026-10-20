@@ -2124,6 +2124,10 @@ disagreement on one program, the internal-invariant form of a defect.
 
 - [ ] **`go test -race ./pkg/wile/` takes over 10 minutes** [Tooling, S, P5.10 crosscheck]: a 10-minute timeout fired during the P5.10 crosscheck. Rerun with `-timeout 30m` on the P5.10 branch: passed (ok, no DATA RACE), wall 10m21s.
 
+### Filed by the P5.11 crosscheck (2026-10-19)
+
+- [ ] **`emitIsGuarded` accepts an unrelated earlier branch as the refusal guard** [Test analyzer, S, P5.11 crosscheck]: `TestCompileSymbolRefusesCompileTimeMeaningOnEveryGlobalArm`'s `emitIsGuarded` (`compile_symbol_reachability_test.go`) treats any earlier statement that transitively reaches `refuseCompileTimeMeaning` plus any `return` between it and the emit as a guard. In `CompileSymbol`'s library arm the `if libBD.IsImported() { return p.emitCachedBindingLoad(...) }` branch satisfies both, so deleting the direct `refuseCompileTimeMeaning` call on the non-imported path passes the analyzer (found by mutation; the behavioural row `TestLibraryBody_SyntacticKeywordAsVariableRefused/*/no-import` now pins it). Tightening it so the refusal must dominate the emit on every path would also flag the nil-binding fallbacks in `tryResolvedBinding` (about :390 and :695), which then need explicit exemptions.
+
 ### Filed from review 2026-09-09 (indexlint, 2026-10-18)
 
 The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no row. All three reproduce on master at `08fdec30`. The other 20 are indexed elsewhere in this corpus.
