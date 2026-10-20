@@ -890,9 +890,14 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   false-flagging a legal define-over-import shadow — a failure a root comparison cannot have, since
   `importConflicts` returns early on `!existing.IsImported()` and a define never enters one.
 
-- [ ] **`quasisyntax`'s `#,` reaches the same permissive disagreement this branch fixed for
+- [x] **`quasisyntax`'s `#,` reaches the same permissive disagreement this branch fixed for
   `quasiquote`, live on MASTER, by a different route** [Medium, M, filed 2026-09-15 during the
-  renamed-inner-positions whole-branch review]: `quasisyntax` is a bare passthrough
+  renamed-inner-positions whole-branch review; Done 2026-10-20, P6.6/I027: `quasiHeadDepth` takes
+  the marker set (`quasiMarkers`) and the walk switches to quasisyntax's at a `quasisyntax` head;
+  the repro answers `(1 99)`. Same root also fixed `opaqueSubtreeMentions` (or_lower.go): an
+  if-shaped let whose binder is only mentioned under that quote answered a compile error or the
+  OUTER binding. Gates `TestQuasisyntaxUnsyntaxUnderQuote*`; a quasisyntax-only mention of a
+  name now KEEPS its Stable stamp, where master withdrew it]: `quasisyntax` is a bare passthrough
   (`registerPassthrough("quasisyntax")`, `pkg/internal/validate/register.go:75`), so
   `opaqueEntryDepth` enters its whole form at `quasiDepthCode` rather than at template depth, and
   `quasiHeadDepth("quote", 0)` is a BARRIER there — the validate walk stops at the `(quote …)`

@@ -119,6 +119,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`#,` under a quote form inside a `quasisyntax` template is seen by the
+  inliner (I027).** `(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quote
+  (#,(begin (set! n 1) (set! f (lambda () 99))))))) (list n (f)))` answered
+  `(1 7)`, the `set!` having run but `f` still inlined with its old body; it is
+  `(1 99)`. The opaque-subtree scan now reads a quasisyntax template with
+  quasisyntax's markers (`unsyntax`, `unsyntax-splicing`, `quasisyntax`) and
+  quasiquote's with quasiquote's, so neither dialect's markers act inside the
+  other's template. The same blindness made an if-shaped `let` drop a live frame
+  (an unbound-variable compile error, or the outer binding of the same name).
+  A name that a `quasisyntax` template only mentions as data now keeps its
+  top-level immutability, as it already did under `quasiquote`.
+
 - **A `#z` or `#m` numeral must end at a delimiter (I039).** `#z1/2`, `#m1/2` and
   `#m2+3i` read as two data (`(#m2+3i)` was `(2.0l0 0+3i)`, the imaginary part
   silently a second element); they are now read errors that name the rule, at the
