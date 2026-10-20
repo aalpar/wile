@@ -8,6 +8,10 @@
 ;;;
 ;;; Every group runs under an explicit equal?: chibi `test`'s default comparator
 ;;; is approximate (1e-5), which a float64-rounded imaginary part satisfies.
+;;;
+;;; The multiplicative group pins today's answers so a change to them is
+;;; deliberate: they are right while the BigComplex parts fit in float64 and
+;;; wrong beyond (filed in todo/tier1-security-correctness.md).
 
 (import (scheme base)
         (scheme inexact)
@@ -40,10 +44,35 @@
     ;; a finite real part past float64 range must not become -inf.0 on the way
     ;; (+inf.0 + -inf.0 is NaN; the true sum is +inf.0)
     (test (/ #m1 #m0) (real-part (+ (make-rectangular #m-1e400 #m1) +inf.0)))
-    (test (/ #m1 #m0) (real-part (- +inf.0 (make-rectangular #m-1e400 #m1))))))
+    (test (/ #m1 #m0) (real-part (- +inf.0 (make-rectangular #m-1e400 #m1))))
+    ;; but a real part that IS infinite is not clamped: +inf + -inf is NaN
+    (test #t (nan? (real-part (+ (make-rectangular (/ #m1 #m0) #m1) -inf.0))))
+    (test #t (nan? (real-part (- (make-rectangular (/ #m1 #m0) #m1) +inf.0))))))
 
-;; The multiplicative arms keep the complex128 route: 0*Inf is NaN in the real
-;; component, so these answers are right and must not move.
+;; Subtracting from a real Inf negates the imaginary part; it must not be
+;; computed as 0.0 - d, which is +0.0 for d = +0.0 and loses the sign.
+(test-group "signed zero"
+  (with-exact-comparison
+    (test #m-0.0 (imag-part (- +inf.0 (make-rectangular #m0 #m0.0))))
+    (test #m-0.0 (imag-part (+ (make-rectangular #m0 #m-0.0) +inf.0)))))
+
+;; An exact imaginary part rounds to float64 as it does on the finite path.
+(test-group "exact imaginary part"
+  (with-exact-comparison
+    (test (imag-part (+ 1.0 1+1/3i)) (imag-part (+ +inf.0 1+1/3i)))
+    (test (- (imag-part (+ 1.0 1+1/3i))) (imag-part (- +inf.0 1+1/3i)))
+    (test (/ #m1 #m0) (imag-part (+ +inf.0 (make-rectangular 1 (expt 10 400)))))))
+
+;; The BigFloat twin: a finite BigFloat past float64 range is not +-inf.
+(test-group "out-of-range BigFloat partner"
+  (with-exact-comparison
+    (test +inf.0 (+ +inf.0 #m-1e400))
+    (test +inf.0 (+ #m-1e400 +inf.0))
+    (test +inf.0 (- +inf.0 #m1e400))
+    (test -inf.0 (- #m1e400 +inf.0))
+    (test +inf.0 (/ +inf.0 #m1e400))))
+
+;; The multiplicative arms keep the complex128 route.
 (test-group "multiplicative arms are unchanged"
   (with-exact-comparison
     (test "+nan.0+inf.0i" (number->string (* z +inf.0)))
