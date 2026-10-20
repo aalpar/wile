@@ -2128,6 +2128,10 @@ disagreement on one program, the internal-invariant form of a defect.
 
 - [ ] **`emitIsGuarded` accepts an unrelated earlier branch as the refusal guard** [Test analyzer, S, P5.11 crosscheck]: `TestCompileSymbolRefusesCompileTimeMeaningOnEveryGlobalArm`'s `emitIsGuarded` (`compile_symbol_reachability_test.go`) treats any earlier statement that transitively reaches `refuseCompileTimeMeaning` plus any `return` between it and the emit as a guard. In `CompileSymbol`'s library arm the `if libBD.IsImported() { return p.emitCachedBindingLoad(...) }` branch satisfies both, so deleting the direct `refuseCompileTimeMeaning` call on the non-imported path passes the analyzer (found by mutation; the behavioural row `TestLibraryBody_SyntacticKeywordAsVariableRefused/*/no-import` now pins it). Tightening it so the refusal must dominate the emit on every path would also flag the nil-binding fallbacks in `tryResolvedBinding` (about :390 and :695), which then need explicit exemptions.
 
+### Filed by the P5.12 crosscheck (2026-10-19)
+
+- [ ] **`TestNewRefIndexAllocatesPerKeyNotPerOccurrence` fails under `-gcflags=all=-N -l`** [Test fragility, XS, P5.12 crosscheck]: with optimizations and inlining off (GoLand debug, dlv) the allocation count is 410, not 3, so the `testing.AllocsPerRun` bound fails. Pre-existing at `494cd444`. The other `AllocsPerRun` tests checked pass under the flags; not every `AllocsPerRun` site in the tree was checked. Fix by skipping under a build that disables optimization, or by a ratio against N rather than an absolute bound.
+
 ### Filed from review 2026-09-09 (indexlint, 2026-10-18)
 
 The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no row. All three reproduce on master at `08fdec30`. The other 20 are indexed elsewhere in this corpus.

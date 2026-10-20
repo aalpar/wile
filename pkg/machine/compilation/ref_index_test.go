@@ -206,9 +206,9 @@ func TestRefIndexDiscriminatesByScopeNotSpelling(t *testing.T) {
 	}
 }
 
-// TestRefIndexIgnoresNilTargets pins that an empty region is empty rather than
+// TestRefIndexEmptyRegionAndNilLookups pins that an empty region is empty rather than
 // universally matching, which is the failure mode a nil-tolerant probe invites.
-func TestRefIndexIgnoresNilTargets(t *testing.T) {
+func TestRefIndexEmptyRegionAndNilLookups(t *testing.T) {
 	c := qt.New(t)
 	body := bodyOfLambda(t, `(lambda () (define a 1) a)`)
 	refs := newRefIndex(nil)
@@ -240,8 +240,13 @@ func refIndexAllocRegion(t *testing.T, k, n int) []validate.ValidatedExpr {
 
 // assertOneBlock asserts that the index's per-spelling slices are exactly full
 // and tile one contiguous backing array: sorted by address, each begins where
-// the previous one ends. This is the witness of "one block"; the allocation
-// count alone cannot tell it from one make per spelling.
+// the previous one ends. This is the structural witness of "one block"; the
+// allocation count only catches a make per spelling when K is large enough for
+// the extra allocations to show (at K=1 both cost 3).
+//
+// Its limit: where 24*n lands on a Go size class, separate allocations can sit
+// adjacent and pass as one block. False passes were seen at n <= 8 and none at
+// n=50 or n=200, which are the sizes the callers that rely on contiguity use.
 func assertOneBlock(c *qt.C, refs refIndex) {
 	c.Helper()
 	type span struct {
@@ -274,12 +279,13 @@ func assertOneBlock(c *qt.C, refs refIndex) {
 // step.
 //
 // The per-key append grew each spelling's slice by doubling: 1600 occurrences
-// over 8 spellings cost 74 allocations on master and cost 3 here (the count
-// map, the block, the index map). The bound of 4 holds for K <= 8, where a Go
-// map fits one bucket; it is an upper bound, not an equality, because map
-// allocation differs by runtime version. It cannot distinguish one block from
-// one make per spelling (10-11 allocations at K=8 would still pass a 2K+4
-// bound); assertOneBlock is the witness of that.
+// over 8 spellings cost 74 allocations on master and cost 3 here (the index
+// map's header plus its one Swiss-table group, and the block; the count map
+// stays on the stack for K <= 8). The bound of 4 holds for K <= 8, where a map
+// fits one group (K=9 measures 8); it is an upper bound, not an equality,
+// because map allocation differs by runtime version. One make per spelling
+// measures 11 at K=8, so the bound catches it here, but not in general (at K=1
+// both cost 3); assertOneBlock is the structural witness.
 func TestNewRefIndexAllocatesPerKeyNotPerOccurrence(t *testing.T) {
 	c := qt.New(t)
 	const k = 8
