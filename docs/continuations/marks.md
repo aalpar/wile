@@ -175,7 +175,7 @@ for cont != nil {
 }
 ```
 
-The real implementation (`CollectContinuationMarks` in `pkg/machine/continuation_mark_set.go`) does not look up a key during the walk: it snapshots every non-empty mark frame (the current frame's marks first, then the chain via `appendChainMarks`) into a `ContinuationMarkSet`, and the per-key lookup happens later, in `ToList` / `First`. Same invariant either way: current frame first, innermost-to-outermost. Its sibling `CollectMarksFromContinuation` runs the same walk over a *captured* chain, which is what `(continuation-marks k)` uses.
+The real implementation (`CollectContinuationMarks` in `pkg/machine/continuation_mark_set.go`) does not look up a key during the walk: it snapshots every non-empty mark frame (the current frame's marks first, then the chain via `appendChainMarks`) into a `ContinuationMarkSet`, and the per-key lookup happens later, in `ToList` / `First`. Same invariant either way: current frame first, innermost-to-outermost. Its sibling `CollectMarksFromCapture` runs the same walk over a *captured* chain, preceded by the capture site's live marks, which is what `(continuation-marks k)` uses.
 
 The walk produces a list of values for a given key, ordered from innermost
 (current frame) to outermost (top-level). This is a `ContinuationMarkSet` —

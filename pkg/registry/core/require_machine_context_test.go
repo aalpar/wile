@@ -34,9 +34,18 @@ import (
 // of panicking on a bare `cc.(*machine.MachineContext)` type assertion. Arg never
 // gets called by these primitives — the context check runs first — but it returns
 // a safe value so the stub cannot panic incidentally.
-type foreignCallContext struct{}
+type foreignCallContext struct {
+	// arg, when non-nil, is returned for every Arg index; the mark-set accessors
+	// look at their argument before they ask for the machine context.
+	arg values.Value
+}
 
-func (*foreignCallContext) Arg(int) values.Value                            { return values.Void }
+func (p *foreignCallContext) Arg(int) values.Value {
+	if p.arg == nil {
+		return values.Void
+	}
+	return p.arg
+}
 func (*foreignCallContext) SetValue(values.Value)                           {}
 func (*foreignCallContext) SetValues(...values.Value)                       {}
 func (*foreignCallContext) Authorizer() security.Authorizer                 { return nil }
@@ -47,6 +56,30 @@ func (*foreignCallContext) Thread() *values.Thread                          { re
 // Compile-time assertion: foreignCallContext satisfies CallContext without being
 // the concrete *MachineContext the primitives need.
 var _ machine.CallContext = (*foreignCallContext)(nil)
+
+// TestMarkSetAccessorsForeignCallContext pins that the continuation-mark-set
+// accessors need the machine context only for #f (the current marks): a real mark
+// set works under a foreign context, #f is refused with ErrNotAMachineContext.
+func TestMarkSetAccessorsForeignCallContext(t *testing.T) {
+	accessors := []struct {
+		name string
+		fn   func(machine.CallContext) error
+	}{
+		{"continuation-mark-set->list", core.PrimContinuationMarkSetToList},
+		{"continuation-mark-set-first", core.PrimContinuationMarkSetFirst},
+		{"continuation-mark-set->list*", core.PrimContinuationMarkSetToListStar},
+	}
+	for _, tc := range accessors {
+		t.Run(tc.name+"/false needs the machine context", func(t *testing.T) {
+			err := tc.fn(&foreignCallContext{arg: values.FalseValue})
+			qt.Assert(t, err, qt.ErrorIs, werr.ErrNotAMachineContext)
+		})
+		t.Run(tc.name+"/mark set does not", func(t *testing.T) {
+			err := tc.fn(&foreignCallContext{arg: &machine.ContinuationMarkSet{}})
+			qt.Assert(t, err, qt.Not(qt.ErrorIs), werr.ErrNotAMachineContext)
+		})
+	}
+}
 
 // TestPrimitivesRejectForeignCallContext exercises every core primitive that
 // downcasts to *machine.MachineContext. Each must surface a wrapped

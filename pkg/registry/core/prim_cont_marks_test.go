@@ -21,8 +21,10 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -372,18 +374,20 @@ func TestPrimCallWithImmediateContMark(t *testing.T) {
 // never calls NativeTemplate.Optimize, so a table written only through it exercises
 // the unoptimized bytecode while the CLI and every embedder run the optimized one;
 // the Engine path is the one a user sees. A shape that answers differently on the
-// two is itself a finding, so each row runs on both.
-func markShapeRunners(t *testing.T) map[string]func(code string) (string, error) {
-	t.Helper()
-	return map[string]func(code string) (string, error){
-		"unoptimized": func(code string) (string, error) {
+// two is itself a finding, so each row runs on both. Each runner takes the subtest's
+// t, so a setup failure fails that subtest and not the parent.
+func markShapeRunners() map[string]func(t *testing.T, code string) (string, error) {
+	return map[string]func(t *testing.T, code string) (string, error){
+		"unoptimized": func(t *testing.T, code string) (string, error) {
+			t.Helper()
 			result, err := testhelpers.RunSchemeCode(t, code)
 			if err != nil {
 				return "", err
 			}
 			return result.SchemeString(), nil
 		},
-		"engine": func(code string) (string, error) {
+		"engine": func(t *testing.T, code string) (string, error) {
+			t.Helper()
 			engine, err := wile.NewEngine(context.Background())
 			qt.Assert(t, err, qt.IsNil)
 			result, err := engine.EvalMultiple(context.Background(), code)
@@ -398,7 +402,9 @@ func markShapeRunners(t *testing.T) map[string]func(code string) (string, error)
 // TestContinuationMarkSetAcceptsFalse pins Racket's alias: #f stands for the
 // current continuation's marks in the first argument of every continuation-mark-set
 // accessor. Expected values are Racket's, measured: 42, (7), (#(7)); the two list
-// forms return a list and a list of vectors.
+// forms return a list and a list of vectors. The two-frame rows put a mark in an
+// enclosing frame and one in the live frame, so a #f path that walked only the
+// chain, or only the live frame, answers differently.
 func TestContinuationMarkSetAcceptsFalse(t *testing.T) {
 	tcs := []struct {
 		name     string
@@ -430,11 +436,29 @@ func TestContinuationMarkSetAcceptsFalse(t *testing.T) {
 			code:     `(with-continuation-mark 'k 7 (equal? (continuation-mark-set->list #f 'k) (continuation-mark-set->list (current-continuation-marks) 'k)))`,
 			expected: "#t",
 		},
+		{
+			name: "list, two frames",
+			code: `((lambda () (with-continuation-mark 'k 1 (list ((lambda ()
+				(with-continuation-mark 'k 2 (continuation-mark-set->list #f 'k))))))))`,
+			expected: "((2 1))",
+		},
+		{
+			name: "list star, two frames",
+			code: `((lambda () (with-continuation-mark 'k 1 (list ((lambda ()
+				(with-continuation-mark 'k 2 (continuation-mark-set->list* #f '(k)))))))))`,
+			expected: "((#(2) #(1)))",
+		},
+		{
+			name: "first, two frames",
+			code: `((lambda () (with-continuation-mark 'k 1 (list ((lambda ()
+				(with-continuation-mark 'k 2 (continuation-mark-set-first #f 'k))))))))`,
+			expected: "(2)",
+		},
 	}
-	for name, run := range markShapeRunners(t) {
+	for name, run := range markShapeRunners() {
 		for _, tc := range tcs {
 			t.Run(name+"/"+tc.name, func(t *testing.T) {
-				got, err := run(tc.code)
+				got, err := run(t, tc.code)
 				qt.Assert(t, err, qt.IsNil)
 				qt.Assert(t, got, qt.Equals, tc.expected)
 			})
@@ -445,17 +469,61 @@ func TestContinuationMarkSetAcceptsFalse(t *testing.T) {
 // TestContinuationMarkSetFalseStillRejectsOtherTypes pins that #f is the only
 // non-set value the accessors take.
 func TestContinuationMarkSetFalseStillRejectsOtherTypes(t *testing.T) {
-	tcs := []testhelpers.SchemeCodeErrorTestCase{
-		{Name: "first 0", Code: `(continuation-mark-set-first 0 'k)`},
-		{Name: "first true", Code: `(continuation-mark-set-first #t 'k)`},
-		{Name: "list empty list", Code: `(continuation-mark-set->list '() 'k)`},
-		{Name: "list star symbol", Code: `(continuation-mark-set->list* 'k '(k))`},
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{name: "first 0", code: `(continuation-mark-set-first 0 'k)`},
+		{name: "first true", code: `(continuation-mark-set-first #t 'k)`},
+		{name: "list empty list", code: `(continuation-mark-set->list '() 'k)`},
+		{name: "list true", code: `(continuation-mark-set->list #t 'k)`},
+		{name: "list star symbol", code: `(continuation-mark-set->list* 'k '(k))`},
+		{name: "list star zero", code: `(continuation-mark-set->list* 0 '(k))`},
 	}
-	for _, tc := range tcs {
-		t.Run(tc.Name, func(t *testing.T) {
-			_, err := testhelpers.RunSchemeCode(t, tc.Code)
-			qt.Assert(t, err, qt.IsNotNil)
-		})
+	for name, run := range markShapeRunners() {
+		for _, tc := range tcs {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				_, err := run(t, tc.code)
+				qt.Assert(t, err, qt.ErrorIs, werr.ErrNotAContinuationMarkSet)
+			})
+		}
+	}
+}
+
+// TestContinuationMarks_OrderAndAliasing pins, end to end, that (continuation-marks k)
+// lists the live frame's mark before the chain's (order) and that it snapshots the
+// live marks at capture (a wcm after the capture does not show in k's set).
+// Expected values are Racket's.
+func TestContinuationMarks_OrderAndAliasing(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name: "live frame first",
+			code: `((lambda () (with-continuation-mark 'a 1 (list ((lambda ()
+				(with-continuation-mark 'a 2 (call/cc (lambda (k)
+					(continuation-mark-set->list (continuation-marks k) 'a))))))))))`,
+			expected: "((2 1))",
+		},
+		{
+			name: "capture is a snapshot",
+			code: `((lambda () (with-continuation-mark 'a 1 (call/cc (lambda (k)
+				(with-continuation-mark 'a 2 (list
+					(continuation-mark-set->list (continuation-marks k) 'a)
+					(continuation-mark-set->list (current-continuation-marks) 'a))))))))`,
+			expected: "((1) (2))",
+		},
+	}
+	for name, run := range markShapeRunners() {
+		for _, tc := range tcs {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				got, err := run(t, tc.code)
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got, qt.Equals, tc.expected)
+			})
+		}
 	}
 }
 
@@ -467,8 +535,10 @@ func TestContinuationMarkSetFalseStillRejectsOtherTypes(t *testing.T) {
 // the save-continuation emitted for a call in tail position of a wcm body and adds a
 // field to the pooled MachineContinuation, which is the VM's hottest instruction, for
 // a Racket extension no consumer has asked for. The row pins Wile's answer so a change
-// is deliberate. The k-nontail and cicm-tail rows are what catch the plausible
-// "just delete the fallback" and "prepend the key-collapsed capturedMarks" repairs.
+// is deliberate. The k-nontail row catches the "prepend the
+// key-collapsed capturedMarks" repair; the "just delete GetImmediateMark's p.cont
+// fallback" repair is caught by the cicm-nontail pin flipping and by
+// TestPrimCallWithImmediateContMark "reads mark from current frame".
 func TestContinuationMarks_ShapeMatrix(t *testing.T) {
 	tcs := []struct {
 		name     string
@@ -508,13 +578,49 @@ func TestContinuationMarks_ShapeMatrix(t *testing.T) {
 			expected: "(1)",
 		},
 	}
-	for name, run := range markShapeRunners(t) {
+	for name, run := range markShapeRunners() {
 		for _, tc := range tcs {
 			t.Run(name+"/"+tc.name, func(t *testing.T) {
-				got, err := run(tc.code)
+				got, err := run(t, tc.code)
 				qt.Assert(t, err, qt.IsNil)
 				qt.Assert(t, got, qt.Equals, tc.expected)
 			})
 		}
+	}
+}
+
+// TestContinuationMarkSetToContextStaysStrict pins that (wile control)'s
+// continuation-mark-set->context, which delegates to ->list, does not inherit the
+// #f alias: Racket raises a contract violation there.
+func TestContinuationMarkSetToContextStaysStrict(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+		wantErr  bool
+	}{
+		{
+			name:     "mark set",
+			code:     `(with-continuation-mark 'wile/source-location "x" (continuation-mark-set->context (current-continuation-marks)))`,
+			expected: `("x")`,
+		},
+		{name: "false is rejected", code: `(continuation-mark-set->context #f)`, wantErr: true},
+		{name: "integer is rejected", code: `(continuation-mark-set->context 0)`, wantErr: true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			engine, err := wile.NewEngine(context.Background(),
+				wile.WithProfile(wile.KitchenSink), wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths())
+			qt.Assert(t, err, qt.IsNil)
+			_, err = engine.EvalMultiple(context.Background(), `(import (wile control))`)
+			qt.Assert(t, err, qt.IsNil)
+			result, err := engine.EvalMultiple(context.Background(), tc.code)
+			if tc.wantErr {
+				qt.Assert(t, err, qt.IsNotNil)
+				return
+			}
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.expected)
+		})
 	}
 }

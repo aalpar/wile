@@ -28,10 +28,10 @@ func addContMarks(r *registry.PrimitiveRegistry) error {
 			Doc: "Returns the set of continuation marks on the current continuation up to the nearest prompt matching PROMPT-TAG.\n\nExamples:\n  (continuation-mark-set? (current-continuation-marks))  => #t", ParamNames: []string{"prompt-tag"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "continuation-mark-set->list", ParamCount: 2, Impl: PrimContinuationMarkSetToList,
-			Doc: "Returns a list of all values associated with KEY in MARK-SET, from innermost to outermost frame.\n\nExamples:\n  (with-continuation-mark 'k 1\n    (continuation-mark-set->list (current-continuation-marks) 'k))  => (1)", ParamNames: []string{"mark-set", "key"}, Category: "continuations",
+			Doc: "Returns a list of all values associated with KEY in MARK-SET (a continuation mark set, or #f for the current continuation's marks), from innermost to outermost frame.\n\nExamples:\n  (with-continuation-mark 'k 1\n    (continuation-mark-set->list (current-continuation-marks) 'k))  => (1)", ParamNames: []string{"mark-set", "key"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeList},
 		{Name: "continuation-mark-set-first", ParamCount: 3, IsVariadic: true, Impl: PrimContinuationMarkSetFirst,
-			Doc: "Returns the first (innermost) value for KEY in MARK-SET, or DEFAULT if no mark with KEY exists.\n\nExamples:\n  (with-continuation-mark 'k 42\n    (continuation-mark-set-first (current-continuation-marks) 'k #f))  => 42", ParamNames: []string{"mark-set", "key", "default"}, Category: "continuations",
+			Doc: "Returns the first (innermost) value for KEY in MARK-SET (a continuation mark set, or #f for the current continuation's marks), or DEFAULT if no mark with KEY exists.\n\nExamples:\n  (with-continuation-mark 'k 42\n    (continuation-mark-set-first (current-continuation-marks) 'k #f))  => 42", ParamNames: []string{"mark-set", "key", "default"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "continuation-mark-set?", ParamCount: 1, Impl: PrimContinuationMarkSetQ,
 			Doc: "Returns #t if OBJ is a continuation mark set.\n\nExamples:\n  (continuation-mark-set? (current-continuation-marks))  => #t\n  (continuation-mark-set? 42)  => #f", ParamNames: []string{"obj"}, Category: "continuations",
@@ -46,7 +46,7 @@ func addContMarks(r *registry.PrimitiveRegistry) error {
 			Doc: "Returns #t if OBJ is a continuation captured by call/cc. Composable continuations from call-with-composable-continuation are not continuation?.\n\nExamples:\n  (call/cc (lambda (k) (continuation? k)))  => #t\n  (continuation? car)  => #f\n  ;; (call-with-composable-continuation (lambda (k) (continuation? k)) TAG)  => #f", ParamNames: []string{"obj"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "continuation-mark-set->list*", ParamCount: 3, IsVariadic: true, Impl: PrimContinuationMarkSetToListStar,
-			Doc: "Like continuation-mark-set->list but for multiple keys. Returns a list of vectors from MARK-SET, one per frame containing any key in KEY-LIST.\n\nExamples:\n  ;; See `continuation-mark-set->iterator' in (wile control) for usage.", ParamNames: []string{"mark-set", "key-list", "none-v"}, Category: "continuations",
+			Doc: "Like continuation-mark-set->list but for multiple keys. Returns a list of vectors from MARK-SET (a continuation mark set, or #f for the current continuation's marks), one per frame containing any key in KEY-LIST.\n\nExamples:\n  ;; See `continuation-mark-set->iterator' in (wile control) for usage.", ParamNames: []string{"mark-set", "key-list", "none-v"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeList, values.TypeAny}, ReturnType: values.TypeList},
 	}, registry.PhaseSetRuntime)
 

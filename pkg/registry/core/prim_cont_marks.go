@@ -48,17 +48,23 @@ func PrimCurrentContinuationMarks(cc machine.CallContext) error {
 // requireMarkSetOrCurrent returns the continuation mark set in argument 0 of the
 // primitive called name. Racket lets #f stand for the current continuation's marks
 // there, so #f yields the set (current-continuation-marks) would; any other value
-// that is not a mark set is a type error.
-func requireMarkSetOrCurrent(cc machine.CallContext, name string) (*machine.ContinuationMarkSet, error) {
-	mc, err := machine.RequireMachineContext(cc, name)
+// that is not a mark set is a type error. Only the #f arm needs the machine
+// context, so a real mark set still works under a foreign CallContext.
+func requireMarkSetOrCurrent(mc machine.CallContext, name string) (*machine.ContinuationMarkSet, error) {
+	arg := mc.Arg(0)
+	if arg != values.FalseValue {
+		cms, ok := arg.(*machine.ContinuationMarkSet)
+		if !ok {
+			return nil, werr.WrapForeignErrorf(werr.ErrNotAContinuationMarkSet,
+				"%s: expected a continuation mark set or #f but got %T", name, arg)
+		}
+		return cms, nil
+	}
+	vm, err := machine.RequireMachineContext(mc, name)
 	if err != nil {
 		return nil, err
 	}
-	arg := mc.Arg(0)
-	if arg == values.FalseValue {
-		return mc.CollectContinuationMarks(machine.DefaultPromptTag), nil
-	}
-	return helpers.RequireType[*machine.ContinuationMarkSet](arg, werr.ErrNotAContinuationMarkSet, name)
+	return vm.CollectContinuationMarks(machine.DefaultPromptTag), nil
 }
 
 // PrimContinuationMarkSetToList implements (continuation-mark-set->list mark-set key).
