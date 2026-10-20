@@ -347,11 +347,6 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                        (if (null? os) m
                            (loop (cdr os) (+ r 1)
                                  (cons (cons (car os) r) m)))))
-           (rank-of (lambda (idx)
-                      (let ((e (assv idx rank-map)))
-                        (unless e
-                          (error "run-analysis: index not in rank map (broken CFG protocol?)" idx))
-                        (cdr e))))
            (flow-preds (lambda (b)
                          (or (if forward?
                                  (cfg-preds-of protocol b)
@@ -364,7 +359,7 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                              '())))
            ;; Widening points: a block is a back-edge target (loop header)
            ;; iff some flow-predecessor sits at or after it in flow order
-           ;; (rank-of p >= rank-of b). Widening at these points forces
+           ;; (rank p >= rank b). Widening at these points forces
            ;; termination on infinite-height lattices (design §5). Computed
            ;; once, and only when a widen operator was supplied — pure MFP
            ;; pays nothing. For irreducible CFGs this flags a sound superset
@@ -372,11 +367,14 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
            ;; precision but never termination.
            ;;
            ;; rank-or-false tolerates indices absent from the RPO rank-map —
-           ;; blocks (or predecessors) unreachable from entry. Pure MFP already
-           ;; tolerates such orphans (their out-state stays bottom and joins
-           ;; harmlessly), so the widening detector must not crash on them. An
-           ;; orphan cannot lie on a cycle reachable from entry, so it is never
-           ;; a widening point.
+           ;; blocks (or predecessors) unreachable from entry. Forward, such an
+           ;; orphan is never enqueued, its out-state stays bottom and joins
+           ;; harmlessly. Backward, orphans ARE dequeued and processed (a
+           ;; generator at an orphan gives out = top); they cannot leak into
+           ;; ranked states because the orphan set is closed under backward
+           ;; flow. An orphan is never a widening point, so an orphan cycle
+           ;; run backward is not widened (filed under "Filed by the P6.8
+           ;; crosscheck").
            (rank-or-false (lambda (idx)
                             (let ((e (assv idx rank-map)))
                               (and e (cdr e)))))
@@ -430,9 +428,10 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                      (list idx in-val out-val)
                      entry))
                states)))
-      ;; Indices absent from the rank-map (a block unreachable from the entry
-      ;; in this direction, reached as a successor or seeded as an exit) sort
-      ;; after every ranked index rather than crashing rank-of.
+      ;; The rank map is built from the FORWARD RPO in both directions, so only a
+      ;; backward run reaches an index absent from it (a block unreachable from
+      ;; the entry, reached as a flow successor or seeded as an exit). Such an
+      ;; index sorts after every ranked one.
       (define (worklist-insert wl idx)
         (if (memv idx wl) wl
             (let ((ri (rank-or-false idx)))
