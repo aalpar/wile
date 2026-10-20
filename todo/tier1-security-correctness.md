@@ -627,6 +627,11 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   chapter 10 use the boolean `sexp-atom-compare`, now exported from `(wile algebra symbolic)` and `(wile algebra)`; new
   `test/wile/algebra-cross-library-test.scm` drives one protocol through both libraries. The error text on master is
   `got #t` for a sorted pair, `got #f` for an unsorted one. BREAKING: a numeric comparator result (the old -1/0/1) now raises in `term-compare`, any other truthy value is read as `#t`; a partial comparator and a written-form tie between distinct atoms raise in `term-equal?`; the crosscheck's follow-ups are filed under "Filed by the P6.9 crosscheck").
+- [x] Reader/IO: ~~`read-token` returns an opaque `#<simple-token ...>` with no accessor~~ (Done 2026-10-20, P6.14 / I101, I100, `72dcf9df` `82c20ab8` `61d6d3a8`:
+  retired rather than finished, since finishing it would have published all 61 tokenizer states as a Scheme-level contract with no
+  consumer. `PrimReadToken`, `State.nextTokenCached` and the `tokenizers` / `tokenizerEntry` cache are gone; `readSyntaxCached` and its
+  `parsers` cache are untouched. BREAKING (Scheme and Go API). The axis-B manifest row disappearing is the gate (`TestBuildAxisBManifest`);
+  the follow-ups are filed under "Filed by the P6.14 crosscheck").
 - [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
   as a profile name.
 - [ ] Coverage: `stdlibPrefixes` (`coverage/gocover.go`) omits the embedded `chibi/` and `rnrs/`.
