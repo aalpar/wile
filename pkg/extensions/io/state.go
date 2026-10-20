@@ -31,7 +31,7 @@ import (
 
 // State is the per-engine I/O port + cache state. One per Namespace, reached by
 // primitives via stateFrom(cc). Replaces the former package globals so two
-// Engines in one process do not share port parameters or caches (staff-sweep #8).
+// Engines in one process do not share port parameters or cache (staff-sweep #8).
 //
 // The parsers cache is keyed by port value; keeping it in the same per-engine
 // struct as the port parameters is what makes its isolation hold — two engines

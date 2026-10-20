@@ -1284,18 +1284,25 @@ func TestParserCacheEviction(t *testing.T) {
 	})
 
 	t.Run("call-with-port evicts cache without eof", func(t *testing.T) {
-		// The third documented eviction path: call-with-port closes the port when
-		// the procedure returns, with the parser populated and EOF never reached.
+		// call-with-port is not a separate eviction path: port_procs.scm closes the
+		// port through close-port, which reaches evictPortCache. This is the
+		// end-to-end pin of that route, with the parser populated first and EOF
+		// never reached.
 		c := qt.New(t)
 		eng := newEngine(t)
 		st := eng.Namespace().IOState().(*extio.State)
 		parsersBefore := extio.ExportParserCacheSize(st)
 
-		eval(t, eng, `(call-with-port (open-input-string "1 2 3")
-		   (lambda (port) (read port)))`)
+		eval(t, eng, `(define p (open-input-string "1 2 3"))`)
+		eval(t, eng, `(read p)`) // caches a parser for p; no EOF
+
+		parsersMid := extio.ExportParserCacheSize(st)
+		c.Assert(parsersMid, qt.Equals, parsersBefore+1) // cache actually populated
+
+		eval(t, eng, `(call-with-port p (lambda (port) (read port)))`)
 
 		parsersAfter := extio.ExportParserCacheSize(st)
-		c.Assert(parsersAfter, qt.Equals, parsersBefore)
+		c.Assert(parsersAfter, qt.Equals, parsersBefore) // call-with-port's close evicted it
 	})
 }
 

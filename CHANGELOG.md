@@ -863,7 +863,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   error. Also gone, from `pkg/extensions/io`: the exported `PrimReadToken`
   (Go API), and the unexported `State.nextTokenCached`, `State.tokenizers` and
   `tokenizerEntry`. `readSyntaxCached` keeps the separate `parsers` cache.
-
 - **BREAKING (Go API): `machine.CollectMarksFromContinuation`.** Exported in
   v1.20.0; its only production caller was `(continuation-marks k)`, which now needs
   the capturing activation's live marks as well and goes through
