@@ -130,7 +130,9 @@ func bindingOccursIn(expr ValidatedExpr, binder *syntax.SyntaxSymbol) bool {
 // with the two halves: this one recurses into validated children itself, and
 // answers a question ABOUT the scan rather than reporting node opacity. The entry
 // depth and the environment the payload's heads denote in are the shared
-// decisions, so both take them from opaqueEntryDepth and opaqueRawSyntax.
+// decisions, so both take them from opaqueEntryDepth and opaqueRawSyntax, and both
+// walk in walkReads: a binder mentioned only as quasisyntax template data is still
+// referenced.
 //
 // Reading the environment off the NODE is what keeps this answer the same for
 // every asker, and both askers need it to be: compileOrShapedLet elides the
@@ -158,8 +160,7 @@ func opaqueSubtreeMentions(expr ValidatedExpr, binder *syntax.SyntaxSymbol) bool
 		return true
 	}
 	q := false
-	depth, mk := opaqueEntryDepth(expr)
-	forEachRawSymbol(env, raw, depth, mk, func(sym *syntax.SyntaxSymbol) {
+	forEachRawSymbol(env, raw, opaqueEntryDepth(expr), quasiquoteKW, walkReads, func(sym *syntax.SyntaxSymbol) {
 		if refMatchesBinder(sym, binder) {
 			q = true
 		}

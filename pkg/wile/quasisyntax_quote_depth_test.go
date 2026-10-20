@@ -15,8 +15,51 @@
 package wile_test
 
 import (
+	"context"
 	"testing"
+
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/wile"
+
+	qt "github.com/frankban/quicktest"
 )
+
+// runQuasisyntaxRows evaluates each row under the default inline threshold and
+// under WithInlineThreshold(0). The stale-body miscompile needs the inliner on,
+// the frame-dropping ones need it off or on depending on the shape, so a row that
+// only one configuration can see would pass unnoticed in the other.
+func runQuasisyntaxRows(t *testing.T, rows []innerPositionRow) {
+	t.Helper()
+	configs := []struct {
+		name string
+		opts []wile.EngineOption
+	}{
+		{"default", nil},
+		{"inline-0", []wile.EngineOption{wile.WithInlineThreshold(0)}},
+	}
+	for _, cfg := range configs {
+		t.Run(cfg.name, func(t *testing.T) {
+			for _, row := range rows {
+				t.Run(row.name, func(t *testing.T) {
+					opts := []wile.EngineOption{
+						wile.WithProfile(wile.KitchenSink),
+						wile.WithSourceFS(stdlib.FS),
+						wile.WithLibraryPaths("."),
+					}
+					opts = append(opts, cfg.opts...)
+					eng, err := wile.NewEngine(context.Background(), opts...)
+					qt.Assert(t, err, qt.IsNil)
+					t.Cleanup(func() {
+						_ = eng.Close()
+					})
+					v, err := eng.EvalMultiple(context.Background(), row.src)
+					qt.Assert(t, err, qt.IsNil)
+					qt.Assert(t, v.SchemeString(), qt.Equals, row.want)
+				})
+			}
+		})
+	}
+}
 
 // quasisyntax is a passthrough form, so the opaque-subtree scan enters its body
 // at code depth. Before the scan learned quasisyntax's markers, a quote form
@@ -28,7 +71,7 @@ import (
 const quasisyntaxStaleBody = `(begin (set! n 1) (set! f (lambda () 99)))`
 
 func TestQuasisyntaxUnsyntaxUnderQuote(t *testing.T) {
-	runInnerPositionRows(t, []innerPositionRow{
+	runQuasisyntaxRows(t, []innerPositionRow{
 		// The measured defect: (1 7) on master.
 		{"unsyntax under a quote form",
 			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quote (#,` + quasisyntaxStaleBody + `)))) (list n (f)))`,
@@ -51,6 +94,9 @@ func TestQuasisyntaxUnsyntaxUnderQuote(t *testing.T) {
 		{"unsyntax in a vector under a quote form",
 			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quote #(#,` + quasisyntaxStaleBody + `)))) (list n (f)))`,
 			"(1 99)"},
+		{"unsyntax in a vector directly in the template",
+			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (a #(#,` + quasisyntaxStaleBody + `))) (list n (f)))`,
+			"(1 99)"},
 		{"unsyntax-splicing under a quote form",
 			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quote (#,@(begin (set! n 1) (set! f (lambda () 99)) '()))))) (list n (f)))`,
 			"(1 99)"},
@@ -63,35 +109,144 @@ func TestQuasisyntaxUnsyntaxUnderQuote(t *testing.T) {
 		{"dotted unsyntax under a quote form",
 			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quote (b . #,` + quasisyntaxStaleBody + `)))) (list n (f)))`,
 			"(1 99)"},
+		// Depth 2 stepped back out by two unsyntax forms reaches code, where the
+		// quote is a barrier for what it contains but not for the unsyntax around it.
+		{"depth-2 unsyntax then quote then unsyntax reaches code",
+			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (quasisyntax (a #,(quote (#,` + quasisyntaxStaleBody + `))))) (list n (f)))`,
+			"(1 99)"},
+		// The boxing scan (ForEachOpaqueLiveSymbol, ref_index.go) is a separate
+		// consumer of the same walk: the assigned binder is captured, so a scan
+		// that misses the set! leaves g reading a stale copy of n.
+		{"boxing: captured binder assigned under a quote form",
+			`(define v (vector 0))
+			 (define g
+			   (let ((n 0))
+			     (let ((f (lambda () n)))
+			       (quasisyntax (a (quote (#,(begin (vector-set! v 0 1) (set! n 99))))))
+			       f)))
+			 (list (g) (vector-ref v 0))`,
+			"(99 1)"},
+		{"boxing control: captured binder assigned by a bare unsyntax",
+			`(define v (vector 0))
+			 (define g
+			   (let ((n 0))
+			     (let ((f (lambda () n)))
+			       (quasisyntax (a #,(begin (vector-set! v 0 1) (set! n 99))))
+			       f)))
+			 (list (g) (vector-ref v 0))`,
+			"(99 1)"},
+		{"top-level define assigned under a quote form in the same unit",
+			`(begin (define g 0) (let ((f (lambda () 7))) (quasisyntax (a (quote (#,(begin (set! g 1) (set! f (lambda () 99))))))) (list g (f))))`,
+			"(1 99)"},
 	})
 }
 
-// A marker of the OTHER dialect inside a template is data, in both directions,
-// and a depth-2 unsyntax stays data. These rows must not move: they are what the
-// marker set is for, and what nestingAlwaysRuntime does NOT change (it picks the
-// expansion path, not the evaluated positions).
+// A marker of the OTHER dialect inside a template is data, in both directions.
+// Every row puts a quote form between the marker and a stale-body set!, so a
+// scan that read the foreign marker as an escape or a nesting head, or kept the
+// quote barrier, answers a wrong VALUE.
 func TestQuasisyntaxMarkersAreDialectLocal(t *testing.T) {
-	runInnerPositionRows(t, []innerPositionRow{
-		// Depth 2: the set! never runs, so n stays 0 and f keeps its body.
+	runQuasisyntaxRows(t, []innerPositionRow{
+		{"unquote is data in a quasisyntax template",
+			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (unquote (quote (#,` + quasisyntaxStaleBody + `))))) (list n (f)))`,
+			"(1 99)"},
+		{"unsyntax is data in a quasiquote template",
+			"(let ((f (lambda () 7)) (n 0)) `(a (unsyntax (quote (," + quasisyntaxStaleBody + ")))) (list n (f)))",
+			"(1 99)"},
+		{"unquote-splicing is data in a quasisyntax template",
+			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (unquote-splicing (quote (#,` + quasisyntaxStaleBody + `))))) (list n (f)))`,
+			"(1 99)"},
+		{"unsyntax-splicing is data in a quasiquote template",
+			"(let ((f (lambda () 7)) (n 0)) `(a (unsyntax-splicing (quote (," + quasisyntaxStaleBody + ")))) (list n (f)))",
+			"(1 99)"},
+		{"quasiquote head is data in a quasisyntax template",
+			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quasiquote (#,` + quasisyntaxStaleBody + `)))) (list n (f)))`,
+			"(1 99)"},
+		{"quasisyntax head is data in a quasiquote template",
+			"(let ((f (lambda () 7)) (n 0)) `(a (quasisyntax (," + quasisyntaxStaleBody + "))) (list n (f)))",
+			"(1 99)"},
+	})
+}
+
+// Compiler-behaviour pins, not scan pins: the set! never runs at depth 2, and
+// nestingAlwaysRuntime takes the nested form to the runtime path. They hold
+// whatever the scan does, because a data position runs nothing; they fix the
+// values the scan has to agree with.
+func TestQuasisyntaxNestedDepthBehaviour(t *testing.T) {
+	runQuasisyntaxRows(t, []innerPositionRow{
 		{"nested quasisyntax keeps an inner unsyntax as data",
 			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (quasisyntax (a #,` + quasisyntaxStaleBody + `))) (list n (f)))`,
 			"(0 7)"},
 		{"nested quasisyntax under a quote keeps an inner unsyntax as data",
 			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (quasisyntax (a (quote (#,` + quasisyntaxStaleBody + `))))) (list n (f)))`,
 			"(0 7)"},
-		// A comma in a quasisyntax template is not an escape; an unsyntax in a
-		// quasiquote template is not one either.
 		{"unquote inside a quasisyntax template is data",
 			"(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (unquote " + quasisyntaxStaleBody + "))) (list n (f)))",
 			"(0 7)"},
 		{"unsyntax inside a quasiquote template is data",
 			"(let ((f (lambda () 7)) (n 0)) `(a (unsyntax " + quasisyntaxStaleBody + ")) (list n (f)))",
 			"(0 7)"},
-		// The flag's discriminating behaviour, measured on master: the nested
-		// form takes the runtime path and (syntax z) yields z's VALUE.
+		{"a quote form at code depth under an unsyntax is a barrier",
+			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quote (b #,(quote (#,` + quasisyntaxStaleBody + `)))))) (list n (f)))`,
+			"(0 7)"},
 		{"nestingAlwaysRuntime materializes a bound local",
 			`(let ((z 5)) (quasisyntax (quasisyntax (a (unsyntax z)))))`,
 			"#'(#'quasisyntax #'(#'a #'(#'unsyntax #'5)))"},
+	})
+}
+
+// A symbol in DATA position of a quasisyntax template is a READ: expandQuasi emits
+// (syntax sym) for it, and (syntax sym) on a bound local yields the local's value.
+// The or-shaped lowering drops a let's frame when nothing mentions the binder, so
+// the mention scan has to count template data, not only the evaluated positions.
+// The stamp scan must not (TestImmutableTopLevel_OpaqueSubtreeOverMark).
+func TestQuasisyntaxTemplateDataIsRead(t *testing.T) {
+	runQuasisyntaxRows(t, []innerPositionRow{
+		{"data symbol and a bare unsyntax",
+			`(let ((t #f)) (if t t (quasisyntax (a t #,1))))`,
+			"#'(#'a #'#f #'1)"},
+		{"data symbol over an outer binder of the same name",
+			`(let ((t 'outer)) (let ((t #f)) (if t t (quasisyntax (b t #,0)))))`,
+			"#'(#'b #'#f #'0)"},
+		{"nested unsyntax at depth one",
+			`(let ((z #f)) (if z z (quasisyntax (quasisyntax (a (unsyntax z))))))`,
+			"#'(#'quasisyntax #'(#'a #'(#'unsyntax #'#f)))"},
+		{"binder is a procedure parameter",
+			`(define (h x) (let ((t x)) (if t t (quasisyntax (b t #,0))))) (h #f)`,
+			"#'(#'b #'#f #'0)"},
+		{"self-tail loop",
+			`(define (lp k) (let ((t #f)) (if t t (if (= k 0) (quasisyntax (a t #,0)) (lp (- k 1)))))) (lp 3)`,
+			"#'(#'a #'#f #'0)"},
+		{"data symbol inside a quote form",
+			`(let ((t #f)) (if t t (quasisyntax (a (quote (t)) #,1))))`,
+			"#'(#'a #'(#'quote #'(#'#f)) #'1)"},
+		{"data symbol inside a vector",
+			`(let ((t #f)) (if t t (quasisyntax (a #(a t #,1)))))`,
+			"#'(#'a #'(#'a #'#f #'1))"},
+		{"or-shaped let, data symbol",
+			`(let ((t #f)) (or t (quasisyntax (a t #,1))))`,
+			"#'(#'a #'#f #'1)"},
+	})
+}
+
+// A head that resolves to a binding denoting no form is an ordinary head at code
+// depth: the compiler dispatches on what a head denotes, so a local named after
+// a marker is a call and its operands are evaluated. Inside templates the
+// spelling fallback stays, as quasiKeywords.headName has it.
+func TestMarkerNamedLocalIsAnOrdinaryCall(t *testing.T) {
+	runQuasisyntaxRows(t, []innerPositionRow{
+		{"local quasisyntax in an unquote position",
+			"(let ((quasisyntax list) (f (lambda () 7))) `(,(quasisyntax (begin (set! f (lambda () 99)) 1))) (f))",
+			"99"},
+		{"local quasisyntax, if-shaped let",
+			"(let ((quasisyntax list)) (let ((t #f)) (if t t `(,(quasisyntax t)))))",
+			"((#f))"},
+		{"local quote in an unsyntax position",
+			`(let ((quote list) (f (lambda () 7))) (quasisyntax (a #,(quote (begin (set! f (lambda () 99)) 1)))) (f))`,
+			"99"},
+		{"local quasiquote in an unsyntax position",
+			`(let ((quasiquote list) (f (lambda () 7))) (quasisyntax (a #,(quasiquote (begin (set! f (lambda () 99)) 1)))) (f))`,
+			"99"},
 	})
 }
 
@@ -100,7 +255,7 @@ func TestQuasisyntaxMarkersAreDialectLocal(t *testing.T) {
 // live. Measured on master, rows 1 and 2 answered an unbound-"t" compile error
 // and the OUTER t (9); the unquote form of the same shapes already answered #f.
 func TestQuasisyntaxUnsyntaxUnderQuoteKeepsLetBinder(t *testing.T) {
-	runInnerPositionRows(t, []innerPositionRow{
+	runQuasisyntaxRows(t, []innerPositionRow{
 		{"if-shaped let, unsyntax under a quote form",
 			`(let ((t #f)) (if t t (quasisyntax (a (quote (#,t))))))`,
 			"#'(#'a #'(#'quote #'(#'#f)))"},
@@ -110,5 +265,8 @@ func TestQuasisyntaxUnsyntaxUnderQuoteKeepsLetBinder(t *testing.T) {
 		{"control: bare unsyntax",
 			`(define t 9) (let ((t #f)) (if t t (quasisyntax (a #,t))))`,
 			"#'(#'a #'#f)"},
+		{"self-tail loop, unsyntax under a quote form",
+			`(define (loop k) (let ((t #f)) (if t t (if (= k 0) (quasisyntax (a (quote (#,t)))) (loop (- k 1)))))) (loop 3)`,
+			"#'(#'a #'(#'quote #'(#'#f)))"},
 	})
 }

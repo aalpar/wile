@@ -896,8 +896,12 @@ a **recorded refusal**, kept so nobody "finishes the job" by flipping a constant
   the marker set (`quasiMarkers`) and the walk switches to quasisyntax's at a `quasisyntax` head;
   the repro answers `(1 99)`. Same root also fixed `opaqueSubtreeMentions` (or_lower.go): an
   if-shaped let whose binder is only mentioned under that quote answered a compile error or the
-  OUTER binding. Gates `TestQuasisyntaxUnsyntaxUnderQuote*`; a quasisyntax-only mention of a
-  name now KEEPS its Stable stamp, where master withdrew it]: `quasisyntax` is a bare passthrough
+  OUTER binding, and a local named `quasisyntax`/`quote`/`quasiquote` is an ordinary head at code
+  depth (the last also fixes the `quote`/`quasiquote` case through `#,`, which answered 7 on
+  master). Gates `TestQuasisyntaxUnsyntaxUnderQuote*`, `TestQuasisyntaxTemplateDataIsRead`,
+  `TestMarkerNamedLocalIsAnOrdinaryCall`; a quasisyntax-only mention of a name now KEEPS its
+  Stable stamp, where master withdrew it, while the if-shaped `let` still counts template data
+  as a reference]: `quasisyntax` is a bare passthrough
   (`registerPassthrough("quasisyntax")`, `pkg/internal/validate/register.go:75`), so
   `opaqueEntryDepth` enters its whole form at `quasiDepthCode` rather than at template depth, and
   `quasiHeadDepth("quote", 0)` is a BARRIER there — the validate walk stops at the `(quote …)`
@@ -2219,6 +2223,12 @@ The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no r
 - [ ] **`string->number` returns `#f` for every `#z`/`#m` string** [Numeric, S, P6.4 crosscheck, pre-existing, divergence]: `(string->number "#z12")` and `"#m1.5"` give `#f` while the reader accepts both. Pinned by `test/scheme/numbers-test.scm:360` `(test #f (string->number "#z42"))`. Decide divergence versus fix. Site: the prefix loop (~:141) in `extensions/math/prim_conversion.go`.
 - [ ] **`#z;c` reads zero data with no error** [Reader, XS, P6.4 crosscheck, pre-existing, all revisions]: a bare introducer followed by a comment and EOF yields no datum and no error. Expected: "big integer marker requires a datum". Site: `readNumericIntroducer`.
 - [ ] **`#x1+2i#t` and `#x1@1#t` fail through strconv, not a located delimiter fault** [Reader diagnostics, XS, P6.4 crosscheck, pre-existing]: expected the radix rule's located `MessageExpectingDelimiterAfterNumber`. Site: `requireDelimiterAfterRadixNumeral` and the radix complex/polar scan in `tokenizer_numbers.go`.
+
+### Filed by the P6.6 crosscheck (2026-10-20)
+
+- [ ] **No renamed or prefixed `unsyntax` / `quasisyntax` row exists** [Test coverage, S, P6.6 crosscheck, unprobed]: the quasiquote side has `TestRenamedQuasiquoteMarkers` and the marker-resolution rows in `pkg/wile/renamed_inner_positions_test.go`; the quasisyntax side resolves heads through the same `markerName`/`headKey` but nothing renames `unsyntax`, `unsyntax-splicing` or `quasisyntax` (a library import with `rename`/`prefix`) and checks the scan agrees with `quasiKeywords.headName`. Not measured whether the two agree.
+- [ ] **The quasi marker names are written out twice with no drift check** [Consistency, XS, P6.6 crosscheck, owner decision]: `quasiquoteKW`/`quasisyntaxKW` in `pkg/internal/validate/opaque_subtree.go` and `quasiKeywords` in `pkg/machine/compilation/quasi_expand.go` hold the same strings, and `pkg/parser/parser.go` already exports the constants (`ConstQuasiquote` ... `ConstUnsyntaxSplicing`, unused by both). A drift test cannot reach the compilation table from validate without an import cycle; sharing the parser constants adds a `validate` → `parser` dependency, which is the owner's call.
+- [ ] **`quasiMarkers` is passed by value through the walk** [Efficiency, Info, P6.6 crosscheck, unmeasured]: three strings (48 bytes) per `forEachRawSymbol` call and per recursion. Not benchmarked; the walk is compile-time and bounded by the opaque subtree, so likely noise.
 
 ### Closed in Tier 1
 

@@ -24,7 +24,8 @@ import (
 // became a parameter, kept verbatim as an oracle. The quasiquote side of the
 // scan decides which names lose their Stable stamp, and a change there fails
 // toward deopt, which no value assertion sees. TestQuasiHeadDepthQuasiquoteSideIsUnchanged
-// compares the new function against this one over the whole input space.
+// compares the new function against this one for every marker key of either dialect
+// plus a few ordinary heads, at depths 0 to 4, on a quasiquote walk.
 func quasiquoteHeadDepthBefore(key string, quasi int) (argDepth int, barrier bool) {
 	switch key {
 	case "quasiquote":
@@ -45,16 +46,27 @@ func quasiquoteHeadDepthBefore(key string, quasi int) (argDepth int, barrier boo
 
 func TestQuasiHeadDepthQuasiquoteSideIsUnchanged(t *testing.T) {
 	c := qt.New(t)
-	keys := []string{"quasiquote", "unquote", "unquote-splicing", "quote", "list", "syntax", ""}
+	keys := []string{
+		"quasiquote", "unquote", "unquote-splicing", "quote", "list", "syntax", "",
+		"quasisyntax", "unsyntax", "unsyntax-splicing",
+	}
 	for quasi := 0; quasi <= 4; quasi++ {
 		for _, key := range keys {
+			gotDepth, gotMarkers, gotBarrier := quasiHeadDepth(key, quasi, quasiquoteKW)
+			if quasi == 0 && key == "quasisyntax" {
+				// The one input where the new function legitimately differs: code
+				// depth opens a quasisyntax template. Everything else stays put.
+				c.Assert(gotDepth, qt.Equals, 1)
+				c.Assert(gotMarkers, qt.Equals, quasisyntaxKW)
+				c.Assert(gotBarrier, qt.IsFalse)
+				continue
+			}
 			wantDepth, wantBarrier := quasiquoteHeadDepthBefore(key, quasi)
-			gotDepth, gotMarkers, gotBarrier := quasiHeadDepth(key, quasi, quasiquoteMarkers)
 			c.Assert(gotDepth, qt.Equals, wantDepth,
 				qt.Commentf("key %q depth %d", key, quasi))
 			c.Assert(gotBarrier, qt.Equals, wantBarrier,
 				qt.Commentf("key %q depth %d", key, quasi))
-			c.Assert(gotMarkers, qt.Equals, quasiquoteMarkers,
+			c.Assert(gotMarkers, qt.Equals, quasiquoteKW,
 				qt.Commentf("key %q depth %d: a quasiquote walk must stay in its dialect", key, quasi))
 		}
 	}
@@ -70,18 +82,20 @@ func TestQuasiHeadDepthQuasisyntaxMarkers(t *testing.T) {
 		wantMarkers quasiMarkers
 		wantBarrier bool
 	}{
-		{"code: quasisyntax opens a quasisyntax template", "quasisyntax", 0, quasiquoteMarkers, 1, quasisyntaxMarkers, false},
-		{"code: quasiquote opens a quasiquote template", "quasiquote", 0, quasisyntaxMarkers, 1, quasiquoteMarkers, false},
-		{"code: quote is a barrier", "quote", 0, quasisyntaxMarkers, 0, quasisyntaxMarkers, true},
-		{"code: unsyntax is an ordinary head", "unsyntax", 0, quasisyntaxMarkers, 0, quasisyntaxMarkers, false},
-		{"template: unsyntax escapes", "unsyntax", 1, quasisyntaxMarkers, 0, quasisyntaxMarkers, false},
-		{"template: unsyntax-splicing escapes", "unsyntax-splicing", 2, quasisyntaxMarkers, 1, quasisyntaxMarkers, false},
-		{"template: quasisyntax nests", "quasisyntax", 1, quasisyntaxMarkers, 2, quasisyntaxMarkers, false},
-		{"template: quote is not a barrier", "quote", 1, quasisyntaxMarkers, 1, quasisyntaxMarkers, false},
-		{"template: unquote is data", "unquote", 1, quasisyntaxMarkers, 1, quasisyntaxMarkers, false},
-		{"template: quasiquote is data", "quasiquote", 1, quasisyntaxMarkers, 1, quasisyntaxMarkers, false},
-		{"quasiquote template: unsyntax is data", "unsyntax", 1, quasiquoteMarkers, 1, quasiquoteMarkers, false},
-		{"quasiquote template: quasisyntax is data", "quasisyntax", 1, quasiquoteMarkers, 1, quasiquoteMarkers, false},
+		{"code: quasisyntax opens a quasisyntax template", "quasisyntax", 0, quasiquoteKW, 1, quasisyntaxKW, false},
+		{"code: quasiquote opens a quasiquote template", "quasiquote", 0, quasisyntaxKW, 1, quasiquoteKW, false},
+		{"code: quote is a barrier", "quote", 0, quasisyntaxKW, 0, quasisyntaxKW, true},
+		{"code: unsyntax is an ordinary head", "unsyntax", 0, quasisyntaxKW, 0, quasisyntaxKW, false},
+		{"template: unsyntax escapes", "unsyntax", 1, quasisyntaxKW, 0, quasisyntaxKW, false},
+		{"template: unsyntax-splicing escapes", "unsyntax-splicing", 2, quasisyntaxKW, 1, quasisyntaxKW, false},
+		{"template: quasisyntax nests", "quasisyntax", 1, quasisyntaxKW, 2, quasisyntaxKW, false},
+		{"template: quote is not a barrier", "quote", 1, quasisyntaxKW, 1, quasisyntaxKW, false},
+		{"template: unquote is data", "unquote", 1, quasisyntaxKW, 1, quasisyntaxKW, false},
+		{"template: quasiquote is data", "quasiquote", 1, quasisyntaxKW, 1, quasisyntaxKW, false},
+		{"template: unquote-splicing is data", "unquote-splicing", 1, quasisyntaxKW, 1, quasisyntaxKW, false},
+		{"quasiquote template: unsyntax-splicing is data", "unsyntax-splicing", 1, quasiquoteKW, 1, quasiquoteKW, false},
+		{"quasiquote template: unsyntax is data", "unsyntax", 1, quasiquoteKW, 1, quasiquoteKW, false},
+		{"quasiquote template: quasisyntax is data", "quasisyntax", 1, quasiquoteKW, 1, quasiquoteKW, false},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

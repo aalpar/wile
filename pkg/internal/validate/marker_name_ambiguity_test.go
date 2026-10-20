@@ -83,10 +83,10 @@ func TestW2MarkerNameStillDenotesUnderNoAmbiguity(t *testing.T) {
 		environment.NewLocalEnvironment(0), environment.NewNamespace().Runtime())
 	sym := values.NewSymbol("otherunquote")
 	env.MaybeCreateLocalBinding(sym, environment.BindingTypeSyntax, scopes, nil)
-	env.GetBinding(sym, syntax.ScopesOf(scopes)).SetValue(environment.NewFormKeyword(quasiquoteMarkers.unquote))
+	env.GetBinding(sym, syntax.ScopesOf(scopes)).SetValue(environment.NewFormKeyword(quasiquoteKW.unquote))
 
 	stx := syntax.NewSyntaxSymbol("otherunquote", &syntax.SourceContext{Scopes: scopes})
 
-	qt.Assert(t, markerName(env, stx), qt.Equals, quasiquoteMarkers.unquote,
+	qt.Assert(t, markerName(env, stx), qt.Equals, quasiquoteKW.unquote,
 		qt.Commentf("a renamed marker is still a marker; spelling-only reading would answer otherunquote"))
 }
