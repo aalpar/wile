@@ -1928,7 +1928,10 @@ design. It was lifted out of the `begin-for-syntax` row below, whose ordering ha
   item proposes would make `+i2` a read *error*, which is equally nonconformant.
   What remains open is only the unprefixed numeral: `1abc` still splits.
 
-  The `#z` / `#m` inline scan is the same family and is **worse**, because it
+  **Done 2026-10-20 by I039 (P6.4)**: `#z`/`#m` numerals now end at a delimiter; the table below
+  is the pre-fix behaviour and every row is a located read error.
+
+  ~~The `#z` / `#m` inline scan is the same family and is **worse**, because it
   truncates silently instead of splitting into two visible datums. `readBigNum`
   scans base 10 and stops at the first character it does not recognize, so:
 
@@ -1942,7 +1945,7 @@ design. It was lifted out of the `begin-for-syntax` row below, whose ordering ha
   is not introduced by the introducer rework — the degenerate `#z<digits>` path
   is unchanged. Arguably these should be errors (a `#z` operand that is not an
   exact integer is rejected everywhere else: `#z1.5` errors), which makes this a
-  narrower and safer fix than D1-b proper.
+  narrower and safer fix than D1-b proper.~~
 
 ### Core-form arity check drops a dotted tail (2026-10-15)
 
@@ -2062,7 +2065,7 @@ disagreement on one program, the internal-invariant form of a defect.
   `(= 1l120 1<120 zeros>.0l0)` are `#f` (exponent not counted, integer-part zeros are; 5^120 needs
   279 bits). Options: count a non-negative exponent up to a bound, or document it.
 - [ ] **Pre-existing, found by the P5.3 crosscheck** [S each]: ~~`(sqrt <BigFloat>)` raises "expected a
-  number but got *values.BigFloat"~~ (done by P6.1, 2026-10-19); `#m1/3` reads as `#m1` then symbol `/3`; the `l` marker inside a
+  number but got *values.BigFloat"~~ (done by P6.1, 2026-10-19); ~~`#m1/3` reads as `#m1` then symbol `/3`~~ (done by P6.4 / I039, 2026-10-20); the `l` marker inside a
   complex literal falls back to float64.
 
 ### Filed by the P5.4 crosscheck (2026-10-17)
@@ -2205,10 +2208,12 @@ The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no r
 
 - [ ] **A radix prefix before `#z`/`#m` is not rejected** [Reader, S, P6.4 crosscheck, pre-existing]: `#d#z1` reads 1, `#d#m1.5` reads `1.5l0`, `#d#z#x1f` reads 31; expected a "misplaced radix" error, per the `#` reader invariant (radix is lexical, so its operand must be a literal). `#b#z1`, `#o#z7`, `#x#z1f`, `#x#m1`, `#b#m1` fail only by accident (strconv on "0z1"). Site: `readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrComment` in `pkg/internal/tokenizer/tokenizer_hash.go`.
 - [ ] **`#m+inf.0`, `#m-inf.0`, `#m+nan.0` do not read** [Reader, S, P6.4 crosscheck, pre-existing]: the inline sign scan in `readBigNum` claims the `+` and the token fails as `#m+`, while `#m +inf.0` and `#m#d+inf.0` read. Expected: all read as the infinity/NaN BigFloat. Site: `pkg/internal/tokenizer/tokenizer_numbers.go` `readBigNum`.
-- [ ] **`#` counts as a terminator after digits** [Reader, XS-S, P6.4 crosscheck, decision]: `#z1#t` reads as `(1 #t)` and `TestBigNumNumeralRequiresDelimiter` pins it; Chez and Racket reject the analogous `#x1#t`, and `#` is not an R7RS delimiter. The radix rule has the same exemption (`isDelimiterOrMarker`). One row for both rules: decide whether to tighten.
+- [ ] **`#` counts as a terminator after digits** [Reader, XS-S, P6.4 crosscheck, decision]: `#z1#t` reads as `(1 #t)` and `TestBigNumNumeralRequiresDelimiter` pins it; `#` is not an R7RS delimiter. The radix rule has the same exemption (`isDelimiterOrMarker`), but `(#x1#t)` is already rejected; the exemption is reached by `(#d1e3#t)`, which reads `(1000.0 #t)` (Chez and Racket reject it). No radix test pins that. One row for both rules: decide whether to tighten.
 - [ ] **`parseBigFloat` rejects the `s`/`f`/`d`/`l` markers the tokenizer accepts** [Reader, S, P6.4 crosscheck, pre-existing]: `#m2l3`, `#m1s10`, `#m1.5d3`, `#m1.5l0` fail with "invalid big float" because the marker text goes to `big.ParseFloat`, which accepts only e/E. Expected: normalize the marker first. Sites: `parseBigFloat` in `pkg/parser/parser_number.go`; `NewBigFloatFromString` in `pkg/values/big_float.go`.
-- [ ] **A token-level parse error shadows the stamped tokenizer error** [Reader diagnostics, S, P6.4 crosscheck, pre-existing]: when the shortened token itself fails to parse, the parser's error wins and the located tokenizer error never appears (`#m1ex` says "invalid big float: #m1e", `#z--5`, `#z1.5x`, and the radix rule's `#b-2`). Expected: the located delimiter fault. Site: `ReadSyntax` in `pkg/parser/parser.go` checks the pending tokenizer error only after `readSyntax` succeeds.
-- [ ] **`string->number` returns `#f` for every `#z`/`#m` string** [Numeric, S, P6.4 crosscheck, pre-existing, divergence]: `(string->number "#z12")` and `"#m1.5"` give `#f` while the reader accepts both. Pinned by `numbers-test.scm` (~:360). Decide divergence versus fix. Site: the prefix loop in `prim_conversion.go`.
+- [ ] **A token-level parse error shadows the stamped tokenizer error** [Reader diagnostics, S, P6.4 crosscheck, pre-existing]: when the shortened token itself fails to parse, the parser's error wins and the located tokenizer error never appears (`#m1ex` says "invalid big float: #m1e", `#z--5`, `#z1.5x`, and the radix rule's `#b-2`). Expected: the located delimiter fault. It also breaks the Reader Diagnostics invariant that the most specific located cause wins (the located tokenizer error is dropped for a coarser one). Site: `ReadSyntax` in `pkg/parser/parser.go` checks the pending tokenizer error only after `readSyntax` succeeds.
+- [ ] **`string->number` returns `#f` for every `#z`/`#m` string** [Numeric, S, P6.4 crosscheck, pre-existing, divergence]: `(string->number "#z12")` and `"#m1.5"` give `#f` while the reader accepts both. Pinned by `test/scheme/numbers-test.scm:360` `(test #f (string->number "#z42"))`. Decide divergence versus fix. Site: the prefix loop (~:141) in `extensions/math/prim_conversion.go`.
+- [ ] **`#z;c` reads zero data with no error** [Reader, XS, P6.4 crosscheck, pre-existing, all revisions]: a bare introducer followed by a comment and EOF yields no datum and no error. Expected: "big integer marker requires a datum". Site: `readNumericIntroducer`.
+- [ ] **`#x1+2i#t` and `#x1@1#t` fail through strconv, not a located delimiter fault** [Reader diagnostics, XS, P6.4 crosscheck, pre-existing]: expected the radix rule's located `MessageExpectingDelimiterAfterNumber`. Site: `requireDelimiterAfterRadixNumeral` and the radix complex/polar scan in `tokenizer_numbers.go`.
 
 ### Closed in Tier 1
 

@@ -3203,10 +3203,23 @@ func TestBigNumNumeralRequiresDelimiter(t *testing.T) {
 
 	// A bare prefix scanned no numeral; the rule does not apply and the
 	// introducer reports it, as on master.
-	for _, in := range []string{"#zabc", "#z'5", "#z,x", "#z", "#m"} {
-		qt.New(t).Run("bare_"+in, func(c *qt.C) {
-			_, err := Tokenize(in, false)
-			c.Check(errors.Is(err, NewTokenizerError(MessageExpectingDelimiterAfterBigNumber)), qt.IsFalse)
+	bare := []struct {
+		input string
+		texts []string
+	}{
+		{"#zabc", []string{"#z", "abc"}},
+		{"#z'5", []string{"#z", "'", "5"}},
+		{"#z,x", []string{"#z", ",", "x"}},
+	}
+	for _, tc := range bare {
+		qt.New(t).Run("bare_"+tc.input, func(c *qt.C) {
+			toks, err := Tokenize(tc.input, false)
+			c.Assert(err, qt.Equals, io.EOF)
+			got := make([]string, 0, len(toks))
+			for _, tk := range toks {
+				got = append(got, tk.String())
+			}
+			c.Check(got, qt.DeepEquals, tc.texts)
 		})
 	}
 
@@ -3230,7 +3243,8 @@ func TestBigNumNumeralRequiresDelimiter(t *testing.T) {
 		{"#m2e3 ", []string{"#m2e3"}},
 		// Tokenizer-only: the parser rejects an l/s/d/f marker as an invalid big float.
 		{"#m2l3 ", []string{"#m2l3"}},
-		// Ends at EOF inside the scan and never reaches the delimiter check.
+		// End of input: the digit scan stops at EOF, or (#m2e3) the check is reached
+		// and skipped because a pending error or EOF is not a fault.
 		{"#z12", []string{"#z12"}},
 		{"#m1.5", []string{"#m1.5"}},
 		{"#m2e3", []string{"#m2e3"}},

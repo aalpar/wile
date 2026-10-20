@@ -211,8 +211,9 @@ func TestParseErrorLocationSurvivesSourcedErrorStamping(t *testing.T) {
 }
 
 // TestBigNumDelimiterErrorReachesEngine pins the #z/#m delimiter rule through
-// the Engine: the tokenizer and parser suites alone stay green with the check
-// deleted, because no other layer exercises a rational or complex #z/#m numeral.
+// the Engine: the read error must survive the compile path with its location
+// and rule name. The tokenizer and parser suites pin the check itself (both go
+// red with it deleted); this row pins that nothing downstream swallows it.
 func TestBigNumDelimiterErrorReachesEngine(t *testing.T) {
 	ctx := context.Background()
 	eng, err := NewEngine(ctx)

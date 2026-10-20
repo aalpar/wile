@@ -178,7 +178,8 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 	//
 	// A bare prefix scanned no numeral (`#zabc`, `#z'5`), and is the introducer
 	// signal the parser splits on, so it is left for readNumericIntroducer to
-	// report; the rule applies only once a sign or digit has been consumed.
+	// report; the rule applies once any rune after the prefix was consumed (sign, digit,
+	// '.', or exponent marker).
 	if p.runeStart != start {
 		p.requireDelimiter(MessageExpectingDelimiterAfterBigNumber)
 	}

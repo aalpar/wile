@@ -704,6 +704,69 @@ numeral (see "A related consequence" below), with its own message. `#z1/2`,
 `#m1/2`, `#m2+3i`, `#z12abc` and `#z1'a` are read errors; they used to read as
 two data (`(#m2+3i)` was the list `(2.0l0 0+3i)`).
 
+**`#m`'s precision is the value's, not the literal's.** `#m1.2345678901234567890123456789`
+keeps every digit, because it is one token the BigFloat reader sees whole.
+`#m#d1.2345678901234567890123456789` goes through the introducer path, so it
+widens an already-rounded `float64`. For arbitrary precision use the unprefixed
+decimal spelling or the `l` marker (see below); `#m` over a prefixed datum is a
+type coercion.
+
+**Note:** R7RS requires implementations to support arbitrarily large exact integers (§6.2.3). Wile satisfies this via automatic overflow promotion from `Integer` (int64) to `BigInteger` — the `#z` prefix is a convenience for explicit construction, not a conformance requirement. Standard R7RS programs never need `#z` or `#m`.
+
+### Exponent Markers Denote Precision
+
+R7RS §6.2.5 makes the exponent markers `s` (short), `f` (single), `d` (double),
+and `l` (long) an **optional** extension, with the escape clause that an
+implementation offering fewer than four internal inexact representations "the
+four size specifications are mapped onto those available". Wile has two, `Float`
+(float64) and `BigFloat` (256-bit), so:
+
+| Marker | Requests | Wile type |
+|--------|----------|-----------|
+| `e` | default precision | `Float` |
+| `s`, `f`, `d` | short / single / double | `Float` |
+| `l` | long | `BigFloat` |
+
+```scheme
+1.5d0  => 1.5      ; a Float
+1.5l0  => 1.5l0    ; a BigFloat
+(exact 1.2345678901234567890123456789l0)  ; keeps all 29 digits
+(exact 1.2345678901234567890123456789d0)  ; rounds to the nearest float64
+```
+
+**This applies on output too.** A `BigFloat` writes with `l`, so `1e1000` reads
+as a BigFloat and writes back as `1l+1000`, and `#m1.5` writes as `1.5l0`.
+Writing `e` would claim default precision, and the value would read back as a
+`Float` — a different type from the one written. Inside a complex number the
+marker is omitted, since a component is not read back as a real.
+
+**Wile is the only Scheme where `l` selects a different representation.** Racket,
+Chez, and MIT all collapse the four markers onto one flonum type, so `1.5l0`
+reads as a plain double everywhere else. Code that relies on the distinction is
+not portable.
+
+**Exponent markers are decimal-only.** `#x1e2` is 482, not 100.0, because `e` is
+a hex digit. R7RS §7.1.1 places `⟨suffix⟩` only inside `⟨decimal 10⟩`, and MIT
+states the same rule ("a numeric representation using a decimal point or an
+exponent marker is not recognized unless radix is 10"). Racket, Chez, and MIT
+nonetheless all accept `#x1s3` = 4096.0, with the exponent base being the
+*radix*; Wile deliberately does not.
+
+### Radix-Prefixed Fractions
+
+R7RS §7.1.1 defines `⟨decimal R⟩` only for R = 10, so a fraction written under a
+radix prefix is outside the standard grammar. Wile accepts it, matching Racket,
+Chez, and MIT:
+
+```scheme
+#x1.8      => 1.5        ; 1 + 8/16
+#o1.4      => 1.5        ; 1 + 4/8
+#b101.101  => 5.625
+#xF.C      => 15.75
+#x.f       => 0.9375
+```
+
+The radix governs the fractional digits too, so `#b1.9` and `#o1.8` are errors.
 As R7RS §6.2.4 requires, a literal written with a decimal point is inexact
 whatever its radix.
 
