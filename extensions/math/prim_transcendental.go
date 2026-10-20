@@ -446,16 +446,22 @@ func PrimSqrt(mc machine.CallContext) error {
 // bigFloatSqrt returns the square root of bf at bf's own precision.
 //
 // The order of the tests is the fix. A NaN BigFloat carries a nan flag over a
-// zero value, so Sign reports 0 for it and any sign test run first would
-// answer as if it were zero; NaN therefore goes first. The sign test goes
-// before the infinity short-circuit: -Inf is negative and takes the branch cut
-// to 0.0+inf.0i, as (sqrt -inf.0) does on the Float arm and in Racket and
-// Chez. Testing infinity before sign would answer -inf.0, which is wrong.
+// zero value, so Sign reports 0 for it and a sign test run first would answer
+// as if it were zero; NaN therefore goes first. The sign test precedes any
+// handling of infinity, and there is none: -Inf is negative, so it takes the
+// branch cut to 0.0+inf.0i, as (sqrt -inf.0) does on the Float arm and in
+// Racket and Chez, and big.Float.Sqrt maps +Inf to +Inf. Short-circuiting an
+// infinite operand before the sign test would answer -inf.0 for -Inf, which
+// is wrong.
 //
 // The negative arm builds its result directly rather than calling
 // (*BigComplex).Sqrt, which opens at DefaultBigFloatPrecision and would
-// return fewer digits than the positive arm. big.Float.Sqrt maps +Inf to
-// +Inf, so -Inf needs no case of its own.
+// return fewer digits than the positive arm for an operand wider than that.
+//
+// Precision policy: sqrt keeps the operand's precision, which big.Float.Sqrt
+// rounds to correctly. exp, log and atan compute at DefaultBigFloatPrecision
+// instead, and so does the BigComplex arm of sqrt; sqrt of a BigFloat is the
+// one transcendental that does not.
 func bigFloatSqrt(bf *values.BigFloat) values.Number {
 	if bf.IsNaN() {
 		return bf

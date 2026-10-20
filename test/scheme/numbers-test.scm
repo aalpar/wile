@@ -62,7 +62,14 @@
   ;; sqrt of negative reals produces complex
   (test #t (< (abs (real-part (sqrt -1))) 1e-10))
   (test #t (< (abs (- (imag-part (sqrt -1)) 1.0)) 1e-10))
-  (test #t (< (abs (- (imag-part (sqrt -4)) 2.0)) 1e-10)))
+  (test #t (< (abs (- (imag-part (sqrt -4)) 2.0)) 1e-10))
+  ;; sqrt of a BigFloat stays a BigFloat; a negative one takes the branch cut,
+  ;; and -inf takes it to +inf imaginary rather than answering -inf
+  (test #t (= (sqrt #m4) 2))
+  (test #f (exact? (sqrt #m4)))
+  (test #t (= (imag-part (sqrt #m-4)) 2))
+  (test #t (= (real-part (sqrt (/ #m-1 #m0))) 0))
+  (test #t (> (imag-part (sqrt (/ #m-1 #m0))) 0)))
 
 ;; ── Exponentiation ──────────────────────────────────────────────────
 
