@@ -15,6 +15,7 @@
 package compilation
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/internal/validate"
@@ -214,4 +215,90 @@ func TestRefIndexIgnoresNilTargets(t *testing.T) {
 	c.Assert(refs.capturedBy(binderNamed(t, body, "a")), qt.IsFalse)
 	c.Assert(refs.assignedBy(nil), qt.IsFalse)
 	c.Assert(newRefIndex(body).capturedBy(nil), qt.IsFalse)
+}
+
+// refIndexAllocRegion builds a lambda body of n calls, each applying k
+// parameters to one another, so the region holds exactly k distinct spellings
+// and k*n occurrences of them. Parameters are binders, not references.
+func refIndexAllocRegion(t *testing.T, k, n int) []validate.ValidatedExpr {
+	t.Helper()
+	names := make([]string, k)
+	for i := range names {
+		names[i] = string(rune('a' + i))
+	}
+	params := strings.Join(names, " ")
+	var b strings.Builder
+	b.WriteString("(lambda (" + params + ")")
+	for i := 0; i < n; i++ {
+		b.WriteString(" (" + params + ")")
+	}
+	b.WriteString(")")
+	return bodyOfLambda(t, b.String())
+}
+
+// TestNewRefIndexAllocatesPerKeyNotPerOccurrence pins that building the index
+// costs allocations proportional to the number of distinct spellings, not to
+// the number of occurrences.
+//
+// The per-key append grew each spelling's slice by doubling, so 1600
+// occurrences over 8 spellings cost 78 allocations on master (8 keys x ~9
+// growth steps, plus map buckets). The bound is 2K+4; the 74 is recorded so the
+// bound can only be tightened.
+func TestNewRefIndexAllocatesPerKeyNotPerOccurrence(t *testing.T) {
+	c := qt.New(t)
+	const k = 8
+	const n = 200
+	body := refIndexAllocRegion(t, k, n)
+
+	var refs refIndex
+	allocs := testing.AllocsPerRun(20, func() {
+		refs = newRefIndex(body)
+	})
+
+	total := 0
+	for _, occ := range refs {
+		total += len(occ)
+	}
+	c.Assert(len(refs), qt.Equals, k)
+	c.Assert(total, qt.Equals, k*n)
+
+	bound := float64(2*k + 4)
+	c.Assert(allocs <= bound, qt.IsTrue,
+		qt.Commentf("K=%d N=%d allocs=%v bound=%v", k, k*n, allocs, bound))
+}
+
+// TestNewRefIndexContents pins what the allocation strategy must not move: each
+// spelling's occurrences in walk order, each slice exactly full so a later add
+// cannot spill into a neighbour's subslice.
+func TestNewRefIndexContents(t *testing.T) {
+	c := qt.New(t)
+	const k = 8
+	const n = 50
+	refs := newRefIndex(refIndexAllocRegion(t, k, n))
+
+	c.Assert(len(refs), qt.Equals, k)
+	for key, occ := range refs {
+		c.Assert(len(occ), qt.Equals, n, qt.Commentf("key %q", key))
+		c.Assert(cap(occ), qt.Equals, n, qt.Commentf("key %q", key))
+		for i, r := range occ {
+			c.Assert(r.sym.Sym.Key, qt.Equals, key)
+			c.Assert(r.origin, qt.Equals, i, qt.Commentf("key %q occurrence %d", key, i))
+		}
+	}
+}
+
+// TestNewRefIndexSizesEveryOccurrenceKind pins that the sizing pass counts the
+// same occurrences the filling pass stores, for each kind newRefIndex records:
+// a read, a set! target, and a live symbol inside an opaque subtree. A kind
+// missed by the count spills its spelling's slice past the reserved capacity,
+// which this catches as cap != len.
+func TestNewRefIndexSizesEveryOccurrenceKind(t *testing.T) {
+	c := qt.New(t)
+	body := bodyOfLambda(t, "(lambda (a b c) (set! a 1) (set! a 2) (a b) (quasiquote ((unquote (set! b 1)) (unquote (set! b 2)) (unquote (set! b 3)) (unquote c))) (c))")
+	refs := newRefIndex(body)
+
+	c.Assert(len(refs) > 0, qt.IsTrue)
+	for key, occ := range refs {
+		c.Assert(cap(occ), qt.Equals, len(occ), qt.Commentf("key %q", key))
+	}
 }

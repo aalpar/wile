@@ -105,7 +105,44 @@ type refIndex map[string][]binderRef
 // agreement, which is exactly what IsOpaqueSubtree's own comment says the
 // frame-release gates depend on not happening.
 func newRefIndex(exprs []validate.ValidatedExpr) refIndex {
-	q := refIndex{}
+	// Two passes over one enumeration, so the pass that sizes the block and the
+	// pass that fills it cannot disagree about which occurrences exist. A
+	// counting walk that skipped a node the filling walk visits would overflow
+	// a key's subslice into its neighbour's.
+	counts := map[string]int{}
+	total := 0
+	forEachBinderRef(exprs, func(r binderRef) {
+		counts[r.sym.Sym.Key]++
+		total++
+	})
+
+	// One backing array for every occurrence, carved into a zero-length,
+	// exactly-sized subslice per spelling; the fill below appends within each
+	// subslice's capacity and so never reallocates. The three-index slice keeps
+	// a subslice's capacity from reaching into the next spelling's.
+	q := make(refIndex, len(counts))
+	block := make([]binderRef, total)
+	off := 0
+	for key, n := range counts {
+		q[key] = block[off : off : off+n]
+		off += n
+	}
+	forEachBinderRef(exprs, func(r binderRef) {
+		q.add(r)
+	})
+	return q
+}
+
+// forEachBinderRef calls visit for every reference occurrence in exprs, in walk
+// order, skipping a set! the validator left without a target. See newRefIndex
+// for what counts as an occurrence.
+func forEachBinderRef(exprs []validate.ValidatedExpr, visit func(binderRef)) {
+	emit := func(r binderRef) {
+		if r.sym == nil {
+			return
+		}
+		visit(r)
+	}
 	var walk func(e validate.ValidatedExpr, origin int, inClosure bool)
 	walk = func(e validate.ValidatedExpr, origin int, inClosure bool) {
 		if e == nil {
@@ -113,12 +150,12 @@ func newRefIndex(exprs []validate.ValidatedExpr) refIndex {
 		}
 		sym, ok := e.(*validate.ValidatedSymbol)
 		if ok {
-			q.add(binderRef{sym: sym.Symbol, origin: origin, inClosure: inClosure})
+			emit(binderRef{sym: sym.Symbol, origin: origin, inClosure: inClosure})
 			return
 		}
 		setBang, ok := e.(*validate.ValidatedSetBang)
 		if ok {
-			q.add(binderRef{sym: setBang.Name, origin: origin, inClosure: inClosure, isSet: true})
+			emit(binderRef{sym: setBang.Name, origin: origin, inClosure: inClosure, isSet: true})
 		}
 		// An opaque subtree — a quasiquote template, a surviving include,
 		// a passthrough body — is reported CHILDLESS by WalkSubExprs, so the
@@ -126,7 +163,7 @@ func newRefIndex(exprs []validate.ValidatedExpr) refIndex {
 		// not empty code: every live symbol in it is a possible set! target and a
 		// possible capture, and validate already computes exactly that set.
 		if validate.ForEachOpaqueLiveSymbol(e, func(sym *syntax.SyntaxSymbol) {
-			q.add(binderRef{sym: sym, origin: origin, inClosure: true, isSet: true})
+			emit(binderRef{sym: sym, origin: origin, inClosure: true, isSet: true})
 		}) {
 			return
 		}
@@ -137,15 +174,11 @@ func newRefIndex(exprs []validate.ValidatedExpr) refIndex {
 	for i, e := range exprs {
 		walk(e, i, false)
 	}
-	return q
 }
 
-// add records one occurrence, ignoring a nil symbol — a set! the validator left
-// without a target names no binding and can match none.
+// add records one occurrence into the subslice newRefIndex reserved for its
+// spelling. The caller has already dropped nil symbols.
 func (p refIndex) add(r binderRef) {
-	if r.sym == nil {
-		return
-	}
 	p[r.sym.Sym.Key] = append(p[r.sym.Sym.Key], r)
 }
 
