@@ -699,6 +699,11 @@ Radix is lexical; exactness is post-hoc.
 `#z1e3`, `#z#x1.8`, and `#z#i#x1f` are all errors. `#m` is the prefix for the
 inexact side, and requires a real.
 
+**A `#z` or `#m` numeral ends at a delimiter**, by the same rule as a radix-prefixed
+numeral (see "A related consequence" below), with its own message. `#z1/2`,
+`#m1/2`, `#m2+3i`, `#z12abc` and `#z1'a` are read errors; they used to read as
+two data (`(#m2+3i)` was the list `(2.0l0 0+3i)`).
+
 **`#m`'s precision is the value's, not the literal's.** `#m1.2345678901234567890123456789`
 keeps every digit, because it is one token the BigFloat reader sees whole.
 `#m#d1.2345678901234567890123456789` goes through the introducer path, so it

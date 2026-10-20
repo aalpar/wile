@@ -209,3 +209,27 @@ func TestParseErrorLocationSurvivesSourcedErrorStamping(t *testing.T) {
 		t.Errorf("parse error %q, want prefix %q", err.Error(), wantPrefix)
 	}
 }
+
+// TestBigNumDelimiterErrorReachesEngine pins the #z/#m delimiter rule through
+// the Engine: the read error must survive the compile path with its location
+// and rule name. The tokenizer and parser suites pin the check itself (both go
+// red with it deleted); this row pins that nothing downstream swallows it.
+func TestBigNumDelimiterErrorReachesEngine(t *testing.T) {
+	ctx := context.Background()
+	eng, err := NewEngine(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer eng.Close()
+
+	_, err = eng.EvalMultipleWithSource(ctx, "(+ 1 2)\n(list #z1/2)", "prog.scm")
+	if err == nil {
+		t.Fatal("expected parse error for #z1/2")
+	}
+	if !strings.HasPrefix(err.Error(), "prog.scm:2:") {
+		t.Errorf("parse error %q, want prefix %q", err.Error(), "prog.scm:2:")
+	}
+	if !strings.Contains(err.Error(), "#z or #m") {
+		t.Errorf("parse error %q does not name the #z/#m rule", err.Error())
+	}
+}

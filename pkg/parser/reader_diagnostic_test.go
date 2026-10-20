@@ -98,6 +98,27 @@ func TestReadErrorNamesPositionCharacterAndState(t *testing.T) {
 			"index 0", "line 1", "column 0",
 			`#\\qqq`, "char-mnemonic",
 		},
+	}, {
+		// #z and #m carry their own rule and state, not the radix numeral's:
+		// the diagnostic must say which rule broke and name the big-number state.
+		name: "bigint_rational_leaves_a_second_datum", src: "#z1/2",
+		wantLoc: "in.scm:1:3",
+		wantText: []string{
+			tokenizer.MessageExpectingDelimiterAfterBigNumber,
+			"index 3", "line 1", "column 3",
+			`'/'`, "U+002F",
+			"big-integer",
+		},
+	}, {
+		// A fault after a well-formed datum, on the second line.
+		name: "bigfloat_complex_after_a_datum", src: "(a b)\n#m2+3i",
+		wantLoc: "in.scm:2:3",
+		wantText: []string{
+			tokenizer.MessageExpectingDelimiterAfterBigNumber,
+			"index 9", "line 2", "column 3",
+			`'+'`, "U+002B",
+			"big-float",
+		},
 	}}
 
 	for _, tc := range tcs {

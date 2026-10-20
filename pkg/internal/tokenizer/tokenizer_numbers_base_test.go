@@ -15,6 +15,7 @@
 package tokenizer
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -3145,6 +3146,113 @@ func TestRadixNumeralRequiresDelimiter(t *testing.T) {
 		// oversight — see TODO.md "Delimiter termination for decimal numerals".
 		{"1abc", []string{"1", "abc"}},
 		{"1000abc", []string{"1000", "abc"}},
+	}
+	for _, tc := range unchanged {
+		qt.New(t).Run(tc.input, func(c *qt.C) {
+			toks, err := Tokenize(tc.input, false)
+			c.Assert(err, qt.Equals, io.EOF)
+			got := make([]string, 0, len(toks))
+			for _, tk := range toks {
+				got = append(got, tk.String())
+			}
+			c.Check(got, qt.DeepEquals, tc.texts)
+		})
+	}
+}
+
+// TestBigNumNumeralRequiresDelimiter pins that a #z or #m numeral ends at a
+// delimiter and names its own rule when it does not. The message is asserted per
+// row, and against the radix message as well: TestRadixNumeralRequiresDelimiter
+// asserts one message for every row, so a #z/#m row cannot live there, and a
+// borrowed radix message would say "radix-prefixed" about a numeral that has no
+// radix.
+//
+// The rejected rows are the shapes the scanner does not own: #z and #m read a
+// decimal integer or real, so a rational or a complex stops at '/' or the sign
+// and used to leave the remainder behind as a second datum. #z1.5 is not here;
+// the tokenizer has always accepted it and the parser rejects it.
+func TestBigNumNumeralRequiresDelimiter(t *testing.T) {
+	rejected := []struct {
+		input string
+		why   string
+	}{
+		{"#z1/2", "a big-integer numeral has no rational form, so /2 was a second datum"},
+		{"#m1/2", "a big-float numeral has no rational form, so /2 was a second datum"},
+		{"#m2+3i", "the imaginary part of a big-float complex became a second datum"},
+		{"#z12abc", "trailing symbol characters were a second datum"},
+		{"#m1.5x", "trailing symbol characters after a decimal were a second datum"},
+		{"(#m1/2)", "inside a list the second datum also read as a list element"},
+		{"#m1e3+2i", "a complex after an exponent was a second datum"},
+		{"#m2e3x", "trailing symbol characters after an exponent were a second datum"},
+		{"#z1'a", "a quote character is not a delimiter; (1 'a) was read on master"},
+		{"#z1`a", "a quasiquote character is not a delimiter"},
+		{"#z1,a", "an unquote character is not a delimiter"},
+	}
+	for _, tc := range rejected {
+		qt.New(t).Run(tc.input, func(c *qt.C) {
+			_, err := Tokenize(tc.input, false)
+			c.Assert(err, qt.ErrorMatches, ".*"+MessageExpectingDelimiterAfterBigNumber+".*",
+				qt.Commentf("%s", tc.why))
+			c.Check(errors.Is(err, NewTokenizerError(MessageExpectingDelimiterAfterNumber)), qt.IsFalse,
+				qt.Commentf("%s: a #z/#m fault must not borrow the radix rule's message", tc.input))
+		})
+	}
+	// The message names both prefixes, whichever one the numeral carried.
+	_, err := Tokenize("#z1/2", false)
+	qt.New(t).Check(err, qt.ErrorMatches, `.*#z or #m.*`)
+
+	// A bare prefix scanned no numeral; the rule does not apply and the
+	// introducer reports it, as on master.
+	bare := []struct {
+		input string
+		texts []string
+	}{
+		{"#zabc", []string{"#z", "abc"}},
+		{"#z'5", []string{"#z", "'", "5"}},
+		{"#z,x", []string{"#z", ",", "x"}},
+	}
+	for _, tc := range bare {
+		qt.New(t).Run("bare_"+tc.input, func(c *qt.C) {
+			toks, err := Tokenize(tc.input, false)
+			c.Assert(err, qt.Equals, io.EOF)
+			got := make([]string, 0, len(toks))
+			for _, tk := range toks {
+				got = append(got, tk.String())
+			}
+			c.Check(got, qt.DeepEquals, tc.texts)
+		})
+	}
+
+	// Every delimiter character ends the numeral.
+	for _, d := range []string{" ", "\t", "\n", "\r", ")", "]", ";", "\"", "|", "(", "["} {
+		qt.New(t).Run(fmt.Sprintf("delimiter_%q", d), func(c *qt.C) {
+			_, err := Tokenize("#z12"+d, false)
+			c.Check(errors.Is(err, NewTokenizerError(MessageExpectingDelimiterAfterBigNumber)), qt.IsFalse)
+		})
+	}
+
+	// Green controls: each is a single numeral token, so the fault above is the
+	// delimiter rule and not a general refusal of #z and #m.
+	unchanged := []struct {
+		input string
+		texts []string
+	}{
+		{"#z12 ", []string{"#z12"}},
+		{"#z-5 ", []string{"#z-5"}},
+		{"#m1.5)", []string{"#m1.5", ")"}},
+		{"#m2e3 ", []string{"#m2e3"}},
+		// Tokenizer-only: the parser rejects an l/s/d/f marker as an invalid big float.
+		{"#m2l3 ", []string{"#m2l3"}},
+		// End of input: the digit scan stops at EOF, or (#m2e3) the check is reached
+		// and skipped because a pending error or EOF is not a fault.
+		{"#z12", []string{"#z12"}},
+		{"#m1.5", []string{"#m1.5"}},
+		{"#m2e3", []string{"#m2e3"}},
+		{"#z1)", []string{"#z1", ")"}},
+		{"#m1.5 #z2", []string{"#m1.5", "#z2"}},
+		{"#z1;c", []string{"#z1", ";c"}},
+		{"#z1#t", []string{"#z1", "#t"}}, // '#' marks a prefix, as after a radix numeral
+		{"#z#x1f", []string{"#z", "#x", "1f"}},
 	}
 	for _, tc := range unchanged {
 		qt.New(t).Run(tc.input, func(c *qt.C) {

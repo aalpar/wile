@@ -70,6 +70,19 @@ func TestTokenizerErrorCarriesScannerState(t *testing.T) {
 		wantMess:  MessageExpectingByteVectorPrefix,
 		wantIndex: 2, wantCol: 2, wantLine: 1,
 		wantRune: '9', wantState: TokenizerStateFailed,
+	}, {
+		// #z and #m carry their own rule: neither is a radix prefix, so the fault
+		// must not borrow the radix message. State is the big-number state, not
+		// the integer state a radix numeral is scanned in.
+		name: "bigint_rational_leaves_a_second_datum", src: "#z1/2",
+		wantMess:  MessageExpectingDelimiterAfterBigNumber,
+		wantIndex: 3, wantCol: 3, wantLine: 1,
+		wantRune: '/', wantState: TokenizerStateBigInteger,
+	}, {
+		name: "bigfloat_complex_leaves_a_second_datum", src: "#m2+3i",
+		wantMess:  MessageExpectingDelimiterAfterBigNumber,
+		wantIndex: 3, wantCol: 3, wantLine: 1,
+		wantRune: '+', wantState: TokenizerStateBigFloat,
 	}}
 
 	for _, tc := range tcs {

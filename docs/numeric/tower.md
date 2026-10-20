@@ -191,10 +191,9 @@ whatever the inner datum's prefixes decided.
 | `#m…` | `BigFloat` | datum must be real; precision is the value's |
 | `1+2i` | `BigComplex` if both parts exact, else `Complex` | |
 
-One gap in the introducer rule: when digits follow `#z` or `#m` directly, the
-scan stops at the first character it does not recognize instead of reading a
-complete datum, so `#m1+2i` reads as `1.0l0` followed by `+2i`, and `#z1/2` as
-`1` followed by the symbol `/2`.
+A `#z` or `#m` numeral ends at a delimiter: the scan reads a decimal integer
+or real, so `#m1+2i` and `#z1/2` are read errors, not a numeral followed by a
+second datum.
 
 **Exponent markers.** R7RS §6.2.5 makes `s`/`f`/`d`/`l` an optional precision
 request, and lets an implementation with fewer than four inexact representations
