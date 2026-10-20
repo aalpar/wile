@@ -258,7 +258,7 @@ func assertOneBlock(c *qt.C, refs refIndex) {
 	sort.Slice(spans, func(i, j int) bool {
 		return spans[i].lo < spans[j].lo
 	})
-	size := reflect.TypeOf(binderRef{}).Size()
+	size := reflect.TypeFor[binderRef]().Size()
 	for i, s := range spans {
 		c.Assert(s.capacity, qt.Equals, s.n, qt.Commentf("span %d", i))
 		if i == 0 {
