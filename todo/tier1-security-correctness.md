@@ -607,7 +607,7 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   (`DenotedForm` is `""` here). Site: `PrimNullEnvironment` (`extensions/eval/prim_eval.go`).
 - [ ] Go ER transformers receive plain symbols, so `(datum->syntax (car f) …)` fails where the
   Scheme syntax forms work. (The whole-clause `_` half closed with P4.4, 2026-10-15.)
-- [ ] Numeric: `(sqrt #m2)` raises (`PrimSqrt` has no `BigFloat` case); the Inf/NaN guard in
+- [ ] Numeric: ~~`(sqrt #m2)` raises (`PrimSqrt` has no `BigFloat` case)~~ (done by P6.1, 2026-10-19); the Inf/NaN guard in
   `pkg/values/promotion.go` (`lubIsComplex` branch) rounds a `BigComplex` operand to float64.
 - [ ] Algebra: `run-analysis` returns all-`#f` outputs for a 3-block forward chain where block 1
   should be `#t`; `rewrite` treats the term comparison as boolean, `unification` as three-way
