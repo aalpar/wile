@@ -16,6 +16,7 @@ package values
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -459,4 +460,182 @@ func TestFloatBigComplexGuard_ResultType(t *testing.T) {
 	_, isComplex := result.(*Complex)
 	_, isBigComplex := result.(*BigComplex)
 	c.Assert(isBigComplex, qt.IsTrue, qt.Commentf("expected *BigComplex, got float=%v complex=%v actual=%T", isFloat, isComplex, result))
+}
+
+// TestSpecialFloatBigComplex_ImaginaryDigits pins I175: an Inf/NaN Float meeting
+// a BigComplex used to round BOTH components through complex128, so the
+// untouched imaginary component came back at float64 precision (the result still
+// printed as a BigComplex, which hides the loss). The additive rows assert the
+// exact imaginary digits. The multiplicative rows pin today's complex128 route so
+// a change to it is deliberate: it is right while the BigComplex parts fit in
+// float64 and wrong beyond (filed in todo/tier1-security-correctness.md).
+func TestSpecialFloatBigComplex_ImaginaryDigits(t *testing.T) {
+	c := qt.New(t)
+
+	const digits = "9.87654321098765432109876543210987"
+	imPart := NewBigFloatFromString(digits)
+	c.Assert(imPart, qt.IsNotNil)
+	z := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(0), imPart)
+	negZeroImag := NewBigComplexFromBigFloats(
+		NewBigFloatFromFloat64(0),
+		NewBigFloatFromFloat64(math.Copysign(0, -1)),
+	)
+
+	// A finite real part beyond float64 range: float64 would make it -Inf, and
+	// +inf.0 + -inf.0 is NaN where the true sum is +inf.0.
+	hugeNegReal := NewBigComplexFromBigFloats(
+		NewBigFloatFromString("-1e400"),
+		NewBigFloatFromFloat64(1),
+	)
+
+	// An exact imaginary part rounds to float64 like every other inexact-contagion
+	// path; it must not be lifted to the 256-bit default precision.
+	thirdImag := NewBigComplex(NewBigIntegerFromInt64(1), NewRational(1, 3))
+	hugeImag := NewBigComplex(
+		NewBigIntegerFromInt64(1),
+		NewBigIntegerFromString("1"+strings.Repeat("0", 400), 10),
+	)
+
+	// A real part that is itself infinite is not clamped: +inf + -inf is NaN.
+	infReal := NewBigComplexFromBigFloats(
+		NewBigFloatFromFloat64(math.Inf(1)),
+		NewBigFloatFromFloat64(1),
+	)
+
+	posZeroImag := NewBigComplexFromBigFloats(
+		NewBigFloatFromFloat64(0),
+		NewBigFloatFromFloat64(0),
+	)
+
+	inf := NewFloat(math.Inf(1))
+	negInf := NewFloat(math.Inf(-1))
+	nan := NewFloat(math.NaN())
+
+	add := func(a, b Number) Number {
+		return a.Add(b)
+	}
+	sub := func(a, b Number) Number {
+		return a.Subtract(b)
+	}
+
+	// imagWant is the exact imaginary component the additive result must carry.
+	tcs := []struct {
+		name     string
+		got      Number
+		realWant string
+		imagWant Number
+	}{
+		{"z + +inf.0", add(z, inf), "+inf.0", imPart},
+		{"+inf.0 + z", add(inf, z), "+inf.0", imPart},
+		{"z - +inf.0", sub(z, inf), "-inf.0", imPart},
+		{"+inf.0 - z", sub(inf, z), "+inf.0", imPart.Negate()},
+		{"z + +nan.0", add(z, nan), "+nan.0", imPart},
+		{"+nan.0 + z", add(nan, z), "+nan.0", imPart},
+		{"z - +nan.0", sub(z, nan), "+nan.0", imPart},
+		{"+nan.0 - z", sub(nan, z), "+nan.0", imPart.Negate()},
+		{"huge-real z + +inf.0 stays +inf.0", add(hugeNegReal, inf), "+inf.0", NewBigFloatFromFloat64(1)},
+		{"+inf.0 - huge-real z stays +inf.0", sub(inf, hugeNegReal), "+inf.0", NewBigFloatFromFloat64(-1)},
+		{"huge-real z + +nan.0 is nan", add(hugeNegReal, nan), "+nan.0", NewBigFloatFromFloat64(1)},
+		{"1+1/3i + +inf.0: exact imag rounds to float64", add(thirdImag, inf), "+inf.0", NewBigFloatFromFloat64(1.0 / 3)},
+		{"+inf.0 - 1+1/3i: exact imag rounds then negates", sub(inf, thirdImag), "+inf.0", NewBigFloatFromFloat64(-1.0 / 3)},
+		{"1+10^400i + +inf.0: exact imag overflows to inf", add(hugeImag, inf), "+inf.0", NewBigFloatFromFloat64(math.Inf(1))},
+		{"+inf-real z + -inf.0 is nan, not clamped", add(infReal, negInf), "+nan.0", NewBigFloatFromFloat64(1)},
+		{"+inf-real z - +inf.0 is nan, not clamped", sub(infReal, inf), "+nan.0", NewBigFloatFromFloat64(1)},
+		{"+inf.0 - (+0.0i) is -0.0i, not 0.0 - 0.0", sub(inf, posZeroImag), "+inf.0", NewBigFloatFromFloat64(math.Copysign(0, -1))},
+		{"(-0.0i) + +inf.0 keeps the sign", add(negZeroImag, inf), "+inf.0", NewBigFloatFromFloat64(math.Copysign(0, -1))},
+		{"+inf.0 - (-0.0i) negates it", sub(inf, negZeroImag), "+inf.0", NewBigFloatFromFloat64(0)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			bc, ok := tc.got.(*BigComplex)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected *BigComplex, got %T", tc.got))
+			c.Assert(bc.RealAsBigFloat().SchemeString(), qt.Equals, tc.realWant)
+			c.Assert(bc.Imag().EqualTo(tc.imagWant), qt.IsTrue,
+				qt.Commentf("imag = %s, want %s", bc.Imag().SchemeString(), tc.imagWant.SchemeString()))
+		})
+	}
+
+	mul := func(a, b Number) Number {
+		return a.Multiply(b)
+	}
+	div := func(a, b Number) Number {
+		q, err := a.Divide(b)
+		c.Assert(err, qt.IsNil)
+		return q
+	}
+	guards := []struct {
+		name string
+		got  Number
+		want string
+	}{
+		{"z * +inf.0", mul(z, inf), "+nan.0+inf.0i"},
+		{"+inf.0 * z", mul(inf, z), "+nan.0+inf.0i"},
+		{"z * +nan.0", mul(z, nan), "+nan.0+nan.0i"},
+		{"z / +inf.0", div(z, inf), "0.0+0.0i"},
+		// Agrees with Chez, Racket and the plain-Complex arm for (/ +inf.0 0+9.87i).
+		{"+inf.0 / z", div(inf, z), "+nan.0-inf.0i"},
+		{"z / +nan.0", div(z, nan), "+nan.0+nan.0i"},
+	}
+	for _, tc := range guards {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			c.Assert(tc.got.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestSpecialFloatBigComplex_ExactImagAgreesWithFiniteAdd pins that an exact
+// imaginary part takes the same value through the Inf path as through the finite
+// path (contagionOverParts), so (+ +inf.0 1+1/3i) and (+ 1.0 1+1/3i) agree on it.
+func TestSpecialFloatBigComplex_ExactImagAgreesWithFiniteAdd(t *testing.T) {
+	c := qt.New(t)
+
+	z := NewBigComplex(NewBigIntegerFromInt64(1), NewRational(1, 3))
+	viaInf, ok := NewFloat(math.Inf(1)).Add(z).(*BigComplex)
+	c.Assert(ok, qt.IsTrue)
+	viaFinite, ok := NewFloat(1).Add(z).(*BigComplex)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(viaInf.Imag().EqualTo(viaFinite.Imag()), qt.IsTrue,
+		qt.Commentf("inf path %s, finite path %s", viaInf.Imag().SchemeString(), viaFinite.Imag().SchemeString()))
+}
+
+// TestSpecialFloatBigFloat_OutOfRangeIsFinite pins the BigFloat twin of the
+// clamp: a FINITE BigFloat beyond float64 range converts to +-Inf, which made
+// (+ +inf.0 #m-1e400) NaN (Inf + -Inf) where the true sum is +inf.0.
+func TestSpecialFloatBigFloat_OutOfRangeIsFinite(t *testing.T) {
+	inf := NewFloat(math.Inf(1))
+	hugePos := NewBigFloatFromString("1e400")
+	hugeNeg := NewBigFloatFromString("-1e400")
+
+	divide := func(a, b Number) Number {
+		q, err := a.Divide(b)
+		if err != nil {
+			panic(err)
+		}
+		return q
+	}
+
+	negInfBig := NewBigFloatFromFloat64(math.Inf(-1))
+
+	tcs := []struct {
+		name string
+		got  Number
+		want string
+	}{
+		// An INFINITE BigFloat partner is not clamped: +inf + -inf is NaN.
+		{"+inf.0 + -inf BigFloat is nan", inf.Add(negInfBig), "+nan.0"},
+		{"+inf.0 + -1e400", inf.Add(hugeNeg), "+inf.0"},
+		{"-1e400 + +inf.0", hugeNeg.Add(inf), "+inf.0"},
+		{"+inf.0 - 1e400", inf.Subtract(hugePos), "+inf.0"},
+		{"1e400 - +inf.0", hugePos.Subtract(inf), "-inf.0"},
+		{"+inf.0 / 1e400", divide(inf, hugePos), "+inf.0"},
+		{"1e400 / +inf.0", divide(hugePos, inf), "0.0"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			c.Assert(tc.got.SchemeString(), qt.Equals, tc.want)
+		})
+	}
 }

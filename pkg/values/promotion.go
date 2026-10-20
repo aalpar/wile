@@ -490,8 +490,15 @@ func NumberToComplex128Lossy(n Number) complex128 {
 // case, preserving the *Float return type.
 //
 // For the Float×BigComplex → BigComplex case, the guard uses complex128
-// arithmetic but wraps the result in BigComplex (not Complex) so the imaginary
-// part of the BigComplex operand is preserved. This is the fix for issue #362.
+// arithmetic but wraps the result in BigComplex (not Complex) so the result is
+// still a BigComplex (issue #362). complex128 rounds BOTH components, though,
+// including the BigComplex operand's imaginary part, which a real Inf/NaN has no
+// way to change. bigComplexSpecialOp, when non-nil, replaces that route: it owns
+// the whole result and keeps a BigFloat imaginary part exact (I175). Add and
+// subtract supply one. Multiply passes nil and keeps the complex128 route;
+// makeDivideDispatch has its own copy of that route. The route is right for
+// them only while the BigComplex's parts fit in float64 (0*Inf makes the real
+// part NaN, which an additive rule cannot reproduce).
 func makeArithmeticDispatch[T Number](
 	srcKind NumericKind,
 	sameTypeOp func(T, Number) Number,
@@ -499,6 +506,7 @@ func makeArithmeticDispatch[T Number](
 	float64Op func(float64, float64) float64,
 	complex128Op func(complex128, complex128) complex128,
 	realComplexOp func(float64, complex128) complex128,
+	bigComplexSpecialOp func(p, o Number) Number,
 ) [numKinds]func(T, Number) Number {
 	ensurePromotionInit()
 	var table [numKinds]func(T, Number) Number
@@ -514,6 +522,19 @@ func makeArithmeticDispatch[T Number](
 		// IEEE 754 special-value guard: when Float is the receiver and the LUB
 		// goes beyond float64/complex128, short-circuit for Inf/NaN values.
 		lubNeedsGuard := lubKind != KindFloat && lubKind != KindComplex
+
+		// The special Float meets a BigComplex: the result stays a BigComplex so
+		// the imaginary part is not demoted to a Complex (#362).
+		specialBigComplex := func(p T, o Number) Number {
+			if bigComplexSpecialOp != nil {
+				return bigComplexSpecialOp(p, o)
+			}
+			z := complex128Op(NumberToComplex128Lossy(p), NumberToComplex128Lossy(o))
+			return NewBigComplexFromBigFloats(
+				NewBigFloatFromFloat64(real(z)),
+				NewBigFloatFromFloat64(imag(z)),
+			)
+		}
 
 		switch {
 		case dstKind == KindComplex && lubKind == KindComplex:
@@ -535,15 +556,9 @@ func makeArithmeticDispatch[T Number](
 			table[dstKind] = func(p T, o Number) Number {
 				if isSpecialFloat(any(p).(*Float)) {
 					if lubIsComplex {
-						// Return BigComplex so the imaginary part of the
-						// BigComplex operand is preserved (fix for #362).
-						z := complex128Op(NumberToComplex128Lossy(p), NumberToComplex128Lossy(o))
-						return NewBigComplexFromBigFloats(
-							NewBigFloatFromFloat64(real(z)),
-							NewBigFloatFromFloat64(imag(z)),
-						)
+						return specialBigComplex(p, o)
 					}
-					return NewFloat(float64Op(NumberToFloat64(p), NumberToFloat64(o)))
+					return NewFloat(float64Op(finiteClampedFloat64(p), finiteClampedFloat64(o)))
 				}
 				return applyOp(promSrc(p), promDst(o))
 			}
@@ -553,13 +568,9 @@ func makeArithmeticDispatch[T Number](
 			table[dstKind] = func(p T, o Number) Number {
 				if isSpecialFloat(o.(*Float)) {
 					if lubIsComplex {
-						z := complex128Op(NumberToComplex128Lossy(p), NumberToComplex128Lossy(o))
-						return NewBigComplexFromBigFloats(
-							NewBigFloatFromFloat64(real(z)),
-							NewBigFloatFromFloat64(imag(z)),
-						)
+						return specialBigComplex(p, o)
 					}
-					return NewFloat(float64Op(NumberToFloat64(p), NumberToFloat64(o)))
+					return NewFloat(float64Op(finiteClampedFloat64(p), finiteClampedFloat64(o)))
 				}
 				return applyOp(promSrc(p), promDst(o))
 			}
@@ -570,6 +581,87 @@ func makeArithmeticDispatch[T Number](
 		}
 	}
 	return table
+}
+
+// bigComplexSpecialAdd is makeAddDispatch's bigComplexSpecialOp: one operand is
+// an Inf/NaN Float, the other a BigComplex. The real component is a float64 sum,
+// where the Inf/NaN decides the answer and precision is moot. The imaginary
+// component is the BigComplex's own, untouched: a real addend has none to add,
+// and routing it through complex128 would round it to 53 bits.
+func bigComplexSpecialAdd(p, o Number) Number {
+	re := finiteClampedFloat64(p) + finiteClampedFloat64(o)
+	z := bigComplexOperand(p, o)
+	return NewBigComplexFromBigFloats(NewBigFloatFromFloat64(re), specialImaginaryPart(z))
+}
+
+// bigComplexSpecialSubtract is makeSubtractDispatch's bigComplexSpecialOp, p - o.
+// When the BigComplex is the subtrahend its imaginary part is NEGATED, not
+// subtracted from 0.0: IEEE turns 0.0 - (+0.0) into +0.0 and the sign dies (the
+// same hazard realSubtractComplex avoids).
+func bigComplexSpecialSubtract(p, o Number) Number {
+	re := finiteClampedFloat64(p) - finiteClampedFloat64(o)
+	z, ok := p.(*BigComplex)
+	if ok {
+		return NewBigComplexFromBigFloats(NewBigFloatFromFloat64(re), specialImaginaryPart(z))
+	}
+	return NewBigComplexFromBigFloats(
+		NewBigFloatFromFloat64(re),
+		negatedBigFloat(specialImaginaryPart(o.(*BigComplex))),
+	)
+}
+
+// specialImaginaryPart is the imaginary part z carries into a special-float
+// result. A BigFloat part is kept exactly. An exact part (BigInteger, Rational)
+// rounds to float64, as every other inexact-contagion path does
+// (contagionOverParts), so (+ +inf.0 1+1/3i) and (+ 1.0 1+1/3i) agree on it.
+func specialImaginaryPart(z *BigComplex) *BigFloat {
+	im, ok := z.Imag().(*BigFloat)
+	if ok {
+		return im
+	}
+	return NewBigFloatFromFloat64(NumberToFloat64(z.Imag()))
+}
+
+// negatedBigFloat returns -x as a *BigFloat (BigFloat.Negate answers a Number).
+func negatedBigFloat(x *BigFloat) *BigFloat {
+	q, ok := x.Negate().(*BigFloat)
+	if !ok {
+		panic(werr.WrapForeignErrorf(werr.ErrInternal, "negatedBigFloat: Negate returned %T", x.Negate()))
+	}
+	return q
+}
+
+// finiteClampedFloat64 is the float64 an Inf/NaN guard computes with for one
+// operand: the operand itself when it is a Float, else its value (a BigComplex
+// contributes its real part). A FINITE value beyond float64 range converts to
+// +-Inf, which would turn (+ +inf.0 #m-1e400) into Inf + -Inf = NaN instead of
+// +inf.0; it is clamped to +-MaxFloat64 instead, still finite, so the Inf/NaN on
+// the other side decides the answer exactly as it would at any magnitude.
+func finiteClampedFloat64(n Number) float64 {
+	z, ok := n.(*BigComplex)
+	if !ok {
+		return clampIfFinite(NumberToFloat64(n), n.IsFinite())
+	}
+	return clampIfFinite(real(NumberToComplex128Lossy(z)), z.Real().IsFinite())
+}
+
+// clampIfFinite maps +-Inf to +-MaxFloat64 when the value it came from was finite.
+func clampIfFinite(f float64, wasFinite bool) float64 {
+	if math.IsInf(f, 0) && wasFinite {
+		return math.Copysign(math.MaxFloat64, f)
+	}
+	return f
+}
+
+// bigComplexOperand returns whichever of p, o is the BigComplex. The dispatch
+// guard only calls its special op for a (special Float, BigComplex) pair, in
+// either order.
+func bigComplexOperand(p, o Number) *BigComplex {
+	z, ok := p.(*BigComplex)
+	if ok {
+		return z
+	}
+	return o.(*BigComplex)
 }
 
 // makeAddDispatch generates a dispatch table for the Add operation.
@@ -585,6 +677,7 @@ func makeAddDispatch[T Number](srcKind NumericKind, sameTypeAdd func(T, Number) 
 			return a + b
 		},
 		realAddComplex,
+		bigComplexSpecialAdd,
 	)
 }
 
@@ -601,6 +694,7 @@ func makeSubtractDispatch[T Number](srcKind NumericKind, sameTypeSub func(T, Num
 			return a - b
 		},
 		realSubtractComplex,
+		bigComplexSpecialSubtract,
 	)
 }
 
@@ -617,6 +711,7 @@ func makeMultiplyDispatch[T Number](srcKind NumericKind, sameTypeMul func(T, Num
 			return a * b
 		},
 		realMultiplyComplex,
+		nil,
 	)
 }
 
@@ -663,7 +758,7 @@ func makeDivideDispatch[T Number](
 							NewBigFloatFromFloat64(imag(z)),
 						), nil
 					}
-					return NewFloat(NumberToFloat64(p) / NumberToFloat64(o)), nil
+					return NewFloat(finiteClampedFloat64(p) / finiteClampedFloat64(o)), nil
 				}
 				return promSrc(p).Divide(promDst(o))
 			}
@@ -679,7 +774,7 @@ func makeDivideDispatch[T Number](
 							NewBigFloatFromFloat64(imag(z)),
 						), nil
 					}
-					return NewFloat(NumberToFloat64(p) / NumberToFloat64(o)), nil
+					return NewFloat(finiteClampedFloat64(p) / finiteClampedFloat64(o)), nil
 				}
 				return promSrc(p).Divide(promDst(o))
 			}
