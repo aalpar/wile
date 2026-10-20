@@ -46,10 +46,12 @@ func NewChainFileResolver(resolvers []environment.FileResolver) *ChainFileResolv
 }
 
 // ResolveAndOpen tries each resolver in order, returning the first successful
-// result. The reported failure is the last resolver's, which is the only one
-// that searched to the end of the chain.
+// result. A total miss reports EVERY arm that searched, joined, so the message
+// names each source consulted rather than only the last; the join still
+// satisfies errors.Is for the sentinels its members wrap. A refusal the chain
+// may not look past returns immediately and alone, unchanged.
 func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error) {
-	var lastErr error
+	var misses []error
 	for i, r := range p.resolvers {
 		f, resolved, err := r.ResolveAndOpen(ctx, path)
 		if err == nil {
@@ -58,9 +60,9 @@ func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs
 		if !p.continuesPast(err, i) {
 			return nil, "", err
 		}
-		lastErr = err
+		misses = append(misses, err)
 	}
-	return nil, "", lastErr
+	return nil, "", errors.Join(misses...)
 }
 
 // continuesPast reports whether the chain may look in resolvers[i+1:] after

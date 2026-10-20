@@ -731,6 +731,46 @@ func TestChainFileResolver_AllMiss(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
 }
 
+// taggedAbsence is a FileResolver that always reports the file absent, naming
+// itself in the message so a test can tell which arm's failure survived.
+type taggedAbsence struct {
+	tag string
+}
+
+func (r taggedAbsence) ResolveAndOpen(_ context.Context, path string) (fs.File, string, error) {
+	return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "%s: %s not found", r.tag, path)
+}
+
+// TestChainFileResolver_AllMissReportsEveryArm pins that a total miss names
+// every arm that searched, not only the last: the joined error must still
+// satisfy errors.Is(ErrFileNotFound) for callers that branch on absence.
+func TestChainFileResolver_AllMissReportsEveryArm(t *testing.T) {
+	r := NewChainFileResolver([]environment.FileResolver{
+		taggedAbsence{tag: "arm-one"},
+		taggedAbsence{tag: "arm-two"},
+		taggedAbsence{tag: "arm-three"},
+	})
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "missing.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
+	qt.Assert(t, err.Error(), qt.Contains, "arm-one: missing.scm not found")
+	qt.Assert(t, err.Error(), qt.Contains, "arm-two: missing.scm not found")
+	qt.Assert(t, err.Error(), qt.Contains, "arm-three: missing.scm not found")
+}
+
+// TestChainFileResolver_SingleArmMissMessageUnchanged pins that a one-arm
+// chain renders its arm's message exactly: the join of one error adds nothing.
+func TestChainFileResolver_SingleArmMissMessageUnchanged(t *testing.T) {
+	arm := taggedAbsence{tag: "only"}
+	r := NewChainFileResolver([]environment.FileResolver{arm})
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "missing.scm")
+	_, _, want := arm.ResolveAndOpen(context.Background(), "missing.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, err.Error(), qt.Equals, want.Error())
+}
+
 // TestChainFileResolver_DenialFallsThroughToADifferentSource pins the other
 // half of the denial protocol, the half the WithSourceFS + WithSourceOS pairing
 // depends on.

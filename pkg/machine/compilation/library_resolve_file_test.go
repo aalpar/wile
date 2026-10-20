@@ -62,3 +62,22 @@ func TestResolveLibraryFile_HardSldErrorDoesNotFallThroughToScm(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsFalse,
 		qt.Commentf("a permission failure is not an absence"))
 }
+
+// pathReportingAbsence reports every path absent and names the path it was
+// asked for, so a test can see which extension probes survived into the error.
+type pathReportingAbsence struct{}
+
+func (pathReportingAbsence) ResolveAndOpen(_ context.Context, path string) (fs.File, string, error) {
+	return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "probe %s", path)
+}
+
+// TestResolveLibraryFileReportsEveryExtension pins that a library miss names
+// the probe for every recognized extension, not only the last one tried. The
+// early return on a non-absence error is pinned by the test above.
+func TestResolveLibraryFileReportsEveryExtension(t *testing.T) {
+	_, _, err := ResolveLibraryFile(context.Background(), pathReportingAbsence{}, NewLibraryName("scheme", "nonexistent-xyz"))
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
+	qt.Assert(t, err.Error(), qt.Contains, "probe scheme/nonexistent-xyz.sld")
+	qt.Assert(t, err.Error(), qt.Contains, "probe scheme/nonexistent-xyz.scm")
+}
