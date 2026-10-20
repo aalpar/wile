@@ -694,6 +694,7 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 ### Term Protocol
 
 - `(sexp-term-protocol compare)` -- term protocol for S-expression terms: compound terms are pairs `(op arg ...)`, atoms are leaves; compare orders atoms for commutativity normalization and must handle all atom types in terms
+- `(sexp-atom-compare a b)` -- the stdlib's boolean comparator for `sexp-term-protocol`: true when `a`'s written form sorts before `b`'s; a strict total order over any atom type
 
 ### Recursive Normalizer
 
@@ -1034,7 +1035,7 @@ Syntactic and AC-modulo unification. Pattern variables as records, substitutions
 - `(ac-match pattern subject theory proto)` -- match pattern against subject modulo AC operators in theory (operators in the theory's associative-ops that also carry a commutativity axiom); returns list of substitutions (empty = no match)
 - `(ac-unify t1 t2 theory proto)` -- two-sided AC unification; returns a CSU (complete set of unifiers) as a list of substitutions
 
-Both procedures call the protocol's compare as a three-way comparator and test its result with `zero?` for term equality. That differs from `(wile algebra rewrite)`, which calls the same compare as a boolean "sorts before" predicate, so a protocol built for one library is not usable with the other.
+Both procedures call the protocol's compare as the same boolean "sorts before" predicate `(wile algebra rewrite)` uses, and derive term equality by antisymmetry (neither term sorts before the other). The comparator must therefore be a strict total order; one protocol serves both libraries, for example `(sexp-term-protocol sexp-atom-compare)`. A comparator that returns -1 / 0 / 1 is misread: every non-`#f` answer counts as "sorts before".
 
 ### Internal helpers (exposed for tests)
 

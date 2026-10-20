@@ -216,17 +216,7 @@
                          (make-named-axiom 'com-+ #f
                            (make-commutativity-axiom '+)))
                    '(+)))
-         (cmp (lambda (a b)
-                (cond
-                  ((and (symbol? a) (symbol? b))
-                   (let ((sa (symbol->string a))
-                         (sb (symbol->string b)))
-                     (cond ((string<? sa sb) -1)
-                           ((string>? sa sb) 1)
-                           (else 0))))
-                  ((equal? a b) 0)
-                  (else 1))))
-         (proto (sexp-term-protocol cmp)))
+         (proto (sexp-term-protocol sexp-atom-compare)))
     (test #t (> (length (ac-match '(+ a b) '(+ b a) theory proto)) 0))))
 
 (test-end)

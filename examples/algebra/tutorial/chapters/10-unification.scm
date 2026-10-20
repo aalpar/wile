@@ -86,21 +86,12 @@
 ;; their bindings. Terms without pattern-vars pass through unchanged.
 ;; ----------------------------------------------------------------
 
-;; The unification library uses `term-compare` as a *3-way* comparator:
-;; it calls `(zero? (term-compare ...))` to test equality. A boolean
-;; comparator (as chapter 3 used for rewriting) would fail here. Use a
-;; compare returning -1 / 0 / 1.
-(define (three-way-compare a b)
-  (cond
-    ((and (number? a) (number? b))
-     (cond ((< a b) -1) ((> a b) 1) (else 0)))
-    ((and (symbol? a) (symbol? b))
-     (let ((sa (symbol->string a)) (sb (symbol->string b)))
-       (cond ((string<? sa sb) -1) ((string>? sa sb) 1) (else 0))))
-    ((equal? a b) 0)
-    (else 1)))
-
-(define proto (sexp-term-protocol three-way-compare))
+;; The unification library shares `term-compare` with the rewrite library:
+;; a boolean "sorts before" predicate that must be a strict total order.
+;; Equality is derived from it (neither term sorts before the other), so the
+;; same protocol that chapter 3 built for rewriting works here. The stdlib's
+;; own comparator, `sexp-atom-compare`, orders atoms by their written form.
+(define proto (sexp-term-protocol sexp-atom-compare))
 
 (check= (substitution-apply sub1 proto (parse-pattern '(+ ?x 1)))
         '(+ a 1)

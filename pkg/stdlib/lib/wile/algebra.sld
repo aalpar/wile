@@ -171,7 +171,7 @@
     make-rewrite-step rewrite-step?
     step-rule-name step-general-form step-before step-after
     fuel-exhausted-step?
-    sexp-term-protocol
+    sexp-term-protocol sexp-atom-compare
     make-recursive-normalizer
     monoid->theory group->theory semiring->theory ring->theory
     field->theory lattice->theory heyting->theory boolean->theory
