@@ -3182,6 +3182,11 @@ func TestBigNumNumeralRequiresDelimiter(t *testing.T) {
 		{"#z12abc", "trailing symbol characters were a second datum"},
 		{"#m1.5x", "trailing symbol characters after a decimal were a second datum"},
 		{"(#m1/2)", "inside a list the second datum also read as a list element"},
+		{"#m1e3+2i", "a complex after an exponent was a second datum"},
+		{"#m2e3x", "trailing symbol characters after an exponent were a second datum"},
+		{"#z1'a", "a quote character is not a delimiter; (1 'a) was read on master"},
+		{"#z1`a", "a quasiquote character is not a delimiter"},
+		{"#z1,a", "an unquote character is not a delimiter"},
 	}
 	for _, tc := range rejected {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
@@ -3192,6 +3197,26 @@ func TestBigNumNumeralRequiresDelimiter(t *testing.T) {
 				qt.Commentf("%s: a #z/#m fault must not borrow the radix rule's message", tc.input))
 		})
 	}
+	// The message names both prefixes, whichever one the numeral carried.
+	_, err := Tokenize("#z1/2", false)
+	qt.New(t).Check(err, qt.ErrorMatches, `.*#z or #m.*`)
+
+	// A bare prefix scanned no numeral; the rule does not apply and the
+	// introducer reports it, as on master.
+	for _, in := range []string{"#zabc", "#z'5", "#z,x", "#z", "#m"} {
+		qt.New(t).Run("bare_"+in, func(c *qt.C) {
+			_, err := Tokenize(in, false)
+			c.Check(errors.Is(err, NewTokenizerError(MessageExpectingDelimiterAfterBigNumber)), qt.IsFalse)
+		})
+	}
+
+	// Every delimiter character ends the numeral.
+	for _, d := range []string{" ", "\t", "\n", "\r", ")", "]", ";", "\"", "|", "(", "["} {
+		qt.New(t).Run(fmt.Sprintf("delimiter_%q", d), func(c *qt.C) {
+			_, err := Tokenize("#z12"+d, false)
+			c.Check(errors.Is(err, NewTokenizerError(MessageExpectingDelimiterAfterBigNumber)), qt.IsFalse)
+		})
+	}
 
 	// Green controls: each is a single numeral token, so the fault above is the
 	// delimiter rule and not a general refusal of #z and #m.
@@ -3199,11 +3224,16 @@ func TestBigNumNumeralRequiresDelimiter(t *testing.T) {
 		input string
 		texts []string
 	}{
+		{"#z12 ", []string{"#z12"}},
+		{"#z-5 ", []string{"#z-5"}},
+		{"#m1.5)", []string{"#m1.5", ")"}},
+		{"#m2e3 ", []string{"#m2e3"}},
+		// Tokenizer-only: the parser rejects an l/s/d/f marker as an invalid big float.
+		{"#m2l3 ", []string{"#m2l3"}},
+		// Ends at EOF inside the scan and never reaches the delimiter check.
 		{"#z12", []string{"#z12"}},
-		{"#z-5", []string{"#z-5"}},
 		{"#m1.5", []string{"#m1.5"}},
 		{"#m2e3", []string{"#m2e3"}},
-		{"#m2l3", []string{"#m2l3"}},
 		{"#z1)", []string{"#z1", ")"}},
 		{"#m1.5 #z2", []string{"#m1.5", "#z2"}},
 		{"#z1;c", []string{"#z1", ";c"}},

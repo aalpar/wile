@@ -209,3 +209,26 @@ func TestParseErrorLocationSurvivesSourcedErrorStamping(t *testing.T) {
 		t.Errorf("parse error %q, want prefix %q", err.Error(), wantPrefix)
 	}
 }
+
+// TestBigNumDelimiterErrorReachesEngine pins the #z/#m delimiter rule through
+// the Engine: the tokenizer and parser suites alone stay green with the check
+// deleted, because no other layer exercises a rational or complex #z/#m numeral.
+func TestBigNumDelimiterErrorReachesEngine(t *testing.T) {
+	ctx := context.Background()
+	eng, err := NewEngine(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer eng.Close()
+
+	_, err = eng.EvalMultipleWithSource(ctx, "(+ 1 2)\n(list #z1/2)", "prog.scm")
+	if err == nil {
+		t.Fatal("expected parse error for #z1/2")
+	}
+	if !strings.HasPrefix(err.Error(), "prog.scm:2:") {
+		t.Errorf("parse error %q, want prefix %q", err.Error(), "prog.scm:2:")
+	}
+	if !strings.Contains(err.Error(), "#z or #m") {
+		t.Errorf("parse error %q does not name the #z/#m rule", err.Error())
+	}
+}

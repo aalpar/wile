@@ -137,6 +137,7 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 	if p.err != nil {
 		return
 	}
+	start := p.runeStart
 	// Optional sign
 	p.mayConsumeSign()
 	if p.err != nil {
@@ -174,8 +175,12 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 	// complex (#m2+3i) stops at the '/' or the sign and used to leave the rest
 	// behind as a second datum. The numeral binds up to a delimiter, as it does
 	// after a radix prefix, but the rule it breaks is its own: neither is a radix.
-	if p.err == nil && !isDelimiterOrMarker(p.curr()) {
-		p.fail(MessageExpectingDelimiterAfterBigNumber)
+	//
+	// A bare prefix scanned no numeral (`#zabc`, `#z'5`), and is the introducer
+	// signal the parser splits on, so it is left for readNumericIntroducer to
+	// report; the rule applies only once a sign or digit has been consumed.
+	if p.runeStart != start {
+		p.requireDelimiter(MessageExpectingDelimiterAfterBigNumber)
 	}
 }
 
@@ -193,10 +198,19 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 // unmeasured blast radius — TODO.md, "Delimiter termination for decimal
 // numerals".
 func (p *Tokenizer) requireDelimiterAfterRadixNumeral(r int) {
-	if r == 0 || p.err != nil || isDelimiterOrMarker(p.curr()) {
+	if r == 0 {
 		return
 	}
-	p.fail(MessageExpectingDelimiterAfterNumber)
+	p.requireDelimiter(MessageExpectingDelimiterAfterNumber)
+}
+
+// requireDelimiter faults with mess unless the numeral just scanned ends at a
+// delimiter or '#'. A pending error is left as it is: it is the real fault.
+func (p *Tokenizer) requireDelimiter(mess string) {
+	if p.err != nil || isDelimiterOrMarker(p.curr()) {
+		return
+	}
+	p.fail(mess)
 }
 
 func (p *Tokenizer) readDiv(r int) {
