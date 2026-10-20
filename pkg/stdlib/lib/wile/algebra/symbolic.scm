@@ -134,10 +134,13 @@
   "Construct a term protocol for S-expression terms.
 Compound terms are pairs (op arg ...). Atoms are leaves.
 COMPARE is a boolean 'sorts before' predicate, shared by (wile algebra
-rewrite) and (wile algebra unification). It must be total over atoms and is
-also called on compounds and on atom/compound pairs, in both argument orders:
-unification derives equality from it (neither sorts before the other), and
-raises an error when it ties two distinct atoms or ranks two equal? atoms.
+rewrite) and (wile algebra unification); a numeric result (the old three-way
+-1/0/1) raises, any other truthy value reads as #t. It must be total over
+atoms and is also called on compounds and on atom/compound pairs, in both
+argument orders: unification derives equality from it (neither sorts before
+the other), and raises an error when it ties two distinct atoms or an atom
+and a compound, or ranks two equal? atoms. A tie between two compounds is
+legal.
 If terms contain numbers or strings alongside symbols, COMPARE must dispatch
 on type (e.g., via cond on symbol?, number?, string?) rather than assuming
 all atoms are symbols.

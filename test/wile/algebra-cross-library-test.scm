@@ -130,6 +130,21 @@
   (let ((c (make-cell 1)))
     (test 1 (length (ac-match c c ac-theory proto)))))
 
+;; Only a NUMERIC result is rejected; any other truthy value reads as #t. An
+;; order that answers with a list (a memq tail) keeps working in both libraries.
+(define (order-by-position a b)
+  (let ((order '(a b c)))
+    (and (memq a order) (memq b order)
+         (memq b (cdr (memq a order))))))
+
+(define memq-proto (sexp-term-protocol order-by-position))
+
+(test-group "contract: a truthy non-boolean comparator is read as #t"
+  (test '(+ a b) ((make-normalizer comm-theory memq-proto) '(+ b a)))
+  (test #f ((make-normalizer comm-theory memq-proto) '(+ a b)))
+  (test 1 (length (ac-match '(+ a b) '(+ b a) ac-theory memq-proto)))
+  (test 1 (length (ac-unify '(+ a b) '(+ b a) ac-theory memq-proto))))
+
 (define (three-way a b)
   (cond ((equal? a b) 0) ((sexp-atom-compare a b) -1) (else 1)))
 

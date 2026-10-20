@@ -626,7 +626,7 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   by antisymmetry over the boolean comparator (`term-equal?`, local); the unification and integration suites and tutorial
   chapter 10 use the boolean `sexp-atom-compare`, now exported from `(wile algebra symbolic)` and `(wile algebra)`; new
   `test/wile/algebra-cross-library-test.scm` drives one protocol through both libraries. The error text on master is
-  `got #t` for a sorted pair, `got #f` for an unsorted one. BREAKING: a -1/0/1 comparator now raises in `term-compare`; a partial comparator and a written-form tie between distinct atoms raise in `term-equal?`; the crosscheck's follow-ups are filed under "Filed by the P6.9 crosscheck").
+  `got #t` for a sorted pair, `got #f` for an unsorted one. BREAKING: a numeric comparator result (the old -1/0/1) now raises in `term-compare`, any other truthy value is read as `#t`; a partial comparator and a written-form tie between distinct atoms raise in `term-equal?`; the crosscheck's follow-ups are filed under "Filed by the P6.9 crosscheck").
 - [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
   as a profile name.
 - [ ] Coverage: `stdlibPrefixes` (`coverage/gocover.go`) omits the embedded `chibi/` and `rnrs/`.
@@ -2273,6 +2273,14 @@ The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no r
 - [ ] **`ac-match` returns duplicate identical substitutions** [Correctness, Low, S, P6.9 crosscheck, pre-existing, verified on
   master]: `(+ a a b)` against `(+ a b a)` gives 2 results and `(+ ?x a)` against `(+ a a)` gives 2. `match-ac` never
   deduplicates; the Stickel path does.
+
+- [ ] **Tutorial chapter 3's `sexp-before?` claims "A total order on terms" and is not** [Docs / contract, S, P6.9 re-review]:
+  strings and chars fall to `#f`, and `<` ties `1` with `1.0`. `ffd2687b` matched `(f "s")` against `(f "t")` under it; the
+  P6.9 contract check raises, which is correct. Fix: a total comparator in chapter 3 (or the shared `sexp-atom-compare`), and
+  reword the "total order" comment. Chapters 4 and 11 define their own `bool-atom-compare` and are unaffected.
+- [ ] **An improper-list term such as `(g . a)` crashes `ac-match` / `ac-unify`** [Correctness, S, P6.9 re-review, pre-existing on
+  master]: `sexp-term-protocol` takes `(cdr term)` as the operand list, so a dotted tail reaches `match-positional` as a
+  non-list and fails with an arity/`car` error instead of a located protocol error.
 
 ### Closed in Tier 1
 

@@ -88,13 +88,13 @@
 
 ;; The unification library shares `term-compare` with the rewrite library:
 ;; a boolean "sorts before" predicate. Equality is derived from it (neither
-;; term sorts before the other), so the comparator must be total over atoms
-;; and over atom/compound pairs, in both argument orders; a comparator that
-;; answers #f for a pair it cannot order raises an error instead of matching.
-;; A boolean comparator of the kind chapter 3 built works here once it is made
-;; total over every atom type the terms contain. The stdlib's `sexp-atom-compare`
-;; orders atoms by their written form, which is total over atoms that print
-;; differently.
+;; term sorts before the other), so the comparator must be total over atoms:
+;; a pair of atoms it cannot order, or orders as equal while they differ
+;; (`<` ties 1 with 1.0), raises an error instead of matching. A tie between
+;; two compounds is legal. A boolean comparator of the kind chapter 3 built
+;; works here once it is total over every atom the terms contain. The
+;; stdlib's `sexp-atom-compare` orders atoms by their written form, which is
+;; total over atoms that print differently.
 (define proto (sexp-term-protocol sexp-atom-compare))
 
 (check= (substitution-apply sub1 proto (parse-pattern '(+ ?x 1)))
