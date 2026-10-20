@@ -496,7 +496,11 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                          (list 'block idx 'in in-val
                                'old-out old-out 'new-out out-val)))
                 (set-state! idx in-val out-val)
-                (if (lattice-leq? lattice out-val old-out)
+                ;; A block's first visit compares against its own bottom seed, so
+                ;; a transfer that generates a fact from bottom input would look
+                ;; converged and strand its successors. vc is 1-based: the first
+                ;; visit always propagates, later ones only when out grew.
+                (if (and (> vc 1) (lattice-leq? lattice out-val old-out))
                     (loop rest-wl)
                     (loop (worklist-insert-all rest-wl
                             (flow-succs blk)))))))))))

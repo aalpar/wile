@@ -398,5 +398,40 @@
                           (widen interval-widen))
             1))))
 
+;;; --- Regression: a first visit that generates a fact propagates ---------
+
+;; run-analysis skipped the successor enqueue whenever out <= old-out, and a
+;; block's FIRST visit compares against its own bottom seed. A transfer that
+;; generates a fact from bottom input (out = #t from in = #f) therefore
+;; propagated only if the generating block was not visited first, with the
+;; worklist emptying after one visit otherwise.
+(define (first-visit-outs direction cfg gen-idx)
+  (let* ((calls 0)
+         (xfer (lambda (blk in)
+                 (set! calls (+ calls 1))
+                 (if (= (car blk) gen-idx) #t in)))
+         (r (run-analysis direction (truth-value-lattice) xfer cfg test-protocol)))
+    (list (map (lambda (i) (analysis-out r i)) (map car cfg)) calls)))
+
+(define three-block-cfg
+  '((0 () (1)) (1 (0) (2)) (2 (1) ())))
+
+(test-group "run-analysis — first visit generating a fact propagates (I176)"
+  ;; Generator mid-chain: block 0 is visited first and yields bottom, so
+  ;; block 1's generated fact must still reach block 2. Was (#f #f #f), 1 call.
+  (test '((#f #t #t) 3) (first-visit-outs 'forward three-block-cfg 1))
+  ;; Generator at the end of the chain.
+  (test '((#f #f #t) 3) (first-visit-outs 'forward three-block-cfg 2))
+  ;; Backward mirror: the exit block is visited first.
+  (test '((#t #t #f) 3) (first-visit-outs 'backward three-block-cfg 1))
+  ;; Diamond: the generated fact reaches the join through both arms.
+  (test '((#f #t #f #t) 4) (first-visit-outs 'forward diamond-cfg 1))
+  ;; Control that never exposed the bug: the generator is the entry block,
+  ;; whose first visit already differs from bottom.
+  (test '((#t #t #t) 3) (first-visit-outs 'forward three-block-cfg 0))
+  ;; Nothing generated: every reachable block is now visited once (was one
+  ;; visit, the entry), and the states are unchanged.
+  (test '((#f #f #f) 3) (first-visit-outs 'forward three-block-cfg 99)))
+
 (test-end)
 (test-exit)
