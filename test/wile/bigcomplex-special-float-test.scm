@@ -70,7 +70,10 @@
     (test +inf.0 (+ #m-1e400 +inf.0))
     (test +inf.0 (- +inf.0 #m1e400))
     (test -inf.0 (- #m1e400 +inf.0))
-    (test +inf.0 (/ +inf.0 #m1e400))))
+    (test +inf.0 (/ +inf.0 #m1e400))
+    (test 0.0 (/ #m1e400 +inf.0))
+    ;; an INFINITE BigFloat partner is not clamped: +inf + -inf is NaN
+    (test #t (nan? (+ +inf.0 (/ #m-1 #m0))))))
 
 ;; The multiplicative arms keep the complex128 route.
 (test-group "multiplicative arms are unchanged"

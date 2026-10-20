@@ -573,6 +573,7 @@ func TestSpecialFloatBigComplex_ImaginaryDigits(t *testing.T) {
 		{"+inf.0 * z", mul(inf, z), "+nan.0+inf.0i"},
 		{"z * +nan.0", mul(z, nan), "+nan.0+nan.0i"},
 		{"z / +inf.0", div(z, inf), "0.0+0.0i"},
+		// Agrees with Chez, Racket and the plain-Complex arm for (/ +inf.0 0+9.87i).
 		{"+inf.0 / z", div(inf, z), "+nan.0-inf.0i"},
 		{"z / +nan.0", div(z, nan), "+nan.0+nan.0i"},
 	}
@@ -615,11 +616,15 @@ func TestSpecialFloatBigFloat_OutOfRangeIsFinite(t *testing.T) {
 		return q
 	}
 
+	negInfBig := NewBigFloatFromFloat64(math.Inf(-1))
+
 	tcs := []struct {
 		name string
 		got  Number
 		want string
 	}{
+		// An INFINITE BigFloat partner is not clamped: +inf + -inf is NaN.
+		{"+inf.0 + -inf BigFloat is nan", inf.Add(negInfBig), "+nan.0"},
 		{"+inf.0 + -1e400", inf.Add(hugeNeg), "+inf.0"},
 		{"-1e400 + +inf.0", hugeNeg.Add(inf), "+inf.0"},
 		{"+inf.0 - 1e400", inf.Subtract(hugePos), "+inf.0"},

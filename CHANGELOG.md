@@ -126,8 +126,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   has no imaginary part to change. It is now the operand's own, and `(- +inf.0 z)`
   negates it exactly. A finite real part beyond float64 range no longer turns
   `(+ (make-rectangular #m-1e400 #m1) +inf.0)` into `+nan.0`; it is `+inf.0`,
-  and `(+ +inf.0 #m-1e400)` likewise. Multiplication of a BigComplex is
-  unchanged.
+  and `(+ +inf.0 #m-1e400)` likewise; `(/ +inf.0 #m1e400)` is `+inf.0` and
+  `(/ (make-rectangular 1 #m1e400) +inf.0)` is `0.0+0.0i`. Multiplication of
+  a BigComplex is unchanged.
 
 - **`sqrt` takes a BigFloat.** `(sqrt #m2)` raised "expected a number but got
   *values.BigFloat". A negative operand, `-inf.0` included, takes the branch

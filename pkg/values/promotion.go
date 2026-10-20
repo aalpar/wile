@@ -494,10 +494,11 @@ func NumberToComplex128Lossy(n Number) complex128 {
 // still a BigComplex (issue #362). complex128 rounds BOTH components, though,
 // including the BigComplex operand's imaginary part, which a real Inf/NaN has no
 // way to change. bigComplexSpecialOp, when non-nil, replaces that route: it owns
-// the whole result and keeps a BigFloat imaginary part exact (I175). Add and subtract supply one. Multiply passes nil and keeps the
-// complex128 route; makeDivideDispatch has its own copy of that route. The
-// route is right for them only while the BigComplex's parts fit in float64
-// (0*Inf makes the real part NaN, which an additive rule cannot reproduce).
+// the whole result and keeps a BigFloat imaginary part exact (I175). Add and
+// subtract supply one. Multiply passes nil and keeps the complex128 route;
+// makeDivideDispatch has its own copy of that route. The route is right for
+// them only while the BigComplex's parts fit in float64 (0*Inf makes the real
+// part NaN, which an additive rule cannot reproduce).
 func makeArithmeticDispatch[T Number](
 	srcKind NumericKind,
 	sameTypeOp func(T, Number) Number,
