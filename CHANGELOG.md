@@ -474,6 +474,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A library body's references to imported names load through the cached
+  binding, so `+ - <` promote as they do at top level (I217).** fib 27 inside
+  a `define-library` drops from 0.216 s to 0.120 s, equal to top level.
+  Type-error message text for promoted primitives in library bodies changes
+  (`+: expected number, got "a"` where it was `+: expected a number but got
+  *values.String`); `errors.Is` and locations are unchanged.
+
 - **BREAKING: `set-current-directory!` changes an engine-scoped directory, never
   the process's (I186).** It called `os.Chdir`, so one engine entering a
   directory moved the host and every other engine in the process. The directory
