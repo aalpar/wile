@@ -42,7 +42,7 @@ func TestQuasisyntaxUnsyntaxUnderQuote(t *testing.T) {
 			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (syntax (#,` + quasisyntaxStaleBody + `)))) (list n (f)))`,
 			"(1 99)"},
 		{"control: quasiquote counterpart",
-			"(let ((f (lambda () 7)) (n 0)) `(a (quote (,"+quasisyntaxStaleBody+"))) (list n (f)))",
+			"(let ((f (lambda () 7)) (n 0)) `(a (quote (," + quasisyntaxStaleBody + "))) (list n (f)))",
 			"(1 99)"},
 		// Quote nested deeper, in a vector element, and through unsyntax-splicing.
 		{"unsyntax under two quote forms",
@@ -57,7 +57,7 @@ func TestQuasisyntaxUnsyntaxUnderQuote(t *testing.T) {
 		// A quasiquote reached from the unsyntax's code position re-enters the
 		// quasiquote dialect: the `,` beneath it is live, its quote is no barrier.
 		{"quasiquote inside an unsyntax",
-			"(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quote (#,`(b (quote (,"+quasisyntaxStaleBody+"))))))) (list n (f)))",
+			"(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quote (#,`(b (quote (," + quasisyntaxStaleBody + "))))))) (list n (f)))",
 			"(1 99)"},
 		// The dotted tail: `(a . #,e) reads as (a unsyntax e) in the spine.
 		{"dotted unsyntax under a quote form",
@@ -82,10 +82,10 @@ func TestQuasisyntaxMarkersAreDialectLocal(t *testing.T) {
 		// A comma in a quasisyntax template is not an escape; an unsyntax in a
 		// quasiquote template is not one either.
 		{"unquote inside a quasisyntax template is data",
-			"(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (unquote "+quasisyntaxStaleBody+"))) (list n (f)))",
+			"(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (unquote " + quasisyntaxStaleBody + "))) (list n (f)))",
 			"(0 7)"},
 		{"unsyntax inside a quasiquote template is data",
-			"(let ((f (lambda () 7)) (n 0)) `(a (unsyntax "+quasisyntaxStaleBody+")) (list n (f)))",
+			"(let ((f (lambda () 7)) (n 0)) `(a (unsyntax " + quasisyntaxStaleBody + ")) (list n (f)))",
 			"(0 7)"},
 		// The flag's discriminating behaviour, measured on master: the nested
 		// form takes the runtime path and (syntax z) yields z's VALUE.
