@@ -776,6 +776,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **BREAKING (Go API): `machine.CollectMarksFromContinuation`.** Exported in
+  v1.20.0; its only production caller was `(continuation-marks k)`, which now needs
+  the capturing activation's live marks as well and goes through
+  `machine.CollectMarksFromCapture(*ComposableContinuation, *PromptTag)`. A
+  bare `*MachineContinuation` chain has no replacement: a mark set is built from a
+  capture, or from the live context with `CollectContinuationMarks`.
 - **The ANY-phase binding coordinate, and everything that only existed to
   express it.** Gone from the released surface: `environment.PhaseKey` (now a
   plain `Phase` on `slotRef`, `bulkRef` and `GlobalIndex`), its constructors

@@ -278,6 +278,4 @@
 ;; key via with-continuation-mark; this function collects them.
 (define (continuation-mark-set->context marks)
   "Extract source-location marks from continuation mark set MARKS.\nCollects all values stored under the well-known key\n'wile/source-location, returning them as a list ordered from\ninnermost frame outward.\n\nExamples:\n  (with-continuation-mark 'wile/source-location \"foo.scm:10\"\n    (continuation-mark-set->context\n      (current-continuation-marks)))  => (\"foo.scm:10\")\n\nParameters:\n  marks : any\nReturns: list\nCategory: control\n\nSee also: `continuation-mark-set->iterator', `continuation-mark-set->list'."
-  (if (continuation-mark-set? marks)
-      (continuation-mark-set->list marks 'wile/source-location)
-      (error "continuation-mark-set->context: expected a continuation mark set" marks)))
+  (continuation-mark-set->list (%require-continuation-mark-set marks) 'wile/source-location))

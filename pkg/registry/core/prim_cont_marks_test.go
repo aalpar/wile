@@ -449,6 +449,8 @@ func TestContinuationMarkSetAcceptsFalse(t *testing.T) {
 			expected: "((#(2) #(1)))",
 		},
 		{
+			// Kills a chain-only walk (it answers (1)); a live-only walk also answers
+			// (2), so the list rows are what pin the chain half.
 			name: "first, two frames",
 			code: `((lambda () (with-continuation-mark 'k 1 (list ((lambda ()
 				(with-continuation-mark 'k 2 (continuation-mark-set-first #f 'k))))))))`,
@@ -591,7 +593,9 @@ func TestContinuationMarks_ShapeMatrix(t *testing.T) {
 
 // TestContinuationMarkSetToContextStaysStrict pins that (wile control)'s
 // continuation-mark-set->context, which delegates to ->list, does not inherit the
-// #f alias: Racket raises a contract violation there.
+// #f alias: Racket raises a contract violation there, and Wile raises the located
+// ErrNotAContinuationMarkSet, as before. Engine-only: the unoptimized runner has no
+// library resolver, so (import (wile control)) cannot load there.
 func TestContinuationMarkSetToContextStaysStrict(t *testing.T) {
 	tcs := []struct {
 		name     string
@@ -616,7 +620,7 @@ func TestContinuationMarkSetToContextStaysStrict(t *testing.T) {
 			qt.Assert(t, err, qt.IsNil)
 			result, err := engine.EvalMultiple(context.Background(), tc.code)
 			if tc.wantErr {
-				qt.Assert(t, err, qt.IsNotNil)
+				qt.Assert(t, err, qt.ErrorIs, werr.ErrNotAContinuationMarkSet)
 				return
 			}
 			qt.Assert(t, err, qt.IsNil)
