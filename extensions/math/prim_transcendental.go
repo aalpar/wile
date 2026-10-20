@@ -431,6 +431,8 @@ func PrimSqrt(mc machine.CallContext) error {
 		}
 	case *values.Complex:
 		mc.SetValue(values.NewComplex(complexSqrtR7RS(v.Value)))
+	case *values.BigFloat:
+		mc.SetValue(bigFloatSqrt(v))
 	case *values.BigComplex:
 		// Compute at big.Float precision; truncating to complex128 first
 		// overflows to +inf when a component exceeds the float64 range.
@@ -439,6 +441,35 @@ func PrimSqrt(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotANumber, "sqrt: expected a number but got %T", o)
 	}
 	return nil
+}
+
+// bigFloatSqrt returns the square root of bf at bf's own precision.
+//
+// The order of the tests is the fix. A NaN BigFloat carries a nan flag over a
+// zero value, so Sign reports 0 for it and any sign test run first would
+// answer as if it were zero; NaN therefore goes first. The sign test goes
+// before the infinity short-circuit: -Inf is negative and takes the branch cut
+// to 0.0+inf.0i, as (sqrt -inf.0) does on the Float arm and in Racket and
+// Chez. Testing infinity before sign would answer -inf.0, which is wrong.
+//
+// The negative arm builds its result directly rather than calling
+// (*BigComplex).Sqrt, which opens at DefaultBigFloatPrecision and would
+// return fewer digits than the positive arm. big.Float.Sqrt maps +Inf to
+// +Inf, so -Inf needs no case of its own.
+func bigFloatSqrt(bf *values.BigFloat) values.Number {
+	if bf.IsNaN() {
+		return bf
+	}
+	f := bf.BigFloatValue()
+	prec := f.Prec()
+	if bf.Sign() < 0 {
+		root := new(big.Float).SetPrec(prec).Sqrt(new(big.Float).Abs(f))
+		return values.NewBigComplexFromBigFloats(
+			values.NewBigFloat(new(big.Float).SetPrec(prec)),
+			values.NewBigFloat(root),
+		)
+	}
+	return values.NewBigFloat(new(big.Float).SetPrec(prec).Sqrt(f))
 }
 
 // complexSqrtR7RS computes square root with R7RS branch cut semantics.

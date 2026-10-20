@@ -304,6 +304,44 @@ func TestSqrtExactness(t *testing.T) {
 	}
 }
 
+// TestSqrtBigFloat verifies sqrt on BigFloat operands. PrimSqrt had no
+// BigFloat arm and raised "expected a number but got *values.BigFloat".
+//
+// The rows that matter are the non-finite ones. (/ #m-1 #m0) is -inf.0 and
+// must take the branch cut to 0.0+inf.0i, like (sqrt -inf.0) on the Float arm
+// and in Racket and Chez; an arm that tested for infinity before the sign
+// would answer -inf.0. A NaN BigFloat has Sign 0, so a sign test run before
+// the NaN test would answer as if it were zero.
+func TestSqrtBigFloat(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"positive finite", `(< (abs (- (sqrt #m2) 1.4142135623730951)) 1e-10)`, values.TrueValue},
+		{"perfect square value", `(= (sqrt #m4) 2)`, values.TrueValue},
+		{"perfect square stays inexact", `(exact? (sqrt #m4))`, values.FalseValue},
+		{"zero", `(zero? (sqrt #m0))`, values.TrueValue},
+		{"negative finite is imaginary", `(= (real-part (sqrt #m-4)) 0)`, values.TrueValue},
+		{"negative finite imag part", `(= (imag-part (sqrt #m-4)) 2)`, values.TrueValue},
+		// The negative arm builds its result at the operand's precision. Going
+		// through (*BigComplex).Sqrt would open at DefaultBigFloatPrecision and
+		// return fewer digits than the positive arm.
+		{"negative arm carries the positive arm's digits", `(equal? (imag-part (sqrt #m-2)) (sqrt #m2))`, values.TrueValue},
+		{"positive infinity", `(let ((r (sqrt (/ #m1 #m0)))) (and (infinite? r) (> r 0)))`, values.TrueValue},
+		{"negative infinity takes the branch cut", `(let ((r (sqrt (/ #m-1 #m0)))) (and (zero? (real-part r)) (infinite? (imag-part r)) (> (imag-part r) 0)))`, values.TrueValue},
+		{"nan", `(nan? (sqrt (/ #m0 #m0)))`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
 // TestSqrtBigInteger verifies sqrt behavior on BigInteger inputs.
 func TestSqrtBigInteger(t *testing.T) {
 	c := qt.New(t)
