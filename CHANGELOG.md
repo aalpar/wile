@@ -119,6 +119,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`ac-match` and `ac-unify` read the term comparator as boolean, like
+  `make-normalizer` (I177).** `(wile algebra unification)` tested equality with
+  `(zero? (term-compare ...))`, a three-way reading, while `(wile algebra
+  rewrite)` documents `term-compare` as a boolean "sorts before" predicate and the
+  stdlib's own `sexp-atom-compare` is boolean. A protocol built from
+  `sexp-atom-compare` normalized correctly and made `(ac-match '(+ a b) '(+ b a)
+  theory proto)` raise `=: expected number, got #t`; a three-way comparator did
+  the reverse, and the normalizer swapped `(+ a b)` and `(+ b a)` on every call.
+  Unification now derives equality by antisymmetry (neither term sorts before the
+  other), so one protocol serves both libraries.
+
+  BREAKING for a protocol written against the old unification contract: a
+  comparator returning -1 / 0 / 1 is now misread (every non-`#f` answer counts as
+  "sorts before"), so `ac-match` finds no match between equal terms. Return a
+  boolean. `sexp-atom-compare` is now exported from `(wile algebra symbolic)` and
+  `(wile algebra)`.
+
 - **`run-analysis` propagates out of a block's first visit (I176).** A forward
   chain `0 -> 1 -> 2` whose block 1 generates a fact from bottom input
   (`(if (= (car blk) 1) #t in)`) answered `(#f #f #f)` after one transfer call;

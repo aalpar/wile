@@ -621,8 +621,12 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   taken: the shipped guard does not widen the seed set (forward-unreachable blocks stay unvisited
   forward; backward runs do process them); seeding only the reachable blocks would also pass. The two follow-ups are filed under "Filed by the P6.8
   crosscheck").
-- [ ] Algebra: `rewrite` treats the term comparison as boolean, `unification` as three-way
-  (`ac-match` raises `=: expected number, got #f`) (P6.9).
+- [x] Algebra: ~~`rewrite` treats the term comparison as boolean, `unification` as three-way
+  (`ac-match` raises `=: expected number, got #f`)~~ (Done 2026-10-20, P6.9 / I177: `unification.scm` derives term equality
+  by antisymmetry over the boolean comparator (`term-equal?`, local); the unification and integration suites and tutorial
+  chapter 10 use the boolean `sexp-atom-compare`, now exported from `(wile algebra symbolic)` and `(wile algebra)`; new
+  `test/wile/algebra-cross-library-test.scm` drives one protocol through both libraries. The error text on master is
+  `got #t` for a sorted pair, `got #f` for an unsorted one. BREAKING for a protocol with a -1/0/1 comparator).
 - [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
   as a profile name.
 - [ ] Coverage: `stdlibPrefixes` (`coverage/gocover.go`) omits the embedded `chibi/` and `rnrs/`.
