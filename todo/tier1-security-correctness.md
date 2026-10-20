@@ -632,6 +632,9 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   consumer. `PrimReadToken`, `State.nextTokenCached` and the `tokenizers` / `tokenizerEntry` cache are gone; `readSyntaxCached` and its
   `parsers` cache are untouched. BREAKING (Scheme and Go API). The axis-B manifest row disappearing is the gate (`TestBuildAxisBManifest`);
   the follow-ups are filed under "Filed by the P6.14 crosscheck").
+- [x] Resolver: ~~a resolver chain miss, and a library-extension miss, report only the LAST arm / extension searched~~ (Done 2026-10-20, P7.1 / I117-chain, I117-libfile, `c3a2270e`:
+  `ChainFileResolver.ResolveAndOpen` and `ResolveLibraryFile` accumulate every absence and return `errors.Join`; denials and hard errors still return early and alone.
+  `(import (scheme nonexistent-xyz))` names four probes (`.sld` and `.scm` in each of the two chain arms) where it named one).
 - [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
   as a profile name.
 - [ ] Coverage: `stdlibPrefixes` (`coverage/gocover.go`) omits the embedded `chibi/` and `rnrs/`.

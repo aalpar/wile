@@ -119,6 +119,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A resolver miss reports every arm and every extension it searched
+  (I117).** `ChainFileResolver.ResolveAndOpen` and `ResolveLibraryFile` each kept
+  a `lastErr` overwritten by every miss, so a missing library named only the last
+  probe: `(import (scheme nonexistent-xyz))` reported the `.scm` search of the
+  host-filesystem arm and nothing of the `.sld` search or the virtual-filesystem
+  arm. A total miss now joins every absence (`errors.Join`), so that import names
+  all four probes. `errors.Is(err, werr.ErrFileNotFound)` still holds; a denial or
+  hard error still stops the search at once and is reported alone. The message of a
+  one-arm chain is unchanged.
+
 - **`ac-match` and `ac-unify` agree with `make-normalizer` on the term
   comparator (I177).** `(wile algebra unification)` tested equality with
   `(zero? (term-compare ...))`, a three-way reading, while `(wile algebra
