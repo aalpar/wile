@@ -119,6 +119,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`run-analysis` propagates out of a block's first visit (I176).** A forward
+  chain `0 -> 1 -> 2` whose block 1 generates a fact from bottom input
+  (`(if (= (car blk) 1) #t in)`) answered `(#f #f #f)` after one transfer call;
+  it is `(#f #t #t)`. The convergence test compared a first visit's out-state
+  against the block's own bottom seed, so the successors were never enqueued;
+  it now requires a prior visit. Backward analyses had the same defect. A
+  reachable block is now visited at least once, so a transfer that generates
+  nothing is called once per block instead of once for the entry.
+
 - **`#,` under a quote form inside a `quasisyntax` template is seen by the
   inliner (I027).** `(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quote
   (#,(begin (set! n 1) (set! f (lambda () 99))))))) (list n (f)))` answered

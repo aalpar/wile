@@ -611,9 +611,15 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   `pkg/values/promotion.go` (`lubIsComplex` branch) rounds a `BigComplex` operand to float64~~ (Done 2026-10-20, P6.2 / I175:
   `+`/`-` keep the imaginary digits; a finite real part past float64 range no longer turns the sum NaN; multiply and divide
   keep the `complex128` route, filed as row I under "Filed by the P6.2 crosscheck").
-- [ ] Algebra: `run-analysis` returns all-`#f` outputs for a 3-block forward chain where block 1
-  should be `#t`; `rewrite` treats the term comparison as boolean, `unification` as three-way
-  (`ac-match` raises `=: expected number, got #f`).
+- [x] Algebra: `run-analysis` returns all-`#f` outputs for a 3-block forward chain where block 1
+  should be `#t` [Done 2026-10-20, P6.8/I176]: a block's first visit compared its out-state against its own
+  bottom seed, so a transfer that generates a fact from bottom input looked converged and never enqueued
+  its successors; the convergence test now requires `(> vc 1)`. Backward direction had the same defect.
+  Cost: a reachable block is visited at least once, so an identity transfer takes 3 transfer calls on a
+  3-block chain where it took 1. Seeding every block was rejected (it fails the unreachable-predecessor
+  widening row).
+- [ ] Algebra: `rewrite` treats the term comparison as boolean, `unification` as three-way
+  (`ac-match` raises `=: expected number, got #f`) (P6.9).
 - [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
   as a profile name.
 - [ ] Coverage: `stdlibPrefixes` (`coverage/gocover.go`) omits the embedded `chibi/` and `rnrs/`.
