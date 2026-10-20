@@ -119,6 +119,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`sqrt` takes a BigFloat.** `(sqrt #m2)` raised "expected a number but got
+  *values.BigFloat". A negative operand, `-inf.0` included, takes the branch
+  cut (`(sqrt (/ #m-1 #m0))` is `0.0+inf.0i`, as `(sqrt -inf.0)` is on a
+  float), NaN passes through, and the result keeps the operand's precision.
+
 - **A continuation resumes at the prompt or context that delimited it, never at
   a sub-context's edge.** A `call/cc` with no chain above it (tail position of a
   `dynamic-wind` thunk run by an escape, of a thread's thunk, of a transformer

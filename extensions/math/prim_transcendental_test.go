@@ -304,6 +304,74 @@ func TestSqrtExactness(t *testing.T) {
 	}
 }
 
+// TestSqrtBigFloat verifies sqrt on BigFloat operands. PrimSqrt had no
+// BigFloat arm and raised "expected a number but got *values.BigFloat".
+//
+// The rows that matter are the non-finite ones. (/ #m-1 #m0) is -inf.0 and
+// must take the branch cut to 0.0+inf.0i, like (sqrt -inf.0) on the Float arm
+// and in Racket and Chez; an arm that short-circuited an infinite operand
+// before the sign test would answer -inf.0. A NaN BigFloat has Sign 0, so a
+// sign test run before the NaN test would answer as if it were zero.
+//
+// The eqv? rows compare against correctly rounded literals and against the
+// BigFloat kind of each special result, which the predicate rows cannot see:
+// a result computed in float64, at the wrong precision, or with the sign of a
+// negative zero lost satisfies every predicate above them.
+func TestSqrtBigFloat(t *testing.T) {
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"positive finite", `(< (abs (- (sqrt #m2) 1.4142135623730951)) 1e-10)`, values.TrueValue},
+		{"perfect square value", `(= (sqrt #m4) 2)`, values.TrueValue},
+		{"perfect square stays inexact", `(exact? (sqrt #m4))`, values.FalseValue},
+		{"zero", `(zero? (sqrt #m0))`, values.TrueValue},
+		{"negative finite is imaginary", `(= (real-part (sqrt #m-4)) 0)`, values.TrueValue},
+		{"negative finite imag part", `(= (imag-part (sqrt #m-4)) 2)`, values.TrueValue},
+		// The negative arm builds its result at the operand's precision. Going
+		// through (*BigComplex).Sqrt would open at DefaultBigFloatPrecision and
+		// return fewer digits than the positive arm. This row holds at the
+		// default precision, where both constructions agree; the wider-literal
+		// row below is the one that tells them apart.
+		{"negative arm carries the positive arm's digits", `(equal? (imag-part (sqrt #m-2)) (sqrt #m2))`, values.TrueValue},
+		// A 120-significant-digit literal is wider than DefaultBigFloatPrecision (256 bits),
+		// so a negative arm that delegated to (*BigComplex).Sqrt would round
+		// to 256 bits and differ from the positive arm; at the default
+		// precision both arms agree whichever way they are built.
+		{"negative arm keeps a wider-than-default precision", `(equal? (imag-part (sqrt #m-2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)) (sqrt #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890))`, values.TrueValue},
+		{"positive infinity", `(let ((r (sqrt (/ #m1 #m0)))) (and (infinite? r) (> r 0)))`, values.TrueValue},
+		{"negative infinity takes the branch cut", `(let ((r (sqrt (/ #m-1 #m0)))) (and (zero? (real-part r)) (infinite? (imag-part r)) (> (imag-part r) 0)))`, values.TrueValue},
+		{"nan", `(nan? (sqrt (/ #m0 #m0)))`, values.TrueValue},
+		// Correctly rounded values. A predicate against a float64 constant
+		// cannot see a result computed at float64 precision, or at a precision
+		// other than the operand's; eqv? against the literal can.
+		{"golden sqrt 2", `(eqv? (sqrt #m2) 1.4142135623730950488016887242096980785696718753769480731766797379907324784621l0)`, values.TrueValue},
+		{"golden sqrt 3", `(eqv? (sqrt #m3) 1.7320508075688772935274463415058723669428052538103806280558069794519330169088l0)`, values.TrueValue},
+		{"golden sqrt 5", `(eqv? (sqrt #m5) 2.23606797749978969640917366873127623544061835961152572427089724541052092563782l0)`, values.TrueValue},
+		// Expected text cross-checked against Python's decimal at 200 digits.
+		{"golden wide operand", `(string=? (number->string (sqrt #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)) "1.4572085605747537190458491165921673542867757439927436248464565622923209398775715433421430030375202786347858342742204472055l0")`, values.TrueValue},
+		// Kind and sign of the special results. eqv? distinguishes -0.0 from
+		// 0.0 and a NaN or infinity BigFloat from a Float, which the
+		// predicate rows above do not.
+		{"negative zero keeps its sign", `(eqv? (sqrt #m-0.0) #m-0.0)`, values.TrueValue},
+		{"zero is an inexact zero", `(eqv? (sqrt #m0) #m0)`, values.TrueValue},
+		{"nan stays a BigFloat nan", `(eqv? (sqrt (/ #m0 #m0)) (/ #m0 #m0))`, values.TrueValue},
+		{"positive infinity stays a BigFloat", `(eqv? (sqrt (/ #m1 #m0)) (/ #m1 #m0))`, values.TrueValue},
+		{"negative infinity imaginary part is a BigFloat +inf", `(eqv? (imag-part (sqrt (/ #m-1 #m0))) (/ #m1 #m0))`, values.TrueValue},
+		{"negative finite real part is a BigFloat zero", `(eqv? (real-part (sqrt #m-4)) #m0)`, values.TrueValue},
+		{"golden negative imag part", `(eqv? (imag-part (sqrt #m-3)) 1.7320508075688772935274463415058723669428052538103806280558069794519330169088l0)`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
 // TestSqrtBigInteger verifies sqrt behavior on BigInteger inputs.
 func TestSqrtBigInteger(t *testing.T) {
 	c := qt.New(t)
