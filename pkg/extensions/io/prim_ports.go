@@ -296,18 +296,18 @@ var PrimBinaryPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	return hasBR || hasBW
 })
 
-// evictPortCache removes any cached tokenizer and parser for the given port.
+// evictPortCache removes any cached parser for the given port.
 // This is the single eviction choke point — all port cleanup paths
-// (explicit close, EOF, call-with-port) must go through here.
+// (explicit close, EOF) must go through here; call-with-port reaches it
+// through close-port.
 func evictPortCache(st *State, port values.Value) {
 	st.mu.Lock()
-	delete(st.tokenizers, port)
 	delete(st.parsers, port)
 	st.mu.Unlock()
 }
 
 // closePort closes a port regardless of its type and evicts
-// any cached tokenizer/parser for the port.
+// any cached parser for the port.
 func closePort(st *State, o values.Value) error {
 	var err error
 	p, ok := o.(values.Port)

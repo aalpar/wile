@@ -498,7 +498,6 @@ Reference for the types, primitives, and special forms in Wile. It is **not exha
 | Primitive | Description |
 |-----------|-------------|
 | `read` | Read a datum |
-| `read-token` | Read a single token |
 | `read-syntax` | Read datum as syntax object |
 | `read-char` | Read a character |
 | `peek-char` | Peek at next character without consuming |

@@ -627,6 +627,11 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   chapter 10 use the boolean `sexp-atom-compare`, now exported from `(wile algebra symbolic)` and `(wile algebra)`; new
   `test/wile/algebra-cross-library-test.scm` drives one protocol through both libraries. The error text on master is
   `got #t` for a sorted pair, `got #f` for an unsorted one. BREAKING: a numeric comparator result (the old -1/0/1) now raises in `term-compare`, any other truthy value is read as `#t`; a partial comparator and a written-form tie between distinct atoms raise in `term-equal?`; the crosscheck's follow-ups are filed under "Filed by the P6.9 crosscheck").
+- [x] Reader/IO: ~~`read-token` returns an opaque `#<simple-token ...>` with no accessor~~ (Done 2026-10-20, P6.14 / I101, I100, `72dcf9df` `82c20ab8` `61d6d3a8`:
+  retired rather than finished, since finishing it would have published all 61 tokenizer states as a Scheme-level contract with no
+  consumer. `PrimReadToken`, `State.nextTokenCached` and the `tokenizers` / `tokenizerEntry` cache are gone; `readSyntaxCached` and its
+  `parsers` cache are untouched. BREAKING (Scheme and Go API). The axis-B manifest row disappearing is the gate (`TestBuildAxisBManifest`);
+  the follow-ups are filed under "Filed by the P6.14 crosscheck").
 - [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
   as a profile name.
 - [ ] Coverage: `stdlibPrefixes` (`coverage/gocover.go`) omits the embedded `chibi/` and `rnrs/`.
@@ -2281,6 +2286,39 @@ The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no r
 - [ ] **An improper-list term such as `(g . a)` crashes `ac-match` / `ac-unify`** [Correctness, S, P6.9 re-review, pre-existing on
   master]: `sexp-term-protocol` takes `(cdr term)` as the operand list, so a dotted tail reaches `match-positional` as a
   non-list and fails with an arity/`car` error instead of a located protocol error.
+
+### Filed by the P6.14 crosscheck (2026-10-20)
+
+- [ ] **`SimpleToken.SchemeString` / `IsVoid` / `EqualTo` are dead after `read-token`'s retirement** [Dead code, XS, P6.14 crosscheck]:
+  `pkg/internal/tokenizer/token.go` (the three methods, ~:106-136) existed only so `PrimReadToken`'s `q.(values.Value)` cast
+  succeeded. Deleting them (and the `fmt` / `values` imports they pull in) builds; only `tokenizer_test.go`
+  breaks, six tests of it: `TestSimpleToken_SchemeString`, `_IsVoid`, `_EqualTo`, `_EqualTo_DifferentType`,
+  `_EqualTo_DifferentPositions` (~:2008-2110) and `TestEqualTo` (~:2188, outside that range). Removing them turns "a token reaches Scheme"
+  into a compile error, which is the property the retirement wanted. Also `releaseLookahead`'s anonymous-interface
+  parameter (`pkg/extensions/io/state.go`, ~:291-294) now has one caller (`readSyntaxCached`, a `*parser.Parser`): narrow it.
+  Outside P6.14's task record, so filed.
+- [ ] **A top-level `define` whose body fails to compile still leaves the name bound to `#<void>`** [Diagnostics / REPL, S,
+  P6.14 crosscheck, pre-existing, reproduced on the P6.14 branch]: `wile -i`, then `(define (f p) (read-token p))` reports the
+  compile error, and a later `(f 1)` fails with `application: expected a procedure, got #<void>`, naming neither `f` nor the
+  unbound name. Same with any unbound name in the body. It is not interactive-only: a guarded `eval` under `-e` shows it
+  too (`(guard (e (#t #f)) (eval '(define (f p) zzz-unbound) (interaction-environment)))`, then `(eval 'f (interaction-environment))`
+  is `#<void>`), so any embedder or MCP caller that keeps evaluating after an error sees it. A file run stops at its first error.
+  A define whose value fails at RUN time leaves the same trace (`(define g (car))` under a guard: `g` is `#<void>` on the P6.14
+  branch and on master); the proposed fix (retract on compile error) does not cover that, so say so when it lands. Overlaps
+  the residual "Q3" in `todo/closed.md` (~:131, "a predeclared-but-unwritten slot reads as `#!void` rather than raising"):
+  no open row tracks Q3, so this row is where it is tracked. Site: `declareDefineBinding` (`pkg/machine/compilation/compile_define.go`, ~:60-145) creates the global
+  binding BEFORE `compileValidatedDefineVar` / the function-shorthand path compiles the value, so a compile error leaves
+  the declared-but-unpopulated slot behind (the function shorthand declares early on purpose, for self-reference). Fix: on a
+  compile error after declaration, retract the binding (or mark it undefined so a reference reports the original error);
+  do not create it visibly until compilation succeeds. Verify the immutable-top-level and `Predeclared` paths keep their
+  contract.
+
+- [ ] **`TestConcurrentMapAccess_T1`'s first and third subtests reimplement the cache's get-or-create inline** [Test coverage,
+  XS, P6.14 re-review, pre-existing]: they never call `readSyntaxCached`, so removing the lock from `readSyntaxCached` passes
+  this test and only `TestConcurrentReadSyntaxSamePort_T1_1` catches it. It also keeps an always-true
+  `c.Assert(entry, qt.Not(qt.IsNil))` called from goroutines on the parent test's `c`, the `FailNow`-from-a-goroutine hazard
+  P6.14 fixed in `TestParserCacheEviction`. Fix: drive `readSyntaxCached` from the goroutines and assert on the returned
+  value, with a per-goroutine `qt.New(t)` or no assertion off the test goroutine.
 
 ### Closed in Tier 1
 

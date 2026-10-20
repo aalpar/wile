@@ -170,30 +170,6 @@ func TestNewlineWithBuffer(t *testing.T) {
 	qt.Assert(t, buf.String(), qt.Equals, "\n")
 }
 
-func TestReadToken(t *testing.T) {
-	// Feed input to this engine's current-input-port.
-	input := strings.NewReader("hello 42")
-	env, err := bootstrap.NewNamespaceFrame(context.TODO())
-	qt.Assert(t, err, qt.IsNil)
-	redirectInput(t, env, input)
-	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	sctx := syntax.NewZeroValueSourceContext()
-
-	// (read-token)
-	prog := values.List(values.NewSymbol("read-token"))
-	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
-	qt.Assert(t, err, qt.IsNil)
-
-	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
-	err = mc.Run()
-	qt.Assert(t, err, qt.IsNil)
-	// First token should be "hello" symbol
-	result := mc.GetValue()
-	qt.Assert(t, result, qt.IsNotNil)
-}
-
 func TestReadSyntax(t *testing.T) {
 	// Feed input to this engine's current-input-port.
 	input := strings.NewReader("(+ 1 2)")
@@ -243,35 +219,6 @@ func TestRead(t *testing.T) {
 	pr, ok := result.(*values.Pair)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, pr.Car().(*values.Symbol).Key, qt.Equals, "a")
-}
-
-func TestReadWithPort(t *testing.T) {
-	// Test read with an explicit port argument
-	input := strings.NewReader("42")
-	port := values.NewCharacterInputPortFromReader(input)
-
-	env, err := bootstrap.NewNamespaceFrame(context.TODO())
-	qt.Assert(t, err, qt.IsNil)
-
-	// We need to test read with an explicit port - use lambda to capture port
-	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	sctx := syntax.NewZeroValueSourceContext()
-
-	// Create a program that reads from the port
-	// First define a variable holding the port, then call read on it
-	// For simplicity, test read-token with no port (uses default)
-	prog := values.List(values.NewSymbol("read-token"))
-	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
-	qt.Assert(t, err, qt.IsNil)
-
-	// Redirect this engine's current-input-port to the test port.
-	stateOf(t, env).SetInputPort(port)
-
-	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
-	err = mc.Run()
-	qt.Assert(t, err, qt.IsNil)
 }
 
 func TestDisplayWithSymbol(t *testing.T) {
@@ -339,30 +286,6 @@ func TestWriteCharWithUnicode(t *testing.T) {
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, buf.String(), qt.Equals, "λ")
-}
-
-func TestReadMultipleTokens(t *testing.T) {
-	// Feed multiple tokens to this engine's current-input-port.
-	input := strings.NewReader("foo bar 123")
-	env, err := bootstrap.NewNamespaceFrame(context.TODO())
-	qt.Assert(t, err, qt.IsNil)
-	redirectInput(t, env, input)
-
-	// Read first token
-	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	sctx := syntax.NewZeroValueSourceContext()
-
-	prog := values.List(values.NewSymbol("read-token"))
-	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
-	qt.Assert(t, err, qt.IsNil)
-
-	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
-	err = mc.Run()
-	qt.Assert(t, err, qt.IsNil)
-	result := mc.GetValue()
-	qt.Assert(t, result, qt.IsNotNil)
 }
 
 func TestDisplayWithInteger(t *testing.T) {
@@ -718,29 +641,6 @@ func TestReadSyntaxFromStringPort(t *testing.T) {
 			Name: "read-syntax simple symbol",
 			Code: `(let ((p (open-input-string "hello")))
 				(read-syntax p))`,
-		},
-	}
-
-	for _, tc := range tcs {
-		t.Run(tc.Name, func(t *testing.T) {
-			result, err := testhelpers.RunSchemeCode(t, tc.Code)
-			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, qt.IsNotNil)
-		})
-	}
-}
-
-func TestReadTokenFromStringPort(t *testing.T) {
-	tcs := []testhelpers.SchemeCodeErrorTestCase{
-		{
-			Name: "read-token identifier",
-			Code: `(let ((p (open-input-string "hello")))
-				(read-token p))`,
-		},
-		{
-			Name: "read-token number",
-			Code: `(let ((p (open-input-string "42")))
-				(read-token p))`,
 		},
 	}
 

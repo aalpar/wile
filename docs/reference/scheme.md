@@ -1381,8 +1381,6 @@ Requires the eval extension:
 | `(compile expr)` | Compile a datum or syntax object to a zero-argument procedure |
 | `(read-syntax)` | Read datum as syntax object |
 | `(read-syntax port)` | |
-| `(read-token)` | Read single token |
-| `(read-token port)` | |
 
 ### Syntax Object Operations
 

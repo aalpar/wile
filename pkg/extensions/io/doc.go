@@ -17,7 +17,7 @@
 // # Textual Read (R7RS 6.13.2)
 //
 //   - read, read-char, peek-char, char-ready?, read-line, read-string
-//   - read-syntax, read-token
+//   - read-syntax
 //
 // # Textual Write (R7RS 6.13.3)
 //

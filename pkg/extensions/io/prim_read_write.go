@@ -18,7 +18,6 @@ import (
 	"errors"
 	"io"
 
-	"github.com/aalpar/wile/pkg/internal/tokenizer"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/registry/helpers"
@@ -236,36 +235,6 @@ func PrimRead(mc machine.CallContext) error {
 	cache := make(map[syntax.SyntaxValue]values.Value)
 	q := syntax.UnwrapAllShared(syn, cache)
 	mc.SetValue(q)
-	return nil
-}
-
-// PrimReadToken implements the (read-token) primitive.
-// Reads a single token from port.
-// Reads from the current input port if no port is specified.
-func PrimReadToken(mc machine.CallContext) error {
-	port, rr, err := getOptionalInputPort(mc, 0)
-	if err != nil {
-		return err
-	}
-	st, err := stateFrom(mc)
-	if err != nil {
-		return err
-	}
-
-	mkTokenizer := func() *tokenizer.Tokenizer {
-		return tokenizer.NewTokenizer(rr, false)
-	}
-	q, err := st.nextTokenCached(port, mkTokenizer)
-	if errors.Is(err, io.EOF) {
-		// Port is exhausted; evict the cached tokenizer.
-		evictPortCache(st, port)
-		mc.SetValue(values.EOFObject)
-		return nil
-	}
-	if err != nil {
-		return werr.WrapForeignReadErrorf(err, "error reading token")
-	}
-	mc.SetValue(q.(values.Value))
 	return nil
 }
 

@@ -21,7 +21,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/aalpar/wile/pkg/internal/tokenizer"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/security"
@@ -32,26 +31,24 @@ import (
 
 // State is the per-engine I/O port + cache state. One per Namespace, reached by
 // primitives via stateFrom(cc). Replaces the former package globals so two
-// Engines in one process do not share port parameters or caches (staff-sweep #8).
+// Engines in one process do not share port parameters or cache (staff-sweep #8).
 //
-// The tokenizers/parsers caches are keyed by port value; keeping them in the
-// same per-engine struct as the port parameters is what makes their isolation
-// hold — two engines reading their default current-input-port now key on
-// distinct default port objects, so their read positions no longer collide.
+// The parsers cache is keyed by port value; keeping it in the same per-engine
+// struct as the port parameters is what makes its isolation hold — two engines
+// reading their default current-input-port now key on distinct default port
+// objects, so their read positions no longer collide.
 type State struct {
 	inPort, outPort, errPort *machine.Parameter
 
-	// mu protects the tokenizers/parsers cache maps — get-or-create and evict
-	// only. It is never held across a read: a read runs under the per-port
-	// entry lock (parserEntry.mu / tokenizerEntry.mu), so a blocking read on one
-	// port neither serialises other ports nor freezes the engine's I/O.
+	// mu protects the parsers cache map — get-or-create and evict only. It is
+	// never held across a read: a read runs under the per-port entry lock
+	// (parserEntry.mu), so a blocking read on one port neither serialises other
+	// ports nor freezes the engine's I/O.
 	mu sync.Mutex
-	// tokenizers caches tokenizers per input port; parsers caches parsers per
-	// input port. Entries are evicted via evictPortCache() on port close or EOF.
-	// Ports abandoned without close or EOF retain their entries until the engine
-	// is collected.
-	tokenizers map[values.Value]*tokenizerEntry
-	parsers    map[values.Value]*parserEntry
+	// parsers caches parsers per input port. Entries are evicted via
+	// evictPortCache() on port close or EOF. Ports abandoned without close or EOF
+	// retain their entries until the engine is collected.
+	parsers map[values.Value]*parserEntry
 }
 
 // parserEntry pairs a port's cached parser with a mutex that serialises reads
@@ -68,15 +65,8 @@ type parserEntry struct {
 	mk     func() *parser.Parser // constructor; nil once parser is built
 }
 
-// tokenizerEntry is the read-token analogue of parserEntry.
-type tokenizerEntry struct {
-	mu        sync.Mutex
-	tokenizer *tokenizer.Tokenizer
-	mk        func() *tokenizer.Tokenizer // constructor; nil once built
-}
-
 // NewState builds a fresh per-engine State: three port parameters over the
-// process std streams, and empty caches. Fully constructed here — there is no
+// process std streams, and an empty cache. Fully constructed here — there is no
 // lazy initialization, unlike the former package-global InitState.
 //
 // auth gates each host stream. This is the only gate the three pre-opened ports
@@ -89,11 +79,10 @@ type tokenizerEntry struct {
 // at all (reviews/2026-08-07/REVIEW.md 2.1.1).
 func NewState(auth security.Authorizer) *State {
 	return &State{
-		inPort:     machine.NewParameter(gatedInputPort(auth, security.StreamStdin, os.Stdin), nil, machine.MutableBase),
-		outPort:    machine.NewParameter(gatedOutputPort(auth, security.StreamStdout, os.Stdout), nil, machine.MutableBase),
-		errPort:    machine.NewParameter(gatedOutputPort(auth, security.StreamStderr, os.Stderr), nil, machine.MutableBase),
-		tokenizers: map[values.Value]*tokenizerEntry{},
-		parsers:    map[values.Value]*parserEntry{},
+		inPort:  machine.NewParameter(gatedInputPort(auth, security.StreamStdin, os.Stdin), nil, machine.MutableBase),
+		outPort: machine.NewParameter(gatedOutputPort(auth, security.StreamStdout, os.Stdout), nil, machine.MutableBase),
+		errPort: machine.NewParameter(gatedOutputPort(auth, security.StreamStderr, os.Stderr), nil, machine.MutableBase),
+		parsers: map[values.Value]*parserEntry{},
 	}
 }
 
@@ -309,33 +298,4 @@ func releaseLookahead(port *values.PortObject, rdr interface {
 		return werr.WrapForeignReadErrorf(err, "error returning lookahead character to port")
 	}
 	return nil
-}
-
-// nextTokenCached returns the next token from the port's cached tokenizer,
-// serialising reads on one port under the entry lock. Same discipline as
-// readSyntaxCached; the tokenizer is likewise built lazily under the entry lock.
-func (p *State) nextTokenCached(port *values.PortObject, mk func() *tokenizer.Tokenizer) (tokenizer.Token, error) {
-	p.mu.Lock()
-	entry, ok := p.tokenizers[port]
-	if !ok || entry == nil {
-		entry = &tokenizerEntry{mk: mk}
-		p.tokenizers[port] = entry
-	}
-	p.mu.Unlock()
-
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-	if entry.tokenizer == nil {
-		entry.tokenizer = entry.mk()
-		entry.mk = nil
-	}
-	q, err := entry.tokenizer.Next()
-	if err != nil {
-		return nil, err
-	}
-	err = releaseLookahead(port, entry.tokenizer)
-	if err != nil {
-		return nil, err
-	}
-	return q, nil
 }

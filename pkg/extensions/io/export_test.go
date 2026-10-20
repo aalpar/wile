@@ -14,12 +14,12 @@
 
 package io
 
-// ExportCacheSizes returns a State's (parsers, tokenizers) cache entry counts,
-// for the io_test package to assert that EOF/close eviction leaves no lingering
-// entries. The caches and their mutex are unexported; this locked accessor
-// exposes only the sizes, without widening the production API.
-func ExportCacheSizes(st *State) (int, int) {
+// ExportParserCacheSize returns the number of entries in a State's parser
+// cache, for the io_test package to assert that EOF/close eviction leaves no
+// lingering entries. The cache and its mutex are unexported; this locked
+// accessor exposes only the size, without widening the production API.
+func ExportParserCacheSize(st *State) int {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	return len(st.parsers), len(st.tokenizers)
+	return len(st.parsers)
 }

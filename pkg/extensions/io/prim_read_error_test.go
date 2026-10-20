@@ -81,12 +81,6 @@ func TestReadErrorClassification(t *testing.T) {
                        (read (make-failing-unread-port "ab cd"))))`,
 		},
 		{
-			name: "read-token surfaces UnreadRune failure as read-error",
-			code: `(read-error?
-                     (guard (e (#t e))
-                       (read-token (make-failing-unread-port "ab cd"))))`,
-		},
-		{
 			name: "read-line surfaces inner ReadRune failure as read-error",
 			code: `(read-error?
                      (guard (e (#t e))
