@@ -494,11 +494,11 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
 
 **Open, no decision needed.**
 
-- [ ] `call-with-immediate-continuation-mark` sees an outer frame's mark after a non-tail call
+- [ ] (OPEN by decision; pinned as a documented divergence by `TestContinuationMarks_ShapeMatrix` cicm-nontail and in r7rs-differences.md, P6.3) `call-with-immediate-continuation-mark` sees an outer frame's mark after a non-tail call
   inside a procedure, to a primitive or a user procedure: `(define (f) (wcm 'a 1 (list (cicm 'a
   (lambda (v) v) 'default))))` gives `(1)`, Racket `(default)` (`GetImmediateMark` fallback). At top
   level it answers `default` (re-measured 2026-10-16).
-- [ ] `(continuation-marks k)` for a `call/cc` captured in tail position of
+- [x] (FIXED P6.3, `2be65293`: `ComposableContinuation.liveMarks`, `CollectMarksFromCapture`) `(continuation-marks k)` for a `call/cc` captured in tail position of
   `with-continuation-mark` inside a procedure omits the capturing frame's marks (Wile `()`,
   Racket `(2)`).
 - [ ] A literal's binding captured when a nested `syntax-rules` transformer compiles misses an
