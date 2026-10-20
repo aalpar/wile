@@ -43,7 +43,7 @@ import (
 // which a future change could quietly drop:
 //
 //   - gensym is stateless: values.NewTemporaryVariableName draws from crypto/rand,
-//     so there is no counter to race on (values/values.go). A counter-based gensym
+//     so there is no counter to race on (values/symbol.go). A counter-based gensym
 //     would reintroduce one.
 //   - scope identity is atomic: values.NewScope mints from an atomic.Uint64
 //     (values/scope.go).

@@ -108,7 +108,7 @@ var EOFObject Value = eofType{}
 //
 // R7RS §6.1 defines eq?/eqv? on aggregates as "denote the same location in the
 // store." A Scheme object must therefore HAVE a location, and Wile spells that as
-// Go pointer identity: EqIdentity (values.go) special-cases *Symbol (compared by
+// Go pointer identity: EqIdentity (defined below) special-cases *Symbol (compared by
 // Key, since interning was removed) and otherwise falls through to a bare `a == b`
 // on the interface. It backs eq?, memq, and assq — the hot path. Go panics with
 // "comparing uncomparable type" when the dynamic type behind an interface is a

@@ -565,7 +565,7 @@ qt.Assert(t, result, qt.IsNotNil)
 - One primary type per file: `{type_lowercase}.go`
 - Tests in parallel: `{type_lowercase}_test.go`
 - Related types grouped by prefix: `character_input_port.go`, `character_output_port.go`
-- Helpers live in the file of the type they serve; there is no catch-all utility file (`pkg/values` has a test that refuses five exact catch-all file names; it does not catch variants)
+- Helpers live in the file of the type they serve; there is no catch-all utility file (`pkg/values` has a test that refuses five exact names, compared case-insensitively; utility.go and the like pass)
 - Error definitions: `error.go`, `foreign_error.go`
 
 ### Package Documentation
@@ -1033,9 +1033,8 @@ func parseImportSet(ctx context.Context, expr syntax.SyntaxValue) (*ImportSet, e
 Generated temporary variables use the pattern `__T_<base32>`:
 
 ```go
-func NewTemporaryVariableName() string {
-    return "__T_" + base32Encode(counter)
-}
+// 128 bits from crypto/rand, base32-encoded; stateless, so no counter to race on.
+func NewTemporaryVariableName() *Symbol { ... }
 ```
 
 ### Builtin Shadowing

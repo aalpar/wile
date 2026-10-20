@@ -24,7 +24,8 @@ import (
 
 // TestValuesHasNoGrabBagFile keeps pkg/values from regrowing a catch-all file.
 // It refuses exactly the five names below, compared case-insensitively against
-// a directory listing (so a case-insensitive filesystem cannot hide one). It is
+// a directory listing, so Utils.go is caught on a case-sensitive filesystem
+// too (a bare os.Stat only catches it on a case-insensitive one). It is
 // a filename predicate: utility.go or values_utils.go pass, and the split of
 // helpers by owner is enforced by review, not by this test. Helpers live in the
 // file of the type they serve.

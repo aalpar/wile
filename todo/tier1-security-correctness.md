@@ -2135,6 +2135,7 @@ disagreement on one program, the internal-invariant form of a defect.
 ### Filed by the P5.13 crosscheck (2026-10-19)
 
 - [ ] **Six mutants survive the `pkg/values` tests on master and the branch** [Test gap, S, P5.13 crosscheck]: `NthCons`, `Single`, `Uncons`, `CarAs`, `CollectList`, and the symbol branch of `EqIdentity`. The first five have 0% coverage inside `pkg/values` (other packages' coverage unchecked). Pre-existing; the P5.13 move changed none of them.
+- [x] **`CODING_STYLE.md` "Temporary Variable Names" showed a counter-based `string` function** [Doc drift, XS, P5.13 crosscheck, Done 2026-10-19]: the real `NewTemporaryVariableName` returns `*Symbol` from `crypto/rand`. Snippet corrected on the P5.13 branch.
 - [ ] **`TestValuesHasNoGrabBagFile` is an exact-name filename predicate** [Test gap, XS, P5.13 crosscheck]: `utility.go`, `helper.go`, `values_utils.go` and a `utils_test.go`-style catch-all test file all pass it. Substring matching was rejected as a source of false positives.
 
 ### Filed from review 2026-09-09 (indexlint, 2026-10-18)
