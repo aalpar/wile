@@ -15,6 +15,8 @@
 package compilation
 
 import (
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -236,14 +238,48 @@ func refIndexAllocRegion(t *testing.T, k, n int) []validate.ValidatedExpr {
 	return bodyOfLambda(t, b.String())
 }
 
+// assertOneBlock asserts that the index's per-spelling slices are exactly full
+// and tile one contiguous backing array: sorted by address, each begins where
+// the previous one ends. This is the witness of "one block"; the allocation
+// count alone cannot tell it from one make per spelling.
+func assertOneBlock(c *qt.C, refs refIndex) {
+	c.Helper()
+	type span struct {
+		lo, n, capacity uintptr
+	}
+	spans := make([]span, 0, len(refs))
+	for _, occ := range refs {
+		spans = append(spans, span{
+			lo:       reflect.ValueOf(occ).Pointer(),
+			n:        uintptr(len(occ)),
+			capacity: uintptr(cap(occ)),
+		})
+	}
+	sort.Slice(spans, func(i, j int) bool {
+		return spans[i].lo < spans[j].lo
+	})
+	size := reflect.TypeOf(binderRef{}).Size()
+	for i, s := range spans {
+		c.Assert(s.capacity, qt.Equals, s.n, qt.Commentf("span %d", i))
+		if i == 0 {
+			continue
+		}
+		prev := spans[i-1]
+		c.Assert(s.lo, qt.Equals, prev.lo+prev.n*size, qt.Commentf("span %d does not start where span %d ends", i, i-1))
+	}
+}
+
 // TestNewRefIndexAllocatesPerKeyNotPerOccurrence pins that building the index
-// costs allocations proportional to the number of distinct spellings, not to
-// the number of occurrences.
+// costs a constant number of allocations, not one per occurrence or per growth
+// step.
 //
-// The per-key append grew each spelling's slice by doubling, so 1600
-// occurrences over 8 spellings cost 78 allocations on master (8 keys x ~9
-// growth steps, plus map buckets). The bound is 2K+4; the 74 is recorded so the
-// bound can only be tightened.
+// The per-key append grew each spelling's slice by doubling: 1600 occurrences
+// over 8 spellings cost 74 allocations on master and cost 3 here (the count
+// map, the block, the index map). The bound of 4 holds for K <= 8, where a Go
+// map fits one bucket; it is an upper bound, not an equality, because map
+// allocation differs by runtime version. It cannot distinguish one block from
+// one make per spelling (10-11 allocations at K=8 would still pass a 2K+4
+// bound); assertOneBlock is the witness of that.
 func TestNewRefIndexAllocatesPerKeyNotPerOccurrence(t *testing.T) {
 	c := qt.New(t)
 	const k = 8
@@ -261,15 +297,15 @@ func TestNewRefIndexAllocatesPerKeyNotPerOccurrence(t *testing.T) {
 	}
 	c.Assert(len(refs), qt.Equals, k)
 	c.Assert(total, qt.Equals, k*n)
+	assertOneBlock(c, refs)
 
-	bound := float64(2*k + 4)
+	const bound = 4.0
 	c.Assert(allocs <= bound, qt.IsTrue,
 		qt.Commentf("K=%d N=%d allocs=%v bound=%v", k, k*n, allocs, bound))
 }
 
 // TestNewRefIndexContents pins what the allocation strategy must not move: each
-// spelling's occurrences in walk order, each slice exactly full so a later add
-// cannot spill into a neighbour's subslice.
+// spelling's occurrences in walk order, in slices that tile one block.
 func TestNewRefIndexContents(t *testing.T) {
 	c := qt.New(t)
 	const k = 8
@@ -277,9 +313,9 @@ func TestNewRefIndexContents(t *testing.T) {
 	refs := newRefIndex(refIndexAllocRegion(t, k, n))
 
 	c.Assert(len(refs), qt.Equals, k)
+	assertOneBlock(c, refs)
 	for key, occ := range refs {
 		c.Assert(len(occ), qt.Equals, n, qt.Commentf("key %q", key))
-		c.Assert(cap(occ), qt.Equals, n, qt.Commentf("key %q", key))
 		for i, r := range occ {
 			c.Assert(r.sym.Sym.Key, qt.Equals, key)
 			c.Assert(r.origin, qt.Equals, i, qt.Commentf("key %q occurrence %d", key, i))
@@ -289,16 +325,24 @@ func TestNewRefIndexContents(t *testing.T) {
 
 // TestNewRefIndexSizesEveryOccurrenceKind pins that the sizing pass counts the
 // same occurrences the filling pass stores, for each kind newRefIndex records:
-// a read, a set! target, and a live symbol inside an opaque subtree. A kind
-// missed by the count spills its spelling's slice past the reserved capacity,
-// which this catches as cap != len.
+// a read, a set! target, and a live symbol inside an opaque subtree. A kind the
+// count misses leaves its spelling's slice too small, so the fill reallocates
+// it out of the block, which assertOneBlock reports as a gap or a spare
+// capacity.
 func TestNewRefIndexSizesEveryOccurrenceKind(t *testing.T) {
 	c := qt.New(t)
 	body := bodyOfLambda(t, "(lambda (a b c) (set! a 1) (set! a 2) (a b) (quasiquote ((unquote (set! b 1)) (unquote (set! b 2)) (unquote (set! b 3)) (unquote c))) (c))")
 	refs := newRefIndex(body)
 
 	c.Assert(len(refs) > 0, qt.IsTrue)
-	for key, occ := range refs {
-		c.Assert(cap(occ), qt.Equals, len(occ), qt.Commentf("key %q", key))
-	}
+	assertOneBlock(c, refs)
+}
+
+// TestNewRefIndexSkipsNilTargets pins the nil guard on the walk's emit: a set!
+// the validator left without a target names no binding and is not indexed.
+func TestNewRefIndexSkipsNilTargets(t *testing.T) {
+	c := qt.New(t)
+	refs := newRefIndex([]validate.ValidatedExpr{&validate.ValidatedSetBang{}})
+
+	c.Assert(len(refs), qt.Equals, 0)
 }

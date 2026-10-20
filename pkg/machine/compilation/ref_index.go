@@ -107,8 +107,9 @@ type refIndex map[string][]binderRef
 func newRefIndex(exprs []validate.ValidatedExpr) refIndex {
 	// Two passes over one enumeration, so the pass that sizes the block and the
 	// pass that fills it cannot disagree about which occurrences exist. A
-	// counting walk that skipped a node the filling walk visits would overflow
-	// a key's subslice into its neighbour's.
+	// disagreement is not unsound: a key that receives more than it was sized
+	// for silently reallocates its own slice (the three-index clamp below keeps
+	// it out of its neighbour's) and loses the saving, with contents correct.
 	counts := map[string]int{}
 	total := 0
 	forEachBinderRef(exprs, func(r binderRef) {
@@ -128,7 +129,7 @@ func newRefIndex(exprs []validate.ValidatedExpr) refIndex {
 		off += n
 	}
 	forEachBinderRef(exprs, func(r binderRef) {
-		q.add(r)
+		q[r.sym.Sym.Key] = append(q[r.sym.Sym.Key], r)
 	})
 	return q
 }
@@ -174,12 +175,6 @@ func forEachBinderRef(exprs []validate.ValidatedExpr, visit func(binderRef)) {
 	for i, e := range exprs {
 		walk(e, i, false)
 	}
-}
-
-// add records one occurrence into the subslice newRefIndex reserved for its
-// spelling. The caller has already dropped nil symbols.
-func (p refIndex) add(r binderRef) {
-	p[r.sym.Sym.Key] = append(p[r.sym.Sym.Key], r)
 }
 
 // matches reports whether any occurrence of name's spelling denotes the binding
