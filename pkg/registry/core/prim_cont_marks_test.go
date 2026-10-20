@@ -15,6 +15,7 @@
 package core_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -22,6 +23,7 @@ import (
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/wile"
 )
 
 func TestPrimContinuationMarkSetQ(t *testing.T) {
@@ -183,8 +185,10 @@ func TestPrimContinuationMarks(t *testing.T) {
 // Racket's. Each case wraps the wcm in a lambda body, where it is in tail position.
 //
 // call-with-immediate-continuation-mark is not pinned here: inside a prompt body it
-// answers the caller's mark where Racket answers the default, a separate defect in
-// GetImmediateMark's fallback to p.cont that this fix does not change.
+// answers the caller's mark where Racket answers the default, the same documented
+// divergence (I167, docs/reference/r7rs-differences.md) that
+// TestContinuationMarks_ShapeMatrix pins for the non-tail call. Both come from
+// GetImmediateMark's fallback to p.cont.
 func TestContinuationMarks_TailBoundaryRecordsMarkOnce(t *testing.T) {
 	tcs := []struct {
 		name     string
@@ -361,5 +365,156 @@ func TestPrimCallWithImmediateContMark(t *testing.T) {
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result.SchemeString(), qt.Equals, tc.expected)
 		})
+	}
+}
+
+// markShapeRunners evaluates code down both pipelines. testhelpers.RunSchemeCode
+// never calls NativeTemplate.Optimize, so a table written only through it exercises
+// the unoptimized bytecode while the CLI and every embedder run the optimized one;
+// the Engine path is the one a user sees. A shape that answers differently on the
+// two is itself a finding, so each row runs on both.
+func markShapeRunners(t *testing.T) map[string]func(code string) (string, error) {
+	t.Helper()
+	return map[string]func(code string) (string, error){
+		"unoptimized": func(code string) (string, error) {
+			result, err := testhelpers.RunSchemeCode(t, code)
+			if err != nil {
+				return "", err
+			}
+			return result.SchemeString(), nil
+		},
+		"engine": func(code string) (string, error) {
+			engine, err := wile.NewEngine(context.Background())
+			qt.Assert(t, err, qt.IsNil)
+			result, err := engine.EvalMultiple(context.Background(), code)
+			if err != nil {
+				return "", err
+			}
+			return result.SchemeString(), nil
+		},
+	}
+}
+
+// TestContinuationMarkSetAcceptsFalse pins Racket's alias: #f stands for the
+// current continuation's marks in the first argument of every continuation-mark-set
+// accessor. Expected values are Racket's, measured: 42, (7), (#(7)); the two list
+// forms return a list and a list of vectors.
+func TestContinuationMarkSetAcceptsFalse(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name:     "first",
+			code:     `(with-continuation-mark 'k 42 (continuation-mark-set-first #f 'k))`,
+			expected: "42",
+		},
+		{
+			name:     "first with default and no mark",
+			code:     `(continuation-mark-set-first #f 'k 'none)`,
+			expected: "none",
+		},
+		{
+			name:     "list",
+			code:     `(with-continuation-mark 'k 7 (continuation-mark-set->list #f 'k))`,
+			expected: "(7)",
+		},
+		{
+			name:     "list star",
+			code:     `(with-continuation-mark 'k 7 (continuation-mark-set->list* #f '(k)))`,
+			expected: "(#(7))",
+		},
+		{
+			name:     "same answer as the explicit current set",
+			code:     `(with-continuation-mark 'k 7 (equal? (continuation-mark-set->list #f 'k) (continuation-mark-set->list (current-continuation-marks) 'k)))`,
+			expected: "#t",
+		},
+	}
+	for name, run := range markShapeRunners(t) {
+		for _, tc := range tcs {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				got, err := run(tc.code)
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got, qt.Equals, tc.expected)
+			})
+		}
+	}
+}
+
+// TestContinuationMarkSetFalseStillRejectsOtherTypes pins that #f is the only
+// non-set value the accessors take.
+func TestContinuationMarkSetFalseStillRejectsOtherTypes(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "first 0", Code: `(continuation-mark-set-first 0 'k)`},
+		{Name: "first true", Code: `(continuation-mark-set-first #t 'k)`},
+		{Name: "list empty list", Code: `(continuation-mark-set->list '() 'k)`},
+		{Name: "list star symbol", Code: `(continuation-mark-set->list* 'k '(k))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+// TestContinuationMarks_ShapeMatrix is the five-shape matrix: a mark recorded by
+// with-continuation-mark, observed four ways from a lambda body (so the wcm is in
+// tail position of its activation) and once from a non-tail frame. Four rows are
+// Racket's answer. The fifth, cicm-nontail, is a documented divergence (I167): Wile
+// reports the enclosing frame's mark where Racket reports the default; its fix tags
+// the save-continuation emitted for a call in tail position of a wcm body and adds a
+// field to the pooled MachineContinuation, which is the VM's hottest instruction, for
+// a Racket extension no consumer has asked for. The row pins Wile's answer so a change
+// is deliberate. The k-nontail and cicm-tail rows are what catch the plausible
+// "just delete the fallback" and "prepend the key-collapsed capturedMarks" repairs.
+func TestContinuationMarks_ShapeMatrix(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name: "cicm-tail",
+			code: `((lambda () (with-continuation-mark 'a 42
+				(call-with-immediate-continuation-mark 'a (lambda (v) v) 'D))))`,
+			expected: "42",
+		},
+		{
+			name: "ccm-tail",
+			code: `((lambda () (with-continuation-mark 'a 2
+				(continuation-mark-set->list (current-continuation-marks) 'a))))`,
+			expected: "(2)",
+		},
+		{
+			name: "k-nontail",
+			code: `((lambda () (with-continuation-mark 'a 2
+				(list (call-with-current-continuation
+					(lambda (k) (continuation-mark-set->list (continuation-marks k) 'a)))))))`,
+			expected: "((2))",
+		},
+		{
+			name: "k-tail",
+			code: `((lambda () (with-continuation-mark 'a 2
+				(call-with-current-continuation
+					(lambda (k) (continuation-mark-set->list (continuation-marks k) 'a))))))`,
+			expected: "(2)",
+		},
+		{
+			name: "cicm-nontail is a documented divergence, Racket answers (D)",
+			code: `((lambda () (with-continuation-mark 'a 1
+				(list (call-with-immediate-continuation-mark 'a (lambda (v) v) 'D)))))`,
+			expected: "(1)",
+		},
+	}
+	for name, run := range markShapeRunners(t) {
+		for _, tc := range tcs {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				got, err := run(tc.code)
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got, qt.Equals, tc.expected)
+			})
+		}
 	}
 }

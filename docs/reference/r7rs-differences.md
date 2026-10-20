@@ -912,6 +912,14 @@ R7RS §7.3's reference implementation of `guard` uses `(let ((result (begin e1 e
 
 Wile's `guard` uses `call-with-values` to capture all values from the body, then re-emits them via `(apply values results)`. This means `(guard (e (#f)) (values 1 2))` correctly propagates both values, whereas the R7RS reference implementation would signal an error. Observing them needs a multiple-value receiver: `(call-with-values (lambda () (guard (e (#f)) (values 1 2))) list)` is `(1 2)`, while placing the same `guard` in a single-value slot raises, per "Value-Count at a Single-Value Slot" above.
 
+### Continuation-Mark Accessors Follow Racket, With One Divergence
+
+`with-continuation-mark`, `current-continuation-marks`, `continuation-marks` and the `continuation-mark-set-*` accessors are Racket's, not R7RS's; Wile follows Racket's answers and records where it does not.
+
+`#f` is accepted for the mark set in `continuation-mark-set-first`, `continuation-mark-set->list` and `continuation-mark-set->list*`, standing for the current continuation's marks as in Racket. `(continuation-marks k)` for a `call/cc` captured in tail position of a `with-continuation-mark` body reports the capturing activation's marks, so `((lambda () (with-continuation-mark 'a 2 (call/cc (lambda (k) (continuation-mark-set->list (continuation-marks k) 'a))))))` is `(2)`, as in Racket.
+
+**Divergence:** `call-with-immediate-continuation-mark` in a non-tail position inside a `with-continuation-mark` body reports the enclosing frame's mark where Racket reports the default: `((lambda () (with-continuation-mark 'a 1 (list (call-with-immediate-continuation-mark 'a (lambda (v) v) 'D)))))` is `(1)` in Wile and `(D)` in Racket. The tail shape (`42`) agrees. Fixing it means tagging the save-continuation emitted for a call in tail position of a `with-continuation-mark` body and adding a field to the pooled `MachineContinuation`, on the VM's hottest instruction, for a Racket extension nobody has asked about. Pinned by `TestContinuationMarks_ShapeMatrix`.
+
 ### Loss-Signal-Aware Numeric Conversion Primitives
 
 Wile adds four primitives (in the math extension) that expose the

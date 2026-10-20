@@ -71,6 +71,15 @@ type ComposableContinuation struct {
 	// continuation captured inside a call-with-values producer (etc.) restores the
 	// outer handler/parameter values. See collectReachableMarks.
 	capturedMarks []markEntry
+	// liveMarks is the capturing activation's own mark frame at capture time, the
+	// marks a with-continuation-mark in tail position of that activation has written
+	// to the live registers and not yet to a continuation frame. A tail call/cc has
+	// no frame of its own in the segment, so without this copy (continuation-marks k)
+	// cannot see them. It is a straight clone, NOT the key-collapsed capturedMarks:
+	// a segment that does carry the marks on a chain frame (the non-tail case) would
+	// report them twice if the collapsed snapshot were prepended as well. Nil for a
+	// composable continuation, which snapshots nothing. See CollectMarksFromCapture.
+	liveMarks []markEntry
 	// escalatorArms are the non-continuable finalizer frames' arms carried by this
 	// segment, precomputed at capture. Nil for essentially every capture, which is
 	// what keeps the resume path's added cost to one length test.

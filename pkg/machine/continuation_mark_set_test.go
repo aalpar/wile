@@ -258,3 +258,55 @@ func TestCollectMarksFromContinuation_StopsAtPrompt(t *testing.T) {
 	c.Assert(CollectMarksFromContinuation(mc.cont, DefaultPromptTag).ToList(key).SchemeString(), qt.Equals, "(3 2 1)")
 	c.Assert(CollectMarksFromContinuation(nil, tag).ToList(key).SchemeString(), qt.Equals, "()")
 }
+
+// CollectMarksFromCapture is CollectMarksFromContinuation preceded by the capture
+// site's live marks: the activation a tail call/cc was made from has no frame in the
+// segment, so its marks reach the set only through liveMarks. They come first, are
+// never cut by the prompt tag, and an empty liveMarks leaves the chain walk as it
+// was (the non-tail capture, whose marks SaveContinuation already put on a frame).
+func TestCollectMarksFromCapture_PrependsLiveMarks(t *testing.T) {
+	c := qt.New(t)
+	mc := newContMarkTestContext()
+
+	key := values.NewSymbol("k")
+	tag := NewPromptTag("test")
+
+	mc.SetMark(key, values.NewInteger(1))
+	err := mc.SaveContinuation(1)
+	c.Assert(err, qt.IsNil)
+	mc.cont.SetPromptTag(tag)
+
+	mc.SetMark(key, values.NewInteger(2))
+	err = mc.SaveContinuation(1)
+	c.Assert(err, qt.IsNil)
+
+	mc.SetMark(key, values.NewInteger(3))
+	live := cloneMarks(mc.marks)
+
+	withLive := &ComposableContinuation{cont: mc.cont, liveMarks: live}
+	c.Assert(CollectMarksFromCapture(withLive, DefaultPromptTag).ToList(key).SchemeString(), qt.Equals, "(3 2 1)")
+	c.Assert(CollectMarksFromCapture(withLive, tag).ToList(key).SchemeString(), qt.Equals, "(3 2)")
+
+	withoutLive := &ComposableContinuation{cont: mc.cont}
+	c.Assert(CollectMarksFromCapture(withoutLive, DefaultPromptTag).ToList(key).SchemeString(), qt.Equals, "(2 1)")
+	c.Assert(CollectMarksFromCapture(withoutLive, tag).ToList(key).SchemeString(), qt.Equals, "(2)")
+
+	empty := &ComposableContinuation{}
+	c.Assert(CollectMarksFromCapture(empty, tag).ToList(key).SchemeString(), qt.Equals, "()")
+}
+
+// SnapshotReachableMarksInto keeps a clone of the live frame: a later SetMark on the
+// capturing context must not show through the captured continuation's marks.
+func TestSnapshotReachableMarksInto_LiveMarksAreAClone(t *testing.T) {
+	c := qt.New(t)
+	mc := newContMarkTestContext()
+
+	key := values.NewSymbol("k")
+	mc.SetMark(key, values.NewInteger(1))
+
+	comp := &ComposableContinuation{}
+	mc.SnapshotReachableMarksInto(comp)
+	mc.SetMark(key, values.NewInteger(2))
+
+	c.Assert(CollectMarksFromCapture(comp, DefaultPromptTag).ToList(key).SchemeString(), qt.Equals, "(1)")
+}

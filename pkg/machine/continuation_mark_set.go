@@ -125,6 +125,22 @@ func CollectMarksFromContinuation(cont *MachineContinuation, tag *PromptTag) *Co
 	return &ContinuationMarkSet{frames: appendChainMarks(nil, cont, tag)}
 }
 
+// CollectMarksFromCapture builds the ContinuationMarkSet of a call/cc capture: the
+// capturing activation's live marks first, then the segment's chain from its head.
+// CollectMarksFromContinuation alone loses the first part when the call/cc was in
+// tail position of a with-continuation-mark body, because those marks sit in the
+// registers and the segment has no frame carrying them. In the non-tail case
+// SaveContinuation has already moved them onto the chain and liveMarks is empty, so
+// nothing is reported twice. Like CollectContinuationMarks, the live marks are never
+// cut by tag: they are inside any prompt the capture is delimited at.
+func CollectMarksFromCapture(comp *ComposableContinuation, tag *PromptTag) *ContinuationMarkSet {
+	var frames [][]markEntry
+	if len(comp.liveMarks) > 0 {
+		frames = append(frames, cloneMarks(comp.liveMarks))
+	}
+	return &ContinuationMarkSet{frames: appendChainMarks(frames, comp.cont, tag)}
+}
+
 // CollectContinuationMarks builds a ContinuationMarkSet snapshot from the
 // current frame's marks followed by the continuation chain.
 //
