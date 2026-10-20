@@ -18,8 +18,8 @@ callback specialization B, jump-table dispatch, Stage-B phase folding all stay c
   `loadLibraryFromReader` (`library_loader.go`) and `CompileDefineLibrary`
   (`compile_library_forms.go`) each call `LibraryEnvFactory` (re-checked 2026-10-16). The largest single unexamined cost on the import path, and it is
   duplication rather than work, so it is a Tier-3 simplification that happens to be the perf lever.
-- [ ] **Library-scope global reads take a read lock and get no peephole promotion** [Performance, M,
-  same source]: measured ~2.3× slower on fib than the namespace-scope path. The `OpLoadGlobal`
+- [x] **Library-scope global reads take a read lock and get no peephole promotion** [Performance, M,
+  same source, Done 2026-10-19 (P5.11)]: **Done:** an imported binding in a library body loads through the cached binding, so `+ - <` promote to `AddTail`/`NumLt`/`Sub` (I217); fib 27 inside a `define-library` 0.216 s to 0.120 s, top level 0.115 s. Non-imported names (80 of ~9900 sites over a `(wile algebra)` load) stay on the by-GlobalIndex load. Original description: measured ~2.3× slower on fib than the namespace-scope path. The `OpLoadGlobal`
   library-scope arm is unchanged.
 - [x] **`lookupHeadPrimitiveExpander` repeats the `GetBinding` that `lookupMacroBinding` arm 1
   already made** [Performance, M, from the keyword-denotation-dispatch artifacts, Done
