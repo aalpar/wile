@@ -158,7 +158,8 @@ func opaqueSubtreeMentions(expr ValidatedExpr, binder *syntax.SyntaxSymbol) bool
 		return true
 	}
 	q := false
-	forEachRawSymbol(env, raw, opaqueEntryDepth(expr), func(sym *syntax.SyntaxSymbol) {
+	depth, mk := opaqueEntryDepth(expr)
+	forEachRawSymbol(env, raw, depth, mk, func(sym *syntax.SyntaxSymbol) {
 		if refMatchesBinder(sym, binder) {
 			q = true
 		}

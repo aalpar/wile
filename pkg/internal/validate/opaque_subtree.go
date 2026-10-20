@@ -178,21 +178,25 @@ func ForEachOpaqueLiveSymbol(expr ValidatedExpr, fn func(*syntax.SyntaxSymbol)) 
 	if raw == nil {
 		return true
 	}
-	forEachRawSymbol(env, raw, opaqueEntryDepth(expr), fn)
+	depth, mk := opaqueEntryDepth(expr)
+	forEachRawSymbol(env, raw, depth, mk, fn)
 	return true
 }
 
-// opaqueEntryDepth reports the quasiquote depth an opaque node's payload is
-// entered at. A *ValidatedQuasiquote's Template is the form's ARGUMENT, so the
+// opaqueEntryDepth reports the quasiquote depth, and the marker set, an opaque
+// node's payload is entered at. The set only matters at a template depth, and a
+// *ValidatedQuasiquote is always the quasiquote dialect; quasisyntax is a
+// passthrough form and is entered at code depth, where quasiHeadDepth switches
+// to its markers. A *ValidatedQuasiquote's Template is the form's ARGUMENT, so the
 // caller has already stepped one level in; every other opaque node conceals
 // ordinary code. This is the same split markOpaqueTemplate / markOpaqueCode
 // make, in one place so a third opaque shape moves every walk at once.
-func opaqueEntryDepth(expr ValidatedExpr) int {
+func opaqueEntryDepth(expr ValidatedExpr) (int, quasiMarkers) {
 	_, isQuasi := expr.(*ValidatedQuasiquote)
 	if isQuasi {
-		return quasiDepthTemplate
+		return quasiDepthTemplate, quasiquoteMarkers
 	}
-	return quasiDepthCode
+	return quasiDepthCode, quasiquoteMarkers
 }
 
 // quasiDepthCode is the entry depth for a subtree that is ordinary CODE: a
@@ -209,13 +213,32 @@ const (
 	quasiDepthTemplate = 1
 )
 
-// The quasiquote markers this walk recognizes, by the form they DENOTE.
-const (
-	quoteKey           = "quote"
-	quasiquoteKey      = "quasiquote"
-	unquoteKey         = "unquote"
-	unquoteSplicingKey = "unquote-splicing"
-)
+// quoteKey is the one marker that is not part of a quasi dialect: a real quote
+// form at code depth is a barrier whichever dialect surrounds it.
+const quoteKey = "quote"
+
+// quasiMarkers is one dialect's three template markers, by the form each DENOTES.
+// It mirrors compilation.quasiKeywords (nesting, unquote, splicing) and nothing
+// else: quasiKeywords.quoting is the compiler's synthesis head and
+// nestingAlwaysRuntime picks its expansion path, neither of which changes which
+// positions are evaluated (see quasiHeadDepth).
+type quasiMarkers struct {
+	nesting  string
+	unquote  string
+	splicing string
+}
+
+var quasiquoteMarkers = quasiMarkers{
+	nesting:  "quasiquote",
+	unquote:  "unquote",
+	splicing: "unquote-splicing",
+}
+
+var quasisyntaxMarkers = quasiMarkers{
+	nesting:  "quasisyntax",
+	unquote:  "unsyntax",
+	splicing: "unsyntax-splicing",
+}
 
 // markerName returns the marker a head identifier names: the form it DENOTES in
 // env, and its spelling when it denotes none.
@@ -257,7 +280,8 @@ func markerName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) str
 }
 
 // quasiHeadDepth reports how to walk a form whose head DENOTES key, sitting at
-// quasiquote depth quasi. argDepth is the depth for the form's ARGUMENTS (its cdr);
+// quasiquote depth quasi inside a template of dialect mk. argDepth is the depth
+// for the form's ARGUMENTS (its cdr) and argMarkers the dialect they are read in;
 // barrier reports that nothing inside the form is live, so the walk skips it whole.
 //
 // This predicate is the soundness boundary of the whole file. It must agree with
@@ -278,13 +302,26 @@ func markerName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) str
 //
 // The rules the compiler's own walk holds to, and that this predicate must match:
 //
-//   - quasiquote: arguments are one level deeper.
-//   - unquote / unquote-splicing: one level shallower, but ONLY when already
-//     inside a template. At depth 0 an unquote head is not an escape.
+//   - the dialect's nesting head (quasiquote, quasisyntax): arguments are one
+//     level deeper. At depth 0 EITHER dialect's nesting head opens a template and
+//     selects its markers; inside a template the other dialect's head is data.
+//   - the dialect's unquote / unquote-splicing (unquote, unsyntax): one level
+//     shallower, but ONLY when already inside a template. At depth 0 such a head
+//     is not an escape, and in a template of the other dialect it is data.
 //   - quote: a barrier at depth 0 (a real quote form is pure datum). NOT special
 //     inside a template — the compiler does not special-case it there, so its
-//     nested unquotes stay live (R7RS §4.2.6).
+//     nested unquotes stay live (R7RS §4.2.6). That is the quasisyntax case this
+//     parameter exists for: `#,` inside a quoted subtree of a quasisyntax template
+//     fires, and a walk that read quasisyntax as an ordinary head at depth 0 hit
+//     the quote barrier and never saw it.
 //   - anything else: arguments stay at the current depth.
+//
+// Not modeled: compilation.quasiKeywords.nestingAlwaysRuntime. It selects the
+// EXPANSION path for a nested quasisyntax at depth 1, and the two paths differ in
+// what they emit for a bound identifier ((syntax z) yields z's value), never in
+// which positions they evaluate: an unsyntax at depth 2 stays data on both, so
+// its set! does not run. Pinned both ways in pkg/wile/quasisyntax_quote_depth_test.go
+// (the depth-2 row stays (0 7)).
 //
 // One rule this walk does NOT match, deliberately. The compiler recognizes a
 // nested quasiquote in DOTTED-TAIL position — `(a . `(b ,x)), which reads as
@@ -295,29 +332,32 @@ func markerName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) str
 // withdrawn Stable stamp, not an unmarked set! — so the disagreement costs an
 // optimization and cannot miscompile. Teaching it the shape is a safe
 // narrowing, not a fix.
-func quasiHeadDepth(key string, quasi int) (argDepth int, barrier bool) {
-	switch key {
-	case quasiquoteKey:
-		return quasi + 1, false
-
-	case unquoteKey, unquoteSplicingKey:
-		// Only an escape from inside a template. At depth 0 an unquote head is an
-		// ordinary form, and decrementing would run the depth negative.
-		if quasi == quasiDepthCode {
-			return quasi, false
+func quasiHeadDepth(key string, quasi int, mk quasiMarkers) (argDepth int, argMarkers quasiMarkers, barrier bool) {
+	if quasi == quasiDepthCode {
+		// Code. Either dialect's nesting head opens a template of its own, and a
+		// real quote form is pure datum. Unquote and unquote-splicing heads are
+		// ordinary forms here, and decrementing would run the depth negative.
+		switch key {
+		case quasiquoteMarkers.nesting:
+			return quasiDepthTemplate, quasiquoteMarkers, false
+		case quasisyntaxMarkers.nesting:
+			return quasiDepthTemplate, quasisyntaxMarkers, false
+		case quoteKey:
+			return quasi, mk, true
 		}
-		return quasi - 1, false
-
-	case quoteKey:
-		// A real quote form is pure datum. Inside a template it is an ordinary
-		// datum symbol whose nested unquotes stay live (R7RS §4.2.6), which is why
-		// the barrier is depth-0-only and the compiler's own walk has no quote case.
-		if quasi == quasiDepthCode {
-			return quasi, true
-		}
-		return quasi, false
+		return quasi, mk, false
 	}
-	return quasi, false
+
+	// Inside a template only ITS dialect's markers count. The other dialect's
+	// nesting head is data, and so is quote: the compiler's walk has no quote
+	// case in a template, so its nested unquotes stay live (R7RS section 4.2.6).
+	switch key {
+	case mk.nesting:
+		return quasi + 1, mk, false
+	case mk.unquote, mk.splicing:
+		return quasi - 1, mk, false
+	}
+	return quasi, mk, false
 }
 
 // forEachRawSymbol calls fn for every SyntaxSymbol in a LIVE position of a raw
@@ -341,7 +381,7 @@ func quasiHeadDepth(key string, quasi int) (argDepth int, barrier bool) {
 //
 // The spine is walked iteratively so that a long list costs no Go stack; only
 // genuine nesting (car, vector element) recurses.
-func forEachRawSymbol(env *environment.EnvironmentFrame, v values.Value, quasi int, fn func(*syntax.SyntaxSymbol)) {
+func forEachRawSymbol(env *environment.EnvironmentFrame, v values.Value, quasi int, mk quasiMarkers, fn func(*syntax.SyntaxSymbol)) {
 	switch e := v.(type) {
 	case nil:
 		return
@@ -353,7 +393,7 @@ func forEachRawSymbol(env *environment.EnvironmentFrame, v values.Value, quasi i
 		fn(e)
 
 	case *syntax.SyntaxPair:
-		forEachRawSymbolPair(env, e, quasi, fn)
+		forEachRawSymbolPair(env, e, quasi, mk, fn)
 
 	case *syntax.SyntaxVector:
 		// A vector at depth 0 is a self-evaluating literal: its elements are data.
@@ -362,7 +402,7 @@ func forEachRawSymbol(env *environment.EnvironmentFrame, v values.Value, quasi i
 			return
 		}
 		for _, elem := range e.Values {
-			forEachRawSymbol(env, elem, quasi, fn)
+			forEachRawSymbol(env, elem, quasi, mk, fn)
 		}
 	}
 }
@@ -374,44 +414,44 @@ func forEachRawSymbol(env *environment.EnvironmentFrame, v values.Value, quasi i
 // they denote no form (markerName) — the rule compilation.quasiKeywords.headName
 // uses, so a renamed or prefixed unquote is a marker on both sides, and a lexical
 // shadow of a RENAMED marker name is a marker on neither (the shadow's spelling no
-// longer matches unquoteKey, so neither the denotation nor the spelling fallback
+// longer matches the marker, so neither the denotation nor the spelling fallback
 // recognizes it). That does NOT hold for the CANONICAL spelling: the fallback
 // reads spelling whenever the head denotes no form, and a local binding of
 // `unquote` still denotes no form, so it still reads as the marker by spelling —
 // measured, `(let ((unquote (lambda (x) x))) `(1 ,2))` still answers `(1 2)`, not
 // `(1 (unquote 2))`. With a nil env the walk is spelling-only and the renamed-shadow
 // case is misread; opaqueRawSyntax says which nodes carry one.
-func forEachRawSymbolPair(env *environment.EnvironmentFrame, p *syntax.SyntaxPair, quasi int, fn func(*syntax.SyntaxSymbol)) {
+func forEachRawSymbolPair(env *environment.EnvironmentFrame, p *syntax.SyntaxPair, quasi int, mk quasiMarkers, fn func(*syntax.SyntaxSymbol)) {
 	head, ok := p.SyntaxCar().(*syntax.SyntaxSymbol)
 	if ok {
-		argDepth, barrier := quasiHeadDepth(markerName(env, head), quasi)
+		argDepth, argMarkers, barrier := quasiHeadDepth(markerName(env, head), quasi, mk)
 		if barrier {
 			return
 		}
 		if argDepth != quasi {
-			forEachRawSymbol(env, p.SyntaxCdr(), argDepth, fn)
+			forEachRawSymbol(env, p.SyntaxCdr(), argDepth, argMarkers, fn)
 			return
 		}
 	}
 	var end syntax.SpineEnd
 	for cur, e := range syntax.Spine(p) {
-		tail, isDotted := dottedUnquoteTail(env, cur, quasi)
+		tail, isDotted := dottedUnquoteTail(env, cur, quasi, mk)
 		if isDotted {
 			// `(a . ,x): the tail is evaluated, and it is the end of the spine.
-			argDepth, barrier := quasiHeadDepth(unquoteKey, quasi)
+			argDepth, argMarkers, barrier := quasiHeadDepth(mk.unquote, quasi, mk)
 			if !barrier {
-				forEachRawSymbol(env, tail, argDepth, fn)
+				forEachRawSymbol(env, tail, argDepth, argMarkers, fn)
 			}
 			return
 		}
-		forEachRawSymbol(env, cur.Car(), quasi, fn)
+		forEachRawSymbol(env, cur.Car(), quasi, mk, fn)
 		end = e
 	}
 	// The dotted-unquote arm above returns outright, so reaching here means the
 	// walk ran to a terminator. Improper() screens out the proper-list case,
 	// where the old walk handed SyntaxEmptyList to forEachRawSymbol as a no-op.
 	if end.Improper() {
-		forEachRawSymbol(env, end.Tail, quasi, fn)
+		forEachRawSymbol(env, end.Tail, quasi, mk, fn)
 	}
 }
 
@@ -433,12 +473,12 @@ func forEachRawSymbolPair(env *environment.EnvironmentFrame, p *syntax.SyntaxPai
 // denotes, spelling as the fallback (markerName) — because the compiler's
 // dottedTailCell reads this same cell through kw.headName. A spelling-only test
 // would miss `(a . ,x) written with a renamed unquote and under-mark x.
-func dottedUnquoteTail(env *environment.EnvironmentFrame, cur *syntax.SyntaxPair, quasi int) (syntax.SyntaxValue, bool) {
+func dottedUnquoteTail(env *environment.EnvironmentFrame, cur *syntax.SyntaxPair, quasi int, mk quasiMarkers) (syntax.SyntaxValue, bool) {
 	if quasi == quasiDepthCode {
 		return nil, false
 	}
 	sym, ok := cur.SyntaxCar().(*syntax.SyntaxSymbol)
-	if !ok || markerName(env, sym) != unquoteKey {
+	if !ok || markerName(env, sym) != mk.unquote {
 		return nil, false
 	}
 	cdrPair, ok := cur.SyntaxCdr().(*syntax.SyntaxPair)
@@ -456,7 +496,7 @@ func dottedUnquoteTail(env *environment.EnvironmentFrame, cur *syntax.SyntaxPair
 // body, a surviving include. Every symbol in it is live until a quote or
 // quasiquote inside it says otherwise.
 func markOpaqueCode(env *environment.EnvironmentFrame, raw values.Value, result *ValidationResult) {
-	markOpaqueSubtree(env, raw, quasiDepthCode, result)
+	markOpaqueSubtree(env, raw, quasiDepthCode, quasiquoteMarkers, result)
 }
 
 // markOpaqueTemplate marks a quasiquote TEMPLATE, which the caller has already
@@ -464,7 +504,7 @@ func markOpaqueCode(env *environment.EnvironmentFrame, raw values.Value, result 
 // depth split is the whole precision win — a template mentioning a name no unquote
 // reaches must not cost that name its Stable stamp.
 func markOpaqueTemplate(env *environment.EnvironmentFrame, raw values.Value, result *ValidationResult) {
-	markOpaqueSubtree(env, raw, quasiDepthTemplate, result)
+	markOpaqueSubtree(env, raw, quasiDepthTemplate, quasiquoteMarkers, result)
 }
 
 // markOpaqueSubtree records every binding an opaque subtree mentions as a
@@ -499,11 +539,11 @@ func markOpaqueTemplate(env *environment.EnvironmentFrame, raw values.Value, res
 // name no unquote reaches no longer costs that name its stamp. What remains below
 // is an over-approximation within the live positions — every symbol there is a
 // candidate, because what a macro expands to is not knowable here.
-func markOpaqueSubtree(env *environment.EnvironmentFrame, raw values.Value, quasi int, result *ValidationResult) {
+func markOpaqueSubtree(env *environment.EnvironmentFrame, raw values.Value, quasi int, mk quasiMarkers, result *ValidationResult) {
 	if result == nil || raw == nil {
 		return
 	}
-	forEachRawSymbol(env, raw, quasi, func(sym *syntax.SyntaxSymbol) {
+	forEachRawSymbol(env, raw, quasi, mk, func(sym *syntax.SyntaxSymbol) {
 		if env != nil {
 			ref := env.ResolveBindingRef(sym.Sym, syntax.ScopesOf(sym.Scopes()))
 			if ref.IsLocal() {

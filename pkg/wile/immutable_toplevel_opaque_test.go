@@ -87,6 +87,45 @@ func TestImmutableTopLevel_OpaqueSubtreeOverMark(t *testing.T) {
 			setRejected: false,
 			why:         "a real set! hides here; the mark is earned, not imprecision",
 		},
+		// quasisyntax is the second dialect the scan reads. The rows mirror the
+		// quasiquote ones above, so a marker set that leaked across dialects, or a
+		// scan that stopped at the quote barrier, changes a stamp here.
+		{
+			name:        "quasisyntax mentioning x leaves the stamp alone",
+			unit:        "(begin (define x 1) (quasisyntax (x)))",
+			setRejected: true,
+			why:         "x is template DATA no unsyntax reaches, so it is not a set! target",
+		},
+		{
+			name:        "quasisyntax unsyntax under a quote form",
+			unit:        "(begin (define x 1) (quasisyntax (a (quote (#,(set! x 9))))))",
+			setRejected: false,
+			why:         "the quote is no barrier inside a template, so the unsyntax is live",
+		},
+		{
+			name:        "nested quasisyntax keeps an inner unsyntax as data",
+			unit:        "(begin (define x 1) (quasisyntax (quasisyntax (a #,(set! x 9)))))",
+			setRejected: true,
+			why:         "one unsyntax under two quasisyntax lands at depth 1: data, not evaluated",
+		},
+		{
+			name:        "unquote in a quasisyntax template is data",
+			unit:        "(begin (define x 1) (quasisyntax (a (unquote (set! x 9)))))",
+			setRejected: true,
+			why:         "unquote is the other dialect's marker; here it is an ordinary datum head",
+		},
+		{
+			name:        "unsyntax in a quasiquote template is data",
+			unit:        "(begin (define x 1) `(a (unsyntax (set! x 9))))",
+			setRejected: true,
+			why:         "unsyntax is the other dialect's marker; here it is an ordinary datum head",
+		},
+		{
+			name:        "quasiquote reached from an unsyntax re-enters its own dialect",
+			unit:        "(begin (define x 1) (quasisyntax (a #,`(b ,(set! x 9)))))",
+			setRejected: false,
+			why:         "the unsyntax is code, and the quasiquote inside it opens a quasiquote template",
+		},
 		{
 			name:        "quote does not over-mark",
 			unit:        `(begin (define x 1) '(x))`,
