@@ -229,7 +229,7 @@ func refIndexAllocRegion(t *testing.T, k, n int) []validate.ValidatedExpr {
 	params := strings.Join(names, " ")
 	var b strings.Builder
 	b.WriteString("(lambda (" + params + ")")
-	for i := 0; i < n; i++ {
+	for range n {
 		b.WriteString(" (" + params + ")")
 	}
 	b.WriteString(")")
