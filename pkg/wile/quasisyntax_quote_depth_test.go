@@ -223,7 +223,7 @@ func TestQuasisyntaxTemplateDataIsRead(t *testing.T) {
 		{"data symbol inside a vector",
 			`(let ((t #f)) (if t t (quasisyntax (a #(a t #,1)))))`,
 			"#'(#'a #'(#'a #'#f #'1))"},
-		{"or-shaped let, data symbol",
+		{"or: the macro temporary, not the user binder",
 			`(let ((t #f)) (or t (quasisyntax (a t #,1))))`,
 			"#'(#'a #'#f #'1)"},
 	})
@@ -269,4 +269,59 @@ func TestQuasisyntaxUnsyntaxUnderQuoteKeepsLetBinder(t *testing.T) {
 			`(define (loop k) (let ((t #f)) (if t t (if (= k 0) (quasisyntax (a (quote (#,t)))) (loop (- k 1)))))) (loop 3)`,
 			"#'(#'a #'(#'quote #'(#'#f)))"},
 	})
+}
+
+// A head spelled quasiquote or quasisyntax that resolves to a binding denoting no
+// form is not necessarily a call to the compiler: a Predeclared slot (a LATER
+// define in the same body) and a top-level variable reached from inside a let
+// body still compile as the form (validate.headDenotesSpecialForm). The scan reads
+// such a head both ways and reports the union, so each row below puts the unquote
+// beneath a quote barrier or a binder the call reading alone would hide.
+func TestDemotedOpenerIsReadBothWays(t *testing.T) {
+	b := `(set! f (lambda () 99))`
+	runQuasisyntaxRows(t, []innerPositionRow{
+		{"top-level quasiquote variable, template opener under an unsyntax",
+			`(define quasiquote list) (let ((f (lambda () 7))) (quasisyntax (a #,(quasiquote (b (quote (unquote ` + b + `)))))) (f))`,
+			"99"},
+		{"predeclared quasiquote, binder as template data",
+			`(begin (define t 9) (define r (let ((t #f)) (if t t (quasisyntax (a #,(quasiquote (b (quote (unquote t))))))))) (define quasiquote list) r)`,
+			"#'(#'a #'(#'b #'(#'quote #'#f)))"},
+		{"predeclared quasiquote, boxing",
+			`(begin (define g (let ((n 0)) (let ((f (lambda () n))) (quasisyntax (a #,(quasiquote (b (quote (unquote (set! n 99))))))) f))) (define quasiquote list) (g))`,
+			"99"},
+		{"top-level quasisyntax variable, unsyntax under a quote form",
+			`(define quasisyntax list) (let ((f (lambda () 7))) (quasisyntax (a (quote (#,` + b + `)))) (f))`,
+			"99"},
+		{"predeclared quasisyntax, unsyntax under a quote form",
+			`(begin (define r (let ((f (lambda () 7))) (quasisyntax (a (quote (#,` + b + `)))) (f))) (define quasisyntax list) r)`,
+			"99"},
+		{"predeclared quasisyntax, unsyntax in a vector",
+			`(begin (define r (let ((f (lambda () 7))) (quasisyntax (a #(#,` + b + `))) (f))) (define quasisyntax list) r)`,
+			"99"},
+		{"predeclared quasisyntax, binder under a quote form",
+			`(begin (define r (let ((t #f)) (if t t (quasisyntax (a (quote (#,t))))))) (define quasisyntax list) r)`,
+			"#'(#'a #'(#'quote #'(#'#f)))"},
+	})
+}
+
+// The stamp walk reads the same head both ways, so a top-level variable named
+// quasisyntax in an EARLIER unit still lets a later unit's hidden set! be marked.
+func TestDemotedOpenerKeepsTopLevelSetLegal(t *testing.T) {
+	ctx := context.Background()
+	for _, inline := range []bool{false, true} {
+		opts := []wile.EngineOption{wile.WithProfile(wile.Small), wile.WithImmutableTopLevel()}
+		if inline {
+			opts = append(opts, wile.WithInlineThreshold(0))
+		}
+		eng, err := wile.NewEngine(ctx, opts...)
+		qt.Assert(t, err, qt.IsNil)
+		_, err = eng.EvalMultiple(ctx, `(define quasisyntax list)`)
+		qt.Assert(t, err, qt.IsNil)
+		_, err = eng.EvalMultiple(ctx, `(begin (define x 1) (let () (quasisyntax (a (quote (#,(set! x 9)))))))`)
+		qt.Assert(t, err, qt.IsNil)
+		v, err := eng.EvalMultiple(ctx, `(begin (set! x 2) x)`)
+		qt.Assert(t, err, qt.IsNil, qt.Commentf("the hidden set! is real: x must not keep a Stable stamp"))
+		qt.Assert(t, v.SchemeString(), qt.Equals, "2")
+		qt.Assert(t, eng.Close(), qt.IsNil)
+	}
 }

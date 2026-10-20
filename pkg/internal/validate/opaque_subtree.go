@@ -62,8 +62,11 @@ import (
 // The walk narrows by POSITION, never by what the code appears to do. Whether the
 // compiler would evaluate a position is a fact this package can decide
 // (forEachRawSymbol / quasiHeadDepth) — structure, plus one resolution per head to
-// ask which marker it denotes, both of which the compiler decides the same way;
-// what an unevaluated macro would expand to is not. Skipping a symbol because it is
+// ask which marker it denotes. The compiler decides the same way EXCEPT for a head
+// that resolves to a non-form binding: validateForm (headDenotesSpecialForm) still
+// compiles the form for a Predeclared slot and for a top-level variable reached
+// from a body (validate.go, "STILL DIVERGENT"), so forEachDemotedOpener reads such
+// a head both ways. What an unevaluated macro would expand to is not decidable. Skipping a symbol because it is
 // quasiquoted data is therefore safe in a way that skipping one because "it does not
 // look like a set!" never is.
 //
@@ -146,7 +149,9 @@ func IsOpaqueSubtree(expr ValidatedExpr) bool {
 // ForEachOpaqueLiveSymbol calls fn for every symbol in a LIVE position of expr's
 // concealed syntax, and reports whether expr was opaque at all. LIVE here is
 // walkReads: the evaluated positions plus the data symbols of a quasisyntax
-// template, which compile to a read of the binding. It does NOT
+// template, which the runtime path reads as bindings. The boxing scan takes this
+// mode defensively: over-reporting only over-boxes, and no test discriminates it
+// from walkWrites. It does NOT
 // descend into validated children: a caller that already walks the tree (every
 // caller so far does) recurses itself and asks this at each node.
 //
@@ -163,7 +168,7 @@ func IsOpaqueSubtree(expr ValidatedExpr) bool {
 // quasiquote Template has already been stepped into, a passthrough form has not),
 // the environment is the one the form was validated in, not the one the caller
 // happens to stand in, and the walkMode is the consumer's. Exporting the raw
-// walker moves those choices to the call site, where getting either wrong
+// walker moves those choices to the call site, where getting any of them wrong
 // under-marks silently — the exact failure mode this file exists to prevent. The
 // classification stays here, with the switch that defines it.
 //
@@ -261,9 +266,11 @@ const (
 	// walkReads additionally reports the symbols of a quasisyntax template at
 	// template depth. On the runtime path expandQuasi emits (syntax sym) for them,
 	// and (syntax sym) on a bound local yields that local's VALUE
-	// (compile_syntax_form.go), so they are references the boxing scan and the
+	// (compile_syntax_form.go; (quasisyntax (a n)) alone yields #'n, while
+	// (quasisyntax (a n #,1)) yields the value), so they are references the
 	// or-shaped lowering (opaqueSubtreeMentions) must see even though nothing is
-	// assigned. Over-reporting here costs a box or a kept frame, never a stamp.
+	// assigned. The boxing scan shares the mode defensively. Over-reporting here
+	// costs a box or a kept frame, never a stamp.
 	// Quasiquote data stays unreported in both modes: it compiles to (quote sym).
 	walkReads
 )
@@ -292,45 +299,57 @@ const (
 // The definition-site pin is read first, as headFormName reads it: a marker
 // renamed where its template was written is unbound where the template is used.
 func markerName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) string {
-	if env == nil {
-		return sym.Key()
-	}
-	denoted := environment.DenotedForm(environment.PinnedBinding(sym))
-	if denoted != "" {
-		return denoted
-	}
-	bnd, _ := env.TryGetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes()))
-	denoted = environment.DenotedForm(bnd)
+	denoted, _ := resolveHead(env, sym)
 	if denoted != "" {
 		return denoted
 	}
 	return sym.Key()
 }
 
-// headKey is markerName for a head met during the walk. At code depth a head
-// that resolves to a binding denoting no form is an ordinary head, not a marker:
-// the compiler dispatches on what a head denotes, so a lambda-bound local named
-// quasisyntax, quote or quasiquote is a call and its operands are evaluated. The
-// spelling fallback survives only for a head that resolves to nothing, and inside
-// templates, where compilation.quasiKeywords.headName falls back the same way.
+// resolveHead is the one resolution markerName and headKey share: the form sym
+// DENOTES in env ("" when it denotes none) and the binding it resolved to (nil
+// when it resolved to none, and also on an ambiguous scope-set tie). The
+// definition-site pin is read first.
+func resolveHead(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) (string, *environment.Binding) {
+	if env == nil {
+		return "", nil
+	}
+	denoted := environment.DenotedForm(environment.PinnedBinding(sym))
+	if denoted != "" {
+		return denoted, nil
+	}
+	bnd, _ := env.TryGetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes()))
+	return environment.DenotedForm(bnd), bnd
+}
+
+// headKey is markerName for a head met during the walk, and reports whether the
+// head was DEMOTED: at code depth it resolves to a binding that denotes no form.
+// The compiler dispatches on what a head denotes, so a lambda-bound local named
+// quasisyntax, quote or quasiquote is an ordinary call and its operands are
+// evaluated; a demoted head yields key "" for the caller to walk as a call.
+//
+// The compiler is NARROWER than "resolves to a non-form binding", though.
+// validateForm (headDenotesSpecialForm) still compiles the form when the head
+// reaches a Predeclared slot, which a LATER (define quasisyntax ...) in the same
+// body mints, and when it reaches a top-level variable from inside a let or
+// lambda body (the divergence documented there as STILL DIVERGENT). So for a head
+// spelled quasiquote or quasisyntax the caller must not trust the demotion alone;
+// see forEachRawSymbolPair. A demoted quote is safe as an ordinary call, because
+// the code-depth walk reports everything its barrier would have hidden.
 //
 // An ambiguous scope-set tie makes TryGetBinding answer nil, so the head keeps its
 // spelling and is read as a marker. That is the safe side: the compiler's own
 // resolution (GetBinding) raises on the same tie, so no program reaches codegen
 // with the head read the other way.
-func headKey(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol, quasi int) string {
-	key := markerName(env, sym)
-	if quasi != quasiDepthCode || env == nil {
-		return key
+func headKey(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol, quasi int) (string, bool) {
+	denoted, bnd := resolveHead(env, sym)
+	if denoted != "" {
+		return denoted, false
 	}
-	if environment.DenotedForm(environment.PinnedBinding(sym)) != "" {
-		return key
+	if quasi == quasiDepthCode && bnd != nil {
+		return "", true
 	}
-	bnd, _ := env.TryGetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes()))
-	if bnd != nil && environment.DenotedForm(bnd) == "" {
-		return ""
-	}
-	return key
+	return sym.Key(), false
 }
 
 // quasiHeadDepth reports how to walk a form whose head DENOTES key, sitting at
@@ -407,8 +426,8 @@ func quasiHeadDepth(key string, quasi int, mk quasiMarkers) (argDepth int, argMa
 }
 
 // forEachRawSymbol calls fn for every SyntaxSymbol in a LIVE position of a raw
-// syntax tree — a position the compiler would evaluate — and skips symbols that are
-// data. quasi is the quasiquote nesting depth: quasiDepthCode (0) is an evaluated
+// syntax tree — a position the compiler would evaluate — and, in walkWrites mode,
+// skips symbols that are data. quasi is the quasiquote nesting depth: quasiDepthCode (0) is an evaluated
 // position, anything higher is inside a template. mk is the dialect of the
 // template being walked (read only when quasi is above quasiDepthCode, and
 // switched by quasiHeadDepth when a nesting head opens a template), and mode picks
@@ -460,7 +479,7 @@ func forEachRawSymbol(env *environment.EnvironmentFrame, v values.Value, quasi i
 // quasiHeadDepth before falling through to an ordinary car/cdr walk.
 //
 // Heads are matched by what they DENOTE in env, falling back to the spelling when
-// they denote no form (markerName) — the rule compilation.quasiKeywords.headName
+// they denote no form (headKey, and markerName for the dotted tail) — the rule compilation.quasiKeywords.headName
 // uses, so a renamed or prefixed unquote is a marker on both sides, and a lexical
 // shadow of a RENAMED marker name is a marker on neither (the shadow's spelling no
 // longer matches the marker, so neither the denotation nor the spelling fallback
@@ -473,10 +492,18 @@ func forEachRawSymbol(env *environment.EnvironmentFrame, v values.Value, quasi i
 func forEachRawSymbolPair(env *environment.EnvironmentFrame, p *syntax.SyntaxPair, quasi int, mk quasiMarkers, mode walkMode, fn func(*syntax.SyntaxSymbol)) {
 	head, ok := p.SyntaxCar().(*syntax.SyntaxSymbol)
 	if ok {
-		argDepth, argMarkers, barrier := quasiHeadDepth(headKey(env, head, quasi), quasi, mk)
+		key, demoted := headKey(env, head, quasi)
+		if demoted && (head.Key() == quasiquoteKW.nesting || head.Key() == quasisyntaxKW.nesting) {
+			forEachDemotedOpener(env, p, head, quasi, mk, mode, fn)
+			return
+		}
+		argDepth, argMarkers, barrier := quasiHeadDepth(key, quasi, mk)
 		if barrier {
 			return
 		}
+		// The marker-set comparison cannot differ from the depth one today (every
+		// dialect switch also changes the depth); it keeps a future same-depth
+		// switch from being walked in the old dialect.
 		if argDepth != quasi || argMarkers != mk {
 			forEachRawSymbol(env, p.SyntaxCdr(), argDepth, argMarkers, mode, fn)
 			return
@@ -504,6 +531,34 @@ func forEachRawSymbolPair(env *environment.EnvironmentFrame, p *syntax.SyntaxPai
 	}
 }
 
+// forEachDemotedOpener walks a form whose head is spelled quasiquote or
+// quasisyntax and resolved to a binding denoting no form, so the compiler may
+// read it either way (see headKey): as a call, or as the opener it still is when
+// the slot is Predeclared or reached from a body. It reports the head and the
+// union of both readings of the operands, which over-approximates and so costs an
+// optimization at worst. Reading it only as a call let a template opener hide a
+// quote barrier, and the unquote beneath it went unreported.
+func forEachDemotedOpener(env *environment.EnvironmentFrame, p *syntax.SyntaxPair, head *syntax.SyntaxSymbol, quasi int, mk quasiMarkers, mode walkMode, fn func(*syntax.SyntaxSymbol)) {
+	fn(head)
+	argDepth, argMarkers, _ := quasiHeadDepth(head.Key(), quasi, mk)
+	cdr, ok := p.SyntaxCdr().(*syntax.SyntaxPair)
+	if !ok {
+		return
+	}
+	// Element by element: walking the cdr as a form would read its first operand
+	// as a head and dispatch on it.
+	var end syntax.SpineEnd
+	for cur, e := range syntax.Spine(cdr) {
+		forEachRawSymbol(env, cur.Car(), quasi, mk, mode, fn)
+		forEachRawSymbol(env, cur.Car(), argDepth, argMarkers, mode, fn)
+		end = e
+	}
+	if end.Improper() {
+		forEachRawSymbol(env, end.Tail, quasi, mk, mode, fn)
+		forEachRawSymbol(env, end.Tail, argDepth, argMarkers, mode, fn)
+	}
+}
+
 // dottedUnquoteTail reports whether cur is the (unquote x) tail that `(a . ,x)
 // parses into — a bare unquote symbol in the SPINE followed by exactly one element
 // (R7RS §4.2.8) — and returns the element that unquote evaluates.
@@ -516,7 +571,9 @@ func forEachRawSymbolPair(env *environment.EnvironmentFrame, p *syntax.SyntaxPai
 // walk already marks the tail.
 //
 // The compiler's version accepts a bare `quasiquote` in the same position too,
-// which this one does not; quasiHeadDepth says why that gap is safe.
+// which this one does not. That gap is NOT safe in general: a nested quasiquote in
+// dotted-tail position is read element-wise here, and the compiler takes it one level
+// deeper (filed as a P6.6 crosscheck row).
 //
 // The unquote is identified the way every other marker head here is — by what it
 // denotes, spelling as the fallback (markerName) — because the compiler's
