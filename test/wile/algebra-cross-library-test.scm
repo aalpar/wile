@@ -75,3 +75,4 @@
   (test 1 (length (ac-match "s" "s" ac-theory proto))))
 
 (test-end)
+(test-exit)
