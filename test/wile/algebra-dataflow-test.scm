@@ -26,6 +26,17 @@
 (define single-block-cfg
   '((0 () ())))
 
+(define three-block-cfg
+  '((0 () (1)) (1 (0) (2)) (2 (1) ())))
+
+;; Loop 1 <-> 2 with an exit arm 3. The successor order (2 3) matters: it is
+;; what makes a block-1 revisit enqueue 2 before 3.
+(define loop-exit-cfg
+  '((0 () (1))
+    (1 (0 2) (2 3))
+    (2 (1) (1))
+    (3 (1) ())))
+
 (define test-protocol
   (make-cfg-protocol
     (lambda (fn) fn)   ; fn is the block list itself
@@ -413,9 +424,6 @@
          (r (run-analysis direction (truth-value-lattice) xfer cfg test-protocol)))
     (list (map (lambda (i) (analysis-out r i)) (map car cfg)) calls)))
 
-(define three-block-cfg
-  '((0 () (1)) (1 (0) (2)) (2 (1) ())))
-
 (test-group "run-analysis — first visit generating a fact propagates (I176)"
   ;; Generator mid-chain: block 0 is visited first and yields bottom, so
   ;; block 1's generated fact must still reach block 2. Was (#f #f #f), 1 call.
@@ -426,12 +434,65 @@
   (test '((#t #t #f) 3) (first-visit-outs 'backward three-block-cfg 1))
   ;; Diamond: the generated fact reaches the join through both arms.
   (test '((#f #t #f #t) 4) (first-visit-outs 'forward diamond-cfg 1))
-  ;; Control that never exposed the bug: the generator is the entry block,
-  ;; whose first visit already differs from bottom.
+  ;; CONTROL (not a gate): the generator is the entry block, whose first visit
+  ;; already differs from bottom, so master answered this correctly too.
   (test '((#t #t #t) 3) (first-visit-outs 'forward three-block-cfg 0))
   ;; Nothing generated: every reachable block is now visited once (was one
   ;; visit, the entry), and the states are unchanged.
   (test '((#f #f #f) 3) (first-visit-outs 'forward three-block-cfg 99)))
+
+;; Loops: assert states only. Call counts on a cycle depend on worklist order.
+(test-group "run-analysis — first visit generating a fact, cyclic CFG (I176)"
+  (test '(#f #t #t #t) (car (first-visit-outs 'forward loop-exit-cfg 2)))
+  (test '(#f #f #f #f) (car (first-visit-outs 'forward loop-exit-cfg 99))))
+
+;; A lattice whose bottom is not #f: a guard that tested the out-state for
+;; truthiness instead of comparing it with the lattice would pass the rows
+;; above and fail here.
+(test-group "run-analysis — first visit generating a fact, non-boolean bottom (I176)"
+  (let* ((rank '((lo . 0) (hi . 1)))
+         (rk (lambda (x) (cdr (assq x rank))))
+         (L (make-lattice
+              (lambda (a b) (if (>= (rk a) (rk b)) a b))
+              (lambda (a b) (if (<= (rk a) (rk b)) a b))
+              'lo 'hi
+              (lambda (a b) (<= (rk a) (rk b)))))
+         (calls 0)
+         (xfer (lambda (blk in)
+                 (set! calls (+ calls 1))
+                 (if (= (car blk) 1) 'hi in)))
+         (r (run-analysis 'forward L xfer three-block-cfg test-protocol)))
+    (test '(lo hi hi) (map (lambda (i) (analysis-out r i)) '(0 1 2)))
+    (test 3 calls)))
+
+;; Backward: the first visit now enqueues flow-succs unconditionally, so a
+;; predecessor the RPO never reaches in this direction must not crash the
+;; worklist ordering. Block 9 is forward-unreachable.
+(test-group "run-analysis — backward with a forward-unreachable predecessor (I176)"
+  (let ((cfg '((0 () (1))
+               (1 (0 9) ())
+               (9 () (1)))))
+    (test '(#f #f #f)
+          (map (lambda (i)
+                 (analysis-out
+                   (run-analysis 'backward (truth-value-lattice)
+                                 (lambda (blk in) in) cfg test-protocol)
+                   i))
+               '(0 1 9)))))
+
+;; An exit block outside the entry's RPO is seeded alongside the real exit;
+;; the second insert used to reach rank-of with the orphan (master too).
+(test-group "run-analysis — backward with a forward-unreachable exit (I176)"
+  (let ((cfg '((0 () (1))
+               (1 (0) ())
+               (9 () ()))))
+    (test '(#f #f #f)
+          (map (lambda (i)
+                 (analysis-out
+                   (run-analysis 'backward (truth-value-lattice)
+                                 (lambda (blk in) in) cfg test-protocol)
+                   i))
+               '(0 1 9)))))
 
 (test-end)
 (test-exit)

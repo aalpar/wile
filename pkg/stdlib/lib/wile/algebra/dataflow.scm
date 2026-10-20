@@ -283,6 +283,8 @@ Returns a per-block result alist shaped `((idx in out) ...)`. Use
 `analysis-in` / `analysis-out` / `analysis-states` to query.
 
 Terminates when no block's out-state changes across a worklist pass.
+Every block reachable from a seed block (in the analysis direction) is
+visited at least once.
 Worklist is rank-ordered by reverse postorder (forward) or reverse
 of reverse postorder (backward) for efficient propagation.
 
@@ -428,13 +430,18 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                      (list idx in-val out-val)
                      entry))
                states)))
+      ;; Indices absent from the rank-map (a block unreachable from the entry
+      ;; in this direction, reached as a successor or seeded as an exit) sort
+      ;; after every ranked index rather than crashing rank-of.
       (define (worklist-insert wl idx)
         (if (memv idx wl) wl
-            (let insert ((rest wl))
-              (cond ((null? rest) (list idx))
-                    ((<= (rank-of idx) (rank-of (car rest)))
-                     (cons idx rest))
-                    (else (cons (car rest) (insert (cdr rest))))))))
+            (let ((ri (rank-or-false idx)))
+              (let insert ((rest wl))
+                (cond ((null? rest) (list idx))
+                      ((let ((rc (rank-or-false (car rest))))
+                         (or (not rc) (and ri (<= ri rc))))
+                       (cons idx rest))
+                      (else (cons (car rest) (insert (cdr rest)))))))))
       (define (worklist-insert-all wl idxs)
         (let loop ((is idxs) (w wl))
           (if (null? is) w
@@ -449,6 +456,8 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
       ;; approximates ascents — fine for a guard whose only job is to turn a
       ;; silent hang into a remedy-pointing error. Mirrors graph.scm's worklist
       ;; cap, but per-block so the error can name the offending widening point.
+      ;; The counter is also what marks a block's FIRST visit (correctness, not
+      ;; only the cap): the convergence test below never suppresses vc = 1.
       (define max-revisits 100000)
       (define visits (make-equal-hashtable))
       (let loop ((wl (worklist-insert-all '() seed-idxs)))
@@ -499,7 +508,8 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                 ;; A block's first visit compares against its own bottom seed, so
                 ;; a transfer that generates a fact from bottom input would look
                 ;; converged and strand its successors. vc is 1-based: the first
-                ;; visit always propagates, later ones only when out grew.
+                ;; visit always propagates, later ones only when out is not below
+                ;; old-out (which also covers an incomparable out).
                 (if (and (> vc 1) (lattice-leq? lattice out-val old-out))
                     (loop rest-wl)
                     (loop (worklist-insert-all rest-wl
