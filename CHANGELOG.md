@@ -119,6 +119,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A `#z` or `#m` numeral must end at a delimiter (I039).** `#z1/2`, `#m1/2` and
+  `#m2+3i` read as two data (`(#m2+3i)` was `(2.0l0 0+3i)`, the imaginary part
+  silently a second element); they are now read errors that name the rule, at the
+  offending character. `#z12`, `#m1.5`, `#m2e3` and a numeral before a delimiter
+  or `#` are unchanged.
+
 - **`continuation-mark-set-first`, `->list` and `->list*` accept `#f` for the mark
   set, and `(continuation-marks k)` sees a tail-position mark (I109, I168).** `#f` stands for the
   current continuation's marks, as in Racket (it used to raise "expected a continuation

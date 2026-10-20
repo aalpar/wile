@@ -170,6 +170,13 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 			p.next()
 		}
 	}
+	// #z and #m scan only a decimal integer or real, so a rational (#z1/2) or a
+	// complex (#m2+3i) stops at the '/' or the sign and used to leave the rest
+	// behind as a second datum. The numeral binds up to a delimiter, as it does
+	// after a radix prefix, but the rule it breaks is its own: neither is a radix.
+	if p.err == nil && !isDelimiterOrMarker(p.curr()) {
+		p.fail(MessageExpectingDelimiterAfterBigNumber)
+	}
 }
 
 // requireDelimiterAfterRadixNumeral enforces R7RS §7.1.1 implicit termination

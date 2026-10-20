@@ -30,6 +30,7 @@ const (
 	MessageRuneError                             = "rune error"
 	MessageExpectingNumber                       = "expecting number"
 	MessageExpectingDelimiterAfterNumber         = "expecting delimiter after radix-prefixed number"
+	MessageExpectingDelimiterAfterBigNumber      = "expecting delimiter after #z or #m number"
 	MessageExpectingExponentDigits               = "expecting exponent digits"
 	MessageExpectingImaginary                    = "expecting imaginary"
 	MessageExpectingDecimalFraction              = "expecting decimal fraction"
