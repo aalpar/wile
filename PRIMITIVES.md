@@ -610,9 +610,9 @@ Reference for the types, primitives, and special forms in Wile. It is **not exha
 | Primitive | Description |
 |-----------|-------------|
 | `current-continuation-marks` | Collect marks from current continuation chain |
-| `continuation-mark-set->list` | Extract mark values for a key from mark set |
-| `continuation-mark-set->list*` | Multi-key variant returning list of vectors |
-| `continuation-mark-set-first` | Get first mark value for a key |
+| `continuation-mark-set->list` | Extract mark values for a key from a mark set, or from the current marks when given `#f` |
+| `continuation-mark-set->list*` | Multi-key variant returning list of vectors; `#f` for the current marks |
+| `continuation-mark-set-first` | Get first mark value for a key from a mark set, or from the current marks when given `#f` |
 | `call-with-immediate-continuation-mark` | Call procedure with mark from current frame |
 | `continuation-mark-set?` | Test for continuation mark set |
 | `continuation?` | Test for continuation value |

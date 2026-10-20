@@ -45,10 +45,47 @@ func PrimCurrentContinuationMarks(cc machine.CallContext) error {
 	return nil
 }
 
+// requireMarkSetOrCurrent returns the continuation mark set in argument 0 of the
+// primitive called name. Racket lets #f stand for the current continuation's marks
+// there, so #f yields the set (current-continuation-marks) would; any other value
+// that is not a mark set is a type error. Only the #f arm needs the machine
+// context, so a real mark set still works under a foreign CallContext.
+func requireMarkSetOrCurrent(cc machine.CallContext, name string) (*machine.ContinuationMarkSet, error) {
+	arg := cc.Arg(0)
+	if arg != values.FalseValue {
+		cms, ok := arg.(*machine.ContinuationMarkSet)
+		if !ok {
+			return nil, werr.WrapForeignErrorf(werr.ErrNotAContinuationMarkSet,
+				"%s: expected a continuation mark set or #f but got %T", name, arg)
+		}
+		return cms, nil
+	}
+	mc, err := machine.RequireMachineContext(cc, name)
+	if err != nil {
+		return nil, err
+	}
+	return mc.CollectContinuationMarks(machine.DefaultPromptTag), nil
+}
+
+// PrimRequireContinuationMarkSet returns its argument if it is a continuation mark
+// set and raises ErrNotAContinuationMarkSet otherwise. #f is refused: it is the
+// accessors' alias for the current marks, which (wile control)'s
+// continuation-mark-set->context does not share with them (Racket raises there).
+func PrimRequireContinuationMarkSet(mc machine.CallContext) error {
+	cms, err := helpers.RequireArg[*machine.ContinuationMarkSet](mc, 0, werr.ErrNotAContinuationMarkSet,
+		"continuation-mark-set->context")
+	if err != nil {
+		return err
+	}
+	mc.SetValue(cms)
+	return nil
+}
+
 // PrimContinuationMarkSetToList implements (continuation-mark-set->list mark-set key).
-// Extracts a list of values for key across all frames in the mark set.
+// Extracts a list of values for key across all frames in the mark set; #f for
+// mark-set means the current continuation's marks.
 func PrimContinuationMarkSetToList(mc machine.CallContext) error {
-	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "continuation-mark-set->list")
+	cms, err := requireMarkSetOrCurrent(mc, "continuation-mark-set->list")
 	if err != nil {
 		return err
 	}
@@ -57,9 +94,10 @@ func PrimContinuationMarkSetToList(mc machine.CallContext) error {
 }
 
 // PrimContinuationMarkSetFirst implements (continuation-mark-set-first mark-set key [default]).
-// Returns the value for key from the nearest frame, or default (#f if omitted).
+// Returns the value for key from the nearest frame, or default (#f if omitted);
+// #f for mark-set means the current continuation's marks.
 func PrimContinuationMarkSetFirst(mc machine.CallContext) error {
-	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "continuation-mark-set-first")
+	cms, err := requireMarkSetOrCurrent(mc, "continuation-mark-set-first")
 	if err != nil {
 		return err
 	}
@@ -82,9 +120,11 @@ func PrimContinuationMarkSetFirst(mc machine.CallContext) error {
 // Each vector position corresponds to a key in key-list.
 // Missing keys use none-v (default #f).
 //
+// #f for mark-set means the current continuation's marks.
+//
 // Racket §10.5: continuation-mark-set->list*
 func PrimContinuationMarkSetToListStar(mc machine.CallContext) error {
-	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "continuation-mark-set->list*")
+	cms, err := requireMarkSetOrCurrent(mc, "continuation-mark-set->list*")
 	if err != nil {
 		return err
 	}
@@ -148,7 +188,7 @@ func PrimContinuationMarks(mc machine.CallContext) error {
 			return err
 		}
 	}
-	mc.SetValue(machine.CollectMarksFromContinuation(capt.ComposableContinuation().Cont(), tag))
+	mc.SetValue(machine.CollectMarksFromCapture(capt.ComposableContinuation(), tag))
 	return nil
 }
 

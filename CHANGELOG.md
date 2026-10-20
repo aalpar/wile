@@ -119,6 +119,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`continuation-mark-set-first`, `->list` and `->list*` accept `#f` for the mark
+  set, and `(continuation-marks k)` sees a tail-position mark (I109, I168).** `#f` stands for the
+  current continuation's marks, as in Racket (it used to raise "expected a continuation
+  mark set"). A `call/cc` made in tail position of a `with-continuation-mark` body now
+  reports that mark: `((lambda () (with-continuation-mark 'a 2 (call/cc (lambda (k)
+  (continuation-mark-set->list (continuation-marks k) 'a))))))` is `(2)`, not `()`.
+  `call-with-immediate-continuation-mark` after a non-tail call still answers the
+  enclosing frame's mark where Racket answers the default; that stays a documented
+  divergence, I167 (docs/reference/r7rs-differences.md).
 - **`+`/`-` of a BigComplex and `+inf.0`/`+nan.0` keep the imaginary part's
   digits.** `(+ (make-rectangular #m0 #m9.87654321098765432109876543210987) +inf.0)`
   came back with an imaginary part of `9.87654321098765386…`: the imaginary
@@ -767,6 +776,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **BREAKING (Go API): `machine.CollectMarksFromContinuation`.** Exported in
+  v1.20.0; its only production caller was `(continuation-marks k)`, which now needs
+  the capturing activation's live marks as well and goes through
+  `machine.CollectMarksFromCapture(*ComposableContinuation, *PromptTag)`. A
+  bare `*MachineContinuation` chain has no replacement: a mark set is built from a
+  capture, or from the live context with `CollectContinuationMarks`.
 - **The ANY-phase binding coordinate, and everything that only existed to
   express it.** Gone from the released surface: `environment.PhaseKey` (now a
   plain `Phase` on `slotRef`, `bulkRef` and `GlobalIndex`), its constructors
