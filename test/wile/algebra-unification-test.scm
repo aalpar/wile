@@ -9,15 +9,9 @@
 
 (test-begin "unification")
 
-(define (default-compare a b)
-  (cond
-    ((and (number? a) (number? b))
-     (cond ((< a b) -1) ((> a b) 1) (else 0)))
-    ((and (symbol? a) (symbol? b))
-     (let ((sa (symbol->string a)) (sb (symbol->string b)))
-       (cond ((string<? sa sb) -1) ((string>? sa sb) 1) (else 0))))
-    ((equal? a b) 0)
-    (else 1)))
+;; Boolean "sorts before", the contract (wile algebra rewrite) documents and
+;; unification derives equality from.
+(define default-compare sexp-atom-compare)
 
 (define (sym-append . syms)
   (string->symbol
@@ -135,17 +129,7 @@
   (let* ((vx (make-pattern-var 'x))
          (vy (make-pattern-var 'y))
          (s (make-substitution (list (cons vx 10) (cons vy 'hello))))
-         (proto (sexp-term-protocol (lambda (a b)
-                                      (cond
-                                        ((and (number? a) (number? b))
-                                         (cond ((< a b) -1) ((> a b) 1) (else 0)))
-                                        ((and (symbol? a) (symbol? b))
-                                         (let ((sa (symbol->string a))
-                                               (sb (symbol->string b)))
-                                           (cond ((string<? sa sb) -1)
-                                                 ((string>? sa sb) 1)
-                                                 (else 0))))
-                                        (else 0)))))) ; dummy: OK for this test
+         (proto (sexp-term-protocol default-compare)))
     ;; Atom var
     (test 10 (substitution-apply s proto vx))
     ;; Compound with vars

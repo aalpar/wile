@@ -1,7 +1,10 @@
 ;;; unification.scm — AC-matching and AC-unification.
 ;;;
-;;; Term protocol contract: term-compare must be a total order consistent
-;;; with equal? modulo the AC-equivalence induced by the caller's theory.
+;;; Term protocol contract: term-compare is the boolean "sorts before"
+;;; predicate (wile algebra rewrite) documents, and it must be a strict total
+;;; order consistent with equal? modulo the AC-equivalence induced by the
+;;; caller's theory. Equality is derived from it by antisymmetry
+;;; (`term-equal?`): two terms are equal when neither sorts before the other.
 
 (define-record-type <pattern-var>
   (make-pattern-var name)
@@ -57,6 +60,8 @@ Keywords: substitution, compose, merge, unification"
          (cond
            ((not existing)
             (loop (cdr xs) (cons pair acc)))
+           ;; equal?, like bind-or-check; term-equal? coincides with it on atoms
+           ;; by its contract check, and differs on compounds only modulo AC.
            ((equal? existing val)
             (loop (cdr xs) acc))
            (else #f)))))))
@@ -242,7 +247,7 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
                           (term-get-operands proto s)
                           sub ac-ops proto))))
     (else
-     (if (zero? (term-compare proto p s)) (list sub) '()))))
+     (if (term-equal? proto p s) (list sub) '()))))
 
 ;; AC-case: direct backtracking over assignments of pattern operands to
 ;; subject operands. Correct (enumerates all CSU elements) but exponential;
@@ -350,6 +355,8 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
   (term-make-term proto (cons op args) args))
 
 ;; Variable binding: bind VAR↦SUBJECT if unbound, else check consistency.
+;; The consistency check is equal?; term-equal? (unify-rec) agrees with it on
+;; atoms by the contract check there, and differs on compounds only modulo AC.
 (define (bind-or-check var subject sub)
   (let ((existing (substitution-lookup sub var)))
     (cond
@@ -455,7 +462,7 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
 
 ;; Core recursion for unification. Walks bindings via resolve, then
 ;; dispatches on shape: var ↦ bind, compound/compound ↦ positional or AC,
-;; ground/ground ↦ term-compare equality.
+;; ground/ground ↦ term-equal? (antisymmetry over the boolean term-compare).
 (define (unify-rec t1 t2 sub ac-ops proto)
   (let ((t1* (resolve t1 sub))
         (t2* (resolve t2 sub)))
@@ -479,7 +486,7 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
                             (term-get-operands proto t2*)
                             sub ac-ops proto))))
       (else
-       (if (zero? (term-compare proto t1* t2*)) (list sub) '())))))
+       (if (term-equal? proto t1* t2*) (list sub) '())))))
 
 ;; Walk a chain of var↦var bindings to the final value (or original term).
 (define (resolve t sub)
@@ -541,7 +548,38 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
      (any (lambda (a) (has-var? a proto)) (term-get-operands proto t)))
     (else #f)))
 
-;; True iff XS and YS are equal as multisets under term-compare.
+;; True iff A and B are equal under PROTO's boolean term-compare: neither
+;; sorts before the other. Sound only for a strict total order, so the two
+;; contract violations that would make a tie lie are raised, not matched:
+;;   - the comparator ranks two atoms that are equal? (checked whenever the
+;;     pair is not two compounds, so the deep equal? is never paid on
+;;     compound pairs);
+;;   - the comparator ties distinct atoms, or an atom and a compound (a
+;;     partial comparator answering #f outside its domain, or a written-form
+;;     collision such as two records). Compound/compound ties stay legal:
+;;     nested AC terms are equal modulo AC without being equal?.
+;; On atoms this makes the comparator's equality coincide with equal?, which is
+;; what bind-or-check and substitution-compose use. Lazy and lean on the hot
+;; path: b<a is asked only when a<b is #f, and the compound test and equal?
+;; run only on a tie or when the comparator ranks the pair.
+(define (term-equal? proto a b)
+  (cond
+    ((term-compare proto a b) (ranked-apart? proto a b))
+    ((term-compare proto b a) (ranked-apart? proto a b))
+    ((equal? a b) #t)
+    ((and (term-compound? proto a) (term-compound? proto b)) #t)
+    (else
+     (error "term-equal?: comparator ties distinct atoms (a boolean comparator must be total over atoms, and over atom/compound pairs)" a b))))
+
+;; The comparator ranked A and B apart: raise if that contradicts equal? on a
+;; non-compound pair, else report them unequal (#f).
+(define (ranked-apart? proto a b)
+  (if (and (equal? a b)
+           (not (and (term-compound? proto a) (term-compound? proto b))))
+      (error "term-equal?: comparator inconsistent with equal?: it ranks equal atoms" a))
+  #f)
+
+;; True iff XS and YS are equal as multisets under term-equal?.
 (define (multiset-equal? xs ys proto)
   (cond
     ((and (null? xs) (null? ys)) #t)
@@ -549,7 +587,7 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
     (else
      (let ((match-idx (find-index
                         (lambda (y)
-                          (zero? (term-compare proto (car xs) y)))
+                          (term-equal? proto (car xs) y))
                         ys)))
        (and match-idx
             (multiset-equal? (cdr xs) (remove-at ys match-idx) proto))))))

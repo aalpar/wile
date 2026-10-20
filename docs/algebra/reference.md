@@ -601,7 +601,7 @@ Axiom-driven term rewriting via abstract term protocols.
 
 ### Term Protocol
 
-- `(make-term-protocol compound-term? get-operator get-operands make-term compare [make-op-term])` -- create a protocol; compound-term? tests if a value has substructure; get-operator and get-operands extract parts; make-term rebuilds a term with new operands preserving metadata; compare orders operands and **must be a strict total order consistent with `equal?`** (AC normalization relies on this for termination and confluence); the optional `make-op-term` (operator operands -> term) lets head-changing rules (De Morgan) build a term with an arbitrary head operator
+- `(make-term-protocol compound-term? get-operator get-operands make-term compare [make-op-term])` -- create a protocol; compound-term? tests if a value has substructure; get-operator and get-operands extract parts; make-term rebuilds a term with new operands preserving metadata; compare is a boolean "sorts before" predicate (a numeric result such as -1 / 0 / 1 raises) and **must be a strict total order over atoms, consistent with `equal?`** (AC normalization relies on this for termination and confluence); it is also called on compounds and on atom/compound pairs, in both argument orders, and `(wile algebra unification)` raises on a tie between distinct atoms; the optional `make-op-term` (operator operands -> term) lets head-changing rules (De Morgan) build a term with an arbitrary head operator
 - `(term-protocol? x)` -- test whether x is a term protocol
 - `(term-compound? proto x)` -- test whether x is a compound term
 - `(term-get-operator proto term)` -- extract operator from compound term
@@ -694,6 +694,7 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 ### Term Protocol
 
 - `(sexp-term-protocol compare)` -- term protocol for S-expression terms: compound terms are pairs `(op arg ...)`, atoms are leaves; compare orders atoms for commutativity normalization and must handle all atom types in terms
+- `(sexp-atom-compare a b)` -- boolean comparator for `sexp-term-protocol`: true when `a`'s written form sorts before `b`'s. A strict weak order keyed on the written form, not a total order over values: two distinct values that print alike (two records, `car` and `cdr`) tie, and unification raises on such a tie
 
 ### Recursive Normalizer
 
@@ -1034,7 +1035,7 @@ Syntactic and AC-modulo unification. Pattern variables as records, substitutions
 - `(ac-match pattern subject theory proto)` -- match pattern against subject modulo AC operators in theory (operators in the theory's associative-ops that also carry a commutativity axiom); returns list of substitutions (empty = no match)
 - `(ac-unify t1 t2 theory proto)` -- two-sided AC unification; returns a CSU (complete set of unifiers) as a list of substitutions
 
-Both procedures call the protocol's compare as a three-way comparator and test its result with `zero?` for term equality. That differs from `(wile algebra rewrite)`, which calls the same compare as a boolean "sorts before" predicate, so a protocol built for one library is not usable with the other.
+Both procedures call the protocol's compare as the same boolean "sorts before" predicate `(wile algebra rewrite)` uses, and derive term equality by antisymmetry: two terms are equal when neither sorts before the other. The comparator is therefore also called on compounds and on atom/compound pairs, in both argument orders, and must be total over atoms (including ties within one type, such as `1` and `1.0` under `<`). Two contract violations raise an error instead of matching: a comparator that ties two distinct atoms, or an atom and a compound (a partial comparator answering `#f` outside its domain, or a written-form collision); and a comparator that ranks two `equal?` atoms. A tie between two compounds is legal (nested AC terms are equal modulo AC without being `equal?`). A numeric comparator result, such as the old three-way -1 / 0 / 1, raises in `term-compare`; any other truthy value is read as `#t`. One protocol serves both libraries, for example `(sexp-term-protocol sexp-atom-compare)`.
 
 ### Internal helpers (exposed for tests)
 
