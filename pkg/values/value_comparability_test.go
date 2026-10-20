@@ -31,7 +31,7 @@ import (
 // only query is reflect.TypeOf(v).Comparable(), which means the invariant can be
 // enforced at test time or not at all.
 //
-// What breaks without it: EqIdentity (utils.go) is a bare `a == b` on the eq?
+// What breaks without it: EqIdentity (values.go) is a bare `a == b` on the eq?
 // hot path. A slice-, map-, or func-backed Value faults there with
 // "comparing uncomparable type", taking down the host — not returning #f.
 //

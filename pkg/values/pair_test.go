@@ -16,6 +16,7 @@ package values_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -685,6 +686,169 @@ func TestSpineEndIsZeroWhenAbandoned(t *testing.T) {
 			qt.Assert(t, end, qt.Equals, values.SpineEnd{})
 			qt.Assert(t, end.Proper(), qt.IsFalse)
 			qt.Assert(t, end.Improper(), qt.IsFalse)
+		})
+	}
+}
+
+func Test_List(t *testing.T) {
+	tcs := []struct {
+		in     values.Tuple
+		out    values.Tuple
+		expect bool
+	}{
+		{
+			in:     values.List(),
+			out:    values.EmptyList,
+			expect: true,
+		},
+		{
+			in:     values.List(nil),
+			out:    values.NewCons(nil, values.EmptyList),
+			expect: true,
+		},
+		{
+			in:     values.List(values.NewSymbol("first")),
+			out:    values.NewCons(values.NewSymbol("first"), values.EmptyList),
+			expect: true,
+		},
+		{
+			in:     values.List(values.NewSymbol("first"), values.NewSymbol("second")),
+			out:    values.NewCons(values.NewSymbol("first"), values.NewCons(values.NewSymbol("second"), values.EmptyList)),
+			expect: true,
+		},
+	}
+
+	for i, tc := range tcs {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			q := tc.in.EqualTo(tc.out)
+			qt.Assert(t, q, qt.Equals, tc.expect)
+		})
+	}
+}
+
+func Test_List_MutationSemantics(t *testing.T) {
+	// Block-allocated pairs must support set-car!/set-cdr! identically
+	// to individually allocated pairs.
+	c := qt.New(t)
+
+	lst := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+	p := lst.(*values.Pair)
+
+	// set-car! on first cell
+	p.SetCar(values.NewInteger(99))
+	c.Assert(p.Car(), valuestest.SchemeEquals, values.NewInteger(99))
+
+	// set-cdr! to truncate list
+	p.SetCdr(values.EmptyList)
+	c.Assert(p.Cdr(), valuestest.SchemeEquals, values.EmptyList)
+
+	// Remaining cells are independent — mutating the head didn't corrupt them
+	lst2 := values.List(values.NewInteger(10), values.NewInteger(20))
+	p2 := lst2.(*values.Pair)
+	second := p2.Cdr().(*values.Pair)
+	second.SetCar(values.NewInteger(42))
+	c.Assert(second.Car(), valuestest.SchemeEquals, values.NewInteger(42))
+	// First cell unchanged
+	c.Assert(p2.Car(), valuestest.SchemeEquals, values.NewInteger(10))
+}
+
+func Test_FlipVectorToList(t *testing.T) {
+	tcs := []struct {
+		name string
+		in   *values.Vector
+		out  values.Tuple
+	}{
+		{
+			name: "nil vector returns empty list",
+			in:   nil,
+			out:  values.EmptyList,
+		},
+		{
+			name: "empty vector returns empty list",
+			in:   values.NewVector(),
+			out:  values.EmptyList,
+		},
+		{
+			name: "single element vector",
+			in:   values.NewVector(values.NewInteger(1)),
+			out:  values.List(values.NewInteger(1)),
+		},
+		{
+			name: "two element vector",
+			in:   values.NewVector(values.NewInteger(1), values.NewInteger(2)),
+			out:  values.List(values.NewInteger(1), values.NewInteger(2)),
+		},
+		{
+			name: "three element vector",
+			in:   values.NewVector(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+			out:  values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+		},
+		{
+			name: "mixed types",
+			in:   values.NewVector(values.NewInteger(1), values.NewString("hello"), values.TrueValue),
+			out:  values.List(values.NewInteger(1), values.NewString("hello"), values.TrueValue),
+		},
+		{
+			name: "nested list as element",
+			in:   values.NewVector(values.List(values.NewInteger(1), values.NewInteger(2)), values.NewInteger(3)),
+			out:  values.List(values.List(values.NewInteger(1), values.NewInteger(2)), values.NewInteger(3)),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got := values.VectorToList(tc.in)
+			qt.Assert(t, got, valuestest.SchemeEquals, tc.out)
+		})
+	}
+}
+
+func Test_ForEach(t *testing.T) {
+	list := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+	count := 0
+	sum := int64(0)
+
+	tail, err := values.ForEach(context.TODO(), list, func(_ context.Context, _ int, _ bool, v values.Value) error {
+		count++
+		intVal, ok := v.(*values.Integer)
+		if ok {
+			sum += intVal.Value
+		}
+		return nil
+	})
+
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, tail, valuestest.SchemeEquals, values.EmptyList)
+	qt.Assert(t, count, qt.Equals, 3)
+	qt.Assert(t, sum, qt.Equals, int64(6))
+}
+
+func Test_ForEach_NonTuple(t *testing.T) {
+	i := values.NewInteger(42)
+	tail, err := values.ForEach(context.TODO(), i, func(_ context.Context, _ int, _ bool, _ values.Value) error {
+		return fmt.Errorf("should not be called")
+	})
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, tail, valuestest.SchemeEquals, i)
+}
+
+func Test_IsList(t *testing.T) {
+	tests := []struct {
+		name string
+		in   values.Value
+		out  bool
+	}{
+		{"nil is not a list", nil, false},
+		{"empty list is a list", values.EmptyList, true},
+		{"proper list is a list", values.List(values.NewInteger(1), values.NewInteger(2)), true},
+		{"improper list is not a list", values.NewCons(values.NewInteger(1), values.NewInteger(2)), false},
+		{"integer is not a list", values.NewInteger(42), false},
+		{"string is not a list", values.NewString("hello"), false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, values.IsList(tc.in), qt.Equals, tc.out)
 		})
 	}
 }

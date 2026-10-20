@@ -16,6 +16,7 @@ package values
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"strings"
@@ -567,4 +568,226 @@ func (p *Pair) AsVector() *Vector {
 			"Pair.AsVector: improper list"))
 	}
 	return NewVector(vs...)
+}
+
+// List constructs a proper list from the given values.
+// Returns EmptyList if no arguments are provided.
+// The resulting list has the values in the same order as the arguments.
+//
+// Implementation note: Block-allocates all Pair cells in a single slice and links
+// them via cdr pointers. Callers receive the Tuple interface.
+func List(os ...Value) Tuple {
+	if len(os) == 0 {
+		return EmptyList
+	}
+	return PairBlock(make([]Pair, len(os))).LinkWith(os)
+}
+
+// ForEach iterates over a Tuple value, calling fn for each element.
+// If the value is not a Tuple, returns the value unchanged with no error.
+// The callback receives the element index, whether more elements follow, and the element value.
+// Returns the tail of the tuple (EmptyList for proper lists) and any error from the callback.
+func ForEach(ctx context.Context, o Value, fn ForEachFunc) (Value, error) {
+	pr, ok := o.(Tuple)
+	if ok {
+		return pr.ForEach(ctx, fn)
+	}
+	return o, nil
+}
+
+// ForEachProperList calls fn on each element of t and returns ErrNotAList
+// if the tail is not the empty list (i.e., t is an improper list). If fn
+// returns an error, that error is returned unchanged, except that any error
+// matching werr.ErrCircularList is rewrapped as ErrNotAList (with the cycle
+// sentinel chained as its cause), since a circular list is an improper list.
+//
+// This is the canonical proper-list eliminator — every site that walks a
+// list and rejects improper tails should funnel through this function so
+// the rejection logic is defined exactly once. registry/helpers.ForEachList
+// delegates here; new code in any layer should call ForEachProperList
+// directly when it cannot import the helpers package (e.g., machine/).
+func ForEachProperList(ctx context.Context, t Tuple, name string, fn ForEachFunc) error {
+	v, err := t.ForEach(ctx, fn)
+	if err != nil {
+		// A circular list IS an improper list, and rejecting improper lists is
+		// already this function's job (R7RS §6.10 requires apply's last argument to
+		// be a proper list). Report the error callers already handle, chaining the
+		// cycle sentinel as the cause so errors.Is(err, werr.ErrCircularList) still
+		// resolves for anyone who wants to distinguish it.
+		if errors.Is(err, werr.ErrCircularList) {
+			return werr.WrapForeignErrorWithCause(werr.ErrNotAList, err,
+				"%s: expected a proper list", name)
+		}
+		return err
+	}
+	if !IsEmptyList(v) {
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a proper list", name)
+	}
+	return nil
+}
+
+// CollectList walks a proper list and returns its elements as a Go slice.
+// The empty list yields a nil slice and no error; a non-Tuple or an improper
+// tail yields a wrapped ErrNotAList naming the caller.
+//
+// This is the reification twin of List: List folds a slice into a spine,
+// CollectList unfolds a spine into a slice. Every site that drains a variadic
+// rest-argument into []Value before handing it to SetValues (or to a Go API)
+// should funnel through here — the pre-existing hand-rolled copies each
+// re-derived the improper-tail rejection and none of them detected cycles,
+// which ForEachProperList does for free.
+func CollectList(ctx context.Context, v Value, name string) ([]Value, error) {
+	t, ok := v.(Tuple)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+			"%s: expected a proper list but got %T", name, v)
+	}
+	if t.IsEmptyList() {
+		return nil, nil
+	}
+	var q []Value
+	err := ForEachProperList(ctx, t, name, func(_ context.Context, _ int, _ bool, elem Value) error {
+		q = append(q, elem)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return q, nil
+}
+
+// Uncons asserts v is a non-empty Tuple and projects (car, cdr).
+// On empty list or non-Tuple input, returns a wrapped ErrNotAList with
+// the canonical "<name>: <role>" message format. The cdr may be any
+// Value — improper lists are accepted here; callers that need a
+// proper-list tail should follow up with ForEachProperList.
+//
+// Uncons is the eliminator for the Tuple algebra: every site that needs
+// to peel one element off the front of a list and continue with the
+// remainder should funnel through here so the empty-list / non-Tuple
+// rejection is defined exactly once. registry/helpers.Uncons delegates here.
+func Uncons(v Value, name, role string) (Value, Value, error) {
+	if IsEmptyList(v) {
+		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+			"%s: %s: expected a non-empty list", name, role)
+	}
+	t, ok := v.(Tuple)
+	if !ok {
+		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+			"%s: %s: expected a list but got %T", name, role, v)
+	}
+	return t.Car(), t.Cdr(), nil
+}
+
+// UnconsTyped is Uncons followed by a type assertion on the head.
+// On head-type mismatch, returns a wrapped headSentinel with the
+// expected-type phrase read via werr.TypeNameOf.
+func UnconsTyped[T any](v Value, headSentinel error, name, role string) (T, Value, error) {
+	var zero T
+	head, tail, err := Uncons(v, name, role)
+	if err != nil {
+		return zero, nil, err
+	}
+	typed, ok := head.(T)
+	if !ok {
+		return zero, nil, werr.WrapForeignErrorf(headSentinel,
+			"%s: %s: expected %s but got %T",
+			name, role, werr.TypeNameOf(headSentinel), head)
+	}
+	return typed, tail, nil
+}
+
+// CarAs asserts t.Car() has concrete type T. Use this when the caller
+// already holds a Tuple in hand and only needs a typed head — the tail
+// is left implicit. For typed head + tail in one call, use UnconsTyped.
+func CarAs[T any](t Tuple, headSentinel error, name, role string) (T, error) {
+	var zero T
+	head := t.Car()
+	typed, ok := head.(T)
+	if !ok {
+		return zero, werr.WrapForeignErrorf(headSentinel,
+			"%s: %s: expected %s but got %T",
+			name, role, werr.TypeNameOf(headSentinel), head)
+	}
+	return typed, nil
+}
+
+// NthCons advances n cons cells along the cdr chain and returns the
+// remaining list (or improper tail). It is the unified primitive
+// behind list-ref (NthCons(...).Car()) and list-tail (NthCons(...)).
+// Returns ErrIndexOutOfRange if n is negative or exceeds the list length.
+//
+// At n=0 the input is returned unchanged, including for EmptyList — this
+// matches R7RS semantics where (list-tail x 0) is x.
+func NthCons(lst Value, n int64, name string) (Value, error) {
+	if n < 0 {
+		return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+			"%s: index must be non-negative", name)
+	}
+	current := lst
+	for i := range n {
+		if IsEmptyList(current) {
+			return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+				"%s: index %d out of bounds at depth %d", name, n, i)
+		}
+		t, ok := current.(Tuple)
+		if !ok {
+			return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+				"%s: index %d out of bounds: improper tail at depth %d", name, n, i)
+		}
+		current = t.Cdr()
+	}
+	return current, nil
+}
+
+// IsList returns true if the value is a proper list.
+// A proper list is either EmptyList or a chain of pairs ending with EmptyList.
+// Returns false for nil, improper lists (dotted pairs), and non-list values.
+func IsList(v Value) bool {
+	if v == nil {
+		return false
+	}
+	if IsEmptyList(v) {
+		return true
+	}
+	tuple, ok := v.(Tuple)
+	if ok {
+		return tuple.IsList()
+	}
+	return false
+}
+
+// IsEmptyList returns true if the value is the empty list.
+// Returns false for nil values. For Tuple types, delegates to their IsEmptyList method.
+func IsEmptyList(v Value) bool {
+	if v == nil {
+		return false
+	}
+	pr, ok := v.(Tuple)
+	if ok {
+		return pr.IsEmptyList()
+	}
+	return false
+}
+
+// Single returns the sole element of a single-element Tuple, or false if
+// the Tuple has zero or more than one element. This avoids ForEach and its
+// closure allocation for the common case of 1-element rest-arg lists.
+func Single(t Tuple) (Value, bool) {
+	if t.IsEmptyList() {
+		return nil, false
+	}
+	if IsEmptyList(t.Cdr()) {
+		return t.Car(), true
+	}
+	return nil, false
+}
+
+// VectorToList converts a Vector to a proper list preserving element order.
+// Returns EmptyList for nil or void vectors.
+func VectorToList(vs *Vector) Tuple {
+	if IsVoid(vs) {
+		return EmptyList
+	}
+	return List(vs.Elems()...)
 }

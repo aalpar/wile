@@ -781,3 +781,49 @@ func TestNumericTower_CoverageMatrix(t *testing.T) {
 		t.Log(row.String())
 	}
 }
+
+func Test_ExactInteger(t *testing.T) {
+	tests := []struct {
+		name   string
+		in     values.Value
+		want   int64
+		wantOk bool
+	}{
+		// Integer cases
+		{"positive integer", values.NewInteger(42), 42, true},
+		{"zero integer", values.NewInteger(0), 0, true},
+		{"negative integer", values.NewInteger(-5), -5, true},
+		{"max int64", values.NewInteger(9223372036854775807), 9223372036854775807, true},
+
+		// BigInteger cases
+		{"small bigint", values.NewBigIntegerFromInt64(100), 100, true},
+		{"bigint at int64 max", values.NewBigIntegerFromString("9223372036854775807", 10), 9223372036854775807, true},
+		{"bigint too large", values.NewBigIntegerFromString("9223372036854775808", 10), 0, false},
+
+		// Rational cases - integers
+		{"rational 2/1", values.NewRational(2, 1), 2, true},
+		{"rational 0/1", values.NewRational(0, 1), 0, true},
+		{"rational -3/1", values.NewRational(-3, 1), -3, true},
+
+		// Rational cases - non-integers
+		{"rational 1/2", values.NewRational(1, 2), 0, false},
+		{"rational 5/3", values.NewRational(5, 3), 0, false},
+
+		// Non-numeric types
+		{"float", values.NewFloat(2.0), 0, false},
+		{"string", values.NewString("2"), 0, false},
+		{"symbol", values.NewSymbol("x"), 0, false},
+		{"nil", nil, 0, false},
+		{"pair", values.NewCons(values.NewInteger(1), values.EmptyList), 0, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := values.ExactInteger(tc.in)
+			qt.Assert(t, ok, qt.Equals, tc.wantOk)
+			if tc.wantOk {
+				qt.Assert(t, got, qt.Equals, tc.want)
+			}
+		})
+	}
+}

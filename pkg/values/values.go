@@ -14,7 +14,14 @@
 
 package values
 
-import "context"
+import (
+	"context"
+	"crypto/rand"
+	"encoding/base32"
+	"fmt"
+
+	"github.com/aalpar/wile/pkg/werr"
+)
 
 // Prefix constants for Scheme value representations.
 const (
@@ -106,7 +113,7 @@ var EOFObject Value = eofType{}
 //
 // R7RS §6.1 defines eq?/eqv? on aggregates as "denote the same location in the
 // store." A Scheme object must therefore HAVE a location, and Wile spells that as
-// Go pointer identity: EqIdentity (utils.go) special-cases *Symbol (compared by
+// Go pointer identity: EqIdentity (below) special-cases *Symbol (compared by
 // Key, since interning was removed) and otherwise falls through to a bare `a == b`
 // on the interface. It backs eq?, memq, and assq — the hot path. Go panics with
 // "comparing uncomparable type" when the dynamic type behind an interface is a
@@ -433,4 +440,81 @@ type RealNumber interface {
 	// For the exact kinds (Integer, BigInteger, Rational) there is no signed zero,
 	// so SignBit coincides with IsNegative.
 	SignBit() bool
+}
+
+// byteCnt is the number of bytes used for generating temporary variable names.
+const (
+	byteCnt = 128 / 8
+)
+
+// EqualTo compares two values for structural equality (R7RS equal?).
+// It is the package-level spelling of Equal; see equal.go for the traversal.
+func EqualTo(a, b Value) bool {
+	return Equal(a, b)
+}
+
+// EqIdentity implements R7RS eq? semantics: pointer identity for all types
+// except symbols, which compare by name/key (R7RS §6.1, §6.5). It is the single
+// source of truth for eq?-identity — machine (the VM's promoted OpEqQ and
+// continuation-mark scans) and registry/helpers both route through it. Living in
+// values/ dissolves the machine↛registry import barrier that previously forced a
+// duplicate copy. Kept small and branch-light so it inlines into the hot callers.
+func EqIdentity(a, b Value) bool {
+	sa, ok := a.(*Symbol)
+	if ok {
+		sb, ok2 := b.(*Symbol)
+		if ok2 {
+			return sa.Key == sb.Key
+		}
+		return false
+	}
+	return a == b
+}
+
+// NewTemporaryVariableName generates a unique symbol for use as a temporary variable.
+// The symbol name has the format "__T_<base32-encoded-random-bytes>".
+// Uses 128 bits of cryptographic randomness to ensure uniqueness.
+// Thread-safe: uses crypto/rand which is safe for concurrent use.
+// Panics if random number generation fails.
+func NewTemporaryVariableName() *Symbol {
+	bs := make([]byte, byteCnt)
+	_, err := rand.Read(bs)
+	if err != nil {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrRandomGenerationFailed,
+			"error reading random stream: %v",
+			err,
+		))
+	}
+	q := NewSymbol(
+		fmt.Sprintf("__T_%s", base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(bs)),
+	)
+	return q
+}
+
+// IsVoid returns true if the value represents the absence of a meaningful result.
+//
+// # Void, EmptyList, and nil Semantics
+//
+// The value system distinguishes three "absence/empty" concepts:
+//
+//   - Void (voidType{} singleton): no meaningful result (e.g., set!, display).
+//     Canonical check: values.IsVoid(v) — handles both nil and the Void singleton.
+//
+//   - EmptyList (emptyListType{} singleton): the empty list () — a valid first-class
+//     Scheme value. Implements Tuple but not *Pair. Canonical check: values.IsEmptyList(v) — handles nil safely (returns false).
+//
+//   - Go nil (nil interface): uninitialized / absent in Go — not a Scheme value.
+//     IsVoid(nil) returns true; IsEmptyList(nil) returns false.
+//
+// Anti-patterns to avoid:
+//
+//   - v == values.EmptyList or v != values.EmptyList → use values.IsEmptyList(v)
+//   - v == values.Void → use values.IsVoid(v)
+//   - v == nil || values.IsVoid(v) → redundant; values.IsVoid(v) handles nil
+//
+// Note: typed nil pointers (e.g., var p *Pair = nil) are handled by the
+// type's IsVoid() method, which checks for nil receiver.
+func IsVoid(v Value) bool {
+	return v == nil || v.IsVoid()
 }

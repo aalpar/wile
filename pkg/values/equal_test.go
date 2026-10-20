@@ -297,3 +297,61 @@ func TestEqual_SameTypedNonComparableLeavesDoNotPanic(t *testing.T) {
 	deepB := values.NewVector(values.NewCons(b, values.EmptyList))
 	qt.Assert(t, values.Equal(deepA, deepB), qt.IsTrue)
 }
+
+func TestEqualTo_CircularPair(t *testing.T) {
+	c := qt.New(t)
+
+	// Self-referential pair: x = (1 . x)
+	x := values.NewCons(values.NewInteger(1), values.EmptyList)
+	x.SetCdr(x)
+	c.Assert(values.EqualTo(x, x), qt.IsTrue)
+
+	// Two structurally identical circular pairs: a = (1 . a), b = (1 . b)
+	a := values.NewCons(values.NewInteger(1), values.EmptyList)
+	a.SetCdr(a)
+	b := values.NewCons(values.NewInteger(1), values.EmptyList)
+	b.SetCdr(b)
+	c.Assert(values.EqualTo(a, b), qt.IsTrue)
+
+	// Different circular pairs: c = (1 . c), d = (2 . d)
+	d := values.NewCons(values.NewInteger(1), values.EmptyList)
+	d.SetCdr(d)
+	e := values.NewCons(values.NewInteger(2), values.EmptyList)
+	e.SetCdr(e)
+	c.Assert(values.EqualTo(d, e), qt.IsFalse)
+
+	// Circular list: (1 2 1 2 ...) vs itself
+	p1 := values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.EmptyList))
+	p1.Cdr().(*values.Pair).SetCdr(p1)
+	p2 := values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.EmptyList))
+	p2.Cdr().(*values.Pair).SetCdr(p2)
+	c.Assert(values.EqualTo(p1, p2), qt.IsTrue)
+}
+
+func TestEqualTo_CircularVector(t *testing.T) {
+	c := qt.New(t)
+
+	// Vector containing itself: #(v)
+	v := values.NewVector(values.NewInteger(0))
+	v.Set(0, v)
+	c.Assert(values.EqualTo(v, v), qt.IsTrue)
+
+	// Two vectors each containing themselves
+	v1 := values.NewVector(values.NewInteger(0))
+	v1.Set(0, v1)
+	v2 := values.NewVector(values.NewInteger(0))
+	v2.Set(0, v2)
+	c.Assert(values.EqualTo(v1, v2), qt.IsTrue)
+}
+
+func TestEqualTo_NonCircular(t *testing.T) {
+	c := qt.New(t)
+
+	// Ensure non-circular comparisons still work
+	c.Assert(values.EqualTo(values.List(values.NewInteger(1), values.NewInteger(2)), values.List(values.NewInteger(1), values.NewInteger(2))), qt.IsTrue)
+	c.Assert(values.EqualTo(values.List(values.NewInteger(1)), values.List(values.NewInteger(2))), qt.IsFalse)
+	c.Assert(values.EqualTo(values.NewVector(values.NewInteger(1)), values.NewVector(values.NewInteger(1))), qt.IsTrue)
+	c.Assert(values.EqualTo(values.NewVector(values.NewInteger(1)), values.NewVector(values.NewInteger(2))), qt.IsFalse)
+	c.Assert(values.EqualTo(values.NewInteger(42), values.NewInteger(42)), qt.IsTrue)
+	c.Assert(values.EqualTo(nil, nil), qt.IsTrue)
+}

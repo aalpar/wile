@@ -565,7 +565,7 @@ qt.Assert(t, result, qt.IsNotNil)
 - One primary type per file: `{type_lowercase}.go`
 - Tests in parallel: `{type_lowercase}_test.go`
 - Related types grouped by prefix: `character_input_port.go`, `character_output_port.go`
-- Utility functions: `utils.go`
+- Helpers live in the file of the type they serve; there is no catch-all utility file (`pkg/values` has a test that refuses one)
 - Error definitions: `error.go`, `foreign_error.go`
 
 ### Package Documentation

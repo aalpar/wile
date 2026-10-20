@@ -266,7 +266,7 @@ be invoked multiple times, need the whole segment, so `AcquireSegment` uses
 
 **Slice, not map.** The `marks` field is a slice of `(key, val)` entries,
 not a Go map. Keys are compared with `eq?` via `values.EqIdentity`
-(`pkg/values/utils.go`): pointer equality for most values, but *symbols
+(`pkg/values/values.go`): pointer equality for most values, but *symbols
 compare by name* (`sa.Key == sb.Key`) — symbol interning was removed in
 PR #529, so two `'foo` symbol values may be distinct pointers that must
 still compare equal. A Go map keyed by `values.Value` can't express that at
