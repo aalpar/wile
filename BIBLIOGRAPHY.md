@@ -323,7 +323,7 @@ Introduces shift/reset as composable delimited control operators, the theoretica
 
 ### Optimistic Bisimilarity for Structural Equality
 
-Used in `pkg/values/utils.go` for `EqualTo()` on compound types (Pair, Vector). When a pointer pair is re-encountered during recursive comparison, it returns true (optimistic assumption). This is the same technique used by Chez Scheme and Racket for `equal?` on circular structures per R7RS §6.1. The formal basis is bisimulation equivalence — see "Bisimulation Equivalence for equal?" entry below.
+Used in `pkg/values/equal.go` for `Equal()` (spelled `EqualTo()` in `pkg/values/values.go`) on compound types (Pair, Vector). When a pointer pair is re-encountered during recursive comparison, it returns true (optimistic assumption). This is the same technique used by Chez Scheme and Racket for `equal?` on circular structures per R7RS §6.1. The formal basis is bisimulation equivalence — see "Bisimulation Equivalence for equal?" entry below.
 
 ### Split Value Register
 
@@ -478,7 +478,7 @@ The `equal?` predicate on cyclic structures (pairs, vectors) is bisimulation equ
 - **ISBN**: 978-0-13-114984-7
 - **Also**: Davide Sangiorgi, David Walker, *The Pi-Calculus: A Theory of Mobile Processes*, Cambridge University Press, 2001, Ch. 2
 - **ISBN** (Sangiorgi): 978-0-521-78177-0
-- **Location**: `pkg/values/utils.go` (EqualTo, equalToDeep)
+- **Location**: `pkg/values/equal.go` (Equal)
 
 ### Multiple Dispatch via Dispatch Tables (Chambers & Chen 1999)
 
@@ -754,7 +754,7 @@ Comprehensive Scheme tutorial covering implementation concepts.
 
 ### Chez Scheme
 
-Implementation behavior reference for zero-dominance in multiplication (`pkg/values/float.go`, `pkg/values/integer.go`, `pkg/values/big_integer.go`), optimistic bisimilarity for `equal?` (`pkg/values/utils.go`), and pointer-based equality for syntax objects (`pkg/syntax/`).
+Implementation behavior reference for zero-dominance in multiplication (`pkg/values/float.go`, `pkg/values/integer.go`, `pkg/values/big_integer.go`), optimistic bisimilarity for `equal?` (`pkg/values/equal.go`), and pointer-based equality for syntax objects (`pkg/syntax/`).
 
 - **URL**: https://cisco.github.io/ChezScheme/
 - **Source**: https://github.com/cisco/ChezScheme

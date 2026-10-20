@@ -61,3 +61,29 @@ func TestSymbol_IsVoid(t *testing.T) {
 	var nilSym *values.Symbol
 	qt.Assert(t, nilSym.IsVoid(), qt.IsTrue)
 }
+
+func Test_NewTemporaryVariableName(t *testing.T) {
+	sym1 := values.NewTemporaryVariableName()
+	sym2 := values.NewTemporaryVariableName()
+
+	qt.Assert(t, sym1.Key[:4], qt.Equals, "__T_")
+	qt.Assert(t, sym2.Key[:4], qt.Equals, "__T_")
+	qt.Assert(t, sym1.Key, qt.Not(qt.Equals), sym2.Key)
+}
+
+func Test_NewTemporaryVariableName_Uniqueness(t *testing.T) {
+	c := qt.New(t)
+	seen := make(map[string]bool)
+
+	// Generate 1000 names rapidly to test PRNG initialization and uniqueness
+	for range 1000 {
+		name := values.NewTemporaryVariableName()
+		if seen[name.Key] {
+			c.Fatalf("duplicate name generated: %s", name.Key)
+		}
+		seen[name.Key] = true
+
+		// Verify format
+		c.Assert(name.Key[:4], qt.Equals, "__T_")
+	}
+}

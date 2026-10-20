@@ -15,8 +15,13 @@
 package values
 
 import (
+	"crypto/rand"
+	"encoding/base32"
+	"fmt"
 	"strings"
 	"unicode"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 var (
@@ -215,4 +220,30 @@ func isNumberLiteral(name string) bool {
 		return true
 	}
 	return false
+}
+
+// byteCnt is the number of bytes used for generating temporary variable names.
+const (
+	byteCnt = 128 / 8
+)
+
+// NewTemporaryVariableName generates a unique symbol for use as a temporary variable.
+// The symbol name has the format "__T_<base32-encoded-random-bytes>".
+// Uses 128 bits of cryptographic randomness to ensure uniqueness.
+// Thread-safe: uses crypto/rand which is safe for concurrent use.
+// Panics if random number generation fails.
+func NewTemporaryVariableName() *Symbol {
+	bs := make([]byte, byteCnt)
+	_, err := rand.Read(bs)
+	if err != nil {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrRandomGenerationFailed,
+			"error reading random stream: %v",
+			err,
+		))
+	}
+	q := NewSymbol(
+		fmt.Sprintf("__T_%s", base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(bs)),
+	)
+	return q
 }

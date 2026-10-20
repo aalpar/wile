@@ -142,8 +142,7 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   body. The plan calls it "redundant but harmless" and gates de-duplication on full `ParamTypes`
   coverage, which is not reached (core ~197/208, several extension packages partial or zero).
   Enforcement is opt-in, so this costs nothing by default — file it, do not schedule it.
-- [ ] **`pkg/values/utils.go` is a 603-line grab-bag** [Tech debt, M]: equality, list helpers,
-  formatting and predicates in one file. Distinct from the `schemeutil` grab-bag already filed.
+- [x] **`pkg/values/utils.go` was a 603-line grab-bag** [Tech debt, M, Done 2026-10-19 (I013, P5.13)]: split by owner into `scheme_string.go`, `pair.go`, `values.go`, `symbol.go`, `numeric_tower.go` and `map_set.go`; `TestValuesHasNoGrabBagFile` refuses five exact catch-all names. Distinct from the `schemeutil` grab-bag already filed.
 - [ ] **`resolveLocal` / `resolveGlobal` take `func(...) any` visitors** [Tech debt, M]:
   `environment_frame.go`. Generics retire the `any`.
 - [ ] **Adding a primitive still touches four files with escaped-string docstrings** [Tech debt, L]:

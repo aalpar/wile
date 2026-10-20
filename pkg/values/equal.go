@@ -33,7 +33,7 @@ type equalPairKey [2]Value
 // An implementor MUST be pointer-shaped, and so Go-comparable: Equal keys its
 // visited set on (a, b) identity, and hashing a non-comparable dynamic type
 // panics. Every implementor in this package is a pointer, and the wider Value
-// contract already assumes as much — EqIdentity (utils.go), which backs eq?,
+// contract already assumes as much — EqIdentity (values.go), which backs eq?,
 // compares interfaces with == and would fault on a slice- or map-backed Value
 // long before equal? saw it.
 //
@@ -92,7 +92,7 @@ func Equal(a, b Value) bool {
 	// NaN as unequal to itself.
 	//
 	// SCOPE, HONESTLY: this makes equal? survive such a type; it does NOT make Wile
-	// survive it. EqIdentity (utils.go) is a bare interface `==` backing eq?/memq/assq
+	// survive it. EqIdentity (values.go) is a bare interface `==` backing eq?/memq/assq
 	// and has no such defense — it panics, and the VM boundary turns that into an opaque
 	// internal error. So the ordering below is cheap insurance, not a guarantee, and the
 	// real fix for an embedder is to honor the contract.
