@@ -622,7 +622,7 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   forward; backward runs do process them); seeding only the reachable blocks would also pass. The two follow-ups are filed under "Filed by the P6.8
   crosscheck").
 - [x] Algebra: ~~`rewrite` treats the term comparison as boolean, `unification` as three-way
-  (`ac-match` raises `=: expected number, got #f`)~~ (Done 2026-10-20, P6.9 / I177: `unification.scm` derives term equality
+  (`ac-match` raises `=: expected number, got #f`)~~ (Done 2026-10-20, P6.9 / I177, `ac4c197f` `b09bfe6a` `d45ee093` `ffd2687b` `d1a8403a` `c6dd88c3`: `unification.scm` derives term equality
   by antisymmetry over the boolean comparator (`term-equal?`, local); the unification and integration suites and tutorial
   chapter 10 use the boolean `sexp-atom-compare`, now exported from `(wile algebra symbolic)` and `(wile algebra)`; new
   `test/wile/algebra-cross-library-test.scm` drives one protocol through both libraries. The error text on master is
