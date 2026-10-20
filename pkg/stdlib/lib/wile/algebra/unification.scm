@@ -60,6 +60,8 @@ Keywords: substitution, compose, merge, unification"
          (cond
            ((not existing)
             (loop (cdr xs) (cons pair acc)))
+           ;; equal?, like bind-or-check; term-equal? coincides with it on atoms
+           ;; by its contract check, and differs on compounds only modulo AC.
            ((equal? existing val)
             (loop (cdr xs) acc))
            (else #f)))))))
@@ -353,6 +355,8 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
   (term-make-term proto (cons op args) args))
 
 ;; Variable binding: bind VAR↦SUBJECT if unbound, else check consistency.
+;; The consistency check is equal?; term-equal? (unify-rec) agrees with it on
+;; atoms by the contract check there, and differs on compounds only modulo AC.
 (define (bind-or-check var subject sub)
   (let ((existing (substitution-lookup sub var)))
     (cond
@@ -545,11 +549,31 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
     (else #f)))
 
 ;; True iff A and B are equal under PROTO's boolean term-compare: neither
-;; sorts before the other. Sound only for a strict total order, which is the
-;; contract (see the header).
+;; sorts before the other. Sound only for a strict total order, so the two
+;; contract violations that would make a tie lie are raised, not matched:
+;;   - the comparator ranks two atoms that are equal? (checked only when it
+;;     says one sorts before the other and neither side is compound, so the
+;;     deep equal? is never paid on compounds);
+;;   - the comparator ties two distinct atoms, or an atom and a compound
+;;     (a partial comparator answering #f outside its domain, or a written-form
+;;     collision such as two records). Compound/compound ties stay legal: nested
+;;     AC terms are equal modulo AC without being equal?.
+;; On atoms this makes the comparator's equality coincide with equal?, which is
+;; what bind-or-check and substitution-compose use.
 (define (term-equal? proto a b)
-  (and (not (term-compare proto a b))
-       (not (term-compare proto b a))))
+  (let ((a<b (term-compare proto a b))
+        (b<a (term-compare proto b a))
+        (both-compound? (and (term-compound? proto a)
+                             (term-compound? proto b))))
+    (cond
+      ((or a<b b<a)
+       (if (and (not both-compound?) (equal? a b))
+           (error "term-equal?: comparator inconsistent with equal?: it ranks equal atoms" a))
+       #f)
+      ((equal? a b) #t)
+      (both-compound? #t)
+      (else
+       (error "term-equal?: comparator ties distinct atoms (a boolean comparator must be total over atoms, and over atom/compound pairs)" a b)))))
 
 ;; True iff XS and YS are equal as multisets under term-equal?.
 (define (multiset-equal? xs ys proto)

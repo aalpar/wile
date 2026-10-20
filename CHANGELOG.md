@@ -119,8 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- **`ac-match` and `ac-unify` read the term comparator as boolean, like
-  `make-normalizer` (I177).** `(wile algebra unification)` tested equality with
+- **`ac-match` and `ac-unify` agree with `make-normalizer` on the term
+  comparator (I177).** `(wile algebra unification)` tested equality with
   `(zero? (term-compare ...))`, a three-way reading, while `(wile algebra
   rewrite)` documents `term-compare` as a boolean "sorts before" predicate and the
   stdlib's own `sexp-atom-compare` is boolean. A protocol built from
@@ -128,13 +128,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   theory proto)` raise `=: expected number, got #t`; a three-way comparator did
   the reverse, and the normalizer swapped `(+ a b)` and `(+ b a)` on every call.
   Unification now derives equality by antisymmetry (neither term sorts before the
-  other), so one protocol serves both libraries.
-
-  BREAKING for a protocol written against the old unification contract: a
-  comparator returning -1 / 0 / 1 is now misread (every non-`#f` answer counts as
-  "sorts before"), so `ac-match` finds no match between equal terms. Return a
-  boolean. `sexp-atom-compare` is now exported from `(wile algebra symbolic)` and
-  `(wile algebra)`.
+  other), so one protocol serves both libraries. See the BREAKING entry under
+  Changed.
 
 - **`run-analysis` propagates out of a block's first visit (I176).** A forward
   chain `0 -> 1 -> 2` whose block 1 generates a fact from bottom input
@@ -560,6 +555,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `let` — are affected and all five now report the structural error.
 
 ### Changed
+
+- **BREAKING: `ac-match` / `ac-unify` and `term-compare` read the comparator as
+  a boolean (I177).** A protocol whose comparator returns -1 / 0 / 1 now raises
+  (`term-compare: comparator must return a boolean ...`) in `ac-match`,
+  `ac-unify` and the rewrite normalizer alike; it was misread before (every
+  number is truthy, so `ac-match` found no match between equal terms and the
+  normalizer swapped `(+ a b)` and `(+ b a)`). Return a boolean. The comparator
+  is also called on compounds and on atom/compound pairs, in both argument
+  orders, and two contract violations raise instead of matching: a partial
+  comparator that answers `#f` where it cannot order two atoms (or an atom and a
+  compound), and a written-form tie between distinct atoms (two records, `car`
+  and `cdr` under `sexp-atom-compare`); a comparator that ranks two `equal?`
+  atoms raises too. `sexp-atom-compare` is exported from `(wile algebra symbolic)`
+  and `(wile algebra)`. Cost: equality is two comparator calls per compared
+  pair; a ground AC `ac-unify` at n = 400 takes 0.357 s where it took 0.128 s
+  (about 3x with `sexp-atom-compare`, which serializes both terms).
 
 - **A library body's references to imported names load through the cached
   binding, so `+ - <` promote as they do at top level (I217).** fib 27 inside

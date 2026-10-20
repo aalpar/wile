@@ -626,7 +626,7 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   by antisymmetry over the boolean comparator (`term-equal?`, local); the unification and integration suites and tutorial
   chapter 10 use the boolean `sexp-atom-compare`, now exported from `(wile algebra symbolic)` and `(wile algebra)`; new
   `test/wile/algebra-cross-library-test.scm` drives one protocol through both libraries. The error text on master is
-  `got #t` for a sorted pair, `got #f` for an unsorted one. BREAKING for a protocol with a -1/0/1 comparator).
+  `got #t` for a sorted pair, `got #f` for an unsorted one. BREAKING: a -1/0/1 comparator now raises in `term-compare`; a partial comparator and a written-form tie between distinct atoms raise in `term-equal?`; the crosscheck's follow-ups are filed under "Filed by the P6.9 crosscheck").
 - [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
   as a profile name.
 - [ ] Coverage: `stdlibPrefixes` (`coverage/gocover.go`) omits the embedded `chibi/` and `rnrs/`.
@@ -2257,6 +2257,22 @@ The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no r
 
 - [ ] **A forward-unreachable CYCLE run BACKWARD is never widened** [Correctness, Low, S, P6.8 re-review, pre-existing root]: `widening-points` drops indices whose `rank-or-false` is `#f`, so with `(init-state '(0 . 0))`, `(widen interval-widen)` and an incrementing transfer on `'((0 () (1)) (1 (0 9) ()) (9 (9) (1 9)))` run backward, the analysis spins about 1.2s and raises the revisit-cap error, whose remedy text says "supply (widen OP)" though widen was supplied. The same holds for an 8<->9 orphan cycle. Base and master already spin on the empty-worklist path (`'((0 ...)) (8 (8) (8 9)) (9 (8) ())`). Fix options: extend the rank map with a DFS over the blocks the RPO missed, or do not enqueue unranked indices. Cross-reference: the fix for the row "Backward analysis silently returns all-bottom..." (start the worklist from every block) would carry this hole to forward runs, so land them together.
 - [ ] **Nothing pins first-visit propagation on a revisit** [Test coverage, Info, P6.8 re-review]: replacing the guard's `(> vc 1)` with `(> vc 2)` is state-equivalent in all 561 matrix runs (it differs only in call counts on cycles), so no row distinguishes them. Optional: a call-count assertion on one cycle (the worklist order is deterministic), if the owner wants it.
+
+### Filed by the P6.9 crosscheck (2026-10-20)
+
+- [ ] **`ac-unify`'s ground fast path ignores NESTED AC** [Correctness, S/M, P6.9 crosscheck, pre-existing, verified on master]:
+  `(ac-unify '(+ (* a b) c) '(+ c (* b a)) theory proto)` with `+` and `*` both AC gives 0 unifiers while `ac-match` of the
+  same pair gives 1. `unify-ac` / `multiset-equal?` compare compound operands flat through the comparator, so no
+  written-form comparator can satisfy the header's "consistent with `equal?` modulo AC". Fix sketch: compare ground compound
+  operands through `unify-rec` with an empty substitution, threading `ac-ops`, so the comparator is consulted on atoms only.
+  Risk note for the owner (design option, NOT to implement unasked): unification could stop consulting the comparator for
+  equality and use `equal?` on atoms plus a structural AC-aware equality on compounds. That removes the cross-library
+  coupling and the contract checks, and fixes this row; the cost is giving up "one protocol, equality derived by
+  antisymmetry". A compound/compound tie that is not `equal?` is deliberately legal today (it does not raise), which is the
+  over-match this row would close.
+- [ ] **`ac-match` returns duplicate identical substitutions** [Correctness, Low, S, P6.9 crosscheck, pre-existing, verified on
+  master]: `(+ a a b)` against `(+ a b a)` gives 2 results and `(+ ?x a)` against `(+ a a)` gives 2. `match-ac` never
+  deduplicates; the Stickel path does.
 
 ### Closed in Tier 1
 

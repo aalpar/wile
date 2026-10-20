@@ -694,7 +694,7 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 ### Term Protocol
 
 - `(sexp-term-protocol compare)` -- term protocol for S-expression terms: compound terms are pairs `(op arg ...)`, atoms are leaves; compare orders atoms for commutativity normalization and must handle all atom types in terms
-- `(sexp-atom-compare a b)` -- the stdlib's boolean comparator for `sexp-term-protocol`: true when `a`'s written form sorts before `b`'s; a strict total order over any atom type
+- `(sexp-atom-compare a b)` -- boolean comparator for `sexp-term-protocol`: true when `a`'s written form sorts before `b`'s. A strict weak order keyed on the written form, not a total order over values: two distinct values that print alike (two records, `car` and `cdr`) tie, and unification raises on such a tie
 
 ### Recursive Normalizer
 
@@ -1035,7 +1035,7 @@ Syntactic and AC-modulo unification. Pattern variables as records, substitutions
 - `(ac-match pattern subject theory proto)` -- match pattern against subject modulo AC operators in theory (operators in the theory's associative-ops that also carry a commutativity axiom); returns list of substitutions (empty = no match)
 - `(ac-unify t1 t2 theory proto)` -- two-sided AC unification; returns a CSU (complete set of unifiers) as a list of substitutions
 
-Both procedures call the protocol's compare as the same boolean "sorts before" predicate `(wile algebra rewrite)` uses, and derive term equality by antisymmetry (neither term sorts before the other). The comparator must therefore be a strict total order; one protocol serves both libraries, for example `(sexp-term-protocol sexp-atom-compare)`. A comparator that returns -1 / 0 / 1 is misread: every non-`#f` answer counts as "sorts before".
+Both procedures call the protocol's compare as the same boolean "sorts before" predicate `(wile algebra rewrite)` uses, and derive term equality by antisymmetry: two terms are equal when neither sorts before the other. The comparator is therefore also called on compounds and on atom/compound pairs, in both argument orders, and must be total over atoms. Two contract violations raise an error instead of matching: a comparator that ties two distinct atoms (or an atom and a compound), such as a partial comparator answering `#f` outside its domain or a written-form collision; and a comparator that ranks two `equal?` atoms. A tie between two compounds is legal (nested AC terms are equal modulo AC without being `equal?`). A comparator that returns -1 / 0 / 1 raises: `term-compare` requires a boolean. One protocol serves both libraries, for example `(sexp-term-protocol sexp-atom-compare)`.
 
 ### Internal helpers (exposed for tests)
 

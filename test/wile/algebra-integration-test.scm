@@ -217,7 +217,7 @@
                            (make-commutativity-axiom '+)))
                    '(+)))
          (proto (sexp-term-protocol sexp-atom-compare)))
-    (test #t (> (length (ac-match '(+ a b) '(+ b a) theory proto)) 0))))
+    (test 1 (length (ac-match '(+ a b) '(+ b a) theory proto)))))
 
 (test-end)
 (test-exit)

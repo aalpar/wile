@@ -133,11 +133,14 @@
 (define (sexp-term-protocol compare)
   "Construct a term protocol for S-expression terms.
 Compound terms are pairs (op arg ...). Atoms are leaves.
-COMPARE orders atoms for commutativity normalization.
-COMPARE must handle all atom types that appear in terms —
-if terms contain numbers or strings alongside symbols,
-COMPARE must dispatch on type (e.g., via cond on symbol?,
-number?, string?) rather than assuming all atoms are symbols.
+COMPARE is a boolean 'sorts before' predicate, shared by (wile algebra
+rewrite) and (wile algebra unification). It must be total over atoms and is
+also called on compounds and on atom/compound pairs, in both argument orders:
+unification derives equality from it (neither sorts before the other), and
+raises an error when it ties two distinct atoms or ranks two equal? atoms.
+If terms contain numbers or strings alongside symbols, COMPARE must dispatch
+on type (e.g., via cond on symbol?, number?, string?) rather than assuming
+all atoms are symbols.
 
 Parameters:
   compare : procedure
@@ -688,8 +691,11 @@ Category: algebra"
 (define (sexp-atom-compare a b)
   "Compare two S-expression atoms lexicographically by their printed form.
 Serializes via `write` so any atom type (symbol, number, string, pair,
-vector) orders consistently. Used as the commutativity tie-break for
-`sexp-term-protocol` in the Boolean normalizer.
+vector) is ordered. A strict weak order keyed on the written form, not a
+total order over values: two distinct values that print alike (two
+records, `car` and `cdr`) tie, and unification raises on such a tie.
+Pass it to `sexp-term-protocol`; it is the commutativity tie-break of the
+Boolean normalizer and serves both the rewrite and unification libraries.
 
 Parameters:
   a : any

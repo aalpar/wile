@@ -79,7 +79,7 @@ Directions documents — identify prioritized capability extensions. Priority se
 
 #### Follow-ups (deferred from shipped plans)
 
-- [ ] **wile-goast AC-match migration** [Algebra, Follow-up]: Migrate `wile-goast/.../unify.scm` (the `discover-equivalences` calls) to `ac-unify`. Three risks: (1) term-protocol contract compliance, (2) trace-emitting diagnostic paths (`ac-unify` produces no rewrite trace), (3) small-arity benchmark before crossover claim. Scope ~100 LOC. `plans/2026-04-21-wile-goast-ac-match-migration.md`.
+- [ ] **wile-goast AC-match migration** [Algebra, Follow-up]: Migrate `wile-goast/.../unify.scm` (the `discover-equivalences` calls) to `ac-unify`. Three risks: (1) term-protocol contract compliance, (2) trace-emitting diagnostic paths (`ac-unify` produces no rewrite trace), (3) small-arity benchmark before crossover claim. Scope ~100 LOC. `plans/2026-04-21-wile-goast-ac-match-migration.md`. Added by the P6.9 crosscheck (2026-10-20): `ssa-binop-protocol`'s comparator (`wile-goast/lib/wile/goast/ssa-normalize.scm:67-68`) returns `#f` for non-strings, so it will raise the `ac-unify` comparator-contract error (a tie between distinct atoms) once migrated; make it total over atoms first. No change in wile-goast is made here.
 - [ ] **AC-matching v2 deferred decisions** [Algebra, Follow-up]: 8 decisions deferred in `memory/2026-04-21-ac-matching-design.md` "Open questions" — non-unit-multiplicity Stickel, sort-typed pattern-vars, E-matching scope. Re-open when a consumer surfaces.
 - [ ] **Incidence algebra future extensions** [Algebra, Follow-up]: Items in `memory/2026-04-21-incidence-algebra-impl.md` "Future extensions (deferred)" section.
 

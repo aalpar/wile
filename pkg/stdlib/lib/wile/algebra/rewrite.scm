@@ -76,8 +76,11 @@
     (fn operator operands)))
 
 (define (term-compare proto a b)
-  "Test whether A should sort before B under protocol PROTO's term ordering.\nUsed by commutativity and AC normalization to pick a canonical operand order.\nCOMPARE must be a strict total order consistent with equal?: AC normalization\nsorts once, which terminates and is confluent only for a total order — a\nnon-total comparator can make AC rewriting oscillate.\n\nExamples:\n  ;; With a numeric comparison protocol:\n  ;; (term-compare proto 1 2)  => #t\n  ;; (term-compare proto 3 1)  => #f\n\nParameters:\n  proto : any\n  a : any\n  b : any\nReturns: boolean\nCategory: algebra"
-  ((term-compare-fn proto) a b))
+  "Test whether A should sort before B under protocol PROTO's term ordering.\nUsed by commutativity and AC normalization to pick a canonical operand order.\nCOMPARE must return a boolean and be a strict total order consistent with equal?\n(over atoms, and also over compounds and atom/compound pairs, in both argument\norders; a non-boolean result raises): AC normalization\nsorts once, which terminates and is confluent only for a total order — a\nnon-total comparator can make AC rewriting oscillate.\n\nExamples:\n  ;; With a numeric comparison protocol:\n  ;; (term-compare proto 1 2)  => #t\n  ;; (term-compare proto 3 1)  => #f\n\nParameters:\n  proto : any\n  a : any\n  b : any\nReturns: boolean\nCategory: algebra"
+  (let ((q ((term-compare-fn proto) a b)))
+    (if (not (boolean? q))
+        (error "term-compare: comparator must return a boolean; the three-way -1/0/1 contract was replaced (I177)" q a b))
+    q))
 
 ;; ─── Axiom types ────────────────────────────
 
