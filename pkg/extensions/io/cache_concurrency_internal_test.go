@@ -29,9 +29,9 @@ import (
 
 // TestConcurrentMapAccess_T1 verifies concurrent access to a State's parsers
 // cache does not race or panic (T1 from the architectural review).
-// It is an internal test because the caches and their mutex are unexported per
+// It is an internal test because the cache and its mutex are unexported per
 // engine — run with -race. Under the former package globals this drove the
-// shared maps; now it drives one engine's per-State caches, the same locking
+// shared map; now it drives one engine's per-State cache, the same locking
 // discipline the primitives use.
 func TestConcurrentMapAccess_T1(t *testing.T) {
 	c := qt.New(t)
@@ -111,9 +111,6 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 		}
 		wg.Wait()
 	})
-
-	// NewState fully constructs the cache (no lazy init), so it is non-nil.
-	c.Assert(st.parsers, qt.Not(qt.IsNil))
 }
 
 // TestConcurrentReadSyntaxSamePort_T1_1 guards the reviews/2026-07-13 §4

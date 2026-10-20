@@ -2282,6 +2282,26 @@ The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no r
   master]: `sexp-term-protocol` takes `(cdr term)` as the operand list, so a dotted tail reaches `match-positional` as a
   non-list and fails with an arity/`car` error instead of a located protocol error.
 
+### Filed by the P6.14 crosscheck (2026-10-20)
+
+- [ ] **`SimpleToken.SchemeString` / `IsVoid` / `EqualTo` are dead after `read-token`'s retirement** [Dead code, XS, P6.14 crosscheck]:
+  `pkg/internal/tokenizer/token.go` (the three methods, ~:106-136) existed only so `PrimReadToken`'s `q.(values.Value)` cast
+  succeeded. Deleting them (and the `fmt` / `values` imports they pull in) builds; only `tokenizer_test.go`
+  (`TestSimpleToken_SchemeString`, `TestSimpleToken_IsVoid`, ~:2008-2092) breaks. Removing them turns "a token reaches Scheme"
+  into a compile error, which is the property the retirement wanted. Also `releaseLookahead`'s anonymous-interface
+  parameter (`pkg/extensions/io/state.go`, ~:291-294) now has one caller (`readSyntaxCached`, a `*parser.Parser`): narrow it.
+  Outside P6.14's task record, so filed.
+- [ ] **A top-level `define` whose body fails to compile still leaves the name bound to `#<void>`** [Diagnostics / REPL, S,
+  P6.14 crosscheck, pre-existing, reproduced on the P6.14 branch]: `wile -i`, then `(define (f p) (read-token p))` reports the
+  compile error, and a later `(f 1)` fails with `application: expected a procedure, got #<void>`, naming neither `f` nor the
+  unbound name. Same with any unbound name in the body. A file run stops at its first error, so only the interactive
+  path shows it. Site: `declareDefineBinding` (`pkg/machine/compilation/compile_define.go`, ~:60-145) creates the global
+  binding BEFORE `compileValidatedDefineVar` / the function-shorthand path compiles the value, so a compile error leaves
+  the declared-but-unpopulated slot behind (the function shorthand declares early on purpose, for self-reference). Fix: on a
+  compile error after declaration, retract the binding (or mark it undefined so a reference reports the original error);
+  do not create it visibly until compilation succeeds. Verify the immutable-top-level and `Predeclared` paths keep their
+  contract.
+
 ### Closed in Tier 1
 
 Moved to [`closed.md`](closed.md) (2026-10-17 split).

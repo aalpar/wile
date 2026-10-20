@@ -66,7 +66,7 @@ type parserEntry struct {
 }
 
 // NewState builds a fresh per-engine State: three port parameters over the
-// process std streams, and empty caches. Fully constructed here — there is no
+// process std streams, and an empty cache. Fully constructed here — there is no
 // lazy initialization, unlike the former package-global InitState.
 //
 // auth gates each host stream. This is the only gate the three pre-opened ports

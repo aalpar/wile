@@ -1231,40 +1231,34 @@ func TestReadU8Coverage(t *testing.T) {
 // Phase 4 — Cache lifecycle
 // =============================================================================
 
-// NOTE: TestParserCacheEviction accesses package-level state (cacheMu, Parsers,
-// Tokenizers) and must NOT use t.Parallel(). Go tests within the same package
-// run sequentially by default, so no additional synchronization is needed
-// beyond the existing cacheMu locking.
+// Each subtest builds its own engine and reads that engine's parser-cache size
+// through ExportParserCacheSize, so an eviction path that stops evicting shows
+// up as a size mismatch on exactly the subtest that exercises it. Every subtest
+// takes its own qt.New(t): an assertion that fails in one must not FailNow the
+// parent and hide the later subtests.
 func TestParserCacheEviction(t *testing.T) {
-	c := qt.New(t)
-	engine := newEngine(t)
-
 	t.Run("read to eof evicts parser", func(t *testing.T) {
-		// Read until EOF triggers parser eviction
-		eval(t, engine, `(let ((p (open-input-string "42")))
-		   (read p)
-		   (read p))`) // second read hits EOF
-
-		// After EOF, the Parsers map should have no lingering entry
-		// for that port. We verify indirectly: a fresh port reuses
-		// the read path without stale state.
-		result := eval(t, engine, `(equal? (read (open-input-string "99")) 99)`)
-		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
-	})
-
-	t.Run("cache maps empty after eof", func(t *testing.T) {
-		// Read to EOF on a port — should add then evict the parser entry — and
-		// verify this engine's cache is back to its pre-read size (no leak).
+		// Read to EOF on a port: the parser entry is added, then evicted, and the
+		// cache is back to its pre-read size (no leak).
+		c := qt.New(t)
 		eng := newEngine(t)
 		st := eng.Namespace().IOState().(*extio.State)
 		parsersBefore := extio.ExportParserCacheSize(st)
 
-		eval(t, eng, `(let ((p (open-input-string "1")))
-		   (read p)
-		   (read p))`)
+		eval(t, eng, `(define p (open-input-string "1"))`)
+		eval(t, eng, `(read p)`)
+
+		parsersMid := extio.ExportParserCacheSize(st)
+		c.Assert(parsersMid, qt.Equals, parsersBefore+1) // cache actually populated
+
+		eval(t, eng, `(read p)`) // second read hits EOF
 
 		parsersAfter := extio.ExportParserCacheSize(st)
-		c.Assert(parsersAfter, qt.Equals, parsersBefore)
+		c.Assert(parsersAfter, qt.Equals, parsersBefore) // EOF evicted it
+
+		// A fresh port still reads: no stale state survived the eviction.
+		result := eval(t, eng, `(equal? (read (open-input-string "99")) 99)`)
+		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 	})
 
 	t.Run("close-port evicts cache without eof", func(t *testing.T) {
@@ -1272,6 +1266,7 @@ func TestParserCacheEviction(t *testing.T) {
 		// must go through the evictPortCache choke point. Read once (populating the
 		// parser cache but not reaching EOF), then close, and assert the cache
 		// returns to baseline.
+		c := qt.New(t)
 		eng := newEngine(t)
 		st := eng.Namespace().IOState().(*extio.State)
 		parsersBefore := extio.ExportParserCacheSize(st)
@@ -1286,6 +1281,21 @@ func TestParserCacheEviction(t *testing.T) {
 
 		parsersAfter := extio.ExportParserCacheSize(st)
 		c.Assert(parsersAfter, qt.Equals, parsersBefore) // close evicted it
+	})
+
+	t.Run("call-with-port evicts cache without eof", func(t *testing.T) {
+		// The third documented eviction path: call-with-port closes the port when
+		// the procedure returns, with the parser populated and EOF never reached.
+		c := qt.New(t)
+		eng := newEngine(t)
+		st := eng.Namespace().IOState().(*extio.State)
+		parsersBefore := extio.ExportParserCacheSize(st)
+
+		eval(t, eng, `(call-with-port (open-input-string "1 2 3")
+		   (lambda (port) (read port)))`)
+
+		parsersAfter := extio.ExportParserCacheSize(st)
+		c.Assert(parsersAfter, qt.Equals, parsersBefore)
 	})
 }
 

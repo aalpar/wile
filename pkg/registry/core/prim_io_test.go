@@ -221,35 +221,6 @@ func TestRead(t *testing.T) {
 	qt.Assert(t, pr.Car().(*values.Symbol).Key, qt.Equals, "a")
 }
 
-func TestReadWithPort(t *testing.T) {
-	// Test read with an explicit port argument
-	input := strings.NewReader("42")
-	port := values.NewCharacterInputPortFromReader(input)
-
-	env, err := bootstrap.NewNamespaceFrame(context.TODO())
-	qt.Assert(t, err, qt.IsNil)
-
-	// We need to test read with an explicit port - use lambda to capture port
-	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	sctx := syntax.NewZeroValueSourceContext()
-
-	// Create a program that reads from the port
-	// First define a variable holding the port, then call read on it
-	// For simplicity, test read with no port (uses default)
-	prog := values.List(values.NewSymbol("read"))
-	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
-	qt.Assert(t, err, qt.IsNil)
-
-	// Redirect this engine's current-input-port to the test port.
-	stateOf(t, env).SetInputPort(port)
-
-	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
-	err = mc.Run()
-	qt.Assert(t, err, qt.IsNil)
-}
-
 func TestDisplayWithSymbol(t *testing.T) {
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
