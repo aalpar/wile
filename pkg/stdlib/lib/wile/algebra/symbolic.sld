@@ -14,7 +14,7 @@
     step-rule-name step-general-form step-before step-after
     fuel-exhausted-step?
     ;; Term protocol
-    sexp-term-protocol
+    sexp-term-protocol sexp-atom-compare
     ;; Recursive normalizer
     make-recursive-normalizer
     ;; Theory projections

@@ -1,7 +1,10 @@
 ;;; unification.scm — AC-matching and AC-unification.
 ;;;
-;;; Term protocol contract: term-compare must be a total order consistent
-;;; with equal? modulo the AC-equivalence induced by the caller's theory.
+;;; Term protocol contract: term-compare is the boolean "sorts before"
+;;; predicate (wile algebra rewrite) documents, and it must be a strict total
+;;; order consistent with equal? modulo the AC-equivalence induced by the
+;;; caller's theory. Equality is derived from it by antisymmetry
+;;; (`term-equal?`): two terms are equal when neither sorts before the other.
 
 (define-record-type <pattern-var>
   (make-pattern-var name)
@@ -242,7 +245,7 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
                           (term-get-operands proto s)
                           sub ac-ops proto))))
     (else
-     (if (zero? (term-compare proto p s)) (list sub) '()))))
+     (if (term-equal? proto p s) (list sub) '()))))
 
 ;; AC-case: direct backtracking over assignments of pattern operands to
 ;; subject operands. Correct (enumerates all CSU elements) but exponential;
@@ -455,7 +458,7 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
 
 ;; Core recursion for unification. Walks bindings via resolve, then
 ;; dispatches on shape: var ↦ bind, compound/compound ↦ positional or AC,
-;; ground/ground ↦ term-compare equality.
+;; ground/ground ↦ term-equal? (antisymmetry over the boolean term-compare).
 (define (unify-rec t1 t2 sub ac-ops proto)
   (let ((t1* (resolve t1 sub))
         (t2* (resolve t2 sub)))
@@ -479,7 +482,7 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
                             (term-get-operands proto t2*)
                             sub ac-ops proto))))
       (else
-       (if (zero? (term-compare proto t1* t2*)) (list sub) '())))))
+       (if (term-equal? proto t1* t2*) (list sub) '())))))
 
 ;; Walk a chain of var↦var bindings to the final value (or original term).
 (define (resolve t sub)
@@ -541,7 +544,14 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
      (any (lambda (a) (has-var? a proto)) (term-get-operands proto t)))
     (else #f)))
 
-;; True iff XS and YS are equal as multisets under term-compare.
+;; True iff A and B are equal under PROTO's boolean term-compare: neither
+;; sorts before the other. Sound only for a strict total order, which is the
+;; contract (see the header).
+(define (term-equal? proto a b)
+  (and (not (term-compare proto a b))
+       (not (term-compare proto b a))))
+
+;; True iff XS and YS are equal as multisets under term-equal?.
 (define (multiset-equal? xs ys proto)
   (cond
     ((and (null? xs) (null? ys)) #t)
@@ -549,7 +559,7 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
     (else
      (let ((match-idx (find-index
                         (lambda (y)
-                          (zero? (term-compare proto (car xs) y)))
+                          (term-equal? proto (car xs) y))
                         ys)))
        (and match-idx
             (multiset-equal? (cdr xs) (remove-at ys match-idx) proto))))))
