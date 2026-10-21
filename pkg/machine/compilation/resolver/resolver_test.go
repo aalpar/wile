@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -729,6 +730,102 @@ func TestChainFileResolver_AllMiss(t *testing.T) {
 	_, _, err := r.ResolveAndOpen(context.Background(), "missing.scm")
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
+}
+
+// taggedAbsence is a FileResolver that always reports the file absent, naming
+// itself in the message so a test can tell which arm's failure survived.
+type taggedAbsence struct {
+	tag string
+}
+
+func (r taggedAbsence) ResolveAndOpen(_ context.Context, path string) (fs.File, string, error) {
+	return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "%s: %s not found", r.tag, path)
+}
+
+// TestChainFileResolver_TotalMissJoinsEveryArmInOrder pins that a total miss
+// names every arm that searched, in chain order, and that the join still
+// satisfies errors.Is(ErrFileNotFound) for callers that branch on absence.
+func TestChainFileResolver_TotalMissJoinsEveryArmInOrder(t *testing.T) {
+	r := NewChainFileResolver([]environment.FileResolver{
+		taggedAbsence{tag: "arm-one"},
+		taggedAbsence{tag: "arm-two"},
+		taggedAbsence{tag: "arm-three"},
+	})
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "missing.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
+	msg := err.Error()
+	one := strings.Index(msg, "arm-one: missing.scm not found")
+	two := strings.Index(msg, "arm-two: missing.scm not found")
+	three := strings.Index(msg, "arm-three: missing.scm not found")
+	qt.Assert(t, one >= 0, qt.IsTrue, qt.Commentf("arm-one absent from %q", msg))
+	qt.Assert(t, two > one, qt.IsTrue, qt.Commentf("arm-two not after arm-one in %q", msg))
+	qt.Assert(t, three > two, qt.IsTrue, qt.Commentf("arm-three not after arm-two in %q", msg))
+}
+
+// TestChainFileResolver_SingleArmMissIsTheArmsOwnError pins that a one-arm
+// chain returns its arm's error itself, not a one-element join.
+func TestChainFileResolver_SingleArmMissIsTheArmsOwnError(t *testing.T) {
+	arm := taggedAbsence{tag: "only"}
+	r := NewChainFileResolver([]environment.FileResolver{arm})
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "missing.scm")
+	_, _, want := arm.ResolveAndOpen(context.Background(), "missing.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, err.Error(), qt.Equals, want.Error())
+	_, isJoin := err.(interface{ Unwrap() []error })
+	qt.Assert(t, isJoin, qt.IsFalse)
+}
+
+// TestChainFileResolver_DeniedArmIsNotJoinedIntoAMiss pins the line between an
+// absence and a denial the chain looks past. Under FilesystemRoot the virtual
+// arm refuses every name and the OS arm reports the file absent; the chain's
+// answer is a plain miss. Joining the refusal would make the miss match
+// security.ErrAccessDenied, which the VM treats as uncatchable, so a guard
+// around (load "missing.scm") would stop catching it.
+func TestChainFileResolver_DeniedArmIsNotJoinedIntoAMiss(t *testing.T) {
+	root := realDir(t, t.TempDir())
+	t.Chdir(root)
+	t.Setenv(SchemeIncludePathEnv, "")
+
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.FilesystemRoot(root))
+	env := ns.Runtime()
+
+	r := NewChainFileResolver([]environment.FileResolver{
+		NewFSFileResolver(fstest.MapFS{}, env),
+		NewOSFileResolver(env),
+	})
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "missing.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsFalse,
+		qt.Commentf("a denial the chain looked past leaked into the miss: %v", err))
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
+}
+
+// TestChainFileResolver_StoppingDenialIsReturnedAlone pins that a refusal the
+// chain may not look past discards the absences collected before it: the
+// caller sees the denial and nothing else, not a join that also matches
+// ErrFileNotFound.
+func TestChainFileResolver_StoppingDenialIsReturnedAlone(t *testing.T) {
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.DenyAll())
+	env := ns.Runtime()
+
+	r := NewChainFileResolver([]environment.FileResolver{
+		taggedAbsence{tag: "arm-one"},
+		NewFSFileResolver(fstest.MapFS{}, env),
+		NewEmbedFileResolver(fstest.MapFS{}),
+	})
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "secret.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsFalse,
+		qt.Commentf("an earlier absence rode into a stopping denial: %v", err))
+	qt.Assert(t, strings.Contains(err.Error(), "arm-one"), qt.IsFalse)
 }
 
 // TestChainFileResolver_DenialFallsThroughToADifferentSource pins the other

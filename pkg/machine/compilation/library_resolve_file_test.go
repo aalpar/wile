@@ -18,12 +18,14 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"strings"
 	"testing"
 	"testing/fstest"
 
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -61,4 +63,49 @@ func TestResolveLibraryFile_HardSldErrorDoesNotFallThroughToScm(t *testing.T) {
 		qt.Commentf("the cause must survive the wrap"))
 	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsFalse,
 		qt.Commentf("a permission failure is not an absence"))
+}
+
+// pathReportingAbsence reports every path absent and names the path it was
+// asked for, so a test can see which extension probes survived into the error.
+type pathReportingAbsence struct{}
+
+func (pathReportingAbsence) ResolveAndOpen(_ context.Context, path string) (fs.File, string, error) {
+	return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "probe %s", path)
+}
+
+// TestResolveLibraryFile_TotalMissJoinsEveryExtensionProbe pins that a library
+// miss names the probe for every recognized extension, .sld before .scm, not
+// only the last one tried. The early return on a non-absence error is pinned by
+// the test above.
+func TestResolveLibraryFile_TotalMissJoinsEveryExtensionProbe(t *testing.T) {
+	_, _, err := ResolveLibraryFile(context.Background(), pathReportingAbsence{}, NewLibraryName("scheme", "nonexistent-xyz"))
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
+	msg := err.Error()
+	sld := strings.Index(msg, "probe scheme/nonexistent-xyz.sld")
+	scm := strings.Index(msg, "probe scheme/nonexistent-xyz.scm")
+	qt.Assert(t, sld >= 0, qt.IsTrue, qt.Commentf(".sld probe absent from %q", msg))
+	qt.Assert(t, scm > sld, qt.IsTrue, qt.Commentf(".scm probe not after .sld in %q", msg))
+}
+
+// sldAbsentScmUnreadable reports the .sld absent and the .scm hard-unreadable.
+type sldAbsentScmUnreadable struct{}
+
+func (sldAbsentScmUnreadable) ResolveAndOpen(_ context.Context, path string) (fs.File, string, error) {
+	if strings.HasSuffix(path, ".sld") {
+		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "probe %s", path)
+	}
+	return nil, "", &fs.PathError{Op: "open", Path: path, Err: fs.ErrPermission}
+}
+
+// TestResolveLibraryFile_HardScmErrorDropsTheEarlierSldAbsence pins that a hard
+// error on the second probe is returned alone: it is not an absence, and the
+// .sld absence collected before it must not ride along and make it look like one.
+func TestResolveLibraryFile_HardScmErrorDropsTheEarlierSldAbsence(t *testing.T) {
+	_, _, err := ResolveLibraryFile(context.Background(), sldAbsentScmUnreadable{}, NewLibraryName("alpha"))
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, fs.ErrPermission), qt.IsTrue)
+	qt.Assert(t, resolver.IsNotFound(err), qt.IsFalse,
+		qt.Commentf("an earlier absence rode into a hard error: %v", err))
+	qt.Assert(t, strings.Contains(err.Error(), ".sld"), qt.IsFalse)
 }

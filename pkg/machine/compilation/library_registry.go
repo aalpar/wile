@@ -669,10 +669,14 @@ func FilePathToLibraryName(path string) (LibraryName, error) {
 // trying each extension in libraryExtensions order.
 // Non-file-not-found errors (security denial, I/O) propagate immediately: only
 // the ABSENCE of the .sld licenses trying the .scm, or an unreadable .sld would
-// silently be replaced by a readable file of the same name.
+// silently be replaced by a readable file of the same name; such an error is
+// returned alone, never joined with the absences before it. When every
+// extension is absent the failure reports each probe, joined, so a missing
+// library names the .sld search as well as the .scm one; errors.Is still sees
+// the absence sentinel.
 func ResolveLibraryFile(ctx context.Context, res FileResolver, name LibraryName) (fs.File, string, error) {
 	basePath := name.Key()
-	var lastErr error
+	var misses []error
 	for _, ext := range libraryExtensions {
 		f, filePath, err := res.ResolveAndOpen(ctx, basePath+ext)
 		if err == nil {
@@ -681,7 +685,7 @@ func ResolveLibraryFile(ctx context.Context, res FileResolver, name LibraryName)
 		if !resolver.IsNotFound(err) {
 			return nil, "", err
 		}
-		lastErr = err
+		misses = append(misses, err)
 	}
-	return nil, "", lastErr
+	return nil, "", resolver.JoinMisses(misses)
 }
