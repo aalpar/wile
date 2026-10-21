@@ -1273,9 +1273,11 @@ func TestBoundPhases_AmbiguousPhaseCountsAsBound(t *testing.T) {
 	c.Assert(bound, qt.DeepEquals, []Phase{PhaseExpand})
 }
 
-// Without a phase registry BoundPhases answers for the runtime alone, like its
-// sibling GetGlobalIndexAcrossPhases.
-func TestBoundPhases_NoPhaseRegistryAnswersForRuntime(t *testing.T) {
+// A frame with no phase registry still answers from the store's exact phases:
+// PresentPhases covers the missing registry, so BoundPhases takes no
+// runtime-only fallback. (An earlier fallback answered "no phases" for a name
+// bound at phase 1, which is wrong.)
+func TestBoundPhases_NoPhaseRegistryStillSeesTheStore(t *testing.T) {
 	c := qt.New(t)
 
 	full := NewNamespaceFrame()
@@ -1287,9 +1289,7 @@ func TestBoundPhases_NoPhaseRegistryAnswersForRuntime(t *testing.T) {
 	bare := *full
 	bare.phases = nil
 	c.Assert(bare.BoundPhases(x, syntax.Scopes{}), qt.DeepEquals, []Phase{PhaseRuntime})
-	// y is bound at phase 1 only; with no registry the answer is the runtime's.
-	c.Assert(bare.BoundPhases(y, syntax.Scopes{}), qt.HasLen, 0)
-	c.Assert(full.BoundPhases(y, syntax.Scopes{}), qt.DeepEquals, []Phase{PhaseExpand})
+	c.Assert(bare.BoundPhases(y, syntax.Scopes{}), qt.DeepEquals, []Phase{PhaseExpand})
 }
 
 func TestGetGlobalIndexFromLibraryScopes(t *testing.T) {

@@ -39,6 +39,8 @@ package wile_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -259,7 +261,7 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 			name: "a macro-introduced phase-1 binder is not called absent",
 			src: `(define-syntax def-it4 (syntax-rules () ((_ x) (begin (begin-for-syntax (define secret 1)) x))))
 			      (def-it4 secret)`,
-			tail: `no such binding "secret" with compatible scopes (a same-named binding here is hygienically distinct): no such binding`,
+			tail: `no such binding "secret" with compatible scopes (a same-named binding at phase 1 is hygienically distinct): no such binding`,
 		},
 		{
 			name: "a phase-1 binder introduced by a macro is not called absent from phase 0",
@@ -274,6 +276,14 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 			      (def0)
 			      (begin-for-syntax hid0)`,
 			tail: `no such local or global binding "hid0" at phase 1 of this unit's macro tower: no such binding`,
+		},
+		{
+			// The only same-named binding is at ANOTHER phase, so "here" would be
+			// false: the clause names the phase instead.
+			name: "a hygienically distinct binder at another phase names that phase",
+			src: `(define-syntax d5 (syntax-rules () ((_ x) (begin (define sec5 1) (begin-for-syntax x)))))
+			      (d5 sec5)`,
+			tail: `no such binding "sec5" with compatible scopes at phase 1 of this unit's macro tower (a same-named binding at phase 0 is hygienically distinct): no such binding`,
 		},
 		{
 			// A local of an enclosing LOWER phase is invisible to the global
@@ -295,4 +305,35 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 				qt.Commentf("want tail: %s\ngot: %s", tc.tail, got))
 		})
 	}
+}
+
+// TestUnboundDiagnosticSeesForTemplateImports pins that the cross-phase probe
+// reaches phase -1. PresentPhases drops negative phases on purpose (resolution
+// ranks runtime-first), so a probe built on it alone called a name imported
+// for-template "bound at no phase".
+func TestUnboundDiagnosticSeesForTemplateImports(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	err := os.MkdirAll(filepath.Join(root, "tpl"), 0o755)
+	qt.Assert(t, err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(root, "tpl", "lib.sld"),
+		[]byte(`(define-library (tpl lib) (export tplonly) (import) (begin (define tplonly 1)))`), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink), wile.WithSourceOS(), wile.WithLibraryPaths(root))
+	qt.Assert(t, err, qt.IsNil)
+	defer eng.Close()
+
+	_, err = eng.EvalMultiple(ctx, `(import (for-template (tpl lib))) tplonly`)
+	qt.Assert(t, err, qt.IsNotNil)
+	want := `no such local or global binding "tplonly" (bound at phase -1): no such binding`
+	qt.Assert(t, strings.HasSuffix(err.Error(), want), qt.IsTrue,
+		qt.Commentf("want tail: %s\ngot: %v", want, err))
+
+	_, err = eng.EvalMultiple(ctx, `(set! tplonly 2)`)
+	qt.Assert(t, err, qt.IsNotNil)
+	want = `no such binding "tplonly" with compatible scopes for set! (bound at phase -1): no such binding`
+	qt.Assert(t, strings.HasSuffix(err.Error(), want), qt.IsTrue,
+		qt.Commentf("want tail: %s\ngot: %v", want, err))
 }

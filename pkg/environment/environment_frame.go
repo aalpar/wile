@@ -1336,8 +1336,12 @@ func (p *EnvironmentFrame) globalIndexAtPhase(key *values.Symbol, q syntax.Scope
 // BoundPhases returns the phases at which key resolves under scopes, ascending.
 // It is GetGlobalIndexAcrossPhases without the early return, for a diagnostic
 // that must say WHERE a name is bound rather than only whether it is. Like that
-// method it probes the store at each phase instead of minting a phase view, and
-// without a phase registry it answers for the runtime alone.
+// method it probes the store at each phase instead of minting a phase view.
+//
+// Unlike that method it also probes PhaseTemplate (-1), which PresentPhases
+// drops on purpose: a resolution ranks runtime-first and must not let a
+// for-template binding outrank a runtime one, but a diagnostic that answers
+// "bound where?" would otherwise call a for-template import absent.
 //
 // A phase at which the name resolves ambiguously counts as bound: the name IS
 // there, the tie is a separate refusal, and a diagnostic must not raise it in
@@ -1352,7 +1356,7 @@ func (p *EnvironmentFrame) BoundPhases(key *values.Symbol, scopes syntax.Scopes)
 // BoundPhasesAnyScope is BoundPhases under the wildcard scope set: the phases at
 // which SOME binding of the spelling exists, whatever its scopes. The pair is
 // what lets a diagnostic tell a hygiene refusal (bound under the wildcard, not
-// under the use's scopes) from a name bound nowhere.
+// under the use's scopes) from a name bound in no global table.
 func (p *EnvironmentFrame) BoundPhasesAnyScope(key *values.Symbol) []Phase {
 	return p.boundPhases(key, syntax.AllScopes())
 }
@@ -1361,10 +1365,9 @@ func (p *EnvironmentFrame) boundPhases(key *values.Symbol, q syntax.ScopeSet) []
 	if p.global == nil {
 		return nil
 	}
-	probe := []Phase{PhaseRuntime}
-	if p.phases != nil {
-		probe = p.PresentPhases()
-	}
+	// PresentPhases already answers for a frame with no registry, from the
+	// store's exact phases, so there is no runtime-only fallback to take.
+	probe := append([]Phase{PhaseTemplate}, p.PresentPhases()...)
 	var bound []Phase
 	for _, phase := range probe {
 		gi, ambiguous := p.tryGlobalIndexAtPhase(key, q, phase)

@@ -552,14 +552,17 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 //     legitimately name phase 1. Every such phase is listed, not the nearest.
 //   - "(a same-named binding here is hygienically distinct)": only when
 //     claimsScopeRefusal, i.e. the message being suffixed says "compatible
-//     scopes". The spelling resolves under syntax.AllScopes() (a local binder at
-//     the compile phase, or a global at any phase) yet not under the use's own
-//     scopes, which is exactly a hygiene refusal.
+//     scopes", and the spelling resolves under syntax.AllScopes() at the compile
+//     phase (a local binder, or a global at that phase) yet not under the use's
+//     own scopes. "here" is that phase. When the only same-named binding is at
+//     other phases the clause names them instead: "(a same-named binding at
+//     phase 0 is hygienically distinct)". Either way the wildcard found a binding
+//     the use's scopes could not reach, which is a hygiene refusal.
 //   - "(no global binding of that name at any phase)": no global resolves under
-//     any scope set at any phase and nothing resolves locally at the compile
-//     phase. It claims the global table only: a local of an ENCLOSING lower
-//     phase (a let around a define-syntax) is outside what this can see, and
-//     saying "no binding" would be false for it.
+//     any scope set at any phase, for-template (-1) included, and nothing
+//     resolves locally at the compile phase. It claims the global table only: a
+//     local of an ENCLOSING lower phase (a let around a define-syntax) is outside
+//     what this can see, and saying "no binding" would be false for it.
 //
 // Both wildcard probes are non-raising: BoundPhasesAnyScope reports a tie as
 // bound, and TryGetBinding reports it as ambiguous. This runs while building an
@@ -588,28 +591,43 @@ func (p *CompileTimeContinuation) unboundSuffix(sym *values.Symbol, scopes synta
 
 	bound := p.env.BoundPhases(sym, scopes)
 	if len(bound) > 0 && !slices.Contains(bound, level) {
-		q.WriteString(" (bound at phase")
-		if len(bound) > 1 {
-			q.WriteString("s")
-		}
-		for i, phase := range bound {
-			if i > 0 {
-				q.WriteString(",")
-			}
-			fmt.Fprintf(&q, " %d", int8(phase))
-		}
+		q.WriteString(" (bound at ")
+		q.WriteString(phaseList(bound))
 		q.WriteString(")")
 		return q.String()
 	}
 
 	local, _ := p.env.TryGetBinding(sym, syntax.AllScopes())
-	exists := local != nil || len(p.env.BoundPhasesAnyScope(sym)) > 0
+	elsewhere := p.env.BoundPhasesAnyScope(sym)
+	exists := local != nil || len(elsewhere) > 0
 	if exists && claimsScopeRefusal {
-		q.WriteString(" (a same-named binding here is hygienically distinct)")
+		if local != nil || slices.Contains(elsewhere, level) {
+			q.WriteString(" (a same-named binding here is hygienically distinct)")
+			return q.String()
+		}
+		q.WriteString(" (a same-named binding at ")
+		q.WriteString(phaseList(elsewhere))
+		q.WriteString(" is hygienically distinct)")
 		return q.String()
 	}
 	if !exists {
 		q.WriteString(" (no global binding of that name at any phase)")
+	}
+	return q.String()
+}
+
+// phaseList renders "phase N" or "phases N, M" for a non-empty ascending list.
+func phaseList(phases []environment.Phase) string {
+	var q strings.Builder
+	q.WriteString("phase")
+	if len(phases) > 1 {
+		q.WriteString("s")
+	}
+	for i, phase := range phases {
+		if i > 0 {
+			q.WriteString(",")
+		}
+		fmt.Fprintf(&q, " %d", int8(phase))
 	}
 	return q.String()
 }

@@ -124,12 +124,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   tested: a typo and a name no scope set could find read the same as a hygiene
   failure, and a transformer body calling `cadr` (bound at phase 0, referenced at
   phase 1) sent the reader hunting for a typo. The existing message is kept as a
-  prefix and one clause is appended: `(bound at phase N)` (or `phases N, M`)
-  when the spelling resolves under the use's scopes at other phases,
-  `(a same-named binding here is hygienically distinct)` when it resolves only
-  under the wildcard scope set, `(no global binding of that name at any phase)`
-  when no global resolves anywhere. The absence clause claims the global table
-  only: a local of an enclosing lower phase is outside it. The sentinel is still
+  prefix and one clause is appended: `(bound at phase N)` (or `phases N, M`;
+  a for-template import is phase -1) when the spelling resolves under the use's
+  scopes at other phases, `(a same-named binding here is hygienically distinct)`
+  when it resolves only under the wildcard scope set at the compile phase (at
+  another phase the clause names it: `a same-named binding at phase 0 is ...`),
+  `(no global binding of that name at any phase)` when no global resolves
+  anywhere. The absence clause claims the global table only: a local of an
+  enclosing lower phase is outside it. The sentinel is still
   `ErrNoSuchBinding`. New `EnvironmentFrame.BoundPhases` and `BoundPhasesAnyScope`
   report the phases a name resolves at; an ambiguous phase counts as bound
   rather than raising.

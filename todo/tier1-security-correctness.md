@@ -1906,8 +1906,8 @@ design. It was lifted out of the `begin-for-syntax` row below, whose ordering ha
   tower`. That arm should stop reporting a scope refusal when no binding of that name exists at the
   phase at all.
   Result: `unboundSuffix` appends `(bound at phase N)`, `(a same-named binding here is hygienically distinct)` or
-  `(no global binding of that name at any phase)`; the last claims the global table only (an enclosing lower-phase
-  local is outside it), and the cross-phase probe `BoundPhases` counts an ambiguous phase as bound instead of raising.
+  `(no global binding of that name at any phase)`, phase -1 (for-template) included; the last claims the global table only
+  (an enclosing lower-phase local is outside it), and the cross-phase probe `BoundPhases` counts an ambiguous phase as bound instead of raising.
 - [x] **A `define-syntax` at phase > 0 is unusable from every rung** [Conformance, Done
   2026-09-13, `2e1e55c2`]: the keyword twin of the `begin-for-syntax`-define item.
   `executeFormsAtCompileTime` (`compile_helpers.go`, shared by `begin-for-syntax` and
@@ -2375,3 +2375,8 @@ Moved to [`closed.md`](closed.md) (2026-10-17 split).
 - [ ] **`make indexlint` fails on master: 28 of 61 `2026-08-21` review citations lack a TODO.md row** [Tooling, Medium, P7.2 crosscheck,
   pre-existing, from the P5 archive]: the ceiling is 0 and the failure is identical on master's `TODO.md`, so no closeout branch caused it.
   Needs its own row/task: file the 28 citations as rows, or decide the review is declined and exempt them.
+- [ ] **The scoped unbound arm still opens with "with compatible scopes" for a name absent everywhere** [Diagnostics, Low, P7.2 crosscheck]:
+  the I036 row asked that arm to stop reporting a scope refusal when no binding of that name exists at any phase. P7.2 appends a
+  discriminating clause instead and keeps the existing text as a prefix (every existing assertion is a prefix or substring match), so
+  `no such binding "x" with compatible scopes ... (no global binding of that name at any phase)` still leads with a claim the clause
+  then contradicts. Rewording the prefix touches 37+ assertions; do it only if the contradiction proves to mislead.
