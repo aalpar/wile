@@ -67,7 +67,7 @@ engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.Tiny))
 
 // This produces a compile-time error — open-input-file is unbound
 _, err = engine.Eval(ctx, engine.MustParse(ctx, `(open-input-file "/etc/passwd")`))
-// err: expand/compile error: compilation: :1:1: no such local or global binding "open-input-file": no such binding
+// err: expand/compile error: compilation: :1:1: no such local or global binding "open-input-file" (no global binding of that name at any phase): no such binding
 ```
 
 In Java, `FileInputStream` exists in every JVM. The SecurityManager intercepts the `open` call at runtime, walks the call stack to check permissions, and allows or denies the operation. Every permission check costs runtime; every new API needs explicit gating; and the interaction between permissions breeds bugs.

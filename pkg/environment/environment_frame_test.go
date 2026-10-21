@@ -1196,6 +1196,102 @@ func TestGetGlobalIndexAcrossPhases(t *testing.T) {
 	c.Assert(gi.Index.Key, qt.Equals, "bar")
 }
 
+// scopesOf builds a scope list variadically, so the scope-ops ratchet (shrink
+// only) is not asked to grant a new composite literal per test.
+func scopesOf(scopes ...*syntax.Scope) syntax.Scopes {
+	return syntax.ScopesFromSlice(scopes)
+}
+
+// BoundPhases is GetGlobalIndexAcrossPhases without the early return: it must
+// report EVERY phase a name resolves at, ascending, and nothing for a name that
+// is bound nowhere (the diagnostic's absence arm rests on that).
+func TestBoundPhases(t *testing.T) {
+	c := qt.New(t)
+
+	tle := NewNamespace()
+	env := tle.Runtime()
+	foo := values.NewSymbol("foo")
+	bar := values.NewSymbol("bar")
+
+	c.Assert(env.BoundPhases(foo, syntax.Scopes{}), qt.HasLen, 0)
+	c.Assert(env.BoundPhasesAnyScope(foo), qt.HasLen, 0)
+
+	env.MaybeCreateOwnGlobalBinding(foo, BindingTypeVariable, syntax.Scopes{})
+	c.Assert(env.BoundPhases(foo, syntax.Scopes{}), qt.DeepEquals, []Phase{PhaseRuntime})
+
+	tle.Expand().MaybeCreateOwnGlobalBinding(bar, BindingTypeSyntax, syntax.Scopes{})
+	c.Assert(env.BoundPhases(bar, syntax.Scopes{}), qt.DeepEquals, []Phase{PhaseExpand})
+
+	env.MaybeCreateOwnGlobalBinding(bar, BindingTypeVariable, syntax.Scopes{})
+	c.Assert(env.BoundPhases(bar, syntax.Scopes{}), qt.DeepEquals, []Phase{PhaseRuntime, PhaseExpand})
+}
+
+// The scope filter is the point of the pair: a binding carrying a scope the use
+// lacks is invisible to BoundPhases and visible to BoundPhasesAnyScope, which is
+// how the diagnostic tells a hygiene refusal from absence.
+func TestBoundPhases_HonorsScopes(t *testing.T) {
+	c := qt.New(t)
+
+	tle := NewNamespace()
+	env := tle.Runtime()
+	s := syntax.NewScope()
+	x := values.NewSymbol("x")
+	scoped := scopesOf(s)
+	env.MaybeCreateOwnGlobalBinding(x, BindingTypeVariable, scoped)
+
+	c.Assert(env.BoundPhases(x, syntax.Scopes{}), qt.HasLen, 0)
+	c.Assert(env.BoundPhases(x, scoped), qt.DeepEquals, []Phase{PhaseRuntime})
+	c.Assert(env.BoundPhasesAnyScope(x), qt.DeepEquals, []Phase{PhaseRuntime})
+}
+
+// A tie at another phase is a name that IS bound there; BoundPhases must report
+// it, not raise werr.ErrAmbiguousBinding. A diagnostic that panicked would
+// replace the ErrNoSuchBinding it was describing (and its location) with an
+// internal error at the engine's recover.
+func TestBoundPhases_AmbiguousPhaseCountsAsBound(t *testing.T) {
+	c := qt.New(t)
+
+	tle := NewNamespace()
+	env := tle.Runtime()
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+	d := syntax.NewScope()
+	x := values.NewSymbol("x")
+	ab := scopesOf(a, b)
+	ad := scopesOf(a, d)
+	abd := scopesOf(a, b, d)
+
+	expand := tle.Expand()
+	expand.MaybeCreateOwnGlobalBinding(x, BindingTypeVariable, ab)
+	expand.MaybeCreateOwnGlobalBinding(x, BindingTypeVariable, ad)
+
+	var bound []Phase
+	r := capturePanic(func() {
+		bound = env.BoundPhases(x, abd)
+	})
+	c.Assert(r, qt.IsNil, qt.Commentf("BoundPhases must not raise on a tie"))
+	c.Assert(bound, qt.DeepEquals, []Phase{PhaseExpand})
+}
+
+// A frame with no phase registry still answers from the store's exact phases:
+// PresentPhases covers the missing registry, so BoundPhases takes no
+// runtime-only fallback. (An earlier fallback answered "no phases" for a name
+// bound at phase 1, which is wrong.)
+func TestBoundPhases_NoPhaseRegistryStillSeesTheStore(t *testing.T) {
+	c := qt.New(t)
+
+	full := NewNamespaceFrame()
+	x := values.NewSymbol("x")
+	y := values.NewSymbol("y")
+	full.MaybeCreateOwnGlobalBinding(x, BindingTypeVariable, syntax.Scopes{})
+	full.Namespace().Expand().MaybeCreateOwnGlobalBinding(y, BindingTypeVariable, syntax.Scopes{})
+
+	bare := *full
+	bare.phases = nil
+	c.Assert(bare.BoundPhases(x, syntax.Scopes{}), qt.DeepEquals, []Phase{PhaseRuntime})
+	c.Assert(bare.BoundPhases(y, syntax.Scopes{}), qt.DeepEquals, []Phase{PhaseExpand})
+}
+
 func TestGetGlobalIndexFromLibraryScopes(t *testing.T) {
 	c := qt.New(t)
 

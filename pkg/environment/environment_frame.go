@@ -1333,6 +1333,67 @@ func (p *EnvironmentFrame) globalIndexAtPhase(key *values.Symbol, q syntax.Scope
 	return newScopeKeyedGlobalIndex(key, p.global, ref, q)
 }
 
+// BoundPhases returns the phases at which key resolves under scopes, ascending.
+// It is GetGlobalIndexAcrossPhases without the early return, for a diagnostic
+// that must say WHERE a name is bound rather than only whether it is. Like that
+// method it probes the store at each phase instead of minting a phase view.
+//
+// Unlike that method it also probes PhaseTemplate (-1), which PresentPhases
+// drops on purpose: a resolution ranks runtime-first and must not let a
+// for-template binding outrank a runtime one, but a diagnostic that answers
+// "bound where?" would otherwise call a for-template import absent.
+//
+// A phase at which the name resolves ambiguously counts as bound: the name IS
+// there, the tie is a separate refusal, and a diagnostic must not raise it in
+// place of the error it is describing.
+//
+// Globals only: a local binding is not a phase fact. A caller asking "does this
+// spelling denote anything at all" must also ask TryGetBinding.
+func (p *EnvironmentFrame) BoundPhases(key *values.Symbol, scopes syntax.Scopes) []Phase {
+	return p.boundPhases(key, syntax.ScopesOf(scopes))
+}
+
+// BoundPhasesAnyScope is BoundPhases under the wildcard scope set: the phases at
+// which SOME binding of the spelling exists, whatever its scopes. The pair is
+// what lets a diagnostic tell a hygiene refusal (bound under the wildcard, not
+// under the use's scopes) from a name bound in no global table.
+func (p *EnvironmentFrame) BoundPhasesAnyScope(key *values.Symbol) []Phase {
+	return p.boundPhases(key, syntax.AllScopes())
+}
+
+func (p *EnvironmentFrame) boundPhases(key *values.Symbol, q syntax.ScopeSet) []Phase {
+	if p.global == nil {
+		return nil
+	}
+	// PresentPhases already answers for a frame with no registry, from the
+	// store's exact phases, so there is no runtime-only fallback to take.
+	probe := append([]Phase{PhaseTemplate}, p.PresentPhases()...)
+	var bound []Phase
+	for _, phase := range probe {
+		gi, ambiguous := p.tryGlobalIndexAtPhase(key, q, phase)
+		if gi != nil || ambiguous {
+			bound = append(bound, phase)
+		}
+	}
+	return bound
+}
+
+// tryGlobalIndexAtPhase is globalIndexAtPhase with an incomparable tie REPORTED
+// rather than raised: (nil, true) is "ambiguous", (nil, false) is "unbound".
+func (p *EnvironmentFrame) tryGlobalIndexAtPhase(key *values.Symbol, q syntax.ScopeSet, phase Phase) (*GlobalIndex, bool) {
+	p.global.mu.RLock()
+	defer p.global.mu.RUnlock()
+
+	ref, ok, ambiguity := p.global.tryResolveRankedLocked(*key, q, phase)
+	if ambiguity != nil {
+		return nil, true
+	}
+	if !ok {
+		return nil, false
+	}
+	return newScopeKeyedGlobalIndex(key, p.global, ref, q), false
+}
+
 // PresentPhases returns the non-negative phases worth searching for this frame's
 // owner (the engine's Namespace, or a library env's own store —
 // EnvironmentFrame.phases is shared by every view over one owner, per "One Store

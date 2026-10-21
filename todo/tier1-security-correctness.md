@@ -1894,7 +1894,8 @@ design. It was lifted out of the `begin-for-syntax` row below, whose ordering ha
   tests, including a library-body delivery and a runs-once-per-unit guard.
 
   The row's diagnostic residual is NOT closed with it. It is lifted to its own row below.
-- [ ] **A phase-1 lookup for an absent name reports a scope refusal** [Diagnostics, S, owned by the
+- [x] **A phase-1 lookup for an absent name reports a scope refusal** [Diagnostics, S, Done 2026-10-20 (P7.2, I036;
+  code `9b913866` + crosscheck remediation; merge SHA added at close), owned by the
   **provenance wave**; lifted 2026-09-26 out of the `begin-for-syntax` row above, whose ordering half
   is fixed and whose diagnostic half is not]: "with compatible scopes" is a misdiagnosis the
   diagnostic invites. Instrumented at the raise, a repeat lookup under `syntax.AllScopes()` also
@@ -1904,6 +1905,9 @@ design. It was lifted out of the `begin-for-syntax` row below, whose ordering ha
   `no such binding "totallyabsenthelper" with compatible scopes at phase 1 of this unit's macro
   tower`. That arm should stop reporting a scope refusal when no binding of that name exists at the
   phase at all.
+  Result: `unboundSuffix` appends `(bound at phase N)`, `(a same-named binding here is hygienically distinct)` or
+  `(no global binding of that name at any phase)`, phase -1 (for-template) included; the last claims the global table only
+  (an enclosing lower-phase local is outside it), and the cross-phase probe `BoundPhases` counts an ambiguous phase as bound instead of raising.
 - [x] **A `define-syntax` at phase > 0 is unusable from every rung** [Conformance, Done
   2026-09-13, `2e1e55c2`]: the keyword twin of the `begin-for-syntax`-define item.
   `executeFormsAtCompileTime` (`compile_helpers.go`, shared by `begin-for-syntax` and
@@ -2347,3 +2351,32 @@ The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no r
 ### Closed in Tier 1
 
 Moved to [`closed.md`](closed.md) (2026-10-17 split).
+
+### Filed by the P7.2 verification (2026-10-20)
+
+- [ ] **`PresentPhases`'s doc comment sits above `const presentPhasesHint`, leaving the function undocumented** [Comments, Low, P7.2 verification, pre-existing]:
+  `pkg/environment/environment_frame.go` has the `// PresentPhases returns ...` paragraph directly above the `presentPhasesHint` constant and a
+  second `presentPhasesHint` paragraph between it and `func (p *EnvironmentFrame) PresentPhases()`, so godoc attaches the function's
+  contract to the constant. Move the constant above the doc block (or the doc below the constant). Found while placing `BoundPhases`.
+
+### Filed by the P7.2 crosscheck (2026-10-20)
+
+- [ ] **A library macro whose template uses a library-private name bound only at phase 1 expands at phase 0 and returns the value with no
+  error** [Phases, Low, P7.2 crosscheck, hypothesis, needs investigation]: `(define-library (ehlib) (export usehelp) (import (scheme base)
+  (for-syntax (scheme base))) (begin (begin-for-syntax (define helper 1)) (define-syntax usehelp (syntax-rules () ((_) helper)))))`
+  then `(usehelp)` gives 1 on master and on the P7.2 branch. Either the documented cross-phase lookup of `GetGlobalIndexAcrossPhases`
+  (a runtime reference reaching a higher rung) or a silent phase leak that Flatt hermeticity forbids; the P7.2 diagnostic only reads the
+  same table, so it neither introduced nor hides it. Decide which, then pin it.
+- [ ] **The scoped unbound arm and `set!` can panic `ErrAmbiguousBinding` on a compile-phase tie before they reach the diagnostic**
+  [Diagnostics, Low, P7.2 crosscheck, pre-existing, latent]: `CompileSymbol`'s scoped arm calls `GetBinding` and `CompileValidatedSetBang`
+  calls `GetBinding` (pkg/machine/compilation/compile_validated.go), both of which raise on an equal-cardinality incomparable maximum, and
+  `engine.go`'s recover turns it into `ErrInternal`, dropping `ErrNoSuchBinding` and the location. Auto-memory calls Fork C latent; a
+  reachable program has not been produced. If one is, switch both to `TryGetBinding` and report the tie as its own diagnostic.
+- [ ] **`make indexlint` fails on master: 28 of 61 `2026-08-21` review citations lack a TODO.md row** [Tooling, Medium, P7.2 crosscheck,
+  pre-existing, from the P5 archive]: the ceiling is 0 and the failure is identical on master's `TODO.md`, so no closeout branch caused it.
+  Needs its own row/task: file the 28 citations as rows, or decide the review is declined and exempt them.
+- [ ] **The scoped unbound arm still opens with "with compatible scopes" for a name absent everywhere** [Diagnostics, Low, P7.2 crosscheck]:
+  the I036 row asked that arm to stop reporting a scope refusal when no binding of that name exists at any phase. P7.2 appends a
+  discriminating clause instead and keeps the existing text as a prefix (every existing assertion is a prefix or substring match), so
+  `no such binding "x" with compatible scopes ... (no global binding of that name at any phase)` still leads with a claim the clause
+  then contradicts. Rewording the prefix touches 37+ assertions; do it only if the contradiction proves to mislead.
