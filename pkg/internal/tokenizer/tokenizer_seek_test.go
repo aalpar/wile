@@ -60,7 +60,7 @@ func TestSeekToRepositionsAReleasedTokenizer(t *testing.T) {
 	tok, err := tk.Next()
 	c.Assert(err, qt.IsNil)
 	c.Assert(tok.String(), qt.Equals, "(")
-	tok, err = tk.Next()
+	_, err = tk.Next()
 	c.Assert(err, qt.IsNil)
 	tok, err = tk.Next()
 	c.Assert(err, qt.IsNil)
@@ -68,7 +68,7 @@ func TestSeekToRepositionsAReleasedTokenizer(t *testing.T) {
 	c.Assert(tk.ReleaseLookahead(r), qt.IsNil)
 
 	// Another consumer reads "\n  " off the shared reader.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, _, err = r.ReadRune()
 		c.Assert(err, qt.IsNil)
 	}

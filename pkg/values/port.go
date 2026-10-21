@@ -139,7 +139,7 @@ func (p *PortObject) ReadPosition() (SourceIndexes, rune) {
 	if p == nil {
 		return portOrigin(), 0
 	}
-	return p.portBase.position(), p.portBase.last
+	return p.position(), p.last
 }
 
 // Close flushes (if a flusher is present) and closes the port. Close

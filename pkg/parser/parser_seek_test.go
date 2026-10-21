@@ -47,7 +47,7 @@ func TestParserSeekToBetweenReads(t *testing.T) {
 	_, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(p.ReleaseLookahead(r), qt.IsNil)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, _, err = r.ReadRune()
 		c.Assert(err, qt.IsNil)
 	}

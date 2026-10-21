@@ -71,7 +71,7 @@ func readRunes(t *testing.T, p *PortObject, k int) {
 	t.Helper()
 	rr, ok := p.AsRuneReader()
 	qt.New(t).Assert(ok, qt.IsTrue)
-	for i := 0; i < k; i++ {
+	for range k {
 		_, _, err := rr.ReadRune()
 		qt.New(t).Assert(err, qt.IsNil)
 	}
