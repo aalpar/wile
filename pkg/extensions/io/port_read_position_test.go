@@ -109,6 +109,19 @@ func TestReadSyntaxCountsWhatTheOtherReadersConsumed(t *testing.T) {
 				"   (let ((s (read-syntax p)))\n" +
 				"     (list (syntax-line s) (syntax-column s))))",
 			"(2 2)"},
+		{"read-char stops between the CR and the LF of a pair (first read)",
+			"(let ((p (open-input-string \"a\\r\\n  (c)\")))\n" +
+				"   (read-char p) (read-char p)\n" +
+				"   (let ((s (read-syntax p)))\n" +
+				"     (list (syntax-line s) (syntax-column s))))",
+			"(2 2)"},
+		{"read-char stops between the CR and the LF of a pair (later read)",
+			"(let ((p (open-input-string \"(a)\\r\\n(b)\")))\n" +
+				"   (read-syntax p)\n" +
+				"   (read-char p)\n" +
+				"   (let ((s (read-syntax p)))\n" +
+				"     (list (syntax-line s) (syntax-column s))))",
+			"(2 0)"},
 		{"a bare CR is a line ending",
 			"(let ((p (open-input-string \"a\\r  (c)\")))\n" +
 				"   (read-char p) (read-char p)\n" +

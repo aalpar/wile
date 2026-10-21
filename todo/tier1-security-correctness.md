@@ -642,8 +642,14 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   (`pkg/values/mutex.go`) say a terminated holder's lock stays held (`Thread.Terminate`
   abandons it); tutorial chapter 06 calls C_6 and 2·K_3 cospectral, chapter 05 lists a
   nonexistent `(wile algebra field)`; `Makefile` `bench-gabriel-compare` names `ack`.
-- [ ] `read-syntax` positions do not count characters `read-char` consumed between reads (needs
-  port-owned position tracking).
+- [x] `read-syntax` positions do not count characters `read-char` consumed between reads (needs
+  port-owned position tracking). [Done 2026-10-20, P7.4 `fix/port-owned-read-position`, merge SHA
+  at Step 8: `portBase` counts every rune its rune reader yields with `values.AdvanceIndexes` (two
+  runes of history, so unread restores the CRLF `prev`), and `readSyntaxCached` seeks the parser to
+  `PortObject.ReadPosition` before each read; the first read builds the tokenizer with
+  `NewTokenizerAt`, never `SeekTo` (that starts the first token a rune late). Row 2's LINE was wrong
+  too: `(1 0 1 5)` became `(1 0 2 2)`. The counter is unsynchronised like the stream itself; see
+  the P7.4 verification row on per-port read serialisation.]
 - [x] `set-current-directory!` still has a check-then-`os.Chdir` window. [Done 2026-10-16, P5.1
   `fix/engine-scoped-current-directory`, merged `5cb05fc6` — there is no `os.Chdir` left to race: the directory is
   engine state and every relative path is resolved against it before the gate]. Two proposed gates
@@ -2394,3 +2400,7 @@ Moved to [`closed.md`](closed.md) (2026-10-17 split).
 
 - [ ] **A file port's name exposes the absolute location of the authorized region** [Information disclosure / diagnostics, Low, P7.3 re-review, residual for the owner]: `portNameFor` (`extensions/files/prim_files.go`) cleans and symlink-resolves the opened path, so `..` residue and the engine directory no longer leak, but the name a program reads back through `syntax-source` and `error-object-source` is still an absolute path, e.g. the `FilesystemRoot` root prefix, which the written spelling hid. **Trade-off:** include resolution reads `SourceContext.File` as a real path (`lexicalIncludeContext`), so the stored name must be real; display wants the written spelling. A two-field design (display spelling vs resolved path for include) avoids it and is a larger change. Not fixed here; needs an owner look at whether the prefix matters.
 - [ ] **Include resolution reads `SourceContext.File` lexically** [Includes, Low, P7.3 re-review, pre-existing]: `lexicalIncludeContext` takes `path.Dir` of the name and joins it, which cleans `link/..` away; a name that spells `a/link/..` mis-steers an include to `a/` instead of the link target's parent. P7.3 now names file ports with the symlink-resolved path, so ports are safe; any other producer of such a name is not. Also hypothesis: a Windows backslash absolute name never steers an include, because `lexicalIncludeContext` uses slash-only `path.Dir`.
+
+### Filed by the P7.4 verification (2026-10-20)
+
+- [ ] **Two threads reading one textual port race on the stream and on its position counter** [Concurrency, Medium, P7.4 verification, pre-existing, widened by P7.4]: `read-char`, `peek-char`, `read-line` and `read-string` take no per-port lock, while `read`/`read-syntax` serialise only against each other (`parserEntry.mu`). Repro (`go test -race`, `WithProfile(KitchenSink)` + `WithSourceFS(stdlib.FS)` + `WithSourceOS()` + `WithLibraryPaths()`): one `make-thread` doing 200 `read-char` and another doing 50 `read-syntax` on one `open-input-string` port reports a DATA RACE in `bytes.Buffer.ReadRune` on master and on the P7.4 branch alike, and the reader can see a torn stream (`unexpected close )`). P7.4 adds `portBase.pos`/`last` to the same unsynchronised pair of calls, and `readSyntaxCached` now reads that position under the entry lock while `read-char` writes it outside it, so a racing `read-char` can seek the cached tokenizer to a position that never existed. The missing injectable is per-port serialisation of EVERY read (one sequencer per port, per the standing orientation), not a mutex on the counter; the plan scheduled none of it and said to file it if `-race` found anything. Size M; touches `guardedRuneReader`, the five read primitives and `readSyntaxCached`.
