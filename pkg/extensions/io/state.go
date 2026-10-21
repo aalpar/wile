@@ -283,6 +283,7 @@ func (p *State) readSyntaxCached(ctx context.Context, port *values.PortObject, m
 		entry.parser = entry.mk()
 		entry.mk = nil
 	}
+	seekToPortPosition(port, entry.parser)
 	q, err := entry.parser.ReadSyntax(ctx)
 	if err != nil {
 		return nil, err
@@ -292,6 +293,17 @@ func (p *State) readSyntaxCached(ctx context.Context, port *values.PortObject, m
 		return nil, err
 	}
 	return q, nil
+}
+
+// seekToPortPosition points the cached parser at where the port stands now. The
+// port owns the one read position R7RS §6.13.2 gives read, read-char and
+// read-syntax; the parser's tokenizer counts only what it scanned, so without
+// this a read-syntax after a read-char reports where the tokenizer last stopped,
+// not where the port is. Before the first read it sets where the tokenizer
+// starts; afterwards it repositions the tokenizer that released its lookahead.
+func seekToPortPosition(port *values.PortObject, p *parser.Parser) {
+	at, prev := port.ReadPosition()
+	p.SeekTo(at, prev)
 }
 
 // releaseLookahead hands a reader's one-rune lookahead back to port. Every

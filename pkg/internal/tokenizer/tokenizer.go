@@ -271,22 +271,56 @@ func Tokenize(s string, ci bool) ([]Token, error) {
 func NewTokenizer(rdr io.RuneReader, ci bool) *Tokenizer {
 	// Seed the position at line 1. SourceIndexes documents line as 1-based
 	// (index and column are 0-based); the struct zero value would start line
-	// at 0, making every reported source location one line too low. Seeding
-	// runeEnd is what matters — readNextRune copies it into runeStart and the
-	// first token's positions derive from there — but all four are set so the
-	// invariant is local and obvious.
-	start := syntax.NewSourceIndexes(0, 0, 1)
+	// at 0, making every reported source location one line too low.
+	return NewTokenizerAt(rdr, ci, syntax.NewSourceIndexes(0, 0, 1), 0)
+}
+
+// NewTokenizerAt is NewTokenizer for a reader that does not stand at the start
+// of its source: origin is the position of the first rune rdr will yield, and
+// prev the rune consumed just before it (0 when none), which the CRLF rule
+// needs to tell a '\n' that completes a pair from one that starts a line.
+//
+// Seeding runeEnd is what matters — readNextRune copies it into runeStart and
+// the first token's positions derive from there — but all four are set so the
+// invariant is local and obvious. A tokenizer is positioned HERE, before its
+// constructor reads the first rune, and never by SeekTo afterwards: the
+// constructor leaves runeStart before that rune and runeEnd after it, and a seek
+// would collapse both onto one point, starting the first token a rune late.
+func NewTokenizerAt(rdr io.RuneReader, ci bool, origin syntax.SourceIndexes, prev rune) *Tokenizer {
 	q := &Tokenizer{
 		rdr:        rdr,
 		ci:         ci,
 		radix:      0, // 0 means default decimal; 10 means explicit #d prefix
-		runeStart:  start,
-		runeEnd:    start,
-		tokenStart: start,
-		tokenEnd:   start,
+		cur:        prev,
+		runeStart:  origin,
+		runeEnd:    origin,
+		tokenStart: origin,
+		tokenEnd:   origin,
 	}
 	q.readNextRune()
 	return q
+}
+
+// SeekTo moves a tokenizer that has released its lookahead to origin, where the
+// rune it will read next stands, with prev the rune consumed before it. It is
+// how a tokenizer that outlives one datum learns what the port's other readers
+// consumed between reads: positions then count the characters read-char took,
+// not where this tokenizer last stopped.
+//
+// It applies only after ReleaseLookahead (which hands the one rune read past the
+// last token back to the port and leaves the tokenizer ready to read it again).
+// A tokenizer still holding that rune has counted it in the port's position
+// already, and seeking would drop it, so SeekTo then does nothing. Never call
+// it on a tokenizer fresh from NewTokenizer: see NewTokenizerAt.
+func (p *Tokenizer) SeekTo(origin syntax.SourceIndexes, prev rune) {
+	if !p.released {
+		return
+	}
+	p.runeStart = origin
+	p.runeEnd = origin
+	p.tokenStart = origin
+	p.tokenEnd = origin
+	p.cur = prev
 }
 
 // Text returns the text of the current token.
@@ -594,44 +628,18 @@ func (p *Tokenizer) readNextRune() {
 		p.err = io.EOF
 		return
 	}
-	// Index counts bytes; column counts characters. A byte-valued column would
-	// only restate the index and would misplace a caret in non-ASCII source.
-	p.runeEnd = syntax.NewSourceIndexes(p.runeEnd.Index()+n, p.runeEnd.Column()+1, p.runeEnd.Line())
 	// A decoding failure is reported as (RuneError, 1); a genuine U+FFFD in the
 	// source decodes to (RuneError, 3). Only the one-byte form is an error —
 	// conflating them makes a written U+FFFD unreadable.
+	//
+	// Line and tab-stop adjustments belong in the advance, not in next(): the
+	// constructor reads the first rune through this path, and a source starting
+	// with a tab or newline must be tracked like any other. The position is
+	// stepped before the fault is raised so the fault is stamped one rune in.
+	p.runeEnd = values.AdvanceIndexes(p.runeEnd, p.prev, p.cur, n)
 	if p.cur == utf8.RuneError && n == 1 {
 		p.fail(MessageRuneError)
-		return
 	}
-	// Line and tab-stop adjustments belong here, not in next(): the constructor
-	// reads the first rune through this path, and a source starting with a tab
-	// or newline must be tracked like any other.
-	//
-	// All three spellings end a line, and CRLF ends exactly one.
-	if isLineEnding(p.cur) {
-		if isNewLine(p.cur) && isReturn(p.prev) {
-			// The '\r' of a CRLF already advanced the line; its '\n' only
-			// holds the column at the new line's origin.
-			p.runeEnd = syntax.NewSourceIndexes(p.runeEnd.Index(), 0, p.runeEnd.Line())
-			return
-		}
-		p.runeEnd.NewLine()
-		return
-	}
-	if p.cur == '\t' {
-		p.runeEnd = tabStop(p.runeEnd)
-	}
-}
-
-// tabStop advances si's column to the next 8-column tab stop. si's column was
-// already stepped one past the tab's own column by readNextRune, so the stop is
-// computed from the tab's column (column-1). SourceIndexes.Tab() adds a whole
-// stop on top of that step instead, over-advancing by 8 whenever the tab sits on
-// a column congruent to 7 (mod 8).
-func tabStop(si syntax.SourceIndexes) syntax.SourceIndexes {
-	col := si.Column() - 1
-	return syntax.NewSourceIndexes(si.Index(), col+8-col%8, si.Line())
 }
 
 // next advances to the next rune, appending the current rune to scratch.
