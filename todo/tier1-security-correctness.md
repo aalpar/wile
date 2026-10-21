@@ -632,7 +632,7 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   consumer. `PrimReadToken`, `State.nextTokenCached` and the `tokenizers` / `tokenizerEntry` cache are gone; `readSyntaxCached` and its
   `parsers` cache are untouched. BREAKING (Scheme and Go API). The axis-B manifest row disappearing is the gate (`TestBuildAxisBManifest`);
   the follow-ups are filed under "Filed by the P6.14 crosscheck").
-- [x] Resolver: ~~a resolver chain miss, and a library-extension miss, report only the LAST arm / extension searched~~ (Done 2026-10-20, P7.1 / I117-chain, I117-libfile, `c3a2270e`:
+- [x] Resolver: ~~a resolver chain miss, and a library-extension miss, report only the LAST arm / extension searched~~ (Done 2026-10-20, P7.1 / I117-chain, I117-libfile, `c3a2270e` `0e5749eb` `38be8712` `607a62ab`:
   `ChainFileResolver.ResolveAndOpen` and `ResolveLibraryFile` accumulate every ABSENCE and return `resolver.JoinMisses` (`errors.Join`, or the lone absence itself). A denial the chain looks past is dropped, not joined, so a plain miss never matches `security.ErrAccessDenied`; a stopping denial or hard error still returns alone. `werr.FailureMessage` renders a multi-error as one ` | `-separated segment.
   `(import (scheme nonexistent-xyz))` names four probes (`.sld` and `.scm` in each of the two chain arms) where it named one).
 - [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
