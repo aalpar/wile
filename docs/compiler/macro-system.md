@@ -417,7 +417,7 @@ stated phase) makes the rung a program lands on visible:
 ;; program B, a separate file: the imports do not accumulate
 (import (for-syntax (scheme base)))                  ; car bound at phase 1
 (begin-for-syntax (begin-for-syntax (car '(1 2))))   ; body runs at phase 2
-;; => no such local or global binding "car" at phase 2 of this unit's macro tower
+;; => no such local or global binding "car" at phase 2 of this unit's macro tower (bound at phase 1)
 ```
 
 Bindings are **shared single objects** across phases, not re-instantiated per

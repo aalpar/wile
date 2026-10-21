@@ -119,6 +119,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The unbound-binding diagnostic says why instead of blaming scopes (I036).**
+  `no such binding "x" with compatible scopes` asserted a scope refusal it never
+  tested: a typo and a name no scope set could find read the same as a hygiene
+  failure, and a transformer body calling `cadr` (bound at phase 0, referenced at
+  phase 1) sent the reader hunting for a typo. The message now appends one clause:
+  `(bound at phase N)` when the spelling resolves at another phase,
+  `(a same-named binding here is hygienically distinct)` when it resolves only
+  under the wildcard scope set, `(no binding of that name at any phase)` when it
+  resolves nowhere. Existing text is unchanged and the sentinel is still
+  `ErrNoSuchBinding`. New `EnvironmentFrame.BoundPhases` reports every phase a
+  name resolves at.
+
 - **A resolver miss reports every arm and every extension it searched
   (I117).** `ChainFileResolver.ResolveAndOpen` and `ResolveLibraryFile` each kept
   a `lastErr` overwritten by every miss, so a missing library named only the last

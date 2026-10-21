@@ -1196,6 +1196,29 @@ func TestGetGlobalIndexAcrossPhases(t *testing.T) {
 	c.Assert(gi.Index.Key, qt.Equals, "bar")
 }
 
+// BoundPhases is GetGlobalIndexAcrossPhases without the early return: it must
+// report EVERY phase a name resolves at, ascending, and nothing for a name that
+// is bound nowhere (the diagnostic's absence arm rests on that).
+func TestBoundPhases(t *testing.T) {
+	c := qt.New(t)
+
+	tle := NewNamespace()
+	env := tle.Runtime()
+	foo := values.NewSymbol("foo")
+	bar := values.NewSymbol("bar")
+
+	c.Assert(env.BoundPhases(foo, syntax.AllScopes()), qt.HasLen, 0)
+
+	env.MaybeCreateOwnGlobalBinding(foo, BindingTypeVariable, syntax.Scopes{})
+	c.Assert(env.BoundPhases(foo, syntax.ScopesOf(syntax.Scopes{})), qt.DeepEquals, []Phase{PhaseRuntime})
+
+	tle.Expand().MaybeCreateOwnGlobalBinding(bar, BindingTypeSyntax, syntax.Scopes{})
+	c.Assert(env.BoundPhases(bar, syntax.ScopesOf(syntax.Scopes{})), qt.DeepEquals, []Phase{PhaseExpand})
+
+	env.MaybeCreateOwnGlobalBinding(bar, BindingTypeVariable, syntax.Scopes{})
+	c.Assert(env.BoundPhases(bar, syntax.ScopesOf(syntax.Scopes{})), qt.DeepEquals, []Phase{PhaseRuntime, PhaseExpand})
+}
+
 func TestGetGlobalIndexFromLibraryScopes(t *testing.T) {
 	c := qt.New(t)
 

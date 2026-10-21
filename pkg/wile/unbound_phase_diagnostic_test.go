@@ -171,3 +171,75 @@ func TestUnboundDiagnosticKeepsItsSentinel(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
 		qt.Commentf("the sentinel must still match through the wrap; got: %s", err.Error()))
 }
+
+// TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal pins that the
+// unbound diagnostic says which of three things happened, instead of asserting
+// a scope refusal it never tested. "with compatible scopes" blamed scopes for a
+// plain typo: a repeat lookup under syntax.AllScopes() misses too, so no scope
+// set would have found the name.
+//
+// Row 3 is the control, not the change: a let-bound template binder is local,
+// and a global-only probe would call it absent. The discrimination is what is
+// pinned, so the table holds both sides of it.
+func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want []string
+		not  []string
+	}{
+		{
+			name: "a name bound at no phase says so",
+			src:  `(begin (define-syntax q (lambda (stx) (totally-absent-name-xyz stx))) (q))`,
+			want: []string{`no binding of that name at any phase`},
+			not:  []string{`bound at phase 0`, `hygienically distinct`},
+		},
+		{
+			name: "a name bound at phase 0 and referenced at phase 1 says so",
+			src:  `(begin (define-syntax q (lambda (stx) (cadr (list 1 2)))) (q))`,
+			want: []string{`bound at phase 0`},
+			not:  []string{`no binding of that name`, `hygienically distinct`},
+		},
+		{
+			name: "a macro-introduced binder the use site cannot see names hygiene",
+			src: `(define-syntax bind-it (syntax-rules () ((_ x) (let ((secret 1)) x))))
+			      (bind-it secret)`,
+			want: []string{`hygienically distinct`},
+			not:  []string{`no binding of that name`, `bound at phase`},
+		},
+		{
+			name: "a phase-0 typo names its absence and carries no phase sentence",
+			src:  `(totally-absent-name 1 2)`,
+			want: []string{`no binding of that name at any phase`},
+			not:  []string{`macro tower`, `bound at phase`, `hygienically distinct`},
+		},
+		{
+			name: "set! of a name bound nowhere says so",
+			src:  `(set! totally-absent-name-xyz 5)`,
+			want: []string{`for set!`, `no binding of that name at any phase`},
+			not:  []string{`bound at phase`, `hygienically distinct`},
+		},
+		{
+			// The empty-scope arm does not claim a scope refusal, so even a
+			// name that resolves under the wildcard never gets the hygiene clause.
+			name: "the empty-scope arm never names hygiene",
+			src: `(define counter 41)
+			      (begin-for-syntax (define seen counter))`,
+			want: []string{`no such local or global binding "counter"`, `bound at phase 0`},
+			not:  []string{`hygienically distinct`, `no binding of that name`},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := evalForPhaseDiagnostic(t, tc.src)
+			for _, w := range tc.want {
+				qt.Assert(t, strings.Contains(got, w), qt.IsTrue,
+					qt.Commentf("want substring: %s\ngot: %s", w, got))
+			}
+			for _, n := range tc.not {
+				qt.Assert(t, strings.Contains(got, n), qt.IsFalse,
+					qt.Commentf("unwanted substring: %s\ngot: %s", n, got))
+			}
+		})
+	}
+}

@@ -1333,6 +1333,27 @@ func (p *EnvironmentFrame) globalIndexAtPhase(key *values.Symbol, q syntax.Scope
 	return newScopeKeyedGlobalIndex(key, p.global, ref, q)
 }
 
+// BoundPhases returns the phases at which key resolves under q, ascending. It
+// is GetGlobalIndexAcrossPhases without the early return, for a diagnostic that
+// must say WHERE a name is bound rather than only whether it is. Like that
+// method it probes the store at each phase instead of minting a phase view.
+//
+// Globals only: a local binding is not a phase fact. A caller asking "does this
+// spelling denote anything at all" must also ask TryGetBinding.
+func (p *EnvironmentFrame) BoundPhases(key *values.Symbol, q syntax.ScopeSet) []Phase {
+	if p.global == nil || p.phases == nil {
+		return nil
+	}
+	var bound []Phase
+	for _, phase := range p.PresentPhases() {
+		gi := p.globalIndexAtPhase(key, q, phase)
+		if gi != nil {
+			bound = append(bound, phase)
+		}
+	}
+	return bound
+}
+
 // PresentPhases returns the non-negative phases worth searching for this frame's
 // owner (the engine's Namespace, or a library env's own store —
 // EnvironmentFrame.phases is shared by every view over one owner, per "One Store

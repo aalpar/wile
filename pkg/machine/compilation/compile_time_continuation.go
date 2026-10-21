@@ -17,6 +17,8 @@ package compilation
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/aalpar/wile/pkg/machine"
 
@@ -379,7 +381,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 			// (e.g., the undefined variable), not the enclosing form".
 			return wrapSourcedError(expr.SourceContext(),
 				werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
-					"no such local or global binding %q%s", sym.Key, p.phaseSuffix()))
+					"no such local or global binding %q%s", sym.Key, p.unboundSuffix(sym, symbolScopes, false)))
 		}
 
 		bd := p.env.GetGlobalBinding(gi)
@@ -517,54 +519,84 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// the empty-scope arm above: this is the scoped half of one defect.
 	return wrapSourcedError(expr.SourceContext(),
 		werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
-			"no such binding %q with compatible scopes%s", sym.Key, p.phaseSuffix()))
+			"no such binding %q with compatible scopes%s", sym.Key, p.unboundSuffix(sym, symbolScopes, true)))
 }
 
-// phaseSuffix renders the compile phase for an unbound-binding diagnostic, or
-// the empty string at the unit's own runtime.
+// unboundSuffix renders what an unbound-binding diagnostic can say about WHY a
+// name did not resolve: the compile phase, then at most one clause that
+// discriminates absence, phase and hygiene.
 //
 // Under the Flatt binding model "bound at phase 0, referenced at phase 1" is a
 // ROUTINE failure for code that reads as correct — a procedural transformer body
 // calling cadr is the canonical case — so a message carrying only the name sends
-// the reader hunting for a typo that is not there.
+// the reader hunting for a typo that is not there. Conversely the scoped arms
+// word their failure as "with compatible scopes", which blames scopes for a name
+// no scope set would have found.
 //
-// The number is EnvironmentFrame.PhaseLevel, which its own doc calls "a base to
-// compute from ... not a stage tag": it is this OWNER's level, so a transformer
-// body inside a define-library reports that library's tower and not the
-// program's. There is no owner-independent number to render instead, because a
-// library's runtime is phase 0 to a plain importer and phase 1 to a for-syntax
-// one. The rendering therefore carries the qualification ("of this unit's macro
-// tower") rather than leaving the bare number to be misread as absolute.
+// The phase sentence is the number in EnvironmentFrame.PhaseLevel, which its
+// own doc calls "a base to compute from ... not a stage tag": it is this OWNER's
+// level, so a transformer body inside a define-library reports that library's
+// tower and not the program's. There is no owner-independent number to render
+// instead, because a library's runtime is phase 0 to a plain importer and phase
+// 1 to a for-syntax one. The rendering therefore carries the qualification ("of
+// this unit's macro tower") rather than leaving the bare number to be misread as
+// absolute. Phase 0 renders no phase sentence, following Racket, so the far
+// commoner phase-0 message keeps its text.
 //
-// Phase 0 renders nothing, following Racket: its phase-0 unbound message says
-// nothing about phase, and its phase-1 one names the phase in words. What is
-// gained is that the far commoner phase-0 message is left byte-identical, and
-// that absence rules phase OUT.
+// The clause, first match wins:
+//   - "(bound at phase N)": a global of that spelling resolves under the use's
+//     scopes at some phase, and the compile phase is not among them. This is the
+//     cross-phase probe (EnvironmentFrame.BoundPhases) Racket's phase-1 message
+//     earns by reporting the other phase's state. It is a fact about the store,
+//     so a phase-0 reference to a begin-for-syntax-only name can legitimately
+//     name phase 1.
+//   - "(a same-named binding here is hygienically distinct)": only when
+//     claimsScopeRefusal, i.e. the message being suffixed says "compatible
+//     scopes". The spelling resolves under syntax.AllScopes() (a local binder
+//     counts) yet not under the use's own scopes, which is exactly a hygiene
+//     refusal.
+//   - "(no binding of that name at any phase)": nothing resolves, local or
+//     global, under any scope set and at no phase.
 //
-// Presence rules nothing IN. The gate is the compile phase alone; nothing here
-// asks whether the name is bound at some OTHER rung, so the clause renders for
-// a plain typo and for a same-rung scope failure exactly as it does for a real
-// phase mismatch. It reports where the lookup ran, which is provenance, not a
-// diagnosis. Racket's phase-1 message earns more than this because it reports
-// the other phase's state; matching that needs a cross-phase probe
-// (EnvironmentFrame.GetGlobalIndexAcrossPhases walks PresentPhases and is the
-// existing machinery for exactly this owner-relative question), which is a
-// deliberate follow-on and not what this renders today.
+// The all-scopes probe goes through TryGetBinding, never GetBinding: this runs
+// while building an error, and a diagnostic must not raise ErrAmbiguousBinding
+// of its own. An ambiguous answer means bindings exist, so it suppresses the
+// absence clause and, where the message claims a refusal, names hygiene.
+// The wildcard query itself is safe for the reason the resolution that just
+// failed was: rankedArgmax.consider's len(scopes) > 0 guard, plus the pinned
+// premise that every bulk row carries the empty scope set
+// (TestBulkRowsCarryTheEmptyScopeSet, TestEveryOriginRowIsLanguageDeclared).
 //
-// Text only, deliberately. The phase goes in the WRAP message, never in
-// werr.ErrNoSuchBinding and never in an errors.Is comparison — the same rule
-// TokenizerError.Is follows for position. That precedent's other half (stamp the
-// fact as a struct field so it is recoverable programmatically) is NOT taken
-// here: nothing consumes the phase, it is provenance for a human reader. A
-// consumer would need a field, not this string.
+// Text only, deliberately. The phase and the clause go in the WRAP message,
+// never in werr.ErrNoSuchBinding and never in an errors.Is comparison — the same
+// rule TokenizerError.Is follows for position. That precedent's other half
+// (stamp the fact as a struct field so it is recoverable programmatically) is
+// NOT taken here: nothing consumes it, it is provenance for a human reader.
 //
 // Pinned by pkg/wile/unbound_phase_diagnostic_test.go.
-func (p *CompileTimeContinuation) phaseSuffix() string {
+func (p *CompileTimeContinuation) unboundSuffix(sym *values.Symbol, scopes syntax.Scopes, claimsScopeRefusal bool) string {
+	var q strings.Builder
 	level := p.env.PhaseLevel()
-	if level == environment.PhaseRuntime {
-		return ""
+	if level != environment.PhaseRuntime {
+		fmt.Fprintf(&q, " at phase %d of this unit's macro tower", int8(level))
 	}
-	return fmt.Sprintf(" at phase %d of this unit's macro tower", int8(level))
+
+	bound := p.env.BoundPhases(sym, syntax.ScopesOf(scopes))
+	if len(bound) > 0 && !slices.Contains(bound, level) {
+		fmt.Fprintf(&q, " (bound at phase %d)", int8(bound[0]))
+		return q.String()
+	}
+
+	anywhere, ambiguous := p.env.TryGetBinding(sym, syntax.AllScopes())
+	exists := anywhere != nil || ambiguous
+	if exists && claimsScopeRefusal {
+		q.WriteString(" (a same-named binding here is hygienically distinct)")
+		return q.String()
+	}
+	if !exists && len(bound) == 0 {
+		q.WriteString(" (no binding of that name at any phase)")
+	}
+	return q.String()
 }
 
 // refuseCompileTimeMeaning is the syntactic-keyword refusal every arm of
