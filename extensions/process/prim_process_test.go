@@ -103,16 +103,23 @@ func TestProcessSpawn(t *testing.T) {
 		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 	})
 
-	t.Run("pipe ports are named for the command and stream", func(t *testing.T) {
-		result := eval(t, engine, `
-			(let ((proc (process-spawn "echo" "(a b)")))
-			  (let ((src (syntax-source (read-syntax (process-stdout proc)))))
-			    (process-wait proc)
-			    src))
-		`)
-		str, ok := result.Internal().(*values.String)
-		c.Assert(ok, qt.IsTrue)
-		c.Assert(str.Value, qt.Equals, "echo stdout")
+	t.Run("pipe ports are named for the command's base name and the stream", func(t *testing.T) {
+		tests := []struct{ accessor, want string }{
+			{"process-stdin", "cat stdin"},
+			{"process-stdout", "cat stdout"},
+			{"process-stderr", "cat stderr"},
+		}
+		for _, tc := range tests {
+			result := eval(t, engine, `
+				(let* ((proc (process-spawn "/bin/cat")) (p (`+tc.accessor+` proc)))
+				  (close-port (process-stdin proc))
+				  (process-wait proc)
+				  p)
+			`)
+			port, ok := result.Internal().(*values.PortObject)
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(port.PortName(), qt.Equals, tc.want)
+		}
 	})
 
 	t.Run("can read stdout", func(t *testing.T) {

@@ -63,12 +63,12 @@ func NewBinaryInputPort(rdr *bufio.Reader) *PortObject {
 // NewBinaryInputPortFromReader buffers reader and constructs a binary
 // input port. If reader implements io.Closer, Close is propagated.
 func NewBinaryInputPortFromReader(reader io.Reader) *PortObject {
-	return NewBinaryInputPortFromReaderNamed(reader, "")
+	return NewBinaryInputPortFromReaderWithName(reader, "")
 }
 
-// NewBinaryInputPortFromReaderNamed is NewBinaryInputPortFromReader for a
-// port opened under name; SourceName reports it.
-func NewBinaryInputPortFromReaderNamed(reader io.Reader, name string) *PortObject {
+// NewBinaryInputPortFromReaderWithName is NewBinaryInputPortFromReader for a
+// port opened under name; PortName reports it.
+func NewBinaryInputPortFromReaderWithName(reader io.Reader, name string) *PortObject {
 	rd := bufio.NewReader(reader)
 	q := &PortObject{}
 	q.kind = portKindBinaryInput
@@ -77,7 +77,7 @@ func NewBinaryInputPortFromReaderNamed(reader io.Reader, name string) *PortObjec
 	q.rdr = guardedReader{base: &q.portBase, raw: rd}
 	q.rb = guardedByteReader{base: &q.portBase, raw: rd}
 	q.urb = guardedByteUnreader{base: &q.portBase, raw: rd}
-	q.setSourceName(name)
+	q.srcName = name
 	validateOrPanic(q)
 	return q
 }
@@ -87,12 +87,12 @@ func NewBinaryInputPortFromReaderNamed(reader io.Reader, name string) *PortObjec
 // binary ports even though *bufio.Writer satisfies io.StringWriter.
 // flsh is non-nil so Close flushes before closing.
 func NewBinaryOutputPortFromWriter(writer io.Writer) *PortObject {
-	return NewBinaryOutputPortFromWriterNamed(writer, "")
+	return NewBinaryOutputPortFromWriterWithName(writer, "")
 }
 
-// NewBinaryOutputPortFromWriterNamed is NewBinaryOutputPortFromWriter for a
-// port opened under name; SourceName reports it.
-func NewBinaryOutputPortFromWriterNamed(writer io.Writer, name string) *PortObject {
+// NewBinaryOutputPortFromWriterWithName is NewBinaryOutputPortFromWriter for a
+// port opened under name; PortName reports it.
+func NewBinaryOutputPortFromWriterWithName(writer io.Writer, name string) *PortObject {
 	wr := bufio.NewWriter(writer)
 	q := &PortObject{}
 	q.kind = portKindBinaryOutput
@@ -101,7 +101,7 @@ func NewBinaryOutputPortFromWriterNamed(writer io.Writer, name string) *PortObje
 	q.wrt = guardedWriter{base: &q.portBase, raw: wr}
 	q.wb = guardedByteWriter{base: &q.portBase, raw: wr}
 	q.flsh = guardedFlusher{base: &q.portBase, raw: wr}
-	q.setSourceName(name)
+	q.srcName = name
 	validateOrPanic(q)
 	return q
 }
@@ -122,12 +122,12 @@ func NewCharacterInputPort(rdr *bufio.Reader) *PortObject {
 // NewCharacterInputPortFromReader buffers rdr and constructs a textual
 // input port.
 func NewCharacterInputPortFromReader(rdr io.Reader) *PortObject {
-	return NewCharacterInputPortFromReaderNamed(rdr, "")
+	return NewCharacterInputPortFromReaderWithName(rdr, "")
 }
 
-// NewCharacterInputPortFromReaderNamed is NewCharacterInputPortFromReader for
-// a port opened under name; SourceName reports it.
-func NewCharacterInputPortFromReaderNamed(rdr io.Reader, name string) *PortObject {
+// NewCharacterInputPortFromReaderWithName is NewCharacterInputPortFromReader for
+// a port opened under name; PortName reports it.
+func NewCharacterInputPortFromReaderWithName(rdr io.Reader, name string) *PortObject {
 	rd := bufio.NewReader(rdr)
 	q := &PortObject{}
 	q.kind = portKindCharacterInput
@@ -136,7 +136,7 @@ func NewCharacterInputPortFromReaderNamed(rdr io.Reader, name string) *PortObjec
 	q.rdr = guardedReader{base: &q.portBase, raw: rd}
 	q.rr = guardedRuneReader{base: &q.portBase, raw: rd}
 	q.urr = guardedRuneUnreader{base: &q.portBase, raw: rd}
-	q.setSourceName(name)
+	q.srcName = name
 	validateOrPanic(q)
 	return q
 }
@@ -146,12 +146,12 @@ func NewCharacterInputPortFromReaderNamed(rdr io.Reader, name string) *PortObjec
 // expose byte-level writes even though *bufio.Writer satisfies
 // io.ByteWriter. flsh is non-nil so Close flushes before closing.
 func NewCharacterOutputPortFromWriter(wrt io.Writer) *PortObject {
-	return NewCharacterOutputPortFromWriterNamed(wrt, "")
+	return NewCharacterOutputPortFromWriterWithName(wrt, "")
 }
 
-// NewCharacterOutputPortFromWriterNamed is NewCharacterOutputPortFromWriter
-// for a port opened under name; SourceName reports it.
-func NewCharacterOutputPortFromWriterNamed(wrt io.Writer, name string) *PortObject {
+// NewCharacterOutputPortFromWriterWithName is NewCharacterOutputPortFromWriter
+// for a port opened under name; PortName reports it.
+func NewCharacterOutputPortFromWriterWithName(wrt io.Writer, name string) *PortObject {
 	wr := bufio.NewWriter(wrt)
 	q := &PortObject{}
 	q.kind = portKindCharacterOutput
@@ -161,7 +161,7 @@ func NewCharacterOutputPortFromWriterNamed(wrt io.Writer, name string) *PortObje
 	q.wr = guardedRuneWriter{base: &q.portBase, raw: wr}
 	q.ws = guardedStringWriter{base: &q.portBase, raw: wr}
 	q.flsh = guardedFlusher{base: &q.portBase, raw: wr}
-	q.setSourceName(name)
+	q.srcName = name
 	validateOrPanic(q)
 	return q
 }

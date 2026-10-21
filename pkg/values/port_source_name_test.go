@@ -29,11 +29,13 @@ import (
 //
 // It parses port_constructors.go and collects every exported input-capable
 // factory (New…Port… with "Input" in its name) that neither takes a name
-// parameter nor has a "…Named" sibling in the same file. A factory added
+// parameter nor has a "…WithName" sibling in the same file. A factory added
 // without a way to name its port moves the count, with no hand-written table
 // to forget it in. The ceiling is the honest count after the fix: the two
-// FromReader forms gained siblings; the *bufio.Reader forms and the in-memory
-// ports (string, bytevector) have no name to carry.
+// FromReader forms gained siblings; the in-memory ports (string, bytevector)
+// have no name to carry; and NewCharacterInputPort / NewBinaryInputPort wrap a
+// caller's *bufio.Reader and are exempt because they have no production
+// callers. The ceiling is an equality, so a shrink forces lowering it.
 func inputPortFactoriesWithoutAName(t *testing.T) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -53,10 +55,10 @@ func inputPortFactoriesWithoutAName(t *testing.T) []string {
 		if !strings.HasPrefix(name, "New") || !strings.Contains(name, "Port") || !strings.Contains(name, "Input") {
 			continue
 		}
-		if strings.HasSuffix(name, "Named") {
+		if strings.HasSuffix(name, "WithName") {
 			continue
 		}
-		_, hasSibling := declared[name+"Named"]
+		_, hasSibling := declared[name+"WithName"]
 		if hasSibling || takesName(fn) {
 			continue
 		}
@@ -65,8 +67,13 @@ func inputPortFactoriesWithoutAName(t *testing.T) []string {
 	return q
 }
 
+// takesName reports whether fn has a parameter called name of type string.
 func takesName(fn *ast.FuncDecl) bool {
 	for _, field := range fn.Type.Params.List {
+		typ, ok := field.Type.(*ast.Ident)
+		if !ok || typ.Name != "string" {
+			continue
+		}
 		for _, id := range field.Names {
 			if id.Name == "name" {
 				return true
@@ -80,9 +87,10 @@ func TestInputPortFactoryNamingCensus(t *testing.T) {
 	c := qt.New(t)
 	const ceiling = 7
 	unnamed := inputPortFactoriesWithoutAName(t)
-	c.Assert(len(unnamed) <= ceiling, qt.IsTrue,
-		qt.Commentf("%d input-capable port factories cannot name their port (ceiling %d): %v",
-			len(unnamed), ceiling, unnamed))
+	c.Assert(len(unnamed), qt.Equals, ceiling,
+		qt.Commentf("input-capable port factories that cannot name their port: %v "+
+			"(more than the ceiling is a new unnamed factory; fewer means lower the ceiling)",
+			unnamed))
 }
 
 func TestNamedPortConstructorsCarryTheName(t *testing.T) {
@@ -90,14 +98,14 @@ func TestNamedPortConstructorsCarryTheName(t *testing.T) {
 		name string
 		port *PortObject
 	}{
-		{"character input", NewCharacterInputPortFromReaderNamed(strings.NewReader(""), "in.scm")},
-		{"binary input", NewBinaryInputPortFromReaderNamed(strings.NewReader(""), "in.scm")},
-		{"character output", NewCharacterOutputPortFromWriterNamed(&bytes.Buffer{}, "in.scm")},
-		{"binary output", NewBinaryOutputPortFromWriterNamed(&bytes.Buffer{}, "in.scm")},
+		{"character input", NewCharacterInputPortFromReaderWithName(strings.NewReader(""), "in.scm")},
+		{"binary input", NewBinaryInputPortFromReaderWithName(strings.NewReader(""), "in.scm")},
+		{"character output", NewCharacterOutputPortFromWriterWithName(&bytes.Buffer{}, "in.scm")},
+		{"binary output", NewBinaryOutputPortFromWriterWithName(&bytes.Buffer{}, "in.scm")},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			qt.New(t).Assert(tc.port.SourceName(), qt.Equals, "in.scm")
+			qt.New(t).Assert(tc.port.PortName(), qt.Equals, "in.scm")
 		})
 	}
 }
@@ -113,20 +121,29 @@ func TestUnnamedPortConstructorsHaveNoName(t *testing.T) {
 		{"binary output", NewBinaryOutputPortFromWriter(&bytes.Buffer{})},
 		{"string input", NewStringInputPortWithBuffer(bytes.NewBufferString("x"))},
 		{"string output", NewStringOutputPort()},
+		{"bytevector input", NewByteVectorInputPortFromReader(strings.NewReader(""))},
+		{"bytevector output", NewByteVectorBufferedOutputPort()},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			qt.New(t).Assert(tc.port.SourceName(), qt.Equals, "")
+			qt.New(t).Assert(tc.port.PortName(), qt.Equals, "")
 		})
 	}
 }
 
-// A name is provenance, not identity: port equality is unchanged.
-func TestPortEqualityIgnoresTheSourceName(t *testing.T) {
+// A name is provenance, not identity: ports that differ only in name are
+// equal, so EqualTo must ignore srcName. The two ports share their datum so
+// the name is the only difference; the test fails if EqualTo ever compares it.
+func TestPortEqualityIgnoresThePortName(t *testing.T) {
 	c := qt.New(t)
-	r := strings.NewReader("")
-	a := NewCharacterInputPortFromReaderNamed(r, "a.scm")
-	b := NewCharacterInputPortFromReaderNamed(r, "b.scm")
-	c.Assert(a.EqualTo(a), qt.IsTrue)
-	c.Assert(a.EqualTo(b), qt.IsFalse)
+	a := NewCharacterInputPortFromReaderWithName(strings.NewReader(""), "a.scm")
+	b := NewCharacterInputPortFromReaderWithName(strings.NewReader(""), "b.scm")
+	b.datum = a.datum
+	c.Assert(a.PortName(), qt.Not(qt.Equals), b.PortName())
+	c.Assert(a.EqualTo(b), qt.IsTrue)
+}
+
+func TestNilPortHasNoName(t *testing.T) {
+	var p *PortObject
+	qt.New(t).Assert(p.PortName(), qt.Equals, "")
 }

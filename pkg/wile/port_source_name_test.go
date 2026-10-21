@@ -18,6 +18,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/values"
@@ -26,19 +27,25 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// evalInDir evaluates src on a KitchenSink engine whose current directory is a
-// fresh temp dir holding files, and returns the displayed string. The files
-// are opened by a RELATIVE name, so a port that reported the resolved path
-// would differ from the written spelling: every assertion below compares the
-// whole name with Equals, never a suffix or Contains, because
-// "/abs/dir/i.scm:2:5" ends with "i.scm:2:5".
-func evalInDir(t *testing.T, files map[string]string, src string) string {
+// portNameFixture is a KitchenSink engine whose current directory is a fresh
+// temp dir. dir is the symlink-resolved directory, because a file port's name
+// is the engine-resolved absolute path and every assertion below compares the
+// WHOLE name with Equals, never a suffix: "/abs/dir/i.scm:2:5" ends with
+// "i.scm:2:5".
+type portNameFixture struct {
+	t   *testing.T
+	eng *wile.Engine
+	dir string
+}
+
+func newPortNameFixture(t *testing.T, files map[string]string) *portNameFixture {
 	t.Helper()
 	c := qt.New(t)
 	ctx := context.Background()
-	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
 	for name, body := range files {
-		err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o700)
+		err = os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o700)
 		c.Assert(err, qt.IsNil)
 		err = os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600)
 		c.Assert(err, qt.IsNil)
@@ -48,73 +55,175 @@ func evalInDir(t *testing.T, files map[string]string, src string) string {
 	t.Cleanup(func() {
 		_ = eng.Close()
 	})
-	_, err = eng.EvalMultiple(ctx, `(set-current-directory! "`+dir+`")`)
-	c.Assert(err, qt.IsNil)
-	v, err := eng.EvalMultiple(ctx, src)
-	c.Assert(err, qt.IsNil)
-	str, ok := v.Internal().(*values.String)
-	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", v.Internal()))
+	f := &portNameFixture{t: t, eng: eng, dir: dir}
+	f.eval(`(set-current-directory! "` + dir + `")`)
+	return f
+}
+
+// installEcho writes a one-line sh script that echoes its arguments to
+// dir/cmd/ and returns its absolute path, so a competing inc.scm can sit
+// beside "the executable". (A copy of /bin/echo is killed by code signing on
+// macOS.)
+func (f *portNameFixture) installEcho() string {
+	f.t.Helper()
+	c := qt.New(f.t)
+	dst := filepath.Join(f.dir, "cmd", "echo.sh")
+	c.Assert(os.MkdirAll(filepath.Dir(dst), 0o700), qt.IsNil)
+	c.Assert(os.WriteFile(dst, []byte("#!/bin/sh\necho \"$@\"\n"), 0o700), qt.IsNil)
+	return dst
+}
+
+func (f *portNameFixture) eval(src string) values.Value {
+	f.t.Helper()
+	v, err := f.eng.EvalMultiple(context.Background(), src)
+	qt.New(f.t).Assert(err, qt.IsNil)
+	return v.Internal()
+}
+
+func (f *portNameFixture) evalString(src string) string {
+	f.t.Helper()
+	v := f.eval(src)
+	str, ok := v.(*values.String)
+	qt.New(f.t).Assert(ok, qt.IsTrue, qt.Commentf("got %T", v))
 	return str.Value
+}
+
+func (f *portNameFixture) evalSymbol(src string) string {
+	f.t.Helper()
+	v := f.eval(src)
+	sym, ok := v.(*values.Symbol)
+	qt.New(f.t).Assert(ok, qt.IsTrue, qt.Commentf("got %T", v))
+	return sym.Key
 }
 
 // I055-a1: read-syntax on a file port names the file, not #f.
 func TestReadSyntaxFromFilePortNamesTheFile(t *testing.T) {
-	got := evalInDir(t,
-		map[string]string{"f.scm": "(define x 1)\n  (foo bar)\n"},
-		`(let ((p (open-input-file "f.scm")))
+	f := newPortNameFixture(t, map[string]string{"f.scm": "(define x 1)\n  (foo bar)\n"})
+	got := f.evalString(`(let ((p (open-input-file "f.scm")))
 		   (read-syntax p)
 		   (let ((s (read-syntax p)) (o (open-output-string)))
 		     (write (list (syntax-source s) (syntax-line s) (syntax-column s)) o)
 		     (get-output-string o)))`)
-	qt.New(t).Assert(got, qt.Equals, `("f.scm" 2 2)`)
+	qt.New(t).Assert(got, qt.Equals, `("`+filepath.Join(f.dir, "f.scm")+`" 2 2)`)
 }
 
-// I055-a2: a read error from a file port names the file and the position in it.
+// I055-a2: a read error from a file port carries the file and the position in
+// it. error-object-source and ParserError.Location carry the file; the
+// rendered message text does not (filed against ParserError.contextSuffix).
 func TestReadErrorFromFilePortNamesTheFile(t *testing.T) {
-	got := evalInDir(t,
-		map[string]string{"i.scm": "(define x 1)\n(foo ]\n"},
-		`(guard (e (#t (error-object-source e)))
+	f := newPortNameFixture(t, map[string]string{"i.scm": "(define x 1)\n(foo ]\n"})
+	got := f.evalString(`(guard (e (#t (error-object-source e)))
 		   (let ((p (open-input-file "i.scm")))
 		     (read p)
 		     (read p)))`)
-	qt.New(t).Assert(got, qt.Equals, "i.scm:2:5")
+	qt.New(t).Assert(got, qt.Equals, filepath.Join(f.dir, "i.scm")+":2:5")
 }
 
-// The name is the spelling the program wrote, through every way of opening a
-// file port.
-func TestFilePortsCarryTheWrittenName(t *testing.T) {
+// Every way of opening a file port names it with the engine-resolved absolute
+// path, whatever spelling the program wrote: the reader stamps the name into
+// SourceContext.File, which include resolution treats as a real path.
+func TestEveryFileFactoryNamesItsPort(t *testing.T) {
 	tests := []struct {
 		name string
 		src  string
-		want string
+		file string
 	}{
-		{
-			name: "call-with-input-file",
-			src: `(call-with-input-file "./sub/../g.scm"
-			        (lambda (p) (syntax-source (read-syntax p))))`,
-			want: "./sub/../g.scm",
-		},
-		{
-			name: "with-input-from-file",
-			src: `(with-input-from-file "g.scm"
-			        (lambda () (syntax-source (read-syntax))))`,
-			want: "g.scm",
-		},
+		{"open-input-file", `(open-input-file "g.scm")`, "g.scm"},
+		{"open-input-file non-canonical", `(open-input-file "./sub/../g.scm")`, "./sub/../g.scm"},
+		{"open-binary-input-file", `(open-binary-input-file "g.scm")`, "g.scm"},
+		{"open-output-file", `(open-output-file "o1.txt")`, "o1.txt"},
+		{"open-binary-output-file", `(open-binary-output-file "o2.bin")`, "o2.bin"},
+		{"call-with-output-file", `(call-with-output-file "o3.txt" (lambda (p) p))`, "o3.txt"},
+		{"call-with-input-file", `(call-with-input-file "g.scm" (lambda (p) p))`, "g.scm"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := evalInDir(t, map[string]string{"g.scm": "(a b)\n", "sub/keep": ""}, tc.src)
-			qt.New(t).Assert(got, qt.Equals, tc.want)
+			f := newPortNameFixture(t, map[string]string{"g.scm": "(a b)\n", "sub/keep": ""})
+			p, ok := f.eval(tc.src).(*values.PortObject)
+			qt.New(t).Assert(ok, qt.IsTrue)
+			// The engine resolves against its directory without cleaning, so the
+			// written spelling is kept after the directory.
+			qt.New(t).Assert(p.PortName(), qt.Equals, f.dir+string(os.PathSeparator)+tc.file)
 		})
 	}
+}
+
+func TestReadSyntaxThroughCurrentInputPortNamesTheFile(t *testing.T) {
+	f := newPortNameFixture(t, map[string]string{"g.scm": "(a b)\n"})
+	got := f.evalString(`(with-input-from-file "g.scm" (lambda () (syntax-source (read-syntax))))`)
+	qt.New(t).Assert(got, qt.Equals, filepath.Join(f.dir, "g.scm"))
 }
 
 // String ports stay unnamed: Wile's syntax-source is a string or #f, so the
 // literal "string" would be indistinguishable from a file named "string".
 func TestStringPortStaysUnnamed(t *testing.T) {
-	got := evalInDir(t, nil,
-		`(let ((o (open-output-string)))
+	f := newPortNameFixture(t, nil)
+	got := f.evalString(`(let ((o (open-output-string)))
 		   (write (syntax-source (read-syntax (open-input-string "(a b)"))) o)
 		   (get-output-string o))`)
 	qt.New(t).Assert(got, qt.Equals, "#f")
+}
+
+// The port name feeds include resolution (lexicalIncludeContext reads
+// SourceContext.File as a path). These pin that a form read from a port
+// includes relative to where its file really is, and that a port that is not
+// a file never steers an include.
+func TestPortNameSteersIncludeConsistently(t *testing.T) {
+	files := map[string]string{
+		"inc.scm":           "(define y 'top)\n",
+		"sub/inc.scm":       "(define y 'sub)\n",
+		"sub/incl.scm":      "(include \"inc.scm\")\n",
+		"other/sub/inc.scm": "(define y 'other)\n",
+		"driver.scm": `(eval (read-syntax (open-input-file "sub/incl.scm")) (interaction-environment))
+(set-box! driver-result (eval 'y (interaction-environment)))`,
+		"cmd/inc.scm": "(define y 'cmd)\n",
+	}
+
+	t.Run("relative file port, no live load stack", func(t *testing.T) {
+		f := newPortNameFixture(t, files)
+		got := f.evalSymbol(`(eval (read-syntax (open-input-file "sub/incl.scm")) (interaction-environment))
+			(eval 'y (interaction-environment))`)
+		qt.New(t).Assert(got, qt.Equals, "sub")
+	})
+
+	t.Run("cwd moves after the port is opened", func(t *testing.T) {
+		f := newPortNameFixture(t, files)
+		got := f.evalSymbol(`(define p (open-input-file "sub/incl.scm"))
+			(set-current-directory! "` + filepath.Join(f.dir, "other") + `")
+			(eval (read-syntax p) (interaction-environment))
+			(eval 'y (interaction-environment))`)
+		qt.New(t).Assert(got, qt.Equals, "sub")
+	})
+
+	t.Run("relative file port under a live load stack", func(t *testing.T) {
+		f := newPortNameFixture(t, files)
+		f.eval(`(define driver-result (box #f))`)
+		f.eval(`(load "driver.scm")`)
+		qt.New(t).Assert(f.evalSymbol(`(unbox driver-result)`), qt.Equals, "sub")
+	})
+
+	t.Run("pipe from an absolute command includes against the cwd, with no load stack", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses /bin/echo")
+		}
+		f := newPortNameFixture(t, files)
+		echo := f.installEcho()
+		got := f.evalSymbol(`(eval (read-syntax (process-stdout (process-spawn "` + echo + `" "(include \"inc.scm\")"))) (interaction-environment))
+			(eval 'y (interaction-environment))`)
+		qt.New(t).Assert(got, qt.Equals, "top")
+	})
+
+	t.Run("pipe from an absolute command under a live load stack", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses /bin/echo")
+		}
+		f := newPortNameFixture(t, files)
+		echo := f.installEcho()
+		err := os.WriteFile(filepath.Join(f.dir, "pipe.scm"), []byte(`(eval (read-syntax (process-stdout (process-spawn "`+echo+`" "(include \"inc.scm\")"))) (interaction-environment))
+(set-box! driver-result (eval 'y (interaction-environment)))`), 0o600)
+		qt.New(t).Assert(err, qt.IsNil)
+		f.eval(`(define driver-result (box #f))`)
+		f.eval(`(load "pipe.scm")`)
+		qt.New(t).Assert(f.evalSymbol(`(unbox driver-result)`), qt.Equals, "top")
+	})
 }

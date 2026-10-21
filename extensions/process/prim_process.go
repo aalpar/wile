@@ -225,13 +225,21 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 	q := values.NewProcess(
 		command.Value,
 		cmd,
-		values.NewCharacterOutputPortFromWriterNamed(stdinPipe, command.Value+" stdin"),
-		values.NewCharacterInputPortFromReaderNamed(stdoutPipe, command.Value+" stdout"),
-		values.NewCharacterInputPortFromReaderNamed(stderrPipe, command.Value+" stderr"),
+		values.NewCharacterOutputPortFromWriterWithName(stdinPipe, pipeLabel(command.Value, "stdin")),
+		values.NewCharacterInputPortFromReaderWithName(stdoutPipe, pipeLabel(command.Value, "stdout")),
+		values.NewCharacterInputPortFromReaderWithName(stderrPipe, pipeLabel(command.Value, "stderr")),
 	)
 	trackSpawnedProcess(mc, q)
 	mc.SetValue(q)
 	return nil
+}
+
+// pipeLabel names a spawned process's pipe port "<command> <stream>". Only the
+// command's base name is used: the label becomes SourceContext.File when a
+// form is read from the pipe, and include resolution resolves relative to the
+// directory of a File that contains one.
+func pipeLabel(command, stream string) string {
+	return filepath.Base(command) + " " + stream
 }
 
 // PrimProcessStdout implements the (process-stdout) primitive.
