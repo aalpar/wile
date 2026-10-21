@@ -56,7 +56,7 @@ type State struct {
 // cannot both yield coherent data — so reads on one port serialise on entry.mu,
 // held across the whole ReadSyntax call. Reads on DIFFERENT ports take different
 // entry locks and never contend. The parser is constructed lazily under entry.mu
-// (parser.NewParser reads the first rune eagerly, so construction is itself I/O
+// (the parser constructor reads the first rune eagerly, so construction is itself I/O
 // that must stay off State.mu). Fixes the reviews/2026-07-13 §4 finding where the
 // shared parser was driven outside any per-port lock.
 type parserEntry struct {
@@ -86,6 +86,14 @@ func NewState(auth security.Authorizer) *State {
 	}
 }
 
+// streamLabel is the name a host stream's port carries: "<stdin>", matching the
+// CLI's own "<eval>" and "<stdin>" spelling. The angle brackets keep it from
+// colliding with a file that happens to be called stdin, and it has no path
+// separator, so include resolution never mistakes it for a location on disk.
+func streamLabel(target string) string {
+	return "<" + target + ">"
+}
+
 // gatedInputPort returns a textual input port over stream when auth permits
 // stream:read on it, and a refused port otherwise.
 func gatedInputPort(auth security.Authorizer, target string, stream *os.File) *values.PortObject {
@@ -95,9 +103,9 @@ func gatedInputPort(auth security.Authorizer, target string, stream *os.File) *v
 		Target:   target,
 	})
 	if err != nil {
-		return refusedPort(values.NewCharacterInputPortFromReader(strings.NewReader("")))
+		return refusedPort(values.NewCharacterInputPortFromReaderWithName(strings.NewReader(""), streamLabel(target)))
 	}
-	return values.NewCharacterInputPortFromReader(stream)
+	return values.NewCharacterInputPortFromReaderWithName(stream, streamLabel(target))
 }
 
 // gatedOutputPort returns a textual output port over stream when auth permits
@@ -109,9 +117,9 @@ func gatedOutputPort(auth security.Authorizer, target string, stream *os.File) *
 		Target:   target,
 	})
 	if err != nil {
-		return refusedPort(values.NewCharacterOutputPortFromWriter(&bytes.Buffer{}))
+		return refusedPort(values.NewCharacterOutputPortFromWriterWithName(&bytes.Buffer{}, streamLabel(target)))
 	}
-	return values.NewCharacterOutputPortFromWriter(stream)
+	return values.NewCharacterOutputPortFromWriterWithName(stream, streamLabel(target))
 }
 
 // refusedPort marks a port closed, which is how a stream denial surfaces to
@@ -252,7 +260,7 @@ func resolveCurrentInputPort(cc machine.CallContext) (*values.PortObject, error)
 // get-or-creates the port's entry under State.mu (no I/O), then holds that
 // entry's lock across the whole ReadSyntax call so two threads reading one port
 // serialise on a single parser instead of racing its fields and datum-label map.
-// The parser is built lazily under the entry lock (parser.NewParser reads a rune
+// The parser is built lazily under the entry lock (the parser constructor reads a rune
 // eagerly), so State.mu is never held across a read. First-creator's mk wins,
 // matching the pre-fix "first read constructs the cached parser" behaviour.
 //

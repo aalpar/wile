@@ -54,6 +54,14 @@ type portBase struct {
 	clsr   io.Closer
 	kind   string
 	datum  any
+	// srcName labels where the port's data comes from. For a file port it is
+	// the engine-resolved absolute path, because the reader stamps it into
+	// SourceContext.File and include resolution treats File as a real path
+	// (lexicalIncludeContext). For a host stream or a process pipe it is a
+	// display label with no path separator ("<stdin>", "echo stdout"); it is
+	// never a path to open. "" means the port has no name to give (string
+	// and bytevector ports, in-memory buffers).
+	srcName string
 }
 
 // IsClosed returns true if the port has been closed.

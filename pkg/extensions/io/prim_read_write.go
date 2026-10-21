@@ -218,7 +218,7 @@ func PrimRead(mc machine.CallContext) error {
 	}
 
 	mkParser := func() *parser.Parser {
-		return parser.NewParser(mc.EnvironmentFrame(), true, rr)
+		return parser.NewParserWithFile(mc.EnvironmentFrame(), true, rr, port.PortName())
 	}
 	syn, err := st.readSyntaxCached(mc.Context(), port, mkParser)
 	if err != nil {
@@ -252,7 +252,7 @@ func PrimReadSyntax(mc machine.CallContext) error {
 	}
 
 	mkParser := func() *parser.Parser {
-		return parser.NewParser(mc.EnvironmentFrame(), true, rr)
+		return parser.NewParserWithFile(mc.EnvironmentFrame(), true, rr, port.PortName())
 	}
 	q, err := st.readSyntaxCached(mc.Context(), port, mkParser)
 	if err != nil {

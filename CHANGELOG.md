@@ -119,6 +119,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A textual input port carries the name it was opened under (I055).**
+  `(syntax-source (read-syntax p))` on `(open-input-file "f.scm")` answered `#f`
+  and `error-object-source` of a read error from that port answered `2:5`; the
+  former now names the file and the latter is `<file>:2:5`. The name is the
+  engine-resolved absolute path with symlinks resolved and `..` folded away
+  (so on macOS `/tmp/x.scm` is named `/private/tmp/x.scm`), not the spelling the
+  program wrote, because the
+  reader stamps it into the form's source file and `include` resolves relative
+  paths against that file: a written relative name would be re-resolved against
+  whatever the current directory is at compile time. `open-binary-input-file`,
+  `call-with-input-file`, `with-input-from-file` and the output twins carry it
+  too. Forms read from a file port therefore carry the file's absolute path, and
+  an `include` inside such a form resolves against that file's directory. Host
+  streams are labelled `<stdin>`, `<stdout>`, `<stderr>` and `process-spawn`
+  pipes `<command base name> stdin|stdout|stderr`; the labels contain no path
+  separator, so they never steer an `include`. String and bytevector ports stay
+  unnamed. `error-object-source` and `ParserError.Location` carry the file; the
+  rendered message text does not yet. New: `(*values.PortObject).PortName()` and
+  `values.New{Character,Binary}{Input,Output}Port…WithName`.
+
 - **The unbound-binding diagnostic says why instead of blaming scopes (I036).**
   `no such binding "x" with compatible scopes` asserted a scope refusal it never
   tested: a typo and a name no scope set could find read the same as a hygiene

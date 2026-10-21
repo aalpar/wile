@@ -111,6 +111,18 @@ func (p *PortObject) PortKind() string {
 	return p.kind
 }
 
+// PortName returns the label the port was opened under: the resolved path of
+// a file port, a display label for a host stream or process pipe, or "" for a
+// port with no name (string and bytevector ports). Readers hand it to the
+// parser so positions read from the port carry a file. It plays no part in
+// port equality. Nil-safe: a nil port has no name.
+func (p *PortObject) PortName() string {
+	if p == nil {
+		return ""
+	}
+	return p.srcName
+}
+
 // Close flushes (if a flusher is present) and closes the port. Close
 // is idempotent — subsequent calls are no-ops. Nil-safe: a nil
 // receiver returns nil.
