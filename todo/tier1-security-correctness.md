@@ -2208,7 +2208,7 @@ Wile repros measured on the P6.3 branch tip (`2be65293`) with a binary built fro
 
 ### Filed by the P5.7-P6.2 residual audit (2026-10-20)
 
-From an audit of the SHIPPED records in `plans/2026-09-22-defect-closeout-P5.md` and `-P6.md` for residuals that never got a row. Sites verified by symbol on master at `899bff71`; none of these is a defect repro.
+From an audit of the SHIPPED records in `memory/2026-09-22-defect-closeout-P5.md` and `plans/…-P6.md` for residuals that never got a row. Sites verified by symbol on master at `899bff71`; none of these is a defect repro.
 
 - [ ] **Library-declaration `(include ...)` in a `.sld` is untested after the lexical-resolution change** [Test gap, XS, P5.7 re-review]: it now resolves against that file's directory (`lexicalIncludeContext`, `pkg/machine/compilation/compile_time_continuation_include.go`); no test pins it.
 - [ ] **`child.libraryScope` in the include splice is not shown necessary** [Test gap, XS, P5.7 crosscheck]: `expander_include.go:134`. Delete the line and run the suite; if green remove it, else add the pin that reddens.
