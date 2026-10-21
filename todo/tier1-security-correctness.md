@@ -2347,3 +2347,10 @@ The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no r
 ### Closed in Tier 1
 
 Moved to [`closed.md`](closed.md) (2026-10-17 split).
+
+### Filed by the P7.2 verification (2026-10-20)
+
+- [ ] **`PresentPhases`'s doc comment sits above `const presentPhasesHint`, leaving the function undocumented** [Comments, Low, P7.2 verification, pre-existing]:
+  `pkg/environment/environment_frame.go` has the `// PresentPhases returns ...` paragraph directly above the `presentPhasesHint` constant and a
+  second `presentPhasesHint` paragraph between it and `func (p *EnvironmentFrame) PresentPhases()`, so godoc attaches the function's
+  contract to the constant. Move the constant above the doc block (or the doc below the constant). Found while placing `BoundPhases`.
