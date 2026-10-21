@@ -182,7 +182,7 @@ func TestLoadParseErrorReportsReadSiteOnBothArms(t *testing.T) {
 // location at all.
 //
 // The answer has no file because a string port has no name to give: PrimRead
-// hands the port's SourceName to the parser, and open-input-string leaves it
+// hands the port's PortName to the parser, and open-input-string leaves it
 // empty on purpose. A port opened on a file names it, and the same read error
 // then renders "<file>:2:5" (TestReadErrorFromFilePortNamesTheFile).
 func TestReadErrorReportsPortPositionNotTheReadCall(t *testing.T) {

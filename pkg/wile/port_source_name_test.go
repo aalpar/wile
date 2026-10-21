@@ -19,8 +19,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
 
@@ -129,7 +131,7 @@ func TestEveryFileFactoryNamesItsPort(t *testing.T) {
 		file string
 	}{
 		{"open-input-file", `(open-input-file "g.scm")`, "g.scm"},
-		{"open-input-file non-canonical", `(open-input-file "./sub/../g.scm")`, "./sub/../g.scm"},
+		{"open-input-file non-canonical", `(open-input-file "./sub/../g.scm")`, "g.scm"},
 		{"open-binary-input-file", `(open-binary-input-file "g.scm")`, "g.scm"},
 		{"open-output-file", `(open-output-file "o1.txt")`, "o1.txt"},
 		{"open-binary-output-file", `(open-binary-output-file "o2.bin")`, "o2.bin"},
@@ -141,9 +143,9 @@ func TestEveryFileFactoryNamesItsPort(t *testing.T) {
 			f := newPortNameFixture(t, map[string]string{"g.scm": "(a b)\n", "sub/keep": ""})
 			p, ok := f.eval(tc.src).(*values.PortObject)
 			qt.New(t).Assert(ok, qt.IsTrue)
-			// The engine resolves against its directory without cleaning, so the
-			// written spelling is kept after the directory.
-			qt.New(t).Assert(p.PortName(), qt.Equals, f.dir+string(os.PathSeparator)+tc.file)
+			// The name is cleaned and symlink-resolved: ".." and "." do not
+			// survive into a name a program can read back.
+			qt.New(t).Assert(p.PortName(), qt.Equals, filepath.Join(f.dir, tc.file))
 		})
 	}
 }
@@ -226,4 +228,63 @@ func TestPortNameSteersIncludeConsistently(t *testing.T) {
 		f.eval(`(load "pipe.scm")`)
 		qt.New(t).Assert(f.evalSymbol(`(unbox driver-result)`), qt.Equals, "top")
 	})
+}
+
+// A ..-climbing relative open must not leave the engine directory and its
+// climb in the name: the name is readable by the program (syntax-source,
+// error-object-source), so an uncleaned join would expose where the engine
+// stands even when current-directory is denied.
+func TestFilePortNameIsCleanedUnderAConfiningAuthorizer(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(root, "f.scm"), []byte("(a b)\n(c ]\n"), 0o600)
+	c.Assert(err, qt.IsNil)
+	// The host stands outside the authorized region, in a directory the
+	// program must not learn the name of. (current-directory) is denied there.
+	outside, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	secret := filepath.Join(outside, "tenant-SECRET")
+	c.Assert(os.MkdirAll(secret, 0o700), qt.IsNil)
+	t.Chdir(secret)
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithAuthorizer(security.FilesystemRoot(root)))
+	c.Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = eng.Close()
+	})
+	written := strings.Repeat("../", 30) + strings.TrimPrefix(root, "/") + "/f.scm"
+	want := filepath.Join(root, "f.scm")
+
+	evalString := func(src string) string {
+		v, err := eng.EvalMultiple(ctx, src)
+		c.Assert(err, qt.IsNil)
+		str, ok := v.Internal().(*values.String)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", v.Internal()))
+		return str.Value
+	}
+	got := evalString(`(syntax-source (read-syntax (open-input-file "` + written + `")))`)
+	c.Assert(got, qt.Equals, want)
+	c.Assert(strings.Contains(got, "SECRET"), qt.IsFalse)
+	c.Assert(evalString(`(guard (e (#t (error-object-source e)))
+		(let ((p (open-input-file "`+written+`"))) (read p) (read p)))`), qt.Equals, want+":2:3")
+}
+
+// Include resolution reads the port name lexically, so "link/.." in a written
+// name must not mis-steer it: the name is the real path, and an include inside
+// the form resolves against the real file's directory.
+func TestSymlinkedFilePortIncludesAgainstTheRealDirectory(t *testing.T) {
+	f := newPortNameFixture(t, map[string]string{
+		"real/deep/keep": "",
+		"real/incl.scm":  "(include \"inc.scm\")\n",
+		"real/inc.scm":   "(define y 'real)\n",
+		"a/inc.scm":      "(define y 'decoy)\n",
+	})
+	err := os.Symlink(filepath.Join(f.dir, "real", "deep"), filepath.Join(f.dir, "a", "link"))
+	qt.New(t).Assert(err, qt.IsNil)
+	got := f.evalSymbol(`(eval (read-syntax (open-input-file "a/link/../incl.scm")) (interaction-environment))
+		(eval 'y (interaction-environment))`)
+	qt.New(t).Assert(got, qt.Equals, "real")
 }

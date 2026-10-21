@@ -123,7 +123,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `(syntax-source (read-syntax p))` on `(open-input-file "f.scm")` answered `#f`
   and `error-object-source` of a read error from that port answered `2:5`; the
   former now names the file and the latter is `<file>:2:5`. The name is the
-  engine-resolved absolute path, not the spelling the program wrote, because the
+  engine-resolved absolute path with symlinks resolved and `..` folded away
+  (so on macOS `/tmp/x.scm` is named `/private/tmp/x.scm`), not the spelling the
+  program wrote, because the
   reader stamps it into the form's source file and `include` resolves relative
   paths against that file: a written relative name would be re-resolved against
   whatever the current directory is at compile time. `open-binary-input-file`,

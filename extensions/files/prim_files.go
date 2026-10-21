@@ -18,6 +18,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
@@ -57,8 +58,28 @@ func openFilePort(
 	if err != nil {
 		return werr.WrapForeignFileError(err, name, filename.Value)
 	}
-	mc.SetValue(makePort(file, abs))
+	mc.SetValue(makePort(file, portNameFor(abs)))
 	return nil
+}
+
+// portNameFor is the name a file port carries: the opened path with symlinks
+// resolved and ".." folded away, falling back to the lexically cleaned path if
+// resolution fails. enginePath joins the written spelling onto the engine's
+// directory without cleaning, so a relative "../../x" would otherwise leave the
+// engine directory and its ".." climb in a name a program can read back
+// (syntax-source, error-object-source), around the gate on current-directory.
+// containedInRoot resolves the same way, so under a confining authorizer the
+// result lies inside the authorized region. The name must be a real path
+// because the reader stamps it into SourceContext.File, which include
+// resolution reads lexically (lexicalIncludeContext). The cost: the absolute
+// location of the authorized region is visible to the program, which the
+// written spelling hid.
+func portNameFor(abs string) string {
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return filepath.Clean(abs)
+	}
+	return resolved
 }
 
 // PrimOpenInputFile implements the open-input-file primitive.
@@ -238,7 +259,7 @@ func callWithFile(
 	}
 	defer file.Close() //nolint:errcheck
 
-	port := portCreator(file, abs)
+	port := portCreator(file, portNameFor(abs))
 
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
