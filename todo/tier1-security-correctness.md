@@ -1895,7 +1895,7 @@ design. It was lifted out of the `begin-for-syntax` row below, whose ordering ha
 
   The row's diagnostic residual is NOT closed with it. It is lifted to its own row below.
 - [x] **A phase-1 lookup for an absent name reports a scope refusal** [Diagnostics, S, Done 2026-10-20 (P7.2, I036;
-  code `9b913866` + crosscheck remediation; merge SHA added at close), owned by the
+  code `9b913866`, crosscheck `97ef85a1`, re-review `92f0cab8`, merge `4234bbb0`), owned by the
   **provenance wave**; lifted 2026-09-26 out of the `begin-for-syntax` row above, whose ordering half
   is fixed and whose diagnostic half is not]: "with compatible scopes" is a misdiagnosis the
   diagnostic invites. Instrumented at the raise, a repeat lookup under `syntax.AllScopes()` also
