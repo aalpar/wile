@@ -125,7 +125,8 @@ func messageParts(err error, acc []string) []string {
 
 // messageMembers appends the rendering of a multi-error (errors.Join) as ONE
 // part: each member's own parts, joined as FailureMessage joins them, and the
-// members joined on a single line with "; ". errors.Join's own Error() puts a
+// members joined on a single line with " | " ("; " would be ambiguous: a miss
+// message already contains "; searched:"). errors.Join's own Error() puts a
 // newline between members and keeps every member's category label, which is
 // right for a log and wrong for the one-line message R7RS §6.11 specifies. The
 // Unwrap edges stay on the original error; only the projection is flattened.
@@ -140,7 +141,7 @@ func messageMembers(members []error, acc []string) []string {
 	if len(rendered) == 0 {
 		return acc
 	}
-	return append(acc, strings.Join(rendered, "; "))
+	return append(acc, strings.Join(rendered, " | "))
 }
 
 // isCategorySentinel reports whether err IS a static sentinel, by direct type

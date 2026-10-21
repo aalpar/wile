@@ -116,7 +116,9 @@ A total miss reports every arm: the absences are joined (`errors.Join`), so the
 message names each source searched and `errors.Is(err, werr.ErrFileNotFound)`
 still holds. Only absences are joined; a denial the chain looks past is dropped,
 so a miss never matches `security.ErrAccessDenied`. Library imports join the same
-way across the `.sld` and `.scm` probes.
+way across the `.sld` and `.scm` probes. Under a confining authorizer a file
+present only in the `fs.FS` reads as not found, since the denied virtual arm's refusal
+is dropped and only the host arm's absence is reported.
 
 ```go
 func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error) {

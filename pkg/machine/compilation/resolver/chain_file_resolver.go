@@ -51,9 +51,9 @@ func NewChainFileResolver(resolvers []environment.FileResolver) *ChainFileResolv
 // errors.Is(werr.ErrFileNotFound). A denial the chain looks past is dropped, not
 // joined: a joined denial would make a plain miss match security.ErrAccessDenied,
 // which the VM treats as uncatchable. A refusal or hard error the chain may not
-// look past returns immediately and alone. The last arm never continues, so a
-// total miss always holds at least one absence; a single absence is returned
-// unwrapped.
+// look past returns immediately and alone. A denial at the last arm always
+// stops, so a total miss holds at least one absence; a single absence is
+// returned unwrapped.
 func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error) {
 	var misses []error
 	for i, r := range p.resolvers {

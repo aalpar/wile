@@ -141,13 +141,13 @@ func TestFailureMessage(t *testing.T) {
 		},
 		{
 			// errors.Join renders a newline per member with each member's category
-			// label; FailureMessage presents one line, members split on "; ".
+			// label; FailureMessage presents one line, members split on " | ".
 			name: "a joined error is one line, one segment per member",
 			err: errors.Join(
 				werr.WrapForeignErrorf(werr.ErrFileNotFound, "probe a.sld"),
 				werr.WrapForeignErrorf(werr.ErrFileNotFound, "probe a.scm"),
 			),
-			want: "probe a.sld; probe a.scm",
+			want: "probe a.sld | probe a.scm",
 		},
 		{
 			name: "a joined error nested in a wrap keeps the wrap's text",
@@ -158,7 +158,7 @@ func TestFailureMessage(t *testing.T) {
 				),
 				"load-library: (a)",
 			),
-			want: "load-library: (a): probe a.sld; probe a.scm",
+			want: "load-library: (a): probe a.sld | probe a.scm",
 		},
 		{
 			name: "nil is empty",

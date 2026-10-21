@@ -125,8 +125,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   probe: `(import (scheme nonexistent-xyz))` reported the `.scm` search of the
   host-filesystem arm and nothing of the `.sld` search or the virtual-filesystem
   arm. A total miss now joins every ABSENCE (`errors.Join`), so that import names
-  all four probes, and `error-object-message` renders them on one line separated
-  by `; `. `errors.Is(err, werr.ErrFileNotFound)` still holds. Only absences are
+  all four probes (without a confining authorizer, which drops the denied virtual
+  arm's probes), and `error-object-message` renders them on one line separated
+  by ` | `. `errors.Is(err, werr.ErrFileNotFound)` still holds. Only absences are
   joined: a denial the chain looks past is dropped as before, so a plain miss
   never matches `security.ErrAccessDenied` (which a guard cannot catch), and a
   denial or hard error that stops the search is still reported alone. A search
