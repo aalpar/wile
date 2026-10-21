@@ -54,6 +54,10 @@ type portBase struct {
 	clsr   io.Closer
 	kind   string
 	datum  any
+	// srcName is the name the port was opened under: the spelling a program
+	// wrote to open it, or the host stream's name. "" means the port has no
+	// name to give (string and bytevector ports, in-memory buffers).
+	srcName string
 }
 
 // IsClosed returns true if the port has been closed.
@@ -82,6 +86,19 @@ func (p *portBase) setCloser(v any) {
 	if ok {
 		p.clsr = closer
 	}
+}
+
+// SourceName returns the name the port was opened under, or "" when it has
+// none. Readers hand it to the parser so positions read from the port carry
+// a file; it plays no part in port equality.
+func (p *portBase) SourceName() string {
+	return p.srcName
+}
+
+// setSourceName records the name the port was opened under. Used by the
+// Named port constructors, after construction, like setCloser.
+func (p *portBase) setSourceName(name string) {
+	p.srcName = name
 }
 
 // guardClosed returns werr.ErrPortClosed if the port is closed.

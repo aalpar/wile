@@ -103,6 +103,18 @@ func TestProcessSpawn(t *testing.T) {
 		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 	})
 
+	t.Run("pipe ports are named for the command and stream", func(t *testing.T) {
+		result := eval(t, engine, `
+			(let ((proc (process-spawn "echo" "(a b)")))
+			  (let ((src (syntax-source (read-syntax (process-stdout proc)))))
+			    (process-wait proc)
+			    src))
+		`)
+		str, ok := result.Internal().(*values.String)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(str.Value, qt.Equals, "echo stdout")
+	})
+
 	t.Run("can read stdout", func(t *testing.T) {
 		result := eval(t, engine, `
 			(let ((proc (process-spawn "echo" "hello")))

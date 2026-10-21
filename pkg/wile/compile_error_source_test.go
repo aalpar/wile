@@ -181,11 +181,10 @@ func TestLoadParseErrorReportsReadSiteOnBothArms(t *testing.T) {
 // call, which is one location for every datum a loop reads and therefore no
 // location at all.
 //
-// The answer has no file, and that is a SEPARATE gap, not this rule misfiring:
-// PrimRead builds its parser with parser.NewParser rather than
-// NewParserWithFile, because values.PortObject carries no name to hand it. A
-// successful read from a file port already yields syntax with no file for the
-// same reason. Filed in TODO.md under Tier 2.
+// The answer has no file because a string port has no name to give: PrimRead
+// hands the port's SourceName to the parser, and open-input-string leaves it
+// empty on purpose. A port opened on a file names it, and the same read error
+// then renders "<file>:2:5" (TestReadErrorFromFilePortNamesTheFile).
 func TestReadErrorReportsPortPositionNotTheReadCall(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()

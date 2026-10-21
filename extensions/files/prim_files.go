@@ -33,7 +33,7 @@ import (
 // access; see confined.go), and wraps it in a port via makePort.
 func openFilePort(
 	mc machine.CallContext, name string, action string,
-	makePort func(*os.File) values.Value,
+	makePort func(file *os.File, name string) values.Value,
 ) error {
 	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, name)
 	if err != nil {
@@ -55,39 +55,39 @@ func openFilePort(
 	if err != nil {
 		return werr.WrapForeignFileError(err, name, filename.Value)
 	}
-	mc.SetValue(makePort(file))
+	mc.SetValue(makePort(file, filename.Value))
 	return nil
 }
 
 // PrimOpenInputFile implements the open-input-file primitive.
 // Opens a file for reading and returns an input port.
 func PrimOpenInputFile(mc machine.CallContext) error {
-	return openFilePort(mc, "open-input-file", security.ActionRead, func(f *os.File) values.Value {
-		return values.NewCharacterInputPortFromReader(f)
+	return openFilePort(mc, "open-input-file", security.ActionRead, func(f *os.File, name string) values.Value {
+		return values.NewCharacterInputPortFromReaderNamed(f, name)
 	})
 }
 
 // PrimOpenOutputFile implements the open-output-file primitive.
 // Opens a file for writing and returns an output port.
 func PrimOpenOutputFile(mc machine.CallContext) error {
-	return openFilePort(mc, "open-output-file", security.ActionWrite, func(f *os.File) values.Value {
-		return values.NewCharacterOutputPortFromWriter(f)
+	return openFilePort(mc, "open-output-file", security.ActionWrite, func(f *os.File, name string) values.Value {
+		return values.NewCharacterOutputPortFromWriterNamed(f, name)
 	})
 }
 
 // PrimOpenBinaryInputFile implements the open-binary-input-file primitive (R7RS).
 // Opens a file for binary reading and returns a binary input port.
 func PrimOpenBinaryInputFile(mc machine.CallContext) error {
-	return openFilePort(mc, "open-binary-input-file", security.ActionRead, func(f *os.File) values.Value {
-		return values.NewBinaryInputPortFromReader(f)
+	return openFilePort(mc, "open-binary-input-file", security.ActionRead, func(f *os.File, name string) values.Value {
+		return values.NewBinaryInputPortFromReaderNamed(f, name)
 	})
 }
 
 // PrimOpenBinaryOutputFile implements the open-binary-output-file primitive (R7RS).
 // Opens a file for binary writing and returns a binary output port.
 func PrimOpenBinaryOutputFile(mc machine.CallContext) error {
-	return openFilePort(mc, "open-binary-output-file", security.ActionWrite, func(f *os.File) values.Value {
-		return values.NewBinaryOutputPortFromWriter(f)
+	return openFilePort(mc, "open-binary-output-file", security.ActionWrite, func(f *os.File, name string) values.Value {
+		return values.NewBinaryOutputPortFromWriterNamed(f, name)
 	})
 }
 
@@ -205,7 +205,7 @@ func callWithFile(
 	mc *machine.MachineContext,
 	name string,
 	action string,
-	portCreator func(*os.File) values.Value,
+	portCreator func(file *os.File, name string) values.Value,
 ) error {
 	filename, err := helpers.RequireType[*values.String](mc.Arg(0), werr.ErrNotAString, name)
 	if err != nil {
@@ -236,7 +236,7 @@ func callWithFile(
 	}
 	defer file.Close() //nolint:errcheck
 
-	port := portCreator(file)
+	port := portCreator(file, filename.Value)
 
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
@@ -260,8 +260,8 @@ func PrimCallWithInputFile(cc machine.CallContext) error {
 		return err
 	}
 	return callWithFile(mc, "call-with-input-file", security.ActionRead,
-		func(f *os.File) values.Value {
-			return values.NewCharacterInputPortFromReader(f)
+		func(f *os.File, name string) values.Value {
+			return values.NewCharacterInputPortFromReaderNamed(f, name)
 		})
 }
 
@@ -272,8 +272,8 @@ func PrimCallWithOutputFile(cc machine.CallContext) error {
 		return err
 	}
 	return callWithFile(mc, "call-with-output-file", security.ActionWrite,
-		func(f *os.File) values.Value {
-			return values.NewCharacterOutputPortFromWriter(f)
+		func(f *os.File, name string) values.Value {
+			return values.NewCharacterOutputPortFromWriterNamed(f, name)
 		})
 }
 

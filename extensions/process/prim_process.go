@@ -225,9 +225,9 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 	q := values.NewProcess(
 		command.Value,
 		cmd,
-		values.NewCharacterOutputPortFromWriter(stdinPipe),
-		values.NewCharacterInputPortFromReader(stdoutPipe),
-		values.NewCharacterInputPortFromReader(stderrPipe),
+		values.NewCharacterOutputPortFromWriterNamed(stdinPipe, command.Value+" stdin"),
+		values.NewCharacterInputPortFromReaderNamed(stdoutPipe, command.Value+" stdout"),
+		values.NewCharacterInputPortFromReaderNamed(stderrPipe, command.Value+" stderr"),
 	)
 	trackSpawnedProcess(mc, q)
 	mc.SetValue(q)

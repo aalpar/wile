@@ -95,9 +95,9 @@ func gatedInputPort(auth security.Authorizer, target string, stream *os.File) *v
 		Target:   target,
 	})
 	if err != nil {
-		return refusedPort(values.NewCharacterInputPortFromReader(strings.NewReader("")))
+		return refusedPort(values.NewCharacterInputPortFromReaderNamed(strings.NewReader(""), target))
 	}
-	return values.NewCharacterInputPortFromReader(stream)
+	return values.NewCharacterInputPortFromReaderNamed(stream, target)
 }
 
 // gatedOutputPort returns a textual output port over stream when auth permits
@@ -109,9 +109,9 @@ func gatedOutputPort(auth security.Authorizer, target string, stream *os.File) *
 		Target:   target,
 	})
 	if err != nil {
-		return refusedPort(values.NewCharacterOutputPortFromWriter(&bytes.Buffer{}))
+		return refusedPort(values.NewCharacterOutputPortFromWriterNamed(&bytes.Buffer{}, target))
 	}
-	return values.NewCharacterOutputPortFromWriter(stream)
+	return values.NewCharacterOutputPortFromWriterNamed(stream, target)
 }
 
 // refusedPort marks a port closed, which is how a stream denial surfaces to

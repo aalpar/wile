@@ -119,6 +119,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A textual input port carries the name it was opened under (I055).**
+  `(syntax-source (read-syntax p))` on `(open-input-file "f.scm")` answered `#f`
+  and a read error from that port rendered `2:5`; both now name the file
+  (`f.scm`, `f.scm:2:5`). The name is the spelling the program wrote, not the
+  resolved path. `open-binary-input-file`, `call-with-input-file`,
+  `with-input-from-file` and the output twins carry it too; the host streams
+  are `stdin`/`stdout`/`stderr` and `process-spawn` pipes are
+  `<command> stdin|stdout|stderr`. String and bytevector ports stay unnamed.
+  New: `SourceName()` on ports and `values.New{Character,Binary}{Input,Output}Port…Named`.
+
 - **The unbound-binding diagnostic says why instead of blaming scopes (I036).**
   `no such binding "x" with compatible scopes` asserted a scope refusal it never
   tested: a typo and a name no scope set could find read the same as a hygiene
