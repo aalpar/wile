@@ -15,6 +15,7 @@
 package werr_test
 
 import (
+	"errors"
 	"io/fs"
 	"testing"
 
@@ -137,6 +138,27 @@ func TestFailureMessage(t *testing.T) {
 				cause: werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: expected a pair"),
 			},
 			want: "load: in f.scm: syntax-error: expected a pair: invalid syntax",
+		},
+		{
+			// errors.Join renders a newline per member with each member's category
+			// label; FailureMessage presents one line, members split on "; ".
+			name: "a joined error is one line, one segment per member",
+			err: errors.Join(
+				werr.WrapForeignErrorf(werr.ErrFileNotFound, "probe a.sld"),
+				werr.WrapForeignErrorf(werr.ErrFileNotFound, "probe a.scm"),
+			),
+			want: "probe a.sld; probe a.scm",
+		},
+		{
+			name: "a joined error nested in a wrap keeps the wrap's text",
+			err: werr.WrapForeignErrorf(
+				errors.Join(
+					werr.WrapForeignErrorf(werr.ErrFileNotFound, "probe a.sld"),
+					werr.WrapForeignErrorf(werr.ErrFileNotFound, "probe a.scm"),
+				),
+				"load-library: (a)",
+			),
+			want: "load-library: (a): probe a.sld; probe a.scm",
 		},
 		{
 			name: "nil is empty",

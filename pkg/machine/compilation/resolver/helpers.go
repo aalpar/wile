@@ -118,6 +118,18 @@ func IsNotFound(err error) bool {
 	return errors.Is(err, werr.ErrFileNotFound) || errors.Is(err, fs.ErrNotExist)
 }
 
+// JoinMisses combines the absences a search collected into one error. A single
+// absence is returned as itself, so a one-probe search keeps its type and text;
+// several are joined so each probe stays reachable through errors.Is and
+// FailureMessage. Callers pass only IsNotFound errors, which is what keeps a
+// denial from riding into the join.
+func JoinMisses(misses []error) error {
+	if len(misses) == 1 {
+		return misses[0]
+	}
+	return errors.Join(misses...)
+}
+
 // SourceGate is implemented by a FileResolver that authorizes every candidate
 // before opening it, and names the security.AccessRequest.TargetSource it
 // authorizes them under ("" = the host OS filesystem).

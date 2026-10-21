@@ -46,10 +46,14 @@ func NewChainFileResolver(resolvers []environment.FileResolver) *ChainFileResolv
 }
 
 // ResolveAndOpen tries each resolver in order, returning the first successful
-// result. A total miss reports EVERY arm that searched, joined, so the message
-// names each source consulted rather than only the last; the join still
-// satisfies errors.Is for the sentinels its members wrap. A refusal the chain
-// may not look past returns immediately and alone, unchanged.
+// result. A total miss joins the ABSENCE reported by every arm, so the message
+// names each source consulted rather than only the last; the join satisfies
+// errors.Is(werr.ErrFileNotFound). A denial the chain looks past is dropped, not
+// joined: a joined denial would make a plain miss match security.ErrAccessDenied,
+// which the VM treats as uncatchable. A refusal or hard error the chain may not
+// look past returns immediately and alone. The last arm never continues, so a
+// total miss always holds at least one absence; a single absence is returned
+// unwrapped.
 func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error) {
 	var misses []error
 	for i, r := range p.resolvers {
@@ -60,9 +64,11 @@ func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs
 		if !p.continuesPast(err, i) {
 			return nil, "", err
 		}
-		misses = append(misses, err)
+		if IsNotFound(err) {
+			misses = append(misses, err)
+		}
 	}
-	return nil, "", errors.Join(misses...)
+	return nil, "", JoinMisses(misses)
 }
 
 // continuesPast reports whether the chain may look in resolvers[i+1:] after

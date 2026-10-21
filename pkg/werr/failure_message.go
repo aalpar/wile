@@ -98,6 +98,10 @@ func messageParts(err error, acc []string) []string {
 	}
 	fw, ok := err.(foreignWrap)
 	if !ok {
+		multi, isMulti := err.(interface{ Unwrap() []error })
+		if isMulti {
+			return messageMembers(multi.Unwrap(), acc)
+		}
 		inner := errors.Unwrap(err)
 		if inner != nil && err.Error() == inner.Error() {
 			// A transparent wrapper: it decorates the error with something other
@@ -117,6 +121,26 @@ func messageParts(err error, acc []string) []string {
 	}
 	acc = messageParts(fw.sentinelSlot(), acc)
 	return messageParts(fw.causeSlot(), acc)
+}
+
+// messageMembers appends the rendering of a multi-error (errors.Join) as ONE
+// part: each member's own parts, joined as FailureMessage joins them, and the
+// members joined on a single line with "; ". errors.Join's own Error() puts a
+// newline between members and keeps every member's category label, which is
+// right for a log and wrong for the one-line message R7RS §6.11 specifies. The
+// Unwrap edges stay on the original error; only the projection is flattened.
+func messageMembers(members []error, acc []string) []string {
+	var rendered []string
+	for _, m := range members {
+		text := strings.Join(messageParts(m, nil), ": ")
+		if text != "" {
+			rendered = append(rendered, text)
+		}
+	}
+	if len(rendered) == 0 {
+		return acc
+	}
+	return append(acc, strings.Join(rendered, "; "))
 }
 
 // isCategorySentinel reports whether err IS a static sentinel, by direct type

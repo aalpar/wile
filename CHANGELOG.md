@@ -124,10 +124,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   a `lastErr` overwritten by every miss, so a missing library named only the last
   probe: `(import (scheme nonexistent-xyz))` reported the `.scm` search of the
   host-filesystem arm and nothing of the `.sld` search or the virtual-filesystem
-  arm. A total miss now joins every absence (`errors.Join`), so that import names
-  all four probes. `errors.Is(err, werr.ErrFileNotFound)` still holds; a denial or
-  hard error still stops the search at once and is reported alone. The message of a
-  one-arm chain is unchanged.
+  arm. A total miss now joins every ABSENCE (`errors.Join`), so that import names
+  all four probes, and `error-object-message` renders them on one line separated
+  by `; `. `errors.Is(err, werr.ErrFileNotFound)` still holds. Only absences are
+  joined: a denial the chain looks past is dropped as before, so a plain miss
+  never matches `security.ErrAccessDenied` (which a guard cannot catch), and a
+  denial or hard error that stops the search is still reported alone. A search
+  that collects a single absence returns it unchanged.
 
 - **`ac-match` and `ac-unify` agree with `make-normalizer` on the term
   comparator (I177).** `(wile algebra unification)` tested equality with

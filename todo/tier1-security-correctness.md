@@ -633,7 +633,7 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   `parsers` cache are untouched. BREAKING (Scheme and Go API). The axis-B manifest row disappearing is the gate (`TestBuildAxisBManifest`);
   the follow-ups are filed under "Filed by the P6.14 crosscheck").
 - [x] Resolver: ~~a resolver chain miss, and a library-extension miss, report only the LAST arm / extension searched~~ (Done 2026-10-20, P7.1 / I117-chain, I117-libfile, `c3a2270e`:
-  `ChainFileResolver.ResolveAndOpen` and `ResolveLibraryFile` accumulate every absence and return `errors.Join`; denials and hard errors still return early and alone.
+  `ChainFileResolver.ResolveAndOpen` and `ResolveLibraryFile` accumulate every ABSENCE and return `resolver.JoinMisses` (`errors.Join`, or the lone absence itself). A denial the chain looks past is dropped, not joined, so a plain miss never matches `security.ErrAccessDenied`; a stopping denial or hard error still returns alone. `werr.FailureMessage` renders a multi-error as one `; `-separated segment.
   `(import (scheme nonexistent-xyz))` names four probes (`.sld` and `.scm` in each of the two chain arms) where it named one).
 - [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
   as a profile name.
@@ -2322,6 +2322,22 @@ The three confirmed findings of `reviews/2026-09-09/REVIEW.md` §2 that had no r
   `c.Assert(entry, qt.Not(qt.IsNil))` called from goroutines on the parent test's `c`, the `FailNow`-from-a-goroutine hazard
   P6.14 fixed in `TestParserCacheEviction`. Fix: drive `readSyntaxCached` from the goroutines and assert on the returned
   value, with a per-goroutine `qt.New(t)` or no assertion off the test goroutine.
+
+### Filed by the P7.1 crosscheck (2026-10-20)
+
+- [ ] **A zero-value `ChainFileResolver{}`, and a search over an empty extension list, return `(nil, "", nil)`** [Resolver, Medium, P7.1 crosscheck, pre-existing]:
+  `NewChainFileResolver` panics on an empty slice, but the zero value is constructible (`ChainFileResolver{}`), and `ResolveAndOpen`
+  then loops zero times and returns a nil file with a nil error; callers `defer f.Close()` on it. `ResolveLibraryFile` has the same
+  exit when `libraryExtensions` is empty. Master returned the same (`lastErr` was nil), so P7.1 neither introduced nor changed it.
+  Fix is a guard returning a `werr.ErrFileNotFound` wrap when no probe ran.
+- [ ] **The joined miss message repeats and under-labels its arms** [Diagnostics, Low, P7.1 crosscheck]: the four-probe message for
+  `(import (scheme nonexistent-xyz))` lists the same `searched:` directories twice within one arm's text, the `fs.FS` arm does not
+  name which `fs.FS` it searched (every virtual arm reads `not found in virtual filesystem`), and the virtual arm prints
+  absolute-path text for a name that is relative. Readable, noisy.
+- [ ] **OS-first chains expose the OS arm's absolute search directories** [Diagnostics / information disclosure, Low, P7.1 crosscheck;
+  owner decision whether it matters]: with `WithSourceOS()` before `WithSourceFS`, master reported only the last (virtual) arm's text; the
+  joined miss now includes the OS arm's `searched: <absolute dirs>` too. The same text is already reported by the OS arm on its own and
+  by the default OS-last order, so no new fact leaves the process, only more of it per message.
 
 ### Closed in Tier 1
 

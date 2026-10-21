@@ -112,9 +112,15 @@ Composes a list of `FileResolver`s into a single resolver. Tries each in
 order. On not-found, proceeds to the next. On a denial, proceeds only under
 the source rule above. On any other error, returns immediately.
 
+A total miss reports every arm: the absences are joined (`errors.Join`), so the
+message names each source searched and `errors.Is(err, werr.ErrFileNotFound)`
+still holds. Only absences are joined; a denial the chain looks past is dropped,
+so a miss never matches `security.ErrAccessDenied`. Library imports join the same
+way across the `.sld` and `.scm` probes.
+
 ```go
 func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error) {
-    var lastErr error
+    var misses []error
     for i, r := range p.resolvers {
         f, resolved, err := r.ResolveAndOpen(ctx, path)
         if err == nil {
@@ -123,9 +129,11 @@ func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs
         if !p.continuesPast(err, i) {
             return nil, "", err // hard error, or a denial nothing later can revisit
         }
-        lastErr = err
+        if IsNotFound(err) {
+            misses = append(misses, err)
+        }
     }
-    return nil, "", lastErr
+    return nil, "", JoinMisses(misses)
 }
 
 func (p *ChainFileResolver) continuesPast(err error, i int) bool {
