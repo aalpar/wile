@@ -524,13 +524,13 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 
 // unboundSuffix renders what an unbound-binding diagnostic can say about WHY a
 // name did not resolve: the compile phase, then at most one clause that
-// discriminates absence, phase and hygiene.
+// discriminates phase, hygiene and global absence.
 //
 // Under the Flatt binding model "bound at phase 0, referenced at phase 1" is a
 // ROUTINE failure for code that reads as correct — a procedural transformer body
 // calling cadr is the canonical case — so a message carrying only the name sends
 // the reader hunting for a typo that is not there. Conversely the scoped arms
-// word their failure as "with compatible scopes", which blames scopes for a name
+// word their failure as "with compatible scopes", which blamed scopes for a name
 // no scope set would have found.
 //
 // The phase sentence is the number in EnvironmentFrame.PhaseLevel, which its
@@ -540,32 +540,37 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 // instead, because a library's runtime is phase 0 to a plain importer and phase
 // 1 to a for-syntax one. The rendering therefore carries the qualification ("of
 // this unit's macro tower") rather than leaving the bare number to be misread as
-// absolute. Phase 0 renders no phase sentence, following Racket, so the far
-// commoner phase-0 message keeps its text.
+// absolute. Phase 0 renders no phase sentence, following Racket; the clause
+// below is appended to either.
 //
 // The clause, first match wins:
-//   - "(bound at phase N)": a global of that spelling resolves under the use's
-//     scopes at some phase, and the compile phase is not among them. This is the
-//     cross-phase probe (EnvironmentFrame.BoundPhases) Racket's phase-1 message
-//     earns by reporting the other phase's state. It is a fact about the store,
-//     so a phase-0 reference to a begin-for-syntax-only name can legitimately
-//     name phase 1.
+//   - "(bound at phase N)" / "(bound at phases N, M)": a global of that spelling
+//     resolves under the use's scopes at other phases and not at the compile
+//     phase. This is the cross-phase probe (EnvironmentFrame.BoundPhases) Racket's
+//     phase-1 message earns by reporting the other phase's state. It is a fact
+//     about the store, so a phase-0 reference to a begin-for-syntax-only name can
+//     legitimately name phase 1. Every such phase is listed, not the nearest.
 //   - "(a same-named binding here is hygienically distinct)": only when
 //     claimsScopeRefusal, i.e. the message being suffixed says "compatible
-//     scopes". The spelling resolves under syntax.AllScopes() (a local binder
-//     counts) yet not under the use's own scopes, which is exactly a hygiene
-//     refusal.
-//   - "(no binding of that name at any phase)": nothing resolves, local or
-//     global, under any scope set and at no phase.
+//     scopes". The spelling resolves under syntax.AllScopes() (a local binder at
+//     the compile phase, or a global at any phase) yet not under the use's own
+//     scopes, which is exactly a hygiene refusal.
+//   - "(no global binding of that name at any phase)": no global resolves under
+//     any scope set at any phase and nothing resolves locally at the compile
+//     phase. It claims the global table only: a local of an ENCLOSING lower
+//     phase (a let around a define-syntax) is outside what this can see, and
+//     saying "no binding" would be false for it.
 //
-// The all-scopes probe goes through TryGetBinding, never GetBinding: this runs
-// while building an error, and a diagnostic must not raise ErrAmbiguousBinding
-// of its own. An ambiguous answer means bindings exist, so it suppresses the
-// absence clause and, where the message claims a refusal, names hygiene.
-// The wildcard query itself is safe for the reason the resolution that just
-// failed was: rankedArgmax.consider's len(scopes) > 0 guard, plus the pinned
-// premise that every bulk row carries the empty scope set
-// (TestBulkRowsCarryTheEmptyScopeSet, TestEveryOriginRowIsLanguageDeclared).
+// Both wildcard probes are non-raising: BoundPhasesAnyScope reports a tie as
+// bound, and TryGetBinding reports it as ambiguous. This runs while building an
+// error, and a diagnostic that raised ErrAmbiguousBinding would replace the
+// ErrNoSuchBinding and its location with an internal error. The wildcard query
+// itself is safe for the reason the resolution that just failed was:
+// rankedArgmax.consider's len(scopes) > 0 guard, plus the pinned premise that
+// every bulk row carries the empty scope set (TestBulkRowsCarryTheEmptyScopeSet,
+// TestEveryOriginRowIsLanguageDeclared). TryGetBinding(AllScopes) resolves the
+// compile phase's locals, where equal-cardinality incomparable binders cannot
+// arise for a wildcard reference, so its ambiguity answer is ignored.
 //
 // Text only, deliberately. The phase and the clause go in the WRAP message,
 // never in werr.ErrNoSuchBinding and never in an errors.Is comparison — the same
@@ -581,20 +586,30 @@ func (p *CompileTimeContinuation) unboundSuffix(sym *values.Symbol, scopes synta
 		fmt.Fprintf(&q, " at phase %d of this unit's macro tower", int8(level))
 	}
 
-	bound := p.env.BoundPhases(sym, syntax.ScopesOf(scopes))
+	bound := p.env.BoundPhases(sym, scopes)
 	if len(bound) > 0 && !slices.Contains(bound, level) {
-		fmt.Fprintf(&q, " (bound at phase %d)", int8(bound[0]))
+		q.WriteString(" (bound at phase")
+		if len(bound) > 1 {
+			q.WriteString("s")
+		}
+		for i, phase := range bound {
+			if i > 0 {
+				q.WriteString(",")
+			}
+			fmt.Fprintf(&q, " %d", int8(phase))
+		}
+		q.WriteString(")")
 		return q.String()
 	}
 
-	anywhere, ambiguous := p.env.TryGetBinding(sym, syntax.AllScopes())
-	exists := anywhere != nil || ambiguous
+	local, _ := p.env.TryGetBinding(sym, syntax.AllScopes())
+	exists := local != nil || len(p.env.BoundPhasesAnyScope(sym)) > 0
 	if exists && claimsScopeRefusal {
 		q.WriteString(" (a same-named binding here is hygienically distinct)")
 		return q.String()
 	}
-	if !exists && len(bound) == 0 {
-		q.WriteString(" (no binding of that name at any phase)")
+	if !exists {
+		q.WriteString(" (no global binding of that name at any phase)")
 	}
 	return q.String()
 }

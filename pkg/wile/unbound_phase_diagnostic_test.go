@@ -130,17 +130,19 @@ func TestUnboundDiagnosticNamesThePhase(t *testing.T) {
 // TestUnboundDiagnosticStaysSilentAtRuntimePhase is a GUARD: it passes on both
 // sides of Stage A.
 //
-// Phase 0 renders no phase clause at all, following Racket, whose phase-0
+// Phase 0 renders no phase SENTENCE at all, following Racket, whose phase-0
 // unbound message says nothing about phase and whose phase-1 one names it in
 // words ("no #%app syntax transformer is bound in the transformer phase" —
 // measured against /opt/local/bin/racket 9.2, 2026-09-09, on
 // `#lang racket/base` + an unbound reference at each phase). What that buys is
-// the direction asserted here: ABSENCE rules phase out, and the far commoner
-// phase-0 message stays byte-identical, which is why none of the 37 existing
-// assertions on this text needed touching.
+// the direction asserted here: ABSENCE rules the phase sentence out. The
+// message is no longer byte-identical at phase 0 (unboundSuffix appends one
+// discriminating clause), but every existing assertion is a prefix or substring
+// match, so none needed touching.
 //
-// Presence rules nothing in — see phaseSuffix's doc. The gate is the compile
-// phase alone, so the clause also renders for a typo compiled at phase 1.
+// Presence rules something in only through that clause: the phase sentence's
+// gate is still the compile phase alone, so it also renders for a typo compiled
+// at phase 1, while the clause says whether the name is bound anywhere.
 func TestUnboundDiagnosticStaysSilentAtRuntimePhase(t *testing.T) {
 	got := evalForPhaseDiagnostic(t, `(totally-absent-name 1 2)`)
 	qt.Assert(t, strings.Contains(got, `no such local or global binding "totally-absent-name"`), qt.IsTrue,
@@ -178,68 +180,119 @@ func TestUnboundDiagnosticKeepsItsSentinel(t *testing.T) {
 // plain typo: a repeat lookup under syntax.AllScopes() misses too, so no scope
 // set would have found the name.
 //
-// Row 3 is the control, not the change: a let-bound template binder is local,
-// and a global-only probe would call it absent. The discrimination is what is
-// pinned, so the table holds both sides of it.
+// Every row asserts the EXACT tail of the message, not a substring: the clause
+// text, its parentheses and its position before the sentinel are the contract,
+// and a substring match survives each of those drifting.
+//
+// The rows holding a name that IS bound somewhere (a phase-0 local read from a
+// transformer body aside, which is a local of an enclosing phase and so outside
+// the global-table claim) are the ones that kill a false absence clause.
 func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 	cases := []struct {
 		name string
 		src  string
-		want []string
-		not  []string
+		tail string
 	}{
 		{
 			name: "a name bound at no phase says so",
 			src:  `(begin (define-syntax q (lambda (stx) (totally-absent-name-xyz stx))) (q))`,
-			want: []string{`no binding of that name at any phase`},
-			not:  []string{`bound at phase 0`, `hygienically distinct`},
+			tail: `no such binding "totally-absent-name-xyz" with compatible scopes at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
+		},
+		{
+			name: "a phase-0 typo names its absence and carries no phase sentence",
+			src:  `(totally-absent-name 1 2)`,
+			tail: `no such local or global binding "totally-absent-name" (no global binding of that name at any phase): no such binding`,
+		},
+		{
+			name: "set! of a name bound nowhere says so",
+			src:  `(set! totally-absent-name-xyz 5)`,
+			tail: `no such binding "totally-absent-name-xyz" with compatible scopes for set! (no global binding of that name at any phase): no such binding`,
 		},
 		{
 			name: "a name bound at phase 0 and referenced at phase 1 says so",
 			src:  `(begin (define-syntax q (lambda (stx) (cadr (list 1 2)))) (q))`,
-			want: []string{`bound at phase 0`},
-			not:  []string{`no binding of that name`, `hygienically distinct`},
+			tail: `no such binding "cadr" with compatible scopes at phase 1 of this unit's macro tower (bound at phase 0): no such binding`,
+		},
+		{
+			name: "a name bound only above the reference phase names that phase",
+			src:  `(begin-for-syntax (define only-expand 1)) only-expand`,
+			tail: `no such local or global binding "only-expand" (bound at phase 1): no such binding`,
+		},
+		{
+			name: "every bound phase is listed, not the nearest",
+			src: `(define both 1)
+			      (begin-for-syntax (begin-for-syntax (define both 2)))
+			      (begin-for-syntax both)`,
+			tail: `no such local or global binding "both" at phase 1 of this unit's macro tower (bound at phases 0, 2): no such binding`,
+		},
+		{
+			name: "the empty-scope arm names the phase it is bound at",
+			src: `(define counter 41)
+			      (begin-for-syntax (define seen counter))`,
+			tail: `no such local or global binding "counter" at phase 1 of this unit's macro tower (bound at phase 0): no such binding`,
 		},
 		{
 			name: "a macro-introduced binder the use site cannot see names hygiene",
 			src: `(define-syntax bind-it (syntax-rules () ((_ x) (let ((secret 1)) x))))
 			      (bind-it secret)`,
-			want: []string{`hygienically distinct`},
-			not:  []string{`no binding of that name`, `bound at phase`},
+			tail: `no such binding "secret" with compatible scopes (a same-named binding here is hygienically distinct): no such binding`,
 		},
 		{
-			name: "a phase-0 typo names its absence and carries no phase sentence",
-			src:  `(totally-absent-name 1 2)`,
-			want: []string{`no binding of that name at any phase`},
-			not:  []string{`macro tower`, `bound at phase`, `hygienically distinct`},
+			name: "set! of a hygienically distinct binder names hygiene",
+			src: `(define-syntax bind-it (syntax-rules () ((_ x) (let ((secret 1)) (set! x 2)))))
+			      (bind-it secret)`,
+			tail: `no such binding "secret" with compatible scopes for set! (a same-named binding here is hygienically distinct): no such binding`,
 		},
 		{
-			name: "set! of a name bound nowhere says so",
-			src:  `(set! totally-absent-name-xyz 5)`,
-			want: []string{`for set!`, `no binding of that name at any phase`},
-			not:  []string{`bound at phase`, `hygienically distinct`},
-		},
-		{
-			// The empty-scope arm does not claim a scope refusal, so even a
-			// name that resolves under the wildcard never gets the hygiene clause.
+			// The empty-scope arm does not claim a scope refusal, so a name that
+			// resolves only under the wildcard gets no hygiene clause. This is the
+			// row that reaches the claimsScopeRefusal gate on that arm.
 			name: "the empty-scope arm never names hygiene",
-			src: `(define counter 41)
-			      (begin-for-syntax (define seen counter))`,
-			want: []string{`no such local or global binding "counter"`, `bound at phase 0`},
-			not:  []string{`hygienically distinct`, `no binding of that name`},
+			src: `(define-syntax def-it2 (syntax-rules () ((_) (define secret 1))))
+			      (def-it2)
+			      secret`,
+			tail: `no such local or global binding "secret": no such binding`,
+		},
+		{
+			// A macro-introduced global bound at another phase under scopes the use
+			// cannot satisfy: bound, so never "no global binding".
+			name: "a macro-introduced phase-1 binder is not called absent",
+			src: `(define-syntax def-it4 (syntax-rules () ((_ x) (begin (begin-for-syntax (define secret 1)) x))))
+			      (def-it4 secret)`,
+			tail: `no such binding "secret" with compatible scopes (a same-named binding here is hygienically distinct): no such binding`,
+		},
+		{
+			name: "a phase-1 binder introduced by a macro is not called absent from phase 0",
+			src: `(define-syntax def-ct (syntax-rules () ((_ v) (begin-for-syntax (define hidden v)))))
+			      (def-ct 5)
+			      hidden`,
+			tail: `no such local or global binding "hidden": no such binding`,
+		},
+		{
+			name: "a phase-0 binder introduced by a macro is not called absent from phase 1",
+			src: `(define-syntax def0 (syntax-rules () ((_) (define hid0 1))))
+			      (def0)
+			      (begin-for-syntax hid0)`,
+			tail: `no such local or global binding "hid0" at phase 1 of this unit's macro tower: no such binding`,
+		},
+		{
+			// A local of an enclosing LOWER phase is invisible to the global
+			// table, so the clause must claim only the global table.
+			name: "a phase-0 local read from a transformer body is a global absence only",
+			src:  `(let ((loc 1)) (define-syntax q (lambda (stx) loc)) (q))`,
+			tail: `no such binding "loc" with compatible scopes at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
+		},
+		{
+			name: "the let-syntax form of the same local",
+			src:  `(let ((yy 1)) (let-syntax ((m (lambda (stx) yy))) (m)))`,
+			tail: `no such binding "yy" with compatible scopes at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := evalForPhaseDiagnostic(t, tc.src)
-			for _, w := range tc.want {
-				qt.Assert(t, strings.Contains(got, w), qt.IsTrue,
-					qt.Commentf("want substring: %s\ngot: %s", w, got))
-			}
-			for _, n := range tc.not {
-				qt.Assert(t, strings.Contains(got, n), qt.IsFalse,
-					qt.Commentf("unwanted substring: %s\ngot: %s", n, got))
-			}
+			qt.Assert(t, strings.HasSuffix(got, tc.tail), qt.IsTrue,
+				qt.Commentf("want tail: %s\ngot: %s", tc.tail, got))
 		})
 	}
 }

@@ -123,13 +123,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `no such binding "x" with compatible scopes` asserted a scope refusal it never
   tested: a typo and a name no scope set could find read the same as a hygiene
   failure, and a transformer body calling `cadr` (bound at phase 0, referenced at
-  phase 1) sent the reader hunting for a typo. The message now appends one clause:
-  `(bound at phase N)` when the spelling resolves at another phase,
+  phase 1) sent the reader hunting for a typo. The existing message is kept as a
+  prefix and one clause is appended: `(bound at phase N)` (or `phases N, M`)
+  when the spelling resolves under the use's scopes at other phases,
   `(a same-named binding here is hygienically distinct)` when it resolves only
-  under the wildcard scope set, `(no binding of that name at any phase)` when it
-  resolves nowhere. Existing text is unchanged and the sentinel is still
-  `ErrNoSuchBinding`. New `EnvironmentFrame.BoundPhases` reports every phase a
-  name resolves at.
+  under the wildcard scope set, `(no global binding of that name at any phase)`
+  when no global resolves anywhere. The absence clause claims the global table
+  only: a local of an enclosing lower phase is outside it. The sentinel is still
+  `ErrNoSuchBinding`. New `EnvironmentFrame.BoundPhases` and `BoundPhasesAnyScope`
+  report the phases a name resolves at; an ambiguous phase counts as bound
+  rather than raising.
 
 - **A resolver miss reports every arm and every extension it searched
   (I117).** `ChainFileResolver.ResolveAndOpen` and `ResolveLibraryFile` each kept
