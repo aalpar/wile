@@ -127,7 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `read-char` and `read-syntax` one position per port; the cached reader behind
   `read`/`read-syntax` kept its own and counted only what it scanned. A textual
   input port's rune reader now counts each rune it yields, so `read-char`,
-  `peek-char`, `read-line`, `read-string` and the reader itself all move one
+  `peek-char`, `read-line`, `read-string` and the reader itself share one
   position, with a CRLF pair one line ending and `peek-char`/unread restoring the
   position exactly, and the cached reader seeks to that position before each
   read. Reading the port's underlying `io.Reader` through `AsReader` on a textual

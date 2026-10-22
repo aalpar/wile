@@ -194,11 +194,38 @@ func TestReadSyntaxOnAFilePortCountsWhatReadCharConsumed(t *testing.T) {
 	c.Assert(r.Internal().SchemeString(), qt.Equals, "(1 0 2 2 6)")
 }
 
-// TestFailedLookaheadReleaseDropsTheCachedParser: when the port refuses to take
-// the lookahead rune back, the cached parser is left holding a rune the port has
-// already counted, so every later position it reported would be stale. The read
-// fails, and the next read builds a parser at the port's position.
-func TestFailedLookaheadReleaseDropsTheCachedParser(t *testing.T) {
+// TestFailedLookaheadReleaseKeepsTheDatumStream: when the port refuses the
+// lookahead rune back, the tokenizer holds the only copy, so the next read must
+// continue with it. Each row is the results of three read-syntax calls,
+// 'failed standing for the unread error the port raises.
+func TestFailedLookaheadReleaseKeepsTheDatumStream(t *testing.T) {
+	tcs := []struct {
+		name, src, want string
+	}{
+		{"a symbol ended by a paren", `ab(cd)`, "(failed (cd) #<eof>)"},
+		{"a symbol then a string then a symbol", `ab\"x y\" z`, "(failed failed z)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngineWithIOTest(t)
+			t.Cleanup(func() {
+				_ = engine.Close()
+			})
+			code := `(let* ((p (make-failing-unread-port "` + tc.src + `"))
+			         (rd (lambda () (guard (e (#t 'failed)) (syntax->datum (read-syntax p)))))
+			         (a (rd)) (b (rd)) (d (rd)))
+			    (list a b d))`
+			r := eval(t, engine, code)
+			c.Assert(r.Internal().SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestFailedLookaheadReleaseThenOtherReadsRebuildsTheParser: once another reader
+// has moved the port past the held rune, that rune is no longer the next one, so
+// the cached parser is replaced and counts from the port's position.
+func TestFailedLookaheadReleaseThenOtherReadsRebuildsTheParser(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngineWithIOTest(t)
 	t.Cleanup(func() {
