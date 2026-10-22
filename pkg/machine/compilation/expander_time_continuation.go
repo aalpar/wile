@@ -808,6 +808,14 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 		// ExpandOnce prune at their own returns), so a definition that only
 		// surfaces after several expansions is pruned at its own level. Identity
 		// while nothing mints.
+		//
+		// The origin chain is stamped here, on every closure transformer's
+		// output, and not inside the Go syntax-rules transform: syntax-case and
+		// the Scheme-layer forms pass through this point too, and none of them
+		// stamped (I099). It runs before the flip, while the nodes the
+		// transformer passed through are still the objects inputForm holds, so
+		// the stamp can leave the user's own syntax alone.
+		stx = syntax.StampOrigin(stx, pushOrigin(sym.Key(), sym.SourceContext()), inputForm)
 		stx = syntax.FlipScope(stx, introScope)
 		stx = p.pruneUseSiteScopes(stx)
 		// Recursively expand the result to handle nested macro calls
@@ -930,7 +938,13 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// Re-wrap the result to syntax. Already-syntax nodes (renames, and identifiers
 	// passed through from the spine) are returned unchanged; a raw symbol takes
 	// the keyword's context, so it resolves as if written at the use site.
-	wrapped, err := schemeutil.DatumToSyntaxValue(p.ctx, sym.SourceContext(), result)
+	//
+	// That context is also where the origin chain is stamped (I099): one clone
+	// per invocation, not one per node. It reaches exactly the nodes the
+	// transformer constructed from raw data. A node it hands back already
+	// wrapped keeps the context it arrived with, so a rename or a spine
+	// identifier is not stamped, the same coverage the seed has for scopes.
+	wrapped, err := schemeutil.DatumToSyntaxValue(p.ctx, sym.SourceContext().WithOrigin(pushOrigin(sym.Key(), sym.SourceContext())), result)
 	if err != nil {
 		return nil, wrapSourcedError(sym.SourceContext(), err)
 	}
@@ -1038,7 +1052,9 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	// Return the result WITHOUT recursive expansion
 	stx, ok := result.(syntax.SyntaxValue)
 	if ok {
-		return p.pruneUseSiteScopes(syntax.FlipScope(stx, introScope)), true, nil
+		stx = syntax.StampOrigin(stx, pushOrigin(sym.Key(), sym.SourceContext()), inputForm)
+		stx = syntax.FlipScope(stx, introScope)
+		return p.pruneUseSiteScopes(stx), true, nil
 	}
 
 	return nil, false, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxValue, "syntax transformer returned non-syntax value: %T", result))

@@ -119,6 +119,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`expanded from '<macro>'` is reported for every transformer kind, not only Go `syntax-rules` (I099).**
+  A malformed form built by a `syntax-case`, `er-macro-transformer` or Scheme-layer
+  macro now carries the same expansion chain, through both `expand` and
+  `expand-once`. The chain is stamped once on the transformer's output at the
+  expander boundary; `match.ExpandOptions.Origin` is retired. Syntax a macro
+  passes through unchanged keeps the user's own provenance.
+
 - **A textual input port owns its read position, so `read-syntax` counts what `read-char` consumed (I185).**
   `(let ((p (open-input-string "abc (x y)"))) (read-char p) (read-char p) (read-char p) (syntax-column (read-syntax p)))`
   answered `1` and now answers `4`; a `read-char` between two `read-syntax`

@@ -106,25 +106,6 @@ func TestCapturedValueToSyntax_FallbackPaths(t *testing.T) {
 		c.Assert(ok, qt.IsTrue)
 		c.Assert(so.Unwrap().SchemeString(), qt.Equals, `"test"`)
 	})
-
-	c.Run("with origin and useSiteCtx", func(c *qt.C) {
-		origin := &syntax.OriginInfo{Identifier: "test-macro"}
-		useSite := &syntax.SourceContext{Text: "use"}
-		str := values.NewString("val")
-		result, err := sm.capturedValueToSyntax(str, &ExpandOptions{UseSiteCtx: useSite, Origin: origin})
-		c.Assert(err, qt.IsNil)
-		c.Assert(result, qt.IsNotNil)
-		c.Assert(result.SourceContext().Origin, qt.Equals, origin)
-	})
-
-	c.Run("with origin but no useSiteCtx", func(c *qt.C) {
-		origin := &syntax.OriginInfo{Identifier: "test-macro"}
-		str := values.NewString("val")
-		result, err := sm.capturedValueToSyntax(str, &ExpandOptions{Origin: origin})
-		c.Assert(err, qt.IsNil)
-		c.Assert(result, qt.IsNotNil)
-		c.Assert(result.SourceContext().Origin, qt.Equals, origin)
-	})
 }
 
 // --- applyHygieneToSymbol tests ---
@@ -216,15 +197,6 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		sym := syntax.NewSyntaxSymbol("foo", &syntax.SourceContext{Text: "template"})
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, UseSiteCtx: useSite})
 		c.Assert(result, qt.IsNotNil)
-	})
-
-	c.Run("with origin info", func(c *qt.C) {
-		origin := &syntax.OriginInfo{Identifier: "test"}
-		srcCtx := &syntax.SourceContext{Text: "src"}
-		sym := syntax.NewSyntaxSymbol("foo", srcCtx)
-		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, Origin: origin})
-		ss := result.(*syntax.SyntaxSymbol)
-		c.Assert(ss.SourceContext().Origin, qt.Equals, origin)
 	})
 
 	c.Run("global binding keeps definition-site scopes and adds intro scope", func(c *qt.C) {

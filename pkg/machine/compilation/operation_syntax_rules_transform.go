@@ -337,35 +337,6 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *machine.MachineContext) (*mach
 		useSiteCtx = input.SourceContext()
 	}
 
-	// Extract macro name from the input form's car for origin tracking
-	macroName := ""
-	inputPair, ok := input.(*syntax.SyntaxPair)
-	if ok {
-		car := inputPair.Car()
-		if car != nil {
-			sym, ok := car.(*syntax.SyntaxSymbol)
-			if ok {
-				macroName = sym.Key()
-			}
-		}
-	}
-
-	// Create origin info for tracking macro expansion chains
-	// The origin chain is built up as macros expand other macros
-	var origin *syntax.OriginInfo
-	if macroName != "" {
-		// Check if input already has origin info (from a previous macro expansion)
-		var parentOrigin *syntax.OriginInfo
-		if useSiteCtx != nil && useSiteCtx.Origin != nil {
-			parentOrigin = useSiteCtx.Origin
-		}
-		origin = &syntax.OriginInfo{
-			Identifier: macroName,
-			Location:   useSiteCtx,
-			Parent:     parentOrigin,
-		}
-	}
-
 	// Create binding checker for R7RS auxiliary syntax hygiene.
 	// This allows the pattern matcher to check if an identifier like => or else
 	// has been locally bound, in which case it shouldn't match the pattern literal.
@@ -404,7 +375,6 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *machine.MachineContext) (*mach
 			expanded, err := matcher.Expand(clause.Template, match.ExpandOptions{
 				FreeIds:          freeIds,
 				UseSiteCtx:       useSiteCtx,
-				Origin:           origin,
 				PatternVarSyntax: clause.PatternVarSyntax,
 			})
 			if err != nil {

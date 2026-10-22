@@ -41,15 +41,20 @@ func (p ValidationError) Error() string {
 // ErrorWithMaxOriginDepth returns the error message with a configurable origin chain depth.
 func (p ValidationError) ErrorWithMaxOriginDepth(maxDepth int) string {
 	var msg string
-	if loc := p.Source.Location(); loc != "" {
+	loc := p.Source.Location()
+	if loc != "" {
 		msg = fmt.Sprintf("%s: %s in %s form", loc, p.Message, p.Form)
-
-		// Add origin chain if present
-		if p.Source.Origin != nil {
-			msg += syntax.FormatOriginChain(p.Source.Origin, maxDepth)
-		}
 	} else {
 		msg = fmt.Sprintf("%s in %s form", p.Message, p.Form)
+	}
+
+	// The chain is independent of the node's own position: a node a transformer
+	// built carries the origin the expander stamped on it (StampOrigin) whether or
+	// not the transformer gave it a location, and each link names its own use
+	// site. Gating the chain on the position left every position-less node, such
+	// as a syntax-case template pair, reporting no expansion at all.
+	if p.Source != nil && p.Source.Origin != nil {
+		msg += syntax.FormatOriginChain(p.Source.Origin, maxDepth)
 	}
 	return msg
 }
