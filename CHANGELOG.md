@@ -119,6 +119,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A textual input port owns its read position, so `read-syntax` counts what `read-char` consumed (I185).**
+  `(let ((p (open-input-string "abc (x y)"))) (read-char p) (read-char p) (read-char p) (syntax-column (read-syntax p)))`
+  answered `1` and now answers `4`; a `read-char` between two `read-syntax`
+  calls moved the next datum's line as well as its column
+  (`(a b)\n  (c d)`: second datum `1:5`, now `2:2`). R7RS §6.13.2 gives `read`,
+  `read-char` and `read-syntax` one position per port; the cached reader behind
+  `read`/`read-syntax` kept its own and counted only what it scanned. A textual
+  input port's rune reader now counts each rune it yields, so `read-char`,
+  `peek-char`, `read-line`, `read-string` and the reader itself share one
+  position, with a CRLF pair one line ending and `peek-char`/unread restoring the
+  position exactly, and the cached reader seeks to that position before each
+  read. Reading the port's underlying `io.Reader` through `AsReader` on a textual
+  port bypasses the counter. Positions of an uninterrupted read are unchanged.
+  New: `(*values.PortObject).ReadPosition()`, `values.AdvanceIndexes` and
+  `(*parser.Parser).SeekTo`.
+
 - **A textual input port carries the name it was opened under (I055).**
   `(syntax-source (read-syntax p))` on `(open-input-file "f.scm")` answered `#f`
   and `error-object-source` of a read error from that port answered `2:5`; the

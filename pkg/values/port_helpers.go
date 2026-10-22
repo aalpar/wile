@@ -79,7 +79,11 @@ func guardedReadRune(b *portBase, r io.RuneReader) (rune, int, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	return r.ReadRune()
+	c, n, err := r.ReadRune()
+	if n > 0 {
+		b.consumed(c, n)
+	}
+	return c, n, err
 }
 
 func guardedUnreadRune(b *portBase, r RuneUnreader) error {
@@ -87,7 +91,12 @@ func guardedUnreadRune(b *portBase, r RuneUnreader) error {
 	if err != nil {
 		return err
 	}
-	return r.UnreadRune()
+	err = r.UnreadRune()
+	if err != nil {
+		return err
+	}
+	b.unconsumed()
+	return nil
 }
 
 func guardedWrite(b *portBase, w io.Writer, bs []byte) (int, error) {

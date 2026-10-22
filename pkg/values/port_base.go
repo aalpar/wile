@@ -39,9 +39,10 @@ const (
 	portKindBytevectorInputOutput = "bytevector-input-output-port"
 )
 
-// portBase tracks the closed state of a port and optionally holds
-// an io.Closer for the underlying stream. *PortObject is its sole embedder;
-// portBase supplies guardClosed and a base Close, and *PortObject shadows
+// portBase tracks the closed state of a port, optionally holds an io.Closer for
+// the underlying stream, and counts the position of the port's rune reader.
+// *PortObject is its sole embedder; portBase supplies guardClosed, a base Close
+// and the position arithmetic (consumed, unconsumed), and *PortObject shadows
 // IsClosed/Close with nil-safe wrappers.
 //
 // Close semantics:
@@ -62,6 +63,51 @@ type portBase struct {
 	// never a path to open. "" means the port has no name to give (string
 	// and bytevector ports, in-memory buffers).
 	srcName string
+	// pos is where the port's next rune stands, counted by the port's guarded
+	// rune reader (guardedRuneReader) as it yields runes, so it already includes
+	// what the tokenizer itself consumed and excludes the lookahead it handed
+	// back. Only that reader counts: a consumer that reads the underlying
+	// io.Reader through AsReader on a textual port bypasses the counter, and
+	// guardedRead and the byte path do not count. No textual consumer in the
+	// tree reads that way. last is the rune consumed just before pos: AdvanceIndexes
+	// needs it to tell the '\n' of a CRLF pair from a bare one. posBefore and
+	// lastBefore are the same pair one read earlier, which is exactly what
+	// UnreadRune restores; the io.RuneScanner contract allows one rune of
+	// unread, so one step of history is the whole of it.
+	//
+	// Not synchronised: read-char takes no per-port lock, so two threads
+	// reading one port race here as they race on the stream itself (see
+	// ReadPosition).
+	pos, posBefore   SourceIndexes
+	last, lastBefore rune
+}
+
+// portOrigin is where a port's first rune stands: index 0, column 0, line 1
+// (SourceIndexes documents line as 1-based, so the struct zero value is not it).
+func portOrigin() SourceIndexes {
+	return NewSourceIndexes(0, 0, 1)
+}
+
+// position returns where the port's next rune stands. pos counts lines from
+// zero, so a port that has read nothing is at the struct zero value and needs no
+// initialisation; SourceIndexes documents line as 1-based, so the shift happens
+// here and nowhere else.
+func (p *portBase) position() SourceIndexes {
+	return NewSourceIndexes(p.pos.Index(), p.pos.Column(), p.pos.Line()+1)
+}
+
+// consumed records that one rune of n bytes has been read from the port.
+func (p *portBase) consumed(r rune, n int) {
+	p.posBefore, p.lastBefore = p.pos, p.last
+	p.pos = AdvanceIndexes(p.pos, p.last, r, n)
+	p.last = r
+}
+
+// unconsumed undoes the most recent consumed. The caller has already seen the
+// underlying reader accept the unread, so the history it restores is current.
+func (p *portBase) unconsumed() {
+	p.pos = p.posBefore
+	p.last = p.lastBefore
 }
 
 // IsClosed returns true if the port has been closed.
