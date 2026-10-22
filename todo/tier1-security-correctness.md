@@ -643,8 +643,8 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   abandons it); tutorial chapter 06 calls C_6 and 2·K_3 cospectral, chapter 05 lists a
   nonexistent `(wile algebra field)`; `Makefile` `bench-gabriel-compare` names `ack`.
 - [x] `read-syntax` positions do not count characters `read-char` consumed between reads (needs
-  port-owned position tracking). [Done 2026-10-20, P7.4 `fix/port-owned-read-position`, merge SHA
-  at Step 8: `portBase` counts every rune its rune reader yields with `values.AdvanceIndexes` (two
+  port-owned position tracking). [Done 2026-10-20, P7.4 `fix/port-owned-read-position`, merge `97821490`
+  (`6faa74ff`, `1f202f81`, `5a703aa4`, crosscheck `59970863`, re-review `b5ccf9ce`): `portBase` counts every rune its rune reader yields with `values.AdvanceIndexes` (two
   runes of history, so unread restores the CRLF `prev`), and `readSyntaxCached` seeks the parser to
   `PortObject.ReadPosition` before each read; the first read builds the tokenizer with
   `NewTokenizerAt`, never `SeekTo` (that starts the first token a rune late). Row 2's LINE was wrong
