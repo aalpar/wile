@@ -72,7 +72,7 @@ func TestSeekToRepositionsAReleasedTokenizer(t *testing.T) {
 		_, _, err = r.ReadRune()
 		c.Assert(err, qt.IsNil)
 	}
-	tk.SeekTo(syntax.NewSourceIndexes(6, 2, 2), ' ')
+	c.Assert(tk.SeekTo(syntax.NewSourceIndexes(6, 2, 2), ' '), qt.IsTrue)
 
 	tok, err = tk.Next()
 	c.Assert(err, qt.IsNil)
@@ -91,7 +91,8 @@ func TestSeekToDoesNothingToATokenizerHoldingLookahead(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(tok.String(), qt.Equals, "ab")
 
-	tk.SeekTo(syntax.NewSourceIndexes(40, 40, 9), 'z')
+	c.Assert(tk.SeekTo(syntax.NewSourceIndexes(40, 40, 9), 'z'), qt.IsFalse,
+		qt.Commentf("a tokenizer holding its lookahead reports that it did not move"))
 
 	tok, err = tk.Next()
 	c.Assert(err, qt.IsNil)

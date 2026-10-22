@@ -51,6 +51,22 @@ func TestAdvanceIndexes(t *testing.T) {
 			NewSourceIndexes(3, 3, 1), 'c', '\t', 1, NewSourceIndexes(4, 8, 1)},
 		{"tab on a stop moves a whole stop",
 			NewSourceIndexes(8, 8, 1), 'x', '\t', 1, NewSourceIndexes(9, 16, 1)},
+		{"the rune just above CR is ordinary",
+			NewSourceIndexes(2, 2, 1), 'x', '\x0e', 1, NewSourceIndexes(3, 3, 1)},
+		{"CR itself is a line ending",
+			NewSourceIndexes(2, 2, 1), 'x', '\r', 1, NewSourceIndexes(3, 0, 2)},
+		{"LF itself is a line ending",
+			NewSourceIndexes(2, 2, 1), 'x', '\n', 1, NewSourceIndexes(3, 0, 2)},
+		{"vertical tab is ordinary",
+			NewSourceIndexes(2, 2, 1), 'x', '\v', 1, NewSourceIndexes(3, 3, 1)},
+		{"form feed is ordinary",
+			NewSourceIndexes(2, 2, 1), 'x', '\f', 1, NewSourceIndexes(3, 3, 1)},
+		{"NUL is ordinary",
+			NewSourceIndexes(2, 2, 1), 'x', 0, 1, NewSourceIndexes(3, 3, 1)},
+		{"a three-byte rune is three bytes and one column",
+			NewSourceIndexes(2, 2, 1), 'x', '\u20ac', 3, NewSourceIndexes(5, 3, 1)},
+		{"a four-byte rune above the BMP is four bytes and one column",
+			NewSourceIndexes(2, 2, 1), 'x', '\U0001F600', 4, NewSourceIndexes(6, 3, 1)},
 		{"tab at column 7 does not over-advance (the Tab method would)",
 			NewSourceIndexes(7, 7, 1), 'x', '\t', 1, NewSourceIndexes(8, 8, 1)},
 	}
@@ -185,4 +201,20 @@ func TestPortReadPosition(t *testing.T) {
 		at, _ := p.ReadPosition()
 		c.Assert(at, qt.Equals, NewSourceIndexes(1, 1, 1))
 	})
+}
+
+func TestPortReadPositionAfterAFailedUnread(t *testing.T) {
+	c := qt.New(t)
+	p := NewStringInputPortWithBuffer(bytes.NewBufferString("a"))
+	rr, _ := p.AsRuneReader()
+	urr, _ := p.AsRuneUnreader()
+	_, _, err := rr.ReadRune()
+	c.Assert(err, qt.IsNil)
+	_, _, err = rr.ReadRune() // EOF: bytes.Buffer forgets the last ReadRune
+	c.Assert(err, qt.IsNotNil)
+	err = urr.UnreadRune()
+	c.Assert(err, qt.IsNotNil)
+	at, prev := p.ReadPosition()
+	c.Assert(at, qt.Equals, NewSourceIndexes(1, 1, 1))
+	c.Assert(prev, qt.Equals, 'a')
 }

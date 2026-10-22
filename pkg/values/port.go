@@ -125,16 +125,18 @@ func (p *PortObject) PortName() string {
 
 // ReadPosition returns where the port's next rune stands (index in bytes, column
 // in characters, line from 1) and the rune consumed just before it (0 when none).
-// Every textual reader counts here as it consumes, so the answer is the one
-// position R7RS §6.13.2 gives read, read-char and read-syntax together; a
-// reader that keeps its own position (the cached tokenizer behind read-syntax)
-// takes it from here between reads. A port that has read nothing, a port with no
-// rune reader, and a nil port all stand at the origin.
+// The port's rune reader counts as it yields runes, so every consumer that reads
+// runes through it (read-char, peek-char, read-line, read-string and the reader
+// behind read and read-syntax) moves the one position R7RS §6.13.2 gives them
+// together; a reader that keeps its own position (the cached tokenizer) takes it
+// from here between reads. A consumer that reads the underlying io.Reader
+// through AsReader on a textual port bypasses the counter. A port that has read
+// nothing, a port with no rune reader, and a nil port all stand at the origin.
 //
-// The counter is not synchronised: read-char takes no per-port lock, so a
-// ReadPosition racing a read-char on another thread can see a position the
-// stream never held. That is the same exposure the stream itself has to two
-// readers on one port, not a new one.
+// The counter is not synchronised. Two readers racing on one port already race
+// on the stream itself; what is new is that the position, three ints copied
+// without a lock, can be torn, and a cached tokenizer seeked to a torn position
+// reports a location the port never held.
 func (p *PortObject) ReadPosition() (SourceIndexes, rune) {
 	if p == nil {
 		return portOrigin(), 0

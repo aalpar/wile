@@ -30,7 +30,7 @@ import (
 func TestParserSeekToBeforeTheFirstRead(t *testing.T) {
 	c := qt.New(t)
 	p := parser.NewParser(nil, true, strings.NewReader("(x)"))
-	p.SeekTo(syntax.NewSourceIndexes(12, 7, 3), 0)
+	c.Assert(p.SeekTo(syntax.NewSourceIndexes(12, 7, 3), 0), qt.IsTrue)
 
 	got, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -51,9 +51,36 @@ func TestParserSeekToBetweenReads(t *testing.T) {
 		_, _, err = r.ReadRune()
 		c.Assert(err, qt.IsNil)
 	}
-	p.SeekTo(syntax.NewSourceIndexes(6, 2, 2), ' ')
+	c.Assert(p.SeekTo(syntax.NewSourceIndexes(6, 2, 2), ' '), qt.IsTrue)
 
 	got, err := p.ReadSyntax(context.Background())
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.SourceContext().Start, qt.Equals, syntax.NewSourceIndexes(6, 2, 2))
+}
+
+// TestParserSeekToReportsAStaleTokenizer: a parser whose tokenizer still holds
+// its lookahead (the release was never done or failed) cannot be repositioned,
+// and says so.
+func TestParserSeekToReportsAStaleTokenizer(t *testing.T) {
+	c := qt.New(t)
+	p := parser.NewParser(nil, true, strings.NewReader("(a) (b)"))
+
+	_, err := p.ReadSyntax(context.Background())
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(p.SeekTo(syntax.NewSourceIndexes(40, 40, 9), 'z'), qt.IsFalse)
+}
+
+// TestParserSeekToIgnoresADeadParser: death is permanent, so a seek neither
+// revives the parser nor reports it stale.
+func TestParserSeekToIgnoresADeadParser(t *testing.T) {
+	c := qt.New(t)
+	p := parser.NewParser(nil, true, strings.NewReader("(1 2] (3 4)"))
+
+	_, err := p.ReadSyntax(context.Background())
+	c.Assert(err, qt.IsNotNil)
+
+	c.Assert(p.SeekTo(syntax.NewSourceIndexes(0, 0, 1), 0), qt.IsTrue)
+	_, err = p.ReadSyntax(context.Background())
+	c.Assert(err, qt.IsNotNil, qt.Commentf("a dead parser stays dead"))
 }

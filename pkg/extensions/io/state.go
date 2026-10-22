@@ -283,13 +283,24 @@ func (p *State) readSyntaxCached(ctx context.Context, port *values.PortObject, m
 		entry.parser = entry.mk()
 		entry.mk = nil
 	}
-	seekToPortPosition(port, entry.parser)
+	if !seekToPortPosition(port, entry.parser) {
+		// The cached parser's tokenizer still holds a lookahead rune the port has
+		// already counted, so its positions are stale. Reader state that outlives
+		// a datum (fold-case mode) is lost with it, which a failed release has
+		// already cost the datum it was releasing.
+		entry.parser = mk()
+		seekToPortPosition(port, entry.parser)
+	}
 	q, err := entry.parser.ReadSyntax(ctx)
 	if err != nil {
 		return nil, err
 	}
 	err = releaseLookahead(port, entry.parser)
 	if err != nil {
+		// The tokenizer is left holding the lookahead the port refused to take
+		// back, so this parser would count from a position the port no longer
+		// has. Drop it: the next read builds one at the port's position.
+		evictPortCache(p, port)
 		return nil, err
 	}
 	return q, nil
@@ -301,9 +312,10 @@ func (p *State) readSyntaxCached(ctx context.Context, port *values.PortObject, m
 // this a read-syntax after a read-char reports where the tokenizer last stopped,
 // not where the port is. Before the first read it sets where the tokenizer
 // starts; afterwards it repositions the tokenizer that released its lookahead.
-func seekToPortPosition(port *values.PortObject, p *parser.Parser) {
+// It reports whether the parser now stands at the port's position.
+func seekToPortPosition(port *values.PortObject, p *parser.Parser) bool {
 	at, prev := port.ReadPosition()
-	p.SeekTo(at, prev)
+	return p.SeekTo(at, prev)
 }
 
 // releaseLookahead hands a reader's one-rune lookahead back to port. Every

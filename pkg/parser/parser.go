@@ -95,15 +95,23 @@ func NewParserWithFile(env *environment.EnvironmentFrame, skipComments bool, rdr
 // rune consumed just before it) so positions it reports count what other
 // consumers of the same reader took between reads. Before the first read it sets
 // where the tokenizer starts; afterwards it repositions a tokenizer that has
-// released its lookahead (ReleaseLookahead) and does nothing to one that has not.
-// A dead parser ignores it: death is permanent.
-func (p *Parser) SeekTo(at syntax.SourceIndexes, prev rune) {
+// released its lookahead (ReleaseLookahead).
+//
+// It reports whether the parser now stands at the given position. False means a
+// live tokenizer still holds its lookahead (a release that failed), so its
+// positions are stale and the caller should discard the parser and build another.
+// A dead parser reports true and does nothing: death is permanent, and what it
+// returns is its death, not a position.
+func (p *Parser) SeekTo(at syntax.SourceIndexes, prev rune) bool {
+	if p.dead != nil {
+		return true
+	}
 	if p.toks == nil {
 		p.origin = at
 		p.originPrev = prev
-		return
+		return true
 	}
-	p.toks.SeekTo(at, prev)
+	return p.toks.SeekTo(at, prev)
 }
 
 // SetMaxDepth sets the maximum structural nesting depth allowed during

@@ -15,9 +15,18 @@
 package io_test
 
 import (
+	"bytes"
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/extensions/files"
+	extio "github.com/aalpar/wile/pkg/extensions/io"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/wile"
 )
 
 // TestReadSyntaxCountsWhatTheOtherReadersConsumed pins I185: a textual port owns
@@ -42,92 +51,92 @@ func TestReadSyntaxCountsWhatTheOtherReadersConsumed(t *testing.T) {
 			`(let ((p (open-input-string "abc (x y)")))
 			   (read-char p) (read-char p) (read-char p)
 			   (let ((s (read-syntax p)))
-			     (list (syntax-line s) (syntax-column s))))`,
-			"(1 4)"},
+			     (list (syntax-line s) (syntax-column s) (syntax-position s))))`,
+			"(1 4 4)"},
 		{"read-char between two read-syntax calls crosses a line",
 			`(let ((p (open-input-string "(a b)\n  (c d)\n(e f)")))
 			   (let ((s1 (read-syntax p)))
 			     (read-char p) (read-char p) (read-char p)
 			     (let ((s2 (read-syntax p)))
 			       (list (syntax-line s1) (syntax-column s1)
-			             (syntax-line s2) (syntax-column s2)))))`,
-			"(1 0 2 2)"},
+			             (syntax-line s2) (syntax-column s2) (syntax-position s2)))))`,
+			"(1 0 2 2 8)"},
 		{"pin: the first datum of an untouched port is at line 1 column 0",
 			`(let ((s (read-syntax (open-input-string "(x y)"))))
-			   (list (syntax-line s) (syntax-column s)))`,
-			"(1 0)"},
+			   (list (syntax-line s) (syntax-column s) (syntax-position s)))`,
+			"(1 0 0)"},
 		{"read also advances the shared position",
 			`(let ((p (open-input-string "(a)\n(b) (c)")))
 			   (read p)
 			   (read-char p)
 			   (read p)
 			   (let ((s (read-syntax p)))
-			     (list (syntax-line s) (syntax-column s))))`,
-			"(2 4)"},
+			     (list (syntax-line s) (syntax-column s) (syntax-position s))))`,
+			"(2 4 8)"},
 		{"peek-char leaves the position alone",
 			`(let ((p (open-input-string "(a)  (b)")))
 			   (read-syntax p)
 			   (peek-char p) (peek-char p)
 			   (let ((s (read-syntax p)))
-			     (list (syntax-line s) (syntax-column s))))`,
-			"(1 5)"},
+			     (list (syntax-line s) (syntax-column s) (syntax-position s))))`,
+			"(1 5 5)"},
 		{"read-line consumes through the newline",
 			`(let ((p (open-input-string "junk line\n  (z)")))
 			   (read-line p)
 			   (let ((s (read-syntax p)))
-			     (list (syntax-line s) (syntax-column s))))`,
-			"(2 2)"},
+			     (list (syntax-line s) (syntax-column s) (syntax-position s))))`,
+			"(2 2 12)"},
 		{"read-string counts every character it returned",
 			`(let ((p (open-input-string "12345 (w)")))
 			   (read-string 6 p)
 			   (let ((s (read-syntax p)))
-			     (list (syntax-line s) (syntax-column s))))`,
-			"(1 6)"},
+			     (list (syntax-line s) (syntax-column s) (syntax-position s))))`,
+			"(1 6 6)"},
 		{"a tab read by read-char moves to the next tab stop",
 			"(let ((p (open-input-string \"\\t(t)\")))\n" +
 				"   (read-char p)\n" +
 				"   (let ((s (read-syntax p)))\n" +
-				"     (list (syntax-line s) (syntax-column s))))",
-			"(1 8)"},
+				"     (list (syntax-line s) (syntax-column s) (syntax-position s))))",
+			"(1 8 1)"},
 		{"a multibyte character is one column",
 			"(let ((p (open-input-string \"\u00e9\u00e9 (m)\")))\n" +
 				"   (read-char p) (read-char p)\n" +
 				"   (let ((s (read-syntax p)))\n" +
-				"     (list (syntax-line s) (syntax-column s))))",
-			"(1 3)"},
+				"     (list (syntax-line s) (syntax-column s) (syntax-position s))))",
+			"(1 3 5)"},
 		{"a CRLF read by read-char is one line ending",
 			"(let ((p (open-input-string \"a\\r\\n  (c)\")))\n" +
 				"   (read-char p) (read-char p) (read-char p)\n" +
 				"   (let ((s (read-syntax p)))\n" +
-				"     (list (syntax-line s) (syntax-column s))))",
-			"(2 2)"},
+				"     (list (syntax-line s) (syntax-column s) (syntax-position s))))",
+			"(2 2 5)"},
 		{"peek-char across a CRLF does not count the line twice",
 			"(let ((p (open-input-string \"a\\r\\n  (c)\")))\n" +
 				"   (read-char p) (read-char p)\n" +
 				"   (peek-char p)\n" +
 				"   (read-char p)\n" +
 				"   (let ((s (read-syntax p)))\n" +
-				"     (list (syntax-line s) (syntax-column s))))",
-			"(2 2)"},
+				"     (list (syntax-line s) (syntax-column s) (syntax-position s))))",
+			"(2 2 5)"},
 		{"read-char stops between the CR and the LF of a pair (first read)",
 			"(let ((p (open-input-string \"a\\r\\n  (c)\")))\n" +
 				"   (read-char p) (read-char p)\n" +
 				"   (let ((s (read-syntax p)))\n" +
-				"     (list (syntax-line s) (syntax-column s))))",
-			"(2 2)"},
+				"     (list (syntax-line s) (syntax-column s) (syntax-position s))))",
+			"(2 2 5)"},
 		{"read-char stops between the CR and the LF of a pair (later read)",
 			"(let ((p (open-input-string \"(a)\\r\\n(b)\")))\n" +
 				"   (read-syntax p)\n" +
 				"   (read-char p)\n" +
 				"   (let ((s (read-syntax p)))\n" +
-				"     (list (syntax-line s) (syntax-column s))))",
-			"(2 0)"},
+				"     (list (syntax-line s) (syntax-column s) (syntax-position s))))",
+			"(2 0 5)"},
 		{"a bare CR is a line ending",
 			"(let ((p (open-input-string \"a\\r  (c)\")))\n" +
 				"   (read-char p) (read-char p)\n" +
 				"   (let ((s (read-syntax p)))\n" +
-				"     (list (syntax-line s) (syntax-column s))))",
-			"(2 2)"},
+				"     (list (syntax-line s) (syntax-column s) (syntax-position s))))",
+			"(2 2 4)"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -138,16 +147,68 @@ func TestReadSyntaxCountsWhatTheOtherReadersConsumed(t *testing.T) {
 	}
 }
 
-// TestReadSyntaxAfterEOFKeepsCounting pins that evicting a port's cached parser
-// at end of input does not reset the position: a port that hit EOF and is read
-// again reports the same position the port itself holds.
+// TestReadSyntaxAfterEOFKeepsCounting: evicting a port's cached parser at end of
+// input must not reset the position. The port's source grows after the EOF, so
+// the fresh parser's start position is observable.
 func TestReadSyntaxAfterEOFKeepsCounting(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
+	buf := bytes.NewBufferString("(a)")
+	err := engine.Define("p", wile.WrapValue(values.NewStringInputPortWithBuffer(buf)))
+	c.Assert(err, qt.IsNil)
 
-	result := eval(t, engine, `(let ((p (open-input-string "(a)")))
-	  (read-syntax p)
-	  (read-syntax p)
-	  (eof-object? (read-syntax p)))`)
-	c.Assert(result.Internal().SchemeString(), qt.Equals, "#t")
+	r := eval(t, engine, `(begin (read-syntax p) (eof-object? (read-syntax p)))`)
+	c.Assert(r.Internal().SchemeString(), qt.Equals, "#t")
+	buf.WriteString("\n  (b)")
+	r = eval(t, engine, `(let ((s (read-syntax p))) (list (syntax-line s) (syntax-column s) (syntax-position s)))`)
+	c.Assert(r.Internal().SchemeString(), qt.Equals, "(2 2 6)")
+}
+
+// TestReadSyntaxOnAFilePortCountsWhatReadCharConsumed: a real file port rides a
+// bufio.Reader, whose UnreadRune is stricter than bytes.Buffer's.
+func TestReadSyntaxOnAFilePortCountsWhatReadCharConsumed(t *testing.T) {
+	c := qt.New(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "f.scm")
+	err := os.WriteFile(path, []byte("(a)\n  (b)"), 0o600)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(extio.Extension),
+		wile.WithExtension(files.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = engine.Close()
+	})
+	err = engine.Define("path", wile.WrapValue(values.NewString(path)))
+	c.Assert(err, qt.IsNil)
+
+	r := eval(t, engine, `(let ((p (open-input-file path)))
+	  (let ((s1 (read-syntax p)))
+	    (read-char p) (read-char p) (read-char p)
+	    (let ((s2 (read-syntax p)))
+	      (close-port p)
+	      (list (syntax-line s1) (syntax-column s1)
+	            (syntax-line s2) (syntax-column s2) (syntax-position s2)))))`)
+	c.Assert(r.Internal().SchemeString(), qt.Equals, "(1 0 2 2 6)")
+}
+
+// TestFailedLookaheadReleaseDropsTheCachedParser: when the port refuses to take
+// the lookahead rune back, the cached parser is left holding a rune the port has
+// already counted, so every later position it reported would be stale. The read
+// fails, and the next read builds a parser at the port's position.
+func TestFailedLookaheadReleaseDropsTheCachedParser(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngineWithIOTest(t)
+	t.Cleanup(func() {
+		_ = engine.Close()
+	})
+
+	r := eval(t, engine, `(let ((p (make-failing-unread-port "ab\n  cd")))
+	  (guard (e (#t 'failed)) (read-syntax p))
+	  (read-char p) (read-char p)
+	  (let ((s (read-syntax p)))
+	    (list (syntax-line s) (syntax-column s) (syntax-position s))))`)
+	c.Assert(r.Internal().SchemeString(), qt.Equals, "(2 2 5)")
 }

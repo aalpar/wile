@@ -282,10 +282,10 @@ func NewTokenizer(rdr io.RuneReader, ci bool) *Tokenizer {
 //
 // Seeding runeEnd is what matters — readNextRune copies it into runeStart and
 // the first token's positions derive from there — but all four are set so the
-// invariant is local and obvious. A tokenizer is positioned HERE, before its
-// constructor reads the first rune, and never by SeekTo afterwards: the
-// constructor leaves runeStart before that rune and runeEnd after it, and a seek
-// would collapse both onto one point, starting the first token a rune late.
+// invariant is local and obvious. The origin is given here, before the
+// constructor reads the first rune, because that read leaves runeStart before
+// the rune and runeEnd after it; a fresh tokenizer has released nothing, so
+// SeekTo would not apply (see SeekTo).
 func NewTokenizerAt(rdr io.RuneReader, ci bool, origin syntax.SourceIndexes, prev rune) *Tokenizer {
 	q := &Tokenizer{
 		rdr:        rdr,
@@ -307,20 +307,23 @@ func NewTokenizerAt(rdr io.RuneReader, ci bool, origin syntax.SourceIndexes, pre
 // consumed between reads: positions then count the characters read-char took,
 // not where this tokenizer last stopped.
 //
-// It applies only after ReleaseLookahead (which hands the one rune read past the
-// last token back to the port and leaves the tokenizer ready to read it again).
-// A tokenizer still holding that rune has counted it in the port's position
-// already, and seeking would drop it, so SeekTo then does nothing. Never call
-// it on a tokenizer fresh from NewTokenizer: see NewTokenizerAt.
-func (p *Tokenizer) SeekTo(origin syntax.SourceIndexes, prev rune) {
+// Precondition: ReleaseLookahead has run since the last Next, which hands the
+// one rune read past the last token back to the reader and leaves the tokenizer
+// ready to read it again. A tokenizer still holding that rune (a fresh one, or
+// one whose release failed) has counted it in the reader's position already, and
+// moving it would drop the rune, so SeekTo then does nothing and reports false.
+// The caller must treat false as "this tokenizer's positions are stale" and
+// discard it.
+func (p *Tokenizer) SeekTo(origin syntax.SourceIndexes, prev rune) bool {
 	if !p.released {
-		return
+		return false
 	}
 	p.runeStart = origin
 	p.runeEnd = origin
 	p.tokenStart = origin
 	p.tokenEnd = origin
 	p.cur = prev
+	return true
 }
 
 // Text returns the text of the current token.
