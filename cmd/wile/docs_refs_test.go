@@ -777,6 +777,7 @@ func TestCitationCheckersCatchTheirTargets(t *testing.T) {
 		{"one past the end", "three.go:4", 1, 1},
 		{"range end past the end", "three.go:1-9", 1, 1},
 		{"one stale number in a comma list", "three.go:1,2,40", 1, 1},
+		{"two stale numbers in a list is one finding", "three.go:1,40,50", 1, 1},
 		{"a comma list in range", "three.go:1,2,3", 1, 0},
 		{"ambiguous basename is skipped", "dup.go:99", 0, 0},
 		{"untracked file is skipped", "nowhere.go:99", 0, 0},
