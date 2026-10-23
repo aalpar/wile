@@ -83,12 +83,19 @@ func TestFlipScopeStampOrigin(t *testing.T) {
 		c.Assert(originOf(got.Car()), qt.IsNil)
 	})
 
-	t.Run("a symbol carrying the scope is the user's", func(t *testing.T) {
+	t.Run("an input symbol is the user's, a built one carrying the scope is not", func(t *testing.T) {
 		c := qt.New(t)
-		out := FlipScopeStampOrigin(SyntaxList(&SourceContext{}, inputSym("u"), sym("t")), intro, origin, NewPassThrough(nil)).(*SyntaxPair)
+		u := inputSym("u")
+		// built carries the scope, as a symbol made in the keyword's context
+		// does, but it is not an object of the input.
+		built := inputSym("v")
+		input := SyntaxList(&SourceContext{}, inputSym("m"), u)
+		out := FlipScopeStampOrigin(SyntaxList(&SourceContext{}, u, built, sym("t")), intro, origin, NewPassThrough(input)).(*SyntaxPair)
 		c.Assert(originOf(out.Car()), qt.IsNil)
 		c.Assert(hasIntro(out.Car()), qt.IsFalse)
-		c.Assert(originOf(out.Cdr().(*SyntaxPair).Car()), qt.Equals, origin)
+		rest := out.Cdr().(*SyntaxPair)
+		c.Assert(originOf(rest.Car()), qt.Equals, origin)
+		c.Assert(originOf(rest.Cdr().(*SyntaxPair).Car()), qt.Equals, origin)
 	})
 
 	t.Run("elements of an input vector and contents of an input box pass through", func(t *testing.T) {
@@ -214,5 +221,18 @@ func TestFlipScopeStampOrigin(t *testing.T) {
 			cur = next
 		}
 		c.Assert(n, qt.Equals, 6*smallSetMax)
+	})
+
+	t.Run("recording a vector or box containing itself terminates", func(t *testing.T) {
+		c := qt.New(t)
+		vec := NewSyntaxVector(&SourceContext{})
+		vec.Values = append(vec.Values, vec)
+		box := NewSyntaxBox(nil, &SourceContext{})
+		box.Value = box
+		for _, cyclic := range []SyntaxValue{vec, box} {
+			// Recording the input must visit the cycle once.
+			pass := NewPassThrough(SyntaxList(&SourceContext{}, inputSym("m"), cyclic))
+			c.Assert(pass.other.has(cyclic), qt.IsTrue)
+		}
 	})
 }

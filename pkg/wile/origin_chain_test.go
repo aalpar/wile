@@ -212,3 +212,69 @@ func TestMacroOriginChainSparesPassThrough(t *testing.T) {
 		})
 	}
 }
+
+// TestMacroOriginChainBlamesMacroBuiltSyntax: syntax a transformer builds in
+// the keyword's context carries the introduction scope, as the user's input
+// does, and is the macro's all the same. Go and Scheme layers agree.
+func TestMacroOriginChainBlamesMacroBuiltSyntax(t *testing.T) {
+	defs := []struct{ name, def string }{
+		{"er literals", `(er-macro-transformer (lambda (f r c) (list 'lambda (list 'y 'y) 1)))`},
+		{"syntax-case datum->syntax on the keyword", `(lambda (stx) (syntax-case stx () ((k) (datum->syntax #'k '(lambda (y y) 1)))))`},
+	}
+	layers := []struct {
+		name string
+		opts []wile.EngineOption
+	}{{"go", nil}, {"scheme", []wile.EngineOption{wile.WithSchemeSyntaxForms()}}}
+	for _, def := range defs {
+		for _, layer := range layers {
+			t.Run(def.name+"/"+layer.name, func(t *testing.T) {
+				err := evalSyntaxFormsErr(t, "(define-syntax m "+def.def+")\n(m)", layer.opts...)
+				qt.Assert(t, err, qt.IsNotNil)
+				qt.Assert(t, err.Error(), qt.Contains, "duplicate parameter name")
+				qt.Assert(t, err.Error(), qt.Contains, "expanded from 'm' at :2:1")
+			})
+		}
+	}
+}
+
+// TestMacroOriginChainKeepsSplicedKeywordPosition: a keyword a macro splices
+// into head position is the user's identifier, with a position of its own, so
+// the inner link points at it and the macro that wrote the call around it is
+// not added as a second link. Only an ER rename, which has no position, falls
+// back to the call pair.
+func TestMacroOriginChainKeepsSplicedKeywordPosition(t *testing.T) {
+	src := "(define-syntax inner (syntax-rules () ((_ a) (let ((a)) a))))\n" +
+		"(define-syntax outer (syntax-rules () ((_ k) (k z))))\n(outer inner)"
+	layers := []struct {
+		name string
+		opts []wile.EngineOption
+	}{{"go", nil}, {"scheme", []wile.EngineOption{wile.WithSchemeSyntaxForms()}}}
+	for _, layer := range layers {
+		t.Run(layer.name, func(t *testing.T) {
+			err := evalSyntaxFormsErr(t, src, layer.opts...)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, err.Error(), qt.Contains, "in let form\n  expanded from 'inner' at :3:7: invalid syntax")
+			qt.Assert(t, err.Error(), qt.Not(qt.Contains), "expanded from 'outer'")
+		})
+	}
+}
+
+// TestSchemeLayerERConversionMatchesDatumToSyntax: the Scheme layer's ER shim
+// converts a transformer's result as datum->syntax does, so a box keeps its raw
+// contents and a void stays a literal. The Go layer's converter has always
+// differed on both; that difference is recorded, not asserted as a goal.
+func TestSchemeLayerERConversionMatchesDatumToSyntax(t *testing.T) {
+	scheme := wile.WithSchemeSyntaxForms()
+	box := "(define-syntax m (er-macro-transformer (lambda (f r c) (list 'quote (box 'foo)))))\n(m)"
+	void := "(define-syntax m (er-macro-transformer (lambda (f r c) (if #f #f))))\n(list (m))"
+	t.Run("box/scheme", func(t *testing.T) {
+		qt.Assert(t, evalSyntaxForms(t, box, scheme), qt.Equals, "#&foo")
+	})
+	t.Run("void/scheme", func(t *testing.T) {
+		qt.Assert(t, evalSyntaxForms(t, void, scheme), qt.Equals, "(#<void>)")
+	})
+	t.Run("void/go refuses", func(t *testing.T) {
+		err := evalSyntaxFormsErr(t, void)
+		qt.Assert(t, err, qt.IsNotNil)
+	})
+}

@@ -25,15 +25,17 @@ import (
 // leaves these out of the origin stamp, because an error on a form the user
 // wrote must not name the macro that merely carried it.
 //
-// Pairs, literals, vectors and boxes are recorded by identity. Symbols are not
-// recorded at all: the expander puts the introduction scope on every input
-// symbol, so a symbol that still carries it on the way out came in through the
-// input (see FlipScopeStampOrigin). Keyed by node pointer rather than by
+// Every node is recorded by identity, symbols included. The introduction scope
+// cannot stand in for the symbols: it marks input symbols, but a symbol a
+// transformer builds in the keyword's context (datum->syntax on the keyword,
+// a quoted literal in an ER macro) carries it too, and is the macro's. Keyed
+// by node pointer rather than by
 // SyntaxValue interface: hashing an interface key costs a type-word compare and
 // a dynamic hash per node, and the set is built on every expansion.
 type PassThrough struct {
 	pairs nodeSet[*SyntaxPair]
 	objs  nodeSet[*SyntaxObject]
+	syms  nodeSet[*SyntaxSymbol]
 	other nodeSet[SyntaxValue]
 }
 
@@ -78,7 +80,7 @@ func (p *nodeSet[K]) add(k K) bool {
 	return false
 }
 
-// NewPassThrough records every pair, literal, vector and box of input. A nil
+// NewPassThrough records every pair, symbol, literal, vector and box of input. A nil
 // input yields an empty set.
 func NewPassThrough(input SyntaxValue) *PassThrough {
 	q := &PassThrough{}
@@ -101,6 +103,8 @@ func (p *PassThrough) Add(stx SyntaxValue) {
 		p.Add(s.Values[1])
 	case *SyntaxObject:
 		p.objs.add(s)
+	case *SyntaxSymbol:
+		p.syms.add(s)
 	case *SyntaxVector:
 		if p.other.add(s) {
 			return
@@ -159,10 +163,9 @@ func (p *originStamp) stamp(c *SourceContext) *SourceContext {
 // pair (the offending node for a malformed binding is the binding pair).
 //
 // A node of pass is the user's own syntax and is only flipped, never stamped.
-// A symbol is the user's own iff it carries scope: the expander put it on every
-// input symbol, and a symbol the transformer introduced lacks it. That makes a
-// datum->syntax symbol built from an input identifier count as the user's
-// (its context is the user's), which is the intent.
+// That includes a symbol: only the input's own symbol objects are the user's, so
+// a symbol the transformer built, in the keyword's context or not, is blamed on
+// the macro.
 //
 // WithOrigin replaces the context's Origin rather than appending, which is
 // correct because the caller builds the chain: origin.Parent is the origin the
@@ -183,8 +186,7 @@ func FlipScopeStampOrigin(stx SyntaxValue, scope *Scope, origin *OriginInfo, pas
 }
 
 // walk rebuilds stx. flip is false inside a box: FlipScope does not descend
-// into one, so its symbols keep their scopes and are told apart from the
-// transformer's own by the scope they carry all the same.
+// into one, so its symbols keep their scopes.
 func (p *originStamp) walk(stx SyntaxValue, flip bool) SyntaxValue {
 	switch s := stx.(type) {
 	case *SyntaxPair:
@@ -209,7 +211,13 @@ func (p *originStamp) walk(stx SyntaxValue, flip bool) SyntaxValue {
 		if c == nil {
 			c = &SourceContext{}
 		}
-		if p.scope == nil || !c.Scopes.Has(p.scope) {
+		user := false
+		// Only a symbol carrying the scope can be an input one, so the set is
+		// consulted for those alone.
+		if p.scope != nil && c.Scopes.Has(p.scope) && p.pass.syms.has(s) {
+			user = true
+		}
+		if !user {
 			c.Origin = p.origin
 		}
 		if flip && p.scope != nil {

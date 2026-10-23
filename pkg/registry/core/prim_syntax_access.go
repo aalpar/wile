@@ -129,7 +129,7 @@ func PrimErSyntax(cc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "%%er-syntax: template-id must be an identifier, got %s", mc.Arg(0).SchemeString())
 	}
 	sctx := templateID.SourceContext()
-	keep := &schemeutil.Kept{Spine: syntax.InputSpineOf(mc.Arg(1)), Ctx: sctx}
+	keep := &schemeutil.Kept{Spine: syntax.InputSpineOf(mc.Arg(1)), Ctx: sctx, AsDatumToSyntax: true}
 	ectx := mc.ExpanderContext()
 	if ectx != nil {
 		keep.Rebuilt = ectx.NotePassThrough

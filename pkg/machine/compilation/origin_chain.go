@@ -24,11 +24,13 @@ import (
 // macro that expands another: the inner use is written by the outer's template,
 // so it arrives wearing the outer expansion's origin.
 //
-// A keyword that is an ER rename carries no origin (the rename closure builds
-// it from the definition site), though the form around it does. When the
-// keyword has none and the call pair has one, the pair stands for the use site,
-// so the chain is not cut at the rename. A keyword with an origin of its own
-// always wins, which keeps a syntax-rules expansion's chain as it was.
+// A keyword that is an ER rename carries no source position at all (the rename
+// closure builds it from the definition site), though the form around it does.
+// For such a keyword the call pair stands for the use site, so the chain is not
+// cut at the rename. Any keyword with a position of its own keeps it, which
+// keeps a syntax-rules expansion's chain as it was: a user identifier a macro
+// splices into head position has no origin either, and must not be replaced by
+// the pair the macro wrote around it.
 //
 // The origin chain is stamped at the three places a transformer's output leaves
 // the kernel, not inside any one transformer: expandMacroInvocation and
@@ -39,7 +41,7 @@ import (
 // never stamped twice.
 func pushOrigin(macroName string, keywordCtx, pairCtx *syntax.SourceContext) *syntax.OriginInfo {
 	useCtx := keywordCtx
-	if (keywordCtx == nil || keywordCtx.Origin == nil) && pairCtx != nil && pairCtx.Origin != nil {
+	if isRenameContext(keywordCtx) && pairCtx != nil && pairCtx.Origin != nil {
 		useCtx = pairCtx
 	}
 	q := &syntax.OriginInfo{
@@ -50,4 +52,14 @@ func pushOrigin(macroName string, keywordCtx, pairCtx *syntax.SourceContext) *sy
 		q.Parent = useCtx.Origin
 	}
 	return q
+}
+
+// isRenameContext reports whether ctx is the position-less context the ER
+// rename closure gives its identifiers (resolveRenamedSymbol). Source text
+// positions start at line 1, so a zero start never belongs to read source.
+func isRenameContext(ctx *syntax.SourceContext) bool {
+	if ctx == nil {
+		return true
+	}
+	return ctx.Origin == nil && ctx.File == "" && ctx.Start == syntax.SourceIndexes{}
 }
