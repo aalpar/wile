@@ -912,6 +912,7 @@ func TestCitationCheckersCatchTheirTargets(t *testing.T) {
 		{"reversed range", "three.go:3-1", 1, 1, []string{past("1", "three.go:3-1", "pkg/b/three.go", "3", "range 3-1 is reversed")}},
 		{"line zero", "three.go:0", 1, 1, []string{past("1", "three.go:0", "pkg/b/three.go", "3", "line 0 is not a line")}},
 		{"a number too large to parse", "three.go:99999999999999999999", 1, 1, []string{past("1", "three.go:99999999999999999999", "pkg/b/three.go", "3", "unreadable line 99999999999999999999")}},
+		{"a range end too large to parse", "three.go:1-99999999999999999999", 1, 1, []string{past("1", "three.go:1-99999999999999999999", "pkg/b/three.go", "3", "unreadable line 99999999999999999999")}},
 		{"one stale number in a comma list", "three.go:1,2,40", 1, 1, []string{past("1", "three.go:1,2,40", "pkg/b/three.go", "3", "line 40 is past the end")}},
 		{"two stale numbers in a list is one finding", "three.go:1,40,50", 1, 1, []string{past("1", "three.go:1,40,50", "pkg/b/three.go", "3", "line 40 is past the end")}},
 		{"a comma list in range", "three.go:1,2,3", 1, 1, nil},
