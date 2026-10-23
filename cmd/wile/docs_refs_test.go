@@ -15,14 +15,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"maps"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -32,9 +35,10 @@ import (
 var docPathRef = regexp.MustCompile("`([^`\n]+)`|\\]\\(([^)\\s]+)\\)")
 
 // TestTrackedDocsDoNotReferenceIgnoredPaths guards the public docs against
-// pointing at files a clone does not have. The working-notes directories
-// (plans/, memory/) and the CLAUDE*.md files are gitignored, so a tracked doc
-// that cites one sends the reader to a path that exists only on the author's
+// pointing at files a clone does not have. plans/ and memory/ are tracked as
+// symlinks into a sibling checkout of the working notes, so nothing beneath
+// them is in a clone; the CLAUDE*.md files are gitignored. A tracked doc that
+// cites one sends the reader to a path that exists only on the author's
 // machine. Either inline the content or drop the pointer.
 func TestTrackedDocsDoNotReferenceIgnoredPaths(t *testing.T) {
 	root := gitOutput(t, ".", "rev-parse", "--show-toplevel")
@@ -497,4 +501,294 @@ func gitOutput(t *testing.T, dir string, args ...string) string {
 		t.Skipf("git %v: %v (not a git checkout?)", args, err)
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// The two citation checks below, TestCitedSymbolsExistWhereCited and
+// TestLineCitationCensusOnlyShrinks, walk `git ls-files -- '*.md'`. That set
+// holds no file under plans/ or memory/, so every plan file's citations are
+// outside these gates by construction, not by omission. The mechanism is the
+// symlink, not the ignore rule: plans/ and memory/ are tracked as mode-120000
+// symlinks, nothing beneath a symlink is in the index, and the /plans/ and
+// /memory/ patterns in .gitignore are inert for a tracked path (the file's own
+// comment is the authority). Every count quoted in these tests ("path-like
+// spans", "unresolved") is a count over the tracked Markdown, not the tree.
+//
+// Consequence: re-measuring the Go anchors inside the plan files after each
+// phase merge (the closeout audit's fault E1, remedy c) cannot be hosted here.
+// A pass over plans/ off the filesystem would not run in CI, which has no such
+// directory, and ratcheting 500 line numbers repeats the mistake E1 argues
+// against. That measurement stays a maintainer action with a written
+// specification and no gate.
+//
+// There is deliberately no path-existence arm. It has no red set that
+// uncleanedDocs does not already exempt; its basename-suffix fallback, which
+// would forgive a stale directory, is in direct tension with the directory
+// drift the symbol arm exists to catch; and the whole-tree scope is infeasible
+// (most path-like spans in tracked Markdown do not resolve).
+
+// symbolCitation matches a code-span identifier followed, within forty
+// characters, by a parenthesised code-span Go file: "`Sym` ... (`file.go`)".
+// The parenthesis must close straight after the file, so a comma list of files
+// does not match. That is the strict grammar; admitting lists also admits
+// fragments and file names read as symbols.
+var symbolCitation = regexp.MustCompile("`([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)`[^`\\n]{0,40}\\(`([A-Za-z0-9_./-]+\\.go)`\\)")
+
+// lineSpanCitation matches "file.ext:N", "file.ext:N-M" and the comma list
+// "file.ext:N,M,K". Unlike symbolCitation it admits lists, because a list is
+// exactly where a stale line hides: every number in it is a claim about the
+// file's length.
+var lineSpanCitation = regexp.MustCompile(`([A-Za-z0-9_./-]+\.(?:go|scm|sh|md)):([0-9]+(?:[-,][0-9]+)*)`)
+
+// lineCitationCeiling is the number of resolvable "file:N" spans in tracked
+// Markdown. It is the value TestLineCitationCensusOnlyShrinks prints, with no
+// slack: it may only go down, because a count that only falls is how a
+// citation habit is retired. Cite `file.go` and a symbol instead of a line.
+const lineCitationCeiling = 105
+
+// minSymbolChecks keeps the symbol check from passing on a grammar that has
+// stopped matching anything.
+const minSymbolChecks = 60
+
+// sourceIndex resolves the file paths a doc cites to tracked files and reads
+// them.
+type sourceIndex struct {
+	tracked map[string]bool
+	byBase  map[string][]string
+	read    func(file string) ([]byte, bool)
+}
+
+func newSourceIndex(tracked []string, read func(file string) ([]byte, bool)) *sourceIndex {
+	q := &sourceIndex{
+		tracked: map[string]bool{},
+		byBase:  map[string][]string{},
+		read:    read,
+	}
+	for _, file := range tracked {
+		q.tracked[file] = true
+		base := path.Base(file)
+		q.byBase[base] = append(q.byBase[base], file)
+	}
+	return q
+}
+
+// resolve maps a path as a doc writes it to the one tracked file it names. A
+// path that is not tracked, or whose trailing components name more than one
+// tracked file, resolves to nothing: a citation that cannot be pinned to a file
+// is skipped, not guessed.
+func (p *sourceIndex) resolve(written string) (string, bool) {
+	written = path.Clean(written)
+	if p.tracked[written] {
+		return written, true
+	}
+	var match []string
+	for _, candidate := range p.byBase[path.Base(written)] {
+		if strings.HasSuffix(candidate, "/"+written) {
+			match = append(match, candidate)
+		}
+	}
+	if len(match) != 1 {
+		return "", false
+	}
+	return match[0], true
+}
+
+// symbolCitationFindings returns how many symbol citations in body resolved to
+// a file, and one finding per citation whose file does not contain the symbol.
+// For a qualified name, Type.Method, the leaf is the part that is looked for.
+func symbolCitationFindings(idx *sourceIndex, doc, body string) (int, []string) {
+	var findings []string
+	checks := 0
+	for _, m := range symbolCitation.FindAllStringSubmatch(body, -1) {
+		file, ok := idx.resolve(m[2])
+		if !ok {
+			continue
+		}
+		src, ok := idx.read(file)
+		if !ok {
+			continue
+		}
+		checks++
+		leaf := m[1][strings.LastIndex(m[1], ".")+1:]
+		word := regexp.MustCompile(`\b` + regexp.QuoteMeta(leaf) + `\b`)
+		if word.Match(src) {
+			continue
+		}
+		findings = append(findings, doc+" cites `"+m[1]+"` in "+file+", which does not contain it")
+	}
+	return checks, findings
+}
+
+// lineCount is the number of lines in src, counting an unterminated last line.
+func lineCount(src []byte) int {
+	q := bytes.Count(src, []byte("\n"))
+	if len(src) > 0 && src[len(src)-1] != '\n' {
+		q++
+	}
+	return q
+}
+
+// lineSpanFindings returns how many "file:N" spans in body resolved to a file,
+// and one finding per span that names a line the file does not have.
+func lineSpanFindings(idx *sourceIndex, doc, body string) (int, []string) {
+	var findings []string
+	spans := 0
+	for _, m := range lineSpanCitation.FindAllStringSubmatch(body, -1) {
+		file, ok := idx.resolve(m[1])
+		if !ok {
+			continue
+		}
+		src, ok := idx.read(file)
+		if !ok {
+			continue
+		}
+		spans++
+		lines := lineCount(src)
+		for _, num := range strings.FieldsFunc(m[2], func(r rune) bool {
+			return r == '-' || r == ','
+		}) {
+			n, err := strconv.Atoi(num)
+			if err != nil || n <= lines {
+				continue
+			}
+			findings = append(findings, doc+" cites "+m[1]+":"+m[2]+", but "+file+" has "+strconv.Itoa(lines)+" lines")
+			break
+		}
+	}
+	return spans, findings
+}
+
+// citationCorpus is every tracked Markdown doc and the index of tracked files
+// its citations resolve against.
+func citationCorpus(t *testing.T) (*sourceIndex, map[string]string) {
+	t.Helper()
+	root := gitOutput(t, ".", "rev-parse", "--show-toplevel")
+	read := func(file string) ([]byte, bool) {
+		src, err := os.ReadFile(filepath.Join(root, file))
+		return src, err == nil
+	}
+	idx := newSourceIndex(strings.Split(gitOutput(t, root, "ls-files"), "\n"), read)
+	docs := map[string]string{}
+	for doc := range strings.SplitSeq(gitOutput(t, root, "ls-files", "--", "*.md"), "\n") {
+		src, ok := read(doc)
+		if !ok {
+			continue // deleted in the working tree; nothing to cite
+		}
+		docs[doc] = string(src)
+	}
+	return idx, docs
+}
+
+// TestCitedSymbolsExistWhereCited fails when a doc cites a symbol in a file
+// that does not contain it: a rename or deletion the prose never heard about.
+// A symbol outlives a line number, so this is the citation form worth gating.
+func TestCitedSymbolsExistWhereCited(t *testing.T) {
+	idx, docs := citationCorpus(t)
+	checks := 0
+	for _, doc := range slices.Sorted(maps.Keys(docs)) {
+		n, findings := symbolCitationFindings(idx, doc, docs[doc])
+		checks += n
+		for _, finding := range findings {
+			t.Error(finding)
+		}
+	}
+	if checks < minSymbolChecks {
+		t.Errorf("only %d symbol citations matched the grammar, want at least %d: the check has gone vacuous",
+			checks, minSymbolChecks)
+	}
+}
+
+// TestLineCitationCensusOnlyShrinks has two arms. A cited line the file does
+// not have is a defect and fails outright, at zero. The count of "file:N"
+// citations that do resolve is a ratchet: line numbers rot with every edit, so
+// the habit is retired by letting the count fall and never rise.
+func TestLineCitationCensusOnlyShrinks(t *testing.T) {
+	idx, docs := citationCorpus(t)
+	spans := 0
+	for _, doc := range slices.Sorted(maps.Keys(docs)) {
+		n, findings := lineSpanFindings(idx, doc, docs[doc])
+		spans += n
+		for _, finding := range findings {
+			t.Error(finding)
+		}
+	}
+	if spans > lineCitationCeiling {
+		t.Errorf("%d line citations in tracked Markdown, ceiling %d: cite a symbol instead of a line",
+			spans, lineCitationCeiling)
+	}
+	if spans < lineCitationCeiling {
+		t.Errorf("%d line citations in tracked Markdown, ceiling %d: lower lineCitationCeiling to %d",
+			spans, lineCitationCeiling, spans)
+	}
+}
+
+// TestCitationCheckersCatchTheirTargets pins the two checkers on a synthetic
+// tree. A checker that finds nothing passes the real corpus vacuously, so each
+// positive and each skip is asserted directly.
+func TestCitationCheckersCatchTheirTargets(t *testing.T) {
+	files := map[string]string{
+		"pkg/a/one.go":   "package a\n\nfunc Kept() {}\n\nfunc (p *T) Method() {}\n",
+		"pkg/a/dup.go":   "package a\n",
+		"pkg/b/dup.go":   "package b\n",
+		"pkg/b/three.go": "a\nb\nc",
+	}
+	var tracked []string
+	for file := range files {
+		tracked = append(tracked, file)
+	}
+	idx := newSourceIndex(tracked, func(file string) ([]byte, bool) {
+		src, ok := files[file]
+		return []byte(src), ok
+	})
+
+	symbols := []struct {
+		name   string
+		body   string
+		checks int
+		found  int
+	}{
+		{"present", "`Kept` (`pkg/a/one.go`)", 1, 0},
+		{"present by basename", "`Kept` is in (`one.go`)", 1, 0},
+		{"qualified, leaf present", "`T.Method` (`one.go`)", 1, 0},
+		{"absent", "`Gone` (`pkg/a/one.go`)", 1, 1},
+		{"only a substring of a word", "`Kep` (`one.go`)", 1, 1},
+		{"ambiguous basename is skipped", "`Gone` (`dup.go`)", 0, 0},
+		{"untracked file is skipped", "`Gone` (`nowhere.go`)", 0, 0},
+		{"a file list is outside the strict grammar", "`Gone` (`one.go`, `dup.go`)", 0, 0},
+		{"too far apart", "`Gone` " + strings.Repeat("x", 60) + " (`one.go`)", 0, 0},
+	}
+	for _, tc := range symbols {
+		t.Run("symbol/"+tc.name, func(t *testing.T) {
+			checks, findings := symbolCitationFindings(idx, "doc.md", tc.body)
+			if checks != tc.checks || len(findings) != tc.found {
+				t.Errorf("checks %d findings %v, want %d checks and %d findings",
+					checks, findings, tc.checks, tc.found)
+			}
+		})
+	}
+
+	lines := []struct {
+		name  string
+		body  string
+		spans int
+		found int
+	}{
+		{"in range", "pkg/b/three.go:3", 1, 0},
+		{"unterminated last line counts", "three.go:3", 1, 0},
+		{"one past the end", "three.go:4", 1, 1},
+		{"range end past the end", "three.go:1-9", 1, 1},
+		{"one stale number in a comma list", "three.go:1,2,40", 1, 1},
+		{"a comma list in range", "three.go:1,2,3", 1, 0},
+		{"ambiguous basename is skipped", "dup.go:99", 0, 0},
+		{"untracked file is skipped", "nowhere.go:99", 0, 0},
+		{"a URL does not resolve", "https://example.com/x/three.go:99", 0, 0},
+	}
+	for _, tc := range lines {
+		t.Run("line/"+tc.name, func(t *testing.T) {
+			spans, findings := lineSpanFindings(idx, "doc.md", tc.body)
+			if spans != tc.spans || len(findings) != tc.found {
+				t.Errorf("spans %d findings %v, want %d spans and %d findings",
+					spans, findings, tc.spans, tc.found)
+			}
+		})
+	}
 }
