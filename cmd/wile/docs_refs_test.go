@@ -524,16 +524,16 @@ func gitOutput(t *testing.T, dir string, args ...string) string {
 // Unresolvable citations. A citation whose file is not tracked, or whose
 // trailing path components name more than one tracked file, cannot be checked,
 // and is skipped by both checks. Skipping alone would let a rename hide: the
-// symbol check would see one citation fewer and the census would see one span
-// fewer, and a maintainer told to "lower the ceiling" would lock in the dead
-// citation. So both pins count what the grammar MATCHES, resolved or not, and
-// a rename leaves them unchanged. The two pins differ on purpose in what they
-// do when the count moves: a citation that stops resolving moves
-// symbolCitationMatches (resolved ones) and fails it, which is the prompt to
-// look; a citation deleted outright lowers both and is a legitimate edit that
-// the message tells the maintainer to record. The counts cannot tell a
-// deletion from a rename on their own; the resolved-symbol pin plus the
-// per-citation findings are what do.
+// checks would see one citation fewer and nothing would say why. Each check
+// therefore pins two numbers exactly, in both directions. The first counts
+// everything the grammar MATCHES, resolved or not: a rename leaves it
+// unchanged, and it drops only when a citation is deleted, which is a
+// legitimate edit the message tells the maintainer to record. The second
+// counts only the RESOLVED citations (symbolCitationsResolved,
+// lineCitationsResolved): a rename or removal of a cited file moves it and
+// fails, which is the prompt to look. Neither number can tell a deletion from
+// a rename by itself; the pair can, because a rename moves one and not the
+// other.
 
 // symbolCitation matches a code-span identifier followed, within forty
 // characters on one line, by a parenthesised code-span Go file:
@@ -549,14 +549,9 @@ var symbolCitation = regexp.MustCompile("`([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_]
 // `file.go:12` in a transcript is still a claim about that file.
 var lineSpanCitation = regexp.MustCompile(`([A-Za-z0-9_./-]+\.(?:go|scm|sh|md)):([0-9]+(?:[-,][0-9]+)*)`)
 
-// goComments removes block and line comments from Go source so that a symbol
-// named only in a comment does not count as defined. It does not parse: a "//"
-// inside a string literal also cuts the rest of its line, which can only turn a
-// pass into a finding, never hide one.
-var goComments = regexp.MustCompile(`(?s)/\*.*?\*/|//[^\n]*`)
-
 // lineCitationCeiling is the number of "file:N" spans in tracked Markdown,
-// resolved or not (see "Unresolvable citations" above). It is the value
+// resolved or not (see "Unresolvable citations" above). lineCitationsResolved,
+// below, pins how many of them name a tracked file. It is the value
 // TestLineCitationCensusOnlyShrinks prints, with no slack, and it may only go
 // down: line numbers rot with every edit, so the habit is retired by letting
 // the count fall and never rise. Cite `file.go` and a symbol instead of a line.
@@ -567,13 +562,18 @@ var goComments = regexp.MustCompile(`(?s)/\*.*?\*/|//[^\n]*`)
 // message names the value to write.
 const lineCitationCeiling = 130
 
-// symbolCitationMatches is the number of symbol citations the grammar matches
-// that resolve to a tracked file, pinned exactly in both directions. A
-// citation that stops resolving (a rename, a move) drops it and fails; a new
-// one raises it and fails until the pin is raised. Together with the
-// per-citation findings this keeps the check from going vacuous or from
-// quietly shrinking.
-const symbolCitationMatches = 105
+// symbolCitationsResolved is the number of symbol citations that resolve to a
+// tracked file (the grammar matches 107; the other two name no tracked file),
+// pinned exactly in both directions. A citation that stops resolving (a
+// rename, a move) drops it and fails; a new one raises it and fails until the
+// pin is raised. Together with the per-citation findings this keeps the check
+// from going vacuous or from quietly shrinking.
+const symbolCitationsResolved = 105
+
+// lineCitationsResolved is the number of "file:N" spans that name a tracked
+// file (130 match; 27 do not), pinned exactly in both directions. Renaming a
+// file that is cited only by line number moves it and nothing else.
+const lineCitationsResolved = 103
 
 // sourceIndex resolves the file paths a doc cites to tracked files and reads
 // them.
@@ -626,6 +626,71 @@ func (p *sourceIndex) resolve(written string) (string, bool) {
 	return match[0], true
 }
 
+// skipQuoted returns the index just past the interpreted string or rune
+// literal that opens at src[i]. An unterminated literal ends at the line break,
+// so one stray quote cannot swallow the rest of the file.
+func skipQuoted(src []byte, i int) int {
+	quote := src[i]
+	j := i + 1
+	for j < len(src) && src[j] != quote && src[j] != '\n' {
+		if src[j] == '\\' {
+			j++
+		}
+		j++
+	}
+	if j < len(src) && src[j] == quote {
+		j++
+	}
+	return min(j, len(src))
+}
+
+// stripGoComments removes block and line comments from Go source so that a
+// symbol named only in a comment does not count as defined. It is a lexical
+// scan, not a parser: it steps over interpreted strings, runes and raw strings
+// so that "pkg/*" or "http://x" does not open a comment. Source it misreads
+// can only keep or drop text around the misreading; it never reads a symbol
+// out of a comment it recognised.
+func stripGoComments(src []byte) []byte {
+	q := make([]byte, 0, len(src))
+	for i := 0; i < len(src); {
+		c := src[i]
+		pair := ""
+		if i+1 < len(src) {
+			pair = string(src[i : i+2])
+		}
+		switch {
+		case c == '"' || c == '\'':
+			j := skipQuoted(src, i)
+			q = append(q, src[i:j]...)
+			i = j
+		case c == '`':
+			end := bytes.IndexByte(src[i+1:], '`')
+			j := len(src)
+			if end >= 0 {
+				j = i + 1 + end + 1
+			}
+			q = append(q, src[i:j]...)
+			i = j
+		case pair == "//":
+			for i < len(src) && src[i] != '\n' {
+				i++
+			}
+		case pair == "/*":
+			end := bytes.Index(src[i+2:], []byte("*/"))
+			next := len(src)
+			if end >= 0 {
+				next = i + 2 + end + 2
+			}
+			i = next
+			q = append(q, ' ')
+		default:
+			q = append(q, c)
+			i++
+		}
+	}
+	return q
+}
+
 // lineOf is the 1-based line of body at byte offset off.
 func lineOf(body string, off int) int {
 	return strings.Count(body[:off], "\n") + 1
@@ -652,7 +717,7 @@ func symbolCitationFindings(idx *sourceIndex, doc, body string) (matched, resolv
 		resolved++
 		leaf := sym[strings.LastIndex(sym, ".")+1:]
 		word := regexp.MustCompile(`\b` + regexp.QuoteMeta(leaf) + `\b`)
-		if word.Match(goComments.ReplaceAll(src, nil)) {
+		if word.Match(stripGoComments(src)) {
 			continue
 		}
 		findings = append(findings, doc+":"+strconv.Itoa(lineOf(body, m[0]))+": cites `"+sym+"` in "+file+", which does not define it")
@@ -674,6 +739,9 @@ func lineCount(src []byte) int {
 // reversed range, an end past the file and a number too large to parse are all
 // the same defect: the citation names lines the file does not have.
 func spanProblem(part string, lines int) string {
+	if strings.Count(part, "-") > 1 {
+		return "range " + part + " is malformed"
+	}
 	lo, hi, isRange := strings.Cut(part, "-")
 	if !isRange {
 		hi = lo
@@ -730,13 +798,21 @@ func lineSpanFindings(idx *sourceIndex, doc, body string) (matched, resolved int
 
 // ratchetVerdict compares a measured count with the constant that pins it, in
 // both directions, and returns the failure message or "" when they are equal.
-// A pin that is only checked from one side drifts from the measurement.
-func ratchetVerdict(what, constant string, got, pinned int) string {
+// A pin that is only checked from one side drifts from the measurement. The
+// advice for a count that fell depends on what the count is: an all-matches
+// count falls only when a citation is deleted, while a resolved count also
+// falls when a cited file is renamed or removed.
+func ratchetVerdict(what, constant string, got, pinned int, resolved bool) string {
+	n := strconv.Itoa(got)
+	head := n + " " + what + ", " + constant + " is " + strconv.Itoa(pinned) + ": "
 	if got > pinned {
-		return strconv.Itoa(got) + " " + what + ", " + constant + " is " + strconv.Itoa(pinned) + ": if citations were added, raise " + constant + " to " + strconv.Itoa(got) + " (a symbol outlives a line number)"
+		return head + "if citations were added, raise " + constant + " to " + n + " (a symbol outlives a line number)"
+	}
+	if got < pinned && resolved {
+		return head + "a cited file was renamed or removed (update the citation), or a citation was deleted (lower " + constant + " to " + n + ")"
 	}
 	if got < pinned {
-		return strconv.Itoa(got) + " " + what + ", " + constant + " is " + strconv.Itoa(pinned) + ": if a citation was deleted, lower " + constant + " to " + strconv.Itoa(got) + "; if one stopped resolving, find it"
+		return head + "a citation was deleted: lower " + constant + " to " + n
 	}
 	return ""
 }
@@ -793,15 +869,16 @@ func TestCitedSymbolsExistWhereCited(t *testing.T) {
 			t.Error(finding)
 		}
 	}
-	verdict := ratchetVerdict("resolved symbol citations", "symbolCitationMatches", resolved, symbolCitationMatches)
+	verdict := ratchetVerdict("resolved symbol citations", "symbolCitationsResolved", resolved, symbolCitationsResolved, true)
 	if verdict != "" {
 		t.Errorf("%s (the grammar matched %d, %d of them unresolvable)", verdict, matched, matched-resolved)
 	}
 }
 
 // TestLineCitationCensusOnlyShrinks has two arms. A cited line the file does
-// not have is a defect and fails outright, at zero. The count of "file:N"
-// citations, resolved or not, is a ratchet: see "Unresolvable citations" above.
+// not have is a defect and fails outright, at zero. The counts of "file:N"
+// citations, all of them and the resolved ones, are ratchets: see
+// "Unresolvable citations" above.
 func TestLineCitationCensusOnlyShrinks(t *testing.T) {
 	idx, docs := citationCorpus(t)
 	matched, resolved := 0, 0
@@ -813,9 +890,13 @@ func TestLineCitationCensusOnlyShrinks(t *testing.T) {
 			t.Error(finding)
 		}
 	}
-	verdict := ratchetVerdict("line citations", "lineCitationCeiling", matched, lineCitationCeiling)
+	verdict := ratchetVerdict("line citations", "lineCitationCeiling", matched, lineCitationCeiling, false)
 	if verdict != "" {
-		t.Errorf("%s (%d of them resolve to a tracked file)", verdict, resolved)
+		t.Errorf("%s (%d resolve to a tracked file, %d do not)", verdict, resolved, matched-resolved)
+	}
+	verdict = ratchetVerdict("resolved line citations", "lineCitationsResolved", resolved, lineCitationsResolved, true)
+	if verdict != "" {
+		t.Errorf("%s (%d line citations in all, %d unresolvable)", verdict, matched, matched-resolved)
 	}
 }
 
@@ -826,8 +907,12 @@ func citationFixture() *sourceIndex {
 		"pkg/a/one.go": "package a\n\nfunc Kept() {}\n\nfunc (p *T) Method() {}\n",
 		// Ghost and Block are named only in comments
 		"pkg/a/ghost.go": "package a\n// Ghost is only a comment\n/* Block is too */\nfunc Real() {}\n",
-		"pkg/a/dup.go":   "package a\n",
-		"pkg/b/dup.go":   "package b\n",
+		// string and rune literals that look like the start of a comment
+		"pkg/a/lit.go":    "package a\nvar glob = \"pkg/*\"\nfunc After() {}\nvar u = \"http://x\"; func Tail() {}\nvar r = `a//b`\nfunc Raw() {}\nvar q = '\"'\nfunc Quote() {}\n/* real */ func Last() {}\n",
+		"pkg/a/raw.go":    "package a\nvar r2 = `/*`\nfunc Raw2() {}\n/* c */\n",
+		"pkg/a/ghost2.go": "package a\nvar bad = \"oops\n// Ghost2 is only a comment\nfunc Fine() {}\n",
+		"pkg/a/dup.go":    "package a\n",
+		"pkg/b/dup.go":    "package b\n",
 		// three lines, the last unterminated
 		"pkg/b/three.go": "a\nb\nc",
 		"pkg/c/x.scm":    "(a)\n(b)\n",
@@ -874,6 +959,14 @@ func TestCitationCheckersCatchTheirTargets(t *testing.T) {
 		{"named only in a line comment", "`Ghost` (`ghost.go`)", 1, 1, []string{gone("1", "Ghost", "pkg/a/ghost.go")}},
 		{"named only in a block comment", "`Block` (`ghost.go`)", 1, 1, []string{gone("1", "Block", "pkg/a/ghost.go")}},
 		{"defined beside comments", "`Real` (`ghost.go`)", 1, 1, nil},
+		{"after a glob in a string", "`After` (`lit.go`)", 1, 1, nil},
+		{"after a // in a string", "`Tail` (`lit.go`)", 1, 1, nil},
+		{"after a // in a raw string", "`Raw` (`lit.go`)", 1, 1, nil},
+		{"after a block opener in a raw string", "`Raw2` (`raw.go`)", 1, 1, nil},
+		{"an unterminated quote ends at its line", "`Ghost2` (`ghost2.go`)", 1, 1, []string{gone("1", "Ghost2", "pkg/a/ghost2.go")}},
+		{"code after an unterminated quote", "`Fine` (`ghost2.go`)", 1, 1, nil},
+		{"after a quote rune", "`Quote` (`lit.go`)", 1, 1, nil},
+		{"after a real block comment", "`Last` (`lit.go`)", 1, 1, nil},
 		{"dot-slash path resolves", "`Gone` (`./pkg/a/one.go`)", 1, 1, []string{gone("1", "Gone", "pkg/a/one.go")}},
 		{"gap of forty characters matches", "`Gone` " + strings.Repeat("x", 38) + " (`one.go`)", 1, 1, []string{gone("1", "Gone", "pkg/a/one.go")}},
 		{"gap of forty-one does not", "`Gone` " + strings.Repeat("x", 39) + " (`one.go`)", 0, 0, nil},
@@ -910,6 +1003,7 @@ func TestCitationCheckersCatchTheirTargets(t *testing.T) {
 		{"range end past the end", "three.go:1-9", 1, 1, []string{past("1", "three.go:1-9", "pkg/b/three.go", "3", "line 9 is past the end")}},
 		{"range in range", "three.go:1-3", 1, 1, nil},
 		{"reversed range", "three.go:3-1", 1, 1, []string{past("1", "three.go:3-1", "pkg/b/three.go", "3", "range 3-1 is reversed")}},
+		{"malformed range", "three.go:1-2-3", 1, 1, []string{past("1", "three.go:1-2-3", "pkg/b/three.go", "3", "range 1-2-3 is malformed")}},
 		{"line zero", "three.go:0", 1, 1, []string{past("1", "three.go:0", "pkg/b/three.go", "3", "line 0 is not a line")}},
 		{"a number too large to parse", "three.go:99999999999999999999", 1, 1, []string{past("1", "three.go:99999999999999999999", "pkg/b/three.go", "3", "unreadable line 99999999999999999999")}},
 		{"a range end too large to parse", "three.go:1-99999999999999999999", 1, 1, []string{past("1", "three.go:1-99999999999999999999", "pkg/b/three.go", "3", "unreadable line 99999999999999999999")}},
@@ -944,20 +1038,52 @@ func TestCitationCheckersCatchTheirTargets(t *testing.T) {
 // with the instruction for that direction.
 func TestRatchetVerdictIsExactInBothDirections(t *testing.T) {
 	tcs := []struct {
-		name string
-		got  int
-		want string
+		name     string
+		got      int
+		resolved bool
+		want     string
 	}{
-		{"below", 104, "104 things, pin is 105: if a citation was deleted, lower pin to 104; if one stopped resolving, find it"},
-		{"equal", 105, ""},
-		{"above", 106, "106 things, pin is 105: if citations were added, raise pin to 106 (a symbol outlives a line number)"},
+		{"all-matches below", 104, false, "104 things, pin is 105: a citation was deleted: lower pin to 104"},
+		{"resolved below", 104, true, "104 things, pin is 105: a cited file was renamed or removed (update the citation), or a citation was deleted (lower pin to 104)"},
+		{"equal", 105, false, ""},
+		{"equal resolved", 105, true, ""},
+		{"above", 106, false, "106 things, pin is 105: if citations were added, raise pin to 106 (a symbol outlives a line number)"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ratchetVerdict("things", "pin", tc.got, 105)
+			got := ratchetVerdict("things", "pin", tc.got, 105, tc.resolved)
 			if got != tc.want {
-				t.Errorf("ratchetVerdict(%d, 105) = %q, want %q", tc.got, got, tc.want)
+				t.Errorf("ratchetVerdict(%d, 105, %v) = %q, want %q", tc.got, tc.resolved, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestRenamingACitedFileTripsTheResolvedPins is the rename probe on the
+// synthetic tree: a file cited only by line number is renamed, the all-matches
+// count does not move, the resolved count drops by one, and the resolved pin
+// reports it.
+func TestRenamingACitedFileTripsTheResolvedPins(t *testing.T) {
+	body := "pkg/b/three.go:1 and `Kept` (`one.go`)"
+	before := citationFixture()
+	renamed := newSourceIndex([]string{"pkg/a/one.go", "pkg/b/four.go"}, func(file string) ([]byte, bool) {
+		src, ok := map[string]string{
+			"pkg/a/one.go":  "package a\n\nfunc Kept() {}\n",
+			"pkg/b/four.go": "a\nb\nc",
+		}[file]
+		return []byte(src), ok
+	})
+
+	matchedBefore, resolvedBefore, _ := lineSpanFindings(before, "doc.md", body)
+	matchedAfter, resolvedAfter, _ := lineSpanFindings(renamed, "doc.md", body)
+	if matchedBefore != matchedAfter || resolvedBefore-resolvedAfter != 1 {
+		t.Fatalf("matched %d -> %d, resolved %d -> %d: want matched unchanged and resolved down by one",
+			matchedBefore, matchedAfter, resolvedBefore, resolvedAfter)
+	}
+	if ratchetVerdict("resolved line citations", "pin", resolvedAfter, resolvedBefore, true) == "" {
+		t.Error("the resolved pin accepts a rename of a line-cited file")
+	}
+	if ratchetVerdict("line citations", "pin", matchedAfter, matchedBefore, false) != "" {
+		t.Error("the all-matches pin should not move on a rename")
 	}
 }
