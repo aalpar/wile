@@ -1676,23 +1676,7 @@ Correctness work that lived only inside plan files, invisible to a TODO scan.
     latent re-export miss and a coupled miscompile, where inline dispatch keyed on the call-site
     name, so a curated HOF renamed onto another curated HOF's name inlined the wrong body. Dispatch
     keys on the stamped `BindingMeta.InlineHOFName`, reset on every re-import.
-  - [~] `,doc` follow `Origin` instead of eager-copying `Doc` at every import hop. **The defect this
-    would have incidentally fixed was found and fixed on its own 2026-07-25, and needed no origin.**
-    Repro: two libraries exporting one macro name, the first documented and the second not — under
-    the §5.2 by-name conflation the second won the value while `,doc` kept reporting the first's
-    docstring. The cause was not the copying but the `if doc != ""` guard on it, which made the field
-    un-clearable: the same staleness class as the inline-HOF stamp reset three lines above it, which
-    the doc field was never added to. Unconditional assignment (`library_bindings.go:127`) is smaller
-    than the guarded copy it replaced, and the guard protected nothing (full suite green without it).
-    Guard: `TestImportedMacroDocTracksTheWinningValue`, verified RED first. Procedures were always
-    immune — a closure carries its docstring on its template, so it tracks its value for free.
-    **What remains is structural-only and BLOCKED as filed**: `Binding.Doc()` lives in
-    `pkg/environment`, but resolving `OriginRef` needs `LibraryRegistry.Lookup` + `findLibraryBinding`
-    in `pkg/machine/compilation`, three layers up; `OriginRef.RootLib` is a `string` key, not a
-    `LibraryName`, so even from above it needs a reverse lookup or a scan; and `repl/` is
-    deliberately decoupled from `machine/compilation`. So the options are re-couple, inject a
-    resolver into `environment`, or store a `*Binding` (rejected by D2). With no defect left
-    motivating it, **re-justify before starting, or drop it.**
+  - [x] `,doc` follow `Origin` instead of eager-copying `Doc` at every import hop [Done 2026-10-23, closed as not worth building (P7.7), no code change]: the behavioural half shipped 2026-07-25. The defect was the `if doc != ""` guard, which made the field un-clearable; unconditional assignment (`library_bindings.go`, `m.Doc = source.Doc()`) fixed it. The display the structural half would have bought already ships by a cheaper route: `DocInfo.Origin` (`pkg/repl/doc_provider.go`) rendered by `writeOrigin` (`pkg/repl/meta.go`) as `From: <lib> as <name>`. What remained was a layering re-coupling (`Binding.Doc()` in `pkg/environment` resolving `OriginRef` needs `LibraryRegistry.Lookup` + `findLibraryBinding` from `pkg/machine/compilation`, `RootLib` is a bare string key with no reverse index, `repl/` is deliberately decoupled) that buys nothing a user can see. Guards: `TestImportedMacroKeepsItsDocstring` (`pkg/wile/import_doc_staleness_test.go`), `pkg/wile/immutable_import_test.go`, `pkg/wile/engine_import_composition_test.go`; the `TestImportedMacroDocTracksTheWinningValue` this row cited never existed as a test. Reopen on new evidence, not on this row.
   - [x] Site 3, import-conflict detection [Done 2026-09-16, merge `5d654b3f`]: the by-name/`EqualTo`
     comparison and the "irreducible gap" it documented are gone. `importConflicts`
     (`pkg/machine/compilation/library_bindings.go`) compares provenance roots (`*OriginRef`) and
