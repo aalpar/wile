@@ -954,3 +954,4 @@ func (p *stubExpanderCtx) IntroductionScope() *syntax.Scope   { return nil }
 func (p *stubExpanderCtx) SetIntroductionScope(*syntax.Scope) {}
 func (p *stubExpanderCtx) UseSiteScope() *syntax.Scope        { return nil }
 func (p *stubExpanderCtx) SetUseSiteScope(*syntax.Scope)      {}
+func (p *stubExpanderCtx) NotePassThrough(syntax.SyntaxValue) {}

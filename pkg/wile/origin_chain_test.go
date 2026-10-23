@@ -23,10 +23,10 @@ import (
 )
 
 // originChainKinds is one row per transformer kind. Each definition expands
-// `(bad y)` to the malformed `(let ((y)) y)`, and the malformed binding pair is
-// built by the transformer itself: after P4.7 an ER transformer's pass-through
-// nodes keep their own SourceContext, so a binding pair that arrived through the
-// macro's input would stop carrying the stamp with no code change to blame.
+// `(bad y)` to the malformed `(let ((y)) y)`. The malformed binding pair is
+// built by the transformer itself, so the row measures a node the macro
+// produced; a binding pair that arrived through the macro's input is the
+// pass-through case, covered by TestMacroOriginChainNestsAndSparesPassThrough.
 var originChainKinds = []struct {
 	name string
 	def  string
@@ -52,6 +52,11 @@ var originChainKinds = []struct {
 	{
 		name: "Scheme-layer syntax-case",
 		def:  `(lambda (stx) (syntax-case stx () ((_ x) #'(let ((x)) x))))`,
+		opts: []wile.EngineOption{wile.WithSchemeSyntaxForms()},
+	},
+	{
+		name: "Scheme-layer er-macro-transformer",
+		def:  `(er-macro-transformer (lambda (form rename compare) (list (rename 'let) (list (list 'y)) 'y)))`,
 		opts: []wile.EngineOption{wile.WithSchemeSyntaxForms()},
 	},
 }
@@ -85,27 +90,125 @@ func TestMacroErrorCarriesOriginChainForEveryTransformerKind(t *testing.T) {
 	}
 }
 
-// TestMacroOriginChainNestsAndSparesPassThrough: an inner macro written by an
-// outer one reports both links, and syntax the user wrote and a macro merely
-// passed through is not attributed to the macro.
-func TestMacroOriginChainNestsAndSparesPassThrough(t *testing.T) {
-	c := qt.New(t)
+// expandOnceEval is a program that expands form one step and evaluates the
+// result, so a validation error on the expansion surfaces through expand-once.
+func expandOnceEval(form string) string {
+	return "(call-with-values (lambda () (expand-once #'" + form + ")) (lambda (r changed) (eval r (interaction-environment))))"
+}
 
-	nested := "(define-syntax inner (lambda (stx) (syntax-case stx () ((_ x) #'(let ((x)) x)))))\n" +
-		"(define-syntax outer (lambda (stx) (syntax-case stx () ((_ x) #'(inner x)))))\n" +
-		"(outer y)"
-	err := evalSyntaxFormsErr(t, nested)
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "expanded from 'inner'")
-	c.Assert(err.Error(), qt.Contains, "expanded from 'outer'")
+// TestMacroOriginChainText pins the rendered chain block, anchored on the
+// message before it and on what follows, so a reordered, duplicated,
+// truncated or position-less chain cannot match. The link positions record the
+// behavior as shipped, not an ideal: :2:1 is the use the chain was stamped at,
+// and :2:45 is where expand-once's quoted form sits in the program above.
+func TestMacroOriginChainText(t *testing.T) {
+	entries := []struct{ name, use, chain string }{
+		{"expand", `(bad y)`, "in let form\n  expanded from 'bad' at :2:1: invalid syntax"},
+		{"expand-once", expandOnceEval(`(bad y)`), "in let form\n  expanded from 'bad' at :2:45\nStack trace:"},
+	}
+	for _, kind := range originChainKinds {
+		for _, entry := range entries {
+			t.Run(kind.name+"/"+entry.name, func(t *testing.T) {
+				err := evalSyntaxFormsErr(t, "(define-syntax bad "+kind.def+")\n"+entry.use, kind.opts...)
+				qt.Assert(t, err, qt.IsNotNil)
+				qt.Assert(t, err.Error(), qt.Contains, entry.chain)
+			})
+		}
+	}
+}
 
-	for _, def := range []string{
-		`(syntax-rules () ((_ e) e))`,
-		`(lambda (stx) (syntax-case stx () ((_ e) #'e)))`,
-	} {
-		err = evalSyntaxFormsErr(t, "(define-syntax pass "+def+")\n(pass (let ((x)) x))")
-		c.Assert(err, qt.IsNotNil)
-		c.Assert(err.Error(), qt.Contains, "let binding must be (name init) in let form")
-		c.Assert(err.Error(), qt.Not(qt.Contains), "expanded from")
+// TestMacroOriginChainNests: an inner macro written by an outer one reports
+// both links, innermost first. Where each link points records current
+// behavior: the template-written `(inner x)` takes the outer use site as its
+// position (UseSiteCtx), so for syntax-rules the inner link reads :3:1.
+func TestMacroOriginChainNests(t *testing.T) {
+	cases := []struct{ name, src, chain string }{
+		{"syntax-case in syntax-case",
+			"(define-syntax inner (lambda (stx) (syntax-case stx () ((_ x) #'(let ((x)) x)))))\n" +
+				"(define-syntax outer (lambda (stx) (syntax-case stx () ((_ x) #'(inner x)))))\n(outer y)",
+			"in let form\n  expanded from 'inner' at :2:65\n  expanded from 'outer' at :3:1: invalid syntax"},
+		{"er in syntax-rules",
+			"(define-syntax inner (er-macro-transformer (lambda (form rename compare) (list (rename 'let) (list (list 'y)) 'y))))\n" +
+				"(define-syntax outer (syntax-rules () ((_ x) (inner x))))\n(outer y)",
+			"in let form\n  expanded from 'inner' at :3:1\n  expanded from 'outer' at :3:1: invalid syntax"},
+		// The keyword of the inner use is an ER rename, which carries no origin
+		// of its own; the chain continues through the call pair around it.
+		{"rename keyword in er",
+			"(define-syntax inner (syntax-rules () ((_ x) (let ((x)) x))))\n" +
+				"(define-syntax outer (er-macro-transformer (lambda (form rename compare) (list (rename 'inner) 'y))))\n(outer)",
+			"expanded from 'outer'"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := evalSyntaxFormsErr(t, tc.src)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, err.Error(), qt.Contains, tc.chain)
+		})
+	}
+}
+
+// TestMacroOriginChainThroughRenameExpandOnce: the keyword of the second step's
+// use is an ER rename, which carries no origin of its own, so the chain
+// continues through the call pair around it, on expand-once as on expand.
+func TestMacroOriginChainThroughRenameExpandOnce(t *testing.T) {
+	src := "(define-syntax inner (syntax-rules () ((_ x) (let ((x)) x))))\n" +
+		"(define-syntax outer (er-macro-transformer (lambda (form rename compare) (list (rename 'inner) 'y))))\n" +
+		"(call-with-values (lambda () (expand-once #'(outer)))\n" +
+		"  (lambda (r ch) (call-with-values (lambda () (expand-once r))\n" +
+		"    (lambda (r2 ch2) (eval r2 (interaction-environment))))))"
+	err := evalSyntaxFormsErr(t, src)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, err.Error(), qt.Contains, "expanded from 'inner'")
+	qt.Assert(t, err.Error(), qt.Contains, "expanded from 'outer'")
+}
+
+// TestMacroOriginChainSparesPassThrough: syntax the user wrote and a macro
+// handed back unchanged is not attributed to the macro, for every transformer
+// kind, both entry points, both syntax layers.
+func TestMacroOriginChainSparesPassThrough(t *testing.T) {
+	scheme := []wile.EngineOption{wile.WithSchemeSyntaxForms()}
+	defs := []struct{ name, def string }{
+		{"syntax-rules", `(syntax-rules () ((_ e) e))`},
+		{"syntax-case", `(lambda (stx) (syntax-case stx () ((_ e) #'e)))`},
+		{"er-macro-transformer", `(er-macro-transformer (lambda (f r c) (car (cdr f))))`},
+	}
+	layers := []struct {
+		name string
+		opts []wile.EngineOption
+	}{{"go", nil}, {"scheme", scheme}}
+	entries := []struct{ name, use string }{
+		{"expand", `(pass (let ((x)) x))`},
+		{"expand-once", expandOnceEval(`(pass (let ((x)) x))`)},
+	}
+	for _, def := range defs {
+		for _, layer := range layers {
+			for _, entry := range entries {
+				t.Run(def.name+"/"+layer.name+"/"+entry.name, func(t *testing.T) {
+					err := evalSyntaxFormsErr(t, "(define-syntax pass "+def.def+")\n"+entry.use, layer.opts...)
+					qt.Assert(t, err, qt.IsNotNil)
+					qt.Assert(t, err.Error(), qt.Contains, "let binding must be (name init) in let form")
+					qt.Assert(t, err.Error(), qt.Not(qt.Contains), "expanded from")
+				})
+			}
+		}
+	}
+
+	other := []struct {
+		name, src string
+		opts      []wile.EngineOption
+	}{
+		{"embedded pattern var", "(define-syntax pass (syntax-rules () ((_ e) (begin e))))\n(pass (let ((x)) x))", nil},
+		{"do body", "(do ((i 0 (+ i 1))) ((= i 1)) (let ((x)) x))", nil},
+		{"do body/scheme-layer", "(do ((i 0 (+ i 1))) ((= i 1)) (let ((x)) x))", scheme},
+		{"vector element/syntax-rules", "(define-syntax pass (syntax-rules () ((_ #(e)) e)))\n(pass #((let ((x)) x)))", nil},
+		{"vector element/syntax-case", "(define-syntax pass (lambda (stx) (syntax-case stx () ((_ #(e)) #'e))))\n(pass #((let ((x)) x)))", nil},
+	}
+	for _, tc := range other {
+		t.Run(tc.name, func(t *testing.T) {
+			err := evalSyntaxFormsErr(t, tc.src, tc.opts...)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, err.Error(), qt.Contains, "let binding must be (name init) in let form")
+			qt.Assert(t, err.Error(), qt.Not(qt.Contains), "expanded from")
+		})
 	}
 }

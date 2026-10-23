@@ -436,3 +436,11 @@ func TestMatchSyntax_CaptureCdr(t *testing.T) {
 		c.Assert(bindings["rest"], qt.IsNotNil)
 	})
 }
+
+func TestCapturedValueToSyntaxFallbackUseSite(t *testing.T) {
+	sm := &SyntaxMatcher{matcher: &Matcher{}}
+	useSite := &syntax.SourceContext{Text: "use"}
+	result, err := sm.capturedValueToSyntax(values.NewString("val"), &ExpandOptions{UseSiteCtx: useSite})
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SourceContext(), qt.Equals, useSite)
+}

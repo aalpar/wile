@@ -986,6 +986,7 @@ enough to rebuild the probes.
   error as "syntax-rules transformer invocation failed", so a lambda, ER or primitive transformer's
   raise reads as a `syntax-rules` one. Fix: drop "syntax-rules" from the wrap; check for tests
   matching the text first. Found by the errors lens of this fix's remediation crosscheck, 2026-10-14.
+  Also seen by the P7.6 crosscheck (2026-10-23) on a `syntax-case` transformer's own failure.
 - [ ] **A host function that forwards an `Engine.Call` failure makes it uncatchable**
   [Correctness, S–M]: an uncaught failure in the callee root leaves `RunWithEscapeHandling` as an
   `*ErrExceptionEscape`; `Engine.callCallable` wraps it in a `RuntimeError` whose `Unwrap` keeps it,

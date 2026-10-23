@@ -15,122 +15,248 @@
 package syntax
 
 import (
+	"slices"
+
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// StampOrigin returns stx with origin recorded on the SourceContext of every
-// node the transformer constructed: pairs, vectors, boxes, symbols and
-// self-evaluating literals. The expander calls it once per transformer
-// invocation, on the transformer's output, so a validation error raised on any
-// node of the expansion can name the macro that produced it (ValidationError
-// reads Source.Origin off the offending node).
+// PassThrough is the set of nodes a transformer's output shares with its
+// input: syntax the user wrote, handed back unchanged. FlipScopeStampOrigin
+// leaves these out of the origin stamp, because an error on a form the user
+// wrote must not name the macro that merely carried it.
 //
-// input is the form the transformer was handed. A node of stx that is a node
-// of input, by identity, is the caller's own syntax passed through, not
-// something the macro produced, and is left untouched along with everything
-// beneath it: stamping it would report `expanded from 'do'` on a malformed form
-// the user wrote in a do body. This is the semantics the Go syntax-rules
-// template expander always had (a pattern variable keeps the syntax it
-// captured), now enforced at the boundary instead of inside one transformer.
-// A nil input stamps every node.
-//
-// It is a separate walk from MapSyntaxTree and FlipScope on purpose.
-// MapSyntaxTree never calls its function on a pair, and it hands back unchanged
-// nodes by identity so that most pairs share structure; the stamp has to reach
-// the pair (the offending node for a malformed binding is the binding pair) and
-// so rebuilds every node it visits. Folding it into FlipScope would change the
-// contract six other callers share. Call it before FlipScope, while the
-// input's own nodes are still the same objects the transformer returned.
-//
-// WithOrigin replaces the context's Origin rather than appending, which is
-// correct because the caller builds the chain: the new OriginInfo's Parent is
-// the origin the use site already carried.
-//
-// A nil origin returns stx unchanged. The empty list, comments, directives and
-// datum labels pass through.
-func StampOrigin(stx SyntaxValue, origin *OriginInfo, input SyntaxValue) SyntaxValue {
-	if stx == nil || origin == nil {
-		return stx
-	}
-	var passThrough map[SyntaxValue]struct{}
-	if input != nil {
-		passThrough = make(map[SyntaxValue]struct{})
-		collectNodes(input, passThrough)
-	}
-	return stampOrigin(stx, origin, passThrough)
+// Pairs, literals, vectors and boxes are recorded by identity. Symbols are not
+// recorded at all: the expander puts the introduction scope on every input
+// symbol, so a symbol that still carries it on the way out came in through the
+// input (see FlipScopeStampOrigin). Keyed by node pointer rather than by
+// SyntaxValue interface: hashing an interface key costs a type-word compare and
+// a dynamic hash per node, and the set is built on every expansion.
+type PassThrough struct {
+	pairs nodeSet[*SyntaxPair]
+	objs  nodeSet[*SyntaxObject]
+	other nodeSet[SyntaxValue]
 }
 
-// collectNodes records every node of stx by identity.
-func collectNodes(stx SyntaxValue, into map[SyntaxValue]struct{}) {
-	if stx == nil {
-		return
+// smallSetMax is how many members a nodeSet scans linearly before it moves to a
+// map. An expansion's input is a handful of nodes; a slice scan of that size is
+// cheaper than hashing and allocates nothing beyond the slice itself.
+const smallSetMax = 24
+
+// nodeSet is a set of node pointers: a slice while small, a map once it grows.
+type nodeSet[K comparable] struct {
+	small []K
+	big   map[K]struct{}
+}
+
+func (p *nodeSet[K]) has(k K) bool {
+	if p.big != nil {
+		_, ok := p.big[k]
+		return ok
 	}
-	into[stx] = struct{}{}
+	return slices.Contains(p.small, k)
+}
+
+// add inserts k and reports whether it was already a member.
+func (p *nodeSet[K]) add(k K) bool {
+	if p.has(k) {
+		return true
+	}
+	if p.big != nil {
+		p.big[k] = struct{}{}
+		return false
+	}
+	if len(p.small) < smallSetMax {
+		p.small = append(p.small, k)
+		return false
+	}
+	p.big = make(map[K]struct{}, 2*smallSetMax)
+	for _, m := range p.small {
+		p.big[m] = struct{}{}
+	}
+	p.big[k] = struct{}{}
+	p.small = nil
+	return false
+}
+
+// NewPassThrough records every pair, literal, vector and box of input. A nil
+// input yields an empty set.
+func NewPassThrough(input SyntaxValue) *PassThrough {
+	q := &PassThrough{}
+	q.Add(input)
+	return q
+}
+
+// Add records stx and everything beneath it. The recorded containers double as
+// the visited set, so a shared or cyclic subgraph is entered once.
+func (p *PassThrough) Add(stx SyntaxValue) {
 	switch s := stx.(type) {
 	case *SyntaxPair:
 		if IsSyntaxEmptyList(s) {
 			return
 		}
-		collectNodes(s.Values[0], into)
-		collectNodes(s.Values[1], into)
+		if p.pairs.add(s) {
+			return
+		}
+		p.Add(s.Values[0])
+		p.Add(s.Values[1])
+	case *SyntaxObject:
+		p.objs.add(s)
 	case *SyntaxVector:
+		if p.other.add(s) {
+			return
+		}
 		for _, elem := range s.Values {
-			collectNodes(elem, into)
+			p.Add(elem)
 		}
 	case *SyntaxBox:
-		collectNodes(s.Value, into)
+		if p.other.add(s) {
+			return
+		}
+		p.Add(s.Value)
 	}
 }
 
-func stampOrigin(stx SyntaxValue, origin *OriginInfo, passThrough map[SyntaxValue]struct{}) SyntaxValue {
+// stampMemoMax bounds originStamp's context memo. A syntax-rules expansion
+// reuses a few contexts (the use site's, mostly); a syntax-case template carries
+// one per node, where a memo never hits, so it stops growing rather than turn a
+// lookup per node into a scan of the whole template.
+const stampMemoMax = 8
+
+// originStamp is one FlipScopeStampOrigin walk. in and out memoize the stamped
+// clone of each SourceContext seen: cloning one per node is most of what a
+// naive stamp costs.
+type originStamp struct {
+	scope  *Scope
+	origin *OriginInfo
+	pass   *PassThrough
+	in     [stampMemoMax]*SourceContext
+	out    [stampMemoMax]*SourceContext
+	n      int
+}
+
+func (p *originStamp) stamp(c *SourceContext) *SourceContext {
+	for i := range p.n {
+		if p.in[i] == c {
+			return p.out[i]
+		}
+	}
+	q := c.WithOrigin(p.origin)
+	if p.n < stampMemoMax {
+		p.in[p.n] = c
+		p.out[p.n] = q
+		p.n++
+	}
+	return q
+}
+
+// FlipScopeStampOrigin flips scope over stx, as FlipScope does, and records
+// origin on every node the transformer constructed, so a validation error
+// raised on any node of the expansion can name the macro that produced it
+// (ValidationError reads Source.Origin off the offending node). It is the
+// expander's one pass over a transformer's output, and a separate walk from
+// MapSyntaxTree on purpose: MapSyntaxTree never calls its function on a pair
+// and returns unchanged nodes by identity, while the stamp has to reach the
+// pair (the offending node for a malformed binding is the binding pair).
+//
+// A node of pass is the user's own syntax and is only flipped, never stamped.
+// A symbol is the user's own iff it carries scope: the expander put it on every
+// input symbol, and a symbol the transformer introduced lacks it. That makes a
+// datum->syntax symbol built from an input identifier count as the user's
+// (its context is the user's), which is the intent.
+//
+// WithOrigin replaces the context's Origin rather than appending, which is
+// correct because the caller builds the chain: origin.Parent is the origin the
+// use site already carried. A nil origin or scope degrades to FlipScope and to
+// a bare stamp respectively; the empty list passes through.
+func FlipScopeStampOrigin(stx SyntaxValue, scope *Scope, origin *OriginInfo, pass *PassThrough) SyntaxValue {
+	if origin == nil {
+		return FlipScope(stx, scope)
+	}
 	if stx == nil {
 		return nil
 	}
-	_, ok := passThrough[stx]
-	if ok {
-		return stx
+	if pass == nil {
+		pass = NewPassThrough(nil)
 	}
+	p := &originStamp{scope: scope, origin: origin, pass: pass}
+	return p.walk(stx, true)
+}
 
+// walk rebuilds stx. flip is false inside a box: FlipScope does not descend
+// into one, so its symbols keep their scopes and are told apart from the
+// transformer's own by the scope they carry all the same.
+func (p *originStamp) walk(stx SyntaxValue, flip bool) SyntaxValue {
 	switch s := stx.(type) {
 	case *SyntaxPair:
 		if IsSyntaxEmptyList(s) {
 			return s
 		}
+		if p.pass.pairs.has(s) {
+			return p.flipOnly(s, flip)
+		}
 		var car, cdr SyntaxValue
 		if s.Values[0] != nil {
-			car = stampOrigin(s.Values[0], origin, passThrough)
+			car = p.walk(s.Values[0], flip)
 		}
 		if s.Values[1] != nil {
-			cdr = stampOrigin(s.Values[1], origin, passThrough)
+			cdr = p.walk(s.Values[1], flip)
 		}
-		return NewSyntaxCons(car, cdr, s.SourceContext().WithOrigin(origin))
+		return NewSyntaxCons(car, cdr, p.stamp(s.SourceContext()))
 
 	case *SyntaxSymbol:
+		sctx := s.SourceContext()
+		c := sctx.Clone()
+		if c == nil {
+			c = &SourceContext{}
+		}
+		if p.scope == nil || !c.Scopes.Has(p.scope) {
+			c.Origin = p.origin
+		}
+		if flip && p.scope != nil {
+			c.Scopes = FlipScopeInSet(c.Scopes, p.scope)
+		}
 		return &SyntaxSymbol{
 			Sym:             s.Sym,
-			syntaxBase:      values.NewSyntaxBase(s.SourceContext().WithOrigin(origin)),
+			syntaxBase:      values.NewSyntaxBase(c),
 			ResolvedBinding: s.ResolvedBinding,
 		}
 
 	case *SyntaxObject:
+		if p.pass.objs.has(s) {
+			return s
+		}
 		return &SyntaxObject{
 			datum:      s.datum,
-			syntaxBase: values.NewSyntaxBase(s.SourceContext().WithOrigin(origin)),
+			syntaxBase: values.NewSyntaxBase(p.stamp(s.SourceContext())),
 		}
 
 	case *SyntaxVector:
+		if p.pass.other.has(s) {
+			return p.flipOnly(s, flip)
+		}
 		elems := make([]SyntaxValue, len(s.Values))
 		for i, elem := range s.Values {
 			if elem != nil {
-				elems[i] = stampOrigin(elem, origin, passThrough)
+				elems[i] = p.walk(elem, flip)
 			}
 		}
-		return NewSyntaxVector(s.SourceContext().WithOrigin(origin), elems...)
+		return NewSyntaxVector(p.stamp(s.SourceContext()), elems...)
 
 	case *SyntaxBox:
-		return NewSyntaxBox(stampOrigin(s.Value, origin, passThrough), s.SourceContext().WithOrigin(origin))
+		if p.pass.other.has(s) {
+			return s
+		}
+		return NewSyntaxBox(p.walk(s.Value, false), p.stamp(s.SourceContext()))
 
 	default:
 		return stx
 	}
+}
+
+// flipOnly returns a pass-through node with the scope flipped and no stamp.
+func (p *originStamp) flipOnly(stx SyntaxValue, flip bool) SyntaxValue {
+	if !flip {
+		return stx
+	}
+	return FlipScope(stx, p.scope)
 }

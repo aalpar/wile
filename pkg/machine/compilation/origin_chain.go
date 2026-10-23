@@ -24,6 +24,12 @@ import (
 // macro that expands another: the inner use is written by the outer's template,
 // so it arrives wearing the outer expansion's origin.
 //
+// A keyword that is an ER rename carries no origin (the rename closure builds
+// it from the definition site), though the form around it does. When the
+// keyword has none and the call pair has one, the pair stands for the use site,
+// so the chain is not cut at the rename. A keyword with an origin of its own
+// always wins, which keeps a syntax-rules expansion's chain as it was.
+//
 // The origin chain is stamped at the three places a transformer's output leaves
 // the kernel, not inside any one transformer: expandMacroInvocation and
 // ExpandOnce for closure transformers (syntax-rules, syntax-case and anything a
@@ -31,13 +37,17 @@ import (
 // one of the three fires for an invocation: expandMacroInvocation returns into
 // the ER path before its closure arm and ExpandOnce does the same, so a form is
 // never stamped twice.
-func pushOrigin(macroName string, useSiteCtx *syntax.SourceContext) *syntax.OriginInfo {
+func pushOrigin(macroName string, keywordCtx, pairCtx *syntax.SourceContext) *syntax.OriginInfo {
+	useCtx := keywordCtx
+	if (keywordCtx == nil || keywordCtx.Origin == nil) && pairCtx != nil && pairCtx.Origin != nil {
+		useCtx = pairCtx
+	}
 	q := &syntax.OriginInfo{
 		Identifier: macroName,
-		Location:   useSiteCtx,
+		Location:   useCtx,
 	}
-	if useSiteCtx != nil {
-		q.Parent = useSiteCtx.Origin
+	if useCtx != nil {
+		q.Parent = useCtx.Origin
 	}
 	return q
 }

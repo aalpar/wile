@@ -38,3 +38,70 @@ func UnwrapSpine(v values.Value) values.Value {
 	}
 	return unwrapShared(sv, make(map[SyntaxValue]values.Value), true)
 }
+
+// InputSpine is the set of pairs and vectors of a value UnwrapSpine produced, by
+// identity. A transformer that returns one of them unchanged is handing the
+// user's own form back; the expander uses the set to tell that from a form the
+// transformer built (see schemeutil.DatumToSyntaxValueKeeping).
+type InputSpine struct {
+	pairs   map[*values.Pair]struct{}
+	vectors map[*values.Vector]struct{}
+}
+
+// InputSpineOf records the pairs and vectors of raw. The sets double as the visited
+// record, so a shared or cyclic spine is entered once.
+func InputSpineOf(raw values.Value) *InputSpine {
+	q := &InputSpine{
+		pairs:   make(map[*values.Pair]struct{}),
+		vectors: make(map[*values.Vector]struct{}),
+	}
+	q.add(raw)
+	return q
+}
+
+func (p *InputSpine) add(v values.Value) {
+	for {
+		switch x := v.(type) {
+		case *values.Pair:
+			_, seen := p.pairs[x]
+			if seen {
+				return
+			}
+			p.pairs[x] = struct{}{}
+			p.add(x.Car())
+			v = x.Cdr()
+		case *values.Vector:
+			_, seen := p.vectors[x]
+			if seen {
+				return
+			}
+			p.vectors[x] = struct{}{}
+			for _, elem := range x.Elems() {
+				p.add(elem)
+			}
+			return
+		default:
+			return
+		}
+	}
+}
+
+// HasPair reports whether v is a pair of the spine.
+func (p *InputSpine) HasPair(v values.Value) bool {
+	x, ok := v.(*values.Pair)
+	if !ok {
+		return false
+	}
+	_, ok = p.pairs[x]
+	return ok
+}
+
+// HasVector reports whether v is a vector of the spine.
+func (p *InputSpine) HasVector(v values.Value) bool {
+	x, ok := v.(*values.Vector)
+	if !ok {
+		return false
+	}
+	_, ok = p.vectors[x]
+	return ok
+}

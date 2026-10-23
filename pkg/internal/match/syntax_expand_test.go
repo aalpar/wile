@@ -1029,6 +1029,14 @@ func TestExpandWithUseSite_NilUseSite(t *testing.T) {
 	c.Assert(resultSc.Start.Line(), qt.Equals, 50)
 }
 
+// TestSyntaxExpandCrossGroupEllipsis verifies that template expansion correctly
+// handles pattern variables from different ellipsis groups used under a single
+// template ellipsis. For example:
+//
+//	(syntax-rules ()
+//	  ((_ (a ...) (b ...))
+//	   ((list a b) ...)))
+//
 // The template ellipsis should "zip" the two groups, iterating them in lockstep.
 // findMatchingEllipsisIDs (plural) returns all contributing IDs, and the
 // cross-group path merges their child contexts per iteration.
@@ -2048,4 +2056,60 @@ func TestFreeIdKey_DiscriminatesScopeAndName(t *testing.T) {
 	// it: "<id>|a|b" decomposes only as (fp=<id>, name="a|b").
 	c.Assert(FreeIdKey("a|b", syntax.ScopesFromSlice([]*syntax.Scope{s1})),
 		qt.Not(qt.Equals), FreeIdKey("b", syntax.ScopesFromSlice([]*syntax.Scope{s1})))
+}
+
+// TestExpandStructuralNodesTakeUseSite: every structural node the expander
+// constructs takes the use-site context, by identity. The expansion-origin chain
+// is no longer stamped here, so the context itself is the thing to check.
+func TestExpandStructuralNodesTakeUseSite(t *testing.T) {
+	useSiteSc := syntax.NewSourceContext("(my-macro 42)", "user.scm",
+		syntax.NewSourceIndexes(0, 0, 7), syntax.NewSourceIndexes(13, 13, 7))
+	opts := ExpandOptions{UseSiteCtx: useSiteSc}
+	oneVar := func(c *qt.C) *SyntaxMatcher {
+		compiler := NewSyntaxCompiler()
+		compiler.variables = syntax.PatternVarSymbols{"x": {}}
+		c.Assert(compiler.Compile(context.TODO(), testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))), qt.IsNil)
+		sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
+		in := testSyntaxList(syntax.NewSyntaxSymbol("macro", nil), syntax.NewSyntaxObject(values.NewInteger(42), nil))
+		c.Assert(sm.Match(context.Background(), in), qt.IsNil)
+		return sm
+	}
+	c := qt.New(t)
+	c.Run("pair", func(c *qt.C) {
+		r, err := oneVar(c).Expand(testSyntaxList(syntax.NewSyntaxSymbol("a", nil), syntax.NewSyntaxSymbol("x", nil)), opts)
+		c.Assert(err, qt.IsNil)
+		c.Assert(r.(*syntax.SyntaxPair).SourceContext(), qt.Equals, useSiteSc)
+	})
+	c.Run("vector", func(c *qt.C) {
+		r, err := oneVar(c).Expand(syntax.NewSyntaxVector(nil, syntax.NewSyntaxSymbol("x", nil), syntax.NewSyntaxSymbol("a", nil)), opts)
+		c.Assert(err, qt.IsNil)
+		c.Assert(r.(*syntax.SyntaxVector).SourceContext(), qt.Equals, useSiteSc)
+	})
+	c.Run("escaped", func(c *qt.C) {
+		tmpl := testSyntaxList(syntax.NewSyntaxSymbol("...", nil),
+			testSyntaxList(syntax.NewSyntaxSymbol("x", nil), syntax.NewSyntaxSymbol("a", nil)))
+		r, err := oneVar(c).Expand(tmpl, opts)
+		c.Assert(err, qt.IsNil)
+		c.Assert(r.(*syntax.SyntaxPair).SourceContext(), qt.Equals, useSiteSc)
+	})
+	c.Run("ellipsis", func(c *qt.C) {
+		variables := syntax.PatternVarSymbols{"x": {}}
+		pattern := testSyntaxList(syntax.NewSyntaxSymbol("_", nil), syntax.NewSyntaxSymbol("x", nil), syntax.NewSyntaxSymbol("...", nil))
+		compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+		c.Assert(err, qt.IsNil)
+		sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars})
+		in := testSyntaxList(syntax.NewSyntaxSymbol("_", nil), syntax.NewSyntaxObject(values.NewInteger(1), nil), syntax.NewSyntaxObject(values.NewInteger(2), nil))
+		c.Assert(sm.Match(context.Background(), in), qt.IsNil)
+		r, err := sm.Expand(testSyntaxList(syntax.NewSyntaxSymbol("x", nil), syntax.NewSyntaxSymbol("...", nil)), opts)
+		c.Assert(err, qt.IsNil)
+		c.Assert(r.(*syntax.SyntaxPair).SourceContext(), qt.Equals, useSiteSc)
+	})
+}
+
+func TestApplyHygieneToSymbolTakesUseSite(t *testing.T) {
+	sm := &SyntaxMatcher{matcher: &Matcher{}}
+	useSite := &syntax.SourceContext{Text: "use-site"}
+	sym := syntax.NewSyntaxSymbol("foo", &syntax.SourceContext{Text: "template"})
+	result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: syntax.NewScope(), UseSiteCtx: useSite})
+	qt.Assert(t, result.SourceContext().Text, qt.Equals, "use-site")
 }

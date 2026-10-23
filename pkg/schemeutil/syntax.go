@@ -55,13 +55,60 @@ const DefaultMaxDatumToSyntaxDepth = 10000
 // only one that terminates: a faithful cyclic graph merely moves the hang into
 // the expander, which was measured before this shape was chosen.
 func DatumToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o values.Value) (syntax.SyntaxValue, error) {
-	return datumToSyntaxValueVisited(ctx, sctx, o, values.NewMapSet[values.Value](0), 0)
+	return datumToSyntaxValueVisited(ctx, sctx, o, values.NewMapSet[values.Value](0), 0, nil)
+}
+
+// Kept describes the part of a datum that is the user's own form coming back.
+type Kept struct {
+	// Spine is the pairs and vectors of the form the transformer was handed
+	// (syntax.InputSpineOf what syntax.UnwrapSpine returned).
+	Spine *syntax.InputSpine
+
+	// Ctx is the context a rebuilt Spine pair or vector takes in place of the
+	// converter's sctx. Callers pass the context the converter would have used
+	// had it not been stamped.
+	Ctx *syntax.SourceContext
+
+	// Rebuilt, when non-nil, receives each node built from a Spine member.
+	Rebuilt func(syntax.SyntaxValue)
+}
+
+// DatumToSyntaxValueKeeping is DatumToSyntaxValue for a transformer's result,
+// where some of the pairs and vectors in o are the input form handed back.
+// Those are rebuilt, not returned (the transformer may have mutated them), but
+// with keep.Ctx instead of sctx, so a stamp carried by sctx lands only on the
+// nodes the transformer constructed. Atoms keep sctx: an atom has no identity
+// to tell its source by.
+func DatumToSyntaxValueKeeping(ctx context.Context, sctx *syntax.SourceContext, o values.Value, keep *Kept) (syntax.SyntaxValue, error) {
+	return datumToSyntaxValueVisited(ctx, sctx, o, values.NewMapSet[values.Value](0), 0, keep)
+}
+
+// ctxFor returns the context for the SyntaxPair or SyntaxVector built from o, and whether o is a Spine member
+// A member takes keep.Ctx and is reported to keep.Rebuilt through note; anything
+// else takes sctx.
+func (p *Kept) ctxFor(sctx *syntax.SourceContext, o values.Value) (*syntax.SourceContext, bool) {
+	if p == nil {
+		return sctx, false
+	}
+	member := p.Spine.HasPair(o) || p.Spine.HasVector(o)
+	if member {
+		return p.Ctx, true
+	}
+	return sctx, false
+}
+
+// note reports n, built from a Spine member.
+func (p *Kept) note(member bool, n syntax.SyntaxValue) {
+	if !member || p.Rebuilt == nil {
+		return
+	}
+	p.Rebuilt(n)
 }
 
 // datumToSyntaxValueVisited is DatumToSyntaxValue's worker. visited is
 // PATH-scoped — entries are removed on the way back out — so shared structure
 // converts exactly as it did before and only a true cycle is refused.
-func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, o values.Value, visited values.MapSet[values.Value], depth int) (syntax.SyntaxValue, error) {
+func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, o values.Value, visited values.MapSet[values.Value], depth int, keep *Kept) (syntax.SyntaxValue, error) {
 	if depth > DefaultMaxDatumToSyntaxDepth {
 		return nil, werr.WrapForeignErrorf(werr.ErrParseDepthExceeded,
 			"DatumToSyntaxValue: datum nested deeper than %d", DefaultMaxDatumToSyntaxDepth)
@@ -85,7 +132,7 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 	case *values.Symbol:
 		return syntax.NewSyntaxSymbol(v.Key, sctx), nil
 	case values.Tuple:
-		return datumListToSyntaxValue(ctx, sctx, o, v, visited, depth)
+		return datumListToSyntaxValue(ctx, sctx, o, v, visited, depth, keep)
 	case *values.Box:
 		dup := visited.ContainsOne(o)
 		if dup {
@@ -93,7 +140,7 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 		}
 		visited.Set(o)
 		defer visited.Unset(o)
-		inner, err := datumToSyntaxValueVisited(ctx, sctx, v.Unbox(), visited, depth+1)
+		inner, err := datumToSyntaxValueVisited(ctx, sctx, v.Unbox(), visited, depth+1, keep)
 		if err != nil {
 			return nil, err
 		}
@@ -105,9 +152,11 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 		}
 		visited.Set(o)
 		defer visited.Unset(o)
-		vt0 := syntax.NewSyntaxVector(sctx)
+		vctx, member := keep.ctxFor(sctx, o)
+		vt0 := syntax.NewSyntaxVector(vctx)
+		keep.note(member, vt0)
 		for _, elem := range v.Elems() {
-			e, err := datumToSyntaxValueVisited(ctx, sctx, elem, visited, depth+1)
+			e, err := datumToSyntaxValueVisited(ctx, sctx, elem, visited, depth+1, keep)
 			if err != nil {
 				return nil, err
 			}
@@ -134,7 +183,7 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 // ctx is no longer polled: the walk is now bounded by the size of a datum
 // already resident in memory, and the caller re-checks the deadline on the
 // very next step.
-func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o values.Value, v values.Tuple, visited values.MapSet[values.Value], depth int) (syntax.SyntaxValue, error) {
+func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o values.Value, v values.Tuple, visited values.MapSet[values.Value], depth int, keep *Kept) (syntax.SyntaxValue, error) {
 	dup := visited.ContainsOne(o)
 	if dup {
 		return nil, circularDatumError()
@@ -147,10 +196,12 @@ func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o v
 		}
 	}()
 
-	head := syntax.NewSyntaxCons(nil, nil, sctx)
+	headCtx, member := keep.ctxFor(sctx, o)
+	head := syntax.NewSyntaxCons(nil, nil, headCtx)
+	keep.note(member, head)
 	cur, place := v, head
 	for {
-		car, err := datumToSyntaxValueVisited(ctx, sctx, cur.Car(), visited, depth+1)
+		car, err := datumToSyntaxValueVisited(ctx, sctx, cur.Car(), visited, depth+1, keep)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +210,7 @@ func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o v
 		cdr := cur.Cdr()
 		next, isTuple := cdr.(values.Tuple)
 		if !isTuple || values.IsEmptyList(cdr) {
-			tail, err := datumToSyntaxValueVisited(ctx, sctx, cdr, visited, depth+1)
+			tail, err := datumToSyntaxValueVisited(ctx, sctx, cdr, visited, depth+1, keep)
 			if err != nil {
 				return nil, err
 			}
@@ -173,7 +224,9 @@ func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o v
 		visited.Set(cdr)
 		spine = append(spine, cdr)
 
-		cell := syntax.NewSyntaxCons(nil, nil, sctx)
+		cellCtx, member := keep.ctxFor(sctx, cdr)
+		cell := syntax.NewSyntaxCons(nil, nil, cellCtx)
+		keep.note(member, cell)
 		place.Values[1] = cell
 		cur, place = next, cell
 	}

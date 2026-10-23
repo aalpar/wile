@@ -105,9 +105,8 @@ func FreeIdName(key string) string {
 // stamped here: the expander stamps it once on every transformer's output, so
 // no transformer kind has to remember to.
 //
-// The variants in applyHygieneToSymbol, combineEllipsisResults, and
-// capturedValueToSyntax handle different base contexts or nil-bases and are
-// deliberately kept separate.
+// The variants in combineEllipsisResults and capturedValueToSyntax handle
+// different base contexts or nil-bases and are deliberately kept separate.
 func (opts *ExpandOptions) resolveSourceContext(t syntax.SyntaxValue) *syntax.SourceContext {
 	srcCtx := t.SourceContext()
 	if opts.UseSiteCtx != nil {
@@ -335,10 +334,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 ) syntax.SyntaxValue {
 	key := sym.Key()
 
-	srcCtx := sym.SourceContext()
-	if opts.UseSiteCtx != nil {
-		srcCtx = opts.UseSiteCtx
-	}
+	srcCtx := opts.resolveSourceContext(sym)
 
 	// A template identifier carries the scopes it had at the macro's DEFINITION
 	// site (Flatt 2016). UseSiteCtx overrides srcCtx for diagnostics — position
