@@ -272,7 +272,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxOrProcedureCall(car syntax.Syntax
 		return syntax.NewSyntaxCons(newCar, rest1, newCar.SourceContext()), nil
 	case *syntax.SyntaxSymbol:
 		// Car is a symbol - check if it's a macro, expand arguments either way
-		return p.ExpandSyntaxExpression(v, cdr)
+		return p.ExpandSyntaxExpression(v, cdr, parentCtx)
 	case *syntax.SyntaxObject:
 		// Car is a self-evaluating value - just expand arguments
 		rest1, err := p.ExpandSyntaxArgumentList(cdr)
@@ -585,7 +585,7 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 //
 // The expanded result may itself contain macro invocations, so the caller
 // should recursively expand it.
-func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, pairCtx *syntax.SourceContext) (syntax.SyntaxValue, error) {
 	sym0, ok := sym.Unwrap().(*values.Symbol) // Ensure sym is a symbol
 	if !ok {
 		return nil, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASymbol, "expected a symbol for syntax, got %T", sym.Unwrap()))
@@ -605,7 +605,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 	if !hasLocalBinding {
 		bnd, head := p.lookupMacroBinding(sym, sym.Scopes())
 		if bnd != nil {
-			return p.expandMacroInvocation(sym, expr, bnd)
+			return p.expandMacroInvocation(sym, expr, bnd, pairCtx)
 		}
 
 		// Not a macro - check if it's a primitive (quote, if, define-syntax, etc.)
@@ -733,11 +733,11 @@ func sealedPrimitiveExpander(store *environment.GlobalEnvironmentFrame, canon *v
 
 // expandMacroInvocation invokes a macro transformer and returns the expanded result.
 // This is called when ExpandSyntaxExpression determines that a symbol is bound to a macro.
-func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, bnd *environment.Binding) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, bnd *environment.Binding, pairCtx *syntax.SourceContext) (syntax.SyntaxValue, error) {
 	// Check for ER macro transformer first
 	erTransformer, isER := bnd.Value().(*ERMacroTransformer)
 	if isER {
-		return p.expandERMacroInvocation(sym, expr, erTransformer)
+		return p.expandERMacroInvocation(sym, expr, erTransformer, pairCtx)
 	}
 
 	cls, ok := bnd.Value().(machine.Closure)
@@ -808,7 +808,14 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 		// ExpandOnce prune at their own returns), so a definition that only
 		// surfaces after several expansions is pruned at its own level. Identity
 		// while nothing mints.
-		stx = syntax.FlipScope(stx, introScope)
+		//
+		// The origin chain is stamped here, on every closure transformer's
+		// output, and not inside the Go syntax-rules transform: syntax-case and
+		// the Scheme-layer forms pass through this point too, and none of them
+		// stamped (I099). The stamp shares the flip's walk: it costs a second
+		// rebuild of every output node otherwise, and leaves the nodes the
+		// transformer passed through from inputForm alone.
+		stx = syntax.FlipScopeStampOrigin(stx, introScope, pushOrigin(sym.Key(), sym.SourceContext(), pairCtx), expanderCtx.passThroughSet(inputForm))
 		stx = p.pruneUseSiteScopes(stx)
 		// Recursively expand the result to handle nested macro calls
 		return p.ExpandExpression(stx)
@@ -823,8 +830,9 @@ func (p *ExpanderTimeContinuation) expandERMacroInvocation(
 	sym *syntax.SyntaxSymbol,
 	expr syntax.SyntaxValue,
 	erTransformer *ERMacroTransformer,
+	pairCtx *syntax.SourceContext,
 ) (syntax.SyntaxValue, error) {
-	wrapped, err := p.invokeERTransformer(sym, expr, erTransformer)
+	wrapped, err := p.invokeERTransformer(sym, expr, erTransformer, pairCtx)
 	if err != nil {
 		return nil, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(err, "expand: er-macro-transformer expansion failed"))
 	}
@@ -839,6 +847,7 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	sym *syntax.SyntaxSymbol,
 	expr syntax.SyntaxValue,
 	erTransformer *ERMacroTransformer,
+	pairCtx *syntax.SourceContext,
 ) (syntax.SyntaxValue, error) {
 	// Build complete input form: (macro-name . args)
 	inputForm := syntax.NewSyntaxCons(sym, expr, sym.SourceContext())
@@ -864,6 +873,7 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// is use-site by contract; a flip would stamp those raw symbols and turn an
 	// anaphoric binder hygienic.
 	rawForm := syntax.UnwrapSpine(inputForm)
+	spine := syntax.InputSpineOf(rawForm)
 
 	// Create a fresh intro scope for this invocation. Unbound renamed symbols
 	// (like temporary names) get this scope to prevent variable capture.
@@ -930,7 +940,22 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// Re-wrap the result to syntax. Already-syntax nodes (renames, and identifiers
 	// passed through from the spine) are returned unchanged; a raw symbol takes
 	// the keyword's context, so it resolves as if written at the use site.
-	wrapped, err := schemeutil.DatumToSyntaxValue(p.ctx, sym.SourceContext(), result)
+	//
+	// That context is also where the origin chain is stamped (I099): one clone
+	// per invocation, not one per node. It reaches the nodes the transformer
+	// constructed from raw data. A node it hands back already wrapped keeps the
+	// context it arrived with, so a rename or a spine identifier is not
+	// stamped. The raw pairs of the input spine are the user's own form handed
+	// back; they are rebuilt with the keyword's unstamped context, the one they
+	// took before the stamp existed, so the chain does not blame the macro for
+	// syntax it merely returned.
+	keywordCtx := sym.SourceContext()
+	wrapped, err := schemeutil.DatumToSyntaxValueKeeping(
+		p.ctx,
+		keywordCtx.WithOrigin(pushOrigin(sym.Key(), keywordCtx, pairCtx)),
+		result,
+		&schemeutil.Kept{Spine: spine, Ctx: keywordCtx},
+	)
 	if err != nil {
 		return nil, wrapSourcedError(sym.SourceContext(), err)
 	}
@@ -995,7 +1020,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	// Check for ER macro transformer first
 	erTransformer, isER := bnd.Value().(*ERMacroTransformer)
 	if isER {
-		result, err := p.invokeERTransformer(sym, cdr, erTransformer)
+		result, err := p.invokeERTransformer(sym, cdr, erTransformer, stxPair.SourceContext())
 		if err != nil {
 			return nil, false, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(err, "expand-once: er-macro-transformer failed"))
 		}
@@ -1038,7 +1063,8 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	// Return the result WITHOUT recursive expansion
 	stx, ok := result.(syntax.SyntaxValue)
 	if ok {
-		return p.pruneUseSiteScopes(syntax.FlipScope(stx, introScope)), true, nil
+		stx = syntax.FlipScopeStampOrigin(stx, introScope, pushOrigin(sym.Key(), sym.SourceContext(), stxPair.SourceContext()), expanderCtx.passThroughSet(inputForm))
+		return p.pruneUseSiteScopes(stx), true, nil
 	}
 
 	return nil, false, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxValue, "syntax transformer returned non-syntax value: %T", result))

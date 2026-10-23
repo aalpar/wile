@@ -42,6 +42,9 @@ type ExpanderCtx interface {
 	SetIntroductionScope(*syntax.Scope)
 	UseSiteScope() *syntax.Scope
 	SetUseSiteScope(*syntax.Scope)
+	// NotePassThrough records a node a transformer rebuilt from the user's own
+	// input form, so the expander leaves it out of the macro-origin stamp.
+	NotePassThrough(syntax.SyntaxValue)
 }
 
 // Compile-time interface assertion lives in machine/compilation/expander_context.go:

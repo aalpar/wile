@@ -338,3 +338,86 @@ func (p *DatumToSyntaxValueSuite) TestLengthIsNotBounded(c *qt.C) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
 }
+
+func TestDatumToSyntaxValueKeeping(t *testing.T) {
+	stamped := &syntax.SourceContext{Text: "stamped"}
+	plain := &syntax.SourceContext{Text: "plain"}
+	inner := values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.EmptyList))
+	vec := values.NewVector(values.NewInteger(3))
+	mine := values.NewCons(values.NewInteger(9), values.EmptyList)
+	// input is the form the transformer was handed: (inner-pair . vec). The
+	// result keeps inner and vec by identity and adds a pair of its own.
+	spine := syntax.InputSpineOf(values.NewCons(inner, values.NewCons(vec, values.EmptyList)))
+
+	build := func(c *qt.C) (syntax.SyntaxValue, []syntax.SyntaxValue) {
+		var rebuilt []syntax.SyntaxValue
+		keep := &Kept{Spine: spine, Ctx: plain, Rebuilt: func(n syntax.SyntaxValue) { rebuilt = append(rebuilt, n) }}
+		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, values.NewCons(inner, values.NewCons(vec, mine)), keep)
+		c.Assert(err, qt.IsNil)
+		return got, rebuilt
+	}
+
+	c := qt.New(t)
+	c.Run("members take Ctx, the rest take sctx", func(c *qt.C) {
+		got, _ := build(c)
+		top := got.(*syntax.SyntaxPair)
+		c.Assert(top.SourceContext(), qt.Equals, stamped)
+		c.Assert(top.Car().(*syntax.SyntaxPair).SourceContext(), qt.Equals, plain)
+		rest := top.Cdr().(*syntax.SyntaxPair)
+		c.Assert(rest.Car().(*syntax.SyntaxVector).SourceContext(), qt.Equals, plain)
+		c.Assert(rest.Cdr().(*syntax.SyntaxPair).SourceContext(), qt.Equals, stamped)
+	})
+	c.Run("Rebuilt sees exactly the member nodes", func(c *qt.C) {
+		_, rebuilt := build(c)
+		// Two cells of inner and the vector.
+		c.Assert(rebuilt, qt.HasLen, 3)
+	})
+	c.Run("a nil Kept is DatumToSyntaxValue", func(c *qt.C) {
+		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, inner, nil)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.SourceContext(), qt.Equals, stamped)
+	})
+	c.Run("a member without a Rebuilt hook is fine", func(c *qt.C) {
+		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, inner, &Kept{Spine: spine, Ctx: plain})
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.SourceContext(), qt.Equals, plain)
+	})
+}
+
+func TestDatumToSyntaxValueKeepingAsDatumToSyntax(t *testing.T) {
+	sctx := &syntax.SourceContext{Text: "s"}
+	convert := func(c *qt.C, o values.Value, asDatum bool) syntax.SyntaxValue {
+		got, err := DatumToSyntaxValueKeeping(context.Background(), sctx, o, &Kept{AsDatumToSyntax: asDatum})
+		c.Assert(err, qt.IsNil)
+		return got
+	}
+	box := values.NewBox(values.NewSymbol("foo"))
+	var voidVec *values.Vector
+
+	c := qt.New(t)
+	c.Run("a box is an opaque literal with raw contents", func(c *qt.C) {
+		obj, ok := convert(c, box, true).(*syntax.SyntaxObject)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(obj.Unwrap(), qt.Equals, values.Value(box))
+	})
+	c.Run("otherwise a box holds converted contents", func(c *qt.C) {
+		obj, ok := convert(c, box, false).(*syntax.SyntaxObject)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(obj.Unwrap(), qt.Not(qt.Equals), values.Value(box))
+	})
+	c.Run("a void is a literal", func(c *qt.C) {
+		_, ok := convert(c, values.Void, true).(*syntax.SyntaxObject)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(convert(c, values.Void, false), qt.Equals, syntax.SyntaxVoid)
+	})
+	c.Run("a void vector is an empty syntax-vector, not a dereference", func(c *qt.C) {
+		vec, ok := convert(c, voidVec, true).(*syntax.SyntaxVector)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(vec.Values, qt.HasLen, 0)
+	})
+	c.Run("syntax and the empty list are left alone", func(c *qt.C) {
+		sym := syntax.NewSyntaxSymbol("x", sctx)
+		c.Assert(convert(c, sym, true), qt.Equals, syntax.SyntaxValue(sym))
+		c.Assert(convert(c, values.EmptyList, true), qt.Equals, syntax.SyntaxEmptyList)
+	})
+}

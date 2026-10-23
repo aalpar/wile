@@ -32,6 +32,7 @@ type ExpanderContext struct {
 	expander     *ExpanderTimeContinuation
 	introScope   *syntax.Scope // Introduction scope for current macro expansion
 	useSiteScope *syntax.Scope // Use-site scope for binding forms
+	passThrough  []syntax.SyntaxValue
 }
 
 // NewExpanderContext creates a new ExpanderContext.
@@ -148,4 +149,22 @@ func (p *ExpanderContext) SetUseSiteScope(scope *syntax.Scope) {
 		return
 	}
 	p.useSiteScope = scope
+}
+
+// NotePassThrough records a node the transformer rebuilt from the input form.
+func (p *ExpanderContext) NotePassThrough(stx syntax.SyntaxValue) {
+	if p == nil {
+		return
+	}
+	p.passThrough = append(p.passThrough, stx)
+}
+
+// passThroughSet returns the input form's nodes together with those the
+// transformer recorded through NotePassThrough.
+func (p *ExpanderContext) passThroughSet(input syntax.SyntaxValue) *syntax.PassThrough {
+	q := syntax.NewPassThrough(input)
+	for _, stx := range p.passThrough {
+		q.Add(stx)
+	}
+	return q
 }

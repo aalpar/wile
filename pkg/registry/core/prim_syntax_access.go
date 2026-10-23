@@ -19,6 +19,7 @@ import (
 	"slices"
 
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/schemeutil"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -109,6 +110,35 @@ func PrimSyntaxVectorToList(mc machine.CallContext) error {
 // identifier=? would accept the quoted symbol.
 func PrimSyntaxSpine(mc machine.CallContext) error {
 	mc.SetValue(syntax.UnwrapSpine(mc.Arg(0)))
+	return nil
+}
+
+// PrimErSyntax implements (%er-syntax template-id spine result), the Scheme
+// er-macro-transformer's datum->syntax. It converts RESULT with TEMPLATE-ID's
+// context as datum->syntax does, except that a pair or vector of SPINE, the
+// value (%syntax-spine stx) handed the procedure, that RESULT hands back is
+// recorded with the expander (NotePassThrough): it is the user's own form, not
+// something the macro built, and the macro-origin stamp must leave it alone.
+func PrimErSyntax(cc machine.CallContext) error {
+	mc, err := machine.RequireMachineContext(cc, "%er-syntax")
+	if err != nil {
+		return err
+	}
+	templateID, ok := mc.Arg(0).(*syntax.SyntaxSymbol)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "%%er-syntax: template-id must be an identifier, got %s", mc.Arg(0).SchemeString())
+	}
+	sctx := templateID.SourceContext()
+	keep := &schemeutil.Kept{Spine: syntax.InputSpineOf(mc.Arg(1)), Ctx: sctx, AsDatumToSyntax: true}
+	ectx := mc.ExpanderContext()
+	if ectx != nil {
+		keep.Rebuilt = ectx.NotePassThrough
+	}
+	result, err := schemeutil.DatumToSyntaxValueKeeping(mc.Context(), sctx, mc.Arg(2), keep)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "%%er-syntax: conversion failed")
+	}
+	mc.SetValue(result)
 	return nil
 }
 

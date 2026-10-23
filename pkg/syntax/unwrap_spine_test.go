@@ -155,3 +155,26 @@ func dropLeafSyntax(v values.Value) values.Value {
 		return v
 	}
 }
+
+func TestInputSpine(t *testing.T) {
+	c := qt.New(t)
+	deep := values.NewCons(values.NewInteger(1), values.EmptyList)
+	vec := values.NewVector(deep)
+	list := values.NewCons(vec, values.NewCons(values.NewInteger(2), values.EmptyList))
+	spine := InputSpineOf(list)
+
+	c.Assert(spine.HasPair(list), qt.IsTrue)
+	c.Assert(spine.HasPair(list.Cdr()), qt.IsTrue)
+	c.Assert(spine.HasVector(vec), qt.IsTrue)
+	c.Assert(spine.HasPair(deep), qt.IsTrue, qt.Commentf("a pair inside a vector"))
+	c.Assert(spine.HasPair(values.NewCons(values.NewInteger(1), values.EmptyList)), qt.IsFalse, qt.Commentf("equal but not identical"))
+	c.Assert(spine.HasPair(vec), qt.IsFalse)
+	c.Assert(spine.HasVector(deep), qt.IsFalse)
+	c.Assert(spine.HasPair(values.NewInteger(2)), qt.IsFalse)
+
+	c.Run("a cyclic spine terminates", func(c *qt.C) {
+		loop := values.NewCons(values.NewInteger(1), values.EmptyList)
+		loop.SetCdr(loop)
+		c.Assert(InputSpineOf(loop).HasPair(loop), qt.IsTrue)
+	})
+}

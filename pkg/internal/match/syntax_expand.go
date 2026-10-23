@@ -67,18 +67,6 @@ type ExpandOptions struct {
 	// where the macro was invoked rather than where it was defined.
 	UseSiteCtx *syntax.SourceContext
 
-	// Origin tracks the macro expansion chain for debugging and error reporting.
-	// WithOrigin replaces (not appends to) a SourceContext's Origin field, so the
-	// last expansion pass wins. This is correct because the caller constructs the
-	// OriginInfo with the full chain: it reads the previous SourceContext.Origin and
-	// sets it as Parent on the new OriginInfo before calling Expand. The chain lives
-	// inside OriginInfo.Parent, not across successive SourceContext.Origin values.
-	//
-	// The nil guard at each call site skips when no origin is provided — avoiding a
-	// pointless allocation and preserving any existing origin on the SourceContext
-	// (e.g., syntax-case expands with ExpandOptions{}, where Origin is nil).
-	Origin *syntax.OriginInfo
-
 	// PatternVarSyntax contains the syntax symbols from the pattern, enabling nested
 	// macro hygiene via scope comparison. When set, template symbols are only substituted
 	// if their scopes match the corresponding pattern variable's scopes.
@@ -113,20 +101,16 @@ func FreeIdName(key string) string {
 // resolveSourceContext returns the source context for a newly-constructed
 // structural node derived from template t. The template's context is the
 // default; UseSiteCtx overrides it (so error messages point at the invocation
-// site rather than the macro definition); Origin is stamped on top so the
-// trace records which macro produced the node — see ExpandOptions.Origin for
-// why "last caller wins" is correct.
+// site rather than the macro definition). The expansion-origin chain is not
+// stamped here: the expander stamps it once on every transformer's output, so
+// no transformer kind has to remember to.
 //
-// The variants in applyHygieneToSymbol, combineEllipsisResults, and
-// capturedValueToSyntax handle different base contexts or nil-bases and are
-// deliberately kept separate.
+// The variants in combineEllipsisResults and capturedValueToSyntax handle
+// different base contexts or nil-bases and are deliberately kept separate.
 func (opts *ExpandOptions) resolveSourceContext(t syntax.SyntaxValue) *syntax.SourceContext {
 	srcCtx := t.SourceContext()
 	if opts.UseSiteCtx != nil {
 		srcCtx = opts.UseSiteCtx
-	}
-	if opts.Origin != nil {
-		srcCtx = srcCtx.WithOrigin(opts.Origin)
 	}
 	return srcCtx
 }
@@ -350,15 +334,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 ) syntax.SyntaxValue {
 	key := sym.Key()
 
-	srcCtx := sym.SourceContext()
-	if opts.UseSiteCtx != nil {
-		srcCtx = opts.UseSiteCtx
-	}
-	if opts.Origin != nil && srcCtx != nil {
-		srcCtx = srcCtx.WithOrigin(opts.Origin)
-	} else if opts.Origin != nil {
-		srcCtx = &syntax.SourceContext{Origin: opts.Origin}
-	}
+	srcCtx := opts.resolveSourceContext(sym)
 
 	// A template identifier carries the scopes it had at the macro's DEFINITION
 	// site (Flatt 2016). UseSiteCtx overrides srcCtx for diagnostics — position
@@ -560,11 +536,6 @@ func (p *SyntaxMatcher) capturedValueToSyntax(
 
 	// Fallback: wrap the value in syntax (for edge cases like nil or empty list)
 	srcCtx := opts.UseSiteCtx
-	if opts.Origin != nil && srcCtx != nil {
-		srcCtx = srcCtx.WithOrigin(opts.Origin)
-	} else if opts.Origin != nil {
-		srcCtx = &syntax.SourceContext{Origin: opts.Origin}
-	}
 
 	switch v := val.(type) {
 	case *values.Pair:
@@ -786,9 +757,6 @@ func (p *SyntaxMatcher) combineEllipsisResults(
 	srcCtx := opts.UseSiteCtx
 	if srcCtx == nil && pattern != nil {
 		srcCtx = pattern.SourceContext()
-	}
-	if opts.Origin != nil {
-		srcCtx = srcCtx.WithOrigin(opts.Origin)
 	}
 	result := expandedRest
 	for i := range slices.Backward(results) {
