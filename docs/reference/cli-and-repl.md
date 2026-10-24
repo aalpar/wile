@@ -38,7 +38,7 @@ the last `-f` file. A bare `-` names standard input, positionally or as
 |       | `--mutexprofile` | string     | Write mutex contention profile to file |
 |       | `--blockprofile` | string     | Write goroutine blocking profile to file |
 |       | `--cover`        | string     | Write Scheme-level coverage report to file (Go cover format) |
-|       | `--cover-stdlib` | bool       | Include stdlib files in `--cover` output (default excludes `scheme/`, `wile/`, `srfi/`) |
+|       | `--cover-stdlib` | bool       | Include stdlib files in `--cover` output (default excludes the files of the embedded stdlib) |
 |       | `--cover-summary`| string     | Write human-readable coverage summary to file |
 | `-h`  | `--help`         | bool       | Print usage and exit |
 

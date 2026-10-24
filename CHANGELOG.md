@@ -119,6 +119,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`--cover` excludes exactly the embedded stdlib (I179).** The default exclusion
+  was three prefixes (`scheme/`, `wile/`, `srfi/`), so `(import (chibi test))`
+  put 268 `chibi/test.sld` rows in the default report while `wile/goast/` (from
+  the wile-goast repository, not embedded) was dropped as though it were stdlib.
+  The set is now the file list of the embedded FS, under both `srfi/1.sld` and
+  `lib/srfi/1.sld` spellings. A user file whose relative name equals an embedded
+  path is still dropped from the default report.
+- **`make bench-gabriel-compare` example names `ackermann`, not `ack` (I183).**
+  A test now checks every literal `BENCHMARKS="..."` example against
+  `examples/benchmarks/<name>.scm`.
+
 - **`expanded from '<macro>'` is reported for every transformer kind, not only Go `syntax-rules` (I099).**
   A malformed form built by a `syntax-case`, `er-macro-transformer` or Scheme-layer
   macro now carries the same expansion chain, through both `expand` and

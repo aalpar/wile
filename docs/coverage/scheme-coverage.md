@@ -56,12 +56,19 @@ TOTAL  3/7 sexprs covered
 
 ## Stdlib exclusion
 
-By default, entries from the embedded stdlib (paths starting with
-`scheme/`, `wile/`, or `srfi/`) are excluded. Pass `--cover-stdlib`
-to include them in the output — useful when debugging stdlib
-interactions, noisy otherwise. The prefix list does not cover the
-embedded `chibi/` and `rnrs/` libraries: importing `(chibi test)`
-puts `chibi/test.sld` entries in the default output.
+By default, entries from the files of the embedded stdlib (every file
+under `scheme/`, `srfi/`, `wile/`, `chibi/` and `rnrs/` that the embed
+carries, whether named `srfi/1.sld` or `lib/srfi/1.sld`) are excluded.
+Pass `--cover-stdlib` to include them in the output, useful when
+debugging stdlib interactions, noisy otherwise.
+
+The exclusion is an exact match on the name in the entry, derived from
+the embedded filesystem, so it cannot drift from it. Two consequences:
+a library that lives outside the embed (`wile/goast`, from the
+wile-goast repository) is reported like user code, and a user file
+whose relative name equals an embedded path (`wile/control.scm`) is
+dropped from the default report as well; spell it `./wile/control.scm`
+to keep it.
 
 ## When the profile is written
 
