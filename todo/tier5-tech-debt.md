@@ -345,6 +345,13 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   dynamic binding rather than mutation and works on a `NoMutation` engine
   today. That one belongs with the dialect's documented language-surface
   boundary.
+  **Partial floor, P8.11 (2026-10-23):** a direct-sink pin now fails CI for a NEW
+  hand-written primitive whose own body calls a method named like a values mutator and
+  is not annotated; it sees 12 of the 21 annotated primitives. It does NOT see
+  write-through to a backing slice (vector-fill!, vector-copy!, bytevector-copy!,
+  read-bytevector!, string-copy!), method values, helper indirection or helper-built
+  primitives (152 of 464 with an Impl). Widening to those shapes is this row's remaining
+  scope; the pin's header lists them.
 
 ### `extensions/gointerop` is named for a story it does not tell (2026-08-09)
 
