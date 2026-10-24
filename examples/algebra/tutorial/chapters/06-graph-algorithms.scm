@@ -10,7 +10,8 @@
 ;;     deletion-contraction (general case) -- verified against τ(Petersen) = 2000.
 ;;   - Chromatic polynomial on K_n, C_n, empty graphs -- verified against
 ;;     the closed forms you can check by hand.
-;;   - Graph isomorphism including the cospectral canary (C_6 vs 2·K_3).
+;;   - Graph isomorphism: a cospectral canary (C_4 + K_1 vs K_{1,4}) and a
+;;     pair 1-WL refinement cannot separate (C_6 vs 2·K_3).
 ;;
 ;; Prerequisites: chapter 02 (lattices for ordering), chapter 05
 ;;   (polynomials, since chromatic/Tutte polynomials are coefficient lists).
@@ -178,14 +179,25 @@
 ;; Part 8: Graph isomorphism.
 ;;
 ;; `graph-isomorphic?` uses 1-WL + backtracking (McKay-Piperno 2014).
-;; The classical cospectral-but-non-isomorphic canary is C_6 vs
-;; two disjoint triangles (2·K_3): both have 6 vertices, 6 edges,
-;; the same spectrum, but are not isomorphic.
+;; The classical cospectral-but-non-isomorphic canary is the Saltire pair,
+;; C_4 + K_1 (a square and an isolated vertex) vs the star K_{1,4}: both
+;; have 5 vertices, 4 edges and spectrum {-2, 0, 0, 0, 2}, but are not
+;; isomorphic. (C_6 vs 2·K_3 is NOT cospectral: spec(C_6) =
+;; {2, 1, 1, -1, -1, -2}, spec(2·K_3) = {2, 2, -1, -1, -1, -1}. It is
+;; still a useful canary for another reason: both are 2-regular, so
+;; 1-WL refinement cannot separate them and the backtracking has to.)
 ;; ----------------------------------------------------------------
 
-;; Two copies of K_3 built as a hand-wired adjacency list, then
-;; compared against C_6. The hand-wired construction lives outside
-;; the presets, so the tutorial exercises the user-construction path.
+;; The graphs below are built as hand-wired adjacency lists. The
+;; hand-wired construction lives outside the presets, so the tutorial
+;; exercises the user-construction path.
+(define square-and-point
+  (make-graph
+    '((0 (1) (3)) (1 (0) (2)) (2 (1) (3)) (3 (0) (2)) (4))))
+(define star-1-4
+  (make-graph
+    '((0 (1) (2) (3) (4)) (1 (0)) (2 (0)) (3 (0)) (4 (0)))))
+;; Two copies of K_3, to be compared against C_6.
 (define two-triangles
   (make-graph
     '((0 (1) (2)) (1 (0) (2)) (2 (0) (1))
@@ -195,8 +207,10 @@
              "K_4 isomorphic to itself")
 (check-true  (graph-isomorphic? C5 (cycle-graph 5))
              "C_5 isomorphic to itself")
+(check-false (graph-isomorphic? square-and-point star-1-4)
+             "C_4 + K_1 and K_{1,4} are NOT isomorphic (cospectral canary)")
 (check-false (graph-isomorphic? (cycle-graph 6) two-triangles)
-             "C_6 and 2·K_3 are NOT isomorphic (cospectral canary)")
+             "C_6 and 2·K_3 are NOT isomorphic (2-regular, 1-WL cannot separate)")
 
 ;; Petersen isomorphic to the preset Petersen (smoke test for nontrivial
 ;; isomorphism case).

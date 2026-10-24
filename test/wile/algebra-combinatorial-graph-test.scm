@@ -493,7 +493,7 @@
         (p4   (path-graph 4)))
     (test #f (graph-isomorphic? star p4))))
 
-(test-group "COSPECTRAL NON-ISO CANARY — C_6 vs 2K_3"
+(test-group "NON-ISO CANARY — C_6 vs 2K_3 (2-regular; NOT cospectral)"
   (let ((C6 (cycle-graph 6))
         (two-triangles
           (make-graph
