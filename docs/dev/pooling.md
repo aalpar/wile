@@ -28,10 +28,10 @@ For performance motivation and benchmark data, see
 
 ## Pool Inventory
 
-The process-global pools are registered with the package-level `PoolManager`
-(`pools`) and defined in `pkg/machine/pool.go`. The per-thread freelists are
-deliberately **not** registered: they are single-goroutine, so they must not
-share the manager's lock or aggregate its counters.
+The process-global pools are package-level variables defined in
+`pkg/machine/pool.go`. Nothing registers them: there is no pool manager. The
+per-thread freelists are single-goroutine, so they carry no lock and keep their
+own counters.
 
 | Pool | Type | Backend | Acquired | Released | Reset |
 |------|------|---------|----------|----------|-------|
@@ -182,18 +182,15 @@ slots, clearing them before pooling (unshared) or leaving them intact
 
 ## Observability
 
-`PoolManager` (`pkg/machine/pool_generic.go`) provides unified observation and
-control over the four process-global pools. It does **not** see the per-thread
-freelists, so on a rooted context (which is every ordinary execution) the
-stack, continuation, and env-frame counters it reports stay near zero. Read
-`unsyncFreeList.Stats()` from the owning goroutine for those.
-
-| Method | Purpose |
-|--------|---------|
-| `AllStats()` | Point-in-time `PoolSnapshot` for each pool (acquires, releases, misses, in-flight) |
-| `DrainAll()` | Clears all pools (triggers `runtime.GC()` for sync.Pool; drains FreeList slices) |
-| `SetAllEnabled(bool)` | Toggle all pools on/off; disabled pools allocate fresh and discard on release |
-| `String()` | Tabular summary of all pool counters |
+Each pool in `pkg/machine/pool_generic.go` (`Pool`, `FreeList`,
+`unsyncFreeList`) reports a point-in-time `PoolSnapshot` (acquires, releases,
+misses, in-flight) from its own `Stats()` method. There is no aggregate view:
+the registry that once offered `AllStats`, `DrainAll` and `SetAllEnabled` was
+deleted because no production code called it. The per-thread freelists are
+not visible from outside their goroutine, so on a rooted context (which is
+every ordinary execution) the global stack, continuation, and env-frame
+counters stay near zero. Read `unsyncFreeList.Stats()` from the owning
+goroutine for those.
 
 Per-context counters on `MachineContext` (`counters` field) track pool
 operations at a finer grain: `StackPoolReleases`, `ContinuationPoolReleases`,

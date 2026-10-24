@@ -29,7 +29,7 @@ import (
 // define-library parsing, compilation, execution, and binding installation.
 //
 // Source: library_loader.go (LoadLibrary, loadLibraryFromReader,
-// compileAndExecuteLibrary), library_bindings.go (ApplyToExports,
+// compileLibrary), library_bindings.go (ApplyToExports,
 // CopyLibraryBindingsToEnv), compile_import.go (CompileImport),
 // compile_library_forms.go (CompileDefineLibrary),
 // compile_time_continuation_library.go (compileLibraryBegin).
