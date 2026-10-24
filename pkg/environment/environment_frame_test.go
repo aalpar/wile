@@ -1495,3 +1495,25 @@ func TestEnvironmentFrame_LocalLayout(t *testing.T) {
 	c.Assert(child.LocalLayout(), qt.Equals, child.LocalEnvironment())
 	c.Assert(child.LocalLayout().Bindings(), qt.HasLen, 2)
 }
+
+// The layout descriptor applies against a runtime parent that differs from the
+// frame it was compiled against: the apply frame takes parent, global, phase
+// level and namespace from the parent, and only the local bindings from the
+// descriptor.
+func TestLocalEnvironmentFrame_InitApplyFrameWithParentTakesTheParentsContext(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	compiledAgainst := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), ns.Runtime())
+	parent := ns.AtPhase(PhaseExpand)
+	c.Assert(parent.PhaseLevel(), qt.Not(qt.Equals), ns.Runtime().PhaseLevel())
+
+	var dst EnvironmentFrame
+	copied := compiledAgainst.LocalLayout().InitApplyFrameWithParent(&dst, parent)
+
+	c.Assert(copied, qt.Equals, 1)
+	c.Assert(dst.Parent(), qt.Equals, parent)
+	c.Assert(dst.GlobalEnvironment(), qt.Equals, parent.GlobalEnvironment())
+	c.Assert(dst.PhaseLevel(), qt.Equals, parent.PhaseLevel())
+	c.Assert(dst.Namespace(), qt.Equals, ns)
+	c.Assert(dst.LocalEnvironment().Bindings(), qt.HasLen, 1)
+}
