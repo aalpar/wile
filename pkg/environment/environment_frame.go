@@ -132,11 +132,14 @@ type EnvironmentFrame struct {
 	//     3") populates it before the copy, and is the site where populating it
 	//     late would lose a binding.
 	//   - LocalEnvironment's pointer aliases this field. A store through it is
-	//     seen. Only shapeSlotFor (merged_slots.go) and the merged-let path in
-	//     operation_syntax_case.go change its LENGTH (AppendAnonymousSlot). The
-	//     apply paths store element VALUES through Bindings() (bindArgs and
-	//     SetValue in machine_context.go, machine_context_apply.go and
-	//     call_foreign_cached.go). MachineClosure.Env (machine_closure.go) hands
+	//     seen. Of the stores through the returned pointer, only shapeSlotFor
+	//     (merged_slots.go) and the merged-let path in operation_syntax_case.go
+	//     change its LENGTH (AppendAnonymousSlot); the frame's own
+	//     MaybeCreateLocalBinding and EnsureLocalBinding also grow the field
+	//     directly. The apply paths store element VALUES through Bindings():
+	//     bindArgs (arity.go) calls SetValue, and is reached from
+	//     machine_context.go, machine_context_apply.go and
+	//     call_foreign_cached.go. MachineClosure.Env (machine_closure.go) hands
 	//     the aliased pointer to NewEnvironmentFrameWithParent, which copies it
 	//     again as builder input. The remaining readers test it for nil or read
 	//     Bindings, Keys or CopyCount.
