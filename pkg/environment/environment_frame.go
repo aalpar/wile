@@ -124,9 +124,10 @@ type EnvironmentFrame struct {
 	// Five functions deal in a *LocalEnvironmentFrame, and the pointers are NOT
 	// one object seen from five places. NewLocalEnvironment allocates its own.
 	// Four explicitly take the address (&p.local), and TestLocalFieldAddressTakers
-	// lists them: LocalEnvironment, LocalLayout, bindingIDAt (ResolveBindingID
-	// builds its IDs there), and LocalEnvironmentFrame.InitApplyFrameWithParent
-	// (a destination written through, never handed out). Pointer-receiver calls on the field
+	// lists them: LocalEnvironment, LocalLayout, bindingIDAt (the
+	// ResolveBindingID family builds its IDs there), and
+	// LocalEnvironmentFrame.InitApplyFrameWithParent (a destination written
+	// through, never handed out). Pointer-receiver calls on the field
 	// (InitApplyFrameWithParent, EnsureLocalBinding and MaybeCreateLocalBinding
 	// below) take the address implicitly, and the test cannot see an escape that
 	// way. The pointers promise different things:
@@ -155,11 +156,11 @@ type EnvironmentFrame struct {
 	//     builds one) into a template that looks like it records no shape.
 	//     MachineClosure.Env (machine_closure.go) hands it to
 	//     NewEnvironmentFrameWithParent, which copies it as builder input.
-	//   - bindingIDAt's pointer (ResolveBindingID's) is an identity, not an
+	//   - bindingIDAt's pointer (the ResolveBindingID family's) is an identity, not an
 	//     access path: BindingID.Frame names the local environment of the frame
 	//     at the depth the symbol resolved, so two IDs are equal exactly when
-	//     they name the same frame's locals. It is never nil for a depth
-	//     inside the parent chain, which every caller guarantees.
+	//     they name the same frame's locals. It is never nil: a depth
+	//     outside the parent chain is a caller bug (nil dereference).
 	// Absent is nil, not an empty frame, for LocalEnvironment alone. A function
 	// that hands out the address of this field must extend this comment rather
 	// than add a second one. The test checks only its own hard-coded list, so

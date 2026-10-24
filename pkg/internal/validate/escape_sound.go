@@ -21,7 +21,7 @@ import (
 // letBoundClosureEscapes reports whether the lambda bound by the i-th binding of
 // v can outlive the enclosing call. It is the sound sibling of
 // markEscapedBindings: that one is best-effort and leaves an unresolved
-// reference NON-escaping (validate_escape.go — the ResolveBindingID miss just
+// reference NON-escaping (validate_escape.go — the TryResolveBindingID miss just
 // returns), which is the wrong direction for anything gating frame reuse. This
 // one answers "does not escape" only from positive evidence.
 //

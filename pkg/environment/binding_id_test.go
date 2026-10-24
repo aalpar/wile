@@ -38,15 +38,17 @@ func TestResolveBindingIDAgreesWithGetLocalIndex(t *testing.T) {
 		name   string
 		frames layer
 		q      syntax.ScopeSet
+		up     int // expected frames above the innermost; -1 for a miss
+		over   int // expected slot in that frame
 	}{
-		{"same-frame maximal first", layer{{ab, onlyA}}, syntax.ScopesOf(ab)},
-		{"same-frame maximal last", layer{{onlyA, ab}}, syntax.ScopesOf(ab)},
-		{"inner maximal, outer smaller", layer{{onlyA}, {ab}}, syntax.ScopesOf(ab)},
-		{"outer maximal, inner smaller", layer{{ab}, {onlyA}}, syntax.ScopesOf(ab)},
-		{"perfect match shadowed by identical outer", layer{{ab}, {ab}}, syntax.ScopesOf(ab)},
-		{"scoped miss", layer{{ab}}, syntax.ScopesOf(onlyA)},
-		{"wildcard first not maximal", layer{{onlyA, ab}}, syntax.AllScopes()},
-		{"wildcard reaches outer", layer{{onlyA}, {}}, syntax.AllScopes()},
+		{"same-frame maximal first", layer{{ab, onlyA}}, syntax.ScopesOf(ab), 0, 0},
+		{"same-frame maximal last", layer{{onlyA, ab}}, syntax.ScopesOf(ab), 0, 1},
+		{"inner maximal, outer smaller", layer{{onlyA}, {ab}}, syntax.ScopesOf(ab), 0, 0},
+		{"outer maximal, inner smaller", layer{{ab}, {onlyA}}, syntax.ScopesOf(ab), 1, 0},
+		{"perfect match shadowed by identical outer", layer{{ab}, {ab}}, syntax.ScopesOf(ab), 0, 0},
+		{"scoped miss", layer{{ab}}, syntax.ScopesOf(onlyA), -1, 0},
+		{"wildcard first not maximal", layer{{onlyA, ab}}, syntax.AllScopes(), 0, 0},
+		{"wildcard reaches outer", layer{{onlyA}, {}}, syntax.AllScopes(), 1, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -62,6 +64,13 @@ func TestResolveBindingIDAgreesWithGetLocalIndex(t *testing.T) {
 			}
 			li := env.GetLocalIndex(sym, tc.q)
 			bid, ok := env.ResolveBindingID(sym, tc.q)
+			if tc.up < 0 {
+				qt.Assert(t, li, qt.IsNil)
+			} else {
+				qt.Assert(t, li, qt.IsNotNil)
+				qt.Assert(t, li.Up(), qt.Equals, tc.up)
+				qt.Assert(t, li.Over(), qt.Equals, tc.over)
+			}
 			qt.Assert(t, ok, qt.Equals, li != nil)
 			if li == nil {
 				qt.Assert(t, bid, qt.Equals, BindingID{})
