@@ -182,10 +182,13 @@
 ;; The classical cospectral-but-non-isomorphic canary is the Saltire pair,
 ;; C_4 + K_1 (a square and an isolated vertex) vs the star K_{1,4}: both
 ;; have 5 vertices, 4 edges and spectrum {-2, 0, 0, 0, 2}, but are not
-;; isomorphic. (C_6 vs 2·K_3 is NOT cospectral: spec(C_6) =
-;; {2, 1, 1, -1, -1, -2}, spec(2·K_3) = {2, 2, -1, -1, -1, -1}. It is
-;; still a useful canary for another reason: both are 2-regular, so
-;; 1-WL refinement cannot separate them and the backtracking has to.)
+;; isomorphic. `graph-isomorphic?` rejects this pair at its degree-sequence
+;; short-circuit ((2, 2, 2, 2, 0) vs (4, 1, 1, 1, 1)), so it is a canary for
+;; spectral invariants (cospectrality), not for the 1-WL/backtracking path.
+;; C_6 vs 2·K_3 is NOT cospectral: spec(C_6) = {2, 1, 1, -1, -1, -2},
+;; spec(2·K_3) = {2, 2, -1, -1, -1, -1}. It is the pair that reaches the
+;; canonical-form comparison: both are 2-regular, so the degree sequences
+;; agree and 1-WL refinement cannot separate them.
 ;; ----------------------------------------------------------------
 
 ;; The graphs below are built as hand-wired adjacency lists. The

@@ -54,6 +54,15 @@ func TestDenotedForm(t *testing.T) {
 		// FormName denotes nothing.
 		{"a macro binding holds a transformer, not a form name",
 			bind("my-macro", environment.BindingTypeSyntax, values.NewString("transformer")), ""},
+		// The !ok arm is by value, not by binding type: a Primitive binding holding
+		// a non-form value denotes nothing either. (The value is a string so the
+		// row does not depend on a transient Void.)
+		{"a primitive binding without a form-naming value denotes nothing",
+			bind("=>", environment.BindingTypePrimitive, values.NewString("not-a-form")), ""},
+		// DenotedForm excludes only variables; a keyword value on a macro-typed
+		// binding still names its form.
+		{"a syntax-typed binding holding a keyword value names its form",
+			bind("my-macro-if", environment.BindingTypeSyntax, environment.NewFormKeyword("if")), "if"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
