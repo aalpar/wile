@@ -26,10 +26,11 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// The comment on EnvironmentFrame.local lists every function that takes the
-// address of that field. This pins the list: a new accessor that returns
-// &p.local without extending the comment fails here, which a compiler never
-// would (the staleness is silent, and a textual merge of the two edits exits 0).
+// The comment on EnvironmentFrame.local lists the functions that explicitly take
+// the address of that field (&p.local). This checks the list: a new accessor
+// that returns &p.local fails here until the list is updated, which a compiler
+// never would. It does not see implicit address-taking through pointer-receiver
+// calls on the field, and the comment itself is maintained by hand.
 func TestLocalFieldAddressTakers(t *testing.T) {
 	c := qt.New(t)
 	entries, err := os.ReadDir(".")
@@ -54,6 +55,9 @@ func TestLocalFieldAddressTakers(t *testing.T) {
 				if !ok || unary.Op != token.AND {
 					return true
 				}
+				// The match is on the selector name alone, ignoring the receiver's
+				// type: a BindingRef.local written &r.local would be a false
+				// positive.
 				sel, ok := unary.X.(*ast.SelectorExpr)
 				if ok && sel.Sel.Name == "local" {
 					found = append(found, fn.Name.Name)

@@ -123,10 +123,13 @@ type EnvironmentFrame struct {
 	//
 	// Five functions deal in a *LocalEnvironmentFrame, and the pointers are NOT
 	// one object seen from five places. NewLocalEnvironment allocates its own.
-	// Four take the address of this field, and TestLocalFieldAddressTakers pins
-	// that set: LocalEnvironment, LocalLayout, ResolveBindingID, and
+	// Four explicitly take the address (&p.local), and TestLocalFieldAddressTakers
+	// lists them: LocalEnvironment, LocalLayout, ResolveBindingID, and
 	// LocalEnvironmentFrame.InitApplyFrameWithParent (a destination written
-	// through, never handed out). The pointers promise different things:
+	// through, never handed out). Pointer-receiver calls on the field
+	// (InitApplyFrameWithParent, EnsureLocalBinding and MaybeCreateLocalBinding
+	// below) take the address implicitly, and the test cannot see an escape that
+	// way. The pointers promise different things:
 	//   - NewLocalEnvironment's pointer is a builder. NewEnvironmentFrameWithParent
 	//     copies *lenv into this field, so a store through the original after that
 	//     copy is lost (the slice header and map survive the copy, but a length
@@ -157,8 +160,9 @@ type EnvironmentFrame struct {
 	//     the symbol resolved, so two IDs are equal exactly when they name the
 	//     same frame's locals. It is never nil, because a binding resolved.
 	// Absent is nil, not an empty frame, for LocalEnvironment alone. A function
-	// that takes the address of this field must extend this comment rather than
-	// add a second one; the test fails until it does.
+	// that hands out the address of this field must extend this comment rather
+	// than add a second one. The test checks only its own hard-coded list, so
+	// this comment is maintained by hand.
 	local LocalEnvironmentFrame
 	// phaseLevel is this frame's level on the macro tower, RELATIVE to the
 	// owner's own runtime (level 0). It is not an absolute compilation stage:
