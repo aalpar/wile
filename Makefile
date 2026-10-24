@@ -140,10 +140,15 @@ examples:
 
 # ── CI: everything that must pass before merge ──────────────────────
 # Set SKIP_LINT=1 when lint is handled externally (e.g., golangci-lint-action).
+# The legs are independent once `build` has run, so ci re-invokes make with -j;
+# --output-sync keeps each target's log contiguous.
 #   make ci
 #   make ci SKIP_LINT=1
-.PHONY: ci
-ci: $(if $(SKIP_LINT),,lint) build-all tutorial-test test-scheme-gate covercheck readme-check check-readme-links check-docs-orphans examples test-examples verify-mod
+.PHONY: ci ci-all
+ci:
+	@$(MAKE) --no-print-directory -j --output-sync=target ci-all
+
+ci-all: $(if $(SKIP_LINT),,lint) build-all tutorial-test test-scheme-gate covercheck readme-check check-readme-links check-docs-orphans examples test-examples verify-mod
 	@echo "CI passed"
 
 # ── CD: release-specific validation ─────────────────────────────────
@@ -484,10 +489,13 @@ coverhtml:
 # for the first, per library directory for the second (suites skipped;
 # exclusions listed in covercheck.sh).
 #   make covercheck
-.PHONY: covercheck
-covercheck: cover-scm
-	@mkdir -p ./build
+# The Go and Scheme profiles are independent, so they can build in parallel.
+.PHONY: covercheck cover-go
+cover-go: build
+	@mkdir -p $(GO_BUILD_DIR)
 	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./...
+
+covercheck: cover-go cover-scm
 	@bash $(SH_TOOLS_DIR)/covercheck.sh 80 $(GO_BUILD_DIR)/coverage.out
 	@bash $(SH_TOOLS_DIR)/covercheck.sh 80 $(GO_BUILD_DIR)/scheme-coverage.out
 
