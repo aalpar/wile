@@ -190,3 +190,81 @@ func TestResolveBindingRefsTieAcrossFrames(t *testing.T) {
 	qt.Assert(t, refs[0], qt.Equals, LocalRef(BindingID{Frame: &env.local, Slot: 0}))
 	qt.Assert(t, refs[1], qt.Equals, LocalRef(BindingID{Frame: &outer.local, Slot: 0}))
 }
+
+// resolveLocalTies and resolveLocalMaximal are one walk: the tie flag of one is
+// exactly "has ties" of the other, and both name the same best.
+func TestResolveLocalTiesAgreesWithResolveLocalMaximal(t *testing.T) {
+	tied, tiedSym, tiedQ := tiedFrame()
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+	plainSym := values.NewSymbol("x")
+	plain := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	plain.MaybeCreateLocalBinding(plainSym, BindingTypeVariable, syntax.Scopes{}.Add(a), nil)
+	plain.MaybeCreateLocalBinding(plainSym, BindingTypeVariable, syntax.Scopes{}.Add(a).Add(b), nil)
+	build := func(_ *Binding, slot int, depth int) BindingID {
+		return BindingID{Frame: nil, Slot: slot*10 + depth}
+	}
+	cases := []struct {
+		name string
+		env  *EnvironmentFrame
+		sym  *values.Symbol
+		q    syntax.ScopeSet
+		ties int
+	}{
+		{"tie", tied, tiedSym, tiedQ, 1},
+		{"no tie", plain, plainSym, syntax.ScopesOf(syntax.Scopes{}.Add(a).Add(b)), 0},
+		{"wildcard", tied, tiedSym, syntax.AllScopes(), 0},
+		{"miss", tied, values.NewSymbol("y"), tiedQ, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			best1, found1, amb := resolveLocalMaximal(tc.env, tc.sym, tc.q, build)
+			best2, found2, ties := resolveLocalTies(tc.env, tc.sym, tc.q, build)
+
+			qt.Assert(t, found2, qt.Equals, found1)
+			qt.Assert(t, best2, qt.Equals, best1)
+			qt.Assert(t, amb, qt.Equals, len(ties) > 0)
+			qt.Assert(t, ties, qt.HasLen, tc.ties)
+		})
+	}
+}
+
+// A later strictly heavier compatible binder supersedes the ties recorded at the
+// lower weight: the answer is that one binder, not a tie.
+func TestResolveBindingRefsHeavierBinderSupersedesTies(t *testing.T) {
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+	c := syntax.NewScope()
+	d := syntax.NewScope()
+	sym := values.NewSymbol("x")
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a).Add(b), nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a).Add(c), nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a).Add(b).Add(c), nil)
+	q := syntax.ScopesOf(syntax.Scopes{}.Add(a).Add(b).Add(c).Add(d))
+
+	refs := env.ResolveBindingRefs(sym, q)
+
+	qt.Assert(t, refs, qt.HasLen, 1)
+	qt.Assert(t, refs[0], qt.Equals, LocalRef(BindingID{Frame: &env.local, Slot: 2}))
+}
+
+// A scope set seen twice among the ties is one tied binder, the innermost.
+func TestResolveBindingRefsDedupsRepeatedTie(t *testing.T) {
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+	c := syntax.NewScope()
+	sym := values.NewSymbol("x")
+	ac := syntax.Scopes{}.Add(a).Add(c)
+	outer := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	outer.MaybeCreateLocalBinding(sym, BindingTypeVariable, ac, nil)
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outer)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a).Add(b), nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, ac, nil)
+	q := syntax.ScopesOf(ac.Add(b))
+
+	refs := env.ResolveBindingRefs(sym, q)
+
+	qt.Assert(t, refs, qt.HasLen, 2)
+	qt.Assert(t, refs[1], qt.Equals, LocalRef(BindingID{Frame: &env.local, Slot: 1}))
+}
