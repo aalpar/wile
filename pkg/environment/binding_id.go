@@ -86,3 +86,45 @@ func (p *EnvironmentFrame) ResolveBindingRef(key *values.Symbol, q syntax.ScopeS
 	}
 	return GlobalRef(key.Key)
 }
+
+// ResolveBindingRefs is ResolveBindingRef for a caller that must cover every
+// binder a reference MIGHT denote. Without a tie it is the single ref
+// ResolveBindingRef returns. On a tie it is one local ref per tied binder (one
+// per distinct maximal scope set, innermost first), so a marker that
+// over-approximates cannot miss the binder expansion later settles on. A wildcard
+// query is never a tie.
+func (p *EnvironmentFrame) ResolveBindingRefs(key *values.Symbol, q syntax.ScopeSet) []BindingRef {
+	_, _, ambiguous := p.TryResolveBindingID(key, q)
+	if !ambiguous {
+		return []BindingRef{p.ResolveBindingRef(key, q)}
+	}
+	type candidate struct {
+		scopes syntax.Scopes
+		bid    BindingID
+	}
+	var all []candidate
+	maxLen := 0
+	walkLocal(p, key, q, func(binding *Binding, slot int, depth int) bool {
+		sc := binding.Scopes()
+		all = append(all, candidate{scopes: sc, bid: p.bindingIDAt(slot, depth)})
+		maxLen = max(maxLen, sc.Len())
+		return false
+	})
+	var q2 []BindingRef
+	var kept []syntax.Scopes
+	for _, c := range all {
+		if c.scopes.Len() != maxLen {
+			continue
+		}
+		dup := false
+		for _, k := range kept {
+			dup = dup || syntax.ScopesMatch(c.scopes, k)
+		}
+		if dup {
+			continue
+		}
+		kept = append(kept, c.scopes)
+		q2 = append(q2, LocalRef(c.bid))
+	}
+	return q2
+}

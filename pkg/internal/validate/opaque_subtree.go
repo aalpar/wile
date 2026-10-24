@@ -651,9 +651,11 @@ func markOpaqueSubtree(env *environment.EnvironmentFrame, raw values.Value, quas
 	}
 	forEachRawSymbol(env, raw, quasi, mk, walkWrites, func(sym *syntax.SyntaxSymbol) {
 		if env != nil {
-			ref := env.ResolveBindingRef(sym.Sym, syntax.ScopesOf(sym.Scopes()))
-			if ref.IsLocal() {
-				result.markMutated(ref)
+			// Every tied binder: expansion may settle the reference on any of them.
+			for _, ref := range env.ResolveBindingRefs(sym.Sym, syntax.ScopesOf(sym.Scopes())) {
+				if ref.IsLocal() {
+					result.markMutated(ref)
+				}
 			}
 		}
 		result.markMutated(environment.GlobalRef(sym.Key()))
