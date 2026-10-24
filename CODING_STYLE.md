@@ -121,6 +121,46 @@ When both arms are genuine, comparable alternatives (a true two-way choice), an
 that opens with a wall of a dozen guards is a signal to split it, not evidence
 that guard clauses scale without limit.
 
+### Passing Fields, Not Structs
+
+When a function references only a few fields of a struct, pass in the fields;
+do not pass in the struct or a reference to it. The signature then states what
+the function depends on, and a test supplies the fields without building the
+struct.
+
+```go
+// Avoid: the signature says "a Frame"; the body needs only its slots.
+func slotInRange(f *Frame, i int) bool {
+	return i >= 0 && i < len(f.slots)
+}
+
+// Prefer: the signature says what is read.
+func slotInRange(slots []Binding, i int) bool {
+	return i >= 0 && i < len(slots)
+}
+```
+
+The rule is about *few* fields: a function that reads most of a struct, or
+writes it, takes the struct. A method whose body reads one receiver field,
+writes none and takes parameters is a free function over that field in
+disguise, unless the receiver is the point:
+
+- an exported method over an unexported field, where the receiver is the
+  encapsulation boundary (keyed lookups such as `Namespace.ExtensionState`);
+- a method that satisfies an interface;
+- a setter or a one-line forwarder;
+- a hot-path accessor where the extra parameter costs more than it clarifies
+  (`EnvironmentFrame.GetLocalBindingByIndex`, whose whole body is
+  `return &p.local.bindings[i]`).
+
+wile-goast's `(receiver-parameter-asymmetry)` finds the mechanical subset
+(receiver field read exactly once, written never, at least one parameter; it
+counts parameters, it does not examine them) and needs hand triage: it flags
+keyed lookups and setters that write through a sub-struct, not zero-parameter
+accessors or direct-field setters. A located `'candidate` verdict is a pair, not
+the bare symbol; see `receiver-parameter-asymmetry` in the sibling repo's
+`wile-goast/lib/wile/goast/belief-checkers.scm`.
+
 ## Return Values
 
 | Letter | Usage                                                                                                                                                                                          |
