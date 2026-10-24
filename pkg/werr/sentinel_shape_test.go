@@ -130,8 +130,11 @@ func calleeName(e ast.Expr) string {
 // the package. Known limits, each the price of reading source instead of
 // values:
 //
-//   - Declarations only. The old list saw runtime values, so a sentinel
-//     reassigned in an init() was visible to it; the walk does not see that.
+//   - Declarations and literals only. The old list saw runtime values, so any
+//     sentinel replaced after declaration was visible to it. The walk inspects
+//     every NewStaticError call, init() bodies included, so a reassignment such
+//     as ErrNotAFoo = NewStaticError("not a foo") in an init() still fires
+//     arm 2; a reassignment whose message does not begin "not a ..." is unseen.
 //   - Build constraints are ignored: a file excluded by //go:build is scanned
 //     too, which errs toward flagging.
 //   - The walk stops at pkg/werr. A sentinel declared elsewhere is not checked.
@@ -252,13 +255,6 @@ var ErrX = NewStaticError("not a " + "thing")`,
 			nil,
 		},
 		{
-			"constant message escapes arm 2",
-			`package p
-const msg = "not a thing"
-var ErrX = NewStaticError(msg)`,
-			nil,
-		},
-		{
 			"call with no argument is not inspected",
 			`package p
 var ErrX = NewStaticError()`,
@@ -271,8 +267,9 @@ var ErrX = NewStaticError("Not a thing")`,
 			nil,
 		},
 		{
-			"non-literal message is not inspected",
+			"non-literal message (identifier or constant) is not inspected",
 			`package p
+const msg = "not a thing"
 var ErrX = NewStaticError(msg)`,
 			nil,
 		},
