@@ -51,7 +51,7 @@ func TestBenchmarkExampleNamesResolve(t *testing.T) {
 			continue
 		}
 		for _, m := range bareBenchmarksExample.FindAllStringSubmatch(string(src), -1) {
-			for _, bench := range strings.Fields(m[2]) {
+			for _, bench := range strings.FieldsSeq(m[2]) {
 				checked++
 				bench = strings.TrimSuffix(bench, ".scm")
 				_, err := os.Stat(filepath.Join(root, "examples", "benchmarks", bench+".scm"))

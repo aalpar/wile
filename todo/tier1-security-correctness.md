@@ -637,11 +637,15 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   `(import (scheme nonexistent-xyz))` names four probes (`.sld` and `.scm` in each of the two chain arms) where it named one).
 - [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
   as a profile name.
-- [ ] Coverage: `stdlibPrefixes` (`coverage/gocover.go`) omits the embedded `chibi/` and `rnrs/`.
+- [x] Coverage: `stdlibPrefixes` (`coverage/gocover.go`) omits the embedded `chibi/` and `rnrs/`.
+  [Done 2026-10-23, P8.4 `fix/derive-stdlib-and-benchmark-lists`: `stdlibPaths` is the exact file set walked from `stdlib.FS`;
+  `chibi/`, `rnrs/hashtables.sld` stop leaking and non-embedded `wile/goast/` stops being excluded. A plain `--cover`
+  run importing `(chibi test)` emitted 268 `chibi/test.sld` rows on master and none now.]
 - [ ] Stale: `waitOnCondCtx` (`pkg/values/cond_wait.go`) and `LockContext`
   (`pkg/values/mutex.go`) say a terminated holder's lock stays held (`Thread.Terminate`
   abandons it); tutorial chapter 06 calls C_6 and 2·K_3 cospectral, chapter 05 lists a
-  nonexistent `(wile algebra field)`; `Makefile` `bench-gabriel-compare` names `ack`.
+  nonexistent `(wile algebra field)`. (The `Makefile` `bench-gabriel-compare` `ack` clause closed 2026-10-23, P8.4:
+  `TestBenchmarkExampleNamesResolve` pins literal `BENCHMARKS="..."` examples to `examples/benchmarks/<name>.scm`.)
 - [x] `read-syntax` positions do not count characters `read-char` consumed between reads (needs
   port-owned position tracking). [Done 2026-10-20, P7.4 `fix/port-owned-read-position`, merge `97821490`
   (`6faa74ff`, `1f202f81`, `5a703aa4`, crosscheck `59970863`, re-review `b5ccf9ce`): `portBase` counts every rune its rune reader yields with `values.AdvanceIndexes` (two
