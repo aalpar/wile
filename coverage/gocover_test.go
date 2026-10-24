@@ -16,9 +16,12 @@ package coverage
 
 import (
 	"bytes"
+	"io/fs"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/stdlib"
 )
 
 func TestWriteGoCover_HeaderModeSet(t *testing.T) {
@@ -113,4 +116,36 @@ func TestWriteGoCover_ColumnsAreOneBased(t *testing.T) {
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(buf.String(), qt.Equals, "mode: set\na.scm:1.2,1.8 1 1\n")
+}
+
+// TestEveryEmbeddedStdlibPathIsExcluded pins the exclusion set to the embedded
+// stdlib itself: a file the embed FS carries is stdlib, whatever its first
+// path element, so a plain --cover report never lists it.
+func TestEveryEmbeddedStdlibPathIsExcluded(t *testing.T) {
+	c := qt.New(t)
+	var unexcluded []string
+	err := fs.WalkDir(stdlib.FS, ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !isStdlibPath(name) {
+			unexcluded = append(unexcluded, name)
+		}
+		return nil
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(unexcluded, qt.HasLen, 0, qt.Commentf("embedded stdlib paths a plain --cover report would list: %v", unexcluded))
+}
+
+// TestNonEmbeddedWileGoastIsNotExcluded pins the other direction: wile/goast
+// lives in the wile-goast repository, not in the embed FS, so a user program
+// under that name is user code. The old "wile/" prefix excluded it.
+func TestNonEmbeddedWileGoastIsNotExcluded(t *testing.T) {
+	c := qt.New(t)
+	_, err := fs.Stat(stdlib.FS, "wile/goast/ast.sld")
+	c.Assert(err, qt.Not(qt.IsNil), qt.Commentf("wile/goast is embedded now; pick another non-embedded path"))
+	c.Assert(isStdlibPath("wile/goast/ast.sld"), qt.IsFalse)
 }

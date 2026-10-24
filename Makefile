@@ -360,7 +360,7 @@ bench-larceny: build
 # Requires other Schemes installed (chez, racket, chibi, guile).
 # Saves comparison results to examples/benchmarks/comparison-*.csv.
 #   make bench-gabriel-compare
-#   make bench-gabriel-compare BENCHMARKS="tak fib ack deriv"
+#   make bench-gabriel-compare BENCHMARKS="tak fib ackermann deriv"
 .PHONY: bench-gabriel-compare
 bench-gabriel-compare: build
 	@cd examples/benchmarks && ./compare-schemes.sh

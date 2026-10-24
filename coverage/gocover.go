@@ -17,15 +17,36 @@ package coverage
 import (
 	"fmt"
 	"io"
-	"strings"
+	"io/fs"
+
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
-// stdlibPrefixes are paths whose entries are excluded by default.
-// They correspond to the embedded R7RS stdlib paths under stdlib/lib/.
-var stdlibPrefixes = []string{
-	"scheme/",
-	"wile/",
-	"srfi/",
+// stdlibPaths are the files whose entries are excluded by default: exactly the
+// files the embedded stdlib carries, walked from the embed FS so the set cannot
+// drift from it. A prefix list did drift: chibi/ and rnrs/ leaked into plain
+// reports, and wile/goast/ (which lives in the wile-goast repository, not in
+// the embed) was excluded as though it were stdlib.
+var stdlibPaths = embeddedStdlibPaths()
+
+// embeddedStdlibPaths walks the embedded stdlib FS into an exact-path set.
+func embeddedStdlibPaths() map[string]struct{} {
+	q := make(map[string]struct{})
+	err := fs.WalkDir(stdlib.FS, ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		q[name] = struct{}{}
+		return nil
+	})
+	if err != nil {
+		panic(werr.WrapForeignErrorf(err, "coverage: walking the embedded stdlib"))
+	}
+	return q
 }
 
 // WriteGoCover writes the collector's entries in Go cover v1 format
@@ -64,10 +85,6 @@ func writeGoCover(w io.Writer, c *Collector, includeStdlib bool) error {
 // isStdlibPath reports whether a file path is part of the embedded
 // stdlib and should be excluded from user-facing reports by default.
 func isStdlibPath(file string) bool {
-	for _, prefix := range stdlibPrefixes {
-		if strings.HasPrefix(file, prefix) {
-			return true
-		}
-	}
-	return false
+	_, ok := stdlibPaths[file]
+	return ok
 }
