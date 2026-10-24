@@ -7,6 +7,11 @@
 
 ## Tier 5 — Tech Debt
 
+### Filed by the P8.11 crosscheck (2026-10-23)
+
+- [ ] **Widen the `Mutates` direct-sink pin to the shapes it cannot see** [Test debt, M]: the pin sees 12 of the 21 annotated primitives (the 13 hand-written primitives that call a sink method, less `append`). Not seen: write-through to a backing slice without a mutator call (vector-fill!, vector-copy!, bytevector-copy!, read-bytevector!, string-copy!), `String.SetValue`, method values, helper indirection (record-modifier's factory), and every helper-built primitive (152 of 464 with an Impl, 33%; set-box!, %parameter-raw-set! and atomic-store! are three annotated ones). Needs function-valued arguments and func-typed call sites as edges, plus exported-field and slice writes on the values types: the SSA or `go/analysis` item the closed row below describes. Overlap checked: this is the remaining scope of that row.
+- [ ] **Audit the variadic primitives for rest-list retention** [Correctness, S]: the buildRestArg contract pin records that every variadic call shares one block, so a primitive that keeps its rest list past the call sees it re-linked by the next call. Only `PrimList` (which copies the spine) was checked; 126 specs carry `IsVariadic`. Retention is unproven, not absent. Method: for each variadic Impl, find whether the rest binding or `mc.Arg` of the rest index is stored, returned or captured past the call. Overlap checked: the buildRestArg row in the correctness file closed on the contract only and points here.
+
 ### Filed by the P8.5 crosscheck (2026-10-23)
 
 Two rows from the review of `test/type-sentinel-declaration-shape`; both are limits of reading
@@ -325,7 +330,7 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
 
 ### `PrimitiveSpec.Mutates` has no static guard (2026-08-09)
 
-- [ ] **Derive destructiveness from the code, not only from the annotation**
+- [x] **Derive destructiveness from the code, not only from the annotation** [Done 2026-10-23 for the DIRECT-SINK shape only, P8.11 `MERGE_SHA`: `TestMutatesDirectSinkPin` and `TestMutatesPinFindingsDecision`; the write-through, method-value, helper-indirection and helper-built shapes stay open as the first row under "Filed by the P8.11 crosscheck" above]
   [Correctness-adjacent, M]: `TestMutatesMatchesMutationPrimitives` pins the
   annotated set against `NoMutation`'s removal list in both directions, but
   derives NEITHER from what the primitives actually do. A new destructive
