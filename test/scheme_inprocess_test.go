@@ -246,6 +246,8 @@ func runSchemeFileInProcess(t *testing.T, repoRoot, relPath string) (failures in
 // driver can only see 0 or 1, while the counter reports how many assertions
 // actually failed and survives a file that raises partway through.
 func TestSchemeSuiteInProcess(t *testing.T) {
+	t.Parallel()
+
 	repoRoot, rootErr := filepath.Abs("..")
 	qt.Assert(t, rootErr, qt.IsNil)
 

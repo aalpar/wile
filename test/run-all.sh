@@ -105,6 +105,10 @@ if [ "$UNGATED_COUNT" -ne 0 ]; then
     exit 1
 fi
 
+if [ -n "${GATE_ONLY:-}" ]; then
+    exit 0
+fi
+
 # Run each test file
 FAILED=0
 PASSED=0

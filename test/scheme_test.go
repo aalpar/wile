@@ -15,6 +15,14 @@ import (
 // Tests are discovered by the run-all.sh script, which finds all
 // *-test.scm files in test/ and lib/ directories.
 func TestSchemeTestSuite(t *testing.T) {
+	// The two drivers share no state: this one execs the binary, the other
+	// swaps os.Stdout only inside its own run.
+	t.Parallel()
+
+	if os.Getenv("WILE_SKIP_CLI_SCHEME_SUITE") != "" {
+		t.Skip("CLI Scheme suite is run by make cover-scm")
+	}
+
 	c := qt.New(t)
 
 	// Find the scheme binary

@@ -140,10 +140,15 @@ examples:
 
 # ── CI: everything that must pass before merge ──────────────────────
 # Set SKIP_LINT=1 when lint is handled externally (e.g., golangci-lint-action).
+# The legs are independent once `build` has run, so ci re-invokes make with -j;
+# --output-sync keeps each target's log contiguous.
 #   make ci
 #   make ci SKIP_LINT=1
-.PHONY: ci
-ci: $(if $(SKIP_LINT),,lint) build-all test covercheck readme-check check-readme-links check-docs-orphans examples test-examples verify-mod
+.PHONY: ci ci-all
+ci:
+	@$(MAKE) --no-print-directory -j --output-sync=target ci-all
+
+ci-all: $(if $(SKIP_LINT),,lint) build-all tutorial-test test-scheme-gate covercheck readme-check check-readme-links check-docs-orphans examples test-examples verify-mod
 	@echo "CI passed"
 
 # ── CD: release-specific validation ─────────────────────────────────
@@ -253,6 +258,12 @@ fuzz:
 	    || { echo "FAIL: $$t found a crasher (saved under testdata/fuzz/$$t/)"; exit 1; }; \
 	done; \
 	echo "fuzz: all targets completed $(FUZZTIME) with no new failures"
+
+# Only the (test-exit) gate from run-all.sh. `make ci` runs the suites through
+# covercheck (cover-scm.sh), which gates on exit status but not on this.
+.PHONY: test-scheme-gate
+test-scheme-gate: build
+	@GATE_ONLY=1 SCHEME=$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) ./test/run-all.sh
 
 # Run Scheme-level test suite.
 # Override SCHEME to test against different implementations:
@@ -478,10 +489,15 @@ coverhtml:
 # for the first, per library directory for the second (suites skipped;
 # exclusions listed in covercheck.sh).
 #   make covercheck
-.PHONY: covercheck
-covercheck: cover-scm
-	@mkdir -p ./build
-	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./...
+# The Go and Scheme profiles are independent, so they can build in parallel.
+# cover-scm and test-scheme-gate already run the CLI suite, so the Go run skips
+# TestSchemeTestSuite (scheme_test.go) rather than exec the binary a third time.
+.PHONY: covercheck cover-go
+cover-go: build
+	@mkdir -p $(GO_BUILD_DIR)
+	WILE_SKIP_CLI_SCHEME_SUITE=1 $(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./...
+
+covercheck: cover-go cover-scm
 	@bash $(SH_TOOLS_DIR)/covercheck.sh 80 $(GO_BUILD_DIR)/coverage.out
 	@bash $(SH_TOOLS_DIR)/covercheck.sh 80 $(GO_BUILD_DIR)/scheme-coverage.out
 
