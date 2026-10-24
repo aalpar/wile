@@ -426,7 +426,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	//
 	// Global-only by construction. GetBinding would search locals first, and
 	// emitting a cached-binding load for a local would be wrong. A nil GetLocalIndex
-	// does imply GetBinding's local phase is empty today (both walk walkLocal
+	// does imply GetBinding's local phase is empty today (both walk the local frames through walkLocal
 	// with the same scopedBestOf and ScopesCompatible filter), but that is a
 	// non-local invariant, so use the accessor that cannot depend on it — the same
 	// one the empty-scope path above uses.

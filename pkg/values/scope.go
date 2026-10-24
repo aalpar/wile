@@ -170,7 +170,7 @@ func ScopesMatch(useScopes, bindingScopes Scopes) bool {
 // It is the entry point MOST consumers matching a REFERENCE against a candidate
 // BINDER share, so scope resolution cannot diverge across them. This comment used
 // to name two; measured 2026-09-10 there are NINE call sites in three packages —
-// environment's walkLocal, probeTiersLocked, probeBulkLocked and
+// environment's resolveLocal (now walkLocal), probeTiersLocked, probeBulkLocked and
 // resolveAtCoordsLocked; validate's letBoundClosureEscapes, refMatchesBinder and
 // nameSet.shadowLookup; compilation's sameBinder and
 // freeVarCollector.boundInside.

@@ -25,8 +25,8 @@ package compilation
 // would find the parameter's slot and alias it — duplicate-parameter detection
 // and `let` shadowing are the same call. And one frame is one scope: two
 // same-named binders in it with identical (commonly empty) scope sets are an
-// equal-cardinality incomparable tie, which walkLocal answers by panicking
-// with ErrAmbiguousBinding. There is no "innermost wins" in this model, and
+// equal-cardinality incomparable tie, which GetLocalIndex and GetBinding answer by
+// panicking with ErrAmbiguousBinding. There is no "innermost wins" in this model, and
 // adding one would be a hygiene change rather than an allocation change.
 //
 // The merged frame costs nothing at run time — it is never instantiated — and

@@ -563,8 +563,9 @@ func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 // walkLocal walks local bindings up the parent chain, calling visit for each
 // binding that matches key and passes scope filtering. It is the stop-signal
 // form: visit returns true to stop the walk, false to keep walking, and walkLocal
-// reports whether any visit stopped it. resolveLocalWith is the form whose visit
-// also produces a value.
+// reports whether any visit stopped it. A caller that must see every candidate
+// (the scoped maximal-match arms, which stop only on a perfect match) uses it
+// directly. resolveLocalWith is the first-match form that returns a value.
 //
 // A wildcard query (q.IsAll) means "match any" — this replaces the former
 // checkScopes=false pattern. A specific or empty query (even the empty set) is
@@ -604,24 +605,20 @@ func walkLocal(
 	return false
 }
 
-// resolveLocalWith is walkLocal for a visit that produces a value: visit returns
-// (answer, true) to stop the walk and hand answer back, or (_, false) to keep
-// walking. The bool result is false, and the value T's zero, when no visit
-// stopped the walk. It is a package-level function because Go methods cannot
-// take type parameters.
+// resolveLocalWith is the first-match form of walkLocal: the walk stops at the
+// first compatible binding, and the answer is whatever visit builds from it. The
+// bool is false, and the value T's zero, when no binding matched. It is a
+// package-level function because Go methods cannot take type parameters.
 func resolveLocalWith[T any](
 	p *EnvironmentFrame,
 	key *values.Symbol,
 	q syntax.ScopeSet,
-	visit func(binding *Binding, slot int, depth int) (T, bool),
+	visit func(binding *Binding, slot int, depth int) T,
 ) (T, bool) {
 	var q2 T
 	found := walkLocal(p, key, q, func(binding *Binding, slot int, depth int) bool {
-		answer, stop := visit(binding, slot, depth)
-		if stop {
-			q2 = answer
-		}
-		return stop
+		q2 = visit(binding, slot, depth)
+		return true
 	})
 	return q2, found
 }
@@ -648,7 +645,8 @@ func resolveLocalWith[T any](
 //
 // The visitor runs at most once, after the probe has already decided there is a
 // binding, so unlike walkLocal's it has no stop signal to give: it only builds
-// the answer. A miss returns T's zero.
+// the answer. A miss returns T's zero, so T's zero must not be a valid answer;
+// every instantiation is a pointer, whose zero is nil.
 func resolveGlobalWith[T any](
 	p *EnvironmentFrame,
 	key values.Symbol,
@@ -694,8 +692,8 @@ func tryResolveGlobalWith[T any](
 func (p *EnvironmentFrame) localBinding(key *values.Symbol, q syntax.ScopeSet) (bnd *Binding, ambiguous bool) {
 	if q.IsAll() {
 		// Fast path: wildcard query — return first match
-		binding, _ := resolveLocalWith(p, key, q, func(binding *Binding, _ int, _ int) (*Binding, bool) {
-			return binding, true
+		binding, _ := resolveLocalWith(p, key, q, func(binding *Binding, _ int, _ int) *Binding {
+			return binding
 		})
 		return binding, false
 	}
@@ -856,8 +854,8 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) 
 
 	// Fast path: wildcard query — return first match (no maximal resolution needed)
 	if q.IsAll() {
-		li, _ := resolveLocalWith(p, key, q, func(_ *Binding, slot int, depth int) (*LocalIndex, bool) {
-			return NewLocalIndex(slot, depth), true
+		li, _ := resolveLocalWith(p, key, q, func(_ *Binding, slot int, depth int) *LocalIndex {
+			return NewLocalIndex(slot, depth)
 		})
 		return li
 	}

@@ -187,7 +187,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 	// remaining read-side mutex behaviour.)
 
 	// Test 7: Concurrent resolveGlobalWith (variable lookup pattern)
-	t.Run("concurrent resolveGlobal", func(t *testing.T) {
+	t.Run("concurrent global lookup", func(t *testing.T) {
 		topLevel := NewNamespace()
 		parent := topLevel.Runtime()
 		child := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), parent)
