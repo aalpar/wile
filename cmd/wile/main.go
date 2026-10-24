@@ -68,7 +68,7 @@ type Options struct {
 	MutexProfile string   `long:"mutexprofile" description:"Write mutex contention profile to file" unquote:"false"`
 	BlockProfile string   `long:"blockprofile" description:"Write goroutine blocking profile to file" unquote:"false"`
 	Cover        string   `long:"cover" description:"Write Scheme-level coverage report to file (Go cover format)" unquote:"false"`
-	CoverStdlib  bool     `long:"cover-stdlib" description:"Include stdlib files in --cover output (default excludes scheme/, wile/, srfi/)"`
+	CoverStdlib  bool     `long:"cover-stdlib" description:"Include stdlib files in --cover output (default excludes the files of the embedded stdlib)"`
 	CoverSummary string   `long:"cover-summary" description:"Write human-readable coverage summary to file" unquote:"false"`
 }
 

@@ -15,6 +15,7 @@
 package wile_test
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -102,4 +103,35 @@ func TestWithCoverage_NestedLambdaTracked(t *testing.T) {
 		}
 	}
 	c.Assert(hitBody, qt.IsTrue, qt.Commentf("lambda body must be tracked; entries: %+v", entries))
+}
+
+// TestWithCoverage_EmbedderStdlibRowsAreExcludedByDefault pins the lib/-rooted
+// half of the stdlib exclusion: an embedder mounting wile.StdLibFS and the
+// "lib" library path names embedded entries `lib/srfi/1.sld`, not `srfi/1.sld`.
+// The including writer must see those rows (or the test is vacuous); the
+// default writer must drop them and keep the program's own.
+func TestWithCoverage_EmbedderStdlibRowsAreExcludedByDefault(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	col := coverage.NewCollector()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithSourceFS(wile.StdLibFS),
+		wile.WithLibraryPaths("lib"),
+		wile.WithCoverage(col),
+	)
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	_, err = eng.EvalMultipleWithSource(ctx, "(import (scheme base) (srfi 1))\n(first '(1 2))\n", "userprog.scm")
+	c.Assert(err, qt.IsNil)
+
+	var all bytes.Buffer
+	c.Assert(coverage.WriteGoCoverIncludingStdlib(&all, col), qt.IsNil)
+	c.Assert(all.String(), qt.Contains, "\nlib/srfi/1.sld:", qt.Commentf("the embedder run produced no lib/-rooted stdlib rows: %s", all.String()))
+
+	var plain bytes.Buffer
+	c.Assert(coverage.WriteGoCover(&plain, col), qt.IsNil)
+	c.Assert(plain.String(), qt.Not(qt.Contains), "\nlib/", qt.Commentf("lib/-rooted stdlib rows in the default report: %s", plain.String()))
+	c.Assert(plain.String(), qt.Contains, "\nuserprog.scm:", qt.Commentf("the program's own rows are missing: %s", plain.String()))
 }

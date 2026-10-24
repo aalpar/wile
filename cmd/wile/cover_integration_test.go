@@ -235,3 +235,28 @@ func TestCLI_CoverStdlib_GatesEmbeddedLibraryBodies(t *testing.T) {
 		})
 	}
 }
+
+// TestCLI_Cover_ExcludesEveryEmbeddedLibrary pins that a plain --cover report
+// carries no row for an embedded library the old prefix list did not name.
+// (chibi test) is the repro: it emitted chibi/test.sld rows beside the
+// program's own.
+func TestCLI_Cover_ExcludesEveryEmbeddedLibrary(t *testing.T) {
+	c := qt.New(t)
+	dir := c.TempDir()
+	binPath := buildWileBinary(c, dir)
+
+	schemePath := filepath.Join(dir, "userprog.scm")
+	err := os.WriteFile(schemePath, []byte("(import (scheme base) (chibi test))\n(test 1 1)\n"), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	covPath := filepath.Join(c.TempDir(), "cov.out")
+	runCmd := exec.CommandContext(context.Background(), binPath, "--cover", covPath, "--file", schemePath)
+	runOut, err := runCmd.CombinedOutput()
+	c.Assert(err, qt.IsNil, qt.Commentf("run output: %s", runOut))
+
+	data, err := os.ReadFile(covPath)
+	c.Assert(err, qt.IsNil)
+	content := string(data)
+	c.Assert(strings.Contains(content, "chibi/test.sld"), qt.IsFalse, qt.Commentf("embedded library rows in the default report: %s", content))
+	c.Assert(strings.Contains(content, "userprog.scm"), qt.IsTrue, qt.Commentf("the program's own rows are missing: %s", content))
+}
