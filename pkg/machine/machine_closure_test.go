@@ -220,3 +220,17 @@ func TestMachineClosure_LocallessShapeIsRecorded(t *testing.T) {
 	c.Assert(materialized, qt.IsNotNil)
 	c.Assert(materialized.LocalEnvironment(), qt.IsNil)
 }
+
+// SetShape(nil) records no shape, so the closure constructors still refuse the
+// template with their wrapped error rather than the recorder dereferencing nil.
+func TestNativeTemplate_SetShapeNilRecordsNoShape(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewNamespace().Runtime()
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.SetShape(env)
+	c.Assert(tpl.Shape(), qt.IsNotNil)
+
+	tpl.SetShape(nil)
+	c.Assert(tpl.Shape(), qt.IsNil)
+	c.Assert(func() { NewClosureCapturing(tpl, env, nil) }, qt.PanicMatches, ".*records no local shape.*")
+}

@@ -1479,9 +1479,8 @@ func TestMaybeCreateLocalBinding_EmptyScopedSlotNotReused(t *testing.T) {
 	}
 }
 
-// LocalLayout is the third *LocalEnvironmentFrame producer: it aliases the
-// frame's embedded field like LocalEnvironment, but a frame with no local
-// environment yields an empty layout, not nil.
+// LocalLayout aliases the frame's embedded field like LocalEnvironment, but a
+// frame with no local environment yields an empty layout, not nil.
 func TestEnvironmentFrame_LocalLayout(t *testing.T) {
 	c := qt.New(t)
 	root := NewNamespace().Runtime()
@@ -1498,8 +1497,8 @@ func TestEnvironmentFrame_LocalLayout(t *testing.T) {
 
 // The layout descriptor applies against a runtime parent that differs from the
 // frame it was compiled against: the apply frame takes parent, global, phase
-// level and namespace from the parent, and only the local bindings from the
-// descriptor.
+// level, phase registry and namespace from the parent, and only the local
+// bindings from the descriptor.
 func TestLocalEnvironmentFrame_InitApplyFrameWithParentTakesTheParentsContext(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
@@ -1514,6 +1513,8 @@ func TestLocalEnvironmentFrame_InitApplyFrameWithParentTakesTheParentsContext(t 
 	c.Assert(dst.Parent(), qt.Equals, parent)
 	c.Assert(dst.GlobalEnvironment(), qt.Equals, parent.GlobalEnvironment())
 	c.Assert(dst.PhaseLevel(), qt.Equals, parent.PhaseLevel())
+	c.Assert(parent.phases, qt.IsNotNil)
+	c.Assert(dst.phases, qt.Equals, parent.phases)
 	c.Assert(dst.Namespace(), qt.Equals, ns)
 	c.Assert(dst.LocalEnvironment().Bindings(), qt.HasLen, 1)
 }

@@ -40,14 +40,15 @@ type NativeTemplate struct {
 
 	// shape is the layout of the frame this template's body was compiled
 	// against: the local parameter/internal-define structure every closure over
-	// this template applies with. It lives here, not on MachineClosure, because it is a
-	// property of the compiled body — one template, one shape — while the
-	// environment a closure captures is per-activation. Apply reads only the
+	// this template applies with. It lives here, not on MachineClosure, because
+	// it is a property of the compiled body — one template, one shape — while
+	// the environment a closure captures is per-activation. Apply reads only the
 	// local layout (InitApplyFrameWithParent derives everything else from the
-	// runtime parent), so that is all the template holds. It points INTO the
-	// compile-time frame rather than snapshotting it, and is read at APPLY time,
-	// which is sound because compileClosureBody finishes populating the frame
-	// before it emits the OpMakeClosure that can first observe it.
+	// runtime parent), so the type is only that. It is a pointer INTO the
+	// compile-time frame, not a snapshot, so the whole frame stays reachable
+	// through it. It is read at APPLY time, which is sound because
+	// compileClosureBody finishes populating the frame before it emits the
+	// OpMakeClosure that can first observe it.
 	//
 	// Kept next to the fields Apply already touches (parameterCount,
 	// isVariadic) so the extra load lands on a cache line the apply path has
@@ -185,8 +186,14 @@ func (p *NativeTemplate) Shape() *environment.LocalEnvironmentFrame {
 // syntax-rules transformer closure).
 //
 // Takes the frame, not its layout, and records the layout unconditionally: a
-// frame with no local environment is a valid shape, not an absent one.
+// frame with no local environment is a valid shape, not an absent one. A nil
+// frame leaves the template with no shape, which the closure constructors
+// refuse as before.
 func (p *NativeTemplate) SetShape(env *environment.EnvironmentFrame) {
+	if env == nil {
+		p.shape = nil
+		return
+	}
 	p.shape = env.LocalLayout()
 }
 

@@ -1292,6 +1292,10 @@ Open restructuring work found only in `plans/` during the 2026-07-21 triage.
 
 - [ ] **Go type names (`%T`) in diagnostics outside `pkg/registry/helpers`** [Error quality, M, P9.7 verification]: 169 production verbs (`grep -rn '%T' --include=*.go . | grep -v _test.go | grep -v pkg/registry/helpers`, 2026-10-24); 208 with helpers' 39, and the P9 plan's 161 (2026-09-26) was also a total including helpers. By area: `pkg/machine` 40 (32 in `compilation`), `extensions/math` 26, `pkg/registry/core` 22, `pkg/values` 19, `pkg/internal` 14 (9 `validate`, 5 `extensions`), `pkg/extensions/io` 8, `extensions/charsets` 8, `extensions/algebragraph` 6, `extensions/threads` 5, `pkg/wile` 4, `pkg/parser` 4, `extensions/sat` 3, `pkg/syntax` 2, `tools/cmd/typeswitchlint` 2, `extensions/process` 2, `extensions/eval` 2, `extensions/introspection` 1, `cmd/wile` 1. Many are invariant messages for Go callers, which the rule does not touch: separate the two populations, then apply the rendering P9.2 settles to the Scheme-facing ones. After P9.2.
 
+### Filed by the P9.6 crosscheck (2026-10-24)
+
+- [ ] **`createTransformerClosure` comment says Apply needs a non-nil `LocalEnvironment()`; it does not** [Docs, XS, P9.6 crosscheck]: the comment at the `environment.NewLocalEnvironment(1)` site in `pkg/machine/compilation/compile_syntax_rules.go` (`createTransformerClosure`) says "This is required because machine.MachineContext.Apply expects LocalEnvironment() to be non-nil". `machine_context_apply.go` (the `lenv := env.LocalEnvironment()` guard in `MachineContext.Apply`) handles nil, and `(compile ...)` thunks apply over a localless frame. The one-parameter local frame is still needed for the input binding; the stated reason is stale.
+
 ### Closed in Tier 5
 
 Moved to [`closed.md`](closed.md) (2026-10-17 split).

@@ -121,10 +121,12 @@ type EnvironmentFrame struct {
 	// Embedded by value to eliminate a separate heap allocation per closure call.
 	// Sentinel: local.keys == nil means "no local environment" (zero value).
 	//
-	// The *LocalEnvironmentFrame that NewLocalEnvironment returns, that
-	// LocalEnvironment hands back and that LocalLayout hands back is NOT one
-	// object seen from three places, and the three pointers promise different
-	// things:
+	// Five functions deal in a *LocalEnvironmentFrame, and the pointers are NOT
+	// one object seen from five places. NewLocalEnvironment allocates its own.
+	// Four take the address of this field, and TestLocalFieldAddressTakers pins
+	// that set: LocalEnvironment, LocalLayout, ResolveBindingID, and
+	// LocalEnvironmentFrame.InitApplyFrameWithParent (a destination written
+	// through, never handed out). The pointers promise different things:
 	//   - NewLocalEnvironment's pointer is a builder. NewEnvironmentFrameWithParent
 	//     copies *lenv into this field, so a store through the original after that
 	//     copy is lost (the slice header and map survive the copy, but a length
@@ -150,9 +152,13 @@ type EnvironmentFrame struct {
 	//     builds one) into a template that looks like it records no shape.
 	//     MachineClosure.Env (machine_closure.go) hands it to
 	//     NewEnvironmentFrameWithParent, which copies it as builder input.
-	// Absent is nil, not an empty frame, for every producer but LocalLayout.
-	// A fourth producer of this field must extend this comment rather than add
-	// a second one.
+	//   - ResolveBindingID's pointer is an identity, not an access path:
+	//     BindingID.Frame names the local environment of the frame, at the depth
+	//     the symbol resolved, so two IDs are equal exactly when they name the
+	//     same frame's locals. It is never nil, because a binding resolved.
+	// Absent is nil, not an empty frame, for LocalEnvironment alone. A function
+	// that takes the address of this field must extend this comment rather than
+	// add a second one; the test fails until it does.
 	local LocalEnvironmentFrame
 	// phaseLevel is this frame's level on the macro tower, RELATIVE to the
 	// owner's own runtime (level 0). It is not an absolute compilation stage:
