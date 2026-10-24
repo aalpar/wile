@@ -55,6 +55,8 @@ const erRenamePhase1Prologue = "(import (for-syntax (rename (scheme base) (car p
 // with no import anywhere. The import rows are kept because they are what was
 // filed and what the integration fixture hits.
 func TestERRenameDenotesTheOutputPhase(t *testing.T) {
+	t.Parallel()
+
 	// A phase-1-only name is not reachable from phase 0. The control: without
 	// it the next row proves nothing.
 	t.Run("a phase-1-only import is unbound at phase 0", func(t *testing.T) {

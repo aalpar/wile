@@ -64,6 +64,8 @@ func baseSlotEngine(t *testing.T) *wile.Engine {
 // fix that gives the import its own slot passes, and so does one that leaves the
 // base alone some other way, but nothing that keeps writing through the base can.
 func TestImportDoesNotMutateTheBaseBinding(t *testing.T) {
+	t.Parallel()
+
 	// `not` is a bootstrap Scheme procedure and `car` a Go primitive; the defect
 	// reached both, and they take different install paths. A FRESH engine per row:
 	// the import mutates engine state, so a shared one would let the first row's
@@ -107,6 +109,8 @@ func TestImportDoesNotMutateTheBaseBinding(t *testing.T) {
 // Green on master. The narrowing row is what says the damage tracks the import's
 // coverage rather than being a blanket effect.
 func TestImportDoesNotStripThePhase1Vocabulary(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		src  string
@@ -146,6 +150,8 @@ func TestImportDoesNotStripThePhase1Vocabulary(t *testing.T) {
 // Both rows are green on master. Without the import both refuse here too, so the
 // import is the whole variable.
 func TestImportDoesNotMakeABasePrimitiveDeletable(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		src  string

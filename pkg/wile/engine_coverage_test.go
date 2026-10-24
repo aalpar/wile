@@ -26,6 +26,8 @@ import (
 )
 
 func TestWithCoverage_TopLevelExprTracked(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	col := coverage.NewCollector()
 	eng, err := wile.NewEngine(context.Background(), wile.WithCoverage(col))
@@ -48,6 +50,8 @@ func TestWithCoverage_TopLevelExprTracked(t *testing.T) {
 }
 
 func TestWithCoverage_UncalledBodyNotCovered(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	col := coverage.NewCollector()
 	eng, err := wile.NewEngine(context.Background(), wile.WithCoverage(col))
@@ -82,6 +86,8 @@ func TestWithCoverage_UncalledBodyNotCovered(t *testing.T) {
 }
 
 func TestWithCoverage_NestedLambdaTracked(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	col := coverage.NewCollector()
 	eng, err := wile.NewEngine(context.Background(), wile.WithCoverage(col))
@@ -111,6 +117,8 @@ func TestWithCoverage_NestedLambdaTracked(t *testing.T) {
 // The including writer must see those rows (or the test is vacuous); the
 // default writer must drop them and keep the program's own.
 func TestWithCoverage_EmbedderStdlibRowsAreExcludedByDefault(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	col := coverage.NewCollector()

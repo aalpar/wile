@@ -69,6 +69,8 @@ func ownSyntaxEngine(t *testing.T) *wile.Engine {
 }
 
 func TestLibraryOwnSyntaxBeatsInheritedCoreForm(t *testing.T) {
+	t.Parallel()
+
 	for _, row := range []struct {
 		name string
 		src  string

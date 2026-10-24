@@ -58,6 +58,8 @@ func patternLiteralMacroEngine(t *testing.T, libs map[string]string) *wile.Engin
 }
 
 func TestPatternLiteralNamingAUserMacroMatches(t *testing.T) {
+	t.Parallel()
+
 	const libMacro = `(define-library (i169lib)
   (export topelse)
   (import (scheme base))
@@ -148,6 +150,8 @@ func TestPatternLiteralNamingAUserMacroMatches(t *testing.T) {
 // not the residual and must not be cited as one: a measurement taken on that
 // shape reports the row closed when it is not.
 func TestNestedLetSyntaxPatternLiteralIsStillRefused(t *testing.T) {
+	t.Parallel()
+
 	for _, row := range []struct {
 		name string
 		src  string

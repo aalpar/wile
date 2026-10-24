@@ -179,6 +179,8 @@ var letReentryFreshnessCases = []struct {
 }
 
 func TestLetIsFreshWhenAContinuationReentersIt(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	for _, tc := range letReentryFreshnessCases {
 		t.Run(strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
@@ -202,6 +204,8 @@ func TestLetIsFreshWhenAContinuationReentersIt(t *testing.T) {
 // passes the value table above, so this pins that a capture-free region still
 // merges while a capturing one pushes.
 func TestLetMergeFollowsCaptureSafety(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	tcs := []struct {
 		name       string

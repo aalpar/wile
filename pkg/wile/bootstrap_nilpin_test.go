@@ -95,6 +95,8 @@ type nilPin struct {
 // TestBootstrapMacrosResistUseSiteCapture. Retire this census with the Go
 // producer in P3, not before.
 func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithGoSyntaxForms())
 	if err != nil {
@@ -228,6 +230,8 @@ func collectNilPins(t *testing.T, env, expandEnv *environment.EnvironmentFrame) 
 // free-template-id back-patch closed (memory free-template-id-hygiene-shipped,
 // trap 2). Do not re-simplify it.
 func TestBootstrapMacrosResistUseSiteCapture(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name, src, want string
 	}{

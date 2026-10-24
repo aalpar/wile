@@ -29,6 +29,8 @@ import (
 // bare inexact numbers, and (2) never bypass an explicitly-set
 // current-test-comparator — including for inexact expected values.
 func TestChibiTestComparator(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

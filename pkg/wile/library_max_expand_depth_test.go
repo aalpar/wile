@@ -35,6 +35,8 @@ import (
 // (unlimited) must be retained and distinguished from "unset" via the set flag.
 // Sibling of TestInlineThresholdPopulatedOnNamespace.
 func TestMaxExpandDepthPopulatedOnNamespace(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tcs := []struct {
@@ -79,6 +81,8 @@ func TestMaxExpandDepthPopulatedOnNamespace(t *testing.T) {
 // Pre-fix the library path ignored the bound entirely, so even depth 20 imported
 // successfully — this test failed.
 func TestMaxExpandDepthHonoredForImportedLibrary(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	items := strings.TrimSpace(strings.Repeat("a ", 30))

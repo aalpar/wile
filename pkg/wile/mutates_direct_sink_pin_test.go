@@ -219,6 +219,8 @@ func mutatesPinFindings(prims []sinkPrim, exempt map[string]string) []string {
 // TestMutatesDirectSinkPin is the pin. See the file header for what reddens it and what
 // it does not cover.
 func TestMutatesDirectSinkPin(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
 	if err != nil {
@@ -334,6 +336,8 @@ func TestMutatesDirectSinkPin(t *testing.T) {
 // with a sink is a finding, an annotated one is not, an exempt one is not, and a stale
 // exemption is a finding both ways.
 func TestMutatesPinFindingsDecision(t *testing.T) {
+	t.Parallel()
+
 	hit := []sinkHit{{selector: "SetCar", pos: token.Position{Filename: "fake.go", Line: 7, Column: 3}}}
 	tcs := []struct {
 		name   string
@@ -396,6 +400,8 @@ func TestMutatesPinFindingsDecision(t *testing.T) {
 // name in it must still be a method declared in pkg/values, so a rename there fails here
 // instead of silently emptying the scan.
 func TestMutationSinksAreValuesMethods(t *testing.T) {
+	t.Parallel()
+
 	fset := token.NewFileSet()
 	files := parsePackageFiles(t, fset, filepath.Join(repoRoot(t), "pkg", "values"))
 	methods := map[string]bool{}
@@ -421,6 +427,8 @@ func TestMutationSinksAreValuesMethods(t *testing.T) {
 // backing slice are NOT found; a sink in a nested closure and one on a type-asserted
 // receiver ARE.
 func TestDirectMutationSinkAnalyzerDetectsSinks(t *testing.T) {
+	t.Parallel()
+
 	const src = `
 package fake
 

@@ -67,6 +67,8 @@ func deniedTags(c *qt.C, auth security.Authorizer, tags ...string) []string {
 // The resolution is a pure function of the field set, so it is inherently
 // order-independent at the option level (each option writes a distinct field).
 func TestResolveAuthorizer(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	profile := denyTarget("P")
@@ -134,6 +136,8 @@ func TestResolveAuthorizer(t *testing.T) {
 // silently overwrite the explicit one. Both orders must now yield an engine
 // where the explicit authorizer wins.
 func TestAuthorizerOptions_ExplicitBeatsProfile_OrderIndependent(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	codeEval := security.AccessRequest{
@@ -182,6 +186,8 @@ func TestAuthorizerOptions_ExplicitBeatsProfile_OrderIndependent(t *testing.T) {
 // explicitAuthorizerSet), and a later profile with no authorizer must not clear
 // an earlier profile's authorizer.
 func TestAuthorizerOptions_NilAndMultiProfile(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	codeEval := security.AccessRequest{
@@ -216,6 +222,8 @@ func TestAuthorizerOptions_NilAndMultiProfile(t *testing.T) {
 // silently widening access. Two sandboxes with disjoint env prefixes must
 // intersect: a var permitted by one layer is still denied by the other.
 func TestSandboxOption_MultipleCallsAccumulate(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	build := func(opts ...EngineOption) security.Authorizer {
@@ -243,6 +251,8 @@ func TestSandboxOption_MultipleCallsAccumulate(t *testing.T) {
 // restriction onto a profile no matter whether it appears before or after
 // WithProfile — the ordering caveat the old prose comment warned about.
 func TestSandboxOption_OrderIndependent(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	// A profile authorizer denies code:eval; the sandbox additionally denies

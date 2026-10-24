@@ -90,6 +90,8 @@ func panicEngine(t *testing.T) *wile.Engine {
 // Both expressions supply input outside the primitive's R7RS domain, and both
 // used to answer with a recovered panic that aborted the whole evaluation.
 func TestMalformedArgumentIsACondition(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := panicEngine(t)
@@ -147,6 +149,8 @@ func TestMalformedArgumentIsACondition(t *testing.T) {
 // the foreign-call boundary would make every half-A domain-error row pass more
 // easily, and only these two rows can see it.
 func TestGenuinePrimitivePanicStaysUncatchable(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := panicEngine(t)

@@ -43,6 +43,8 @@ func compositionEngine(t *testing.T) *Engine {
 // (libraries-plan Task 5A / compiler-plan 7D). Covers the four 7D compositions plus the
 // two same-kind-overwrite cases the compiler plan cross-references.
 func TestImportSetCompositionOrder(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name    string
 		program string
@@ -122,6 +124,8 @@ func TestImportSetCompositionOrder(t *testing.T) {
 // paths a program can use to disambiguate (except / prefix, or the R5RS base that
 // never had string-map) are pinned too.
 func TestImportConflictDetection(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name    string
 		program string
@@ -208,6 +212,8 @@ func TestImportConflictDetection(t *testing.T) {
 // required"). One library's definitions reached by several routes (directly, or
 // re-exported by one or two parents) stay a diamond, as Racket allows.
 func TestImportConflictDetectionByOrigin(t *testing.T) {
+	t.Parallel()
+
 	files := fstest.MapFS{
 		"defs-a.scm": &fstest.MapFile{Data: []byte(`(define-library (defs-a)
   (import (scheme base))
@@ -274,6 +280,8 @@ func TestImportConflictDetectionByOrigin(t *testing.T) {
 // rather than silently no-op the rename. A valid rename of an exported name still
 // works (the new name binds; the old name is no longer available).
 func TestImportRenameOfNonExported(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name    string
 		program string

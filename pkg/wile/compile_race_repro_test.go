@@ -41,6 +41,8 @@ import (
 // mints DISTINCT names per thread, so no two threads ever touch the same *Binding.
 // Sharing the NAME is the whole repro; that is the one variable it holds constant.
 func TestCompileDefineMetaRace(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink),
 		WithSourceFS(stdlib.FS), WithLibraryPaths("."))

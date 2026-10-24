@@ -40,6 +40,8 @@ func evalOne(t *testing.T, code string) string {
 // symbol, so binding them in one `let` failed with `duplicate binding name ""`,
 // and `(let ((+node 5)) +nap)` returned 5 for a name that was never bound.
 func TestPeculiarIdentifiersAreDistinctBindings(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -148,6 +150,8 @@ func TestPeculiarIdentifiersAreDistinctBindings(t *testing.T) {
 // the aliasing: `+node` and `+nap` were the same (empty) symbol, so binding one
 // bound the other and the unbound reference silently resolved.
 func TestPeculiarIdentifierDoesNotShadowAnUnboundName(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)

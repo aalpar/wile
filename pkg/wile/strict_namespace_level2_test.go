@@ -70,6 +70,8 @@ var level2BoundNames = []string{
 // The set is profile-independent: level 2 binds from an empty registry, so
 // Small, Tiny and KitchenSink all land here.
 func TestNoAmbientBindingsBoundSet(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -101,6 +103,8 @@ func TestNoAmbientBindingsBoundSet(t *testing.T) {
 //	resolves-unusable expansion calls a primitive the empty registry never bound
 //	unresolved        bootstrap macro or primitive; both come from the registry
 func TestNoAmbientBindingsFloor(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	// Column 1: usable. These resolve AND run on an empty visible frame.
@@ -289,6 +293,8 @@ func TestNoAmbientBindingsFloor(t *testing.T) {
 // the library env), so they are asserted separately; one combined assertion would
 // hide which mechanism broke.
 func TestNoAmbientBindingsLayering(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("derived syntax (cond) restored by import", func(t *testing.T) {
@@ -319,6 +325,8 @@ func TestNoAmbientBindingsLayering(t *testing.T) {
 // surface, so the broken import is an inconvenience; at level 2 there is no
 // ambient surface and no way back.
 func TestNoAmbientBindingsTinyBound(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("Tiny cannot import (scheme base) at level 2", func(t *testing.T) {
@@ -344,6 +352,8 @@ func TestNoAmbientBindingsTinyBound(t *testing.T) {
 // level 1 and quietly re-bind car — the one direction this family must never
 // allow. (car '(1 2)) is the discriminator: bound at level 1, unbound at level 2.
 func TestNoAmbientBindingsCommutativity(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	orders := []struct {
@@ -386,6 +396,8 @@ func TestNoAmbientBindingsCommutativity(t *testing.T) {
 // canImport is what the sandbox DOES change, and it is a separate axis: see
 // TestNoAmbientBindingsSandboxIsConfinement.
 func TestNoAmbientBindingsOrthogonality(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	ctx := context.Background()
@@ -455,6 +467,8 @@ func TestNoAmbientBindingsOrthogonality(t *testing.T) {
 // the claim in WithoutAmbientBindings' doc comment is bounded by a test rather
 // than by prose alone.
 func TestNoAmbientBindingsSandboxIsConfinement(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -495,6 +509,8 @@ func TestNoAmbientBindingsSandboxIsConfinement(t *testing.T) {
 // a supported configuration. The defect is documentary, and this test is what
 // keeps the documentation honest.
 func TestNoAmbientBindingsWithoutLibrarySystemIsConfinement(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("import denied when the library system was never enabled", func(t *testing.T) {
@@ -541,6 +557,8 @@ func TestNoAmbientBindingsWithoutLibrarySystemIsConfinement(t *testing.T) {
 // and stays importable under KitchenSink. The profile is the boundary; strictness
 // only decides what is pre-bound.
 func TestNoAmbientBindingsNoEscalation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("KitchenSink-only library still unimportable under Small", func(t *testing.T) {
@@ -566,6 +584,8 @@ func TestNoAmbientBindingsNoEscalation(t *testing.T) {
 // registry backing library environments, level 2 empties only the visible surface.
 // The engine refuses the pair rather than pick one reading.
 func TestNoAmbientBindingsRejectsCustomRegistry(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -607,6 +627,8 @@ func TestNoAmbientBindingsRejectsCustomRegistry(t *testing.T) {
 // the visible surface silently bypassed it, "strict" would read as confinement and
 // not be any.
 func TestNoAmbientBindingsAuthorizerStillGates(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -639,6 +661,8 @@ func TestNoAmbientBindingsAuthorizerStillGates(t *testing.T) {
 // read the Tiny/Console bound as an init failure and gate the option on profile,
 // which would be the wrong fix for a pre-existing gap.
 func TestNoAmbientBindingsEngineInitAllProfiles(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

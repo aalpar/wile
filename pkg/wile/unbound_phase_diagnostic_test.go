@@ -76,6 +76,8 @@ func evalForPhaseDiagnostic(t *testing.T, src string) string {
 // one — so the rendering carries the qualification rather than the number
 // carrying it alone.
 func TestUnboundDiagnosticNamesThePhase(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		src  string
@@ -146,6 +148,8 @@ func TestUnboundDiagnosticNamesThePhase(t *testing.T) {
 // gate is still the compile phase alone, so it also renders for a typo compiled
 // at phase 1, while the clause says whether the name is bound anywhere.
 func TestUnboundDiagnosticStaysSilentAtRuntimePhase(t *testing.T) {
+	t.Parallel()
+
 	got := evalForPhaseDiagnostic(t, `(totally-absent-name 1 2)`)
 	qt.Assert(t, strings.Contains(got, `no such local or global binding "totally-absent-name"`), qt.IsTrue,
 		qt.Commentf("got: %s", got))
@@ -165,6 +169,8 @@ func TestUnboundDiagnosticStaysSilentAtRuntimePhase(t *testing.T) {
 // appears, it needs a field, and this comment is the record that the choice was
 // made rather than defaulted into.
 func TestUnboundDiagnosticKeepsItsSentinel(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
@@ -190,6 +196,8 @@ func TestUnboundDiagnosticKeepsItsSentinel(t *testing.T) {
 // transformer body aside, which is a local of an enclosing phase and so outside
 // the global-table claim) are the ones that kill a false absence clause.
 func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		src  string
@@ -312,6 +320,8 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 // ranks runtime-first), so a probe built on it alone called a name imported
 // for-template "bound at no phase".
 func TestUnboundDiagnosticSeesForTemplateImports(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	root := t.TempDir()
 	err := os.MkdirAll(filepath.Join(root, "tpl"), 0o755)

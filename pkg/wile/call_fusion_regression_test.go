@@ -41,6 +41,8 @@ import (
 // the push run before the pattern can match — and is here because it is the
 // shape that becomes ordinary the moment a let stops pushing a frame.
 func TestCallFusionPicksTheGroupsBottom(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		code string
@@ -93,6 +95,8 @@ func TestCallFusionPicksTheGroupsBottom(t *testing.T) {
 // promotion this pass exists for did not deoptimize — is pinned structurally by
 // TestPromoteCompoundArgsFib, since no value assertion can see a deopt.
 func TestPromotedCompoundArgFusionPicksTheGroupsBottom(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		code string
@@ -192,6 +196,8 @@ func TestPromotedCompoundArgFusionPicksTheGroupsBottom(t *testing.T) {
 // Verified by disassembly at the time of writing; asserted here only by value,
 // because the point is that the ANSWER survives whichever way the peephole goes.
 func TestTailCallAcrossFrameReclaimInMergedLet(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name     string
 		code     string

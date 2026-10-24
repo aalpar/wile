@@ -40,6 +40,8 @@ import (
 // The last case is the one that matters. A first-class dynamic-wind that did not
 // unwind on a continuation escape would satisfy procedure? and still be worthless.
 func TestDynamicWindIsAFirstClassProcedure(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		src  string

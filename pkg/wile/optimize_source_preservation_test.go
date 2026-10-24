@@ -52,6 +52,8 @@ import (
 // the fix in memory/2026-06-26-editplan-preserve-collapsed-sources.md
 // (EditPlan extraSources) becomes justified.
 func TestOptimize_PreservesCoverageSpans(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink))

@@ -47,6 +47,8 @@ func newEngineWithStdlib(t *testing.T) *wile.Engine {
 // TestSetBangOnImportedBindingRejected verifies that set! on an imported
 // binding produces a compilation error wrapping ErrImmutableBinding.
 func TestSetBangOnImportedBindingRejected(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newEngineWithStdlib(t)
@@ -68,6 +70,8 @@ func TestSetBangOnImportedBindingRejected(t *testing.T) {
 // TestSetBangOnLocalDefineAllowed verifies that set! on a user-defined
 // binding works normally.
 func TestSetBangOnLocalDefineAllowed(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newEngineWithStdlib(t)
@@ -81,6 +85,8 @@ func TestSetBangOnLocalDefineAllowed(t *testing.T) {
 // supersedes an imported binding, clearing the Imported flag so that
 // a subsequent set! on the same binding succeeds (R7RS §5.3.1).
 func TestDefineThenSetBangOnImportAllowed(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newEngineWithStdlib(t)
@@ -94,6 +100,8 @@ func TestDefineThenSetBangOnImportAllowed(t *testing.T) {
 // TestSetBangOnShadowedImportAllowed verifies that a lexical binding
 // shadows the imported binding, and set! on the shadow succeeds.
 func TestSetBangOnShadowedImportAllowed(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newEngineWithStdlib(t)
@@ -131,6 +139,8 @@ func TestSetBangOnShadowedImportAllowed(t *testing.T) {
 // and the frame-reclaim classifier "cannot be rebound" about a binding the user
 // had just rebound.
 func TestDefineSyntaxShadowsImportedMacro(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newEngineWithStdlib(t)
@@ -169,6 +179,8 @@ func TestDefineSyntaxShadowsImportedMacro(t *testing.T) {
 // TestImportedBindingStableFlag verifies that after importing (scheme base),
 // the binding for "cons" has both IsImported and IsStable flags set.
 func TestImportedBindingStableFlag(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newEngineWithStdlib(t)
@@ -213,6 +225,8 @@ func TestImportedBindingStableFlag(t *testing.T) {
 // immutable default routes the variable path through an extra guard
 // (declareDefineBinding's immTop branch) that the mutable one skips.
 func TestSupersedeClearsImportedOnlyAtAMutableCoordinate(t *testing.T) {
+	t.Parallel()
+
 	modes := []struct {
 		name string
 		opt  wile.EngineOption

@@ -44,6 +44,8 @@ import (
 // the non-vacuity of the arity check, which would otherwise be satisfied by
 // turning IsStable() off for every import.
 func TestImportSharesTheValueLocation(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	fsys := fstest.MapFS{

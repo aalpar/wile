@@ -59,6 +59,8 @@ import (
 // (for-syntax (scheme base))" is false and this test, not the vocabulary, is
 // what has to change.
 func TestPhase1DoesNotReachPhase0Sealed(t *testing.T) {
+	t.Parallel()
+
 	eng, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
 

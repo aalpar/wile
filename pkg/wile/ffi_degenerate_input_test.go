@@ -123,6 +123,8 @@ func degenerateEngine(t *testing.T) *wile.Engine {
 }
 
 func TestFFIDegenerateInputIsCatchable(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := degenerateEngine(t)
 
@@ -194,6 +196,8 @@ func TestFFIDegenerateInputIsCatchable(t *testing.T) {
 // above rejects something; these rows prove none of them rejects everything,
 // which a guard written one predicate too wide would.
 func TestFFIWellFormedCompositesStillConvert(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := degenerateEngine(t)
 

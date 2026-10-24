@@ -24,6 +24,8 @@ import (
 )
 
 func TestProfile_Tiny_CoreOnly(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -39,6 +41,8 @@ func TestProfile_Tiny_CoreOnly(t *testing.T) {
 }
 
 func TestProfile_Console_IOWorks(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -56,6 +60,8 @@ func TestProfile_Console_IOWorks(t *testing.T) {
 }
 
 func TestProfile_Console_FileSandbox(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -79,6 +85,8 @@ func TestProfile_Console_FileSandbox(t *testing.T) {
 }
 
 func TestProfile_ConsoleWithLoad_EvalAndLoad(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -108,6 +116,8 @@ func TestProfile_ConsoleWithLoad_EvalAndLoad(t *testing.T) {
 }
 
 func TestProfile_ConsoleWithLoad_DeniesLoadOutsideTmp(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -120,6 +130,8 @@ func TestProfile_ConsoleWithLoad_DeniesLoadOutsideTmp(t *testing.T) {
 }
 
 func TestProfile_Small_R7RS(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -133,6 +145,8 @@ func TestProfile_Small_R7RS(t *testing.T) {
 }
 
 func TestProfile_KitchenSink_Threads(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -148,6 +162,8 @@ func TestProfile_KitchenSink_Threads(t *testing.T) {
 }
 
 func TestProfile_Superset_Invariant(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tinyExts := Tiny.extensions()
@@ -164,6 +180,8 @@ func TestProfile_Superset_Invariant(t *testing.T) {
 }
 
 func TestProfile_NoProfile_BareEngine(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -176,6 +194,8 @@ func TestProfile_NoProfile_BareEngine(t *testing.T) {
 }
 
 func TestProfile_WithSandbox_Composition(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

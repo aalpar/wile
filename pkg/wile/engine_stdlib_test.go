@@ -11,6 +11,8 @@ import (
 )
 
 func TestEngine_EmbeddedStdlib_SchemeBase(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -40,6 +42,8 @@ func TestEngine_EmbeddedStdlib_SchemeBase(t *testing.T) {
 // re-export of stdlib.LibFS. The embed shape must be byte-identical for real
 // consumers, so this resolves a known library (scheme base) the public way.
 func TestEngine_PublicStdLibFS_ResolvesSchemeBase(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -60,6 +64,8 @@ func TestEngine_PublicStdLibFS_ResolvesSchemeBase(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_ChibiTest(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -82,6 +88,8 @@ func TestEngine_EmbeddedStdlib_ChibiTest(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_SRFI1(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -103,6 +111,8 @@ func TestEngine_EmbeddedStdlib_SRFI1(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_WileAlgebra(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -124,6 +134,8 @@ func TestEngine_EmbeddedStdlib_WileAlgebra(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteIdentityRight(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -160,6 +172,8 @@ func TestEngine_EmbeddedStdlib_RewriteIdentityRight(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteIdentityLeft(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -191,6 +205,8 @@ func TestEngine_EmbeddedStdlib_RewriteIdentityLeft(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteNoMatch(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -222,6 +238,8 @@ func TestEngine_EmbeddedStdlib_RewriteNoMatch(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteCommutativity(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -249,6 +267,8 @@ func TestEngine_EmbeddedStdlib_RewriteCommutativity(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteCommutativityOrdered(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -276,6 +296,8 @@ func TestEngine_EmbeddedStdlib_RewriteCommutativityOrdered(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteAbsorbing(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -304,6 +326,8 @@ func TestEngine_EmbeddedStdlib_RewriteAbsorbing(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteIdempotence(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -331,6 +355,8 @@ func TestEngine_EmbeddedStdlib_RewriteIdempotence(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteInvolution(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -358,6 +384,8 @@ func TestEngine_EmbeddedStdlib_RewriteInvolution(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteAbsorptionRight(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -385,6 +413,8 @@ func TestEngine_EmbeddedStdlib_RewriteAbsorptionRight(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteAbsorptionLeft(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -412,6 +442,8 @@ func TestEngine_EmbeddedStdlib_RewriteAbsorptionLeft(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteAbsorptionNoMatch(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -439,6 +471,8 @@ func TestEngine_EmbeddedStdlib_RewriteAbsorptionNoMatch(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteComposed(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -475,6 +509,8 @@ func TestEngine_EmbeddedStdlib_RewriteComposed(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteAssociativity(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -502,6 +538,8 @@ func TestEngine_EmbeddedStdlib_RewriteAssociativity(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteAssociativityAlreadyRight(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -529,6 +567,8 @@ func TestEngine_EmbeddedStdlib_RewriteAssociativityAlreadyRight(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_RewriteDirectionalAxiom(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -552,6 +592,8 @@ func TestEngine_EmbeddedStdlib_RewriteDirectionalAxiom(t *testing.T) {
 }
 
 func TestEngine_EmbeddedStdlib_SymbolicBooleanNormalization(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -589,6 +631,8 @@ func TestEngine_EmbeddedStdlib_SymbolicBooleanNormalization(t *testing.T) {
 // resolves standard libraries without OS filesystem fallback. This catches
 // path mismatches between the embed structure and DefaultLibraryPaths.
 func TestEngine_EmbeddedStdlib_NoOSFallback(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -609,6 +653,8 @@ func TestEngine_EmbeddedStdlib_NoOSFallback(t *testing.T) {
 }
 
 func TestEngine_LibraryDescription(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

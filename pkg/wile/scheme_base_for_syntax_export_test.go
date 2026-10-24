@@ -30,6 +30,8 @@ import (
 // conflict. (scheme base) and (scheme r5rs) export the same three names the
 // same way.
 func TestSchemeBaseExportsSyntaxRulesForSyntax(t *testing.T) {
+	t.Parallel()
+
 	files := fstest.MapFS{
 		"sr-user.scm": &fstest.MapFile{Data: []byte(`(define-library (sr-user)
   (import (rename (scheme base) (syntax-rules sr)))

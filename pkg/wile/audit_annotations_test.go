@@ -185,6 +185,8 @@ func evalIsolated(ctx context.Context, call string, tag string) (values.Value, e
 }
 
 func TestAuditPrimitiveAnnotations(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
 	if err != nil {

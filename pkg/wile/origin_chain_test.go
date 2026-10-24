@@ -69,6 +69,8 @@ var originChainKinds = []struct {
 // the expansion loop's closure arm, and a kind-only table cannot see a stamp
 // that lands on one entry and not the other.
 func TestMacroErrorCarriesOriginChainForEveryTransformerKind(t *testing.T) {
+	t.Parallel()
+
 	entries := []struct {
 		name string
 		use  string
@@ -102,6 +104,8 @@ func expandOnceEval(form string) string {
 // behavior as shipped, not an ideal: :2:1 is the use the chain was stamped at,
 // and :2:45 is where expand-once's quoted form sits in the program above.
 func TestMacroOriginChainText(t *testing.T) {
+	t.Parallel()
+
 	entries := []struct{ name, use, chain string }{
 		{"expand", `(bad y)`, "in let form\n  expanded from 'bad' at :2:1: invalid syntax"},
 		{"expand-once", expandOnceEval(`(bad y)`), "in let form\n  expanded from 'bad' at :2:45\nStack trace:"},
@@ -122,6 +126,8 @@ func TestMacroOriginChainText(t *testing.T) {
 // behavior: the template-written `(inner x)` takes the outer use site as its
 // position (UseSiteCtx), so for syntax-rules the inner link reads :3:1.
 func TestMacroOriginChainNests(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct{ name, src, chain string }{
 		{"syntax-case in syntax-case",
 			"(define-syntax inner (lambda (stx) (syntax-case stx () ((_ x) #'(let ((x)) x)))))\n" +
@@ -151,6 +157,8 @@ func TestMacroOriginChainNests(t *testing.T) {
 // use is an ER rename, which carries no origin of its own, so the chain
 // continues through the call pair around it, on expand-once as on expand.
 func TestMacroOriginChainThroughRenameExpandOnce(t *testing.T) {
+	t.Parallel()
+
 	src := "(define-syntax inner (syntax-rules () ((_ x) (let ((x)) x))))\n" +
 		"(define-syntax outer (er-macro-transformer (lambda (form rename compare) (list (rename 'inner) 'y))))\n" +
 		"(call-with-values (lambda () (expand-once #'(outer)))\n" +
@@ -166,6 +174,8 @@ func TestMacroOriginChainThroughRenameExpandOnce(t *testing.T) {
 // handed back unchanged is not attributed to the macro, for every transformer
 // kind, both entry points, both syntax layers.
 func TestMacroOriginChainSparesPassThrough(t *testing.T) {
+	t.Parallel()
+
 	scheme := []wile.EngineOption{wile.WithSchemeSyntaxForms()}
 	defs := []struct{ name, def string }{
 		{"syntax-rules", `(syntax-rules () ((_ e) e))`},
@@ -217,6 +227,8 @@ func TestMacroOriginChainSparesPassThrough(t *testing.T) {
 // the keyword's context carries the introduction scope, as the user's input
 // does, and is the macro's all the same. Go and Scheme layers agree.
 func TestMacroOriginChainBlamesMacroBuiltSyntax(t *testing.T) {
+	t.Parallel()
+
 	defs := []struct{ name, def string }{
 		{"er literals", `(er-macro-transformer (lambda (f r c) (list 'lambda (list 'y 'y) 1)))`},
 		{"syntax-case datum->syntax on the keyword", `(lambda (stx) (syntax-case stx () ((k) (datum->syntax #'k '(lambda (y y) 1)))))`},
@@ -243,6 +255,8 @@ func TestMacroOriginChainBlamesMacroBuiltSyntax(t *testing.T) {
 // not added as a second link. Only an ER rename, which has no position, falls
 // back to the call pair.
 func TestMacroOriginChainKeepsSplicedKeywordPosition(t *testing.T) {
+	t.Parallel()
+
 	src := "(define-syntax inner (syntax-rules () ((_ a) (let ((a)) a))))\n" +
 		"(define-syntax outer (syntax-rules () ((_ k) (k z))))\n(outer inner)"
 	layers := []struct {
@@ -264,6 +278,8 @@ func TestMacroOriginChainKeepsSplicedKeywordPosition(t *testing.T) {
 // contents and a void stays a literal. The Go layer's converter has always
 // differed on both; that difference is recorded, not asserted as a goal.
 func TestSchemeLayerERConversionMatchesDatumToSyntax(t *testing.T) {
+	t.Parallel()
+
 	scheme := wile.WithSchemeSyntaxForms()
 	box := "(define-syntax m (er-macro-transformer (lambda (f r c) (list 'quote (box 'foo)))))\n(m)"
 	void := "(define-syntax m (er-macro-transformer (lambda (f r c) (if #f #f))))\n(list (m))"

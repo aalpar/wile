@@ -34,6 +34,8 @@ const forwardRefProgram = `(define (f) (g))
 // input as a single (begin ...) unit, so a define may forward-reference a later
 // define — file/program semantics (R22).
 func TestEngine_EvalProgram_ForwardReference(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -47,6 +49,8 @@ func TestEngine_EvalProgram_ForwardReference(t *testing.T) {
 // encapsulates: EvalMultiple compiles each top-level form independently, so the
 // forward reference fails.
 func TestEngine_EvalMultiple_ForwardReferenceFails(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -60,6 +64,8 @@ func TestEngine_EvalMultiple_ForwardReferenceFails(t *testing.T) {
 // (begin ...) wrapper structurally (parse-then-wrap) is more robust than the old
 // string surgery ("(begin " + code + "\n)").
 func TestEngine_EvalProgram_StructuralWrap(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("trailing line comment without newline", func(t *testing.T) {
@@ -99,6 +105,8 @@ func TestEngine_EvalProgram_StructuralWrap(t *testing.T) {
 // expansion goes through, so a capture there is the widest blast radius a single
 // define can have.
 func TestEngine_EvalProgram_WrapperHeadIsNotShadowable(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	cases := []struct {
 		name string
@@ -145,6 +153,8 @@ func TestEngine_EvalProgram_WrapperHeadIsNotShadowable(t *testing.T) {
 // rows below are green with and without it. The redefinition case is ratcheted
 // in binding_model_matrix_test.go, not here.
 func TestEngine_EvalProgram_DefinitionHeadIsNotSelfShadowed(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	cases := []struct {
 		name    string

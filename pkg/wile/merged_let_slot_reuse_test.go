@@ -88,6 +88,8 @@ var mergedLetSlotReuseCases = []struct {
 }
 
 func TestMergedLetSlotReuseIsNotObservable(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	for _, tc := range mergedLetSlotReuseCases {
 		t.Run(strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {

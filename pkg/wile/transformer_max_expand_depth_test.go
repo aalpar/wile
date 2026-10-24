@@ -36,6 +36,8 @@ import (
 // DefaultMaxExpandDepth. Procedural right-hand sides and load are covered by
 // TestMaxExpandDepthBoundsProceduralTransformerAndLoad.
 func TestMaxExpandDepthBoundsTransformerCompilation(t *testing.T) {
+	t.Parallel()
+
 	const deep = `(let ((a 1)) (let ((b 2)) (let ((c 3)) (let ((d 4)) (let ((e 5)) e)))))`
 
 	tcs := []struct {
@@ -69,6 +71,8 @@ const deepLam = `(let ((a 1)) (let ((b 2)) (let ((c 3)) (let ((d 4)) (let ((e 5)
 const inlinableLam = `(lambda (n) (let ((f (lambda (x) (+ x 1)))) (f n)))`
 
 func TestMaxExpandDepthBoundsProceduralTransformerAndLoad(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	p := filepath.Join(dir, "deep.scm")
 	qt.Assert(t, os.WriteFile(p, []byte(deepLet), 0o600), qt.IsNil)
@@ -94,6 +98,8 @@ func TestMaxExpandDepthBoundsProceduralTransformerAndLoad(t *testing.T) {
 }
 
 func TestInlineThresholdReachesEvalCompileLoad(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	p := filepath.Join(dir, "lam.scm")
 	qt.Assert(t, os.WriteFile(p, []byte(`(define g `+inlinableLam+`)`), 0o600), qt.IsNil)
@@ -124,6 +130,8 @@ func TestInlineThresholdReachesEvalCompileLoad(t *testing.T) {
 }
 
 func TestInlineThresholdReachesTransformerCompilation(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct{ name, src string }{
 		{"er", `(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'quote) ` + inlinableLam + `)))) (define d (m))`},
 		{"procedural", `(define-syntax m (let ((h ` + inlinableLam + `)) (lambda (stx) (datum->syntax stx (list 'quote h))))) (define d (m))`},

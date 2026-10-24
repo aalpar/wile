@@ -42,6 +42,8 @@ import (
 // from the ordinary resolution, which is a separate, pre-existing refusal (filed
 // in todo/tier1-security-correctness.md) and not what is pinned here.
 func TestUnboundDiagnosticSurvivesATieAtAnotherPhase(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		src  string

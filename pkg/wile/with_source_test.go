@@ -27,6 +27,8 @@ import (
 // RuntimeError.Source with the filename, line, and column when a runtime
 // error occurs.
 func TestParseWithSource_RuntimeError(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -138,6 +140,8 @@ func TestParseWithSource_RuntimeError(t *testing.T) {
 // TestParseWithSource_Success verifies that ParseWithSource + Eval returns correct
 // results for code that does not error.
 func TestParseWithSource_Success(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -182,6 +186,8 @@ func TestParseWithSource_Success(t *testing.T) {
 // TestEvalMultipleWithSource_RuntimeError verifies that source tracking
 // works across multiple expressions.
 func TestEvalMultipleWithSource_RuntimeError(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -201,6 +207,8 @@ func TestEvalMultipleWithSource_RuntimeError(t *testing.T) {
 // TestEvalMultipleWithSource_Success verifies that EvalMultipleWithSource
 // returns the result of the last expression.
 func TestEvalMultipleWithSource_Success(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -217,6 +225,8 @@ func TestEvalMultipleWithSource_Success(t *testing.T) {
 // survives the compile → run boundary. Code compiled with ParseWithSource + Compile
 // and later executed with Run should still carry source info in errors.
 func TestCompileParseWithSource_RuntimeError(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -238,6 +248,8 @@ func TestCompileParseWithSource_RuntimeError(t *testing.T) {
 // TestParseWithSource_ParseError verifies that ParseWithSource returns
 // a CompilationError for malformed input.
 func TestParseWithSource_ParseError(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -254,6 +266,8 @@ func TestParseWithSource_ParseError(t *testing.T) {
 // produce distinct Source fields in errors — the source string is not
 // cached or shared between calls.
 func TestWithSource_DistinctSources(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -286,6 +300,8 @@ func TestWithSource_DistinctSources(t *testing.T) {
 // There is no filename to report, but the position must not be dropped — see
 // SourceContext.Location and the "Error Chains: Lossless" invariant.
 func TestWithSource_SourcelessEvalCarriesPosition(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -340,6 +356,8 @@ func TestWithSource_SourcelessEvalCarriesPosition(t *testing.T) {
 // ParseWithSource + Compile result can be Run multiple times, each retaining
 // the source information in errors.
 func TestCompileParseWithSource_ReusedCompiledCode(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -362,6 +380,8 @@ func TestCompileParseWithSource_ReusedCompiledCode(t *testing.T) {
 // TestParseWithSource_ErrorFormat verifies the full Error() string format
 // includes the source prefix.
 func TestParseWithSource_ErrorFormat(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -391,6 +411,8 @@ func TestParseWithSource_ErrorFormat(t *testing.T) {
 // exactly once (it legitimately recurs inside individual stack frames, so only
 // the leading prefix is checked).
 func TestRuntimeError_RendersOnce(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)

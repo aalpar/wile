@@ -25,6 +25,8 @@ import (
 )
 
 func TestReadExpression(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -68,6 +70,8 @@ func TestReadExpression(t *testing.T) {
 // incomplete form is reported as IsIncompleteInput without dropping it, and a
 // genuine syntax error is distinguished from end-of-input.
 func TestReadExpressions(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -138,6 +142,8 @@ func TestReadExpressions(t *testing.T) {
 // evaluation so each form's value still echoes. This test is the reference
 // point if that trade-off is ever revisited.
 func TestReadExpressions_ForwardReferenceBoundary(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)

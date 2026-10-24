@@ -68,6 +68,8 @@ func narrowingEngine(t *testing.T) *wile.Engine {
 // "dynamic-wind: before/after must be a procedure", and the make-parameter rows
 // with "make-parameter: converter must be a procedure".
 func TestCallableNarrowingSitesAcceptEveryProcedure(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "narrowing-out.txt")
 	quoted := `"` + outFile + `"`
@@ -340,6 +342,8 @@ func TestCallableNarrowingSitesAcceptEveryProcedure(t *testing.T) {
 // R7RS-adjacent barrier semantics call for and what a widening to
 // "any NamedCallable" would still not produce.
 func TestBarrierContinuationReachesTheBarrierNotTheNarrowing(t *testing.T) {
+	t.Parallel()
+
 	eng := narrowingEngine(t)
 	_, err := eng.EvalMultiple(context.Background(),
 		`(begin (call/cc (lambda (k) (call-with-continuation-barrier k))) 'unreachable)`)
@@ -356,6 +360,8 @@ func TestBarrierContinuationReachesTheBarrierNotTheNarrowing(t *testing.T) {
 // name it in Scheme terms rather than by Go type. helpers.RequireCallable renders
 // SchemeString, so "42" — not "*values.Integer".
 func TestNarrowedSitesStillRejectNonProcedures(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		src  string
@@ -387,6 +393,8 @@ func TestNarrowedSitesStillRejectNonProcedures(t *testing.T) {
 // values.Value and lets ApplyCallable decide, so it never had the defect. It
 // answers 99 at 003b3353 and must keep answering 99.
 func TestWithExceptionHandlerStillTakesEveryProcedure(t *testing.T) {
+	t.Parallel()
+
 	eng := narrowingEngine(t)
 	v, err := eng.EvalMultiple(context.Background(),
 		`(begin (with-exception-handler (case-lambda ((e) 99)) (lambda () (raise-continuable 'boom))))`)

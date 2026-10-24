@@ -54,6 +54,8 @@ func newImmutableTopLevelLibraryEngine(t *testing.T) *wile.Engine {
 // top-level set!/redefine.
 
 func TestImmutableTopLevel_OptOut_CrossFormSetBangAllowed(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithMutableTopLevel())
@@ -67,6 +69,8 @@ func TestImmutableTopLevel_OptOut_CrossFormSetBangAllowed(t *testing.T) {
 }
 
 func TestImmutableTopLevel_OptOut_RedefineAllowed(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithMutableTopLevel())
@@ -80,6 +84,8 @@ func TestImmutableTopLevel_OptOut_RedefineAllowed(t *testing.T) {
 // --- Flag ON: Option B enforcement ---
 
 func TestImmutableTopLevel_On_CrossFormSetBangRejected(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newImmutableTopLevelEngine(t)
@@ -97,6 +103,8 @@ func TestImmutableTopLevel_On_CrossFormSetBangRejected(t *testing.T) {
 }
 
 func TestImmutableTopLevel_On_RedefineRejected(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newImmutableTopLevelEngine(t)
@@ -125,6 +133,8 @@ func TestImmutableTopLevel_On_RedefineRejected(t *testing.T) {
 // Unlike TestImmutableTopLevel_On_RedefineRejected (two non-begin units, pre-stamp
 // never fires), this is the only test exercising the guard ON the pre-stamped path.
 func TestImmutableTopLevel_On_PrestampedUnitRedefineRejected(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newImmutableTopLevelEngine(t)
@@ -159,6 +169,8 @@ func TestImmutableTopLevel_On_PrestampedUnitRedefineRejected(t *testing.T) {
 // redefine is allowed — unlike the cross-unit case above, which is rejected. Guards
 // the pre-stamp's StableInUnit gate / "already Stable, leave it" branch.
 func TestImmutableTopLevel_On_InUnitRedefineAllowed(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newImmutableTopLevelEngine(t)
@@ -169,6 +181,8 @@ func TestImmutableTopLevel_On_InUnitRedefineAllowed(t *testing.T) {
 }
 
 func TestImmutableTopLevel_On_InUnitSetBangAllowed(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newImmutableTopLevelEngine(t)
@@ -181,6 +195,8 @@ func TestImmutableTopLevel_On_InUnitSetBangAllowed(t *testing.T) {
 }
 
 func TestImmutableTopLevel_On_StableFlagReflectsInUnitMutation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newImmutableTopLevelEngine(t)
@@ -200,6 +216,8 @@ func TestImmutableTopLevel_On_StableFlagReflectsInUnitMutation(t *testing.T) {
 }
 
 func TestImmutableTopLevel_On_LocalDefineUnaffected(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newImmutableTopLevelEngine(t)
@@ -217,6 +235,8 @@ func TestImmutableTopLevel_On_LocalDefineUnaffected(t *testing.T) {
 // define path, so the binding it creates becomes Stable and a later set! is
 // rejected. (define-values is a core bootstrap macro; no import needed.)
 func TestImmutableTopLevel_On_DefineValuesCovered(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newImmutableTopLevelEngine(t)
@@ -234,6 +254,8 @@ func TestImmutableTopLevel_On_DefineValuesCovered(t *testing.T) {
 // (define var0 ...) ... (set! var0 ...) within one unit, so var0 is set! in its
 // own unit → non-stable → the internal set! is permitted.
 func TestImmutableTopLevel_On_DefineValuesMultiStillWorks(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newImmutableTopLevelEngine(t)
@@ -253,6 +275,8 @@ func TestImmutableTopLevel_On_DefineValuesMultiStillWorks(t *testing.T) {
 // (scheme cxr) import; importing (scheme base) AND (scheme cxr) together must not
 // collide either, since both now export the same binding rather than two copies.
 func TestImmutableTopLevel_On_CxrReExportImport(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name     string
 		src      string

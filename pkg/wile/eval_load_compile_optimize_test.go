@@ -39,6 +39,8 @@ import (
 // procedures, whose closure bodies are optimized as they compile on every path;
 // they pin parity with a top-level define, not the fix.
 func TestEvalLoadCompileTemplatesOptimized(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

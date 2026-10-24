@@ -73,6 +73,8 @@ var conflictingLibFS = fstest.MapFS{
 // Fresh engines, never RunSchemeCode: that helper skips tpl.Optimize() and the
 // mutable top level, so a ratchet written on it can pass without the fix.
 func TestImportConflictNamesTheSameIdentifierEveryTime(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -224,6 +226,8 @@ func newAtomicImportEngine(t *testing.T, obs func(wile.LibraryImportEvent)) *wil
 // Fails on master, where each set installed in sorted order and a refusal
 // returned midway, leaving a0 and a1 bound.
 func TestRefusedImportBindsNothing(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	newEngine := func(t *testing.T) *wile.Engine {
 		return newAtomicImportEngine(t, nil)
@@ -301,6 +305,8 @@ func TestRefusedImportBindsNothing(t *testing.T) {
 // events fire only once the whole form has passed the check, so an observer (the
 // doc registration among them) never reports an import the check refused.
 func TestRefusedImportFiresNoObserver(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	var topLevel []string
 	eng := newAtomicImportEngine(t, func(evt wile.LibraryImportEvent) {
@@ -327,6 +333,8 @@ func TestRefusedImportFiresNoObserver(t *testing.T) {
 // events only once all of it has passed the check, and fired lists every import
 // the library made.
 func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		lib   string
 		want  error
@@ -371,6 +379,8 @@ func TestRefusedLibraryImportDeclarationBindsNothing(t *testing.T) {
 // return no namespace when refused, and a phase-127 install is invisible to
 // namespace-bound?, which looks at phase 0.
 func TestRefusedNamespaceRequireBindsNothing(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	t.Run("alone", func(t *testing.T) {
 		eng := newAtomicImportEngine(t, nil)

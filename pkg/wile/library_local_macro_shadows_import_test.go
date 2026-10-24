@@ -32,6 +32,8 @@ import (
 // runtime frame, and both findLibraryBinding (export) and body macro resolution
 // found that mirror first, so the imported macro won.
 func TestLibraryLocalMacroShadowsImportedMacro(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	fs := fstest.MapFS{
 		"mb.scm": &fstest.MapFile{Data: []byte(`(define-library (mb)

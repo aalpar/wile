@@ -63,6 +63,8 @@ func evalWithLib(t *testing.T, libSource, src string) (string, error) {
 // prefers the define. Before the export lookup was scope-keyed this was decided
 // by which slot happened to be created first.
 func TestLibraryExport_OwnDefineBeatsAmbientImport(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got, err := evalWithLib(t, `(define-library (exportlib)
   (export not)
@@ -78,6 +80,8 @@ func TestLibraryExport_OwnDefineBeatsAmbientImport(t *testing.T) {
 // {} is a subset of {libScope} it still resolves, so re-export needs no special
 // case in the export lookup.
 func TestLibraryExport_ReExportResolves(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got, err := evalWithLib(t, `(define-library (exportlib)
   (export car cdr)
@@ -91,6 +95,8 @@ func TestLibraryExport_ReExportResolves(t *testing.T) {
 // the library author at the use site, so it carries {libScope} and stays
 // exportable. define-record-type is the case that matters in practice.
 func TestLibraryExport_PatternVariableBinderIsExportable(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got, err := evalWithLib(t, `(define-library (exportlib)
   (export made-by-macro rec-a make-r)
@@ -118,6 +124,8 @@ func TestLibraryExport_PatternVariableBinderIsExportable(t *testing.T) {
 // NOT reachable through RunSchemeCode: that path has no library env, so the
 // library-scope arm never fires and the test would pass vacuously.
 func TestLibraryBody_SyntacticKeywordAsVariableRefused(t *testing.T) {
+	t.Parallel()
+
 	// One keyword per HANDLER KIND: `if` is a primitive expander,
 	// `define-syntax` a syntax compiler. Both carry BindingTypePrimitive
 	// (measured: define-syntax's phase-0 binding is type 3), so the refusal
@@ -179,6 +187,8 @@ func TestLibraryBody_SyntacticKeywordAsVariableRefused(t *testing.T) {
 // Inside a library body both resolve through the library-scope arm and must
 // reach the refusal there too: TestLibraryBody_SyntacticKeywordAsVariableRefused.
 func TestTopLevel_KeywordInValuePositionNeverYieldsAValue(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		keyword string
 		want    error
@@ -206,6 +216,8 @@ func TestTopLevel_KeywordInValuePositionNeverYieldsAValue(t *testing.T) {
 // rejection is eager, at define-library time, and the diagnostic must say why
 // rather than claiming the name is undefined.
 func TestLibraryExport_TemplateIntroducedBinderIsRejected(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	_, err := evalWithLib(t, `(define-library (exportlib)
   (export template-made)

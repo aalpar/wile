@@ -72,6 +72,8 @@ var promotedMutatorPrograms = map[string]struct {
 // that never reads mc.env, so a future promoted vector mutator would pass this
 // test without touching the namespace-loss class at all.
 func TestPromotedMutatorsRespectImmutableLiterals(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	names := machine.PromotedMutatorNames()
 	qt.Assert(t, len(names) > 0, qt.IsTrue)

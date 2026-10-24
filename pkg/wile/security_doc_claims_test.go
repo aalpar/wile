@@ -82,6 +82,8 @@ func postureBullet(t *testing.T, doc, lead string) string {
 // production code, so Wile inherits Go's memory safety" with no qualifier of
 // any kind.
 func TestSecurityDocScopesMemorySafety(t *testing.T) {
+	t.Parallel()
+
 	bullet := postureBullet(t, securityDoc(t), "Pure Go")
 	stale := "so Wile inherits Go's memory safety"
 	if strings.Contains(bullet, stale) {
@@ -101,6 +103,8 @@ func TestSecurityDocScopesMemorySafety(t *testing.T) {
 // promises atomic mutation"); the measured consequence is an uncatchable
 // runtime.throw that kills the host process.
 func TestSecurityDocStatesHostFaultConsequence(t *testing.T) {
+	t.Parallel()
+
 	bullet := postureBullet(t, securityDoc(t), "One engine per goroutine")
 	stale := "the `atomic` primitives. This matches R7RS and SRFI-18, neither of which promises atomic mutation."
 	if strings.Contains(bullet, stale) {
@@ -118,6 +122,8 @@ func TestSecurityDocStatesHostFaultConsequence(t *testing.T) {
 // property unconditionally, with no occurrence of "no authorizer" and no
 // pointer to the widening section anywhere before the profile table.
 func TestSecurityDocNamesNoAuthorizerCarveOut(t *testing.T) {
+	t.Parallel()
+
 	section := docSection(t, securityDoc(t), "### Two-layer authorization")
 	head, _, found := strings.Cut(section, "| Profile")
 	if !found {
@@ -178,6 +184,8 @@ func resourceLimitBullet(t *testing.T, doc, lead string) string {
 // changing, and a wall-clock threshold inside a test is the determinism leak
 // CLAUDE.md's concurrency section says to route through an injectable.
 func TestSecurityDocScopesTimeoutPreemption(t *testing.T) {
+	t.Parallel()
+
 	bullet := resourceLimitBullet(t, securityDoc(t), "Context cancellation and timeouts")
 	for _, want := range []string{"granularity", "primitive"} {
 		if !strings.Contains(bullet, want) {

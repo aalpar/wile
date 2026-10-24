@@ -10,6 +10,8 @@ import (
 )
 
 func TestKitchenSink_EngineCreation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -35,6 +37,8 @@ func TestKitchenSink_EngineCreation(t *testing.T) {
 }
 
 func TestKitchenSink_Smoke(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

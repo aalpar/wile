@@ -42,6 +42,8 @@ var libDVFS = fstest.MapFS{
 // does not hit the immutable-top-level / cross-unit collision that the top-level
 // binder-hygiene pass exists to solve — this pins that they keep working.
 func TestLibraryBodyDefineValues(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),

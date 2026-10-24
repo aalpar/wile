@@ -32,6 +32,8 @@ import (
 // the documented examples and the actual public API (e.g., a missing
 // context parameter, a renamed method, a changed return type).
 func TestREADMEGoSnippetsCompile(t *testing.T) {
+	t.Parallel()
+
 	// README.md and go.mod live at the module root, two levels above this
 	// package (pkg/wile/). Paths are relative to the package directory.
 	readme, err := os.ReadFile("../../README.md")

@@ -70,6 +70,8 @@ import (
 // named `c` resolves, not that the let is what was being refused. The pair
 // stops being a controlled contrast at that point.
 func TestERMacroTransformerCannotSeeLetLocals(t *testing.T) {
+	t.Parallel()
+
 	const letLocalSrc = `(let ((c 0))
 	                       (define-syntax m (er-macro-transformer (lambda (x r c*) c)))
 	                       (m))`

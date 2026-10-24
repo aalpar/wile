@@ -177,6 +177,8 @@ func assertAggregateImmutable(
 // ratchet the walk's reach and termination and nothing else; the corpus-level
 // flaggable count below is what keeps the suite as a whole non-vacuous.
 func TestLiteralPoolAggregatesAreImmutable(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	corpusFlaggable := 0
 	for _, tc := range literalPoolCorpus {
@@ -211,6 +213,8 @@ func TestLiteralPoolAggregatesAreImmutable(t *testing.T) {
 // returned the SAME object, marking there would freeze an object the Go or
 // Scheme caller still owns. It returns a copy, and the original stays mutable.
 func TestEvalOfRuntimeVectorReturnsMutableCopy(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink))
 	qt.Assert(t, err, qt.IsNil)

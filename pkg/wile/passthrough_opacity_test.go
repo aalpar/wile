@@ -66,6 +66,8 @@ func evalPassthrough(t *testing.T, src string) (wile.Value, error) {
 // inline-threshold path. The broken invariant is escape/mutable marking, so a
 // non-inlinable body miscompiles too; the inliner is just where it shows first.
 func TestPassthrough_QuasiquoteSetBangDefeatsInlining(t *testing.T) {
+	t.Parallel()
+
 	v, err := evalPassthrough(t, `
 		(let ((f (lambda () 7)))
 		  (define ignored `+"`"+`(,(set! f (lambda () 99))))
@@ -87,6 +89,8 @@ func TestPassthrough_QuasiquoteSetBangDefeatsInlining(t *testing.T) {
 // test asserting only "the numbers are stale" would have been satisfied by a
 // wrong-type read too.
 func TestPassthrough_CondExpandHiddenClosureDoesNotCorruptFrame(t *testing.T) {
+	t.Parallel()
+
 	v, err := evalPassthrough(t, `
 		(begin
 		  (define slot (make-vector 1 '()))
@@ -111,6 +115,8 @@ func TestPassthrough_CondExpandHiddenClosureDoesNotCorruptFrame(t *testing.T) {
 // capture in plain sight was always correct; if this ever fails, the bug is in the
 // escape analysis generally, not in the opacity hole.
 func TestPassthrough_VisibleClosureCapture(t *testing.T) {
+	t.Parallel()
+
 	v, err := evalPassthrough(t, `
 		(begin
 		  (define slot (make-vector 1 '()))
@@ -132,6 +138,8 @@ func TestPassthrough_VisibleClosureCapture(t *testing.T) {
 // legal, and concealing it in a cond-expand must not make StableInUnit freeze the
 // binding and reject it.
 func TestPassthrough_CondExpandSetBangIsLegal(t *testing.T) {
+	t.Parallel()
+
 	v, err := evalPassthrough(t, `
 		(begin
 		  (define x 1)
@@ -146,6 +154,8 @@ func TestPassthrough_CondExpandSetBangIsLegal(t *testing.T) {
 
 // TestPassthrough_QuasiquoteSetBangIsLegal is the same, one form over.
 func TestPassthrough_QuasiquoteSetBangIsLegal(t *testing.T) {
+	t.Parallel()
+
 	v, err := evalPassthrough(t, `
 		(begin
 		  (define x 1)
@@ -165,6 +175,8 @@ func TestPassthrough_QuasiquoteSetBangIsLegal(t *testing.T) {
 // happens to mask the corruption; this cannot. A visible call/cc suppresses
 // SelfTailCall, and after the fix a concealed one must too.
 func TestPassthrough_NoSelfTailCallForConcealedCapture(t *testing.T) {
+	t.Parallel()
+
 	disasmOfLoop := func(t *testing.T, body string) string {
 		t.Helper()
 		ctx := context.Background()

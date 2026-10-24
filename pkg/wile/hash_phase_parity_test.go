@@ -68,6 +68,8 @@ var r6rsHashCalls = []struct {
 }
 
 func TestR6RSHashProceduresAreReachableAtPhaseOne(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range r6rsHashCalls {
 		t.Run(tt.name, func(t *testing.T) {
 			src := `(import (for-syntax (only (rnrs hashtables) ` + tt.name + `)))
@@ -93,6 +95,8 @@ func TestR6RSHashProceduresAreReachableAtPhaseOne(t *testing.T) {
 // import is the plain whole-library one the records document as the route; the
 // reachability test above narrows it with `only` to pin the export itself.
 func TestStringCiPairAgreesAtPhaseOne(t *testing.T) {
+	t.Parallel()
+
 	got, err := evalPhaseDistinctness(t, `
 		(import (for-syntax (scheme char)) (for-syntax (rnrs hashtables)))
 		(begin-for-syntax
@@ -113,6 +117,8 @@ func TestStringCiPairAgreesAtPhaseOne(t *testing.T) {
 // TestCorePrimitivePhaseCensus, and widening equal-hash flips
 // TestPhaseOneHashRouteNeedsALoadableLibrary.
 func TestR6RSHashesAreNotAmbientAtPhaseOne(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range r6rsHashCalls {
 		t.Run(tt.name, func(t *testing.T) {
 			// Positive control, same configuration: the name exists at phase 0, so
@@ -134,6 +140,8 @@ func TestR6RSHashesAreNotAmbientAtPhaseOne(t *testing.T) {
 // itself both-phase; the pair it recognizes is decided by primitive identity, so
 // the import's copy of the hash is the registered one.
 func TestMakeHashtableAcceptsTheImportedHashAtPhaseOne(t *testing.T) {
+	t.Parallel()
+
 	got, err := evalPhaseDistinctness(t, `
 		(import (for-syntax (only (rnrs hashtables) equal-hash)))
 		(begin-for-syntax (define zz (hashtable? (make-hashtable equal-hash equal?))))
@@ -152,6 +160,8 @@ func TestMakeHashtableAcceptsTheImportedHashAtPhaseOne(t *testing.T) {
 // pkg/stdlib/lib/rnrs/hashtables.sld. Moving the hashtable procedures to
 // PhaseSetRuntime flips it, on purpose, and that note changes with it.
 func TestEqualHashReachesPhaseOneThroughTheHashtableAccessor(t *testing.T) {
+	t.Parallel()
+
 	got, err := evalPhaseDistinctness(t, `
 		(begin-for-syntax
 		  (define zz ((hashtable-hash-function (make-equal-hashtable)) (list 1 2))))
@@ -167,6 +177,8 @@ func TestEqualHashReachesPhaseOneThroughTheHashtableAccessor(t *testing.T) {
 // A BOUNDARY like the accessor test above: closing that leak flips this, on
 // purpose, and the .sld's note changes with it.
 func TestTemplateIntroducedHashResolvesAtPhaseOne(t *testing.T) {
+	t.Parallel()
+
 	got, err := evalPhaseDistinctness(t, `
 		(define-syntax g (syntax-rules () ((_ v) (begin-for-syntax (define v (equal-hash (list 1 2)))))))
 		(g zz)
@@ -215,6 +227,8 @@ func phaseOneHashLibFS() fstest.MapFS {
 // import and (rnrs hashtables) did not export it: the two importing libraries
 // fail to load, and hashbare loads.
 func TestLibraryMacroBodyBindsTheHashThroughItsOwnImport(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	newEngine := func(t *testing.T) *wile.Engine {
 		t.Helper()
@@ -261,6 +275,8 @@ func TestLibraryMacroBodyBindsTheHashThroughItsOwnImport(t *testing.T) {
 // (rnrs hashtables) binds each one there by name. The library exported
 // string-ci-hash alone on master, so the other three rows fail there.
 func TestRnrsHashtablesBindsTheHashesWithoutAmbientBindings(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range r6rsHashCalls {
 		t.Run(tt.name, func(t *testing.T) {
 			// Control: level 2 binds no hash without the import, so the import
@@ -288,6 +304,8 @@ func TestRnrsHashtablesBindsTheHashesWithoutAmbientBindings(t *testing.T) {
 //
 // Fails on master, which said "equal-hash is not registered in this namespace".
 func TestHashAccessorRefusalNamesPhaseZero(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		src  string

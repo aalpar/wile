@@ -30,6 +30,8 @@ import (
 // wrapping chain from ErrAccessDenied through goErrorToSchemeException to
 // RuntimeError preserves errors.Is reachability.
 func TestErrorChain_SecurityDenial_PreservesErrAccessDenied(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -58,6 +60,8 @@ func TestErrorChain_SecurityDenial_PreservesErrAccessDenied(t *testing.T) {
 // TestErrorChain_CallDepthExceeded verifies that ErrCallDepthExceeded is
 // reachable through the RuntimeError wrapping chain.
 func TestErrorChain_CallDepthExceeded(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

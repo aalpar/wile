@@ -71,6 +71,8 @@ func newPhaseRowsEngine(t *testing.T) *wile.Engine {
 }
 
 func TestProfileEnvironmentHasTheMacroVocabularyAtEveryPhase(t *testing.T) {
+	t.Parallel()
+
 	rows := []struct {
 		name    string
 		envExpr string
@@ -95,6 +97,8 @@ func TestProfileEnvironmentHasTheMacroVocabularyAtEveryPhase(t *testing.T) {
 }
 
 func TestImportSetEnvironmentIsEmptyAboveRuntime(t *testing.T) {
+	t.Parallel()
+
 	eng := newPhaseRowsEngine(t)
 	_, err := eng.EvalMultiple(context.Background(), phaseTwoTransformerProgram("(environment '(scheme base))"))
 	qt.Assert(t, err, qt.ErrorMatches, `(?s).*no such .*binding "list" at phase 2 .*`)

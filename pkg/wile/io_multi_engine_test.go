@@ -32,6 +32,8 @@ import (
 // (get-output-string p) read "ab". With per-engine io.State, B's default is its
 // own port, so p reads "a".
 func TestTwoEngines_CurrentOutputPortIsolated(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ea, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
@@ -62,6 +64,8 @@ func TestTwoEngines_CurrentOutputPortIsolated(t *testing.T) {
 // current-input-port must be its own default, not A's string port. Reading a
 // char in A must not advance or share B's read position.
 func TestTwoEngines_CurrentInputPortIsolated(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	ea, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
@@ -100,6 +104,8 @@ func TestTwoEngines_CurrentInputPortIsolated(t *testing.T) {
 // redirect. Regression for a defect found verifying staff-sweep #8: a fresh
 // per-Apply State sent output to stdout the moment any library was imported.
 func TestImportDoesNotResetCurrentPort(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),

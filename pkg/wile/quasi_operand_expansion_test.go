@@ -62,6 +62,8 @@ func runUnderBothSyntaxLayers(t *testing.T, tcs []syntaxLayerRow) {
 //
 // Expected column: Chez 10.4.1 (petite -q --script) and Racket 9.2, identical.
 func TestI144UnquotedOperandIsAnExpression(t *testing.T) {
+	t.Parallel()
+
 	const two = `(define-syntax two (syntax-rules () ((_) 2))) `
 	tcs := []syntaxLayerRow{
 		{name: "unquote", program: "`(1 ,(when #t 2))", expected: "(1 2)"},
@@ -111,6 +113,8 @@ func TestI144UnquotedOperandIsAnExpression(t *testing.T) {
 // The two capture rows were red under the Scheme layer, which a variable pin
 // did not protect.
 func TestI144Pins(t *testing.T) {
+	t.Parallel()
+
 	tcs := []syntaxLayerRow{
 		// Blind to the depth rule: expanding the call (two) yields (two), so a
 		// fix that wrongly expanded the inner operand would still pass this.
@@ -185,6 +189,8 @@ var helperLibFS = fstest.MapFS{
 // library's helper. Go layer only: under the Scheme layer a user library that
 // defines a syntax-rules macro fails to load ("not a closure"), on master too.
 func TestI144LibraryVariablePinNotCaptured(t *testing.T) {
+	t.Parallel()
+
 	got := evalSyntaxForms(t, "(import (helperlib)) (define-syntax helper (syntax-rules () ((_) 42))) (m)",
 		wile.WithGoSyntaxForms(), wile.WithSourceFS(stdlib.FS), wile.WithSourceFS(helperLibFS), wile.WithLibraryPaths())
 	qt.New(t).Assert(got, qt.Equals, "1")
@@ -195,6 +201,8 @@ func TestI144LibraryVariablePinNotCaptured(t *testing.T) {
 // the quasi forms dropped their improper tail, and with-syntax ignored an extra
 // element and an improper binding list.
 func TestI144MalformedFormsRejected(t *testing.T) {
+	t.Parallel()
+
 	programs := []string{
 		"(quasiquote (1 ,(when #t 2)) . junk)",
 		"(quasisyntax (1 #,(when #t 2)) . junk)",
@@ -215,6 +223,8 @@ func TestI144MalformedFormsRejected(t *testing.T) {
 // compile-time expander per operand started each one at depth zero, and the
 // recursion overflowed the Go stack and killed the process.
 func TestI144OperandRecursionIsBounded(t *testing.T) {
+	t.Parallel()
+
 	programs := []string{
 		"(define-syntax m (syntax-rules () ((_) `(,(m))))) (m)",
 		"(define-syntax m (syntax-rules () ((_) (syntax-case (m) () (_ 1))))) (m)",

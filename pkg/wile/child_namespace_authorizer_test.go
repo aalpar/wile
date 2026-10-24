@@ -79,6 +79,8 @@ func sandboxedChild(t *testing.T) (*Engine, *environment.Namespace, *recordingAu
 // DENY and be recorded by the CHILD's authorizer. Asserting the denial alone
 // would pass against a root that happens to deny too.
 func TestChildNamespaceAuthorizerGovernsRuntimeGates(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		code string
@@ -112,6 +114,8 @@ func TestChildNamespaceAuthorizerGovernsRuntimeGates(t *testing.T) {
 // while this one hands it the HOST's top level to define into. Under
 // WithMutableTopLevel it can redefine host procedures outright.
 func TestChildNamespaceIsItsOwnInteractionEnvironment(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, child, _, _ := sandboxedChild(t)
 
@@ -141,6 +145,8 @@ func TestChildNamespaceIsItsOwnInteractionEnvironment(t *testing.T) {
 // LoadLibrary is the only production installer of a ctx authorizer. So include
 // and load resolved under root policy while import was already correct.
 func TestChildNamespaceAuthorizerGovernsSourceLoading(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dir := t.TempDir()
 	src := filepath.Join(dir, "oracle.scm")
@@ -177,6 +183,8 @@ func TestChildNamespaceAuthorizerGovernsSourceLoading(t *testing.T) {
 //
 // TestLibraryLoadUsesCallerAuthorizerOnMiss pins the miss; this is the hit.
 func TestChildNamespaceAuthorizerGovernsWarmLibraryCache(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, child, _, childAuth := sandboxedChild(t)
 
@@ -202,6 +210,8 @@ func TestChildNamespaceAuthorizerGovernsWarmLibraryCache(t *testing.T) {
 // still refused. This is the property the fix must not trade away while
 // tightening the other direction.
 func TestChildNamespaceCannotWidenAStrictRoot(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx,
 		WithProfile(KitchenSink),
@@ -278,6 +288,8 @@ func evalTrustingChild(t *testing.T, libDir string, inner security.Authorizer) (
 // denial alone would pass against a constructor that merely failed to bind
 // system, or against a root that happened to deny too.
 func TestChildNamespaceAuthorizerGovernsConstructedEnvironments(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		env  string
@@ -320,6 +332,8 @@ func TestChildNamespaceAuthorizerGovernsConstructedEnvironments(t *testing.T) {
 // through any of the three primitives that share that sink, while a plain
 // (import …) from the same child was refused.
 func TestChildNamespaceAuthorizerGovernsConstructorImports(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		code string
@@ -357,6 +371,8 @@ func TestChildNamespaceAuthorizerGovernsConstructorImports(t *testing.T) {
 // EffectiveAuthorizer(): a permissive child would then answer namespace:create
 // for a strict root.
 func TestChildNamespaceCannotWidenProfileOfAStrictRoot(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx,
 		WithProfile(ConsoleWithLoad),

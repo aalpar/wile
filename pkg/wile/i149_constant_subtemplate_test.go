@@ -63,6 +63,8 @@ import (
 // The assertions are on sentinels, never on rendered wrap chains: shape a's chain
 // is nine "failed to …" links deep and the provenance wave rewrites those.
 func TestI149_ConstantSubtemplateFollowedByEllipsisIsRefused(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		src      string

@@ -34,6 +34,8 @@ import (
 // not bootstrap-resident, so it is stamped on its import path in a later phase and
 // is intentionally absent here.)
 func TestInlineHOFStamp(t *testing.T) {
+	t.Parallel()
+
 	eng := captureSafetyEngine(t)
 	env := eng.Environment()
 
@@ -76,6 +78,8 @@ func TestInlineHOFStamp(t *testing.T) {
 // the freshly-created target binding by export name instead. Orthogonality holds:
 // fold applies its callback (kons) and stays NOT capture-safe.
 func TestInlineHOFStamp_FoldViaImport(t *testing.T) {
+	t.Parallel()
+
 	eng := captureSafetyEngine(t)
 	ctx := context.Background()
 
@@ -103,6 +107,8 @@ func TestInlineHOFStamp_FoldViaImport(t *testing.T) {
 // export, not the local alias: an import-rename of fold still stamps the renamed
 // binding, because the stamp keys on the external name.
 func TestInlineHOFStamp_RenamedImport(t *testing.T) {
+	t.Parallel()
+
 	eng := captureSafetyEngine(t)
 	ctx := context.Background()
 
@@ -121,6 +127,8 @@ func TestInlineHOFStamp_RenamedImport(t *testing.T) {
 // (a plain top-level define) is never stamped. The import path is the only library
 // seam; a user define lands in the mutable runtime and reads -1.
 func TestInlineHOFStamp_UserDefineNotStamped(t *testing.T) {
+	t.Parallel()
+
 	eng := captureSafetyEngine(t)
 	ctx := context.Background()
 
@@ -143,6 +151,8 @@ func TestInlineHOFStamp_UserDefineNotStamped(t *testing.T) {
 // R7RS template for SRFI-13's different procedure. The genuine R7RS string-map is
 // stamped at its sealed-base home (TestInlineHOFStamp); only that binding inlines.
 func TestInlineHOFStamp_Srfi13StringMapNotStamped(t *testing.T) {
+	t.Parallel()
+
 	eng := captureSafetyEngine(t)
 	ctx := context.Background()
 

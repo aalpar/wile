@@ -70,6 +70,8 @@ func stdlibLibraryNames(t *testing.T) []string {
 // population that makes the claim worth checking is the loaded stdlib, and
 // loading it needs bootstrap, which imports compilation.
 func TestExportRootIsOneAnswerPerBinding(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

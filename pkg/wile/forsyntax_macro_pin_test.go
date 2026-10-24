@@ -82,6 +82,8 @@ func newForSyntaxPinEngine(ctx context.Context, t *testing.T) *wile.Engine {
 // where the use site's `helper` keyword lives. Before the guard this yielded
 // user-helper.
 func TestForSyntaxPin_TransformerBodyKeepsPinnedTemplateID(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newForSyntaxPinEngine(ctx, t)
 
@@ -103,6 +105,8 @@ func TestForSyntaxPin_TransformerBodyKeepsPinnedTemplateID(t *testing.T) {
 // keyword: correct before and after, so it pins that the repro above discriminates on
 // the collision rather than on the transformer-body path itself.
 func TestForSyntaxPin_TransformerBodyControl(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newForSyntaxPinEngine(ctx, t)
 
@@ -120,6 +124,8 @@ func TestForSyntaxPin_TransformerBodyControl(t *testing.T) {
 // keyword it names is only reachable through arm 1's ∅-scoped match, so guarding arm 1
 // must leave that path intact.
 func TestForSyntaxPin_TransformerBodyReachesAmbientMacro(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newForSyntaxPinEngine(ctx, t)
 

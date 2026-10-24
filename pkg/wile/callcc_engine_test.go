@@ -18,6 +18,8 @@ import (
 // convergence. (A genuinely NON-converging continuation loop is now an ordinary
 // infinite loop bounded by context cancellation, like (let loop () (loop)).)
 func TestDeepNonTailCallccLoopCompletes(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -37,6 +39,8 @@ func TestDeepNonTailCallccLoopCompletes(t *testing.T) {
 // converges after ~100 re-invocations completes and returns its value — the resume
 // trampoline replays it in O(1) Go frames.
 func TestContinuationLoopBoundedConverges(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -65,6 +69,8 @@ func TestContinuationLoopBoundedConverges(t *testing.T) {
 // The warmup + 10-iteration loop is load-bearing: it only completes if each resume
 // truly recedes rather than accumulating Go frames.
 func TestDeepConvergingContinuationConverges(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	// Default engine — the trampoline resumes each call/cc in O(1) Go frames.
@@ -92,6 +98,8 @@ last)`
 }
 
 func TestCallCC_Procedure(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -108,6 +116,8 @@ func TestCallCC_Procedure(t *testing.T) {
 // ForeignClosure, applyForeign consumes the SaveContinuation frame. Without
 // the savedCont guard, callForeignCached would double-restore from mc.cont.
 func TestCallCC_FusedCallForeignCached(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tests := []struct {

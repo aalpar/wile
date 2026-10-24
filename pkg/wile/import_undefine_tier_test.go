@@ -45,6 +45,8 @@ import (
 // import rather than the base passes, and nothing that keeps addressing the
 // coordinate without the provenance axis can.
 func TestUndefineOfAnImportLeavesTheStartupSetIntact(t *testing.T) {
+	t.Parallel()
+
 	// `car` is a Go primitive and `list-copy` a bootstrap Scheme procedure; the
 	// two take different install paths, and the defect reached both. A FRESH
 	// engine per row: undefine mutates engine state.
@@ -96,6 +98,8 @@ func TestUndefineOfAnImportLeavesTheStartupSetIntact(t *testing.T) {
 // and the name ends up bound nowhere — a state no single undefine can produce,
 // because the sealed refusal exists precisely to forbid it.
 func TestUndefineTwiceCannotUnbindAStartupSetName(t *testing.T) {
+	t.Parallel()
+
 	const name = "list-copy"
 	undefine := `(namespace-undefine! (interaction-environment) '` + name + `)`
 

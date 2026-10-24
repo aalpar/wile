@@ -31,6 +31,8 @@ import (
 // the library-load path can read it. An explicit WithInlineThreshold(0) must be
 // retained and distinguished from "unset" via the set flag.
 func TestInlineThresholdPopulatedOnNamespace(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tcs := []struct {
@@ -70,6 +72,8 @@ func TestInlineThresholdPopulatedOnNamespace(t *testing.T) {
 // path always compiled at the default threshold, so the disabled case would
 // fail (body still inlined).
 func TestInlineThresholdHonoredForImportedLibrary(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	// The discriminator is f's body operator, `+`, appearing in use-helper's own
@@ -146,6 +150,8 @@ func TestInlineThresholdHonoredForImportedLibrary(t *testing.T) {
 // 0-vs-nonzero — mapping every positive value to the default — would pass the
 // extremes test yet fail here.
 func TestInlineThresholdBoundaryForImportedLibrary(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	// f's body is (x x (+ x 1)) -> length 3. The two leading bare-x expressions

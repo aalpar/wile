@@ -32,6 +32,8 @@ import (
 // importable from an external test). include exercises the same
 // FSFileResolver.ResolveAndOpen path at compile time.
 func TestWithSourceFS_Include(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -58,6 +60,8 @@ func TestWithSourceFS_Include(t *testing.T) {
 // includes sub/helper.scm, and definitions from the nested file are
 // visible at the top level.
 func TestWithSourceFS_NestedInclude(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -85,6 +89,8 @@ func TestWithSourceFS_NestedInclude(t *testing.T) {
 // TestWithSourceFS_LibraryImport verifies that the R7RS library system
 // can find and import .sld library files from a virtual filesystem.
 func TestWithSourceFS_LibraryImport(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -114,6 +120,8 @@ func TestWithSourceFS_LibraryImport(t *testing.T) {
 // define-library form resolves files relative to the library's directory
 // within the virtual filesystem.
 func TestWithSourceFS_IncludeInLibrary(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -145,6 +153,8 @@ func TestWithSourceFS_IncludeInLibrary(t *testing.T) {
 // FSFileResolver rejects absolute paths. Absolute paths have no meaning
 // in a virtual filesystem.
 func TestWithSourceFS_IncludeRejectsAbsolutePath(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -170,6 +180,8 @@ func TestWithSourceFS_IncludeRejectsAbsolutePath(t *testing.T) {
 // nonexistent file should produce an error (proving the OS resolver is
 // used, not a nil/missing resolver).
 func TestWithSourceFS_NotSet_UsesOSFilesystem(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -184,6 +196,8 @@ func TestWithSourceFS_NotSet_UsesOSFilesystem(t *testing.T) {
 // falls back to .scm when no .sld file exists. This exercises the
 // .sld-then-.scm resolution path in LoadLibrary.
 func TestWithSourceFS_LibraryScmFallback(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -212,6 +226,8 @@ func TestWithSourceFS_LibraryScmFallback(t *testing.T) {
 // import another library and re-export values. Library (derived) imports
 // (base) and defines derived-val in terms of base-val.
 func TestWithSourceFS_TransitiveLibraryImport(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -246,6 +262,8 @@ func TestWithSourceFS_TransitiveLibraryImport(t *testing.T) {
 // create a chain where files are found across different virtual filesystems.
 // fs1 has helper.scm, fs2 has utils.scm — both resolve.
 func TestWithSourceFS_MultipleFS(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -277,6 +295,8 @@ func TestWithSourceFS_MultipleFS(t *testing.T) {
 // TestWithSourceFS_ChainPriority verifies that when two filesystems both
 // contain the same file, the first one in chain order wins.
 func TestWithSourceFS_ChainPriority(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -308,6 +328,8 @@ func TestWithSourceFS_ChainPriority(t *testing.T) {
 // OS filesystem as the last resolver. A nonexistent file in the virtual
 // FS falls through to OS, which also fails — proving the chain tried both.
 func TestWithSourceOS_Fallback(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -339,6 +361,8 @@ func TestWithSourceOS_Fallback(t *testing.T) {
 // without WithSourceOS, the OS filesystem is NOT consulted. Only the
 // virtual filesystem is searched.
 func TestWithSourceFS_ExcludesOSByDefault(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -364,6 +388,8 @@ func TestWithSourceFS_ExcludesOSByDefault(t *testing.T) {
 // TestWithSourceFS_LibraryAcrossLayers verifies that the library loader
 // searches across multiple virtual filesystems in chain order.
 func TestWithSourceFS_LibraryAcrossLayers(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -402,6 +428,8 @@ func TestWithSourceFS_LibraryAcrossLayers(t *testing.T) {
 // Each include is relative to the including file's directory, not the
 // original evaluation root.
 func TestWithSourceFS_DeeplyNestedInclude(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -434,6 +462,8 @@ func TestWithSourceFS_DeeplyNestedInclude(t *testing.T) {
 // directory. The library at lib/mylib.sld includes ../shared/common.scm,
 // which resolves to shared/common.scm in the virtual filesystem.
 func TestWithSourceFS_IncludeDotDotTraversal(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

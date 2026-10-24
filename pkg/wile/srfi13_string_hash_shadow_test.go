@@ -49,6 +49,8 @@ import (
 // 1876933714763452203 and SRFI-13's is 96354, four orders of magnitude below the
 // 2^22 bound the library reduces modulo.
 func TestStringHashSRFI13StillShadows(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	cases := []struct {
@@ -83,6 +85,8 @@ func TestStringHashSRFI13StillShadows(t *testing.T) {
 // (rnrs hashtables) carries the same conflict. A fresh engine per row, for the
 // reason TestStringHashSRFI13StillShadows gives.
 func TestStringHashConflictsBetweenRnrsHashtablesAndSRFI13(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	c.Run("importing both is refused", func(c *qt.C) {
@@ -139,6 +143,8 @@ func TestStringHashConflictsBetweenRnrsHashtablesAndSRFI13(t *testing.T) {
 // equal-hash equal?) into "unsupported hash/equivalence pair" with nothing in the
 // user's program having changed. It must fail HERE instead of surprising them.
 func TestMakeHashtableRecognitionAcrossNamespaces(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 

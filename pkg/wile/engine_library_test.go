@@ -30,6 +30,8 @@ import (
 )
 
 func TestExtensionAsLibrary_Import(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -48,6 +50,8 @@ func TestExtensionAsLibrary_Import(t *testing.T) {
 }
 
 func TestExtensionAsLibrary_Only(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -67,6 +71,8 @@ func TestExtensionAsLibrary_Only(t *testing.T) {
 }
 
 func TestExtensionAsLibrary_Prefix(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -85,6 +91,8 @@ func TestExtensionAsLibrary_Prefix(t *testing.T) {
 }
 
 func TestExtensionAsLibrary_Rename(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -103,6 +111,8 @@ func TestExtensionAsLibrary_Rename(t *testing.T) {
 }
 
 func TestExtensionAsLibrary_NoRuntimePrimitives(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -149,6 +159,8 @@ func (m *mockLibraryNamerExtension) LibraryName() []string {
 }
 
 func TestExtensionAsLibrary_CustomLibraryName(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -181,6 +193,8 @@ func TestExtensionAsLibrary_CustomLibraryName(t *testing.T) {
 // both *ExtensionFunc with an unset WithLibraryName slot and to custom
 // types that happen to return [].
 func TestExtensionAsLibrary_EmptyLibraryNameFallsBack(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -197,6 +211,8 @@ func TestExtensionAsLibrary_EmptyLibraryNameFallsBack(t *testing.T) {
 }
 
 func TestExtensionAsLibrary_NotEnabled(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -234,6 +250,8 @@ func TestExtensionAsLibrary_NotEnabled(t *testing.T) {
 // for `sqrt` and also defined `sqrt`, so §5.2 does apply and the define keeps
 // winning.
 func TestExtensionLibraryExportIgnoresUserShadow(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		code string
@@ -305,6 +323,8 @@ func TestExtensionLibraryExportIgnoresUserShadow(t *testing.T) {
 // Racket agrees; Chez refuses the program ("multiple definitions"), so the doc
 // line does not claim agreement.
 func TestImportOrderingIsNotChecked(t *testing.T) {
+	t.Parallel()
+
 	libFS := fstest.MapFS{"ordlib.sld": &fstest.MapFile{Data: []byte(`(define-library (ordlib)
   (import (scheme base))
   (export ord-f)

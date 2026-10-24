@@ -67,6 +67,8 @@ func evalStable(t *testing.T, eng *wile.Engine, src string) (string, error) {
 // of this work; if it ever fails, the other rows are asserting agreement with
 // something that no longer refuses and mean nothing.
 func TestStableRebind_EvalBaselineRefuses(t *testing.T) {
+	t.Parallel()
+
 	eng := stableRebindEngine(t)
 	_, err := evalStable(t, eng, `(define (f n) 'OLD)`)
 	qt.Assert(t, err, qt.IsNil)
@@ -90,6 +92,8 @@ func TestStableRebind_EvalBaselineRefuses(t *testing.T) {
 // Measured before the fix: this sequence completed and (f 1) answered NEW, on the
 // very engine where the eval oracle above refuses the identical program.
 func TestStableRebind_CompiledThunkRefuses(t *testing.T) {
+	t.Parallel()
+
 	eng := stableRebindEngine(t)
 	_, err := evalStable(t, eng, `(define (f n) 'OLD)`)
 	qt.Assert(t, err, qt.IsNil)
@@ -114,6 +118,8 @@ func TestStableRebind_CompiledThunkRefuses(t *testing.T) {
 // It closes an asymmetry as well: namespace-undefine! already refused a binding
 // it must not remove, while namespace-define! would overwrite one.
 func TestStableRebind_NamespaceDefineRefuses(t *testing.T) {
+	t.Parallel()
+
 	eng := stableRebindEngine(t)
 	_, err := evalStable(t, eng, `(define (f n) 'OLD)`)
 	qt.Assert(t, err, qt.IsNil)
@@ -130,6 +136,8 @@ func TestStableRebind_NamespaceDefineRefuses(t *testing.T) {
 
 // TestStableRebind_EngineDefineRefuses covers the two Go-API doors.
 func TestStableRebind_EngineDefineRefuses(t *testing.T) {
+	t.Parallel()
+
 	eng := stableRebindEngine(t)
 	_, err := evalStable(t, eng, `(define (f n) 'OLD)`)
 	qt.Assert(t, err, qt.IsNil)
@@ -167,6 +175,8 @@ func TestStableRebind_EngineDefineRefuses(t *testing.T) {
 // Define may rebind it as often as it likes. This is the shape
 // ExampleEngine_Compile documents.
 func TestStableRebind_HostOwnedNameStaysRebindable(t *testing.T) {
+	t.Parallel()
+
 	eng := stableRebindEngine(t)
 	for _, n := range []int64{1, 2, 3} {
 		err := eng.Define("hostvar", wile.NewInteger(n))
@@ -184,6 +194,8 @@ func TestStableRebind_HostOwnedNameStaysRebindable(t *testing.T) {
 // and varies only the engine option, so a build that refused unconditionally
 // (rather than because a binding is Stable) fails here.
 func TestStableRebind_MutableTopLevelOptsOut(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMutableTopLevel())
 	qt.Assert(t, err, qt.IsNil)
@@ -214,6 +226,8 @@ func TestStableRebind_MutableTopLevelOptsOut(t *testing.T) {
 // Scheme define and the Go Define must still land. Shipping the refusal without
 // the relocation would have made these error on every name an embedder imported.
 func TestStableRebind_DefineOverImportStillWorks(t *testing.T) {
+	t.Parallel()
+
 	eng := stableRebindEngine(t)
 	_, err := evalStable(t, eng, `(import (scheme base))`)
 	qt.Assert(t, err, qt.IsNil)

@@ -28,6 +28,8 @@ import (
 // /tmp), a symlink staged in /tmp pointing outside /tmp must NOT let evaluated
 // Scheme read a file outside the sandbox. Pre-fix this read /etc/passwd.
 func TestEngine_SymlinkEscape_Denied(t *testing.T) {
+	t.Parallel()
+
 	dir, err := os.MkdirTemp("/tmp", "wile_esc_")
 	if err != nil {
 		t.Fatal(err)
@@ -54,6 +56,8 @@ func TestEngine_SymlinkEscape_Denied(t *testing.T) {
 
 // Regression for wile-goast: ConsoleWithLoad must keep allowing (eval ...).
 func TestEngine_Eval_AllowedUnderConsoleWithLoad(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.ConsoleWithLoad))
 	if err != nil {
@@ -68,6 +72,8 @@ func TestEngine_Eval_AllowedUnderConsoleWithLoad(t *testing.T) {
 // The new gate lets an authorizer deny code:eval. With eval present but a
 // deny-all authorizer, (eval ...) and (compile ...) must be refused.
 func TestEngine_Eval_DeniedByAuthorizer(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),

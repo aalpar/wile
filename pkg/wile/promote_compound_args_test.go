@@ -35,6 +35,8 @@ import (
 // 2-ary and tail-only), and the promotion actually fires (OpAddTail appears in
 // the compiled bytecode — guarding against a dead optimization).
 func TestPromoteCompoundArgsFib(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

@@ -32,6 +32,8 @@ import (
 // IsSyntaxEmptyList check. A malformed template compiles as ordinary quasiquoted
 // data, so a clean nil error proves the safe path rather than the crash path.
 func TestQuasiquoteImproperUnquoteTail_NoPanic(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		code string

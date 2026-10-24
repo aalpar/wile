@@ -45,6 +45,8 @@ import (
 // minted it, so recognition asks "is this the registered equal-hash?" rather than
 // "is this the sealed base's copy of it?".
 func TestMakeHashtableRecognitionSurvivesImports(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	cases := []struct {
@@ -84,6 +86,8 @@ func TestMakeHashtableRecognitionSurvivesImports(t *testing.T) {
 // recognition to a name compare would accept these and silently hash with the
 // wrong function.
 func TestMakeHashtableRejectsUnregisteredProcedures(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	cases := []struct {
@@ -121,6 +125,8 @@ func TestMakeHashtableRejectsUnregisteredProcedures(t *testing.T) {
 // CALLER holds, not the sealed base's copy, so the pair a program reads off a
 // table is the pair it wrote.
 func TestHashtableAccessorsRoundTripAfterImport(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	cases := []struct {
@@ -159,6 +165,8 @@ func TestHashtableAccessorsRoundTripAfterImport(t *testing.T) {
 // shadow the mutable tier is either empty (so the probe falls through to the
 // sealed slot on its own) or holds the real primitive after an import.
 func TestHashtableAccessorsSurviveAUserShadow(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	cases := []struct {
@@ -244,6 +252,8 @@ func newHashtableSecondCopyEngine(t testing.TB) *Engine {
 // explicit field list rather than a struct copy, so a field Copy forgets
 // regresses to the probe on the copy while the first element still passes.
 func TestHashtableRemembersTheProceduresItWasMadeWith(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	cases := []struct {
@@ -353,6 +363,8 @@ func TestHashtableRemembersTheProceduresItWasMadeWith(t *testing.T) {
 // remembered slot. Swapping the two checks fails no test, measured — and saying
 // otherwise here is a claim this file cannot back.
 func TestHashtableAccessorsRefuseAnUnknownKind(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	for _, name := range []string{"hashtable-equivalence-function", "hashtable-hash-function"} {
@@ -420,6 +432,8 @@ func (*typedNilCallable) AcceptsArity(int) bool {
 // perfectly good equal?-keyed table, and the probe's answer is the one a
 // fixed-kind table would get.
 func TestHashtableAccessorsRejectAnUnregisteredRememberedValue(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	// The registry's own equal? and equal-hash closures, reached the way a
@@ -484,6 +498,8 @@ func TestHashtableAccessorsRejectAnUnregisteredRememberedValue(t *testing.T) {
 // Fail OPEN, like the gate: both accessors answer from the name probe, which is
 // what a fixed-kind table gets.
 func TestHashtableHalfRememberedPairIsNotRemembered(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	eng := newSRFITestEngine(c)

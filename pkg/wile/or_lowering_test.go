@@ -71,6 +71,8 @@ func templateOf(t *testing.T, src, name string) *machine.NativeTemplate {
 // The cases hold everything constant but the operand count, so a pass cannot be
 // explained by "this procedure happens to need no frame".
 func TestOrEmitsNoEnvFrame(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		src  string
@@ -96,6 +98,8 @@ func TestOrEmitsNoEnvFrame(t *testing.T) {
 // boolean; the register passthrough returns E's OWN value, so a truthy non-boolean
 // operand must come back unchanged.
 func TestOrLoweringPreservesValues(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		src  string
@@ -170,6 +174,8 @@ func selfTailPops(tpl *machine.NativeTemplate) []int {
 // The controls hold the loop shape constant and vary only the wrapper, so a pass
 // cannot be explained by "self-recursive procedures get OpSelfTailCall".
 func TestOrAlternativeSelfTailCallPopsNoFrame(t *testing.T) {
+	t.Parallel()
+
 	plain := templateOf(t,
 		"(define (f n acc) (if (= n 0) acc (f (- n 1) (+ acc n))))", "f")
 	qt.Assert(t, selfTailPops(plain), qt.DeepEquals, []int{0},

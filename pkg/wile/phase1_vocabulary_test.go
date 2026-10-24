@@ -46,6 +46,8 @@ import (
 // directions mean opposite things: an ADDED name is a narrowing of D4 that has
 // to be argued, a REMOVED one is a transformer body that will stop compiling.
 func TestPhase1VocabularyMembership(t *testing.T) {
+	t.Parallel()
+
 	want := []string{
 		// The declarative vocabulary a syntax-rules macro's own definition needs.
 		"...", "=>", "_", "else", "syntax-rules",
@@ -102,6 +104,8 @@ func TestPhase1VocabularyMembership(t *testing.T) {
 // decided by the closed set. It does not widen D4's break, because a %-name is
 // not something user code writes.
 func TestMacroVocabularyAdmitsTheBootstrapPrefix(t *testing.T) {
+	t.Parallel()
+
 	qt.Assert(t, bootstrap.MacroVocabularyAdmits("%syntax-case-transform"), qt.IsTrue)
 	qt.Assert(t, bootstrap.MacroVocabularyAdmits("%pattern-variable?"), qt.IsTrue)
 	qt.Assert(t, bootstrap.MacroVocabularyAdmits("%"), qt.IsTrue)
@@ -124,6 +128,8 @@ func TestMacroVocabularyAdmitsTheBootstrapPrefix(t *testing.T) {
 // checked from the other end too: the names D4 is ABOUT must be reachable at
 // phase 0 and not at phase 1.
 func TestPhase1VocabularyIsAStrictSubsetOfTheBase(t *testing.T) {
+	t.Parallel()
+
 	eng, err := NewEngine(context.Background(), WithProfile(KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
 	defer eng.Close()
@@ -170,6 +176,8 @@ func TestPhase1VocabularyIsAStrictSubsetOfTheBase(t *testing.T) {
 // install, so a deeper tower is a matter of which names rather than which
 // phases.
 func TestPhase1VocabularyIsPinnedAgainstTheGoLayer(t *testing.T) {
+	t.Parallel()
+
 	eng, err := NewEngine(context.Background(), WithProfile(KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
 	defer eng.Close()

@@ -47,6 +47,8 @@ import (
 // shape-level ratchet (TestQuasiExpandShape's dotted rows) pins structurally and
 // this one pins by value.
 func TestQuasisyntaxDottedTail(t *testing.T) {
+	t.Parallel()
+
 	const preamble = "(define x 5) (define y 7) (define xs '(1 2)) "
 
 	cases := []struct {

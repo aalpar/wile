@@ -64,6 +64,8 @@ import (
 // it. This passes by construction and keeps passing while the reach 3b pins
 // stays wide open — which is exactly why 3a alone does not guard the defect.
 func TestPin3aThreadsAreKitchenSinkOnly(t *testing.T) {
+	t.Parallel()
+
 	for _, profile := range []string{"tiny", "console", "console-with-load", "small"} {
 		exts, err := bootstrap.ProfileExtensions(profile)
 		qt.Assert(t, err, qt.IsNil)
@@ -97,6 +99,8 @@ func TestPin3aThreadsAreKitchenSinkOnly(t *testing.T) {
 // Design §8 Q3's standing answer is Keep, so this is the decided behaviour and
 // a future re-decision must flip this test rather than pass silently.
 func TestPin3bNoAuthorizerSmallEngineReachesThreads(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.Small))
 	qt.Assert(t, err, qt.IsNil)
@@ -124,6 +128,8 @@ func TestPin3bNoAuthorizerSmallEngineReachesThreads(t *testing.T) {
 // that does install a policy, the privileged sink resolves a non-nil
 // authorizer and the same widening request is refused.
 func TestPin3bRestrictiveProfilesResolveAnAuthorizer(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.ConsoleWithLoad))
 	qt.Assert(t, err, qt.IsNil)
@@ -191,6 +197,8 @@ func runAggregateChild(t *testing.T, name string, iterations int) (string, error
 // deviation is real: two threads mutating one shared aggregate with no
 // synchronisation is a data race, on every aggregate in the class.
 func TestPin3cRaceDetectorFiresOnSharedAggregate(t *testing.T) {
+	t.Parallel()
+
 	if !raceDetectorEnabled {
 		t.Skip("3c is the -race arm; run under make test-race")
 	}
@@ -214,6 +222,8 @@ func TestPin3cRaceDetectorFiresOnSharedAggregate(t *testing.T) {
 // A failure here is not "the test broke". It means a change made the tear
 // materially more likely, which is the whole reason the canary exists.
 func TestPin3dHostSurvivesSharedVectorMutation(t *testing.T) {
+	t.Parallel()
+
 	if raceDetectorEnabled {
 		t.Skip("3d is the non-race arm; under -race the detector reports this shape by design")
 	}
@@ -230,6 +240,8 @@ func TestPin3dHostSurvivesSharedVectorMutation(t *testing.T) {
 // no-op when run directly, which is what keeps `go test ./...` from executing
 // an unsynchronised payload in the parent's own process.
 func TestSharedAggregateHelper(t *testing.T) {
+	t.Parallel()
+
 	name := os.Getenv(aggregateCaseEnv)
 	if name == "" {
 		t.Skip("helper process; driven by the 3c/3d parents")

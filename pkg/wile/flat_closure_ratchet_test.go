@@ -231,6 +231,8 @@ func countOpInTemplateTree(
 // bodyIsSelfTailReusable) must move it strictly UP; a count that did not move
 // means the clause was not the binding constraint.
 func TestFlatClosureArmedSiteCount(t *testing.T) {
+	t.Parallel()
+
 	tpls := compileRatchetCorpus(t)
 	got := 0
 	for i, tpl := range tpls {
@@ -286,6 +288,8 @@ func countBoxedFreeSlotsInTree(
 // this off zero. TestBoxingSet in pkg/machine/compilation carries the
 // both-conjuncts fixtures.
 func TestFlatClosureBoxedSlotCount(t *testing.T) {
+	t.Parallel()
+
 	tpls := compileRatchetCorpus(t)
 	got := 0
 	for i, tpl := range tpls {
@@ -304,6 +308,8 @@ func TestFlatClosureBoxedSlotCount(t *testing.T) {
 // above: a source that genuinely needs a box must produce one. Without it,
 // deleting markBoxedFreeVars outright would leave every ratchet green.
 func TestFlatClosureBoxingPredicateHasTeeth(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := NewEngine(ctx)
 	if err != nil {
@@ -336,6 +342,8 @@ func TestFlatClosureBoxingPredicateHasTeeth(t *testing.T) {
 // its free variables are values in a vector instead. Everything else in this
 // arc exists to make that safe.
 func TestFlatClosureDoesNotPinItsCreatorsFrame(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := NewEngine(ctx)
 	if err != nil {
@@ -371,6 +379,8 @@ func TestFlatClosureDoesNotPinItsCreatorsFrame(t *testing.T) {
 // nothing, so every entry's value is asserted here and an edit to a corpus entry
 // has to state what the entry now computes.
 func TestFlatClosureRatchetCorpusStillEvaluates(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	for _, tc := range flatClosureRatchetCorpus {
 		t.Run(tc.name, func(t *testing.T) {
@@ -543,6 +553,8 @@ func compileLetFrameCorpus(t *testing.T) []*machine.NativeTemplate {
 // TestLetFrameMergeCensus pins how many env-frame pushes and pops letFrameCorpus
 // compiles to. Phase 2 of the let-slot merging plan must move both strictly DOWN.
 func TestLetFrameMergeCensus(t *testing.T) {
+	t.Parallel()
+
 	tpls := compileLetFrameCorpus(t)
 	pushes, pops := 0, 0
 	for i, tpl := range tpls {
@@ -568,6 +580,8 @@ func TestLetFrameMergeCensus(t *testing.T) {
 // pushes for must still evaluate correctly. A census alone cannot tell a merge
 // from a miscompile.
 func TestLetFrameCorpusValues(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	for _, tc := range letFrameCorpus {
 		engine, err := NewEngine(ctx)
@@ -630,6 +644,8 @@ func shapeWidthAndCopyCount(
 // TestLetFrameMergeSlotsAreExemptFromApplyCopy pins that merged `let` slots
 // widen the shape without widening the per-apply copy.
 func TestLetFrameMergeSlotsAreExemptFromApplyCopy(t *testing.T) {
+	t.Parallel()
+
 	tpls := compileLetFrameCorpus(t)
 	width, copied := 0, 0
 	for i, tpl := range tpls {
@@ -657,6 +673,8 @@ func TestLetFrameMergeSlotsAreExemptFromApplyCopy(t *testing.T) {
 // indices first, so a reset that merely ZEROED would leave a nil values.Value
 // and the probe would fail with "expected 1 value, got 0" rather than #!void.
 func TestMergedLetSlotReadsVoidAfterRecycling(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := NewEngine(ctx)
 	if err != nil {

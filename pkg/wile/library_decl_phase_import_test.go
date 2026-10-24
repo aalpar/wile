@@ -141,6 +141,8 @@ func declPhaseEngine(t *testing.T) *wile.Engine {
 // master and are kept because they say what must NOT move: the shift-0 no-op,
 // and the body position the stdlib's er-macro-test.scm depends on.
 func TestLibraryDeclarationImportComposesPhaseShift(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		src     string

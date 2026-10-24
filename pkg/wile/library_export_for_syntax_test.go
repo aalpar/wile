@@ -55,6 +55,8 @@ var forSyntaxExportFS = fstest.MapFS{
 }
 
 func TestLibraryExportRefusesNameNotBoundAtItsPhase(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		lib  string
@@ -118,6 +120,8 @@ func TestLibraryExportRefusesNameNotBoundAtItsPhase(t *testing.T) {
 // Each program raises unless the imported name has the expected value at the
 // phase it reads it from, so a nil error is the whole assertion.
 func TestLibraryExportForSyntaxRoundTrips(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog string
@@ -178,6 +182,8 @@ func TestLibraryExportForSyntaxRoundTrips(t *testing.T) {
 // The other half of the round trip: a for-syntax export must not also land at
 // the importer's phase 0.
 func TestLibraryExportForSyntaxIsNotBoundAtPhaseZero(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog string
@@ -232,6 +238,8 @@ var twoPhaseDefinitionFS = fstest.MapFS{
 }
 
 func TestImportOfOneNameFromTwoPhasesConflicts(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog string
@@ -256,6 +264,8 @@ func TestImportOfOneNameFromTwoPhasesConflicts(t *testing.T) {
 // The same binding reaching one phase by two routes is not a conflict, however
 // far each route shifted it.
 func TestImportOfOneBindingByTwoRoutesDoesNotConflict(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog string
@@ -282,6 +292,8 @@ func TestImportOfOneBindingByTwoRoutesDoesNotConflict(t *testing.T) {
 }
 
 func TestLibraryExportForSyntaxMalformed(t *testing.T) {
+	t.Parallel()
+
 	eng := phaseIsolationEngine(t, fstest.MapFS{
 		"bad.scm": &fstest.MapFile{Data: []byte(`(define-library (bad)
   (import (scheme base))

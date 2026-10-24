@@ -39,6 +39,8 @@ import (
 // never reaches RunBodyUnderFrame. That is the discriminator, so the no-converter
 // arm is a control rather than coverage.
 func TestParameterConverterDoesNotReleaseTheCallersFrame(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		code string

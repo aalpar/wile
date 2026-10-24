@@ -44,6 +44,8 @@ func newSealedImmutableEngine(t *testing.T) *Engine {
 // the sealed base owns caar and the redefine/import lands as a child-frame shadow
 // (created=true in the mutable runtime), never tripping the redefine guard.
 func TestSealedBase_R1_RedefineIsShadowUnderImmutability(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	tcs := []struct {
 		name string
@@ -71,6 +73,8 @@ func TestSealedBase_R1_RedefineIsShadowUnderImmutability(t *testing.T) {
 // scoping plan's "shrink the capture-safe set" workaround, which would have cost reclaim
 // coverage. No production change needed if this passes.
 func TestSealedBase_R1a_ZeroRedefine(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newSealedImmutableEngine(t)
 	defer func() {
@@ -88,6 +92,8 @@ func TestSealedBase_R1a_ZeroRedefine(t *testing.T) {
 // enforce immutability in library/child envs — ns.Runtime() != the library frame) is what
 // makes the cross-form set! succeed; the library define is never stamped Stable.
 func TestSealedBase_R2_LibraryCrossFormSetBang(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	libFS := fstest.MapFS{
 		"test/r2.scm": &fstest.MapFile{Data: []byte(`
@@ -123,6 +129,8 @@ func TestSealedBase_R2_LibraryCrossFormSetBang(t *testing.T) {
 // immutability via root delegation, so the second eval'd define was rejected with
 // ErrImmutableBinding.
 func TestSealedBase_B3_RedefineInEvalEnvironmentPermitted(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	tcs := []struct {
 		name string
@@ -152,6 +160,8 @@ func TestSealedBase_B3_RedefineInEvalEnvironmentPermitted(t *testing.T) {
 // and stamped bootstrap procedures Stable, so (set! caar ...) was rejected while
 // (set! car ...) was permitted — an origin-dependent divergence from the engine root.
 func TestSealedBase_C1_ProfileChildSetBangConsistent(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	for _, name := range []string{"car", "caar"} {
 		t.Run(name, func(t *testing.T) {

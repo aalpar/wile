@@ -63,6 +63,8 @@ func mustEvalScheme(t *testing.T, src string) string {
 //
 // All five forms raised "syntax-rules: no matching clause" at the base.
 func TestEllipsisOverVariableFreeSubpattern(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		src  string
@@ -119,6 +121,8 @@ func TestEllipsisOverVariableFreeSubpattern(t *testing.T) {
 // to match the input it repeats over. At the base the first clause matched
 // nothing, so this returned (other other other).
 func TestEllipsisOverVariableFreeSubpatternStillDiscriminates(t *testing.T) {
+	t.Parallel()
+
 	src := `(begin
               (define-syntax m
                 (syntax-rules ()
@@ -140,6 +144,8 @@ func TestEllipsisOverVariableFreeSubpatternStillDiscriminates(t *testing.T) {
 // ((1 2) 3)). An exit test at the loop head would yield a=(1) r=3 and satisfy a
 // bare "it matches" assertion.
 func TestEllipsisFollowedByDottedTail(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		src  string
@@ -222,6 +228,8 @@ func TestEllipsisFollowedByDottedTail(t *testing.T) {
 // all, so ByteCodeDone's one-instruction lookahead could not distinguish "the
 // pattern ends here" from "the next pattern element is a wildcard".
 func TestTrailingWildcardAfterSublist(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		src  string
@@ -301,6 +309,8 @@ func TestTrailingWildcardAfterSublist(t *testing.T) {
 // there is no compiler case for *SyntaxBox at all, so a box is self-evaluating
 // data and the failure is always a wrong DATUM, never a capture.
 func TestBoxInMacroTemplateAndPattern(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		src  string
@@ -392,6 +402,8 @@ func TestBoxInMacroTemplateAndPattern(t *testing.T) {
 // identifier with hasLocalBinding true"), and with its nil UseSiteCtx
 // templateCtx == srcCtx, so it passes either way. It is a control, not a gate.
 func TestFreeTemplateIdInsideSyntaxCaseClauseResolvesAtDefinitionSite(t *testing.T) {
+	t.Parallel()
+
 	src := `(begin
               (define-syntax outer
                 (lambda (stx)
@@ -425,6 +437,8 @@ func TestFreeTemplateIdInsideSyntaxCaseClauseResolvesAtDefinitionSite(t *testing
 // wave 1 §6's own gate is TestPatternLiteralIdentifiedByDefinitionSiteBinding
 // below, where the two forms are separate top-level units.
 func TestPatternLiteralRespectsAUseSiteShadow(t *testing.T) {
+	t.Parallel()
+
 	const rulesMacro = `(define-syntax m
                           (syntax-rules (else)
                             ((_ else x) (list 'ELSE x))
@@ -521,6 +535,8 @@ func evalMultiForm(t *testing.T, src string) string {
 // on a name the program had taken over. Racket 9.2 returns #<void> for row 1 and a
 // procedure for row 2.
 func TestPatternLiteralIdentifiedByDefinitionSiteBinding(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		src  string
@@ -622,6 +638,8 @@ func w16LibEngine(t *testing.T, libs map[string]string) *wile.Engine {
 // refused where it used to be accepted. See literalNotShadowed's own paragraph
 // on it; the row exists so the change is a measurement rather than folklore.
 func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
+	t.Parallel()
+
 	const libRules = `(define-library (w16lib)
   (export mg)
   (import (scheme base))
@@ -808,6 +826,8 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 // Nothing here is about whether the pin idea is right; each row is a program whose
 // two identifiers live at DIFFERENT phases and must not see each other.
 func TestPatternLiteralLookupIsPhaseScoped(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		src  string
@@ -857,6 +877,8 @@ func TestPatternLiteralLookupIsPhaseScoped(t *testing.T) {
 // accepts improper input: `(_ a ...)` requires a list, so the unconsumed tail
 // is a mismatch and the second clause takes it.
 func TestProperListPatternStillRejectsDottedInput(t *testing.T) {
+	t.Parallel()
+
 	src := `(begin
               (define-syntax m
                 (syntax-rules ()

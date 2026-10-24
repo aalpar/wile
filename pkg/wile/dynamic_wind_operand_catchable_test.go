@@ -37,6 +37,8 @@ import (
 // are here so a later change to the operand order cannot quietly re-open the
 // hole on an arm that is currently closed for a different reason.
 func TestDynamicWindOperandErrorIsCatchable(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		src  string

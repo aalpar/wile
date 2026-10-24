@@ -84,6 +84,8 @@ func newErSelfOriginEngine(t *testing.T) *wile.Engine {
 // so both sides carry origin (erlib, foo); the other library's foo has a distinct
 // root and is refused even though its value is identical (car).
 func TestErCompareInternalVsImport(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

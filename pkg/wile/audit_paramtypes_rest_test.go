@@ -159,6 +159,8 @@ var restExerciseSkip = map[string]string{
 // with and without WithContractEnforcement(). Enforcement must not change
 // whether the call is accepted.
 func TestParamTypesRestSlotAcceptsWhatTheImplementationDoes(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	plain, err := NewEngine(ctx, WithProfile(KitchenSink))
@@ -204,6 +206,8 @@ func TestParamTypesRestSlotAcceptsWhatTheImplementationDoes(t *testing.T) {
 // the specs this audit already corrected. Only a row naming something that is
 // no longer a variadic ParamTypes-declaring primitive at all is stale.
 func TestParamTypesRestSlotCensusIsComplete(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink))
 	qt.Assert(t, err, qt.IsNil)

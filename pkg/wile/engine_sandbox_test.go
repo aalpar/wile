@@ -45,6 +45,8 @@ import (
 // operations to /tmp, so reads/writes outside /tmp fail at runtime with
 // ErrAccessDenied.
 func TestConsole_RejectsPrivileged(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -92,6 +94,8 @@ func TestConsole_RejectsPrivileged(t *testing.T) {
 // TestConsole_AllowsSafe verifies that safe primitives work in the
 // Console profile.
 func TestConsole_AllowsSafe(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -130,6 +134,8 @@ func TestConsole_AllowsSafe(t *testing.T) {
 // TestWithoutCore_BareEngine verifies that WithoutCore produces an engine
 // where core primitives are absent.
 func TestWithoutCore_BareEngine(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -154,6 +160,8 @@ func TestWithoutCore_BareEngine(t *testing.T) {
 // TestWithoutCore_PlusExtension verifies that WithoutCore + a specific
 // extension gives only that extension's primitives.
 func TestWithoutCore_PlusExtension(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -175,6 +183,8 @@ func TestWithoutCore_PlusExtension(t *testing.T) {
 // created by a Console-profile engine inherit the authorizer — so libraries
 // that attempt privileged operations are still blocked at runtime.
 func TestConsole_LibraryPropagation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -210,6 +220,8 @@ func TestConsole_LibraryPropagation(t *testing.T) {
 // stops a Go embedder from handing the same capability back. Sandbox
 // enforcement is the authorizer's job (security.Check gate sites).
 func TestWithout_RemovesMutationPrimitives(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -248,6 +260,8 @@ func TestWithout_RemovesMutationPrimitives(t *testing.T) {
 // their dependents are inside the main bootstrap source and are not separable at
 // all. Declaring a dependency is what makes a category removable.
 func TestWithoutCategory_RemoveHashtables(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -278,6 +292,8 @@ func TestWithoutCategory_RemoveHashtables(t *testing.T) {
 // TestImportObserver verifies that the import observer is called with
 // correct event data when a library is imported.
 func TestImportObserver(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -324,6 +340,8 @@ func TestImportObserver(t *testing.T) {
 // TestImportObserver_OnlyModifier verifies that the Imported field reflects
 // import set modifiers like (only ...).
 func TestImportObserver_OnlyModifier(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -370,6 +388,8 @@ func TestImportObserver_OnlyModifier(t *testing.T) {
 // structured docstrings makes those procedures visible to the documentation
 // system (,doc, ,topic, ,apropos).
 func TestImportRegistersDocstrings(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -424,6 +444,8 @@ Category: search"
 // TestImportRegistersDocstrings_UnexportedNotVisible verifies that
 // unexported bindings from imported libraries do NOT appear in docs.
 func TestImportRegistersDocstrings_UnexportedNotVisible(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -472,6 +494,8 @@ Category: mylib"
 // TestImportRegistersDocstrings_ChainsUserObserver verifies that the
 // doc registration observer chains with a user-provided import observer.
 func TestImportRegistersDocstrings_ChainsUserObserver(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -513,6 +537,8 @@ Category: widgets"
 // TestWithAuthorizer_FlowsToNamespace verifies that WithAuthorizer stores
 // the authorizer on the namespace so mc.Authorizer() sees it.
 func TestWithAuthorizer_FlowsToNamespace(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -556,6 +582,8 @@ func TestWithAuthorizer_FlowsToNamespace(t *testing.T) {
 // TestWithAuthorizer_DenyBlocksEval verifies that a denying authorizer
 // causes security.CheckWithAuthorizer to return ErrAccessDenied.
 func TestWithAuthorizer_DenyBlocksEval(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -584,6 +612,8 @@ func TestWithAuthorizer_DenyBlocksEval(t *testing.T) {
 // TestNoAuthorizer_AllowsByDefault verifies that without WithAuthorizer,
 // security.Check allows everything.
 func TestNoAuthorizer_AllowsByDefault(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -617,6 +647,8 @@ func TestNoAuthorizer_AllowsByDefault(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestAuthorizer_DenyBlocksFileRead(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -646,6 +678,8 @@ func TestAuthorizer_DenyBlocksFileRead(t *testing.T) {
 // The OS half of the same split, and the system errors that do NOT collapse to
 // #f, are gated in extensions/files/prim_file_exists_test.go.
 func TestAuthorizer_DenialIsIndistinguishableFromAbsence(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -685,6 +719,8 @@ func TestAuthorizer_DenialIsIndistinguishableFromAbsence(t *testing.T) {
 }
 
 func TestAuthorizer_DenyBlocksFileWrite(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -700,6 +736,8 @@ func TestAuthorizer_DenyBlocksFileWrite(t *testing.T) {
 }
 
 func TestAuthorizer_DenyBlocksDelete(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -715,6 +753,8 @@ func TestAuthorizer_DenyBlocksDelete(t *testing.T) {
 }
 
 func TestAuthorizer_ReadOnlyAllowsStat(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -732,6 +772,8 @@ func TestAuthorizer_ReadOnlyAllowsStat(t *testing.T) {
 }
 
 func TestAuthorizer_ReadOnlyDeniesWrite(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -747,6 +789,8 @@ func TestAuthorizer_ReadOnlyDeniesWrite(t *testing.T) {
 }
 
 func TestAuthorizer_DenyBlocksEnvVar(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -768,6 +812,8 @@ func TestAuthorizer_DenyBlocksEnvVar(t *testing.T) {
 }
 
 func TestAuthorizer_DenyBlocksExit(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -789,6 +835,8 @@ func TestAuthorizer_DenyBlocksExit(t *testing.T) {
 }
 
 func TestAuthorizer_DenyBlocksLoad(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -816,6 +864,8 @@ func TestAuthorizer_DenyBlocksLoad(t *testing.T) {
 }
 
 func TestAuthorizer_DenyBlocksImport(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -850,6 +900,8 @@ func TestAuthorizer_DenyBlocksImport(t *testing.T) {
 // policy was tightened, while an uncached import from the SAME directory was
 // refused — the hit and the miss disagreed about what the sandbox allows.
 func TestLibraryCacheReauthorizedOnHit(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -892,6 +944,8 @@ func TestLibraryCacheReauthorizedOnHit(t *testing.T) {
 // consulted: the effective policy for a library load was whatever the root
 // happened to hold.
 func TestLibraryLoadUsesCallerAuthorizerOnMiss(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -924,6 +978,8 @@ func TestLibraryLoadUsesCallerAuthorizerOnMiss(t *testing.T) {
 // WithLibraryPaths is load-bearing: without a library registry the import fails
 // for an unrelated reason.
 func TestSyntheticLibraryImportSkipsPathGate(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -941,6 +997,8 @@ func TestSyntheticLibraryImportSkipsPathGate(t *testing.T) {
 }
 
 func TestAuthorizer_FilesystemRootAllowsInside(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -961,6 +1019,8 @@ func TestAuthorizer_FilesystemRootAllowsInside(t *testing.T) {
 }
 
 func TestAuthorizer_FilesystemRootDeniesOutside(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -985,6 +1045,8 @@ func TestAuthorizer_FilesystemRootDeniesOutside(t *testing.T) {
 }
 
 func TestAuthorizer_SelectivePolicy(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -1029,6 +1091,8 @@ func writeTestFile(path, content string) error {
 // denies ResourceProcess, reading the host argv must raise ErrAccessDenied
 // rather than leaking os.Args.
 func TestAuthorizer_DenyBlocksCommandLine(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -1097,6 +1161,8 @@ func TestAuthorizer_DenyBlocksCommandLine(t *testing.T) {
 // could ever have caught. See TestProfileEnvironmentCannotWidenSandboxedEngine
 // below, and checkProfileWidening in pkg/internal/bootstrap.
 func TestAuthorizer_DenyAllSweep(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -1173,6 +1239,8 @@ func TestAuthorizer_DenyAllSweep(t *testing.T) {
 // The scope is the RUNTIME gate sites. The three compile-time load gates
 // surface as *CompilationError and were already unswallowable.
 func TestDenialIsUnswallowable(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -1284,6 +1352,8 @@ func TestDenialIsUnswallowable(t *testing.T) {
 // report. The location survived only flattened into the cause's text, which the
 // repo's "Error Chains: Lossless and Traversable" rule does not accept.
 func TestDenialCarriesItsProvenance(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -1319,6 +1389,8 @@ func TestDenialCarriesItsProvenance(t *testing.T) {
 // unwind the wind chain, they move together, and so that "the denial leaks the
 // cleanup" is never read as a property of denials in particular.
 func TestUncaughtDenialUnwindsLikeAnyOtherUncaughtError(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	// Each row states its own guarding, because that is the variable: the denial
@@ -1382,6 +1454,8 @@ func TestUncaughtDenialUnwindsLikeAnyOtherUncaughtError(t *testing.T) {
 // Each arm states which half of the policy it pins, so a future edit that
 // collapses them is visibly changing the contract rather than tidying tests.
 func TestProfileEnvironmentCannotWidenSandboxedEngine(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("sandboxed engine is refused a widening profile", func(t *testing.T) {
@@ -1442,6 +1516,8 @@ func TestProfileEnvironmentCannotWidenSandboxedEngine(t *testing.T) {
 //     ("cannot redefine immutable top-level binding \"call-with-port\""), so the
 //     restricted engine takes WithRegistry alone.
 func TestWithoutCategoryKeepsStringCiHash(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -1486,6 +1562,8 @@ func TestWithoutCategoryKeepsStringCiHash(t *testing.T) {
 // where an unexported name would only have gone missing. The registry comes from
 // a KitchenSink engine, for the reason TestWithoutCategoryKeepsStringCiHash gives.
 func TestRnrsHashtablesNeedsEveryExportedHash(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -1533,6 +1611,8 @@ func TestRnrsHashtablesNeedsEveryExportedHash(t *testing.T) {
 // TestEqualHashReachesPhaseOneThroughTheHashtableAccessor and
 // TestTemplateIntroducedHashResolvesAtPhaseOne, across configurations.
 func TestPhaseOneHashRouteNeedsALoadableLibrary(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	lib := []EngineOption{WithLibraryPaths(), WithSourceFS(stdlib.FS)}
 	withProfile := func(p Profile) []EngineOption {

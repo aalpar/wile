@@ -79,6 +79,8 @@ func reexportHOFEngine(t *testing.T) *wile.Engine {
 // library. The stamp gate keys on the binding's origin root ((srfi/1, fold)),
 // which survives the re-export hop, rather than the re-exporting library's key.
 func TestInlineHOFStamp_FoldViaReexport(t *testing.T) {
+	t.Parallel()
+
 	eng := reexportHOFEngine(t)
 	ctx := context.Background()
 
@@ -103,6 +105,8 @@ func TestInlineHOFStamp_FoldViaReexport(t *testing.T) {
 // one re-export hop: (h2) re-exports (h1)'s fold, which re-exports srfi-1's fold.
 // The root (srfi/1, fold) propagates verbatim at each hop.
 func TestInlineHOFStamp_TwoHopReexportChain(t *testing.T) {
+	t.Parallel()
+
 	eng := reexportHOFEngine(t)
 	ctx := context.Background()
 
@@ -127,6 +131,8 @@ func TestInlineHOFStamp_TwoHopReexportChain(t *testing.T) {
 // as fold — same root library (srfi/1) but a different root NAME (filter) — so it
 // must NOT be stamped, or (fold ...) would inline fold's template for filter.
 func TestInlineHOFStamp_ReexportedFilterAsFoldNotStamped(t *testing.T) {
+	t.Parallel()
+
 	eng := reexportHOFEngine(t)
 	ctx := context.Background()
 
@@ -156,6 +162,8 @@ func TestInlineHOFStamp_ReexportedFilterAsFoldNotStamped(t *testing.T) {
 // both the direct-import form (pre-existing bug) and the re-export form (widened
 // by the origin gate). A wrong template shows as a wrong result.
 func TestInlineHOFRenamedOntoCuratedNameDispatchesCorrectly(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -198,6 +206,8 @@ func TestInlineHOFRenamedOntoCuratedNameDispatchesCorrectly(t *testing.T) {
 // template onto the custom fold. Their provenance roots differ, so the second
 // import is refused and no value is ever overwritten under a stale stamp.
 func TestInlineHOFSameNamedFoldsConflict(t *testing.T) {
+	t.Parallel()
+
 	eng := reexportHOFEngine(t)
 	_, err := eng.EvalMultiple(context.Background(),
 		`(import (rename (myfold) (fold z)))
@@ -210,6 +220,8 @@ func TestInlineHOFSameNamedFoldsConflict(t *testing.T) {
 // onto map's name does NOT let a 2-argument call inline map's template: the call
 // must reach the real fold and raise an arity error, not fabricate a value.
 func TestInlineHOFRenamedOntoIncompatibleArityErrors(t *testing.T) {
+	t.Parallel()
+
 	eng := reexportHOFEngine(t)
 	_, err := eng.EvalMultiple(context.Background(),
 		`(import (rename (only (srfi 1) fold) (fold map)))

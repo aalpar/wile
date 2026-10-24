@@ -31,6 +31,8 @@ func dottedTailEngine(t *testing.T) *wile.Engine {
 // Before the fix the matcher dropped the improper tail of a pair/vector
 // sub-pattern, so `(m (1) 9)` raised "no matching clause for input".
 func TestSyntaxRulesNestedSublistDottedTail(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -48,6 +50,8 @@ func TestSyntaxRulesNestedSublistDottedTail(t *testing.T) {
 // longer improper tail: the captured `body` collects every element after the
 // nested sub-list.
 func TestSyntaxRulesNestedSublistDottedTailMultiArg(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -66,6 +70,8 @@ func TestSyntaxRulesNestedSublistDottedTailMultiArg(t *testing.T) {
 // is what (chibi optional)'s let-optionals macro depends on. A proper-list
 // input drives the ellipsis to exhaustion, after which `rest` binds to ().
 func TestSyntaxRulesEllipsisDottedTail(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -84,6 +90,8 @@ func TestSyntaxRulesEllipsisDottedTail(t *testing.T) {
 // and its opt-lambda works for both the defaulted and the supplied-argument
 // cases.
 func TestChibiOptionalLoads(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := dottedTailEngine(t)
@@ -100,6 +108,8 @@ func TestChibiOptionalLoads(t *testing.T) {
 // TestChibiDiffLoads verifies (chibi diff) — which imports (chibi optional) —
 // now loads, and its lcs procedure computes the longest common subsequence.
 func TestChibiDiffLoads(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := dottedTailEngine(t)

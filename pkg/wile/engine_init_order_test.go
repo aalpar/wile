@@ -36,6 +36,8 @@ import (
 // lambda) are hardcoded in the compiler's type switch and work without
 // bootstrap, but any expression referencing a primitive will fail.
 func TestInitOrder_UnbootstrappedNamespace(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -70,6 +72,8 @@ func TestInitOrder_UnbootstrappedNamespace(t *testing.T) {
 // engine creation (if setupLibrarySystem needs bootstrap artifacts) or at
 // import time (if library parsing requires define-library syntax).
 func TestInitOrder_LibraryWithoutBootstrap(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

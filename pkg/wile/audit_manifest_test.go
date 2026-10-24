@@ -337,6 +337,8 @@ func writeSchemeString(b *strings.Builder, s string) {
 }
 
 func TestBuildAxisBManifest(t *testing.T) {
+	t.Parallel()
+
 	entries := buildManifest(t)
 	if len(entries) < 400 {
 		t.Fatalf("expected at least 400 primitives, got %d", len(entries))
@@ -444,6 +446,8 @@ func TestBuildAxisBManifest(t *testing.T) {
 }
 
 func TestFormatManifest(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		input    []manifestEntry
@@ -531,6 +535,8 @@ func TestFormatManifest(t *testing.T) {
 // row therefore feeds output from formatManifest, so the mask is exercised
 // against precisely what the renderer emits.
 func TestMaskGoFunctionColumn(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name  string
 		input []manifestEntry
@@ -606,6 +612,8 @@ func TestMaskGoFunctionColumn(t *testing.T) {
 // does not. Without the second half the mask could blank the whole line and
 // every row above would still pass.
 func TestMaskGoFunctionColumnDiscriminates(t *testing.T) {
+	t.Parallel()
+
 	base := []manifestEntry{
 		{Name: "car", ReturnType: "any", ParamTypes: []string{"pair"}, GoFunction: "pkg/core.init.Make.func67", SourceFile: "a.go", SourceLine: 42},
 		{Name: "cdr", ReturnType: "any", ParamTypes: []string{"pair"}, GoFunction: "pkg/core.PrimCdr", SourceFile: "a.go", SourceLine: 53},
@@ -646,6 +654,8 @@ func TestMaskGoFunctionColumnDiscriminates(t *testing.T) {
 }
 
 func TestFormatParamTypes(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name       string
 		types      []values.TypeConstraint
@@ -711,6 +721,8 @@ func TestFormatParamTypes(t *testing.T) {
 // underlying cause is almost certainly that a primitive was re-registered
 // through a closure or wrapper layer.
 func TestManifestSanity(t *testing.T) {
+	t.Parallel()
+
 	entries := buildManifest(t)
 	byName := make(map[string]manifestEntry, len(entries))
 	for _, e := range entries {
@@ -770,6 +782,8 @@ func TestManifestSanity(t *testing.T) {
 // repeated invocations in the same process. Non-determinism here would
 // cause WILE_AXIS_B_UPDATE runs to produce unstable diffs.
 func TestManifestStability(t *testing.T) {
+	t.Parallel()
+
 	first := buildManifest(t)
 	second := buildManifest(t)
 	if len(first) != len(second) {

@@ -63,6 +63,8 @@ func evalUnderProfile(t *testing.T, p wile.Profile, src string, extra ...wile.En
 // These rows pass today; they are the oracle the strict-mode delta is measured
 // against (impl plan Phase 0).
 func TestStrictNamespaceBaseline(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -100,6 +102,8 @@ func TestStrictNamespaceBaseline(t *testing.T) {
 // primitives and the define/syntax machinery stay visible, while a profile's
 // extension primitive (display) is NOT pre-bound and must be imported.
 func TestStrictNamespaceBareSurface(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	okCases := []struct {
@@ -143,6 +147,8 @@ func TestStrictNamespaceBareSurface(t *testing.T) {
 // TestStrictNamespaceR5RSOnBare is the headline goal: over a bare strict top
 // level, (import (scheme r5rs)) resolves and layers the R5RS surface on top.
 func TestStrictNamespaceR5RSOnBare(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("import (scheme r5rs) layers the R5RS surface", func(t *testing.T) {
@@ -192,6 +198,8 @@ func TestStrictNamespaceR5RSOnBare(t *testing.T) {
 // under KitchenSink. The profile remains the boundary; strict only changes
 // top-level visibility, never reachability.
 func TestStrictNamespaceNoEscalation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	// Under Small the threads extension is unregistered, so no (wile threads)
@@ -228,6 +236,8 @@ func TestStrictNamespaceNoEscalation(t *testing.T) {
 // registry would let the top level widen past the configured registry — the engine
 // rejects the combination at construction with ErrEngineInit rather than widen.
 func TestStrictNamespaceRejectsCustomRegistry(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -258,6 +268,8 @@ func TestStrictNamespaceRejectsCustomRegistry(t *testing.T) {
 // order-independently with WithProfile and WithSandbox: the bare surface holds
 // regardless of option order and is unaffected by adding a sandbox layer.
 func TestStrictNamespaceOrthogonality(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	ctx := context.Background()
@@ -306,6 +318,8 @@ func TestStrictNamespaceOrthogonality(t *testing.T) {
 // change) does not disable runtime authorization: an explicit deny authorizer
 // still rejects a gated operation under a strict engine.
 func TestStrictNamespaceAuthorizerStillGates(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -335,6 +349,8 @@ func TestStrictNamespaceAuthorizerStillGates(t *testing.T) {
 // under Tiny and under Small+WithStrictNamespace, for a core op (both succeed)
 // and for an extension op (both fail unbound).
 func TestStrictNamespaceTinyParity(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	cases := []struct {

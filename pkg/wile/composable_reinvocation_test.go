@@ -98,6 +98,8 @@ var composableReinvocationCases = []struct {
 }
 
 func TestComposableContinuationReinvocationKeepsLiveSegment(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	for _, tc := range composableReinvocationCases {
 		t.Run(strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {

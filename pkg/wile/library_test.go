@@ -26,6 +26,8 @@ import (
 )
 
 func TestWithLibraryPaths(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -55,6 +57,8 @@ func TestWithLibraryPaths(t *testing.T) {
 }
 
 func TestWithLibraryPaths_DefaultsOnly(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -71,6 +75,8 @@ func TestWithLibraryPaths_DefaultsOnly(t *testing.T) {
 }
 
 func TestWithLibraryPaths_NotEnabled(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -84,6 +90,8 @@ func TestWithLibraryPaths_NotEnabled(t *testing.T) {
 }
 
 func TestLibraryExportEncapsulation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -118,6 +126,8 @@ func TestLibraryExportEncapsulation(t *testing.T) {
 }
 
 func TestLibraryIsolationFromTopLevel(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -151,6 +161,8 @@ func TestLibraryIsolationFromTopLevel(t *testing.T) {
 }
 
 func TestLibraryIsolationBetweenLibraries(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -194,6 +206,8 @@ func TestLibraryIsolationBetweenLibraries(t *testing.T) {
 // cell (set-car! on a closed-over pair) rather than set! on an imported binding —
 // imported bindings are immutable by default (see TestSetBangOnImportedBindingRejected).
 func TestLibraryImportIdempotentInstance(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -226,6 +240,8 @@ func TestLibraryImportIdempotentInstance(t *testing.T) {
 }
 
 func TestWithLibraryPaths_GoFuncsAvailableInLibrary(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

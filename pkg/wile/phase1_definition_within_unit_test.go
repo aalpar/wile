@@ -41,6 +41,8 @@ import (
 )
 
 func TestPhase1DefinitionIsVisibleWithinItsUnit(t *testing.T) {
+	t.Parallel()
+
 	const macro = `(define-syntax m (er-macro-transformer (lambda (f r c) (helper (cadr f)))))`
 	tests := []struct {
 		name string
@@ -90,6 +92,8 @@ func TestPhase1DefinitionIsVisibleWithinItsUnit(t *testing.T) {
 
 // A library body is one unit for the same reason a file is.
 func TestPhase1DefinitionIsVisibleWithinALibraryBody(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		def  string
@@ -126,6 +130,8 @@ func TestPhase1DefinitionIsVisibleWithinALibraryBody(t *testing.T) {
 // so no transformer in that unit could see it. The counting unit is therefore
 // read back from a LATER unit.
 func TestPhase1FormRunsOncePerUnit(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := phaseDistinctnessEngine(t)
 	_, err := eng.EvalMultiple(ctx, `(import (for-syntax (scheme base)))

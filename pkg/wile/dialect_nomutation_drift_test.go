@@ -71,6 +71,8 @@ var nonDestructiveBangs = map[string]string{
 // writes into a caller-supplied object, all registered OUTSIDE registry/core, and
 // all left standing by a dialect whose documented scope was "registry/core".
 func TestNoMutationRemovesEveryDestructivePrimitive(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	// KitchenSink so that io, gointerop and the thread extensions are all loaded —
@@ -139,6 +141,8 @@ func TestNoMutationRemovesEveryDestructivePrimitive(t *testing.T) {
 // InvokesProcedure already uses: an annotation on the spec, a hand-curated
 // list, and a test that refuses to let them diverge.
 func TestMutatesMatchesMutationPrimitives(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	full, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
@@ -217,6 +221,8 @@ func TestMutatesMatchesMutationPrimitives(t *testing.T) {
 // so the temporary is unique per expansion and hidden from the use site. This
 // test is now an enforced guard, not a gated gap.
 func TestNoMutationKeepsDefineValues(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tcs := []struct {
@@ -254,6 +260,8 @@ func TestNoMutationKeepsDefineValues(t *testing.T) {
 // TestNoMutationStillRemovesSetBang guards the dialect's actual, working guarantee,
 // so the skip above cannot be mistaken for "NoMutation is broken".
 func TestNoMutationStillRemovesSetBang(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),
@@ -286,6 +294,8 @@ func TestNoMutationStillRemovesSetBang(t *testing.T) {
 // literally or introduced by a macro template. This is the general defect: it
 // applies to any removed form carrying a primitive expander, not just set!.
 func TestNoMutationRemovedFormInMacroTemplateIsUnbound(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithDialect(wile.NoMutation))
 	qt.Assert(t, err, qt.IsNil)
@@ -313,6 +323,8 @@ func TestNoMutationRemovedFormInMacroTemplateIsUnbound(t *testing.T) {
 // destructive update, the direct analogue of the removed set-box!, so NoMutation
 // must remove it.
 func TestNoMutationRemovesParameterRawSet(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithDialect(wile.NoMutation))
 	qt.Assert(t, err, qt.IsNil)

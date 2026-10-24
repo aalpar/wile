@@ -116,6 +116,8 @@ var nonPrimitiveProcedureInvokers = map[string]string{
 // both directions are pinned here: an annotated primitive absent from the list,
 // and a listed name that no annotation and no documented carve-out derives.
 func TestProcedureInvokersMatchesInvokesProcedure(t *testing.T) {
+	t.Parallel()
+
 	eng := captureSafetyEngine(t)
 
 	listed := map[string]bool{}
@@ -169,6 +171,8 @@ func TestProcedureInvokersMatchesInvokesProcedure(t *testing.T) {
 // listed name that no annotation (or documented carve-out) derives, and refuses an
 // annotated primitive that is not listed.
 func TestInvokesProcedureCompleteness(t *testing.T) {
+	t.Parallel()
+
 	eng := captureSafetyEngine(t)
 	env := eng.Environment()
 
@@ -234,6 +238,8 @@ func TestInvokesProcedureCompleteness(t *testing.T) {
 // ambient registration stamp. This is otherwise only covered indirectly (via the
 // measure harness).
 func TestImportPropagatesCaptureSafe(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := captureSafetyEngine(t)

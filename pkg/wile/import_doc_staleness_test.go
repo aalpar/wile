@@ -37,6 +37,8 @@ import (
 // different provenance roots, so that import is now a conflict
 // (TestImportConflictDetectionByOrigin) and no value is displaced.
 func TestImportedMacroKeepsItsDocstring(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	fs := fstest.MapFS{
 		"maca.scm": &fstest.MapFile{Data: []byte(`(define-library (maca)

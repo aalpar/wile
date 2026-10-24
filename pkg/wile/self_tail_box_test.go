@@ -122,6 +122,8 @@ const selfTailUnboxedLoop = `(map (lambda (f) (f))
 // acc is built by consing, so map walks the closures newest-first: the closure
 // made when i was 2 runs first and reports 102.
 func TestSelfTailCallFreshBoxPerIteration(t *testing.T) {
+	t.Parallel()
+
 	// Vacuity guard. A fixture that does not box is not testing anything, and
 	// this one boxes only because the capture and the set! are BOTH present —
 	// either alone leaves i unboxed and this silently becomes the control below.
@@ -146,6 +148,8 @@ func TestSelfTailCallFreshBoxPerIteration(t *testing.T) {
 // captured-but-unassigned loop parameter must stay unboxed and must still give
 // each iteration's closure its own value.
 func TestSelfTailCallUnboxedPerIterationCapture(t *testing.T) {
+	t.Parallel()
+
 	boxes := countBoxSlotOps(t, selfTailUnboxedLoop)
 	if boxes != 0 {
 		t.Errorf("captured-but-unassigned loop parameter compiled to %d OpBoxSlot, "+

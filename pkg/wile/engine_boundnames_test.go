@@ -29,6 +29,8 @@ import (
 // alternative to walking Environment().Namespace() phase frames that the REPL
 // completer now consumes.
 func TestEngine_BoundNames(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)

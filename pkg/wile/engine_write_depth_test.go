@@ -31,6 +31,8 @@ import (
 // regressed, this test binary would die with a fatal stack overflow rather
 // than fail. (1M here keeps the test fast; the reported case was 10M.)
 func TestEngine_WriteLongFlatList_DoesNotCrash(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	if err != nil {
@@ -52,6 +54,8 @@ func TestEngine_WriteLongFlatList_DoesNotCrash(t *testing.T) {
 // ~DefaultMaxWriteDepth Go frames, well within what the host tolerates (the
 // parser recurses just as deep on bounded input).
 func TestEngine_WriteDeeplyNested_Raises(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	if err != nil {

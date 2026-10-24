@@ -30,6 +30,8 @@ import (
 // This exercises the same code path as `go install ... @latest` but resolves
 // against local source rather than the module proxy.
 func TestGoInstall(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("skipping go install test in short mode")
 	}
@@ -74,6 +76,8 @@ func TestGoInstall(t *testing.T) {
 // Each resulting binary is verified to be a valid 64-bit ELF executable
 // targeting the correct architecture.
 func TestCrossBuildLinux(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("skipping cross-compilation test in short mode")
 	}

@@ -27,6 +27,8 @@ import (
 // a new extension, update BOTH lists: profile.go KitchenSink.extensions() and
 // internal/bootstrap/environment_tiny.go allExtensions.
 func TestExtensionListConsistency(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

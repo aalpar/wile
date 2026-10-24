@@ -40,6 +40,8 @@ import (
 // compiler; the only variable is where the primitives came from, so anything but
 // equality is the regression.
 func TestStrictLevelOptSameShape(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		setup string

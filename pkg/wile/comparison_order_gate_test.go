@@ -49,6 +49,8 @@ func evalString(t *testing.T, src string) string {
 // implementation approach of converting all arguments to inexact numbers if any
 // argument is inexact is not transitive."
 func TestComparisonOrder_Witnesses(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tests := []struct {
@@ -122,6 +124,8 @@ func TestComparisonOrder_Witnesses(t *testing.T) {
 // any finite composition of arithmetic, and a float64 and a 256-bit value do
 // not. eqv? is deliberately NOT derived from the comparison kernel.
 func TestComparisonOrder_MixedExactnessPreservationPin(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	c.Assert(evalString(t, `(list (= 3.0 #m3.0) (eqv? 3.0 #m3.0))`), qt.Equals, "(#t #f)")
 }
@@ -167,6 +171,8 @@ const comparisonWitnesses = `
 // injective, so two distinct exact values collapse onto one float and the strict
 // order between them evaporates.
 func TestComparisonOrder_IsATotalOrder(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	trichotomy := comparisonWitnesses + `
@@ -222,6 +228,8 @@ func TestComparisonOrder_IsATotalOrder(t *testing.T) {
 // stays #t, because eqv? is an equivalence relation and is not derived from the
 // comparison kernel.
 func TestComparisonOrder_NaNIsUnordered(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	c.Assert(

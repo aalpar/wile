@@ -171,6 +171,8 @@ func runMatrix(t *testing.T, rows []matrixRow, extra ...wile.EngineOption) {
 
 // The engine default: immutable top level.
 func TestBindingModelMatrix(t *testing.T) {
+	t.Parallel()
+
 	rows := []matrixRow{
 		// P1: define over a sealed primitive is a SHADOW — new binding, original
 		// untouched (the captured f still holds the primitive). This asserts a
@@ -691,6 +693,8 @@ func TestBindingModelMatrix(t *testing.T) {
 // WithMutableTopLevel: the variant where nothing is Stable, which is where the
 // pinned-store reach and the define asymmetry become visible (M6/M7).
 func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
+	t.Parallel()
+
 	rows := []matrixRow{
 		// M6: a compile-resolved set! pin mutates the SEALED binding. This row
 		// only asserts the resulting VALUE — an in-place mutation and a
