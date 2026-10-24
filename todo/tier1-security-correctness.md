@@ -321,8 +321,8 @@ defect at HEAD whether or not Tier 2 is ever built.
   definitions"), and Chez `--script` lets the import win. **Documented** as unchecked in
   `r7rs-differences.md` (*Import order is not checked*), pinned by
   `TestImportOrderingIsNotChecked`.
-- [ ] **`buildRestArg` buffer reuse is unverified against a rest-Tuple-retaining primitive**
-  [Correctness, S, from `2026-07-17-pair-gc-investigation.md` Q1]: no test references `restArgBuf`
+- [x] **`buildRestArg` buffer reuse is unverified against a rest-Tuple-retaining primitive**
+  [Correctness, S, Done 2026-10-23 for the CONTRACT only, P8.11 `MERGE_SHA`: `TestBuildRestArgAliasesTheSharedBlockPin` pins that every variadic call shares one block and a second call re-links a retained rest list, through `buildRestArg` directly, `applyForeign` and the peephole `callForeignCached`; it reddens if the buffer stops being shared. **Retention is NOT shown absent**: only `PrimList` was checked, 126 variadic specs were not audited; that remainder is an open row under "Filed by the P8.11 crosscheck" in `todo/tier5-tech-debt.md`]: no test references `restArgBuf`
   or `buildRestArg`. If a variadic primitive retains the rest list, reuse mutates it under the
   caller. Cheap adversarial test, never written.
 
