@@ -179,7 +179,7 @@ type tiedBestOf[T any] struct {
 // candidate is incomparable with the best and not already kept. The caller MUST
 // call recordTie(item, scopes) iff tie is true.
 func (p *tiedBestOf[T]) shouldRecordTied(scopes syntax.Scopes, target int) (rec, done, tie bool) {
-	rec, done = p.scopedBestOf.shouldRecord(scopes, target)
+	rec, done = p.shouldRecord(scopes, target)
 	if rec || !p.collect {
 		return rec, done, false
 	}
