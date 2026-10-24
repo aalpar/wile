@@ -1478,3 +1478,20 @@ func TestMaybeCreateLocalBinding_EmptyScopedSlotNotReused(t *testing.T) {
 		})
 	}
 }
+
+// LocalLayout is the third *LocalEnvironmentFrame producer: it aliases the
+// frame's embedded field like LocalEnvironment, but a frame with no local
+// environment yields an empty layout, not nil.
+func TestEnvironmentFrame_LocalLayout(t *testing.T) {
+	c := qt.New(t)
+	root := NewNamespace().Runtime()
+
+	c.Assert(root.LocalEnvironment(), qt.IsNil)
+	layout := root.LocalLayout()
+	c.Assert(layout, qt.IsNotNil)
+	c.Assert(layout.Keys(), qt.HasLen, 0)
+
+	child := NewEnvironmentFrameWithParent(NewLocalEnvironment(2), root)
+	c.Assert(child.LocalLayout(), qt.Equals, child.LocalEnvironment())
+	c.Assert(child.LocalLayout().Bindings(), qt.HasLen, 2)
+}

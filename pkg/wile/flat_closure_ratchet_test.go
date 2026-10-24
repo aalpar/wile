@@ -613,11 +613,8 @@ func shapeWidthAndCopyCount(
 	width, copied := 0, 0
 	shape := tpl.Shape()
 	if shape != nil {
-		lenv := shape.LocalEnvironment()
-		if lenv != nil {
-			width += len(lenv.Bindings())
-			copied += lenv.CopyCount()
-		}
+		width += len(shape.Bindings())
+		copied += shape.CopyCount()
 	}
 	for _, lit := range tpl.Literals() {
 		sub, ok := lit.(*machine.NativeTemplate)

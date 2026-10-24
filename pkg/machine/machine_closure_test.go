@@ -199,3 +199,24 @@ func TestForeignClosureSchemeString(t *testing.T) {
 	qt.Assert(t, cls, qt.IsNotNil)
 	qt.Assert(t, cls.SchemeString(), qt.Contains, "closure")
 }
+
+// A closure body compiled over a frame with no local environment (what
+// (compile ...) builds: a zero-parameter thunk over the current environment)
+// records an empty shape, not an absent one. The nil-shape refusal in
+// NewClosureCapturing must not fire for it, and Env must still materialize a
+// frame that has no local environment.
+func TestMachineClosure_LocallessShapeIsRecorded(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewNamespace().Runtime()
+	c.Assert(env.LocalEnvironment(), qt.IsNil)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.SetShape(env)
+	c.Assert(tpl.Shape(), qt.IsNotNil)
+	c.Assert(tpl.Shape().Keys(), qt.HasLen, 0)
+
+	closure := NewClosureCapturing(tpl, env, nil)
+	materialized := closure.Env()
+	c.Assert(materialized, qt.IsNotNil)
+	c.Assert(materialized.LocalEnvironment(), qt.IsNil)
+}

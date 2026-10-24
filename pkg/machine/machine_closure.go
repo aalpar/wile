@@ -186,7 +186,7 @@ func (p *MachineClosure) Env() *environment.EnvironmentFrame {
 	if p.link == nil || shape == nil {
 		return nil
 	}
-	return environment.NewEnvironmentFrameWithParent(shape.LocalEnvironment(), p.link)
+	return environment.NewEnvironmentFrameWithParent(shape, p.link)
 }
 
 func (p *MachineClosure) IsVoid() bool {

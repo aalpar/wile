@@ -121,9 +121,10 @@ type EnvironmentFrame struct {
 	// Embedded by value to eliminate a separate heap allocation per closure call.
 	// Sentinel: local.keys == nil means "no local environment" (zero value).
 	//
-	// The *LocalEnvironmentFrame that NewLocalEnvironment returns and that
-	// LocalEnvironment hands back is NOT one object seen from two places, and the
-	// two pointers promise different things:
+	// The *LocalEnvironmentFrame that NewLocalEnvironment returns, that
+	// LocalEnvironment hands back and that LocalLayout hands back is NOT one
+	// object seen from three places, and the three pointers promise different
+	// things:
 	//   - NewLocalEnvironment's pointer is a builder. NewEnvironmentFrameWithParent
 	//     copies *lenv into this field, so a store through the original after that
 	//     copy is lost (the slice header and map survive the copy, but a length
@@ -139,12 +140,19 @@ type EnvironmentFrame struct {
 	//     directly. The apply paths store element VALUES through Bindings():
 	//     bindArgs (arity.go) calls SetValue, and is reached from
 	//     machine_context.go, machine_context_apply.go and
-	//     call_foreign_cached.go. MachineClosure.Env (machine_closure.go) hands
-	//     the aliased pointer to NewEnvironmentFrameWithParent, which copies it
-	//     again as builder input. The remaining readers test it for nil or read
+	//     call_foreign_cached.go. The remaining readers test it for nil or read
 	//     Bindings, Keys or CopyCount.
-	// Absent is nil, not an empty frame. A third producer of this field must
-	// extend this comment rather than add a second one.
+	//   - LocalLayout's pointer is a descriptor. It aliases this field like
+	//     LocalEnvironment's, but is never nil: a frame with no local environment
+	//     yields the zero value (keys == nil), not "absent". NativeTemplate keeps
+	//     it as the shape its closures apply with; a nil-able pointer there would
+	//     turn a zero-parameter closure over a localless frame ((compile ...)
+	//     builds one) into a template that looks like it records no shape.
+	//     MachineClosure.Env (machine_closure.go) hands it to
+	//     NewEnvironmentFrameWithParent, which copies it as builder input.
+	// Absent is nil, not an empty frame, for every producer but LocalLayout.
+	// A fourth producer of this field must extend this comment rather than add
+	// a second one.
 	local LocalEnvironmentFrame
 	// phaseLevel is this frame's level on the macro tower, RELATIVE to the
 	// owner's own runtime (level 0). It is not an absolute compilation stage:
@@ -230,35 +238,10 @@ func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) int {
 }
 
 // InitApplyFrameWithParent is InitApplyFrame with the runtime parent supplied
-// separately, for callers that hold the parameter SHAPE and the parent as two
-// values rather than as one materialized frame. A closure built by
-// OpMakeClosure is exactly that: p is the lambda's compile-time frame (a
-// template constant shared by every evaluation) and parent is the runtime
-// environment captured at closure creation. Splitting them here is what lets
-// MachineClosure skip materializing an intermediate frame per closure.
-//
-// Only p.local is read off p. Everything else (global, phase, namespace) comes
-// from parent, which is why substituting a different parent is sound.
-//
-// Returns how many binding slots were actually transferred, which is p's
-// copyCount and not dst's width — the difference is the merged `let` slots
-// copyForApplyInto reslices past. The VM's BindingsCopied counter takes it from
-// here rather than measuring len(dst.Bindings()) so that the meter keeps naming
-// work done rather than frame width; it is already in a register at the copy, so
-// returning it costs the hot path nothing.
+// separately; the work lives on LocalEnvironmentFrame, which is all of p it
+// reads. See LocalEnvironmentFrame.InitApplyFrameWithParent.
 func (p *EnvironmentFrame) InitApplyFrameWithParent(dst *EnvironmentFrame, parent *EnvironmentFrame) int {
-	if parent == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrNilParentEnvironment,
-			"InitApplyFrameWithParent: nil parent - a closure's apply frame must hang from a runtime environment",
-		))
-	}
-	dst.parent = parent
-	dst.global = parent.global
-	dst.phaseLevel = parent.phaseLevel
-	dst.phases = parent.phases
-	dst.namespace = parent.namespace
-	return p.local.copyForApplyInto(&dst.local)
+	return p.local.InitApplyFrameWithParent(dst, parent)
 }
 
 // ResetForPool clears the EnvironmentFrame for return to the FreeList while
@@ -546,6 +529,15 @@ func (p *EnvironmentFrame) SetLibraryRegistry(registry LibrarySearcher) {
 // The sentinel for "no local environment" is local.keys == nil (zero value).
 func (p *EnvironmentFrame) hasLocal() bool {
 	return p.local.keys != nil
+}
+
+// LocalLayout returns the frame's embedded local environment as a layout
+// descriptor: the same storage LocalEnvironment aliases, but never nil. Where
+// LocalEnvironment answers "does this frame have locals?" with nil, this answers
+// "what is this frame's local layout?", and a frame with none has an empty one.
+// See the comment on the local field.
+func (p *EnvironmentFrame) LocalLayout() *LocalEnvironmentFrame {
+	return &p.local
 }
 
 // LocalEnvironment returns the local environment frame, or nil if none. The
