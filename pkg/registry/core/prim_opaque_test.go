@@ -29,6 +29,8 @@ import (
 )
 
 func TestPrimOpaqueQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "number is not opaque", Code: `(opaque? 42)`, Expected: values.FalseValue},
 		{Name: "string is not opaque", Code: `(opaque? "hello")`, Expected: values.FalseValue},
@@ -47,6 +49,8 @@ func TestPrimOpaqueQ(t *testing.T) {
 }
 
 func TestPrimOpaqueTag_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "number", Code: `(opaque-tag 42)`},
 		{Name: "string", Code: `(opaque-tag "hello")`},
@@ -75,6 +79,8 @@ func envWithOpaque(t *testing.T, name string, opaque values.Value) *environment.
 }
 
 func TestPrimOpaqueQ_WithOpaqueValue(t *testing.T) {
+	t.Parallel()
+
 	env := envWithOpaque(t, "my-opaque", values.NewOpaqueValue("test-tag", "inner"))
 
 	tcs := []testhelpers.SchemeCodeTestCase{
@@ -91,6 +97,8 @@ func TestPrimOpaqueQ_WithOpaqueValue(t *testing.T) {
 }
 
 func TestPrimOpaqueTag_WithOpaqueValue(t *testing.T) {
+	t.Parallel()
+
 	env := envWithOpaque(t, "my-opaque", values.NewOpaqueValue("test-tag", "inner"))
 
 	result, err := testhelpers.RunSchemeCodeWithEnv(t, env, `(opaque-tag my-opaque)`)

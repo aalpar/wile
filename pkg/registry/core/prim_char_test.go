@@ -25,6 +25,8 @@ import (
 )
 
 func TestCharComparisons(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -106,6 +108,8 @@ func TestCharComparisons(t *testing.T) {
 }
 
 func TestCharToInteger(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -132,6 +136,8 @@ func TestCharToInteger(t *testing.T) {
 }
 
 func TestIntegerToChar(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -160,6 +166,8 @@ func TestIntegerToChar(t *testing.T) {
 // Extended character conversion tests
 
 func TestCharToIntegerExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "char->integer uppercase A",
@@ -202,6 +210,8 @@ func TestCharToIntegerExtended(t *testing.T) {
 }
 
 func TestIntegerToCharExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "integer->char 65 (A)",
@@ -241,6 +251,8 @@ func TestIntegerToCharExtended(t *testing.T) {
 // Case-insensitive character comparison tests
 
 func TestCharCIEqual(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "char-ci=? same case",
@@ -283,6 +295,8 @@ func TestCharCIEqual(t *testing.T) {
 }
 
 func TestCharCILessThan(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "char-ci<? less",
@@ -315,6 +329,8 @@ func TestCharCILessThan(t *testing.T) {
 }
 
 func TestCharCIGreaterThan(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "char-ci>? greater",
@@ -347,6 +363,8 @@ func TestCharCIGreaterThan(t *testing.T) {
 }
 
 func TestCharCILessThanOrEqual(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "char-ci<=? less",
@@ -379,6 +397,8 @@ func TestCharCILessThanOrEqual(t *testing.T) {
 }
 
 func TestCharCIGreaterThanOrEqual(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "char-ci>=? greater",
@@ -414,6 +434,8 @@ func TestCharCIGreaterThanOrEqual(t *testing.T) {
 // NOTE: These tests will fail until char-ci comparisons are made variadic per R7RS
 
 func TestCharCICompareVariadic(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// char-ci=? variadic
 		{
@@ -488,6 +510,8 @@ func TestCharCICompareVariadic(t *testing.T) {
 // Variadic character comparison tests
 
 func TestCharCompareVariadic(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "char=? three equal",
@@ -537,6 +561,8 @@ func TestCharCompareVariadic(t *testing.T) {
 // Error condition tests for character primitives per R7RS
 
 func TestCharCompareErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		// char=? errors
 		{Name: "char=? with integer", Code: `(char=? #\a 42)`},
@@ -564,6 +590,8 @@ func TestCharCompareErrors(t *testing.T) {
 }
 
 func TestCharCICompareErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		// char-ci=? errors
 		{Name: "char-ci=? with integer", Code: `(char-ci=? #\a 42)`},
@@ -590,6 +618,8 @@ func TestCharCICompareErrors(t *testing.T) {
 }
 
 func TestCharPredicateErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		// char-alphabetic? errors
 		{Name: "char-alphabetic? with integer", Code: `(char-alphabetic? 65)`},
@@ -616,6 +646,8 @@ func TestCharPredicateErrors(t *testing.T) {
 }
 
 func TestCharConversionErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		// char->integer errors
 		{Name: "char->integer with integer", Code: `(char->integer 65)`},
@@ -655,6 +687,8 @@ func TestCharConversionErrors(t *testing.T) {
 // Edge case tests for integer->char (R7RS §6.6 Unicode scalar value boundaries)
 
 func TestIntegerToChar_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "null char (0)",
@@ -694,6 +728,8 @@ func TestIntegerToChar_EdgeCases(t *testing.T) {
 // Edge case tests for char->integer (high Unicode code points)
 
 func TestCharToInteger_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "null char",

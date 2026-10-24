@@ -31,6 +31,8 @@ import (
 // itself: the defect DESTROYS the complexness, so "did the imaginary part
 // survive" is exactly what the assertion has to see.
 func TestNumericClusterH(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -192,6 +194,8 @@ func TestNumericClusterH(t *testing.T) {
 // §6.2.6 already calls the inputs erroneous, so no conforming program observed
 // the wrong value.
 func TestNumericClusterH_MinMaxRejectNonRealComplex(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "min, complex second", Code: `(min 1+2i 3)`},
 		{Name: "min, complex first", Code: `(min 3 1+2i)`},

@@ -27,6 +27,8 @@ import (
 
 // TestRounding tests floor, ceiling, round, and truncate with floats, integers, and rationals
 func TestRounding(t *testing.T) {
+	t.Parallel()
+
 	tests := []testhelpers.SchemeCodeTestCase{
 		// Floor tests - floats and integers
 		{
@@ -374,6 +376,8 @@ func TestRounding(t *testing.T) {
 // TestRounding_TypeErrors tests that rounding functions reject non-numeric arguments.
 // R7RS §6.2.6: floor, ceiling, round, truncate require numeric arguments.
 func TestRounding_TypeErrors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("floor of string", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(floor "hello")`)
 	})
@@ -403,6 +407,8 @@ func TestRounding_TypeErrors(t *testing.T) {
 // TestRounding_SpecialValues tests rounding functions with +inf.0, -inf.0, and +nan.0.
 // R7RS §6.2.6: These functions return their argument for infinite and NaN inputs.
 func TestRounding_SpecialValues(t *testing.T) {
+	t.Parallel()
+
 	t.Run("floor of +inf.0", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(floor +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
@@ -492,6 +498,8 @@ func TestRounding_SpecialValues(t *testing.T) {
 // TestFloorQuotient_AllSigns tests floor-quotient with all sign combinations.
 // R7RS §6.2.6: floor-quotient returns floor(n1/n2).
 func TestFloorQuotient_AllSigns(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "(10, 3) -> 3", Code: `(floor-quotient 10 3)`, Expected: values.NewInteger(3)},
 		{Name: "(-10, 3) -> -4", Code: `(floor-quotient -10 3)`, Expected: values.NewInteger(-4)},
@@ -512,6 +520,8 @@ func TestFloorQuotient_AllSigns(t *testing.T) {
 // TestFloorRemainder_AllSigns tests floor-remainder with all sign combinations.
 // R7RS §6.2.6: floor-remainder returns n1 - n2*floor(n1/n2).
 func TestFloorRemainder_AllSigns(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "(10, 3) -> 1", Code: `(floor-remainder 10 3)`, Expected: values.NewInteger(1)},
 		{Name: "(-10, 3) -> 2", Code: `(floor-remainder -10 3)`, Expected: values.NewInteger(2)},
@@ -530,6 +540,8 @@ func TestFloorRemainder_AllSigns(t *testing.T) {
 // TestTruncateQuotient_AllSigns tests truncate-quotient with all sign combinations.
 // R7RS §6.2.6: truncate-quotient returns truncate(n1/n2).
 func TestTruncateQuotient_AllSigns(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "(10, 3) -> 3", Code: `(truncate-quotient 10 3)`, Expected: values.NewInteger(3)},
 		{Name: "(-10, 3) -> -3", Code: `(truncate-quotient -10 3)`, Expected: values.NewInteger(-3)},
@@ -548,6 +560,8 @@ func TestTruncateQuotient_AllSigns(t *testing.T) {
 // TestTruncateRemainder_AllSigns tests truncate-remainder with all sign combinations.
 // R7RS §6.2.6: truncate-remainder returns n1 - n2*truncate(n1/n2).
 func TestTruncateRemainder_AllSigns(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "(10, 3) -> 1", Code: `(truncate-remainder 10 3)`, Expected: values.NewInteger(1)},
 		{Name: "(-10, 3) -> -1", Code: `(truncate-remainder -10 3)`, Expected: values.NewInteger(-1)},
@@ -566,6 +580,8 @@ func TestTruncateRemainder_AllSigns(t *testing.T) {
 // TestFloorTruncateMultiValue tests floor/ and truncate/ multi-value returns.
 // R7RS §6.2.6: These return two values (quotient and remainder).
 func TestFloorTruncateMultiValue(t *testing.T) {
+	t.Parallel()
+
 	// floor/ returns (quotient remainder)
 	t.Run("floor/ 10 3", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectTrue(t, "(equal? (call-with-values (lambda () (floor/ 10 3)) list) '(3 1))")
@@ -584,6 +600,8 @@ func TestFloorTruncateMultiValue(t *testing.T) {
 
 // TestFloorTruncateInvariant tests the R7RS invariant: x = q*d + r.
 func TestFloorTruncateInvariant(t *testing.T) {
+	t.Parallel()
+
 	// (= x (+ (* (floor-quotient x d) d) (floor-remainder x d)))
 	t.Run("floor invariant positive", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectTrue(t, "(= 10 (+ (* (floor-quotient 10 3) 3) (floor-remainder 10 3)))")
@@ -602,6 +620,8 @@ func TestFloorTruncateInvariant(t *testing.T) {
 
 // TestFloorTruncateDivisionByZero tests division by zero produces an error.
 func TestFloorTruncateDivisionByZero(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "floor-quotient by zero", Code: `(floor-quotient 10 0)`},
 		{Name: "floor-remainder by zero", Code: `(floor-remainder 10 0)`},

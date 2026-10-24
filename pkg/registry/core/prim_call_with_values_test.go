@@ -28,6 +28,8 @@ import (
 // call-with-values Tests (R7RS §6.4 - Multiple values)
 
 func TestCallWithValuesComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Single value
 		{Name: "single value", Code: `(call-with-values (lambda () 42) (lambda (x) x))`, Expected: values.NewInteger(42)},
@@ -56,6 +58,8 @@ func TestCallWithValuesComprehensive(t *testing.T) {
 }
 
 func TestCallWithValuesErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "producer not procedure", Code: `(call-with-values 5 (lambda (x) x))`},
 		{Name: "consumer not procedure", Code: `(call-with-values (lambda () 1) 5)`},
@@ -95,6 +99,8 @@ func TestCallWithValuesErrors(t *testing.T) {
 // order of magnitude, so the deadline is widened under -race. The counts here
 // are 2x that test's, so the deadlines are scaled to match.
 func TestCallWithValuesTailCall(t *testing.T) {
+	t.Parallel()
+
 	timeout := 60 * time.Second
 	if raceEnabled {
 		timeout = 360 * time.Second

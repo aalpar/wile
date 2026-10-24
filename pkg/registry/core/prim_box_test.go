@@ -29,6 +29,8 @@ import (
 // =============================================================================
 
 func TestBox(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -75,6 +77,8 @@ func TestBox(t *testing.T) {
 // =============================================================================
 
 func TestBoxQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -121,6 +125,8 @@ func TestBoxQ(t *testing.T) {
 // =============================================================================
 
 func TestUnbox(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -153,6 +159,8 @@ func TestUnbox(t *testing.T) {
 }
 
 func TestUnboxErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "unbox non-box integer",
@@ -177,6 +185,8 @@ func TestUnboxErrors(t *testing.T) {
 // =============================================================================
 
 func TestSetBox(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -209,6 +219,8 @@ func TestSetBox(t *testing.T) {
 }
 
 func TestSetBoxErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "set-box! non-box integer",
@@ -233,6 +245,8 @@ func TestSetBoxErrors(t *testing.T) {
 // =============================================================================
 
 func TestBoxEqual(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

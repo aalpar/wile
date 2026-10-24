@@ -24,6 +24,8 @@ import (
 // wrong argument counts. The VM enforces arity automatically via
 // machine_context.go ("expected %d arguments, got %d").
 func TestSyntax_ArityErrors(t *testing.T) {
+	t.Parallel()
+
 	// Fixed 1 arg: identifier?, syntax->datum, generate-temporaries
 	fixedArity1 := []string{
 		"identifier?",

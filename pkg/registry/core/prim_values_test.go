@@ -27,6 +27,8 @@ import (
 // values Tests (R7RS §6.4 - Return multiple values)
 
 func TestValuesComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Single value (direct return)
 		{Name: "single value", Code: `(values 42)`, Expected: values.NewInteger(42)},

@@ -25,6 +25,8 @@ import (
 // I/O Error Condition Tests
 
 func TestReadErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "read from output port",
@@ -41,6 +43,8 @@ func TestReadErrors(t *testing.T) {
 }
 
 func TestWriteErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "write to input port",
@@ -61,6 +65,8 @@ func TestWriteErrors(t *testing.T) {
 }
 
 func TestOpenInputFileErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "open nonexistent file",
@@ -85,6 +91,8 @@ func TestOpenInputFileErrors(t *testing.T) {
 }
 
 func TestOpenOutputFileErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "wrong type - symbol",

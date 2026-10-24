@@ -25,6 +25,8 @@ import (
 )
 
 func TestInexact(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer to float
 		{Name: "inexact on integer", Code: `(inexact 42)`, Expected: values.NewFloat(42.0)},
@@ -56,6 +58,8 @@ func TestInexact(t *testing.T) {
 }
 
 func TestInexactBigNumbers(t *testing.T) {
+	t.Parallel()
+
 	// BigInteger to float
 	t.Run("inexact on BigInteger", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(inexact (expt 2 100))`)
@@ -84,6 +88,8 @@ func TestInexactBigNumbers(t *testing.T) {
 }
 
 func TestInexactErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "inexact on non-number string", Code: `(inexact "hello")`},
 		{Name: "inexact on symbol", Code: `(inexact 'foo)`},

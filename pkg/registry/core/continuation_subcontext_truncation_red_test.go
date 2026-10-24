@@ -73,6 +73,8 @@ func redExpected() values.Value {
 // delay-force chain-depth property that conversion had to preserve is pinned
 // separately by TestForceDeepDelayForceChain (prim_promise_extra_test.go).
 func TestSubContextNonTailEscapeTruncation(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		// form is the sub-context primitive call whose thunk contains
@@ -124,6 +126,8 @@ func TestSubContextNonTailEscapeTruncation(t *testing.T) {
 //     sub.Run primitive, and the bare top-level case). This proves the RED
 //     assertion is not vacuously failing.
 func TestSubContextEscapeControls(t *testing.T) {
+	t.Parallel()
+
 	endSym := func() values.Value {
 		return values.NewSymbol("END")
 	}

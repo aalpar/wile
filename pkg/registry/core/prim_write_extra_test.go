@@ -24,6 +24,8 @@ import (
 )
 
 func TestWriteWithStringOutputPort(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write "hello" p)
@@ -36,6 +38,8 @@ func TestWriteWithStringOutputPort(t *testing.T) {
 }
 
 func TestWriteWithSymbolOutputPort(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write 'hello p)
@@ -48,6 +52,8 @@ func TestWriteWithSymbolOutputPort(t *testing.T) {
 }
 
 func TestWriteWithListOutputPort(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write '(1 2 3) p)
@@ -60,6 +66,8 @@ func TestWriteWithListOutputPort(t *testing.T) {
 }
 
 func TestWriteCharWithOutputPort(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write-char #\A p)
@@ -72,6 +80,8 @@ func TestWriteCharWithOutputPort(t *testing.T) {
 }
 
 func TestNewlineWithOutputPort(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (newline p)
@@ -84,6 +94,8 @@ func TestNewlineWithOutputPort(t *testing.T) {
 }
 
 func TestMultipleWriteCharsWithOutputPort(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write-char #\H p)
@@ -97,6 +109,8 @@ func TestMultipleWriteCharsWithOutputPort(t *testing.T) {
 }
 
 func TestWriteWithInteger(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write 42 p)
@@ -109,6 +123,8 @@ func TestWriteWithInteger(t *testing.T) {
 }
 
 func TestWriteWithBoolean(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write #t p)
@@ -121,6 +137,8 @@ func TestWriteWithBoolean(t *testing.T) {
 }
 
 func TestWriteWithNestedList(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write '((a b) (c d)) p)
@@ -133,6 +151,8 @@ func TestWriteWithNestedList(t *testing.T) {
 }
 
 func TestWriteMixedOperationsToPort(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write "line1" p)
@@ -151,6 +171,8 @@ func TestWriteMixedOperationsToPort(t *testing.T) {
 // WriteByte with Different wrt Types Tests (R7RS §6.13.3)
 
 func TestWriteWithRational(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(write 3/4 p)
@@ -163,6 +185,8 @@ func TestWriteWithRational(t *testing.T) {
 }
 
 func TestWriteWithFloat(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(write 3.14 p)
@@ -175,6 +199,8 @@ func TestWriteWithFloat(t *testing.T) {
 }
 
 func TestWriteWithComplex(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(write 1+2i p)
@@ -187,6 +213,8 @@ func TestWriteWithComplex(t *testing.T) {
 }
 
 func TestWriteWithDottedPair(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(write (cons 1 2) p)

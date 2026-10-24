@@ -24,6 +24,8 @@ import (
 // wrong argument counts. The VM enforces arity automatically via
 // machine_context.go ("expected %d arguments, got %d").
 func TestLists_ArityErrors(t *testing.T) {
+	t.Parallel()
+
 	// Fixed 1 arg: car, cdr, reverse, length, list-copy
 	fixedArity1 := []string{
 		"car",
@@ -104,6 +106,8 @@ func TestLists_ArityErrors(t *testing.T) {
 // TestCxR_ArityErrors verifies that all 28 CxR accessors (2/3/4-level
 // compositions of car and cdr) reject wrong argument counts.
 func TestCxR_ArityErrors(t *testing.T) {
+	t.Parallel()
+
 	cxrs := []string{
 		// 2-level (4)
 		"caar", "cadr", "cdar", "cddr",

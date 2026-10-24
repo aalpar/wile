@@ -39,6 +39,8 @@ import (
 //
 //	-> (inner-result inner)   [not the invocation-site (sentinel-result sentinel)]
 func TestExceptionHandlerCapturedByContinuation(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (call/cc (lambda (done)
   (let ((k #f) (log '()))
@@ -75,6 +77,8 @@ func TestExceptionHandlerCapturedByContinuation(t *testing.T) {
 // regression guard the mark-based design must preserve (raise must re-mark to the
 // cdr so the handler runs with the parent current).
 func TestExceptionHandlerSelfReRaiseEscalates(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (call/cc (lambda (done)
   (with-exception-handler
@@ -94,6 +98,8 @@ func TestExceptionHandlerSelfReRaiseEscalates(t *testing.T) {
 // of the headline guard; GREEN since claim 3 (was RED/skipped on HEAD 9540d515:
 // got "(resumed-with sentinel-value)", want "(resumed-with inner-value)").
 func TestRaiseContinuableThroughReinvokedContinuation(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (call/cc (lambda (done)
   (let ((k #f) (first #t))
@@ -119,6 +125,8 @@ func TestRaiseContinuableThroughReinvokedContinuation(t *testing.T) {
 // Exercises the bridge the mark-based redesign must keep working (step 3): the VM's
 // foreign-error path must find the handler across an intervening prompt.
 func TestGoPrimitiveErrorCrossesPromptToHandler(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (guard (e (#t 'caught))
   (call/cc (lambda (escape)

@@ -49,6 +49,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestFloorDivComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -165,6 +167,8 @@ func TestFloorDivComprehensive(t *testing.T) {
 
 // TestFloorDivIdentity verifies the mathematical identity: n = d * q + r
 func TestFloorDivIdentity(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -188,6 +192,8 @@ func TestFloorDivIdentity(t *testing.T) {
 
 // TestFloorDivRemainderSign verifies that remainder has the sign of the divisor
 func TestFloorDivRemainderSign(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -214,6 +220,8 @@ func TestFloorDivRemainderSign(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestFloorQuotientComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic cases
 		{Name: "positive / positive exact", Code: `(floor-quotient 12 4)`, Expected: values.NewInteger(3)},
@@ -260,6 +268,8 @@ func TestFloorQuotientComprehensive(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestFloorRemainderComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic cases
 		{Name: "positive / positive exact", Code: `(floor-remainder 12 4)`, Expected: values.NewInteger(0)},
@@ -305,6 +315,8 @@ func TestFloorRemainderComprehensive(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestTruncateDivComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -421,6 +433,8 @@ func TestTruncateDivComprehensive(t *testing.T) {
 
 // TestTruncateDivIdentity verifies the mathematical identity: n = d * q + r
 func TestTruncateDivIdentity(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -444,6 +458,8 @@ func TestTruncateDivIdentity(t *testing.T) {
 
 // TestTruncateDivRemainderSign verifies that remainder has the sign of the dividend
 func TestTruncateDivRemainderSign(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -470,6 +486,8 @@ func TestTruncateDivRemainderSign(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestTruncateQuotientComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic cases
 		{Name: "positive / positive exact", Code: `(truncate-quotient 12 4)`, Expected: values.NewInteger(3)},
@@ -516,6 +534,8 @@ func TestTruncateQuotientComprehensive(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestTruncateRemainderComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic cases
 		{Name: "positive / positive exact", Code: `(truncate-remainder 12 4)`, Expected: values.NewInteger(0)},
@@ -562,6 +582,8 @@ func TestTruncateRemainderComprehensive(t *testing.T) {
 
 // TestFloorVsTruncateDifference shows cases where floor and truncate differ
 func TestFloorVsTruncateDifference(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name         string
 		floorCode    string
@@ -636,6 +658,8 @@ func TestFloorVsTruncateDifference(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestDivisionErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		// Division by zero
 		{Name: "floor/ divide by zero", Code: `(floor/ 10 0)`},
@@ -682,6 +706,8 @@ func TestDivisionErrors(t *testing.T) {
 
 // TestModuloEqualsFloorRemainder verifies that modulo gives same results as floor-remainder
 func TestModuloEqualsFloorRemainder(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -704,6 +730,8 @@ func TestModuloEqualsFloorRemainder(t *testing.T) {
 
 // TestRemainderEqualsTruncateRemainder verifies that remainder gives same results as truncate-remainder
 func TestRemainderEqualsTruncateRemainder(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -726,6 +754,8 @@ func TestRemainderEqualsTruncateRemainder(t *testing.T) {
 
 // TestQuotientEqualsTruncateQuotient verifies that quotient gives same results as truncate-quotient
 func TestQuotientEqualsTruncateQuotient(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

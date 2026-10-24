@@ -29,6 +29,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestCurrentTime(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, "(current-time)")
 	qt.Assert(t, err, qt.IsNil)
 
@@ -38,6 +40,8 @@ func TestCurrentTime(t *testing.T) {
 }
 
 func TestTimeQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -79,6 +83,8 @@ func TestTimeQ(t *testing.T) {
 }
 
 func TestTimeToSeconds(t *testing.T) {
+	t.Parallel()
+
 	// time->seconds should return a positive number
 	code := "(> (time->seconds (current-time)) 0)"
 	result, err := testhelpers.RunSchemeCode(t, code)
@@ -87,6 +93,8 @@ func TestTimeToSeconds(t *testing.T) {
 }
 
 func TestTimeToSecondsReturnsFloat(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, "(time->seconds (current-time))")
 	qt.Assert(t, err, qt.IsNil)
 
@@ -96,6 +104,8 @@ func TestTimeToSecondsReturnsFloat(t *testing.T) {
 }
 
 func TestTimeToSecondsError(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "time->seconds with integer", Code: "(time->seconds 42)"},
 		{Name: "time->seconds with string", Code: `(time->seconds "now")`},
@@ -109,6 +119,8 @@ func TestTimeToSecondsError(t *testing.T) {
 }
 
 func TestSecondsToTime(t *testing.T) {
+	t.Parallel()
+
 	// seconds->time should return a time object
 	result, err := testhelpers.RunSchemeCode(t, "(seconds->time 1000000000)")
 	qt.Assert(t, err, qt.IsNil)
@@ -118,6 +130,8 @@ func TestSecondsToTime(t *testing.T) {
 }
 
 func TestSecondsToTimeWithFloat(t *testing.T) {
+	t.Parallel()
+
 	// Should work with floats
 	result, err := testhelpers.RunSchemeCode(t, "(seconds->time 1000000000.5)")
 	qt.Assert(t, err, qt.IsNil)
@@ -127,6 +141,8 @@ func TestSecondsToTimeWithFloat(t *testing.T) {
 }
 
 func TestSecondsToTimeRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	// Converting to time and back should preserve the value (approximately)
 	code := `
 		(let ((secs 1500000000.5))
@@ -138,6 +154,8 @@ func TestSecondsToTimeRoundTrip(t *testing.T) {
 }
 
 func TestSecondsToTimeError(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "seconds->time with string", Code: `(seconds->time "1000")`},
 		{Name: "seconds->time with symbol", Code: "(seconds->time 'now)"},
@@ -151,6 +169,8 @@ func TestSecondsToTimeError(t *testing.T) {
 }
 
 func TestCurrentTimeIncreasing(t *testing.T) {
+	t.Parallel()
+
 	// Two successive calls should return increasing times
 	code := `
 		(let ((t1 (current-time))

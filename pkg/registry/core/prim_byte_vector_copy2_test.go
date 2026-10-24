@@ -25,48 +25,64 @@ import (
 )
 
 func TestBytevectorCopyFullCopy(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `(bytevector-copy (bytevector 1 2 3 4 5))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8(1 2 3 4 5)")
 }
 
 func TestBytevectorCopyWithStart(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `(bytevector-copy (bytevector 1 2 3 4 5) 2)`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8(3 4 5)")
 }
 
 func TestBytevectorCopyWithStartAndEnd(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `(bytevector-copy (bytevector 1 2 3 4 5) 1 3)`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8(2 3)")
 }
 
 func TestBytevectorCopyEmptyBytevector(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `(bytevector-copy (bytevector))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8()")
 }
 
 func TestBytevectorCopyStartZero(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `(bytevector-copy (bytevector 1 2 3 4 5) 0)`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8(1 2 3 4 5)")
 }
 
 func TestBytevectorCopyStartAtEnd(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `(bytevector-copy (bytevector 1 2 3 4 5) 5)`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8()")
 }
 
 func TestBytevectorCopyEmptyRange(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `(bytevector-copy (bytevector 1 2 3 4 5) 2 2)`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8()")
 }
 
 func TestBytevectorCopyIndependence(t *testing.T) {
+	t.Parallel()
+
 	code := `(let* ((bv1 (bytevector 1 2 3 4 5))
 	              (bv2 (bytevector-copy bv1)))
 	         (bytevector-u8-set! bv2 0 99)
@@ -77,6 +93,8 @@ func TestBytevectorCopyIndependence(t *testing.T) {
 }
 
 func TestBytevectorCopyPartialIndependence(t *testing.T) {
+	t.Parallel()
+
 	code := `(let* ((bv1 (bytevector 10 20 30 40 50))
 	              (bv2 (bytevector-copy bv1 1 4)))
 	         (bytevector-u8-set! bv2 0 99)

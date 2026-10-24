@@ -27,6 +27,8 @@ import (
 // Bytevector Port Tests (R7RS §6.13.1)
 
 func TestOpenInputBytevector(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -59,6 +61,8 @@ func TestOpenInputBytevector(t *testing.T) {
 }
 
 func TestOpenOutputBytevector(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -91,6 +95,8 @@ func TestOpenOutputBytevector(t *testing.T) {
 }
 
 func TestGetOutputBytevector(t *testing.T) {
+	t.Parallel()
+
 	// R7RS: binary output ports do not accept textual ops (display/write).
 	// Use write-bytevector to write raw bytes to a bytevector output port.
 	result, err := testhelpers.RunSchemeCode(t, `

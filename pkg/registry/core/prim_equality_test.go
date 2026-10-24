@@ -27,6 +27,8 @@ import (
 )
 
 func TestNumericEquality(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -63,6 +65,8 @@ func TestNumericEquality(t *testing.T) {
 }
 
 func TestEqQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -103,6 +107,8 @@ func TestEqQ(t *testing.T) {
 }
 
 func TestEqualQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -139,6 +145,8 @@ func TestEqualQ(t *testing.T) {
 }
 
 func TestEqQWithDifferentPairs(t *testing.T) {
+	t.Parallel()
+
 	// Test eq? with two different pairs that have same contents
 	// According to R7RS, eq? should return #f for different objects
 	prog := values.List(values.NewSymbol("eq?"),
@@ -153,6 +161,8 @@ func TestEqQWithDifferentPairs(t *testing.T) {
 }
 
 func TestEqualQWithLists(t *testing.T) {
+	t.Parallel()
+
 	// Test equal? with two equivalent lists
 	prog := values.List(values.NewSymbol("equal?"),
 		values.List(values.NewSymbol("quote"),
@@ -166,6 +176,8 @@ func TestEqualQWithLists(t *testing.T) {
 }
 
 func TestEqv(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name   string
 		a      values.Value
@@ -297,6 +309,8 @@ func TestEqv(t *testing.T) {
 
 // TestEqvWithSamePointer tests eqv with the same pointer values
 func TestEqvWithSamePointer(t *testing.T) {
+	t.Parallel()
+
 	// When a and b are the same object, eqv should return true
 	i := values.NewInteger(42)
 	qt.Assert(t, helpers.Eqv(i, i), qt.IsTrue)
@@ -319,6 +333,8 @@ func TestEqvWithSamePointer(t *testing.T) {
 
 // TestEqvWithRational tests eqv with rational numbers
 func TestEqvWithRational(t *testing.T) {
+	t.Parallel()
+
 	// Same rational value
 	r1 := values.NewRational(1, 2)
 	r2 := values.NewRational(1, 2)
@@ -338,6 +354,8 @@ func TestEqvWithRational(t *testing.T) {
 
 // TestEqvWithComplex tests eqv with complex numbers
 func TestEqvWithComplex(t *testing.T) {
+	t.Parallel()
+
 	// Same complex value
 	c1 := values.NewComplex(complex(1, 2))
 	c2 := values.NewComplex(complex(1, 2))
@@ -353,6 +371,8 @@ func TestEqvWithComplex(t *testing.T) {
 
 // TestEqvQPrimitive tests the eqv? primitive through program execution
 func TestEqvQPrimitive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -432,6 +452,8 @@ func TestEqvQPrimitive(t *testing.T) {
 // future leaf type whose EqualTo is non-reflexive breaks the same way, and this
 // table catches it without anyone remembering to think about NaN.
 func TestEquivalenceLattice(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name  string
 		value string // expression bound to x, then compared with itself
@@ -475,6 +497,8 @@ func TestEquivalenceLattice(t *testing.T) {
 // TestEqualIsReflexive pins the consequence that bit the equal?-based list
 // searches: an object must be found in a list that contains it.
 func TestEqualIsReflexive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "equal? nan self", Code: `(let ((x +nan.0)) (equal? x x))`, Expected: values.TrueValue},
 		{Name: "member finds nan", Code: `(let ((x +nan.0)) (if (member x (list 1 x 2)) #t #f))`, Expected: values.TrueValue},
@@ -522,6 +546,8 @@ func TestEqualIsReflexive(t *testing.T) {
 // they share the compile-time frame, the runtime parent AND the template. Only
 // object identity separates them. A tail loop reaches the same shape.
 func TestEqualOnProceduresAgreesWithEqv(t *testing.T) {
+	t.Parallel()
+
 	const twoClosuresFromOneForm = `
 	  (let ((k #f) (n 0) (acc (list)))
 	    (call/cc (lambda (kk) (set! k kk)))

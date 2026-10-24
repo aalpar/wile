@@ -29,6 +29,8 @@ import (
 // open-binary-input-file Tests (R7RS §6.13.1)
 
 func TestOpenBinaryInputFile(t *testing.T) {
+	t.Parallel()
+
 	// Create a temp file with binary content
 	f, err := os.CreateTemp("", "test_obif_*.bin")
 	qt.Assert(t, err, qt.IsNil)
@@ -62,6 +64,8 @@ func TestOpenBinaryInputFile(t *testing.T) {
 }
 
 func TestOpenBinaryInputFileAndClose(t *testing.T) {
+	t.Parallel()
+
 	f, err := os.CreateTemp("", "test_obif_close_*.bin")
 	qt.Assert(t, err, qt.IsNil)
 	_, err = f.Write([]byte{0x00})
@@ -80,6 +84,8 @@ func TestOpenBinaryInputFileAndClose(t *testing.T) {
 }
 
 func TestOpenBinaryInputFileErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "file not found",

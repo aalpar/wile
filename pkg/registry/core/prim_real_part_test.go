@@ -26,6 +26,8 @@ import (
 )
 
 func TestRealPartExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Exact complex (integer parts parsed as exact BigComplex)
 		{Name: "real-part of complex", Code: `(real-part 3+4i)`, Expected: values.NewBigIntegerFromInt64(3)},
@@ -51,6 +53,8 @@ func TestRealPartExtended(t *testing.T) {
 }
 
 func TestRealPartErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "real-part of string", Code: `(real-part "hello")`},
 		{Name: "real-part of symbol", Code: `(real-part 'foo)`},

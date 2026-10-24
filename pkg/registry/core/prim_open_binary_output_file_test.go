@@ -30,6 +30,8 @@ import (
 // open-binary-output-file Tests (R7RS §6.13.1)
 
 func TestOpenBinaryOutputFile(t *testing.T) {
+	t.Parallel()
+
 	tmpfile := filepath.Join(os.TempDir(), "test_obof.bin")
 	defer os.Remove(tmpfile) //nolint:errcheck
 
@@ -60,6 +62,8 @@ func TestOpenBinaryOutputFile(t *testing.T) {
 }
 
 func TestOpenBinaryOutputFileAndClose(t *testing.T) {
+	t.Parallel()
+
 	tmpfile := filepath.Join(os.TempDir(), "test_obof_close.bin")
 	defer os.Remove(tmpfile) //nolint:errcheck
 
@@ -73,6 +77,8 @@ func TestOpenBinaryOutputFileAndClose(t *testing.T) {
 }
 
 func TestOpenBinaryOutputFileErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "wrong type - integer",

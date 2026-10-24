@@ -39,6 +39,8 @@ import (
 // The control case (distinct template) proves the logic is otherwise correct:
 // only template identity differs between the two sub-tests.
 func TestCallCCSelfTemplate(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			// proc passed to call/cc IS the enclosing function `self`, so the

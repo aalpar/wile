@@ -25,6 +25,8 @@ import (
 )
 
 func TestMinExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -102,6 +104,8 @@ func TestMinExtended(t *testing.T) {
 }
 
 func TestMaxExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

@@ -51,6 +51,8 @@ import (
 // whether an unrelated continuation was resumed earlier on the same driver, or
 // the handler itself takes a call/cc jump inside its own body.
 func TestNonContinuableHandlerReturnErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "no prior resume (baseline control)",
@@ -149,6 +151,8 @@ func TestNonContinuableHandlerReturnErrors(t *testing.T) {
 // corpus cell `guard-reraise-to-weh`, pinned here next to the regression it must not
 // trade against.)
 func TestNonContinuableForwardBranchPreserved(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "guard miss re-raises continuable to outer weh",

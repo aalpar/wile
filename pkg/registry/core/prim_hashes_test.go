@@ -25,6 +25,8 @@ import (
 )
 
 func TestHashPrimitives(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "equal-hash is deterministic", Code: `(= (equal-hash '(1 2 3)) (equal-hash '(1 2 3)))`, Expected: values.TrueValue},
 		{Name: "equal-hash agrees with equal? on lists", Code: `(= (equal-hash (list 1 2)) (equal-hash (list 1 2)))`, Expected: values.TrueValue},

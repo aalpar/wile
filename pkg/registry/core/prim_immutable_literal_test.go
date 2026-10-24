@@ -34,6 +34,8 @@ import (
 // TestPairLiteral_IsMutableByDecision rather than being deleted, so the change
 // of answer is pinned instead of merely un-asserted.
 func TestImmutableLiteral_MutatorsRaise(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -57,6 +59,8 @@ func TestImmutableLiteral_MutatorsRaise(t *testing.T) {
 // TestImmutableLiteral_AllocatedStillMutable verifies freshly-allocated
 // pairs/vectors remain mutable — the guard keys on literal identity, not type.
 func TestImmutableLiteral_AllocatedStillMutable(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "set-car! on allocated pair",
 			Code: `(let ((p (list 1 2))) (set-car! p 9) (car p))`, Expected: values.NewInteger(9)},
@@ -92,6 +96,8 @@ func TestImmutableLiteral_AllocatedStillMutable(t *testing.T) {
 // baseline. What bought it is that *Pair stays [2]Value — a flag word is ~25%
 // growth on the dominant heap object, on a mutation path the peephole promotes.
 func TestPairLiteral_IsMutableByDecision(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "set-car! on literal",
 			Code: `(let ((p '(a b))) (set-car! p 'x) (car p))`, Expected: values.NewSymbol("x")},
@@ -119,6 +125,8 @@ func TestPairLiteral_IsMutableByDecision(t *testing.T) {
 // wrapper forces a single compilation unit (per-template equal? dedup); separate
 // REPL units would give distinct objects and the row would prove nothing.
 func TestPairLiteral_StructureSharingCorrupts(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `(begin
 		(define x '(1 2 3))
 		(define y '(1 2 3))
@@ -144,6 +152,8 @@ func TestPairLiteral_StructureSharingCorrupts(t *testing.T) {
 // The two quoted rows are negative controls: they were the only appender that
 // marked, and they must keep refusing.
 func TestImmutableLiteral_EveryConstantAppenderMarks(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -183,6 +193,8 @@ func TestImmutableLiteral_EveryConstantAppenderMarks(t *testing.T) {
 // still holds for pairs — both twins are equally mutable — but it is no longer
 // observable through an error, so there is nothing left here to assert.
 func TestImmutableLiteral_OrderIndependence(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -233,6 +245,8 @@ func TestImmutableLiteral_OrderIndependence(t *testing.T) {
 // splitting the pool is not. A future dedup key must not be gated on this
 // program returning #f.
 func TestImmutableLiteral_PooledSharingIsIntended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []string{
 		"(begin (define x `(1 2 3)) (define y '(1 2 3)) (eq? x y))",
 		"(begin (define y '(1 2 3)) (define x `(1 2 3)) (eq? x y))",
@@ -253,6 +267,8 @@ func TestImmutableLiteral_PooledSharingIsIntended(t *testing.T) {
 // freeze a caller's runtime aggregate. (vector 1 2) is a call, never pools, and
 // eval returns a non-eq? copy of any vector handed to it.
 func TestImmutableLiteral_RuntimeAggregatesUnaffected(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "vector call result is mutable",
 			Code: `(let ((v (vector 1 2 3))) (vector-set! v 0 9) (vector-ref v 0))`, Expected: values.NewInteger(9)},
@@ -276,6 +292,8 @@ func TestImmutableLiteral_RuntimeAggregatesUnaffected(t *testing.T) {
 // immutable — the new pair/vector behavior is consistent with strings and did
 // not regress them.
 func TestImmutableLiteral_StringParityPreserved(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, `(string-set! "abc" 0 #\z)`)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, errors.Is(err, werr.ErrImmutableString), qt.IsTrue,
@@ -304,6 +322,8 @@ func TestImmutableLiteral_StringParityPreserved(t *testing.T) {
 // list-copy has no row: with pair literals mutable there is no immutable pair
 // source for it to clear from, so the assertion would be vacuous.
 func TestImmutability_CopyClears(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "vector-copy",
 			Code:     `(let ((v (vector-copy '#(1 2 3)))) (vector-set! v 0 9) v)`,
@@ -332,6 +352,8 @@ func TestImmutability_CopyClears(t *testing.T) {
 // default-immutable constructor makes this the standing failure mode: any new
 // allocator that reaches for NewString instead of NewMutableString fails here.
 func TestImmutability_AllocatorsReturnMutable(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "number->string",
 			Code:     `(let ((s (number->string 42))) (string-set! s 0 #\9) s)`,
@@ -359,6 +381,8 @@ func TestImmutability_AllocatorsReturnMutable(t *testing.T) {
 // markLiteralImmutable. The walk then never reaches the vector, and this row
 // answers (1 #(9 3)) instead of raising.
 func TestImmutability_SharingPreserves(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t,
 		`(let ((b '(1 #(2 3)))) (vector-set! (cadr b) 0 9) b)`)
 	qt.Assert(t, err, qt.IsNotNil)
@@ -375,6 +399,8 @@ func TestImmutability_SharingPreserves(t *testing.T) {
 //	vector-copy!      PrimVectorCopyTo
 //	bytevector-copy!  PrimBytevectorCopyBang
 func TestImmutability_DestinationOnly(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "vector-copy! from a literal source",
 			Code:     `(let ((dst (make-vector 3 0))) (vector-copy! dst 0 '#(1 2 3)) dst)`,

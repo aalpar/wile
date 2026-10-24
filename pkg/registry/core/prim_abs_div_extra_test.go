@@ -29,6 +29,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestAbsExtraCoverage(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -72,6 +74,8 @@ func TestAbsExtraCoverage(t *testing.T) {
 // TestAbsRejectsComplex verifies that abs rejects complex numbers per R7RS.
 // R7RS §6.2.6: abs is only defined for real numbers. Use magnitude for complex.
 func TestAbsRejectsComplex(t *testing.T) {
+	t.Parallel()
+
 	errorCases := []struct {
 		name string
 		code string
@@ -112,6 +116,8 @@ func TestAbsRejectsComplex(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestMagnitudeExtraCoverage(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -146,6 +152,8 @@ func TestMagnitudeExtraCoverage(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestDivisionExtraCoverage(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

@@ -27,6 +27,8 @@ import (
 // write-simple Tests (R7RS §6.13.3)
 
 func TestWriteSimple(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -109,6 +111,8 @@ func TestWriteSimple(t *testing.T) {
 }
 
 func TestWriteSimpleDefaultPort(t *testing.T) {
+	t.Parallel()
+
 	// write-simple with only one argument should use current-output-port
 	// We can't easily capture stdout, so we just verify it doesn't error
 	result, err := testhelpers.RunSchemeCode(t, `(begin (write-simple 42) #t)`)

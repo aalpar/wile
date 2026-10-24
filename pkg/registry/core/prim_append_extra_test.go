@@ -24,6 +24,8 @@ import (
 )
 
 func TestBytevectorAppendExtra(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name   string
 		code   string
@@ -65,6 +67,8 @@ func TestBytevectorAppendExtra(t *testing.T) {
 }
 
 func TestStringAppendExtra(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name   string
 		code   string

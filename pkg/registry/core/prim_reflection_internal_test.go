@@ -32,6 +32,8 @@ type libNameParts struct {
 }
 
 func TestLibraryRegistrySearcherAdapter(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name    string
 		entries []libNameParts
@@ -72,6 +74,8 @@ func TestLibraryRegistrySearcherAdapter(t *testing.T) {
 }
 
 func TestLibraryExportIndexSearcherAdapter(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name    string
 		entries map[string]*compilation.LibrarySummary

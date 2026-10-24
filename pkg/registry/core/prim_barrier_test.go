@@ -25,6 +25,8 @@ import (
 )
 
 func TestWithContinuationBarrier_Success(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []testhelpers.SchemeCodeTestCase{
@@ -111,6 +113,8 @@ func TestWithContinuationBarrier_Success(t *testing.T) {
 }
 
 func TestWithContinuationBarrier_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "call/cc escape from inside to outside blocked",
@@ -155,6 +159,8 @@ func TestWithContinuationBarrier_Errors(t *testing.T) {
 }
 
 func TestWithContinuationBarrier_ExceptionPassthrough(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	result, err := testhelpers.RunSchemeCode(t, `(guard (e (#t 'caught))

@@ -77,6 +77,8 @@ import (
 // call-with-values row returned the consumer marker. This is the test that was
 // missing.
 func TestContinuationEscapePastBoundary(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		code string
@@ -164,6 +166,8 @@ func TestContinuationEscapePastBoundary(t *testing.T) {
 // shape keeps at most one. An inner guard misses (number? vs a symbol) and re-raises
 // to the outer guard.
 func TestContinuationNestedGuardReRaise(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (guard (outer ((symbol? outer) (list 'outer-caught outer)))
   (guard (inner ((number? inner) (list 'inner-caught inner)))
@@ -178,6 +182,8 @@ func TestContinuationNestedGuardReRaise(t *testing.T) {
 // post-thunk work SHOULD run exactly once. Guards against a fix that "solves"
 // escape-past by dropping the consumer unconditionally.
 func TestContinuationNormalCompletionThroughCallWithValues(t *testing.T) {
+	t.Parallel()
+
 	const code = `(call-with-values (lambda () (values 3 4)) (lambda (a b) (+ a b)))`
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
@@ -189,6 +195,8 @@ func TestContinuationNormalCompletionThroughCallWithValues(t *testing.T) {
 // that re-invocation works and that the segment is not corrupted across shots
 // (use-after-release would crash or miscount under -race).
 func TestContinuationPlainMultiShot(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (let ((k #f) (n 0))
   (call/cc (lambda (c) (set! k c)))
@@ -206,6 +214,8 @@ func TestContinuationPlainMultiShot(t *testing.T) {
 // stays re-enterable. (Surfaced by the design's adversarial review, gap #5: the
 // producer side was guarded but the consumer side was not.)
 func TestContinuationConsumerCapturedReentry(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (let ((k #f) (n 0) (trace '()))
   (call-with-values
@@ -227,6 +237,8 @@ func TestContinuationConsumerCapturedReentry(t *testing.T) {
 // GREEN on master (validated -> 3); a fix that corrupts the segment across shots
 // (use-after-release / shared-bit underflow) would miscount or crash under -race.
 func TestContinuationEscapePastMultiShotWithMutation(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (let ((k #f) (n 0))
   (call/cc (lambda (c) (set! k c)))
@@ -250,6 +262,8 @@ func TestContinuationEscapePastMultiShotWithMutation(t *testing.T) {
 // keeps the consumer + program tail on the captured chain, so re-entry replays them
 // and the generator counts to three (master truncated at the intermediate "2").
 func TestCallWithValuesTruncation_TargetReachesFullTrace(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (let ((k #f) (count 0) (trace '()))
   (call-with-values
@@ -268,6 +282,8 @@ func TestCallWithValuesTruncation_TargetReachesFullTrace(t *testing.T) {
 // The flip collapses the two winding reconciles (reinstallSegment + the abort catch)
 // that master fired into one.
 func TestDynamicWindDoubleFire_TargetFiresOnce(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (let ((fired #f) (k #f))
   (call/cc (lambda (c) (set! k c)))
@@ -312,6 +328,8 @@ const criticalGuardTimeout = 15 * time.Second
 // tag exit") or silently returned a #<machine-closure>. The flip (resume on the
 // driver, O(1) Go frames) is what keeps these GREEN once boundaries are reified.
 func TestContinuationBoundaryReachedAfterResume_C1(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		code string
@@ -372,6 +390,8 @@ func TestContinuationBoundaryReachedAfterResume_C1(t *testing.T) {
 // crashed ("no prompt found"). Here the after-thunk runs its own call-with-exit while
 // the outer escape unwinds the wind; clean HEAD completes the outer escape => 'done.
 func TestBoundaryInsideWindThunkOnForwardEscape_C2(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (call-with-exit
   (lambda (escape)
@@ -391,6 +411,8 @@ func TestBoundaryInsideWindThunkOnForwardEscape_C2(t *testing.T) {
 // own chain, not the deeper sub's winding, so the after-thunk was SILENTLY SKIPPED (a
 // resource leak). The counter proves it ran on the escape.
 func TestAfterThunkThroughDeeperSubFiresOnce_C3(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (let ((c 0))
   (guard (e (#t 'caught))
@@ -412,6 +434,8 @@ func TestAfterThunkThroughDeeperSubFiresOnce_C3(t *testing.T) {
 // list — re-invoking the same handler unboundedly (a hang). The outer guard must catch
 // the re-raised 'again exactly once.
 func TestHandlerRunsBoundaryThenReraise_C4(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (guard (outer (#t (list 'outer outer)))
   (with-exception-handler
@@ -431,6 +455,8 @@ func TestHandlerRunsBoundaryThenReraise_C4(t *testing.T) {
 // sub-context blocked FindPrompt). The load-bearing property is that capture no longer
 // errors.
 func TestComposableEscapePastReifiedBoundary_Target(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (call-with-continuation-prompt
   (lambda ()
@@ -460,6 +486,8 @@ func TestComposableEscapePastReifiedBoundary_Target(t *testing.T) {
 // live activation was dropped when that frame restored, so the consumer's
 // raise-continuable escaped UNCAUGHT.
 func TestConsumerHandlerVisibility(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (let ((caught #f))
   (with-exception-handler
@@ -480,6 +508,8 @@ func TestConsumerHandlerVisibility(t *testing.T) {
 // re-raise's result flows back through it. The escalate must NOT fire (the handler did
 // not return naturally, it was resumed) — the outer handler's value is the result.
 func TestEscalateViaResumeNoSpuriousEscalate(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (with-exception-handler
   (lambda (e) (list 'caught e))
@@ -498,6 +528,8 @@ func TestEscalateViaResumeNoSpuriousEscalate(t *testing.T) {
 // when the raise fires inside a reified call-with-values producer (guard's body). The
 // timeout surfaces any hang as a clean FAIL.
 func TestTailPromotedOpUnderGuard(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		code string
@@ -519,6 +551,8 @@ func TestTailPromotedOpUnderGuard(t *testing.T) {
 // call-with-values producer executes on a DETACHED procedure frame (nil namespace);
 // its exit/finalizer closures must build without panicking (MutableRuntimeOrNil fallback).
 func TestBoundaryInDetachedProducer(t *testing.T) {
+	t.Parallel()
+
 	const code = `(call-with-values (lambda () (call-with-exit (lambda (k) (k 7)))) (lambda (x) x))`
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
@@ -530,6 +564,8 @@ func TestBoundaryInDetachedProducer(t *testing.T) {
 // Deterministic — a generous deadline that never fires — so it guards the routing, not
 // wall-clock timing.
 func TestKC10_TimerBoundaryRouting(t *testing.T) {
+	t.Parallel()
+
 	const code = `(with-timeout 10000 (lambda (k) 'timed-out) (lambda () (call-with-exit (lambda (ex) (ex 42)))))`
 	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, criticalGuardTimeout)
 	qt.Assert(t, err, qt.IsNil)
@@ -541,6 +577,8 @@ func TestKC10_TimerBoundaryRouting(t *testing.T) {
 // (the thread root is RunWithEscapeHandling, a DefaultPromptTag owner) and returns its
 // value across the thread-join boundary.
 func TestKC11_ThreadCallccInBoundary(t *testing.T) {
+	t.Parallel()
+
 	const code = `
 (let ((t (make-thread
            (lambda ()
@@ -568,6 +606,8 @@ func TestKC11_ThreadCallccInBoundary(t *testing.T) {
 // exit / guard inconsistency (those were already wrong on clean HEAD). Every escape
 // mechanism must yield the entry value 1.
 func TestParameterizeCleanupBeforeAfterThunk(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		body string // escapes out of (parameterize ((p 10)) ...) inside the dynamic-wind body

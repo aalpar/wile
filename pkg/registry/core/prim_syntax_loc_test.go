@@ -25,6 +25,8 @@ import (
 )
 
 func TestSyntaxLocationAccessors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Syntax values with no source context (datum->syntax #f ...) return #f
 		{Name: "source/no-context", Code: `(syntax-source (datum->syntax #f 'x))`, Expected: values.FalseValue},
@@ -53,6 +55,8 @@ func TestSyntaxLocationAccessors(t *testing.T) {
 }
 
 func TestSyntaxLocationAccessorsErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		// Non-syntax values raise errors. Note: '() is *not* a non-syntax
 		// value — after the empty-list duality merge it satisfies
@@ -82,6 +86,8 @@ func TestSyntaxLocationAccessorsErrors(t *testing.T) {
 // EqualTo on the now-deleted *syntaxEmptyListType returned #f, contrary
 // to Chez Scheme 10.3.0 (verified in the REPL).
 func TestEmptyListSyntaxValueChezConformance(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "equal/syntax-empty-vs-empty",
@@ -115,6 +121,8 @@ func TestEmptyListSyntaxValueChezConformance(t *testing.T) {
 }
 
 func TestSyntaxToList(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// datum->syntax on a list creates a SyntaxPair chain
 		{Name: "proper-list/length", Code: `

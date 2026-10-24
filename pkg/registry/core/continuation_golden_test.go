@@ -96,6 +96,8 @@ var continuationGolden = []struct {
 }
 
 func TestContinuationGoldenCorpus(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range continuationGolden {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := testhelpers.RunSchemeCode(t, tc.code)
@@ -110,6 +112,8 @@ func TestContinuationGoldenCorpus(t *testing.T) {
 // same programs. Gated on WILE_WRITE_CORPUS=1 so the normal test run does not write to
 // the source tree; run it explicitly to refresh the cross-scheme corpus.
 func TestGenerateContinuationCorpus(t *testing.T) {
+	t.Parallel()
+
 	if os.Getenv("WILE_WRITE_CORPUS") == "" {
 		t.Skip("set WILE_WRITE_CORPUS=1 to (re)emit test/scheme/generated/continuation-corpus.scm")
 	}

@@ -24,6 +24,8 @@ import (
 // argument counts. The VM enforces arity automatically via
 // machine_context.go ("expected %d arguments, got %d").
 func TestControl_ArityErrors(t *testing.T) {
+	t.Parallel()
+
 	// Fixed 1 arg: call/cc, call-with-current-continuation
 	fixedArity1 := []string{
 		"call/cc",

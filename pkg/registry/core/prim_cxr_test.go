@@ -25,6 +25,8 @@ import (
 )
 
 func TestCxR2Level(t *testing.T) {
+	t.Parallel()
+
 	tests := []testhelpers.SchemeCodeTestCase{
 		// 2-level accessors
 		{
@@ -59,6 +61,8 @@ func TestCxR2Level(t *testing.T) {
 }
 
 func TestCxR3Level(t *testing.T) {
+	t.Parallel()
+
 	tests := []testhelpers.SchemeCodeTestCase{
 		// 3-level accessors
 		{
@@ -113,6 +117,8 @@ func TestCxR3Level(t *testing.T) {
 }
 
 func TestCxR4Level(t *testing.T) {
+	t.Parallel()
+
 	tests := []testhelpers.SchemeCodeTestCase{
 		// 4-level accessors
 		{
@@ -207,6 +213,8 @@ func TestCxR4Level(t *testing.T) {
 }
 
 func TestCxRErrors(t *testing.T) {
+	t.Parallel()
+
 	tests := []testhelpers.SchemeCodeErrorTestCase{
 		// 2-level errors
 		{Name: "caar on non-pair", Code: `(caar 42)`},

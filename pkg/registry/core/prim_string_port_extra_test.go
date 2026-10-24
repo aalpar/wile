@@ -27,6 +27,8 @@ import (
 // String Port Tests (R7RS §6.13.1)
 
 func TestOpenInputStringReadMultiple(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "a b c")))
 			(list (read p) (read p) (read p)))
@@ -41,6 +43,8 @@ func TestOpenInputStringReadMultiple(t *testing.T) {
 }
 
 func TestOpenInputStringWithNestedExpressions(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "(define x 10)")))
 			(read p))
@@ -55,6 +59,8 @@ func TestOpenInputStringWithNestedExpressions(t *testing.T) {
 }
 
 func TestOpenOutputStringMultipleWrites(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(display "Hello" p)
@@ -69,6 +75,8 @@ func TestOpenOutputStringMultipleWrites(t *testing.T) {
 }
 
 func TestOpenOutputStringWithDifferentTypes(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(display "num: " p)

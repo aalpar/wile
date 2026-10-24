@@ -25,6 +25,8 @@ import (
 )
 
 func TestCharPredicate(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -62,6 +64,8 @@ func TestCharPredicate(t *testing.T) {
 }
 
 func TestCharAlphabetic(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -98,6 +102,8 @@ func TestCharAlphabetic(t *testing.T) {
 }
 
 func TestCharNumeric(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -134,6 +140,8 @@ func TestCharNumeric(t *testing.T) {
 }
 
 func TestCharWhitespace(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -175,6 +183,8 @@ func TestCharWhitespace(t *testing.T) {
 }
 
 func TestCharUpperCase(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -211,6 +221,8 @@ func TestCharUpperCase(t *testing.T) {
 }
 
 func TestCharLowerCase(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -247,6 +259,8 @@ func TestCharLowerCase(t *testing.T) {
 }
 
 func TestCharUpcase(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -283,6 +297,8 @@ func TestCharUpcase(t *testing.T) {
 }
 
 func TestCharDowncase(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -319,6 +335,8 @@ func TestCharDowncase(t *testing.T) {
 }
 
 func TestCharFoldcase(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -355,6 +373,8 @@ func TestCharFoldcase(t *testing.T) {
 }
 
 func TestDigitValue(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -399,6 +419,8 @@ func TestDigitValue(t *testing.T) {
 // Per R7RS §6.6, char-foldcase uses Unicode simple case-folding which maps each
 // character to exactly one character.
 func TestCharFoldcaseUnicode(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -463,6 +485,8 @@ func TestCharFoldcaseUnicode(t *testing.T) {
 // Per R7RS §6.6, digit-value returns the numeric value (0-9) for any Unicode
 // character in the Nd (Number, Decimal Digit) category.
 func TestDigitValueUnicode(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -563,6 +587,8 @@ func TestDigitValueUnicode(t *testing.T) {
 // from multiple scripts. Per R7RS §6.6, char-alphabetic? returns #t for
 // characters with the Unicode "Alphabetic" property.
 func TestCharAlphabeticUnicode(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -692,6 +718,8 @@ func TestCharAlphabeticUnicode(t *testing.T) {
 // characters in Unicode categories Nd (decimal digits), Nl (letter
 // numerals), or No (other numerics including fractions and superscripts).
 func TestCharNumericUnicode(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -771,6 +799,8 @@ func TestCharNumericUnicode(t *testing.T) {
 // characters. Per R7RS §6.6, char-whitespace? returns #t for characters
 // with the Unicode "White_Space" property.
 func TestCharWhitespaceUnicode(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -858,6 +888,8 @@ func TestCharWhitespaceUnicode(t *testing.T) {
 // characters from multiple scripts. Per R7RS §6.6, char-upper-case? returns
 // #t for characters with the Unicode "Uppercase" property.
 func TestCharUpperCaseUnicode(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -959,6 +991,8 @@ func TestCharUpperCaseUnicode(t *testing.T) {
 // characters from multiple scripts. Per R7RS §6.6, char-lower-case? returns
 // #t for characters with the Unicode "Lowercase" property.
 func TestCharLowerCaseUnicode(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -1060,6 +1094,8 @@ func TestCharLowerCaseUnicode(t *testing.T) {
 // R7RS specifies locale-independent Unicode operations, so these use
 // Unicode's simple case mappings (not Turkish locale rules).
 func TestCharCaseConversionTurkish(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -1122,6 +1158,8 @@ func TestCharCaseConversionTurkish(t *testing.T) {
 // char-foldcase uses simple (1:1) folding per R7RS §6.6, while
 // string-foldcase uses full folding (ß -> "ss") per R7RS §6.7.
 func TestCharCaseConversionGermanSS(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value

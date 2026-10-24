@@ -27,6 +27,8 @@ import (
 // map Tests (R7RS §6.4 - Mapping over lists)
 
 func TestMapComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Single list
 		{Name: "map double", Code: `(map (lambda (x) (* x 2)) '(1 2 3))`, Expected: values.List(values.NewInteger(2), values.NewInteger(4), values.NewInteger(6))},
@@ -70,6 +72,8 @@ func TestMapComprehensive(t *testing.T) {
 }
 
 func TestMapErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "map non-procedure", Code: `(map 5 '(1 2 3))`},
 		{Name: "map with non-list", Code: `(map + 5)`},
@@ -95,6 +99,8 @@ func TestMapErrors(t *testing.T) {
 // guarantee rather than a conformance point — and it is the property a future
 // allocation optimization is most likely to trade away without noticing.
 func TestMapResultIsFreshAndMutable(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "set-car! on result does not disturb input",
@@ -127,6 +133,8 @@ func TestMapResultIsFreshAndMutable(t *testing.T) {
 }
 
 func TestMapExceptionGuard(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "guard catches exception mid-iteration",

@@ -25,6 +25,8 @@ import (
 )
 
 func TestStringEqual(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -66,6 +68,8 @@ func TestStringEqual(t *testing.T) {
 }
 
 func TestStringLessThan(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -112,6 +116,8 @@ func TestStringLessThan(t *testing.T) {
 }
 
 func TestStringGreaterThan(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -153,6 +159,8 @@ func TestStringGreaterThan(t *testing.T) {
 }
 
 func TestStringLessThanOrEqual(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -194,6 +202,8 @@ func TestStringLessThanOrEqual(t *testing.T) {
 }
 
 func TestStringGreaterThanOrEqual(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -237,6 +247,8 @@ func TestStringGreaterThanOrEqual(t *testing.T) {
 // Case-insensitive string comparison tests
 
 func TestStringCIEqual(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-ci=? equal same case",
@@ -279,6 +291,8 @@ func TestStringCIEqual(t *testing.T) {
 }
 
 func TestStringCILessThan(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-ci<? less",
@@ -321,6 +335,8 @@ func TestStringCILessThan(t *testing.T) {
 }
 
 func TestStringCIGreaterThan(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-ci>? greater",
@@ -358,6 +374,8 @@ func TestStringCIGreaterThan(t *testing.T) {
 }
 
 func TestStringCILessThanOrEqual(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-ci<=? equal same case",
@@ -395,6 +413,8 @@ func TestStringCILessThanOrEqual(t *testing.T) {
 }
 
 func TestStringCIGreaterThanOrEqual(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-ci>=? equal same case",
@@ -435,6 +455,8 @@ func TestStringCIGreaterThanOrEqual(t *testing.T) {
 // NOTE: These tests will fail until string-ci comparisons are made variadic per R7RS
 
 func TestStringCICompareVariadic(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// string-ci=? variadic
 		{
@@ -510,6 +532,8 @@ func TestStringCICompareVariadic(t *testing.T) {
 // These tests exercise the actual registered string comparison primitives
 
 func TestStringEqualScheme(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic equality
 		{
@@ -585,6 +609,8 @@ func TestStringEqualScheme(t *testing.T) {
 }
 
 func TestStringLessThanScheme(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic ordering
 		{
@@ -656,6 +682,8 @@ func TestStringLessThanScheme(t *testing.T) {
 }
 
 func TestStringGreaterThanScheme(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic ordering
 		{
@@ -721,6 +749,8 @@ func TestStringGreaterThanScheme(t *testing.T) {
 }
 
 func TestStringLessOrEqualScheme(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic ordering
 		{
@@ -776,6 +806,8 @@ func TestStringLessOrEqualScheme(t *testing.T) {
 }
 
 func TestStringGreaterOrEqualScheme(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic ordering
 		{
@@ -838,6 +870,8 @@ func TestStringGreaterOrEqualScheme(t *testing.T) {
 // Variadic string comparison tests
 
 func TestStringCompareVariadic(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string=? three equal strings",

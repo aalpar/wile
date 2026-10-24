@@ -23,6 +23,8 @@ import (
 )
 
 func TestBytevectorCopyBang(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name           string
 		code           string
@@ -119,6 +121,8 @@ func TestBytevectorCopyBang(t *testing.T) {
 }
 
 func TestBytevectorCopyBangErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name        string
 		code        string
@@ -184,6 +188,8 @@ func TestBytevectorCopyBangErrors(t *testing.T) {
 }
 
 func TestBytevectorCopyBangReturnValue(t *testing.T) {
+	t.Parallel()
+
 	code := `(let ((to (make-bytevector 5 0))
 	               (from (bytevector 1 2 3)))
 	          (bytevector-copy! to 0 from))`

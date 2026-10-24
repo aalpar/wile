@@ -36,6 +36,8 @@ import (
 // ordinary primitive, answered "caught" on the same input — so the family
 // disagreed with itself over which of its three members could be guarded.
 func TestAssocFamilyMalformedEntryIsCatchable(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "assq on an alist holding the empty list",

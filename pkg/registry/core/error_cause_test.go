@@ -31,6 +31,8 @@ import (
 // Only the user-reachable sites are exercised here; the remaining causeless
 // sites are can't-happen invariants (ErrInternal) not triggerable from Scheme.
 func TestVMErrorsCarrySentinelCause(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string

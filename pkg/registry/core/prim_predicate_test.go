@@ -29,6 +29,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestTypePredicates(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -211,6 +213,8 @@ func TestTypePredicates(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestNumericPredicates(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value

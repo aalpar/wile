@@ -30,6 +30,8 @@ import (
 
 // TestMakeLazyPromise tests the make-lazy-promise / delay-force primitive
 func TestMakeLazyPromise(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -63,6 +65,8 @@ func TestMakeLazyPromise(t *testing.T) {
 
 // TestPromiseMemoization tests that promises memoize their values
 func TestPromiseMemoization(t *testing.T) {
+	t.Parallel()
+
 	// This tests that a promise is only evaluated once
 	// by using a side effect (incrementing a counter)
 	result, err := testhelpers.RunSchemeCode(t, `
@@ -80,6 +84,8 @@ func TestPromiseMemoization(t *testing.T) {
 
 // TestForceIdempotent tests that force is idempotent
 func TestForceIdempotent(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -112,6 +118,8 @@ func TestForceIdempotent(t *testing.T) {
 
 // TestPromiseWithSideEffects tests promises with side effects
 func TestPromiseWithSideEffects(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -137,6 +145,8 @@ func TestPromiseWithSideEffects(t *testing.T) {
 
 // TestPromiseQEdgeCases tests promise? with edge cases
 func TestPromiseQEdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -182,6 +192,8 @@ func TestPromiseQEdgeCases(t *testing.T) {
 
 // TestForceWithComplexExpressions tests force with complex expressions
 func TestForceWithComplexExpressions(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -216,6 +228,8 @@ func TestForceWithComplexExpressions(t *testing.T) {
 // TestMakePromiseIdentity tests R7RS §4.2.5 make-promise identity behavior
 // R7RS: "If obj is already a promise, it is returned."
 func TestMakePromiseIdentity(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -249,6 +263,8 @@ func TestMakePromiseIdentity(t *testing.T) {
 // to evaluate to a promise. This idiom is needed for proper tail recursion in
 // lazy algorithms using delay and force."
 func TestDelayForceTailCall(t *testing.T) {
+	t.Parallel()
+
 	// This tests that delay-force enables iterative lazy algorithms
 	// without stack overflow. R7RS example: lazy-filter uses delay-force
 	// for proper tail recursion.
@@ -307,6 +323,8 @@ func TestDelayForceTailCall(t *testing.T) {
 // R7RS §4.2.5: If the body of a delay raises an exception, the promise remains
 // unforced and subsequent force calls re-evaluate the thunk.
 func TestForceExceptionInDelayBody(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name    string
 		code    string
@@ -353,6 +371,8 @@ func TestForceExceptionInDelayBody(t *testing.T) {
 // R7RS §4.2.5: force must recursively force promises returned by promise
 // bodies. This verifies that chains of delay-wrapped promises resolve correctly.
 func TestForceCircularPromise(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -399,6 +419,8 @@ func TestForceCircularPromise(t *testing.T) {
 // 100k links is the figure the conversion was measured against; the pre-conversion
 // Go recursion also handled it, so this is a no-regression pin, not a new ceiling.
 func TestForceDeepDelayForceChain(t *testing.T) {
+	t.Parallel()
+
 	code := `(let ()
 	           (define (mkchain n)
 	             (if (= n 0)
@@ -425,6 +447,8 @@ func TestForceDeepDelayForceChain(t *testing.T) {
 // errors. If Wile ever adopts Chez's polarity it should be a decision recorded
 // here, not a side effect of how a boundary was reified.
 func TestForceMultipleValuesTakesTheFirst(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "two values from a delay thunk", Code: `(force (delay (values 1 2)))`, Expected: values.NewInteger(1)},
 		{Name: "zero values from a delay thunk", Code: `(force (delay (values)))`, Expected: values.Void},
@@ -441,6 +465,8 @@ func TestForceMultipleValuesTakesTheFirst(t *testing.T) {
 
 // TestMakePromiseEdgeCases tests make-promise edge cases
 func TestMakePromiseEdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

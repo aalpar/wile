@@ -28,6 +28,8 @@ import (
 )
 
 func TestOpenInputFile(t *testing.T) {
+	t.Parallel()
+
 	f, err := os.CreateTemp("", "test*.txt")
 	qt.Assert(t, err, qt.IsNil)
 	_, err = f.WriteString("hello world")
@@ -45,6 +47,8 @@ func TestOpenInputFile(t *testing.T) {
 }
 
 func TestOpenInputFileAndRead(t *testing.T) {
+	t.Parallel()
+
 	f, err := os.CreateTemp("", "test*.txt")
 	qt.Assert(t, err, qt.IsNil)
 	_, err = f.WriteString("(+ 1 2)")
@@ -64,6 +68,8 @@ func TestOpenInputFileAndRead(t *testing.T) {
 }
 
 func TestOpenOutputFile(t *testing.T) {
+	t.Parallel()
+
 	tmpfile := filepath.Join(os.TempDir(), "scheme_test_output.txt")
 	defer os.Remove(tmpfile) //nolint:errcheck
 
@@ -81,6 +87,8 @@ func TestOpenOutputFile(t *testing.T) {
 }
 
 func TestOpenOutputFileWithMultipleWrites(t *testing.T) {
+	t.Parallel()
+
 	tmpfile := filepath.Join(os.TempDir(), "scheme_test_output2.txt")
 	defer os.Remove(tmpfile) //nolint:errcheck
 
@@ -100,6 +108,8 @@ func TestOpenOutputFileWithMultipleWrites(t *testing.T) {
 }
 
 func TestClosePortWithFileInputPort(t *testing.T) {
+	t.Parallel()
+
 	f, err := os.CreateTemp("", "test*.txt")
 	qt.Assert(t, err, qt.IsNil)
 	_, err = f.WriteString("test data")
@@ -117,6 +127,8 @@ func TestClosePortWithFileInputPort(t *testing.T) {
 }
 
 func TestClosePortWithFileOutputPort(t *testing.T) {
+	t.Parallel()
+
 	tmpfile := filepath.Join(os.TempDir(), "scheme_test_close_output.txt")
 	defer os.Remove(tmpfile) //nolint:errcheck
 
@@ -134,6 +146,8 @@ func TestClosePortWithFileOutputPort(t *testing.T) {
 }
 
 func TestClosePortExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "close-port on string input port",

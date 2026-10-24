@@ -29,6 +29,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestComplexPredicate(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -76,6 +78,8 @@ func TestComplexPredicate(t *testing.T) {
 }
 
 func TestRealPredicate(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -128,6 +132,8 @@ func TestRealPredicate(t *testing.T) {
 }
 
 func TestRationalPredicate(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -173,6 +179,8 @@ func TestRationalPredicate(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestFeatures(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, "(features)")
 	qt.Assert(t, err, qt.IsNil)
 
@@ -183,6 +191,8 @@ func TestFeatures(t *testing.T) {
 }
 
 func TestJiffiesPerSecond(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, "(jiffies-per-second)")
 	qt.Assert(t, err, qt.IsNil)
 
@@ -195,6 +205,8 @@ func TestJiffiesPerSecond(t *testing.T) {
 }
 
 func TestCurrentJiffy(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, "(current-jiffy)")
 	qt.Assert(t, err, qt.IsNil)
 
@@ -208,6 +220,8 @@ func TestCurrentJiffy(t *testing.T) {
 }
 
 func TestCurrentSecond(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, "(current-second)")
 	qt.Assert(t, err, qt.IsNil)
 
@@ -225,6 +239,8 @@ func TestCurrentSecond(t *testing.T) {
 }
 
 func TestCurrentJiffyMonotonic(t *testing.T) {
+	t.Parallel()
+
 	// Test that current-jiffy is monotonically increasing
 	code := `
 		(begin
@@ -238,6 +254,8 @@ func TestCurrentJiffyMonotonic(t *testing.T) {
 }
 
 func TestCurrentSecondReasonable(t *testing.T) {
+	t.Parallel()
+
 	// Test that current-second returns a reasonable Unix timestamp
 	// (greater than Jan 1, 2020 timestamp: 1577836800)
 	code := "(> (current-second) 1577836800)"
@@ -251,6 +269,8 @@ func TestCurrentSecondReasonable(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestNotPredicate(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -297,6 +317,8 @@ func TestNotPredicate(t *testing.T) {
 }
 
 func TestListPredicateWithImproperList(t *testing.T) {
+	t.Parallel()
+
 	// Test that list? correctly identifies improper lists
 	code := "(list? '(1 . 2))"
 	result, err := testhelpers.RunSchemeCode(t, code)
@@ -305,6 +327,8 @@ func TestListPredicateWithImproperList(t *testing.T) {
 }
 
 func TestListPredicateWithProperList(t *testing.T) {
+	t.Parallel()
+
 	code := "(list? '(1 2 3))"
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
@@ -312,6 +336,8 @@ func TestListPredicateWithProperList(t *testing.T) {
 }
 
 func TestListPredicateWithEmptyList(t *testing.T) {
+	t.Parallel()
+
 	code := "(list? '())"
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
@@ -319,6 +345,8 @@ func TestListPredicateWithEmptyList(t *testing.T) {
 }
 
 func TestProcedurePredicateComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// R7RS §6.1: procedure? returns #t for all procedure types
 		{Name: "builtin", Code: `(procedure? +)`, Expected: values.TrueValue},

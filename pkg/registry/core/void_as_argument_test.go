@@ -32,6 +32,8 @@ import (
 // slot from the eval stack. The fix: all void-returning primitives use
 // mc.SetValue(values.Void) to push exactly one value.
 func TestVoidReturningExpressionAsArgument(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []testhelpers.SchemeCodeTestCase{

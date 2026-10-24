@@ -24,6 +24,8 @@ import (
 )
 
 func TestNumLt(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -90,6 +92,8 @@ func TestNumLt(t *testing.T) {
 }
 
 func TestNumLe(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

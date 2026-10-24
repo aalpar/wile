@@ -30,6 +30,8 @@ import (
 // with-output-to-file Tests (R7RS §6.13.1)
 
 func TestWithOutputToFile(t *testing.T) {
+	t.Parallel()
+
 	tmpfile := filepath.Join(os.TempDir(), "test_wotf.txt")
 	defer os.Remove(tmpfile) //nolint:errcheck
 
@@ -46,6 +48,8 @@ func TestWithOutputToFile(t *testing.T) {
 }
 
 func TestWithOutputToFileReturnsResult(t *testing.T) {
+	t.Parallel()
+
 	tmpfile := filepath.Join(os.TempDir(), "test_wotf_return.txt")
 	defer os.Remove(tmpfile) //nolint:errcheck
 
@@ -60,6 +64,8 @@ func TestWithOutputToFileReturnsResult(t *testing.T) {
 }
 
 func TestWithOutputToFileErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "wrong type for filename",

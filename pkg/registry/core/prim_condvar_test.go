@@ -29,6 +29,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestConditionVariableQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -70,6 +72,8 @@ func TestConditionVariableQ(t *testing.T) {
 }
 
 func TestMakeConditionVariable(t *testing.T) {
+	t.Parallel()
+
 	// make-condition-variable should return a condition-variable
 	result, err := testhelpers.RunSchemeCode(t, "(condition-variable? (make-condition-variable))")
 	qt.Assert(t, err, qt.IsNil)
@@ -77,6 +81,8 @@ func TestMakeConditionVariable(t *testing.T) {
 }
 
 func TestMakeConditionVariableWithName(t *testing.T) {
+	t.Parallel()
+
 	code := `(condition-variable-name (make-condition-variable "test-cv"))`
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
@@ -84,6 +90,8 @@ func TestMakeConditionVariableWithName(t *testing.T) {
 }
 
 func TestConditionVariableName(t *testing.T) {
+	t.Parallel()
+
 	code := `(condition-variable-name (make-condition-variable "my-cv"))`
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
@@ -91,11 +99,15 @@ func TestConditionVariableName(t *testing.T) {
 }
 
 func TestConditionVariableNameError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(condition-variable-name 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestConditionVariableSpecific(t *testing.T) {
+	t.Parallel()
+
 	// Initially condition-variable-specific returns void
 	code := `(void? (condition-variable-specific (make-condition-variable)))`
 	result, err := testhelpers.RunSchemeCode(t, code)
@@ -104,6 +116,8 @@ func TestConditionVariableSpecific(t *testing.T) {
 }
 
 func TestConditionVariableSpecificSet(t *testing.T) {
+	t.Parallel()
+
 	code := `
 		(let ((cv (make-condition-variable)))
 			(condition-variable-specific-set! cv 'my-data)
@@ -115,16 +129,22 @@ func TestConditionVariableSpecificSet(t *testing.T) {
 }
 
 func TestConditionVariableSpecificError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(condition-variable-specific 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestConditionVariableSpecificSetError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(condition-variable-specific-set! 42 'data)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestConditionVariableSignal(t *testing.T) {
+	t.Parallel()
+
 	// signal should return void
 	code := `
 		(let ((cv (make-condition-variable)))
@@ -136,11 +156,15 @@ func TestConditionVariableSignal(t *testing.T) {
 }
 
 func TestConditionVariableSignalError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(condition-variable-signal! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestConditionVariableBroadcast(t *testing.T) {
+	t.Parallel()
+
 	// broadcast should return void
 	code := `
 		(let ((cv (make-condition-variable)))
@@ -152,6 +176,8 @@ func TestConditionVariableBroadcast(t *testing.T) {
 }
 
 func TestConditionVariableBroadcastError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(condition-variable-broadcast! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }

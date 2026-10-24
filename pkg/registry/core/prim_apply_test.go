@@ -28,6 +28,8 @@ import (
 // apply Tests (R7RS §6.4 - Function application)
 
 func TestApplyComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic apply
 		{Name: "apply + to list", Code: `(apply + '(1 2 3))`, Expected: values.NewInteger(6)},
@@ -74,6 +76,8 @@ func TestApplyComprehensive(t *testing.T) {
 // TestApplyMultipleValues tests that apply correctly propagates multiple values.
 // R7RS §6.4: apply should preserve multiple return values from the applied procedure.
 func TestApplyMultipleValues(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// apply values should return multiple values
 		{
@@ -120,6 +124,8 @@ func TestApplyMultipleValues(t *testing.T) {
 // The outer call-with-continuation-prompt delimits the continuation so it only
 // captures the dynamic-wind section, preventing infinite re-invocation.
 func TestApplyWindingStackInheritance(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "baseline: call/cc directly in dynamic-wind",
@@ -246,6 +252,8 @@ func TestApplyWindingStackInheritance(t *testing.T) {
 }
 
 func TestApplyErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "apply non-procedure", Code: `(apply 5 '(1 2))`},
 		{Name: "apply without list", Code: `(apply + 1 2 3)`},
@@ -268,6 +276,8 @@ func TestApplyErrors(t *testing.T) {
 // tail-position apply emits OpUnpackListToStack + Pull + Apply bytecode,
 // running in constant Go stack space.
 func TestApplyTailRecursion_NoStackOverflow(t *testing.T) {
+	t.Parallel()
+
 	code := `
 		(begin
 			(define (f n)
@@ -293,6 +303,8 @@ func TestApplyTailRecursion_NoStackOverflow(t *testing.T) {
 // These cases exercise paths not covered by TestApplyComprehensive:
 // non-tail position, first-class apply, and call/cc interaction.
 func TestCompiledApply(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "non-tail position",
@@ -336,6 +348,8 @@ func TestCompiledApply(t *testing.T) {
 
 // TestCompiledApply_Errors tests error conditions for the compiled apply path.
 func TestCompiledApply_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "improper list", Code: `(apply + '(1 . 2))`},
 		{Name: "non-list final arg", Code: `(apply + 42)`},

@@ -29,6 +29,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestPromiseQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -70,6 +72,8 @@ func TestPromiseQ(t *testing.T) {
 }
 
 func TestMakePromise(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -106,6 +110,8 @@ func TestMakePromise(t *testing.T) {
 }
 
 func TestForce(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -152,6 +158,8 @@ func TestForce(t *testing.T) {
 }
 
 func TestDelayForce(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

@@ -26,6 +26,8 @@ import (
 )
 
 func TestNullEnvironment(t *testing.T) {
+	t.Parallel()
+
 	tests := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "null-environment version 5",
@@ -50,6 +52,8 @@ func TestNullEnvironment(t *testing.T) {
 }
 
 func TestSchemeReportEnvironment(t *testing.T) {
+	t.Parallel()
+
 	tests := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "scheme-report-environment version 5",
@@ -74,6 +78,8 @@ func TestSchemeReportEnvironment(t *testing.T) {
 }
 
 func TestEnvironmentPrimitiveError(t *testing.T) {
+	t.Parallel()
+
 	// Test that (environment) with a library import fails when no library
 	// registry is configured (test env doesn't have one).
 	_, err := testhelpers.RunSchemeCode(t, `(environment '(scheme base))`)
@@ -81,6 +87,8 @@ func TestEnvironmentPrimitiveError(t *testing.T) {
 }
 
 func TestEvalWithEnvironments(t *testing.T) {
+	t.Parallel()
+
 	tests := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "eval with scheme-report-environment",
@@ -104,6 +112,8 @@ func TestEvalWithEnvironments(t *testing.T) {
 }
 
 func TestEnvironmentQ(t *testing.T) {
+	t.Parallel()
+
 	trueTests := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "interaction-environment is env", Code: `(environment? (interaction-environment))`},
 	}
@@ -125,6 +135,8 @@ func TestEnvironmentQ(t *testing.T) {
 }
 
 func TestEnvironmentBoundNames(t *testing.T) {
+	t.Parallel()
+
 	trueTests := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "result is a pair", Code: `(pair? (environment-bound-names (interaction-environment)))`},
 		{Name: "elements are symbols", Code: `(symbol? (car (environment-bound-names (interaction-environment))))`},
@@ -146,6 +158,8 @@ func TestEnvironmentBoundNames(t *testing.T) {
 }
 
 func TestEnvironmentRef(t *testing.T) {
+	t.Parallel()
+
 	trueTests := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "lookup + is procedure", Code: `(procedure? (environment-ref (interaction-environment) '+))`},
 	}
@@ -168,6 +182,8 @@ func TestEnvironmentRef(t *testing.T) {
 }
 
 func TestEnvironmentBoundQ(t *testing.T) {
+	t.Parallel()
+
 	trueTests := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "bound symbol", Code: `(environment-bound? (interaction-environment) '+)`},
 	}

@@ -27,6 +27,8 @@ import (
 // Combined Tests - Integration scenarios for control flow primitives
 
 func TestControlFlowCombinations(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// map with apply
 		{

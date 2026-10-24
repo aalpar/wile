@@ -25,6 +25,8 @@ import (
 )
 
 func TestLcmExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -76,6 +78,8 @@ func TestLcmExtended(t *testing.T) {
 }
 
 func TestGcdExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -122,6 +126,8 @@ func TestGcdExtended(t *testing.T) {
 }
 
 func TestNumGe(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

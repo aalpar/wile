@@ -29,6 +29,8 @@ import (
 // TestStrings_ArityErrors verifies that fixed-arity and minimum-arity string
 // primitives reject wrong argument counts.
 func TestStrings_ArityErrors(t *testing.T) {
+	t.Parallel()
+
 	// Fixed-arity: too few and too many args
 	fixedArityErrors := []struct {
 		name string
@@ -88,6 +90,8 @@ func TestStrings_ArityErrors(t *testing.T) {
 // "not an integer" error (not "not a number") when passed non-integer
 // start/end. See F2 in the strings audit.
 func TestSubstring_IntegerSentinel(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-integer start", Code: `(substring "hello" "0" 3)`},
 		{Name: "non-integer end", Code: `(substring "hello" 0 "3")`},
@@ -109,6 +113,8 @@ func TestSubstring_IntegerSentinel(t *testing.T) {
 // helpers.ParseOptionalArg / ParseOptionalStartEnd did not check the rest
 // list's tail. See F1 in the strings audit.
 func TestStrings_ExcessArgRejection(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		// make-string: k [char] — at most 2 args
 		{Name: "make-string three args", Code: `(make-string 3 #\a #\b)`},
@@ -135,6 +141,8 @@ func TestStrings_ExcessArgRejection(t *testing.T) {
 // TestStrings_VariadicZeroArgs verifies that variadic string primitives
 // accepting zero arguments produce the correct results per R7RS.
 func TestStrings_VariadicZeroArgs(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string

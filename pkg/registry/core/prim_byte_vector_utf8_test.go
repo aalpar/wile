@@ -28,6 +28,8 @@ import (
 // TestStringToUtf8CharacterIndices tests that string->utf8 uses character
 // (not byte) indices for start/end parameters per R7RS §6.9.
 func TestStringToUtf8CharacterIndices(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	// Test string: "héllo"
@@ -121,6 +123,8 @@ func TestStringToUtf8CharacterIndices(t *testing.T) {
 
 // TestStringToUtf8EdgeCases tests edge cases for string->utf8.
 func TestStringToUtf8EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -184,6 +188,8 @@ func TestStringToUtf8EdgeCases(t *testing.T) {
 // TestUtf8ToStringInvalid tests that utf8->string raises an error when
 // the bytevector is not well-formed UTF-8 (R7RS §6.9).
 func TestUtf8ToStringInvalid(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "lone continuation byte", Code: `(utf8->string #u8(#x80))`},
 		{Name: "two lone continuation bytes", Code: `(utf8->string #u8(255 254 253))`},
@@ -204,6 +210,8 @@ func TestUtf8ToStringInvalid(t *testing.T) {
 
 // TestStringToUtf8RoundTrip verifies round-trip consistency.
 func TestStringToUtf8RoundTrip(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []struct {

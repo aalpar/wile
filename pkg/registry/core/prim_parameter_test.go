@@ -34,6 +34,8 @@ import (
 // =============================================================================
 
 func TestMakeParameter(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -87,6 +89,8 @@ func TestMakeParameter(t *testing.T) {
 }
 
 func TestMakeParameterWithConverter(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -122,6 +126,8 @@ func TestMakeParameterWithConverter(t *testing.T) {
 }
 
 func TestMakeParameterErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "converter not a procedure",
@@ -149,6 +155,8 @@ func TestMakeParameterErrors(t *testing.T) {
 // =============================================================================
 
 func TestParameterize(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -204,6 +212,8 @@ func TestParameterize(t *testing.T) {
 }
 
 func TestExceptionHandlerSeesParameterizeAtRaise(t *testing.T) {
+	t.Parallel()
+
 	// R7RS §6.11: raise-continuable invokes the handler "with the same dynamic
 	// environment as the call to raise-continuable" (only the current-handler binding
 	// is swapped). The call is inside (parameterize ((p 'modified)) ...), so the
@@ -225,6 +235,8 @@ func TestExceptionHandlerSeesParameterizeAtRaise(t *testing.T) {
 }
 
 func TestParameterizeRestoredForGuardClause(t *testing.T) {
+	t.Parallel()
+
 	// The complementary property: a guard CLAUSE body runs at the guard form, OUTSIDE
 	// the parameterize the raise was inside — so by then the parameterize extent has
 	// been exited and the clause observes the restored value 'original. (The guard
@@ -241,6 +253,8 @@ func TestParameterizeRestoredForGuardClause(t *testing.T) {
 }
 
 func TestParameterizeWithConverter(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -269,6 +283,8 @@ func TestParameterizeWithConverter(t *testing.T) {
 // =============================================================================
 
 func TestParameterAsProcedure(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -305,6 +321,8 @@ func TestParameterAsProcedure(t *testing.T) {
 // =============================================================================
 
 func TestParameterMutationViaCall(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -350,6 +368,8 @@ func TestParameterMutationViaCall(t *testing.T) {
 // =============================================================================
 
 func TestParameterConverterErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -396,6 +416,8 @@ func TestParameterConverterErrors(t *testing.T) {
 // =============================================================================
 
 func TestDeeplyNestedParameterize(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -450,6 +472,8 @@ func TestDeeplyNestedParameterize(t *testing.T) {
 // =============================================================================
 
 func TestParameterizeWithCallCC(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -490,6 +514,8 @@ func TestParameterizeWithCallCC(t *testing.T) {
 // =============================================================================
 
 func TestCurrentPortParameters(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -521,6 +547,8 @@ func TestCurrentPortParameters(t *testing.T) {
 // =============================================================================
 
 func TestParameterizeConverterNoDoubleApply(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -581,6 +609,8 @@ func TestParameterizeConverterNoDoubleApply(t *testing.T) {
 // in effect *before* the parameterize, then bound. A later clause's value must NOT
 // observe an earlier clause's freshly-installed binding.
 func TestParameterizeValueEvalOrder(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

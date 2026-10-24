@@ -31,6 +31,8 @@ import (
 // load-order fix their free-id snapshot was a nil pin that a use-site redefine
 // captured. `case`->`memv` (a Go primitive, pinned) is the positive control.
 func TestBootstrapMacroReferentialTransparency(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "unless not-shadow does not capture (skips body)",

@@ -26,6 +26,8 @@ import (
 // 5000000000 > 2^32 (4294967296) and still fits in int64, so it reaches the
 // guard rather than promoting to a bignum.
 func TestMakeConstructors_RejectOversized(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "make-vector", Code: `(make-vector 5000000000)`},
 		{Name: "make-string", Code: `(make-string 5000000000)`},
@@ -44,6 +46,8 @@ func TestMakeConstructors_RejectOversized(t *testing.T) {
 
 // Counts within the limit still allocate normally.
 func TestMakeConstructors_AllowNormal(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "make-vector", Code: `(vector-length (make-vector 8))`},
 		{Name: "make-string", Code: `(string-length (make-string 8 #\a))`},

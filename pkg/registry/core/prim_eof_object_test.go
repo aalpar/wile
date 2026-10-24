@@ -27,6 +27,8 @@ import (
 // EOF Object Tests (R7RS §6.13.2)
 
 func TestEofObjectFromRead(t *testing.T) {
+	t.Parallel()
+
 	// R7RS §6.13.2: "If an end of file is encountered in the input before any
 	// characters are found that can begin an object, then an end-of-file object
 	// is returned."
@@ -39,6 +41,8 @@ func TestEofObjectFromRead(t *testing.T) {
 }
 
 func TestEofObjectFromReadAfterData(t *testing.T) {
+	t.Parallel()
+
 	// Reading past the end of data returns eof-object
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "42")))
@@ -50,6 +54,8 @@ func TestEofObjectFromReadAfterData(t *testing.T) {
 }
 
 func TestEofObjectFromReadCharAfterRead(t *testing.T) {
+	t.Parallel()
+
 	// After read consumes data, read-char also returns eof-object
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "42")))
@@ -61,6 +67,8 @@ func TestEofObjectFromReadCharAfterRead(t *testing.T) {
 }
 
 func TestEofObjectFromReadMultipleEof(t *testing.T) {
+	t.Parallel()
+
 	// Multiple reads past EOF all return eof-object
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "")))
@@ -76,6 +84,8 @@ func TestEofObjectFromReadMultipleEof(t *testing.T) {
 }
 
 func TestEofObjectUniqueness(t *testing.T) {
+	t.Parallel()
+
 	// There is only one eof-object
 	result, err := testhelpers.RunSchemeCode(t, `(eq? (eof-object) (eof-object))`)
 	qt.Assert(t, err, qt.IsNil)
@@ -83,12 +93,16 @@ func TestEofObjectUniqueness(t *testing.T) {
 }
 
 func TestEofObjectEqv(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `(eqv? (eof-object) (eof-object))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestEofObjectEqual(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `(equal? (eof-object) (eof-object))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)

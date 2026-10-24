@@ -22,6 +22,8 @@ import (
 // inside an unterminated compound datum raises a read-error?-satisfying
 // exception rather than returning the EOF object.
 func TestReadMidParseEOFRaisesReadError(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "unterminated open paren",

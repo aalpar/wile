@@ -25,6 +25,8 @@ import (
 )
 
 func TestNativeErrorEnrichment(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "error-object-source returns string or false",
@@ -109,6 +111,8 @@ func TestNativeErrorEnrichment(t *testing.T) {
 }
 
 func TestErrorContext_Primitives(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "current-error-context outside handler",
@@ -206,6 +210,8 @@ func TestErrorContext_Primitives(t *testing.T) {
 }
 
 func TestCurrentStackTrace(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "returns a non-empty list",

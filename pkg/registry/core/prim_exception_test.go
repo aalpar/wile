@@ -29,6 +29,8 @@ import (
 // =============================================================================
 
 func TestWithExceptionHandler(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -74,6 +76,8 @@ func TestWithExceptionHandler(t *testing.T) {
 }
 
 func TestWithExceptionHandlerContinuable(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -105,6 +109,8 @@ func TestWithExceptionHandlerContinuable(t *testing.T) {
 }
 
 func TestWithExceptionHandlerNested(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -132,6 +138,8 @@ func TestWithExceptionHandlerNested(t *testing.T) {
 }
 
 func TestWithExceptionHandlerNonContinuable(t *testing.T) {
+	t.Parallel()
+
 	// Non-continuable exceptions (from raise) require the handler to
 	// not return. If it returns, an error is raised.
 	// We test that raise is non-continuable by verifying the error.
@@ -144,6 +152,8 @@ func TestWithExceptionHandlerNonContinuable(t *testing.T) {
 }
 
 func TestWithExceptionHandlerErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "thunk is not a procedure",
@@ -164,6 +174,8 @@ func TestWithExceptionHandlerErrors(t *testing.T) {
 // =============================================================================
 
 func TestRaise(t *testing.T) {
+	t.Parallel()
+
 	// raise creates a non-continuable exception
 	// The handler cannot return from a non-continuable exception
 	_, err := testhelpers.RunSchemeCode(t, `
@@ -176,6 +188,8 @@ func TestRaise(t *testing.T) {
 }
 
 func TestRaiseWithCallCC(t *testing.T) {
+	t.Parallel()
+
 	// Use call/cc to escape from non-continuable exception handler
 	result, err := testhelpers.RunSchemeCode(t, `
 		(call/cc
@@ -196,6 +210,8 @@ func TestRaiseWithCallCC(t *testing.T) {
 // handler become the values returned by raise-continuable" (plural). A handler
 // returning (values 1 2 3) must not collapse to a single value.
 func TestRaiseContinuableMultipleValues(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(call-with-values
 			(lambda ()
@@ -208,6 +224,8 @@ func TestRaiseContinuableMultipleValues(t *testing.T) {
 }
 
 func TestRaiseContinuable(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -264,6 +282,8 @@ func TestRaiseContinuable(t *testing.T) {
 // =============================================================================
 
 func TestError(t *testing.T) {
+	t.Parallel()
+
 	// error creates an error object and raises it as non-continuable
 	// We use call/cc to escape from the handler
 	tcs := []struct {
@@ -301,6 +321,8 @@ func TestError(t *testing.T) {
 }
 
 func TestErrorWithIrritants(t *testing.T) {
+	t.Parallel()
+
 	// Test error with irritants using call/cc to escape
 	result, err := testhelpers.RunSchemeCode(t, `
 		(call/cc
@@ -315,6 +337,8 @@ func TestErrorWithIrritants(t *testing.T) {
 }
 
 func TestErrorErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "error with non-string message",
@@ -340,6 +364,8 @@ func TestErrorErrors(t *testing.T) {
 // rides as an irritant — not a lossy %T Go-type string. Each case self-checks and
 // returns #t.
 func TestErrorTypeCheckIsCatchableCondition(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -383,6 +409,8 @@ func TestErrorTypeCheckIsCatchableCondition(t *testing.T) {
 // =============================================================================
 
 func TestErrorObjectQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -448,6 +476,8 @@ func TestErrorObjectQ(t *testing.T) {
 // =============================================================================
 
 func TestErrorObjectMessage(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -483,6 +513,8 @@ func TestErrorObjectMessage(t *testing.T) {
 }
 
 func TestErrorObjectMessageErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "error-object-message on integer",
@@ -507,6 +539,8 @@ func TestErrorObjectMessageErrors(t *testing.T) {
 // =============================================================================
 
 func TestErrorObjectIrritants(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -551,6 +585,8 @@ func TestErrorObjectIrritants(t *testing.T) {
 }
 
 func TestErrorObjectIrritantsErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "error-object-irritants on integer",
@@ -583,6 +619,8 @@ func TestErrorObjectIrritantsErrors(t *testing.T) {
 // the same dynamic environment as the call to raise, except that the current
 // exception handler is the one that was in place when the handler was installed."
 func TestRaiseNonContinuableR7RS(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -613,6 +651,8 @@ func TestRaiseNonContinuableR7RS(t *testing.T) {
 // R7RS: "If the handler returns, the returned values become the values returned by
 // the call to raise-continuable."
 func TestRaiseContinuableR7RS(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -654,6 +694,8 @@ func TestRaiseContinuableR7RS(t *testing.T) {
 // R7RS: Handler's return value becomes the value of raise-continuable,
 // and execution continues from that point.
 func TestRaiseContinuableResumption(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -731,6 +773,8 @@ func TestRaiseContinuableResumption(t *testing.T) {
 // R7RS: "When an exception handler is invoked, the current exception handler
 // is the one that was in place when the handler was installed."
 func TestExceptionHandlerChain(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -765,6 +809,8 @@ func TestExceptionHandlerChain(t *testing.T) {
 // implementation-defined object which encapsulates the information provided
 // by message, as well as any objs, known as the irritants."
 func TestErrorR7RS(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -801,6 +847,8 @@ func TestErrorR7RS(t *testing.T) {
 
 // TestGuard tests the guard syntax for exception handling
 func TestGuard(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -887,6 +935,8 @@ func TestGuard(t *testing.T) {
 // of test to it. The test must return a useful truthy value (not just #t),
 // since that value is what gets passed to the procedure.
 func TestGuardArrowClause(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -920,6 +970,8 @@ func TestGuardArrowClause(t *testing.T) {
 
 // TestGuardReraise tests that guard re-raises when no clause matches (R7RS §4.2.7)
 func TestGuardReraise(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -960,6 +1012,8 @@ func TestGuardReraise(t *testing.T) {
 
 // TestGuardWithError tests guard with error objects (R7RS §4.2.7, §6.11)
 func TestGuardWithError(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -999,6 +1053,8 @@ func TestGuardWithError(t *testing.T) {
 // TestGuardNested tests nested guard expressions (R7RS §4.2.7)
 // Note: Some nested guard patterns may have limitations due to continuation semantics.
 func TestGuardNested(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -1047,6 +1103,8 @@ func TestGuardNested(t *testing.T) {
 // itself raises an exception. R7RS: "the current exception handler is the one
 // that was in place when the handler being called was installed."
 func TestExceptionInHandler(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -1158,6 +1216,8 @@ func TestExceptionInHandler(t *testing.T) {
 // TestGuardDeeplyNested tests deeply nested guard forms with exceptions
 // propagating through multiple levels.
 func TestGuardDeeplyNested(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -1285,6 +1345,8 @@ func TestGuardDeeplyNested(t *testing.T) {
 // (values 1 2) in the body causes a wrong-argument-count error. This test
 // pins the correct behavior after the fix.
 func TestGuardBodyMultipleValues(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -1332,6 +1394,8 @@ func TestGuardBodyMultipleValues(t *testing.T) {
 
 // TestFileErrorPredicate tests the file-error? predicate (R7RS §6.11)
 func TestFileErrorPredicate(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -1365,6 +1429,8 @@ func TestFileErrorPredicate(t *testing.T) {
 
 // TestReadErrorPredicate tests the read-error? predicate (R7RS §6.11)
 func TestReadErrorPredicate(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

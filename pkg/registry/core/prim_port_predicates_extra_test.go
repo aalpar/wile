@@ -27,6 +27,8 @@ import (
 // Port Predicate Edge Case Tests (R7RS §6.13.1)
 
 func TestPortPredicatesWithEmptyList(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -59,6 +61,8 @@ func TestPortPredicatesWithEmptyList(t *testing.T) {
 }
 
 func TestPortPredicatesWithVector(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

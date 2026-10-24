@@ -25,6 +25,8 @@ import (
 )
 
 func TestEval(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -61,6 +63,8 @@ func TestEval(t *testing.T) {
 }
 
 func TestInteractionEnvironment(t *testing.T) {
+	t.Parallel()
+
 	t.Run("returns environment", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, "(interaction-environment)")
 		qt.Assert(t, err, qt.IsNil)
@@ -69,6 +73,8 @@ func TestInteractionEnvironment(t *testing.T) {
 }
 
 func TestEvalExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "eval subtraction",
@@ -102,6 +108,8 @@ func TestEvalExtended(t *testing.T) {
 
 // TestEvalWithLambda tests eval with lambda expressions
 func TestEvalWithLambda(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "eval lambda application",
@@ -136,6 +144,8 @@ func TestEvalWithLambda(t *testing.T) {
 
 // TestEvalErrors tests error conditions for eval
 func TestEvalErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "eval with non-environment", Code: `(eval '(+ 1 2) 42)`},
 		{Name: "eval with string env", Code: `(eval '(+ 1 2) "env")`},
@@ -155,6 +165,8 @@ func TestEvalErrors(t *testing.T) {
 
 // TestSchemeReportEnvironmentErrors tests error conditions
 func TestSchemeReportEnvironmentErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "unsupported version", Code: `(scheme-report-environment 6)`},
 		{Name: "non-integer version", Code: `(scheme-report-environment "5")`},
@@ -175,6 +187,8 @@ func TestSchemeReportEnvironmentErrors(t *testing.T) {
 
 // TestNullEnvironmentErrors tests error conditions
 func TestNullEnvironmentErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "unsupported version", Code: `(null-environment 6)`},
 		{Name: "non-integer version", Code: `(null-environment "5")`},
@@ -194,6 +208,8 @@ func TestNullEnvironmentErrors(t *testing.T) {
 
 // TestCompile tests the compile primitive
 func TestCompile(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -241,6 +257,8 @@ func TestCompile(t *testing.T) {
 
 // TestSyntaxToDatum tests syntax->datum
 func TestSyntaxToDatum(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -286,6 +304,8 @@ func TestSyntaxToDatum(t *testing.T) {
 
 // TestDatumToSyntax tests datum->syntax
 func TestDatumToSyntax(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -324,6 +344,8 @@ func TestDatumToSyntax(t *testing.T) {
 
 // TestDatumToSyntaxErrors tests error conditions
 func TestDatumToSyntaxErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "invalid template - number", Code: `(datum->syntax 42 'foo)`},
 		{Name: "invalid template - string", Code: `(datum->syntax "bad" 'foo)`},
@@ -343,6 +365,8 @@ func TestDatumToSyntaxErrors(t *testing.T) {
 
 // TestIdentifierQ tests identifier? predicate
 func TestIdentifierQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -395,6 +419,8 @@ func TestIdentifierQ(t *testing.T) {
 
 // TestExpand tests the expand primitive
 func TestExpand(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -424,6 +450,8 @@ func TestExpand(t *testing.T) {
 
 // TestExpandErrors tests error conditions for expand
 func TestExpandErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "expand non-syntax", Code: `(expand 42)`},
 		{Name: "expand string", Code: `(expand "hello")`},
@@ -443,6 +471,8 @@ func TestExpandErrors(t *testing.T) {
 
 // TestExpandOnce tests the expand-once primitive
 func TestExpandOnce(t *testing.T) {
+	t.Parallel()
+
 	t.Run("expand-once on non-macro returns two values", func(t *testing.T) {
 		// expand-once returns multiple values, test that second value is boolean
 		code := `(call-with-values
@@ -468,6 +498,8 @@ func TestExpandOnce(t *testing.T) {
 
 // TestExpandOnceErrors tests error conditions for expand-once
 func TestExpandOnceErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "expand-once non-syntax", Code: `(expand-once 42)`},
 		{Name: "expand-once string", Code: `(expand-once "hello")`},
@@ -488,6 +520,8 @@ func TestExpandOnceErrors(t *testing.T) {
 // TestEnvironmentSymbolIdentity tests that environments created by (environment)
 // share symbol interning with the caller, ensuring R7RS §6.5 symbol identity.
 func TestEnvironmentSymbolIdentity(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "empty environment eval quoted symbol",
@@ -508,6 +542,8 @@ func TestEnvironmentSymbolIdentity(t *testing.T) {
 // TestNullEnvironmentSymbolIdentity tests that null-environment shares
 // symbol interning with the caller for R7RS §6.5 symbol identity.
 func TestNullEnvironmentSymbolIdentity(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "null-environment 5 returns environment",

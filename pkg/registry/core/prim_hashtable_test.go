@@ -27,6 +27,8 @@ import (
 )
 
 func TestHashtable_MakeAndPredicate(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "make-hashtable returns hashtable", Code: `(hashtable? (make-equal-hashtable))`, Expected: values.TrueValue},
@@ -44,6 +46,8 @@ func TestHashtable_MakeAndPredicate(t *testing.T) {
 }
 
 func TestHashtable_SetAndRef(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "set and ref round-trip", Code: `(let ((ht (make-equal-hashtable)))
@@ -81,6 +85,8 @@ func TestHashtable_SetAndRef(t *testing.T) {
 // returns it rather than erroring. So the arity is now the error and the missing
 // key is not — werr.ErrHashtableKeyNotFound went dead with the change.
 func TestHashtable_RefRequiresDefault(t *testing.T) {
+	t.Parallel()
+
 	t.Run("two-argument form is an arity error", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(let ((ht (make-equal-hashtable)))
 			   (hashtable-ref ht 'missing))`)
@@ -93,6 +99,8 @@ func TestHashtable_RefRequiresDefault(t *testing.T) {
 }
 
 func TestHashtable_Delete(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "delete removes key", Code: `(let ((ht (make-equal-hashtable)))
@@ -113,6 +121,8 @@ func TestHashtable_Delete(t *testing.T) {
 }
 
 func TestHashtable_Size(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "empty hashtable size", Code: `(hashtable-size (make-equal-hashtable))`, Expected: values.NewInteger(0)},
@@ -132,6 +142,8 @@ func TestHashtable_Size(t *testing.T) {
 }
 
 func TestHashtable_KeysAndValues(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	// Keys returns a VECTOR now, not a list.
@@ -162,6 +174,8 @@ func TestHashtable_KeysAndValues(t *testing.T) {
 }
 
 func TestHashtable_Copy(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	// Copy is independent
@@ -185,6 +199,8 @@ func TestHashtable_Copy(t *testing.T) {
 }
 
 func TestHashtable_Clear(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((ht (make-equal-hashtable)))
@@ -197,6 +213,8 @@ func TestHashtable_Clear(t *testing.T) {
 }
 
 func TestHashtable_EqualQ(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	// equal? on identical content
@@ -224,6 +242,8 @@ func TestHashtable_EqualQ(t *testing.T) {
 // The Go-level gate is covered by TestHashtableEqualGate; this is the assertion
 // a user reading the documented deviation would go looking for.
 func TestHashtable_EqualQGate(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "same kind, leaf keys, equal contents", Code: `(let ((a (make-equal-hashtable)) (b (make-equal-hashtable))) (hashtable-set! a 'x 1) (hashtable-set! b 'x 1) (equal? a b))`, Expected: values.TrueValue},
 		// Different key equivalences are not comparable entry-by-entry at all.
@@ -243,6 +263,8 @@ func TestHashtable_EqualQGate(t *testing.T) {
 }
 
 func TestHashtable_TypeErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "hashtable-ref on non-hashtable", Code: `(hashtable-ref 42 'key)`},
 		{Name: "hashtable-set! on non-hashtable", Code: `(hashtable-set! 42 'key 1)`},
@@ -270,6 +292,8 @@ func TestHashtable_TypeErrors(t *testing.T) {
 // key is ABSENT rather than because it is inadmissible. Keeping it would have
 // looked like key-admission coverage while asserting something else entirely.
 func TestHashtable_ContainerKeyRoundTrips(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "pair key stores and reads back", Code: `(let ((ht (make-equal-hashtable))) (hashtable-set! ht '(1 2) "val") (hashtable-ref ht '(1 2) #f))`, Expected: values.NewString("val")},
 		{Name: "a distinct but equal? pair is the same key", Code: `(let ((ht (make-equal-hashtable))) (hashtable-set! ht (list 1 2) 'a) (hashtable-set! ht (list 1 2) 'b) (hashtable-size ht))`, Expected: values.NewInteger(1)},
@@ -288,6 +312,8 @@ func TestHashtable_ContainerKeyRoundTrips(t *testing.T) {
 // TestHashtableConstructors pins the three fixed-kind R6RS constructors: which
 // objects count as ONE key is now the TABLE's choice, not the key's.
 func TestHashtableConstructors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "eq: same-named symbols collapse", Code: `(let ((h (make-eq-hashtable))) (hashtable-set! h 'a 1) (hashtable-set! h 'a 2) (hashtable-size h))`, Expected: values.NewInteger(1)},
 		{Name: "eq: equal lists stay distinct", Code: `(let ((h (make-eq-hashtable))) (hashtable-set! h (list 1) 1) (hashtable-set! h (list 1) 2) (hashtable-size h))`, Expected: values.NewInteger(2)},
@@ -315,6 +341,8 @@ func TestHashtableConstructors(t *testing.T) {
 }
 
 func TestHashtableImmutability(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "fresh table is mutable", Code: `(hashtable-mutable? (make-equal-hashtable))`, Expected: values.TrueValue},
 		{Name: "copy without flag is immutable", Code: `(hashtable-mutable? (hashtable-copy (make-equal-hashtable)))`, Expected: values.FalseValue},
@@ -333,6 +361,8 @@ func TestHashtableImmutability(t *testing.T) {
 }
 
 func TestHashtableImmutabilityErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "set! on immutable", Code: `(hashtable-set! (hashtable-copy (make-equal-hashtable)) 'a 1)`},
 		{Name: "delete! on immutable", Code: `(hashtable-delete! (hashtable-copy (make-equal-hashtable)) 'a)`},
@@ -355,6 +385,8 @@ func TestHashtableImmutabilityErrors(t *testing.T) {
 }
 
 func TestHashtableR6RSAccessors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "contains? finds a key", Code: `(let ((h (make-equal-hashtable))) (hashtable-set! h 'a 1) (hashtable-contains? h 'a))`, Expected: values.TrueValue},
 		{Name: "contains? misses", Code: `(hashtable-contains? (make-equal-hashtable) 'a)`, Expected: values.FalseValue},
@@ -381,6 +413,8 @@ func TestHashtableR6RSAccessors(t *testing.T) {
 }
 
 func TestHashtableUpdate(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "absent key uses default", Code: `(let ((h (make-equal-hashtable))) (hashtable-update! h 'a (lambda (v) (+ v 1)) 0) (hashtable-ref h 'a #f))`, Expected: values.NewInteger(1)},
 		{Name: "present key ignores default", Code: `(let ((h (make-equal-hashtable))) (hashtable-set! h 'a 10) (hashtable-update! h 'a (lambda (v) (+ v 1)) 0) (hashtable-ref h 'a #f))`, Expected: values.NewInteger(11)},
@@ -401,6 +435,8 @@ func TestHashtableUpdate(t *testing.T) {
 // rather than truncated at a sub-context boundary — the exact failure that moved
 // map, for-each, member, and assoc out of Go.
 func TestHashtableUpdateCapturesContinuation(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((h (make-equal-hashtable))
 		      (k #f))
@@ -413,6 +449,8 @@ func TestHashtableUpdateCapturesContinuation(t *testing.T) {
 }
 
 func TestMakeHashtableR6RSArity(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "equal-hash + equal? selects the equal kind", Code: `(let ((h (make-hashtable equal-hash equal?))) (hashtable-set! h (list 1) 'a) (hashtable-ref h (list 1) #f))`, Expected: values.NewSymbol("a")},
 		{Name: "optional k accepted", Code: `(hashtable-size (make-hashtable equal-hash equal? 64))`, Expected: values.NewInteger(0)},
@@ -432,6 +470,8 @@ func TestMakeHashtableR6RSArity(t *testing.T) {
 }
 
 func TestMakeHashtableR6RSArityErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "nullary is gone", Code: `(make-hashtable)`},
 		{Name: "one argument", Code: `(make-hashtable equal-hash)`},
@@ -461,6 +501,8 @@ func TestMakeHashtableR6RSArityErrors(t *testing.T) {
 // TestMakeHashtableUnsupportedPairSentinel pins that the refusal is matchable,
 // not just an error: an embedder gating on the reason needs errors.Is.
 func TestMakeHashtableUnsupportedPairSentinel(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, `(make-hashtable symbol-hash eq?)`)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, errors.Is(err, werr.ErrUnsupportedHashtableKind), qt.IsTrue,

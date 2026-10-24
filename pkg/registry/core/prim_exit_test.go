@@ -25,6 +25,8 @@ import (
 )
 
 func TestCallWithExit_Success(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []testhelpers.SchemeCodeTestCase{
@@ -115,6 +117,8 @@ func TestCallWithExit_Success(t *testing.T) {
 }
 
 func TestCallWithExit_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "exit procedure invalid after return",

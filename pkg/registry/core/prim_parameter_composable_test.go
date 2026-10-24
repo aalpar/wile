@@ -42,6 +42,8 @@ import (
 // =============================================================================
 
 func TestParameterizeComposableContinuation(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -171,6 +173,8 @@ func TestParameterizeComposableContinuation(t *testing.T) {
 // definition time. Mutating the parameter between capture and invocation
 // means the after-thunk restores the stale captured value, not the mutation.
 func TestParameterizeMutationClobbering(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -213,6 +217,8 @@ func TestParameterizeMutationClobbering(t *testing.T) {
 // outer parameterize (firing its after-thunk with a stale 'old' value),
 // and the outer's before-thunk never re-fires after the CC finishes.
 func TestParameterizeOuterDestruction(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -277,6 +283,8 @@ func TestParameterizeOuterDestruction(t *testing.T) {
 // current wind frames (including unrelated parameterize frames) to reach
 // the captured context, firing their after-thunks and clobbering their values.
 func TestParameterizeCollateralDamage(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

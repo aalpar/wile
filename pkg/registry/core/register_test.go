@@ -35,6 +35,8 @@ import (
 // previously exercised the void-Vector input to datumToSyntax).
 // Recorded as a crosscheck-errors-lens finding on commit d7112b0c.
 func TestDatumToSyntax_VoidVector(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	var voidVec *values.Vector // typed-nil pointer = void per p.IsVoid()
@@ -56,6 +58,8 @@ func TestDatumToSyntax_VoidVector(t *testing.T) {
 }
 
 func TestBuilder_AddToRegistry(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -67,6 +71,8 @@ func TestBuilder_AddToRegistry(t *testing.T) {
 }
 
 func TestBuilder_Build(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r, err := Builder.Build()
@@ -76,6 +82,8 @@ func TestBuilder_Build(t *testing.T) {
 }
 
 func TestExtension(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	c.Assert(Extension.Name(), qt.Equals, "core")
@@ -87,6 +95,8 @@ func TestExtension(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersBindings(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -110,6 +120,8 @@ func TestAddToRegistry_RegistersBindings(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersPredicates(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -130,6 +142,8 @@ func TestAddToRegistry_RegistersPredicates(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersEquality(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -149,6 +163,8 @@ func TestAddToRegistry_RegistersEquality(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersPairs(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -168,6 +184,8 @@ func TestAddToRegistry_RegistersPairs(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersArithmetic(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -187,6 +205,8 @@ func TestAddToRegistry_RegistersArithmetic(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersLists(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -206,6 +226,8 @@ func TestAddToRegistry_RegistersLists(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersControl(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -225,6 +247,8 @@ func TestAddToRegistry_RegistersControl(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersVectors(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -244,6 +268,8 @@ func TestAddToRegistry_RegistersVectors(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersStrings(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -263,6 +289,8 @@ func TestAddToRegistry_RegistersStrings(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersCharacters(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -282,6 +310,8 @@ func TestAddToRegistry_RegistersCharacters(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersBytevectors(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -301,6 +331,8 @@ func TestAddToRegistry_RegistersBytevectors(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersSyntax(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -320,6 +352,8 @@ func TestAddToRegistry_RegistersSyntax(t *testing.T) {
 }
 
 func TestAddToRegistry_RegistersParameters(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -339,6 +373,8 @@ func TestAddToRegistry_RegistersParameters(t *testing.T) {
 }
 
 func TestAddToRegistry_HasMacroSources(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
@@ -350,6 +386,8 @@ func TestAddToRegistry_HasMacroSources(t *testing.T) {
 }
 
 func TestPrimitivePhases(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	r := registry.NewRegistry()
