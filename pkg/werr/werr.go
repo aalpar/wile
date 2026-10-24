@@ -48,7 +48,7 @@ var (
 	ErrDivisionByZero             = NewStaticError("division by zero")
 	ErrNotAList                   = NewTypeSentinel("list")
 	ErrCircularList               = NewStaticError("circular list")
-	ErrNotACloseParen             = NewStaticError("not a close parenthesis")
+	ErrNotACloseParen             = NewTypeSentinel("close parenthesis")
 	ErrDatumLabelUndefined        = NewStaticError("undefined datum label")
 	ErrWrongNumberOfArguments     = NewStaticError("wrong number of arguments")
 	ErrWrongNumberOfValues        = NewStaticError("wrong number of values")

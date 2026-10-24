@@ -102,7 +102,7 @@ func TestRequireType_Failure_NilValue(t *testing.T) {
 // errors.As cast in typeNameFromSentinel (e.g., changing *werr.StaticError
 // to a value type, or switching the lookup mechanism) would silently
 // degrade every primitive's type-mismatch message to "expected  but got
-// *Foo" — with TestTypeSentinelsCarryTypeName still passing because the
+// *Foo" — with TestTypeSentinelDeclarationShape still passing because the
 // sentinel itself carries TypeName; only the helpers' use of it would
 // have broken.
 func TestRequireType_ErrorMessageContainsTypeName(t *testing.T) {
