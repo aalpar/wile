@@ -143,7 +143,7 @@ examples:
 #   make ci
 #   make ci SKIP_LINT=1
 .PHONY: ci
-ci: $(if $(SKIP_LINT),,lint) build-all test covercheck readme-check check-readme-links check-docs-orphans examples test-examples verify-mod
+ci: $(if $(SKIP_LINT),,lint) build-all tutorial-test test-scheme-gate covercheck readme-check check-readme-links check-docs-orphans examples test-examples verify-mod
 	@echo "CI passed"
 
 # ── CD: release-specific validation ─────────────────────────────────
@@ -253,6 +253,12 @@ fuzz:
 	    || { echo "FAIL: $$t found a crasher (saved under testdata/fuzz/$$t/)"; exit 1; }; \
 	done; \
 	echo "fuzz: all targets completed $(FUZZTIME) with no new failures"
+
+# Only the (test-exit) gate from run-all.sh. `make ci` runs the suites through
+# covercheck (cover-scm.sh), which gates on exit status but not on this.
+.PHONY: test-scheme-gate
+test-scheme-gate: build
+	@GATE_ONLY=1 SCHEME=$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) ./test/run-all.sh
 
 # Run Scheme-level test suite.
 # Override SCHEME to test against different implementations:
