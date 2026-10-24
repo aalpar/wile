@@ -564,8 +564,9 @@ func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 // binding that matches key and passes scope filtering. It is the stop-signal
 // form: visit returns true to stop the walk, false to keep walking, and walkLocal
 // reports whether any visit stopped it. A caller that must see every candidate
-// (the scoped maximal-match arms, which stop only on a perfect match) uses it
-// directly. resolveLocalWith is the first-match form that returns a value.
+// (the scoped maximal-match arms, which stop only on a perfect match) or that
+// filters by a predicate (HasLocalVariableBinding) uses it directly.
+// resolveLocalWith is the first-match form that returns a value.
 //
 // A wildcard query (q.IsAll) means "match any" — this replaces the former
 // checkScopes=false pattern. A specific or empty query (even the empty set) is

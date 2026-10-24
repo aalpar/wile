@@ -24,10 +24,10 @@ package compilation
 // MaybeCreateLocalBinding dedups on scope-set EQUALITY, so `(lambda (x) (let ((x 1)) …))`
 // would find the parameter's slot and alias it — duplicate-parameter detection
 // and `let` shadowing are the same call. And one frame is one scope: two
-// same-named binders in it with identical (commonly empty) scope sets are an
-// equal-cardinality incomparable tie, which GetLocalIndex and GetBinding answer by
-// panicking with ErrAmbiguousBinding. There is no "innermost wins" in this model, and
-// adding one would be a hygiene change rather than an allocation change.
+// same-named binders in it with identical (commonly empty) scope sets alias one
+// slot, because MaybeCreateLocalBinding dedups on scope-set equality. There is no
+// "innermost wins" within a frame in this model, and adding one would be a
+// hygiene change rather than an allocation change.
 //
 // The merged frame costs nothing at run time — it is never instantiated — and
 // absoluteSlot, boxedSlots, freeSlotOf and collectFreeVars keep reading the
