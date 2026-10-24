@@ -243,6 +243,12 @@ func f() {
 			nil,
 		},
 		{
+			"multi-name declaration checks every name",
+			`package p
+var ErrNotAFoo, ErrNotABar = NewTypeSentinel("foo"), NewStaticError("bar missing")`,
+			[]string{"arm 1: x.go:2:17: ErrNotABar is named like a type sentinel but is not built by NewTypeSentinel"},
+		},
+		{
 			"grouped declaration reports only the offender",
 			`package p
 var (
