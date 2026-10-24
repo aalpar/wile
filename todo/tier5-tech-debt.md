@@ -151,7 +151,7 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   [Tech debt, S, Done 2026-10-04, `e01f79ab`]: the sentence is gone; the doc now names
   `planLibraryImport` and `planCopyDirect`.
 - [x] **`TestDenotedForm`'s Primitive+Void case is unreachable** [Tech debt, S, Done 2026-10-23,
-  P8.14 `docs/small-corrections-round`]: `TestDenotedForm` (`pkg/environment/form_keyword_test.go`)
+  P8.14 `07a51091`]: `TestDenotedForm` (`pkg/environment/form_keyword_test.go`)
   now feeds the !ok arm what production does: a `BindingTypeSyntax`
   binding holding a `*machine.MachineClosure` (measured by instrumenting the arm), not by Primitive+Void,
   which exists for one statement in `registerCompileTimeBinding`. The row now feeds a macro binding, and a
@@ -1054,8 +1054,7 @@ enough to rebuild the probes.
   `…_SideTableReturnsFalse` (`:203`) cover the other. This is a scope judgment, not a
   non-reproduction: nothing was fixed, and no existing test asserts the row's literal ask, because
   the property it names is false.
-- [x] **LocalEnvironmentFrame pointer ambiguity** [Low, S, Done 2026-10-23, P8.14
-  `docs/small-corrections-round`]: documentation only, on the `EnvironmentFrame.local` field comment with
+- [x] **LocalEnvironmentFrame pointer ambiguity** [Low, S, Done 2026-10-23, P8.14 `07a51091`]: documentation only, on the `EnvironmentFrame.local` field comment with
   pointers from `NewLocalEnvironment` and `LocalEnvironment`. The two pointers promise different things:
   NewLocalEnvironment's is a builder copied by value (17 of 17 production callers), LocalEnvironment's
   aliases the field (15 production readers; two grow it through the pointer).
