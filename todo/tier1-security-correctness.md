@@ -637,7 +637,7 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   `(import (scheme nonexistent-xyz))` names four probes (`.sld` and `.scm` in each of the two chain arms) where it named one).
 - [ ] `(environment '(wile algebra))` fails with "unknown wile profile": every `(wile X)` is read
   as a profile name.
-- [x] Coverage: `stdlibPrefixes` (`coverage/gocover.go`) omits the embedded `chibi/` and `rnrs/`.
+- [x] Coverage: the old stdlib prefix list omitted the embedded `chibi/` and `rnrs/`.
   [Done 2026-10-23, P8.4 `fix/derive-stdlib-and-benchmark-lists`: `stdlibPaths` is the exact file set walked from `stdlib.FS`;
   `chibi/`, `rnrs/hashtables.sld` stop leaking and non-embedded `wile/goast/` stops being excluded. A plain `--cover`
   run importing `(chibi test)` emitted 268 `chibi/test.sld` rows on master and none now.]
