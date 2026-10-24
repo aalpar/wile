@@ -26,8 +26,8 @@ import (
 // sentinel (e.g., "a string" from werr.ErrNotAString). Returns "" for
 // non-type sentinels — the resulting error message will read
 // "expected  but got *Foo" which is degraded but unambiguous; the
-// TestTypeSentinelsCarryTypeName guard test catches missed sentinels
-// at the werr level.
+// TestTypeSentinelDeclarationShape guard test catches a sentinel declared
+// without NewTypeSentinel at the werr level.
 func typeNameFromSentinel(sentinel error) string {
 	var se *werr.StaticError
 	if errors.As(sentinel, &se) {
