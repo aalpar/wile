@@ -51,21 +51,23 @@ func TestMarkOpaqueCodeTieMarksEveryTiedBinder(t *testing.T) {
 	qt.Assert(t, result.isMutated(refAC), qt.IsTrue)
 }
 
-// Without a tie only the one resolved binder is marked, alongside the global.
+// Without a tie only the maximal compatible binder is marked, alongside the
+// name's global entry; a compatible binder of lower weight is not.
 func TestMarkOpaqueCodeMarksTheResolvedLocalBinder(t *testing.T) {
-	a, b, c := syntax.NewScope(), syntax.NewScope(), syntax.NewScope()
+	a, b := syntax.NewScope(), syntax.NewScope()
 	env := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), environment.NewNamespace().Runtime())
 	x := syntax.NewSyntaxSymbol("x", nil)
-	ab := withScope(withScope(x, a), b)
-	ac := withScope(withScope(x, a), c)
-	bindLocalSymbol(env, ab)
-	bindLocalSymbol(env, ac)
-	refAB := env.ResolveBindingRef(ab.Sym, syntax.ScopesOf(ab.Scopes()))
-	refAC := env.ResolveBindingRef(ac.Sym, syntax.ScopesOf(ac.Scopes()))
+	xa := withScope(x, a)
+	xab := withScope(xa, b)
+	bindLocalSymbol(env, xa)
+	bindLocalSymbol(env, xab)
+	refA := env.ResolveBindingRef(xa.Sym, syntax.ScopesOf(xa.Scopes()))
+	refAB := env.ResolveBindingRef(xab.Sym, syntax.ScopesOf(xab.Scopes()))
 
 	result := &ValidationResult{}
-	markOpaqueCode(env, ab, result)
+	markOpaqueCode(env, xab, result)
 
 	qt.Assert(t, result.isMutated(refAB), qt.IsTrue)
-	qt.Assert(t, result.isMutated(refAC), qt.IsFalse)
+	qt.Assert(t, result.isMutated(refA), qt.IsFalse)
+	qt.Assert(t, result.isMutated(environment.GlobalRef(xab.Key())), qt.IsTrue)
 }

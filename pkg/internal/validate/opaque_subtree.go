@@ -651,8 +651,9 @@ func markOpaqueSubtree(env *environment.EnvironmentFrame, raw values.Value, quas
 	}
 	forEachRawSymbol(env, raw, quasi, mk, walkWrites, func(sym *syntax.SyntaxSymbol) {
 		if env != nil {
-			// Every tied binder: this subtree is never compiled here, so no tie is
-			// refused, and expansion may settle the reference on any of them.
+			// Every tied binder: validation cannot know which scopes expansion leaves
+			// on this reference. If it stays tied the compiler refuses it, so the
+			// extra marks cost nothing; if it settles, it settles on one of them.
 			for _, ref := range env.ResolveBindingRefs(sym.Sym, syntax.ScopesOf(sym.Scopes())) {
 				if ref.IsLocal() {
 					result.markMutated(ref)

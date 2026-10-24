@@ -76,9 +76,9 @@ func (p *EnvironmentFrame) bindingIDAt(slot int, depth int) BindingID {
 // total — always returns a valid BindingRef — because the global arm needs no
 // existing binding (a top-level set!/define is named before the compiler
 // creates its global). A tie does not raise: it names one of the tied binders,
-// because a caller whose reference the compiler will also see (validate_set)
-// marks or records and the compiler, which refuses the tie, is the authority.
-// A caller whose subtree is never compiled there uses ResolveBindingRefs. Unlike ResolveBindingID, callers do not branch on a
+// because a caller that marks or records (validate_set) leaves the compiler,
+// which refuses the tie, as the authority. A caller whose reference may still be
+// rewritten by expansion uses ResolveBindingRefs. Unlike ResolveBindingID, callers do not branch on a
 // found/not-found bool; "not local" is itself a nameable (global) outcome.
 func (p *EnvironmentFrame) ResolveBindingRef(key *values.Symbol, q syntax.ScopeSet) BindingRef {
 	bid, ok, _ := p.TryResolveBindingID(key, q)
@@ -89,8 +89,9 @@ func (p *EnvironmentFrame) ResolveBindingRef(key *values.Symbol, q syntax.ScopeS
 }
 
 // ResolveBindingRefs is ResolveBindingRef for a caller that must cover every
-// binder a reference MIGHT denote, because the reference is never compiled where
-// a tie would be refused (opaque code). Without a tie it is the single ref
+// binder a reference MIGHT denote, because validation cannot know which scopes
+// expansion will leave on it (opaque code). If the tie survives, the compiler
+// refuses it and the extra marks cost nothing. Without a tie it is the single ref
 // ResolveBindingRef returns. On a tie it is one local ref per tied binder (one
 // per distinct maximal scope set, innermost first: a shadowed outer duplicate is
 // never the answer, so keeping it instead would leave the inner binder unmarked).
