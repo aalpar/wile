@@ -71,6 +71,6 @@ func TestLocalFieldAddressTakers(t *testing.T) {
 		"InitApplyFrameWithParent",
 		"LocalEnvironment",
 		"LocalLayout",
-		"ResolveBindingID",
+		"bindingIDAt",
 	})
 }

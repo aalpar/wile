@@ -124,7 +124,8 @@ type EnvironmentFrame struct {
 	// Five functions deal in a *LocalEnvironmentFrame, and the pointers are NOT
 	// one object seen from five places. NewLocalEnvironment allocates its own.
 	// Four explicitly take the address (&p.local), and TestLocalFieldAddressTakers
-	// lists them: LocalEnvironment, LocalLayout, ResolveBindingID, and
+	// lists them: LocalEnvironment, LocalLayout, bindingIDAt (the
+	// ResolveBindingID family builds its IDs there), and
 	// LocalEnvironmentFrame.InitApplyFrameWithParent (a destination written
 	// through, never handed out). Pointer-receiver calls on the field
 	// (InitApplyFrameWithParent, EnsureLocalBinding and MaybeCreateLocalBinding
@@ -155,10 +156,11 @@ type EnvironmentFrame struct {
 	//     builds one) into a template that looks like it records no shape.
 	//     MachineClosure.Env (machine_closure.go) hands it to
 	//     NewEnvironmentFrameWithParent, which copies it as builder input.
-	//   - ResolveBindingID's pointer is an identity, not an access path:
-	//     BindingID.Frame names the local environment of the frame, at the depth
-	//     the symbol resolved, so two IDs are equal exactly when they name the
-	//     same frame's locals. It is never nil, because a binding resolved.
+	//   - bindingIDAt's pointer (the ResolveBindingID family's) is an identity, not an
+	//     access path: BindingID.Frame names the local environment of the frame
+	//     at the depth the symbol resolved, so two IDs are equal exactly when
+	//     they name the same frame's locals. It is never nil: a depth
+	//     outside the parent chain is a caller bug (nil dereference).
 	// Absent is nil, not an empty frame, for LocalEnvironment alone. A function
 	// that hands out the address of this field must extend this comment rather
 	// than add a second one. The test checks only its own hard-coded list, so
@@ -624,6 +626,34 @@ func resolveLocalWith[T any](
 	return q2, found
 }
 
+// resolveLocalMaximal is the one resolution rule every local lookup shares: a
+// wildcard query takes the first match, any other query takes Flatt's maximal
+// match (the compatible binder with the largest scope set). build runs only for
+// a candidate that becomes the new best, so a caller that allocates per answer
+// (NewLocalIndex) does not allocate per visit. ambiguous reports that two
+// incomparable scope sets tied for the maximum; the result is then one of the
+// tied candidates and the caller decides what a tie means to it (GetLocalIndex
+// raises, localBinding reports, analyses over-approximate).
+func resolveLocalMaximal[T any](p *EnvironmentFrame, key *values.Symbol, q syntax.ScopeSet,
+	build func(binding *Binding, slot int, depth int) T) (q2 T, found bool, ambiguous bool) {
+	if q.IsAll() {
+		q2, found = resolveLocalWith(p, key, q, build)
+		return q2, found, false
+	}
+	var best scopedBestOf[T]
+	target := q.Scopes().Len()
+	walkLocal(p, key, q, func(binding *Binding, slot int, depth int) bool {
+		sc := binding.Scopes()
+		rec, done := best.shouldRecord(sc, target)
+		if rec {
+			best.record(build(binding, slot, depth), sc)
+		}
+		return done
+	})
+	q2, found = best.Result()
+	return q2, found, best.Ambiguous()
+}
+
 // resolveGlobalWith resolves a global binding visible from p and hands the
 // store and slot to the visitor.
 //
@@ -691,35 +721,13 @@ func tryResolveGlobalWith[T any](
 // wildcard query), or nil, and whether two incomparable equal-cardinality scope
 // sets tied for it. GetBinding raises on ambiguous; ExactBinding returns it.
 func (p *EnvironmentFrame) localBinding(key *values.Symbol, q syntax.ScopeSet) (bnd *Binding, ambiguous bool) {
-	if q.IsAll() {
-		// Fast path: wildcard query — return first match
-		binding, _ := resolveLocalWith(p, key, q, func(binding *Binding, _ int, _ int) *Binding {
-			return binding
-		})
-		return binding, false
-	}
-	// Scoped path: maximal binding resolution (Flatt model).
-	// See bestOf in best_of.go. Allocation here is trivial — the
-	// candidate is just the existing *Binding pointer — so we record
-	// unconditionally on shouldRecord = true.
-	var best scopedBestOf[*Binding]
-	target := q.Scopes().Len()
-	walkLocal(p, key, q, func(binding *Binding, _ int, _ int) bool {
-		sc := binding.Scopes()
-		rec, done := best.shouldRecord(sc, target)
-		if rec {
-			best.record(binding, sc)
-		}
-		return done
+	binding, _, tied := resolveLocalMaximal(p, key, q, func(binding *Binding, _ int, _ int) *Binding {
+		return binding
 	})
-	if best.Ambiguous() {
+	if tied {
 		return nil, true
 	}
-	item, ok := best.Result()
-	if !ok {
-		return nil, false
-	}
-	return item, false
+	return binding, false
 }
 
 // GetBinding returns the binding for the given symbol that matches the
@@ -853,37 +861,15 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) 
 		return nil
 	}
 
-	// Fast path: wildcard query — return first match (no maximal resolution needed)
-	if q.IsAll() {
-		li, _ := resolveLocalWith(p, key, q, func(_ *Binding, slot int, depth int) *LocalIndex {
-			return NewLocalIndex(slot, depth)
-		})
-		return li
-	}
-
-	// Scoped path: maximal binding resolution.
-	// See bestOf in best_of.go. Splitting shouldRecord/record lets us
-	// defer NewLocalIndex(slot, depth) — an allocation — to the cases
-	// where the candidate actually becomes the new best, instead of
-	// allocating on every parent-chain visit.
-	var best scopedBestOf[*LocalIndex]
-	target := q.Scopes().Len()
-	walkLocal(p, key, q, func(binding *Binding, slot int, depth int) bool {
-		sc := binding.Scopes()
-		rec, done := best.shouldRecord(sc, target)
-		if rec {
-			best.record(NewLocalIndex(slot, depth), sc)
-		}
-		return done
+	li, _, tied := resolveLocalMaximal(p, key, q, func(_ *Binding, slot int, depth int) *LocalIndex {
+		return NewLocalIndex(slot, depth)
 	})
-
-	if best.Ambiguous() {
+	if tied {
 		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
 			"GetLocalIndex: identifier %q resolves ambiguously among incomparable hygienic scope sets",
 			key.Key))
 	}
-	item, _ := best.Result()
-	return item
+	return li
 }
 
 // HasLocalVariableBinding reports whether sym has a local variable binding
