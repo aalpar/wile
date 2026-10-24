@@ -7,6 +7,11 @@
 
 ## Tier 5 — Tech Debt
 
+### Filed by the P8.14 crosscheck (2026-10-23)
+
+- [ ] **Pin that `ScopedBindingKeyOf`'s `ScopeKey` is the scope SET, not its size, in the consumers' ratchets** [Test debt, S]: a mutant that keys on the number of scopes instead of the set survives `TestLambdaFormalsHygienicDuplicates` and `TestLetSameNameDistinctScopeBindings` in `pkg/machine/compilation` and `TestFrameReclaimVerdict_ScopeDistinctBindersGetSeparateVerdicts` in `pkg/wile`; only the two `pkg/internal/validate` tests fail (found by the P8.14 mutation review). Give each consumer ratchet a pair of same-size, different-content scope sets. Adjacent, not the same scope: the open row "PRECONDITION 1 for any future S4" in `todo/tier1-security-correctness.md` covers the collapse direction and the frame-reclaim guard; this row is about the three consumer ratchets being blind to a size-only key, so it is filed separately and cites that row.
+- [ ] **Bound the 1-WL refinement tests with a deadline** [Test debt, XS]: a mutant that makes the refinement step return its coloring unchanged makes the isomorphism tests run past 120 s instead of failing, so the failure is a CI timeout with no message. Give the affected tests a bounded deadline so the mutant is a red test, not a hang (observed by the P8.14 mutation review: the "BACKTRACKING CORRECTNESS CANARY" Petersen self-iso group in `test/wile/algebra-combinatorial-graph-test.scm` ran past 150 s under the mutant). Overlap: none.
+
 ### Filed by the P8.11 crosscheck (2026-10-23)
 
 - [ ] **Widen the `Mutates` direct-sink pin to the shapes it cannot see** [Test debt, M]: the pin sees 12 of the 21 annotated primitives (the 13 hand-written primitives that call a sink method, less `append`). Not seen: write-through to a backing slice without a mutator call (vector-fill!, vector-copy!, bytevector-copy!, read-bytevector!, string-copy!), `String.SetValue`, method values, helper indirection (record-modifier's factory), and every helper-built primitive (152 of 464 with an Impl, 33%; set-box!, %parameter-raw-set! and atomic-store! are three annotated ones). Needs function-valued arguments and func-typed call sites as edges, plus exported-field and slice writes on the values types: the SSA or `go/analysis` item the closed row below describes. Overlap checked: this is the remaining scope of that row.
@@ -145,9 +150,13 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
 - [x] **Stale doc: `processLibraryImport` claims `AtPhase` routes to the parent's phase registry**
   [Tech debt, S, Done 2026-10-04, `e01f79ab`]: the sentence is gone; the doc now names
   `planLibraryImport` and `planCopyDirect`.
-- [ ] **`TestDenotedForm`'s Primitive+Void case is unreachable** [Tech debt, S]: after the
-  keyword-denotation Task-6 ratchet, `TestDenotedForm` (`pkg/environment/form_keyword_test.go`) pins a state
-  production cannot produce.
+- [x] **`TestDenotedForm`'s Primitive+Void case is unreachable** [Tech debt, S, Done 2026-10-23,
+  P8.14 `docs/small-corrections-round`]: `TestDenotedForm` (`pkg/environment/form_keyword_test.go`)
+  now feeds the !ok arm what production does: a `BindingTypeSyntax`
+  binding holding a `*machine.MachineClosure` (measured by instrumenting the arm), not by Primitive+Void,
+  which exists for one statement in `registerCompileTimeBinding`. The row now feeds a macro binding, and a
+  Primitive binding holding a non-form string and a Syntax binding holding a keyword value are added;
+  mutants on each die.
 - [ ] **`RequireArg[T]` and `BuildValidator` type-check the same argument twice** [Tech debt, M,
   from `2026-03-26-extension-contracts-phase2-design.md`]: with `WithContractEnforcement()` on,
   `BuildValidator` (`pkg/registry/contract.go`, wired in `pkg/wile/engine.go`) checks from
@@ -1045,7 +1054,11 @@ enough to rebuild the probes.
   `…_SideTableReturnsFalse` (`:203`) cover the other. This is a scope judgment, not a
   non-reproduction: nothing was fixed, and no existing test asserts the row's literal ask, because
   the property it names is false.
-- [ ] **LocalEnvironmentFrame pointer ambiguity** [Low, S]: Doc comment on `NewLocalEnvironment` explaining lifecycle (value-vs-pointer ownership).
+- [x] **LocalEnvironmentFrame pointer ambiguity** [Low, S, Done 2026-10-23, P8.14
+  `docs/small-corrections-round`]: documentation only, on the `EnvironmentFrame.local` field comment with
+  pointers from `NewLocalEnvironment` and `LocalEnvironment`. The two pointers promise different things:
+  NewLocalEnvironment's is a builder copied by value (17 of 17 production callers), LocalEnvironment's
+  aliases the field (15 production readers; two grow it through the pointer).
 - [x] **Honor `WithInlineThreshold` for imported libraries** [Low, S, **already fixed, closed
   2026-09-26**]: the row said the library load path had no `inlineThreshold` parameter, so an
   imported library always compiled at `DefaultInlineThreshold = 5` and silently ignored the

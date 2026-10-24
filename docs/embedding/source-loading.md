@@ -225,6 +225,19 @@ licenses the `.scm`; a denial or I/O error propagates. The whole chain is
 tried for `.sld` before any resolver is asked for `.scm`. Resolvers only see
 opaque file paths.
 
+A `load` inside a library body installs into the interaction environment, not
+into the library, so its defines are visible to the importing program (R7RS
+§6.14: `load`'s environment defaults to `interaction-environment`). Wile
+instantiates the library at `import`, so the loaded names are visible right
+after it. Chez Scheme (petite 10.4.1) agrees once the library has been
+instantiated, which it does lazily on first use of an export; a program that
+never references an export sees the loaded names unbound there. Chez also
+rejects a `load` placed before a `define` in a library body ("invalid context
+for definition"). That is R6RS's rule that a library body puts its definitions
+before its expressions, not a Chez quirk, and Wile accepts that ordering too.
+The comparison is only possible as an R6RS `library` form: petite 10.4.1 has no
+`(scheme base)` to load the R7RS one against.
+
 ### Profiles Gate Which Standard Libraries Load
 
 A security profile (`WithProfile`) is a statement about which primitives the

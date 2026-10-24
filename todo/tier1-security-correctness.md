@@ -643,8 +643,10 @@ reproduced. Every fixed item has a regression test that fails on `032728ab`.
   run importing `(chibi test)` emitted 268 `chibi/test.sld` rows on master and none now.]
 - [ ] Stale: `waitOnCondCtx` (`pkg/values/cond_wait.go`) and `LockContext`
   (`pkg/values/mutex.go`) say a terminated holder's lock stays held (`Thread.Terminate`
-  abandons it); tutorial chapter 06 calls C_6 and 2·K_3 cospectral, chapter 05 lists a
-  nonexistent `(wile algebra field)`. (The `Makefile` `bench-gabriel-compare` `ack` clause closed 2026-10-23, P8.4 `0788da7e`:
+  abandons it); chapter 05 lists a
+  nonexistent `(wile algebra field)`. (Chapter 06's "C_6 and 2·K_3 cospectral" claim closed 2026-10-23,
+  P8.14 `docs/small-corrections-round`: the Saltire pair C_4 + K_1 and K_{1,4} is the cospectral canary and
+  C_6 vs 2·K_3 stays as the 1-WL pair. The `Makefile` `bench-gabriel-compare` `ack` clause closed 2026-10-23, P8.4 `0788da7e`:
   `TestBenchmarkExampleNamesResolve` pins literal `BENCHMARKS="..."` examples to `examples/benchmarks/<name>.scm`.)
 - [x] `read-syntax` positions do not count characters `read-char` consumed between reads (needs
   port-owned position tracking). [Done 2026-10-20, P7.4 `fix/port-owned-read-position`, merge `97821490`

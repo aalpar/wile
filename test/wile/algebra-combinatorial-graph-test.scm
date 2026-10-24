@@ -493,7 +493,7 @@
         (p4   (path-graph 4)))
     (test #f (graph-isomorphic? star p4))))
 
-(test-group "COSPECTRAL NON-ISO CANARY — C_6 vs 2K_3"
+(test-group "NON-ISO CANARY: C_6 vs 2K_3 (2-regular; NOT cospectral)"
   (let ((C6 (cycle-graph 6))
         (two-triangles
           (make-graph
@@ -504,6 +504,21 @@
     (test 6 (graph-size  C6))
     (test 6 (graph-size  two-triangles))
     (test #f (graph-isomorphic? C6 two-triangles))))
+
+(test-group "ISOMORPHIC, RELABELLED: C_3 + C_4 with the components listed in opposite order"
+  ;; Same degree sequence and a different vertex numbering, so this reaches the
+  ;; canonical-form comparison and cannot be answered by comparing identically
+  ;; built graphs.
+  (let ((G (make-graph
+             '((0 . ((1) (2))) (1 . ((0) (2))) (2 . ((0) (1)))
+               (3 . ((4) (6))) (4 . ((3) (5))) (5 . ((4) (6))) (6 . ((5) (3))))))
+        (H (make-graph
+             '((0 . ((1) (3))) (1 . ((0) (2))) (2 . ((1) (3))) (3 . ((2) (0)))
+               (4 . ((5) (6))) (5 . ((4) (6))) (6 . ((4) (5)))))))
+    (test 7 (graph-order G))
+    (test 7 (graph-order H))
+    (test #t (graph-isomorphic? G H))
+    (test #t (graph-isomorphic? H G))))
 
 (test-group "more negative pairs"
   (test #f (graph-isomorphic? (complete-graph 4) (path-graph 4)))

@@ -42,8 +42,27 @@ func TestDenotedForm(t *testing.T) {
 			bind("my-if", environment.BindingTypePrimitive, environment.NewFormKeyword("if")), "if"},
 		{"a variable denotes nothing even holding a keyword value",
 			bind("v", environment.BindingTypeVariable, environment.NewFormKeyword("if")), ""},
-		{"a keyword binding without a form-naming value denotes nothing",
-			bind("=>", environment.BindingTypePrimitive, values.Void), ""},
+		// A macro binding is what production validation actually feeds the !ok arm:
+		// a macro-headed form resolves its head to a BindingTypeSyntax binding whose
+		// value is a transformer (a *machine.MachineClosure), not a form name
+		// (validateForm, the head resolution). Measured by instrumenting the arm:
+		// every hit on a small program with one define-syntax was of that shape.
+		// A Primitive binding holding Void is not that case: it exists for exactly
+		// one statement in registerCompileTimeBinding, between
+		// MaybeCreateOwnGlobalBinding and SetOwnGlobalValue, and nothing observes
+		// it. The value here stands in for a transformer; any value without a
+		// FormName denotes nothing.
+		{"a macro binding holds a transformer, not a form name",
+			bind("my-macro", environment.BindingTypeSyntax, values.NewString("transformer")), ""},
+		// The !ok arm is by value, not by binding type: a Primitive binding holding
+		// a non-form value denotes nothing either. (The value is a string so the
+		// row does not depend on a transient Void.)
+		{"a primitive binding without a form-naming value denotes nothing",
+			bind("=>", environment.BindingTypePrimitive, values.NewString("not-a-form")), ""},
+		// DenotedForm excludes only variables; a keyword value on a macro-typed
+		// binding still names its form.
+		{"a syntax-typed binding holding a keyword value names its form",
+			bind("my-macro-if", environment.BindingTypeSyntax, environment.NewFormKeyword("if")), "if"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
