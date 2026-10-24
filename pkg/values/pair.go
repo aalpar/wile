@@ -714,8 +714,11 @@ func CarAs[T any](t Tuple, headSentinel error, name, role string) (T, error) {
 
 // NthCons advances n cons cells along the cdr chain and returns the
 // remaining list (or improper tail). It is the unified primitive
-// behind list-ref (NthCons(...).Car()) and list-tail (NthCons(...)).
+// behind list-ref (NthCons(...).Car()), list-tail (NthCons(...)) and
+// list-set! (the returned cell is stored into).
 // Returns ErrIndexOutOfRange if n is negative or exceeds the list length.
+// n equal to the length is not an error: the terminal cdr (EmptyList, or the
+// improper tail) is returned, and callers that need a pair must check for it.
 //
 // At n=0 the input is returned unchanged, including for EmptyList — this
 // matches R7RS semantics where (list-tail x 0) is x.

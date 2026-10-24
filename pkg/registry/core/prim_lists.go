@@ -216,14 +216,37 @@ func PrimLength(mc machine.CallContext) error {
 	return nil
 }
 
+// listIndexArg reads the index argument of list-ref, list-set! and list-tail.
+// An exact integer too large for int64 is out of range for every list that
+// fits in memory, so it reports ErrIndexOutOfRange; only a non-exact or
+// non-numeric argument is ErrNotAnInteger.
+func listIndexArg(mc machine.CallContext, i int, name string) (int64, error) {
+	v := mc.Arg(i)
+	idx, ok := values.ExactInteger(v)
+	if ok {
+		return idx, nil
+	}
+	switch n := v.(type) {
+	case *values.BigInteger:
+		return 0, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+			"%s: index %s out of range", name, n.SchemeString())
+	case *values.Rational:
+		if n.IsInteger() {
+			return 0, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+				"%s: index %s out of range", name, n.SchemeString())
+		}
+	}
+	return 0, werr.WrapForeignErrorf(werr.ErrNotAnInteger,
+		"%s: expected an exact integer index but got %s", name, v.SchemeString())
+}
+
 // PrimListRef implements the (list-ref) primitive.
 // Returns the element at the given index in a list.
 // R7RS §6.4: The index must be an exact non-negative integer.
 func PrimListRef(mc machine.CallContext) error {
-	idx, ok := values.ExactInteger(mc.Arg(1))
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
-			"list-ref: expected an exact integer index but got %s", mc.Arg(1).SchemeString())
+	idx, err := listIndexArg(mc, 1, "list-ref")
+	if err != nil {
+		return err
 	}
 	result, err := helpers.NthCons(mc.Arg(0), idx, "list-ref")
 	if err != nil {
@@ -245,13 +268,11 @@ func PrimListSet(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	idxVal := mc.Arg(1)
 	val := mc.Arg(2)
 
-	idx, ok := values.ExactInteger(idxVal)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
-			"list-set!: expected an exact integer index but got %s", idxVal.SchemeString())
+	idx, err := listIndexArg(mc, 1, "list-set!")
+	if err != nil {
+		return err
 	}
 
 	// The same walk list-ref and list-tail use, so the three index-keyed
@@ -276,10 +297,9 @@ func PrimListSet(mc machine.CallContext) error {
 // PrimListTail implements the (list-tail) primitive.
 // Benchmarked: kept in Go — Scheme impl is 6x slower on short lists.
 func PrimListTail(mc machine.CallContext) error {
-	idx, ok := values.ExactInteger(mc.Arg(1))
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
-			"list-tail: expected an exact integer index but got %T", mc.Arg(1))
+	idx, err := listIndexArg(mc, 1, "list-tail")
+	if err != nil {
+		return err
 	}
 	result, err := helpers.NthCons(mc.Arg(0), idx, "list-tail")
 	if err != nil {
