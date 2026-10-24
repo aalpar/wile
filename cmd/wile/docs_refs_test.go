@@ -568,7 +568,7 @@ const lineCitationCeiling = 130
 // rename, a move) drops it and fails; a new one raises it and fails until the
 // pin is raised. Together with the per-citation findings this keeps the check
 // from going vacuous or from quietly shrinking.
-const symbolCitationsResolved = 105
+const symbolCitationsResolved = 104
 
 // lineCitationsResolved is the number of "file:N" spans that name a tracked
 // file (130 match; 27 do not), pinned exactly in both directions. Renaming a
