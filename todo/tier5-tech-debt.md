@@ -7,6 +7,11 @@
 
 ## Tier 5 — Tech Debt
 
+### Filed by the P8.14 crosscheck (2026-10-23)
+
+- [ ] **Pin that `ScopedBindingKeyOf`'s `ScopeKey` is the scope SET, not its size, in the consumers' ratchets** [Test debt, S]: a mutant that keys on the number of scopes instead of the set survives `TestLambdaFormalsHygienicDuplicates` and `TestLetSameNameDistinctScopeBindings` in `pkg/machine/compilation` and `TestFrameReclaimVerdict_ScopeDistinctBindersGetSeparateVerdicts` in `pkg/wile`; only the two `pkg/internal/validate` tests fail (found by the P8.14 mutation review). Give each consumer ratchet a pair of same-size, different-content scope sets. Overlap: none (`git grep todo/` for ScopeKey, scope-set-size and ScopedBindingKeyOf found no row).
+- [ ] **Bound the 1-WL refinement tests with a deadline** [Test debt, XS]: a mutant that makes the refinement step return its coloring unchanged makes the isomorphism tests run past 120 s instead of failing, so the failure is a CI timeout with no message. Give the affected tests a bounded deadline so the mutant is a red test, not a hang (observed by the P8.14 mutation review; the exact test was not located here, so find it from `%refine-step` in `pkg/stdlib/lib/wile/algebra/combinatorial-graph.scm`). Overlap: none.
+
 ### Filed by the P8.11 crosscheck (2026-10-23)
 
 - [ ] **Widen the `Mutates` direct-sink pin to the shapes it cannot see** [Test debt, M]: the pin sees 12 of the 21 annotated primitives (the 13 hand-written primitives that call a sink method, less `append`). Not seen: write-through to a backing slice without a mutator call (vector-fill!, vector-copy!, bytevector-copy!, read-bytevector!, string-copy!), `String.SetValue`, method values, helper indirection (record-modifier's factory), and every helper-built primitive (152 of 464 with an Impl, 33%; set-box!, %parameter-raw-set! and atomic-store! are three annotated ones). Needs function-valued arguments and func-typed call sites as edges, plus exported-field and slice writes on the values types: the SSA or `go/analysis` item the closed row below describes. Overlap checked: this is the remaining scope of that row.
