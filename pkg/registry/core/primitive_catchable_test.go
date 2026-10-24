@@ -27,6 +27,8 @@ import (
 // Go panic and on any condition that guard cannot catch. The current-port rows are
 // the regression guard for the io resolve-time panic.
 func TestPrimitiveConditionsAreCatchable(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "car of non-pair", Code: `(car 5)`},
 		{Name: "vector-ref out of range", Code: `(vector-ref (vector) 0)`},

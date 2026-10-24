@@ -32,6 +32,8 @@ import (
 )
 
 func TestCallCC(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -99,6 +101,8 @@ func TestCallCC(t *testing.T) {
 }
 
 func TestCallCCWithHigherOrderFunctions(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -165,6 +169,8 @@ func TestCallCCWithHigherOrderFunctions(t *testing.T) {
 }
 
 func TestMapMultipleLists(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -259,6 +265,8 @@ func TestMapMultipleLists(t *testing.T) {
 }
 
 func TestForEachMultipleLists(t *testing.T) {
+	t.Parallel()
+
 	// for-each returns void, so we test that it doesn't error
 	tcs := []struct {
 		name string
@@ -311,6 +319,8 @@ func TestForEachMultipleLists(t *testing.T) {
 }
 
 func TestApplyMultipleArgs(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -376,6 +386,8 @@ func TestApplyMultipleArgs(t *testing.T) {
 }
 
 func TestValues(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -412,6 +424,8 @@ func TestValues(t *testing.T) {
 }
 
 func TestCallWithValues(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -501,6 +515,8 @@ func TestCallWithValues(t *testing.T) {
 }
 
 func TestDynamicWind(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -596,6 +612,8 @@ func TestDynamicWind(t *testing.T) {
 // TestDynamicWindEscape tests that after is called on continuation escape.
 // This test uses runSchemeCodeWithEnv to load bootstrap macros for 'let'.
 func TestDynamicWindEscape(t *testing.T) {
+	t.Parallel()
+
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
@@ -637,6 +655,8 @@ func TestDynamicWindEscape(t *testing.T) {
 }
 
 func TestDynamicWindBasic(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((result '()))
 			(dynamic-wind
@@ -650,6 +670,8 @@ func TestDynamicWindBasic(t *testing.T) {
 }
 
 func TestCallWithValuesExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "call-with-values single value",
@@ -683,6 +705,8 @@ func TestCallWithValuesExtended(t *testing.T) {
 }
 
 func TestCallCCMultiInvoke(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "continuation invoked after call/cc returns",
@@ -714,6 +738,8 @@ func TestCallCCMultiInvoke(t *testing.T) {
 }
 
 func TestCallCCMultipleValues(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "call/cc body returns multiple values",
@@ -764,6 +790,8 @@ func TestCallCCMultipleValues(t *testing.T) {
 // a call/cc inside map's callback includes the rest of the map iteration
 // and the outer computation.
 func TestCallCCSubContextReentry(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			// Re-entering a continuation captured inside map should
@@ -822,6 +850,8 @@ func TestCallCCSubContextReentry(t *testing.T) {
 }
 
 func TestDynamicWindExceptionInThunks(t *testing.T) {
+	t.Parallel()
+
 	errorTcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "exception in before thunk", Code: `(dynamic-wind (lambda () (error "before-fail")) (lambda () 1) (lambda () 2))`},
 		{Name: "exception in after thunk", Code: `(dynamic-wind (lambda () #f) (lambda () 42) (lambda () (error "after-fail")))`},
@@ -855,6 +885,8 @@ func TestDynamicWindExceptionInThunks(t *testing.T) {
 }
 
 func TestApplyExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "apply with prefix args",
@@ -878,6 +910,8 @@ func TestApplyExtended(t *testing.T) {
 }
 
 func TestApply_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "improper list as final argument", Code: `(apply + '(1 . 2))`},
 		{Name: "non-list as final argument", Code: `(apply + 42)`},
@@ -890,6 +924,8 @@ func TestApply_Errors(t *testing.T) {
 }
 
 func TestMap_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "exception in mapped procedure", Code: `(map (lambda (x) (if (= x 2) (error "boom") x)) '(1 2 3))`},
 		{Name: "improper list argument", Code: `(map (lambda (x) x) '(1 . 2))`},
@@ -902,6 +938,8 @@ func TestMap_Errors(t *testing.T) {
 }
 
 func TestForEachExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "unequal length lists stops at shortest",
@@ -926,6 +964,8 @@ func TestForEachExtended(t *testing.T) {
 }
 
 func TestCallWithValues_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "exception in producer", Code: `(call-with-values (lambda () (error "fail")) (lambda (x) x))`},
 		{Name: "exception in consumer", Code: `(call-with-values (lambda () 42) (lambda (x) (error "fail")))`},
@@ -942,6 +982,8 @@ func TestCallWithValues_Errors(t *testing.T) {
 // nested call/cc sub-contexts had truncated continuation chains, causing
 // top-level forms after (scheduler-run) to be silently dropped.
 func TestCallCCCoroutines(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name    string
 		code    string
@@ -1072,6 +1114,8 @@ func TestCallCCCoroutines(t *testing.T) {
 }
 
 func TestApplyWithParameter(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -1124,6 +1168,8 @@ func TestApplyWithParameter(t *testing.T) {
 // before the fix; it guards that a continuation delimited at the thunk's own
 // boundary is still resolved there.
 func TestCallCCInAWindingThunkIsNotAPrompt(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "a full continuation invoked from an escape's after thunk replaces the escape",
@@ -1294,6 +1340,8 @@ func TestCallCCInAWindingThunkIsNotAPrompt(t *testing.T) {
 // continues. Treating the delivery as the context's final result instead ends
 // the evaluation with 5.
 func TestEmptyContinuationResumedAtAPromptFrame(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCodeWithTimeout(t, `
 		(list (call-with-continuation-prompt (lambda () (call/cc (lambda (k) (k 5))))
 		                                     (default-continuation-prompt-tag)

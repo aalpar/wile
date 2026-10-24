@@ -24,6 +24,8 @@ import (
 // wrong argument counts. The VM enforces arity automatically via
 // machine_context.go ("expected %d arguments, got %d").
 func TestParameters_ArityErrors(t *testing.T) {
+	t.Parallel()
+
 	// Fixed 1 arg: parameter?
 	t.Run("parameter? zero args", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, "(parameter?)")

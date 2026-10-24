@@ -31,6 +31,8 @@ import (
 // TestZeroQ tests the zero? predicate.
 // R7RS §6.2.6: (zero? z) returns #t if z is zero.
 func TestZeroQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -78,6 +80,8 @@ func TestZeroQ(t *testing.T) {
 // TestOddQ tests the odd? predicate.
 // R7RS §6.2.6: (odd? n) returns #t if n is odd.
 func TestOddQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -115,6 +119,8 @@ func TestOddQ(t *testing.T) {
 
 // TestOddQ_Errors tests error cases for odd?.
 func TestOddQ_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("odd? on non-integer float", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(odd? 3.5)`)
 	})
@@ -132,6 +138,8 @@ func TestOddQ_Errors(t *testing.T) {
 // TestEvenQ tests the even? predicate.
 // R7RS §6.2.6: (even? n) returns #t if n is even.
 func TestEvenQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -169,6 +177,8 @@ func TestEvenQ(t *testing.T) {
 
 // TestEvenQ_Errors tests error cases for even?.
 func TestEvenQ_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("even? on non-integer float", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(even? 3.5)`)
 	})
@@ -191,6 +201,8 @@ func TestEvenQ_Errors(t *testing.T) {
 // TestNumericEquals tests the = comparison.
 // R7RS §6.2.6: (= z1 z2 z3 ...) returns #t if all arguments are numerically equal.
 func TestNumericEquals(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -249,6 +261,8 @@ func TestNumericEquals(t *testing.T) {
 // TestNumericLessThan tests the < comparison.
 // R7RS §6.2.6: (< x1 x2 x3 ...) returns #t if arguments are monotonically increasing.
 func TestNumericLessThan(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -295,6 +309,8 @@ func TestNumericLessThan(t *testing.T) {
 // TestNumericGreaterThan tests the > comparison.
 // R7RS §6.2.6: (> x1 x2 x3 ...) returns #t if arguments are monotonically decreasing.
 func TestNumericGreaterThan(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -338,6 +354,8 @@ func TestNumericGreaterThan(t *testing.T) {
 // TestNumericLessThanOrEqual tests the <= comparison.
 // R7RS §6.2.6: (<= x1 x2 x3 ...) returns #t if arguments are monotonically non-decreasing.
 func TestNumericLessThanOrEqual(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -380,6 +398,8 @@ func TestNumericLessThanOrEqual(t *testing.T) {
 // TestNumericGreaterThanOrEqual tests the >= comparison.
 // R7RS §6.2.6: (>= x1 x2 x3 ...) returns #t if arguments are monotonically non-increasing.
 func TestNumericGreaterThanOrEqual(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -423,6 +443,8 @@ func TestNumericGreaterThanOrEqual(t *testing.T) {
 // Bug: case *values.BigComplex matched only BigComplex, not *values.Complex.
 // Fix: case values.ComplexNumber matches both implementations.
 func TestRealQ_ComplexRegression(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -462,6 +484,8 @@ func TestRealQ_ComplexRegression(t *testing.T) {
 // TestComparison_NonRealComplex tests that ordering comparisons reject non-real complex numbers.
 // R7RS §6.2.6: <, >, <=, >= require real arguments.
 func TestComparison_NonRealComplex(t *testing.T) {
+	t.Parallel()
+
 	// Non-real complex should error for ordering comparisons
 	t.Run("< with non-real complex", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(< 1+1i 2)`)
@@ -494,6 +518,8 @@ func TestComparison_NonRealComplex(t *testing.T) {
 // TestComparison_TypeErrors tests that numeric comparisons reject non-numeric arguments.
 // R7RS §6.2.6: =, <, >, <=, >= require numeric arguments.
 func TestComparison_TypeErrors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("= string first arg", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(= "hello" 1)`)
 	})
@@ -532,6 +558,8 @@ func TestComparison_TypeErrors(t *testing.T) {
 
 // TestExactnessPredicatesExtended adds BigInteger and BigFloat coverage.
 func TestExactnessPredicatesExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -578,6 +606,8 @@ func TestExactnessPredicatesExtended(t *testing.T) {
 
 // TestSignPredicatesExtended adds BigInteger, BigFloat, and special value coverage.
 func TestSignPredicatesExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -618,6 +648,8 @@ func TestSignPredicatesExtended(t *testing.T) {
 
 // TestSpecialValuePredicatesExtended adds BigInteger and BigFloat coverage.
 func TestSpecialValuePredicatesExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -653,6 +685,8 @@ func TestSpecialValuePredicatesExtended(t *testing.T) {
 // TestTypeTowerPredicates tests the numeric tower predicates.
 // R7RS §6.2.6: number?, complex?, real?, rational?, integer?
 func TestTypeTowerPredicates(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

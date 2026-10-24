@@ -30,6 +30,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestIntegerQ(t *testing.T) {
+	t.Parallel()
+
 	t.Run("integer? on exact integer", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, "(integer? 42)")
 		qt.Assert(t, err, qt.IsNil)
@@ -96,6 +98,8 @@ func TestIntegerQ(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestSqrtExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("sqrt of perfect square", func(t *testing.T) {
 		// R7RS §6.2.6: sqrt of exact perfect square returns exact integer
 		result, err := testhelpers.RunSchemeCode(t, "(sqrt 4)")
@@ -165,6 +169,8 @@ func TestSqrtExtended(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestExptExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("expt with positive integer exponent", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, "(expt 2 3)")
 		qt.Assert(t, err, qt.IsNil)
@@ -238,6 +244,8 @@ func TestExptExtended(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestNumeratorExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("numerator of rational", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, "(numerator 3/4)")
 		qt.Assert(t, err, qt.IsNil)
@@ -285,6 +293,8 @@ func TestNumeratorExtended(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestDenominatorExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("denominator of rational", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, "(denominator 3/4)")
 		qt.Assert(t, err, qt.IsNil)
@@ -340,6 +350,8 @@ func TestDenominatorExtended(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestNumberToStringExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("number->string on integer", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, "(number->string 42)")
 		qt.Assert(t, err, qt.IsNil)
@@ -418,6 +430,8 @@ func TestNumberToStringExtended(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestStringToNumberExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("string->number on integer string", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, "(string->number \"42\")")
 		qt.Assert(t, err, qt.IsNil)
@@ -500,6 +514,8 @@ func TestStringToNumberExtended(t *testing.T) {
 // Exactness prefixes: #e (exact), #i (inexact).
 // Up to two prefixes (one radix + one exactness) in either order.
 func TestStringToNumber_Prefixes(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Radix prefixes
 		{Name: "hex prefix", Code: `(string->number "#x2a")`, Expected: values.NewInteger(42)},
@@ -558,6 +574,8 @@ func TestStringToNumber_Prefixes(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestNumeratorDenominator_Exactness(t *testing.T) {
+	t.Parallel()
+
 	// Inexact input → inexact output
 	t.Run("numerator of 0.5 is inexact", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, "(numerator 0.5)")

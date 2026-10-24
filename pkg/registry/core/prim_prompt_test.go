@@ -24,6 +24,8 @@ import (
 )
 
 func TestPrompt_BasicAbortRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []testhelpers.SchemeCodeTestCase{
@@ -66,6 +68,8 @@ func TestPrompt_BasicAbortRoundTrip(t *testing.T) {
 }
 
 func TestPrompt_ContinuationPromptTagPredicate(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -107,6 +111,8 @@ func TestPrompt_ContinuationPromptTagPredicate(t *testing.T) {
 }
 
 func TestPrompt_ComposableContinuation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []testhelpers.SchemeCodeTestCase{
@@ -161,6 +167,8 @@ func TestPrompt_ComposableContinuation(t *testing.T) {
 // the rows date from covering that arm and now pin that its removal changed no
 // answer here. The rows with a live chain are in TestPrompt_ComposableContinuation.
 func TestPrompt_ComposableContinuationAtAThreadRoot(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []testhelpers.SchemeCodeTestCase{
@@ -213,6 +221,8 @@ func TestPrompt_ComposableContinuationAtAThreadRoot(t *testing.T) {
 }
 
 func TestPrompt_NestedPrompts(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []testhelpers.SchemeCodeTestCase{
@@ -256,6 +266,8 @@ func TestPrompt_NestedPrompts(t *testing.T) {
 }
 
 func TestPrompt_DynamicWind(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []testhelpers.SchemeCodeTestCase{
@@ -287,6 +299,8 @@ func TestPrompt_DynamicWind(t *testing.T) {
 }
 
 func TestPrompt_AvailableQ(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "default-available", Code: `
@@ -316,6 +330,8 @@ func TestPrompt_AvailableQ(t *testing.T) {
 }
 
 func TestPrompt_AvailableQErrors(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "not-a-tag", Code: `(continuation-prompt-available? 42)`},

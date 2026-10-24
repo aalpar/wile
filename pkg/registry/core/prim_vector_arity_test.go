@@ -24,6 +24,8 @@ import (
 // argument counts. The VM enforces arity automatically via
 // machine_context.go ("expected %d arguments, got %d").
 func TestVectors_ArityErrors(t *testing.T) {
+	t.Parallel()
+
 	fixedArityErrors := []struct {
 		name string
 		code string

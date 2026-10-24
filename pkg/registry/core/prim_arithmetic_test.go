@@ -28,6 +28,8 @@ import (
 )
 
 func TestAddition(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
 		{Name: "add two integers", Code: `(+ 1 2)`, Expected: values.NewInteger(3)},
@@ -76,6 +78,8 @@ func TestAddition(t *testing.T) {
 }
 
 func TestAddition_SpecialValues(t *testing.T) {
+	t.Parallel()
+
 	// Test infinity and NaN behavior
 	t.Run("add positive infinity", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(+ 1 +inf.0)`)
@@ -111,6 +115,8 @@ func TestAddition_SpecialValues(t *testing.T) {
 }
 
 func TestSubtraction(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
 		{Name: "subtract two integers", Code: `(- 5 2)`, Expected: values.NewInteger(3)},
@@ -153,6 +159,8 @@ func TestSubtraction(t *testing.T) {
 }
 
 func TestSubtraction_SpecialValues(t *testing.T) {
+	t.Parallel()
+
 	t.Run("subtract from infinity", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(- +inf.0 1)`)
 		qt.Assert(t, err, qt.IsNil)
@@ -199,6 +207,8 @@ func TestSubtraction_SpecialValues(t *testing.T) {
 }
 
 func TestSubtraction_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("subtract no arguments", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(-)`)
 	})
@@ -211,6 +221,8 @@ func TestSubtraction_Errors(t *testing.T) {
 }
 
 func TestMultiplication(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
 		{Name: "multiply two integers", Code: `(* 3 4)`, Expected: values.NewInteger(12)},
@@ -256,6 +268,8 @@ func TestMultiplication(t *testing.T) {
 }
 
 func TestMultiplication_SpecialValues(t *testing.T) {
+	t.Parallel()
+
 	t.Run("multiply by infinity", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(* 2 +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
@@ -302,6 +316,8 @@ func TestMultiplication_SpecialValues(t *testing.T) {
 }
 
 func TestDivision(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
 		{Name: "divide two integers", Code: `(/ 10 2)`, Expected: values.NewInteger(5)},
@@ -346,6 +362,8 @@ func TestDivision(t *testing.T) {
 }
 
 func TestDivision_SpecialValues(t *testing.T) {
+	t.Parallel()
+
 	t.Run("divide by infinity", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(/ 1 +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
@@ -383,6 +401,8 @@ func TestDivision_SpecialValues(t *testing.T) {
 }
 
 func TestDivision_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("divide no arguments", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(/)`)
 	})
@@ -400,6 +420,8 @@ func TestDivision_Errors(t *testing.T) {
 }
 
 func TestAbs(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer operations
 		{Name: "abs of positive", Code: `(abs 5)`, Expected: values.NewInteger(5)},
@@ -429,6 +451,8 @@ func TestAbs(t *testing.T) {
 }
 
 func TestAbs_SpecialValues(t *testing.T) {
+	t.Parallel()
+
 	t.Run("abs of positive infinity", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(abs +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
@@ -455,6 +479,8 @@ func TestAbs_SpecialValues(t *testing.T) {
 }
 
 func TestFloor(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -486,6 +512,8 @@ func TestFloor(t *testing.T) {
 }
 
 func TestCeiling(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -517,6 +545,8 @@ func TestCeiling(t *testing.T) {
 }
 
 func TestRound(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -548,6 +578,8 @@ func TestRound(t *testing.T) {
 }
 
 func TestTruncate(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -579,6 +611,8 @@ func TestTruncate(t *testing.T) {
 }
 
 func TestSqrt(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Perfect square integers return exact integer per R7RS §6.2.6
 		{Name: "sqrt of perfect square 4", Code: `(sqrt 4)`, Expected: values.NewInteger(2)},
@@ -606,6 +640,8 @@ func TestSqrt(t *testing.T) {
 }
 
 func TestSqrt_NegativeToComplex(t *testing.T) {
+	t.Parallel()
+
 	// Negative perfect-square integers return exact BigComplex per R7RS §6.2.6
 	t.Run("sqrt of negative integer", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(sqrt -1)`)
@@ -635,6 +671,8 @@ func TestSqrt_NegativeToComplex(t *testing.T) {
 }
 
 func TestSqrt_SpecialValues(t *testing.T) {
+	t.Parallel()
+
 	t.Run("sqrt of positive infinity", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(sqrt +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
@@ -653,6 +691,8 @@ func TestSqrt_SpecialValues(t *testing.T) {
 }
 
 func TestExpt(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer exponents
 		{Name: "2^3", Code: `(expt 2 3)`, Expected: values.NewInteger(8)},
@@ -697,6 +737,8 @@ func TestExpt(t *testing.T) {
 }
 
 func TestExpt_SpecialValues(t *testing.T) {
+	t.Parallel()
+
 	t.Run("infinity^2", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(expt +inf.0 2)`)
 		qt.Assert(t, err, qt.IsNil)
@@ -725,6 +767,8 @@ func TestExpt_SpecialValues(t *testing.T) {
 // TestExpt_FloatingPointPrecision tests cases where floating-point precision
 // prevents exact equality. These test mathematical correctness within epsilon.
 func TestExpt_FloatingPointPrecision(t *testing.T) {
+	t.Parallel()
+
 	const epsilon = 1e-10
 
 	t.Run("8^(1/3) ≈ 2", func(t *testing.T) {
@@ -754,6 +798,8 @@ func TestExpt_FloatingPointPrecision(t *testing.T) {
 }
 
 func TestSquare(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer operations
 		{Name: "square of 5", Code: `(square 5)`, Expected: values.NewInteger(25)},
@@ -790,6 +836,8 @@ func TestSquare(t *testing.T) {
 }
 
 func TestSquare_SpecialValues(t *testing.T) {
+	t.Parallel()
+
 	t.Run("square of infinity", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(square +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
@@ -816,6 +864,8 @@ func TestSquare_SpecialValues(t *testing.T) {
 }
 
 func TestGcd(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
 		{Name: "gcd of 12 and 8", Code: `(gcd 12 8)`, Expected: values.NewInteger(4)},
@@ -868,6 +918,8 @@ func TestGcd(t *testing.T) {
 }
 
 func TestLcm(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
 		{Name: "lcm of 4 and 6", Code: `(lcm 4 6)`, Expected: values.NewInteger(12)},
@@ -904,6 +956,8 @@ func TestLcm(t *testing.T) {
 }
 
 func TestQuotient(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations (truncates toward zero)
 		{Name: "quotient 7/3", Code: `(quotient 7 3)`, Expected: values.NewInteger(2)},
@@ -943,6 +997,8 @@ func TestQuotient(t *testing.T) {
 }
 
 func TestQuotient_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("quotient by zero", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(quotient 7 0)`)
 	})
@@ -955,6 +1011,8 @@ func TestQuotient_Errors(t *testing.T) {
 }
 
 func TestRemainder(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations (sign follows dividend)
 		{Name: "remainder 7/3", Code: `(remainder 7 3)`, Expected: values.NewInteger(1)},
@@ -989,6 +1047,8 @@ func TestRemainder(t *testing.T) {
 }
 
 func TestRemainder_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("remainder by zero", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(remainder 7 0)`)
 	})
@@ -1001,6 +1061,8 @@ func TestRemainder_Errors(t *testing.T) {
 }
 
 func TestModulo(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations (sign follows divisor)
 		{Name: "modulo 7/3", Code: `(modulo 7 3)`, Expected: values.NewInteger(1)},
@@ -1040,6 +1102,8 @@ func TestModulo(t *testing.T) {
 }
 
 func TestModulo_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("modulo by zero", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(modulo 7 0)`)
 	})
@@ -1052,6 +1116,8 @@ func TestModulo_Errors(t *testing.T) {
 }
 
 func TestMax(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
 		{Name: "max of two", Code: `(max 3 5)`, Expected: values.NewInteger(5)},
@@ -1090,6 +1156,8 @@ func TestMax(t *testing.T) {
 }
 
 func TestMax_SpecialValues(t *testing.T) {
+	t.Parallel()
+
 	t.Run("max with positive infinity", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(max 1 2 +inf.0 3)`)
 		qt.Assert(t, err, qt.IsNil)
@@ -1116,6 +1184,8 @@ func TestMax_SpecialValues(t *testing.T) {
 }
 
 func TestMax_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("max no arguments", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(max)`)
 	})
@@ -1128,6 +1198,8 @@ func TestMax_Errors(t *testing.T) {
 }
 
 func TestMin(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic integer operations
 		{Name: "min of two", Code: `(min 3 5)`, Expected: values.NewInteger(3)},
@@ -1166,6 +1238,8 @@ func TestMin(t *testing.T) {
 }
 
 func TestMin_SpecialValues(t *testing.T) {
+	t.Parallel()
+
 	t.Run("min with negative infinity", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(min 1 2 -inf.0 3)`)
 		qt.Assert(t, err, qt.IsNil)
@@ -1192,6 +1266,8 @@ func TestMin_SpecialValues(t *testing.T) {
 }
 
 func TestMin_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("min no arguments", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(min)`)
 	})
@@ -1204,6 +1280,8 @@ func TestMin_Errors(t *testing.T) {
 }
 
 func TestAddition_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("add string arg", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(+ "hello" 1)`)
 	})
@@ -1213,6 +1291,8 @@ func TestAddition_Errors(t *testing.T) {
 }
 
 func TestMultiplication_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("multiply string arg", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(* "hello" 2)`)
 	})
@@ -1222,6 +1302,8 @@ func TestMultiplication_Errors(t *testing.T) {
 }
 
 func TestAbs_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("abs of string", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(abs "hello")`)
 	})
@@ -1231,6 +1313,8 @@ func TestAbs_Errors(t *testing.T) {
 }
 
 func TestSquare_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("square of string", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(square "hello")`)
 	})
@@ -1240,6 +1324,8 @@ func TestSquare_Errors(t *testing.T) {
 }
 
 func TestSqrt_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("sqrt of string", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(sqrt "hello")`)
 	})
@@ -1249,6 +1335,8 @@ func TestSqrt_Errors(t *testing.T) {
 }
 
 func TestExpt_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("expt string base", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(expt "hello" 2)`)
 	})
@@ -1258,6 +1346,8 @@ func TestExpt_Errors(t *testing.T) {
 }
 
 func TestGcd_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("gcd string first arg", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(gcd "hello" 4)`)
 	})
@@ -1267,6 +1357,8 @@ func TestGcd_Errors(t *testing.T) {
 }
 
 func TestLcm_Errors(t *testing.T) {
+	t.Parallel()
+
 	t.Run("lcm string first arg", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, `(lcm "hello" 4)`)
 	})
@@ -1280,6 +1372,8 @@ func TestLcm_Errors(t *testing.T) {
 // exception that guard can handle. This tests the recover in
 // applyForeign, not just the values package panic.
 func TestDivisionByZero_SchemeException(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer / 0
@@ -1305,6 +1399,8 @@ func TestDivisionByZero_SchemeException(t *testing.T) {
 // TestDivisionByZero_ReturnsError verifies that division by zero returns an
 // error through the VM rather than panicking.
 func TestDivisionByZero_ReturnsError(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "integer / 0", Code: `(/ 1 0)`},
 		{Name: "biginteger / 0", Code: `(/ (expt 2 100) 0)`},
@@ -1325,6 +1421,8 @@ func TestDivisionByZero_ReturnsError(t *testing.T) {
 // division-by-zero errors use the ErrDivisionByZero sentinel and are
 // matchable with errors.Is().
 func TestQuotientDivisionByZeroSentinel(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -1349,6 +1447,8 @@ func TestQuotientDivisionByZeroSentinel(t *testing.T) {
 // TestDivisionByInexactZero verifies that dividing by an inexact zero returns
 // ±Inf or NaN per R7RS §6.2.6 and IEEE 754, rather than raising an error.
 func TestDivisionByInexactZero(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "(/ 1 0.0) is +inf.0", Code: `(/ 1 0.0)`, Expected: values.NewFloat(math.Inf(1))},
 		{Name: "(/ -1 0.0) is -inf.0", Code: `(/ -1 0.0)`, Expected: values.NewFloat(math.Inf(-1))},
@@ -1367,6 +1467,8 @@ func TestDivisionByInexactZero(t *testing.T) {
 }
 
 func TestOverflowPromotion(t *testing.T) {
+	t.Parallel()
+
 	// R7RS §6.2.3: Integer overflow should promote to BigInteger
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "add overflow", Code: `(+ 9223372036854775807 1)`, Expected: values.NewBigIntegerFromString("9223372036854775808", 10)},
@@ -1395,6 +1497,8 @@ func TestOverflowPromotion(t *testing.T) {
 // TestSpecialValueArithmetic tests arithmetic with +inf.0, -inf.0, and +nan.0.
 // R7RS §6.2.6: These follow IEEE 754 rules.
 func TestSpecialValueArithmetic(t *testing.T) {
+	t.Parallel()
+
 	// inf + -inf = nan
 	t.Run("+inf.0 + -inf.0 is nan", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, "(+ +inf.0 -inf.0)")

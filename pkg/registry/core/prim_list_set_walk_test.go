@@ -34,6 +34,8 @@ import (
 // R7RS §6.4 leaves the message unspecified; the settlement is consistency with
 // the siblings, not a conformance claim.
 func TestListSetReportsWhereTheWalkRanOut(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		code     string
@@ -149,6 +151,8 @@ func TestListSetReportsWhereTheWalkRanOut(t *testing.T) {
 // the last cell, and a circular list (k bounds the walk, so a cycle neither
 // hangs nor fails).
 func TestListSetStoresAtTheIndexedCell(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		code string
@@ -194,6 +198,8 @@ func TestListSetStoresAtTheIndexedCell(t *testing.T) {
 // TestListSetReturnsVoid pins list-set!'s return value, which R7RS leaves
 // unspecified and Wile makes the void value (the same as set-car!).
 func TestListSetReturnsVoid(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	v, err := testhelpers.RunSchemeCode(t, `(list-set! (list 1 2) 1 'z)`)
 	c.Assert(err, qt.IsNil)

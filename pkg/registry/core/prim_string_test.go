@@ -36,6 +36,8 @@ func stringValue(o values.Value) string {
 }
 
 func TestStringValue(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name   string
 		input  values.Value
@@ -76,6 +78,8 @@ func TestStringValue(t *testing.T) {
 }
 
 func TestStringValueWithPair(t *testing.T) {
+	t.Parallel()
+
 	// Test StringValue with a Pair which has both String() and SchemeString()
 	pair := values.NewCons(values.NewInteger(1), values.NewInteger(2))
 	result := stringValue(pair)
@@ -83,6 +87,8 @@ func TestStringValueWithPair(t *testing.T) {
 }
 
 func TestStringValueWithoutStringer(t *testing.T) {
+	t.Parallel()
+
 	// Test StringValue with a type that doesn't implement fmt.Stringer
 	// CharacterOutputPort implements values.wrt but not fmt.Stringer
 	buf := &bytes.Buffer{}
@@ -93,6 +99,8 @@ func TestStringValueWithoutStringer(t *testing.T) {
 }
 
 func TestStringLength(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -119,6 +127,8 @@ func TestStringLength(t *testing.T) {
 }
 
 func TestStringRef(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -145,6 +155,8 @@ func TestStringRef(t *testing.T) {
 }
 
 func TestSubstring(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -171,6 +183,8 @@ func TestSubstring(t *testing.T) {
 }
 
 func TestStringAppend(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -202,6 +216,8 @@ func TestStringAppend(t *testing.T) {
 }
 
 func TestStringToList(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -228,6 +244,8 @@ func TestStringToList(t *testing.T) {
 }
 
 func TestListToString(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -257,6 +275,8 @@ func TestListToString(t *testing.T) {
 }
 
 func TestListToStringUnicode(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "list->string unicode chars",
@@ -274,6 +294,8 @@ func TestListToStringUnicode(t *testing.T) {
 }
 
 func TestStringToSymbol(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -295,6 +317,8 @@ func TestStringToSymbol(t *testing.T) {
 }
 
 func TestStringToSymbolEdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string->symbol empty string round-trip",
@@ -317,6 +341,8 @@ func TestStringToSymbolEdgeCases(t *testing.T) {
 }
 
 func TestStringSymbolRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "ASCII round-trip",
@@ -349,6 +375,8 @@ func TestStringSymbolRoundTrip(t *testing.T) {
 }
 
 func TestSymbolToString(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -371,6 +399,8 @@ func TestSymbolToString(t *testing.T) {
 }
 
 func TestSymbolToStringEdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "symbol->string empty symbol",
@@ -393,6 +423,8 @@ func TestSymbolToStringEdgeCases(t *testing.T) {
 }
 
 func TestNumberToString(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -419,6 +451,8 @@ func TestNumberToString(t *testing.T) {
 }
 
 func TestStringToNumber(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -445,6 +479,8 @@ func TestStringToNumber(t *testing.T) {
 }
 
 func TestStringAppendExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -479,11 +515,15 @@ func TestStringAppendExtended(t *testing.T) {
 }
 
 func TestStringAppendWithNonString(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, `(string-append "hello" 42)`)
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestStringLengthExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-length unicode",
@@ -516,6 +556,8 @@ func TestStringLengthExtended(t *testing.T) {
 }
 
 func TestStringRefExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-ref last char",
@@ -543,6 +585,8 @@ func TestStringRefExtended(t *testing.T) {
 }
 
 func TestStringRefOutOfBounds(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "string-ref negative index",
@@ -566,6 +610,8 @@ func TestStringRefOutOfBounds(t *testing.T) {
 }
 
 func TestSubstringExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "substring full string",
@@ -603,6 +649,8 @@ func TestSubstringExtended(t *testing.T) {
 }
 
 func TestSubstringErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "substring start > end",
@@ -626,6 +674,8 @@ func TestSubstringErrors(t *testing.T) {
 }
 
 func TestMakeString(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "make-string with length only",
@@ -658,6 +708,8 @@ func TestMakeString(t *testing.T) {
 }
 
 func TestStringCopy(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-copy full",
@@ -712,6 +764,8 @@ func TestStringCopy(t *testing.T) {
 }
 
 func TestStringCopyErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "string-copy with non-string", Code: `(string-copy 42)`},
 		{Name: "string-copy with non-integer start", Code: `(string-copy "hello" "0")`},
@@ -729,6 +783,8 @@ func TestStringCopyErrors(t *testing.T) {
 }
 
 func TestStringCase(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// string-upcase
 		{
@@ -783,6 +839,8 @@ func TestStringCase(t *testing.T) {
 }
 
 func TestStringPredicate(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string? with string",
@@ -825,6 +883,8 @@ func TestStringPredicate(t *testing.T) {
 }
 
 func TestStringFoldcase(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-foldcase uppercase",
@@ -860,6 +920,8 @@ func TestStringFoldcase(t *testing.T) {
 // Per R7RS §6.7, string-foldcase uses Unicode full case folding which can expand
 // characters (e.g., ß → ss, ẞ → ss).
 func TestStringFoldcaseUnicode(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// German sharp S - full case folding expands to "ss"
 		{
@@ -911,6 +973,8 @@ func TestStringFoldcaseUnicode(t *testing.T) {
 }
 
 func TestStringConstructor(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string from chars",
@@ -940,6 +1004,8 @@ func TestStringConstructor(t *testing.T) {
 // Unicode string tests
 
 func TestStringUnicode(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// string-length with Unicode
 		{
@@ -1021,6 +1087,8 @@ func TestStringUnicode(t *testing.T) {
 // Error condition tests for string operations
 
 func TestStringErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		// string-length errors
 		{
@@ -1234,6 +1302,8 @@ func TestStringErrors(t *testing.T) {
 // Unicode character tests
 
 func TestCharUnicode(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// char->integer with Unicode
 		{
@@ -1283,6 +1353,8 @@ func TestCharUnicode(t *testing.T) {
 // R7RS string mutation tests
 
 func TestStringSet(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-set! first char",
@@ -1315,6 +1387,8 @@ func TestStringSet(t *testing.T) {
 }
 
 func TestStringSetErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "string-set! with non-string", Code: `(string-set! 42 0 #\a)`},
 		{Name: "string-set! with non-integer index", Code: `(string-set! "hello" "0" #\a)`},
@@ -1331,6 +1405,8 @@ func TestStringSetErrors(t *testing.T) {
 }
 
 func TestStringFill(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-fill! entire string",
@@ -1368,6 +1444,8 @@ func TestStringFill(t *testing.T) {
 }
 
 func TestStringFillErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "string-fill! with non-string", Code: `(string-fill! 42 #\z)`},
 		{Name: "string-fill! with non-character", Code: `(string-fill! "hello" "x")`},
@@ -1384,6 +1462,8 @@ func TestStringFillErrors(t *testing.T) {
 }
 
 func TestStringCopyTo(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-copy! basic",
@@ -1421,6 +1501,8 @@ func TestStringCopyTo(t *testing.T) {
 }
 
 func TestStringCopyToErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "string-copy! to non-string", Code: `(string-copy! 42 0 "abc")`},
 		{Name: "string-copy! at non-integer", Code: `(string-copy! "12345" "0" "abc")`},
@@ -1437,6 +1519,8 @@ func TestStringCopyToErrors(t *testing.T) {
 }
 
 func TestStringMap(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-map single string",
@@ -1493,6 +1577,8 @@ func TestStringMap(t *testing.T) {
 }
 
 func TestStringMapErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "string-map non-procedure", Code: `(string-map 42 "hello")`},
 		{Name: "string-map non-string", Code: `(string-map char-upcase 42)`},
@@ -1507,6 +1593,8 @@ func TestStringMapErrors(t *testing.T) {
 }
 
 func TestStringForEach(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-for-each returns void",
@@ -1554,6 +1642,8 @@ func TestStringForEach(t *testing.T) {
 }
 
 func TestStringForEachErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "string-for-each non-procedure", Code: `(string-for-each 42 "hello")`},
 		{Name: "string-for-each non-string", Code: `(string-for-each (lambda (c) c) 42)`},
@@ -1567,6 +1657,8 @@ func TestStringForEachErrors(t *testing.T) {
 }
 
 func TestStringToListOptional(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic (no optional args)
 		{Name: "string->list full", Code: `(string->list "hello")`,
@@ -1595,6 +1687,8 @@ func TestStringToListOptional(t *testing.T) {
 }
 
 func TestStringToListErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "string->list with non-string", Code: `(string->list 42)`},
 		{Name: "string->list with non-integer start", Code: `(string->list "hello" "x")`},
@@ -1612,6 +1706,8 @@ func TestStringToListErrors(t *testing.T) {
 }
 
 func TestStringSetImmutable(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "string-set! on literal",
@@ -1631,6 +1727,8 @@ func TestStringSetImmutable(t *testing.T) {
 }
 
 func TestStringSetMutable(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "string-set! on string-copy",

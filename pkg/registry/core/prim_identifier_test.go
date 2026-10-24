@@ -26,6 +26,8 @@ import (
 )
 
 func TestBoundIdentifierEqualQ(t *testing.T) {
+	t.Parallel()
+
 	sctx := syntax.NewZeroValueSourceContext()
 	scope1 := syntax.NewScope()
 	scope2 := syntax.NewScope()
@@ -103,6 +105,8 @@ func TestBoundIdentifierEqualQ(t *testing.T) {
 }
 
 func TestFreeIdentifierEqualQ(t *testing.T) {
+	t.Parallel()
+
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Create syntax symbols
@@ -176,6 +180,8 @@ func TestFreeIdentifierEqualQ(t *testing.T) {
 }
 
 func TestBoundIdentifierEqualQPrimitiveExists(t *testing.T) {
+	t.Parallel()
+
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
@@ -186,6 +192,8 @@ func TestBoundIdentifierEqualQPrimitiveExists(t *testing.T) {
 }
 
 func TestFreeIdentifierEqualQPrimitiveExists(t *testing.T) {
+	t.Parallel()
+
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 

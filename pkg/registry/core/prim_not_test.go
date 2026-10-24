@@ -27,6 +27,8 @@ import (
 // not Tests (R7RS §6.3 - Boolean negation)
 
 func TestNotComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Only #f is false
 		{Name: "not false is true", Code: `(not #f)`, Expected: values.TrueValue},

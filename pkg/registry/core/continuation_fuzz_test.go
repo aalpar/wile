@@ -164,6 +164,8 @@ func isVMCrash(err error) (string, bool) {
 // none may crash the VM, route to a missing prompt, or hang. A failure prints the exact
 // program for one-line reproduction. Deterministic seed -> reproducible.
 func TestContinuationFuzz(t *testing.T) {
+	t.Parallel()
+
 	const (
 		seed     = int64(0xC0FFEE)
 		programs = 2500

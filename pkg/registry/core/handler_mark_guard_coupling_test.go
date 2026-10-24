@@ -113,6 +113,8 @@ func runProtoGuard(t *testing.T, probe string) (string, error) {
 
 // G1: basic catch -- a raise inside my-guard's body is caught by a matching clause.
 func TestGuardCoupling_BasicCatch(t *testing.T) {
+	t.Parallel()
+
 	got, err := runProtoGuard(t, `(my-guard (e (#t (list 'caught e))) (p-raise 'boom))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, got, qt.Equals, "(caught boom)")
@@ -120,6 +122,8 @@ func TestGuardCoupling_BasicCatch(t *testing.T) {
 
 // G2: no exception -- my-guard returns the body value.
 func TestGuardCoupling_NoException(t *testing.T) {
+	t.Parallel()
+
 	got, err := runProtoGuard(t, `(my-guard (e (#t 'caught)) (+ 1 2))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, got, qt.Equals, "3")
@@ -129,6 +133,8 @@ func TestGuardCoupling_NoException(t *testing.T) {
 // extent of the original raise (R7RS §4.2.7). Exercises my-guard's re-raise path
 // (handler-k + p-raise-continuable) over the parameter model.
 func TestGuardCoupling_ReRaiseToOuter(t *testing.T) {
+	t.Parallel()
+
 	got, err := runProtoGuard(t, `
 (call/cc (lambda (done)
   (p-weh
@@ -161,6 +167,8 @@ func generatorProbe(wrap string) string {
 // C0 (positive control): plain call/cc, no boundary. MUST survive -- proves the
 // generator harness correctly detects the "survives" outcome.
 func TestGuardCoupling_C0_PlainSurvives(t *testing.T) {
+	t.Parallel()
+
 	got, err := runProtoGuard(t, generatorProbe(`(+ 1 (call/cc (lambda (c) (set! k c) 0)))`))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, got, qt.Equals, "(finished (1 2 3))")
@@ -177,6 +185,8 @@ const fullTrail = "(finished (1 2 3))"
 // C1: raw call-with-values, producer captures k — the producer-in-sub-context
 // truncation is fixed; the generator reaches the full trace.
 func TestGuardCoupling_C1_RawCallWithValues(t *testing.T) {
+	t.Parallel()
+
 	got, err := runProtoGuard(t, generatorProbe(
 		`(call-with-values (lambda () (+ 1 (call/cc (lambda (c) (set! k c) 0)))) (lambda (x) x))`))
 	qt.Assert(t, err, qt.IsNil)
@@ -186,6 +196,8 @@ func TestGuardCoupling_C1_RawCallWithValues(t *testing.T) {
 // C2: the REAL builtin guard (call-with-exit over call-with-values) survives
 // identically to C1 once both boundaries are reified.
 func TestGuardCoupling_C2_RealGuard(t *testing.T) {
+	t.Parallel()
+
 	got, err := runProtoGuard(t, generatorProbe(
 		`(guard (e (#t e)) (+ 1 (call/cc (lambda (c) (set! k c) 0))))`))
 	qt.Assert(t, err, qt.IsNil)
@@ -195,6 +207,8 @@ func TestGuardCoupling_C2_RealGuard(t *testing.T) {
 // G4: my-guard over the parameter handler survives identically to the real builtin
 // guard (C2) — the handler facet adds no truncation.
 func TestGuardCoupling_G4_MyGuard(t *testing.T) {
+	t.Parallel()
+
 	got, err := runProtoGuard(t, generatorProbe(
 		`(my-guard (e (#t e)) (+ 1 (call/cc (lambda (c) (set! k c) 0))))`))
 	qt.Assert(t, err, qt.IsNil)

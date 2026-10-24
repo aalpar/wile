@@ -42,6 +42,8 @@ import (
 // by exception provenance: a fix that re-routed only exception-derived aborts
 // would leave it broken.
 func TestAfterThunkControlTransferReachesDriver(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			// LEAKED. No exception anywhere: the after-thunk escapes to an OUTER
@@ -120,6 +122,8 @@ func TestAfterThunkControlTransferReachesDriver(t *testing.T) {
 // lose. `eval` is the vehicle that still reaches a deeper sub-context, and it
 // reproduces the filed trace exactly: (in out in) instead of (in out in out).
 func TestAbortCurrentContinuationRunsDeepSubAfterThunks(t *testing.T) {
+	t.Parallel()
+
 	// Both runs abort from inside the same dynamic-wind. The first runs it in
 	// ordinary code (the control, which already worked); the second runs it under
 	// eval, one foreign sub-context deeper. Each must contribute in AND out.

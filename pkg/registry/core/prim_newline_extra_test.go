@@ -26,6 +26,8 @@ import (
 // Newline Tests (R7RS §6.13.3)
 
 func TestNewlineWithExplicitPort(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(newline p)
@@ -38,6 +40,8 @@ func TestNewlineWithExplicitPort(t *testing.T) {
 }
 
 func TestMultipleNewlines(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(newline p)

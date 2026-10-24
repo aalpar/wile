@@ -29,6 +29,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestAtomicQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -60,12 +62,16 @@ func TestAtomicQ(t *testing.T) {
 }
 
 func TestMakeAtomic(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, "(atomic? (make-atomic 42))")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestAtomicLoad(t *testing.T) {
+	t.Parallel()
+
 	code := "(atomic-load (make-atomic 42))"
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
@@ -73,11 +79,15 @@ func TestAtomicLoad(t *testing.T) {
 }
 
 func TestAtomicLoadError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(atomic-load 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestAtomicStore(t *testing.T) {
+	t.Parallel()
+
 	code := `
 		(let ((a (make-atomic 0)))
 			(atomic-store! a 100)
@@ -89,11 +99,15 @@ func TestAtomicStore(t *testing.T) {
 }
 
 func TestAtomicStoreError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(atomic-store! 42 100)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestAtomicSwap(t *testing.T) {
+	t.Parallel()
+
 	code := `
 		(let ((a (make-atomic 'old)))
 			(atomic-swap! a 'new))
@@ -104,6 +118,8 @@ func TestAtomicSwap(t *testing.T) {
 }
 
 func TestAtomicSwapUpdatesValue(t *testing.T) {
+	t.Parallel()
+
 	code := `
 		(let ((a (make-atomic 'old)))
 			(atomic-swap! a 'new)
@@ -115,11 +131,15 @@ func TestAtomicSwapUpdatesValue(t *testing.T) {
 }
 
 func TestAtomicSwapError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(atomic-swap! 42 'new)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestAtomicCompareAndSwapSuccess(t *testing.T) {
+	t.Parallel()
+
 	// CAS uses Go's atomic.Value.CompareAndSwap (pointer comparison),
 	// so we must load the value first to get the same pointer.
 	code := `
@@ -133,6 +153,8 @@ func TestAtomicCompareAndSwapSuccess(t *testing.T) {
 }
 
 func TestAtomicCompareAndSwapFailure(t *testing.T) {
+	t.Parallel()
+
 	code := `
 		(let ((a (make-atomic 'old)))
 			(atomic-compare-and-swap! a 'wrong 'new))
@@ -143,6 +165,8 @@ func TestAtomicCompareAndSwapFailure(t *testing.T) {
 }
 
 func TestAtomicCompareAndSwapUpdatesOnSuccess(t *testing.T) {
+	t.Parallel()
+
 	// CAS uses Go's atomic.Value.CompareAndSwap (pointer comparison),
 	// so we must load the value first to get the same pointer.
 	code := `
@@ -157,6 +181,8 @@ func TestAtomicCompareAndSwapUpdatesOnSuccess(t *testing.T) {
 }
 
 func TestAtomicCompareAndSwapNoUpdateOnFailure(t *testing.T) {
+	t.Parallel()
+
 	code := `
 		(let ((a (make-atomic 'old)))
 			(atomic-compare-and-swap! a 'wrong 'new)
@@ -168,11 +194,15 @@ func TestAtomicCompareAndSwapNoUpdateOnFailure(t *testing.T) {
 }
 
 func TestAtomicCompareAndSwapError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(atomic-compare-and-swap! 42 'old 'new)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestAtomicWithDifferentTypes(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

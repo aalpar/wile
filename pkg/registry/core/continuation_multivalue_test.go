@@ -35,6 +35,8 @@ import (
 // inside a call-with-values producer, so they exercise the composable-
 // continuation empty-segment path, not the sub-context truncation bug.
 func TestContinuationMultipleValues(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "three values into list consumer",
@@ -73,6 +75,8 @@ func TestContinuationMultipleValues(t *testing.T) {
 // value-truncation the captured/composable apply paths fixed; the no-handler
 // prompt branch (prim_prompt.go) is a fourth site of the identical pattern.
 func TestPromptNoHandlerMultipleValues(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "three values to no-handler prompt",

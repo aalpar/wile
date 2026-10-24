@@ -46,6 +46,8 @@ func withinTolerance(t *testing.T, result, expected values.Value, tolerance floa
 }
 
 func TestSin(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name      string
 		prog      values.Value
@@ -84,6 +86,8 @@ func TestSin(t *testing.T) {
 }
 
 func TestCos(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name      string
 		prog      values.Value
@@ -122,6 +126,8 @@ func TestCos(t *testing.T) {
 }
 
 func TestTan(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name      string
 		prog      values.Value
@@ -154,6 +160,8 @@ func TestTan(t *testing.T) {
 }
 
 func TestAsin(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name      string
 		prog      values.Value
@@ -192,6 +200,8 @@ func TestAsin(t *testing.T) {
 }
 
 func TestAcos(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name      string
 		prog      values.Value
@@ -230,6 +240,8 @@ func TestAcos(t *testing.T) {
 }
 
 func TestAtan(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name      string
 		prog      values.Value
@@ -274,6 +286,8 @@ func TestAtan(t *testing.T) {
 }
 
 func TestExp(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name      string
 		prog      values.Value
@@ -312,6 +326,8 @@ func TestExp(t *testing.T) {
 }
 
 func TestLog(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name      string
 		prog      values.Value
@@ -355,6 +371,8 @@ func TestLog(t *testing.T) {
 }
 
 func TestTrigWithRationals(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "sin with rational",
@@ -476,6 +494,8 @@ func assertComplexResult(t *testing.T, code string, expectedReal, expectedImag, 
 
 // TestExpExtended tests exp with various numeric types and edge cases
 func TestExpExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("integer inputs", func(t *testing.T) {
 		assertFloatResult(t, `(exp 0)`, 1.0, 1e-10)
 		assertFloatResult(t, `(exp 1)`, math.E, 1e-10)
@@ -520,6 +540,8 @@ func TestExpExtended(t *testing.T) {
 
 // TestExpErrors tests error conditions for exp
 func TestExpErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "exp string", Code: `(exp "hello")`},
 		{Name: "exp symbol", Code: `(exp 'foo)`},
@@ -536,6 +558,8 @@ func TestExpErrors(t *testing.T) {
 
 // TestLogExtended tests log with various numeric types and edge cases
 func TestLogExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("natural log integer inputs", func(t *testing.T) {
 		assertFloatResult(t, `(log 1)`, 0.0, 1e-10)
 		assertFloatResult(t, `(log 2)`, math.Log(2), 1e-10)
@@ -609,6 +633,8 @@ func TestLogExtended(t *testing.T) {
 
 // TestLogErrors tests error conditions for log
 func TestLogErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "log string", Code: `(log "hello")`},
 		{Name: "log symbol", Code: `(log 'foo)`},
@@ -627,6 +653,8 @@ func TestLogErrors(t *testing.T) {
 
 // TestSinExtended tests sin with various numeric types and edge cases
 func TestSinExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("integer inputs", func(t *testing.T) {
 		assertFloatResult(t, `(sin 0)`, 0.0, 1e-10)
 		assertFloatResult(t, `(sin 1)`, math.Sin(1), 1e-10)
@@ -676,6 +704,8 @@ func TestSinExtended(t *testing.T) {
 
 // TestSinErrors tests error conditions for sin
 func TestSinErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "sin string", Code: `(sin "hello")`},
 		{Name: "sin symbol", Code: `(sin 'foo)`},
@@ -692,6 +722,8 @@ func TestSinErrors(t *testing.T) {
 
 // TestCosExtended tests cos with various numeric types and edge cases
 func TestCosExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("integer inputs", func(t *testing.T) {
 		assertFloatResult(t, `(cos 0)`, 1.0, 1e-10)
 		assertFloatResult(t, `(cos 1)`, math.Cos(1), 1e-10)
@@ -740,6 +772,8 @@ func TestCosExtended(t *testing.T) {
 
 // TestCosErrors tests error conditions for cos
 func TestCosErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "cos string", Code: `(cos "hello")`},
 		{Name: "cos symbol", Code: `(cos 'foo)`},
@@ -756,6 +790,8 @@ func TestCosErrors(t *testing.T) {
 
 // TestTanExtended tests tan with various numeric types and edge cases
 func TestTanExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("integer inputs", func(t *testing.T) {
 		assertFloatResult(t, `(tan 0)`, 0.0, 1e-10)
 		assertFloatResult(t, `(tan 1)`, math.Tan(1), 1e-10)
@@ -795,6 +831,8 @@ func TestTanExtended(t *testing.T) {
 
 // TestTanErrors tests error conditions for tan
 func TestTanErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "tan string", Code: `(tan "hello")`},
 		{Name: "tan symbol", Code: `(tan 'foo)`},
@@ -811,6 +849,8 @@ func TestTanErrors(t *testing.T) {
 
 // TestAsinExtended tests asin with various numeric types and edge cases
 func TestAsinExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("integer inputs", func(t *testing.T) {
 		assertFloatResult(t, `(asin 0)`, 0.0, 1e-10)
 		assertFloatResult(t, `(asin 1)`, math.Pi/2, 1e-10)
@@ -850,6 +890,8 @@ func TestAsinExtended(t *testing.T) {
 
 // TestAsinErrors tests error conditions for asin
 func TestAsinErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "asin string", Code: `(asin "hello")`},
 		{Name: "asin symbol", Code: `(asin 'foo)`},
@@ -866,6 +908,8 @@ func TestAsinErrors(t *testing.T) {
 
 // TestAcosExtended tests acos with various numeric types and edge cases
 func TestAcosExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("integer inputs", func(t *testing.T) {
 		assertFloatResult(t, `(acos 1)`, 0.0, 1e-10)
 		assertFloatResult(t, `(acos 0)`, math.Pi/2, 1e-10)
@@ -905,6 +949,8 @@ func TestAcosExtended(t *testing.T) {
 
 // TestAcosErrors tests error conditions for acos
 func TestAcosErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "acos string", Code: `(acos "hello")`},
 		{Name: "acos symbol", Code: `(acos 'foo)`},
@@ -921,6 +967,8 @@ func TestAcosErrors(t *testing.T) {
 
 // TestAtanExtended tests atan with various numeric types and edge cases
 func TestAtanExtended(t *testing.T) {
+	t.Parallel()
+
 	t.Run("one-arg integer inputs", func(t *testing.T) {
 		assertFloatResult(t, `(atan 0)`, 0.0, 1e-10)
 		assertFloatResult(t, `(atan 1)`, math.Pi/4, 1e-10)
@@ -984,6 +1032,8 @@ func TestAtanExtended(t *testing.T) {
 
 // TestAtanErrors tests error conditions for atan
 func TestAtanErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "atan string", Code: `(atan "hello")`},
 		{Name: "atan symbol", Code: `(atan 'foo)`},
@@ -1004,6 +1054,8 @@ func TestAtanErrors(t *testing.T) {
 // Expected values use Go's math/cmplx branch cut conventions.
 // See CLAUDE.md "Transcendental Functions - Implementation Details" for branch cut documentation.
 func TestTranscendentalComplex(t *testing.T) {
+	t.Parallel()
+
 	t.Run("exp with complex", func(t *testing.T) {
 		// exp(πi) = -1 (Euler's identity)
 		assertComplexResult(t, `(exp 0+3.141592653589793i)`, -1.0, 0, 1e-10)
@@ -1067,6 +1119,8 @@ func TestTranscendentalComplex(t *testing.T) {
 
 // TestTranscendentalIdentities tests mathematical identities
 func TestTranscendentalIdentities(t *testing.T) {
+	t.Parallel()
+
 	t.Run("sin^2 + cos^2 = 1", func(t *testing.T) {
 		// For various x values, sin(x)^2 + cos(x)^2 should equal 1
 		testValues := []string{"0", "1", "0.5", "1/2", "2", "3.14159"}

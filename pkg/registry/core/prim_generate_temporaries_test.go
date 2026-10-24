@@ -27,6 +27,8 @@ import (
 )
 
 func TestGenerateTemporaries_CorrectCount(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '(a b c))")
 	qt.Assert(t, err, qt.IsNil)
 
@@ -47,6 +49,8 @@ func TestGenerateTemporaries_CorrectCount(t *testing.T) {
 }
 
 func TestGenerateTemporaries_ReturnsSyntaxSymbols(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '(x))")
 	qt.Assert(t, err, qt.IsNil)
 
@@ -59,12 +63,16 @@ func TestGenerateTemporaries_ReturnsSyntaxSymbols(t *testing.T) {
 }
 
 func TestGenerateTemporaries_EmptyList(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '())")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, values.IsEmptyList(result), qt.IsTrue)
 }
 
 func TestGenerateTemporaries_AllUnique(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '(a b c d e))")
 	qt.Assert(t, err, qt.IsNil)
 
@@ -87,6 +95,8 @@ func TestGenerateTemporaries_AllUnique(t *testing.T) {
 }
 
 func TestGenerateTemporaries_UniqueAcrossCalls(t *testing.T) {
+	t.Parallel()
+
 	result1, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '(a b))")
 	qt.Assert(t, err, qt.IsNil)
 
@@ -124,6 +134,8 @@ func TestGenerateTemporaries_UniqueAcrossCalls(t *testing.T) {
 }
 
 func TestGenerateTemporaries_GensymPrefix(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '(a))")
 	qt.Assert(t, err, qt.IsNil)
 
@@ -133,6 +145,8 @@ func TestGenerateTemporaries_GensymPrefix(t *testing.T) {
 }
 
 func TestGenerateTemporaries_PrimitiveExists(t *testing.T) {
+	t.Parallel()
+
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 

@@ -33,6 +33,8 @@ import (
 // hand-authored name lists in specialforms.go that would otherwise cause
 // documentation to silently vanish.
 func TestDocEntryNamesResolve(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	env, reg, err := bootstrap.NewTopLevelWithRegistry(context.Background())
@@ -93,6 +95,8 @@ func checkAngleBracketParams(t *testing.T, name, doc string) {
 // doc strings use ALL-CAPS metavariables (KEY, TEST, BODY) instead of
 // angle-bracket notation (<key>, <test>, <body>).
 func TestDocStringsNoAngleBracketParams(t *testing.T) {
+	t.Parallel()
+
 	_, reg, err := bootstrap.NewTopLevelWithRegistry(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
@@ -126,6 +130,8 @@ func TestDocStringsNoAngleBracketParams(t *testing.T) {
 // This catches the original bug: doc strings declaring "Category: conditionals"
 // while ,topics didn't list "conditionals".
 func TestDocStringCategoriesVisible(t *testing.T) {
+	t.Parallel()
+
 	_, reg, err := bootstrap.NewTopLevelWithRegistry(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
@@ -169,6 +175,8 @@ func TestDocStringCategoriesVisible(t *testing.T) {
 // TestDocStringCategoriesNonEmpty verifies that every category returned by
 // Categories() has at least one entry in ByCategory().
 func TestDocStringCategoriesNonEmpty(t *testing.T) {
+	t.Parallel()
+
 	_, reg, err := bootstrap.NewTopLevelWithRegistry(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 

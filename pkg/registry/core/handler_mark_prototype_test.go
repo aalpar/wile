@@ -64,6 +64,8 @@ func runProto(t *testing.T, probe string) string {
 // Probe 1 (headline capture): a continuation captured under the mark-based inner
 // handler, re-invoked under a sentinel, must resume with the CAPTURED handler.
 func TestHandlerAsMarkPrototype_Capture(t *testing.T) {
+	t.Parallel()
+
 	got := runProto(t, `
 (call/cc (lambda (done)
   (let ((k #f) (log '()))
@@ -83,6 +85,8 @@ func TestHandlerAsMarkPrototype_Capture(t *testing.T) {
 // Probe 2 (self-catch escalation): a re-raise inside a handler must reach the OUTER
 // handler, not loop on itself.
 func TestHandlerAsMarkPrototype_SelfReRaiseEscalates(t *testing.T) {
+	t.Parallel()
+
 	got := runProto(t, `
 (call/cc (lambda (done)
   (p-weh
@@ -97,6 +101,8 @@ func TestHandlerAsMarkPrototype_SelfReRaiseEscalates(t *testing.T) {
 // Probe 3 (raise-continuable through re-invoke): resume returns the captured
 // handler's value at the raise site.
 func TestHandlerAsMarkPrototype_RaiseContinuableThroughReinvoke(t *testing.T) {
+	t.Parallel()
+
 	got := runProto(t, `
 (call/cc (lambda (done)
   (let ((k #f) (first #t))
@@ -121,6 +127,8 @@ func TestHandlerAsMarkPrototype_RaiseContinuableThroughReinvoke(t *testing.T) {
 // (current-continuation-marks does not hop parentMC); switching the carrier to a
 // parameter is the fix. No VM change required for handler lookup.
 func TestHandlerAsMarkPrototype_HandlerVisibleAcrossPrompt(t *testing.T) {
+	t.Parallel()
+
 	got := runProto(t, `
 (let ((tag (make-continuation-prompt-tag 'p)))
   (call/cc (lambda (done)

@@ -27,6 +27,8 @@ import (
 // eq? Tests (R7RS §6.1 - Identity comparison)
 
 func TestEqQComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Symbols - same symbol name should be eq?
 		{Name: "same symbol", Code: `(eq? 'foo 'foo)`, Expected: values.TrueValue},
@@ -92,6 +94,8 @@ func TestEqQComprehensive(t *testing.T) {
 }
 
 func TestEqQWithLetBinding(t *testing.T) {
+	t.Parallel()
+
 	// Test that eq? works correctly with let bindings (same object)
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{

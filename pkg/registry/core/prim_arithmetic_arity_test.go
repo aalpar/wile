@@ -24,6 +24,8 @@ import (
 // primitives reject wrong argument counts. The VM enforces arity
 // automatically via machine_context.go ("expected %d arguments, got %d").
 func TestArithmetic_ArityErrors(t *testing.T) {
+	t.Parallel()
+
 	// Fixed 1 arg: abs, exact, inexact
 	fixedArity1 := []string{
 		"abs",

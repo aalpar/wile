@@ -58,6 +58,8 @@ func redirectInput(t *testing.T, env *environment.EnvironmentFrame, r io.Reader)
 }
 
 func TestNewline(t *testing.T) {
+	t.Parallel()
+
 	prog := values.List(values.NewSymbol("newline"))
 	result, err := testhelpers.RunProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
@@ -65,6 +67,8 @@ func TestNewline(t *testing.T) {
 }
 
 func TestCurrentInputPort(t *testing.T) {
+	t.Parallel()
+
 	prog := values.List(values.NewSymbol("current-input-port"))
 	result, err := testhelpers.RunProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
@@ -74,6 +78,8 @@ func TestCurrentInputPort(t *testing.T) {
 }
 
 func TestCurrentOutputPort(t *testing.T) {
+	t.Parallel()
+
 	prog := values.List(values.NewSymbol("current-output-port"))
 	result, err := testhelpers.RunProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
@@ -83,6 +89,8 @@ func TestCurrentOutputPort(t *testing.T) {
 }
 
 func TestDisplayWithBuffer(t *testing.T) {
+	t.Parallel()
+
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -105,6 +113,8 @@ func TestDisplayWithBuffer(t *testing.T) {
 }
 
 func TestWriteWithBuffer(t *testing.T) {
+	t.Parallel()
+
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -127,6 +137,8 @@ func TestWriteWithBuffer(t *testing.T) {
 }
 
 func TestWriteCharWithBuffer(t *testing.T) {
+	t.Parallel()
+
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -149,6 +161,8 @@ func TestWriteCharWithBuffer(t *testing.T) {
 }
 
 func TestNewlineWithBuffer(t *testing.T) {
+	t.Parallel()
+
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -171,6 +185,8 @@ func TestNewlineWithBuffer(t *testing.T) {
 }
 
 func TestReadSyntax(t *testing.T) {
+	t.Parallel()
+
 	// Feed input to this engine's current-input-port.
 	input := strings.NewReader("(+ 1 2)")
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -196,6 +212,8 @@ func TestReadSyntax(t *testing.T) {
 }
 
 func TestRead(t *testing.T) {
+	t.Parallel()
+
 	// Feed input to this engine's current-input-port.
 	input := strings.NewReader("(a b c)")
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -222,6 +240,8 @@ func TestRead(t *testing.T) {
 }
 
 func TestDisplayWithSymbol(t *testing.T) {
+	t.Parallel()
+
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -245,6 +265,8 @@ func TestDisplayWithSymbol(t *testing.T) {
 }
 
 func TestWriteWithString(t *testing.T) {
+	t.Parallel()
+
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -267,6 +289,8 @@ func TestWriteWithString(t *testing.T) {
 }
 
 func TestWriteCharWithUnicode(t *testing.T) {
+	t.Parallel()
+
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -289,6 +313,8 @@ func TestWriteCharWithUnicode(t *testing.T) {
 }
 
 func TestDisplayWithInteger(t *testing.T) {
+	t.Parallel()
+
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -311,6 +337,8 @@ func TestDisplayWithInteger(t *testing.T) {
 }
 
 func TestDisplayWithBoolean(t *testing.T) {
+	t.Parallel()
+
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -333,6 +361,8 @@ func TestDisplayWithBoolean(t *testing.T) {
 }
 
 func TestWriteWithSymbol(t *testing.T) {
+	t.Parallel()
+
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -356,6 +386,8 @@ func TestWriteWithSymbol(t *testing.T) {
 }
 
 func TestGetCurrentInputPortInitialization(t *testing.T) {
+	t.Parallel()
+
 	// A fresh State defaults its input port to stdin (non-nil, textual).
 	st := ioext.NewState(nil)
 	port, err := st.GetInputPort()
@@ -364,6 +396,8 @@ func TestGetCurrentInputPortInitialization(t *testing.T) {
 }
 
 func TestGetCurrentOutputPortInitialization(t *testing.T) {
+	t.Parallel()
+
 	// A fresh State defaults its output port to stdout (non-nil, textual).
 	st := ioext.NewState(nil)
 	port, err := st.GetOutputPort()
@@ -372,6 +406,8 @@ func TestGetCurrentOutputPortInitialization(t *testing.T) {
 }
 
 func TestDisplayWithList(t *testing.T) {
+	t.Parallel()
+
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -396,6 +432,8 @@ func TestDisplayWithList(t *testing.T) {
 }
 
 func TestWriteWithList(t *testing.T) {
+	t.Parallel()
+
 	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
@@ -420,6 +458,8 @@ func TestWriteWithList(t *testing.T) {
 }
 
 func TestStringPorts(t *testing.T) {
+	t.Parallel()
+
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
@@ -454,6 +494,8 @@ func TestStringPorts(t *testing.T) {
 }
 
 func TestStringInputPort(t *testing.T) {
+	t.Parallel()
+
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
@@ -486,6 +528,8 @@ func TestStringInputPort(t *testing.T) {
 }
 
 func TestBytevectorPorts(t *testing.T) {
+	t.Parallel()
+
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
@@ -519,6 +563,8 @@ func TestBytevectorPorts(t *testing.T) {
 }
 
 func TestBytevectorInputPort(t *testing.T) {
+	t.Parallel()
+
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
@@ -547,6 +593,8 @@ func TestBytevectorInputPort(t *testing.T) {
 }
 
 func TestPortPredicates(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog string
@@ -631,6 +679,8 @@ func TestPortPredicates(t *testing.T) {
 }
 
 func TestReadSyntaxFromStringPort(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "read-syntax from string port",
@@ -654,6 +704,8 @@ func TestReadSyntaxFromStringPort(t *testing.T) {
 }
 
 func TestNewlineToStringPort(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(newline p)
@@ -667,6 +719,8 @@ func TestNewlineToStringPort(t *testing.T) {
 }
 
 func TestWriteCircularPair(t *testing.T) {
+	t.Parallel()
+
 	// Test that write handles circular pairs correctly with datum labels
 	// R7RS §6.13.3: write-shared uses datum labels for shared/circular structures
 	result, err := testhelpers.RunSchemeCode(t, `
@@ -684,6 +738,8 @@ func TestWriteCircularPair(t *testing.T) {
 }
 
 func TestWriteCircularList(t *testing.T) {
+	t.Parallel()
+
 	// Test write with a circular list
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
@@ -700,6 +756,8 @@ func TestWriteCircularList(t *testing.T) {
 }
 
 func TestDisplayCircularPair(t *testing.T) {
+	t.Parallel()
+
 	// Test that display handles circular pairs correctly
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
@@ -715,6 +773,8 @@ func TestDisplayCircularPair(t *testing.T) {
 }
 
 func TestWriteCircularVector(t *testing.T) {
+	t.Parallel()
+
 	// Test write with a circular vector
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
@@ -731,6 +791,8 @@ func TestWriteCircularVector(t *testing.T) {
 }
 
 func TestWriteSharedCircularPair(t *testing.T) {
+	t.Parallel()
+
 	// Test write-shared with circular pairs
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
@@ -746,6 +808,8 @@ func TestWriteSharedCircularPair(t *testing.T) {
 }
 
 func TestWriteNonCircularPair(t *testing.T) {
+	t.Parallel()
+
 	// Test that non-circular structures don't get labels
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
@@ -759,6 +823,8 @@ func TestWriteNonCircularPair(t *testing.T) {
 }
 
 func TestWriteNonCircularVector(t *testing.T) {
+	t.Parallel()
+
 	// Test that non-circular vectors don't get labels
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))

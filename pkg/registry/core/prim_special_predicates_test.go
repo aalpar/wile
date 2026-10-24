@@ -29,6 +29,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestFiniteQWithRationalAndComplex(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -75,6 +77,8 @@ func TestFiniteQWithRationalAndComplex(t *testing.T) {
 }
 
 func TestInfiniteQWithRationalAndComplex(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -116,6 +120,8 @@ func TestInfiniteQWithRationalAndComplex(t *testing.T) {
 }
 
 func TestNanQWithRationalAndComplex(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -164,6 +170,8 @@ func TestNanQWithRationalAndComplex(t *testing.T) {
 // reject non-numeric arguments. These predicates require a number argument
 // per R7RS §6.2.6.
 func TestSpecialPredicates_TypeErrors(t *testing.T) {
+	t.Parallel()
+
 	predicates := []string{"finite?", "infinite?", "nan?"}
 	badArgs := []struct {
 		label string
@@ -189,6 +197,8 @@ func TestSpecialPredicates_TypeErrors(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestRealPartWithVariousTypes(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

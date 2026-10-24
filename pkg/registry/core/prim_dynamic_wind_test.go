@@ -27,6 +27,8 @@ import (
 // dynamic-wind Tests (R7RS §6.4 - Cleanup handlers)
 
 func TestDynamicWindComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic - returns thunk value
 		{Name: "returns thunk value", Code: `(dynamic-wind (lambda () #f) (lambda () 42) (lambda () #f))`, Expected: values.NewInteger(42)},
@@ -65,6 +67,8 @@ func TestDynamicWindComprehensive(t *testing.T) {
 }
 
 func TestDynamicWindWithContinuations(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// After runs on continuation escape
 		{
@@ -111,6 +115,8 @@ func TestDynamicWindWithContinuations(t *testing.T) {
 }
 
 func TestDynamicWindErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "before not procedure", Code: `(dynamic-wind 5 (lambda () 1) (lambda () 2))`},
 		{Name: "thunk not procedure", Code: `(dynamic-wind (lambda () 1) 5 (lambda () 2))`},
@@ -127,6 +133,8 @@ func TestDynamicWindErrors(t *testing.T) {
 // TestDynamicWindR7RSExample tests the classic R7RS §6.10 example.
 // This is the canonical test for dynamic-wind + call/cc interaction.
 func TestDynamicWindR7RSExample(t *testing.T) {
+	t.Parallel()
+
 	// R7RS §6.10 example:
 	// (let ((path '()) (c #f))
 	//   (let ((add (lambda (s) (set! path (cons s path)))))
@@ -164,6 +172,8 @@ func TestDynamicWindR7RSExample(t *testing.T) {
 
 // TestDynamicWindNestedContinuations tests nested dynamic-wind with continuations.
 func TestDynamicWindNestedContinuations(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Nested dynamic-wind - inner escape triggers both afters
 		{
@@ -229,6 +239,8 @@ func TestDynamicWindNestedContinuations(t *testing.T) {
 // unwound (out ran before the body was done) and the body's own PopWind then found
 // the stack empty. Racket logs the expected order for both shapes.
 func TestReentryInsideAFrameKeepsIt(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "composable continuation",
@@ -384,6 +396,8 @@ func TestReentryInsideAFrameKeepsIt(t *testing.T) {
 // sub-context. A continuation captured and applied inside it reinstates at that
 // sub-context's own boundary, which keeps the inherited extents too.
 func TestRootlessSubContextLeavesInheritedExtents(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "completion",
@@ -456,6 +470,8 @@ func TestRootlessSubContextLeavesInheritedExtents(t *testing.T) {
 
 // TestDynamicWindContinuationReentry tests calling a captured continuation multiple times.
 func TestDynamicWindContinuationReentry(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Re-entry: continuation invoked twice
 		{
@@ -516,6 +532,8 @@ func TestDynamicWindContinuationReentry(t *testing.T) {
 
 // TestCallCCComprehensive tests various call/cc scenarios.
 func TestCallCCComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic: return without invoking continuation
 		{
@@ -587,6 +605,8 @@ func TestCallCCComprehensive(t *testing.T) {
 // stack — N>1 raised "expected a procedure" (after-thunk APPLY read a misaligned
 // slot) and N==0 underflowed the stack.
 func TestDynamicWindMultipleValues(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "thunk returns two values",

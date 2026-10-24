@@ -26,6 +26,8 @@ import (
 // Bug: Unchecked type assertion arg.(values.Tuple).Length() caused Go panic.
 // Fix: Check arg type before assertion, return ErrNotAList with context.
 func TestGenerateTemporaries_H7Regression(t *testing.T) {
+	t.Parallel()
+
 	t.Run("valid list input", func(t *testing.T) {
 		code := `
 			(let ((temps (generate-temporaries '(a b c))))

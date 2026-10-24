@@ -27,6 +27,8 @@ import (
 // Read Variants Tests (R7RS §6.13.2)
 
 func TestReadWithExplicitPort(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "42")))
 			(read p))
@@ -36,6 +38,8 @@ func TestReadWithExplicitPort(t *testing.T) {
 }
 
 func TestReadSyntaxReturnsSyntaxObject(t *testing.T) {
+	t.Parallel()
+
 	// read-syntax should return a syntax object
 	// We verify by converting back to datum
 	result, err := testhelpers.RunSchemeCode(t, `
@@ -48,6 +52,8 @@ func TestReadSyntaxReturnsSyntaxObject(t *testing.T) {
 }
 
 func TestReadEOFOnExhaustedPort(t *testing.T) {
+	t.Parallel()
+
 	// After reading all data, subsequent reads return eof-object
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "42")))
@@ -59,6 +65,8 @@ func TestReadEOFOnExhaustedPort(t *testing.T) {
 }
 
 func TestReadRepeatedEOF(t *testing.T) {
+	t.Parallel()
+
 	// Multiple reads past EOF all return eof-object
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "")))
@@ -71,6 +79,8 @@ func TestReadRepeatedEOF(t *testing.T) {
 }
 
 func TestReadSyntaxEOFOnExhaustedPort(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "foo")))
 			(read-syntax p)
@@ -81,6 +91,8 @@ func TestReadSyntaxEOFOnExhaustedPort(t *testing.T) {
 }
 
 func TestClosePortThenRead(t *testing.T) {
+	t.Parallel()
+
 	// After close-port, reading returns eof-object (the cached parser
 	// was evicted by close-port, and a fresh read on the closed port
 	// yields EOF immediately).
@@ -94,6 +106,8 @@ func TestClosePortThenRead(t *testing.T) {
 }
 
 func TestCallWithPortClosesOnReturn(t *testing.T) {
+	t.Parallel()
+
 	// call-with-port closes the port after proc returns
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "hello")))

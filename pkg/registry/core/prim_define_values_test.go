@@ -27,6 +27,8 @@ import (
 // define-values Tests (R7RS §5.3.3)
 
 func TestDefineValuesComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Zero values
 		{

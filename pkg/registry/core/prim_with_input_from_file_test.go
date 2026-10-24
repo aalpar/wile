@@ -29,6 +29,8 @@ import (
 // with-input-from-file Tests (R7RS §6.13.1)
 
 func TestWithInputFromFile(t *testing.T) {
+	t.Parallel()
+
 	// Create a temp file with content
 	f, err := os.CreateTemp("", "test_wiff_*.txt")
 	qt.Assert(t, err, qt.IsNil)
@@ -48,6 +50,8 @@ func TestWithInputFromFile(t *testing.T) {
 }
 
 func TestWithInputFromFileReturnsResult(t *testing.T) {
+	t.Parallel()
+
 	f, err := os.CreateTemp("", "test_wiff_return_*.txt")
 	qt.Assert(t, err, qt.IsNil)
 	_, err = f.WriteString("ignored")
@@ -65,6 +69,8 @@ func TestWithInputFromFileReturnsResult(t *testing.T) {
 }
 
 func TestWithInputFromFileErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "file not found",

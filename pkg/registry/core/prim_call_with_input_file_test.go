@@ -29,6 +29,8 @@ import (
 // call-with-input-file Tests (R7RS §6.13.1)
 
 func TestCallWithInputFile(t *testing.T) {
+	t.Parallel()
+
 	// Create a temp file with content
 	f, err := os.CreateTemp("", "test_cwif_*.txt")
 	qt.Assert(t, err, qt.IsNil)
@@ -73,6 +75,8 @@ func TestCallWithInputFile(t *testing.T) {
 }
 
 func TestCallWithInputFileErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "file not found",

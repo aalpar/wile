@@ -24,6 +24,8 @@ import (
 // reject wrong argument counts. The VM enforces arity automatically via
 // machine_context.go ("expected %d arguments, got %d").
 func TestEquality_ArityErrors(t *testing.T) {
+	t.Parallel()
+
 	// Fixed 2 args: eq?, eqv?, equal?
 	fixedArity2 := []string{
 		"eq?",

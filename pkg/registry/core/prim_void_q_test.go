@@ -25,6 +25,8 @@ import (
 )
 
 func TestVoidQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

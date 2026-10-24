@@ -27,6 +27,8 @@ import (
 // TestAuxiliarySyntax_CondElse verifies that auxiliary syntax `else` works
 // correctly in `cond` forms after importing (scheme base).
 func TestAuxiliarySyntax_CondElse(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	result, err := testhelpers.RunSchemeCode(t, "(cond (else 42))")
@@ -37,6 +39,8 @@ func TestAuxiliarySyntax_CondElse(t *testing.T) {
 // TestAuxiliarySyntax_CondArrow verifies that auxiliary syntax `=>` works
 // correctly in `cond` forms after importing (scheme base).
 func TestAuxiliarySyntax_CondArrow(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	result, err := testhelpers.RunSchemeCode(t, "(cond (#t => (lambda (x) x)))")
@@ -47,6 +51,8 @@ func TestAuxiliarySyntax_CondArrow(t *testing.T) {
 // TestAuxiliarySyntax_CaseElse verifies that auxiliary syntax `else` works
 // correctly in `case` forms after importing (scheme base).
 func TestAuxiliarySyntax_CaseElse(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	result, err := testhelpers.RunSchemeCode(t, "(case 1 (else 'ok))")

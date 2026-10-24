@@ -29,6 +29,8 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestVector(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "empty vector", Code: `(vector)`, Expected: values.NewVector()},
 		{Name: "single element", Code: `(vector 1)`, Expected: values.NewVector(values.NewInteger(1))},
@@ -49,6 +51,8 @@ func TestVector(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMakeVectorExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "zero length", Code: `(make-vector 0)`, Expected: values.NewVector()},
 		{Name: "without fill length", Code: `(vector-length (make-vector 5))`, Expected: values.NewInteger(5)},
@@ -65,6 +69,8 @@ func TestMakeVectorExtended(t *testing.T) {
 }
 
 func TestMakeVector_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-integer k", Code: `(make-vector "5")`},
 		{Name: "negative k", Code: `(make-vector -1)`},
@@ -81,6 +87,8 @@ func TestMakeVector_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestVectorLengthExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "empty vector", Code: `(vector-length '#())`, Expected: values.NewInteger(0)},
 		{Name: "single element", Code: `(vector-length '#(42))`, Expected: values.NewInteger(1)},
@@ -96,6 +104,8 @@ func TestVectorLengthExtended(t *testing.T) {
 }
 
 func TestVectorLength_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "string arg", Code: `(vector-length "hello")`},
 		{Name: "integer arg", Code: `(vector-length 42)`},
@@ -113,6 +123,8 @@ func TestVectorLength_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestVectorRefExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "first element", Code: `(vector-ref '#(a b c) 0)`, Expected: values.NewSymbol("a")},
 		{Name: "last element", Code: `(vector-ref '#(a b c) 2)`, Expected: values.NewSymbol("c")},
@@ -128,6 +140,8 @@ func TestVectorRefExtended(t *testing.T) {
 }
 
 func TestVectorRef_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-vector", Code: `(vector-ref '(1 2) 0)`},
 		{Name: "non-integer index", Code: `(vector-ref '#(1 2) "0")`},
@@ -147,6 +161,8 @@ func TestVectorRef_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestVectorSet(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "set first element", Code: `(let ((v (vector 1 2 3))) (vector-set! v 0 99) (vector-ref v 0))`, Expected: values.NewInteger(99)},
 		{Name: "set last element", Code: `(let ((v (vector 1 2 3))) (vector-set! v 2 99) (vector-ref v 2))`, Expected: values.NewInteger(99)},
@@ -163,6 +179,8 @@ func TestVectorSet(t *testing.T) {
 }
 
 func TestVectorSet_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-vector", Code: `(vector-set! '(1 2) 0 99)`},
 		{Name: "non-integer index", Code: `(vector-set! (vector 1 2) "0" 99)`},
@@ -182,6 +200,8 @@ func TestVectorSet_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestVectorToList_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-vector arg", Code: `(vector->list 42)`},
 		{Name: "non-integer start", Code: `(vector->list '#(1 2 3) "0")`},
@@ -202,6 +222,8 @@ func TestVectorToList_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestListToVectorExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "empty list", Code: `(list->vector '())`, Expected: values.NewVector()},
 		{Name: "single element", Code: `(list->vector '(42))`, Expected: values.NewVector(values.NewInteger(42))},
@@ -219,6 +241,8 @@ func TestListToVectorExtended(t *testing.T) {
 }
 
 func TestListToVector_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-list arg", Code: `(list->vector 42)`},
 		{Name: "improper list", Code: `(list->vector (cons 1 2))`},
@@ -236,6 +260,8 @@ func TestListToVector_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestVectorCopy(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "full copy", Code: `(vector-copy '#(1 2 3))`, Expected: values.NewVector(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
 		{Name: "empty vector", Code: `(vector-copy '#())`, Expected: values.NewVector()},
@@ -254,6 +280,8 @@ func TestVectorCopy(t *testing.T) {
 }
 
 func TestVectorCopy_Independence(t *testing.T) {
+	t.Parallel()
+
 	// Mutating the copy must not affect the original.
 	code := `(let ((orig (vector 1 2 3)))
                (let ((cp (vector-copy orig)))
@@ -265,6 +293,8 @@ func TestVectorCopy_Independence(t *testing.T) {
 }
 
 func TestVectorCopy_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-vector", Code: `(vector-copy 42)`},
 		{Name: "non-integer start", Code: `(vector-copy '#(1 2 3) "0")`},
@@ -285,6 +315,8 @@ func TestVectorCopy_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestVectorCopyTo(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "basic copy", Code: `(let ((dest (vector 0 0 0))) (vector-copy! dest 0 '#(1 2 3)) (vector->list dest))`, Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
 		{Name: "copy with offset", Code: `(let ((dest (vector 0 0 0 0 0))) (vector-copy! dest 2 '#(7 8 9)) (vector->list dest))`, Expected: values.List(values.NewInteger(0), values.NewInteger(0), values.NewInteger(7), values.NewInteger(8), values.NewInteger(9))},
@@ -303,6 +335,8 @@ func TestVectorCopyTo(t *testing.T) {
 }
 
 func TestVectorCopyTo_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-vector dest", Code: `(vector-copy! '(1 2 3) 0 '#(1))`},
 		{Name: "non-integer at", Code: `(vector-copy! (vector 1 2 3) "0" '#(1))`},
@@ -324,6 +358,8 @@ func TestVectorCopyTo_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestVectorFill(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "fill entire vector", Code: `(let ((v (vector 1 2 3))) (vector-fill! v 0) (vector->list v))`, Expected: values.List(values.NewInteger(0), values.NewInteger(0), values.NewInteger(0))},
 		{Name: "fill with start", Code: `(let ((v (vector 1 2 3))) (vector-fill! v 99 1) (vector->list v))`, Expected: values.List(values.NewInteger(1), values.NewInteger(99), values.NewInteger(99))},
@@ -341,6 +377,8 @@ func TestVectorFill(t *testing.T) {
 }
 
 func TestVectorFill_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-vector", Code: `(vector-fill! '(1 2 3) 0)`},
 		{Name: "non-integer start", Code: `(vector-fill! (vector 1 2 3) 0 "1")`},
@@ -361,6 +399,8 @@ func TestVectorFill_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestVectorAppend(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "no args", Code: `(vector-append)`, Expected: values.NewVector()},
 		{Name: "single vector", Code: `(vector-append '#(1 2 3))`, Expected: values.NewVector(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
@@ -379,6 +419,8 @@ func TestVectorAppend(t *testing.T) {
 }
 
 func TestVectorAppend_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-vector arg", Code: `(vector-append 42)`},
 		{Name: "non-vector second arg", Code: `(vector-append '#(1) "hello")`},
@@ -395,6 +437,8 @@ func TestVectorAppend_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestVectorMap(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "double elements", Code: `(vector-map (lambda (x) (* x 2)) '#(1 2 3))`, Expected: values.NewVector(values.NewInteger(2), values.NewInteger(4), values.NewInteger(6))},
 		{Name: "two vectors", Code: `(vector-map + '#(1 2 3) '#(10 20 30))`, Expected: values.NewVector(values.NewInteger(11), values.NewInteger(22), values.NewInteger(33))},
@@ -420,6 +464,8 @@ func TestVectorMap(t *testing.T) {
 }
 
 func TestVectorMap_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-procedure", Code: `(vector-map 42 '#(1))`},
 		{Name: "non-vector", Code: `(vector-map + '(1 2))`},
@@ -436,6 +482,8 @@ func TestVectorMap_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestVectorForEach(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "accumulate sum", Code: `(let ((sum 0)) (vector-for-each (lambda (x) (set! sum (+ sum x))) '#(1 2 3)) sum)`, Expected: values.NewInteger(6)},
 		{Name: "two vectors", Code: `(let ((sum 0)) (vector-for-each (lambda (a b) (set! sum (+ sum a b))) '#(1 2) '#(10 20)) sum)`, Expected: values.NewInteger(33)},
@@ -463,6 +511,8 @@ func TestVectorForEach(t *testing.T) {
 }
 
 func TestVectorForEach_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-procedure", Code: `(vector-for-each 42 '#(1))`},
 		{Name: "non-vector", Code: `(vector-for-each + '(1 2))`},
@@ -479,6 +529,8 @@ func TestVectorForEach_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestVectorToString(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "basic conversion", Code: `(vector->string '#(#\h #\e #\l #\l #\o))`, Expected: values.NewString("hello")},
 		{Name: "empty vector", Code: `(vector->string '#())`, Expected: values.NewString("")},
@@ -496,6 +548,8 @@ func TestVectorToString(t *testing.T) {
 }
 
 func TestVectorToString_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-vector", Code: `(vector->string "hello")`},
 		{Name: "non-character element", Code: `(vector->string '#(1 2 3))`},
@@ -516,6 +570,8 @@ func TestVectorToString_Errors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestStringToVector(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "basic conversion", Code: `(string->vector "hello")`, Expected: values.NewVector(values.NewCharacter('h'), values.NewCharacter('e'),
 			values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
@@ -534,6 +590,8 @@ func TestStringToVector(t *testing.T) {
 }
 
 func TestStringToVector_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-string arg", Code: `(string->vector 42)`},
 		{Name: "non-integer start", Code: `(string->vector "abc" "0")`},

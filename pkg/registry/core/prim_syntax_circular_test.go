@@ -42,6 +42,8 @@ import (
 // any affordable size is green in both directions — a test that cannot fail.
 // The iterative spine ships on that measurement, recorded in the commit.
 func TestDatumToSyntaxRefusesCircularDatum(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "cdr-cycle", Code: `(let ((x (list 1))) (set-cdr! x x) (datum->syntax #f x))`},
 		{Name: "car-cycle", Code: `(let ((x (list 1))) (set-car! x x) (datum->syntax #f x))`},
@@ -67,6 +69,8 @@ func TestDatumToSyntaxRefusesCircularDatum(t *testing.T) {
 // catchable condition; the stack overflow it replaced was not catchable by
 // anything, at any layer.
 func TestDatumToSyntaxCircularIsCatchable(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t,
 		`(guard (e (#t 'caught)) (let ((x (list 1))) (set-cdr! x x) (datum->syntax #f x)))`)
 	qt.Assert(t, err, qt.IsNil)
@@ -77,6 +81,8 @@ func TestDatumToSyntaxCircularIsCatchable(t *testing.T) {
 // visited set PATH-scoped. A DAG is not a cycle: if the set were global rather
 // than unwound on the way out, this would be refused too.
 func TestDatumToSyntaxSharedStructureStillConverts(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((shared (list 1 2)))
 		  (syntax->datum (datum->syntax #f (list shared shared))))`)
@@ -95,6 +101,8 @@ func TestDatumToSyntaxSharedStructureStillConverts(t *testing.T) {
 // host process with `fatal error: stack overflow`. It is now refused with a
 // catchable error naming the limit, at any depth.
 func TestDatumToSyntaxRefusesTooDeeplyNestedDatum(t *testing.T) {
+	t.Parallel()
+
 	deep := `(let loop ((i 0) (acc '()))
 	           (if (= i 20000) acc (loop (+ i 1) (list acc))))`
 

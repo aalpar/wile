@@ -29,6 +29,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestAngle(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name      string
 		code      string
@@ -124,6 +126,8 @@ func TestAngle(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestMakePolar(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name      string
 		code      string
@@ -205,6 +209,8 @@ func TestMakePolar(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestMakePolarAngleRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name      string
 		magnitude float64
@@ -285,6 +291,8 @@ func floatToString(f float64) string {
 // ----------------------------------------------------------------------------
 
 func TestAngleErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "angle of string", Code: `(angle "hello")`},
 		{Name: "angle of symbol", Code: `(angle 'foo)`},
@@ -303,6 +311,8 @@ func TestAngleErrors(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestMakePolarErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "make-polar string magnitude", Code: `(make-polar "3" 0)`},
 		{Name: "make-polar string angle", Code: `(make-polar 3 "0")`},

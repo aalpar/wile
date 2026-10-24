@@ -61,6 +61,8 @@ var _ machine.CallContext = (*foreignCallContext)(nil)
 // accessors need the machine context only for #f (the current marks): a real mark
 // set works under a foreign context, #f is refused with ErrNotAMachineContext.
 func TestMarkSetAccessorsForeignCallContext(t *testing.T) {
+	t.Parallel()
+
 	accessors := []struct {
 		name string
 		fn   func(machine.CallContext) error
@@ -85,6 +87,8 @@ func TestMarkSetAccessorsForeignCallContext(t *testing.T) {
 // downcasts to *machine.MachineContext. Each must surface a wrapped
 // ErrNotAMachineContext rather than panicking when handed a foreign context.
 func TestPrimitivesRejectForeignCallContext(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		fn   func(machine.CallContext) error

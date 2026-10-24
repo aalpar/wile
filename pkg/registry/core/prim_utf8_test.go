@@ -25,6 +25,8 @@ import (
 )
 
 func TestStringToUtf8Basic(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -56,6 +58,8 @@ func TestStringToUtf8Basic(t *testing.T) {
 }
 
 func TestStringToUtf8WithIndices(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -92,6 +96,8 @@ func TestStringToUtf8WithIndices(t *testing.T) {
 }
 
 func TestStringToUtf8VerifyBytes(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -128,6 +134,8 @@ func TestStringToUtf8VerifyBytes(t *testing.T) {
 }
 
 func TestUtf8ToStringBasic(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -159,6 +167,8 @@ func TestUtf8ToStringBasic(t *testing.T) {
 }
 
 func TestUtf8ToStringWithIndices(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -195,6 +205,8 @@ func TestUtf8ToStringWithIndices(t *testing.T) {
 }
 
 func TestUtf8ToStringVerifyResult(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -226,6 +238,8 @@ func TestUtf8ToStringVerifyResult(t *testing.T) {
 }
 
 func TestUtf8RoundTrip(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -262,6 +276,8 @@ func TestUtf8RoundTrip(t *testing.T) {
 }
 
 func TestUtf8WithMultiByteCharacters(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -293,6 +309,8 @@ func TestUtf8WithMultiByteCharacters(t *testing.T) {
 }
 
 func TestUtf8EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

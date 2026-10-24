@@ -27,6 +27,8 @@ import (
 // for-each Tests (R7RS §6.4 - Side-effect iteration)
 
 func TestForEachComprehensive(t *testing.T) {
+	t.Parallel()
+
 	// for-each returns unspecified value, we test via side effects
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Verify side effects happen in order
@@ -86,6 +88,8 @@ func TestForEachComprehensive(t *testing.T) {
 }
 
 func TestForEachErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "for-each non-procedure", Code: `(for-each 5 '(1 2 3))`},
 		{Name: "for-each with non-list", Code: `(for-each (lambda (x) x) 5)`},

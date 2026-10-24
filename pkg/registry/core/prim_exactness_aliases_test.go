@@ -27,6 +27,8 @@ import (
 // TestExactnessAliases tests exact->inexact and inexact->exact R5RS aliases.
 // R7RS §6.2.6: These are R5RS compatibility aliases.
 func TestExactnessAliases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// exact->inexact (alias for inexact)
 		{Name: "exact->inexact on integer", Code: `(exact->inexact 3)`, Expected: values.NewFloat(3.0)},

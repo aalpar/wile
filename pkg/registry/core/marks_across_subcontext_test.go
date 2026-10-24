@@ -32,6 +32,8 @@ import (
 // An OUTER parameterize (above the call-with-values boundary) must be visible to a
 // continuation captured inside the producer and re-invoked.
 func TestMarks_OuterParamSurvivesCaptureAcrossProducer(t *testing.T) {
+	t.Parallel()
+
 	got, err := testhelpers.RunSchemeCode(t, `
 (let ((p (make-parameter 'base)))
   (parameterize ((p 'outer))
@@ -56,6 +58,8 @@ func TestMarks_OuterParamSurvivesCaptureAcrossProducer(t *testing.T) {
 // that error site, which must resolve the namespace via parentMC (mutableRuntimeFor /
 // MutableRuntimeOrNil). Before that fix this nil-pointer-panicked.
 func TestMarks_GoErrorInProcUnderGuard(t *testing.T) {
+	t.Parallel()
+
 	got, err := testhelpers.RunSchemeCode(t, `
 (begin
   (define (sq x) (* x x))
@@ -69,6 +73,8 @@ func TestMarks_GoErrorInProcUnderGuard(t *testing.T) {
 // above the producer boundary). Mirrors TestCoverageExceptionReRaise at the registry
 // level as a permanent B-marks regression guard.
 func TestMarks_NestedGuardReRaiseEscalates(t *testing.T) {
+	t.Parallel()
+
 	got, err := testhelpers.RunSchemeCode(t, `
 (guard (outer ((number? outer) (+ outer 100)))
   (guard (inner ((and (number? inner) (< inner 5)) (raise (+ inner 10))))

@@ -30,6 +30,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestThreadQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -66,6 +68,8 @@ func TestThreadQ(t *testing.T) {
 }
 
 func TestMakeThread(t *testing.T) {
+	t.Parallel()
+
 	// make-thread should return a thread
 	result, err := testhelpers.RunSchemeCode(t, "(thread? (make-thread (lambda () 'done)))")
 	qt.Assert(t, err, qt.IsNil)
@@ -73,6 +77,8 @@ func TestMakeThread(t *testing.T) {
 }
 
 func TestMakeThreadWithName(t *testing.T) {
+	t.Parallel()
+
 	// make-thread with name should preserve the name
 	code := `(thread-name (make-thread (lambda () 'done) "test-thread"))`
 	result, err := testhelpers.RunSchemeCode(t, code)
@@ -81,6 +87,8 @@ func TestMakeThreadWithName(t *testing.T) {
 }
 
 func TestThreadName(t *testing.T) {
+	t.Parallel()
+
 	code := `(thread-name (make-thread (lambda () 42) "my-thread"))`
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
@@ -88,11 +96,15 @@ func TestThreadName(t *testing.T) {
 }
 
 func TestThreadNameError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(thread-name 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestThreadSpecific(t *testing.T) {
+	t.Parallel()
+
 	// Initially thread-specific returns void
 	code := `
 		(let ((th (make-thread (lambda () 42))))
@@ -104,6 +116,8 @@ func TestThreadSpecific(t *testing.T) {
 }
 
 func TestThreadSpecificSet(t *testing.T) {
+	t.Parallel()
+
 	code := `
 		(let ((th (make-thread (lambda () 42))))
 			(thread-specific-set! th 'my-data)
@@ -115,16 +129,22 @@ func TestThreadSpecificSet(t *testing.T) {
 }
 
 func TestThreadSpecificError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(thread-specific 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestThreadSpecificSetError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(thread-specific-set! 42 'data)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestThreadStartAndJoin(t *testing.T) {
+	t.Parallel()
+
 	// Start a thread and join it to get the result
 	code := `
 		(let ((th (make-thread (lambda () (+ 1 2 3)))))
@@ -137,6 +157,8 @@ func TestThreadStartAndJoin(t *testing.T) {
 }
 
 func TestThreadStartReturnsThread(t *testing.T) {
+	t.Parallel()
+
 	code := `
 		(let ((th (make-thread (lambda () 42))))
 			(eq? th (thread-start! th)))
@@ -147,11 +169,15 @@ func TestThreadStartReturnsThread(t *testing.T) {
 }
 
 func TestThreadStartError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(thread-start! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestThreadYield(t *testing.T) {
+	t.Parallel()
+
 	// thread-yield! should return void and not error
 	result, err := testhelpers.RunSchemeCode(t, "(thread-yield!)")
 	qt.Assert(t, err, qt.IsNil)
@@ -159,6 +185,8 @@ func TestThreadYield(t *testing.T) {
 }
 
 func TestThreadSleepWithNumber(t *testing.T) {
+	t.Parallel()
+
 	// Sleep for a short time (0 seconds)
 	result, err := testhelpers.RunSchemeCodeWithTimeout(t, "(thread-sleep! 0)", 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
@@ -166,6 +194,8 @@ func TestThreadSleepWithNumber(t *testing.T) {
 }
 
 func TestThreadSleepWithFloat(t *testing.T) {
+	t.Parallel()
+
 	// Sleep for 0.001 seconds
 	result, err := testhelpers.RunSchemeCodeWithTimeout(t, "(thread-sleep! 0.001)", 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
@@ -173,11 +203,15 @@ func TestThreadSleepWithFloat(t *testing.T) {
 }
 
 func TestThreadSleepError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, `(thread-sleep! "one")`)
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestThreadTerminate(t *testing.T) {
+	t.Parallel()
+
 	code := `
 		(let ((th (make-thread (lambda () (thread-sleep! 10)))))
 			(thread-start! th)
@@ -190,16 +224,22 @@ func TestThreadTerminate(t *testing.T) {
 }
 
 func TestThreadTerminateError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(thread-terminate! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestThreadJoinError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(thread-join! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestCurrentThread(t *testing.T) {
+	t.Parallel()
+
 	// current-thread returns something (primordial thread or actual thread)
 	result, err := testhelpers.RunSchemeCode(t, "(current-thread)")
 	qt.Assert(t, err, qt.IsNil)
@@ -208,6 +248,8 @@ func TestCurrentThread(t *testing.T) {
 }
 
 func TestThreadJoinWithTimeout(t *testing.T) {
+	t.Parallel()
+
 	// Test thread-join! with timeout that expires
 	code := `
 		(let ((th (make-thread (lambda () (thread-sleep! 10)))))
@@ -220,6 +262,8 @@ func TestThreadJoinWithTimeout(t *testing.T) {
 }
 
 func TestMultipleThreads(t *testing.T) {
+	t.Parallel()
+
 	// Test that multiple threads can run concurrently
 	code := `
 		(let ((th1 (make-thread (lambda () 1)))

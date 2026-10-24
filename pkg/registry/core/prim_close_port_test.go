@@ -27,6 +27,8 @@ import (
 // Close Port Tests (R7RS §6.13.1)
 
 func TestClosePortOnStringPorts(t *testing.T) {
+	t.Parallel()
+
 	// close-port should work on string ports without error
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "test")))
@@ -46,6 +48,8 @@ func TestClosePortOnStringPorts(t *testing.T) {
 }
 
 func TestClosePortOnBytevectorPorts(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-bytevector #u8(1 2 3))))
 			(close-port p)

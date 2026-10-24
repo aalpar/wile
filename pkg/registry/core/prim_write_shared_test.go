@@ -27,6 +27,8 @@ import (
 // write-shared Tests (R7RS §6.13.3)
 
 func TestWriteShared(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -81,6 +83,8 @@ func TestWriteShared(t *testing.T) {
 }
 
 func TestWriteSharedDefaultPort(t *testing.T) {
+	t.Parallel()
+
 	// write-shared with only one argument should use current-output-port
 	result, err := testhelpers.RunSchemeCode(t, `(begin (write-shared 42) #t)`)
 	qt.Assert(t, err, qt.IsNil)

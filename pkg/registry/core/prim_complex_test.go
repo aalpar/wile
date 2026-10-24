@@ -29,6 +29,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestRealPart(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -55,6 +57,8 @@ func TestRealPart(t *testing.T) {
 }
 
 func TestImagPart(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -81,6 +85,8 @@ func TestImagPart(t *testing.T) {
 }
 
 func TestMagnitude(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -108,6 +114,8 @@ func TestMagnitude(t *testing.T) {
 }
 
 func TestMakeRectangular(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -140,6 +148,8 @@ func TestMakeRectangular(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestNumerator(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -161,6 +171,8 @@ func TestNumerator(t *testing.T) {
 }
 
 func TestDenominator(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -182,6 +194,8 @@ func TestDenominator(t *testing.T) {
 }
 
 func TestMakeRectangularExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "make-rectangular with integers",
@@ -207,6 +221,8 @@ func TestMakeRectangularExtended(t *testing.T) {
 }
 
 func TestMagnitudeExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "magnitude of rational",

@@ -28,6 +28,8 @@ import (
 // equal? Tests (R7RS §6.1 - Deep structural comparison)
 
 func TestEqualQComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// All eqv? cases should also be equal?
 		{Name: "same integers", Code: `(equal? 42 42)`, Expected: values.TrueValue},
@@ -77,6 +79,8 @@ func TestEqualQComprehensive(t *testing.T) {
 }
 
 func TestEqualityHierarchy(t *testing.T) {
+	t.Parallel()
+
 	// Test that eq? implies eqv? implies equal?
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// If eq?, then eqv? and equal?
@@ -109,6 +113,8 @@ func TestEqualityHierarchy(t *testing.T) {
 // are circular data structures."
 
 func TestEqualQCircular_SelfReferentialList(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCodeWithTimeout(t, `
 		(let ((x (list 1 2 3)))
 		  (set-cdr! (cdr (cdr x)) x)
@@ -119,6 +125,8 @@ func TestEqualQCircular_SelfReferentialList(t *testing.T) {
 }
 
 func TestEqualQCircular_TwoIdenticalCircularLists(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCodeWithTimeout(t, `
 		(let ((a (list 1 2))
 		      (b (list 1 2)))
@@ -131,6 +139,8 @@ func TestEqualQCircular_TwoIdenticalCircularLists(t *testing.T) {
 }
 
 func TestEqualQCircular_DifferentCircularLists(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCodeWithTimeout(t, `
 		(let ((a (list 1))
 		      (b (list 2)))
@@ -143,6 +153,8 @@ func TestEqualQCircular_DifferentCircularLists(t *testing.T) {
 }
 
 func TestEqualQCircular_CircularVector(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCodeWithTimeout(t, `
 		(let ((v (vector 0)))
 		  (vector-set! v 0 v)
@@ -153,6 +165,8 @@ func TestEqualQCircular_CircularVector(t *testing.T) {
 }
 
 func TestEqualQCircular_PairContainingCircularVector(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCodeWithTimeout(t, `
 		(let ((v (vector 0)))
 		  (vector-set! v 0 v)

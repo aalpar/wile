@@ -25,6 +25,8 @@ import (
 )
 
 func TestImagPartExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Exact complex (integer parts parsed as exact BigComplex)
 		{Name: "imag-part of complex", Code: `(imag-part 3+4i)`, Expected: values.NewBigIntegerFromInt64(4)},
@@ -50,6 +52,8 @@ func TestImagPartExtended(t *testing.T) {
 }
 
 func TestImagPartErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "imag-part of string", Code: `(imag-part "hello")`},
 		{Name: "imag-part of symbol", Code: `(imag-part 'foo)`},

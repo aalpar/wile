@@ -27,6 +27,8 @@ import (
 )
 
 func TestDeleteFile(t *testing.T) {
+	t.Parallel()
+
 	f, err := os.CreateTemp("", "test*.txt")
 	qt.Assert(t, err, qt.IsNil)
 	f.WriteString("test") //nolint:errcheck
@@ -44,18 +46,24 @@ func TestDeleteFile(t *testing.T) {
 }
 
 func TestDeleteFileErrorWithNonexistentFile(t *testing.T) {
+	t.Parallel()
+
 	code := `(delete-file "/nonexistent/path/file-xyz-12345.txt")`
 	_, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.Not(qt.IsNil), qt.Commentf("expected error when deleting nonexistent file"))
 }
 
 func TestDeleteFileErrorWithNonString(t *testing.T) {
+	t.Parallel()
+
 	code := `(delete-file 42)`
 	_, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.Not(qt.IsNil), qt.Commentf("expected error when passing non-string"))
 }
 
 func TestLoad(t *testing.T) {
+	t.Parallel()
+
 	f, err := os.CreateTemp("", "test*.scm")
 	qt.Assert(t, err, qt.IsNil)
 	f.WriteString("42")       //nolint:errcheck
@@ -69,6 +77,8 @@ func TestLoad(t *testing.T) {
 }
 
 func TestLoadWithMultipleExpressions(t *testing.T) {
+	t.Parallel()
+
 	f, err := os.CreateTemp("", "test*.scm")
 	qt.Assert(t, err, qt.IsNil)
 	f.WriteString("(define x 10)\n(define y 20)\n(+ x y)") //nolint:errcheck
@@ -83,6 +93,8 @@ func TestLoadWithMultipleExpressions(t *testing.T) {
 }
 
 func TestLoadReturnsLastValue(t *testing.T) {
+	t.Parallel()
+
 	f, err := os.CreateTemp("", "test*.scm")
 	qt.Assert(t, err, qt.IsNil)
 	f.WriteString("1\n2\n3")  //nolint:errcheck
@@ -96,6 +108,8 @@ func TestLoadReturnsLastValue(t *testing.T) {
 }
 
 func TestLoadWithEmptyFile(t *testing.T) {
+	t.Parallel()
+
 	f, err := os.CreateTemp("", "test*.scm")
 	qt.Assert(t, err, qt.IsNil)
 	f.Close()                 //nolint:errcheck
@@ -109,18 +123,24 @@ func TestLoadWithEmptyFile(t *testing.T) {
 }
 
 func TestLoadErrorWithNonexistentFile(t *testing.T) {
+	t.Parallel()
+
 	code := `(load "/nonexistent/path/file-xyz-12345.scm")`
 	_, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.Not(qt.IsNil), qt.Commentf("expected error when loading nonexistent file"))
 }
 
 func TestLoadErrorWithNonString(t *testing.T) {
+	t.Parallel()
+
 	code := `(load 42)`
 	_, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.Not(qt.IsNil), qt.Commentf("expected error when passing non-string"))
 }
 
 func TestLoadDefinesVariableInTopLevel(t *testing.T) {
+	t.Parallel()
+
 	f, err := os.CreateTemp("", "test*.scm")
 	qt.Assert(t, err, qt.IsNil)
 	f.WriteString("(define loaded-var 99)") //nolint:errcheck
@@ -135,6 +155,8 @@ func TestLoadDefinesVariableInTopLevel(t *testing.T) {
 }
 
 func TestLoadAccessesNamespace(t *testing.T) {
+	t.Parallel()
+
 	// Test that load can access variables defined in the top-level environment
 	f, err := os.CreateTemp("", "test*.scm")
 	qt.Assert(t, err, qt.IsNil)

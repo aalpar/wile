@@ -29,6 +29,8 @@ import (
 // =============================================================================
 
 func TestProcedureArity(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "fixed foreign 1-arg",
@@ -100,6 +102,8 @@ func TestProcedureArity(t *testing.T) {
 }
 
 func TestProcedureArityErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "integer", Code: `(procedure-arity 42)`},
 		{Name: "string", Code: `(procedure-arity "hello")`},
@@ -119,6 +123,8 @@ func TestProcedureArityErrors(t *testing.T) {
 // =============================================================================
 
 func TestProcedureName(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "foreign procedure",
@@ -157,6 +163,8 @@ func TestProcedureName(t *testing.T) {
 }
 
 func TestProcedureNameErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "integer", Code: `(procedure-name 42)`},
 		{Name: "string", Code: `(procedure-name "hello")`},
@@ -175,6 +183,8 @@ func TestProcedureNameErrors(t *testing.T) {
 // =============================================================================
 
 func TestProcedureSourceLocation(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "foreign has no source",
@@ -208,6 +218,8 @@ func TestProcedureSourceLocation(t *testing.T) {
 }
 
 func TestProcedureSourceLocationErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "integer", Code: `(procedure-source-location 42)`},
 		{Name: "string", Code: `(procedure-source-location "hello")`},
@@ -226,6 +238,8 @@ func TestProcedureSourceLocationErrors(t *testing.T) {
 // =============================================================================
 
 func TestProcedureBoundSymbols(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "foreign returns false",
@@ -299,6 +313,8 @@ func TestProcedureBoundSymbols(t *testing.T) {
 }
 
 func TestProcedureBoundSymbolsErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "integer", Code: `(procedure-bound-symbols 42)`},
 		{Name: "string", Code: `(procedure-bound-symbols "hello")`},
@@ -317,6 +333,8 @@ func TestProcedureBoundSymbolsErrors(t *testing.T) {
 // =============================================================================
 
 func TestProcedureType(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "closure",
@@ -371,6 +389,8 @@ func TestProcedureType(t *testing.T) {
 }
 
 func TestProcedureTypeErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "integer", Code: `(procedure-type 42)`},
 		{Name: "string", Code: `(procedure-type "hello")`},
@@ -390,6 +410,8 @@ func TestProcedureTypeErrors(t *testing.T) {
 // =============================================================================
 
 func TestProcedureDocumentation(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "define with docstring",
@@ -449,6 +471,8 @@ func TestProcedureDocumentation(t *testing.T) {
 }
 
 func TestProcedureDocumentationErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "wrong arity zero", Code: `(procedure-documentation)`},
 		{Name: "wrong arity two", Code: `(procedure-documentation car car)`},
@@ -470,6 +494,8 @@ func TestProcedureDocumentationErrors(t *testing.T) {
 // =============================================================================
 
 func TestLibraryDescription(t *testing.T) {
+	t.Parallel()
+
 	// Note: The test environment (NewNamespaceFrame) does not configure a
 	// library registry, so (import ...) is unavailable. Tests for loaded
 	// libraries with/without descriptions belong in integration/ or
@@ -497,6 +523,8 @@ func TestLibraryDescription(t *testing.T) {
 }
 
 func TestLibraryDescriptionErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "empty library name", Code: `(library-description '())`},
 	}
@@ -514,6 +542,8 @@ func TestLibraryDescriptionErrors(t *testing.T) {
 // =============================================================================
 
 func TestApropos(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name  string
 		code  string
@@ -562,6 +592,8 @@ func TestApropos(t *testing.T) {
 }
 
 func TestAproposErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "wrong arity zero", Code: `(apropos)`},
 		{Name: "wrong arity two", Code: `(apropos "a" "b")`},
@@ -580,6 +612,8 @@ func TestAproposErrors(t *testing.T) {
 // =============================================================================
 
 func TestDocTopics(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name  string
 		code  string
@@ -626,6 +660,8 @@ func TestDocTopics(t *testing.T) {
 }
 
 func TestDocTopicsErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "wrong arity", Code: `(doc-topics "extra")`},
 	}
@@ -642,6 +678,8 @@ func TestDocTopicsErrors(t *testing.T) {
 // =============================================================================
 
 func TestDocTopic(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name  string
 		code  string
@@ -681,6 +719,8 @@ func TestDocTopic(t *testing.T) {
 }
 
 func TestDocTopicErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "wrong arity zero", Code: `(doc-topic)`},
 		{Name: "wrong arity two", Code: `(doc-topic "a" "b")`},
@@ -695,6 +735,8 @@ func TestDocTopicErrors(t *testing.T) {
 }
 
 func TestRegisteredPrimitives(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "returns a non-empty list",
@@ -737,6 +779,8 @@ func TestRegisteredPrimitives(t *testing.T) {
 }
 
 func TestRegisteredPrimitivesErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "accessor on non-spec", Code: `(primitive-spec-name 42)`},
 		{Name: "accessor on wrong-tag opaque", Code: `(primitive-spec-name "hello")`},

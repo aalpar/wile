@@ -26,6 +26,8 @@ import (
 // Display vs WriteByte Comparison Tests (R7RS §6.13.3)
 
 func TestDisplayVsWriteString(t *testing.T) {
+	t.Parallel()
+
 	// display should output without quotes
 	displayResult, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
@@ -50,6 +52,8 @@ func TestDisplayVsWriteString(t *testing.T) {
 }
 
 func TestDisplayVsWriteCharacter(t *testing.T) {
+	t.Parallel()
+
 	// display should output the character directly
 	displayResult, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))

@@ -29,6 +29,8 @@ import (
 )
 
 func TestPrimContinuationMarkSetQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "mark set", Code: `(continuation-mark-set? (current-continuation-marks))`, Expected: values.TrueValue},
 		{Name: "integer", Code: `(continuation-mark-set? 42)`, Expected: values.FalseValue},
@@ -45,6 +47,8 @@ func TestPrimContinuationMarkSetQ(t *testing.T) {
 }
 
 func TestPrimContinuationMarkSetToList(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -86,6 +90,8 @@ func TestPrimContinuationMarkSetToList(t *testing.T) {
 }
 
 func TestPrimContinuationMarkSetFirst(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -125,6 +131,8 @@ func TestPrimContinuationMarkSetFirst(t *testing.T) {
 }
 
 func TestPrimContMarkErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "->list wrong type", Code: `(continuation-mark-set->list 42 'k)`},
 		{Name: "first wrong type", Code: `(continuation-mark-set-first 42 'k)`},
@@ -141,6 +149,8 @@ func TestPrimContMarkErrors(t *testing.T) {
 }
 
 func TestPrimContinuationMarks(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -192,6 +202,8 @@ func TestPrimContinuationMarks(t *testing.T) {
 // TestContinuationMarks_ShapeMatrix pins for the non-tail call. Both come from
 // GetImmediateMark's fallback to p.cont.
 func TestContinuationMarks_TailBoundaryRecordsMarkOnce(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -284,6 +296,8 @@ func TestContinuationMarks_TailBoundaryRecordsMarkOnce(t *testing.T) {
 }
 
 func TestPrimContinuationQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -320,6 +334,8 @@ func TestPrimContinuationQ(t *testing.T) {
 }
 
 func TestPrimCallWithImmediateContMark(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -406,6 +422,8 @@ func markShapeRunners() map[string]func(t *testing.T, code string) (string, erro
 // enclosing frame and one in the live frame, so a #f path that walked only the
 // chain, or only the live frame, answers differently.
 func TestContinuationMarkSetAcceptsFalse(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -471,6 +489,8 @@ func TestContinuationMarkSetAcceptsFalse(t *testing.T) {
 // TestContinuationMarkSetFalseStillRejectsOtherTypes pins that #f is the only
 // non-set value the accessors take.
 func TestContinuationMarkSetFalseStillRejectsOtherTypes(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -497,6 +517,8 @@ func TestContinuationMarkSetFalseStillRejectsOtherTypes(t *testing.T) {
 // live marks at capture (a wcm after the capture does not show in k's set).
 // Expected values are Racket's.
 func TestContinuationMarks_OrderAndAliasing(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -542,6 +564,8 @@ func TestContinuationMarks_OrderAndAliasing(t *testing.T) {
 // fallback" repair is caught by the cicm-nontail pin flipping and by
 // TestPrimCallWithImmediateContMark "reads mark from current frame".
 func TestContinuationMarks_ShapeMatrix(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -597,6 +621,8 @@ func TestContinuationMarks_ShapeMatrix(t *testing.T) {
 // ErrNotAContinuationMarkSet, as before. Engine-only: the unoptimized runner has no
 // library resolver, so (import (wile control)) cannot load there.
 func TestContinuationMarkSetToContextStaysStrict(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string

@@ -46,6 +46,8 @@ import (
 // after-thunk) must NOT run. The program reaches 'escaped-ok on re-entry; a regression
 // that runs the boundary's pending work yields its MARKER instead.
 func TestEscapePastInvariant(t *testing.T) {
+	t.Parallel()
+
 	boundaries := []struct {
 		name string
 		wrap string // an expression containing (k 1); its non-escape value is a *-MARKER
@@ -78,6 +80,8 @@ func TestEscapePastInvariant(t *testing.T) {
 // returns (and (= before after) (> before 0)) => #t; the various exit mechanisms
 // (normal, exception, escape-procedure, call/cc escape) are the matrix axis.
 func TestDynamicWindBalanceInvariant(t *testing.T) {
+	t.Parallel()
+
 	const tmpl = `(let ((b 0) (a 0) (esc #f) (top #f))
   %s
   (and (= b a) (> b 0)))`
@@ -106,6 +110,8 @@ func TestDynamicWindBalanceInvariant(t *testing.T) {
 // resume would loop (-> timeout) or return the wrong count. Confirms the resume
 // trampoline replays whatever boundary the capture sits inside.
 func TestMultiShotConvergenceInvariant(t *testing.T) {
+	t.Parallel()
+
 	positions := []struct {
 		name    string
 		capture string // an expression that runs (call/cc (lambda (c) (set! k c))) in some boundary
@@ -138,6 +144,8 @@ func TestMultiShotConvergenceInvariant(t *testing.T) {
 // crosscheck caught a regression here that escaped every other layer. Each program
 // returns the parameter value observed by the after-thunk; it must equal the entry value.
 func TestDynamicWindEntryMarkInvariant(t *testing.T) {
+	t.Parallel()
+
 	const tmpl = `(let ((p (make-parameter 7)) (seen #f))
   %s
   seen)`

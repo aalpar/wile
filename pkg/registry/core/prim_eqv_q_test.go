@@ -27,6 +27,8 @@ import (
 // eqv? Tests (R7RS §6.1 - Equivalence predicate)
 
 func TestEqvQComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// All eq? cases should also be eqv?
 		{Name: "same symbol", Code: `(eqv? 'foo 'foo)`, Expected: values.TrueValue},
@@ -97,6 +99,8 @@ func TestEqvQComprehensive(t *testing.T) {
 }
 
 func TestEqvQSpecialValues(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Infinity
 		{Name: "positive infinity", Code: `(eqv? +inf.0 +inf.0)`, Expected: values.TrueValue},

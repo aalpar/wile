@@ -26,6 +26,8 @@ import (
 )
 
 func TestWithTimeout(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "normal completion returns thunk result",
@@ -55,6 +57,8 @@ func TestWithTimeout(t *testing.T) {
 }
 
 func TestWithTimeoutErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "ms not integer", Code: `(with-timeout "bad" (lambda (k) k) (lambda () 1))`},
 		{Name: "handler not procedure", Code: `(with-timeout 100 42 (lambda () 1))`},
@@ -72,6 +76,8 @@ func TestWithTimeoutErrors(t *testing.T) {
 }
 
 func TestWithTimeoutNesting(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "inner fires before outer",
@@ -108,6 +114,8 @@ func TestWithTimeoutNesting(t *testing.T) {
 }
 
 func TestWithTimeoutResumption(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "handler discards continuation",
@@ -132,6 +140,8 @@ func TestWithTimeoutResumption(t *testing.T) {
 }
 
 func TestWithTimeoutDynamicWind(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "normal completion fires dynamic-wind after thunk",
@@ -182,6 +192,8 @@ func TestWithTimeoutDynamicWind(t *testing.T) {
 // in TODO.md), and every operand the spin consumes is a number or a test value,
 // for which a number is harmless.
 func TestTimerHandlerContinuationCarriesNoTimerFrame(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "resumed inside a dynamic-wind in the handler",
@@ -227,6 +239,8 @@ func TestTimerHandlerContinuationCarriesNoTimerFrame(t *testing.T) {
 // enclosing dynamic-wind's, which must stay for its own PopWind; popped, the
 // dynamic-wind's exit found its frame gone.
 func TestFiredTimerInsideAFrameLeavesTheFrame(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((log '()))
 			(define (note x) (set! log (cons x log)))
@@ -246,6 +260,8 @@ func TestFiredTimerInsideAFrameLeavesTheFrame(t *testing.T) {
 // end of the run ran its after thunk a second time. The dynamic-wind runs in a
 // thread, whose exit is that end, so the log read after the join shows it.
 func TestWithTimeoutReturnLeavesItsExtent(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((log '()))
 			(define (note x) (set! log (cons x log)))
@@ -269,6 +285,8 @@ func TestWithTimeoutReturnLeavesItsExtent(t *testing.T) {
 // resolveTimerInterrupt arm in RunWithinBoundary this truncates or crashes ("no boundary
 // frame found"). If the loop is not interrupted, the 10s test timeout fails it loudly.
 func TestWithTimeoutInSubContext(t *testing.T) {
+	t.Parallel()
+
 	code := `(eval '(with-timeout 1 (lambda (k) 'expired) (lambda () (let loop () (loop))))
 	               (interaction-environment))`
 	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, 10*time.Second)
@@ -277,6 +295,8 @@ func TestWithTimeoutInSubContext(t *testing.T) {
 }
 
 func TestWithTimeoutThreadIsolation(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "timeout in one thread does not affect another",

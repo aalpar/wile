@@ -26,6 +26,8 @@ import (
 )
 
 func TestMakeRectangularComprehensive(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer args - R7RS §6.2.6: exact + exact = exact BigComplex
 		{Name: "make-rectangular integers", Code: `(make-rectangular 3 4)`,
@@ -59,6 +61,8 @@ func TestMakeRectangularComprehensive(t *testing.T) {
 }
 
 func TestMakeRectangularResultTypes(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -89,6 +93,8 @@ func TestMakeRectangularResultTypes(t *testing.T) {
 }
 
 func TestMakeRectangularErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "make-rectangular string arg", Code: `(make-rectangular "3" 4)`},
 		{Name: "make-rectangular symbol arg", Code: `(make-rectangular 3 'four)`},

@@ -25,6 +25,8 @@ import (
 )
 
 func TestExactQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Exact types
 		{Name: "exact? on integer", Code: `(exact? 42)`, Expected: values.TrueValue},

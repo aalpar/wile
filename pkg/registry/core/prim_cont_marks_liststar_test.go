@@ -25,6 +25,8 @@ import (
 )
 
 func TestPrimContinuationMarkSetToListStar(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// No marks: empty list
 		{Name: "no-marks", Code: `
@@ -82,6 +84,8 @@ func TestPrimContinuationMarkSetToListStar(t *testing.T) {
 }
 
 func TestPrimContinuationMarkSetToListStarErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "not-a-mark-set", Code: `(continuation-mark-set->list* 42 '(a))`},
 		{Name: "not-a-list", Code: `(continuation-mark-set->list* (current-continuation-marks) 42)`},
@@ -111,6 +115,8 @@ func TestPrimContinuationMarkSetToListStarErrors(t *testing.T) {
 // just the refusal: a circular key list is a domain error on user data, so it
 // must reach `guard` rather than escaping as an uncatchable fault.
 func TestPrimContinuationMarkSetToListStarCircularIsCatchable(t *testing.T) {
+	t.Parallel()
+
 	result, err := testhelpers.RunSchemeCode(t, `
 		(guard (e (#t 'caught))
 		  (let ((x (list 'a)))

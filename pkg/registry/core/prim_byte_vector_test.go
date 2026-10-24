@@ -27,6 +27,8 @@ import (
 )
 
 func TestBytevectorQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -67,6 +69,8 @@ func TestBytevectorQ(t *testing.T) {
 }
 
 func TestMakeBytevector(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -108,6 +112,8 @@ func TestMakeBytevector(t *testing.T) {
 }
 
 func TestBytevector(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -143,6 +149,8 @@ func TestBytevector(t *testing.T) {
 }
 
 func TestBytevectorLength(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -171,6 +179,8 @@ func TestBytevectorLength(t *testing.T) {
 }
 
 func TestBytevectorU8Ref(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -208,6 +218,8 @@ func TestBytevectorU8Ref(t *testing.T) {
 }
 
 func TestBytevectorU8Set(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -245,6 +257,8 @@ func TestBytevectorU8Set(t *testing.T) {
 }
 
 func TestBytevectorCopy(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -281,6 +295,8 @@ func TestBytevectorCopy(t *testing.T) {
 }
 
 func TestBytevectorAppend(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -317,6 +333,8 @@ func TestBytevectorAppend(t *testing.T) {
 }
 
 func TestUtf8ToString(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -348,6 +366,8 @@ func TestUtf8ToString(t *testing.T) {
 }
 
 func TestStringToUtf8(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -384,6 +404,8 @@ func TestStringToUtf8(t *testing.T) {
 }
 
 func TestBytevectorRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -416,6 +438,8 @@ func TestBytevectorRoundTrip(t *testing.T) {
 }
 
 func TestBytevectorU8RefSet(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "bytevector-u8-ref",
@@ -439,6 +463,8 @@ func TestBytevectorU8RefSet(t *testing.T) {
 // --- Error tests ---
 
 func TestMakeBytevector_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-integer size", Code: `(make-bytevector "a")`},
 		{Name: "negative size", Code: `(make-bytevector -1)`},
@@ -455,6 +481,8 @@ func TestMakeBytevector_Errors(t *testing.T) {
 }
 
 func TestMakeBytevector_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "fill = 0 boundary", Code: `(bytevector-u8-ref (make-bytevector 1 0) 0)`, Expected: values.NewInteger(0)},
 		{Name: "fill = 255 boundary", Code: `(bytevector-u8-ref (make-bytevector 1 255) 0)`, Expected: values.NewInteger(255)},
@@ -469,6 +497,8 @@ func TestMakeBytevector_EdgeCases(t *testing.T) {
 }
 
 func TestBytevector_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-integer element", Code: `(bytevector 1 "a" 3)`},
 		{Name: "element > 255", Code: `(bytevector 1 256 3)`},
@@ -483,6 +513,8 @@ func TestBytevector_Errors(t *testing.T) {
 }
 
 func TestBytevector_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "boundary 0", Code: `(bytevector-u8-ref (bytevector 0) 0)`, Expected: values.NewInteger(0)},
 		{Name: "boundary 255", Code: `(bytevector-u8-ref (bytevector 255) 0)`, Expected: values.NewInteger(255)},
@@ -497,6 +529,8 @@ func TestBytevector_EdgeCases(t *testing.T) {
 }
 
 func TestBytevectorLength_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-bytevector string", Code: `(bytevector-length "hello")`},
 		{Name: "non-bytevector integer", Code: `(bytevector-length 42)`},
@@ -511,6 +545,8 @@ func TestBytevectorLength_Errors(t *testing.T) {
 }
 
 func TestBytevectorU8Ref_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-bytevector", Code: `(bytevector-u8-ref "hello" 0)`},
 		{Name: "non-integer index", Code: `(bytevector-u8-ref (bytevector 1 2 3) "a")`},
@@ -528,6 +564,8 @@ func TestBytevectorU8Ref_Errors(t *testing.T) {
 }
 
 func TestBytevectorU8Set_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-bytevector", Code: `(bytevector-u8-set! "hello" 0 1)`},
 		{Name: "non-integer index", Code: `(bytevector-u8-set! (bytevector 1 2 3) "a" 1)`},
@@ -546,6 +584,8 @@ func TestBytevectorU8Set_Errors(t *testing.T) {
 }
 
 func TestBytevectorU8Set_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name:     "value = 0 boundary",
@@ -568,6 +608,8 @@ func TestBytevectorU8Set_EdgeCases(t *testing.T) {
 }
 
 func TestByteRangeValidation_Sentinel(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -589,6 +631,8 @@ func TestByteRangeValidation_Sentinel(t *testing.T) {
 }
 
 func TestBytevectorCopy_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-bytevector", Code: `(bytevector-copy "hello")`},
 		{Name: "non-integer start", Code: `(bytevector-copy (bytevector 1 2 3) "a")`},
@@ -607,6 +651,8 @@ func TestBytevectorCopy_Errors(t *testing.T) {
 }
 
 func TestBytevectorCopy_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "start = end empty", Code: `(bytevector-length (bytevector-copy (bytevector 1 2 3) 1 1))`, Expected: values.NewInteger(0)},
 		{Name: "partial copy with start", Code: `(bytevector-length (bytevector-copy (bytevector 1 2 3) 1))`, Expected: values.NewInteger(2)},
@@ -622,6 +668,8 @@ func TestBytevectorCopy_EdgeCases(t *testing.T) {
 }
 
 func TestBytevectorAppend_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-bytevector element", Code: `(bytevector-append (bytevector 1 2) "hello")`},
 		{Name: "non-bytevector integer", Code: `(bytevector-append 42)`},
@@ -635,6 +683,8 @@ func TestBytevectorAppend_Errors(t *testing.T) {
 }
 
 func TestBytevectorAppend_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "no arguments", Code: `(bytevector-length (bytevector-append))`, Expected: values.NewInteger(0)},
 		{Name: "single argument", Code: `(bytevector-length (bytevector-append (bytevector 1 2 3)))`, Expected: values.NewInteger(3)},
@@ -649,6 +699,8 @@ func TestBytevectorAppend_EdgeCases(t *testing.T) {
 }
 
 func TestUtf8ToString_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-bytevector", Code: `(utf8->string "hello")`},
 		{Name: "non-integer start", Code: `(utf8->string (bytevector 65) "a")`},
@@ -666,6 +718,8 @@ func TestUtf8ToString_Errors(t *testing.T) {
 }
 
 func TestUtf8ToString_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "with start", Code: `(utf8->string (bytevector 65 66 67) 1)`, Expected: values.NewString("BC")},
 		{Name: "with start and end", Code: `(utf8->string (bytevector 65 66 67) 1 2)`, Expected: values.NewString("B")},
@@ -682,6 +736,8 @@ func TestUtf8ToString_EdgeCases(t *testing.T) {
 }
 
 func TestStringToUtf8_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "non-string", Code: `(string->utf8 42)`},
 		{Name: "non-integer start", Code: `(string->utf8 "hello" "a")`},
@@ -699,6 +755,8 @@ func TestStringToUtf8_Errors(t *testing.T) {
 }
 
 func TestStringToUtf8_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "with start", Code: `(bytevector-length (string->utf8 "hello" 2))`, Expected: values.NewInteger(3)},
 		{Name: "with start and end", Code: `(bytevector-length (string->utf8 "hello" 1 3))`, Expected: values.NewInteger(2)},

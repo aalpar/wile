@@ -30,6 +30,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestMutexQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -66,6 +68,8 @@ func TestMutexQ(t *testing.T) {
 }
 
 func TestMakeMutex(t *testing.T) {
+	t.Parallel()
+
 	// make-mutex should return a mutex
 	result, err := testhelpers.RunSchemeCode(t, "(mutex? (make-mutex))")
 	qt.Assert(t, err, qt.IsNil)
@@ -73,6 +77,8 @@ func TestMakeMutex(t *testing.T) {
 }
 
 func TestMakeMutexWithName(t *testing.T) {
+	t.Parallel()
+
 	code := `(mutex-name (make-mutex "test-mutex"))`
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
@@ -80,6 +86,8 @@ func TestMakeMutexWithName(t *testing.T) {
 }
 
 func TestMutexName(t *testing.T) {
+	t.Parallel()
+
 	code := `(mutex-name (make-mutex "my-mutex"))`
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
@@ -87,11 +95,15 @@ func TestMutexName(t *testing.T) {
 }
 
 func TestMutexNameError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(mutex-name 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestMutexSpecific(t *testing.T) {
+	t.Parallel()
+
 	// Initially mutex-specific returns void
 	code := `(void? (mutex-specific (make-mutex)))`
 	result, err := testhelpers.RunSchemeCode(t, code)
@@ -100,6 +112,8 @@ func TestMutexSpecific(t *testing.T) {
 }
 
 func TestMutexSpecificSet(t *testing.T) {
+	t.Parallel()
+
 	code := `
 		(let ((m (make-mutex)))
 			(mutex-specific-set! m 'my-data)
@@ -111,11 +125,15 @@ func TestMutexSpecificSet(t *testing.T) {
 }
 
 func TestMutexSpecificError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(mutex-specific 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestMutexSpecificSetError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(mutex-specific-set! 42 'data)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
@@ -125,6 +143,8 @@ func TestMutexSpecificSetError(t *testing.T) {
 // 'not-owned, and it is not — 'not-owned means the mutex IS HELD by a caller
 // with no Thread object.
 func TestMutexState(t *testing.T) {
+	t.Parallel()
+
 	// Not held at all.
 	result, err := testhelpers.RunSchemeCode(t, "(mutex-state (make-mutex))")
 	qt.Assert(t, err, qt.IsNil)
@@ -149,11 +169,15 @@ func TestMutexState(t *testing.T) {
 }
 
 func TestMutexStateError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(mutex-state 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestMutexLockAndUnlock(t *testing.T) {
+	t.Parallel()
+
 	code := `
 		(let ((m (make-mutex)))
 			(mutex-lock! m)
@@ -166,6 +190,8 @@ func TestMutexLockAndUnlock(t *testing.T) {
 }
 
 func TestMutexLockReturnsTrue(t *testing.T) {
+	t.Parallel()
+
 	code := "(mutex-lock! (make-mutex))"
 	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
@@ -173,16 +199,22 @@ func TestMutexLockReturnsTrue(t *testing.T) {
 }
 
 func TestMutexLockError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(mutex-lock! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestMutexUnlockError(t *testing.T) {
+	t.Parallel()
+
 	_, err := testhelpers.RunSchemeCode(t, "(mutex-unlock! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestMutexLockWithTimeout(t *testing.T) {
+	t.Parallel()
+
 	// Lock with timeout 0 should return immediately
 	code := `
 		(let ((m (make-mutex)))
@@ -195,6 +227,8 @@ func TestMutexLockWithTimeout(t *testing.T) {
 }
 
 func TestMutexProtectsCriticalSection(t *testing.T) {
+	t.Parallel()
+
 	// Test that mutex properly serializes access
 	code := `
 		(let ((m (make-mutex))

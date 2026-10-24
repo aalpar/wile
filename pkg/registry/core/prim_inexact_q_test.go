@@ -25,6 +25,8 @@ import (
 )
 
 func TestInexactQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Inexact types
 		{Name: "inexact? on float", Code: `(inexact? 3.14)`, Expected: values.TrueValue},

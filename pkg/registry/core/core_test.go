@@ -26,6 +26,8 @@ import (
 
 // TestCoreArithmetic tests basic arithmetic primitives.
 func TestCoreArithmetic(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []testhelpers.SchemeCodeTestCase{
@@ -48,6 +50,8 @@ func TestCoreArithmetic(t *testing.T) {
 
 // TestCorePredicates tests basic type predicates.
 func TestCorePredicates(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -77,6 +81,8 @@ func TestCorePredicates(t *testing.T) {
 
 // TestCoreListOperations tests basic list operations.
 func TestCoreListOperations(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []testhelpers.SchemeCodeTestCase{

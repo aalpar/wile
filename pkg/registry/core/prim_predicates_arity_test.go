@@ -24,6 +24,8 @@ import (
 // wrong argument counts. The VM enforces arity automatically via
 // machine_context.go ("expected %d arguments, got %d").
 func TestPredicates_ArityErrors(t *testing.T) {
+	t.Parallel()
+
 	predicates := []string{
 		// 19 type predicates
 		"void?",

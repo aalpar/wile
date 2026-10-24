@@ -25,6 +25,8 @@ import (
 )
 
 func TestExact(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Integer - already exact
 		{Name: "exact on integer", Code: `(exact 42)`, Expected: values.NewInteger(42)},
@@ -54,6 +56,8 @@ func TestExact(t *testing.T) {
 // TestExact_Complex tests exact on complex numbers.
 // R7RS §6.2.6: exact converts both real and imaginary parts.
 func TestExact_Complex(t *testing.T) {
+	t.Parallel()
+
 	// exact on inexact complex produces exact BigComplex
 	t.Run("exact on 1.5+2.5i", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, "(exact 1.5+2.5i)")
@@ -101,6 +105,8 @@ func TestExact_Complex(t *testing.T) {
 // Architectural Review H4: toExactPart converts BigFloat to integer by
 // truncation instead of Rational. (exact 1.5+0i) produces 1 instead of 3/2.
 func TestExact_ComplexFractionalParts(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Fractional real part should become Rational 3/2, not Integer 1
 		{
@@ -157,6 +163,8 @@ func TestExact_ComplexFractionalParts(t *testing.T) {
 }
 
 func TestExactErrors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "exact on non-number string", Code: `(exact "hello")`},
 		{Name: "exact on symbol", Code: `(exact 'foo)`},

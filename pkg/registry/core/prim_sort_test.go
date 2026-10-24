@@ -25,6 +25,8 @@ import (
 )
 
 func TestSort(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "empty list", Code: `(sort < '())`, Expected: values.EmptyList},
 		{Name: "single element", Code: `(sort < '(42))`, Expected: values.List(values.NewInteger(42))},
@@ -50,6 +52,8 @@ func TestSort(t *testing.T) {
 }
 
 func TestSort_NonDestructive(t *testing.T) {
+	t.Parallel()
+
 	code := `(let ((xs '(3 1 2)))
                (sort < xs)
                xs)`
@@ -60,6 +64,8 @@ func TestSort_NonDestructive(t *testing.T) {
 }
 
 func TestSort_Stable(t *testing.T) {
+	t.Parallel()
+
 	// Sort pairs by first element; equal firsts should preserve original order.
 	code := `(sort (lambda (a b) (< (car a) (car b)))
                    '((1 . a) (2 . b) (1 . c) (2 . d)))`
@@ -74,6 +80,8 @@ func TestSort_Stable(t *testing.T) {
 }
 
 func TestSort_SwappedArguments(t *testing.T) {
+	t.Parallel()
+
 	// Calling sort list-first -- (sort lst less?) -- is a common habit carried
 	// over from list-first Scheme dialects (e.g. Racket). wile is comparator-first.
 	// The swap should produce an error that names sort and explains the argument
@@ -86,6 +94,8 @@ func TestSort_SwappedArguments(t *testing.T) {
 }
 
 func TestSort_GuardPrecision(t *testing.T) {
+	t.Parallel()
+
 	// The swap guard -- (and (not (procedure? less?)) (procedure? lst)) -- must
 	// fire ONLY on the unambiguous swap (a procedure sitting in the list slot).
 	// It must NOT relabel every sort type-error as a swap, or the hint becomes
@@ -113,6 +123,8 @@ func TestSort_GuardPrecision(t *testing.T) {
 }
 
 func TestSort_Errors(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "wrong arity zero args", Code: `(sort)`},
 		{Name: "wrong arity one arg", Code: `(sort <)`},

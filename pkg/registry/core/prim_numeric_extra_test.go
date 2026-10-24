@@ -30,6 +30,8 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestExactnessPredicates(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -93,6 +95,8 @@ func TestExactnessPredicates(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestSpecialValuePredicates(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -171,6 +175,8 @@ func TestSpecialValuePredicates(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestExactnessConversions(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -218,6 +224,8 @@ func TestExactnessConversions(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestExactIntegerSqrt(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -287,6 +295,8 @@ func TestExactIntegerSqrt(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestRationalize(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -322,6 +332,8 @@ func TestRationalize(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestFloorDivision(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -371,6 +383,8 @@ func TestFloorDivision(t *testing.T) {
 }
 
 func TestFloorQuotient(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -397,6 +411,8 @@ func TestFloorQuotient(t *testing.T) {
 }
 
 func TestFloorRemainder(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -427,6 +443,8 @@ func TestFloorRemainder(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestTruncateDivision(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -476,6 +494,8 @@ func TestTruncateDivision(t *testing.T) {
 }
 
 func TestTruncateQuotient(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -502,6 +522,8 @@ func TestTruncateQuotient(t *testing.T) {
 }
 
 func TestTruncateRemainder(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		prog values.Value
@@ -528,6 +550,8 @@ func TestTruncateRemainder(t *testing.T) {
 }
 
 func TestRationalizeMoreCases(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "rationalize integer",
@@ -560,6 +584,8 @@ func TestRationalizeMoreCases(t *testing.T) {
 }
 
 func TestExactInexactExtended(t *testing.T) {
+	t.Parallel()
+
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
 			Name: "exact on rational",
@@ -592,6 +618,8 @@ func TestExactInexactExtended(t *testing.T) {
 // R7RS §6.2.6: rationalize returns an exact result for exact arguments
 // and an inexact result for inexact arguments.
 func TestRationalize_Exactness(t *testing.T) {
+	t.Parallel()
+
 	// Exact inputs produce exact result
 	t.Run("exact inputs produce exact result", func(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectTrue(t, "(exact? (rationalize 3/10 1/10))")

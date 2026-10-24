@@ -24,6 +24,8 @@ import (
 )
 
 func TestFiniteQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -70,6 +72,8 @@ func TestFiniteQ(t *testing.T) {
 }
 
 func TestInfiniteQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -111,6 +115,8 @@ func TestInfiniteQ(t *testing.T) {
 }
 
 func TestNanQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -147,6 +153,8 @@ func TestNanQ(t *testing.T) {
 }
 
 func TestNegativeQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -188,6 +196,8 @@ func TestNegativeQ(t *testing.T) {
 }
 
 func TestPositiveQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -229,6 +239,8 @@ func TestPositiveQ(t *testing.T) {
 }
 
 func TestRationalQ(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
