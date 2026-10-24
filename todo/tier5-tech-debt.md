@@ -1274,6 +1274,13 @@ Open restructuring work found only in `plans/` during the 2026-07-21 triage.
 
 > **Stale-status housekeeping (planlint evidence), DONE 2026-09-04.** `2026-07-17-review-remediation.md` + `-impl.md` and `2026-07-12-numeric-zero-and-tier2-fold.md` showed unchecked boxes while fully shipped; all three archived to `memory/` in the 2026-09-04 pass with their Plan Index rows, alongside eight whose headers said shipped and the lingering rows of three earlier archives (r6rs hashtables, ambient keywords, literal-pin ambiguity).
 
+### Filed by the P9.3 crosscheck (2026-10-23)
+
+- [ ] **`(list-set! '() ...)` leaks a Go type name and disagrees with `list-ref`** [Error quality, XS, P9.3 crosscheck]: `PrimListSet`'s `RequireArg[*values.Pair]` rejects the empty list with "expected a list but got values.emptyListType" (a Go type name, and wrong: `'()` is a list), sentinel `ErrNotAList`. `(list-ref '() 0)` reaches `NthCons` and reports `ErrIndexOutOfRange`. Pinned by sentinel only in `TestListSetReportsWhereTheWalkRanOut`; reconcile the sentinel and the message together.
+- [ ] **A circular list with a huge index hangs `list-ref`, `list-tail` and `list-set!`** [Correctness, S, P9.3 crosscheck]: `values.NthCons` is bounded by the index, not by the cycle, and has no context check, so `(list-ref circ 4611686018427387904)` spins until killed. Tree-wide: `ForEachProperList` has the same shape. Fix belongs in `NthCons` (cycle detection or a periodic `ctx.Err()` poll) and needs the context threaded through `helpers.NthCons`.
+- [ ] **`(list-ref 5 0)` reports `ErrIndexOutOfRange`, not `ErrNotAList`** [Error quality, XS, P9.3 crosscheck]: a non-list first argument falls into `NthCons` at depth 0 and is reported as an index error.
+- [ ] **Bignum and negative indices are classified two ways across the index-keyed primitives** [Consistency, S, P9.3 crosscheck]: a bignum index is `ErrIndexOutOfRange` in `list-ref`/`list-tail`/`list-set!` (`listIndexArg`, `pkg/registry/core/prim_lists.go`) but `ErrNotAnInteger` via `helpers.RequireIndex` (`pkg/registry/helpers/args.go`) for `vector-ref`/`string-ref`. A negative index also has two texts under one sentinel (`values.NthCons`: "index must be non-negative"; `CheckIndexBounds`: its own bounds wording). Pick one rule and route both families through it.
+
 ### Closed in Tier 5
 
 Moved to [`closed.md`](closed.md) (2026-10-17 split).
