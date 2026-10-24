@@ -330,7 +330,7 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
 
 ### `PrimitiveSpec.Mutates` has no static guard (2026-08-09)
 
-- [x] **Derive destructiveness from the code, not only from the annotation** [Done 2026-10-23 for the DIRECT-SINK shape only, P8.11 `MERGE_SHA`: `TestMutatesDirectSinkPin` and `TestMutatesPinFindingsDecision`; the write-through, method-value, helper-indirection and helper-built shapes stay open as the first row under "Filed by the P8.11 crosscheck" above]
+- [x] **Derive destructiveness from the code, not only from the annotation** [Done 2026-10-23 for the DIRECT-SINK shape only, P8.11 `4d2ba6a4`: `TestMutatesDirectSinkPin` and `TestMutatesPinFindingsDecision`; the write-through, method-value, helper-indirection and helper-built shapes stay open as the first row under "Filed by the P8.11 crosscheck" above]
   [Correctness-adjacent, M]: `TestMutatesMatchesMutationPrimitives` pins the
   annotated set against `NoMutation`'s removal list in both directions, but
   derives NEITHER from what the primitives actually do. A new destructive
