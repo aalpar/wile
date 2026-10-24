@@ -99,40 +99,16 @@ func (p *EnvironmentFrame) ResolveBindingRef(key *values.Symbol, q syntax.ScopeS
 // sets; any other change to the reference's scopes is the same approximation the
 // rest of the analysis makes. A wildcard query is never a tie.
 func (p *EnvironmentFrame) ResolveBindingRefs(key *values.Symbol, q syntax.ScopeSet) []BindingRef {
-	bid, ok, ambiguous := p.TryResolveBindingID(key, q)
-	if !ambiguous && ok {
-		return []BindingRef{LocalRef(bid)}
-	}
-	if !ambiguous {
+	bid, ok, ties := resolveLocalTies(p, key, q, func(_ *Binding, slot int, depth int) BindingID {
+		return p.bindingIDAt(slot, depth)
+	})
+	if !ok {
 		return []BindingRef{GlobalRef(key.Key)}
 	}
-	type candidate struct {
-		scopes syntax.Scopes
-		bid    BindingID
-	}
-	var all []candidate
-	maxLen := 0
-	walkLocal(p, key, q, func(binding *Binding, slot int, depth int) bool {
-		sc := binding.Scopes()
-		all = append(all, candidate{scopes: sc, bid: p.bindingIDAt(slot, depth)})
-		maxLen = max(maxLen, sc.Len())
-		return false
-	})
-	var q2 []BindingRef
-	var kept []syntax.Scopes
-	for _, c := range all {
-		if c.scopes.Len() != maxLen {
-			continue
-		}
-		dup := false
-		for _, k := range kept {
-			dup = dup || syntax.ScopesMatch(c.scopes, k)
-		}
-		if dup {
-			continue
-		}
-		kept = append(kept, c.scopes)
-		q2 = append(q2, LocalRef(c.bid))
+	q2 := make([]BindingRef, 0, 1+len(ties))
+	q2 = append(q2, LocalRef(bid))
+	for _, tied := range ties {
+		q2 = append(q2, LocalRef(tied))
 	}
 	return q2
 }

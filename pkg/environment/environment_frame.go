@@ -636,22 +636,49 @@ func resolveLocalWith[T any](
 // raises, localBinding reports, analyses over-approximate).
 func resolveLocalMaximal[T any](p *EnvironmentFrame, key *values.Symbol, q syntax.ScopeSet,
 	build func(binding *Binding, slot int, depth int) T) (q2 T, found bool, ambiguous bool) {
+	best := resolveLocalBest(p, key, q, false, build)
+	q2, found = best.Result()
+	return q2, found, best.Ambiguous()
+}
+
+// resolveLocalTies is resolveLocalMaximal that also returns the other tied
+// candidates, one per distinct incomparable scope set, in visit order. ties is
+// empty exactly when the lookup is not ambiguous. build then also runs for each
+// kept tie.
+func resolveLocalTies[T any](p *EnvironmentFrame, key *values.Symbol, q syntax.ScopeSet,
+	build func(binding *Binding, slot int, depth int) T) (q2 T, found bool, ties []T) {
+	best := resolveLocalBest(p, key, q, true, build)
+	q2, found = best.Result()
+	return q2, found, best.ties
+}
+
+// resolveLocalBest is the one walk behind resolveLocalMaximal and
+// resolveLocalTies. collect keeps the tied candidates; a wildcard query takes the
+// first match and has none.
+func resolveLocalBest[T any](p *EnvironmentFrame, key *values.Symbol, q syntax.ScopeSet, collect bool,
+	build func(binding *Binding, slot int, depth int) T) tiedBestOf[T] {
+	var best tiedBestOf[T]
 	if q.IsAll() {
-		q2, found = resolveLocalWith(p, key, q, build)
-		return q2, found, false
+		first, found := resolveLocalWith(p, key, q, build)
+		if found {
+			best.record(first, syntax.Scopes{})
+		}
+		return best
 	}
-	var best scopedBestOf[T]
+	best.collect = collect
 	target := q.Scopes().Len()
 	walkLocal(p, key, q, func(binding *Binding, slot int, depth int) bool {
 		sc := binding.Scopes()
-		rec, done := best.shouldRecord(sc, target)
+		rec, done, tie := best.shouldRecordTied(sc, target)
 		if rec {
 			best.record(build(binding, slot, depth), sc)
 		}
+		if tie {
+			best.recordTie(build(binding, slot, depth), sc)
+		}
 		return done
 	})
-	q2, found = best.Result()
-	return q2, found, best.Ambiguous()
+	return best
 }
 
 // resolveGlobalWith resolves a global binding visible from p and hands the

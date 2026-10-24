@@ -120,11 +120,22 @@ func (p *scopedBestOf[T]) shouldRecord(scopes syntax.Scopes, target int) (rec, d
 	if rec {
 		return rec, done
 	}
-	if p.best.has && weight < target && weight == p.best.weight &&
-		!syntax.ScopesMatch(scopes, p.bestScopes) {
+	if p.tiesBest(weight, target, scopes) {
 		p.ambiguous = true
 	}
 	return rec, done
+}
+
+// tiesBest is the one definition of an ambiguous tie: a candidate of the same
+// sub-target weight as the current best whose scope set differs from it. Equal
+// cardinality plus distinct ⇒ incomparable, so neither is THE maximal subset of
+// the reference. ScopesMatch(scopes, bestScopes) reports bestScopes ⊆ scopes; at
+// equal cardinality that holds iff the sets are equal, so its negation is exactly
+// "different set". It is only meaningful for a candidate that did not beat the
+// best.
+func (p *scopedBestOf[T]) tiesBest(weight, target int, scopes syntax.Scopes) bool {
+	return p.best.has && weight < target && weight == p.best.weight &&
+		!syntax.ScopesMatch(scopes, p.bestScopes)
 }
 
 // record commits item as the current best and clears any prior ambiguity: a
@@ -146,4 +157,52 @@ func (p *scopedBestOf[T]) Result() (T, bool) {
 // incomparable scope sets tied for the largest subset of the reference.
 func (p *scopedBestOf[T]) Ambiguous() bool {
 	return p.ambiguous
+}
+
+// tiedBestOf is scopedBestOf that can also KEEP the tied candidates, for a caller
+// that must cover every binder an ambiguous reference might denote. It is a
+// wrapper rather than fields on scopedBestOf because the global probe zeroes
+// scopedBestOf values on a hot path and never wants the ties. The tie rule is
+// scopedBestOf.tiesBest, so the two cannot disagree on what a tie is.
+//
+// Ties are kept in visit order after the best, one per distinct scope set. A new
+// best supersedes them, as it supersedes the ambiguity flag. With collect false
+// it is a scopedBestOf and allocates nothing extra.
+type tiedBestOf[T any] struct {
+	scopedBestOf[T]
+	collect   bool
+	ties      []T
+	tieScopes []syntax.Scopes
+}
+
+// shouldRecordTied is scopedBestOf.shouldRecord that also reports tie: the
+// candidate is incomparable with the best and not already kept. The caller MUST
+// call recordTie(item, scopes) iff tie is true.
+func (p *tiedBestOf[T]) shouldRecordTied(scopes syntax.Scopes, target int) (rec, done, tie bool) {
+	rec, done = p.shouldRecord(scopes, target)
+	if rec || !p.collect {
+		return rec, done, false
+	}
+	if !p.tiesBest(scopes.Len(), target, scopes) {
+		return false, done, false
+	}
+	for _, k := range p.tieScopes {
+		if syntax.ScopesMatch(scopes, k) {
+			return false, done, false
+		}
+	}
+	return false, done, true
+}
+
+// record commits item as the new best and drops the ties of the old one.
+func (p *tiedBestOf[T]) record(item T, scopes syntax.Scopes) {
+	p.scopedBestOf.record(item, scopes)
+	p.ties = p.ties[:0]
+	p.tieScopes = p.tieScopes[:0]
+}
+
+// recordTie keeps item as a tied candidate of the current best.
+func (p *tiedBestOf[T]) recordTie(item T, scopes syntax.Scopes) {
+	p.ties = append(p.ties, item)
+	p.tieScopes = append(p.tieScopes, scopes)
 }
