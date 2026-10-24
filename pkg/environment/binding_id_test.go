@@ -122,3 +122,71 @@ func TestTryResolveBindingIDReportsTie(t *testing.T) {
 	ref := env.ResolveBindingRef(sym, q)
 	qt.Assert(t, ref.IsLocal(), qt.IsTrue)
 }
+
+// A tie yields one local ref per tied binder; without a tie the answer is the
+// single ref ResolveBindingRef gives, and a miss is the global ref.
+func TestResolveBindingRefsCoversEveryTiedBinder(t *testing.T) {
+	env, sym, q := tiedFrame()
+
+	refs := env.ResolveBindingRefs(sym, q)
+	qt.Assert(t, refs, qt.HasLen, 2)
+	qt.Assert(t, refs[0].IsLocal(), qt.IsTrue)
+	qt.Assert(t, refs[1].IsLocal(), qt.IsTrue)
+	qt.Assert(t, refs[0], qt.Not(qt.Equals), refs[1])
+
+	one := env.ResolveBindingRefs(sym, syntax.AllScopes())
+	qt.Assert(t, one, qt.HasLen, 1)
+	qt.Assert(t, one[0], qt.Equals, env.ResolveBindingRef(sym, syntax.AllScopes()))
+
+	miss := env.ResolveBindingRefs(values.NewSymbol("y"), q)
+	qt.Assert(t, miss, qt.HasLen, 1)
+	qt.Assert(t, miss[0].IsGlobal(), qt.IsTrue)
+}
+
+// Compatible binders below the maximal weight are not tied binders, and an
+// identical scope set shadowed in an outer frame is never the answer.
+func TestResolveBindingRefsExcludesNonMaximalBinders(t *testing.T) {
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+	c := syntax.NewScope()
+	sym := values.NewSymbol("x")
+	ab := syntax.Scopes{}.Add(a).Add(b)
+	ac := syntax.Scopes{}.Add(a).Add(c)
+	outer := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	outer.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a), nil)
+	outer.MaybeCreateLocalBinding(sym, BindingTypeVariable, ab, nil)
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outer)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, ab, nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, ac, nil)
+	q := syntax.ScopesOf(ab.Add(c))
+
+	refs := env.ResolveBindingRefs(sym, q)
+
+	qt.Assert(t, refs, qt.HasLen, 2)
+	qt.Assert(t, refs[0], qt.Equals, LocalRef(BindingID{Frame: &env.local, Slot: 0}))
+	qt.Assert(t, refs[1], qt.Equals, LocalRef(BindingID{Frame: &env.local, Slot: 1}))
+}
+
+// A tie between binders in different frames names both, innermost first.
+func TestResolveBindingRefsTieAcrossFrames(t *testing.T) {
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+	c := syntax.NewScope()
+	sym := values.NewSymbol("x")
+	ab := syntax.Scopes{}.Add(a).Add(b)
+	ac := syntax.Scopes{}.Add(a).Add(c)
+	outer := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	outer.MaybeCreateLocalBinding(sym, BindingTypeVariable, ab, nil)
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outer)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, ac, nil)
+	q := syntax.ScopesOf(ab.Add(c))
+
+	_, _, tied := env.TryResolveBindingID(sym, q)
+	qt.Assert(t, tied, qt.IsTrue)
+
+	refs := env.ResolveBindingRefs(sym, q)
+
+	qt.Assert(t, refs, qt.HasLen, 2)
+	qt.Assert(t, refs[0], qt.Equals, LocalRef(BindingID{Frame: &env.local, Slot: 0}))
+	qt.Assert(t, refs[1], qt.Equals, LocalRef(BindingID{Frame: &outer.local, Slot: 0}))
+}

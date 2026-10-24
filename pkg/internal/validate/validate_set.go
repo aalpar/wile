@@ -46,6 +46,7 @@ func validateSetBang(ctx context.Context, env *environment.EnvironmentFrame, pai
 	// non-local target is left to the conservative by-name mark below, so the
 	// global arm is not double-recorded here.
 	if env != nil {
+		// One tied binder suffices: the compiler sees this set! and refuses a tie.
 		ref := env.ResolveBindingRef(name.Sym, syntax.ScopesOf(name.Scopes()))
 		if ref.IsLocal() {
 			result.markMutated(ref)

@@ -24,13 +24,10 @@ import (
 )
 
 // An opaque subtree mentioning x under {a,b,c} ties between the binders of x
-// under {a,b} and {a,c}: neither scope set is a superset of the other. The
-// marker resolves through ResolveBindingRef, which names ONE tied binder, so
-// exactly one of the two is marked mutated. That is the residual filed by the
-// ResolveBindingID closeout: if expansion later breaks the tie the other way,
-// the unmarked binder is a missed set! target. This pins today's behavior; a fix
-// that marks both tied binders flips the final assertion.
-func TestMarkOpaqueCodeTieMarksOneTiedBinder(t *testing.T) {
+// under {a,b} and {a,c}: neither scope set is a superset of the other. Expansion
+// may settle the reference on either, so both are marked mutated; marking one
+// would miss a set! target.
+func TestMarkOpaqueCodeTieMarksEveryTiedBinder(t *testing.T) {
 	a, b, c := syntax.NewScope(), syntax.NewScope(), syntax.NewScope()
 	env := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), environment.NewNamespace().Runtime())
 	x := syntax.NewSyntaxSymbol("x", nil)
@@ -50,12 +47,27 @@ func TestMarkOpaqueCodeTieMarksOneTiedBinder(t *testing.T) {
 	markOpaqueCode(env, abc, result)
 
 	qt.Assert(t, result.isMutated(environment.GlobalRef(abc.Key())), qt.IsTrue)
-	marked := 0
-	if result.isMutated(refAB) {
-		marked++
-	}
-	if result.isMutated(refAC) {
-		marked++
-	}
-	qt.Assert(t, marked, qt.Equals, 1)
+	qt.Assert(t, result.isMutated(refAB), qt.IsTrue)
+	qt.Assert(t, result.isMutated(refAC), qt.IsTrue)
+}
+
+// Without a tie only the maximal compatible binder is marked, alongside the
+// name's global entry; a compatible binder of lower weight is not.
+func TestMarkOpaqueCodeMarksTheResolvedLocalBinder(t *testing.T) {
+	a, b := syntax.NewScope(), syntax.NewScope()
+	env := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), environment.NewNamespace().Runtime())
+	x := syntax.NewSyntaxSymbol("x", nil)
+	xa := withScope(x, a)
+	xab := withScope(xa, b)
+	bindLocalSymbol(env, xa)
+	bindLocalSymbol(env, xab)
+	refA := env.ResolveBindingRef(xa.Sym, syntax.ScopesOf(xa.Scopes()))
+	refAB := env.ResolveBindingRef(xab.Sym, syntax.ScopesOf(xab.Scopes()))
+
+	result := &ValidationResult{}
+	markOpaqueCode(env, xab, result)
+
+	qt.Assert(t, result.isMutated(refAB), qt.IsTrue)
+	qt.Assert(t, result.isMutated(refA), qt.IsFalse)
+	qt.Assert(t, result.isMutated(environment.GlobalRef(xab.Key())), qt.IsTrue)
 }

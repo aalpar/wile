@@ -76,8 +76,9 @@ func (p *EnvironmentFrame) bindingIDAt(slot int, depth int) BindingID {
 // total — always returns a valid BindingRef — because the global arm needs no
 // existing binding (a top-level set!/define is named before the compiler
 // creates its global). A tie does not raise: it names one of the tied binders,
-// because every caller marks or records and the compiler, which refuses the tie,
-// is the authority. Unlike ResolveBindingID, callers do not branch on a
+// because a caller that marks or records (validate_set) leaves the compiler,
+// which refuses the tie, as the authority. A caller whose reference may still be
+// rewritten by expansion uses ResolveBindingRefs. Unlike ResolveBindingID, callers do not branch on a
 // found/not-found bool; "not local" is itself a nameable (global) outcome.
 func (p *EnvironmentFrame) ResolveBindingRef(key *values.Symbol, q syntax.ScopeSet) BindingRef {
 	bid, ok, _ := p.TryResolveBindingID(key, q)
@@ -85,4 +86,53 @@ func (p *EnvironmentFrame) ResolveBindingRef(key *values.Symbol, q syntax.ScopeS
 		return LocalRef(bid)
 	}
 	return GlobalRef(key.Key)
+}
+
+// ResolveBindingRefs is ResolveBindingRef for a caller that must cover every
+// binder a reference MIGHT denote, because validation cannot know which scopes
+// expansion will leave on it (opaque code). If the tie survives, the compiler
+// refuses it and the extra marks cost nothing. Without a tie it is the single ref
+// ResolveBindingRef returns. On a tie it is one local ref per tied binder (one
+// per distinct maximal scope set, innermost first: a shadowed outer duplicate is
+// never the answer, so keeping it instead would leave the inner binder unmarked).
+// This covers a tie later broken by removing a scope that separates the tied
+// sets; any other change to the reference's scopes is the same approximation the
+// rest of the analysis makes. A wildcard query is never a tie.
+func (p *EnvironmentFrame) ResolveBindingRefs(key *values.Symbol, q syntax.ScopeSet) []BindingRef {
+	bid, ok, ambiguous := p.TryResolveBindingID(key, q)
+	if !ambiguous && ok {
+		return []BindingRef{LocalRef(bid)}
+	}
+	if !ambiguous {
+		return []BindingRef{GlobalRef(key.Key)}
+	}
+	type candidate struct {
+		scopes syntax.Scopes
+		bid    BindingID
+	}
+	var all []candidate
+	maxLen := 0
+	walkLocal(p, key, q, func(binding *Binding, slot int, depth int) bool {
+		sc := binding.Scopes()
+		all = append(all, candidate{scopes: sc, bid: p.bindingIDAt(slot, depth)})
+		maxLen = max(maxLen, sc.Len())
+		return false
+	})
+	var q2 []BindingRef
+	var kept []syntax.Scopes
+	for _, c := range all {
+		if c.scopes.Len() != maxLen {
+			continue
+		}
+		dup := false
+		for _, k := range kept {
+			dup = dup || syntax.ScopesMatch(c.scopes, k)
+		}
+		if dup {
+			continue
+		}
+		kept = append(kept, c.scopes)
+		q2 = append(q2, LocalRef(c.bid))
+	}
+	return q2
 }
