@@ -223,7 +223,7 @@ func PrimListRef(mc machine.CallContext) error {
 	idx, ok := values.ExactInteger(mc.Arg(1))
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
-			"list-ref: expected an exact integer index but got %T", mc.Arg(1))
+			"list-ref: expected an exact integer index but got %s", mc.Arg(1).SchemeString())
 	}
 	result, err := helpers.NthCons(mc.Arg(0), idx, "list-ref")
 	if err != nil {
@@ -250,24 +250,25 @@ func PrimListSet(mc machine.CallContext) error {
 
 	idx, ok := values.ExactInteger(idxVal)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "list-set!: expected an exact integer index but got %T", idxVal)
-	}
-	k := int(idx)
-	if k < 0 {
-		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-set!: index must be non-negative")
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
+			"list-set!: expected an exact integer index but got %s", idxVal.SchemeString())
 	}
 
-	current := p
-	for range k {
-		cdr := current.Cdr()
-		next, ok := cdr.(*values.Pair)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-set!: index out of range")
-		}
-		current = next
+	// The same walk list-ref and list-tail use, so the three index-keyed
+	// primitives report an overshoot the same way. An index exactly at the
+	// end (or at an improper tail) comes back from NthCons as a non-pair
+	// tail, which is the "points past the last element" arm below.
+	tail, err := helpers.NthCons(p, idx, "list-set!")
+	if err != nil {
+		return err
+	}
+	cell, ok := tail.(*values.Pair)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+			"list-set!: index %d points past the last element", idx)
 	}
 
-	current.SetCar(val)
+	cell.SetCar(val)
 	mc.SetValue(values.Void)
 	return nil
 }
