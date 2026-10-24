@@ -144,7 +144,7 @@ func TestResolveBindingRefsCoversEveryTiedBinder(t *testing.T) {
 }
 
 // Compatible binders below the maximal weight are not tied binders, and an
-// identical scope set shadowed in an outer frame is the same binder.
+// identical scope set shadowed in an outer frame is never the answer.
 func TestResolveBindingRefsExcludesNonMaximalBinders(t *testing.T) {
 	a := syntax.NewScope()
 	b := syntax.NewScope()
@@ -163,4 +163,30 @@ func TestResolveBindingRefsExcludesNonMaximalBinders(t *testing.T) {
 	refs := env.ResolveBindingRefs(sym, q)
 
 	qt.Assert(t, refs, qt.HasLen, 2)
+	qt.Assert(t, refs[0], qt.Equals, LocalRef(BindingID{Frame: &env.local, Slot: 0}))
+	qt.Assert(t, refs[1], qt.Equals, LocalRef(BindingID{Frame: &env.local, Slot: 1}))
+}
+
+// A tie between binders in different frames names both, innermost first.
+func TestResolveBindingRefsTieAcrossFrames(t *testing.T) {
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+	c := syntax.NewScope()
+	sym := values.NewSymbol("x")
+	ab := syntax.Scopes{}.Add(a).Add(b)
+	ac := syntax.Scopes{}.Add(a).Add(c)
+	outer := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	outer.MaybeCreateLocalBinding(sym, BindingTypeVariable, ab, nil)
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outer)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, ac, nil)
+	q := syntax.ScopesOf(ab.Add(c))
+
+	_, _, tied := env.TryResolveBindingID(sym, q)
+	qt.Assert(t, tied, qt.IsTrue)
+
+	refs := env.ResolveBindingRefs(sym, q)
+
+	qt.Assert(t, refs, qt.HasLen, 2)
+	qt.Assert(t, refs[0], qt.Equals, LocalRef(BindingID{Frame: &env.local, Slot: 0}))
+	qt.Assert(t, refs[1], qt.Equals, LocalRef(BindingID{Frame: &outer.local, Slot: 0}))
 }

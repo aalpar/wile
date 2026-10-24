@@ -76,8 +76,9 @@ func (p *EnvironmentFrame) bindingIDAt(slot int, depth int) BindingID {
 // total — always returns a valid BindingRef — because the global arm needs no
 // existing binding (a top-level set!/define is named before the compiler
 // creates its global). A tie does not raise: it names one of the tied binders,
-// because every caller marks or records and the compiler, which refuses the tie,
-// is the authority. Unlike ResolveBindingID, callers do not branch on a
+// because a caller whose reference the compiler will also see (validate_set)
+// marks or records and the compiler, which refuses the tie, is the authority.
+// A caller whose subtree is never compiled there uses ResolveBindingRefs. Unlike ResolveBindingID, callers do not branch on a
 // found/not-found bool; "not local" is itself a nameable (global) outcome.
 func (p *EnvironmentFrame) ResolveBindingRef(key *values.Symbol, q syntax.ScopeSet) BindingRef {
 	bid, ok, _ := p.TryResolveBindingID(key, q)
@@ -88,15 +89,21 @@ func (p *EnvironmentFrame) ResolveBindingRef(key *values.Symbol, q syntax.ScopeS
 }
 
 // ResolveBindingRefs is ResolveBindingRef for a caller that must cover every
-// binder a reference MIGHT denote. Without a tie it is the single ref
+// binder a reference MIGHT denote, because the reference is never compiled where
+// a tie would be refused (opaque code). Without a tie it is the single ref
 // ResolveBindingRef returns. On a tie it is one local ref per tied binder (one
-// per distinct maximal scope set, innermost first), so a marker that
-// over-approximates cannot miss the binder expansion later settles on. A wildcard
-// query is never a tie.
+// per distinct maximal scope set, innermost first: a shadowed outer duplicate is
+// never the answer, so keeping it instead would leave the inner binder unmarked).
+// This covers a tie later broken by removing a scope that separates the tied
+// sets; any other change to the reference's scopes is the same approximation the
+// rest of the analysis makes. A wildcard query is never a tie.
 func (p *EnvironmentFrame) ResolveBindingRefs(key *values.Symbol, q syntax.ScopeSet) []BindingRef {
-	_, _, ambiguous := p.TryResolveBindingID(key, q)
+	bid, ok, ambiguous := p.TryResolveBindingID(key, q)
+	if !ambiguous && ok {
+		return []BindingRef{LocalRef(bid)}
+	}
 	if !ambiguous {
-		return []BindingRef{p.ResolveBindingRef(key, q)}
+		return []BindingRef{GlobalRef(key.Key)}
 	}
 	type candidate struct {
 		scopes syntax.Scopes
