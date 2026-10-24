@@ -18,8 +18,10 @@
 // Mutation that reddens it: delete `Mutates: true` from the set-car! spec
 // (pkg/registry/core/pairs.go). The test then names set-car!, PrimSetCar, the matched
 // selector and its position. Second mutation, for the vacuity guards: delete "SetCar"
-// from mutationSinkSelectors, or rename the Pair.SetCar method; the must-discover rows,
-// the census and TestMutationSinksAreValuesMethods fail.
+// from mutationSinkSelectors; the census and four rows of
+// TestDirectMutationSinkAnalyzerDetectsSinks fail. Renaming the Pair.SetCar method
+// (callers updated with it) fails TestMutationSinksAreValuesMethods, which catches only
+// a rename, and stays green when SetCar is deleted from the list.
 //
 // What this pin is for. For primitives that exist today, the guard is the drift test
 // (dialect_nomutation_drift_test.go): it ties the annotation to the NoMutation
@@ -36,8 +38,9 @@
 //     body that holds the sink, and is skipped by construction: 152 of the 464
 //     registered primitives with an Impl (33%), counted as Impls whose runtime name
 //     carries a closure suffix. The plan (defect-closeout-P8.md, P8.11) said 103 of 463,
-//     counting something narrower. %parameter-raw-set! and atomic-store! are annotated
-//     and invisible here for this reason.
+//     counting something narrower. %parameter-raw-set!, atomic-store! and set-box!
+//     (each built with helpers.MakeBinarySetter) are annotated and invisible here for
+//     this reason.
 //   - A sink reached through a call. Only the Impl's own declaration, nested closures
 //     included, is scanned. record-modifier is the proof: PrimRecordModifier hands a
 //     function-valued argument to a factory, newRecordModifierClosure, and the closure
