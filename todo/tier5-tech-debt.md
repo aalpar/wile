@@ -151,7 +151,7 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   [Tech debt, S, Done 2026-10-04, `e01f79ab`]: the sentence is gone; the doc now names
   `planLibraryImport` and `planCopyDirect`.
 - [x] **`TestDenotedForm`'s Primitive+Void case is unreachable** [Tech debt, S, Done 2026-10-23,
-  P8.14 `docs/small-corrections-round`]: `TestDenotedForm` (`pkg/environment/form_keyword_test.go`)
+  P8.14 `07a51091`]: `TestDenotedForm` (`pkg/environment/form_keyword_test.go`)
   now feeds the !ok arm what production does: a `BindingTypeSyntax`
   binding holding a `*machine.MachineClosure` (measured by instrumenting the arm), not by Primitive+Void,
   which exists for one statement in `registerCompileTimeBinding`. The row now feeds a macro binding, and a
