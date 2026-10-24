@@ -941,13 +941,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
-- **BREAKING (Go API): `schemeutil.TrimSuffixCI` (I157).** Exported since v1.0.0
-  with no consumer anywhere in the workspace (this repo, `wile-goast`,
-  `wile-extension-example`); its only references were its own test and the
-  `doc.go` index. Gone with it: the unexported `hasSuffixCI` it alone called.
-  Removed under the zero-external-consumer clause of the versioning rule. The
-  neighbouring `TrimPrefixCI`, `NormalizeExponentMarker` and
-  `IndexExponentMarker` stay: moving them is a separate decision.
+- **BREAKING (Go API): `schemeutil.TrimSuffixCI` (I157).** Public since
+  v1.18.0 (an exported identifier since v1.0.0, under `internal/tokenizer`, then
+  `internal/schemeutil` from v1.6.0), with zero consumers found in the workspace
+  (this repo, `wile-goast`, `wile-extension-example`); its only references were
+  its own test and the `doc.go` index. Gone with it: the unexported
+  `hasSuffixCI` it alone called. The neighbouring `TrimPrefixCI`,
+  `NormalizeExponentMarker` and `IndexExponentMarker` stay: moving them is a
+  separate decision.
 - **BREAKING: `read-token`, and the per-port tokenizer cache behind it
   (I101, I100).** The primitive returned an opaque `<simple-token ...>` with no
   accessor: a program could test it against `eof-object` and do nothing else, so
