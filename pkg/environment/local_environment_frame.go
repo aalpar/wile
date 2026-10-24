@@ -88,6 +88,11 @@ func fillVoid(bs []Binding) {
 // NewLocalEnvironment creates a new local environment frame with pre-allocated
 // slots for the given parameter count. Each slot is initialized with a void
 // binding of unknown type.
+//
+// The returned pointer is a builder: NewEnvironmentFrameWithParent copies the
+// frame by value, so populate it BEFORE handing it over; a store through the
+// pointer afterwards is not seen by the frame. See the comment on
+// EnvironmentFrame's local field.
 func NewLocalEnvironment(pcnt int) *LocalEnvironmentFrame {
 	return &LocalEnvironmentFrame{
 		keys:      make(map[values.Symbol][]int, pcnt),

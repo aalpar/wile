@@ -120,6 +120,24 @@ type EnvironmentFrame struct {
 	// local holds local bindings for this frame (parameters, let-bound variables).
 	// Embedded by value to eliminate a separate heap allocation per closure call.
 	// Sentinel: local.keys == nil means "no local environment" (zero value).
+	//
+	// The *LocalEnvironmentFrame that NewLocalEnvironment returns and that
+	// LocalEnvironment hands back is NOT one object seen from two places, and the
+	// two pointers promise different things:
+	//   - NewLocalEnvironment's pointer is a builder. NewEnvironmentFrameWithParent
+	//     copies *lenv into this field, so a store through the original after that
+	//     copy is lost (the slice header and map survive the copy, but a length
+	//     change does not). No production caller stores through it after the copy;
+	//     compileClosureBody (pkg/machine/compilation/compile_closure.go, "Phase
+	//     3") populates it before the copy, and is the site where populating it
+	//     late would lose a binding.
+	//   - LocalEnvironment's pointer aliases this field. A store through it is
+	//     seen: shapeSlotFor (merged_slots.go) and the merged-let path in
+	//     operation_syntax_case.go call AppendAnonymousSlot on it. The other
+	//     production readers only test it for nil or read Bindings, Keys or
+	//     CopyCount.
+	// Absent is nil, not an empty frame. A third producer of this field must
+	// extend this comment rather than add a second one.
 	local LocalEnvironmentFrame
 	// phaseLevel is this frame's level on the macro tower, RELATIVE to the
 	// owner's own runtime (level 0). It is not an absolute compilation stage:
@@ -523,7 +541,9 @@ func (p *EnvironmentFrame) hasLocal() bool {
 	return p.local.keys != nil
 }
 
-// LocalEnvironment returns the local environment frame, or nil if none.
+// LocalEnvironment returns the local environment frame, or nil if none. The
+// pointer aliases the frame's own embedded field, so a store through it is seen
+// by the frame; see the comment on the local field.
 func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 	if !p.hasLocal() {
 		return nil
