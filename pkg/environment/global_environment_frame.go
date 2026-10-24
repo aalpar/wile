@@ -2093,7 +2093,9 @@ func (p *GlobalEnvironmentFrame) DeleteImportedBindingAt(key *values.Symbol, q s
 // Caller MUST hold the write lock on p.mu.
 func (p *GlobalEnvironmentFrame) removeSlotLocked(sym values.Symbol, i int) {
 	// Nil out the slot so a re-resolving GlobalIndex reference (OpLoadGlobal /
-	// OpPushGlobal) sees nil, caught by resolveGlobal, instead of the old value.
+	// OpPushGlobal) misses instead of seeing the old value: the removal also
+	// prunes the key, so the ranked probe behind resolveGlobalWith and
+	// healReadLocked finds nothing.
 	// NOTE: this does NOT reach compiled code that captured the *Binding pointer
 	// itself at compile time (OpLoadCachedBinding / OpPushCachedBinding /
 	// OpCallCachedBinding read cachedBindings[i].Value() directly, bypassing the

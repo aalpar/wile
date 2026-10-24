@@ -560,8 +560,13 @@ func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 	return &p.local
 }
 
-// resolveLocal walks local bindings up the parent chain, calling visitor
-// for each binding that matches key and passes scope filtering.
+// walkLocal walks local bindings up the parent chain, calling visit for each
+// binding that matches key and passes scope filtering. It is the stop-signal
+// form: visit returns true to stop the walk, false to keep walking, and walkLocal
+// reports whether any visit stopped it. A caller that must see every candidate
+// (the scoped maximal-match arms, which stop only on a perfect match) or that
+// filters by a predicate (HasLocalVariableBinding) uses it directly.
+// resolveLocalWith is the first-match form that returns a value.
 //
 // A wildcard query (q.IsAll) means "match any" — this replaces the former
 // checkScopes=false pattern. A specific or empty query (even the empty set) is
@@ -570,14 +575,14 @@ func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 // When a key maps to multiple slots (same-name bindings with different
 // scope sets from hygienic expansion), all compatible slots are visited.
 //
-// The visitor receives the matching binding, its slot index within the
-// local frame, and the depth (number of parent frames traversed). Return
-// a non-nil value to stop the walk and propagate the result.
-func (p *EnvironmentFrame) resolveLocal(
+// visit receives the matching binding, its slot index within the local frame,
+// and the depth (number of parent frames traversed).
+func walkLocal(
+	p *EnvironmentFrame,
 	key *values.Symbol,
 	q syntax.ScopeSet,
-	visitor func(binding *Binding, slot int, depth int) any,
-) any {
+	visit func(binding *Binding, slot int, depth int) bool,
+) bool {
 	env := p
 	depth := 0
 	matchAny := q.IsAll()
@@ -586,9 +591,9 @@ func (p *EnvironmentFrame) resolveLocal(
 		for _, i := range env.local.keys[*key] {
 			binding := &env.local.bindings[i]
 			if matchAny || syntax.ScopesCompatible(binding.Scopes(), scopes) {
-				result := visitor(binding, i, depth)
-				if result != nil {
-					return result
+				stop := visit(binding, i, depth)
+				if stop {
+					return true
 				}
 			}
 		}
@@ -598,10 +603,28 @@ func (p *EnvironmentFrame) resolveLocal(
 		env = env.parent
 		depth++
 	}
-	return nil
+	return false
 }
 
-// resolveGlobal resolves a global binding visible from this frame and hands the
+// resolveLocalWith is the first-match form of walkLocal: the walk stops at the
+// first compatible binding, and the answer is whatever visit builds from it. The
+// bool is false, and the value T's zero, when no binding matched. It is a
+// package-level function because Go methods cannot take type parameters.
+func resolveLocalWith[T any](
+	p *EnvironmentFrame,
+	key *values.Symbol,
+	q syntax.ScopeSet,
+	visit func(binding *Binding, slot int, depth int) T,
+) (T, bool) {
+	var q2 T
+	found := walkLocal(p, key, q, func(binding *Binding, slot int, depth int) bool {
+		q2 = visit(binding, slot, depth)
+		return true
+	})
+	return q2, found
+}
+
+// resolveGlobalWith resolves a global binding visible from p and hands the
 // store and slot to the visitor.
 //
 // One ranked probe replaces the parent-chain walk this used to be: every frame
@@ -616,42 +639,51 @@ func (p *EnvironmentFrame) resolveLocal(
 // empty-set query: a reference written outside any macro expansion must not
 // reach a binder introduced inside one.
 //
-// An ambiguous binding (P8) is raised, by tryResolveGlobal's caller here rather
-// than from inside the hold: the probe reports the tie, the RLock is released by
-// defer, and only then does this panic. The visitor still runs under the lock.
-func (p *EnvironmentFrame) resolveGlobal(
+// An ambiguous binding (P8) is raised, by tryResolveGlobalWith's caller here
+// rather than from inside the hold: the probe reports the tie, the RLock is
+// released by defer, and only then does this panic. The visitor still runs under
+// the lock.
+//
+// The visitor runs at most once, after the probe has already decided there is a
+// binding, so unlike walkLocal's it has no stop signal to give: it only builds
+// the answer. A miss returns T's zero, so T's zero must not be a valid answer;
+// every instantiation is a pointer, whose zero is nil.
+func resolveGlobalWith[T any](
+	p *EnvironmentFrame,
 	key values.Symbol,
 	q syntax.ScopeSet,
-	visitor func(frame *GlobalEnvironmentFrame, ref slotRef) any,
-) any {
-	q2, ambiguity := p.tryResolveGlobal(key, q, visitor)
+	visit func(frame *GlobalEnvironmentFrame, ref slotRef) T,
+) T {
+	q2, ambiguity := tryResolveGlobalWith(p, key, q, visit)
 	if ambiguity != nil {
 		panic(ambiguity)
 	}
 	return q2
 }
 
-// tryResolveGlobal is resolveGlobal with the incomparable tie REPORTED rather
-// than raised: ambiguity is nil unless resolution refused a tie. A miss is
-// (nil, nil), which is indistinguishable from a visitor that answered nil —
-// the same conflation resolveGlobal has always had, and every caller already
+// tryResolveGlobalWith is resolveGlobalWith with the incomparable tie REPORTED
+// rather than raised: ambiguity is nil unless resolution refused a tie. A miss is
+// (zero, nil), which is indistinguishable from a visitor that answered zero —
+// the same conflation resolveGlobalWith has always had, and every caller already
 // treats both as "nothing here".
-func (p *EnvironmentFrame) tryResolveGlobal(
+func tryResolveGlobalWith[T any](
+	p *EnvironmentFrame,
 	key values.Symbol,
 	q syntax.ScopeSet,
-	visitor func(frame *GlobalEnvironmentFrame, ref slotRef) any,
-) (any, error) {
+	visit func(frame *GlobalEnvironmentFrame, ref slotRef) T,
+) (T, error) {
+	var zero T
 	p.global.mu.RLock()
 	defer p.global.mu.RUnlock()
 
 	ref, ok, ambiguity := p.global.tryResolveRankedLocked(key, q, p.phaseLevel)
 	if ambiguity != nil {
-		return nil, ambiguity
+		return zero, ambiguity
 	}
 	if !ok {
-		return nil, nil
+		return zero, nil
 	}
-	return visitor(p.global, ref), nil
+	return visit(p.global, ref), nil
 }
 
 // localBinding is GetBinding's lexical-chain phase with the tie REPORTED rather
@@ -661,13 +693,10 @@ func (p *EnvironmentFrame) tryResolveGlobal(
 func (p *EnvironmentFrame) localBinding(key *values.Symbol, q syntax.ScopeSet) (bnd *Binding, ambiguous bool) {
 	if q.IsAll() {
 		// Fast path: wildcard query — return first match
-		result := p.resolveLocal(key, q, func(binding *Binding, _ int, _ int) any {
+		binding, _ := resolveLocalWith(p, key, q, func(binding *Binding, _ int, _ int) *Binding {
 			return binding
 		})
-		if result == nil {
-			return nil, false
-		}
-		return result.(*Binding), false
+		return binding, false
 	}
 	// Scoped path: maximal binding resolution (Flatt model).
 	// See bestOf in best_of.go. Allocation here is trivial — the
@@ -675,16 +704,13 @@ func (p *EnvironmentFrame) localBinding(key *values.Symbol, q syntax.ScopeSet) (
 	// unconditionally on shouldRecord = true.
 	var best scopedBestOf[*Binding]
 	target := q.Scopes().Len()
-	p.resolveLocal(key, q, func(binding *Binding, _ int, _ int) any {
+	walkLocal(p, key, q, func(binding *Binding, _ int, _ int) bool {
 		sc := binding.Scopes()
 		rec, done := best.shouldRecord(sc, target)
 		if rec {
 			best.record(binding, sc)
 		}
-		if done {
-			return true
-		}
-		return nil
+		return done
 	})
 	if best.Ambiguous() {
 		return nil, true
@@ -753,20 +779,13 @@ func (p *EnvironmentFrame) tryGetBinding(key *values.Symbol, q syntax.ScopeSet) 
 
 	// The scope filter lives in the ranked probe, which both selects the maximal
 	// match within the winning tier and rejects incompatible candidates.
-	gResult, ambiguity := p.tryResolveGlobal(*key, q, func(g *GlobalEnvironmentFrame, ref slotRef) any {
-		binding := g.bindings[ref.slot]
-		if binding != nil {
-			return binding
-		}
-		return nil
+	gBinding, ambiguity := tryResolveGlobalWith(p, *key, q, func(g *GlobalEnvironmentFrame, ref slotRef) *Binding {
+		return g.bindings[ref.slot]
 	})
 	if ambiguity != nil {
 		return nil, ambiguity
 	}
-	if gResult != nil {
-		return gResult.(*Binding), nil
-	}
-	return nil, nil
+	return gBinding, nil
 }
 
 // ExactBinding resolves key under q in this frame's lexical chain, then among the
@@ -836,13 +855,10 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) 
 
 	// Fast path: wildcard query — return first match (no maximal resolution needed)
 	if q.IsAll() {
-		result := p.resolveLocal(key, q, func(_ *Binding, slot int, depth int) any {
+		li, _ := resolveLocalWith(p, key, q, func(_ *Binding, slot int, depth int) *LocalIndex {
 			return NewLocalIndex(slot, depth)
 		})
-		if result != nil {
-			return result.(*LocalIndex)
-		}
-		return nil
+		return li
 	}
 
 	// Scoped path: maximal binding resolution.
@@ -852,16 +868,13 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) 
 	// allocating on every parent-chain visit.
 	var best scopedBestOf[*LocalIndex]
 	target := q.Scopes().Len()
-	p.resolveLocal(key, q, func(binding *Binding, slot int, depth int) any {
+	walkLocal(p, key, q, func(binding *Binding, slot int, depth int) bool {
 		sc := binding.Scopes()
 		rec, done := best.shouldRecord(sc, target)
 		if rec {
 			best.record(NewLocalIndex(slot, depth), sc)
 		}
-		if done {
-			return true
-		}
-		return nil
+		return done
 	})
 
 	if best.Ambiguous() {
@@ -896,13 +909,9 @@ func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, q syntax.
 	if p == nil {
 		return false
 	}
-	result := p.resolveLocal(sym, q, func(binding *Binding, _ int, _ int) any {
-		if binding.BindingType() == BindingTypeVariable {
-			return true
-		}
-		return nil
+	return walkLocal(p, sym, q, func(binding *Binding, _ int, _ int) bool {
+		return binding.BindingType() == BindingTypeVariable
 	})
-	return result != nil
 }
 
 // GetLocalBinding returns the binding for the given LocalIndex.
@@ -1245,13 +1254,9 @@ func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, s
 // This is the WILDCARD form — see GlobalEnvironmentFrame.GetGlobalIndex.
 // Compiler callers want GetGlobalIndexWithScopes.
 func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
-	result := p.resolveGlobal(*key, syntax.AllScopes(), func(g *GlobalEnvironmentFrame, ref slotRef) any {
+	return resolveGlobalWith(p, *key, syntax.AllScopes(), func(g *GlobalEnvironmentFrame, ref slotRef) *GlobalIndex {
 		return newResolvedGlobalIndex(key, g, ref)
 	})
-	if result != nil {
-		return result.(*GlobalIndex)
-	}
-	return nil
 }
 
 // GetGlobalIndexWithScopes is GetGlobalIndex with hygienic resolution: the
@@ -1259,13 +1264,9 @@ func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 // (EmptyScopes) resolves under the empty scope set, not "any" — pass AllScopes
 // for wildcard resolution.
 func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, q syntax.ScopeSet) *GlobalIndex {
-	result := p.resolveGlobal(*key, q, func(g *GlobalEnvironmentFrame, ref slotRef) any {
+	return resolveGlobalWith(p, *key, q, func(g *GlobalEnvironmentFrame, ref slotRef) *GlobalIndex {
 		return newScopeKeyedGlobalIndex(key, g, ref, q)
 	})
-	if result != nil {
-		return result.(*GlobalIndex)
-	}
-	return nil
 }
 
 // GetGlobalBinding returns the binding for the given GlobalIndex, searching global bindings in the current and parent environments.
@@ -1273,13 +1274,9 @@ func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, q syntax
 // A deferred index (Env == nil) carries the reference's scope set, so this
 // execution-time walk resolves hygienically rather than by bare name.
 func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
-	result := p.resolveGlobal(*key.Index, key.query, func(g *GlobalEnvironmentFrame, ref slotRef) any {
+	return resolveGlobalWith(p, *key.Index, key.query, func(g *GlobalEnvironmentFrame, ref slotRef) *Binding {
 		return g.bindings[ref.slot]
 	})
-	if result != nil {
-		return result.(*Binding)
-	}
-	return nil
 }
 
 // GetGlobalIndexAcrossPhases searches for a global binding across phases
@@ -1491,7 +1488,7 @@ func (p *EnvironmentFrame) PresentPhases() []Phase {
 // Reaching the library's PRIMITIVES from phase 1 is not this search's job — it
 // falls out of GetGlobalIndexWithScopes's own reach, not a mechanism this
 // function adds. A library env (NewChildRuntime) shares its store across every
-// phase view, and GetGlobalIndexWithScopes's ranked probe (resolveGlobal →
+// phase view, and GetGlobalIndexWithScopes's ranked probe (resolveGlobalWith →
 // resolveRankedLocked) already includes the sealed tiers at the referring phase
 // at every call — there is no parent walk post-fold, one
 // store answers for all of a library's phase views. Before the store fold this

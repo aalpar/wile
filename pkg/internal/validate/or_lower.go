@@ -46,7 +46,7 @@ import (
 // shape whose consequent consumes the value. Both are refused.
 //
 // The scan matches by name AND binderScopes ⊆ refScopes — Flatt's rule, through
-// the same syntax.ScopesCompatible the environment's resolveLocal uses, so it
+// the same syntax.ScopesCompatible the environment's walkLocal uses, so it
 // cannot drift from real resolution. Over-approximating in that direction is
 // safe: a genuine reference necessarily carries the binder's name and satisfies
 // the subset relation, so none is missed, while an unrelated same-name

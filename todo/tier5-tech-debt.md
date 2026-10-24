@@ -170,8 +170,7 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   count, the plan's 117/34 included comments and a ruleguard message string). Reopen only when every `ParamTypes`
   position is constrained, types with no `ValueType` entry included, AND enforcement is the default.
 - [x] **`pkg/values/utils.go` was a 603-line grab-bag** [Tech debt, M, Done 2026-10-19 (I013, P5.13)]: split by owner into `scheme_string.go`, `pair.go`, `values.go`, `symbol.go`, `numeric_tower.go` and `map_set.go`; `TestValuesHasNoGrabBagFile` refuses five exact catch-all names. Distinct from the `schemeutil` grab-bag already filed.
-- [ ] **`resolveLocal` / `resolveGlobal` take `func(...) any` visitors** [Tech debt, M]:
-  `environment_frame.go`. Generics retire the `any`.
+- [x] **`resolveLocal` / `resolveGlobal` take `func(...) any` visitors** [Tech debt, M, Done 2026-10-24 (I014, P9.4)]: now `walkLocal` (stop-signal), `resolveLocalWith[T]` (first match), `resolveGlobalWith[T]` and `tryResolveGlobalWith[T]`. `tryResolveGlobal` was a third `any` visitor the row did not list. Gates: `visitor func(...) any,` 3 to 0, `result.(*T)` assertions 6 to 0. Cost: local wildcard lookup +1.6 ns, global +0.75 ns, allocations unchanged, `ExpandAndCompile`/`Compile`/`EngineStartup` flat over 5 interleaved rounds.
 - [ ] **Adding a primitive still touches four files with escaped-string docstrings** [Tech debt, L]:
   `pkg/registry/core/register.go`'s own comment lists the ritual verbatim. Related to, but larger
   than, the chibi-ffi-style codegen item parked in the plan index.

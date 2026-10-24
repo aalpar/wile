@@ -426,7 +426,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	//
 	// Global-only by construction. GetBinding would search locals first, and
 	// emitting a cached-binding load for a local would be wrong. A nil GetLocalIndex
-	// does imply GetBinding's local phase is empty today (both walk resolveLocal
+	// does imply GetBinding's local phase is empty today (both walk the local frames through walkLocal
 	// with the same scopedBestOf and ScopesCompatible filter), but that is a
 	// non-local invariant, so use the accessor that cannot depend on it — the same
 	// one the empty-scope path above uses.
@@ -435,7 +435,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// re-walk: one lock, no re-hash, and no chance of a second walk landing on a
 	// different slot than the one whose scopes the guard below inspects. The
 	// Env != nil guard covers a DEFERRED index (NewGlobalIndex), which
-	// resolveGlobal never produces but the type does not forbid.
+	// resolveGlobalWith never produces but the type does not forbid.
 	coGI := p.env.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
 	if coGI != nil && coGI.Env != nil {
 		coBD := coGI.Env.GetOwnGlobalBinding(coGI)
@@ -459,7 +459,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// in the caller env, which would falsely match any reference scopes.
 	libGI := p.env.GetGlobalIndexFromLibraryScopes(sym, symbolScopes)
 	if libGI != nil {
-		// Env is nil for a DEFERRED index, which resolveGlobal never produces but
+		// Env is nil for a DEFERRED index, which resolveGlobalWith never produces but
 		// the type does not forbid; a nil binding is not a refusal
 		// (refuseCompileTimeMeaning says why).
 		var libBD *environment.Binding

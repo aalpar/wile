@@ -236,7 +236,7 @@ func TestCopyPreservesCoordinates(t *testing.T) {
 // path (a plain first-live-slot loop with no tier concept): it tracks
 // tier across the whole slot list, applies the same phase filter the scoped
 // branch does, and returns the highest tier's first live slot. Every existing
-// wildcard caller that the fold moved onto the probe — resolveGlobal, and
+// wildcard caller that the fold moved onto the probe — resolveGlobalWith, and
 // through it EnvironmentFrame.GetGlobalIndex — inherits this ranked behavior, so
 // pin it here.
 func TestResolveRankedWildcard(t *testing.T) {
@@ -816,4 +816,20 @@ func TestImportedRowOutranksALanguageRow(t *testing.T) {
 	qt.Assert(t, got != sealed, qt.IsTrue,
 		qt.Commentf("the language row won: a sealed import row must outrank a sealed language row, as tierExactImported outranks tierExactSealed for slots"))
 	qt.Assert(t, got.Value().SchemeString(), qt.Equals, "2")
+}
+
+// A scoped query skips a nil'd slot, as the wildcard query does (see
+// TestResolveRankedWildcard): the visitor resolveGlobalWith hands the answer to
+// never sees a removed binding.
+func TestResolveRankedScopedSkipsNilSlot(t *testing.T) {
+	sym := values.NewSymbol("v")
+	a := syntax.NewScope()
+	g := NewGlobalEnvironmentFrame()
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}.Add(a), 0, false)
+	g.bindings[0] = nil
+
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	_, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf(syntax.Scopes{}.Add(a)), 0)
+	qt.Assert(t, ok, qt.IsFalse)
 }

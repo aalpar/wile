@@ -219,3 +219,78 @@ func TestExactBinding_ReachesTheStoresExactTiers(t *testing.T) {
 	bnd, _ = ns.Runtime().ExactBinding(sym, values.EmptyScopes())
 	qt.Assert(t, bnd, qt.Equals, ns.Store().GetOwnGlobalBinding(idx))
 }
+
+// Two nested frames bind x under the SAME scope set the reference carries: the
+// inner binder wins. Pins that the scoped arms of localBinding and GetLocalIndex
+// stop at a perfect match instead of letting an outer equal-scope binder
+// overwrite it.
+func TestScopedPerfectMatchStopsAtInnermost(t *testing.T) {
+	a := syntax.NewScope()
+	sym := values.NewSymbol("x")
+	outer := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	outer.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a), nil)
+	inner := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outer)
+	inner.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a), nil)
+	q := syntax.ScopesOf(syntax.Scopes{}.Add(a))
+
+	li := inner.GetLocalIndex(sym, q)
+	qt.Assert(t, li, qt.IsNotNil)
+	qt.Assert(t, li.Up(), qt.Equals, 0)
+	qt.Assert(t, inner.GetBinding(sym, q), qt.Equals, li.GetBinding(inner))
+}
+
+// A wildcard query over two nested binders answers the FIRST (innermost) match.
+// Pins resolveLocalWith's stop-at-first-match.
+func TestWildcardFirstMatchIsInnermost(t *testing.T) {
+	sym := values.NewSymbol("x")
+	outer := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	outer.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}, nil)
+	inner := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outer)
+	inner.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}, nil)
+
+	li := inner.GetLocalIndex(sym, syntax.AllScopes())
+	qt.Assert(t, li, qt.IsNotNil)
+	qt.Assert(t, li.Up(), qt.Equals, 0)
+	qt.Assert(t, inner.GetBinding(sym, syntax.AllScopes()), qt.Equals, li.GetBinding(inner))
+}
+
+// resolveLocalWith answers (value, true) on a hit and (zero, false) on a miss.
+func TestResolveLocalWithHitAndMiss(t *testing.T) {
+	sym := values.NewSymbol("x")
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}, nil)
+
+	v, ok := resolveLocalWith(env, sym, syntax.AllScopes(), func(_ *Binding, _ int, _ int) int {
+		return 7
+	})
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, v, qt.Equals, 7)
+
+	v, ok = resolveLocalWith(env, values.NewSymbol("absent"), syntax.AllScopes(), func(_ *Binding, _ int, _ int) int {
+		return 7
+	})
+	qt.Assert(t, ok, qt.IsFalse)
+	qt.Assert(t, v, qt.Equals, 0)
+}
+
+// A store tie reached through GetGlobalIndexWithScopes (resolveGlobalWith) is
+// raised, like the one reached through GetBinding. Pins the panic in
+// resolveGlobalWith, which tryGetBinding and ExactBindingAt do not exercise.
+func TestGetGlobalIndexWithScopesRaisesOnStoreTie(t *testing.T) {
+	ns := NewNamespace()
+	sym := values.NewSymbol("tie")
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+	for _, s := range []syntax.Scopes{syntax.Scopes{}.Add(a), syntax.Scopes{}.Add(b)} {
+		_, created := ns.Runtime().MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, s)
+		qt.Assert(t, created, qt.IsTrue)
+	}
+	q := syntax.ScopesOf(syntax.Scopes{}.Add(a).Add(b))
+
+	r := capturePanic(func() {
+		ns.Runtime().GetGlobalIndexWithScopes(sym, q)
+	})
+	qt.Assert(t, r, qt.IsNotNil)
+	err, _ := r.(error)
+	qt.Assert(t, errors.Is(err, werr.ErrAmbiguousBinding), qt.IsTrue)
+}

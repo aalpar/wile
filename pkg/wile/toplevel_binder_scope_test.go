@@ -155,7 +155,7 @@ func TestMacroGeneratingMacro_TwoExpansionsDoNotShareBinder(t *testing.T) {
 // identifier behind each generated macro's template is resolved by the local
 // arm of collectFreeIdentifiersWithEllipsis, which passed nil scopes.
 //
-// nil is MATCH ANY (resolveLocal, environment_frame.go: matchAny := scopes ==
+// nil is MATCH ANY (the former resolveLocal, environment_frame.go: matchAny := scopes ==
 // nil), so the walk took the first live slot and both hatters saw expansion
 // one's binder. The local arm also returns EARLY on a hit, so it shadowed the
 // scope-verified global arm eleven lines below it — the two arms of one

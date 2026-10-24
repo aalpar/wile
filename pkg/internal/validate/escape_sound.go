@@ -34,7 +34,7 @@ import (
 // An occurrence is treated as a reference to this binding when the names match
 // AND the binder's scopes are compatible with the occurrence's — Flatt's rule,
 // bindingScopes ⊆ useScopes, via the same ScopesCompatible the environment's
-// resolveLocal uses, so this cannot drift from real resolution. Both halves are
+// walkLocal uses, so this cannot drift from real resolution. Both halves are
 // pure functions of two syntax objects, so no *EnvironmentFrame is needed and
 // bodyCreatesEscapingClosure keeps its body-only signature.
 //

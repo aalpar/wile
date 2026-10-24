@@ -400,8 +400,8 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 				// The reference's own scope set decides WHICH same-named binding,
 				// for the same reason it does on the global arm below: two
 				// expansions of a macro-generating macro each bind under their own
-				// intro scope, so the name owns two slots. Passing nil here means
-				// MATCH ANY (resolveLocal), which takes the first live slot and
+				// intro scope, so the name owns two slots. Passing nil here meant
+				// MATCH ANY (the former resolveLocal), which took the first live slot and
 				// hands both generated macros the first expansion's binder.
 				li := env.GetLocalIndex(symVal, syntax.ScopesOf(t.Scopes()))
 				if li != nil {

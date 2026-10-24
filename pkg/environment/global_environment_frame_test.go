@@ -409,7 +409,7 @@ func TestGlobalFrame_StalePinDoesNotHealOntoSealedSlot(t *testing.T) {
 
 	// Pin an index at the mutable slot, the way a compiled set!'s
 	// EnvironmentFrame.GetGlobalIndexWithScopes re-resolve does: tier-aware
-	// (resolveGlobal's ranked probe), so it lands on tierExactMutable, not on
+	// (resolveGlobalWith's ranked probe), so it lands on tierExactMutable, not on
 	// tierExactSealed, even though both slots share the empty scope set and the
 	// same phase.
 	gi := ns.runtime.GetGlobalIndexWithScopes(sym, values.EmptyScopes())
