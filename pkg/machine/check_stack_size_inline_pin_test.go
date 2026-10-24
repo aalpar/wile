@@ -57,7 +57,7 @@ const checkStackSizeInlineSites = 8
 func TestCheckStackSizeIsInlinedAtEveryCallSitePin(t *testing.T) {
 	c := qt.New(t)
 
-	cmd := exec.Command("go", "build", "-gcflags=-m=2", "-o", os.DevNull, ".")
+	cmd := exec.CommandContext(t.Context(), "go", "build", "-gcflags=-m=2", "-o", os.DevNull, ".")
 	// A clean environment for the knobs that change inlining: an enclosing
 	// `go test -race` or a GOFLAGS carrying -gcflags would change the count.
 	cmd.Env = append(os.Environ(), "GOFLAGS=", "GOWORK=off")
