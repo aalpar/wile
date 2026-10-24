@@ -228,10 +228,10 @@ func TestScopedPerfectMatchStopsAtInnermost(t *testing.T) {
 	a := syntax.NewScope()
 	sym := values.NewSymbol("x")
 	outer := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
-	outer.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{a}), nil)
+	outer.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a), nil)
 	inner := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outer)
-	inner.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{a}), nil)
-	q := syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{a}))
+	inner.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a), nil)
+	q := syntax.ScopesOf(syntax.Scopes{}.Add(a))
 
 	li := inner.GetLocalIndex(sym, q)
 	qt.Assert(t, li, qt.IsNotNil)
@@ -281,11 +281,11 @@ func TestGetGlobalIndexWithScopesRaisesOnStoreTie(t *testing.T) {
 	sym := values.NewSymbol("tie")
 	a := syntax.NewScope()
 	b := syntax.NewScope()
-	for _, s := range [][]*syntax.Scope{{a}, {b}} {
-		_, created := ns.Runtime().MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, syntax.ScopesFromSlice(s))
+	for _, s := range []syntax.Scopes{syntax.Scopes{}.Add(a), syntax.Scopes{}.Add(b)} {
+		_, created := ns.Runtime().MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, s)
 		qt.Assert(t, created, qt.IsTrue)
 	}
-	q := syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{a, b}))
+	q := syntax.ScopesOf(syntax.Scopes{}.Add(a).Add(b))
 
 	r := capturePanic(func() {
 		ns.Runtime().GetGlobalIndexWithScopes(sym, q)

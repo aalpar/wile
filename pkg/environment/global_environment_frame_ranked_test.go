@@ -825,11 +825,11 @@ func TestResolveRankedScopedSkipsNilSlot(t *testing.T) {
 	sym := values.NewSymbol("v")
 	a := syntax.NewScope()
 	g := NewGlobalEnvironmentFrame()
-	g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.ScopesFromSlice([]*syntax.Scope{a}), 0, false)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, syntax.Scopes{}.Add(a), 0, false)
 	g.bindings[0] = nil
 
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	_, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf(syntax.ScopesFromSlice([]*syntax.Scope{a})), 0)
+	_, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf(syntax.Scopes{}.Add(a)), 0)
 	qt.Assert(t, ok, qt.IsFalse)
 }
