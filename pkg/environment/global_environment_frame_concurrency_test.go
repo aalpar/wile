@@ -183,10 +183,10 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 
 	// (Concurrent EqualTo test removed: GlobalEnvironmentFrame is no longer
 	// a values.Value and its EqualTo method has been deleted. The
-	// concurrent-Copy and concurrent-resolveGlobal tests below cover the
+	// concurrent-Copy and concurrent-resolveGlobalWith tests below cover the
 	// remaining read-side mutex behaviour.)
 
-	// Test 7: Concurrent EnvironmentFrame.resolveGlobal (variable lookup pattern)
+	// Test 7: Concurrent resolveGlobalWith (variable lookup pattern)
 	t.Run("concurrent resolveGlobal", func(t *testing.T) {
 		topLevel := NewNamespace()
 		parent := topLevel.Runtime()
@@ -205,7 +205,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				// Use GetBinding which internally calls resolveGlobal
+				// Use GetBinding which internally calls resolveGlobalWith
 				bd := child.GetBinding(symbols[idx%10], values.AllScopes())
 				c.Assert(bd, qt.Not(qt.IsNil))
 			}(i)

@@ -103,7 +103,7 @@ Local variable addressing by `(slot, depth)` pair. Eliminates runtime name looku
 - **DOI**: https://doi.org/10.1016/1385-7258(72)90034-0
 - **Also**: Harold Abelson, Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd edition, MIT Press, 1996, §5.5.6 "Lexical Addressing"
 - **Also**: R. Kent Dybvig, *Three Implementation Models for Scheme*, PhD Dissertation, University of North Carolina, 1987
-- **Location**: `pkg/machine/instruction.go` (EncodeLocalIndex, DecodeLocalIndex), `pkg/environment/environment_frame.go` (resolveLocal, GetLocalBindingBySlotDepth)
+- **Location**: `pkg/machine/instruction.go` (EncodeLocalIndex, DecodeLocalIndex), `pkg/environment/environment_frame.go` (walkLocal, GetLocalBindingBySlotDepth)
 
 ### Linked Closure Representation (Cardelli 1983)
 

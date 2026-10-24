@@ -170,7 +170,7 @@ func ScopesMatch(useScopes, bindingScopes Scopes) bool {
 // It is the entry point MOST consumers matching a REFERENCE against a candidate
 // BINDER share, so scope resolution cannot diverge across them. This comment used
 // to name two; measured 2026-09-10 there are NINE call sites in three packages —
-// environment's resolveLocal, probeTiersLocked, probeBulkLocked and
+// environment's walkLocal, probeTiersLocked, probeBulkLocked and
 // resolveAtCoordsLocked; validate's letBoundClosureEscapes, refMatchesBinder and
 // nameSet.shadowLookup; compilation's sameBinder and
 // freeVarCollector.boundInside.
@@ -196,7 +196,7 @@ func ScopesMatch(useScopes, bindingScopes Scopes) bool {
 // set means "this reference has no scopes" and behaves like an empty set —
 // only bindings with no scopes match. Callers that want "match any" ask for it
 // with AllScopes and short-circuit on ScopeSet.IsAll() before reaching this
-// function (see EnvironmentFrame.resolveLocal).
+// function (see walkLocal).
 func ScopesCompatible(bindingScopes, useScopes Scopes) bool {
 	return bindingScopes.SubsetOf(useScopes)
 }

@@ -236,7 +236,7 @@ func TestCopyPreservesCoordinates(t *testing.T) {
 // path (a plain first-live-slot loop with no tier concept): it tracks
 // tier across the whole slot list, applies the same phase filter the scoped
 // branch does, and returns the highest tier's first live slot. Every existing
-// wildcard caller that the fold moved onto the probe — resolveGlobal, and
+// wildcard caller that the fold moved onto the probe — resolveGlobalWith, and
 // through it EnvironmentFrame.GetGlobalIndex — inherits this ranked behavior, so
 // pin it here.
 func TestResolveRankedWildcard(t *testing.T) {

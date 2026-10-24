@@ -82,7 +82,7 @@ func (instr Instruction) String() string {
 //	Constrains: GetLocalBindingBySlotDepth / SetLocalValueBySlotDepth
 //	  (runtime access walks depth parent pointers, indexes by slot; the
 //	  runtime frame chain must match compile-time depth).
-//	Constrained by: resolveLocal (compile-time computation of depth
+//	Constrained by: walkLocal (compile-time computation of depth
 //	  by walking the EnvironmentFrame parent chain).
 //
 // See BIBLIOGRAPHY.md "De Bruijn Indices / Lexical Addressing".

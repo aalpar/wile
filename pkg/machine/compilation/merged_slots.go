@@ -25,7 +25,7 @@ package compilation
 // would find the parameter's slot and alias it — duplicate-parameter detection
 // and `let` shadowing are the same call. And one frame is one scope: two
 // same-named binders in it with identical (commonly empty) scope sets are an
-// equal-cardinality incomparable tie, which resolveLocal answers by panicking
+// equal-cardinality incomparable tie, which walkLocal answers by panicking
 // with ErrAmbiguousBinding. There is no "innermost wins" in this model, and
 // adding one would be a hygiene change rather than an allocation change.
 //

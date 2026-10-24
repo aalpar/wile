@@ -37,7 +37,7 @@ type BindingID struct {
 // symbol does not resolve to a local binding.
 func (p *EnvironmentFrame) ResolveBindingID(key *values.Symbol, q syntax.ScopeSet) (BindingID, bool) {
 	var bid BindingID
-	result := p.resolveLocal(key, q, func(_ *Binding, slot int, depth int) any {
+	found := walkLocal(p, key, q, func(_ *Binding, slot int, depth int) bool {
 		frame := p
 		for range depth {
 			frame = frame.parent
@@ -45,7 +45,7 @@ func (p *EnvironmentFrame) ResolveBindingID(key *values.Symbol, q syntax.ScopeSe
 		bid = BindingID{Frame: &frame.local, Slot: slot}
 		return true
 	})
-	return bid, result != nil
+	return bid, found
 }
 
 // ResolveBindingRef names the binding a symbol refers to: a local ref when the

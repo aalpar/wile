@@ -401,7 +401,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 				// for the same reason it does on the global arm below: two
 				// expansions of a macro-generating macro each bind under their own
 				// intro scope, so the name owns two slots. Passing nil here means
-				// MATCH ANY (resolveLocal), which takes the first live slot and
+				// MATCH ANY (walkLocal), which takes the first live slot and
 				// hands both generated macros the first expansion's binder.
 				li := env.GetLocalIndex(symVal, syntax.ScopesOf(t.Scopes()))
 				if li != nil {
