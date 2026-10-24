@@ -98,19 +98,19 @@ func TestListSetReportsWhereTheWalkRanOut(t *testing.T) {
 			name:     "an inexact index is not an exact integer (list-set!)",
 			code:     `(list-set! (list 1 2) 1.0 0)`,
 			sentinel: werr.ErrNotAnInteger,
-			want:     "list-set!: expected an exact integer index but got 1",
+			want:     "list-set!: expected an exact integer index but got 1.0",
 		},
 		{
 			name:     "an inexact index is not an exact integer (list-ref)",
 			code:     `(list-ref (list 1 2) 1.0)`,
 			sentinel: werr.ErrNotAnInteger,
-			want:     "list-ref: expected an exact integer index but got 1",
+			want:     "list-ref: expected an exact integer index but got 1.0",
 		},
 		{
 			name:     "an inexact index is not an exact integer (list-tail)",
 			code:     `(list-tail (list 1 2) 1.0)`,
 			sentinel: werr.ErrNotAnInteger,
-			want:     "list-tail: expected an exact integer index but got 1",
+			want:     "list-tail: expected an exact integer index but got 1.0",
 		},
 		{
 			name:     "a bignum index is out of range, not a type error (list-set!)",
