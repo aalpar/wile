@@ -44,7 +44,10 @@ var typeSentinelMessage = regexp.MustCompile(`^not an? `)
 //	       NewTypeSentinel (the constructor that sets TypeName).
 //	arm 2: a NewStaticError call whose literal message reads "not a(n) ..."
 //	       (the message shape of a type sentinel) is not built by
-//	       NewTypeSentinel.
+//	       NewTypeSentinel. Only a plain string literal as the first argument
+//	       is read: a concatenated, constant or computed message, and a call
+//	       with no argument, escape the rule. The match is anchored at the
+//	       start of the message and is case-sensitive.
 //
 // Each finding is prefixed "arm 1" or "arm 2" so a failure says which rule
 // fired. src is passed to go/parser.ParseFile: nil reads filename.
@@ -113,22 +116,31 @@ func calleeName(e ast.Expr) string {
 }
 
 // TestTypeSentinelDeclarationShape replaces a hand-maintained list of the 51
-// type sentinels, which had two defects: it was blind to a sentinel nobody
-// added (ErrNotAPort and ErrNotAnUncaughtException were both absent from it),
-// and its one assertion, TypeName() != "", could not fail. NewTypeSentinel
-// panics on an empty noun and unconditionally sets the expected type, so every
-// value it builds passes; the assertion never tested the property the comment
-// above it claimed, that nothing was built with NewStaticError instead.
+// type sentinels. The list checked TypeName() != "" on each listed value, which
+// does fail for a listed sentinel rebuilt with NewStaticError, but it was blind
+// to every name nobody had added: ErrNotAPort and ErrNotAnUncaughtException
+// were both already absent from it, so the guard shrank silently as the package
+// grew. The assertion itself is not the defect and is not kept: NewTypeSentinel
+// panics on an empty noun and always sets the expected type, so for anything
+// built with it the check is vacuous, and the property that matters is how a
+// sentinel is DECLARED.
 //
-// The property is about how a sentinel is DECLARED, so the test reads the
-// declarations. Go has no package-scope reflection, so a source walk is the
-// only implementable form. It covers every non-test file in the package.
+// So the test reads the declarations. Go has no package-scope reflection, so a
+// source walk is the only implementable form. It covers every non-test file in
+// the package. Known limits, each the price of reading source instead of
+// values:
+//
+//   - Declarations only. The old list saw runtime values, so a sentinel
+//     reassigned in an init() was visible to it; the walk does not see that.
+//   - Build constraints are ignored: a file excluded by //go:build is scanned
+//     too, which errs toward flagging.
+//   - The walk stops at pkg/werr. A sentinel declared elsewhere is not checked.
 //
 // The two rules are in typeSentinelFindings. If one fires, fix the name or the
-// constructor; do not delete the rule. Arm 2 matches message text, so a future
-// non-type sentinel that begins "not a ..." fires it by design: the message
-// shape is the claim that registry/helpers argument errors rely on to render
-// "expected a Foo".
+// constructor; do not delete the rule. Arm 2 matches message text, so within
+// pkg/werr a future non-type sentinel that begins "not a ..." fires it by
+// design: the message shape is the claim that registry/helpers argument errors
+// rely on to render "expected a Foo".
 func TestTypeSentinelDeclarationShape(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -225,6 +237,37 @@ var ErrZ = NewStaticError("cannot be a thing")`,
 var ErrNotable = NewStaticError("notable")
 var ErrNotAnalysis = NewStaticError("analysis failed")
 var ErrNotFound = NewStaticError("lookup failed")`,
+			nil,
+		},
+		{
+			"message that contains the phrase after other text is not a type sentinel",
+			`package p
+var ErrX = NewStaticError("arg is not a thing")`,
+			nil,
+		},
+		{
+			"concatenated message escapes arm 2",
+			`package p
+var ErrX = NewStaticError("not a " + "thing")`,
+			nil,
+		},
+		{
+			"constant message escapes arm 2",
+			`package p
+const msg = "not a thing"
+var ErrX = NewStaticError(msg)`,
+			nil,
+		},
+		{
+			"call with no argument is not inspected",
+			`package p
+var ErrX = NewStaticError()`,
+			nil,
+		},
+		{
+			"uppercase phrase is not matched (arm 2 is case-sensitive)",
+			`package p
+var ErrX = NewStaticError("Not a thing")`,
 			nil,
 		},
 		{

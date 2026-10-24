@@ -7,6 +7,14 @@
 
 ## Tier 5 — Tech Debt
 
+### Filed by the P8.5 crosscheck (2026-10-23)
+
+Two rows from the review of `test/type-sentinel-declaration-shape`; both are limits of reading
+declarations instead of values, which the test header states.
+
+- [ ] **Widen the type-sentinel declaration walk beyond `pkg/werr`** [Test debt, S]: `TestTypeSentinelDeclarationShape` scans only the non-test files of `pkg/werr`, matches names and messages case-sensitively, and reads only plain string-literal arguments. Three shapes it cannot see: (a) a `NewStaticError("not a ...")` outside `pkg/werr`, e.g. `errNotPrimitiveSpec` in `pkg/registry/core/prim_reflection.go` (`NewStaticError("not a primitive-spec")`; harmless today, never passed to a type helper); (b) a type sentinel under a name that does not match `^ErrNot(A|An)[A-Z]` or with a differently cased message, e.g. `ErrPairExpected = NewStaticError("Not a pair")`; (c) the alias shape `ErrNotAMatch = werr.ErrNotAMatch` in another package. Widen to every non-test file in the module (`git ls-files '*.go'`), decide the alias and case rules deliberately, and expect a small sweep of existing hits. Entry: none.
+- [ ] **A sentinel reassigned after declaration is invisible to the declaration walk** [Test debt, XS]: the retired 51-name allowlist checked runtime values, so a sentinel replaced in an `init()` was visible to it; `TestTypeSentinelDeclarationShape` reads declarations only. No `init()` in `pkg/werr` reassigns a sentinel today. A cheap closure is an `ast` check that no `ErrNot*` identifier appears as an assignment target anywhere in the package; do not build a reflection harness larger than the test it supports.
+
 ### Filed by the P5.6 crosscheck (2026-10-18)
 
 Two rows from the five-lens review of `refactor/include-expander-seams`, all outside a
