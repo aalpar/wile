@@ -563,7 +563,7 @@ var lineSpanCitation = regexp.MustCompile(`([A-Za-z0-9_./-]+\.(?:go|scm|sh|md)):
 const lineCitationCeiling = 130
 
 // symbolCitationsResolved is the number of symbol citations that resolve to a
-// tracked file (the grammar matches 107; the other two name no tracked file),
+// tracked file (the grammar matches 106; the other two name no tracked file),
 // pinned exactly in both directions. A citation that stops resolving (a
 // rename, a move) drops it and fails; a new one raises it and fails until the
 // pin is raised. Together with the per-citation findings this keeps the check
