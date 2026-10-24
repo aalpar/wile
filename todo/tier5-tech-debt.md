@@ -150,9 +150,12 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
 - [x] **Stale doc: `processLibraryImport` claims `AtPhase` routes to the parent's phase registry**
   [Tech debt, S, Done 2026-10-04, `e01f79ab`]: the sentence is gone; the doc now names
   `planLibraryImport` and `planCopyDirect`.
-- [ ] **`TestDenotedForm`'s Primitive+Void case is unreachable** [Tech debt, S]: after the
-  keyword-denotation Task-6 ratchet, `TestDenotedForm` (`pkg/environment/form_keyword_test.go`) pins a state
-  production cannot produce.
+- [x] **`TestDenotedForm`'s Primitive+Void case is unreachable** [Tech debt, S, Done 2026-10-23,
+  P8.14 `docs/small-corrections-round`]: the !ok arm is reached in production by a `BindingTypeSyntax`
+  binding holding a `*machine.MachineClosure` (measured by instrumenting the arm), not by Primitive+Void,
+  which exists for one statement in `registerCompileTimeBinding`. The row now feeds a macro binding, and a
+  Primitive binding holding a non-form string and a Syntax binding holding a keyword value are added;
+  mutants on each die.
 - [ ] **`RequireArg[T]` and `BuildValidator` type-check the same argument twice** [Tech debt, M,
   from `2026-03-26-extension-contracts-phase2-design.md`]: with `WithContractEnforcement()` on,
   `BuildValidator` (`pkg/registry/contract.go`, wired in `pkg/wile/engine.go`) checks from
@@ -1050,7 +1053,11 @@ enough to rebuild the probes.
   `…_SideTableReturnsFalse` (`:203`) cover the other. This is a scope judgment, not a
   non-reproduction: nothing was fixed, and no existing test asserts the row's literal ask, because
   the property it names is false.
-- [ ] **LocalEnvironmentFrame pointer ambiguity** [Low, S]: Doc comment on `NewLocalEnvironment` explaining lifecycle (value-vs-pointer ownership).
+- [x] **LocalEnvironmentFrame pointer ambiguity** [Low, S, Done 2026-10-23, P8.14
+  `docs/small-corrections-round`]: documentation only, on the `EnvironmentFrame.local` field comment with
+  pointers from `NewLocalEnvironment` and `LocalEnvironment`. The two pointers promise different things:
+  NewLocalEnvironment's is a builder copied by value (17 of 17 production callers), LocalEnvironment's
+  aliases the field (15 production readers; two grow it through the pointer).
 - [x] **Honor `WithInlineThreshold` for imported libraries** [Low, S, **already fixed, closed
   2026-09-26**]: the row said the library load path had no `inlineThreshold` parameter, so an
   imported library always compiled at `DefaultInlineThreshold = 5` and silently ignored the
