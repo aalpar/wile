@@ -65,7 +65,7 @@ func TestBenchmarkExampleNamesResolve(t *testing.T) {
 		return err == nil
 	}
 	files := gitOutput(t, root, "ls-files", "-z", "--", "Makefile", "examples/benchmarks/*.sh", "examples/benchmarks/*.md")
-	var checked int
+	checked := map[string]int{}
 	var findings []string
 	for name := range strings.SplitSeq(files, "\x00") {
 		if name == "" {
@@ -74,10 +74,14 @@ func TestBenchmarkExampleNamesResolve(t *testing.T) {
 		src, err := os.ReadFile(filepath.Join(root, name))
 		c.Assert(err, qt.IsNil, qt.Commentf("a tracked file in the scan list is unreadable"))
 		n, f := benchmarkExampleFindings(name, string(src), resolve)
-		checked += n
+		checked[filepath.Ext(name)] += n
 		findings = append(findings, f...)
 	}
-	c.Assert(checked > 0, qt.IsTrue, qt.Commentf("no benchmark list found; the grammar or the file list has drifted"))
+	// Each kind of file carries a list today (Makefile has no extension). A
+	// kind with none means the grammar or the file list has stopped seeing it.
+	for ext, kind := range map[string]string{"": "Makefile", ".sh": "script", ".md": "document"} {
+		c.Assert(checked[ext] > 0, qt.IsTrue, qt.Commentf("no benchmark list found in the %s files; the grammar or the file list has drifted", kind))
+	}
 	c.Assert(findings, qt.HasLen, 0, qt.Commentf("%s", strings.Join(findings, "\n")))
 }
 
@@ -101,6 +105,8 @@ func TestBenchmarkExampleGrammar(t *testing.T) {
 		{"escaped quotes", `echo "  BENCHMARKS=\"tak nosuch\" $0"`, 2, []string{"f: BENCHMARKS lists nosuch, which has no examples/benchmarks/nosuch.scm"}},
 		{"unquoted", `make x BENCHMARKS=nosuch`, 1, []string{"f: BENCHMARKS lists nosuch, which has no examples/benchmarks/nosuch.scm"}},
 		{"default expansion", `BENCHMARKS="${BENCHMARKS:-tak nosuch}"`, 2, []string{"f: BENCHMARKS lists nosuch, which has no examples/benchmarks/nosuch.scm"}},
+		{"two lists in one source", "BENCHMARKS=\"tak\"\nBENCHMARKS=\"nosuch\"", 2, []string{"f: BENCHMARKS lists nosuch, which has no examples/benchmarks/nosuch.scm"}},
+		{"variable inside quotes", `BENCHMARKS="$x tak"`, 0, nil},
 		{"other tool's list", `LARCENY_BENCHMARKS="fib tak ack"`, 0, nil},
 		{"array assignment", `CANONICAL_BENCHMARKS=(`, 0, nil},
 		{"prose mention", "BENCHMARKS= are silently ignored", 0, nil},
