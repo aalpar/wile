@@ -19,6 +19,10 @@ func TestSchemeTestSuite(t *testing.T) {
 	// swaps os.Stdout only inside its own run.
 	t.Parallel()
 
+	if os.Getenv("WILE_SKIP_CLI_SCHEME_SUITE") != "" {
+		t.Skip("CLI Scheme suite is run by make cover-scm")
+	}
+
 	c := qt.New(t)
 
 	// Find the scheme binary

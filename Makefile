@@ -490,10 +490,12 @@ coverhtml:
 # exclusions listed in covercheck.sh).
 #   make covercheck
 # The Go and Scheme profiles are independent, so they can build in parallel.
+# cover-scm and test-scheme-gate already run the CLI suite, so the Go run skips
+# TestSchemeTestSuite (scheme_test.go) rather than exec the binary a third time.
 .PHONY: covercheck cover-go
 cover-go: build
 	@mkdir -p $(GO_BUILD_DIR)
-	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./...
+	WILE_SKIP_CLI_SCHEME_SUITE=1 $(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./...
 
 covercheck: cover-go cover-scm
 	@bash $(SH_TOOLS_DIR)/covercheck.sh 80 $(GO_BUILD_DIR)/coverage.out
