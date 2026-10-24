@@ -37,43 +37,32 @@ type BindingID struct {
 // returns a stable BindingID. Returns the zero BindingID and false if the
 // symbol does not resolve to a local binding.
 //
-// It answers the same question as GetLocalIndex: a wildcard query takes the
-// first match, any other query takes Flatt's maximal match (the compatible
-// binder with the largest scope set). Identity decided here must agree with the
-// slot GetLocalIndex will emit, or a validator and the compiler name two
-// different binders for one reference.
-//
-// Panics with a wrapped werr.ErrAmbiguousBinding when two incomparable scope
-// sets tie for the maximal match, as GetLocalIndex does.
+// It answers the same question as GetLocalIndex (see resolveLocalMaximal), so
+// identity decided here agrees with the slot the compiler emits. Panics with a
+// wrapped werr.ErrAmbiguousBinding when two incomparable scope sets tie for the
+// maximal match, as GetLocalIndex does. Use TryResolveBindingID from an
+// analysis that over-approximates and must not turn a tie into a compile error.
 func (p *EnvironmentFrame) ResolveBindingID(key *values.Symbol, q syntax.ScopeSet) (BindingID, bool) {
-	if p == nil || !p.hasLocal() {
-		return BindingID{}, false
-	}
-	if q.IsAll() {
-		return resolveLocalWith(p, key, q, func(_ *Binding, slot int, depth int) BindingID {
-			return p.bindingIDAt(slot, depth)
-		})
-	}
-
-	var best scopedBestOf[BindingID]
-	target := q.Scopes().Len()
-	walkLocal(p, key, q, func(binding *Binding, slot int, depth int) bool {
-		sc := binding.Scopes()
-		rec, done := best.shouldRecord(sc, target)
-		if rec {
-			best.record(p.bindingIDAt(slot, depth), sc)
-		}
-		return done
-	})
-	if best.Ambiguous() {
+	bid, ok, tied := p.TryResolveBindingID(key, q)
+	if tied {
 		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
 			"ResolveBindingID: identifier %q resolves ambiguously among incomparable hygienic scope sets",
 			key.Key))
 	}
-	return best.Result()
+	return bid, ok
 }
 
-// bindingIDAt names the binder at slot in the frame depth parents above p.
+// TryResolveBindingID is ResolveBindingID with the tie REPORTED rather than
+// raised. On ambiguous the BindingID is one of the tied binders, not the answer:
+// a caller may use it only where naming one of them is a safe approximation.
+func (p *EnvironmentFrame) TryResolveBindingID(key *values.Symbol, q syntax.ScopeSet) (bid BindingID, ok bool, ambiguous bool) {
+	return resolveLocalMaximal(p, key, q, func(_ *Binding, slot int, depth int) BindingID {
+		return p.bindingIDAt(slot, depth)
+	})
+}
+
+// bindingIDAt names the binder at slot in the frame depth parents above p;
+// depth must lie within p's parent chain.
 func (p *EnvironmentFrame) bindingIDAt(slot int, depth int) BindingID {
 	frame := p
 	for range depth {
@@ -86,10 +75,12 @@ func (p *EnvironmentFrame) bindingIDAt(slot int, depth int) BindingID {
 // symbol resolves to a local binding, otherwise a symbolic global ref. It is
 // total — always returns a valid BindingRef — because the global arm needs no
 // existing binding (a top-level set!/define is named before the compiler
-// creates its global). Unlike ResolveBindingID, callers do not branch on a
+// creates its global). A tie does not raise: it names one of the tied binders,
+// because every caller marks or records and the compiler, which refuses the tie,
+// is the authority. Unlike ResolveBindingID, callers do not branch on a
 // found/not-found bool; "not local" is itself a nameable (global) outcome.
 func (p *EnvironmentFrame) ResolveBindingRef(key *values.Symbol, q syntax.ScopeSet) BindingRef {
-	bid, ok := p.ResolveBindingID(key, q)
+	bid, ok, _ := p.TryResolveBindingID(key, q)
 	if ok {
 		return LocalRef(bid)
 	}
