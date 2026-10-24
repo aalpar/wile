@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
@@ -144,4 +145,13 @@ func TestListSetStoresAtTheIndexedCell(t *testing.T) {
 			c.Check(v.SchemeString(), qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestListSetReturnsVoid pins list-set!'s return value, which R7RS leaves
+// unspecified and Wile makes the void value (the same as set-car!).
+func TestListSetReturnsVoid(t *testing.T) {
+	c := qt.New(t)
+	v, err := testhelpers.RunSchemeCode(t, `(list-set! (list 1 2) 1 'z)`)
+	c.Assert(err, qt.IsNil)
+	c.Check(v, qt.Equals, values.Void)
 }
