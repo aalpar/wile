@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // LocalEnvironmentFrame stores local variable bindings for a single scope.
@@ -275,7 +276,9 @@ func (p *LocalEnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) er
 
 // copyForApplyInto copies bindings into an existing destination frame,
 // aliasing the source's keys map into the destination (copy-on-write).
-// Used by EnvironmentFrame.NewApplyFrame() and InitApplyFrame().
+// Its one caller is LocalEnvironmentFrame.InitApplyFrameWithParent, which
+// EnvironmentFrame.NewApplyFrame, InitApplyFrame and InitApplyFrameWithParent
+// and the VM's lambda apply path all reach.
 //
 // Only the destination is marked keysShared. The source `p` is intentionally
 // NOT marked: a frame's keys map is mutated only during compilation/expansion
@@ -328,6 +331,40 @@ func (p *LocalEnvironmentFrame) copyForApplyInto(dst *LocalEnvironmentFrame) int
 	// every frame rather than only of shapes.
 	dst.copyCount = int32(n)
 	return int(p.copyCount)
+}
+
+// InitApplyFrameWithParent populates dst as an apply frame: dst hangs from
+// parent, inherits parent's global, phase, registry and namespace, and receives
+// p's local bindings through copyForApplyInto. p is a layout descriptor or a
+// live frame's local. For a lambda closure it is the compiled body's parameter
+// shape, a template constant shared by every evaluation, while parent is the
+// runtime environment captured at closure creation; splitting them is what lets
+// MachineClosure skip materializing an intermediate frame per closure. For a
+// foreign closure (EnvironmentFrame.InitApplyFrame) it is a live frame's local
+// and parent is that frame's own.
+//
+// Only p is read; nothing else about the frame it was compiled against takes
+// part, which is why substituting a different parent is sound.
+//
+// Returns how many binding slots were actually transferred, which is p's
+// copyCount and not dst's width — the difference is the merged `let` slots
+// copyForApplyInto reslices past. The VM's BindingsCopied counter takes it from
+// here rather than measuring len(dst.Bindings()) so that the meter keeps naming
+// work done rather than frame width; it is already in a register at the copy, so
+// returning it costs the hot path nothing.
+func (p *LocalEnvironmentFrame) InitApplyFrameWithParent(dst *EnvironmentFrame, parent *EnvironmentFrame) int {
+	if parent == nil {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrNilParentEnvironment,
+			"InitApplyFrameWithParent: nil parent - a closure's apply frame must hang from a runtime environment",
+		))
+	}
+	dst.parent = parent
+	dst.global = parent.global
+	dst.phaseLevel = parent.phaseLevel
+	dst.phases = parent.phases
+	dst.namespace = parent.namespace
+	return p.copyForApplyInto(&dst.local)
 }
 
 // CopyCount returns how many of this frame's slots copyForApplyInto transfers.

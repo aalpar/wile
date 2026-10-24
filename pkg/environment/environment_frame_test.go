@@ -1478,3 +1478,43 @@ func TestMaybeCreateLocalBinding_EmptyScopedSlotNotReused(t *testing.T) {
 		})
 	}
 }
+
+// LocalLayout aliases the frame's embedded field like LocalEnvironment, but a
+// frame with no local environment yields an empty layout, not nil.
+func TestEnvironmentFrame_LocalLayout(t *testing.T) {
+	c := qt.New(t)
+	root := NewNamespace().Runtime()
+
+	c.Assert(root.LocalEnvironment(), qt.IsNil)
+	layout := root.LocalLayout()
+	c.Assert(layout, qt.IsNotNil)
+	c.Assert(layout.Keys(), qt.HasLen, 0)
+
+	child := NewEnvironmentFrameWithParent(NewLocalEnvironment(2), root)
+	c.Assert(child.LocalLayout(), qt.Equals, child.LocalEnvironment())
+	c.Assert(child.LocalLayout().Bindings(), qt.HasLen, 2)
+}
+
+// The layout descriptor applies against a runtime parent that differs from the
+// frame it was compiled against: the apply frame takes parent, global, phase
+// level, phase registry and namespace from the parent, and only the local
+// bindings from the descriptor.
+func TestLocalEnvironmentFrame_InitApplyFrameWithParentTakesTheParentsContext(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	compiledAgainst := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), ns.Runtime())
+	parent := ns.AtPhase(PhaseExpand)
+	c.Assert(parent.PhaseLevel(), qt.Not(qt.Equals), ns.Runtime().PhaseLevel())
+
+	var dst EnvironmentFrame
+	copied := compiledAgainst.LocalLayout().InitApplyFrameWithParent(&dst, parent)
+
+	c.Assert(copied, qt.Equals, 1)
+	c.Assert(dst.Parent(), qt.Equals, parent)
+	c.Assert(dst.GlobalEnvironment(), qt.Equals, parent.GlobalEnvironment())
+	c.Assert(dst.PhaseLevel(), qt.Equals, parent.PhaseLevel())
+	c.Assert(parent.phases, qt.IsNotNil)
+	c.Assert(dst.phases, qt.Equals, parent.phases)
+	c.Assert(dst.Namespace(), qt.Equals, ns)
+	c.Assert(dst.LocalEnvironment().Bindings(), qt.HasLen, 1)
+}

@@ -100,11 +100,11 @@ func TestCompileContext_CompileLambda(t *testing.T) {
 	qt.Assert(t, tpl0.IsVariadic(), qt.Equals, true)
 	qt.Assert(t, tpl0.ParameterCount(), qt.Equals, 1)
 	// The body's frame reaches the VM on the template, not as a second literal.
-	env0 := tpl0.Shape()
-	qt.Assert(t, env0, qt.IsNotNil)
-	// check that the env has been set up correctly
-	qt.Assert(t, env0.LocalEnvironment().Keys(), qt.HasLen, 1)
-	qt.Assert(t, env0.GlobalEnvironment(), qt.Equals, env.GlobalEnvironment())
+	shape0 := tpl0.Shape()
+	qt.Assert(t, shape0, qt.IsNotNil)
+	// The shape is a layout descriptor: it carries the parameter slots and no
+	// global environment, which the closure's runtime parent supplies.
+	qt.Assert(t, shape0.Keys(), qt.HasLen, 1)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, cont.Template(), env))
 	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
@@ -151,11 +151,11 @@ func TestCompileContext_CompileLambdaCall(t *testing.T) {
 	qt.Assert(t, tpl0.IsVariadic(), qt.Equals, true)
 	qt.Assert(t, tpl0.ParameterCount(), qt.Equals, 1)
 	// The body's frame reaches the VM on the template, not as a second literal.
-	env0 := tpl0.Shape()
-	qt.Assert(t, env0, qt.IsNotNil)
-	// check that the env has been set up correctly
-	qt.Assert(t, env0.LocalEnvironment().Keys(), qt.HasLen, 1)
-	qt.Assert(t, env0.GlobalEnvironment(), qt.Equals, env.GlobalEnvironment())
+	shape0 := tpl0.Shape()
+	qt.Assert(t, shape0, qt.IsNotNil)
+	// The shape is a layout descriptor: it carries the parameter slots and no
+	// global environment, which the closure's runtime parent supplies.
+	qt.Assert(t, shape0.Keys(), qt.HasLen, 1)
 
 	mc := machine.NewMachineContext(context.Background(), cont)
 	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)

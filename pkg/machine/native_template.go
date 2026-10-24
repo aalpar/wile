@@ -38,15 +38,17 @@ type NativeTemplate struct {
 	valueCount     int
 	isVariadic     bool
 
-	// shape is the frame this template's body was compiled against: the local
-	// parameter/internal-define structure every closure over this template
-	// applies with. It lives here, not on MachineClosure, because it is a
-	// property of the compiled body — one template, one shape — while the
-	// environment a closure captures is per-activation. Apply reads only its
-	// local half (InitApplyFrameWithParent derives everything else from the
-	// runtime parent), and reads it at APPLY time rather than snapshotting it,
-	// which is sound because compileClosureBody finishes populating the frame
-	// before it emits the OpMakeClosure that can first observe it.
+	// shape is the layout of the frame this template's body was compiled
+	// against: the local parameter/internal-define structure every closure over
+	// this template applies with. It lives here, not on MachineClosure, because
+	// it is a property of the compiled body — one template, one shape — while
+	// the environment a closure captures is per-activation. Apply reads only the
+	// local layout (InitApplyFrameWithParent derives everything else from the
+	// runtime parent), so the type is only that. It is a pointer INTO the
+	// compile-time frame, not a snapshot, so the whole frame stays reachable
+	// through it. It is read at APPLY time, which is sound because
+	// compileClosureBody finishes populating the frame before it emits the
+	// OpMakeClosure that can first observe it.
 	//
 	// Kept next to the fields Apply already touches (parameterCount,
 	// isVariadic) so the extra load lands on a cache line the apply path has
@@ -54,8 +56,11 @@ type NativeTemplate struct {
 	//
 	// nil for a template that is not a closure body — a top-level program
 	// template, or one still under construction. Both closure constructors
-	// refuse a nil shape rather than deferring the fault to Apply.
-	shape *environment.EnvironmentFrame
+	// refuse a nil shape rather than deferring the fault to Apply. A closure
+	// body over a frame with no local environment has a non-nil, empty shape
+	// (EnvironmentFrame.LocalLayout), which is why the field is not
+	// EnvironmentFrame.LocalEnvironment's nil-able pointer.
+	shape *environment.LocalEnvironmentFrame
 
 	// literals holds constant values referenced by bytecode instructions in this template.
 	literals        MultipleValues
@@ -166,20 +171,30 @@ func (p *NativeTemplate) ParameterCount() int {
 	return p.parameterCount
 }
 
-// Shape returns the frame this template's body was compiled against, whose
-// local half every closure over the template applies with. nil for a template
-// that is not a closure body; see the field comment.
-func (p *NativeTemplate) Shape() *environment.EnvironmentFrame {
+// Shape returns the local layout of the frame this template's body was compiled
+// against, which every closure over the template applies with. nil for a
+// template that is not a closure body; see the field comment.
+func (p *NativeTemplate) Shape() *environment.LocalEnvironmentFrame {
 	return p.shape
 }
 
-// SetShape records the frame this template's body was compiled against. Called
-// once, by whoever compiled the body, before any closure over the template can
-// exist — compileClosureBody for lambda and case-lambda clauses, and the two
-// callers that build a template and its environment together
-// (extensions/eval PrimCompile, createTransformerClosure).
+// SetShape records the local layout of the frame this template's body was
+// compiled against. Called once, by whoever compiled the body, before any
+// closure over the template can exist — compileClosureBody for lambda and
+// case-lambda clauses, and NewClosureWithTemplate for the callers that build a
+// template and its environment together (extensions/eval PrimCompile, the
+// syntax-rules transformer closure).
+//
+// Takes the frame, not its layout, and records the layout unconditionally: a
+// frame with no local environment is a valid shape, not an absent one. A nil
+// frame leaves the template with no shape, which the closure constructors
+// refuse as before.
 func (p *NativeTemplate) SetShape(env *environment.EnvironmentFrame) {
-	p.shape = env
+	if env == nil {
+		p.shape = nil
+		return
+	}
+	p.shape = env.LocalLayout()
 }
 
 func (p *NativeTemplate) IsVariadic() bool {
