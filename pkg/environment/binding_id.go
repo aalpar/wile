@@ -17,6 +17,7 @@ package environment
 import (
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // BindingID is a stable identifier for a local binding, safe to use as a
@@ -35,14 +36,50 @@ type BindingID struct {
 // ResolveBindingID looks up a local binding by symbol and scope-set query and
 // returns a stable BindingID. Returns the zero BindingID and false if the
 // symbol does not resolve to a local binding.
+//
+// It answers the same question as GetLocalIndex: a wildcard query takes the
+// first match, any other query takes Flatt's maximal match (the compatible
+// binder with the largest scope set). Identity decided here must agree with the
+// slot GetLocalIndex will emit, or a validator and the compiler name two
+// different binders for one reference.
+//
+// Panics with a wrapped werr.ErrAmbiguousBinding when two incomparable scope
+// sets tie for the maximal match, as GetLocalIndex does.
 func (p *EnvironmentFrame) ResolveBindingID(key *values.Symbol, q syntax.ScopeSet) (BindingID, bool) {
-	return resolveLocalWith(p, key, q, func(_ *Binding, slot int, depth int) BindingID {
-		frame := p
-		for range depth {
-			frame = frame.parent
+	if p == nil || !p.hasLocal() {
+		return BindingID{}, false
+	}
+	if q.IsAll() {
+		return resolveLocalWith(p, key, q, func(_ *Binding, slot int, depth int) BindingID {
+			return p.bindingIDAt(slot, depth)
+		})
+	}
+
+	var best scopedBestOf[BindingID]
+	target := q.Scopes().Len()
+	walkLocal(p, key, q, func(binding *Binding, slot int, depth int) bool {
+		sc := binding.Scopes()
+		rec, done := best.shouldRecord(sc, target)
+		if rec {
+			best.record(p.bindingIDAt(slot, depth), sc)
 		}
-		return BindingID{Frame: &frame.local, Slot: slot}
+		return done
 	})
+	if best.Ambiguous() {
+		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
+			"ResolveBindingID: identifier %q resolves ambiguously among incomparable hygienic scope sets",
+			key.Key))
+	}
+	return best.Result()
+}
+
+// bindingIDAt names the binder at slot in the frame depth parents above p.
+func (p *EnvironmentFrame) bindingIDAt(slot int, depth int) BindingID {
+	frame := p
+	for range depth {
+		frame = frame.parent
+	}
+	return BindingID{Frame: &frame.local, Slot: slot}
 }
 
 // ResolveBindingRef names the binding a symbol refers to: a local ref when the

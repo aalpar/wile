@@ -294,3 +294,74 @@ func TestGetGlobalIndexWithScopesRaisesOnStoreTie(t *testing.T) {
 	err, _ := r.(error)
 	qt.Assert(t, errors.Is(err, werr.ErrAmbiguousBinding), qt.IsTrue)
 }
+
+// ResolveBindingID must name the binder GetLocalIndex emits. Two binders of one
+// name in one frame, scopes {a} and {a,b}, query {a,b}: the maximal one is slot 1.
+func TestResolveBindingIDIsMaximal(t *testing.T) {
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+	sym := values.NewSymbol("x")
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a), nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a).Add(b), nil)
+	q := syntax.ScopesOf(syntax.Scopes{}.Add(a).Add(b))
+
+	bid, ok := env.ResolveBindingID(sym, q)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, bid.Slot, qt.Equals, 1)
+	qt.Assert(t, bid.Frame, qt.Equals, env.LocalEnvironment())
+	qt.Assert(t, &bid.Frame.Bindings()[bid.Slot], qt.Equals, env.GetBinding(sym, q))
+}
+
+// The maximal binder in an OUTER frame beats a smaller one in an inner frame.
+func TestResolveBindingIDMaximalAcrossFrames(t *testing.T) {
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+	sym := values.NewSymbol("x")
+	outer := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	outer.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a).Add(b), nil)
+	inner := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outer)
+	inner.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a), nil)
+
+	bid, ok := inner.ResolveBindingID(sym, syntax.ScopesOf(syntax.Scopes{}.Add(a).Add(b)))
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, bid.Frame, qt.Equals, outer.LocalEnvironment())
+}
+
+// Equal-cardinality incomparable binders tie; ResolveBindingID refuses as
+// GetLocalIndex does.
+func TestResolveBindingIDRaisesOnTie(t *testing.T) {
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+	c := syntax.NewScope()
+	sym := values.NewSymbol("x")
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a).Add(b), nil)
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a).Add(c), nil)
+	q := syntax.ScopesOf(syntax.Scopes{}.Add(a).Add(b).Add(c))
+
+	defer func() {
+		r := recover()
+		err, isErr := r.(error)
+		qt.Assert(t, isErr, qt.IsTrue)
+		qt.Assert(t, errors.Is(err, werr.ErrAmbiguousBinding), qt.IsTrue)
+	}()
+	env.ResolveBindingID(sym, q)
+	t.Fatal("expected ErrAmbiguousBinding panic")
+}
+
+// A wildcard query keeps first-match, and a miss answers (zero, false).
+func TestResolveBindingIDWildcardAndMiss(t *testing.T) {
+	a := syntax.NewScope()
+	sym := values.NewSymbol("x")
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), NewNamespaceFrame())
+	env.MaybeCreateLocalBinding(sym, BindingTypeVariable, syntax.Scopes{}.Add(a), nil)
+
+	bid, ok := env.ResolveBindingID(sym, syntax.AllScopes())
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, bid.Slot, qt.Equals, 0)
+
+	bid, ok = env.ResolveBindingID(values.NewSymbol("nope"), syntax.AllScopes())
+	qt.Assert(t, ok, qt.IsFalse)
+	qt.Assert(t, bid, qt.Equals, BindingID{})
+}

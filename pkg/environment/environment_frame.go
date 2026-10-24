@@ -124,7 +124,8 @@ type EnvironmentFrame struct {
 	// Five functions deal in a *LocalEnvironmentFrame, and the pointers are NOT
 	// one object seen from five places. NewLocalEnvironment allocates its own.
 	// Four explicitly take the address (&p.local), and TestLocalFieldAddressTakers
-	// lists them: LocalEnvironment, LocalLayout, ResolveBindingID, and
+	// lists them: LocalEnvironment, LocalLayout, bindingIDAt (ResolveBindingID
+	// builds its IDs there), and
 	// LocalEnvironmentFrame.InitApplyFrameWithParent (a destination written
 	// through, never handed out). Pointer-receiver calls on the field
 	// (InitApplyFrameWithParent, EnsureLocalBinding and MaybeCreateLocalBinding
@@ -155,7 +156,7 @@ type EnvironmentFrame struct {
 	//     builds one) into a template that looks like it records no shape.
 	//     MachineClosure.Env (machine_closure.go) hands it to
 	//     NewEnvironmentFrameWithParent, which copies it as builder input.
-	//   - ResolveBindingID's pointer is an identity, not an access path:
+	//   - bindingIDAt's pointer (ResolveBindingID's) is an identity, not an access path:
 	//     BindingID.Frame names the local environment of the frame, at the depth
 	//     the symbol resolved, so two IDs are equal exactly when they name the
 	//     same frame's locals. It is never nil, because a binding resolved.
