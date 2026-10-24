@@ -66,6 +66,8 @@ func nestedDepthEngine(t *testing.T) (*wile.Engine, context.Context) {
 // left — so a row like "one let, argument is the let binding" is an ordering
 // assertion wearing an arithmetic disguise.
 func TestNestedSelfTailCallValues(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -166,6 +168,8 @@ func TestNestedSelfTailCallValues(t *testing.T) {
 // each pass sums 1..50 = 1275 through a let-wrapped self call, and the answer is
 // 3*1275 = 3825.
 func TestNestedSelfTailCallAcrossContinuationReentry(t *testing.T) {
+	t.Parallel()
+
 	eng, ctx := nestedDepthEngine(t)
 	const program = `
 (define (accumulate i n acc)
@@ -191,6 +195,8 @@ func TestNestedSelfTailCallAcrossContinuationReentry(t *testing.T) {
 // answer is still right" means. Without this, the whole file would be a suite
 // that cannot see what it was written for.
 func TestNestedSelfTailCallIsArmed(t *testing.T) {
+	t.Parallel()
+
 	tpl := templateOf(t,
 		"(define (loop i n) (if (>= i n) i (let ((j (+ i 1))) (loop j n))))", "loop")
 	// The pop count is 0, not 1, since let-slot merging: the `let` allocates its

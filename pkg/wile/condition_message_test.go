@@ -41,6 +41,8 @@ import (
 // syntax-error "behaves similarly to error (6.11)", so both of §6.11's accessors
 // must answer the same pair the equivalent error call answers.
 func TestSyntaxErrorMessageMatchesErrorForm(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, path := syntaxErrorEngine(t)
 
@@ -88,6 +90,8 @@ func TestSyntaxErrorMessageMatchesErrorForm(t *testing.T) {
 // it there — so repeating it inside the message is the same duplication V3 closed
 // for the Go envelope.
 func TestCompileConditionMessageIsTheFailureAlone(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -126,6 +130,8 @@ func TestCompileConditionMessageIsTheFailureAlone(t *testing.T) {
 // same slot a sentinel would occupy, so a walk that stops at the innermost wrap
 // deletes the only substantive fact in the diagnostic.
 func TestFileErrorMessageKeepsItsCause(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -148,6 +154,8 @@ func TestFileErrorMessageKeepsItsCause(t *testing.T) {
 // occupies the err slot: the category text is what errors.Is is for, and it is not
 // part of the message R7RS specifies.
 func TestRuntimeConditionMessageDropsTheCategory(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)

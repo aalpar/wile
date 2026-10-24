@@ -49,6 +49,8 @@ var multiShiftLibs = fstest.MapFS{
 // cadddr unbound at phase 1 while (for-syntax (scheme base)) (for-syntax
 // (scheme cxr)) bound it.
 func TestPhaseShiftImportTakesEveryImportSet(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		src     string

@@ -26,6 +26,8 @@ import (
 )
 
 func TestEngineEval(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	engine, err := wile.NewEngine(ctx)
@@ -52,6 +54,8 @@ func TestEngineEval(t *testing.T) {
 }
 
 func TestEngineEvalMultiple(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tcs := []struct {
@@ -83,6 +87,8 @@ func TestEngineEvalMultiple(t *testing.T) {
 }
 
 func TestEngineCompileAndRun(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	engine, err := wile.NewEngine(ctx)
@@ -112,6 +118,8 @@ func TestEngineCompileAndRun(t *testing.T) {
 }
 
 func TestEngineDefineAndGet(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	engine, err := wile.NewEngine(ctx)
@@ -142,6 +150,8 @@ func TestEngineDefineAndGet(t *testing.T) {
 // host's value lands on the macro's variable and the host's own binding is
 // left #!void. Create means exact-empty-set; write means any.
 func TestEngineDefine_DoesNotClobberMacroIntroducedBinding(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	engine, err := wile.NewEngine(ctx)
@@ -182,6 +192,8 @@ func TestEngineDefine_DoesNotClobberMacroIntroducedBinding(t *testing.T) {
 // ask for it. A wildcard Get would hand back a binding whose hygiene says it is
 // not addressable.
 func TestEngineGet_DoesNotSeeMacroOnlyBinding(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	engine, err := wile.NewEngine(ctx)
@@ -207,6 +219,8 @@ func TestEngineGet_DoesNotSeeMacroOnlyBinding(t *testing.T) {
 }
 
 func TestEngineCall(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	engine, err := wile.NewEngine(ctx)
@@ -224,6 +238,8 @@ func TestEngineCall(t *testing.T) {
 }
 
 func TestEngineClose(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("close does not panic", func(t *testing.T) {
@@ -248,6 +264,8 @@ func TestEngineClose(t *testing.T) {
 }
 
 func TestEngineErrorWrapping(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tcs := []struct {
@@ -290,6 +308,8 @@ func TestEngineErrorWrapping(t *testing.T) {
 }
 
 func TestEngineParse(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	engine, err := wile.NewEngine(ctx)
@@ -329,6 +349,8 @@ func TestEngineParse(t *testing.T) {
 }
 
 func TestEngineParseWithSource(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	engine, err := wile.NewEngine(ctx)
@@ -341,6 +363,8 @@ func TestEngineParseWithSource(t *testing.T) {
 }
 
 func TestEngineMustParse(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	engine, err := wile.NewEngine(ctx)
@@ -366,6 +390,8 @@ func TestEngineMustParse(t *testing.T) {
 }
 
 func TestEngineOptions(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("WithMaxCallDepth limits recursion", func(t *testing.T) {

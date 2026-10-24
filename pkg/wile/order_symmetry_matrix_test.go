@@ -79,6 +79,8 @@ func orderSymmetryEngine(t *testing.T) *wile.Engine {
 }
 
 func TestOrderSymmetryMatrix(t *testing.T) {
+	t.Parallel()
+
 	for _, row := range []struct {
 		name string
 		src  string
@@ -227,6 +229,8 @@ vname`,
 // the store, from the Scheme side, so a reader of this matrix does not have to
 // take the relocation's safety on trust.
 func TestOrderSymmetryDoesNotDisturbBootstrapMacros(t *testing.T) {
+	t.Parallel()
+
 	eng := orderSymmetryEngine(t)
 	v, err := eng.EvalMultiple(context.Background(),
 		`(import (scheme base) (for-syntax (vlib)))

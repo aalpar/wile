@@ -45,6 +45,8 @@ import (
 // and it is what says 4:6 is that arm's own answer rather than an invented
 // number. Only rows 1 and 2 are the ratchet.
 func TestSetBangRefusalLocatesTheIdentifier(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		src     string

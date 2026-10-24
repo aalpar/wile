@@ -41,6 +41,8 @@ import (
 // rejected; `(,(set! x 9)) puts x in an evaluated position, so the mark is earned.
 // The table below pins both directions.
 func TestImmutableTopLevel_OpaqueSubtreeOverMark(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	tcs := []struct {
 		name string

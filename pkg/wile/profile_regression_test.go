@@ -20,6 +20,8 @@ import (
 // that don't bundle the algebragraph extension. The fix is a cond-expand
 // guard in graph.sld; this test ensures it stays.
 func TestAlgebraGraphLoadsUnderSmallProfile(t *testing.T) {
+	t.Parallel()
+
 	for _, prof := range []wile.Profile{
 		wile.Tiny,
 		wile.Console,

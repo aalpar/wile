@@ -94,6 +94,8 @@ func uniformPanicEngine(t *testing.T) *wile.Engine {
 // exception (Condition non-nil, because the wrapper's returned error routed
 // through bridgeForeignError) with empty structured fields.
 func TestHostBugEscapesGuardFromEitherRoute(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := uniformPanicEngine(t)
@@ -138,6 +140,8 @@ func TestHostBugEscapesGuardFromEitherRoute(t *testing.T) {
 // path and must still become an ordinary error. Scheme guard must still catch
 // it. Without this row, deleting the recover outright would pass G8.3.
 func TestCallbackProtocolStillConverts(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := uniformPanicEngine(t)
@@ -168,6 +172,8 @@ func TestCallbackProtocolStillConverts(t *testing.T) {
 // so a Scheme-level guard around them would still catch, and only the Go-side
 // classification changes.
 func TestSchemeConditionsStillClassifyAsExceptions(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := uniformPanicEngine(t)
@@ -214,6 +220,8 @@ type cfgStruct struct {
 // explicit rejection it would now escape guard as if it were a host bug. Same
 // shape and same fix as helpers.AssocLookup, which Phase 6 closed.
 func TestStructConverterRejectsEmptyAlistEntry(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := uniformPanicEngine(t)

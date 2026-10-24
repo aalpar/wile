@@ -64,6 +64,8 @@ func reportEnvTransformerProgram(envExpr string) string {
 }
 
 func TestReportEnvironmentKeepsTheMacroVocabulary(t *testing.T) {
+	t.Parallel()
+
 	rows := []struct {
 		name    string
 		envExpr string

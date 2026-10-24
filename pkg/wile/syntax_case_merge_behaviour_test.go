@@ -41,6 +41,8 @@ import (
 // state slot is exercised by a `(syntax ...)` template after the lets, and the
 // reentrancy case nests a whole syntax-case inside a merged let.
 func TestSyntaxCaseClauseBodyLetBehaviour(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

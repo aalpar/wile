@@ -31,6 +31,8 @@ import (
 // argument rests on its base value never changing, and before ImmutableBase
 // ordinary Scheme could rewrite it through the one-argument parameter form.
 func TestExceptionHandlerBaseIsNotWritableFromScheme(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -53,6 +55,8 @@ func TestExceptionHandlerBaseIsNotWritableFromScheme(t *testing.T) {
 // same defect: a Tiny engine poisoning the shared base so that conditions
 // escaping another engine's handler stack are delivered to it instead.
 func TestExceptionHandlerNotStealableAcrossEngines(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

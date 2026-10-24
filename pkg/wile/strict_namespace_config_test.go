@@ -24,6 +24,8 @@ import (
 // raises engineConfig.strictLevel to strictLevelCore and that the default is off.
 // Behavior driven by the level is exercised in the external strict-namespace suite.
 func TestWithStrictNamespaceSetsFlag(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	cfg := newEngineConfig()

@@ -123,6 +123,8 @@ const phase1TransformerCadrSrc = `(define-syntax pick
 // Design section 6.1's car row is wrong rather than imprecise, and Task 11 owes
 // it a correction. The design's own A4 census already contained the refutation.
 func TestPhase1_ProceduralTransformerUnboundWithoutImport(t *testing.T) {
+	t.Parallel()
+
 	eng := phaseDistinctnessEngine(t)
 	_, err := eng.EvalMultiple(context.Background(), phase1TransformerCadrSrc)
 
@@ -172,6 +174,8 @@ var forSyntaxProbeFS = fstest.MapFS{
 // import is observably insufficient and the for-syntax import observably fixes
 // it. It discriminates on the MECHANISM rather than on the change.
 func TestPhase1_ProceduralTransformerBoundWithImport(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	newProbeEngine := func(t *testing.T) *wile.Engine {
@@ -291,6 +295,8 @@ func transformerAtPhase(n int, prologue string) string {
 // it carries an exact-phase-1 slot but none at phase 2, so a car-based pin
 // would assert phase 2 DIFFERING from phase 1, the opposite of this test.
 func TestPhase2_UniformRule(t *testing.T) {
+	t.Parallel()
+
 	t.Run("a name the dialect supplies only at phase 0 is unbound at every higher rung", func(t *testing.T) {
 		for _, n := range []int{1, 2} {
 			t.Run(fmt.Sprintf("phase %d", n), func(t *testing.T) {
@@ -379,6 +385,8 @@ func TestPhase2_UniformRule(t *testing.T) {
 // ambient tier does not remove it. So on today's shape this row survives A
 // whether or not the dialect declares anything at phase 1.
 func TestDeclarativeMacroNeedsNoImport(t *testing.T) {
+	t.Parallel()
+
 	t.Run("template over a phase-0-only name", func(t *testing.T) {
 		got, err := evalPhaseDistinctness(t, `
 			(define-syntax lookup (syntax-rules () ((_ key alist) (assoc key alist))))
@@ -439,6 +447,8 @@ func TestDeclarativeMacroNeedsNoImport(t *testing.T) {
 // earlier-created slot wins on slot-list order alone. Hoisting the import above
 // the define makes the same mutated build PASS, and the guard stops guarding.
 func TestPhase0DefineDoesNotShadowPhase1(t *testing.T) {
+	t.Parallel()
+
 	eng := phaseDistinctnessEngine(t)
 	ctx := context.Background()
 

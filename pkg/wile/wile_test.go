@@ -35,6 +35,8 @@ import (
 // Value constructors
 
 func TestNewFloat(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	v := NewFloat(3.14)
 	c.Assert(v.SchemeString(), qt.Equals, "3.14")
@@ -42,6 +44,8 @@ func TestNewFloat(t *testing.T) {
 }
 
 func TestNewString(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	v := NewString("hello")
 	c.Assert(v.SchemeString(), qt.Equals, `"hello"`)
@@ -49,18 +53,24 @@ func TestNewString(t *testing.T) {
 }
 
 func TestNewSymbol(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	v := NewSymbol("foo")
 	c.Assert(v.SchemeString(), qt.Equals, "foo")
 }
 
 func TestNewBoolean(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	c.Assert(NewBoolean(true).SchemeString(), qt.Equals, "#t")
 	c.Assert(NewBoolean(false).SchemeString(), qt.Equals, "#f")
 }
 
 func TestNewList(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("empty list", func(t *testing.T) {
@@ -75,6 +85,8 @@ func TestNewList(t *testing.T) {
 }
 
 func TestNewBigInteger(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	bigInt := big.NewInt(123456789)
 	v := NewBigInteger(bigInt)
@@ -83,6 +95,8 @@ func TestNewBigInteger(t *testing.T) {
 }
 
 func TestNewBigIntegerFromInt64(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	v := NewBigIntegerFromInt64(9223372036854775807)
 	c.Assert(v.SchemeString(), qt.Equals, "9223372036854775807")
@@ -90,6 +104,8 @@ func TestNewBigIntegerFromInt64(t *testing.T) {
 }
 
 func TestNewBigIntegerFromString(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("valid base 10", func(t *testing.T) {
@@ -111,6 +127,8 @@ func TestNewBigIntegerFromString(t *testing.T) {
 }
 
 func TestNewBigFloat(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	bigFloat := big.NewFloat(3.141592653589793)
 	v := NewBigFloat(bigFloat)
@@ -119,6 +137,8 @@ func TestNewBigFloat(t *testing.T) {
 }
 
 func TestNewBigFloatFromFloat64(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	v := NewBigFloatFromFloat64(2.718281828459045)
 	c.Assert(v, qt.IsNotNil)
@@ -126,6 +146,8 @@ func TestNewBigFloatFromFloat64(t *testing.T) {
 }
 
 func TestNewBigFloatFromString(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("valid float string", func(t *testing.T) {
@@ -145,6 +167,8 @@ func TestNewBigFloatFromString(t *testing.T) {
 }
 
 func TestNewRational(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tcs := []struct {
 		name     string
@@ -166,6 +190,8 @@ func TestNewRational(t *testing.T) {
 }
 
 func TestNewRationalFromBigInt(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	v := NewRationalFromBigInt(big.NewInt(7), big.NewInt(3))
 	c.Assert(v.SchemeString(), qt.Equals, "7/3")
@@ -173,6 +199,8 @@ func TestNewRationalFromBigInt(t *testing.T) {
 }
 
 func TestNewComplex(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tcs := []struct {
 		name    string
@@ -194,6 +222,8 @@ func TestNewComplex(t *testing.T) {
 }
 
 func TestNewComplexFromParts(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	v := NewComplexFromParts(3.0, 4.0)
 	c.Assert(v.SchemeString(), qt.Equals, "3.0+4.0i")
@@ -201,6 +231,8 @@ func TestNewComplexFromParts(t *testing.T) {
 }
 
 func TestNewVector(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("empty vector", func(t *testing.T) {
@@ -221,6 +253,8 @@ func TestNewVector(t *testing.T) {
 }
 
 func TestValueConstructors_RoundTrip(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -252,6 +286,8 @@ func TestValueConstructors_RoundTrip(t *testing.T) {
 // Value methods
 
 func TestValue_IsVoid(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	c.Assert(Void.IsVoid(), qt.IsTrue)
 	c.Assert(NewInteger(1).IsVoid(), qt.IsFalse)
@@ -259,6 +295,8 @@ func TestValue_IsVoid(t *testing.T) {
 }
 
 func TestValue_Internal(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	v := NewInteger(42)
 	c.Assert(v.Internal(), qt.IsNotNil)
@@ -268,6 +306,8 @@ func TestValue_Internal(t *testing.T) {
 // Engine accessors
 
 func TestEngine_Environment(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -275,6 +315,8 @@ func TestEngine_Environment(t *testing.T) {
 }
 
 func TestEngine_Namespace(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -282,6 +324,8 @@ func TestEngine_Namespace(t *testing.T) {
 }
 
 func TestNewNamespace(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -292,6 +336,8 @@ func TestNewNamespace(t *testing.T) {
 }
 
 func TestNewEngineWithNamespace(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -310,6 +356,8 @@ func TestNewEngineWithNamespace(t *testing.T) {
 }
 
 func TestNewEngine_BackwardCompat(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -326,6 +374,8 @@ func TestNewEngine_BackwardCompat(t *testing.T) {
 }
 
 func TestNewNamespace_WithExtension(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -342,6 +392,8 @@ func TestNewNamespace_WithExtension(t *testing.T) {
 }
 
 func TestEngine_EvalIn(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -367,6 +419,8 @@ func TestEngine_EvalIn(t *testing.T) {
 // CompiledCode.String
 
 func TestCompiledCode_String(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -379,6 +433,8 @@ func TestCompiledCode_String(t *testing.T) {
 // WithRegistry option
 
 func TestWithRegistry(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	reg := registry.NewRegistry()
 	// Engine with empty registry — should still create
@@ -390,6 +446,8 @@ func TestWithRegistry(t *testing.T) {
 // WithExtensions option
 
 func TestWithExtensions(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	// WithExtensions with no extensions should work fine
 	engine, err := NewEngine(context.Background(), WithExtensions())
@@ -400,6 +458,8 @@ func TestWithExtensions(t *testing.T) {
 // Call with different callable types
 
 func TestCall_Lambda(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -417,6 +477,8 @@ func TestCall_Lambda(t *testing.T) {
 }
 
 func TestCall_CaseLambda(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -445,6 +507,8 @@ func TestCall_CaseLambda(t *testing.T) {
 }
 
 func TestCall_Parameter(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -473,6 +537,8 @@ func TestCall_Parameter(t *testing.T) {
 }
 
 func TestCall_ParameterWithConverter(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -502,6 +568,8 @@ func TestCall_ParameterWithConverter(t *testing.T) {
 }
 
 func TestCall_NotAProcedure(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -518,6 +586,8 @@ func TestCall_NotAProcedure(t *testing.T) {
 }
 
 func TestCall_ParameterTooManyArgs(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -540,6 +610,8 @@ func TestCall_ParameterTooManyArgs(t *testing.T) {
 }
 
 func TestCall_ComposableContinuation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	// Opt out of the immutable default: this test set!s a top-level saved-k cell.
 	engine, err := NewEngine(context.Background(), WithMutableTopLevel())
@@ -570,6 +642,8 @@ func TestCall_ComposableContinuation(t *testing.T) {
 }
 
 func TestCall_CallCCNonTailEscape(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -622,6 +696,8 @@ func TestCall_CallCCNonTailEscape(t *testing.T) {
 // Structured error types
 
 func TestCompilationError(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -635,6 +711,8 @@ func TestCompilationError(t *testing.T) {
 }
 
 func TestCompilationError_Format(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("with cause", func(t *testing.T) {
@@ -649,6 +727,8 @@ func TestCompilationError_Format(t *testing.T) {
 }
 
 func TestCompilationError_Unwrap(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	cause := errors.New("root")
 	e := &CompilationError{Message: "msg", Cause: cause}
@@ -656,6 +736,8 @@ func TestCompilationError_Unwrap(t *testing.T) {
 }
 
 func TestCompilationError_SourceLocation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -686,6 +768,8 @@ func TestCompilationError_SourceLocation(t *testing.T) {
 }
 
 func TestRuntimeError_DivisionByZero(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -699,6 +783,8 @@ func TestRuntimeError_DivisionByZero(t *testing.T) {
 }
 
 func TestRuntimeError_SchemeRaise(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -713,6 +799,8 @@ func TestRuntimeError_SchemeRaise(t *testing.T) {
 }
 
 func TestRuntimeError_IsSchemeException(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("true when condition set", func(t *testing.T) {
@@ -732,6 +820,8 @@ func TestRuntimeError_IsSchemeException(t *testing.T) {
 }
 
 func TestRuntimeError_Format(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("with cause", func(t *testing.T) {
@@ -746,6 +836,8 @@ func TestRuntimeError_Format(t *testing.T) {
 }
 
 func TestRuntimeError_Unwrap(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	cause := errors.New("root")
 	e := &RuntimeError{Message: "msg", Cause: cause}
@@ -755,6 +847,8 @@ func TestRuntimeError_Unwrap(t *testing.T) {
 // Value helpers
 
 func TestIsList(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	c.Assert(IsList(NewList(NewInteger(1), NewInteger(2))), qt.IsTrue)
 	c.Assert(IsList(EmptyList), qt.IsTrue)
@@ -762,6 +856,8 @@ func TestIsList(t *testing.T) {
 }
 
 func TestIsPair(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	c.Assert(IsPair(NewList(NewInteger(1))), qt.IsTrue)
 	c.Assert(IsPair(EmptyList), qt.IsFalse)
@@ -769,6 +865,8 @@ func TestIsPair(t *testing.T) {
 }
 
 func TestIsNull(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	c.Assert(IsNull(EmptyList), qt.IsTrue)
 	c.Assert(IsNull(NewList(NewInteger(1))), qt.IsFalse)
@@ -776,18 +874,24 @@ func TestIsNull(t *testing.T) {
 }
 
 func TestIsSymbol(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	c.Assert(IsSymbol(NewSymbol("foo")), qt.IsTrue)
 	c.Assert(IsSymbol(NewString("foo")), qt.IsFalse)
 }
 
 func TestIsString(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	c.Assert(IsString(NewString("hello")), qt.IsTrue)
 	c.Assert(IsString(NewInteger(42)), qt.IsFalse)
 }
 
 func TestIsNumber(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	c.Assert(IsNumber(NewInteger(1)), qt.IsTrue)
 	c.Assert(IsNumber(NewFloat(1.5)), qt.IsTrue)
@@ -795,6 +899,8 @@ func TestIsNumber(t *testing.T) {
 }
 
 func TestIsBoolean(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	c.Assert(IsBoolean(True), qt.IsTrue)
 	c.Assert(IsBoolean(False), qt.IsTrue)
@@ -802,6 +908,8 @@ func TestIsBoolean(t *testing.T) {
 }
 
 func TestIsProcedure(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -825,6 +933,8 @@ func TestIsProcedure(t *testing.T) {
 }
 
 func TestCar(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	v, ok := Car(NewList(NewInteger(1), NewInteger(2)))
@@ -839,6 +949,8 @@ func TestCar(t *testing.T) {
 }
 
 func TestCdr(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	v, ok := Cdr(NewList(NewInteger(1), NewInteger(2)))
@@ -850,6 +962,8 @@ func TestCdr(t *testing.T) {
 }
 
 func TestToSlice(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("proper list", func(t *testing.T) {
@@ -873,6 +987,8 @@ func TestToSlice(t *testing.T) {
 }
 
 func TestToGoString(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	s, ok := ToGoString(NewString("hello"))
@@ -884,6 +1000,8 @@ func TestToGoString(t *testing.T) {
 }
 
 func TestToGoInt(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	n, ok := ToGoInt(NewInteger(42))
@@ -898,6 +1016,8 @@ func TestToGoInt(t *testing.T) {
 }
 
 func TestToGoFloat(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	f, ok := ToGoFloat(NewFloat(3.14))
@@ -909,6 +1029,8 @@ func TestToGoFloat(t *testing.T) {
 }
 
 func TestToGoBool(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	b, ok := ToGoBool(True)
@@ -926,6 +1048,8 @@ func TestToGoBool(t *testing.T) {
 // Context cancellation
 
 func TestEval_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -939,6 +1063,8 @@ func TestEval_ContextCancellation(t *testing.T) {
 }
 
 func TestEval_AlreadyCancelledContext(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -959,6 +1085,8 @@ func TestEval_AlreadyCancelledContext(t *testing.T) {
 // TestParse_AlreadyCancelledContext pins R24: parse entry points honor ctx, so an
 // already-cancelled context surfaces as a parse error rather than being ignored.
 func TestParse_AlreadyCancelledContext(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -976,6 +1104,8 @@ func TestParse_AlreadyCancelledContext(t *testing.T) {
 // the default (10000) accepts is rejected under a small override. Before R24, Parse
 // used the parser's own default and silently ignored the engine's configured value.
 func TestEngine_MaxParseDepth_ReachesParseEntries(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -994,6 +1124,8 @@ func TestEngine_MaxParseDepth_ReachesParseEntries(t *testing.T) {
 }
 
 func TestEval_CancelDuringComputation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ext, ready := testutil.ReadyExtension()
 	engine, err := NewEngine(context.Background(), WithExtension(ext))
@@ -1014,6 +1146,8 @@ func TestEval_CancelDuringComputation(t *testing.T) {
 }
 
 func TestEval_CancelNestedCalls(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
@@ -1054,6 +1188,8 @@ func (m *mockCloseableExtension) Close() error {
 }
 
 func TestEngineClose(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	t.Run("no closers", func(t *testing.T) {
@@ -1172,6 +1308,8 @@ func TestEngineClose(t *testing.T) {
 // TestDefaultCallDepth verifies that an engine created without WithMaxCallDepth
 // uses DefaultMaxCallDepth, preventing unbounded recursion from OOMing the host.
 func TestDefaultCallDepth(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -1186,6 +1324,8 @@ func TestDefaultCallDepth(t *testing.T) {
 }
 
 func TestWithoutCore(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background(), WithoutCore())
 	c.Assert(err, qt.IsNil)
@@ -1198,6 +1338,8 @@ func TestWithoutCore(t *testing.T) {
 }
 
 func TestWithProfile_Console(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background(), WithProfile(Console))
 	c.Assert(err, qt.IsNil)
@@ -1221,12 +1363,16 @@ func TestWithProfile_Console(t *testing.T) {
 }
 
 func TestProfile_Console_Extensions(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	// Console profile includes: io, files, math, all-safe, charsets, envvars.
 	c.Assert(len(Console.extensions()), qt.Equals, 6)
 }
 
 func TestWithMaxCallDepth(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		code        string
@@ -1283,6 +1429,8 @@ func TestWithMaxCallDepth(t *testing.T) {
 }
 
 func TestWithMaxStackSize(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		code        string

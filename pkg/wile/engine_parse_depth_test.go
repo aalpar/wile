@@ -26,6 +26,8 @@ import (
 // public API must return an error, NOT crash the host with a fatal stack
 // overflow. If the bound regressed, this test binary would die rather than fail.
 func TestEngine_DeepNesting_DoesNotCrash(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := wile.NewEngine(ctx)
 	if err != nil {
@@ -40,6 +42,8 @@ func TestEngine_DeepNesting_DoesNotCrash(t *testing.T) {
 }
 
 func TestEngine_WithMaxParseDepth(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := wile.NewEngine(ctx, wile.WithMaxParseDepth(20))
 	if err != nil {

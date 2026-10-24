@@ -71,6 +71,8 @@ func runQuasisyntaxRows(t *testing.T, rows []innerPositionRow) {
 const quasisyntaxStaleBody = `(begin (set! n 1) (set! f (lambda () 99)))`
 
 func TestQuasisyntaxUnsyntaxUnderQuote(t *testing.T) {
+	t.Parallel()
+
 	runQuasisyntaxRows(t, []innerPositionRow{
 		// The measured defect: (1 7) on master.
 		{"unsyntax under a quote form",
@@ -146,6 +148,8 @@ func TestQuasisyntaxUnsyntaxUnderQuote(t *testing.T) {
 // scan that read the foreign marker as an escape or a nesting head, or kept the
 // quote barrier, answers a wrong VALUE.
 func TestQuasisyntaxMarkersAreDialectLocal(t *testing.T) {
+	t.Parallel()
+
 	runQuasisyntaxRows(t, []innerPositionRow{
 		{"unquote is data in a quasisyntax template",
 			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (unquote (quote (#,` + quasisyntaxStaleBody + `))))) (list n (f)))`,
@@ -173,6 +177,8 @@ func TestQuasisyntaxMarkersAreDialectLocal(t *testing.T) {
 // whatever the scan does, because a data position runs nothing; they fix the
 // values the scan has to agree with.
 func TestQuasisyntaxNestedDepthBehaviour(t *testing.T) {
+	t.Parallel()
+
 	runQuasisyntaxRows(t, []innerPositionRow{
 		{"nested quasisyntax keeps an inner unsyntax as data",
 			`(let ((f (lambda () 7)) (n 0)) (quasisyntax (quasisyntax (a #,` + quasisyntaxStaleBody + `))) (list n (f)))`,
@@ -201,6 +207,8 @@ func TestQuasisyntaxNestedDepthBehaviour(t *testing.T) {
 // the mention scan has to count template data, not only the evaluated positions.
 // The stamp scan must not (TestImmutableTopLevel_OpaqueSubtreeOverMark).
 func TestQuasisyntaxTemplateDataIsRead(t *testing.T) {
+	t.Parallel()
+
 	runQuasisyntaxRows(t, []innerPositionRow{
 		{"data symbol and a bare unsyntax",
 			`(let ((t #f)) (if t t (quasisyntax (a t #,1))))`,
@@ -234,6 +242,8 @@ func TestQuasisyntaxTemplateDataIsRead(t *testing.T) {
 // a marker is a call and its operands are evaluated. Inside templates the
 // spelling fallback stays, as quasiKeywords.headName has it.
 func TestMarkerNamedLocalIsAnOrdinaryCall(t *testing.T) {
+	t.Parallel()
+
 	runQuasisyntaxRows(t, []innerPositionRow{
 		{"local quasisyntax in an unquote position",
 			"(let ((quasisyntax list) (f (lambda () 7))) `(,(quasisyntax (begin (set! f (lambda () 99)) 1))) (f))",
@@ -255,6 +265,8 @@ func TestMarkerNamedLocalIsAnOrdinaryCall(t *testing.T) {
 // live. Measured on master, rows 1 and 2 answered an unbound-"t" compile error
 // and the OUTER t (9); the unquote form of the same shapes already answered #f.
 func TestQuasisyntaxUnsyntaxUnderQuoteKeepsLetBinder(t *testing.T) {
+	t.Parallel()
+
 	runQuasisyntaxRows(t, []innerPositionRow{
 		{"if-shaped let, unsyntax under a quote form",
 			`(let ((t #f)) (if t t (quasisyntax (a (quote (#,t))))))`,
@@ -278,6 +290,8 @@ func TestQuasisyntaxUnsyntaxUnderQuoteKeepsLetBinder(t *testing.T) {
 // such a head both ways and reports the union, so each row below puts the unquote
 // beneath a quote barrier or a binder the call reading alone would hide.
 func TestDemotedOpenerIsReadBothWays(t *testing.T) {
+	t.Parallel()
+
 	b := `(set! f (lambda () 99))`
 	runQuasisyntaxRows(t, []innerPositionRow{
 		{"top-level quasiquote variable, template opener under an unsyntax",
@@ -307,6 +321,8 @@ func TestDemotedOpenerIsReadBothWays(t *testing.T) {
 // The stamp walk reads the same head both ways, so a top-level variable named
 // quasisyntax in an EARLIER unit still lets a later unit's hidden set! be marked.
 func TestDemotedOpenerKeepsTopLevelSetLegal(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	for _, inline := range []bool{false, true} {
 		opts := []wile.EngineOption{wile.WithProfile(wile.Small), wile.WithImmutableTopLevel()}

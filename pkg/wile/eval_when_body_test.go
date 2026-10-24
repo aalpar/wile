@@ -33,6 +33,8 @@ import (
 // body's instructions through the VM, so it printed 12 the whole time. A gate
 // written on (eval-when (compile) ...) alone would have stayed green.
 func TestEvalWhen_MultiExpressionBody(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tests := []struct {

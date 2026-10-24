@@ -66,6 +66,8 @@ func badCompileEngine(t *testing.T) (*wile.Engine, string) {
 }
 
 func TestLoadCompileErrorReportsCompileSite(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, path := badCompileEngine(t)
@@ -83,6 +85,8 @@ func TestLoadCompileErrorReportsCompileSite(t *testing.T) {
 // reaches the innermost SourcedError by errors.As, so an embedder can recover
 // the structured location rather than parsing it back out of the message.
 func TestLoadCompileErrorConditionReachesSourcedError(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, path := badCompileEngine(t)
@@ -149,6 +153,8 @@ func badParseEngine(t *testing.T) (*wile.Engine, string) {
 // function: extensions/eval sits below pkg/wile, so PrimLoad calls
 // compilation.ExpandAndCompile directly.
 func TestLoadParseErrorReportsReadSiteOnBothArms(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, path := badParseEngine(t)
@@ -186,6 +192,8 @@ func TestLoadParseErrorReportsReadSiteOnBothArms(t *testing.T) {
 // empty on purpose. A port opened on a file names it, and the same read error
 // then renders "<file>:2:5" (TestReadErrorFromFilePortNamesTheFile).
 func TestReadErrorReportsPortPositionNotTheReadCall(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

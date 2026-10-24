@@ -102,6 +102,8 @@ var recLibFS = fstest.MapFS{
 // from a define-syntax / let-syntax / letrec-syntax right-hand side in P0.1, and
 // these are the three shapes it used to serve.
 func TestP01_TransformerIsAnExpression(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tests := []struct {
 		name string
@@ -176,6 +178,8 @@ func TestP01_TransformerIsAnExpression(t *testing.T) {
 // names rec-len before its slot exists; the predeclare (design §2.2) makes the
 // pin real. Fails on master at library load ("unsupported transformer type").
 func TestP01_SelfReferencePinsThroughMacroProducedTransformer(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSyntaxForms(t, `(import (reclib))
 (define-syntax rec-len (syntax-rules () ((_ . a) 'hijacked)))
@@ -188,6 +192,8 @@ func TestP01_SelfReferencePinsThroughMacroProducedTransformer(t *testing.T) {
 // the right-hand side fails, so the keyword is not left bound to nothing. One
 // engine for both evaluations — the slot would be invisible across engines. GUARD.
 func TestP01_FailedRightHandSideLeavesNoSlot(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -209,6 +215,8 @@ func TestP01_FailedRightHandSideLeavesNoSlot(t *testing.T) {
 // This replaces TestP01_NonProcedureRefusedUntilP04, which pinned P0.1's
 // admission ladder — the refusal this phase lifts.
 func TestP04_NonProcedureIsACompileTimeValue(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSyntaxForms(t, `(define-syntax k 42)
 (define-syntax probe (lambda (stx) (datum->syntax #f (syntax-local-value #'k))))
@@ -222,6 +230,8 @@ func TestP04_NonProcedureIsACompileTimeValue(t *testing.T) {
 // "no binding for pv" at both phases): syntax-local-value resolves through the
 // let-syntax frames the way macro dispatch does.
 func TestP04_LetSyntaxProbeAtPhase1And2(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tests := []struct {
 		name, src, want string
@@ -299,6 +309,8 @@ func TestP04_LetSyntaxProbeAtPhase1And2(t *testing.T) {
 // TestP04_CompileTimeValueWrapperIsGone: make-compile-time-value and its wrapper
 // are retired (Q4); a define-syntax value reads back bare.
 func TestP04_CompileTimeValueWrapperIsGone(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	err := evalSyntaxFormsErr(t, `(make-compile-time-value 1)`)
 	c.Assert(err, qt.ErrorMatches, `(?s).*make-compile-time-value.*`)
@@ -314,6 +326,8 @@ func TestP04_CompileTimeValueWrapperIsGone(t *testing.T) {
 // reference: the expected 5 comes back as #f. The kernel flip (design §2.2) is
 // what fixes it.
 func TestP02_LambdaTransformerHygiene(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSyntaxForms(t, `(import (for-syntax (scheme base))  ; cadr
         (for-syntax (scheme cxr)))  ; caddr — cxr.sld, not base.sld
@@ -338,6 +352,8 @@ func TestP02_LambdaTransformerHygiene(t *testing.T) {
 // both binders are ∅-scoped, the second define wins both getters, and the answer
 // is (2 2).
 func TestP02_FreshnessAcrossInvocations(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	src := `(import (for-syntax (scheme base))  ; cadr
         (for-syntax (scheme cxr)))  ; caddr — cxr.sld, not base.sld
@@ -357,6 +373,8 @@ func TestP02_FreshnessAcrossInvocations(t *testing.T) {
 // expands to a syntax-rules macro use; swap!'s tmp and the user's tmp stay apart
 // with the Go matcher's intro scope gone (Q9) and the kernel's in its place.
 func TestP02_NestedMacroThroughLambdaTransformer(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSyntaxForms(t, `(import (for-syntax (scheme base))  ; cadr
         (for-syntax (scheme cxr)))  ; caddr — cxr.sld, not base.sld
@@ -376,6 +394,8 @@ func TestP02_NestedMacroThroughLambdaTransformer(t *testing.T) {
 // (`PrimExpandOnce`, `extensions/eval/prim_eval.go`), so the input is a
 // syntax object, not a quoted datum.
 func TestP02_ExpandOnceMirrorsTheLoop(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSyntaxForms(t, `(import (for-syntax (scheme base)) (for-syntax (scheme cxr)))  ; cadr / caddr
 (define-syntax my-or2
@@ -393,6 +413,8 @@ func TestP02_ExpandOnceMirrorsTheLoop(t *testing.T) {
 // invocation's intro scope, so syntax-local-introduce flips it instead of
 // raising not-implemented. Fails on master with ErrNotImplemented.
 func TestP02_SyntaxLocalIntroduceIsWired(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSyntaxForms(t, `(import (for-syntax (scheme base))  ; cadr
         (for-syntax (scheme cxr)))  ; caddr — cxr.sld, not base.sld
@@ -413,6 +435,8 @@ func TestP02_SyntaxLocalIntroduceIsWired(t *testing.T) {
 // on this branch. Passes on master and must keep passing here — P0.2 is the one
 // phase that could break it, so the guard lives here rather than in Task 5.
 func TestP02_AifSurvivesTheFlip(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSyntaxForms(t, `(import (for-syntax (scheme base))  ; cadr
         (for-syntax (scheme cxr)))  ; caddr, cadddr — cxr.sld, not base.sld
@@ -432,6 +456,8 @@ func TestP02_AifSurvivesTheFlip(t *testing.T) {
 // reached here through a top-level syntax-case). GlobalIndex values are minted
 // per query, so the comparison is on the *environment.Binding both reach.
 func TestP03_QuoteSyntaxPinIsTheTemplatePin(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -462,6 +488,8 @@ func TestP03_QuoteSyntaxPinIsTheTemplatePin(t *testing.T) {
 // TestP03_QuoteSyntaxSkipsThePinUnderALocal: no global pin where a
 // definition-site local of the name resolves.
 func TestP03_QuoteSyntaxSkipsThePinUnderALocal(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -495,6 +523,8 @@ var qLibFS = fstest.MapFS{
 }
 
 func TestP03_QuoteSyntaxCarriesTheLibraryScope(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSyntaxForms(t, `(import (qlib))
 (define (helper x) (list 'user x))
@@ -506,6 +536,8 @@ func TestP03_QuoteSyntaxCarriesTheLibraryScope(t *testing.T) {
 // identifier keeps its read scopes, so the definition-site x resolves by subset
 // through the whole macro and the use-site x cannot capture it.
 func TestP03_QuoteSyntaxDefSiteLocalUnderUseSiteLet(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSyntaxForms(t, `(let ((x 'def))
   (define-syntax m (lambda (stx) (quote-syntax x)))
@@ -515,6 +547,8 @@ func TestP03_QuoteSyntaxDefSiteLocalUnderUseSiteLet(t *testing.T) {
 
 // TestP05_Accessors: the one-level accessors (design §2.4) and the ER spine (Q6).
 func TestP05_Accessors(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tests := []struct {
 		name, src, want string
@@ -543,6 +577,8 @@ func TestP05_Accessors(t *testing.T) {
 // are readable (R7RS §6.11) and whose cause carries the form's location as a
 // real chain member.
 func TestP05_SyntaxViolationCarriesSource(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSyntaxForms(t, `(guard (e (#t (list (error-object-message e) (error-object-irritants e))))
   (%syntax-violation 'who "bad form" #'(x y)))`)
@@ -560,6 +596,8 @@ func TestP05_SyntaxViolationCarriesSource(t *testing.T) {
 // TestP05_FreeIdentifierEqualShadowProbe (design §3.1, measured 2026-09-05 as
 // ("else" "else") through the primitive): a use-site local shadows a literal.
 func TestP05_FreeIdentifierEqualShadowProbe(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSyntaxForms(t, `(import (for-syntax (scheme base)))  ; cadr
 (define-syntax m
@@ -577,6 +615,8 @@ func TestP05_FreeIdentifierEqualShadowProbe(t *testing.T) {
 // its Go consequence fail on master only because quote-syntax is unbound there:
 // Task 3 makes the answer observable, it does not change it.
 func TestP05_DatumToSyntax(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	tests := []struct {
 		name, src, want string

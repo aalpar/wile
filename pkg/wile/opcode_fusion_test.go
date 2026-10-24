@@ -93,6 +93,8 @@ func isFusionBranchOp(op machine.OpCode) bool {
 // non-tail call fusions (Wave 7/8/9) to silently fail on real compiler output
 // while passing hand-crafted unit tests.
 func TestOpcodeFusion(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		setup      string
@@ -263,6 +265,8 @@ func TestOpcodeFusion(t *testing.T) {
 // discriminator is the identity token rather than the name these rows also
 // happen to differ in.
 func TestPromotedPrimitiveFallback(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		code       string
@@ -325,6 +329,8 @@ func TestPromotedPrimitiveFallback(t *testing.T) {
 // substitution, so the embedder's implementation never runs — the fail-OPEN
 // direction, and the one that silently changes program meaning.
 func TestPromotedOpIdentityGuard(t *testing.T) {
+	t.Parallel()
+
 	impostor := func(mc machine.CallContext) error {
 		mc.SetValue(values.NewSymbol("IMPOSTOR-RAN"))
 		return nil
@@ -411,6 +417,8 @@ func TestPromotedOpIdentityGuard(t *testing.T) {
 // diagnostic. That is the same fail-open symptom this branch exists to remove,
 // surviving at the one site the compile-time gate does not cover.
 func TestPromotedOpRuntimeGuardIsIdentity(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	// WithMutableTopLevel: rebinding a capture-safe primitive is refused under the
 	// immutable-top-level default, and rebinding after compilation is the only way
@@ -478,6 +486,8 @@ func TestPromotedOpRuntimeGuardIsIdentity(t *testing.T) {
 // the same program answers the same question two different ways with no
 // diagnostic — the fail-CLOSED direction of the same defect.
 func TestPromotedOverrideAgreesWithGenericCall(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	full, err := NewEngine(ctx)
 	if err != nil {
@@ -523,6 +533,8 @@ func TestPromotedOverrideAgreesWithGenericCall(t *testing.T) {
 // identity-set check below is that closure, reaching promotedOps through
 // machine.PromotedIdentities.
 func TestPromotedPrimitivesCarryTheirIdentity(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		want *machine.PrimitiveIdentity

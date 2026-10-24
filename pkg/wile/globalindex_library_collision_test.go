@@ -92,6 +92,8 @@ func newCollisionEngine(ctx context.Context, t *testing.T) *wile.Engine {
 // Env==nil `define` store literal wins the dedup, so the macro's LOAD reads the
 // user's frame instead of the library's. Before the fix this displayed 1.
 func TestGlobalIndexCollision_MacroReadsLibraryBinding(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newCollisionEngine(ctx, t)
 
@@ -118,6 +120,8 @@ func TestGlobalIndexCollision_MacroReadsLibraryBinding(t *testing.T) {
 // isolation breach: a user's top-level define silently mutating a library's
 // private state.
 func TestGlobalIndexCollision_UserDefineDoesNotWriteLibraryFrame(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newCollisionEngine(ctx, t)
 
@@ -148,6 +152,8 @@ func TestGlobalIndexCollision_UserDefineDoesNotWriteLibraryFrame(t *testing.T) {
 // begin is one compilation unit, which is exactly the "single top-level unit" the
 // collision needs.
 func TestGlobalIndexCollision_SetBangDoesNotWriteLibraryFrame(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newCollisionEngine(ctx, t)
 

@@ -68,6 +68,8 @@ func selfTailSites(tpl *machine.NativeTemplate) int {
 // the loop shape is held constant and only the callee's provability varies, so a
 // pass cannot be explained by "named lets get OpSelfTailCall".
 func TestSelfTailCall_CalleeStampFlipsAnEnclosingLoop(t *testing.T) {
+	t.Parallel()
+
 	loopSitesOf := func(t *testing.T, src, name string) int {
 		t.Helper()
 		ctx := context.Background()

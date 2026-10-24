@@ -35,6 +35,8 @@ import (
 // user never sees a RequireArg error when enforcement is on, because the
 // validator fires first).
 func TestContractEnforcement_EndToEnd(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("wrong type rejected with position", func(t *testing.T) {
@@ -92,6 +94,8 @@ func TestContractEnforcement_EndToEnd(t *testing.T) {
 // by applyBaseEnvironment from the files extension), which is precisely the site
 // that used to be missed.
 func TestContractEnforcement_PreBuiltNamespace(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("namespace carries enforcement into the base environment", func(t *testing.T) {

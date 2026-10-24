@@ -23,6 +23,8 @@ import (
 // If this test fails with "missing from umbrella: ...", add the listed
 // symbols to stdlib/lib/wile/algebra.sld's (export ...) clause.
 func TestAlgebraUmbrellaCoversLeafExports(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	// stdlib/ lives at pkg/stdlib; this package is at pkg/wile/ (sibling under pkg/).

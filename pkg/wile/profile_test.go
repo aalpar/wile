@@ -21,6 +21,8 @@ import (
 )
 
 func TestProfile_String(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tests := []struct {
@@ -41,12 +43,16 @@ func TestProfile_String(t *testing.T) {
 }
 
 func TestProfile_Extensions_Tiny(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	exts := Tiny.extensions()
 	c.Assert(exts, qt.HasLen, 0)
 }
 
 func TestProfile_Extensions_ConsoleWithLoad_HasEval(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	consoleExts := Console.extensions()
 	cwlExts := ConsoleWithLoad.extensions()
@@ -55,6 +61,8 @@ func TestProfile_Extensions_ConsoleWithLoad_HasEval(t *testing.T) {
 }
 
 func TestProfile_Extensions_KitchenSink(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	exts := KitchenSink.extensions()
 	c.Assert(len(exts) > 0, qt.IsTrue)

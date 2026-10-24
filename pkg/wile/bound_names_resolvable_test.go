@@ -54,6 +54,8 @@ func boundNamesEngine(t *testing.T) *wile.Engine {
 }
 
 func TestW2I095HiddenNotOffered(t *testing.T) {
+	t.Parallel()
+
 	eng := boundNamesEngine(t)
 
 	// The macro-introduced binder exists in the store and is unreachable. Both
@@ -107,6 +109,8 @@ func TestW2I095HiddenNotOffered(t *testing.T) {
 // The two listings must agree. environment-bound-names already reports `hidden`
 // absent, which is what made the disagreement visible in the first place.
 func TestW2I095ListingsAgree(t *testing.T) {
+	t.Parallel()
+
 	eng := boundNamesEngine(t)
 
 	v, err := eng.EvalMultiple(context.Background(),

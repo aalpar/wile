@@ -37,6 +37,8 @@ import (
 // driver of its own; a non-tail call/cc or a guard failed the expansion. The
 // first row guards the case that worked.
 func TestControlInACompileTimeBody(t *testing.T) {
+	t.Parallel()
+
 	fsys := fstest.MapFS{
 		"probe/control.sld": &fstest.MapFile{
 			Data: []byte(`(define-library (probe control)
@@ -529,6 +531,8 @@ func TestControlInACompileTimeBody(t *testing.T) {
 // location the cut chain held: for a macro use nested in forms that stamp their
 // own, the use, not the outermost form.
 func TestStaleRuntimeContinuationAtTopLevelExpansionIsAnError(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name       string
 		src        string
@@ -591,6 +595,8 @@ func TestStaleRuntimeContinuationAtTopLevelExpansionIsAnError(t *testing.T) {
 // import receives is a continuation barrier error, not the signal: remembered as
 // is, every later import resumed the continuation again (count 3, 4, ...).
 func TestLibraryBodyThatExitedThroughAContinuationIsNotReplayedByLaterImports(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),
@@ -639,6 +645,8 @@ func TestLibraryBodyThatExitedThroughAContinuationIsNotReplayedByLaterImports(t 
 // continuation barrier error instead. Remembered as is, every later import ran
 // both again (cell #(2 2), #(3 3), ...).
 func TestLibraryBodyThatExitedThroughAnAbortIsNotReplayedByLaterImports(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),
@@ -696,6 +704,8 @@ func TestLibraryBodyThatExitedThroughAnAbortIsNotReplayedByLaterImports(t *testi
 // compile entry, which reports "no prompt found" as a plain error rather than
 // letting the abort signal surface to the embedder.
 func TestAbortAtTopLevelExpansionIsAnError(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),
@@ -722,6 +732,8 @@ func TestAbortAtTopLevelExpansionIsAnError(t *testing.T) {
 // source runs under RunWithinBoundary, so a guard in it works and a call/cc in
 // it resumes. Under a bare Run both failed the load.
 func TestBootstrapBodyHasADriver(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
@@ -791,6 +803,8 @@ func assertRememberedAsCancelled(t *testing.T, eng *wile.Engine, src string) {
 // under -race); a first import that timed out before the body ran fails the cell
 // check, not a later one.
 func TestLibraryBodyCancelledByATimeoutIsNotReportedAsADeadlineByLaterImports(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newLibraryBodyProbeEngine(t, `((vector-ref hook 0) 5)`)
 	_, err := eng.EvalMultiple(ctx, `(import (probe box))
@@ -823,6 +837,8 @@ func TestLibraryBodyCancelledByATimeoutIsNotReportedAsADeadlineByLaterImports(t 
 // and the VM loop stops it with context.Canceled, which the first importer
 // receives. A later import under a live ctx must not report it.
 func TestLibraryBodyCancelledByTheEmbedderIsNotReportedAsCancelledByLaterImports(t *testing.T) {
+	t.Parallel()
+
 	eng := newLibraryBodyProbeEngine(t, `((vector-ref hook 0)) (let loop () (loop))`)
 	cctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -842,6 +858,8 @@ func TestLibraryBodyCancelledByTheEmbedderIsNotReportedAsCancelledByLaterImports
 // failure, an uncaught raise; a later import sees the same raise, not a
 // cancellation. Decided from the chain instead of the ctx, it was converted.
 func TestLibraryBodyFailingWithItsOwnDeadlineIsRememberedAsIs(t *testing.T) {
+	t.Parallel()
+
 	eng := newLibraryBodyProbeEngine(t, `((vector-ref hook 0))`)
 	qt.Assert(t, eng.RegisterFunc("call-upstream", func() error {
 		return werr.WrapForeignErrorf(context.DeadlineExceeded, "call-upstream: upstream request timed out")
@@ -862,6 +880,8 @@ func TestLibraryBodyFailingWithItsOwnDeadlineIsRememberedAsIs(t *testing.T) {
 // failure, not the cancellation, and the first importer received it so; a later
 // import sees the same raise. Decided from ctx.Err() alone, it was converted.
 func TestLibraryBodyFailingAfterItsCtxEndedIsRememberedAsIs(t *testing.T) {
+	t.Parallel()
+
 	eng := newLibraryBodyProbeEngine(t, `((vector-ref hook 0))`)
 	cctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -884,6 +904,8 @@ func TestLibraryBodyFailingAfterItsCtxEndedIsRememberedAsIs(t *testing.T) {
 // uncaught raise is the body's ordinary failure, and a later import sees the
 // same raise, not a continuation barrier error.
 func TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise(t *testing.T) {
+	t.Parallel()
+
 	eng := newLibraryBodyProbeEngine(t, `(raise 'boom)`)
 	_, err := eng.EvalMultiple(context.Background(), `(import (probe box))`)
 	qt.Assert(t, err, qt.IsNil)
@@ -905,6 +927,8 @@ func TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise(t *testing.T) {
 // importer's handlers now, as Chez and Racket do, the raised object itself, on
 // every import (later ones see the remembered raise).
 func TestLibraryBodyRaiseIsCaughtByAGuardAroundTheImport(t *testing.T) {
+	t.Parallel()
+
 	eng := newLibraryBodyProbeEngine(t, `(raise 'boom)`)
 	_, err := eng.EvalMultiple(context.Background(), `(import (probe box))`)
 	qt.Assert(t, err, qt.IsNil)
@@ -934,6 +958,8 @@ func TestLibraryBodyRaiseIsCaughtByAGuardAroundTheImport(t *testing.T) {
 // the escape still marked there, each would hand it back to the handler, which
 // imports again.
 func TestLibraryBodyRaiseInAHandlerReachesTheOuterHandlersOnce(t *testing.T) {
+	t.Parallel()
+
 	eng := newLibraryBodyProbeEngine(t, `(raise 'boom)`)
 	v, err := eng.EvalMultiple(context.Background(), `(import (probe box))
 	  (list
@@ -974,6 +1000,8 @@ func TestLibraryBodyRaiseInAHandlerReachesTheOuterHandlersOnce(t *testing.T) {
 // cancellation is the importer's own ctx ending, so it is not marked and a guard
 // around the import does not run.
 func TestLibraryBodyCancelledInAWaitIsNotRaisedInTheImportersHandlers(t *testing.T) {
+	t.Parallel()
+
 	eng := newLibraryBodyProbeEngine(t, `((vector-ref hook 0))`)
 	cctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1009,6 +1037,8 @@ func newExpansionRootProbeEngine(t *testing.T) *wile.Engine {
 // there used to reach the embedder past a guard around the eval. It is raised in
 // the caller's handlers now, as Racket does, the raised object itself.
 func TestExpansionRootRaiseIsCaughtByAGuardAroundEval(t *testing.T) {
+	t.Parallel()
+
 	const raising = `(import (for-syntax (scheme base))) (define-syntax m (lambda (stx) (raise 'boom)))`
 	for _, tc := range []struct {
 		name, src, want string
@@ -1070,6 +1100,8 @@ func TestExpansionRootRaiseIsCaughtByAGuardAroundEval(t *testing.T) {
 // but the cancellation is the caller's own ctx ending, so a guard around the
 // eval does not run.
 func TestExpansionRootCancelledInAWaitIsNotRaisedInTheCallersHandlers(t *testing.T) {
+	t.Parallel()
+
 	eng := newExpansionRootProbeEngine(t)
 	cctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

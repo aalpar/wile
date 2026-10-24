@@ -95,6 +95,8 @@ func newOriginEngine(t *testing.T) *wile.Engine {
 // prim_syntax.go, which mints a distinct *Binding per import and so answered #f
 // on every cross-import pair.
 func TestFreeIdentifierOriginProvenance(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

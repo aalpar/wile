@@ -42,6 +42,8 @@ import (
 )
 
 func TestQuasiquoteDottedTail(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		src  string
@@ -162,6 +164,8 @@ func TestQuasiquoteDottedTail(t *testing.T) {
 // ordinary elements, and R7RS backs them: ⟨splicing unquotation D⟩ derives
 // only from ⟨qq template or splice D⟩, an ELEMENT, never the tail.
 func TestQuasiquoteDottedTailDepth(t *testing.T) {
+	t.Parallel()
+
 	const preamble = "(define x 5) (define y 7) (define xs '(1 2)) "
 
 	cases := []struct {

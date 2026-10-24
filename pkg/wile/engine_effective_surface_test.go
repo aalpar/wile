@@ -38,6 +38,8 @@ func hasPrimitive(reg *registry.PrimitiveRegistry, name string) bool {
 // RemovedPrimitives list is the 21 destructive *procedures*, the ones whose
 // specs carry Mutates:true.
 func TestEffectiveRegistry_ReportsDialectNarrowing(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -65,6 +67,8 @@ func TestEffectiveRegistry_ReportsDialectNarrowing(t *testing.T) {
 // TestForms_ReportsDialectFormRemoval covers the axis EffectiveRegistry cannot see.
 // set! is removed from the forms registry, so no registry accessor reports it.
 func TestForms_ReportsDialectFormRemoval(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -93,6 +97,8 @@ func TestForms_ReportsDialectFormRemoval(t *testing.T) {
 // TestEffectiveRegistry_UnnarrowedEngineMatchesBase pins the fallback: with no
 // dialect and no strict mode, the two accessors describe the same surface.
 func TestEffectiveRegistry_UnnarrowedEngineMatchesBase(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -110,6 +116,8 @@ func TestEffectiveRegistry_UnnarrowedEngineMatchesBase(t *testing.T) {
 // Engine field set during bootstrap would be gone. The dialect narrowing happens
 // inside NewNamespace here, not in NewEngineWithNamespace.
 func TestEffectiveRegistry_SurvivesPreBuiltNamespace(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

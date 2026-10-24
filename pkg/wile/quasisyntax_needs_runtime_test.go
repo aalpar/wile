@@ -42,6 +42,8 @@ import (
 // shapes, so each row is a divergence between two dialects of one algorithm,
 // not a question about what the right answer is.
 func TestQuasisyntaxNeedsRuntimeReachesVectorsAndTails(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		// qs and qq are the same template in both dialects; want is the datum

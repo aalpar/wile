@@ -58,6 +58,8 @@ func runInnerPositionRows(t *testing.T, rows []innerPositionRow) {
 
 // Task 2: quasiquote markers.
 func TestRenamedQuasiquoteMarkers(t *testing.T) {
+	t.Parallel()
+
 	runInnerPositionRows(t, []innerPositionRow{
 		{"renamed unquote",
 			`(import (scheme base) (rename (scheme base) (unquote uq))) (quasiquote (1 (uq (+ 1 1))))`, "(1 2)"},
@@ -85,6 +87,8 @@ func TestRenamedQuasiquoteMarkers(t *testing.T) {
 
 // Task 3: pattern literals.
 func TestRenamedAuxiliaryKeywords(t *testing.T) {
+	t.Parallel()
+
 	runInnerPositionRows(t, []innerPositionRow{
 		{"renamed else in cond",
 			`(import (scheme base) (rename (scheme base) (else otherwise))) (cond (#f 1) (otherwise 2))`, "2"},
@@ -134,6 +138,8 @@ func TestRenamedAuxiliaryKeywords(t *testing.T) {
 // control, and each was measured on 079c62ab as (1 7) / (0 1) / a raised
 // "cannot mutate immutable top-level binding" / (0).
 func TestRenamedQuasiquoteMarkerIsVisibleToTheOpaqueScan(t *testing.T) {
+	t.Parallel()
+
 	runInnerPositionRows(t, []innerPositionRow{
 		// The inliner: f is let-bound to a lambda and set! to another one from
 		// inside the template. Unmarked, f is still Stable, so the call is
@@ -234,6 +240,8 @@ func TestRenamedQuasiquoteMarkerIsVisibleToTheOpaqueScan(t *testing.T) {
 // arm because car's imported binding satisfied literalNotShadowed's
 // denoted=="" fallback unconditionally.
 func TestRenamedLiteralDoesNotOverAcceptUnrelatedImports(t *testing.T) {
+	t.Parallel()
+
 	const lib = `(define-library (sm)
   (export go)
   (import (scheme base))

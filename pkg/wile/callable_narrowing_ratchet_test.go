@@ -57,6 +57,8 @@ func narrowingModuleRoot(t *testing.T) string {
 // It is a PIN on the arithmetic, not a gate on the fix. The gate half is
 // TestNoCallableNarrowingOutsideMachine below, which is red at 003b3353.
 func TestClosureMarkerImplementorCountIsTwo(t *testing.T) {
+	t.Parallel()
+
 	root := narrowingModuleRoot(t)
 	dir := filepath.Join(root, "pkg", "machine")
 
@@ -126,6 +128,8 @@ var closureNarrowingExemptions = map[string]string{
 // whole-line // comments; a mention inside a block comment or trailing a
 // statement would still trip it, which errs toward noisy rather than silent.
 func TestNoCallableNarrowingOutsideMachine(t *testing.T) {
+	t.Parallel()
+
 	root := narrowingModuleRoot(t)
 	scanned := 0
 	var offenders []string

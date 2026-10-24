@@ -84,6 +84,8 @@ func evalString(t *testing.T, eng *wile.Engine, code string) string {
 // runtime phase closed to imports" is contradicted by a failing test rather than by
 // a silent capture bug. The safety property is asserted separately, below.
 func TestImportBindsIntoRuntimePhaseAfterSeal(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newHostileEngine(t)
 	env := eng.Environment()
@@ -146,6 +148,8 @@ func TestImportBindsIntoRuntimePhaseAfterSeal(t *testing.T) {
 // These tests therefore cover the runtime phase only. Do not read them as evidence
 // that expand-phase referents are protected. See bootstrap_nilpin_test.go.
 func TestImportCannotCaptureSnapshottedMacroReferent(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newHostileEngine(t)
 

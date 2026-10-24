@@ -35,6 +35,8 @@ import (
 // the panic fires during frame setup and leaves the engine unable to compile
 // anything afterwards.
 func TestRegisterPrimitiveValidatesSpec(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -70,6 +72,8 @@ func TestRegisterPrimitiveValidatesSpec(t *testing.T) {
 // TestRegisterPrimitiveRejectsNilImpl covers the other Validate rule an embedder
 // can trip from the public API.
 func TestRegisterPrimitiveRejectsNilImpl(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -89,6 +93,8 @@ func TestRegisterPrimitiveRejectsNilImpl(t *testing.T) {
 // TestRegisterPrimitiveAcceptsValidSpec is the guard: no in-tree registration
 // shape newly fails.
 func TestRegisterPrimitiveAcceptsValidSpec(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

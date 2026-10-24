@@ -54,6 +54,8 @@ import (
 // rows exist to replace, and it is the shape this stage would silently regress
 // to if materialization or resolution were wired wrong.
 func TestInitialImportsMatchDialectDeclaration(t *testing.T) {
+	t.Parallel()
+
 	eng, err := NewEngine(context.Background(), WithProfile(KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
 	defer eng.Close()
@@ -100,6 +102,8 @@ func (p phasedImportDialect) InitialImports() []PhasedImport {
 // the default would satisfy the count ratchet above, since the default is what
 // it counts.
 func TestLanguageProviderOverridesTheDefaultDeclaration(t *testing.T) {
+	t.Parallel()
+
 	d := phasedImportDialect{
 		imports: []PhasedImport{
 			{Library: environment.BaseSourceName(), Phase: environment.PhaseRuntime},
@@ -127,6 +131,8 @@ func TestLanguageProviderOverridesTheDefaultDeclaration(t *testing.T) {
 // Reading absence as emptiness would silently unbind the whole base for every
 // existing dialect, none of which implements the capability.
 func TestAbsentLanguageProviderMeansTheDefault(t *testing.T) {
+	t.Parallel()
+
 	_, isProvider := DefaultDialect.(LanguageProvider)
 	qt.Assert(t, isProvider, qt.IsFalse,
 		qt.Commentf("DefaultDialect must NOT implement the capability, or this test proves nothing"))
@@ -144,6 +150,8 @@ func TestAbsentLanguageProviderMeansTheDefault(t *testing.T) {
 // source's phase lives in its BulkSource identity instead, which is why
 // environment.BulkSource takes no phase argument.
 func TestPhasedImportPhaseIsTheInstallPhase(t *testing.T) {
+	t.Parallel()
+
 	declared := defaultInitialImports()
 	qt.Assert(t, declared, qt.HasLen, 1)
 	qt.Assert(t, declared[0].Phase, qt.Equals, environment.PhaseRuntime,
@@ -192,6 +200,8 @@ func TestPhasedImportPhaseIsTheInstallPhase(t *testing.T) {
 // INTO the scope set it will create the first non-empty row, and this test going
 // red is the signal that the miss-only fast path has to become the full argmax.
 func TestBulkRowsCarryTheEmptyScopeSet(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx,
 		WithProfile(KitchenSink),
@@ -273,6 +283,8 @@ func TestBulkRowsCarryTheEmptyScopeSet(t *testing.T) {
 // TestBulkRowsCarryTheEmptyScopeSet, which needs EachBulkRow, so the file does
 // not compile there.
 func TestBulkResolutionCountIsInBand(t *testing.T) {
+	t.Parallel()
+
 	eng, err := NewEngine(context.Background(), WithProfile(KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
 	defer eng.Close()
@@ -325,6 +337,8 @@ func TestBulkResolutionCountIsInBand(t *testing.T) {
 // installers refuse that origin outright — and the assertion here is the
 // stronger one either way: language-declared, not merely rankable.
 func TestEveryOriginRowIsLanguageDeclared(t *testing.T) {
+	t.Parallel()
+
 	d := phasedImportDialect{
 		imports: []PhasedImport{
 			{Library: environment.BaseSourceName(), Phase: environment.PhaseRuntime},

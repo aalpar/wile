@@ -42,6 +42,8 @@ import (
 // bounded to one MachineContext and REPL top-level forms do not share one, so
 // two separate Eval calls cannot see it.
 func TestSyntaxCaseDoesNotCorruptTheEnclosingFrame(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		src  string
@@ -225,6 +227,8 @@ func TestSyntaxCaseDoesNotCorruptTheEnclosingFrame(t *testing.T) {
 // because the clause body's tail call skipped the epilogue that would have
 // cleared the matcher.
 func TestSyntaxEllipsisOutsideSyntaxCaseRaises(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := wile.NewEngine(ctx)
 	if err != nil {
@@ -255,6 +259,8 @@ func TestSyntaxEllipsisOutsideSyntaxCaseRaises(t *testing.T) {
 // pattern as its base case, which CompileSyntaxPattern still refuses (N2, filed
 // in TODO.md); with N2 fixed, this test's shape is what it reduces to.
 func TestRecursiveSyntaxListWalk(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := wile.NewEngine(ctx)
 	if err != nil {

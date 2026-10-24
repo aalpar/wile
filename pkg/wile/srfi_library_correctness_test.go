@@ -72,6 +72,8 @@ func evalSRFI(t testing.TB, eng *Engine, program string) string {
 // reduce-right folds right-to-left using the LAST element as the base (not
 // ridentity). ridentity is only the result for the empty list.
 func TestSRFI1ReduceRight(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 
@@ -99,6 +101,8 @@ func TestSRFI1ReduceRight(t *testing.T) {
 // only on a null cdr), so they handle improper (dotted) lists per SRFI-1 instead
 // of crashing with "cdr: not a pair".
 func TestSRFI1LastDotted(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 
@@ -129,6 +133,8 @@ func TestSRFI1LastDotted(t *testing.T) {
 // (delete-duplicates '(1 5 2 9 3) <) is (1) per the SRFI-1 reference, because
 // every later element y satisfies (< 1 y) and is deleted.
 func TestSRFI1DeleteDuplicatesArgOrder(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 
@@ -154,6 +160,8 @@ func TestSRFI1DeleteDuplicatesArgOrder(t *testing.T) {
 // size 3; before the fix the transposed parameters silently produced the empty
 // set.
 func TestSRFI14CharSetUnfoldArgOrder(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 
@@ -178,6 +186,8 @@ func TestSRFI14CharSetUnfoldArgOrder(t *testing.T) {
 // TestSRFI13StringJoinDefaultDelimiter pins the SRFI-13 default delimiter for
 // string-join: a single space, not the empty string.
 func TestSRFI13StringJoinDefaultDelimiter(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 
@@ -202,6 +212,8 @@ func TestSRFI13StringJoinDefaultDelimiter(t *testing.T) {
 // it is a separator. The tab case (whitespace) split under both defaults and is
 // kept as a regression guard.
 func TestSRFI13StringTokenizeDefaultCriterion(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 
@@ -228,6 +240,8 @@ func TestSRFI13StringTokenizeDefaultCriterion(t *testing.T) {
 // unchanged and end the current word. The optional [start end] range restricts
 // which span is rewritten (chars outside the range are copied verbatim).
 func TestSRFI13StringTitlecase(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 
@@ -257,6 +271,8 @@ func TestSRFI13StringTitlecase(t *testing.T) {
 // equal. The hash predicates are asserted (rather than the raw value) so the
 // test does not over-specify the polynomial constant.
 func TestSRFI13StringHash(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 
@@ -287,6 +303,8 @@ func TestSRFI13StringHash(t *testing.T) {
 // [from, to) are extracted. to defaults to from + (end - start). Negative and
 // out-of-range from/to wrap cyclically; from == to yields "".
 func TestSRFI13Xsubstring(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 
@@ -314,6 +332,8 @@ func TestSRFI13Xsubstring(t *testing.T) {
 // TestSRFI13XsubstringErrors pins the two error edges of xsubstring: from > to,
 // and replicating an empty source slice when from /= to. Both must raise.
 func TestSRFI13XsubstringErrors(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 
@@ -348,6 +368,8 @@ func TestSRFI13XsubstringErrors(t *testing.T) {
 // that removed this test (a8027851) is undone. The guard+escape victim is pinned
 // by TestSubContextNonTailEscapeTruncation/guard in pkg/registry/core.
 func TestChibiTestRaisingExpressionIsFailure(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 

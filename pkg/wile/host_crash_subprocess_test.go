@@ -105,6 +105,8 @@ func evalInFreshEngine(t *testing.T, src string) error {
 // equal? on a self-referential record recursed on the Go stack until the host
 // died. Equal is now iterative and its visited set closes the cycle.
 func TestHostCrash_CyclicRecordEqual(t *testing.T) {
+	t.Parallel()
+
 	if requireCleanChildRun(t) {
 		return
 	}
@@ -122,6 +124,8 @@ func TestHostCrash_CyclicRecordEqual(t *testing.T) {
 
 // TestHostCrash_CyclicHashtableEqual pins reviews/2026-07-13 hashtable.go:62.
 func TestHostCrash_CyclicHashtableEqual(t *testing.T) {
+	t.Parallel()
+
 	if requireCleanChildRun(t) {
 		return
 	}
@@ -137,6 +141,8 @@ func TestHostCrash_CyclicHashtableEqual(t *testing.T) {
 // reachable through a Box overflowed the host stack in every writer verb; the
 // bound is a datum label (write/display) or "..." (write-simple).
 func TestHostCrash_CyclicBoxWrite(t *testing.T) {
+	t.Parallel()
+
 	if requireCleanChildRun(t) {
 		return
 	}
@@ -160,6 +166,8 @@ func TestHostCrash_CyclicBoxWrite(t *testing.T) {
 // ctx, maxStackSize and maxCallDepth, and OOM'd the host. It must now report an
 // error instead.
 func TestHostCrash_CircularApply(t *testing.T) {
+	t.Parallel()
+
 	if requireCleanChildRun(t) {
 		return
 	}
@@ -176,6 +184,8 @@ func TestHostCrash_CircularApply(t *testing.T) {
 // deeper than the Go stack tolerates. This is the case that recursion could not
 // survive at any depth bound, and the one Equal's heap worklist exists for.
 func TestHostCrash_DeepCarNestEqual(t *testing.T) {
+	t.Parallel()
+
 	if requireCleanChildRun(t) {
 		return
 	}

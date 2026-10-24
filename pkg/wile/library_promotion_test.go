@@ -67,6 +67,8 @@ func globalLoads(h map[string]int) int {
 // they pin that library code reaches the top-level shape, not that widening
 // the gate to non-imported names is unsafe (it is not shown to be).
 func TestLibraryBodyPromotesImportedPrimitiveLoads(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	fib := `(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))`
@@ -114,6 +116,8 @@ func TestLibraryBodyPromotesImportedPrimitiveLoads(t *testing.T) {
 // reference would flip the first assertion. (The nil-binding fallback for a name
 // not yet defined is defensive and untested: no site in the suite reaches it.)
 func TestLibraryBodyKeepsGlobalLoadForNonImportedNames(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	fsys := fstest.MapFS{
@@ -148,6 +152,8 @@ func TestLibraryBodyKeepsGlobalLoadForNonImportedNames(t *testing.T) {
 // importing library reads a variable its exporter later assigns, so a load that
 // snapshotted the value at compile time (a literal) answers 0 twice.
 func TestLibraryBodyCachedLoadSeesTheExportersSet(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	fsys := fstest.MapFS{

@@ -41,6 +41,8 @@ import (
 const notDefinedHere = `(?s).*define-syntax: m was not defined: the expander did not reach this form as define-syntax.*`
 
 func TestImportSetNamespaceDispatchesSpecialForms(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		env  string

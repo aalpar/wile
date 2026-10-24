@@ -52,6 +52,8 @@ func phaseIsolationEngine(t *testing.T, files fstest.MapFS) *wile.Engine {
 // Downward: phase-0 code must not resolve a phase-1 define. The library form of
 // this produced a wrong VALUE, not a wrong void — (go) returned 99.
 func TestLibraryPhaseIsolationDownward(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("top level refuses", func(t *testing.T) {
@@ -85,6 +87,8 @@ func TestLibraryPhaseIsolationDownward(t *testing.T) {
 // this was silent — the phase-1 body read the predeclared, not-yet-written
 // phase-0 slot as #!void and computed with it.
 func TestLibraryPhaseIsolationUpward(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("top level refuses", func(t *testing.T) {
@@ -119,6 +123,8 @@ func TestLibraryPhaseIsolationUpward(t *testing.T) {
 // cannot ship before the library sealed base: without the base, phase-1 library
 // code loses car/list along with the phase-0 defines it is supposed to lose.
 func TestLibraryPhaseOneReachesPrimitives(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := phaseIsolationEngine(t, fstest.MapFS{
 		"prims.scm": &fstest.MapFile{Data: []byte(`(define-library (prims)
@@ -138,6 +144,8 @@ func TestLibraryPhaseOneReachesPrimitives(t *testing.T) {
 // still resolve the library's own phase-1 defines. Without this the fix would
 // have traded the upward leak for a phase-1 blackout.
 func TestLibraryPhaseOneSeesItsOwnPhaseOneDefines(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := phaseIsolationEngine(t, fstest.MapFS{
 		"ct.scm": &fstest.MapFile{Data: []byte(`(define-library (ct)
@@ -173,6 +181,8 @@ func TestLibraryPhaseOneSeesItsOwnPhaseOneDefines(t *testing.T) {
 // must ask. Dropping the import would redden this test on = being unbound,
 // which says nothing about whether the phase-3 EXPORT resolved.
 func TestLibraryExportsPhaseThreeBinding(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := phaseIsolationEngine(t, fstest.MapFS{
 		"deep.scm": &fstest.MapFile{Data: []byte(`(define-library (deep)

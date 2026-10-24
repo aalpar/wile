@@ -67,6 +67,8 @@ import (
 // synchronization and sharing one across threads is the user's responsibility. The
 // contract this guards is narrower — the ENGINE's own compile machinery.
 func TestCompilePathIsSafeUnderConcurrentThreads(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	tcs := []struct {
 		name string

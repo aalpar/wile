@@ -33,6 +33,8 @@ import (
 // TestBoxedCaptureIsShared drives the shapes a value-copying closure would get
 // wrong.
 func TestBoxedCaptureIsShared(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -160,6 +162,8 @@ func TestBoxedCaptureIsShared(t *testing.T) {
 // source — the named-let binder is set! through a quasiquote, so codegen emits a
 // free-slot store against an unboxed slot.
 func TestBoxedCaptureThroughOpaqueSubtree(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -252,6 +256,8 @@ func TestBoxedCaptureThroughOpaqueSubtree(t *testing.T) {
 // a #<box> where the program wanted a number, and only an equality assertion on
 // the printed form notices.
 func TestBoxedSlotNeverEscapesToScheme(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -375,6 +381,8 @@ func TestBoxedSlotNeverEscapesToScheme(t *testing.T) {
 // outright — linked closures share the frame, so the values are right either
 // way. This is the test that fails in that case.
 func TestBoxedSlotEmitsTheProtocol(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := NewEngine(ctx)
 	if err != nil {

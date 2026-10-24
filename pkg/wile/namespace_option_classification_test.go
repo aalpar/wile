@@ -137,6 +137,8 @@ func engineOnlyOptions() []struct {
 // Rejected: a whole toolchain invocation per option, for an invariant one type
 // assertion states exactly.)
 func TestNamespaceConsumedOptionsAreNotEngineOnly(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	for _, tt := range namespaceConsumedOptions() {
@@ -154,6 +156,8 @@ func TestNamespaceConsumedOptionsAreNotEngineOnly(t *testing.T) {
 // above is satisfied by giving every option the namespace-consumed adapter,
 // which would make NewEngineWithNamespace take no options at all.
 func TestEngineOnlyOptionsAreEngineOnly(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	for _, tt := range engineOnlyOptions() {
@@ -184,6 +188,8 @@ func TestEngineOnlyOptionsAreEngineOnly(t *testing.T) {
 // .go file rather than the deprecated parser.ParseDir. _test.go files are
 // included on purpose — a test-only option still has to pick an adapter.
 func TestEveryOptionIsInExactlyOneTable(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	listed := make(map[string]string)
@@ -271,6 +277,8 @@ func returnsAnEngineOption(fn *ast.FuncDecl) bool {
 // reads after the namespace exists applies equally to a pre-built one, and must
 // still be passable there.
 func TestNewEngineWithNamespaceAcceptsEngineOnlyOptions(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -313,6 +321,8 @@ func TestNewEngineWithNamespaceAcceptsEngineOnlyOptions(t *testing.T) {
 // stronger claim than the panic it replaces, because it proves the route the
 // diagnostic recommends actually confines.
 func TestPreBuiltNamespaceCarriesItsSandbox(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -362,6 +372,8 @@ func TestPreBuiltNamespaceCarriesItsSandbox(t *testing.T) {
 // same class of bad input as the two registry checks it joins, and answered the
 // same way.
 func TestNewEngineWithNamespaceRejectsNilNamespace(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -416,6 +428,8 @@ var engineOnlyFields = []string{
 // exactly the silent partial application this split removes, and no behavioral
 // test would notice, because the option to trigger it would be new too.
 func TestEngineConfigFieldsAreClassified(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	classified := make(map[string]bool, len(namespaceConsumedFields)+len(engineOnlyFields))
@@ -447,6 +461,8 @@ func TestEngineConfigFieldsAreClassified(t *testing.T) {
 // filing worried about. NewNamespace CONSUMES these options, so it must keep
 // accepting every one of them.
 func TestNewNamespaceAcceptsEveryConsumedOption(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

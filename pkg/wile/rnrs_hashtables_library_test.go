@@ -28,6 +28,8 @@ import (
 // because ParseLibraryNameFromDatum drops a final-position version reference
 // rather than treating it as a name part — see TestLibraryNameVersionReference.
 func TestRnrsHashtablesLibrary(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 
@@ -75,6 +77,8 @@ func TestRnrsHashtablesLibrary(t *testing.T) {
 // elsewhere stays an error — and a name that is nothing but a version denotes no
 // library.
 func TestLibraryNameVersionReference(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	accepted := []struct {
@@ -114,6 +118,8 @@ func TestLibraryNameVersionReference(t *testing.T) {
 // not disturb R7RS integer name parts, which look adjacent and are not: (srfi 13)
 // binds 13 as a part, where (srfi (13)) would drop it.
 func TestLibraryNameVersionIsNotAnIntegerPart(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSRFI(c, newSRFITestEngine(t), `(begin (import (srfi 13)) (string-index "abc" #\b))`)
 	c.Assert(got, qt.Equals, `1`)
@@ -140,6 +146,8 @@ func TestLibraryNameVersionIsNotAnIntegerPart(t *testing.T) {
 // it fails, recognition has re-acquired a dependence on where a binding came from,
 // and the fix is there, not in the .sld.
 func TestRnrsHashtablesRecognitionIsIndependentOfTheExportList(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	cases := []struct {
@@ -174,6 +182,8 @@ func TestRnrsHashtablesRecognitionIsIndependentOfTheExportList(t *testing.T) {
 // Fails on master, which answers (#t #t): the library did not export equal-hash,
 // so the import left the ambient binding in place.
 func TestImportRebindsAHashCapturedBeforeIt(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got := evalSRFI(c, newSRFITestEngine(t), `
 		(define h equal-hash)

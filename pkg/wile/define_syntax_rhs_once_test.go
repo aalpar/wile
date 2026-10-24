@@ -57,6 +57,8 @@ func rhsOnceDefine(name, tag string) string {
 }
 
 func TestDefineSyntaxRHSRunsOnce(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	fsys := fstest.MapFS{
 		"once/lib.sld": &fstest.MapFile{Data: []byte(`(define-library (once lib)
@@ -165,6 +167,8 @@ func TestDefineSyntaxRHSRunsOnce(t *testing.T) {
 // a definition that binds nothing. On a6de778e it bound; on e6267d8d (P4.6
 // before its crosscheck remediation) it was a silent no-op.
 func TestDefineSyntaxInMetaIsRefused(t *testing.T) {
+	t.Parallel()
+
 	eng := newPhaseRowsEngine(t)
 	_, err := eng.EvalMultiple(context.Background(), `(meta (define-syntax mm (syntax-rules () ((_) 1))))`)
 	qt.Assert(t, err, qt.ErrorMatches,

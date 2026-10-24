@@ -51,6 +51,8 @@ func evalStringErr(t *testing.T, src string) error {
 // R7RS §6.10 leaves the count unspecified, so no particular number was owed. Chez
 // and Racket both raise at the delivery point, and that is the answer adopted here.
 func TestSingleValueDelivery_Raises(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tests := []struct {
@@ -151,6 +153,8 @@ func TestSingleValueDelivery_Raises(t *testing.T) {
 // Chez agrees it is catchable: (guard (e (#t (list 'caught))) (+ (values 1 2) 3))
 // answers (caught) there too.
 func TestSingleValueDelivery_IsACatchableCondition(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	c.Run("catchable by guard", func(c *qt.C) {
@@ -194,6 +198,8 @@ func TestSingleValueDelivery_IsACatchableCondition(t *testing.T) {
 // at compile time gets all three, and the required answer is uniform -- 1 works,
 // 0 and 2 raise the same catchable condition, and none of the six panics.
 func TestSingleValueDelivery_DrainSiteMatrix(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	// Each site is a program with a %s hole for the delivering expression.
@@ -245,6 +251,8 @@ func TestSingleValueDelivery_DrainSiteMatrix(t *testing.T) {
 // hand-built in run_body_under_frame.go and does not appear among compilation's
 // NewOperationPush sites.
 func TestSingleValueDelivery_MultiValueSeamStillWorks(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tests := []struct {

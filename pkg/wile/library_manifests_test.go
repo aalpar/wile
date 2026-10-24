@@ -40,6 +40,8 @@ func manifestEngine(t *testing.T) *Engine {
 // name. Before the fix, (only (scheme base) let-syntax …) failed with
 // "identifier not exported by (scheme base)".
 func TestSchemeBaseExportsLetSyntax(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name    string
 		program string
@@ -90,6 +92,8 @@ func TestSchemeBaseExportsLetSyntax(t *testing.T) {
 // Using (only …) forces resolution through the manifest, then exercising the binding
 // proves it is both exported and functional.
 func TestSchemeR5RSManifestCompleteness(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name    string
 		program string
@@ -159,6 +163,8 @@ func TestSchemeR5RSManifestCompleteness(t *testing.T) {
 // load and a re-exported name must resolve. Guards against the strict R7RS §5.6
 // conflict check (PR #793) firing on a diamond among r5rs's own imports.
 func TestSchemeR5RSBareImportNoConflict(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	eng := manifestEngine(t)
 	result, err := eng.EvalMultiple(context.Background(),

@@ -22,6 +22,8 @@ import (
 )
 
 func TestWithSandbox_DefaultPrefix(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -34,6 +36,8 @@ func TestWithSandbox_DefaultPrefix(t *testing.T) {
 }
 
 func TestWithSandbox_CustomPrefix(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

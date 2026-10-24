@@ -72,6 +72,8 @@ func countingFactory(ns *environment.Namespace) *int {
 // (scheme base) library the first import pulls in, and the assertion is off by
 // that constant on both sides of the fix.
 func TestOneLibraryEnvPerFileLibraryLoad(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -95,6 +97,8 @@ func TestOneLibraryEnvPerFileLibraryLoad(t *testing.T) {
 // catches a hint installed on the top-level compiler, which would hand an inline
 // library the loader's environment instead of a fresh one.
 func TestInlineDefineLibraryStillMintsItsOwnEnv(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -129,6 +133,8 @@ func TestInlineDefineLibraryStillMintsItsOwnEnv(t *testing.T) {
 // if it did, the nested library's (import (dep)) would land in the outer
 // library's environment and make `depval` visible to the outer body.
 func TestNestedDefineLibraryDoesNotShareTheOuterEnv(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

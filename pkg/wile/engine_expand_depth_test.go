@@ -32,6 +32,8 @@ import (
 // WithMaxExpandDepth knob end-to-end: a tight bound must return a catchable
 // ErrExpandDepthExceeded rather than crash the host with a fatal stack overflow.
 func TestEngine_WithMaxExpandDepth_Trips(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := wile.NewEngine(ctx, wile.WithMaxExpandDepth(100))
 	if err != nil {
@@ -52,6 +54,8 @@ func TestEngine_WithMaxExpandDepth_Trips(t *testing.T) {
 // The same program under the default bound (50000) must expand and run without
 // error — the bound does not regress ordinary recursive-macro use.
 func TestEngine_WithMaxExpandDepth_DefaultAllowsOrdinary(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := wile.NewEngine(ctx)
 	if err != nil {

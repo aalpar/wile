@@ -117,6 +117,8 @@ func sealTierEngine(t *testing.T) *wile.Engine {
 // in-place overwrite of a slot that keeps its identity, so asserting the binding
 // pointer alone would pass through the bug.
 func TestImportDoesNotOverwriteSealedBootstrapMacro(t *testing.T) {
+	t.Parallel()
+
 	eng := sealTierEngine(t)
 	store := eng.Environment().Namespace().Store()
 	sym := values.NewSymbol("when")
@@ -148,6 +150,8 @@ func TestImportDoesNotOverwriteSealedBootstrapMacro(t *testing.T) {
 // gate above would still pass on a build where the relocation had been reverted
 // wholesale.
 func TestImportedBindingTakesTheSealedPhaseZeroTier(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := sealTierEngine(t)
 	store := eng.Environment().Namespace().Store()

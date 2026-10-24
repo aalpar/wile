@@ -35,6 +35,8 @@ import (
 // the variable, its template ellipsis depth, and its pattern depth, and carries
 // a source location.
 func TestSyntaxRules_TemplateEllipsisDepthMismatch_ErrorsAtDefinition(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	engine, err := wile.NewEngine(ctx)
 	if err != nil {
@@ -72,6 +74,8 @@ func TestSyntaxRules_TemplateEllipsisDepthMismatch_ErrorsAtDefinition(t *testing
 // depth accounting, a custom ellipsis identifier, and an improper-list (dotted
 // tail) binding. All must be rejected at definition time with the precise phrase.
 func TestSyntaxRules_TemplateEllipsisDepth_RejectsOverEllipsis(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	cases := []struct {
 		name string
@@ -121,6 +125,8 @@ func TestSyntaxRules_TemplateEllipsisDepth_RejectsOverEllipsis(t *testing.T) {
 // reported variable must be deterministic (lexicographically smallest by name),
 // not whichever a randomized Go-map iteration happens to reach first.
 func TestSyntaxRules_TemplateEllipsisDepth_DeterministicOffendingVar(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	src := "(define-syntax m (syntax-rules () ((_ a b) (list (cons a b) ...))))"
 	const want = `template variable "a"` // "a" < "b", both bound at depth 0
@@ -145,6 +151,8 @@ func TestSyntaxRules_TemplateEllipsisDepth_DeterministicOffendingVar(t *testing.
 // could naively misclassify: plain repetition, broadcast (a lower-depth variable
 // riding inside a higher-depth ellipsis), and nested ellipsis.
 func TestSyntaxRules_TemplateEllipsisDepth_NoFalsePositives(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	cases := []struct {
 		name string

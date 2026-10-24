@@ -141,6 +141,8 @@ func footprintOfName(t *testing.T, eng *wile.Engine, name string) tierFootprint 
 // first slot is not. Every name here owns a phase-1 slot outright, so the
 // narrowing of the phase-1 row to the macro vocabulary cannot reach them.
 func TestKeywordSlotIsNotTheExpanderSlot(t *testing.T) {
+	t.Parallel()
+
 	eng := censusEngine(t)
 
 	tcs := []struct {
@@ -181,6 +183,8 @@ func TestKeywordSlotIsNotTheExpanderSlot(t *testing.T) {
 // and so that dropping them from the vocabulary is a visible edit rather than a
 // silent one.
 func TestEllipsisAndUnderscoreReachPhaseOneOnlyThroughABulkRow(t *testing.T) {
+	t.Parallel()
+
 	eng := censusEngine(t)
 
 	for _, name := range []string{"...", "_"} {
@@ -259,6 +263,8 @@ func footprintFor(t *testing.T, exactPhase0 bool, g phaseOneGroup) tierFootprint
 // on the primitive layer. Measure, do not reason: the value of these rows is that
 // they were read off a built engine.
 func TestPhaseOneVisibilityHasThreeGroups(t *testing.T) {
+	t.Parallel()
+
 	eng := censusEngine(t)
 
 	tcs := []struct {
@@ -314,6 +320,8 @@ func TestPhaseOneVisibilityHasThreeGroups(t *testing.T) {
 // runtime-only, 0 expand-only; 152 and 66 since the three hashes moved
 // (2026-10-04).
 func TestCorePrimitivePhaseCensus(t *testing.T) {
+	t.Parallel()
+
 	reg := registry.NewRegistry()
 	err := core.AddToRegistry(reg)
 	qt.Assert(t, err, qt.IsNil)

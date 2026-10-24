@@ -28,6 +28,8 @@ import (
 // with the program's source label, even though the reference sits inside a
 // procedure body that is never called.
 func TestEngine_CheckProgram_UnboundBindingIsReported(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -48,6 +50,8 @@ func TestEngine_CheckProgram_UnboundBindingIsReported(t *testing.T) {
 // TestEngine_CheckProgram_RegistersTopLevelBindings), so binding visibility
 // proves nothing about execution either way.
 func TestEngine_CheckProgram_DoesNotExecute(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const src = `(car '())`
 
@@ -69,6 +73,8 @@ func TestEngine_CheckProgram_DoesNotExecute(t *testing.T) {
 // a namespace, and re-checking the same program trips the immutable redefine
 // guard — both documented on CheckProgram.
 func TestEngine_CheckProgram_RegistersTopLevelBindings(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -86,6 +92,8 @@ func TestEngine_CheckProgram_RegistersTopLevelBindings(t *testing.T) {
 // TestEngine_CheckProgram_EmptyInputIsClean covers the len(forms) == 0 early
 // return: whitespace and comments are not an error.
 func TestEngine_CheckProgram_EmptyInputIsClean(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -97,6 +105,8 @@ func TestEngine_CheckProgram_EmptyInputIsClean(t *testing.T) {
 // TestEngine_CheckProgram_ParseErrorIsReported covers the read loop's non-EOF
 // branch, which wraps as a parse error rather than a compile error.
 func TestEngine_CheckProgram_ParseErrorIsReported(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -111,6 +121,8 @@ func TestEngine_CheckProgram_ParseErrorIsReported(t *testing.T) {
 // (begin ...) unit, so a define may reference a later one. Checking form-by-form
 // would report a spurious unbound-name error here.
 func TestEngine_CheckProgram_ForwardReferenceResolves(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)

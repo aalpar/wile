@@ -408,6 +408,8 @@ func newStdlibEngine(ctx context.Context, t *testing.T) *wile.Engine {
 // vacuous — an (only ...) that silently admitted unknown names would "prove"
 // every sanctioned extra exists whether or not any of them did.
 func TestLibraryExport_OnlyEnforcesMembership(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newStdlibEngine(ctx, t)
 	defer func() {
@@ -428,6 +430,8 @@ func TestLibraryExport_OnlyEnforcesMembership(t *testing.T) {
 // buckets: a diff-table row, a no-authority prefix, or a no-authority file.
 // A newly bundled library therefore fails here until it is classified.
 func TestLibraryExportDiff_PartitionsEveryBundledLibrary(t *testing.T) {
+	t.Parallel()
+
 	discovered := bundledLibraryPaths(t)
 	qt.Assert(t, len(discovered) > 0, qt.IsTrue,
 		qt.Commentf("no .sld files found in the embedded stdlib; the walk is broken"))
@@ -486,6 +490,8 @@ func TestLibraryExportDiff_PartitionsEveryBundledLibrary(t *testing.T) {
 // unsanctioned omission is a conformance hole, and a sanctioned entry that no
 // longer appears in the diff is a stale sanction.
 func TestLibraryExportDiff(t *testing.T) {
+	t.Parallel()
+
 	docExtras := parseSupersetDocTable(t)
 
 	for _, row := range exportAuthorityRows {
@@ -531,6 +537,8 @@ func TestLibraryExportDiff(t *testing.T) {
 // rejection direction. This is the generated form of the hand-written allowlist
 // this file replaces.
 func TestLibraryExportDiff_SanctionedExtrasResolve(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	for _, row := range exportAuthorityRows {
@@ -556,6 +564,8 @@ func TestLibraryExportDiff_SanctionedExtrasResolve(t *testing.T) {
 // other direction: a supersets-table row naming a library or identifier no
 // sanction claims is a doc row outliving its deviation.
 func TestLibraryExportDiff_DocTableHasNoStaleRows(t *testing.T) {
+	t.Parallel()
+
 	docExtras := parseSupersetDocTable(t)
 	qt.Assert(t, len(docExtras) > 0, qt.IsTrue,
 		qt.Commentf("parsed no rows from the Standard-Library Export Supersets "+

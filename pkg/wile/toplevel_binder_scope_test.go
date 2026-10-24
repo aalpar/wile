@@ -53,6 +53,8 @@ func evalTopLevel(t *testing.T, src string) (string, error) {
 // A macro-introduced top-level define must not capture a user's same-named
 // top-level variable.
 func TestTopLevelMacroBinder_DoesNotLeakToUser(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got, err := evalTopLevel(t, `
 		(define x 1)
@@ -66,6 +68,8 @@ func TestTopLevelMacroBinder_DoesNotLeakToUser(t *testing.T) {
 // Two expansions of the same binder-introducing macro must not alias one
 // another through their shared introduced temporary.
 func TestTopLevelMacroBinder_ExpansionsDoNotCollide(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got, err := evalTopLevel(t, `
 		(define-syntax def-and-read
@@ -84,6 +88,8 @@ func TestTopLevelMacroBinder_ExpansionsDoNotCollide(t *testing.T) {
 // rule. The retired rename pass delivered this by giving each binder a distinct
 // fresh name; scope-keyed globals must deliver it from the scope sets alone.
 func TestTopLevelMacroBinder_NestedBindersResolveMaximally(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got, err := evalTopLevel(t, `
 		(define-syntax inner
@@ -105,6 +111,8 @@ func TestTopLevelMacroBinder_NestedBindersResolveMaximally(t *testing.T) {
 // to. The rename pass had to special-case quote/quasiquote traversal to avoid
 // rewriting data; scope keying rewrites nothing, so this must hold trivially.
 func TestTopLevelMacroBinder_QuotedDatumIsNotCaptured(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got, err := evalTopLevel(t, `
 		(define-syntax m (syntax-rules () ((_) (define tmp 'introduced))))
@@ -116,6 +124,8 @@ func TestTopLevelMacroBinder_QuotedDatumIsNotCaptured(t *testing.T) {
 
 // A macro-introduced binder must stay invisible to user code that names it.
 func TestTopLevelMacroBinder_IntroducedNameIsNotReachable(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	_, err := evalTopLevel(t, `
 		(define-syntax m (syntax-rules () ((_) (define hidden 7))))
@@ -135,6 +145,8 @@ func TestTopLevelMacroBinder_IntroducedNameIsNotReachable(t *testing.T) {
 // template resolved it by BARE NAME — taking whichever slot was created first, for
 // both hatters. Definition order decided the answer for everyone.
 func TestMacroGeneratingMacro_TwoExpansionsDoNotShareBinder(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got, err := evalTopLevel(t, `
 		(define-syntax jabberwocky
@@ -163,6 +175,8 @@ func TestMacroGeneratingMacro_TwoExpansionsDoNotShareBinder(t *testing.T) {
 //
 // Racket gives (1 2).
 func TestMacroGeneratingMacro_TwoLocalExpansionsDoNotShareBinder(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got, err := evalTopLevel(t, `
 		(define-syntax jabberwocky
@@ -195,6 +209,8 @@ func TestMacroGeneratingMacro_TwoLocalExpansionsDoNotShareBinder(t *testing.T) {
 // surface syntax at top level — the generated macro is a top-level binding, so
 // it dodges the internal-define-syntax visibility limitation.
 func TestMacroGeneratingMacro_SameNameFreeIdsDoNotCollapse(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got, err := evalTopLevel(t, `
 		(define mh 99)
@@ -241,6 +257,8 @@ func TestMacroGeneratingMacro_SameNameFreeIdsDoNotCollapse(t *testing.T) {
 // make-build-first note in the plan's gates). march-hare, the sibling shape,
 // has two unit tests; this one had none.
 func TestMacroIntroducedSiblingDefines_ForwardReferenceResolves(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got, err := evalTopLevel(t, `
 		(define-syntax ffoo
@@ -282,6 +300,8 @@ func TestMacroIntroducedSiblingDefines_ForwardReferenceResolves(t *testing.T) {
 // before its binder exists) pins nil — and tryResolvedBinding is consumed by the
 // value-level symbol compiler, never by the macro lookup.
 func TestTopLevelMacroSyntaxBinder_DoesNotLeakToUser(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	_, err := evalTopLevel(t, `
 		(define-syntax mk
@@ -299,6 +319,8 @@ func TestTopLevelMacroSyntaxBinder_DoesNotLeakToUser(t *testing.T) {
 // macro-then-user yielded 'user for the wrong reason. Order deciding the answer is
 // the shared-slot signature, which is why both orders are exercised here.
 func TestTopLevelMacroSyntaxBinder_DoesNotClobberUser(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	// User's keyword defined FIRST, macro-introduced one after.
@@ -331,6 +353,8 @@ func TestTopLevelMacroSyntaxBinder_DoesNotClobberUser(t *testing.T) {
 // the creation key alone. Inside a let body the user's binder carries {let}, so
 // both the creation key and the scope-resolved write have to be right.
 func TestInternalMacroSyntaxBinder_DoesNotClobberUser(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	got, err := evalTopLevel(t, `
@@ -348,6 +372,8 @@ func TestInternalMacroSyntaxBinder_DoesNotClobberUser(t *testing.T) {
 // all, the keyword a macro introduced into that body must not answer a bare
 // reference written by the user.
 func TestInternalMacroSyntaxBinder_DoesNotLeakToUser(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	_, err := evalTopLevel(t, `
@@ -386,6 +412,8 @@ func TestInternalMacroSyntaxBinder_DoesNotLeakToUser(t *testing.T) {
 // binding \"deep\" with compatible scopes" against that recap and passes
 // against the shipped ascending walk (task-8-report.md, Fix round 1).
 func TestFreeTemplateIdentifierAtPhaseZeroResolvesPhaseThreeBinding(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	got, err := evalTopLevel(t, `
 		(begin-for-syntax

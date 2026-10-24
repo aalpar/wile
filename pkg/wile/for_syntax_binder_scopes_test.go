@@ -80,6 +80,8 @@ func forSyntaxBinderEngine(t *testing.T) *wile.Engine {
 // that matters most, because it is GREEN on master, GREEN after, and RED under
 // the scopes argument alone. Without it a half-change ships looking correct.
 func TestForSyntaxBinderScopes(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		code string
@@ -186,6 +188,8 @@ func TestForSyntaxBinderScopes(t *testing.T) {
 // Both facts are on the ledger rows; adding the two forms to the list closes the
 // macro route alone.
 func TestForSyntaxSuppliedDefineValuesStillRefused(t *testing.T) {
+	t.Parallel()
+
 	eng := forSyntaxBinderEngine(t)
 	_, err := eng.EvalProgram(context.Background(),
 		`(define-syntax genvals

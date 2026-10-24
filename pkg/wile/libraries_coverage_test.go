@@ -43,6 +43,8 @@ func libcovEngine(t *testing.T) (*wile.Engine, context.Context) {
 // a genuine cycle must render bounded ("...") rather than diverging — across
 // pairs, vectors, and pair↔vector cross-references (A3).
 func TestPrinterSharingVsCycle(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -100,6 +102,8 @@ func TestPrinterSharingVsCycle(t *testing.T) {
 // TestSRFI13EdgeRows is part of the 11E per-library backfill: edge behavior of
 // the procedures added in A2 (string-titlecase, string-hash, xsubstring).
 func TestSRFI13EdgeRows(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -126,6 +130,8 @@ func TestSRFI13EdgeRows(t *testing.T) {
 // surrogates (B4), so size excludes the 2048-codepoint block and iteration
 // across a straddling range is safe and surrogate-free.
 func TestSRFI14SurrogateEdgeRows(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

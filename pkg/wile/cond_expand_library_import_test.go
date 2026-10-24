@@ -35,6 +35,8 @@ import (
 // it imports a non-existent library) must NOT satisfy (library X) — the else
 // clause is selected instead.
 func TestCondExpandLibraryImportability(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -123,6 +125,8 @@ func TestCondExpandLibraryImportability(t *testing.T) {
 // not-available because the old probe executed it. The third row is the residual
 // this change does NOT close, pinned so it is recorded rather than discovered.
 func TestCondExpandLibraryProbeDoesNotRunTheBody(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	fsys := fstest.MapFS{

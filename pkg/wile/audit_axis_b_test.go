@@ -45,6 +45,8 @@ import (
 // improvements in wile-goast. Guards against script crashes, missing
 // entries, or output format drift.
 func TestAxisBSmoke(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("smoke test runs go build + script — slow")
 	}

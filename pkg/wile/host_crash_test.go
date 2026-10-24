@@ -68,6 +68,8 @@ func manyParams(n int) string {
 // compile path, so a *syntactically valid* program crashed the host during
 // compile, before Run's boundary existed. Machine-generated Scheme reaches this.
 func TestHostCrash_LetExceedingLocalSlots(t *testing.T) {
+	t.Parallel()
+
 	eng := newTestEngine(t)
 
 	src := "(let (" + manyBindings(40000) + ") 1)"
@@ -81,6 +83,8 @@ func TestHostCrash_LetExceedingLocalSlots(t *testing.T) {
 // TestHostCrash_LambdaExceedingLocalSlots is the same defect one form over: the
 // parameter list, not the let bindings, is what overflows the frame.
 func TestHostCrash_LambdaExceedingLocalSlots(t *testing.T) {
+	t.Parallel()
+
 	eng := newTestEngine(t)
 
 	src := "(lambda (" + manyParams(40000) + ") 1)"
@@ -96,6 +100,8 @@ func TestHostCrash_LambdaExceedingLocalSlots(t *testing.T) {
 // cannot see them. Verified to still panic at slot 32768 with only the let and
 // parameter guards in place.
 func TestHostCrash_InternalDefinesExceedingLocalSlots(t *testing.T) {
+	t.Parallel()
+
 	eng := newTestEngine(t)
 
 	var b strings.Builder
@@ -115,6 +121,8 @@ func TestHostCrash_InternalDefinesExceedingLocalSlots(t *testing.T) {
 // guard cannot pass by rejecting everything. 32767 slots is the largest legal
 // frame; the guard must admit it.
 func TestHostCrash_LetAtSlotLimitStillCompiles(t *testing.T) {
+	t.Parallel()
+
 	eng := newTestEngine(t)
 
 	src := "(let (" + manyBindings(32767) + ") 1)"
@@ -133,6 +141,8 @@ func TestHostCrash_LetAtSlotLimitStillCompiles(t *testing.T) {
 // loads it (the review said registry/gointerop; the design said pkg/extensions/
 // gointerop; both are wrong).
 func TestHostCrash_AtomicBoxTypeChange(t *testing.T) {
+	t.Parallel()
+
 	eng, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
 
@@ -151,6 +161,8 @@ func TestHostCrash_AtomicBoxTypeChange(t *testing.T) {
 // expression panics uncatchably. Values above MaxInt64 parse as BigInteger and are
 // rejected upstream, so MaxInt64-1 is the boundary that matters.
 func TestHostCrash_VectorCopyDestinationOverflow(t *testing.T) {
+	t.Parallel()
+
 	eng := newTestEngine(t)
 
 	_, err := eng.EvalMultiple(context.Background(),
@@ -163,6 +175,8 @@ func TestHostCrash_VectorCopyDestinationOverflow(t *testing.T) {
 // TestHostCrash_BytevectorCopyDestinationOverflow is the same guard, same overflow,
 // in bytevector-copy! (prim_byte_vectors.go:168).
 func TestHostCrash_BytevectorCopyDestinationOverflow(t *testing.T) {
+	t.Parallel()
+
 	eng := newTestEngine(t)
 
 	_, err := eng.EvalMultiple(context.Background(),
@@ -180,6 +194,8 @@ func TestHostCrash_BytevectorCopyDestinationOverflow(t *testing.T) {
 // sum lands on MaxInt64, does not wrap, and the guard correctly rejects. The vector
 // cases above copy two elements, so MaxInt64-1 suffices there.
 func TestHostCrash_StringCopyDestinationOverflow(t *testing.T) {
+	t.Parallel()
+
 	eng, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
 
@@ -193,6 +209,8 @@ func TestHostCrash_StringCopyDestinationOverflow(t *testing.T) {
 // TestHostCrash_VectorCopyValidDestinationStillWorks pins the guard from below: a
 // legal in-range copy must still be admitted after the rewrite.
 func TestHostCrash_VectorCopyValidDestinationStillWorks(t *testing.T) {
+	t.Parallel()
+
 	eng := newTestEngine(t)
 
 	v, err := eng.EvalMultiple(context.Background(),
@@ -216,6 +234,8 @@ func TestHostCrash_VectorCopyValidDestinationStillWorks(t *testing.T) {
 // The re-raise also implements a policy reversed on 2026-06-23: the VM boundary
 // contains every panic, so the wrapper has nothing to re-raise for.
 func TestHostCrash_FFINonForeignErrorPanicKeepsSentinel(t *testing.T) {
+	t.Parallel()
+
 	eng := newTestEngine(t)
 
 	sentinel := werr.NewStaticError("ffi bare sentinel")
@@ -234,6 +254,8 @@ func TestHostCrash_FFINonForeignErrorPanicKeepsSentinel(t *testing.T) {
 // TestHostCrash_FFIForeignErrorPanicKeepsSentinel pins the path that already worked,
 // so the fix cannot regress it.
 func TestHostCrash_FFIForeignErrorPanicKeepsSentinel(t *testing.T) {
+	t.Parallel()
+
 	eng := newTestEngine(t)
 
 	sentinel := werr.NewStaticError("ffi wrapped sentinel")
@@ -251,6 +273,8 @@ func TestHostCrash_FFIForeignErrorPanicKeepsSentinel(t *testing.T) {
 // TestHostCrash_FFINonErrorPanicNamesTheFunction pins that a panic("...") still
 // reports which FFI function blew up. The name is the only locator a Go host gets.
 func TestHostCrash_FFINonErrorPanicNamesTheFunction(t *testing.T) {
+	t.Parallel()
+
 	eng := newTestEngine(t)
 
 	err := eng.RegisterFunc("boom3", func() int {
@@ -275,6 +299,8 @@ func TestHostCrash_FFINonErrorPanicNamesTheFunction(t *testing.T) {
 // argument to be a proper list; a circular list is improper, so the correct answer was
 // always ErrNotAList, and nothing detected the condition that should raise it.
 func TestHostCrash_ApplyCircularList(t *testing.T) {
+	t.Parallel()
+
 	eng := newTestEngine(t)
 
 	_, err := eng.EvalMultiple(context.Background(), `
@@ -296,6 +322,8 @@ func TestHostCrash_ApplyCircularList(t *testing.T) {
 // stack's peak was the argument list's length no matter what maxStackSize said. The
 // error surfaced, but only once the memory had already been committed.
 func TestHostCrash_ApplyLongListRespectsMaxStackSize(t *testing.T) {
+	t.Parallel()
+
 	eng, err := wile.NewEngine(context.Background(), wile.WithMaxStackSize(1000))
 	qt.Assert(t, err, qt.IsNil)
 
@@ -309,6 +337,8 @@ func TestHostCrash_ApplyLongListRespectsMaxStackSize(t *testing.T) {
 // TestHostCrash_ApplyProperListStillWorks pins the guard from below: ordinary apply
 // over a proper list must be unaffected by the cycle check.
 func TestHostCrash_ApplyProperListStillWorks(t *testing.T) {
+	t.Parallel()
+
 	eng := newTestEngine(t)
 
 	v, err := eng.EvalMultiple(context.Background(), `(apply + (list 1 2 3 4 5))`)

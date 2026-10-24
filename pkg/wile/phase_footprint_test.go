@@ -61,6 +61,8 @@ import (
 // so a macro template's binder (intro-scoped, filtered out of BoundNames) is
 // probed too.
 func TestStartupBindsNothingAboveExpand(t *testing.T) {
+	t.Parallel()
+
 	layers := []struct {
 		name      string
 		opt       wile.EngineOption
@@ -138,6 +140,8 @@ func TestStartupBindsNothingAboveExpand(t *testing.T) {
 // the registry's specs and NOT hold a keyword slot; the first is DocOnly.
 // Both must leave the predicate true; only the walked set changes.
 func TestKeywordSlotsNeverHoldAProcedure(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	tests := []struct {
 		name string

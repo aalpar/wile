@@ -110,6 +110,8 @@ func depthSitesIn(tpl *machine.NativeTemplate) int {
 // census rather than a value test. The value arms live in
 // TestLetFrameCorpusValues and TestSyntaxCaseClauseBodyLetBehaviour.
 func TestEmittedLocalDepthIsZeroWhereEnumerable(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -172,6 +174,8 @@ func TestEmittedLocalDepthIsZeroWhereEnumerable(t *testing.T) {
 // someone closed the hatch for that shape — which is progress, and is exactly
 // the moment to re-price the LocalIndex collapse rather than to delete the row.
 func TestEmittedLocalDepthSurvivesOnlyWhereUnprovable(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string

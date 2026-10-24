@@ -27,6 +27,8 @@ import (
 // Source even though the position survived in the stack trace; a named program
 // must keep its "file:line:col" form unchanged.
 func TestRuntimeErrorSourceProvenance(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name       string
 		source     string // "" => EvalMultiple (nameless); else EvalMultipleWithSource
@@ -79,6 +81,8 @@ func TestRuntimeErrorSourceProvenance(t *testing.T) {
 // context, so the expander must fall back to the enclosing form's context when
 // rebuilding the call node. Regression test for finding 5.3.
 func TestEmptyListOperatorSourceLocation(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx)
 	if err != nil {
@@ -120,6 +124,8 @@ func TestEmptyListOperatorSourceLocation(t *testing.T) {
 // Two compile-time diagnostics on the same shape used to disagree about it,
 // because arityError stamps at its node and these did not.
 func TestUnboundBindingCompileErrorLocation(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -191,6 +197,8 @@ func TestUnboundBindingCompileErrorLocation(t *testing.T) {
 // ParserError fallback, which runs only when the SourcedError walk yields
 // nothing. Stamping more compiler errors must not shadow that fallback.
 func TestParseErrorLocationSurvivesSourcedErrorStamping(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx)
 	if err != nil {
@@ -215,6 +223,8 @@ func TestParseErrorLocationSurvivesSourcedErrorStamping(t *testing.T) {
 // and rule name. The tokenizer and parser suites pin the check itself (both go
 // red with it deleted); this row pins that nothing downstream swallows it.
 func TestBigNumDelimiterErrorReachesEngine(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx)
 	if err != nil {

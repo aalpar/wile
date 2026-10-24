@@ -32,6 +32,8 @@ import (
 
 // TestNoMutation_Name pins the dialect identity.
 func TestNoMutation_Name(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	c.Assert(NoMutation, qt.IsNotNil)
 	c.Assert(NoMutation.Name(), qt.Equals, "no-mutation")
@@ -41,6 +43,8 @@ func TestNoMutation_Name(t *testing.T) {
 // ceiling via the optional PrimitiveRemover capability, that its removal set is the
 // full canonical mutation set, and that RemovedPrimitives hands back a defensive copy.
 func TestNoMutation_ImplementsPrimitiveRemover(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	remover, ok := NoMutation.(PrimitiveRemover)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("NoMutation must implement PrimitiveRemover"))
@@ -57,6 +61,8 @@ func TestNoMutation_ImplementsPrimitiveRemover(t *testing.T) {
 // mutating vector-map/string-map bootstrap fragment for the mutation-free one, and
 // leaves every other source untouched.
 func TestNoMutation_ImplementsBootstrapProcedureRewriter(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	rw, ok := NoMutation.(BootstrapProcedureRewriter)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("NoMutation must implement BootstrapProcedureRewriter"))
@@ -72,6 +78,8 @@ func TestNoMutation_ImplementsBootstrapProcedureRewriter(t *testing.T) {
 // engine on no-mutation loses the set! form AND the mutation primitives, the rest of
 // R7RS still works, and a default engine retains them — the difference is the dialect.
 func TestNoMutation_Engine_MutatorsGone_RestIntact(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -108,6 +116,8 @@ func TestNoMutation_Engine_MutatorsGone_RestIntact(t *testing.T) {
 // canonical mutation set is unbound at the top level of a no-mutation engine — the
 // full set, including vector-set!/string-set!, which the bootstrap rewrite frees up.
 func TestNoMutation_AllMutationPrimitivesUnbound(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithDialect(NoMutation))
 	qt.Assert(t, err, qt.IsNil)
@@ -128,6 +138,8 @@ func TestNoMutation_AllMutationPrimitivesUnbound(t *testing.T) {
 // dialect swapped in the mutation-free bootstrap fragment. Covers single- and
 // multi-argument (shortest-length) forms for both.
 func TestNoMutation_VectorStringMapWorkMutationFree(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithDialect(NoMutation))
@@ -176,6 +188,8 @@ func TestNoMutation_VectorStringMapWorkMutationFree(t *testing.T) {
 // The profile is load-bearing: a bare NewEngine has no make-record-type either,
 // so both rows would fail for a reason that has nothing to do with the dialect.
 func TestNoMutation_RecordModifierFailsAtDefinition(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithDialect(NoMutation))
@@ -203,6 +217,8 @@ func TestNoMutation_RecordModifierFailsAtDefinition(t *testing.T) {
 // because the library/import surface is a separate reader the primitive dialect layer
 // does not gate. A no-mutation dialect is a language-surface statement, not a sandbox.
 func TestNoMutation_ImportReexposes_DocumentsBoundary(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -233,6 +249,8 @@ func TestNoMutation_ImportReexposes_DocumentsBoundary(t *testing.T) {
 // that test iterates Registry().Primitives(), and hashtable-update! is a Scheme
 // define, not a registered primitive. This test is the only guard.
 func TestNoMutationHasNoHashtableUpdate(t *testing.T) {
+	t.Parallel()
+
 	e, err := NewEngine(context.Background(),
 		WithProfile(KitchenSink), WithDialect(NoMutation))
 	qt.Assert(t, err, qt.IsNil)
@@ -246,6 +264,8 @@ func TestNoMutationHasNoHashtableUpdate(t *testing.T) {
 // TestDefaultDialectHasHashtableUpdate is the other half: the guard above must
 // fail because NoMutation removed it, not because it was never defined.
 func TestDefaultDialectHasHashtableUpdate(t *testing.T) {
+	t.Parallel()
+
 	e, err := NewEngine(context.Background(), WithProfile(KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
 	defer func() {

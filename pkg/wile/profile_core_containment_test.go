@@ -64,6 +64,8 @@ func namespaceRequests(rec *recordingAuthorizer) []string {
 // acquired the same way. extensionPrimitiveNames walked only the extension
 // list, so a request for tiny looked like a request for nothing.
 func TestProfileNamespaceDoesNotHandOutCoreUngated(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -96,6 +98,8 @@ func TestProfileNamespaceDoesNotHandOutCoreUngated(t *testing.T) {
 // was already correctly denied at 003b3353 — kitchen-sink's extensions supply
 // names the engine lacks — and must stay denied for the same reason.
 func TestProfileNamespaceCoreAcquisitionIsPerRequest(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

@@ -64,6 +64,8 @@ func evalCounter(t *testing.T, src string) (string, error) {
 // pooled on its first normal return, but the captured continuation re-enters it,
 // so the frame must not be recycled. The counter must run to n == 3.
 func TestContinuationReentryInternalDefine(t *testing.T) {
+	t.Parallel()
+
 	src := `(let ((n 0) (k* #f))
               (define (step)
                 (call/cc (lambda (k) (set! k* k)))
@@ -80,6 +82,8 @@ func TestContinuationReentryInternalDefine(t *testing.T) {
 // env-frame pool keeps every re-entrant-counter form correct, not just the one
 // that previously failed.
 func TestContinuationReentryVariantsConverge(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		src  string
@@ -148,6 +152,8 @@ func TestContinuationReentryVariantsConverge(t *testing.T) {
 // ping/pong frame is pooled on its normal return yet re-entered by the other's
 // captured continuation, so both activation frames must stay live.
 func TestContinuationReentryCoroutinePingPong(t *testing.T) {
+	t.Parallel()
+
 	src := `(let ((out '()) (kp #f) (kq #f) (turns 0))
             (define (ping)
               (call/cc (lambda (k) (set! kp k)))

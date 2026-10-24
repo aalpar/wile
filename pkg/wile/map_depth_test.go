@@ -61,6 +61,8 @@ const mapDepthProbeMulti = `(begin
 // NoMutation removes set-cdr! and would have had to fall back to a ceilinged map.
 // Pinning it here keeps that property from being traded away silently.
 func TestMapCallDepthCeiling(t *testing.T) {
+	t.Parallel()
+
 	const limit = 2000
 	const elements = 20000
 

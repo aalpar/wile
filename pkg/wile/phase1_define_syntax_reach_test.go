@@ -44,6 +44,8 @@ import (
 )
 
 func TestPhase1DefineSyntaxIsReachableFromItsOwnRung(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		src  string
@@ -118,6 +120,8 @@ func TestPhase1DefineSyntaxIsReachableFromItsOwnRung(t *testing.T) {
 // still be unbound, or begin-for-syntax would have stopped separating phases.
 // GUARD — passes on both sides of the fix.
 func TestPhase1DefineSyntaxIsNotVisibleAtPhaseZero(t *testing.T) {
+	t.Parallel()
+
 	eng, err := wile.NewEngine(context.Background(),
 		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(wile.StdLibFS),

@@ -58,6 +58,8 @@ func newEngineLossy(t *testing.T) *wile.Engine {
 // parameters accept inputs that fit float64 exactly under the default
 // strict mode. All inputs here are exactly representable; none should error.
 func TestRegisterFuncFloat64StrictModeLossless(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngineWithMath(t)
 
@@ -97,6 +99,8 @@ func TestRegisterFuncFloat64StrictModeLossless(t *testing.T) {
 // mode (the default). Pre-PR-2 these all succeeded silently; now they
 // return ErrLossyConversion.
 func TestRegisterFuncFloat64StrictModeLossy(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngineWithMath(t)
 
@@ -147,6 +151,8 @@ func TestRegisterFuncFloat64StrictModeLossy(t *testing.T) {
 // WithLossyConversionsAllowed is set. Assertions check the exact
 // IEEE-754-rounded result (rounding is deterministic).
 func TestRegisterFuncFloat64LossyAllowedMode(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngineLossy(t)
 
@@ -183,6 +189,8 @@ func TestRegisterFuncFloat64LossyAllowedMode(t *testing.T) {
 // engine yields independent behaviors. The flag is captured at RegisterFunc
 // time, so behavior is frozen per engine.
 func TestRegisterFuncFloat64EngineIsolation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	strict := newEngineWithMath(t)
 	lossy := newEngineLossy(t)
@@ -207,6 +215,8 @@ func TestRegisterFuncFloat64EngineIsolation(t *testing.T) {
 // continue to share the engine's flag state — each newly-registered
 // function gets the same captured value.
 func TestRegisterFuncFloat64FreezeAtRegistration(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	strictEng := newEngineWithMath(t)
@@ -239,6 +249,8 @@ func TestRegisterFuncFloat64FreezeAtRegistration(t *testing.T) {
 // and errors under strict — proving makeSliceArgConverter forwards
 // the flag to its element converter.
 func TestRegisterFuncFloat64SliceLossyAllowedPropagation(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	fn := func(xs []float64) int64 { return int64(len(xs)) }
@@ -260,6 +272,8 @@ func TestRegisterFuncFloat64SliceLossyAllowedPropagation(t *testing.T) {
 // The Go callback returns bool to sidestep the not-yet-supported
 // complex128 *return* path.
 func TestRegisterFuncComplex128StrictMode(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngineWithMath(t)
 
@@ -312,6 +326,8 @@ func TestRegisterFuncComplex128StrictMode(t *testing.T) {
 // TestRegisterFuncComplex128LossyAllowed verifies the new Complex128
 // path silently truncates under WithLossyConversionsAllowed.
 func TestRegisterFuncComplex128LossyAllowed(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngineLossy(t)
 

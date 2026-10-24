@@ -27,6 +27,8 @@ import (
 )
 
 func TestIsIncompleteInput(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -105,6 +107,8 @@ func TestIsIncompleteInput(t *testing.T) {
 // real tokenizer → parser → engine chain: genuinely-incomplete inputs are
 // reported incomplete, while a complete-but-malformed parse is not.
 func TestIsIncompleteInput_RealParse(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := NewEngine(ctx)

@@ -154,6 +154,8 @@ func runGateProgram(t *testing.T, src string) string {
 // carried live on in TestSelfTailArmingCountRatchet
 // (selftail_scope_identity_test.go), the one counter this repository keeps.
 func TestErrorSelfTailCaptureGate_Target(t *testing.T) {
+	t.Parallel()
+
 	got := runGateProgram(t, errorSelfTailRaisedAtProgram)
 	qt.Assert(t, got, qt.Equals, errorSelfTailCorrect,
 		qt.Commentf("replaying one continuation twice must continue the loop identically; "+
@@ -176,6 +178,8 @@ func TestErrorSelfTailCaptureGate_Target(t *testing.T) {
 // This test is a statement about the harness, not about the defect, so it
 // survives the fix and outlived the two tripwires it shipped beside.
 func TestErrorSelfTailCaptureGate_HarnessNonBlindness(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMutableTopLevel())
 	qt.Assert(t, err, qt.IsNil)

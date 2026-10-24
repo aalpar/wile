@@ -32,6 +32,8 @@ import (
 // expanded its body as a flat argument list, so internal macros were never
 // registered and a use raised "no such local or global binding".
 func TestInternalDefineSyntax_InShorthandDefineBody(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	cases := []struct {
@@ -108,6 +110,8 @@ func TestInternalDefineSyntax_InShorthandDefineBody(t *testing.T) {
 // clean diagnostic, not a panic or a silently-wrong expansion. Curried define
 // is unsupported in Wile.
 func TestShorthandDefine_MalformedSignatureRejectedCleanly(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	cases := []string{
 		`(define ((f a) b) (+ a b))`, // curried
@@ -128,6 +132,8 @@ func TestShorthandDefine_MalformedSignatureRejectedCleanly(t *testing.T) {
 // under the lambda, let, and named-let forms that already handled them, so the
 // shorthand-define fix does not diverge from them.
 func TestInternalDefineSyntax_LambdaLetParityUnbroken(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	body := `(define-syntax m (syntax-rules () ((_) 42))) (m)`
 

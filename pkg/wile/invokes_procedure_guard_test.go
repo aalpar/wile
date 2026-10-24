@@ -419,6 +419,8 @@ func splitQualified(qualified string) (pkg, fn string) {
 // registered primitive whose Impl transitively reaches a procedure-invocation sink
 // carries InvokesProcedure:true. See the file header for the soundness model.
 func TestInvokesProcedureStaticGuard(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
 	if err != nil {
@@ -537,6 +539,8 @@ func TestInvokesProcedureStaticGuard(t *testing.T) {
 // non-sub-context receiver is correctly NOT a sink. This is the
 // intentionally-unannotated-fails demonstration the plan's "done-when" calls for.
 func TestInvokesProcedureAnalyzerDetectsSinks(t *testing.T) {
+	t.Parallel()
+
 	const pkg = "example.com/fake"
 	const src = `
 package fake
@@ -618,6 +622,8 @@ func PrimPure() int {
 // module rename can't silently break the join key that ties resolveImpl's
 // runtime-qualified names to the AST analyzer's import-path keys.
 func TestInvokesProcedureGuardModulePath(t *testing.T) {
+	t.Parallel()
+
 	root := repoRoot(t)
 	b, err := os.ReadFile(filepath.Join(root, "go.mod"))
 	if err != nil {

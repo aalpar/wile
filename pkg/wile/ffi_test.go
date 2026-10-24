@@ -63,6 +63,8 @@ func evalExpectError(t *testing.T, engine *wile.Engine, code string) error {
 // --- Registration validation errors ---
 
 func TestRegisterFuncValidation(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	tcs := []struct {
@@ -88,6 +90,8 @@ func TestRegisterFuncValidation(t *testing.T) {
 }
 
 func TestRegisterFuncUnsupportedTypes(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	tcs := []struct {
@@ -116,6 +120,8 @@ func TestRegisterFuncUnsupportedTypes(t *testing.T) {
 }
 
 func TestRegisterFuncContextNotFirst(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 	err := engine.RegisterFunc("bad", func(n int64, ctx context.Context) int64 {
 		_ = ctx
@@ -129,6 +135,8 @@ func TestRegisterFuncContextNotFirst(t *testing.T) {
 // --- Type round-trip tests ---
 
 func TestRegisterFuncTypeRoundTrips(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -196,6 +204,8 @@ func TestRegisterFuncTypeRoundTrips(t *testing.T) {
 // --- Float promotion ---
 
 func TestRegisterFuncFloatPromotion(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -225,6 +235,8 @@ func TestRegisterFuncFloatPromotion(t *testing.T) {
 // --- Void returns ---
 
 func TestRegisterFuncVoid(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -242,6 +254,8 @@ func TestRegisterFuncVoid(t *testing.T) {
 // --- Error returns ---
 
 func TestRegisterFuncErrorReturns(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -283,6 +297,8 @@ func TestRegisterFuncErrorReturns(t *testing.T) {
 // --- Type mismatch errors ---
 
 func TestRegisterFuncTypeMismatch(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	err := engine.RegisterFunc("need-int", func(n int64) int64 {
@@ -337,6 +353,8 @@ func TestRegisterFuncTypeMismatch(t *testing.T) {
 // --- Type mismatch error message ---
 
 func TestRegisterFuncTypeMismatchMessage(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -362,6 +380,8 @@ func TestRegisterFuncTypeMismatchMessage(t *testing.T) {
 // --- Variadic functions ---
 
 func TestRegisterFuncVariadic(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -410,6 +430,8 @@ func TestRegisterFuncVariadic(t *testing.T) {
 // --- context.Context forwarding ---
 
 func TestRegisterFuncContext(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -423,6 +445,8 @@ func TestRegisterFuncContext(t *testing.T) {
 }
 
 func TestRegisterFuncContextWithArgs(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -439,6 +463,8 @@ func TestRegisterFuncContextWithArgs(t *testing.T) {
 // --- Arithmetic operations ---
 
 func TestRegisterFuncArithmetic(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -474,6 +500,8 @@ func TestRegisterFuncArithmetic(t *testing.T) {
 // --- Scheme interop (map, apply, higher-order) ---
 
 func TestRegisterFuncSchemeInterop(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -509,6 +537,8 @@ func TestRegisterFuncSchemeInterop(t *testing.T) {
 // --- Int64 from inexact integer ---
 
 func TestRegisterFuncInt64FromInexact(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -523,6 +553,8 @@ func TestRegisterFuncInt64FromInexact(t *testing.T) {
 }
 
 func TestRegisterFuncInt64RejectsNonIntegerFloat(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	err := engine.RegisterFunc("identity-int64", func(n int64) int64 {
@@ -539,6 +571,8 @@ func TestRegisterFuncInt64RejectsNonIntegerFloat(t *testing.T) {
 // --- Nil Value return produces Void ---
 
 func TestRegisterFuncNilValueReturn(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -564,6 +598,8 @@ func TestRegisterFuncNilValueReturn(t *testing.T) {
 // --- Concrete error type rejected at registration ---
 
 func TestRegisterFuncConcreteErrorTypeRejected(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	// *fmt.Stringer is not the error interface, but a func returning
@@ -581,6 +617,8 @@ func TestRegisterFuncConcreteErrorTypeRejected(t *testing.T) {
 // --- Multiple FFI functions in one engine ---
 
 func TestRegisterFuncMultipleFunctions(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -621,6 +659,8 @@ func TestRegisterFuncMultipleFunctions(t *testing.T) {
 // --- Typed slices ---
 
 func TestRegisterFuncSlices(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -710,6 +750,8 @@ func TestRegisterFuncSlices(t *testing.T) {
 // --- Nested slices ---
 
 func TestRegisterFuncSliceNested(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -749,6 +791,8 @@ func TestRegisterFuncSliceNested(t *testing.T) {
 // --- Maps ---
 
 func TestRegisterFuncMaps(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -806,6 +850,8 @@ func TestRegisterFuncMaps(t *testing.T) {
 // --- Nested maps ---
 
 func TestRegisterFuncMapNested(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -851,6 +897,8 @@ type testWithSlice struct {
 }
 
 func TestRegisterFuncStructs(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -910,6 +958,8 @@ func TestRegisterFuncStructs(t *testing.T) {
 // --- Struct error cases ---
 
 func TestRegisterFuncStructErrors(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	err := engine.RegisterFunc("need-struct", func(p testPerson) string {
@@ -938,6 +988,8 @@ func TestRegisterFuncStructErrors(t *testing.T) {
 // --- Callbacks ---
 
 func TestRegisterFuncCallbacks(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -989,6 +1041,8 @@ func TestRegisterFuncCallbacks(t *testing.T) {
 // --- Callback Scheme interop ---
 
 func TestRegisterFuncCallbackSchemeInterop(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -1006,6 +1060,8 @@ func TestRegisterFuncCallbackSchemeInterop(t *testing.T) {
 // --- Callback error cases ---
 
 func TestRegisterFuncCallbackErrors(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	err := engine.RegisterFunc("apply-f", func(f func(int64) int64, n int64) int64 {
@@ -1033,6 +1089,8 @@ func TestRegisterFuncCallbackErrors(t *testing.T) {
 // --- Callback exception → error ---
 
 func TestRegisterFuncCallbackExceptionToError(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	err := engine.RegisterFunc("try-callback", func(f func(int64) (int64, error), n int64) (int64, error) {
@@ -1047,6 +1105,8 @@ func TestRegisterFuncCallbackExceptionToError(t *testing.T) {
 }
 
 func TestRegisterFuncCallbackErrorSentinels(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	// Register a function where the Go callback has an error return.
@@ -1085,6 +1145,8 @@ func TestRegisterFuncCallbackErrorSentinels(t *testing.T) {
 // The Go signature func(func(int64) int64, int64) int64 has no error slot,
 // so the FFI layer panics with *ForeignError, which makeWrapper recovers.
 func TestRegisterFuncCallbackPanicToError(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	err := engine.RegisterFunc("apply-f", func(f func(int64) int64, n int64) int64 {
@@ -1112,6 +1174,8 @@ func TestRegisterFuncCallbackPanicToError(t *testing.T) {
 // Passing a lambda that returns a string where int64 is expected triggers the
 // conversion panic path in callbackSuccessResult.
 func TestRegisterFuncCallbackResultConversionPanicToError(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	err := engine.RegisterFunc("apply-f", func(f func(int64) int64, n int64) int64 {
@@ -1134,6 +1198,8 @@ func TestRegisterFuncCallbackResultConversionPanicToError(t *testing.T) {
 // --- Parameter as callback ---
 
 func TestRegisterFuncParameterAsCallback(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -1169,6 +1235,8 @@ func TestRegisterFuncParameterAsCallback(t *testing.T) {
 // --- Composite round-trip ---
 
 func TestRegisterFuncCompositeRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -1196,6 +1264,8 @@ type myString string
 type myBool bool
 
 func TestRegisterFuncNamedScalarTypes(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -1241,6 +1311,8 @@ func TestRegisterFuncNamedScalarTypes(t *testing.T) {
 // --- Non-list to slice/struct converter errors ---
 
 func TestRegisterFuncNonListToComposite(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	err := engine.RegisterFunc("need-list", func(nums []int64) int64 {
@@ -1283,6 +1355,8 @@ func TestRegisterFuncNonListToComposite(t *testing.T) {
 // --- RegisterFuncs batch registration ---
 
 func TestRegisterFuncs(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -1319,6 +1393,8 @@ func TestRegisterFuncs(t *testing.T) {
 }
 
 func TestRegisterFuncsFailFast(t *testing.T) {
+	t.Parallel()
+
 	engine := newEngine(t)
 
 	err := engine.RegisterFuncs(map[string]any{
@@ -1345,6 +1421,8 @@ func TestRegisterFuncsFailFast(t *testing.T) {
 }
 
 func TestRegisterFuncsEmpty(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 
@@ -1353,6 +1431,8 @@ func TestRegisterFuncsEmpty(t *testing.T) {
 }
 
 func TestRegisterFuncsNil(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	engine := newEngine(t)
 

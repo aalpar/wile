@@ -70,6 +70,8 @@ func syntaxErrorEngine(t *testing.T) (*wile.Engine, string) {
 // list the form named, holding the stripped datums rather than the syntax
 // objects the expander was carrying.
 func TestSyntaxErrorIrritantsReachScheme(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, path := syntaxErrorEngine(t)
@@ -106,6 +108,8 @@ func TestSyntaxErrorIrritantsReachScheme(t *testing.T) {
 // object Scheme would see — same location, and the compiler's own error still
 // reachable underneath it.
 func TestCompilationErrorCarriesCondition(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -138,6 +142,8 @@ func TestCompilationErrorCarriesCondition(t *testing.T) {
 // location through the condition builder instead re-opens the hole REVIEW.md
 // records as closed on 2026-07-31.
 func TestParseErrorStillCarriesSource(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -161,6 +167,8 @@ func TestParseErrorStillCarriesSource(t *testing.T) {
 // hold the same location, and an include, where the failure is one file deeper
 // than the form that triggered it.
 func TestCompilationErrorRendersLocationOnce(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.scm")

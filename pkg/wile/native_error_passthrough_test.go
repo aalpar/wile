@@ -99,6 +99,8 @@ func nativeErrorEngine(t *testing.T) *wile.Engine {
 // row returns a condition built by one of the three constructors CODING_STYLE.md
 // names, and reads back the three facts a rebuild used to destroy.
 func TestReturnedNativeErrorKeepsIrritantsAndKind(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := nativeErrorEngine(t)
 
@@ -172,6 +174,8 @@ func TestReturnedNativeErrorKeepsIrritantsAndKind(t *testing.T) {
 // positive gate above still passes and only this one fails. That asymmetry is
 // the reason it exists.
 func TestWrappedNativeErrorIsNotForwarded(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := nativeErrorEngine(t)

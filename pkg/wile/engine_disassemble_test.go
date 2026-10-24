@@ -25,6 +25,8 @@ import (
 )
 
 func TestEngine_FormLabel(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -46,6 +48,8 @@ func TestEngine_FormLabel(t *testing.T) {
 }
 
 func TestEngine_DisassembleValue_Native(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -62,6 +66,8 @@ func TestEngine_DisassembleValue_Native(t *testing.T) {
 }
 
 func TestEngine_DisassembleValue_Foreign(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -76,6 +82,8 @@ func TestEngine_DisassembleValue_Foreign(t *testing.T) {
 }
 
 func TestEngine_DisassembleValue_NonProcedure(t *testing.T) {
+	t.Parallel()
+
 	eng, err := wile.NewEngine(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 

@@ -29,6 +29,8 @@ import (
 // rendering. LibraryName is the owned wile-package type that AvailableLibraries
 // returns instead of leaking machine/compilation.LibraryName (R19).
 func TestLibraryName_String(t *testing.T) {
+	t.Parallel()
+
 	name := wile.LibraryName{Parts: []string{"scheme", "base"}}
 	qt.Assert(t, name.String(), qt.Equals, "(scheme base)")
 
@@ -41,6 +43,8 @@ func TestLibraryName_String(t *testing.T) {
 // with usable Parts and a Scheme-form String. The owned Parts slice is a copy,
 // so mutating it cannot reach engine state.
 func TestEngine_AvailableLibraries_OwnedType(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),
@@ -66,6 +70,8 @@ func TestEngine_AvailableLibraries_OwnedType(t *testing.T) {
 }
 
 func TestEngine_LoadedLibraries_Empty(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -75,6 +81,8 @@ func TestEngine_LoadedLibraries_Empty(t *testing.T) {
 }
 
 func TestEngine_LoadedLibraries_AfterImport(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),
@@ -102,6 +110,8 @@ func TestEngine_LoadedLibraries_AfterImport(t *testing.T) {
 }
 
 func TestEngine_LookupLibrary_NotFound(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
@@ -111,6 +121,8 @@ func TestEngine_LookupLibrary_NotFound(t *testing.T) {
 }
 
 func TestEngine_LookupLibrary_Found(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),
@@ -129,6 +141,8 @@ func TestEngine_LookupLibrary_Found(t *testing.T) {
 }
 
 func TestEngine_UnloadedLibraries(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),
@@ -149,6 +163,8 @@ func TestEngine_UnloadedLibraries(t *testing.T) {
 }
 
 func TestEngine_UnloadedLibraries_StoresExportIndexOnNamespace(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),
@@ -174,6 +190,8 @@ func TestEngine_UnloadedLibraries_StoresExportIndexOnNamespace(t *testing.T) {
 }
 
 func TestEngine_AproposFindsUnloadedExports(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),

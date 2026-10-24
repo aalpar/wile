@@ -64,6 +64,8 @@ func runKeywordRows(t *testing.T, rows []keywordRow) {
 // Controls: pass before and after. A renamed keyword is still shadowable, and
 // the unrenamed forms keep working.
 func TestKeywordDenotationControls(t *testing.T) {
+	t.Parallel()
+
 	runKeywordRows(t, []keywordRow{
 		{"let shadows a renamed keyword",
 			`(import (scheme base) (rename (scheme base) (if my-if))) (let ((my-if list)) (my-if 1 2 3))`, "(1 2 3)"},
@@ -80,6 +82,8 @@ func TestKeywordDenotationControls(t *testing.T) {
 
 // Task 2: the validator dispatches on the denoted form.
 func TestRenamedKeywordValidates(t *testing.T) {
+	t.Parallel()
+
 	runKeywordRows(t, []keywordRow{
 		{"if", `(import (rename (scheme base) (if my-if))) (my-if #t 1 2)`, "1"},
 		{"lambda", `(import (rename (scheme base) (lambda my-lambda))) ((my-lambda (x) x) 5)`, "5"},
@@ -103,6 +107,8 @@ func TestRenamedKeywordValidates(t *testing.T) {
 // Task 3: the expander must see a renamed begin as begin, or the define-syntax it
 // splices into a body is never compiled before the body uses it.
 func TestRenamedKeywordExpands(t *testing.T) {
+	t.Parallel()
+
 	runKeywordRows(t, []keywordRow{
 		{"begin splicing a define-syntax into a body",
 			`(import (scheme base) (rename (scheme base) (begin my-begin))) (define (f) (my-begin (define-syntax m (syntax-rules () ((_) 6)))) (m)) (f)`, "6"},
@@ -112,6 +118,8 @@ func TestRenamedKeywordExpands(t *testing.T) {
 // Task 4: definitions are recognized by denotation in body scans and in use-site
 // scope pruning of macro output.
 func TestRenamedDefinitionsAreRecognized(t *testing.T) {
+	t.Parallel()
+
 	runKeywordRows(t, []keywordRow{
 		{"define-syntax in a let body",
 			`(import (scheme base) (rename (scheme base) (define-syntax my-ds))) (let () (my-ds inner (syntax-rules () ((_) 3))) (inner))`, "3"},
@@ -139,6 +147,8 @@ func TestRenamedDefinitionsAreRecognized(t *testing.T) {
 // as the special form -- quoted data got macro-expanded, and a renamed begin
 // lost its ability to splice a define-syntax into the enclosing body.
 func TestRenamedKeywordSurvivesCanonicalShadow(t *testing.T) {
+	t.Parallel()
+
 	runKeywordRows(t, []keywordRow{
 		{"renamed quote survives a user shadow of quote",
 			`(import (scheme base) (rename (scheme base) (quote core-quote))) (define-syntax quote (syntax-rules () ((_ x) 0))) (core-quote (when #t 2))`,
@@ -156,6 +166,8 @@ func TestRenamedKeywordSurvivesCanonicalShadow(t *testing.T) {
 // held values.Void, a value comparison could not tell them apart and the later
 // import silently won.
 func TestKeywordImportConflicts(t *testing.T) {
+	t.Parallel()
+
 	t.Run("diamond: two libraries re-export the same keyword under one name", func(t *testing.T) {
 		eng, err := wile.NewEngine(context.Background(),
 			wile.WithProfile(wile.KitchenSink),
@@ -238,6 +250,8 @@ func TestKeywordImportConflicts(t *testing.T) {
 // than a general claim about renaming: it has decided by denotation since
 // pattern literals went binding-aware, and it is green before and after.
 func TestRenamedElseDecidesACondExpandClause(t *testing.T) {
+	t.Parallel()
+
 	const renamed = `(import (scheme base) (rename (scheme base) (else otherwise)))`
 
 	runKeywordRows(t, []keywordRow{

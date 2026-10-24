@@ -57,6 +57,8 @@ func (failingDialect) InstallForms(_ *forms.FormRegistry) error {
 // being a special form. The default engine (built AFTER the dialect engine) is
 // unaffected, proving the dialect's Remove mutated only its own clone (COW).
 func TestWithDialect_RemovesForm(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -90,6 +92,8 @@ func TestWithDialect_RemovesForm(t *testing.T) {
 // surfaces as an ErrEngineInit-wrapped engine construction error, not a silent
 // partial engine.
 func TestWithDialect_InstallError_AbortsEngineInit(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -105,6 +109,8 @@ func TestWithDialect_InstallError_AbortsEngineInit(t *testing.T) {
 
 // TestWithDialect_LastWins proves WithDialect is last-wins when supplied twice.
 func TestWithDialect_LastWins(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -124,6 +130,8 @@ func TestWithDialect_LastWins(t *testing.T) {
 
 // TestDefaultDialect_IsR7RS pins the default dialect's identity.
 func TestDefaultDialect_IsR7RS(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	c.Assert(DefaultDialect, qt.IsNotNil)
 	c.Assert(DefaultDialect.Name(), qt.Equals, "r7rs")
@@ -134,6 +142,8 @@ func TestDefaultDialect_IsR7RS(t *testing.T) {
 // its InstallForms is a marker, not a mutator. Seeded with a sentinel so the
 // assertion catches a future add-based OR remove-based edit, not just an add.
 func TestDefaultDialect_InstallForms_IsNoop(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	fr := forms.NewFormRegistry()
 	fr.Register(&forms.FormSpec{Name: "sentinel"})
@@ -150,6 +160,8 @@ func TestDefaultDialect_InstallForms_IsNoop(t *testing.T) {
 // dialect, applied uniformly whether or not the caller names it. A/B on the same
 // source: the two engines must produce the same result.
 func TestWithDialect_DefaultDialect_EqualsNoDialect(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -193,6 +205,8 @@ func (addWhenTrueDialect) InstallForms(fr *forms.FormRegistry) error {
 // compiles and evaluates in that engine — the headline capability SP1's
 // per-engine codegen enabled. A default engine has no such form.
 func TestWithDialect_AddsForm(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -222,6 +236,8 @@ func TestWithDialect_AddsForm(t *testing.T) {
 // migration the compiler points at: the dialect applies when passed to
 // NewNamespace, and the resulting namespace carries it into the engine.
 func TestWithDialect_IsNamespaceScoped(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

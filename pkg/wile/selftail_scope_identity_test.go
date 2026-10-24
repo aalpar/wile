@@ -113,6 +113,8 @@ const f1aControl = `
 // (f i) is a call to a DIFFERENT binding that happens to share the spelling and
 // must compile as an ordinary tail call.
 func TestSelfTailEmit_EscapeToSameSpelledBinding(t *testing.T) {
+	t.Parallel()
+
 	t.Run("control", func(t *testing.T) {
 		sites := procSelfTailSites(t, f1aControl, "h")
 		qt.Assert(t, sites, qt.Equals, 1)
@@ -166,6 +168,8 @@ const f1bControl = `
 // through a macro. Both cases raise when the loop reaches (loop 5) with `loop`
 // holding 42; the collision case must not be armed into a jump instead.
 func TestSelfTailArming_ShadowSetHidesMacroIntroducedSetBang(t *testing.T) {
+	t.Parallel()
+
 	t.Run("control", func(t *testing.T) {
 		sites := procSelfTailSites(t, f1bControl, "h")
 		qt.Assert(t, sites, qt.Equals, 0)
@@ -199,6 +203,8 @@ func TestSelfTailArming_ShadowSetHidesMacroIntroducedSetBang(t *testing.T) {
 // or_lowering_test.go:145,150 assert selfTailSites(...) == 1 on the or-shaped-let
 // lowering and are a second witness in the same blast radius; they are left alone.
 func TestSelfTailArmingCountRatchet(t *testing.T) {
+	t.Parallel()
+
 	const primes = `
 		(begin
 		  (define (is-prime? n)
@@ -343,6 +349,8 @@ const f1aDefineControl = `
 // than the "exposed but unproven" the report recorded — the missing conjunct was
 // that immutable top level is the default, not that the arm was unreachable.
 func TestSelfTailEmit_DefineArmEscape(t *testing.T) {
+	t.Parallel()
+
 	t.Run("control", func(t *testing.T) {
 		sites := procSelfTailSites(t, f1aDefineControl, "entry")
 		qt.Assert(t, sites, qt.Equals, 1)

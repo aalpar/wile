@@ -76,6 +76,8 @@ func exportProbeEngine(t *testing.T) *wile.Engine {
 // phase frame, and the export diagnostic reports the lowest phase a name is bound
 // at. If this ever reverses, the search misses phases that are present.
 func TestPresentPhasesIsAscendingFromRuntime(t *testing.T) {
+	t.Parallel()
+
 	eng, err := wile.NewEngine(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 	t.Cleanup(func() {
@@ -96,6 +98,8 @@ func TestPresentPhasesIsAscendingFromRuntime(t *testing.T) {
 // evidence the export is usable: both names pass validateLibraryExports, and only
 // one of them survives the round trip below.
 func TestLibraryExportOfExpandPhaseNameValidates(t *testing.T) {
+	t.Parallel()
+
 	eng := exportProbeEngine(t)
 	for _, lib := range []string{"(lib-letsyntax)", "(lib-syntaxrules)"} {
 		t.Run(lib, func(t *testing.T) {
@@ -113,6 +117,8 @@ func TestLibraryExportOfExpandPhaseNameValidates(t *testing.T) {
 // not a primitive expander at all: LookupPrimitiveExpander reads env.Expand() and
 // finds nothing. Exporting it (for-syntax ...) takes the phase-1 row, which expands.
 func TestLibraryExportRoundTripByPhase(t *testing.T) {
+	t.Parallel()
+
 	t.Run("let-syntax (phase-1 only) round-trips", func(t *testing.T) {
 		eng := exportProbeEngine(t)
 		// (car '()) raises, so anything but 42 fails loudly rather than rendering.

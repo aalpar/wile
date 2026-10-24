@@ -46,6 +46,8 @@ func newHygieneEngine(ctx context.Context, t *testing.T) *wile.Engine {
 // (def2 ...) calls are two units. Before the fix the second (define tmp ...) died
 // with "cannot redefine immutable top-level binding tmp".
 func TestMacroIntroducedTopLevelTemp_UniquePerExpansion(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newHygieneEngine(ctx, t)
 	defer func() {
@@ -75,6 +77,8 @@ func TestMacroIntroducedTopLevelTemp_UniquePerExpansion(t *testing.T) {
 // the binding — (define-counter) then counter wrongly resolved to the macro's
 // counter. Now the use-site counter is unbound.
 func TestMacroIntroducedTopLevelBinding_HiddenFromUseSite(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newHygieneEngine(ctx, t)
 	defer func() {
@@ -98,6 +102,8 @@ func TestMacroIntroducedTopLevelBinding_HiddenFromUseSite(t *testing.T) {
 // inside a lambda body, so its scope set is a superset of the binder's. Maximal
 // subset resolution must still rename it to the same fresh name.
 func TestMacroIntroducedTopLevelTemp_ReferencedInsideLambda(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newHygieneEngine(ctx, t)
 	defer func() {
@@ -126,6 +132,8 @@ func TestMacroIntroducedTopLevelTemp_ReferencedInsideLambda(t *testing.T) {
 // program-observable value is silently corrupted (e.g. `(quote tmp)` becoming an
 // internal name).
 func TestMacroIntroducedTopLevelTemp_DoesNotCorruptQuotedData(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tcs := []struct {
@@ -193,6 +201,8 @@ func TestMacroIntroducedTopLevelTemp_DoesNotCorruptQuotedData(t *testing.T) {
 // the hidden temp by spelling its name. Before the fix the name was "tmp.1", a
 // legal identifier, so `(define tmp.1 …)` collided with the macro's temp.
 func TestMacroIntroducedTopLevelTemp_FreshNameUnforgeable(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newHygieneEngine(ctx, t)
 	defer func() {
@@ -221,6 +231,8 @@ func TestMacroIntroducedTopLevelTemp_FreshNameUnforgeable(t *testing.T) {
 // binder shape — used across two compilation units. It must be renamed uniquely
 // per expansion just like a value binder.
 func TestMacroIntroducedTopLevelFunctionBinder(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newHygieneEngine(ctx, t)
 	defer func() {
@@ -247,6 +259,8 @@ func TestMacroIntroducedTopLevelFunctionBinder(t *testing.T) {
 // renamed (it is resolved across phases by the macro-generating-macro path), so
 // it must stay usable within the expansion.
 func TestMacroIntroducedTopLevelDefineSyntaxSurvives(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newHygieneEngine(ctx, t)
 	defer func() {
@@ -272,6 +286,8 @@ func TestMacroIntroducedTopLevelDefineSyntaxSurvives(t *testing.T) {
 // temp-introducing macro invocations plus a define-values therefore share a unit,
 // stressing within-unit uniqueness of the generated names.
 func TestMacroIntroducedTopLevelTemp_WholeProgram(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng := newHygieneEngine(ctx, t)
 	defer func() {
@@ -297,6 +313,8 @@ func TestMacroIntroducedTopLevelTemp_WholeProgram(t *testing.T) {
 // WithMutableTopLevel the OLD leak silently "worked" by aliasing (no redefine
 // error to surface it), so this is where a regression would hide.
 func TestMacroIntroducedTopLevelBinding_HiddenUnderMutableTopLevel(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),
@@ -328,6 +346,8 @@ func TestMacroIntroducedTopLevelBinding_HiddenUnderMutableTopLevel(t *testing.T)
 // reads through captured lambdas expose that as a wrong value: distinct names
 // give (10 20), an aliased single temp would give (20 20).
 func TestMacroIntroducedTopLevelTemp_NoAliasingUnderMutable(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),

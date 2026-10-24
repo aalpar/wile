@@ -36,6 +36,8 @@ import (
 //   - registerSchemeDocstrings walks the sealed base to register doc-only entries for
 //     ,apropos/,doc/SearchDoc; reading the empty mutable child would drop them all.
 func TestSealedBase_G2_StdlibProcedureDocs(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
 	qt.Assert(t, err, qt.IsNil)
@@ -70,6 +72,8 @@ func TestSealedBase_G2_StdlibProcedureDocs(t *testing.T) {
 // silently shrinks for loops using them as base-case predicates. (Regression guard for the
 // Q3 enforcement scope: the sealed base must be enforced, only libraries stay mutable.)
 func TestSealedBase_CaptureSafeAnchorsAreStable(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
 	qt.Assert(t, err, qt.IsNil)
@@ -88,6 +92,8 @@ func TestSealedBase_CaptureSafeAnchorsAreStable(t *testing.T) {
 // through the frame-pinned GlobalIndex into the sealed base, for primitives, stdlib
 // procedures, and user defines (in the mutable child reaching the sealed base).
 func TestSealedBase_PrimitiveGlobalIndexPinsSealedBase(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name     string
 		code     string
@@ -118,6 +124,8 @@ func TestSealedBase_PrimitiveGlobalIndexPinsSealedBase(t *testing.T) {
 // per-namespace mutation, NOT corruption. A flag-on set! of a Stable sealed name (a
 // capture-safe primitive) is rejected (compile_validated.go:574).
 func TestSealedBase_SetBangBehavior(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("flag-off set! of non-Stable sealed proc mutates the owned base", func(t *testing.T) {
@@ -152,6 +160,8 @@ func TestSealedBase_SetBangBehavior(t *testing.T) {
 // observable on a subsequent read of the same binding. This is the documented intent at
 // registry/apply.go:165; the test locks it against regression.
 func TestSealedBase_SetBangPortParameterPermitted(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	// No WithMutableTopLevel: exercise the immutable DEFAULT. The point is that a
 	// non-Stable sealed binding stays settable even with top-level immutability on.
@@ -171,6 +181,8 @@ func TestSealedBase_SetBangPortParameterPermitted(t *testing.T) {
 // primitives (sealed base) resolve inside the thread. Run under -race to confirm the
 // thread captures the one mutable runtime, not a per-thread copy or the sealed base.
 func TestSealedBase_ThreadSharesMutableGlobalSeesSealedBase(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	// Opt out of the immutable default: the thread mutates a top-level cell via set!.
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths(), WithMutableTopLevel())

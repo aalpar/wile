@@ -16,6 +16,8 @@ import (
 // pair/triple frequencies to identify peephole optimization candidates.
 // Run with: go test -v -run TestPeepholeCensus .
 func TestPeepholeCensus(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	// Benchmarks live at the module root; this package is at pkg/wile/.

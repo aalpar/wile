@@ -14,6 +14,8 @@ import (
 )
 
 func TestDocRegistrationObserver_ImportUpdatesLiveRegistry(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS), WithSourceOS(), WithLibraryPaths("."))
@@ -51,6 +53,8 @@ func TestDocRegistrationObserver_ImportUpdatesLiveRegistry(t *testing.T) {
 }
 
 func TestDocRegistrationObserver_CloneSnapshotBehavior(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS), WithSourceOS(), WithLibraryPaths("."))
@@ -124,6 +128,8 @@ Signature: (fsproc y)
 // (on a 94-export library the rename row would report 93 rather than 0) and
 // would pass for the wrong reason the moment the fixture changed.
 func TestDocRegistrationObserver_EveryImportShapeRegistersLocalNames(t *testing.T) {
+	t.Parallel()
+
 	for _, row := range []struct {
 		name string
 		src  string
@@ -164,6 +170,8 @@ func TestDocRegistrationObserver_EveryImportShapeRegistersLocalNames(t *testing.
 // then the clone alone did, and dropping it failed this test; now it fails only
 // if both are undone, so the clone is a defence no test reaches.
 func TestDocRegistrationObserver_CannotRewriteTheImport(t *testing.T) {
+	t.Parallel()
+
 	c := qt.New(t)
 	ctx := context.Background()
 

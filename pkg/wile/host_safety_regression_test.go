@@ -32,6 +32,8 @@ import (
 // TestHostSafetyRegressions covers the crash and hang paths reachable from
 // ordinary Scheme. Each Code is expected to terminate and print Want.
 func TestHostSafetyRegressions(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -166,6 +168,8 @@ func TestHostSafetyRegressions(t *testing.T) {
 // speed the test up without re-measuring — at 400k both subtests pass with the
 // fixes reverted.
 func TestLongFlatListDoesNotOverflowHostStack(t *testing.T) {
+	t.Parallel()
+
 	const elements = 3000000
 
 	tcs := []struct {
@@ -209,6 +213,8 @@ func TestLongFlatListDoesNotOverflowHostStack(t *testing.T) {
 // The atomic's id comes from a process-global counter, so this asserts the
 // shape rather than an exact string.
 func TestCyclicAtomicRenders(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
@@ -256,6 +262,8 @@ func TestCyclicAtomicRenders(t *testing.T) {
 // validateQuotedLiteralWithVisited against losing the cycle rejection it
 // replaced: the visited marks must still cover the live spine.
 func TestQuotedLiteralCycleStillRejected(t *testing.T) {
+	t.Parallel()
+
 	eng, err := NewEngine(context.Background(), WithProfile(KitchenSink))
 	qt.Assert(t, err, qt.IsNil)
 
@@ -269,6 +277,8 @@ func TestQuotedLiteralCycleStillRejected(t *testing.T) {
 // path in validateQuotedLiteralWithVisited still returns ordinary quoted data
 // unaltered, including improper tails and nesting.
 func TestQuotedLiteralStructuresPreserved(t *testing.T) {
+	t.Parallel()
+
 	tcs := []struct {
 		name string
 		code string
