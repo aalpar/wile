@@ -153,9 +153,13 @@ disguise, unless the receiver is the point:
   (`EnvironmentFrame.GetLocalBindingByIndex`, whose whole body is
   `return &p.local.bindings[i]`).
 
-wile-goast's `(receiver-parameter-asymmetry)` finds the mechanical subset and
-needs hand triage: it flags keyed lookups and setters that write through a
-sub-struct, not zero-parameter accessors or direct-field setters.
+wile-goast's `(receiver-parameter-asymmetry)` finds the mechanical subset
+(receiver field read exactly once, written never, at least one parameter; it
+counts parameters, it does not examine them) and needs hand triage: it flags
+keyed lookups and setters that write through a sub-struct, not zero-parameter
+accessors or direct-field setters. A located `'candidate` verdict is a pair, not
+the bare symbol; see `receiver-parameter-asymmetry` in the sibling repo's
+`wile-goast/lib/wile/goast/belief-checkers.scm`.
 
 ## Return Values
 

@@ -159,12 +159,12 @@ CLOSED for `pkg/repl` and `registry/helpers` (5 of 7 refuted); nothing below re-
   mutants on each die.
 - [x] **`RequireArg[T]` and `BuildValidator` type-check the same argument twice** [Tech debt, M, **decided: keep both, closed 2026-10-24 (I012, P9.7)**,
   from `2026-03-26-extension-contracts-phase2-design.md`]: not scheduled, because a strip **fails open**, partial or
-  complete. With enforcement off (the zero value, `engineConfig.contractEnforcement`) `RequireArg` is the only check.
+  complete. The validator is installed only under enforcement (`Engine.RegisterPrimitive` in `pkg/wile/engine.go`, `registerPhasePrimitive` in `pkg/registry/apply.go`), whose zero value is false (`engineConfig.contractEnforcement`), so with enforcement off `RequireArg` is the only check.
   With it on, `BuildValidator` returns nil for empty `ParamTypes` (`pkg/registry/contract.go`) and `TypeAny` accepts
   anything, so `RequireArg` is still the only check at those positions (`extensions/threads`, `extensions/process`,
   `pkg/internal/extensions/{all,namespace}` `register.go` say so for types with no `ValueType` entry). Where the
   validator does constrain a position it rejects first (`call_foreign_cached.go`, `machine_context_apply.go`) and
-  `RequireArg` re-checks a value that already passed. Measured 2026-10-24: 112 call sites in 32 files, 11 of them
+  `RequireArg` re-checks a value that already passed; the two rejections are deliberately distinguishable and P9.2 keeps that via the index. `ParamTypes` coverage in `pkg/registry/core`: 199 `ParamTypes:` lines against 210 `Name:` entries (crude grep, 2026-10-24; the 2026-10-16 figure was ~197/208), several extension packages partial or zero. Measured 2026-10-24: 112 call sites in 32 files, 11 of them
   unqualified inside `pkg/registry/helpers` (`grep -rn 'RequireArg\[' --include=*.go . | grep -v _test.go | grep -v
   'func RequireArg' | grep -v '//[^"]*RequireArg\[' | grep -v tools/ruleguard`; the row's "100 in 26" was the 2026-10-16
   count, the plan's 117/34 included comments and a ruleguard message string). Reopen only when every `ParamTypes`
