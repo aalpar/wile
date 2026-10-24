@@ -65,38 +65,12 @@ func hasPrefixCI(s, prefix string) bool {
 	return true
 }
 
-// hasSuffixCI reports whether s ends with suffix, using ASCII case-insensitive
-// comparison. Only ASCII letters (A-Z, a-z) are treated as case-insensitive;
-// all other bytes must match exactly.
-func hasSuffixCI(s, suffix string) bool {
-	if len(s) < len(suffix) {
-		return false
-	}
-	start := len(s) - len(suffix)
-	for i := 0; i < len(suffix); i++ {
-		if toLowerASCII(s[start+i]) != toLowerASCII(suffix[i]) {
-			return false
-		}
-	}
-	return true
-}
-
 // TrimPrefixCI returns s without the provided leading prefix string,
 // using ASCII case-insensitive comparison. If s doesn't start with prefix
 // (case-insensitively), s is returned unchanged.
 func TrimPrefixCI(s, prefix string) string {
 	if hasPrefixCI(s, prefix) {
 		return s[len(prefix):]
-	}
-	return s
-}
-
-// TrimSuffixCI returns s without the provided trailing suffix string,
-// using ASCII case-insensitive comparison. If s doesn't end with suffix
-// (case-insensitively), s is returned unchanged.
-func TrimSuffixCI(s, suffix string) string {
-	if hasSuffixCI(s, suffix) {
-		return s[:len(s)-len(suffix)]
 	}
 	return s
 }

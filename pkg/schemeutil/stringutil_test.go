@@ -68,30 +68,6 @@ func TestHasPrefixCI(t *testing.T) {
 	}
 }
 
-func TestHasSuffixCI(t *testing.T) {
-	c := qt.New(t)
-	tests := []struct {
-		name   string
-		s      string
-		suffix string
-		want   bool
-	}{
-		{"exact match", "Hello", "Hello", true},
-		{"case insensitive", "Hello", "HELLO", true},
-		{"partial match", "WorldHello", "Hello", true},
-		{"no match", "Hello", "World", false},
-		{"suffix too long", "Hi", "Hello", false},
-		{"empty suffix", "Hello", "", true},
-		{"empty string", "", "Hello", false},
-	}
-	for _, tt := range tests {
-		c.Run(tt.name, func(c *qt.C) {
-			got := hasSuffixCI(tt.s, tt.suffix)
-			c.Assert(got, qt.Equals, tt.want)
-		})
-	}
-}
-
 func TestTrimPrefixCI(t *testing.T) {
 	c := qt.New(t)
 	tests := []struct {
@@ -122,38 +98,6 @@ func TestTrimPrefixCI(t *testing.T) {
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
 			got := TrimPrefixCI(tt.s, tt.prefix)
-			c.Assert(got, qt.Equals, tt.want)
-		})
-	}
-}
-
-func TestTrimSuffixCI(t *testing.T) {
-	c := qt.New(t)
-	tests := []struct {
-		name   string
-		s      string
-		suffix string
-		want   string
-	}{
-		{"exact match", "Hello", "Hello", ""},
-		{"lowercase suffix", "Hello", "hello", ""},
-		{"uppercase suffix", "hello", "HELLO", ""},
-		{"mixed case", "HeLLo", "hElLo", ""},
-		{"suffix with remainder", "WorldHello", "hello", "World"},
-		{"no match", "Hello", "World", "Hello"},
-		{"empty suffix", "Hello", "", "Hello"},
-		{"empty string", "", "hello", ""},
-		{"suffix longer than string", "Hi", "Hello", "Hi"},
-		{"imaginary i lowercase", "123i", "i", "123"},
-		{"imaginary I uppercase", "123I", "i", "123"},
-		{"imaginary i with uppercase input", "123i", "I", "123"},
-		{"inf.0 lowercase", "+inf.0", ".0", "+inf"},
-		{"numbers exact", "abc123", "123", "abc"},
-		{"numbers no match", "abc123", "124", "abc123"},
-	}
-	for _, tt := range tests {
-		c.Run(tt.name, func(c *qt.C) {
-			got := TrimSuffixCI(tt.s, tt.suffix)
 			c.Assert(got, qt.Equals, tt.want)
 		})
 	}

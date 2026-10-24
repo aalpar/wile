@@ -28,7 +28,6 @@
 // # String Utilities for R7RS Lexical Syntax
 //
 //   - [TrimPrefixCI]: case-insensitive strings.TrimPrefix
-//   - [TrimSuffixCI]: case-insensitive strings.TrimSuffix
 //   - [NormalizeExponentMarker]: fold a short float exponent marker (s/f/d/l) to 'e'
 //   - [IndexExponentMarker]: locate the first float exponent marker (e/s/f/d/l)
 //
