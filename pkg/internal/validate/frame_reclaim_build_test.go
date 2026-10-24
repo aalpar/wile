@@ -392,6 +392,15 @@ func TestClassifyFrameReclaim_NonStableNameNotReclaimable(t *testing.T) {
 // of ScopedBindingKeyOf, and exercises BOTH halves of the partition: equal scope
 // sets must merge into one colliding node, unequal ones must stay two
 // non-colliding bindings that keep their own verdicts.
+//
+// SCOPE OF THE RATCHETS: collapsing the key (ScopeKey := "" in ScopedBindingKeyOf)
+// is pinned by five tests in three packages, not by this package alone: this
+// test and TestLetDuplicateBindingWithDifferentScopes here,
+// TestLambdaFormalsHygienicDuplicates and TestLetSameNameDistinctScopeBindings in
+// pkg/machine/compilation, and
+// TestFrameReclaimVerdict_ScopeDistinctBindersGetSeparateVerdicts in pkg/wile.
+// A verifier who runs only ./pkg/internal/validate/ sees two of the five and can
+// wrongly conclude the consumers' halves are unpinned.
 func TestBuildReclaimGraph_CollidedIsScopeKeyed(t *testing.T) {
 	sa := syntax.NewScope()
 	sb := syntax.NewScope()
