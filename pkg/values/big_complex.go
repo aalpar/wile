@@ -637,6 +637,23 @@ func (p *BigComplex) Magnitude() *BigFloat {
 	return &BigFloat{value: result}
 }
 
+// nanPartSqrt is Sqrt of a complex with a NaN part, by C99 Annex G.6.4.2 (racket
+// and the Float arm agree): an infinite imaginary part wins, csqrt(x ± ∞i) =
+// +∞ ± ∞i for any x; csqrt(+∞ + NaN·i) = +∞ + NaN·i; csqrt(-∞ + NaN·i) =
+// NaN ± ∞i; anything else is NaN + NaN·i.
+func nanPartSqrt(re, im Number) *BigComplex {
+	if isInfinitePart(im) {
+		return NewBigComplexFromBigFloats(NewBigFloatFromFloat64(math.Inf(1)), toBigFloat(im))
+	}
+	if isInfinitePart(re) && toBigFloat(re).IsPositive() {
+		return NewBigComplexFromBigFloats(NewBigFloatFromFloat64(math.Inf(1)), NewBigFloatNaN())
+	}
+	if isInfinitePart(re) {
+		return NewBigComplexFromBigFloats(NewBigFloatNaN(), NewBigFloatFromFloat64(math.Inf(1)))
+	}
+	return NewBigComplexFromBigFloats(NewBigFloatNaN(), NewBigFloatNaN())
+}
+
 // isInfinitePart reports whether a BigComplex part is ±Inf (not finite, not NaN).
 func isInfinitePart(n Number) bool {
 	return !n.IsFinite() && !n.IsNaN()
@@ -664,7 +681,7 @@ func (p *BigComplex) Phase() *BigFloat {
 // the float64 range (~1.8e308) from overflowing the result to +inf.
 func (p *BigComplex) Sqrt() *BigComplex {
 	if p.IsNaN() {
-		return NewBigComplexFromBigFloats(NewBigFloatNaN(), NewBigFloatNaN())
+		return nanPartSqrt(p.real, p.imag)
 	}
 	prec := uint(DefaultBigFloatPrecision)
 	a := new(big.Float).SetPrec(prec).Set(toBigFloat(p.real).value)

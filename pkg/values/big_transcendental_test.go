@@ -137,6 +137,18 @@ func TestBigLog_MatchesReference(t *testing.T) {
 	}
 }
 
+// TestBigLog_ThreeMatchesReference holds the atanh series to full precision for
+// a mantissa away from 1: under the [√½, √2) split, ln(2) is all ln(2)·e and
+// reaches the series with t = 0, so TestBigLog_MatchesReference no longer
+// exercises it.
+func TestBigLog_ThreeMatchesReference(t *testing.T) {
+	ref := bigRef(t, "1.0986122886681096913952452369225257046474905578227494517346943336374942932186")
+	got := BigLog(big.NewFloat(3), DefaultBigFloatPrecision)
+	if !closeWithin(got, ref, -240) {
+		t.Fatalf("BigLog(3) = %s\n differs from ln(3) beyond 2^-240", got.Text('g', 85))
+	}
+}
+
 func TestBigLog_AgreesWithMathLog(t *testing.T) {
 	for _, x := range []float64{0.01, 0.5, 1.0, 2.0, math.E, 10, 1000, 1e12, 1e300} {
 		got := f64(BigLog(big.NewFloat(x), DefaultBigFloatPrecision))
@@ -316,13 +328,18 @@ func TestBigLog_NearOneIsAccurate(t *testing.T) {
 	if got.Sign() != 0 {
 		t.Fatalf("BigLog(1) = %s, want exactly 0", got.Text('g', 20))
 	}
-	// ln(1 + 2^-100) = 2^-100 - 2^-201 + ...: relative error, not absolute, is the test.
-	// SetMantExp takes mant's precision, so widen before adding 1.
-	want := new(big.Float).SetMantExp(big.NewFloat(1), -100)
-	x := new(big.Float).SetPrec(DefaultBigFloatPrecision).Add(want, big.NewFloat(1))
-	if !closeWithin(BigLog(x, DefaultBigFloatPrecision), want, -195) {
-		t.Fatalf("BigLog(1+2^-100) = %s, want 2^-100 to within 2^-195",
-			BigLog(x, DefaultBigFloatPrecision).Text('g', 40))
+	// ln(1+h) = h - h²/2 + h³/3 - ... for h = 2^-100. The tolerance 2^-350 is a
+	// relative 2^-250 against a 2^-100 answer; the old split's 7.2e-92 (about
+	// 2^-302) error fails it.
+	h := new(big.Float).SetPrec(400).SetMantExp(big.NewFloat(1), -100)
+	x := new(big.Float).SetPrec(DefaultBigFloatPrecision).Add(h, big.NewFloat(1))
+	h2 := new(big.Float).SetPrec(400).Mul(h, h)
+	h3 := new(big.Float).SetPrec(400).Mul(h2, h)
+	want := new(big.Float).SetPrec(400).Sub(h, new(big.Float).SetPrec(400).Quo(h2, big.NewFloat(2)))
+	want.Add(want, new(big.Float).SetPrec(400).Quo(h3, big.NewFloat(3)))
+	got = BigLog(x, DefaultBigFloatPrecision)
+	if !closeWithin(got, want, -350) {
+		t.Fatalf("BigLog(1+2^-100) = %s, want %s to within 2^-350", got.Text('g', 80), want.Text('g', 80))
 	}
 }
 

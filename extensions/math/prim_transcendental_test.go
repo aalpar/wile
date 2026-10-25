@@ -409,6 +409,22 @@ func TestTranscendentalNonFiniteBigFloat(t *testing.T) {
 		{"angle both infinite", "(eqv? (angle (make-rectangular " + inf + " " + inf + ")) (atan #m1))"},
 		{"sqrt nan part", "(let ((r (sqrt (make-rectangular " + nan + " #m4)))) (and (nan? (real-part r)) (nan? (imag-part r))))"},
 		{"sin of a complex with a nan part is not rescued", "(nan? (sin (make-rectangular " + nan + " #m4)))"},
+		// A Float infinity beside a big operand stays on the big path: the float64
+		// arm would truncate 10^400 to +inf.0 and answer atan2(inf, inf) = π/4.
+		{"atan2 big y, Float +inf x", "(eqv? (atan (expt 10 400) +inf.0) #m0)"},
+		{"atan2 Float +inf y, big x", "(eqv? (atan +inf.0 (expt 10 400)) (* 2 (atan #m1)))"},
+		{"log big to an infinite base", "(eqv? (log #m1e400 " + inf + ") #m0)"},
+		{"log tiny big to an infinite base", "(eqv? (log #m1e-400 " + inf + ") #m-0.0)"},
+		{"log exact big to a Float infinite base", "(eqv? (log (expt 10 400) +inf.0) #m0)"},
+		{"log inf base inf", "(eqv? (log " + inf + " " + inf + ") " + nan + ")"},
+		// C99 Annex G csqrt: an infinite imaginary part wins over a NaN real part.
+		{"sqrt nan + inf i", "(equal? (sqrt (make-rectangular " + nan + " " + inf + ")) (make-rectangular " + inf + " " + inf + "))"},
+		{"sqrt +inf + nan i", "(let ((r (sqrt (make-rectangular " + inf + " " + nan + ")))) (and (eqv? (real-part r) " + inf + ") (nan? (imag-part r))))"},
+		{"sqrt -inf + nan i", "(let ((r (sqrt (make-rectangular " + ninf + " " + nan + ")))) (and (nan? (real-part r)) (infinite? (imag-part r))))"},
+		{"atan of a complex with a nan part", "(nan? (atan (make-rectangular " + nan + " #m1e400)))"},
+		// A complex special result is not boxed as a real BigFloat.
+		{"asin +inf stays complex", "(not (real? (asin " + inf + ")))"},
+		{"log negative to a big base stays complex", "(not (real? (log #m-8 #m2)))"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
