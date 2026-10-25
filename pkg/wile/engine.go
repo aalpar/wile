@@ -1624,19 +1624,20 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 // evaluation, or returns nil when err carries none.
 //
 // This covers every error the VM raises that is deliberately NOT a Scheme
-// condition, and there are two such classes: an authorizer denial (see
-// applyCallableError) and a recovered host-fault panic (see
-// MachineContext.RunResumable). Both travel as a *machine.SchemeError rather
+// condition, and there are three such classes: an authorizer denial (see
+// applyCallableError), a recovered host-fault panic (see
+// MachineContext.RunResumable), and a run stopped because its ctx ended outside
+// any wait (MachineContext.CancelledRun). Each travels as a *machine.SchemeError rather
 // than as the exception-escape carrier the branch above unpacks, and the VM has
 // already stamped each with a source location and a continuation-chain trace.
 //
 // Without this arm those survive only flattened into the cause's text:
 // RuntimeError.Source and .StackTrace came back empty and Message was the
-// generic "runtime error" — for the two error classes an embedder most needs to
-// localise, since neither is catchable from Scheme and the Go-side diagnostic is
-// therefore the only channel it has. Condition stays nil — there is no
-// condition, which is the whole point — so IsSchemeException correctly reports
-// false for both.
+// generic "runtime error" — for the error classes an embedder most needs to
+// localise, since none is catchable from Scheme at the top level and the Go-side
+// diagnostic is therefore the only channel it has. Condition stays nil — there is
+// no condition, which is the whole point — so IsSchemeException correctly reports
+// false for each.
 func (*Engine) wrapSchemeError(err error) *RuntimeError {
 	var se *machine.SchemeError
 	if !errors.As(err, &se) {

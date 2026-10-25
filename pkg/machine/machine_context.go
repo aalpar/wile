@@ -490,7 +490,7 @@ func (p *MachineContext) Run() error {
 				if fired != nil {
 					return &ErrTimerInterrupt{Handler: fired.handler, Tag: fired.tag}
 				}
-				return mc.ctx.Err()
+				return mc.CancelledRun(mc.ctx, "Run: cancelled at the VM poll")
 			default:
 			}
 		}

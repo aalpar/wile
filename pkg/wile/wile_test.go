@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/testutil"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
@@ -1161,6 +1162,70 @@ func TestEval_CancelNestedCalls(t *testing.T) {
 	`)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, context.DeadlineExceeded), qt.IsTrue)
+}
+
+// errTestCancelCause is a cancellation cause no context package error matches, so
+// a pin can tell "the cause survived" from "ctx.Err() survived".
+var errTestCancelCause = werr.NewStaticError("wile test: cancelled by the host")
+
+// engineWithCancel returns an engine, a ctx, and a `cancel!` primitive that
+// cancels that ctx with cause when the program calls it. Cancelling from inside
+// the run injects the cancellation at a known point: before cancel! the ctx is
+// live, after it every check sees it ended.
+func engineWithCancel(t *testing.T, cause error, opts ...EngineOption) (*Engine, context.Context) {
+	t.Helper()
+	engine, err := NewEngine(context.Background(), opts...)
+	qt.Assert(t, err, qt.IsNil)
+	ctx, cancel := context.WithCancelCause(context.Background())
+	t.Cleanup(func() {
+		cancel(nil)
+	})
+	err = engine.RegisterPrimitive(PrimitiveSpec{
+		Name:       "cancel!",
+		ParamCount: 0,
+		Impl: func(mc CallContext) error {
+			cancel(cause)
+			mc.SetValue(values.Void)
+			return nil
+		},
+	})
+	qt.Assert(t, err, qt.IsNil)
+	return engine, ctx
+}
+
+// TestVMPollCarriesCauseAndLocation pins that a computation stopped at the VM's
+// poll reports what a parked wait reports: ErrOperationCancelled carrying the
+// ctx's cause, located. The poll used to return the bare ctx.Err(), so a cancel
+// whose cause is context.DeadlineExceeded read as context.Canceled with no
+// position. ctx.Err() stays matchable too: an embedder testing
+// errors.Is(err, context.Canceled) after its own cancel must still see it.
+func TestVMPollCarriesCauseAndLocation(t *testing.T) {
+	t.Parallel()
+	causes := []struct {
+		name  string
+		cause error // passed to the CancelCauseFunc
+		want  error // what context.Cause reports for it
+	}{
+		{"no cause", nil, context.Canceled},
+		{"deadline", context.DeadlineExceeded, context.DeadlineExceeded},
+		{"host cause", errTestCancelCause, errTestCancelCause},
+	}
+	for _, tc := range causes {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := qt.New(t)
+			engine, ctx := engineWithCancel(t, tc.cause)
+			_, err := engine.Eval(ctx, engine.MustParse(ctx, "(begin (cancel!) (let loop ((i 0)) (loop (+ i 1))))"))
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+			c.Assert(errors.Is(err, tc.want), qt.IsTrue, qt.Commentf("the cause must survive, got %v", err))
+			c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("ctx.Err() must survive, got %v", err))
+			c.Assert(err.Error(), qt.Contains, tc.want.Error())
+			var re *RuntimeError
+			c.Assert(errors.As(err, &re), qt.IsTrue)
+			c.Assert(re.Source, qt.Not(qt.Equals), "", qt.Commentf("the poll must locate its stop, got %v", err))
+		})
+	}
 }
 
 // errTestCloser is the sentinel a failing test closer returns, so the assertion

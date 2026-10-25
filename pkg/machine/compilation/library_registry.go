@@ -204,9 +204,8 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 //
 // A body whose ctx ended while it ran (cancelled ctx) is converted too, to
 // ErrLibraryInstantiationCancelled. The root arms no timer, so an enclosing
-// with-timeout's expiry reaches the body as its ctx ending, by a route whose
-// error says so in different ways (the VM loop's ctx.Err(), a SRFI-18 wait's
-// ErrOperationCancelled with the timer's cause); remembered as is, a later
+// with-timeout's expiry reaches the body as its ctx ending (ErrOperationCancelled
+// with the timer's cause, from the VM poll or a SRFI-18 wait); remembered as is, a later
 // importer reported a cancellation that was not in force for it, which an
 // embedder matching its own deadline misreads and a later with-timeout's owner
 // treats as nobody's. cancelled means the ctx ended AND the failure is that
