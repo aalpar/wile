@@ -101,6 +101,13 @@ func TestCallWithExitValidWhileExtentLive(t *testing.T) {
 			want: "2",
 		},
 		{
+			// Validity needs the frame on the escaping chain, so the escape is
+			// still upward-only and a barrier still lets it through.
+			name: "re-entered extent escapes through a continuation barrier",
+			src:  strings.Replace(reentered, "ESCAPE", "(call-with-continuation-barrier (lambda () (esc 'x)))", 1),
+			want: "(normal x)",
+		},
+		{
 			name: "control: escape from eval",
 			src:  `(call-with-exit (lambda (esc) (vector-set! gc 0 esc) (eval '((vector-ref gc 0) 1) (interaction-environment)) 'no))`,
 			want: "1",
@@ -231,4 +238,20 @@ func TestCallWithExitExpiredOffTheLiveChain(t *testing.T) {
 			qt.Assert(t, errors.Is(err, tc.want), qt.IsTrue, qt.Commentf("got: %v", err))
 		})
 	}
+}
+
+// TestCallWithExitPastEngineCallKeepsTheOldRule pins that the chain walk does
+// not decide an escape from an Engine.Call callback: the call's root has no link
+// to the host's caller, so a live outer extent is not expired there. The escape
+// itself still fails, with "no prompt found", as before: Engine.Call does not
+// pass an abort up (todo N29, "Engine.Call is still a default prompt for
+// aborts"). This row pins the walk's answer, not that failure.
+func TestCallWithExitPastEngineCallKeepsTheOldRule(t *testing.T) {
+	t.Parallel()
+
+	engine := newCallWithExitEngine(t)
+	_, err := engine.EvalMultiple(context.Background(),
+		`(call-with-exit (lambda (esc) (host-call (lambda (_) (esc 4))) 'no))`)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrExpiredEscape), qt.IsFalse, qt.Commentf("got: %v", err))
 }
