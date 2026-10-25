@@ -19,6 +19,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -221,8 +222,8 @@ func TestAbandonedMutexException_Error(t *testing.T) {
 // equal reason are therefore not equal; a wrapper equals only itself.
 func TestUncaughtException_EqualTo(t *testing.T) {
 	reason := values.NewSymbol("boom")
-	u1 := values.NewUncaughtException(reason)
-	u2 := values.NewUncaughtException(reason)
+	u1 := values.NewUncaughtException(reason, nil)
+	u2 := values.NewUncaughtException(reason, nil)
 	qt.Assert(t, u1.EqualTo(u1), qt.IsTrue)
 	qt.Assert(t, u1.EqualTo(u2), qt.IsFalse, qt.Commentf("distinct wrappers with the same reason are not equal (pointer identity)"))
 	qt.Assert(t, u1.EqualTo(values.NewInteger(1)), qt.IsFalse)
@@ -230,14 +231,14 @@ func TestUncaughtException_EqualTo(t *testing.T) {
 
 func TestUncaughtException_Reason(t *testing.T) {
 	reason := values.NewSymbol("boom")
-	u := values.NewUncaughtException(reason)
+	u := values.NewUncaughtException(reason, nil)
 	qt.Assert(t, u.Reason, qt.Equals, values.Value(reason))
 	qt.Assert(t, u.IsVoid(), qt.IsFalse)
 	qt.Assert(t, (*values.UncaughtException)(nil).IsVoid(), qt.IsTrue)
 }
 
 func TestUncaughtException_SchemeString(t *testing.T) {
-	u := values.NewUncaughtException(values.NewSymbol("boom"))
+	u := values.NewUncaughtException(values.NewSymbol("boom"), nil)
 	qt.Assert(t, strings.Contains(u.SchemeString(), "boom"), qt.IsTrue)
 	qt.Assert(t, strings.Contains(u.SchemeString(), "uncaught-exception"), qt.IsTrue)
 	// nil-safe.
@@ -267,4 +268,53 @@ func TestJoinCancelledByHostCauseMatchesBoth(t *testing.T) {
 	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
 	c.Assert(errors.Is(err, hostCause), qt.IsTrue, qt.Commentf("got %v", err))
 	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("got %v", err))
+}
+
+// TestJoinFinishedJoineeOutranksCancellationAndTimeout pins the top of Join's
+// order with all three outcomes ready at once: a finished joinee, an ended ctx and
+// a zero timeout. The finished joinee's result is the answer every time.
+func TestJoinFinishedJoineeOutranksCancellationAndTimeout(t *testing.T) {
+	c := qt.New(t)
+	th := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "finished")
+	th.RunFunc = func(_ context.Context, _ values.Callable) (values.Value, error) {
+		return values.NewSymbol("done"), nil
+	}
+	c.Assert(th.Start(context.Background()), qt.IsNil)
+	<-th.Done()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	zero := time.Duration(0)
+	for i := range 200 {
+		v, err := th.Join(ctx, &zero)
+		c.Assert(err, qt.IsNil, qt.Commentf("iteration %d", i))
+		c.Assert(v.SchemeString(), qt.Equals, "done", qt.Commentf("iteration %d", i))
+	}
+}
+
+// TestJoinCancellationOutranksAnElapsedTimeout pins the order of a join's outcomes
+// when more than one is ready: a joining thread whose ctx has ended reports its
+// cancellation, never the timeout, whatever the timeout. A zero timeout makes the
+// timer ready as soon as the cancelled ctx is, and a select with two ready arms
+// picks at random, so (thread-join! t 0 'tv) in a cancelled thread used to answer
+// 'tv about half the time. Every iteration must agree.
+func TestJoinCancellationOutranksAnElapsedTimeout(t *testing.T) {
+	c := qt.New(t)
+	release := make(chan struct{})
+	th := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "blocked")
+	th.RunFunc = func(_ context.Context, _ values.Callable) (values.Value, error) {
+		<-release
+		return values.Void, nil
+	}
+	c.Assert(th.Start(context.Background()), qt.IsNil)
+	defer close(release)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	zero := time.Duration(0)
+	for i := range 200 {
+		_, err := th.Join(ctx, &zero)
+		c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue,
+			qt.Commentf("iteration %d: got %v", i, err))
+	}
 }

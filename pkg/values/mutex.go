@@ -385,7 +385,7 @@ func (p *Mutex) UnlockContext(ctx context.Context, cv *ConditionVariable, timeou
 
 	// Enqueue on the cv while the mutex is still MutexLocked, then release: this pins
 	// the waiter into the wait set before any signaller can acquire the mutex.
-	ch := cv.registerWaiter()
+	ch := cv.registerWaiter(ctx)
 
 	p.mu.Lock()
 	p.state = MutexUnlocked

@@ -145,8 +145,10 @@ which owns the timers, decides it (`supersedingTimerInterrupt`,
   joiner stopped waiting, and SRFI-18 has no condition for it, so it reaches a
   `guard` as an ordinary error object. A joinee that died of its own cancelled
   wait is a joinee outcome, an uncaught exception whose reason is that wait's
-  error, not this one. (A joinee stopped mid-computation by the VM's poll is not
-  yet reported the same way; see *Boundaries*.)
+  error, not this one; so is a joinee stopped mid-computation by the VM's poll,
+  whose reason is the poll's error. The uncaught exception unwraps to the
+  joinee's error, so an uncaught join still answers `errors.Is` for
+  `ErrOperationCancelled` and the ctx's ending at the host.
 
 A `with-timeout`'s extent is a frame on the winding stack, above its boundary
 frame. A normal return pops it; any other way out (an escape, an abort, a guard's
@@ -284,13 +286,6 @@ be reported as a terminated thread's result. Pinned channel-free by
   cancellation too. The check reads the caller's ctx, so a `with-timeout` whose
   own timer fired and whose handler answered finishes normally. A thread's run is
   not checked: its result goes to its joiner, not to the embedder.
-- **A joinee stopped at the VM's poll is reported differently from one stopped
-  in a wait.** A thread cancelled while computing dies at the poll with
-  `ErrOperationCancelled`, which reaches its joiner as an ordinary error object,
-  the same shape as the joiner's own cancellation; one cancelled while parked reaches it as an
-  uncaught exception. Unifying them means mapping every joinee error to an uncaught
-  exception, and that carrier does not yet expose its reason to `errors.Is`, so the
-  host would lose the cause. Filed in TODO.md.
 - **No transactional guarantee across operations.** These are locks, not
   transactions; standard mutual-exclusion semantics apply.
 
@@ -426,8 +421,7 @@ this pins unchanged behaviour and passes on the code before the fix). `TestMutex
   uncaught exception whose reason names the wait, and the main thread's lock stays
   held. The thread signals just before its wait, and the thunk waits for that
   signal before sleeping into the timer, so the cancellation reaches the wait and
-  not the thread's first VM poll, which would report differently (see
-  *Boundaries*).
+  not the thread's first VM poll, whose reason would name the poll instead.
 - `TestJoinReportsJoineeCancellationAsUncaught`: a joinee that died of its own
   cancelled wait is reported as an uncaught exception, not as the joiner's
   cancellation. Same handshake.

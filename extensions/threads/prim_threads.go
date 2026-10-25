@@ -25,6 +25,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -207,6 +208,12 @@ func PrimThreadSleep(mc machine.CallContext) error {
 
 	select {
 	case <-time.After(d):
+		// An elapsed sleep and an ended ctx can be ready together (a zero sleep
+		// always is), and select picks between them at random: the cancellation
+		// wins, as it does for thread-join! and the lock waits.
+		if mc.Context().Err() != nil {
+			return waitCancelled(mc, "thread-sleep!")
+		}
 	case <-mc.Context().Done():
 		return waitCancelled(mc, "thread-sleep!")
 	}
@@ -291,7 +298,7 @@ func PrimThreadJoin(mc machine.CallContext) error {
 	//
 	//	(guard (e ((join-timeout-exception? e) ...)        ; TIMEOUT elapsed
 	//	          ((terminated-thread-exception? e) ...)   ; joinee was terminated
-	//	          ((uncaught-exception? e) ...)            ; joinee raised
+	//	          ((uncaught-exception? e) ...)            ; joinee raised or died
 	//	          ((error-object? e) ...))                 ; joiner was cancelled
 	//	  (thread-join! t))
 	//
@@ -382,16 +389,59 @@ func joinConditionFor(err error) values.Value {
 		return termErr
 	}
 
-	// A thread that ended via an uncaught Scheme exception surfaces it here as an
-	// *ErrExceptionEscape carrier (wrapped in *UncaughtThreadException). The
-	// carrier is already-formed control flow, so applyCallableError would pass it
-	// through untouched — straight past any guard around the join.
-	var escErr *machine.ErrExceptionEscape
-	if errors.As(err, &escErr) {
-		return values.NewUncaughtException(escErr.Condition)
+	// Every other joinee outcome arrives as an *UncaughtThreadException, and every
+	// one is an uncaught-exception to the joiner, wherever the joinee died: a
+	// thread killed by its ctx dies with the wait's raised condition when it was
+	// parked and with the VM poll's error when it was busy, and the joiner must not
+	// tell the two apart (the bare error would reach its guard as an error-object,
+	// the arm for the joiner's OWN cancellation). The joinee's error is the Cause,
+	// so an uncaught join keeps it matchable at the embedder.
+	//
+	// Except a security denial: it is the sandbox's answer, not a Scheme condition,
+	// and it reaches the embedder past the joiner's guards as it does past the
+	// joinee's (applyCallableError, pkg/machine).
+	var uncaught *values.UncaughtThreadException
+	if !errors.As(err, &uncaught) || errors.Is(err, security.ErrAccessDenied) {
+		return nil
+	}
+	cause := uncaught.Reason
+	if machine.IsControlTransfer(cause) {
+		cause = &JoineeControlTransfer{transfer: cause}
 	}
 
-	return nil
+	// A thread that ended via an uncaught Scheme exception surfaces it as an
+	// *ErrExceptionEscape carrier, and its condition is the reason; anything else
+	// is converted as a primitive's failure would be.
+	var escErr *machine.ErrExceptionEscape
+	if errors.As(cause, &escErr) {
+		return values.NewUncaughtException(escErr.Condition, cause)
+	}
+	return values.NewUncaughtException(machine.ConditionFromError(cause), cause)
+}
+
+// JoineeControlTransfer is a joined thread's outcome, as its joiner sees it, when
+// the thread's run ended with a control transfer (an abort, a resume, a timer or
+// break interrupt) instead of a value or an uncaught raise. The transfer was
+// addressed to the joined thread's own drivers, so it is not forwarded: the
+// carrier unwraps to werr.ErrThreadEndedByControlTransfer and to nothing else, so
+// the joiner's drivers, which find a transfer with errors.As, cannot act on it.
+// Transfer returns the original for a host that asks for it by name.
+type JoineeControlTransfer struct {
+	transfer error
+}
+
+func (p *JoineeControlTransfer) Error() string {
+	return "thread-join!: " + werr.ErrThreadEndedByControlTransfer.Error() + ": " + p.transfer.Error()
+}
+
+// Unwrap returns werr.ErrThreadEndedByControlTransfer, never the transfer.
+func (*JoineeControlTransfer) Unwrap() error {
+	return werr.ErrThreadEndedByControlTransfer
+}
+
+// Transfer returns the control transfer that ended the joined thread's run.
+func (p *JoineeControlTransfer) Transfer() error {
+	return p.transfer
 }
 
 // PrimThreadState returns the thread's state as a symbol: new, runnable,
@@ -507,9 +557,8 @@ var PrimMutexState = helpers.MakeUnaryAccessor(werr.ErrNotAMutex, "mutex-state",
 // terminated owner returns #t and additionally signals an abandoned-mutex
 // exception. A cancelled wait raises ErrOperationCancelled (waitCancelled); when a
 // with-timeout armed in this thread's chain fired, the VM turns the raise into the
-// timeout, run by the with-timeout whose timer fired. A timed wait does not watch the context: it notices a
-// cancellation only when its timeout elapses, and acquires if the mutex frees
-// first.
+// timeout, run by the with-timeout whose timer fired. A timed wait watches the
+// context as an untimed one does (Mutex.LockContext).
 func PrimMutexLock(mc machine.CallContext) error {
 	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, werr.ErrNotAMutex, "mutex-lock!")
 	if err != nil {

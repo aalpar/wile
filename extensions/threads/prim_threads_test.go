@@ -23,6 +23,7 @@ import (
 	"time"
 
 	extthreads "github.com/aalpar/wile/extensions/threads"
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/registry/core"
@@ -372,6 +373,59 @@ func TestThreadSleepContextCancellation(t *testing.T) {
 				t.Fatal("thread-sleep! did not respect context cancellation")
 			}
 		})
+	}
+}
+
+// cancelledCallContext is a machine.CallContext whose ctx has already ended, for
+// driving a blocking primitive directly: no VM poll can intervene between the
+// cancellation and the call, which is what makes the outcome deterministic.
+type cancelledCallContext struct {
+	ctx  context.Context
+	args []values.Value
+}
+
+func (p *cancelledCallContext) Arg(i int) values.Value {
+	return p.args[i]
+}
+
+func (*cancelledCallContext) SetValue(values.Value) {
+}
+
+func (*cancelledCallContext) SetValues(...values.Value) {
+}
+
+func (*cancelledCallContext) Authorizer() security.Authorizer {
+	return nil
+}
+
+func (p *cancelledCallContext) Context() context.Context {
+	return p.ctx
+}
+
+func (*cancelledCallContext) EnvironmentFrame() *environment.EnvironmentFrame {
+	return nil
+}
+
+func (*cancelledCallContext) Thread() *values.Thread {
+	return nil
+}
+
+var _ machine.CallContext = (*cancelledCallContext)(nil)
+
+// TestCancelledZeroSleepRaises pins thread-sleep!'s order when its timer and its
+// ctx are ready together: the cancellation wins. A zero sleep's timer fires at
+// once, and a select with two ready arms picks at random, so a cancelled thread's
+// (thread-sleep! 0) used to return normally about half the time. Every iteration
+// must agree.
+func TestCancelledZeroSleepRaises(t *testing.T) {
+	c := qt.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	mc := &cancelledCallContext{ctx: ctx, args: []values.Value{values.NewInteger(0)}}
+	for i := range 200 {
+		err := extthreads.PrimThreadSleep(mc)
+		c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue,
+			qt.Commentf("iteration %d: got %v", i, err))
 	}
 }
 
@@ -2023,6 +2077,156 @@ func TestJoinReportsJoineeCancellationAsUncaught(t *testing.T) {
 				`(thunk-returned "`+w.site+`: cancelled before the wait completed: context canceled")`)
 		})
 	}
+}
+
+// joineeCancelledByThunkReturn starts a thread inside a with-timeout thunk, waits
+// until the thread has signalled that it is past its rendezvous, and returns, which
+// ends the thread's ctx: body then dies of that cancellation, at the VM poll if it
+// is busy and in its wait if it is parked. The program then evaluates join, with
+// the thread bound to t.
+func joineeCancelledByThunkReturn(body, join string) string {
+	return `
+(define rm (make-mutex))
+(define rcv (make-condition-variable))
+(define t (make-thread (lambda ()
+  (mutex-lock! rm) (condition-variable-signal! rcv) (mutex-unlock! rm)
+  ` + body + `)))
+(with-timeout 5000 (lambda (k) 'timed-out)
+  (lambda () (mutex-lock! rm) (thread-start! t) (mutex-unlock! rm rcv) 'thunk-returned))
+` + join
+}
+
+// TestJoinClassifiesACancelledJoineeAlikeWhereverItDied pins that a joinee killed
+// by its ctx is an uncaught-exception to the joiner whether it was parked in a wait
+// or busy at the VM poll. The busy one used to die with the poll's raw error,
+// which joinConditionFor did not map, so the joiner's guard saw an ordinary
+// error-object, the arm a guard reserves for the JOINER's own cancellation.
+func TestJoinClassifiesACancelledJoineeAlikeWhereverItDied(t *testing.T) {
+	bodies := []struct {
+		name string
+		body string
+	}{
+		{"parked", `(thread-sleep! 10)`},
+		{"busy", `(let loop ((i 0)) (loop (+ i 1)))`},
+	}
+	for _, b := range bodies {
+		t.Run(b.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			defer func() {
+				_ = engine.Close()
+			}()
+			result, err := evalWithWatchdog(t, engine, joineeCancelledByThunkReturn(b.body, `
+(guard (e ((uncaught-exception? e) 'uncaught-exception)
+          ((error-object? e) 'error-object))
+  (thread-join! t))`), 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "uncaught-exception")
+		})
+	}
+}
+
+// TestUncaughtJoinOfACancelledJoineeKeepsTheCause pins the embedder's view of a
+// joinee that died of its cancellation, joined with no guard: the error reaching
+// the host still answers errors.Is for ErrOperationCancelled and context.Canceled.
+// The uncaught-exception object the join raises used to end the chain (it was not
+// an error, so the escape carrying it could not unwrap), and only the busy shape,
+// which reached the joiner unmapped, kept its cause.
+func TestUncaughtJoinOfACancelledJoineeKeepsTheCause(t *testing.T) {
+	bodies := []struct {
+		name string
+		body string
+	}{
+		{"parked", `(thread-sleep! 10)`},
+		{"busy", `(let loop ((i 0)) (loop (+ i 1)))`},
+	}
+	for _, b := range bodies {
+		t.Run(b.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			defer func() {
+				_ = engine.Close()
+			}()
+			_, err := evalWithWatchdog(t, engine, joineeCancelledByThunkReturn(b.body, `(thread-join! t)`), 5*time.Second)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+			c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("got %v", err))
+		})
+	}
+}
+
+// TestJoinDoesNotForwardAControlTransfer is a unit test of joinConditionFor's
+// guard, not a regression pin: no Scheme program is known to end a thread's run
+// with a control transfer today (the filed shapes, (make-thread exit) and an abort
+// out of an inherited after thunk, no longer do). The thread's outcome is set by
+// hand to an abort addressed to the default prompt, which every driver owns, so
+// a joiner that forwarded it, even only as the uncaught-exception's cause, would
+// have its own root take the abort and end the program without an error.
+func TestJoinDoesNotForwardAControlTransfer(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	defer func() {
+		_ = engine.Close()
+	}()
+	th := values.NewThread(nil, "aborts")
+	th.RunFunc = func(context.Context, values.Callable) (values.Value, error) {
+		return nil, &machine.ErrPromptAbort{Tag: machine.DefaultPromptTag}
+	}
+	c.Assert(th.Start(context.Background()), qt.IsNil)
+	c.Assert(engine.Define("t", wile.WrapValue(th)), qt.IsNil)
+
+	result, err := evalWithWatchdog(t, engine, `(guard (e ((uncaught-exception? e) 'uncaught-exception)) (thread-join! t))`, 5*time.Second)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "uncaught-exception")
+
+	_, err = evalWithWatchdog(t, engine, `(thread-join! t)`, 5*time.Second)
+	c.Assert(errors.Is(err, werr.ErrThreadEndedByControlTransfer), qt.IsTrue, qt.Commentf("got %v", err))
+	var abort *machine.ErrPromptAbort
+	c.Assert(errors.As(err, &abort), qt.IsFalse, qt.Commentf("the joinee's abort reached the joiner: %v", err))
+	var carrier *extthreads.JoineeControlTransfer
+	c.Assert(errors.As(err, &carrier), qt.IsTrue, qt.Commentf("got %v", err))
+	c.Assert(errors.As(carrier.Transfer(), &abort), qt.IsTrue, qt.Commentf("the carrier lost the transfer: %v", carrier.Transfer()))
+}
+
+// TestJoinOfAPanickedJoineeIsUncaught pins a joinee that panicked: the joiner
+// sees an uncaught-exception (it was an error-object before every joinee outcome
+// was mapped), and an unguarded join keeps ErrThreadPanic at the host.
+func TestJoinOfAPanickedJoineeIsUncaught(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	defer func() {
+		_ = engine.Close()
+	}()
+	th := values.NewThread(nil, "panics")
+	th.RunFunc = func(context.Context, values.Callable) (values.Value, error) {
+		panic("joinee panic")
+	}
+	c.Assert(th.Start(context.Background()), qt.IsNil)
+	c.Assert(engine.Define("t", wile.WrapValue(th)), qt.IsNil)
+
+	result, err := evalWithWatchdog(t, engine, `(guard (e ((uncaught-exception? e) 'uncaught-exception) ((error-object? e) 'error-object)) (thread-join! t))`, 5*time.Second)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "uncaught-exception")
+
+	_, err = evalWithWatchdog(t, engine, `(thread-join! t)`, 5*time.Second)
+	c.Assert(errors.Is(err, werr.ErrThreadPanic), qt.IsTrue, qt.Commentf("got %v", err))
+}
+
+// TestUncaughtJoinKeepsTheJoineesSentinel pins that a primitive failure in a
+// joinee survives an unguarded join with its sentinel matchable at the host.
+func TestUncaughtJoinKeepsTheJoineesSentinel(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	defer func() {
+		_ = engine.Close()
+	}()
+	_, err := evalWithWatchdog(t, engine, `
+(define t (make-thread (lambda () (+ 'a 1))))
+(thread-start! t)
+(thread-join! t)`, 5*time.Second)
+	c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue, qt.Commentf("got %v", err))
+	var uncaught *values.UncaughtException
+	c.Assert(errors.As(err, &uncaught), qt.IsTrue, qt.Commentf("got %v", err))
 }
 
 // TestCancelledWaitInChildThreadIsCatchableThere pins the other side of the child

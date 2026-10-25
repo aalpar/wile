@@ -293,7 +293,7 @@ func (p *Thread) setOutcomeLocked(o *threadOutcome) {
 //     which is what makes the untimed form fall out of the same select.
 //   - the joiner itself is cancelled — thread-terminate! on the JOINER, an
 //     embedder deadline, a with-timeout: ErrOperationCancelled carrying the ctx
-//     cause.
+//     cause. It outranks the timeout when both are ready.
 //
 // The third arm is the one that was missing. Terminate on a started thread
 // cancels its ctx but does not close its done channel (ownsDone is true only for
@@ -318,17 +318,32 @@ func (p *Thread) Join(ctx context.Context, timeout *time.Duration) (Value, error
 		deadline = timer.C
 	}
 
+	// The select only wakes the join. Which arm woke it does not decide the
+	// answer: more than one can be ready together (an elapsed or zero timeout
+	// beside an ended ctx, a joinee finishing as either fires), and select picks
+	// among ready arms at random. The answer is read in one fixed order instead:
+	// the joinee's end, then the joiner's cancellation, then the timeout.
 	select {
 	case <-p.done:
-		// Thread completed
 	case <-deadline:
-		return nil, werr.ErrJoinTimeout
 	case <-ctx.Done():
-		return nil, werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, werr.ContextEnding(ctx, nil),
-			"Thread.Join: the joining thread was cancelled before %s terminated", p.name)
 	}
 
-	return p.terminalResult()
+	select {
+	case <-p.done:
+		return p.terminalResult()
+	default:
+	}
+	if ctx.Err() != nil {
+		return nil, p.joinCancelled(ctx)
+	}
+	return nil, werr.ErrJoinTimeout
+}
+
+// joinCancelled is Join's report of the joining thread's own cancellation.
+func (p *Thread) joinCancelled(ctx context.Context) error {
+	return werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, werr.ContextEnding(ctx, nil),
+		"Thread.Join: the joining thread was cancelled before %s terminated", p.name)
 }
 
 // terminalResult reads the outcome of a thread whose done channel has closed.
@@ -507,6 +522,7 @@ var (
 	_ error = (*JoinTimeoutException)(nil)
 	_ error = (*TerminatedThreadException)(nil)
 	_ error = (*AbandonedMutexException)(nil)
+	_ error = (*UncaughtException)(nil)
 )
 
 // JoinTimeoutException is raised when thread-join! times out
@@ -597,15 +613,35 @@ func (p *UncaughtThreadException) Unwrap() error {
 // a Reason cycle (equal.go documents that hazard for non-DeepEqualer recursive
 // types). Each thread-join! mints a fresh wrapper, so structural equality would
 // buy nothing.
+//
+// Cause is how the joined thread ended, as a Go error, and Unwrap returns it: an
+// uncaught join reaches the embedder as an exception escape carrying this object,
+// and the escape unwraps into its condition when the condition is an error, so the
+// joinee's cause (a cancellation, a sentinel) stays matchable with errors.Is. A nil
+// Cause ends the chain.
 type UncaughtException struct {
 	Reason Value
+	Cause  error
 }
 
 // NewUncaughtException wraps the original raised condition in an SRFI-18
-// uncaught-exception object.
-func NewUncaughtException(reason Value) *UncaughtException {
-	q := &UncaughtException{Reason: reason}
+// uncaught-exception object; cause is how the joined thread ended (see the type
+// doc), or nil.
+func NewUncaughtException(reason Value, cause error) *UncaughtException {
+	q := &UncaughtException{Reason: reason, Cause: cause}
 	return q
+}
+
+func (p *UncaughtException) Error() string {
+	if p.Reason != nil {
+		return fmt.Sprintf("uncaught exception in thread: %s", p.Reason.SchemeString())
+	}
+	return "uncaught exception in thread"
+}
+
+// Unwrap returns how the joined thread ended; see the type doc.
+func (p *UncaughtException) Unwrap() error {
+	return p.Cause
 }
 
 // IsVoid reports whether the receiver is nil, per the default Value convention.

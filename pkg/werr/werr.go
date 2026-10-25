@@ -198,6 +198,14 @@ var (
 	ErrThreadPanic   = NewStaticError("thread panic")
 	ErrPanicRecovery = NewStaticError("panic recovery")
 
+	// ErrThreadEndedByControlTransfer is a thread's outcome as its joiner sees it
+	// when the thread's run ended with a control transfer (an abort, a resume, a
+	// timer or break interrupt) instead of a value or an uncaught raise. The
+	// transfer was addressed to the thread's own drivers, so it is reported to the
+	// joiner as a failure and is not forwarded where the joiner's drivers would act
+	// on it. The threads extension's JoineeControlTransfer carries it.
+	ErrThreadEndedByControlTransfer = NewStaticError("thread ended by a control transfer")
+
 	// ErrNotImplemented marks a primitive that is registered and callable but has
 	// no working implementation behind it. It is deliberately distinct from a
 	// runtime failure sentinel: the operation did not fail on its inputs, it does

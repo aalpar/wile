@@ -17,6 +17,8 @@ package values
 // This file exposes internals to the EXTERNAL test package (values_test) without
 // putting them on the public API. It is compiled only under `go test`.
 
+import "context"
+
 // PromotionResultKind returns the result kind when operands of kindA and kindB are
 // combined in an ARITHMETIC operation: the least upper bound in the promotion lattice.
 //
@@ -40,4 +42,10 @@ package values
 // with it: the only callers are in-tree tests passing real kinds.
 func PromotionResultKind(kindA, kindB NumericKind) NumericKind {
 	return promotionTable[kindA][kindB]
+}
+
+// RegisterWaiter enqueues a waiter on p as Mutex.UnlockContext does, without
+// blocking, and returns the channel a Signal or Broadcast closes to wake it.
+func (p *ConditionVariable) RegisterWaiter(ctx context.Context) <-chan struct{} {
+	return p.registerWaiter(ctx)
 }

@@ -377,7 +377,10 @@ func (p *REPL) evalAndPrint(ctx context.Context, sigCh <-chan os.Signal, expr *w
 		// An interrupt cancels evalCtx but not ctx; report it as ^C and return
 		// to the prompt rather than printing a raw "context canceled". When ctx
 		// itself is done (SIGTERM), fall through so the caller's loop exits.
-		if errors.Is(runErr, context.Canceled) && ctx.Err() == nil {
+		// The ctx says whether there was an interrupt, not the error: an error
+		// can carry a context.Canceled that is not this eval's (an uncaught join
+		// of a thread that died of its own cancellation unwraps to it).
+		if evalCtx.Err() != nil && ctx.Err() == nil {
 			fmt.Fprintln(p.errOut, "^C")
 			return
 		}
