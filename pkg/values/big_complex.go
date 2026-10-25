@@ -129,6 +129,20 @@ func maybeSimplify(rel, iam Number) Number {
 	return NewBigComplex(rel, iam)
 }
 
+// NewInexactBigComplex is re+im*i for two reals at least one of which is a
+// BigFloat: the inexact complex make-rectangular returns, and a complex literal
+// with an l-marked part reads as. Both parts convert at OperandPrecision, an
+// exact part included, because an inexact complex has no exact part (R7RS
+// 6.2.2; Racket and Chez agree, (make-rectangular 1.5 2) is 1.5+2.0i). An exact
+// zero imaginary part collapses to the real part, which is then the BigFloat.
+func NewInexactBigComplex(re, im Number) Number {
+	prec := OperandPrecision(re, im)
+	if isExactZero(im) {
+		return toBigFloatAt(re, prec)
+	}
+	return NewBigComplexFromBigFloats(toBigFloatAt(re, prec), toBigFloatAt(im, prec))
+}
+
 // promoteToBigComplexPart converts any Number to a BigComplex-compatible part.
 func promoteToBigComplexPart(n Number) Number {
 	switch v := n.(type) {
@@ -734,9 +748,12 @@ func (p *BigComplex) Conjugate() *BigComplex {
 
 // SchemeString returns the Scheme representation of this BigComplex.
 // componentString renders one part of a complex number. A BigFloat part drops
-// the 'l' precision marker its standalone spelling carries; see
-// (*BigFloat).numeralText for why the marker is inert inside a complex literal.
-// Every other part type renders as itself.
+// the 'l' precision marker its standalone spelling carries, although the reader
+// honours one (0.0+1.5l0i reads as a BigComplex): a Float or Complex meeting an
+// exact BigComplex still yields a BigComplex of float64 expansions, so writing
+// the marker would print it in plain R7RS results, (+ 1.5 +i) as 1.5l0+1.0l0i.
+// The cost is that a BigComplex reads back as a float64 Complex. Every other
+// part type renders as itself.
 func componentString(n Number) string {
 	bf, ok := n.(*BigFloat)
 	if !ok {

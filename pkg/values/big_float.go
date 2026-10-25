@@ -111,7 +111,11 @@ func parseDecimalBigFloat(s string, prec uint) *BigFloat {
 // decimalLiteralPrecision returns the bits needed for the significant digits of
 // a decimal literal to survive a read/print round trip, floored at
 // DefaultBigFloatPrecision. Only the mantissa counts; the exponent is not a
-// digit of precision.
+// digit of precision. Counting it (so 1e120 would read as exactly 10^120, as
+// its spelled-out zeros do) breaks the write/read round trip: the writer prints
+// the shortest digits at the value's own precision, so the 256-bit neighbour of
+// 10^400 writes as 1l+400 and must read back as that neighbour
+// (TestBigFloatWriteReadRoundTrip, docs/numeric/tower.md).
 //
 // An n-digit integer is exact at ceil(n*log2(10)) bits, but a fraction must
 // also print back as the same n digits, which needs 2^(p-1) > 10^n (Matula), so
@@ -600,14 +604,8 @@ func (p *BigFloat) SchemeString() string {
 }
 
 // numeralText renders the value with no precision marker, and reports whether it
-// is finite — i.e. whether there is a mantissa a marker could attach to.
-//
-// It is what a BigFloat looks like as a *component* of a larger number, where
-// the marker would be inert at best: a real inside a complex literal is not read
-// back as a real (ParseComplexStringNumber builds float64 parts whatever the
-// components claim), so the marker would declare a precision the reader does not
-// honour, and would render inconsistently besides — "+inf.0+0.0l0i" marks one
-// part and not the other.
+// is finite, i.e. whether there is a mantissa a marker could attach to. It is
+// what a BigFloat looks like as a part of a complex (componentString says why).
 //
 // R7RS §6.2.6: inexact integers must include a decimal point to distinguish them
 // from exact ones. big.Float.Text('g', -1) drops ".0", so a form with neither a

@@ -220,6 +220,11 @@ map the four size specifications onto what it has. Wile has two:
 so it is the only one that changes the type. It is symmetric on output: a
 `BigFloat` writes with `l` (`1e1000` renders as `1l+1000`), because writing `e`
 would claim default precision and the value would read back as a `Float`.
+A complex literal with an `l`-marked part reads as the `BigComplex`
+`make-rectangular` builds from the parts read standing alone (`1.5l0+2i` has two
+BigFloat parts). The writer omits the marker inside a complex, so a `BigComplex`
+does not yet round-trip (`componentString` in `pkg/values/big_complex.go` says
+why).
 
 Two consequences worth stating, since they look like inconsistencies and are not:
 
@@ -227,6 +232,17 @@ Two consequences worth stating, since they look like inconsistencies and are not
   `1.2345678901234567890123456789l0` is one token and keeps every digit;
   `#m#d1.2345678901234567890123456789` widens an already-rounded float64.
 - **Markers are decimal-only.** `#x1e2` is 482, because `e` is a hex digit.
+- **A literal's precision is its significant digits, not its magnitude**,
+  floored at 256 bits and capped at `MaxBigFloatLiteralPrecision` (65536).
+  Integer-part zeros are digits and an exponent is not, so `(= 1l120 1<120
+  zeros>.0l0)` is `#f`: `1l120` is the 256-bit neighbour of 10^120 (5^120 needs
+  279 bits) and the spelled-out form is exact. Counting the exponent would break
+  the write/read round trip: the writer prints a BigFloat's shortest digits at
+  its own precision, so the 256-bit neighbour of 10^400 writes as `1l+400`, and
+  a reader that counted the exponent would read that text back as exact 10^400.
+  Spell the zeros out when a power of ten must be exact. A radix fraction past
+  float64 range (`#x1<255 zeros>1.0`) takes the bits its digits hold, on the same
+  floor and cap.
 
 ---
 

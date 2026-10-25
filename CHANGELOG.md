@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`values.NewInexactBigComplex`.** The inexact BigComplex `make-rectangular`
+  builds from two reals one of which is a BigFloat: both parts at the operands'
+  precision, an exact zero imaginary part collapsing to the real.
+
 - **`values.SourceContext.FileIsPath`, `parser.(*Parser).SetFileIsPath`,
   `values.(*PortObject).SetPortNameIsPath` and `PortNameIsPath`.** A reader
   marks the contexts it builds when its file name is a location it opened (an
@@ -131,6 +135,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   4,207 symbols with 385 dead.
 
 ### Fixed
+
+- **A radix fraction past float64 range keeps its digits.** `#x1<255 zeros>1.0`
+  (16^256+1) read at a fixed 256 bits and lost the trailing 1, where the decimal
+  analogue keeps every digit; it now takes the bits its digits hold, floored at
+  256 and clamped at `MaxBigFloatLiteralPrecision`, through the reader and
+  `string->number` with a radix argument alike.
 
 - **A source that opens with a UTF-8 byte order mark reads.** A file an editor
   saved with a BOM failed at 1:0 with "unknown token type ... character U+FEFF"
@@ -855,6 +865,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `let` — are affected and all five now report the structural error.
 
 ### Changed
+
+- **A complex literal with an `l`-marked part reads as a `BigComplex`.** Each
+  part is read by its own spelling and the pair built as `make-rectangular`
+  builds it: `0.0+1.5l0i` and `1.5l0+2i` have two BigFloat parts (were float64
+  complexes), `+1.5l0i` is `0.0+1.5i` with BigFloat parts, `1.5l0+0i` is the
+  BigFloat `1.5l0`; `1.5+2i` is unchanged. `#e1.5l0+2i` is `3/2+2i`. The writer
+  still omits the marker inside a complex.
+
+- **`make-rectangular` of a BigFloat and an exact integer makes the integer
+  inexact.** `(make-rectangular #m1.5 2)` is `1.5+2.0i` with BigFloat parts (was
+  `1.5+2i`: the imaginary part stayed the exact 2, the one way to build a
+  mixed-exactness complex); a Rational partner already converted. Racket and
+  Chez agree.
 
 - **BREAKING (behavior): a program's source name never steers `include` under a
   live load stack.** The name passed to `EvalProgram`, `EvalMultipleWithSource`,
