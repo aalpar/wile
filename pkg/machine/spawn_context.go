@@ -128,12 +128,13 @@ func (p *spawnCtx) end(err, cause error) {
 	stops := p.stops
 	p.stops = nil
 	p.mu.Unlock()
+	// Counted down before anything can observe the ending.
+	liveSpawnContexts.Add(-1)
 	p.setCause(cause)
 	close(p.done)
 	for _, stop := range stops {
 		stop()
 	}
-	liveSpawnContexts.Add(-1)
 }
 
 func (p *spawnCtx) Deadline() (time.Time, bool) {

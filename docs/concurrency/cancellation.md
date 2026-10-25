@@ -142,8 +142,8 @@ which owns the timers, decides it (`supersedingTimerInterrupt`,
   as `context.Canceled`), which is how the two are told apart. A thread's ctx
   hides the starter's timers, so a thread it starts derives from it directly,
   and is released when the thread ends (a child's, when it is reaped). A
-  started thread's root has no synchronous parent,
-  so with no `with-timeout` of its own no context on its chain owns a timer. The
+  started thread's root has no synchronous parent, so with no `with-timeout` of
+  its own no context on its chain owns a timer. The
   failure is an ordinary condition: a `guard` around the wait can catch it, and a
   program that catches it and finishes returns normally even though its context is
   cancelled (see *Boundaries*). So is a procedure a host function runs through
@@ -451,7 +451,9 @@ this pins unchanged behaviour and passes on the code before the fix). `TestMutex
   `TestThreadStartedByAThreadEndsWithIt`: a thread a started thread starts ends
   with it. `TestSpawnContextIsReleasedWhenTheWorkEnds`: the spawn ctx is ended
   when the thread ends, when its start fails, and when the child is reaped.
-  `TestChildSpawnedInATimedThunkEndsOnlyByExpiry`: the `process-spawn` half.
+  `TestChildSpawnedInATimedThunkEndsOnlyByExpiry`: the `process-spawn` half;
+  `TestProcessSpawnedInATimedThunkDiesWithTheHostCtx` (`extensions/process`):
+  such a child still dies with the host's ctx.
 - `TestThreadStartedInATimedThunkEndsOnlyByExpiry` (`pkg/machine`): a thread a
   `with-timeout` thunk started, at top level or inside `eval`, survives the
   thunk's normal return and an escape from it, and is cancelled by the timer's

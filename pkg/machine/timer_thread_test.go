@@ -195,7 +195,8 @@ const meetHelpers = `
 // which the main thread holds, and A is then terminated, or its starter's timer
 // expires. B used to survive A's termination when A had been started in a
 // with-timeout thunk that returned: A's ctx still carried the starter's timer
-// marker, so B's start walked past A's ctx to the ctx below that timer.
+// marker, so B's start walked past A's ctx to the ctx below that timer. A is
+// joined too, so its spawn ctx is released before the next test counts them.
 func TestThreadStartedByAThreadEndsWithIt(t *testing.T) {
 	tcs := []struct {
 		name  string
@@ -224,8 +225,10 @@ func TestThreadStartedByAThreadEndsWithIt(t *testing.T) {
   (define a (make-thread (lambda () (start-and-meet! b rm2 rcv2) (meet! rm rcv) (mutex-lock! m) 'a-value)))
   `+tc.start+`
   `+tc.end+`
-  (guard (e ((uncaught-exception? e) 'b-cancelled))
-    (thread-join! b 30 'b-survived)))`)
+  (let ((q (guard (e ((uncaught-exception? e) 'b-cancelled))
+             (thread-join! b 30 'b-survived))))
+    (guard (e (#t #f)) (thread-join! a))
+    q))`)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result.SchemeString(), qt.Equals, "b-cancelled")
 		})

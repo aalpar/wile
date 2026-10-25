@@ -618,3 +618,23 @@ func TestProcessSpawnCtxBoundsTheChild(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "-1", qt.Commentf("the spawn's ctx must have killed the child"))
 }
+
+// TestProcessSpawnedInATimedThunkDiesWithTheHostCtx is the host half of the
+// spawn rule under a with-timeout: a child a timed thunk spawned outlives the
+// thunk's return (TestChildSpawnedInATimedThunkEndsOnlyByExpiry, pkg/machine),
+// but not the host's ctx below the timer. The timer's 60 s never elapses.
+func TestProcessSpawnedInATimedThunkDiesWithTheHostCtx(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix commands")
+	}
+	c := qt.New(t)
+	engine, ctx := newCancelEngine(t)
+	_, err := evalWithin(ctx, t, engine, `(begin
+  (define p (with-timeout 60000 (lambda (k) 'h) (lambda () (process-spawn "sleep" "30"))))
+  (cancel!))`, 10*time.Second)
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+
+	result, err := evalWithin(context.Background(), t, engine, `(process-wait p)`, 10*time.Second)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "-1", qt.Commentf("the host's ctx must have killed the child"))
+}
