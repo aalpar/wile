@@ -17,6 +17,7 @@ package parser
 import (
 	"context"
 	"errors"
+	"io"
 	"math"
 	"math/big"
 	"strings"
@@ -1237,4 +1238,75 @@ func TestParseNumber_HashDigitsBasePrefixes(t *testing.T) {
 			c.Assert(f.Value, qt.Equals, tc.expected)
 		})
 	}
+}
+
+// TestReadComplexWithDotLedOrInfnanParts pins complex numerals the tokenizer
+// used to split or misread. Each is one datum in racket and petite, which print
+// the value given. The second read must be the end: ".5+.5i" was the two data
+// .5 and +.5i.
+//   - a dot-led real part ended at its fraction (.5+.5i);
+//   - a signed real part took no '.' after the imaginary sign (+1+.5i);
+//   - a NaN real part had no imaginary tail (+nan.0+1i was a symbol).
+func TestReadComplexWithDotLedOrInfnanParts(t *testing.T) {
+	tcs := []struct {
+		input string
+		want  string
+	}{
+		{".5+.5i", "0.5+0.5i"},
+		{"-.5+.5i", "-0.5+0.5i"},
+		{".5e1+1i", "5.0+1.0i"},
+		{".5+i", "0.5+1.0i"},
+		{".5-i", "0.5-1.0i"},
+		{".5@0", "0.5+0.0i"},
+		{"+1+.5i", "1.0+0.5i"},
+		{"-12-.5e1i", "-12.0-5.0i"},
+		{"+1/2+.5i", "0.5+0.5i"},
+		{"+nan.0+1i", "+nan.0+1.0i"},
+		{"-nan.0-i", "+nan.0-1.0i"},
+		{"+nan.0+nan.0i", "+nan.0+nan.0i"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			p := NewParser(environment.NewNamespace().Runtime(), false, strings.NewReader(tc.input))
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+			n, ok := syn.Unwrap().(values.Number)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("%s read as %T", tc.input, syn.Unwrap()))
+			c.Assert(n.SchemeString(), qt.Equals, tc.want)
+			_, err = p.ReadSyntax(context.TODO())
+			c.Assert(errors.Is(err, io.EOF), qt.IsTrue, qt.Commentf("%s read as more than one datum", tc.input))
+		})
+	}
+}
+
+// TestReadSignedImaginaryPointNeedsADigit pins the fault the new dot arm of the
+// signed imaginary part raises: once the point is read, a fraction is owed.
+func TestReadSignedImaginaryPointNeedsADigit(t *testing.T) {
+	for _, src := range []string{"+1+.i", "+1+.", "-2-.x"} {
+		t.Run(src, func(t *testing.T) {
+			parseExpectError(t, src)
+		})
+	}
+}
+
+// TestSharedNumberConversionsRefuseGoSyntax pins that the exported conversions
+// string->number shares with the reader check their own input: strconv and
+// math/big beneath them take spellings the tokenizer never forms.
+func TestSharedNumberConversionsRefuseGoSyntax(t *testing.T) {
+	c := qt.New(t)
+	for _, s := range []string{"0x1p3@0", "nan@0", "1_0@0", "1@0x1p3", "Inf@0"} {
+		_, err := ParsePolarStringNumber(s)
+		c.Check(errors.Is(err, werr.ErrInvalidFormat), qt.IsTrue, qt.Commentf("ParsePolarStringNumber(%q)", s))
+	}
+	for _, s := range []string{"1p3", "inf", "Inf", "1_0", "0x10", "1/3", ""} {
+		_, err := ParseBigFloatLiteral(s)
+		c.Check(errors.Is(err, werr.ErrInvalidFormat), qt.IsTrue, qt.Commentf("ParseBigFloatLiteral(%q)", s))
+	}
+	q, err := ParsePolarStringNumber("2@0")
+	c.Assert(err, qt.IsNil)
+	c.Check(q.SchemeString(), qt.Equals, "2.0+0.0i")
+	n, err := ParseBigFloatLiteral("1.5")
+	c.Assert(err, qt.IsNil)
+	c.Check(n.SchemeString(), qt.Equals, "1.5l0")
 }

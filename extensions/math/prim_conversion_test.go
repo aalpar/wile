@@ -696,6 +696,17 @@ func TestStringToNumberPrefixes(t *testing.T) {
 		{`(string->number "#m#d1/-2")`, "#f"},
 		{`(string->number "ff" 16)`, "*values.Integer 255"},
 		{`(string->number "1/-2" 16)`, "#f"},
+		// Complex with a dot-led or NaN part (racket and petite read them).
+		{`(string->number ".5+.5i")`, "*values.Complex 0.5+0.5i"},
+		{`(string->number "-.5+.5i")`, "*values.Complex -0.5+0.5i"},
+		{`(string->number ".5e1+1i")`, "*values.Complex 5.0+1.0i"},
+		{`(string->number ".5+i")`, "*values.Complex 0.5+1.0i"},
+		{`(string->number "+1+.5i")`, "*values.Complex 1.0+0.5i"},
+		{`(string->number "-12-.5e1i")`, "*values.Complex -12.0-5.0i"},
+		{`(string->number "+1/2+.5i")`, "*values.Complex 0.5+0.5i"},
+		{`(string->number "+nan.0+1i")`, "*values.Complex +nan.0+1.0i"},
+		{`(string->number "-nan.0-i")`, "*values.Complex +nan.0-1.0i"},
+		{`(string->number "+nan.0+nan.0i")`, "*values.Complex +nan.0+nan.0i"},
 		// Polar, as the reader reads it (racket and petite read it too).
 		{`(string->number "1@0")`, "*values.Complex 1.0+0.0i"},
 		{`(string->number "1e1@0")`, "*values.Complex 10.0+0.0i"},
@@ -759,6 +770,8 @@ func TestStringToNumberAgreesWithReader(t *testing.T) {
 		// Polar, and Go spellings strconv and math/big take that the reader does not.
 		"1@0", "1e1@0", "-2@1.5", "nan", "NaN", "Inf", "+inf", "1_0", "1_0.5", "1e1_0",
 		"0x1p3", "0x1.8p1", "0X10", "1/-2", "1/+2", "4/-2", "1E3", "1D3", "+INF.0", "-NAN.0",
+		// Complex shapes the tokenizer used to split or misread.
+		".5+.5i", ".5e1+1i", "+1+.5i", "-12-.5e1i", "+nan.0+1i", "-nan.0-i",
 	}
 	for _, pf := range prefixes {
 		for _, num := range numerals {

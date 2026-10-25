@@ -397,16 +397,72 @@ func isNumeralState(t tokenizer.TokenizerState) bool {
 // surfaces as a tokenizer error instead of a second token. The text comparison
 // rejects intertoken space and comments the token boundary would hide.
 func IsNumeral(prefix, text string) bool {
-	toks, err := tokenizer.Tokenize(prefix+text, false)
-	if !errors.Is(err, io.EOF) || len(toks) == 0 {
+	if isPlainInteger(text, prefixRadix[prefix]) {
+		return true
+	}
+	src := prefix + text
+	toks := tokenizer.NewTokenizer(strings.NewReader(src), false)
+	tok, err := toks.Next()
+	if err != nil {
 		return false
 	}
-	last := toks[len(toks)-1]
-	switch last.Type() {
+	switch tok.Type() {
 	case tokenizer.TokenizerStateBigInteger, tokenizer.TokenizerStateBigFloat:
-		return len(toks) == 1 && text != "" && last.String() == prefix+text
+		return text != "" && tok.String() == src && atEnd(toks)
 	}
-	return len(toks) == 2 && isNumeralState(last.Type()) && last.String() == text
+	// The first token is the radix marker; the numeral is the second.
+	tok, err = toks.Next()
+	if err != nil {
+		return false
+	}
+	return isNumeralState(tok.Type()) && tok.String() == text && atEnd(toks)
+}
+
+// prefixRadix maps a radix prefix to its radix; #z, #m and anything else map
+// to 0, which isPlainInteger refuses.
+var prefixRadix = map[string]int{"#b": 2, "#o": 8, "#d": 10, "#x": 16}
+
+// isPlainInteger reports whether s is an optionally signed run of radix digits:
+// the numeral string->number sees most, answered without building a tokenizer
+// (which costs eight allocations). Every such run scans as one integer token,
+// so this is a shortcut of the tokenizer's answer, not a second grammar.
+func isPlainInteger(s string, radix int) bool {
+	if radix == 0 {
+		return false
+	}
+	if s != "" && (s[0] == '+' || s[0] == '-') {
+		s = s[1:]
+	}
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		d := digitValue(s[i])
+		if d < 0 || d >= radix {
+			return false
+		}
+	}
+	return true
+}
+
+// digitValue is the value of an ASCII digit or letter digit, or -1.
+func digitValue(c byte) int {
+	switch {
+	case '0' <= c && c <= '9':
+		return int(c - '0')
+	case 'a' <= c && c <= 'f':
+		return int(c-'a') + 10
+	case 'A' <= c && c <= 'F':
+		return int(c-'A') + 10
+	}
+	return -1
+}
+
+// atEnd reports whether toks has nothing left but a clean end of input; a
+// pending fault (a numeral that did not end at a delimiter) is not one.
+func atEnd(toks *tokenizer.Tokenizer) bool {
+	_, err := toks.Next()
+	return errors.Is(err, io.EOF)
 }
 
 // parseRational parses a rational number string like "3/4" or "-1/2".

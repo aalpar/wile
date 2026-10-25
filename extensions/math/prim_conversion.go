@@ -212,8 +212,6 @@ func parseIntroduced(marker byte, operand string, radix int) values.Number {
 		return nil
 	case radix != 10:
 		return widenOrNil(widen, parseStringToNumber(operand, radix))
-	case !parser.IsNumeral("#"+string(marker), operand):
-		return nil
 	case marker == 'z':
 		q := values.NewBigIntegerFromString(operand, 10)
 		if q == nil {

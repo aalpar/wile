@@ -503,9 +503,13 @@ func WidenToBigFloat(v values.Value) (values.Number, error) {
 // The tokenizer admits two spellings big.ParseFloat does not: an <infnan>
 // (#m+inf.0), converted through float64, whose NaN NewBigFloatFromFloat64 maps
 // to the BigFloat NaN flag; and the short exponent markers s/f/d/l, which mean
-// e (R7RS §7.1.1) and are folded to it. It trusts its input to be the
-// tokenizer's; string->number checks that first with IsNumeral.
+// e (R7RS §7.1.1) and are folded to it. Text the tokenizer would not scan as
+// #m digits (1p3, inf, 1_0, all of which big.ParseFloat takes) is refused, so
+// a caller without a tokenizer in front cannot read what the reader cannot.
 func ParseBigFloatLiteral(s string) (values.Number, error) {
+	if !IsNumeral("#m", s) {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "big float literal: not #m digits: %s", s)
+	}
 	special, ok := ParseSpecialFloat(s)
 	if ok {
 		return values.NewBigFloatFromFloat64(special.Value), nil
@@ -520,8 +524,13 @@ func ParseBigFloatLiteral(s string) (values.Number, error) {
 
 // ParsePolarStringNumber parses a polar complex numeral ("1@1.5708", "-3@1.0")
 // and converts it to rectangular form, real = r*cos(θ) and imag = r*sin(θ).
-// Shared by the reader (Parser.parsePolarComplex) and string->number.
+// Shared by the reader (Parser.parsePolarComplex) and string->number. Text
+// that is not a decimal numeral (0x1p3@0, nan@0) is refused: the parts are
+// converted by strconv, which takes Go spellings the tokenizer does not.
 func ParsePolarStringNumber(s string) (*values.Complex, error) {
+	if !IsNumeral("#d", s) {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "polar complex: not a decimal numeral: %s", s)
+	}
 	magPart, anglePart, ok := strings.Cut(s, "@")
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "polar complex: no @ separator: %s", s)
