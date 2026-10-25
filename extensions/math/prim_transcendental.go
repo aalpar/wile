@@ -79,7 +79,7 @@ func rescueBigComplex(mc machine.CallContext, arg values.Value, result complex12
 	if !ok {
 		return false
 	}
-	ro, io := bigFn(re, im, values.OperandPrecision(arg))
+	ro, io := bigFn(re, im, values.KernelPrecision(arg))
 	if ro.IsInf() || io.IsInf() {
 		// Genuinely infinite (e.g. log(0) = −∞), not a float64 overflow of a finite
 		// value — keep the float64 result rather than reboxing an infinity.
@@ -111,7 +111,7 @@ func makeComplexPrimitive(name string, fn func(complex128) complex128, bigRealFn
 		bf := numberToBigFloat(arg)
 		if bigRealFn != nil && isUnboundedReal(arg) && bf != nil && !bf.IsInf() {
 			// A nil return declines (e.g. asin/acos of |x|>1 is complex); fall through.
-			q := bigRealFn(bf, values.OperandPrecision(arg))
+			q := bigRealFn(bf, values.KernelPrecision(arg))
 			if q != nil {
 				mc.SetValue(values.NewBigFloat(q))
 				return nil
@@ -153,7 +153,7 @@ func PrimExp(mc machine.CallContext) error {
 		return nil
 	}
 	if isUnboundedReal(arg) {
-		mc.SetValue(values.NewBigFloat(values.BigExp(numberToBigFloat(arg), values.OperandPrecision(arg))))
+		mc.SetValue(values.NewBigFloat(values.BigExp(numberToBigFloat(arg), values.KernelPrecision(arg))))
 		return nil
 	}
 	z, err := helpers.ToComplex128(arg)
@@ -195,7 +195,7 @@ func PrimLog(mc machine.CallContext) error {
 		if isUnboundedReal(o) {
 			ob := numberToBigFloat(o)
 			if ob.Sign() > 0 {
-				mc.SetValue(values.NewBigFloat(values.BigLog(ob, values.OperandPrecision(o))))
+				mc.SetValue(values.NewBigFloat(values.BigLog(ob, values.KernelPrecision(o))))
 				return nil
 			}
 		}
@@ -221,7 +221,7 @@ func PrimLog(mc machine.CallContext) error {
 	// log base b: big path when either operand is unbounded and both are
 	// positive reals, at the operands' precision.
 	if isUnboundedReal(o) || isUnboundedReal(baseVal) {
-		prec := values.OperandPrecision(o, baseVal)
+		prec := values.KernelPrecision(o, baseVal)
 		ob := numberToBigFloatAt(o, prec)
 		bb := numberToBigFloatAt(baseVal, prec)
 		if ob != nil && ob.Sign() > 0 && bb != nil && bb.Sign() > 0 {
@@ -278,7 +278,7 @@ func PrimAtan(mc machine.CallContext) error {
 				mc.SetValue(values.NewBigFloatNaN())
 				return nil
 			}
-			mc.SetValue(values.NewBigFloat(values.BigAtan(bf, values.OperandPrecision(o))))
+			mc.SetValue(values.NewBigFloat(values.BigAtan(bf, values.KernelPrecision(o))))
 			return nil
 		}
 		bc, isBigComplex := o.(*values.BigComplex)
@@ -291,7 +291,7 @@ func PrimAtan(mc machine.CallContext) error {
 			reF, _ := reBig.Float64()
 			imF, _ := imBig.Float64()
 			if math.IsInf(reF, 0) || math.IsInf(imF, 0) {
-				reOut, imOut := values.BigComplexAtan(reBig, imBig, values.OperandPrecision(bc))
+				reOut, imOut := values.BigComplexAtan(reBig, imBig, values.KernelPrecision(bc))
 				if imOut.Sign() == 0 {
 					mc.SetValue(values.NewBigFloat(reOut))
 				} else {
@@ -322,7 +322,7 @@ func PrimAtan(mc machine.CallContext) error {
 	// A NaN on either side (nil here) takes the float64 path, which answers NaN
 	// or raises for a non-real operand.
 	if isUnboundedReal(o) || isUnboundedReal(xVal) {
-		prec := values.OperandPrecision(o, xVal)
+		prec := values.KernelPrecision(o, xVal)
 		y := numberToBigFloatAt(o, prec)
 		x := numberToBigFloatAt(xVal, prec)
 		if y != nil && x != nil {
@@ -686,8 +686,8 @@ func isRealKind(n values.Number) bool {
 }
 
 // bigFloatExpt computes base^exp in big.Float for real operands at least one of
-// which is a BigFloat, rounded to their OperandPrecision (the widest BigFloat
-// operand's, capped at MaxBigFloatLiteralPrecision).
+// which is a BigFloat, rounded to their OperandPrecision, or on the exp/log
+// path to their KernelPrecision.
 //
 // The IEEE special cases are answered first, in big.Float, because the kernels
 // cannot take them: big.Float has no NaN, BigExp cannot reduce an infinity, and
@@ -771,6 +771,11 @@ func bigPowAbs(base values.Number, a, y *big.Float, prec, wp uint) *big.Float {
 	// carries an absolute error of about 2^-wp that y magnifies: ln a then
 	// needs y's binary exponent in extra bits, from the base reconverted at
 	// that precision (a Rational base is not exact at wp).
+	// The log path is a transcendental kernel, so it rounds at the kernel cap;
+	// the paths above are not and keep the operands' precision, so (expt w 2)
+	// agrees with (* w w) at any width.
+	prec = min(prec, values.MaxBigFloatKernelPrecision)
+	wp = min(wp, prec+64)
 	t := new(big.Float).SetPrec(wp).Mul(y, values.BigLog(a, wp))
 	r, isRational := base.(*values.Rational)
 	if t.Sign() == 0 && isRational {

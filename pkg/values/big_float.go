@@ -162,13 +162,18 @@ func (p *BigFloat) BigFloatValue() *big.Float {
 	return p.value
 }
 
-// OperandPrecision is the working precision of a big-precision operation on vs,
-// the operand-max rule: the widest precision among the BigFloat operands and
-// the BigFloat parts of BigComplex operands, or DefaultBigFloatPrecision when
-// none carries one. A NaN carries no precision. The result is capped at
-// MaxBigFloatLiteralPrecision: a precision past it can only be derived (a
-// literal is refused there), and the transcendental kernels, which cannot be
-// interrupted, take seconds at the cap and grow superlinearly beyond it.
+// MaxBigFloatKernelPrecision caps the working precision of the transcendental
+// kernels (exp, log, the trigonometric family, atan, expt's exp/log path,
+// angle). They cannot be interrupted, so neither with-timeout nor a host's
+// context can stop one mid-call, and their cost grows superlinearly: measured
+// per call, about 0.1 s at 16384 bits against 1-2.5 s at 65536.
+const MaxBigFloatKernelPrecision = 1 << 14
+
+// OperandPrecision is the precision of a big-precision operation on vs, the
+// operand-max rule: the widest precision among the BigFloat operands and the
+// BigFloat parts of BigComplex operands, or DefaultBigFloatPrecision when none
+// carries one. A NaN carries no precision. Arithmetic, sqrt and conversions
+// use it as it is; a transcendental kernel uses KernelPrecision.
 func OperandPrecision(vs ...Value) uint {
 	var q uint
 	for _, n := range vs {
@@ -182,7 +187,13 @@ func OperandPrecision(vs ...Value) uint {
 	if q == 0 {
 		return DefaultBigFloatPrecision
 	}
-	return min(q, MaxBigFloatLiteralPrecision)
+	return q
+}
+
+// KernelPrecision is OperandPrecision capped at MaxBigFloatKernelPrecision:
+// the working, and so the result, precision of a transcendental kernel.
+func KernelPrecision(vs ...Value) uint {
+	return min(OperandPrecision(vs...), MaxBigFloatKernelPrecision)
 }
 
 // partPrecision is a BigComplex part's precision: a BigFloat's own, 0 for an

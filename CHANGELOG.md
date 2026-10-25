@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`values.OperandPrecision`, `values.KernelPrecision`, `values.BigSqrt` and
+  `(*BigFloat).Sqrt`.** The operand-max precision of a big-precision operation,
+  the same capped at `values.MaxBigFloatKernelPrecision` for a transcendental
+  kernel, and the square-root kernel the `sqrt` primitive's BigFloat, BigInteger
+  and Rational arms share (it was a private function of `extensions/math`).
+
 - **`tools/cmd/deadscan`: a census of the exported surface nothing consumes.**
   `deadcode` does not run on this toolchain and `unused` skips exported
   identifiers outright, so 10% of the exported surface was unmeasured. A
@@ -118,6 +124,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   4,207 symbols with 385 dead.
 
 ### Fixed
+
+- **A BigFloat result carries its operands' precision, not a fixed 256 bits.**
+  `exp`, `log`, the trigonometric family, `atan` (both forms), `angle`,
+  `magnitude` and a complex `sqrt` computed at 256 bits whatever their BigFloat
+  operand carried, and an exact operand meeting a BigFloat in arithmetic was
+  converted at 256 bits, so `(* w (+ 1 (expt 10 200)))` with a 403-bit `w` lost
+  the partner's low bits. Operations now compute at the widest BigFloat operand's
+  precision; an exact operand converts at it, exactly when it fits. The
+  transcendental kernels cap at 16384 bits (`MaxBigFloatKernelPrecision`)
+  because they cannot be interrupted. Beside a 256-bit BigFloat an exact operand
+  still rounds at 256 bits. See `docs/numeric/tower.md`.
+- **`(log 2 #m10)` is computed in big precision.** Only the argument triggered
+  the big path, so a BigFloat base gave the float64 quotient,
+  `0.30102999566398114250631579125183634459972381591796875l0`.
+- **The angle of a big-tier negative real is a BigFloat π.** `(angle #m-1)` and
+  `(angle (- (expt 10 400)))` answered the float64 π; they answer π at the
+  operand's precision (256 bits for an exact operand). `(angle -1/3)` is still
+  the float64 π.
 
 - **Three complex numeral shapes read as one number.** A dot-led real part
   ended at its fraction (`.5+.5i` read as `.5` then `+.5i`, `.5e1+1i` as `5.0`

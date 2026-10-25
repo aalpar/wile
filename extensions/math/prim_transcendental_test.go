@@ -841,6 +841,10 @@ func TestTranscendentalOperandPrecision(t *testing.T) {
 			"A": "1.013432916721541016211605277743799402465844112767948381018196395266157574190935392660649030184294669272785092042028448688437828413475186121058370220597951434788704123362866015713881429517126482654349756802255268631552942895159052570748751717766098074607380712972",
 			"B": "7.419316722506633726533847485481374371932280058168700445233895490713923528243739180166270477678943331394387187021915176449916295290824980379673123009131954570349133658475066613801850084598863911855137816964627153096894075196516015722185956810339502456512188253389e-1",
 		}},
+		{"angle of negative", `(angle (- x))`, map[string]string{
+			"A": "3.141592653589793238462643383279502884197169399375105820974944592307816406286208998628034825342117067982148086513282306647093844609550582231725359408128481117450284102701938521105559644622948954930381964428810975665933446128475648233786783165271201909145648566923",
+			"B": "3.141592653589793238462643383279502884197169399375105820974944592307816406286208998628034825342117067982148086513282306647093844609550582231725359408128481117450284102701938521105559644622948954930381964428810975665933446128475648233786783165271201909145648566923",
+		}},
 		{"asin", `(asin x)`, map[string]string{
 			"B": "5.235987755982988730771072305465838140328615665625176368291574320513027343810348331046724708903528446636913477522137177745156407682584303719542265680214135195750473504503230868509266074371581591550636607381351626109889076880792747056311305285842207492375013772872e-1",
 		}},
@@ -877,8 +881,7 @@ func TestTranscendentalOperandPrecision(t *testing.T) {
 // TestOperandPrecisionExactPartner pins how an exact operand meets a BigFloat:
 // at the BigFloat's precision, exactly when it fits there and rounded
 // otherwise. Beside a 256-bit BigFloat, 10^100+1 (333 bits) still rounds; beside
-// a 403-bit one it survives. Operations without a BigFloat operand stay at the
-// default.
+// a 403-bit one it survives.
 func TestOperandPrecisionExactPartner(t *testing.T) {
 	engine := newEngine(t)
 	wide := "#m1." + strings.Repeat("0", 119) + "1"
@@ -889,7 +892,8 @@ func TestOperandPrecisionExactPartner(t *testing.T) {
 		{"rounds beside a default-precision bigfloat", `(= (exact (+ #m0 (+ (expt 10 100) 1))) (expt 10 100))`},
 		{"survives beside a wide bigfloat", `(let ((w ` + wide + `)) (= (exact (- (+ w (+ (expt 10 100) 1)) w)) (+ (expt 10 100) 1)))`},
 		{"survives a wide bigfloat divisor", `(let ((w ` + wide + `)) (= (exact (* w (/ (+ (expt 10 100) 1) w))) (+ (expt 10 100) 1)))`},
-		{"exact operand alone takes the default", `(eqv? (exp 1/3) (exp (+ #m0 1/3)))`},
+		// 1/3 at 403 bits errs by about 2^-405; at 256 bits by about 2^-258
+		{"rational partner converts at the wide precision", `(let ((w ` + wide + `)) (< (abs (- (exact (* w 1/3)) (* (exact w) 1/3))) (expt 2 -400)))`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -931,4 +935,53 @@ func TestBigComplexKernelOperandPrecision(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestTranscendentalKernelPrecisionBounded pins the kernel cap: with a
+// 19,700-digit operand (about 65450 bits) a transcendental computes at
+// MaxBigFloatKernelPrecision, so it finishes in a bounded time, while expt with
+// an exact integer exponent, not a kernel, keeps the operand's precision. The
+// budget is generous (about 0.3 s each measured, 1-5 s uncapped): a row is
+// about boundedness, not speed.
+func TestTranscendentalKernelPrecisionBounded(t *testing.T) {
+	engine := newEngine(t)
+	const budget = 10 * time.Second
+	u := "#m1." + strings.Repeat("31415926535897932384", 985) + "7"
+	tcs := []struct {
+		name   string
+		code   string
+		capped bool
+	}{
+		{"exp", "(exp u)", true},
+		{"log", "(log u)", true},
+		{"log base", "(log u 3)", true},
+		{"sin", "(sin u)", true},
+		{"atan2", "(atan u 3)", true},
+		{"angle", "(angle (- u))", true},
+		{"expt non-integer exponent", "(expt u u)", true},
+		{"expt wide integer exponent", "(expt u (+ 1 (expt 2 100000)))", false},
+		{"expt integer exponent is not a kernel", "(expt u 2)", false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			start := time.Now()
+			result := eval(t, engine, "(let ((u "+u+")) "+tc.code+")").Internal()
+			elapsed := time.Since(start)
+			c.Assert(elapsed < budget, qt.IsTrue, qt.Commentf("%s took %v", tc.code, elapsed))
+			got, ok := result.(*values.BigFloat)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("%s answered %T", tc.code, result))
+			if !got.IsFinite() {
+				return
+			}
+			prec := got.BigFloatValue().Prec()
+			if tc.capped {
+				c.Assert(prec, qt.Equals, uint(values.MaxBigFloatKernelPrecision))
+				return
+			}
+			c.Assert(prec > values.MaxBigFloatKernelPrecision, qt.IsTrue, qt.Commentf("%s at %d bits", tc.code, prec))
+		})
+	}
+	c := qt.New(t)
+	c.Assert(eval(t, engine, "(let ((u "+u+")) (eqv? (expt u 2) (* u u)))").Internal(), qt.Equals, values.TrueValue)
 }

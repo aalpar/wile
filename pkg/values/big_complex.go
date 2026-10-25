@@ -228,7 +228,7 @@ func init() {
 	})
 
 	bigComplexLessThan = makeLessThanDispatch(KindBigComplex, func(p *BigComplex, o Number) bool {
-		return toBigFloat(p.real).LessThan(toBigFloat(o.(*BigComplex).real))
+		return p.real.LessThan(o.(*BigComplex).real)
 	})
 
 	bigComplexMultiply = makeMultiplyDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
@@ -426,8 +426,11 @@ func (p *BigComplex) IsZero() bool {
 // (complex.go). This is an internal total order, not mathematical ordering, and
 // nothing may read it as such.
 //
+// The parts compare as Numbers, so two exact parts compare exactly; rounding
+// both to 256 bits first ordered parts that differ past bit 256 as equal.
+//
 // The NaN answer is owned by the real-part comparison, not by a guard here. A
-// real-part NaN reaches BigFloat.LessThan (directly on the same-type path, or
+// real-part NaN reaches the parts' LessThan (directly on the same-type path, or
 // after promotion on the cross-kind path), which yields #f in both directions,
 // exactly as Float gets #f free from IEEE <. An imaginary-part NaN is irrelevant
 // to a real-parts-only ordering, so it is ignored, again matching Complex. An
@@ -436,7 +439,7 @@ func (p *BigComplex) IsZero() bool {
 func (p *BigComplex) LessThan(o Number) bool {
 	v, ok := o.(*BigComplex)
 	if ok {
-		return toBigFloat(p.real).LessThan(toBigFloat(v.real))
+		return p.real.LessThan(v.real)
 	}
 	return bigComplexLessThan[o.Kind()](p, o)
 }
@@ -649,14 +652,14 @@ func isInfinitePart(n Number) bool {
 }
 
 // Phase returns the phase (argument) of the complex number in radians.
-// Uses atan2(imag, real) at the parts' OperandPrecision, so components beyond the
+// Uses atan2(imag, real) at the parts' KernelPrecision, so components beyond the
 // float64 range (~1.8e308) with a finite ratio keep their true angle instead of
 // both saturating to +Inf and collapsing to atan2(+Inf,+Inf)=π/4.
 func (p *BigComplex) Phase() *BigFloat {
 	if p.IsNaN() {
 		return NewBigFloatNaN()
 	}
-	prec := OperandPrecision(p)
+	prec := KernelPrecision(p)
 	r := toBigFloatAt(p.real, prec).value
 	i := toBigFloatAt(p.imag, prec).value
 	return &BigFloat{value: BigAtan2(i, r, prec)}

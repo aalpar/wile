@@ -27,6 +27,7 @@ import (
 //	# both => (3.141592653589793 0 0 #t)
 func TestAngleOfReal(t *testing.T) {
 	pi := "3.141592653589793"
+	bigPi := "3.1415926535897932384626433832795028841971693993751058209749445923078164062862l0"
 
 	tcs := []testhelpers.SchemeCodeTestCase{}
 	_ = tcs
@@ -55,6 +56,15 @@ func TestAngleOfReal(t *testing.T) {
 		{"negative float", "(angle -1.0)", pi},
 		{"negative rational", "(angle -1/2)", pi},
 		{"exact? of a negative angle", "(exact? (angle -1.0))", "#f"},
+
+		// A big-tier negative real's π is a BigFloat at the operand's precision,
+		// 256 bits for an exact operand float64 cannot hold. An exact operand
+		// float64 holds keeps the float64 π.
+		{"negative bigfloat", "(angle #m-1)", bigPi},
+		{"negative biginteger beyond float64", "(angle (- (expt 10 400)))", bigPi},
+		{"negative rational below float64", "(angle (- (/ 1 (expt 10 400))))", bigPi},
+		{"negative biginteger within float64", "(angle (- (expt 2 100)))", pi},
+		{"negative small rational", "(angle -1/3)", pi},
 
 		// Infinities keep their side of the axis.
 		{"positive infinity", "(angle +inf.0)", "0"},

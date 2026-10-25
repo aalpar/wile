@@ -325,7 +325,26 @@ func angleOfReal(v values.RealNumber) (values.Value, error) {
 		return values.NewFloat(math.NaN()), nil
 	}
 	if v.SignBit() {
+		if beyondFloat64Tier(v) {
+			return values.NewBigFloat(values.BigPi(values.KernelPrecision(v))), nil
+		}
 		return values.NewFloat(math.Pi), nil
 	}
 	return values.NewInteger(0), nil
+}
+
+// beyondFloat64Tier reports whether a negative real's π belongs in the big
+// tier: a BigFloat, whose precision the π carries, or a BigInteger or Rational
+// that float64 cannot hold (it converts to an infinity or a zero). An exact
+// operand float64 holds keeps the float64 π.
+func beyondFloat64Tier(v values.RealNumber) bool {
+	switch v.(type) {
+	case *values.BigFloat:
+		return true
+	case *values.BigInteger, *values.Rational:
+		f := values.NumberToFloat64(v)
+		return math.IsInf(f, 0) || f == 0
+	default:
+		return false
+	}
 }

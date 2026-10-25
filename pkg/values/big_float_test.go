@@ -80,9 +80,9 @@ func TestLongDecimalFractionRoundTrips(t *testing.T) {
 	}
 }
 
-// TestOperandPrecision pins the operand-max working precision: the widest
-// BigFloat operand or BigFloat part, the default when none carries one (an exact
-// operand, a NaN), and the cap for a derived precision past the literal bound.
+// TestOperandPrecision pins the operand-max precision: the widest BigFloat
+// operand or BigFloat part, the default when none carries one (an exact
+// operand, a NaN); and KernelPrecision, the same capped for the kernels.
 func TestOperandPrecision(t *testing.T) {
 	at := func(prec uint) *BigFloat {
 		return NewBigFloat(new(big.Float).SetPrec(prec).SetInt64(3))
@@ -100,11 +100,12 @@ func TestOperandPrecision(t *testing.T) {
 		{"narrow bigfloat", []Value{at(100)}, 100},
 		{"bigcomplex bigfloat part", []Value{NewBigComplex(NewRationalFromRat(big.NewRat(1, 3)), at(700))}, 700},
 		{"bigcomplex exact parts", []Value{NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(2))}, DefaultBigFloatPrecision},
-		{"capped", []Value{at(MaxBigFloatLiteralPrecision + 1)}, MaxBigFloatLiteralPrecision},
+		{"not capped", []Value{at(MaxBigFloatKernelPrecision + 1)}, MaxBigFloatKernelPrecision + 1},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			qt.Assert(t, OperandPrecision(tc.ns...), qt.Equals, tc.want)
+			qt.Assert(t, KernelPrecision(tc.ns...), qt.Equals, min(tc.want, MaxBigFloatKernelPrecision))
 		})
 	}
 }
@@ -150,4 +151,15 @@ func TestBigFloatSqrtArms(t *testing.T) {
 	root := neg.Sqrt().(*BigComplex)
 	qt.Assert(t, root.Imag().(*BigFloat).value.Prec(), qt.Equals, uint(500))
 	qt.Assert(t, root.Imag().(*BigFloat).value.Cmp(pos.Sqrt().(*BigFloat).value), qt.Equals, 0)
+}
+
+// TestBigComplexLessThanExactParts pins that exact real parts compare exactly:
+// rounded to 256 bits first, 1 and 1+2^-300 ordered as equal.
+func TestBigComplexLessThanExactParts(t *testing.T) {
+	near := new(big.Rat).Add(big.NewRat(1, 1), new(big.Rat).SetFrac(big.NewInt(1), new(big.Int).Lsh(big.NewInt(1), 300)))
+	a := NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(1))
+	b := NewBigComplex(NewRationalFromRat(near), NewBigIntegerFromInt64(1))
+	qt.Assert(t, a.LessThan(b), qt.IsTrue)
+	qt.Assert(t, b.LessThan(a), qt.IsFalse)
+	qt.Assert(t, bigComplexLessThan[KindBigComplex](a, b), qt.IsTrue)
 }

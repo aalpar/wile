@@ -448,19 +448,9 @@ func Promote(n Number, target NumericKind) Number {
 func promoteToBigFloatPair(p, o Number) (Number, Number) {
 	bf, ok := p.(*BigFloat)
 	if ok {
-		return p, toBigFloatAt(o, partnerPrecision(bf))
+		return p, toBigFloatAt(o, OperandPrecision(bf))
 	}
-	return toBigFloatAt(p, partnerPrecision(o.(*BigFloat))), o
-}
-
-// partnerPrecision is the precision an operand meeting bf rounds at. A NaN has
-// none, and its result is NaN whatever the operand rounds to.
-func partnerPrecision(bf *BigFloat) uint {
-	q := bf.precision()
-	if q == 0 {
-		return DefaultBigFloatPrecision
-	}
-	return q
+	return toBigFloatAt(p, OperandPrecision(o)), o
 }
 
 // toBigFloatAt converts a real Number to a BigFloat rounded to prec bits. A
