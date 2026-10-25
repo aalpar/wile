@@ -15,6 +15,9 @@
 package values_test
 
 import (
+	"context"
+	"os/exec"
+	"runtime"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -57,4 +60,32 @@ func TestProcess(t *testing.T) {
 		p := values.NewProcess("grep", nil, nil, nil, nil)
 		c.Assert(p.Command(), qt.Equals, "grep")
 	})
+}
+
+// TestProcessWaitContext pins WaitContext's two answers. An ended ctx returns
+// (false, nil) without signalling the child, so a later wait still reaps it; an
+// exited child outranks an ended ctx, as a terminated joinee does in Thread.Join,
+// so a wait after the reap reports the exit even under a cancelled ctx.
+func TestProcessWaitContext(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix commands")
+	}
+	c := qt.New(t)
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	cmd := exec.CommandContext(context.Background(), "sleep", "30")
+	c.Assert(cmd.Start(), qt.IsNil)
+	p := values.NewProcess("sleep", cmd, nil, nil, nil)
+	exited, err := p.WaitContext(cancelled)
+	c.Assert(exited, qt.IsFalse)
+	c.Assert(err, qt.IsNil)
+	c.Assert(p.Reaped(), qt.IsFalse)
+	c.Assert(cmd.Process.Kill(), qt.IsNil, qt.Commentf("the cancelled wait must leave the child running"))
+	c.Assert(p.Wait(), qt.IsNotNil, qt.Commentf("a killed child's wait reports its signal"))
+	c.Assert(p.Reaped(), qt.IsTrue)
+
+	exited, err = p.WaitContext(cancelled)
+	c.Assert(exited, qt.IsTrue)
+	c.Assert(err, qt.IsNotNil, qt.Commentf("the memoised outcome, not the cancellation"))
 }

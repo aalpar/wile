@@ -15,6 +15,7 @@
 package values
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"sync"
@@ -27,12 +28,14 @@ var _ Value = (*Process)(nil)
 // Wraps *exec.Cmd and its connected pipes. Accessors return
 // the ports for stdout, stderr, and stdin.
 //
-// Wait is the only supported way to reap the child. exec.Cmd.Wait is not safe
-// for concurrent use — two callers both read a nil c.ProcessState, both wait4
-// the same pid, and both write c.ProcessState — and this value is reachable from
-// several goroutines at once by design: SRFI-18 threads share one engine, so two
-// of them can sit in (process-wait p), and Engine.Close reaps the same child from
-// the host's goroutine. Wait serialises them and memoises the outcome.
+// Wait and WaitContext are the only supported ways to reap the child.
+// exec.Cmd.Wait is not safe for concurrent use (two callers both read a nil
+// c.ProcessState, both wait4 the same pid, and both write c.ProcessState), and
+// this value is reachable from several goroutines at once by design: SRFI-18
+// threads share one engine, so two of them can sit in (process-wait p), and
+// Engine.Close reaps the same child from the host's goroutine. One reaper
+// goroutine makes the single cmd.Wait and memoises its outcome; every waiter
+// waits on that reaper, so a waiter can stop waiting without stopping the reap.
 type Process struct {
 	cmd     *exec.Cmd
 	command string
@@ -40,13 +43,14 @@ type Process struct {
 	stdout  *PortObject
 	stderr  *PortObject
 
-	// waitMu admits one cmd.Wait at a time; waitErr is its memoised result,
-	// guarded by waitMu. reaped is the lock-free "has a Wait completed?" query,
-	// so a caller deciding whether a child still needs killing never blocks
-	// behind a caller that is inside Wait.
-	waitMu  sync.Mutex
-	waitErr error
-	reaped  atomic.Bool
+	// reapOnce starts the reaper on the first wait. The reaper stores waitErr,
+	// then reaped, then closes done, so a waiter that sees done closed reads
+	// waitErr race-free. reaped is the lock-free "has the reap completed?" query,
+	// so a caller deciding whether a child still needs killing never blocks.
+	reapOnce sync.Once
+	done     chan struct{}
+	waitErr  error
+	reaped   atomic.Bool
 }
 
 // NewProcess creates a Process value. The cmd may be nil for testing.
@@ -64,6 +68,7 @@ func NewProcess(
 		stdin:   stdin,
 		stdout:  stdout,
 		stderr:  stderr,
+		done:    make(chan struct{}),
 	}
 }
 
@@ -78,27 +83,57 @@ func (p *Process) Cmd() *exec.Cmd {
 }
 
 // Wait waits for the process to exit and returns the result of the single
-// underlying exec.Cmd.Wait. Concurrent callers serialise; every one of them gets
-// that one result, so a second (process-wait p) reports the child's exit status
-// again rather than "Wait was already called".
+// underlying exec.Cmd.Wait, without ctx cancellation: WaitContext with a
+// background ctx, for callers with no ctx to thread (Engine.Close's reaper).
+func (p *Process) Wait() error {
+	_, err := p.WaitContext(context.Background())
+	return err
+}
+
+// WaitContext waits for the process to exit and returns true with the result of
+// the single underlying exec.Cmd.Wait. Concurrent callers share that one result,
+// so a second (process-wait p) reports the child's exit status again rather than
+// "Wait was already called".
+//
+// When ctx ends first, WaitContext returns (false, nil), and that is all this
+// layer says, as with Mutex.LockContext: process-wait reads the ctx and raises.
+// The child is not signalled: cancelling a wait is not cancelling the process,
+// which stays the caller's to wait for again or kill. The reaper keeps waiting,
+// so its cmd.Wait still closes the stdout and stderr pipes when the child exits,
+// as any completed wait does (exec.Cmd's "Wait before the reads finish" caveat).
+// An exited child outranks an ended ctx, as in Thread.Join: the outcome exists,
+// so it is reported.
 //
 // A Process with no command is a test fixture (NewProcess accepts a nil cmd) and
 // reports success without waiting on anything.
-func (p *Process) Wait() error {
+func (p *Process) WaitContext(ctx context.Context) (bool, error) {
 	if p.cmd == nil {
-		return nil
+		return true, nil
 	}
-	p.waitMu.Lock()
-	defer p.waitMu.Unlock()
-	if p.reaped.Load() {
-		return p.waitErr
+	p.reapOnce.Do(func() {
+		go p.reap()
+	})
+	select {
+	case <-p.done:
+		return true, p.waitErr
+	default:
 	}
-	p.waitErr = p.cmd.Wait()
-	p.reaped.Store(true)
-	return p.waitErr
+	select {
+	case <-p.done:
+		return true, p.waitErr
+	case <-ctx.Done():
+		return false, nil
+	}
 }
 
-// Reaped reports whether a Wait has already completed for this process. Callers
+// reap makes the process's one cmd.Wait and publishes its outcome.
+func (p *Process) reap() {
+	p.waitErr = p.cmd.Wait()
+	p.reaped.Store(true)
+	close(p.done)
+}
+
+// Reaped reports whether the reap has already completed for this process. Callers
 // use it in place of reading cmd.ProcessState, which races with a concurrent
 // Wait's write of that field.
 func (p *Process) Reaped() bool {

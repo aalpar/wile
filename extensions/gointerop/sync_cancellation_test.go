@@ -79,6 +79,15 @@ func TestTerminateUnparksBlockedSyncPrimitive(t *testing.T) {
 			setup: `(mutex-lock! sync)`,
 			park:  `(mutex-lock! sync)`,
 		},
+		{
+			// Its 30 s timeout outlasts the 5 s join, so the wait must wake on
+			// the terminate; it used to sleep out its timeout and the join
+			// timed out.
+			name:  "mutex-lock! held by main (SRFI-18 timed path)",
+			ctor:  `(make-mutex)`,
+			setup: `(mutex-lock! sync)`,
+			park:  `(mutex-lock! sync 30)`,
+		},
 	}
 
 	for _, tc := range tcs {

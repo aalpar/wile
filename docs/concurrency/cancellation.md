@@ -78,7 +78,10 @@ otherwise hang the waiter forever. The goroutine is bounded: it exits on
 
 `Mutex.LockContext`'s untimed slow path loops on `waitOnCondCtx` until the mutex is
 grantable, then flips the state; on cancellation it returns `false` with the state
-untouched.
+untouched. The timed slow path's side goroutine selects on `ctx.Done()` beside its
+timer, under the same `cond.L` rule, and the waiter reads `ctx.Err()` before the
+deadline, so a cancelled timed acquire returns `false` at once rather than at its
+timeout.
 
 ## The primitive-layer policy: wait side vs held side
 
@@ -93,10 +96,11 @@ acquires it and raises `abandoned-mutex-exception`, so the acquirer is told the
 invariant may be broken. A mutex the thread locked with owner `#f` is not tracked
 and stays held.
 
-How a cancelled wait surfaces to Scheme is one rule for all four blocking waits
-(`mutex-lock!`, `(mutex-unlock! m cv)`, `thread-sleep!` and `thread-join!`), and
-the wait does not ask what cancelled it: it raises `werr.ErrOperationCancelled`
-carrying the raw ctx cause (`waitCancelled`, `extensions/threads/prim_threads.go`),
+How a cancelled wait surfaces to Scheme is one rule for all five blocking waits
+(`mutex-lock!`, `(mutex-unlock! m cv)`, `thread-sleep!`, `thread-join!` and
+`process-wait`), and the wait does not ask what cancelled it: it raises
+`werr.ErrOperationCancelled` carrying the raw ctx cause (`waitCancelled`,
+`extensions/threads/prim_threads.go`; `PrimProcessWait`, `extensions/process`),
 so an embedder matches a sentinel and can still tell `context.Canceled` from
 `context.DeadlineExceeded`. It is a committed contract.
 
@@ -191,7 +195,7 @@ it, and correctness holds for a *different reason* in each case.
 |---|---|---|
 | `with-timeout` | `timerExpiry`, naming the timer (`WithTimeoutCause`; `errors.Is` `ErrTimerExpired`) | **Eager recheck.** `callForeignCached` does a non-blocking `ctx.Done()` check *after every foreign return under an active timer* (`mc.timer != nil`) and, when the expiry names a timer this context arms, returns that timer's `ErrTimerInterrupt`, leaving the call's return to its continuation pending (`interruptPendingReturn`) so a resumed handler continuation goes on after the call, with its result (a call the timeout made fail is instead left pending, `interruptFailedCall`: a wait the cancellation woke, which ran no Scheme code, is re-issued, and a call that ran Scheme code in a sub-context, such as `eval`, raises a catchable `ErrNotImplemented` at its call when resumed rather than run that code twice; otherwise the resume answers as if uninterrupted, except that a `dynamic-wind` extent the timer stopped inside is re-entered, its before thunk running again) — but only on the *error-free* return path (`if err != nil` returns first). That recheck serves a primitive that returns normally after the timer fired. A failure takes the other path: the owner's bridge and driver turn it into the interrupt (`supersedingTimerInterrupt`), which also covers a failure returning from a sub-context, where the recheck cannot look. |
 | `thread-terminate!` | `context.Canceled` (plain `cancel()`) | **The outcome is claimed, not raced.** The eager recheck is `ErrTimerExpired`-only, so it does not fire here; the parked wait raises `ErrOperationCancelled` in the terminated thread. Safety comes from `Terminate` holding the thread's own lock across both `cancel()` and the store of the SRFI-18 terminated-thread exception, so a goroutine unparked by that cancellation cannot slip its own outcome in between, plus the outcome being write-once (`Thread.setOutcome`): neither that raise nor any returned value can become the thread's result, whichever path ends the goroutine. |
-| Embedder deadline or cancel | `context.DeadlineExceeded` or `context.Canceled`, `mc.timer == nil` | **Raised at the wait.** No timer interrupt and no thread teardown; the parked wait raises `ErrOperationCancelled` carrying the cause, so an unguarded wait reaches the embedder as an error even when it is the program's last form. Code that does not park meets the VM's own top-of-loop ctx check instead, at the next poll (every 1024 ops; `contextCheckMask` is the 1023 mask), when the program runs that long; the poll reports the same `ErrOperationCancelled` with the cause, located at the instruction it stopped (`MachineContext.CancelledRun`), and keeps `ctx.Err()` matchable when the cause differs from it (`werr.ContextEnding`, which the waits use too). `apply`'s argument spread, a list walker failing through the foreign-call bridge, and the expander report the same class. Either replaces the old **infinite hang**. A run that nothing in it stopped (a `guard` that catches the raise and finishes before the next poll, a timed `mutex-lock!` whose mutex frees within its timeout, work that ends before the next poll, including an uncontended `mutex-lock!`, which acquires without waiting) still reports the cancellation: the Engine checks the caller's ctx when a run returns (see *Boundaries*). |
+| Embedder deadline or cancel | `context.DeadlineExceeded` or `context.Canceled`, `mc.timer == nil` | **Raised at the wait.** No timer interrupt and no thread teardown; the parked wait raises `ErrOperationCancelled` carrying the cause, so an unguarded wait reaches the embedder as an error even when it is the program's last form. Code that does not park meets the VM's own top-of-loop ctx check instead, at the next poll (every 1024 ops; `contextCheckMask` is the 1023 mask), when the program runs that long; the poll reports the same `ErrOperationCancelled` with the cause, located at the instruction it stopped (`MachineContext.CancelledRun`), and keeps `ctx.Err()` matchable when the cause differs from it (`werr.ContextEnding`, which the waits use too). `apply`'s argument spread, a list walker failing through the foreign-call bridge, and the expander report the same class. Either replaces the old **infinite hang**. A run that nothing in it stopped (a `guard` that catches the raise and finishes before the next poll, work that ends before the next poll, including an uncontended `mutex-lock!`, which acquires without waiting) still reports the cancellation: the Engine checks the caller's ctx when a run returns (see *Boundaries*). |
 
 The mechanism that makes the first row work for a parked wait is split: the wait
 raises, and the VM's owner-side rule turns the raise into the timeout.
@@ -253,22 +257,22 @@ be reported as a terminated thread's result. Pinned channel-free by
 - **Unowned locks are not released.** A mutex a terminated thread locked with
   owner `#f` stays locked; only owned mutexes go through abandonment (see the
   policy section).
-- **The timed `mutex-lock!` path wakes within its timeout, not immediately.** Only
-  the *untimed* `Mutex.LockContext` slow path was made ctx-aware; a thread in
-  `(mutex-lock! m T)` under any cancellation wakes within `T` (bounded, never an
-  infinite stall), which was judged sufficient. If the lock frees up within `T`
-  the acquire succeeds: under an embedder cancel it answers `#t` with no error.
-  Under a fired `with-timeout`, in the timer's own context, the handler runs
-  instead (the eager recheck); below it, in `eval` or `load`, the acquire answers
-  `#t` and the code after it runs until that sub-context returns or reaches its
-  next poll or wait. Either way the mutex the abandoned thunk acquired stays held,
-  like any lock held when a timer interrupts.
+- **A cancelled `process-wait` does not kill the child; its spawn's ctx does.**
+  Cancelling a wait is not cancelling the process: the wait raises and the child
+  keeps running, the caller's to wait for again (a resumed `with-timeout`
+  continuation re-issues the wait) or to `process-kill`. A reaper goroutine keeps
+  the one `cmd.Wait` going, so the child's pipes still close when it exits, as
+  after any completed wait. Separately, `process-spawn` uses
+  `exec.CommandContext`, so the ctx a child was spawned under bounds its life: a
+  child spawned inside a timed thunk, or under an embedder ctx, is killed when
+  that ctx ends, and a wait on it answers the killed status (`-1`). The spawning
+  ctx bounds the child; the waiting ctx bounds only the wait.
 - **A cancelled run never reports success to the embedder, but Scheme can still
   carry on past a cancellation.** `ErrOperationCancelled` is an ordinary condition,
   so a `guard` around a wait can catch it and the program continues until its next
   poll or wait. Work that never parks can end before the next poll, such as an
   uncontended `mutex-lock!`, which takes its fast path without reading the ctx, or
-  a `process-wait` on a child the cancellation killed. The Engine's end-of-run
+  a `process-wait` that reaches a child the cancellation already killed. The Engine's end-of-run
   check (`cancelledAtEnd`, in `Engine.Eval`'s and `Engine.Call`'s runs) turns
   every such normal return into `ErrOperationCancelled` with the cause. The cost
   accepted: a computation that genuinely finished as the ctx ended reports the
@@ -290,8 +294,9 @@ be reported as a terminated thread's result. Pinned channel-free by
 `extensions/gointerop/sync_cancellation_test.go` drives the integrations from
 Scheme (they live above `pkg/values` and cannot be reached from a Go-level test):
 
-- `TestTerminateUnparksBlockedSyncPrimitive` — parks a thread in `mutex-lock!`
-  behind a lock the main thread holds, terminates it, and joins. The rendezvous is
+- `TestTerminateUnparksBlockedSyncPrimitive` — parks a thread in `mutex-lock!`,
+  untimed and with a 30 s timeout, behind a lock the main thread holds, terminates
+  it, and joins. The rendezvous is
   a lock-free `atomic` flag polled with `thread-yield!`. A leaked goroutine
   surfaces as `JoinTimeoutException`; reaching the terminated-thread exception
   proves the goroutine exited on ctx cancellation.
@@ -305,6 +310,13 @@ Scheme (they live above `pkg/values` and cannot be reached from a Go-level test)
   Its sibling `TestUnlockCVDeliversSignalAcrossThreads` pins the other half of that
   path, that enqueueing the waiter before releasing the mutex closes the SRFI-18
   lost-wakeup window.
+
+`extensions/process/prim_process_test.go` covers `process-wait`:
+`TestProcessWaitCancelledRaisesAndLeavesTheChild` (an embedder cancel raises, and
+the child is still alive afterwards) and `TestProcessWaitUnderWithTimeout` (the
+handler runs at the expiry and the resume re-issues the wait; a child spawned
+inside the thunk dies with the thunk's ctx). `TestMutexLockContextNoLostWakeup`'s
+`cancelled-timed` arm (`pkg/values`) drives the timed path's ctx wakeup.
 
 `extensions/threads/prim_threads_test.go` covers the rest of the rule:
 
@@ -334,7 +346,8 @@ Scheme (they live above `pkg/values` and cannot be reached from a Go-level test)
   and `TestCancelledCallNeverFinishesNil` (`pkg/wile`) pin that check, with a live
   ctx and an answered `with-timeout` as controls; `TestVMPollCarriesCauseAndLocation`
   pins the poll's error shape.
-- `TestTimerCancelledWaitInSubContextRunsHandler`: each of the four waits inside
+- `TestTimerCancelledWaitInSubContextRunsHandler`: each of the four waits, and the
+  timed `mutex-lock!`, inside
   `eval` under a `with-timeout` runs the handler, and the eval'd code after the
   wait never runs. The timer is on the sub-context's parent, out of the eager
   recheck's reach.
@@ -401,7 +414,8 @@ Scheme (they live above `pkg/values` and cannot be reached from a Go-level test)
   `mutex-lock!`'s abandoned-mutex condition, which those primitives raise in place,
   are handed back to the bridge when the timer claims them
   (`MachineContext.FailureClaimedByTimer`), so a guard inside `eval` does not see them.
-- `TestTimerCancelledWaitInChildThreadRaises`: each of the four waits in a thread
+- `TestTimerCancelledWaitInChildThreadRaises`: each of the four waits, and the
+  timed `mutex-lock!`, in a thread
   started inside a timed thunk raises when the timer fires; the join reports an
   uncaught exception whose reason names the wait, and the main thread's lock stays
   held. The thread signals just before its wait, and the thunk waits for that

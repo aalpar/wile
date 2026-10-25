@@ -468,7 +468,10 @@ func runLockContextWaiters(ctx context.Context, m *values.Mutex, n int, timeout 
 // waiter then parks with nothing left to wake it. The cancelled arm is the
 // control — same shape, same trials, same durations, but its Broadcast is taken
 // under cond.L, so it must lose zero wakeups. Without the control the driver is
-// not shown to discriminate between the two mechanisms.
+// not shown to discriminate between the two mechanisms. A third arm cancels a
+// timed acquire whose 30 s timeout outlasts the watchdog, so its wakeup must be
+// the side goroutine's ctx arm; that arm used to be missing and the acquire slept
+// out its timeout.
 //
 // The bound was re-measured on this base rather than inherited. At 1 ms, the
 // duration the review's driver reproduced at, 12 000 single-waiter trials pass.
@@ -527,6 +530,25 @@ func TestMutexLockContextNoLostWakeup(t *testing.T) {
 				cancel()
 				if len(q) != waiters {
 					t.Fatalf("trial %d: %d of %d waiters never returned from a %v cancelled untimed acquire",
+						i, waiters-len(q), waiters, timeout)
+				}
+				assertAllTimedOut(t, q)
+
+				m.Unlock(nil, nil)
+			}
+		})
+
+		t.Run("cancelled-timed/"+timeout.String(), func(t *testing.T) {
+			for i := range trials {
+				m := values.NewMutex("cancelled-timed")
+				m.Lock(nil, nil)
+
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				d := 30 * time.Second
+				q := runLockContextWaiters(ctx, m, waiters, &d, watchdog)
+				cancel()
+				if len(q) != waiters {
+					t.Fatalf("trial %d: %d of %d waiters never returned from a %v cancelled timed acquire",
 						i, waiters-len(q), waiters, timeout)
 				}
 				assertAllTimedOut(t, q)

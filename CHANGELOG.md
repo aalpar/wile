@@ -183,6 +183,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   already did. One macro layer between them, `(m (pass (include ...)))`, still
   captures, as `(m (pass (define ...)))` does.
 
+- **`process-wait` and a timed `mutex-lock!` end when their context does.**
+  `process-wait` never read its ctx: under `(with-timeout 50 ...)` on a child
+  spawned before it, the handler ran only when the child exited (2 s for
+  `sleep 2`), and an embedder cancel left it parked. It now raises
+  `ErrOperationCancelled` with the cause, as the SRFI-18 waits do, so the
+  handler runs at the expiry and resuming its continuation re-issues the wait.
+  The cancelled wait does not kill the child; a child spawned under the ctx that
+  ended is still killed by its spawn (`exec.CommandContext`), as before.
+  `(mutex-lock! m T)` slept out its timeout after a cancellation (2.1 s under a
+  50 ms `with-timeout` for `T` = 2, and a `thread-terminate!`d thread in it could
+  not be joined in time); it now wakes on the cancellation as the untimed form
+  does.
 - **A resumed `with-timeout` continuation answers as if the thunk had not been
   interrupted.** Resuming after the timer stopped the thunk between two
   instructions cleared or replaced the operand the next instruction consumes

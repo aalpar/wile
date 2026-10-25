@@ -1354,8 +1354,10 @@ func TestCancelledProgramNeverFinishesNil(t *testing.T) {
 		{"guard catches the cancelled wait",
 			`(begin (define m (make-mutex)) (mutex-lock! m #f #f) (cancel!) (guard (e (#t 'caught)) (mutex-lock! m)))`,
 			true, false},
-		// A child spawned under the run's ctx is killed by the cancel, and
-		// process-wait answers without reading the ctx.
+		// A child spawned under the run's ctx is killed by the cancel. The wait
+		// either raises the cancellation or, when the reap wins, answers the
+		// killed status; the end-of-run check covers the second, and either
+		// passes here.
 		{"process-wait on a killed child",
 			`(begin (define p (process-spawn "sleep" "30")) (cancel!) (process-wait p))`, true, true},
 		{"live ctx", `(begin (define m (make-mutex)) (mutex-lock! m) 42)`, false, false},
