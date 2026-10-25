@@ -654,3 +654,45 @@ func TestContinuationMarkSetToContextStaysStrict(t *testing.T) {
 		})
 	}
 }
+
+// TestContinuationMarkSetIteratorRacketProtocol pins (wile control)'s iterator
+// to Racket's protocol: each call answers two values, the next frame's vector
+// (#f once exhausted) and the iterator for the rest, and an iterator is pure.
+// Wile's iterator used to be a stateful closure answering one value, a
+// different protocol under Racket's name. Expected values measured on racket.
+func TestContinuationMarkSetIteratorRacketProtocol(t *testing.T) {
+	t.Parallel()
+
+	tcs := []struct{ name, code, expected string }{
+		{"two values per call",
+			`(with-continuation-mark 'a 1 (let ((it (continuation-mark-set->iterator (current-continuation-marks) '(a)))) (call-with-values it (lambda (v next) (list v (procedure? next))))))`,
+			"(#(1) #t)"},
+		{"walk frames through the next iterator",
+			`(define (g) (with-continuation-mark 'a 2 (let loop ((it (continuation-mark-set->iterator (current-continuation-marks) '(a)))) (call-with-values it (lambda (v next) (if v (cons v (loop next)) '()))))))
+(define (f) (with-continuation-mark 'a 1 (list (g))))
+(f)`,
+			"((#(2) #(1)))"},
+		{"an iterator is pure",
+			`(with-continuation-mark 'a 1 (let ((it (continuation-mark-set->iterator (current-continuation-marks) '(a)))) (list (call-with-values it (lambda (v n) v)) (call-with-values it (lambda (v n) v)))))`,
+			"(#(1) #(1))"},
+		{"none-v fills a missing key",
+			`(with-continuation-mark 'a 1 (call-with-values (continuation-mark-set->iterator #f '(a b) 'none) (lambda (v n) v)))`,
+			"#(1 none)"},
+		{"exhausted answers #f and another iterator",
+			`(let ((it (continuation-mark-set->iterator #f '(a)))) (call-with-values it (lambda (v n) (list v (procedure? n) (call-with-values n (lambda (v2 n2) v2))))))`,
+			"(#f #t #f)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			engine, err := wile.NewEngine(context.Background(),
+				wile.WithProfile(wile.KitchenSink), wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths())
+			qt.Assert(t, err, qt.IsNil)
+			_, err = engine.EvalMultiple(context.Background(), `(import (wile control))`)
+			qt.Assert(t, err, qt.IsNil)
+			result, err := engine.EvalMultiple(context.Background(), tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.expected)
+		})
+	}
+}
