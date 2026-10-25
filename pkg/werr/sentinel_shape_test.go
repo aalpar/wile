@@ -18,6 +18,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -34,23 +36,32 @@ import (
 // ErrNotable and ErrNotAnalysis are not swept in.
 var typeSentinelName = regexp.MustCompile(`^ErrNot(A|An)[A-Z]`)
 
-// typeSentinelMessage is the message shape NewTypeSentinel produces.
-var typeSentinelMessage = regexp.MustCompile(`^not an? `)
+// typeSentinelMessage is the message shape NewTypeSentinel produces, matched
+// without regard to case: "Not a pair" makes the same claim as "not a pair",
+// and a sentinel spelled either way is the type-sentinel shape.
+var typeSentinelMessage = regexp.MustCompile(`(?i)^not an? `)
 
 // typeSentinelFindings parses one source file and reports every declaration
-// that breaks one of two syntactic rules:
+// that breaks one of three syntactic rules:
 //
 //	arm 1: a package-level var named like a type sentinel is not built by
-//	       NewTypeSentinel (the constructor that sets TypeName).
+//	       NewTypeSentinel (the constructor that sets TypeName). An alias,
+//	       a var bound to another identifier that is itself named like a type
+//	       sentinel (ErrNotAMatch = werr.ErrNotAMatch), is accepted: the
+//	       original is checked where it is declared.
 //	arm 2: a NewStaticError call whose literal message reads "not a(n) ..."
 //	       (the message shape of a type sentinel) is not built by
 //	       NewTypeSentinel. Only a plain string literal as the first argument
 //	       is read: a concatenated, constant or computed message, and a call
 //	       with no argument, escape the rule. The match is anchored at the
-//	       start of the message and is case-sensitive.
+//	       start of the message and ignores case.
+//	arm 3: an identifier named like a type sentinel is the target of a plain
+//	       assignment (=). The walk reads declarations, so a sentinel replaced
+//	       after declaration, by a message arm 2 cannot recognise, would
+//	       otherwise be unseen.
 //
-// Each finding is prefixed "arm 1" or "arm 2" so a failure says which rule
-// fired. src is passed to go/parser.ParseFile: nil reads filename.
+// Each finding is prefixed with its arm so a failure says which rule fired.
+// src is passed to go/parser.ParseFile: nil reads filename.
 func typeSentinelFindings(t *testing.T, filename string, src any) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -73,11 +84,28 @@ func typeSentinelFindings(t *testing.T, filename string, src any) []string {
 				if i < len(vs.Values) && calleeName(vs.Values[i]) == "NewTypeSentinel" {
 					continue
 				}
+				if i < len(vs.Values) && typeSentinelName.MatchString(identName(vs.Values[i])) {
+					continue
+				}
 				q = append(q, "arm 1: "+fset.Position(name.Pos()).String()+": "+name.Name+
 					" is named like a type sentinel but is not built by NewTypeSentinel")
 			}
 		}
 	}
+	ast.Inspect(file, func(n ast.Node) bool {
+		assign, ok := n.(*ast.AssignStmt)
+		if !ok || assign.Tok != token.ASSIGN {
+			return true
+		}
+		for _, lhs := range assign.Lhs {
+			name := identName(lhs)
+			if typeSentinelName.MatchString(name) {
+				q = append(q, "arm 3: "+fset.Position(lhs.Pos()).String()+": "+name+
+					" is named like a type sentinel and is reassigned")
+			}
+		}
+		return true
+	})
 	ast.Inspect(file, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok || calleeName(call) != "NewStaticError" || len(call.Args) == 0 {
@@ -96,6 +124,18 @@ func typeSentinelFindings(t *testing.T, filename string, src any) []string {
 		return true
 	})
 	return q
+}
+
+// identName returns the name an expression spells, bare or qualified (ErrNotAFoo
+// or werr.ErrNotAFoo), and "" for anything else.
+func identName(e ast.Expr) string {
+	switch x := e.(type) {
+	case *ast.Ident:
+		return x.Name
+	case *ast.SelectorExpr:
+		return x.Sel.Name
+	}
+	return ""
 }
 
 // calleeName returns the function name of a call expression, whether spelled
@@ -127,39 +167,27 @@ func calleeName(e ast.Expr) string {
 //
 // So the test reads the declarations. Go has no package-scope reflection, so a
 // source walk is the only implementable form. It covers every non-test file in
-// the package. Known limits, each the price of reading source instead of
-// values:
+// the module, because a type sentinel declared outside pkg/werr reaches the same
+// registry/helpers rendering as one inside it. Known limits, each the price of
+// reading source instead of values:
 //
-//   - Declarations and literals only. The old list saw runtime values, so any
-//     sentinel replaced after declaration was visible to it. The walk inspects
-//     every NewStaticError call, init() bodies included, so a reassignment such
-//     as ErrNotAFoo = NewStaticError("not a foo") in an init() still fires
-//     arm 2; a reassignment whose message does not begin "not a ..." is unseen.
+//   - Declarations, literals and assignments only. A sentinel replaced through
+//     a pointer, or by reflection, is unseen; arm 3 sees every plain assignment
+//     to a type-sentinel name, init() bodies included.
 //   - Build constraints are ignored: a file excluded by //go:build is scanned
 //     too, which errs toward flagging.
-//   - The walk stops at pkg/werr. A sentinel declared elsewhere is not checked.
 //
-// The two rules are in typeSentinelFindings. If one fires, fix the name or the
-// constructor; do not delete the rule. Arm 2 matches message text, so within
-// pkg/werr a future non-type sentinel that begins "not a ..." fires it by
-// design: the message shape is the claim that registry/helpers argument errors
-// rely on to render "expected a Foo".
+// The rules are in typeSentinelFindings. If one fires, fix the name or the
+// constructor; do not delete the rule. Arm 2 matches message text, so a future
+// non-type sentinel that begins "not a ..." fires it by design: the message
+// shape is the claim that registry/helpers argument errors rely on to render
+// "expected a Foo".
 func TestTypeSentinelDeclarationShape(t *testing.T) {
-	files, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatalf("glob: %v", err)
+	sources := moduleSources(t)
+	if len(sources) < 100 {
+		t.Fatalf("found %d non-test files in the module, want at least 100", len(sources))
 	}
-	var sources []string
-	for _, f := range files {
-		if strings.HasSuffix(f, "_test.go") {
-			continue
-		}
-		sources = append(sources, f)
-	}
-	if len(sources) < 3 {
-		t.Fatalf("found %d non-test files in pkg/werr, want at least 3: %v", len(sources), sources)
-	}
-	for _, arm := range []string{"arm 1", "arm 2"} {
+	for _, arm := range []string{"arm 1", "arm 2", "arm 3"} {
 		t.Run(arm, func(t *testing.T) {
 			for _, f := range sources {
 				for _, finding := range typeSentinelFindings(t, f, nil) {
@@ -170,6 +198,42 @@ func TestTypeSentinelDeclarationShape(t *testing.T) {
 			}
 		})
 	}
+}
+
+// moduleSources returns every non-test .go file in the module, skipping the
+// directories that hold no source of this module (the skip set of the walk in
+// pkg/values TestValueImplementorPackages_ListIsComplete).
+func moduleSources(t *testing.T) []string {
+	t.Helper()
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("module root: %v", err)
+	}
+	_, err = os.Stat(filepath.Join(root, "go.mod"))
+	if err != nil {
+		t.Fatalf("expected go.mod at %s: %v", root, err)
+	}
+	var q []string
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case "testdata", ".git", "dist", ".claude", ".worktrees":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			q = append(q, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking %s: %v", root, err)
+	}
+	return q
 }
 
 // TestTypeSentinelDeclarationShapeCatchesItsTargets pins each branch of the
@@ -261,9 +325,38 @@ var ErrX = NewStaticError()`,
 			nil,
 		},
 		{
-			"uppercase phrase is not matched (arm 2 is case-sensitive)",
+			"arm 2 ignores case: a capitalised phrase is the same claim",
 			`package p
-var ErrX = NewStaticError("Not a thing")`,
+var ErrPairExpected = NewStaticError("Not a pair")`,
+			[]string{`arm 2: x.go:2:23: NewStaticError("Not a pair") has a type-sentinel message and should be NewTypeSentinel`},
+		},
+		{
+			"alias of a type-sentinel name is accepted",
+			`package p
+var ErrNotAMatch = werr.ErrNotAMatch
+var ErrNotAPair = ErrNotAList`,
+			nil,
+		},
+		{
+			"arm 3: a type-sentinel name reassigned in init",
+			`package p
+var ErrNotAFoo = NewTypeSentinel("foo")
+func init() { ErrNotAFoo = NewStaticError("foo missing") }`,
+			[]string{"arm 3: x.go:3:15: ErrNotAFoo is named like a type sentinel and is reassigned"},
+		},
+		{
+			"arm 3: a qualified type-sentinel name reassigned",
+			`package p
+func f() { werr.ErrNotAnInteger = other }`,
+			[]string{"arm 3: x.go:2:12: ErrNotAnInteger is named like a type sentinel and is reassigned"},
+		},
+		{
+			"arm 3: a short variable declaration is not a reassignment",
+			`package p
+func f() {
+	ErrNotAFoo := other
+	_ = ErrNotAFoo
+}`,
 			nil,
 		},
 		{

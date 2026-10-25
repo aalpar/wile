@@ -35,7 +35,7 @@ import (
 const primitiveSpecTag = "primitive-spec"
 
 // errNotPrimitiveSpec is the sentinel for accessor calls on non-spec values.
-var errNotPrimitiveSpec = werr.NewStaticError("not a primitive-spec")
+var errNotPrimitiveSpec = werr.NewTypeSentinel("primitive-spec")
 
 // unwrapPrimitiveSpec extracts a *registry.PrimitiveRegistration from a
 // Scheme value, returning a descriptive error if the value has the wrong
