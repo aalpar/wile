@@ -245,10 +245,10 @@ func TestEngineCall(t *testing.T) {
 // argument through Engine.Call and forwards the error, and host-call-func to the
 // same host written as a func-typed RegisterFunc callback, the control: both
 // apply their procedure to 0.
-func newHostCallEngine(t *testing.T) *wile.Engine {
+func newHostCallEngine(t *testing.T, opts ...wile.EngineOption) *wile.Engine {
 	t.Helper()
 	ctx := context.Background()
-	engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	engine, err := wile.NewEngine(ctx, append([]wile.EngineOption{wile.WithProfile(wile.KitchenSink)}, opts...)...)
 	qt.Assert(t, err, qt.IsNil)
 	err = engine.RegisterPrimitive(wile.PrimitiveSpec{
 		Name:       "host-call",

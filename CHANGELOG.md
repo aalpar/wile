@@ -29,6 +29,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A `call-with-exit` escape is valid while its extent is live, not one-shot.**
+  It is valid exactly when its `call-with-exit` frame is on the continuation of
+  the call, as Racket's `call/ec`: a continuation that re-enters the extent makes
+  it valid again (it stayed expired), and a `dynamic-wind` after thunk its own
+  escape runs may escape to it again (`7`, was an expired-escape error). An
+  escape whose extent an outer jump left now raises the catchable expired-escape
+  error instead of an uncatchable "no prompt found". `guard` escapes through
+  `call-with-exit`, so a handler re-entered after its `guard` exited now raises
+  the R7RS 6.11 secondary into that guard, as petite does. Past a macro
+  transformer's expansion-time root or an `Engine.Call` callback, where the chain
+  cannot be read, the escape keeps the old rule.
+
 - **BREAKING (behavior): `char-ready?` requires a textual input port.** It
   answered `#t` without looking at its argument, so `(char-ready? 5)`, a binary
   input port and an output port all answered `#t`; each is now an error, as

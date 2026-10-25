@@ -601,7 +601,7 @@ Reference for the types, primitives, and special forms in Wile. It is **not exha
 
 | Primitive | Description |
 |-----------|-------------|
-| `call-with-exit` | Call procedure with one-shot escape continuation |
+| `call-with-exit` | Call procedure with an escape continuation, valid while its extent is live |
 | `call-with-continuation-barrier` | Call thunk with continuation re-entry barrier |
 
 ## Continuation Marks

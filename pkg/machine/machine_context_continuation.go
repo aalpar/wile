@@ -257,6 +257,34 @@ func (p *MachineContext) PromptOwner(tag *PromptTag) *MachineContext {
 	return nil
 }
 
+// PromptOnAbortPath reports whether an abort to tag raised on p would find its
+// prompt: whether some context from p up its parentMC links holds the tag on its
+// chain or boundary. It follows the path the abort itself takes, each driver
+// returning what it cannot resolve to the context that ran it, so unlike
+// PromptOwner it does not stop at a dynamic-wind thunk's sub-context: the
+// unwinder that ran the thunk is the next driver. opaque is true when the walk
+// ends at a root whose caller it holds no link to, so the answer past it is
+// unknown: an expansion-time root, which passes an abort up by error return to
+// that caller's driver (passUpAbort), or a host call's root (hostCallRoot), whose
+// host program runs above it on the Go stack.
+func (p *MachineContext) PromptOnAbortPath(tag *PromptTag) (found bool, opaque bool) {
+	mc := p
+	for {
+		_, found = mc.FindPrompt(tag)
+		if found {
+			return true, false
+		}
+		if mc.hostCallRoot {
+			// Its parentMC is Engine.Call's throwaway root, not the host's caller.
+			return false, true
+		}
+		if mc.parentMC == nil {
+			return false, mc.expansionRoot
+		}
+		mc = mc.parentMC
+	}
+}
+
 // crossesToParent reports whether parentMC continues the continuation running on
 // p, for the prompt and mark-set walks: always, unless p is isolated
 // (isolatedMarks) without outerIntact.

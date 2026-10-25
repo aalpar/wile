@@ -25,15 +25,16 @@ import (
 
 // PrimCallWithExit implements (call-with-exit proc).
 //
-// Calls proc with a single-use escape procedure. If the escape procedure is
-// called with a value during proc's dynamic extent, call-with-exit immediately
-// returns that value (after running any dynamic-wind after thunks). If proc
-// returns normally, call-with-exit returns that value and the escape procedure
-// is invalidated.
+// Calls proc with an escape procedure. If the escape procedure is called with a
+// value while its extent is live, call-with-exit immediately returns that value
+// (after running any dynamic-wind after thunks). If proc returns normally,
+// call-with-exit returns that value.
 //
-// Unlike call/cc, call-with-exit does NOT capture a reified continuation —
-// the escape procedure is a lightweight one-shot upward escape. Calling the
-// escape after call-with-exit has returned signals an error.
+// Unlike call/cc, call-with-exit does NOT capture a reified continuation: the
+// escape procedure is a lightweight upward escape, valid while its extent is
+// live, that is, while call-with-exit's frame is on the continuation of the
+// call (Racket's call/ec). Calling it after the extent was left signals an
+// error; a continuation that re-enters the extent makes it valid again.
 //
 // Inspired by S7 Scheme's call-with-exit and Guile's call-with-escape-continuation.
 func PrimCallWithExit(cc machine.CallContext) error {
@@ -55,35 +56,47 @@ func PrimCallWithExit(cc machine.CallContext) error {
 	closureEnv := mc.ClosureEnv()
 
 	tag := machine.NewPromptTag("exit")
-	valid := &atomic.Bool{}
-	valid.Store(true)
+	// left records that this call's own frame was left (normal return or its
+	// escape). It is the answer only where the live chain cannot be read: past an
+	// expansion-time root (PromptOnAbortPath's opaque) and from another thread.
+	// There a continuation re-entering the extent does not clear it.
+	left := &atomic.Bool{}
 	capturingThreadID := mc.ThreadID()
 
-	// Build the exit closure. It is valid only during the dynamic extent of proc.
-	// Checking valid before thread is intentional: a cross-thread call to an expired
-	// exit procedure gets the "outside dynamic extent" error, which is more informative.
+	// Build the exit closure. It is valid while the exit frame is on the chain the
+	// escape's abort travels (PromptOnAbortPath): a continuation that re-enters the
+	// extent makes it valid again; one that jumps out past the frame expires it.
 	exitFn := func(innerCC machine.CallContext) error {
 		innerMC, err := machine.RequireMachineContext(innerCC, "call-with-exit")
 		if err != nil {
 			return err
 		}
-		if !valid.Load() {
-			return werr.WrapForeignErrorf(werr.ErrExpiredEscape,
-				"call-with-exit: exit procedure called outside dynamic extent")
-		}
+		// Another thread cannot read this thread's chain. An expired exit procedure
+		// still reports "outside dynamic extent" there, which is more informative.
 		if innerMC.ThreadID() != capturingThreadID {
+			if left.Load() {
+				return werr.WrapForeignErrorf(werr.ErrExpiredEscape,
+					"call-with-exit: exit procedure called outside dynamic extent")
+			}
 			return werr.WrapForeignErrorf(werr.ErrCrossThreadContinuation,
 				"call-with-exit: exit procedure called from different thread")
 		}
+		live, opaque := innerMC.PromptOnAbortPath(tag)
+		if !live && (!opaque || left.Load()) {
+			return werr.WrapForeignErrorf(werr.ErrExpiredEscape,
+				"call-with-exit: exit procedure called outside dynamic extent")
+		}
 		val := innerMC.Arg(0)
-		// Invalidate the one-shot BEFORE the abort so an after-thunk that re-invokes
-		// it is rejected (expired). No UnwindTo here: the driver's abort arm
+		// Marked left BEFORE the abort, for the opaque fallback: an after thunk that
+		// re-invokes it from a transformer body is rejected. On the readable chain an
+		// after thunk run by this abort still sees the frame, so (as Racket) it may
+		// escape to it again. No UnwindTo here: the driver's abort arm
 		// (RunResumable / RunWithinBoundary) runs the dynamic-wind after thunks ONCE,
 		// against SourceWinding — the winding live HERE at the escape point, which may
 		// be a deeper sub-context than the driver holding the exit frame. Unwinding
 		// here too would double-fire (C2); reconciling from the driver's own winding
 		// instead of SourceWinding would skip a deeper sub's after-thunks (C3).
-		valid.Store(false)
+		left.Store(true)
 		return &machine.ErrPromptAbort{
 			Tag:           tag,
 			Values:        []values.Value{val},
@@ -96,11 +109,10 @@ func PrimCallWithExit(cc machine.CallContext) error {
 	//   - normal return: proc's value(s) are in the register; OpPush spreads them
 	//     onto the eval stack and OpApply applies the finalizer to them.
 	//   - (exit v): the driver delivers v then re-enters this finalizer template.
-	// Either way it clears the one-shot (so a later stale call gets the catchable
-	// ErrExpiredEscape, not the driver's "no prompt found") and forwards the value(s)
-	// unchanged. ParamCount 1 + variadic accepts 0/1/N values (AcceptsArity n >= 0).
+	// Either way it marks the frame left (the opaque fallback's answer) and forwards
+	// the value(s) unchanged. ParamCount 1 + variadic accepts 0/1/N values (AcceptsArity n >= 0).
 	finalizerFn := func(finCC machine.CallContext) error {
-		valid.Store(false)
+		left.Store(true)
 		finMC, err := machine.RequireMachineContext(finCC, "call-with-exit")
 		if err != nil {
 			return err
@@ -115,7 +127,7 @@ func PrimCallWithExit(cc machine.CallContext) error {
 	finalizer := machine.NewForeignClosure(closureEnv, 1, true, finalizerFn)
 
 	// Reify the boundary: push a non-transparent prompt frame carrying tag (so an
-	// (exit v) abort routes to it via FindPrompt) whose template clears the one-shot
+	// (exit v) abort routes to it via FindPrompt) whose template marks the frame left
 	// and forwards the value(s), then inline-apply proc on the live chain. A
 	// continuation captured inside proc now spans the exit frame and everything below
 	// it — re-entry replays them instead of truncating.
