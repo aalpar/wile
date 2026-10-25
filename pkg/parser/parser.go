@@ -405,7 +405,7 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 		// treat "'" as an empty file.
 		return nil, p.cur, wrapMidParseEOF(err, t, keyword+" form")
 	}
-	q, _, err := p.readSyntax()
+	q, _, err := p.readIntroducedDatum(t, keyword+" form")
 	// A quote form with no datum (e.g. "' )") must be a located error, not a
 	// quote wrapped around nil that panics in listSyntax. Mirrors the
 	// datum-label and dotted-pair guards.
@@ -444,7 +444,7 @@ func (p *Parser) readNumericIntroducer(label string, convert func(syntax.SyntaxV
 		// same rule as the errNoDatum guard below, which rejects "#e)".
 		return nil, p.cur, wrapMidParseEOF(err, markerTok, label)
 	}
-	q, tok, err := p.readSyntax()
+	q, tok, err := p.readIntroducedDatum(markerTok, label)
 	// A marker with no number (e.g. "#e)", "(#z)") must be a located error, not
 	// a nil deref in convert.
 	if errors.Is(err, errNoDatum) {
@@ -525,7 +525,7 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 		}
 	default:
 		// Non-compound datum: read normally and store.
-		v, _, err = p.readSyntax()
+		v, _, err = p.readIntroducedDatum(assignTok, "datum label assignment")
 		// A label assignment with no datum (e.g. "#0=)") must be a located error,
 		// not a silently stored nil. Mirrors the dotted-pair guard above.
 		if errors.Is(err, errNoDatum) {
@@ -594,11 +594,16 @@ func (p *Parser) readDatumComment() (syntax.SyntaxValue, tokenizer.Token, error)
 	// Skip the datum comment begin token
 	err := p.advance()
 	if err != nil {
-		return nil, p.cur, err
+		// "#;" needs the datum it comments out (R7RS §2.2), so EOF here is
+		// malformed input rather than a clean end of input.
+		return nil, p.cur, wrapMidParseEOF(err, beginTok, "datum comment")
 	}
-	// Read the syntax value being commented
+	// Read the syntax value being commented. readIntroducedDatum rather than
+	// readSyntax keeps every introducer on one helper; in this
+	// comment-preserving mode each EOF branch of readSyntax already returns a
+	// located error, so its EOF wrap does not fire here today.
 	var v syntax.SyntaxValue
-	v, _, err = p.readSyntax()
+	v, _, err = p.readIntroducedDatum(beginTok, "datum comment")
 	// "#;)" must be a located error rather than a node whose Value is nil:
 	// SchemeString and EqualTo both dereference Value, so such a node panics on
 	// any use, and at top level nothing stops it escaping ReadSyntax. Same guard
@@ -644,7 +649,7 @@ func (p *Parser) readBoxInto(placeholder *syntax.SyntaxBox) (syntax.SyntaxValue,
 		// input rather than a clean end of input.
 		return nil, p.cur, wrapMidParseEOF(err, beginTok, "box")
 	}
-	v, tok, err := p.readSyntax()
+	v, tok, err := p.readIntroducedDatum(beginTok, "box")
 	// "(#&)" must be a located error rather than a leaked errNoDatum that the
 	// enclosing list reader silently treats as "no element" — the same guard the
 	// numeric introducers carry.
@@ -685,6 +690,20 @@ func wrapMidParseEOF(err error, tok tokenizer.Token, form string) error {
 			"unterminated %s: unexpected end of input", form)
 	}
 	return err
+}
+
+// readIntroducedDatum reads the one datum an introducer takes, with p.cur on its
+// first token. readSyntax skips intertoken comments first, so for "#z;c" the
+// end of input arrives inside that call as a bare io.EOF, which every caller
+// above the introducer reads as a clean end; introTok locates it instead. The
+// wrap belongs here, not in readSyntax's comment loop, where it would turn a
+// trailing top-level comment into an error.
+func (p *Parser) readIntroducedDatum(introTok tokenizer.Token, label string) (syntax.SyntaxValue, tokenizer.Token, error) {
+	q, tok, err := p.readSyntax()
+	if err != nil {
+		return nil, tok, wrapMidParseEOF(err, introTok, label)
+	}
+	return q, tok, nil
 }
 
 // readList reads a fresh list form opened by ( or [. It allocates its own head
@@ -987,13 +1006,16 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			}
 			continue
 		case tokenizer.TokenizerStateDatumCommentBegin:
-			// Skip the datum comment begin token
+			// Skip the datum comment begin token. The #; is an introducer, so an
+			// EOF before its datum is malformed input; only the comment arms
+			// above, and the advance past a completed datum below, may end
+			// cleanly.
 			err = p.advance()
 			if err != nil {
-				return nil, p.cur, err
+				return nil, p.cur, wrapMidParseEOF(err, cur, "datum comment")
 			}
 			// Read and discard the commented datum.
-			_, _, cerr := p.readSyntax()
+			_, _, cerr := p.readIntroducedDatum(cur, "datum comment")
 			// errNoDatum (a #; before a close delimiter) is tolerated: R7RS
 			// §7.1.1 requires a datum after #;, and refusing one here would make
 			// "(1 #;)" a read error, which this reader deliberately does not do.
