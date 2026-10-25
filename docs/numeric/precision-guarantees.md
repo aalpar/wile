@@ -73,7 +73,7 @@ The two FFI rows are **strict by default**: the converter raises `werr.ErrLossyC
 
 ### Tier 4: IEEE 754 Special Values in Arbitrary-Precision Types
 
-`values.BigFloat` and `values.BigComplex` support IEEE 754 Inf and NaN representation. The arithmetic dispatch tables retain an `isSpecialFloat` guard (`pkg/values/promotion.go` → `isSpecialFloat`, consumed by `makeArithmeticDispatch` and `makeDivideDispatch`) that short-circuits to `float64` / `complex128` arithmetic when a `Float` operand is Inf/NaN and the lattice LUB is `BigFloat`/`BigComplex`. The `LessThan` dispatch deliberately has no such guard.
+`values.BigFloat` and `values.BigComplex` support IEEE 754 Inf and NaN representation. The arithmetic dispatch tables retain an `isSpecialFloat` guard (`pkg/values/promotion.go` → `isSpecialFloat`, consumed by `makeArithmeticDispatch` and `makeDivideDispatch`) that short-circuits to range-clamped `float64` arithmetic (part-wise for a `BigComplex`) when a `Float` operand is Inf/NaN and the lattice LUB is `BigFloat`/`BigComplex`, or the partner is a `BigInteger`/`Rational`. The `LessThan` dispatch deliberately has no such guard.
 
 The guard decides the result *kind*, so the lattice LUB is not what comes back:
 
@@ -209,7 +209,7 @@ Sites are pinned as `file` + symbol, never `file:LINE` — a line number rots in
 
 - [x] `pkg/values/big_float.go` — Tier 4: BigFloat must support Inf and NaN (IEEE 754 uniformity). **DONE** (#362): `NewBigFloatNaN` plus the out-of-band `nan` flag; `recoverNaN` converts `big.ErrNaN` panics into BigFloat NaN.
 - [x] `pkg/values/big_complex.go` — Tier 4: BigComplex must support Inf/NaN parts via BigFloat. **DONE** (#362): `(*BigComplex).IsNaN` delegates to each part.
-- [x] ~~`pkg/values/promotion.go` `isSpecialFloat` guard — **REMOVE** after BigFloat Inf/NaN support (#362)~~ — **RETAINED, deliberately.** #362 updated the guard instead of deleting it, so the BigComplex LUB rewraps its `complex128` result as a BigComplex and keeps the operand's imaginary part. See Tier 4 above.
+- [x] ~~`pkg/values/promotion.go` `isSpecialFloat` guard — **REMOVE** after BigFloat Inf/NaN support (#362)~~ — **RETAINED, deliberately.** #362 updated the guard instead of deleting it, so the BigComplex LUB returns a BigComplex; it now computes part-wise on the operand's parts (no `complex128` route), keeping the imaginary part. See Tier 4 above.
 - [ ] `pkg/values/promotion.go` `NumberToFloat64` — Tier 3 helper for lossy `float64` conversion at machine/FFI boundaries; verify all precision-dropping call paths are intentional
 - [ ] `pkg/values/promotion.go` `NumberToComplex128Lossy` — Tier 3 helper for lossy `complex128` conversion at machine/FFI boundaries; verify all precision-dropping call paths are intentional
 - [x] ~~`pkg/values/big_complex.go` `toExactPart`~~ — **FIXED**. `toExactPart` delegates to `(*BigFloat).ToExact`, which calls `p.value.Rat(nil)` directly (`pkg/values/big_float.go`); no `.Float64()` roundtrip remains.
