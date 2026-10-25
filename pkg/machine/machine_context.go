@@ -111,6 +111,14 @@ type MachineContext struct {
 	// Set by reinstallSegment (from its isolate argument) and by the dynamic-wind
 	// thunk sub-contexts built in unwindStackTo and RewindTo.
 	isolatedMarks bool
+	// outerIntact qualifies isolatedMarks: a call/cc resume reinstated at this
+	// context's own boundary, the one the continuation was delimited at, so
+	// parentMC is still the outer continuation the capture saw. The prompt and
+	// mark-set walks (PromptOwner, CollectContinuationMarks) then cross it, as
+	// they cross a context that was never isolated. Written with isolatedMarks by
+	// each call/cc resume (resolveResume); false on a dynamic-wind thunk's
+	// sub-context, whose parentMC is the unwinder.
+	outerIntact bool
 
 	// reconfigured is set by Apply when it repoints the VM (template/env/pc) to
 	// execute a closure in place. The foreign-call dispatchers (applyForeign,
@@ -2545,6 +2553,8 @@ func (p *MachineContext) resolveResume(resumeErr *ErrResumeContinuation, prompt 
 	// The escalator revivals ride the signal rather than being computed here:
 	// p.cont is THIS driver's chain, and the (k v) site may have been a
 	// sub-context whose frames this chain never held (see escalatorRevivals).
+	seg := resumeErr.Segment
+	p.outerIntact = prompt == nil && seg != nil && seg.boundary != nil && seg.boundary == p.boundary
 	wasEmpty, err := p.reinstallSegment(
 		resumeErr.Segment, prompt, resumeErr.SourceWinding, p.windingOutside(prompt),
 		resumeErr.Values, true, resumeErr.escalatorRevivals)

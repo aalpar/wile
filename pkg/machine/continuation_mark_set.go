@@ -101,15 +101,15 @@ func (p *ContinuationMarkSet) ToListStar(keys []values.Value, noneVal values.Val
 // outward, nearest first, stopping at the first frame whose promptTag matches
 // tag (exclusive) or after last (inclusive; nil for no such bound). Pass
 // DefaultPromptTag for an unbounded walk. It is the one chain walk behind both
-// ContinuationMarkSet collectors.
+// ContinuationMarkSet collectors, and reports whether it stopped at tag's frame.
 //
 // The prompt frame's own marks are excluded because they are not inside the
 // prompt: RunBodyUnderFrame moves the marks of the activation that INSTALLED the
 // prompt onto that frame, so they belong to the continuation beyond the delimiter.
-func appendChainMarks(frames [][]markEntry, cont, last *MachineContinuation, tag *PromptTag) [][]markEntry {
+func appendChainMarks(frames [][]markEntry, cont, last *MachineContinuation, tag *PromptTag) ([][]markEntry, bool) {
 	for c := cont; c != nil; c = c.parent {
 		if c.promptTag == tag {
-			break
+			return frames, true
 		}
 		if len(c.marks) > 0 {
 			frames = append(frames, cloneMarks(c.marks))
@@ -118,7 +118,7 @@ func appendChainMarks(frames [][]markEntry, cont, last *MachineContinuation, tag
 			break
 		}
 	}
-	return frames
+	return frames, false
 }
 
 // CollectMarksFromCapture builds the ContinuationMarkSet of a call/cc capture: the
@@ -140,7 +140,8 @@ func CollectMarksFromCapture(comp *ComposableContinuation, tag *PromptTag) *Cont
 	if len(comp.liveMarks) > 0 {
 		frames = append(frames, comp.liveMarks)
 	}
-	return &ContinuationMarkSet{frames: appendChainMarks(frames, comp.cont, comp.bottom, tag)}
+	frames, _ = appendChainMarks(frames, comp.cont, comp.bottom, tag)
+	return &ContinuationMarkSet{frames: frames}
 }
 
 // CollectContinuationMarks builds a ContinuationMarkSet snapshot of the marks
@@ -148,16 +149,16 @@ func CollectMarksFromCapture(comp *ComposableContinuation, tag *PromptTag) *Cont
 // context's live marks, then its chain, hopping parentMC so code an eval or load
 // runs in a sub-context sees its caller's marks, as in Racket. It stops at the
 // context PromptOwner names (after that context's frames inside the prompt) and,
-// with no such prompt, where PromptOwner's walk stops.
+// with no such prompt, where PromptOwner's walk stops (crossesToParent).
 func (p *MachineContext) CollectContinuationMarks(tag *PromptTag) *ContinuationMarkSet {
 	var frames [][]markEntry
 	for mc := p; mc != nil; mc = mc.parentMC {
 		if len(mc.marks) > 0 {
 			frames = append(frames, cloneMarks(mc.marks))
 		}
-		frames = appendChainMarks(frames, mc.cont, nil, tag)
-		_, found := mc.FindPrompt(tag)
-		if found || mc.isolatedMarks {
+		var atPrompt bool
+		frames, atPrompt = appendChainMarks(frames, mc.cont, nil, tag)
+		if atPrompt || mc.promptTag == tag || !mc.crossesToParent() {
 			break
 		}
 	}

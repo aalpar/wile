@@ -352,8 +352,9 @@ func TestPrompt_AvailableQErrors(t *testing.T) {
 // TestPrompt_AvailableQSeesPastEval: code eval runs in a sub-context sees the
 // prompts of the code that called eval, as in Racket (every row agrees with
 // racket -e). Master answered #f for the first two. A thread root has no parent,
-// so a thread does not see its starter's prompts (Racket: #f too). The last two
-// rows pin the walk's stop at an isolated context; removing it flips both.
+// so a thread does not see its starter's prompts (Racket: #f too). The two
+// dynamic-wind rows pin the walk's stop at an isolated context; removing it
+// flips both.
 func TestPrompt_AvailableQSeesPastEval(t *testing.T) {
 	t.Parallel()
 
@@ -395,6 +396,25 @@ func TestPrompt_AvailableQSeesPastEval(t *testing.T) {
 			(set! n (+ n 1))
 			(if (< n 2) (call-with-continuation-prompt (lambda () (kk 2)) t (lambda a 'h)))
 			r`, "(#f #f)"},
+		// A call/cc re-entry inside the eval resumes at the boundary it was
+		// delimited at (outerIntact), so both entries see the prompt and the
+		// caller's mark, as in Racket. Master: (aborted ((1 p1 #f ()) ...)).
+		{"a call/cc re-entry inside eval still sees the caller's prompt", `(define t (make-continuation-prompt-tag 'u))
+			(define p (make-parameter 'p0))
+			(call-with-continuation-prompt
+			  (lambda ()
+			    (parameterize ((p 'p1))
+			      (with-continuation-mark 'a 0
+			        (car (list (eval '(let ((n 0) (k #f) (seen '()))
+			                            (call/cc (lambda (c) (set! k c)))
+			                            (set! seen (cons (list n (p) (continuation-prompt-available? t)
+			                                                   (continuation-mark-set->list (current-continuation-marks) 'a))
+			                                             seen))
+			                            (set! n (+ n 1))
+			                            (if (< n 2) (k #f) #f)
+			                            (if (continuation-prompt-available? t) seen (abort-current-continuation t seen)))
+			                          (interaction-environment)))))))
+			  t (lambda (v) (list 'aborted v)))`, "((1 p1 #t (0)) (0 p1 #t (0)))"},
 	}
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {

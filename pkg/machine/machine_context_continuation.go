@@ -240,21 +240,28 @@ func (p *MachineContext) FindPrompt(tag *PromptTag) (*MachineContinuation, bool)
 // sees its caller's prompts, as in Racket. p itself is the answer exactly when
 // FindPrompt finds the prompt.
 //
-// The walk stops at an isolatedMarks context, as forEachReachableMarkFrame and
-// CaptureStackTrace do: there parentMC is the invoker of a resumed continuation or
-// the context running a dynamic-wind thunk, not the code's continuation. A thread
-// root has no parentMC, so a thread never sees its starter's prompts.
+// The walk stops where parentMC is not the code's continuation (crossesToParent):
+// at a dynamic-wind thunk's sub-context, whose parent is the unwinder, and at a
+// call/cc continuation resumed anywhere but the boundary it was delimited at. A
+// thread root has no parentMC, so a thread never sees its starter's prompts.
 func (p *MachineContext) PromptOwner(tag *PromptTag) *MachineContext {
 	for mc := p; mc != nil; mc = mc.parentMC {
 		_, found := mc.FindPrompt(tag)
 		if found {
 			return mc
 		}
-		if mc.isolatedMarks {
+		if !mc.crossesToParent() {
 			return nil
 		}
 	}
 	return nil
+}
+
+// crossesToParent reports whether parentMC continues the continuation running on
+// p, for the prompt and mark-set walks: always, unless p is isolated
+// (isolatedMarks) without outerIntact.
+func (p *MachineContext) crossesToParent() bool {
+	return !p.isolatedMarks || p.outerIntact
 }
 
 // SliceContinuationAt deep-copies the continuation chain segment from p.cont
