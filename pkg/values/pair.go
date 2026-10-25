@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"math"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/werr"
@@ -712,6 +713,49 @@ func CarAs[T any](t Tuple, headSentinel error, name, role string) (T, error) {
 	return typed, nil
 }
 
+// ExactIndex reads v as the index argument of the primitive named name. It
+// is the one classification every index-keyed primitive applies, list family
+// and vector family alike, so the same mistake reads the same way whichever
+// sequence it was made against:
+//
+//   - not an exact integer: ErrNotAnInteger;
+//   - an exact integer outside int64: ErrIndexOutOfRange, since no sequence
+//     that fits in memory reaches it (Chez and Racket also call it a range
+//     error, not a type error);
+//   - negative: ErrIndexOutOfRange via CheckIndexNonNegative.
+//
+// The upper bound is the caller's: a vector knows its length, a list finds
+// out by walking (NthCons).
+func ExactIndex(v Value, name string) (int64, error) {
+	idx, ok := ExactInteger(v)
+	if ok {
+		return idx, CheckIndexNonNegative(idx, name)
+	}
+	switch n := v.(type) {
+	case *BigInteger:
+		return 0, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+			"%s: index %s out of range", name, n.SchemeString())
+	case *Rational:
+		if n.IsInteger() {
+			return 0, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+				"%s: index %s out of range", name, n.SchemeString())
+		}
+	}
+	return 0, werr.WrapForeignErrorf(werr.ErrNotAnInteger,
+		"%s: expected an exact integer index but got %s", name, v.SchemeString())
+}
+
+// CheckIndexNonNegative reports a negative index as ErrIndexOutOfRange. It
+// owns the text so ExactIndex, NthCons and helpers.CheckIndexBounds cannot
+// drift apart on it.
+func CheckIndexNonNegative(idx int64, name string) error {
+	if idx < 0 {
+		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+			"%s: index %d must be non-negative", name, idx)
+	}
+	return nil
+}
+
 // NthCons advances n cons cells along the cdr chain and returns the
 // remaining list (or improper tail). It is the unified primitive
 // behind list-ref (NthCons(...).Car()), list-tail (NthCons(...)) and
@@ -722,13 +766,59 @@ func CarAs[T any](t Tuple, headSentinel error, name, role string) (T, error) {
 //
 // At n=0 the input is returned unchanged, including for EmptyList — this
 // matches R7RS semantics where (list-tail x 0) is x.
-func NthCons(lst Value, n int64, name string) (Value, error) {
-	if n < 0 {
-		return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
-			"%s: index must be non-negative", name)
+//
+// A circular list is legal input (R7RS §6.4: list-ref's "list argument can be
+// circular"), so the walk is bounded by the structure, not by n: Brent's
+// detector finds the cycle period and the remaining distance is reduced modulo
+// it, which is the answer Chez gives. The reduction never fires on a finite
+// list, so the depth in every error message is unchanged. ctx is polled every
+// contextCheckMask+1 steps regardless: a finite list can still be long enough
+// to outlast an embedder's deadline.
+func NthCons(ctx context.Context, lst Value, n int64, name string) (Value, error) {
+	err := CheckIndexNonNegative(n, name)
+	if err != nil {
+		return nil, err
 	}
 	current := lst
-	for i := range n {
+	// Brent's state, on *Pair pointers only: checkpoint is the cell visited
+	// steps cells ago, re-anchored at each power of two. A generic Tuple step
+	// re-anchors at the next *Pair, so the period is counted in *Pair cells.
+	var checkpoint *Pair
+	power, steps := int64(1), int64(1)
+	for i := int64(0); i < n; i++ {
+		if i&contextCheckMask == 0 && i != 0 {
+			err = ctx.Err()
+			if err != nil {
+				return nil, err
+			}
+		}
+		// The *Pair fast path: a concrete assertion and a field read, where
+		// the generic arm below pays IsEmptyList, an interface assertion and
+		// an interface Cdr per step.
+		pr, ok := current.(*Pair)
+		if ok {
+			if pr == checkpoint {
+				// The cell steps back is this one: the walk is on a cycle of
+				// period steps, so cell i+k*steps is cell i. Walk only what is
+				// left over, and stop looking (no cell matches nil, and steps
+				// never reaches MaxInt64).
+				n = i + (n-i)%steps
+				if n == i {
+					return pr, nil
+				}
+				checkpoint = nil
+				power = math.MaxInt64
+			}
+			if steps == power {
+				checkpoint = pr
+				power *= 2
+				steps = 0
+			}
+			steps++
+			current = pr[1]
+			continue
+		}
+		steps = power
 		if IsEmptyList(current) {
 			return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
 				"%s: index %d out of bounds at depth %d", name, n, i)

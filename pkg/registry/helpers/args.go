@@ -168,27 +168,30 @@ func ParseOptionalStartEnd(rest values.Value, defaultEnd int64, name string) (in
 }
 
 // CheckIndexBounds validates that idx is in range [0, length).
-// Returns a wrapped ErrIndexOutOfRange error if the index is out of bounds.
+// Returns a wrapped ErrIndexOutOfRange error if the index is out of bounds;
+// a negative index reads as values.CheckIndexNonNegative says, the same text
+// the list primitives give.
 func CheckIndexBounds(idx int64, length int, name string) error {
-	if idx < 0 || idx >= int64(length) {
+	err := values.CheckIndexNonNegative(idx, name)
+	if err != nil {
+		return err
+	}
+	if idx >= int64(length) {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
 			"%s: index %d out of bounds for length %d", name, idx, length)
 	}
 	return nil
 }
 
-// RequireIndex extracts an exact integer index from mc.Arg(argIdx) and validates
-// it is in range [0, length). Accepts *Integer, *BigInteger, and integer-valued
-// *Rational via values.ExactInteger, which is more R7RS-correct than requiring
-// *Integer alone (R7RS §6.1: indices are exact non-negative integers).
+// RequireIndex extracts an index from mc.Arg(argIdx), classified by
+// values.ExactIndex (the rule the list primitives share), and validates it is
+// in range [0, length).
 func RequireIndex(mc machine.CallContext, argIdx int, length int, name string) (int, error) {
-	k := mc.Arg(argIdx)
-	idx, ok := values.ExactInteger(k)
-	if !ok {
-		return 0, werr.WrapForeignErrorf(werr.ErrNotAnInteger,
-			"%s: expected an exact integer index but got %s", name, k.SchemeString())
+	idx, err := values.ExactIndex(mc.Arg(argIdx), name)
+	if err != nil {
+		return 0, err
 	}
-	err := CheckIndexBounds(idx, length, name)
+	err = CheckIndexBounds(idx, length, name)
 	if err != nil {
 		return 0, err
 	}
