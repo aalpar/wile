@@ -60,12 +60,13 @@
     (test #m-0.0 (imag-part (- +inf.0 (make-rectangular #m0 #m0.0))))
     (test #m-0.0 (imag-part (+ (make-rectangular #m0 #m-0.0) +inf.0)))))
 
-;; An exact imaginary part rounds to float64 as it does on the finite path.
+;; An exact BigComplex gives a Complex, its imaginary part rounding to float64
+;; as it does on the finite path.
 (test-group "exact imaginary part"
   (with-exact-comparison
     (test (imag-part (+ 1.0 1+1/3i)) (imag-part (+ +inf.0 1+1/3i)))
     (test (- (imag-part (+ 1.0 1+1/3i))) (imag-part (- +inf.0 1+1/3i)))
-    (test (/ #m1 #m0) (imag-part (+ +inf.0 (make-rectangular 1 (expt 10 400)))))))
+    (test +inf.0 (imag-part (+ +inf.0 (make-rectangular 1 (expt 10 400)))))))
 
 ;; The BigFloat twin: a finite BigFloat past float64 range is not +-inf.
 (test-group "out-of-range BigFloat partner"

@@ -315,15 +315,14 @@ func TestBigComplex_MixedArithmetic(t *testing.T) {
 	sum3 := bc.Add(values.NewInteger(10))
 	c.Assert(sum3.(*values.BigComplex).Real().(*values.BigInteger).Int64(), qt.Equals, int64(13))
 
-	// Add with Float: becomes inexact
+	// Add with Float: the exact complex is absorbed into float64, as an exact real is
 	sum4 := bc.Add(values.NewFloat(2.5))
-	c.Assert(sum4.(*values.BigComplex).IsExact(), qt.IsFalse)
+	c.Assert(sum4.(*values.Complex).Value, qt.Equals, complex(5.5, 4))
 
-	// Add with Complex
+	// Add with Complex: likewise
 	cplx := values.NewComplexFromParts(1.0, 1.0)
 	sum5 := bc.Add(cplx)
-	c.Assert(sum5.(*values.BigComplex).RealAsBigFloat().Float64Truncated(), qt.Equals, 4.0)
-	c.Assert(sum5.(*values.BigComplex).ImagAsBigFloat().Float64Truncated(), qt.Equals, 5.0)
+	c.Assert(sum5.(*values.Complex).Value, qt.Equals, complex(4, 5))
 }
 
 func TestBigComplex_Exactness(t *testing.T) {
@@ -970,9 +969,9 @@ func TestBigComplex_RationalExactnessContagion(t *testing.T) {
 		values.NewRational(1, 2),
 	)
 
-	// Adding a Float makes it inexact
+	// Adding a Float makes it inexact, and float64: a Complex
 	sumFloat := exact.Add(values.NewFloat(1.0))
-	c.Assert(sumFloat.(*values.BigComplex).IsExact(), qt.IsFalse)
+	c.Assert(sumFloat.(*values.Complex).Value, qt.Equals, complex(2.5, 0.5))
 
 	// Adding a BigFloat makes it inexact
 	sumBigFloat := exact.Add(values.NewBigFloatFromFloat64(1.0))
@@ -1042,10 +1041,11 @@ func TestBigComplex_HashCode(t *testing.T) {
 func TestBigComplex_FloatInfDispatch(t *testing.T) {
 	c := qt.New(t)
 
-	// BigComplex(3+4i) with exact BigInteger parts.
-	bc := values.NewBigComplex(
-		values.NewBigIntegerFromInt64(3),
-		values.NewBigIntegerFromInt64(4),
+	// BigComplex(3+4i) with BigFloat parts. An exact one gives a Complex
+	// (TestFloat64TimesExactBigComplexIsComplex covers its Inf/NaN rows).
+	bc := values.NewBigComplexFromBigFloats(
+		values.NewBigFloatFromFloat64(3),
+		values.NewBigFloatFromFloat64(4),
 	)
 
 	tcs := []struct {

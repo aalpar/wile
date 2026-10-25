@@ -141,7 +141,7 @@ Tables are populated at `init()` time by generators in `pkg/values/promotion.go`
 
 **Call path:** `Integer.Add(o)` → fast path for same type (`*Integer`), otherwise `integerAdd[o.Kind()](p, o)`.
 
-**IEEE 754 guard:** When a `Float` holds Inf or NaN and the lattice LUB is `BigFloat`/`BigComplex`, or the LUB is `Float` and the partner is a `BigInteger`/`Rational` (whose float64 conversion can overflow to ±Inf or underflow to 0), the dispatch closures short-circuit to `float64` arithmetic on range-clamped operands (`clampedFloat64`: a finite partner stays finite, a non-zero one stays non-zero). A `BigComplex` partner is handled part-wise, never through `complex128`: an exact zero part gives `0.0`, an inexact zero part `NaN`. This logic lives in the generators, `makeArithmeticDispatch` and `makeDivideDispatch` (see `pkg/values/promotion.go` → `isSpecialFloat`), not replicated per type. The guard changes the result *kind*, not only the arithmetic: the `BigFloat` LUB returns a `*Float`, while the `BigComplex` LUB returns a `*BigComplex` so the operand's imaginary part survives. The `LessThan` dispatch deliberately carries no such guard.
+**IEEE 754 guard:** When a `Float` holds Inf or NaN and the lattice LUB is `BigFloat`/`BigComplex`, or the LUB is `Float` and the partner is a `BigInteger`/`Rational` (whose float64 conversion can overflow to ±Inf or underflow to 0), the dispatch closures short-circuit to `float64` arithmetic on range-clamped operands (`clampedFloat64`: a finite partner stays finite, a non-zero one stays non-zero). A `BigComplex` partner is handled part-wise, never through `complex128`: an exact zero part gives `0.0`, an inexact zero part `NaN`. This logic lives in the generators, `makeArithmeticDispatch` and `makeDivideDispatch` (see `pkg/values/promotion.go` → `isSpecialFloat`), not replicated per type. The guard changes the result *kind*, not only the arithmetic: the `BigFloat` LUB returns a `*Float`, while the `BigComplex` LUB returns a `*BigComplex` so the operand's imaginary part survives. An exact `BigComplex` partner never reaches the guard: it gives a `Complex` (note ² under the Result Type Matrix), and each part operation answers its own Inf/NaN. The `LessThan` dispatch deliberately carries no such guard.
 
 ### Why This Instead of a Unified Tower
 
@@ -248,7 +248,7 @@ Two consequences worth stating, since they look like inconsistencies and are not
 
 ## Type Promotion (Lattice Model)
 
-Direct dispatch implements a **join-semilattice** over the seven kinds. The exact kinds form a chain below `Float`; above it, precision (`Float` → `BigFloat`) and complexity (`Float` → `Complex`) are independent and meet at `BigComplex`. `BigComplex` is one kind whether its parts are exact or inexact, so exact × `BigComplex` stays at the top; exactness is tracked separately (see "Exactness Preservation").
+Direct dispatch implements a **join-semilattice** over the seven kinds. The exact kinds form a chain below `Float`; above it, precision (`Float` → `BigFloat`) and complexity (`Float` → `Complex`) are independent and meet at `BigComplex`. `BigComplex` is one kind whether its parts are exact or inexact, so exact × `BigComplex` stays at the top; exactness is tracked separately (see "Exactness Preservation"), and decides one case the table cannot (note ² below).
 
 ```
                 BigComplex
@@ -271,12 +271,14 @@ Direct dispatch implements a **join-semilattice** over the seven kinds. The exac
 | **Integer** | Integer¹ | BigInteger | Rational | Float | BigFloat | Complex | BigComplex |
 | **BigInteger** | BigInteger | BigInteger | Rational | Float | BigFloat | Complex | BigComplex |
 | **Rational** | Rational | Rational | Rational | Float | BigFloat | Complex | BigComplex |
-| **Float** | Float | Float | Float | Float | BigFloat | Complex | BigComplex |
+| **Float** | Float | Float | Float | Float | BigFloat | Complex | BigComplex² |
 | **BigFloat** | BigFloat | BigFloat | BigFloat | BigFloat | BigFloat | BigComplex | BigComplex |
-| **Complex** | Complex | Complex | Complex | Complex | BigComplex | Complex | BigComplex |
-| **BigComplex** | BigComplex | BigComplex | BigComplex | BigComplex | BigComplex | BigComplex | BigComplex |
+| **Complex** | Complex | Complex | Complex | Complex | BigComplex | Complex | BigComplex² |
+| **BigComplex** | BigComplex | BigComplex | BigComplex | BigComplex² | BigComplex | BigComplex² | BigComplex |
 
 ¹ Integer + Integer may overflow to BigInteger
+
+² For a `BigComplex` with a `BigFloat` part. An **exact** `BigComplex` meeting a `Float` or `Complex` gives a `Complex`, the same contagion as `Float` × `Rational` → `Float`: `(+ 1.0 1+1/3i)` is `2.0+0.3333333333333333i`, as in Chez. The kind table cannot say this, because `BigComplex` is one kind for exact and inexact values, so the operation decides it from the operands (`meetsFloat64` in `pkg/values/big_complex.go`), at every site that sees the pair: the dispatch generators and `BigComplex.Divide`'s real-divisor shortcut. The parts are computed one by one, the exact ones kept exact, each part operation being the real contagion; a complex divisor uses Smith's algorithm. That is Chez's construction (`s/5_3.ss`), and it is observable where an exact zero part annihilates: `(* +inf.0 +2i)` is `0.0+inf.0i`, which rounding `+2i` to `0.0+2.0i` first would make `+nan.0+inf.0i`.
 
 ### Exactness Preservation
 

@@ -116,11 +116,27 @@ func isExactZero(n Number) bool {
 // is just α(a op b) = α(a) ⊔ α(b), applied where the part-wise shortcut skipped it.
 //
 //	(/ 0+1i 1.5)  =>  0.0+0.666...i   in Chez and Racket, NOT 0+0.666...i
+//
+// The result is a BigComplex, so an exact part becomes a BigFloat at the operands'
+// precision, as an exact real meeting a BigFloat does (promoteToBigFloatPair).
+// ToInexact would round it to float64 first: (+ (sqrt #m2) 1+1/3i) kept 53 bits of
+// the 1/3. A Float or Complex meeting an exact BigComplex never gets here
+// (meetsFloat64).
 func contagionOverParts(a, b Number, re, im Number) (Number, Number) {
 	if a.IsExact() && b.IsExact() {
 		return re, im
 	}
-	return re.ToInexact(), im.ToInexact()
+	prec := OperandPrecision(a, b)
+	return inexactPartAt(re, prec), inexactPartAt(im, prec)
+}
+
+// inexactPartAt is contagionOverParts for one part: an exact part as a BigFloat
+// rounded to prec bits, an inexact one unchanged.
+func inexactPartAt(n Number, prec uint) Number {
+	if !n.IsExact() {
+		return n
+	}
+	return toBigFloatAt(n, prec)
 }
 
 // exactZeroEither reports whether EITHER operand is an exact zero -- the annihilation

@@ -345,13 +345,16 @@ func TestPromotionResultKind_API(t *testing.T) {
 //
 // After the fix (making BigFloat Inf/NaN-capable and updating the guard to return
 // BigComplex), the result is *BigComplex with the imaginary part fully preserved.
+//
+// The operand has BigFloat parts: an EXACT BigComplex meeting a Float gives a
+// Complex and never reaches the guard (meetsFloat64,
+// TestFloat64TimesExactBigComplexIsComplex).
 func TestFloatBigComplexGuard_ImaginaryPreserved(t *testing.T) {
 	c := qt.New(t)
 
-	// BigComplex(3+4i) with BigInteger parts — guarantees BigComplex kind (not Complex).
-	bc := NewBigComplex(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc := NewBigComplexFromBigFloats(
+		NewBigFloatFromFloat64(3),
+		NewBigFloatFromFloat64(4),
 	)
 
 	type testCase struct {
@@ -449,12 +452,13 @@ func TestFloatBigComplexGuard_ImaginaryPreserved(t *testing.T) {
 }
 
 // TestFloatBigComplexGuard_ResultType verifies that the guard path
-// produces *BigComplex for the BigComplex LUB case (fix for #362).
+// produces *BigComplex for the BigComplex LUB case (fix for #362), for an
+// inexact BigComplex; an exact one gives a Complex.
 func TestFloatBigComplexGuard_ResultType(t *testing.T) {
 	c := qt.New(t)
-	bc := NewBigComplex(
-		NewBigIntegerFromInt64(3),
-		NewBigIntegerFromInt64(4),
+	bc := NewBigComplexFromBigFloats(
+		NewBigFloatFromFloat64(3),
+		NewBigFloatFromFloat64(4),
 	)
 	result := NewFloat(math.Inf(1)).Add(bc)
 	_, isFloat := result.(*Float)
@@ -490,8 +494,8 @@ func TestSpecialFloatBigComplex_ImaginaryDigits(t *testing.T) {
 		NewBigFloatFromFloat64(1),
 	)
 
-	// An exact imaginary part rounds to float64 like every other inexact-contagion
-	// path; it must not be lifted to the 256-bit default precision.
+	// An EXACT BigComplex is not a BigComplex result at all: it meets the Float as
+	// an exact operand does and gives a Complex, the exact parts rounding to float64.
 	thirdImag := NewBigComplex(NewBigIntegerFromInt64(1), NewRational(1, 3))
 	hugeImag := NewBigComplex(
 		NewBigIntegerFromInt64(1),
@@ -538,9 +542,6 @@ func TestSpecialFloatBigComplex_ImaginaryDigits(t *testing.T) {
 		{"huge-real z + +inf.0 stays +inf.0", add(hugeNegReal, inf), "+inf.0", NewBigFloatFromFloat64(1)},
 		{"+inf.0 - huge-real z stays +inf.0", sub(inf, hugeNegReal), "+inf.0", NewBigFloatFromFloat64(-1)},
 		{"huge-real z + +nan.0 is nan", add(hugeNegReal, nan), "+nan.0", NewBigFloatFromFloat64(1)},
-		{"1+1/3i + +inf.0: exact imag rounds to float64", add(thirdImag, inf), "+inf.0", NewBigFloatFromFloat64(1.0 / 3)},
-		{"+inf.0 - 1+1/3i: exact imag rounds then negates", sub(inf, thirdImag), "+inf.0", NewBigFloatFromFloat64(-1.0 / 3)},
-		{"1+10^400i + +inf.0: exact imag overflows to inf", add(hugeImag, inf), "+inf.0", NewBigFloatFromFloat64(math.Inf(1))},
 		{"+inf-real z + -inf.0 is nan, not clamped", add(infReal, negInf), "+nan.0", NewBigFloatFromFloat64(1)},
 		{"+inf-real z - +inf.0 is nan, not clamped", sub(infReal, inf), "+nan.0", NewBigFloatFromFloat64(1)},
 		{"+inf.0 - (+0.0i) is -0.0i, not 0.0 - 0.0", sub(inf, posZeroImag), "+inf.0", NewBigFloatFromFloat64(math.Copysign(0, -1))},
@@ -555,6 +556,24 @@ func TestSpecialFloatBigComplex_ImaginaryDigits(t *testing.T) {
 			c.Assert(bc.RealAsBigFloat().SchemeString(), qt.Equals, tc.realWant)
 			c.Assert(bc.Imag().EqualTo(tc.imagWant), qt.IsTrue,
 				qt.Commentf("imag = %s, want %s", bc.Imag().SchemeString(), tc.imagWant.SchemeString()))
+		})
+	}
+
+	exactPartner := []struct {
+		name string
+		got  Number
+		want string
+	}{
+		{"1+1/3i + +inf.0: exact imag rounds to float64", add(thirdImag, inf), "+inf.0+0.3333333333333333i"},
+		{"+inf.0 - 1+1/3i: exact imag rounds then negates", sub(inf, thirdImag), "+inf.0-0.3333333333333333i"},
+		{"1+10^400i + +inf.0: exact imag overflows to inf", add(hugeImag, inf), "+inf.0+inf.0i"},
+	}
+	for _, tc := range exactPartner {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			_, ok := tc.got.(*Complex)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected *Complex, got %T", tc.got))
+			c.Assert(tc.got.SchemeString(), qt.Equals, tc.want)
 		})
 	}
 
@@ -588,18 +607,17 @@ func TestSpecialFloatBigComplex_ImaginaryDigits(t *testing.T) {
 }
 
 // TestSpecialFloatBigComplex_ExactImagAgreesWithFiniteAdd pins that an exact
-// imaginary part takes the same value through the Inf path as through the finite
-// path (contagionOverParts), so (+ +inf.0 1+1/3i) and (+ 1.0 1+1/3i) agree on it.
+// imaginary part takes the same value beside an Inf as beside a finite Float, so
+// (+ +inf.0 1+1/3i) and (+ 1.0 1+1/3i) agree on it: both are Complex.
 func TestSpecialFloatBigComplex_ExactImagAgreesWithFiniteAdd(t *testing.T) {
 	c := qt.New(t)
 
 	z := NewBigComplex(NewBigIntegerFromInt64(1), NewRational(1, 3))
-	viaInf, ok := NewFloat(math.Inf(1)).Add(z).(*BigComplex)
+	viaInf, ok := NewFloat(math.Inf(1)).Add(z).(*Complex)
 	c.Assert(ok, qt.IsTrue)
-	viaFinite, ok := NewFloat(1).Add(z).(*BigComplex)
+	viaFinite, ok := NewFloat(1).Add(z).(*Complex)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(viaInf.Imag().EqualTo(viaFinite.Imag()), qt.IsTrue,
-		qt.Commentf("inf path %s, finite path %s", viaInf.Imag().SchemeString(), viaFinite.Imag().SchemeString()))
+	c.Assert(imag(viaInf.Value), qt.Equals, imag(viaFinite.Value))
 }
 
 // TestSpecialFloatBigFloat_OutOfRangeIsFinite pins the BigFloat twin of the
@@ -760,41 +778,46 @@ func TestSpecialFloatBigComplex_Multiplicative(t *testing.T) {
 		return q
 	}
 
+	// complex marks an EXACT partner: the result is a Complex (meetsFloat64); a
+	// BigFloat-part partner keeps the BigComplex.
 	tcs := []struct {
-		name string
-		got  Number
-		want string
+		name    string
+		got     Number
+		want    string
+		complex bool
 	}{
-		{"+inf.0 * +2i", inf.Multiply(plus2i), "0.0+inf.0i"},
-		{"+2i * +inf.0", plus2i.Multiply(inf), "0.0+inf.0i"},
-		{"-inf.0 * +2i", negInf.Multiply(plus2i), "0.0-inf.0i"},
-		{"+nan.0 * +2i", nan.Multiply(plus2i), "0.0+nan.0i"},
-		{"+inf.0 * 1+10^400i", inf.Multiply(exactHugeImag), "+inf.0+inf.0i"},
-		{"1+10^400i * +inf.0", exactHugeImag.Multiply(inf), "+inf.0+inf.0i"},
-		{"+inf.0 * 10^-400+1i", inf.Multiply(exactTinyReal), "+inf.0+inf.0i"},
-		{"+inf.0 * 1+#m1e400i", inf.Multiply(bigHugeImag), "+inf.0+inf.0i"},
-		{"+inf.0 * #m1e-400+1i", inf.Multiply(bigTinyReal), "+inf.0+inf.0i"},
-		{"+inf.0 * 1+inf.0i", inf.Multiply(infImag), "+inf.0+inf.0i"},
-		{"+inf.0 * 0.0+9.87i: inexact zero part is nan", inf.Multiply(inexactZeroReal), "+nan.0+inf.0i"},
-		{"+inf.0 * 0.0+0.0i", inf.Multiply(inexactZero), "+nan.0+nan.0i"},
-		{"+inf.0 / +2i", divide(inf, plus2i), "0.0-inf.0i"},
-		{"-inf.0 / +2i", divide(negInf, plus2i), "0.0+inf.0i"},
-		{"+nan.0 / +2i", divide(nan, plus2i), "0.0+nan.0i"},
-		{"+inf.0 / 1+10^400i", divide(inf, exactHugeImag), "+inf.0-inf.0i"},
-		{"+inf.0 / 10^400+10^400i", divide(inf, exactHugeBoth), "+inf.0-inf.0i"},
-		{"+inf.0 / 10^-400+1i", divide(inf, exactTinyReal), "+inf.0-inf.0i"},
-		{"+inf.0 / 1+10^-400i", divide(inf, exactTinyImag), "+inf.0-inf.0i"},
-		{"+inf.0 / 1+#m1e400i", divide(inf, bigHugeImag), "+inf.0-inf.0i"},
-		{"+inf.0 / 0.0+9.87i: inexact zero part is nan", divide(inf, inexactZeroReal), "+nan.0-inf.0i"},
-		{"+inf.0 / 0.0+0.0i", divide(inf, inexactZero), "+nan.0+nan.0i"},
-		{"+inf.0 / 1+inf.0i", divide(inf, infImag), "+nan.0+nan.0i"},
-		{"1+10^400i / +inf.0", divide(exactHugeImag, inf), "0.0+0.0i"},
+		{"+inf.0 * +2i", inf.Multiply(plus2i), "0.0+inf.0i", true},
+		{"+2i * +inf.0", plus2i.Multiply(inf), "0.0+inf.0i", true},
+		{"-inf.0 * +2i", negInf.Multiply(plus2i), "0.0-inf.0i", true},
+		{"+nan.0 * +2i", nan.Multiply(plus2i), "0.0+nan.0i", true},
+		{"+inf.0 * 1+10^400i", inf.Multiply(exactHugeImag), "+inf.0+inf.0i", true},
+		{"1+10^400i * +inf.0", exactHugeImag.Multiply(inf), "+inf.0+inf.0i", true},
+		{"+inf.0 * 10^-400+1i", inf.Multiply(exactTinyReal), "+inf.0+inf.0i", true},
+		{"+inf.0 * 1+#m1e400i", inf.Multiply(bigHugeImag), "+inf.0+inf.0i", false},
+		{"+inf.0 * #m1e-400+1i", inf.Multiply(bigTinyReal), "+inf.0+inf.0i", false},
+		{"+inf.0 * 1+inf.0i", inf.Multiply(infImag), "+inf.0+inf.0i", false},
+		{"+inf.0 * 0.0+9.87i: inexact zero part is nan", inf.Multiply(inexactZeroReal), "+nan.0+inf.0i", false},
+		{"+inf.0 * 0.0+0.0i", inf.Multiply(inexactZero), "+nan.0+nan.0i", false},
+		{"+inf.0 / +2i", divide(inf, plus2i), "0.0-inf.0i", true},
+		{"-inf.0 / +2i", divide(negInf, plus2i), "0.0+inf.0i", true},
+		{"+nan.0 / +2i", divide(nan, plus2i), "0.0+nan.0i", true},
+		{"+inf.0 / 1+10^400i", divide(inf, exactHugeImag), "+inf.0-inf.0i", true},
+		{"+inf.0 / 10^400+10^400i", divide(inf, exactHugeBoth), "+inf.0-inf.0i", true},
+		{"+inf.0 / 10^-400+1i", divide(inf, exactTinyReal), "+inf.0-inf.0i", true},
+		{"+inf.0 / 1+10^-400i", divide(inf, exactTinyImag), "+inf.0-inf.0i", true},
+		{"+inf.0 / 1+#m1e400i", divide(inf, bigHugeImag), "+inf.0-inf.0i", false},
+		{"+inf.0 / 0.0+9.87i: inexact zero part is nan", divide(inf, inexactZeroReal), "+nan.0-inf.0i", false},
+		{"+inf.0 / 0.0+0.0i", divide(inf, inexactZero), "+nan.0+nan.0i", false},
+		{"+inf.0 / 1+inf.0i", divide(inf, infImag), "+nan.0+nan.0i", false},
+		{"1+10^400i / +inf.0", divide(exactHugeImag, inf), "0.0+0.0i", true},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			_, ok := tc.got.(*BigComplex)
-			c.Assert(ok, qt.IsTrue, qt.Commentf("expected *BigComplex, got %T", tc.got))
+			_, isComplex := tc.got.(*Complex)
+			_, isBig := tc.got.(*BigComplex)
+			c.Assert(isComplex, qt.Equals, tc.complex, qt.Commentf("got %T", tc.got))
+			c.Assert(isBig, qt.Equals, !tc.complex, qt.Commentf("got %T", tc.got))
 			c.Assert(tc.got.SchemeString(), qt.Equals, tc.want)
 		})
 	}

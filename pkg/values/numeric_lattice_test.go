@@ -107,25 +107,17 @@ func Classify(n values.Number) TypeClass {
 	panic(fmt.Sprintf("unknown type: %T", n))
 }
 
-// classifyBigComplexPrecision reports the precision of the BigComplex CONTAINER,
-// which is arbitrary-precision no matter what its components currently hold.
+// classifyBigComplexPrecision reports the precision of a BigComplex's parts: the
+// higher of the two. An exact BigComplex ranks as exact, so Float + 1+2i joins to a
+// Complex, as Float + 1/3 joins to a Float (the exact operand is absorbed; owner
+// decision 2026-10-25, matching Chez). A BigFloat part ranks BigFloat, so a
+// BigFloat-part BigComplex keeps Float + BigComplex a BigComplex.
 //
-// It used to report max(precision(real), precision(imag)) — the precision of the
-// values inside. That reads sensibly and is wrong, because the model's precision
-// axis is what the JOIN is computed on, and a BigComplex operand can never demote:
-// Float + BigComplex is a BigComplex, exactly as Float + BigFloat is a BigFloat.
-// Reporting a BigComplex(BigInteger, BigInteger) as "BigInteger precision" made the
-// join predict Complex — a complex128 — for four pairs, which would silently
-// truncate the container.
-//
-// The old no-loss rule hid this: it forced exact × Float up to BigFloat, so the
-// join happened to land on BigComplex anyway, for the wrong reason. Removing that
-// rule (exactness contagion) exposed the model's real defect.
-//
-// Exactness is a SEPARATE axis and is unaffected: a BigComplex with exact parts is
-// still exact, and TestLattice_Exactness checks that via IsExact().
-func classifyBigComplexPrecision(_ *values.BigComplex) PrecisionRank {
-	return PrecisionBigFloat
+// This model said BigFloat for every BigComplex until that decision, on the
+// grounds that a BigComplex container never demotes; the four Float/Complex x
+// exact BigComplex pairs then predicted BigComplex, which was the behaviour.
+func classifyBigComplexPrecision(v *values.BigComplex) PrecisionRank {
+	return maxPrecision(Classify(v.Real()).Precision, Classify(v.Imag()).Precision)
 }
 
 // =============================================================================
@@ -256,13 +248,12 @@ func TestLattice_Classify(t *testing.T) {
 		// Complex types
 		{"Complex", values.NewComplex(complex(1, 2)), TypeClass{PrecisionFloat, ComplexityComplex}},
 
-		// BigComplex with various component types
-		// The CONTAINER is arbitrary-precision, whatever its parts hold — that is
-		// what the join must see. See classifyBigComplexPrecision.
+		// BigComplex with various component types: the parts' precision. See
+		// classifyBigComplexPrecision.
 		{"BigComplex(BigInteger)", values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2)),
-			TypeClass{PrecisionBigFloat, ComplexityComplex}},
+			TypeClass{PrecisionBigInteger, ComplexityComplex}},
 		{"BigComplex(Rational)", values.NewBigComplex(values.NewRational(1, 2), values.NewRational(3, 4)),
-			TypeClass{PrecisionBigFloat, ComplexityComplex}},
+			TypeClass{PrecisionRational, ComplexityComplex}},
 		{"BigComplex(BigFloat)", values.NewBigComplex(values.NewBigFloatFromFloat64(1.0), values.NewBigFloatFromFloat64(2.0)),
 			TypeClass{PrecisionBigFloat, ComplexityComplex}},
 	}
@@ -506,7 +497,7 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"Float+Float":      "*values.Float",
 		"Float+BigFloat":   "*values.BigFloat",
 		"Float+Complex":    "*values.Complex",
-		"Float+BigComplex": "*values.BigComplex",
+		"Float+BigComplex": "*values.Complex", // exact BigComplex operand; see classifyBigComplexPrecision
 
 		// BigFloat row
 		"BigFloat+Integer":    "*values.BigFloat",
@@ -524,15 +515,15 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"Complex+Float":      "*values.Complex",
 		"Complex+BigFloat":   "*values.BigComplex", // Complex.Add(BigFloat) preserves precision!
 		"Complex+Complex":    "*values.Complex",
-		"Complex+BigComplex": "*values.BigComplex",
+		"Complex+BigComplex": "*values.Complex", // exact BigComplex operand; see classifyBigComplexPrecision
 
 		// BigComplex row
 		"BigComplex+Integer":    "*values.BigComplex",
 		"BigComplex+BigInteger": "*values.BigComplex",
 		"BigComplex+Rational":   "*values.BigComplex",
-		"BigComplex+Float":      "*values.BigComplex",
+		"BigComplex+Float":      "*values.Complex", // exact BigComplex operand; see classifyBigComplexPrecision
 		"BigComplex+BigFloat":   "*values.BigComplex",
-		"BigComplex+Complex":    "*values.BigComplex",
+		"BigComplex+Complex":    "*values.Complex", // exact BigComplex operand; see classifyBigComplexPrecision
 		"BigComplex+BigComplex": "*values.BigComplex",
 	}
 
@@ -644,18 +635,15 @@ func TestLattice_VsLinearTower(t *testing.T) {
 	directResult := exactInt.Add(exactComplex)
 	c.Assert(directResult.IsExact(), qt.IsTrue, qt.Commentf("direct dispatch should preserve exactness"))
 
-	// The lattice predicts: Join({Integer,Real}, {BigFloat,Complex}) = {BigFloat,Complex}
-	// Result type: BigComplex — which, note, still carries EXACT parts. The
-	// precision axis describes the CONTAINER's width (a BigComplex is
-	// arbitrary-precision), and exactness is an independent axis, asserted above via
-	// IsExact(). An arbitrary-precision container holding exact components is exact;
-	// the two facts do not contradict each other.
+	// The lattice predicts: Join({Integer,Real}, {BigInteger,Complex}) =
+	// {BigInteger,Complex}, an exact complex, whose result type is a BigComplex
+	// with exact parts.
 	classInt := Classify(exactInt)
 	classComplex := Classify(exactComplex)
 	joined := Join(classInt, classComplex)
 
 	c.Assert(joined.Complexity, qt.Equals, ComplexityComplex)
-	c.Assert(joined.Precision, qt.Equals, PrecisionBigFloat)
+	c.Assert(joined.Precision, qt.Equals, PrecisionBigInteger)
 
 	expectedType := ExpectedResultType(joined)
 	c.Assert(expectedType, qt.Equals, "*values.BigComplex")

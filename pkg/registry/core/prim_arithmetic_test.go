@@ -59,7 +59,7 @@ func TestAddition(t *testing.T) {
 		// where Chez uses a flonum complex; the VALUE and the EXACTNESS match.
 		{Name: "add two complex", Code: `(+ 1+2i 3+4i)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(4), values.NewBigIntegerFromInt64(6))},
 		{Name: "add complex and integer", Code: `(+ 1+2i 3)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(4), values.NewBigIntegerFromInt64(2))},
-		{Name: "add complex and float", Code: `(+ 1+2i 1.5)`, Expected: values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(2.5), values.NewBigFloatFromFloat64(2.0))},
+		{Name: "add complex and float", Code: `(+ 1+2i 1.5)`, Expected: values.NewComplex(complex(2.5, 2))},
 
 		// BigInteger operations
 		{Name: "add two bigintegers", Code: `(+ #z10000000000000000000 #z1)`, Expected: values.NewBigIntegerFromString("10000000000000000001", 10)},
@@ -249,7 +249,7 @@ func TestMultiplication(t *testing.T) {
 		// Complex operations
 		{Name: "multiply two complex", Code: `(* 1+2i 3+4i)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(-5), values.NewBigIntegerFromInt64(10))},
 		{Name: "multiply complex and integer", Code: `(* 2+3i 2)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(4), values.NewBigIntegerFromInt64(6))},
-		{Name: "multiply complex and float", Code: `(* 1+1i 2.0)`, Expected: values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(2.0), values.NewBigFloatFromFloat64(2.0))},
+		{Name: "multiply complex and float", Code: `(* 1+1i 2.0)`, Expected: values.NewComplex(complex(2, 2))},
 
 		// BigInteger operations
 		{Name: "multiply two bigintegers", Code: `(* #z10000000000000000000 #z2)`, Expected: values.NewBigIntegerFromString("20000000000000000000", 10)},
