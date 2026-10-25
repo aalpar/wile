@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/fs"
 	"path"
 	"path/filepath"
 
@@ -32,10 +31,6 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
-
-func findFile(p *CompileTimeContinuation, ctctx CompileTimeCallContext, path string) (fs.File, string, error) {
-	return p.fileResolver.ResolveAndOpen(includeAuthorizerContext(ctctx.Context(), p.env), path)
-}
 
 // includeAuthorizerContext installs the COMPILING namespace's effective
 // authorizer on ctx when nothing has installed one already.

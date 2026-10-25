@@ -15,18 +15,16 @@
 package compilation
 
 import (
-	"bufio"
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
+	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 
 	"github.com/aalpar/wile/pkg/environment"
-	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -442,37 +440,30 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ctctx Compil
 			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAString, "include-library-declarations: expected string filename"))
 		}
 
-		// Find and open the file
-		file, filePath, err := findFile(p, ctctx, fn.Value)
+		// The include path's reader, read whole before any declaration is
+		// processed. A mid-file read error aborts the library either way, so
+		// reading first changes nothing observable.
+		forms, filePath, err := readIncludedForms(ctx, p.env, p.fileResolver, fn.Value, v.SourceContext(), false)
 		if err != nil {
-			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "include-library-declarations: failed to find file %q", fn.Value))
+			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "include-library-declarations: %q", fn.Value))
 		}
-		if file == nil {
-			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrFileNotFound, "include-library-declarations: file not found: %q", fn.Value))
+		// The included file's own directory is the base for a relative include
+		// inside it, as compileIncludeImpl arranges for include: push its path
+		// on the load stack (creating one when there is none) for its extent.
+		inner := ctctx
+		stack := resolver.SelectLoadStack(inner.ctx)
+		if stack == nil {
+			stack = sourceload.NewLoadStack()
+			inner.ctx = sourceload.WithLoadStack(inner.ctx, stack)
 		}
-		defer file.Close() //nolint:errcheck
-
-		// Create parser for the file
-		reader := bufio.NewReader(file)
-		fileParser := parser.NewParserWithFile(p.env, true, reader, filePath)
-
-		// Read and process all forms from the file as library declarations
-		for {
-			stx, readErr := fileParser.ReadSyntax(ctx)
-			if readErr != nil {
-				if errors.Is(readErr, io.EOF) {
-					break
-				}
-				return p.wrapCompilationError(werr.WrapForeignErrorf(readErr, "include-library-declarations: error reading %q", fn.Value))
-			}
-
-			// Process the form as a library declaration
-			err := p.processLibraryDeclaration(ctctx, lib, stx)
+		stack.Push(filePath)
+		defer stack.Pop()
+		for _, stx := range forms {
+			err := p.processLibraryDeclaration(inner, lib, stx)
 			if err != nil {
 				return p.wrapCompilationError(werr.WrapForeignErrorf(err, "include-library-declarations: error processing declaration from %q", fn.Value))
 			}
 		}
-
 		return nil
 	})
 	if err != nil {

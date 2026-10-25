@@ -206,3 +206,58 @@ func TestNestedDefineLibraryIsRefused(t *testing.T) {
 		})
 	}
 }
+
+// TestIncludeLibraryDeclarationsResolvesBesideTheLibrary is a green pin for the
+// declaration-position include (untested before): a relative
+// include-library-declarations resolves beside the .sld, so lib/sub/decls.scm
+// is found for lib/sub/inner.sld. It held on the old findFile path too (the
+// load stack carries the library's directory); it now goes through
+// readIncludedForms, the reader include uses.
+func TestIncludeLibraryDeclarationsResolvesBesideTheLibrary(t *testing.T) {
+	t.Parallel()
+
+	c := qt.New(t)
+	ctx := context.Background()
+	fsys := fstest.MapFS{
+		"lib/sub/inner.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (sub inner)
+  (import (scheme base))
+  (include-library-declarations "decls.scm"))`),
+		},
+		"lib/sub/decls.scm": &fstest.MapFile{
+			Data: []byte(`(export answer)
+(begin (define answer 42))`),
+		},
+	}
+	engine, err := newLibraryCountEngine(ctx, fsys)
+	c.Assert(err, qt.IsNil)
+	result, err := engine.EvalMultiple(ctx, `(import (sub inner)) answer`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "42")
+}
+
+// TestNestedIncludeLibraryDeclarationsResolvesBesideTheIncludedFile: a relative
+// include-library-declarations inside an included declarations file resolves
+// against that file's directory, on the virtual-filesystem resolver too (whose
+// relative paths lexicalIncludeContext does not push): the included file's path
+// goes on the load stack for its extent, as include does.
+func TestNestedIncludeLibraryDeclarationsResolvesBesideTheIncludedFile(t *testing.T) {
+	t.Parallel()
+
+	c := qt.New(t)
+	ctx := context.Background()
+	fsys := fstest.MapFS{
+		"lib/a/outer.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (a outer)
+  (import (scheme base))
+  (include-library-declarations "d2/outer.scm"))`),
+		},
+		"lib/a/d2/outer.scm": &fstest.MapFile{Data: []byte(`(include-library-declarations "inner.scm")`)},
+		"lib/a/d2/inner.scm": &fstest.MapFile{Data: []byte(`(export answer) (begin (define answer 7))`)},
+	}
+	engine, err := newLibraryCountEngine(ctx, fsys)
+	c.Assert(err, qt.IsNil)
+	result, err := engine.EvalMultiple(ctx, `(import (a outer)) answer`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "7")
+}
