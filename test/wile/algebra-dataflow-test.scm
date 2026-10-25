@@ -441,7 +441,7 @@
   ;; visit, the entry), and the states are unchanged.
   (test '((#f #f #f) 3) (first-visit-outs 'forward three-block-cfg 99)))
 
-;; Loops: assert states only. Call counts on a cycle depend on worklist order.
+;; Loops: states only here; one cycle's call count is pinned further down.
 (test-group "run-analysis — first visit generating a fact, cyclic CFG (I176)"
   (test '(#f #t #t #t) (car (first-visit-outs 'forward loop-exit-cfg 2)))
   (test '(#f #f #f #f) (car (first-visit-outs 'forward loop-exit-cfg 99))))
@@ -493,6 +493,130 @@
                                  (lambda (blk in) in) cfg test-protocol)
                    i))
                '(0 1 9)))))
+
+;;; --- Backward seeding: every block, and every cycle widened ---------------
+
+;; Backward used to start the worklist from the exit blocks only, so a block
+;; with no path to an exit was never transferred and reported bottom: dead, to
+;; a liveness analysis. The transfer below is always #t and counts its calls.
+(define (always-outs direction cfg)
+  (let* ((calls 0)
+         (r (run-analysis direction (truth-value-lattice)
+                          (lambda (blk in) (set! calls (+ calls 1)) #t)
+                          cfg test-protocol)))
+    (list (map (lambda (i) (analysis-out r i)) (map car cfg)) calls)))
+
+;; Block 1 loops on itself and never reaches exit 2.
+(define no-exit-path-cfg '((0 () (1 2)) (1 (0 1) (1)) (2 (0) ())))
+
+(test-group "run-analysis — backward visits a block with no path to an exit"
+  ;; Was ((#t #f #t) 2): block 1 never visited.
+  (test '((#t #t #t) 4) (always-outs 'backward no-exit-path-cfg))
+  ;; A CFG with no exit at all (a Go function ending in `for {}`). Was ((#f #f) 0).
+  (test '((#t #t) 3) (always-outs 'backward '((0 () (1)) (1 (0 1) (1)))))
+  ;; CONTROL: forward seeding is unchanged.
+  (test '((#t #t #t) 4) (always-outs 'forward no-exit-path-cfg)))
+
+(define (interval-incr blk in)
+  (interval-add in '(1 . 1)))
+
+(test-group "run-analysis — a forward-unreachable cycle run backward is widened"
+  ;; Block 9 loops on itself and is unreachable from entry 0. It used to get no
+  ;; rank, so it was never a widening point and the run hit the revisit cap
+  ;; although (widen ...) was supplied.
+  (let ((cfg '((0 () (1)) (1 (0 9) ()) (9 (9) (1 9)))))
+    (test '((0 (1 . 1) (2 . 2)) (1 (0 . 0) (1 . 1)) (9 (1 . pos-inf) (2 . pos-inf)))
+          (run-analysis 'backward (interval-lattice) interval-incr cfg test-protocol
+                        (init-state '(0 . 0)) (widen interval-widen)))
+    ;; CONTROL: forward never enqueues the orphan.
+    (test '((1 . 1) (2 . 2) interval-bot)
+          (let ((r (run-analysis 'forward (interval-lattice) interval-incr cfg
+                                 test-protocol
+                                 (init-state '(0 . 0)) (widen interval-widen))))
+            (map (lambda (i) (analysis-out r i)) '(0 1 9)))))
+  ;; An orphan self-loop 8 feeding an orphan exit 9.
+  (test '((0 (0 . 0) (1 . 1)) (8 (1 . pos-inf) (2 . pos-inf)) (9 (0 . 0) (1 . 1)))
+        (run-analysis 'backward (interval-lattice) interval-incr
+                      '((0 () ()) (8 (8) (8 9)) (9 (8) ())) test-protocol
+                      (init-state '(0 . 0)) (widen interval-widen))))
+
+;; Every block here reaches an exit, so the seeds are the exit blocks alone.
+;; Seeding every block let loop 3-6 run ahead of the exit data and widen on
+;; its own value: block 1's out came back (neg-inf . 7) instead of (-4 . 7).
+(test-group "run-analysis — backward seeds only exits when every block reaches one"
+  (let* ((cfg '((0 (0 5) (7 0 1)) (1 (0) (4 5 2)) (2 (1 4) ()) (3 (3 6) (3 6))
+                (4 (1 6) (5 2 6)) (5 (1 4) (6 0)) (6 (3 4 5) (3 4)) (7 (0) ())))
+         (ks '((1 . -2) (0 . 3) (2 . -3) (3 . 2) (0 . -2) (3 . 1) (1 . -2) (2 . 1)))
+         (L (interval-lattice))
+         (xfer (lambda (blk in)
+                 (let ((k (list-ref ks (car blk))))
+                   (if (and (eq? in 'interval-bot) (< (car k) 3))
+                       in
+                       (case (car k)
+                         ((3) (lattice-join L
+                                (if (eq? in 'interval-bot)
+                                    'interval-bot
+                                    (interval-add in '(1 . 1)))
+                                (cons (cdr k) (cdr k))))
+                         ((0) (interval-add in (cons (cdr k) (cdr k))))
+                         ((1) (lattice-meet L in (cons -5 (+ 5 (cdr k)))))
+                         (else (lattice-join L in (cons (cdr k) (cdr k)))))))))
+         (r (run-analysis 'backward L xfer cfg test-protocol
+                          (init-state '(0 . 0)) (widen interval-widen))))
+    (test '((-4 . 3) (-4 . 7) (-3 . 0) (-4 . pos-inf) (-7 . 2) (-4 . 4) (-5 . 3) (0 . 1))
+          (map (lambda (i) (analysis-out r i)) '(0 1 2 3 4 5 6 7)))))
+
+;; Orphans rank AHEAD of the reachable blocks in forward order. Ranked after
+;; them, orphan 9 would make block 1 a forward widening point (its predecessor
+;; 9 would sit later in flow order) and be one itself backward. The widen
+;; operator here returns top, so firing anywhere changes the answer.
+(test-group "run-analysis — an orphan predecessor makes no widening point"
+  (let ((cfg '((0 () (1)) (1 (0 9) ()) (9 () (1))))
+        (top-widen (lambda (cur next) (cons 'neg-inf 'pos-inf))))
+    (for-each
+      (lambda (direction)
+        (test (run-analysis direction (interval-lattice) interval-incr cfg
+                            test-protocol (init-state '(0 . 0)))
+              (run-analysis direction (interval-lattice) interval-incr cfg
+                            test-protocol (init-state '(0 . 0)) (widen top-widen))))
+      '(forward backward))))
+
+;; A revisit whose out-state did not rise must not propagate. The worklist
+;; order is deterministic, so the count pins it: 4 first visits plus block 1's
+;; revisit from block 2. A guard that let a second visit through as well
+;; ((> vc 2) for (> vc 1)) gives 8.
+(test-group "run-analysis — a non-rising revisit does not propagate (call count)"
+  (test '((#f #f #f #f) 5) (first-visit-outs 'forward loop-exit-cfg 99)))
+
+;;; --- Revisit cap names every cause ---------------------------------------
+
+(define (string-has? s sub)
+  (let ((n (string-length s)) (m (string-length sub)))
+    (let scan ((i 0))
+      (cond ((> (+ i m) n) #f)
+            ((string=? (substring s i (+ i m)) sub) #t)
+            (else (scan (+ i 1)))))))
+
+;; A flat lattice {bot, a, b, top} and a transfer that flips a <-> b on a self
+;; loop: non-monotone, never converges, and widening cannot help. The cap
+;; message used to blame only infinite height and suggest (widen OP).
+(test-group "run-analysis — revisit cap names a non-monotone transfer"
+  (let* ((flat (make-lattice
+                 (lambda (x y)
+                   (cond ((eq? x 'bot) y) ((eq? y 'bot) x) ((eq? x y) x) (else 'top)))
+                 (lambda (x y)
+                   (cond ((eq? x 'top) y) ((eq? y 'top) x) ((eq? x y) x) (else 'bot)))
+                 'bot 'top
+                 (lambda (x y) (or (eq? x 'bot) (eq? y 'top) (eq? x y)))))
+         (flip (lambda (blk in) (if (eq? in 'a) 'b 'a)))
+         (cfg '((0 (0) (0)))))
+    (test #t
+          (guard (e ((error-object? e)
+                     (string-has? (error-object-message e) "check-monotone")))
+            (run-analysis 'forward flat flip cfg test-protocol)
+            'no-error))
+    ;; CONTROL: 'check-monotone locates it.
+    (test-error (run-analysis 'forward flat flip cfg test-protocol 'check-monotone))))
 
 (test-end)
 (test-exit)
