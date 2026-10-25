@@ -446,10 +446,10 @@ var errHostCancelCause = werr.NewStaticError("threads test: cancelled by the hos
 //
 // The main thread holds m with no owner, and m is not recursive, so the second
 // acquire parks. Three rows reach branches the plain rows cannot:
-//   - The timed acquire parks on a path that does not watch ctx at all, so only
-//     PrimMutexLock's own check after the timeout turns the cancellation into a
-//     raise; without it the program would end on #f with a nil error. Its 1 s
-//     timeout is the margin the cancel has to land in after (test-ready!).
+//   - The timed acquire parks on the path whose wakeup is a side goroutine. Its
+//     30 s timeout outlasts the 5 s watchdog, so the wait must wake on the cancel
+//     itself; it used to sleep out its timeout, and only PrimMutexLock's own check
+//     after it turned the cancellation into a raise.
 //   - The timed cv wait does watch ctx, and must raise rather than answer #f.
 //   - The acquire inside with-timeout has a timer ARMED but not expired. The
 //     embedder's cancel reaches the timer's ctx with the embedder's cause, which
@@ -463,7 +463,7 @@ func TestCancelledLockWaitRaisesOperationCancelled(t *testing.T) {
 		{"mutex-lock!",
 			`(begin (define m (make-mutex)) (mutex-lock! m) (test-ready!) (mutex-lock! m))`},
 		{"mutex-lock! with a timeout",
-			`(begin (define m (make-mutex)) (mutex-lock! m) (test-ready!) (mutex-lock! m 1))`},
+			`(begin (define m (make-mutex)) (mutex-lock! m) (test-ready!) (mutex-lock! m 30))`},
 		{"mutex-lock! inside with-timeout",
 			`(begin (define m (make-mutex)) (mutex-lock! m) (test-ready!)
 			        (with-timeout 5000 (lambda (k) 'timed-out) (lambda () (mutex-lock! m))))`},
@@ -526,15 +526,18 @@ func TestCaughtCancellationCleanupUnlockReturns(t *testing.T) {
 	c.Assert(v.SchemeString(), qt.Equals, "(cleaned #t #t not-abandoned)")
 }
 
-// timerCancelledWaits are the four blocking waits, each spliced into a program
-// that begins with waitPrelude, so every wait parks until a timer cancels it. site
-// is the name the wait reports a cancellation under.
+// timerCancelledWaits are the four blocking waits, and mutex-lock!'s timed form,
+// each spliced into a program that begins with waitPrelude, so every wait parks
+// until a timer cancels it. site is the name the wait reports a cancellation under.
+// The timed form's 30 s outlasts every watchdog, so it must wake on the cancel; it
+// used to sleep out its timeout.
 var timerCancelledWaits = []struct {
 	name string
 	site string
 	wait string
 }{
 	{"mutex-lock!", "mutex-lock!", `(mutex-lock! m)`},
+	{"mutex-lock! with a timeout", "mutex-lock!", `(mutex-lock! m 30)`},
 	{"mutex-unlock! with cv", "mutex-unlock!", `(let ((m2 (make-mutex))) (mutex-lock! m2) (mutex-unlock! m2 cv))`},
 	{"thread-sleep!", "thread-sleep!", `(thread-sleep! 10)`},
 	{"thread-join!", "thread-join!", `(thread-join! blocker)`},

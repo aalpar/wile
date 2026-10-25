@@ -474,3 +474,143 @@ func TestProcessWaitDoesNotRaceEngineClose(t *testing.T) {
 		qt.Commentf("Close must have reaped the child through the serialised wait"))
 	c.Assert(proc.Cmd().ProcessState, qt.IsNotNil)
 }
+
+// errProcessCancelCause is a cancellation cause no context package error matches,
+// so a pin can tell "the cause survived" from "ctx.Err() survived".
+var errProcessCancelCause = werr.NewStaticError("process test: cancelled by the host")
+
+// newCancelEngine returns a process engine, a ctx, and a `cancel!` primitive that
+// cancels that ctx with errProcessCancelCause when the program calls it, so the
+// cancellation lands at a known point in the run, before the wait it ends.
+func newCancelEngine(t *testing.T) (*wile.Engine, context.Context) {
+	t.Helper()
+	engine := newEngine(t)
+	t.Cleanup(func() {
+		_ = engine.Close()
+	})
+	ctx, cancel := context.WithCancelCause(context.Background())
+	t.Cleanup(func() {
+		cancel(nil)
+	})
+	err := engine.RegisterPrimitive(wile.PrimitiveSpec{
+		Name:       "cancel!",
+		ParamCount: 0,
+		Impl: func(mc wile.CallContext) error {
+			cancel(errProcessCancelCause)
+			mc.SetValue(values.Void)
+			return nil
+		},
+	})
+	qt.Assert(t, err, qt.IsNil)
+	return engine, ctx
+}
+
+// evalWithin runs code under ctx and fails the test if it has not returned
+// within d: the failure these pins guard against is a wait that outlives its
+// cancellation, which would otherwise surface only as a slow pass.
+func evalWithin(ctx context.Context, t *testing.T, engine *wile.Engine, code string, d time.Duration) (wile.Value, error) {
+	t.Helper()
+	type outcome struct {
+		value wile.Value
+		err   error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		v, err := engine.EvalMultiple(ctx, code)
+		done <- outcome{v, err}
+	}()
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case o := <-done:
+		return o.value, o.err
+	case <-timer.C:
+		t.Fatalf("Eval did not return within %v: process-wait outlived its cancellation", d)
+		return nil, nil
+	}
+}
+
+// TestProcessWaitCancelledRaisesAndLeavesTheChild pins process-wait under a
+// cancelled ctx on a child spawned under another one (an earlier run's), which
+// the cancellation therefore does not kill. The wait raises ErrOperationCancelled
+// carrying the cause, as the SRFI-18 waits do, well inside the child's 30 s; it
+// used to park until the child exited. The child is left running: a later run
+// under a live ctx kills it (process-kill fails on a reaped child, so success
+// shows it was still alive) and waits for it.
+func TestProcessWaitCancelledRaisesAndLeavesTheChild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix commands")
+	}
+	c := qt.New(t)
+	engine, ctx := newCancelEngine(t)
+	eval(t, engine, `(define p (process-spawn "sleep" "30"))`)
+
+	_, err := evalWithin(ctx, t, engine, `(begin (cancel!) (process-wait p))`, 10*time.Second)
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+	c.Assert(errors.Is(err, errProcessCancelCause), qt.IsTrue, qt.Commentf("the cause must survive, got %v", err))
+	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("ctx.Err() must survive, got %v", err))
+	c.Assert(err.Error(), qt.Contains, "process-wait: cancelled before the wait completed")
+
+	result := eval(t, engine, `(begin (process-kill p 'kill) (process-wait p))`)
+	c.Assert(result.SchemeString(), qt.Equals, "-1", qt.Commentf("a signalled child's exit code"))
+}
+
+// TestProcessWaitUnderWithTimeout pins process-wait as a pure wait under a
+// with-timeout: the timer's expiry ends the wait, the handler runs at once, and
+// resuming its continuation re-issues the wait rather than refusing it. The rows
+// use the wall clock (WithTimerFiringAfter cannot fire inside a wait), but no
+// answer depends on when the 50 ms timer fires: every child outlives it.
+//
+//   - A child spawned before the with-timeout is not killed by the expiry. The
+//     handler kills it and resumes, and the re-issued wait answers the signalled
+//     exit code. The wait used to park for the child's 30 s, then the handler's
+//     kill failed on the reaped child.
+//
+// A child spawned inside the thunk would die with the timer's ctx; that contract
+// is the spawn's, and TestProcessSpawnCtxBoundsTheChild pins it without a timer.
+func TestProcessWaitUnderWithTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix commands")
+	}
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"a child spawned outside the thunk survives the expiry",
+			`(define p (process-spawn "sleep" "30"))
+(with-timeout 50 (lambda (k) (process-kill p 'kill) (list 'resumed (k))) (lambda () (process-wait p)))`,
+			"(resumed -1)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			t.Cleanup(func() {
+				_ = engine.Close()
+			})
+			result, err := evalWithin(context.Background(), t, engine, tc.code, 10*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestProcessSpawnCtxBoundsTheChild pins the other half of process-wait's
+// cancellation contract: the wait does not kill the child, but the ctx the child
+// was spawned under does (exec.CommandContext). A child spawned in a run whose ctx
+// then ends is killed, and a wait on it in a later run under a live ctx answers
+// the killed status.
+func TestProcessSpawnCtxBoundsTheChild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix commands")
+	}
+	c := qt.New(t)
+	engine, ctx := newCancelEngine(t)
+	_, err := evalWithin(ctx, t, engine, `(begin (define p (process-spawn "sleep" "30")) (cancel!))`, 10*time.Second)
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+
+	result, err := evalWithin(context.Background(), t, engine, `(process-wait p)`, 10*time.Second)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "-1", qt.Commentf("the spawn's ctx must have killed the child"))
+}

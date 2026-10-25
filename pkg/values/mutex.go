@@ -241,8 +241,9 @@ func (p *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
 // *AbandonedMutexException so the caller can observe the prior owner's
 // termination.
 //
-// ctx cancellation unparks the untimed wait so a thread blocked here is reaped by
-// thread-terminate! rather than stalling on a bare cond.Wait. A cancelled acquire
+// ctx cancellation unparks the wait, timed or untimed, so a thread blocked here is
+// reaped by thread-terminate! rather than stalling on a bare cond.Wait or until
+// its timeout. A cancelled acquire
 // returns (false, nil) with the lock not held, and that is all this layer says:
 // how a cancellation surfaces depends on its SOURCE, which only the VM's timer
 // state can resolve. mutex-lock! reads the ctx and routes it through
@@ -270,6 +271,7 @@ func (p *Mutex) LockContext(ctx context.Context, timeout *time.Duration, owner *
 	if timeout == nil {
 		for p.state != MutexUnlocked && p.state != MutexAbandoned {
 			if !waitOnCondCtx(ctx, p.cond) {
+				p.passWakeup()
 				return false, nil // ctx cancelled: acquire abandoned, lock not held
 			}
 		}
@@ -296,20 +298,31 @@ func (p *Mutex) LockContext(ctx context.Context, timeout *time.Duration, owner *
 			// releases cond.L at the next Wait or at the deferred unlock, and
 			// a Broadcast arriving after close(done) is a spurious wakeup the
 			// predicate loop already tolerates.
+			//
+			// The ctx arm wakes the wait on cancellation, as the untimed
+			// arm's waitOnCondCtx does. There is no ctx pre-check: an ended
+			// ctx takes this arm at once, which is the same answer.
 			done := make(chan struct{})
 			go func() {
 				select {
 				case <-time.After(remaining):
-					p.mu.Lock()
-					p.cond.Broadcast()
-					p.mu.Unlock()
+				case <-ctx.Done():
 				case <-done:
+					return
 				}
+				p.mu.Lock()
+				p.cond.Broadcast()
+				p.mu.Unlock()
 			}()
 			p.cond.Wait()
 			close(done)
 
+			if ctx.Err() != nil {
+				p.passWakeup()
+				return false, nil // ctx cancelled: acquire abandoned, lock not held
+			}
 			if time.Now().After(deadline) {
+				p.passWakeup()
 				return false, nil // timeout
 			}
 		}
@@ -323,6 +336,22 @@ func (p *Mutex) LockContext(ctx context.Context, timeout *time.Duration, owner *
 		return true, &AbandonedMutexException{Mutex: p}
 	}
 	return true, nil
+}
+
+// passWakeup hands on a wakeup a waiter that is giving up may have consumed. An
+// unlock Signals one waiter; when that waiter's ctx ends or its deadline passes
+// between the wake and its check, it returns without acquiring, and the waiters
+// behind it stay parked on a free mutex. So a waiter abandoning its acquire with
+// the mutex grantable Signals the next one. The caller holds p.mu. A woken waiter
+// that is itself giving up passes it on again, so the chain is bounded by the
+// waiters, not a livelock. This is the interim fix: two wakers (the unlock's
+// Signal and a watcher's Broadcast) share one sync.Cond and nothing owns "who
+// consumed this wakeup"; the SRFI-18 sequencer
+// (plans/2026-08-01-srfi18-sequencer-design.md) would make cancel a dequeue event.
+func (p *Mutex) passWakeup() {
+	if p.state == MutexUnlocked || p.state == MutexAbandoned {
+		p.cond.Signal()
+	}
 }
 
 // Unlock releases the mutex without ctx cancellation, delegating to UnlockContext
