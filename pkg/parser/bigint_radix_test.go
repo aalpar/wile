@@ -418,3 +418,22 @@ func TestReadSyntaxBigIntegerWithRadixInCompound(t *testing.T) {
 	c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigInteger, got %T", vec.Elems()[0]))
 	c.Assert(nested.BigInt().Int64(), qt.Equals, int64(5))
 }
+
+// TestReadSyntaxRadixExactnessKeepsItsCause pins the error chain of a failed
+// exactness conversion after a radix prefix. The arm rendered the cause into
+// its message with %v, so the sentinel was text only; #d#e reached it once #d
+// began sharing the arm with #b/#o/#x (the introducer path it used before
+// wrapped the cause).
+func TestReadSyntaxRadixExactnessKeepsItsCause(t *testing.T) {
+	for _, src := range []string{"#d#e+inf.0", "#d#e+nan.0", "#d#e-inf.0"} {
+		t.Run(src, func(t *testing.T) {
+			c := qt.New(t)
+
+			env := environment.NewNamespace().Runtime()
+			_, err := NewParser(env, true, strings.NewReader(src)).ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNotNil)
+			c.Check(errors.Is(err, werr.ErrExactnessConversion), qt.IsTrue, qt.Commentf("%v", err))
+			c.Check(err.Error(), qt.Contains, "cannot convert inf or nan to exact")
+		})
+	}
+}

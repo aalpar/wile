@@ -359,13 +359,13 @@ func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer
 			exact, convErr = p.makeExact(q)
 		}
 		if convErr != nil {
-			return nil, tok, NewParserErrorf(tok, "cannot convert to exact: %v", convErr)
+			return nil, tok, NewParserErrorWithWrap(convErr, tok, "cannot convert to exact")
 		}
 		return exact, tok, nil
 	case -1:
 		inexact, convErr := p.makeInexact(q)
 		if convErr != nil {
-			return nil, tok, NewParserErrorf(tok, "cannot convert to inexact: %v", convErr)
+			return nil, tok, NewParserErrorWithWrap(convErr, tok, "cannot convert to inexact")
 		}
 		return inexact, tok, nil
 	}
