@@ -127,6 +127,22 @@ func TestInlineDefineLibraryStillMintsItsOwnEnv(t *testing.T) {
 	c.Assert(*n, qt.Equals, 3)
 }
 
+// TestDefineLibraryInAProgramProcedureBodyIsRefused: a define-library inside a
+// lambda body is not a top-level form of a program either; it compiled, minted
+// an environment and registered nothing. An inline top-level one stays legal.
+func TestDefineLibraryInAProgramProcedureBodyIsRefused(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	ctx := context.Background()
+	engine, err := newLibraryCountEngine(ctx, fstest.MapFS{})
+	c.Assert(err, qt.IsNil)
+	_, err = engine.EvalMultiple(ctx, `(define (g) (define-library (q) (import (scheme base)) (export)) 1)`)
+	c.Assert(errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue, qt.Commentf("err: %v", err))
+	c.Assert(err.Error(), qt.Contains, "define-library: not permitted inside a procedure body")
+	_, err = engine.EvalMultiple(ctx, `(define-library (top) (import (scheme base)) (export z) (begin (define z 5)))`)
+	c.Assert(err, qt.IsNil)
+}
+
 // TestNestedDefineLibraryIsRefused pins the refusal of a (define-library ...)
 // inside a file library, in a body and in declaration position. R7RS 5.6.1
 // lists the declarations, and define-library is not one, nor an expression or
@@ -154,6 +170,11 @@ func TestNestedDefineLibraryIsRefused(t *testing.T) {
   (export answer)
   (define-library (leak-inner) (import (dep)) (export))
   (begin (define answer 1)))`, "leak.sld:4:2"},
+		{"in a procedure body inside the library", "lib/leak.sld", `(define-library (leak)
+  (import (scheme base))
+  (export answer)
+  (begin
+    (define (answer) (define-library (leak-inner) (import (dep)) (export)) 1)))`, "leak.sld:5:22"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -173,7 +194,7 @@ func TestNestedDefineLibraryIsRefused(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 			_, err = engine.EvalMultiple(ctx, `(import (leak))`)
 			c.Assert(errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue, qt.Commentf("err: %v", err))
-			c.Assert(err.Error(), qt.Contains, "define-library: not permitted inside a library")
+			c.Assert(err.Error(), qt.Contains, "define-library: not permitted inside a")
 			c.Assert(err.Error(), qt.Contains, tc.at)
 		})
 	}
