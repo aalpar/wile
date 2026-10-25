@@ -313,3 +313,29 @@ func TestReader_MidParseEOFReportsOpenerLocation(t *testing.T) {
 		})
 	}
 }
+
+// TestParserErrorLocationEscapesFileName pins the render-time file-name escape
+// on ParserError.Location, the parser's own "file:line:col" renderer: a newline
+// in the name must not split the diagnostic. A plain name prints unquoted.
+func TestParserErrorLocationEscapesFileName(t *testing.T) {
+	tcs := []struct {
+		name, file, want string
+	}{
+		{name: "plain", file: "in.scm", want: "in.scm:1:0"},
+		{name: "newline", file: "a\nb.scm", want: `"a\nb.scm":1:0`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			env := environment.NewNamespace().Runtime()
+			p := NewParserWithFile(env, true, strings.NewReader("(1 2"), tc.file)
+			_, err := p.ReadSyntax(context.TODO())
+			var perr *ParserError
+			if !errors.As(err, &perr) {
+				t.Fatalf("reader returned %T, want *ParserError: %v", err, err)
+			}
+			if perr.Location() != tc.want {
+				t.Errorf("located at %q; want %q", perr.Location(), tc.want)
+			}
+		})
+	}
+}

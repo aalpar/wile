@@ -22,6 +22,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // DebugContext holds the state for debug commands. The break state itself — a
@@ -309,7 +311,7 @@ func (p *DebugContext) cmdWhere(_ []string, out io.Writer) {
 		return
 	}
 
-	fmt.Fprintf(out, "At %s:%d:%d\n", loc.File, loc.Line, loc.Column)
+	fmt.Fprintf(out, "At %s:%d:%d\n", values.DisplayFileName(loc.File), loc.Line, loc.Column)
 }
 
 // cmdHelp shows available debug commands.

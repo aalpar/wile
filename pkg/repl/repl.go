@@ -452,9 +452,9 @@ func (p *REPL) renderBreak(state values.DebugState, bp *debug.BreakpointInfo) {
 	loc := state.CurrentLocation()
 	if loc != nil {
 		if bp != nil {
-			fmt.Fprintf(p.out, " at %s:%d:%d", loc.File, loc.Line, loc.Column)
+			fmt.Fprintf(p.out, " at %s:%d:%d", values.DisplayFileName(loc.File), loc.Line, loc.Column)
 		} else {
-			fmt.Fprintf(p.out, " to %s:%d:%d", loc.File, loc.Line, loc.Column)
+			fmt.Fprintf(p.out, " to %s:%d:%d", values.DisplayFileName(loc.File), loc.Line, loc.Column)
 		}
 	}
 	fmt.Fprintln(p.out)

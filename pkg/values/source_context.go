@@ -16,7 +16,9 @@ package values
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"unicode"
 )
 
 var _ Value = (*SourceContext)(nil)
@@ -79,6 +81,18 @@ func (p *SourceContext) Clone() *SourceContext {
 	return &c
 }
 
+// DisplayFileName renders a file name for a "file:line:col" diagnostic. A name
+// holding a control character (a newline, a tab, an escape) is Go-quoted, so
+// program data cannot break the diagnostic line or forge a second one; any
+// other name prints as is. The escape is applied at render time only: the
+// stored name stays the real path, which include resolution reads.
+func DisplayFileName(name string) string {
+	if strings.IndexFunc(name, unicode.IsControl) < 0 {
+		return name
+	}
+	return strconv.Quote(name)
+}
+
 // Location returns the source location formatted as "file:line:col".
 // Returns empty string if the receiver is nil or carries no location at all.
 //
@@ -92,7 +106,7 @@ func (p *SourceContext) Location() string {
 		return ""
 	}
 	if p.File != "" {
-		return fmt.Sprintf("%s:%d:%d", p.File, p.Start.Line(), p.Start.Column())
+		return fmt.Sprintf("%s:%d:%d", DisplayFileName(p.File), p.Start.Line(), p.Start.Column())
 	}
 	if p.Start.Line() > 0 {
 		return fmt.Sprintf(":%d:%d", p.Start.Line(), p.Start.Column())
