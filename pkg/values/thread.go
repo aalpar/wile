@@ -293,7 +293,7 @@ func (p *Thread) setOutcomeLocked(o *threadOutcome) {
 //     which is what makes the untimed form fall out of the same select.
 //   - the joiner itself is cancelled — thread-terminate! on the JOINER, an
 //     embedder deadline, a with-timeout: ErrOperationCancelled carrying the ctx
-//     cause.
+//     cause. It outranks the timeout when both are ready.
 //
 // The third arm is the one that was missing. Terminate on a started thread
 // cancels its ctx but does not close its done channel (ownsDone is true only for
@@ -322,13 +322,24 @@ func (p *Thread) Join(ctx context.Context, timeout *time.Duration) (Value, error
 	case <-p.done:
 		// Thread completed
 	case <-deadline:
+		// The joiner's cancellation outranks the timeout, for the same reason the
+		// joinee's end outranks both: an elapsed (or zero) timeout and an ended ctx
+		// can be ready together, and select would pick between them at random.
+		if ctx.Err() != nil {
+			return nil, p.joinCancelled(ctx)
+		}
 		return nil, werr.ErrJoinTimeout
 	case <-ctx.Done():
-		return nil, werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, werr.ContextEnding(ctx, nil),
-			"Thread.Join: the joining thread was cancelled before %s terminated", p.name)
+		return nil, p.joinCancelled(ctx)
 	}
 
 	return p.terminalResult()
+}
+
+// joinCancelled is Join's report of the joining thread's own cancellation.
+func (p *Thread) joinCancelled(ctx context.Context) error {
+	return werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, werr.ContextEnding(ctx, nil),
+		"Thread.Join: the joining thread was cancelled before %s terminated", p.name)
 }
 
 // terminalResult reads the outcome of a thread whose done channel has closed.

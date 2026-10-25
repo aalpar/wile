@@ -19,6 +19,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -267,4 +268,31 @@ func TestJoinCancelledByHostCauseMatchesBoth(t *testing.T) {
 	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
 	c.Assert(errors.Is(err, hostCause), qt.IsTrue, qt.Commentf("got %v", err))
 	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("got %v", err))
+}
+
+// TestJoinCancellationOutranksAnElapsedTimeout pins the order of a join's outcomes
+// when more than one is ready: a joining thread whose ctx has ended reports its
+// cancellation, never the timeout, whatever the timeout. A zero timeout makes the
+// timer ready as soon as the cancelled ctx is, and a select with two ready arms
+// picks at random, so (thread-join! t 0 'tv) in a cancelled thread used to answer
+// 'tv about half the time. Every iteration must agree.
+func TestJoinCancellationOutranksAnElapsedTimeout(t *testing.T) {
+	c := qt.New(t)
+	release := make(chan struct{})
+	th := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "blocked")
+	th.RunFunc = func(_ context.Context, _ values.Callable) (values.Value, error) {
+		<-release
+		return values.Void, nil
+	}
+	c.Assert(th.Start(context.Background()), qt.IsNil)
+	defer close(release)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	zero := time.Duration(0)
+	for i := range 200 {
+		_, err := th.Join(ctx, &zero)
+		c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue,
+			qt.Commentf("iteration %d: got %v", i, err))
+	}
 }

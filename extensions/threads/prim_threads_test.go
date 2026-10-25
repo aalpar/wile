@@ -23,6 +23,7 @@ import (
 	"time"
 
 	extthreads "github.com/aalpar/wile/extensions/threads"
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/registry/core"
@@ -372,6 +373,59 @@ func TestThreadSleepContextCancellation(t *testing.T) {
 				t.Fatal("thread-sleep! did not respect context cancellation")
 			}
 		})
+	}
+}
+
+// cancelledCallContext is a machine.CallContext whose ctx has already ended, for
+// driving a blocking primitive directly: no VM poll can intervene between the
+// cancellation and the call, which is what makes the outcome deterministic.
+type cancelledCallContext struct {
+	ctx  context.Context
+	args []values.Value
+}
+
+func (p *cancelledCallContext) Arg(i int) values.Value {
+	return p.args[i]
+}
+
+func (*cancelledCallContext) SetValue(values.Value) {
+}
+
+func (*cancelledCallContext) SetValues(...values.Value) {
+}
+
+func (*cancelledCallContext) Authorizer() security.Authorizer {
+	return nil
+}
+
+func (p *cancelledCallContext) Context() context.Context {
+	return p.ctx
+}
+
+func (*cancelledCallContext) EnvironmentFrame() *environment.EnvironmentFrame {
+	return nil
+}
+
+func (*cancelledCallContext) Thread() *values.Thread {
+	return nil
+}
+
+var _ machine.CallContext = (*cancelledCallContext)(nil)
+
+// TestCancelledZeroSleepRaises pins thread-sleep!'s order when its timer and its
+// ctx are ready together: the cancellation wins. A zero sleep's timer fires at
+// once, and a select with two ready arms picks at random, so a cancelled thread's
+// (thread-sleep! 0) used to return normally about half the time. Every iteration
+// must agree.
+func TestCancelledZeroSleepRaises(t *testing.T) {
+	c := qt.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	mc := &cancelledCallContext{ctx: ctx, args: []values.Value{values.NewInteger(0)}}
+	for i := range 200 {
+		err := extthreads.PrimThreadSleep(mc)
+		c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue,
+			qt.Commentf("iteration %d: got %v", i, err))
 	}
 }
 

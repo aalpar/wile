@@ -207,6 +207,12 @@ func PrimThreadSleep(mc machine.CallContext) error {
 
 	select {
 	case <-time.After(d):
+		// An elapsed sleep and an ended ctx can be ready together (a zero sleep
+		// always is), and select picks between them at random: the cancellation
+		// wins, as it does for thread-join! and the lock waits.
+		if mc.Context().Err() != nil {
+			return waitCancelled(mc, "thread-sleep!")
+		}
 	case <-mc.Context().Done():
 		return waitCancelled(mc, "thread-sleep!")
 	}
