@@ -52,9 +52,10 @@
     (test (sqrt #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)
           (imag-part (sqrt #m-2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)))))
 
-;; A non-square BigInteger or Rational has no precision of its own, so its root
-;; is a BigFloat at the default 256 bits; neither arm goes through float64, where
-;; 10^400 overflows. racket and petite agree on the leading digits.
+;; A non-square BigInteger or Rational root is a BigFloat: a Rational's at the
+;; default 256 bits, a BigInteger's at the default or at its bit length when
+;; that is wider. Neither arm goes through float64, where 10^400 overflows.
+;; racket and petite agree on the leading digits.
 (test-group "unbounded exact operands"
   (with-exact-comparison
     (test "5.7735026918962576450914878050195745564760175127012687601860232648397767230293l+199"

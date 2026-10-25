@@ -644,6 +644,14 @@ func TestSqrtExptBigTier(t *testing.T) {
 		{"expt bigfloat rational exponent", `(expt #m2 1/2)`, "*values.BigFloat", "1.41421356237309504880168872420969807856967187537694807317667973799073247846"},
 		{"expt float base bigfloat exponent", `(expt 2.0 #m0.5)`, "*values.BigFloat", "1.41421356237309504880168872420969807856967187537694807317667973799073247846"},
 		{"expt bigfloat huge exponent", `(expt #m2 (expt 10 20))`, "*values.BigFloat", "+inf.0"},
+		// an odd exponent wider than the working precision keeps its parity: racket/petite -1.0 and -inf.0
+		{"expt minus one odd wide exponent", `(expt #m-1 (+ 1 (expt 10 200)))`, "*values.BigFloat", "-1.0l0"},
+		{"expt minus two odd wide exponent", `(expt #m-2 (+ 1 (expt 10 200)))`, "*values.BigFloat", "-inf.0"},
+		// a Rational base near 1 under a wide exponent: (1+1/N)^N with N = 3*2^200,
+		// Python decimal at 200 digits (it differs from e from the 61st digit on)
+		{"expt rational base near one", `(let ((n (* 3 (expt 2 200)))) (expt (+ 1 (/ 1 n)) (* #m1 n)))`, "*values.BigFloat", "2.71828182845904523536028747135266249775724709369995957496696734579225416313"},
+		// a narrow BigInteger root rounds at the default 256 bits, not at its 71
+		{"sqrt narrow bigint", `(sqrt (+ 1 (expt 2 70)))`, "*values.BigFloat", "3.4359738368000000000014551915228366851806637543512088980422635111740352757"},
 		{"expt minus one odd huge exponent", `(expt #m-1 (+ 1 (expt 10 20)))`, "*values.BigFloat", "-1.0l0"},
 		{"expt beyond float64 range", `(expt #m10 #m400.5)`, "*values.BigFloat", "3.162277660168379331998893544432718533719555139325216826857504852792594438639"},
 		// IEEE special values, answered in big.Float
@@ -694,6 +702,8 @@ func TestSqrtExptBigTierAgreement(t *testing.T) {
 		// keeps every digit (408 characters here, not a 256-bit 84), on both arms.
 		{"wide bigint root keeps its digits", `(= (string-length (number->string (sqrt (+ 3 (expt 10 401))))) 408)`},
 		{"wide negative bigint arm carries the positive arm's digits", `(eqv? (imag-part (sqrt (- (+ 3 (expt 10 401))))) (sqrt (+ 3 (expt 10 401))))`},
+		{"narrow bigint root is the 256-bit root", `(eqv? (sqrt (+ 1 (expt 2 70))) (sqrt (+ #m1 (expt 2 70))))`},
+		{"narrow negative bigint arm carries the positive arm's digits", `(eqv? (imag-part (sqrt (- -1 (expt 2 70)))) (sqrt (+ 1 (expt 2 70))))`},
 		{"negative rational arm carries the positive arm's digits", `(eqv? (imag-part (sqrt -2/3)) (sqrt 2/3))`},
 		{"expt one half is sqrt", `(eqv? (expt #m2 #m0.5) (sqrt #m2))`},
 		{"expt one half is sqrt, exact base", `(eqv? (expt 3 #m0.5) (sqrt #m3))`},

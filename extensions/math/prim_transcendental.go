@@ -490,11 +490,11 @@ func PrimSqrt(mc machine.CallContext) error {
 			}
 			return nil
 		}
-		// SetInt at zero precision is exact, at max(bit length, 64) bits; the
-		// root keeps that precision, so a wide operand keeps its digits and
-		// both signs carry the same ones.
+		// SetInt at zero precision is exact. The root rounds at the default, or
+		// at the operand's bit length when that is wider, so a wide operand
+		// keeps its digits; both signs share the rule and so the digits.
 		f := new(big.Float).SetInt(bi)
-		mc.SetValue(realBigSqrt(f, f.Prec()))
+		mc.SetValue(realBigSqrt(f, max(f.Prec(), values.DefaultBigFloatPrecision)))
 	case *values.Float:
 		if v.Value < 0 {
 			mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(v.Value, 0))))
@@ -554,9 +554,9 @@ func PrimSqrt(mc machine.CallContext) error {
 // return fewer digits than the positive arm for an operand wider than that.
 //
 // Precision policy: sqrt keeps a BigFloat operand's precision (big.Float.Sqrt
-// rounds at the receiver's); a BigInteger operand keeps its bit length (at
-// least 64), and a Rational, which has none, rounds at
-// DefaultBigFloatPrecision. exp, log, atan and the
+// rounds at the receiver's); a BigInteger operand rounds at
+// max(bit length, DefaultBigFloatPrecision), and a Rational, which has none,
+// at DefaultBigFloatPrecision. exp, log, atan and the
 // makeComplexPrimitive family compute at DefaultBigFloatPrecision, as does the
 // BigComplex arm of sqrt.
 func bigFloatSqrt(bf *values.BigFloat) values.Number {
@@ -756,10 +756,11 @@ func bigFloatExpt(base, exp values.Number) values.Number {
 	prec := bigFloatOperandPrecision(base, exp)
 	wp := prec + 64
 	x := numberToBigFloatAt(base, wp)
-	y := numberToBigFloatAt(exp, wp)
-	one := big.NewFloat(1)
-	// pow(x, 0) and pow(1, y) are 1 even for a NaN partner.
-	if (y != nil && y.Sign() == 0) || (x != nil && x.Cmp(one) == 0) {
+	y := exponentToBigFloat(exp, wp)
+	// pow(x, 0) and pow(1, y) are 1 even for a NaN partner. A Rational is never
+	// 1, though one near it can round to 1 at wp.
+	_, baseRational := base.(*values.Rational)
+	if (y != nil && y.Sign() == 0) || (x != nil && !baseRational && x.Cmp(big.NewFloat(1)) == 0) {
 		return values.NewBigFloat(new(big.Float).SetPrec(prec).SetInt64(1))
 	}
 	if x == nil || y == nil {
@@ -770,22 +771,38 @@ func bigFloatExpt(base, exp values.Number) values.Number {
 			complex(values.NumberToFloat64(base), 0),
 			complex(values.NumberToFloat64(exp), 0)))
 	}
-	q := bigPowAbs(new(big.Float).Abs(x), y, prec, wp)
+	q := bigPowAbs(base, new(big.Float).Abs(x), y, prec, wp)
 	if x.Signbit() && isOddInteger(y) {
 		q.Neg(q)
 	}
 	return values.NewBigFloat(q)
 }
 
-// bigPowAbs returns a^y rounded to prec bits for a ≥ 0 and y ≠ 0, neither NaN.
-// wp is the working precision of the log path; a and y must be exact at it.
-func bigPowAbs(a, y *big.Float, prec, wp uint) *big.Float {
+// exponentToBigFloat converts expt's exponent: an exact integer exactly, so
+// the parity that decides a negative base's sign is the exponent's own (an odd
+// BigInteger rounded to wp bits reads as even), anything else as
+// numberToBigFloatAt does.
+func exponentToBigFloat(v values.Number, wp uint) *big.Float {
+	switch n := v.(type) {
+	case *values.Integer:
+		return new(big.Float).SetInt64(n.Value)
+	case *values.BigInteger:
+		return new(big.Float).SetInt(n.BigInt())
+	default:
+		return numberToBigFloatAt(v, wp)
+	}
+}
+
+// bigPowAbs returns |base|^y rounded to prec bits, for y ≠ 0 and neither
+// operand NaN. a is |base| converted at wp, the working precision of the log
+// path; base itself is reconverted where wp is not enough.
+func bigPowAbs(base values.Number, a, y *big.Float, prec, wp uint) *big.Float {
 	switch {
 	case y.IsInf():
 		// |x| < 1 vanishes under +inf and diverges under -inf; |x| > 1 the
 		// reverse. |x| = 1 is 1: a base of -1 reaches here as a = 1, and
 		// pow(-1, ±inf) is 1, as on the Float arm.
-		c := a.Cmp(big.NewFloat(1))
+		c := cmpAbsOne(base, a)
 		if c == 0 {
 			return new(big.Float).SetPrec(prec).SetInt64(1)
 		}
@@ -797,10 +814,31 @@ func bigPowAbs(a, y *big.Float, prec, wp uint) *big.Float {
 	if acc == big.Exact {
 		return bigPowInt(a, n, prec)
 	}
-	// |y·ln a| beyond 2^32 over- or underflows big.Float, so wp's 64 guard bits
-	// cover the error that the product passes on to exp.
+	// t = y·ln a, and its absolute error is |y| times ln a's. A t of 2^32 or
+	// more over- or underflows big.Float, which wp answers as well as any
+	// precision. Below that, a wide y means a near 1, where ln a computed at wp
+	// carries an absolute error of about 2^-wp that y magnifies: ln a then
+	// needs y's binary exponent in extra bits, from the base reconverted at
+	// that precision (a Rational base is not exact at wp).
 	t := new(big.Float).SetPrec(wp).Mul(y, values.BigLog(a, wp))
+	yExp := y.MantExp(nil)
+	if yExp > 0 && t.MantExp(nil) <= 32 {
+		lp := wp + uint(yExp)
+		ln := values.BigLog(new(big.Float).Abs(numberToBigFloatAt(base, lp)), lp)
+		t = new(big.Float).SetPrec(lp).Mul(y, ln)
+	}
 	return new(big.Float).SetPrec(prec).Set(values.BigExp(t, wp))
+}
+
+// cmpAbsOne compares |base| with 1, exactly for a Rational base, whose a (its
+// magnitude at the working precision) can round to 1; otherwise from a, which
+// is exact.
+func cmpAbsOne(base values.Number, a *big.Float) int {
+	r, ok := base.(*values.Rational)
+	if !ok {
+		return a.Cmp(big.NewFloat(1))
+	}
+	return new(big.Rat).Abs(r.Rat()).Cmp(big.NewRat(1, 1))
 }
 
 // zeroOrInf returns +Inf when inf is true, else +0, at prec bits.
