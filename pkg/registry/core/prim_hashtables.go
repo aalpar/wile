@@ -317,9 +317,7 @@ func equivIdentity(kind values.HashtableKind) *machine.PrimitiveIdentity {
 // that as a guard: a remembering table is always the equal kind, because
 // NewEqualHashtableWithFunctions takes no kind, so the order is unobservable and
 // swapping it fails no test (measured). It is written this way to read the same
-// as PrimHashtableHashFunction, where the kind arms DO decide. What makes
-// equivIdentity's out-of-range refusal reachable is the constructor's shape, not
-// this ordering.
+// as PrimHashtableHashFunction, where the kind arms DO decide.
 //
 // The gate that is load-bearing is inside rememberedEqualPair.
 func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
