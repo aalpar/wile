@@ -19,8 +19,9 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/aalpar/wile/pkg/werr"
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 func TestShellFor(t *testing.T) {
@@ -111,8 +112,8 @@ func TestResolveSignalNamesUnsupportedApartFromUnknown(t *testing.T) {
 	tcs := []struct {
 		goos, name, wantText string
 	}{
-		{"windows", "term", "process-kill: signal 'term' is not supported on windows (supported: kill)"},
-		{"windows", "hup", "process-kill: signal 'hup' is not supported on windows (supported: kill)"},
+		{"windows", "term", "process-kill: signal 'term' is not supported on windows (expected kill)"},
+		{"windows", "hup", "process-kill: signal 'hup' is not supported on windows (expected kill)"},
 		{"windows", "bogus", "process-kill: unknown signal 'bogus' on windows (expected kill)"},
 		{"linux", "bogus", "process-kill: unknown signal 'bogus' on linux (expected term, kill, int, or hup)"},
 	}

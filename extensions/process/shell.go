@@ -93,11 +93,6 @@ func hostShell() shellSpec {
 	return shellFor(runtime.GOOS)
 }
 
-// hostSignals returns the signals for the running GOOS.
-func hostSignals() []signalSpec {
-	return signalsFor(runtime.GOOS)
-}
-
 // lookupSignal finds name among specs.
 func lookupSignal(specs []signalSpec, name string) (syscall.Signal, bool) {
 	for _, s := range specs {
@@ -122,7 +117,7 @@ func resolveSignal(goos, name string) (syscall.Signal, error) {
 	_, known := lookupSignal(defaultSignals, name)
 	if known {
 		return 0, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"process-kill: signal '%s' is not supported on %s (supported: %s)",
+			"process-kill: signal '%s' is not supported on %s (expected %s)",
 			name, goos, signalNames(signals))
 	}
 	return 0, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
@@ -130,8 +125,8 @@ func resolveSignal(goos, name string) (syscall.Signal, error) {
 		name, goos, signalNames(signals))
 }
 
-// signalNames renders specs as "a", "a or b" or "a, b, or c" for the
-// unknown-signal message.
+// signalNames renders specs as "a", "a or b" or "a, b, or c" for
+// resolveSignal's messages.
 func signalNames(specs []signalSpec) string {
 	names := make([]string, len(specs))
 	for i, s := range specs {
