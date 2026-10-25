@@ -57,10 +57,10 @@ func (p *ExpanderTimeContinuation) expandIncludeCiForm(sym *syntax.SyntaxSymbol,
 //
 //   - The load stack is pushed AFTER the read and popped after the forms are
 //     expanded, on a child expander's ctx, so a relative include nested in the
-//     file resolves against the file's directory, and a file already on the stack
-//     is refused as a cycle (pushIncludedFile). The child exists because ctx is
-//     a field copied by value (newChildExpander): there is nowhere else for the
-//     derived ctx to live.
+//     file resolves against the file's directory; the same ctx records the file
+//     on the include chain, so a cycle is refused (enterIncludedFile). The child
+//     exists because ctx is a field copied by value (newChildExpander): there is
+//     nowhere else for the derived ctx to live.
 //
 //   - The result head is a FRESH-scope begin that drops the include head's scopes
 //     (spliceBegin).
@@ -107,9 +107,14 @@ func spliceBegin(sym *syntax.SyntaxSymbol, label string, forms []syntax.SyntaxVa
 }
 
 // expandIncludedFile reads one file and expands its forms on a child expander
-// whose ctx carries the load stack with the file pushed.
+// whose ctx carries the load stack with the file pushed and the include chain
+// with the file recorded.
 func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, r FileResolver, name string, src *syntax.SourceContext, foldCase bool) ([]syntax.SyntaxValue, error) {
 	forms, filePath, err := readIncludedForms(p.ctx, p.env, r, name, src, foldCase)
+	if err != nil {
+		return nil, err
+	}
+	ctx, err := enterIncludedFile(p.ctx, sym.Key(), filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -127,16 +132,12 @@ func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, 
 		forms[i] = p.pruneUseSiteScopes(form)
 	}
 
-	ctx := p.ctx
 	stack := resolver.SelectLoadStack(ctx)
 	if stack == nil {
 		stack = sourceload.NewLoadStack()
 		ctx = sourceload.WithLoadStack(ctx, stack)
 	}
-	err = pushIncludedFile(stack, sym.Key(), filePath)
-	if err != nil {
-		return nil, err
-	}
+	stack.Push(filePath)
 	defer stack.Pop()
 
 	child := p.newChildExpander(p.env)

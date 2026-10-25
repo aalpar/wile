@@ -21,6 +21,7 @@ import (
 	"io"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -153,28 +154,45 @@ func readIncludedForms(ctx context.Context, env *environment.EnvironmentFrame, r
 	return forms, filePath, nil
 }
 
-// pushIncludedFile pushes filePath, the file the including form (named by form)
-// has just read, on stack for the extent of its processing, or refuses with
-// ErrIncludeCycle when the file is already on it: it is being included from
+// includeChain is the files being included on one causal chain, innermost
+// first. Like loadChain (library_load_chain.go) it is an immutable list carried
+// on ctx, so a sibling include, a finished include and a concurrent SRFI-18
+// thread never observe each other's entries. The load stack cannot answer the
+// same question: a thread inherits its starter's *LoadStack (the CLI installs
+// one for -f), so two threads including the same file would each find the
+// other's push and report a cycle that is not there.
+type includeChain struct {
+	path string
+	prev *includeChain
+}
+
+// includeChainKey is the context key for the include chain.
+type includeChainKey struct{}
+
+// enterIncludedFile returns ctx recording filePath, the file the including form
+// (named by form) has just read, as being included, or refuses with
+// ErrIncludeCycle when ctx already records it: the file is being included from
 // inside itself, directly or through other files, and would be spliced into
 // itself until the expansion depth guard fired (or, for
 // include-library-declarations, until the Go stack overflowed). The error names
 // the files of the cycle, outermost first.
 //
-// stack must be the live one on ctx, not lexicalIncludeContext's resolution
-// copy, whose top can be a caller's label. Entries compare cleaned, as a
-// ContextWithLoadPath argument need not be; resolver output already is.
-func pushIncludedFile(stack *sourceload.LoadStack, form, filePath string) error {
-	paths := stack.Paths()
-	for i, pth := range paths {
-		if filepath.Clean(pth) != filepath.Clean(filePath) {
-			continue
-		}
-		chain := strings.Join(append(paths[i:], filePath), " -> ")
-		return werr.WrapForeignErrorf(werr.ErrIncludeCycle, "%s: %s", form, chain)
+// Paths compare cleaned. Resolver output already is; cleaning keeps the rule
+// independent of that.
+func enterIncludedFile(ctx context.Context, form, filePath string) (context.Context, error) {
+	clean := filepath.Clean(filePath)
+	prev, _ := ctx.Value(includeChainKey{}).(*includeChain)
+	var paths []string
+	for node := prev; node != nil; node = node.prev {
+		paths = append(paths, node.path)
 	}
-	stack.Push(filePath)
-	return nil
+	slices.Reverse(paths)
+	i := slices.Index(paths, clean)
+	if i >= 0 {
+		chain := strings.Join(append(paths[i:], clean), " -> ")
+		return nil, werr.WrapForeignErrorf(werr.ErrIncludeCycle, "%s: %s", form, chain)
+	}
+	return context.WithValue(ctx, includeChainKey{}, &includeChain{path: clean, prev: prev}), nil
 }
 
 // CompileInclude compiles an include expression.
@@ -230,15 +248,16 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 		// would push nowhere and the resolver would read nothing. `inner` is a
 		// copy, so the derived ctx does not escape this file's extent.
 		inner := ctctx
+		inner.ctx, err = enterIncludedFile(inner.ctx, "include", filePath)
+		if err != nil {
+			return err
+		}
 		stack := resolver.SelectLoadStack(inner.ctx)
 		if stack == nil {
 			stack = sourceload.NewLoadStack()
 			inner.ctx = sourceload.WithLoadStack(inner.ctx, stack)
 		}
-		err = pushIncludedFile(stack, "include", filePath)
-		if err != nil {
-			return err
-		}
+		stack.Push(filePath)
 		defer stack.Pop()
 
 		// Process forms with letrec* semantics: pre-declare all bindings first

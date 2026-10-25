@@ -655,6 +655,24 @@ func TestIncludeOfAFileTwiceIsNotACycle(t *testing.T) {
 	}
 }
 
+// TestLoadStackEntryIsNotAnEnclosingInclude pins that the cycle check reads the
+// include chain, not the load stack: a path on the stack is not necessarily an
+// include enclosing this one. An SRFI-18 thread inherits its starter's stack, so
+// two threads each including common.scm saw the other's push, and the first
+// form of the check reported common.scm -> lb.scm -> common.scm for a program
+// with no cycle. ContextWithLoadPath stands in for the other thread's push.
+func TestLoadStackEntryIsNotAnEnclosingInclude(t *testing.T) {
+	fsys := fstest.MapFS{
+		"common.scm": &fstest.MapFile{Data: []byte(`(define c 1)`)},
+	}
+	engine := libraryIncludeEngine(t, fsys)
+	loadCtx, err := engine.ContextWithLoadPath(context.Background(), "common.scm")
+	qt.Assert(t, err, qt.IsNil)
+	result, err := engine.EvalProgram(loadCtx, `(include "common.scm") c`, "includer.scm")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "1")
+}
+
 // TestLibraryDeclarationIncludeResolvesAgainstTheSldDirectory pins a
 // declaration-level (include ...) in a .sld: it resolves against the .sld's own
 // directory, not the library search path or the includer's directory, both of

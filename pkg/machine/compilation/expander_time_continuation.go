@@ -148,10 +148,10 @@ func NewExpanderTimeContinuation(ctx context.Context, env *environment.Environme
 // It is otherwise identical to the expander the call sites previously built with
 // NewExpanderTimeContinuation(p.ctx, env, p.evaluator): ctx and evaluator carry
 // over, env is the nested-body environment, and libraryScope is deliberately
-// left nil: no child site propagates it. An included file's forms need none,
-// since they take the include head's scope set, which in a library body holds
-// the library scope. Sharing only the depth guard keeps the hygiene behavior
-// unchanged.
+// left nil: no child site propagates it. The forms of an include written in a
+// library body need none, since they take the include head's scope set, which
+// holds the library scope. Sharing only the depth guard keeps the hygiene
+// behavior unchanged.
 func (p *ExpanderTimeContinuation) newChildExpander(env *environment.EnvironmentFrame) *ExpanderTimeContinuation {
 	q := &ExpanderTimeContinuation{
 		ctx:           p.ctx,

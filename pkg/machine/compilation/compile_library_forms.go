@@ -451,15 +451,16 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ctctx Compil
 		// inside it, as compileIncludeImpl arranges for include: push its path
 		// on the load stack (creating one when there is none) for its extent.
 		inner := ctctx
+		inner.ctx, err = enterIncludedFile(inner.ctx, "include-library-declarations", filePath)
+		if err != nil {
+			return p.wrapCompilationError(err)
+		}
 		stack := resolver.SelectLoadStack(inner.ctx)
 		if stack == nil {
 			stack = sourceload.NewLoadStack()
 			inner.ctx = sourceload.WithLoadStack(inner.ctx, stack)
 		}
-		err = pushIncludedFile(stack, "include-library-declarations", filePath)
-		if err != nil {
-			return p.wrapCompilationError(err)
-		}
+		stack.Push(filePath)
 		defer stack.Pop()
 		for _, stx := range forms {
 			err := p.processLibraryDeclaration(inner, lib, stx)
