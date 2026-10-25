@@ -345,5 +345,39 @@ func TestTryIndexTwinsReportTheTie(t *testing.T) {
 		qt.Assert(t, ambiguous, qt.IsFalse)
 		qt.Assert(t, gi, qt.IsNotNil)
 		qt.Assert(t, gi.Env.GetOwnGlobalBinding(gi), qt.Equals, ns.Runtime().GetGlobalBinding(gi))
+
+		gi, ambiguous = ns.Runtime().TryGetGlobalIndexAcrossPhases(sym, scopesOf(a, b))
+		qt.Assert(t, ambiguous, qt.IsTrue)
+		qt.Assert(t, gi, qt.IsNil)
+		r = capturePanic(func() {
+			ns.Runtime().GetGlobalIndexAcrossPhases(sym, scopesOf(a, b))
+		})
+		err, _ := r.(error)
+		qt.Assert(t, errors.Is(err, werr.ErrAmbiguousBinding), qt.IsTrue)
+		gi, ambiguous = ns.Runtime().TryGetGlobalIndexAcrossPhases(sym, scopesOf(a, c))
+		qt.Assert(t, ambiguous, qt.IsFalse)
+		qt.Assert(t, gi, qt.IsNotNil)
+	})
+
+	t.Run("library scopes", func(t *testing.T) {
+		ns := NewNamespace()
+		libEnv := ns.NewChildRuntime()
+		lib := syntax.NewScope()
+		ns.RegisterLibraryScope(lib, libEnv)
+		for _, s := range []syntax.Scopes{scopesOf(lib, a), scopesOf(lib, b)} {
+			_, created := libEnv.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, s)
+			qt.Assert(t, created, qt.IsTrue)
+		}
+		gi, ambiguous := ns.Runtime().TryGetGlobalIndexFromLibraryScopes(sym, scopesOf(lib, a, b))
+		qt.Assert(t, ambiguous, qt.IsTrue)
+		qt.Assert(t, gi, qt.IsNil)
+		r := capturePanic(func() {
+			ns.Runtime().GetGlobalIndexFromLibraryScopes(sym, scopesOf(lib, a, b))
+		})
+		err, _ := r.(error)
+		qt.Assert(t, errors.Is(err, werr.ErrAmbiguousBinding), qt.IsTrue)
+		gi, ambiguous = ns.Runtime().TryGetGlobalIndexFromLibraryScopes(sym, scopesOf(lib, a, c))
+		qt.Assert(t, ambiguous, qt.IsFalse)
+		qt.Assert(t, gi, qt.IsNotNil)
 	})
 }

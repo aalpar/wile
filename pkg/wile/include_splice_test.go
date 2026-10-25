@@ -261,8 +261,9 @@ func TestIncludePassedThroughAMacro(t *testing.T) {
 
 // TestIncludePassedToAMacroDoesNotCaptureTheMacrosBinder is the include half of
 // TestCondExpandPassedToAMacroDoesNotCaptureTheMacrosBinder (X21): an include a
-// macro receives as an argument and places in its own body keeps its use-site
-// scope, so a define in the file cannot capture the macro's binder. Chez and
+// macro receives DIRECTLY as an argument and places in its own body keeps its
+// use-site scope, so a define in the file cannot capture the macro's binder.
+// One macro layer between them defeats it; see the known-gap row. Chez and
 // Racket (racket/include) answer top and macro. The macro-local row used to
 // raise ErrAmbiguousBinding: the pruned define tied with the macro's let binder.
 // The last row splices one include twice, once in the macro's body; Racket, with
@@ -293,6 +294,13 @@ func TestIncludePassedToAMacroDoesNotCaptureTheMacrosBinder(t *testing.T) {
             (list (r 'let) (list (list (r 'a) ''macro))
                   (list (r 'let) '() (cadr f) (r 'a)))))))
 (list (pass (twice (include "u.scm"))) a)`, want: "(macro user)", opts: withStdlibResolver()},
+		// KNOWN GAP, pinned at today's answer: racket and petite answer top. pass's
+		// output is the include at a splice position, so it is marked, and the
+		// boundary prune strips every use-site scope the run minted, m's included.
+		// (m (pass (define a 'user))) answers user too, without an include. Filed
+		// from the X21 crosscheck; flip this row when that row is fixed.
+		{name: "one macro layer between (known gap)", code: prelude + `(define-syntax pass (syntax-rules () ((_ e) e)))
+(m (pass (include "u.scm")))`, want: "user"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

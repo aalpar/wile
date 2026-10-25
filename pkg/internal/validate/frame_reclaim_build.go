@@ -66,8 +66,10 @@ func makeIsCaptureOp(env *environment.EnvironmentFrame) func(*syntax.SyntaxSymbo
 		if !named {
 			return false
 		}
-		b := env.GetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes()))
-		return b != nil && b.IsImported()
+		// A tie may be the capture operator: assume it is. The compiler refuses
+		// the reference.
+		b, tied := env.TryGetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes()))
+		return tied || (b != nil && b.IsImported())
 	}
 }
 
@@ -301,7 +303,8 @@ func classifyCallee(
 	// primitive is stamped Stable. A reference whose hygiene matches no binding
 	// resolves to nil, and a user shadow (BindingTypeVariable) or a set!-able
 	// primitive carries neither flag — all fall through to the unsafe default below.
-	b := env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
+	// A tie resolves to nil: unknown, so unsafe. The compiler refuses the reference.
+	b, _ := env.TryGetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
 	if b != nil && b.IsCaptureSafe() && b.IsStable() {
 		return reclaimEdge{}, false
 	}

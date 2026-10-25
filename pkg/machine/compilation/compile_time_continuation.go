@@ -408,10 +408,11 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// reference, so it must shadow the pinned/global fallbacks below (R1 fix —
 	// previously the ResolvedBinding pin short-circuited ahead of this check).
 	//
-	// A tie among incomparable binders is the program's error, refused here with
-	// the identifier's location. The local probe and the global one below are the
-	// first resolver calls of each tier; the later GetBinding asks the same query
-	// of the same chain and store, so it cannot tie once both have answered.
+	// A tie among incomparable binders is the program's error, refused with the
+	// identifier's location by each first resolver call against a chain or store:
+	// this local probe, the global one below, and the library arm's probe of a
+	// library's store. The final GetBinding repeats the first two queries against
+	// the same chain and store, so it cannot tie once they have answered.
 	li, ambiguous := p.env.TryGetLocalIndex(sym, syntax.ScopesOf(symbolScopes))
 	if ambiguous {
 		return ambiguousReference(expr, "")
@@ -474,7 +475,10 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// before GetBinding because the outer expansion of
 	// define-library may create placeholder bindings with empty scopes
 	// in the caller env, which would falsely match any reference scopes.
-	libGI := p.env.GetGlobalIndexFromLibraryScopes(sym, symbolScopes)
+	libGI, ambiguous := p.env.TryGetGlobalIndexFromLibraryScopes(sym, symbolScopes)
+	if ambiguous {
+		return ambiguousReference(expr, "")
+	}
 	if libGI != nil {
 		// Env is nil for a DEFERRED index, which resolveGlobalWith never produces but
 		// the type does not forbid; a nil binding is not a refusal

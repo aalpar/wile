@@ -44,26 +44,47 @@ const ambiguousDefM = `(define-syntax def-m
            ((_) (begin (define given-x 2) %s))))))))
 `
 
+// ambiguousTop and ambiguousLocal place ref in m's template, with def-m and the
+// use at top level and inside a procedure body. (m) is on line 10 and 11.
+func ambiguousTop(ref string) string {
+	return fmt.Sprintf(ambiguousDefM, ref) + "(def-m m x)\n(m)"
+}
+
+func ambiguousLocal(ref string) string {
+	return "(define (f)\n" + fmt.Sprintf(ambiguousDefM, ref) + "(def-m m x)\n(m))\n(f)"
+}
+
 // TestAmbiguousReferenceIsALocatedCompilationError pins B45 (X21): a reference
 // whose scope set ties among incomparable binders is refused with
 // ErrAmbiguousBinding located at the identifier. It used to panic in the
 // environment's resolver and come back from the engine's recover as ErrInternal
 // with no location. The reference is a template identifier, so its location is
-// the (m) use that introduced it, as an unbound template identifier's is. The three rows are the three first resolver calls a
-// reference meets: the global probe of CompileSymbol's scoped arm, its local
-// probe, and set!'s.
+// the (m) use that introduced it, as an unbound template identifier's is.
+//
+// The rows are the positions whose first resolver call is not CompileSymbol's:
+// set!, the head of a call (expander macro lookup, validator form head, arity
+// check, HOF inlining, self-call and inline-candidate probes), a callback
+// argument (capture-safety), a lambda's free variable (closure capture), and a
+// let-syntax template identifier (definition-site pin). Each takes the
+// conservative answer on a tie, so CompileSymbol's located refusal is reported.
 func TestAmbiguousReferenceIsALocatedCompilationError(t *testing.T) {
+	const top, local = "includer.scm:10:1: ", "includer.scm:11:1: "
 	tcs := []struct {
 		name string
 		code string
 		want string
 	}{
-		{name: "global reference", code: fmt.Sprintf(ambiguousDefM, "(display x)") + "(def-m m x)\n(m)",
-			want: "includer.scm:10:1: "},
-		{name: "local reference", code: "(define (f)\n" + fmt.Sprintf(ambiguousDefM, "x") + "(def-m m x)\n(m))\n(f)",
-			want: "includer.scm:11:1: "},
-		{name: "set! target", code: fmt.Sprintf(ambiguousDefM, "(set! x 3)") + "(def-m m x)\n(m)",
-			want: "includer.scm:10:1: "},
+		{name: "global reference", code: ambiguousTop("(display x)"), want: top},
+		{name: "local reference", code: ambiguousLocal("x"), want: local},
+		{name: "set! target", code: ambiguousTop("(set! x 3)"), want: top},
+		{name: "local set! target", code: ambiguousLocal("(set! x 3)"), want: local},
+		{name: "global operator", code: ambiguousTop("(x 5)"), want: top},
+		{name: "local operator", code: ambiguousLocal("(x)"), want: local},
+		{name: "operator in a lambda", code: ambiguousTop("(lambda () (x))"), want: top},
+		{name: "callback argument", code: ambiguousTop("(map x '(1))"), want: top},
+		{name: "local callback argument", code: ambiguousLocal("(for-each x '(1))"), want: local},
+		{name: "captured local", code: ambiguousLocal("(lambda () x)"), want: local},
+		{name: "let-syntax template", code: ambiguousTop("(let-syntax ((k (syntax-rules () ((_) x)))) (k))"), want: top},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -78,9 +99,31 @@ func TestAmbiguousReferenceIsALocatedCompilationError(t *testing.T) {
 			for e := err; errors.As(e, &se); e = se.Cause {
 				deepest = se
 			}
-			qt.Assert(t, deepest, qt.IsNotNil)
+			qt.Assert(t, deepest != nil, qt.IsTrue, qt.Commentf("no SourcedError in %v", err))
 			got := fmt.Sprintf("%s:%d:%d: ", deepest.Source.File, deepest.Source.Start.Line(), deepest.Source.Start.Column())
 			qt.Check(t, got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestQuoteSyntaxOfAnAmbiguousIdentifierIsSyntax pins the other answer a tie
+// gets (X21): quote-syntax and a syntax template reference no binding, so a tie
+// is no error and no pin. Racket's (quote-syntax x) returns #<syntax x> for the
+// same program. Before, both panicked as ErrInternal.
+func TestQuoteSyntaxOfAnAmbiguousIdentifierIsSyntax(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{name: "quote-syntax", code: ambiguousTop("(quote-syntax x)")},
+		{name: "local quote-syntax", code: ambiguousLocal("(quote-syntax x)")},
+		{name: "syntax template", code: ambiguousLocal("(syntax-case 1 () (_ (syntax x)))")},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fstest.MapFS{}, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, "#'x")
 		})
 	}
 }

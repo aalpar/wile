@@ -158,7 +158,10 @@ func (p *ExpanderTimeContinuation) pruneUseSiteScopes(stx syntax.SyntaxValue) sy
 // a definition context the macro created. Its forms keep the use-site scope, as
 // a cond-expand or begin in that position does, so a define in the file cannot
 // capture the macro's binder a. Pruning every included form, as expandIncludedFile
-// did before, stripped the scope there too.
+// did before, stripped the scope there too. This holds for an include the macro
+// receives directly: under (m (pass (include ...))) pass's boundary marks it, and
+// the prune strips every use-site scope the run minted, m's included, as it does
+// for a plain (m (pass (define ...))). That is the pruner's rule, not the mark's.
 //
 // **The mark is the head's identity, not a scope.** The two fail in opposite
 // directions. A lost mark leaves the forms unpruned, so a definition the include

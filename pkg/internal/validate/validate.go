@@ -311,10 +311,11 @@ func headDenotesSpecialForm(
 // satisfies. The expander's lookupMacroBinding lets that pin fall through to the
 // use-site macro lookup instead, so the two sites agree on every pin but that one.
 //
-// GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
-// tie. That is deliberately not caught here: it reaches the compile path's
-// recover boundary and surfaces as a CompilationError chaining the sentinel,
-// which is the answer an ambiguous identifier is supposed to get.
+// An incomparable scope-set tie resolves to nil, so the spelling decides, as
+// compilation.headFormName answers for a tie. A head spelled as no form is then
+// a call, and the compiler refuses the operator reference with
+// ErrAmbiguousBinding located at the identifier. Raising here instead reached
+// the compile path's recover as ErrInternal, with no location.
 func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, sym *syntax.SyntaxSymbol) *environment.Binding {
 	if env == nil {
 		return nil
@@ -324,13 +325,15 @@ func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, s
 	}
 	scopes := syntax.ScopesOf(sym.Scopes())
 	if env.HasLocalVariableBinding(symVal, scopes) {
-		return env.GetBinding(symVal, scopes)
+		b, _ := env.TryGetBinding(symVal, scopes)
+		return b
 	}
 	pinned := environment.PinnedBinding(sym)
 	if environment.DenotedForm(pinned) != "" {
 		return pinned
 	}
-	return env.GetBinding(symVal, scopes)
+	b, _ := env.TryGetBinding(symVal, scopes)
+	return b
 }
 
 // referenceReachesBinderDirectly reports whether the reference sym reaches the
@@ -392,7 +395,8 @@ func referenceReachesBinderDirectly(
 	if !b.Scopes().IsEmpty() {
 		return true
 	}
-	libGI := env.GetGlobalIndexFromLibraryScopes(symVal, scopes)
+	// A tie in the library's store reaches nothing directly.
+	libGI, _ := env.TryGetGlobalIndexFromLibraryScopes(symVal, scopes)
 	if libGI == nil || libGI.Env == nil {
 		return false
 	}

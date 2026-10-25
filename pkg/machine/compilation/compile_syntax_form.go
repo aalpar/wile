@@ -163,11 +163,11 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(ctx context.Context
 		// outranked them. Scoping the binding and scoping the query are one
 		// change; splitting them in either order is a regression.
 		//
-		// A scoped query can raise ErrAmbiguousBinding on an incomparable
-		// equal-cardinality tie, which the wildcard's first-match early return
-		// structurally could not. Never observed across the matrix, the Scheme
-		// corpora or the Go suite; loud (a compile-time panic) if it ever is.
-		li := p.env.GetLocalIndex(symVal, syntax.ScopesOf(v.Scopes()))
+		// A scoped query can tie among incomparable equal-cardinality scope
+		// sets, which the wildcard's first-match early return structurally could
+		// not. A tie is no pattern variable: the identifier is template syntax,
+		// as (quote-syntax x) returns it, and a use of it refuses the tie, located.
+		li, _ := p.env.TryGetLocalIndex(symVal, syntax.ScopesOf(v.Scopes()))
 		if li != nil {
 			templateLocalEmits.Add(1)
 			// This is a pattern variable - load its value, through the shared

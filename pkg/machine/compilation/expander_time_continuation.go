@@ -385,8 +385,15 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	// it is the only arm that finds it (arm 2 looks a phase ABOVE p.env). So the fallback
 	// sits between the pin and arm 2, which makes pin-beats-ambient the whole behavior
 	// change.
+	//
+	// An incomparable tie is no macro use, and no head: the spelling decides, as
+	// headFormName answers for a tie, and a head that denotes no form is compiled
+	// as a reference, where CompileSymbol refuses the tie with its location.
 	var ambient *environment.Binding
-	bnd := p.env.GetBinding(sym0, syntax.ScopesOf(symbolScopes))
+	bnd, tied := p.env.TryGetBinding(sym0, syntax.ScopesOf(symbolScopes))
+	if tied {
+		return nil, nil
+	}
 	// Captured before ARM 2 reassigns bnd below; this is the head every return
 	// from here on reports.
 	head = bnd

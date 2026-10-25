@@ -100,11 +100,15 @@ func (p *CompileTimeContinuation) stampQuoteSyntaxIdentifier(sym *syntax.SyntaxS
 	if p.libraryScope != nil {
 		q = q.AddScope(p.libraryScope).(*syntax.SyntaxSymbol)
 	}
-	if p.env.GetLocalIndex(symVal, syntax.ScopesOf(scopes)) != nil {
+	// A tie pins nothing and is no error: quote-syntax references no binding, so
+	// the identifier is returned with its scopes, as Racket's (quote-syntax x)
+	// returns #<syntax x>. A use of it resolves, and refuses the tie, then.
+	li, tied := p.env.TryGetLocalIndex(symVal, syntax.ScopesOf(scopes))
+	if tied || li != nil {
 		return q
 	}
-	gi := p.env.GetGlobalIndexAcrossPhases(symVal, scopes)
-	if gi == nil {
+	gi, tied := p.env.TryGetGlobalIndexAcrossPhases(symVal, scopes)
+	if tied || gi == nil {
 		return q
 	}
 	return q.WithResolvedBinding(gi)
