@@ -15,8 +15,11 @@
 package values
 
 import (
+	"bufio"
 	"errors"
 	"io"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // Narrow interfaces for backing-type methods not in the stdlib.
@@ -82,14 +85,23 @@ func guardedReadRune(b *portBase, r io.RuneReader) (rune, int, error) {
 	c, n, err := r.ReadRune()
 	if n > 0 {
 		b.consumed(c, n)
+		return c, n, err
 	}
+	b.canUnread = false
 	return c, n, err
 }
 
+// guardedUnreadRune refuses an unread that has no read to undo, rather than
+// trusting the underlying reader to: one that allowed two unreads in a row
+// would move the stream back further than the one step of position history,
+// leaving the counted position ahead of the stream.
 func guardedUnreadRune(b *portBase, r RuneUnreader) error {
 	err := b.guardClosed()
 	if err != nil {
 		return err
+	}
+	if !b.canUnread {
+		return werr.WrapForeignErrorf(bufio.ErrInvalidUnreadRune, "%s: no rune read to unread", b.kind)
 	}
 	err = r.UnreadRune()
 	if err != nil {

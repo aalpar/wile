@@ -15,6 +15,7 @@
 package values
 
 import (
+	"bufio"
 	"bytes"
 	"io"
 	"testing"
@@ -217,4 +218,55 @@ func TestPortReadPositionAfterAFailedUnread(t *testing.T) {
 	at, prev := p.ReadPosition()
 	c.Assert(at, qt.Equals, NewSourceIndexes(1, 1, 1))
 	c.Assert(prev, qt.Equals, 'a')
+}
+
+// permissiveRunes is a rune reader whose UnreadRune steps back as often as it
+// is called, which the io.RuneScanner contract does not forbid an implementation
+// from doing.
+type permissiveRunes struct {
+	rs []rune
+	i  int
+}
+
+func (p *permissiveRunes) Read(b []byte) (int, error) {
+	return 0, io.EOF
+}
+
+func (p *permissiveRunes) ReadRune() (rune, int, error) {
+	if p.i >= len(p.rs) {
+		return 0, 0, io.EOF
+	}
+	r := p.rs[p.i]
+	p.i++
+	return r, 1, nil
+}
+
+func (p *permissiveRunes) UnreadRune() error {
+	if p.i > 0 {
+		p.i--
+	}
+	return nil
+}
+
+// TestPortRefusesASecondUnread pins P7.4 cleanup (v): the port keeps one step
+// of position history, so it refuses a second unread in a row itself rather
+// than letting a permissive reader move the stream back past it, which would
+// leave the counted position one rune ahead of the stream.
+func TestPortRefusesASecondUnread(t *testing.T) {
+	c := qt.New(t)
+	src := &permissiveRunes{rs: []rune("abc")}
+	p := NewStringInputPortWithReaders(src, src, src)
+	readRunes(t, p, 2)
+	urr, _ := p.AsRuneUnreader()
+	err := urr.UnreadRune()
+	c.Assert(err, qt.IsNil)
+	err = urr.UnreadRune()
+	c.Assert(err, qt.ErrorIs, bufio.ErrInvalidUnreadRune)
+	rr, _ := p.AsRuneReader()
+	r, _, err := rr.ReadRune()
+	c.Assert(err, qt.IsNil)
+	c.Assert(r, qt.Equals, 'b')
+	at, prev := p.ReadPosition()
+	c.Assert(at, qt.Equals, NewSourceIndexes(2, 2, 1))
+	c.Assert(prev, qt.Equals, 'b')
 }
