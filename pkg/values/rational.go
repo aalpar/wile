@@ -128,11 +128,11 @@ func (p *Rational) Kind() NumericKind {
 func rationalSimplifyDown(n Number) Number {
 	v := n.(*Rational)
 	if v.IsInteger() {
-		bi := &BigInteger{value: new(big.Int).Set(v.Num())}
-		if bi.value.IsInt64() {
-			return NewInteger(bi.value.Int64())
+		num := v.Num() // aliases the Rat's numerator; copy only when it outgrows int64
+		if num.IsInt64() {
+			return NewInteger(num.Int64())
 		}
-		return bi
+		return &BigInteger{value: new(big.Int).Set(num)}
 	}
 	return n
 }

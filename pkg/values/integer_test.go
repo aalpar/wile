@@ -324,6 +324,14 @@ func TestInteger_DivideMinInt64ByNegOne(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	_, ok = result.(*values.Rational)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("1 / 3 should stay Rational, got %T", result))
+
+	// The int64 boundary from both sides: quotients that still fit stay Integers.
+	result, err = values.NewInteger(math.MinInt64).Divide(values.NewInteger(1))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, qt.DeepEquals, values.NewInteger(math.MinInt64))
+	result, err = values.NewInteger(math.MinInt64).Divide(values.NewInteger(-2))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, qt.DeepEquals, values.NewInteger(1<<62))
 }
 
 // TestInteger_MultiplyMinInt64ByNegOne pins the -1 * MinInt64 overflow corner.
