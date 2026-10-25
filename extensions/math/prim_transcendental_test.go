@@ -16,6 +16,8 @@ package math_test
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/values"
@@ -598,6 +600,102 @@ func TestTranscendentalEdgeCases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
 			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestSqrtExptBigTier pins the tier rule for the sqrt and expt arms that used to
+// round-trip through float64: a non-square BigInteger or Rational operand of
+// sqrt, and an expt with a BigFloat operand, yield a BigFloat (or a BigComplex
+// with BigFloat parts). want is the Go type of the result; prefix is the leading
+// text of its printed form. Leading digits are cross-checked against Python's
+// decimal at 90 digits and, where they apply, racket and petite (whose results
+// are float64, so only their leading digits are comparable).
+func TestSqrtExptBigTier(t *testing.T) {
+	engine := newEngine(t)
+	tcs := []struct {
+		name   string
+		code   string
+		want   string
+		prefix string
+	}{
+		// sqrt, negative non-square BigInteger: racket 0.0+1e+200i (was 0.0+inf.0i)
+		{"sqrt neg bigint imag", `(imag-part (sqrt (- 1 (expt 10 400))))`, "*values.BigFloat", "1l+200"},
+		{"sqrt neg bigint real", `(real-part (sqrt (- 1 (expt 10 400))))`, "*values.BigFloat", "0.0"},
+		{"sqrt neg bigint kind", `(sqrt (- 1 (expt 10 400)))`, "*values.BigComplex", ""},
+		// sqrt, Rational: racket 5.773502691896257e+199 (was +inf.0) and 1e-200 (was 0.0)
+		{"sqrt huge rational", `(sqrt (/ (+ 1 (expt 10 400)) 3))`, "*values.BigFloat", "5.77350269189625764509148780501957455647601751270126876018602326483977672302"},
+		{"sqrt tiny rational", `(sqrt (/ 1 (+ 1 (expt 10 400))))`, "*values.BigFloat", "1l-200"},
+		{"sqrt small rational", `(sqrt 2/3)`, "*values.BigFloat", "0.81649658092772603273242802490196379732198249355222337614423085575032012581"},
+		{"sqrt neg rational imag", `(imag-part (sqrt -2/3))`, "*values.BigFloat", "0.81649658092772603273242802490196379732198249355222337614423085575032012581"},
+		// sqrt controls
+		{"sqrt perfect square bigint", `(sqrt (expt 10 400))`, "*values.BigInteger", "1000000000"},
+		{"sqrt pos bigint", `(sqrt (+ 1 (expt 10 400)))`, "*values.BigFloat", "1l+200"},
+		{"sqrt perfect square rational", `(sqrt 4/9)`, "*values.Rational", "2/3"},
+		// expt with a BigFloat operand (was a Float)
+		{"expt bigfloat bigfloat", `(expt #m2 #m0.5)`, "*values.BigFloat", "1.41421356237309504880168872420969807856967187537694807317667973799073247846"},
+		{"expt bigfloat exact int", `(expt #m2.5 2)`, "*values.BigFloat", "6.25l0"},
+		{"expt bigfloat cube", `(expt #m2 3)`, "*values.BigFloat", "8.0l0"},
+		{"expt bigfloat negative int", `(expt #m2 -1)`, "*values.BigFloat", "0.5l0"},
+		{"expt negative bigfloat odd", `(expt #m-2 3)`, "*values.BigFloat", "-8.0l0"},
+		{"expt negative bigfloat integral bigfloat", `(expt #m-2 #m3)`, "*values.BigFloat", "-8.0l0"},
+		{"expt general", `(expt #m1.5 #m2.5)`, "*values.BigFloat", "2.75567596063107536047194458404412781596169091573875389448677913815733042463"},
+		{"expt exact base bigfloat exponent", `(expt 2 #m0.5)`, "*values.BigFloat", "1.41421356237309504880168872420969807856967187537694807317667973799073247846"},
+		{"expt bigfloat rational exponent", `(expt #m2 1/2)`, "*values.BigFloat", "1.41421356237309504880168872420969807856967187537694807317667973799073247846"},
+		{"expt float base bigfloat exponent", `(expt 2.0 #m0.5)`, "*values.BigFloat", "1.41421356237309504880168872420969807856967187537694807317667973799073247846"},
+		{"expt bigfloat huge exponent", `(expt #m2 (expt 10 20))`, "*values.BigFloat", "+inf.0"},
+		{"expt minus one odd huge exponent", `(expt #m-1 (+ 1 (expt 10 20)))`, "*values.BigFloat", "-1.0l0"},
+		{"expt beyond float64 range", `(expt #m10 #m400.5)`, "*values.BigFloat", "3.162277660168379331998893544432718533719555139325216826857504852792594438639"},
+		// IEEE special values, answered in big.Float
+		{"expt zero base negative exponent", `(expt #m0 -1)`, "*values.BigFloat", "+inf.0"},
+		{"expt negative zero odd negative exponent", `(expt #m-0.0 -1)`, "*values.BigFloat", "-inf.0"},
+		{"expt zero base positive exponent", `(expt #m0 #m0.5)`, "*values.BigFloat", "0.0"},
+		{"expt infinite exponent", `(expt #m2 +inf.0)`, "*values.BigFloat", "+inf.0"},
+		{"expt infinite exponent small base", `(expt #m0.5 +inf.0)`, "*values.BigFloat", "0.0"},
+		// float64 rounds this base to 1.0, where pow(1, +inf) is 1.
+		{"expt infinite exponent base just above one", `(expt #m1.000000000000000000000000000001 +inf.0)`, "*values.BigFloat", "+inf.0"},
+		{"expt nan base zero exponent", `(expt (/ #m0 #m0) 0)`, "*values.BigFloat", "1.0l0"},
+		{"expt one base nan exponent", `(expt #m1 +nan.0)`, "*values.BigFloat", "1.0l0"},
+		{"expt nan exponent", `(expt #m2 +nan.0)`, "*values.BigFloat", "+nan.0"},
+		// negative base, non-integer exponent: stays on the complex path
+		{"expt negative bigfloat fractional", `(expt #m-2 #m0.5)`, "*values.Complex", ""},
+		// expt controls: no BigFloat operand, kinds unchanged
+		{"expt exact", `(expt 2 10)`, "*values.Integer", "1024"},
+		{"expt float", `(expt 2.0 0.5)`, "*values.Float", "1.4142135623730951"},
+		{"expt float base bigint exponent", `(expt 2.0 (expt 10 20))`, "*values.Float", "+inf.0"},
+		{"expt rational base float exponent", `(expt 2/3 0.5)`, "*values.Float", "0.816496580927726"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := eval(t, engine, tc.code).Internal()
+			c.Assert(fmt.Sprintf("%T", result), qt.Equals, tc.want)
+			c.Assert(strings.HasPrefix(result.SchemeString(), tc.prefix), qt.IsTrue,
+				qt.Commentf("%s printed %s", tc.code, result.SchemeString()))
+		})
+	}
+}
+
+// TestSqrtExptBigTierAgreement pins identities that a result rounded at the
+// wrong precision, or computed in float64, breaks: the two sqrt arms agree, and
+// expt agrees with sqrt and with multiplication.
+func TestSqrtExptBigTierAgreement(t *testing.T) {
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"negative bigint arm carries the positive arm's digits", `(eqv? (imag-part (sqrt (- 1 (expt 10 400)))) (sqrt (- (expt 10 400) 1)))`},
+		{"negative rational arm carries the positive arm's digits", `(eqv? (imag-part (sqrt -2/3)) (sqrt 2/3))`},
+		{"expt one half is sqrt", `(eqv? (expt #m2 #m0.5) (sqrt #m2))`},
+		{"expt one half is sqrt, exact base", `(eqv? (expt 3 #m0.5) (sqrt #m3))`},
+		{"expt keeps a wider-than-default operand precision", `(let ((w #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)) (eqv? (expt w 2) (* w w)))`},
+		{"expt wide operand one half is sqrt", `(let ((w #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)) (eqv? (expt w #m0.5) (sqrt w)))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			c.Assert(eval(t, engine, tc.code).Internal(), qt.Equals, values.TrueValue)
 		})
 	}
 }

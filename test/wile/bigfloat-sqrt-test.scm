@@ -52,6 +52,18 @@
     (test (sqrt #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)
           (imag-part (sqrt #m-2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)))))
 
+;; A non-square BigInteger or Rational has no precision of its own, so its root
+;; is a BigFloat at the default 256 bits; neither arm goes through float64, where
+;; 10^400 overflows. racket and petite agree on the leading digits.
+(test-group "unbounded exact operands"
+  (with-exact-comparison
+    (test "5.7735026918962576450914878050195745564760175127012687601860232648397767230293l+199"
+          (number->string (sqrt (/ (+ 1 (expt 10 400)) 3))))
+    (test 1l-200 (sqrt (/ 1 (+ 1 (expt 10 400)))))
+    (test #m0 (real-part (sqrt (- 1 (expt 10 400)))))
+    (test (sqrt (- (expt 10 400) 1)) (imag-part (sqrt (- 1 (expt 10 400)))))
+    (test (sqrt 2/3) (imag-part (sqrt -2/3)))))
+
 (test-group "non-finite"
   (with-exact-comparison
     (test #t (nan? (sqrt (/ #m0 #m0))))
