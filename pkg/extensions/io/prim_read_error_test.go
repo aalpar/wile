@@ -246,9 +246,10 @@ func TestReadOnClosedFilePortNamesTheFile(t *testing.T) {
 // TestReadAgreesWithReadCharOnInvalidUTF8 pins that read and read-char take
 // the same view of a byte that does not decode: both read it as U+FFFD, as
 // racket and petite do. read used to raise a rune error on a port read-char
-// read cleanly. Where U+FFFD may not appear (it is not an identifier
-// character) the read fails as it does for a written U+FFFD, with a lexical
-// error that names the character.
+// read cleanly. U+FFFD is an identifier character, so an invalid byte inside
+// a symbol joins it, as in racket. Where U+FFFD may not appear (ending a
+// radix-prefixed numeral) the read fails as it does for a written U+FFFD,
+// with a lexical error that names the character.
 func TestReadAgreesWithReadCharOnInvalidUTF8(t *testing.T) {
 	tcs := []struct {
 		name    string
@@ -261,7 +262,9 @@ func TestReadAgreesWithReadCharOnInvalidUTF8(t *testing.T) {
 		{name: "string", content: "\"a\xffb\"", code: "(let ((s (read p))) (list (string-length s) (char->integer (string-ref s 1)) (read p)))", want: "(3 65533 #<eof>)"},
 		{name: "comment", content: "; a\xffb\n42", code: "(list (read p) (read p))", want: "(42 #<eof>)"},
 		{name: "character", content: "#\\\xff", code: "(char->integer (read p))", want: "65533"},
-		{name: "symbol", content: "a\xffb", code: "(list (read p) (read p))", wantErr: "expecting token"},
+		{name: "symbol", content: "a\xffb", code: "(let ((s (symbol->string (read p)))) (list (string-length s) (char->integer (string-ref s 1)) (read p)))", want: "(3 65533 #<eof>)"},
+		{name: "symbol at end of input", content: "a\xff", code: "(let ((s (symbol->string (read p)))) (list (string-length s) (char->integer (string-ref s 1)) (read p)))", want: "(2 65533 #<eof>)"},
+		{name: "radix numeral", content: "#b1\xff", code: "(list (read p) (read p))", wantErr: "expecting delimiter"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -371,6 +374,41 @@ func TestReadFaultPastACloseParenIsIntertoken(t *testing.T) {
 			c.Check(strings.Contains(err.Error(), "tokenizer state failed)"), qt.IsTrue, qt.Commentf("got: %v", err))
 			tail := eval(t, engine, `(let* ((a `+step+`) (b `+step+`)) (list a b))`)
 			c.Check(tail.Internal().SchemeString(), qt.Equals, "(y eof)")
+		})
+	}
+}
+
+// TestReplacementCharacterIsAnIdentifierCharacter pins U+FFFD as a symbol
+// constituent in every reader entry, as racket and petite read it, and pins
+// the trap beside it: end of input arrives as the same utf8.RuneError, so a
+// symbol that ends the input must end there, with nothing appended.
+func TestReplacementCharacterIsAnIdentifierCharacter(t *testing.T) {
+	tcs := []struct {
+		name, code, want string
+	}{
+		{name: "read at end of input", code: `(let ((p (open-input-string "a"))) (list (read p) (read p)))`, want: "(a #<eof>)"},
+		{name: "read-syntax at end of input", code: `(let ((p (open-input-string "ab"))) (list (syntax->datum (read-syntax p)) (read-syntax p)))`, want: "(ab #<eof>)"},
+		{name: "read-char after a symbol at end of input", code: `(let ((p (open-input-string "a"))) (read p) (read-char p))`, want: "#<eof>"},
+		{name: "inside a symbol", code: `(symbol->string (read (open-input-string "a\xFFFD;b")))`, want: "\"a�b\""},
+		{name: "ending the input", code: `(string-length (symbol->string (read (open-input-string "a\xFFFD;"))))`, want: "2"},
+		{name: "in a list", code: `(let ((d (read (open-input-string "(\xFFFD;)")))) (list (length d) (symbol? (car d))))`, want: "(1 #t)"},
+		{name: "in a datum comment", code: `(read (open-input-string "#;a\xFFFD; 42"))`, want: "42"},
+		{name: "read-syntax inside a symbol", code: `(string-length (symbol->string (syntax->datum (read-syntax (open-input-string "a\xFFFD;b")))))`, want: "3"},
+		{name: "source text", code: "(symbol->string 'a�b)", want: "\"a�b\""},
+		{name: "source text at end of input", code: "'a", want: "a"},
+		{name: "written and read back", code: `(let* ((s (string->symbol "a\xFFFD;b")) (o (open-output-string))) (write s o) (eq? s (read (open-input-string (get-output-string o)))))`, want: "#t"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngineWithIOTest(t)
+			c.Check(eval(t, engine, tc.code).SchemeString(), qt.Equals, tc.want)
+			// The one-expression entry reads the same source.
+			expr, err := engine.Parse(context.Background(), tc.code)
+			c.Assert(err, qt.IsNil)
+			got, err := engine.Eval(context.Background(), expr)
+			c.Assert(err, qt.IsNil)
+			c.Check(got.SchemeString(), qt.Equals, tc.want)
 		})
 	}
 }

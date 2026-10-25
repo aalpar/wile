@@ -994,8 +994,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   does.** It raised a rune error, so `read`, `load`, `include` and `wile -f`
   rejected input `read-char` read cleanly; racket and petite both substitute.
   `"a<FF>b"` reads as a three-character string and a comment holding the byte is
-  skipped. U+FFFD is not a Wile identifier character, so a bare `a<FF>b` is a
-  lexical error naming the character, as a written U+FFFD is.
+  skipped. A bare `a<FF>b` reads as the symbol `a<U+FFFD>b`, as a written
+  U+FFFD does (next entry).
+
+- **U+FFFD is an identifier character.** `a<U+FFFD>b`, `(<U+FFFD>)` and
+  `#;a<U+FFFD> 42` (written, or with an invalid byte) read as racket and petite
+  read them: the symbol `a<U+FFFD>b`, a one-symbol list, and 42. Wile read `a`
+  and then failed with "expecting token". An unprefixed numeral still ends
+  before it, as `12a` reads 12 then `a` (racket and petite read `12<U+FFFD>` as
+  one symbol). `write` still bars such a symbol (`|a<U+FFFD>b|`), which reads
+  back as the same symbol.
 
 - **BREAKING (Go API): `compilation.ExpandAndCompile` and
   `ExpandAndCompileOptimized` take `(ctx, env, stx)`.** The `resolver`,

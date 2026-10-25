@@ -28,15 +28,16 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// TestReader_InvalidUTF8IsLocatedError pins the boundary contract for lexical
+// TestReader_LexicalFaultIsLocatedError pins the boundary contract for lexical
 // errors: a lexical fault must surface as a located *ParserError, not leak the
 // lower-layer *tokenizer.TokenizerError. The original cause stays matchable
 // through the wrap chain, and rendering the error must not panic, including
 // when the failure has no located token. Found by FuzzReadSyntax on "\x8b",
-// which then raised a rune error before any token; an invalid byte now reads
-// as U+FFFD, which starts no token, so the tokenless path is driven by a
-// reader that fails before its first rune.
-func TestReader_InvalidUTF8IsLocatedError(t *testing.T) {
+// which then raised a rune error before any token. An invalid byte now reads
+// as U+FFFD, an identifier character, so "\x8b" is the symbol U+FFFD; the
+// located fault is driven by a character that starts no token, and the
+// tokenless path by a reader that fails before its first rune.
+func TestReader_LexicalFaultIsLocatedError(t *testing.T) {
 	closed := werr.WrapForeignErrorf(werr.ErrPortClosed, "string-input-port is closed")
 	tcs := []struct {
 		name string
@@ -44,7 +45,7 @@ func TestReader_InvalidUTF8IsLocatedError(t *testing.T) {
 		// tokenless says the fault precedes every token.
 		tokenless bool
 	}{
-		{name: "invalid byte", rdr: strings.NewReader("\x8b")},
+		{name: "character that starts no token", rdr: strings.NewReader("§")},
 		{name: "reader fault before the first rune", rdr: &faultAfterReader{rdr: strings.NewReader("abc"), fault: closed}, tokenless: true},
 	}
 	for _, tc := range tcs {

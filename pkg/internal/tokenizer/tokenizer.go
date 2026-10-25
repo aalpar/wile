@@ -544,7 +544,7 @@ func (p *Tokenizer) read() {
 		p.readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrComment() //nolint:errcheck
 		p.term()
 		return
-	case isInitial(p.curr()): // read symbol
+	case p.atIdentifier(isInitial): // read symbol
 		p.state = TokenizerStateSymbol
 		p.value = utf8.AppendRune(p.value, p.curr())
 		p.next()
@@ -627,6 +627,20 @@ func (p *Tokenizer) scanLineEnding() bool {
 // curr returns the current rune being examined.
 func (p *Tokenizer) curr() rune {
 	return p.cur
+}
+
+// atIdentifier reports whether cur may stand where pred decides an identifier
+// character: one pred accepts, or a U+FFFD read from the input (written, or an
+// invalid byte read as one), which racket and petite also take as a symbol
+// constituent. Every identifier predicate admits the initials, so U+FFFD, an
+// initial, belongs to each. End of input and a reader fault leave cur at the
+// same utf8.RuneError with p.err set: that flag, never the rune, keeps them
+// out of a symbol.
+func (p *Tokenizer) atIdentifier(pred func(rune) bool) bool {
+	if p.err != nil {
+		return false
+	}
+	return pred(p.cur) || p.cur == utf8.RuneError
 }
 
 // mark marks the current position as the beginning of a new token.

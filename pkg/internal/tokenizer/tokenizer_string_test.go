@@ -672,9 +672,9 @@ func TestReplacementCharacterIsNotADecodeError(t *testing.T) {
 // it, so it behaves exactly like a written U+FFFD in every lexical context:
 // the same tokens and the same outcome. It used to raise a rune error, so
 // read rejected a port read-char accepts. Each row is checked against the
-// written character rather than a fixed answer, because U+FFFD is not a Wile
-// identifier character and the lexical rules, not the decoder, decide where
-// it may appear.
+// written character rather than a fixed answer: the lexical rules, not the
+// decoder, decide where it may appear. U+FFFD is an identifier character, so
+// an invalid byte inside a symbol joins it, as in racket.
 func TestInvalidUTF8ReadsAsReplacementCharacter(t *testing.T) {
 	tcs := []struct {
 		name string
@@ -695,12 +695,18 @@ func TestInvalidUTF8ReadsAsReplacementCharacter(t *testing.T) {
 		{name: "block comment", src: "#| aX |# 42", want: []string{"#| aX |#", "42"}},
 		{name: "vertical-line symbol", src: "|aXb|", want: []string{"|aXb|"}},
 		{name: "character", src: `#\X`, want: []string{`#\X`}},
-		{name: "character after x", src: `#\xX`, want: []string{`#\x`}, wantErr: MessageExpectingToken},
-		{name: "datum comment", src: "#;aX 42", want: []string{"#;", "a"}, wantErr: MessageExpectingToken},
-		{name: "symbol", src: "aXb", want: []string{"a"}, wantErr: MessageExpectingToken},
-		{name: "last byte of input", src: "aX", want: []string{"a"}, wantErr: MessageExpectingToken},
-		{name: "after open paren", src: "(X)", want: []string{"("}, wantErr: MessageExpectingToken},
-		{name: "after a numeral", src: "12X", want: []string{"12"}, wantErr: MessageExpectingToken},
+		// #\x is complete before a non-hex character, as before a letter.
+		{name: "character after x", src: `#\xX`, want: []string{`#\x`, "X"}},
+		{name: "datum comment", src: "#;aX 42", want: []string{"#;", "aX", "42"}},
+		{name: "symbol", src: "aXb", want: []string{"aXb"}},
+		{name: "last byte of input", src: "aX", want: []string{"aX"}},
+		{name: "alone", src: "X", want: []string{"X"}},
+		{name: "after open paren", src: "(X)", want: []string{"(", "X", ")"}},
+		// An unprefixed numeral splits before it, as 12a reads 12 then a.
+		{name: "after a numeral", src: "12X", want: []string{"12", "X"}},
+		{name: "after a sign", src: "+X", want: []string{"+X"}},
+		{name: "after a dot", src: ".X", want: []string{".X"}},
+		{name: "ending a radix numeral", src: "#b1X", want: []string{"#b", "1"}, wantErr: MessageExpectingDelimiterAfterNumber},
 		{name: "unterminated string", src: `"aX`, wantErr: MessageUnterminatedString, wantEOF: true},
 	}
 	for _, tc := range tcs {
@@ -772,31 +778,37 @@ func TestInvalidUTF8AdvancesByTheByteConsumed(t *testing.T) {
 // distinction, on the path that does not go through a string or character
 // literal. Next used to treat cur == utf8.RuneError as end of input, so a
 // literal U+FFFD between datums reported io.EOF and the remaining input was
-// discarded without a diagnostic. U+FFFD is not a Wile identifier character
-// (isInitial admits letters and the special initials only), so it is a lexical
-// error exactly like any other unusable character — but an error, not a silent
-// truncation. An invalid byte reads as U+FFFD, so it is the same error.
+// discarded without a diagnostic. U+FFFD is an identifier character (racket
+// and petite agree), so it reads as symbol text and the rest of the input is
+// read after it; an invalid byte reads as U+FFFD, so it does the same. A
+// character outside the identifier alphabet is still a lexical error, not a
+// silent truncation.
 func TestReplacementCharacterInDatumPositionIsNotEOF(t *testing.T) {
 	tcs := []struct {
-		name    string
-		input   string
+		name  string
+		input string
+		// wantErr is the fault that ends the scan; "" is a clean end of input.
 		wantErr string
-		// tokens successfully read before the error
+		// tokens successfully read before the error or the end
 		wantTokens []string
 	}{
-		{name: "leading", input: "� (a b) 42", wantErr: MessageExpectingToken, wantTokens: []string{}},
-		{name: "after_datum", input: "(a b)� 42", wantErr: MessageExpectingToken, wantTokens: []string{"(", "a", "b", ")"}},
-		{name: "splitting_symbol", input: "ab�cd", wantErr: MessageExpectingToken, wantTokens: []string{"ab"}},
+		{name: "leading", input: "� (a b) 42", wantTokens: []string{"�", "(", "a", "b", ")", "42"}},
+		{name: "after_datum", input: "(a b)� 42", wantTokens: []string{"(", "a", "b", ")", "�", "42"}},
+		{name: "inside_symbol", input: "ab�cd", wantTokens: []string{"ab�cd"}},
 		{name: "non_identifier_control", input: "§ (a b) 42", wantErr: MessageExpectingToken, wantTokens: []string{}},
-		{name: "invalid_utf8_leading", input: "\xff (a b) 42", wantErr: MessageExpectingToken, wantTokens: []string{}},
-		{name: "invalid_utf8_after_datum", input: "(a b)\xff 42", wantErr: MessageExpectingToken, wantTokens: []string{"(", "a", "b", ")"}},
+		{name: "invalid_utf8_leading", input: "\xff (a b) 42", wantTokens: []string{"�", "(", "a", "b", ")", "42"}},
+		{name: "invalid_utf8_after_datum", input: "(a b)\xff 42", wantTokens: []string{"(", "a", "b", ")", "�", "42"}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			toks, err := Tokenize(tc.input, false)
-			c.Assert(errors.Is(err, io.EOF), qt.IsFalse)
-			c.Assert(errors.Is(err, NewTokenizerError(tc.wantErr)), qt.IsTrue)
+			if tc.wantErr == "" {
+				c.Assert(err, qt.Equals, io.EOF)
+			} else {
+				c.Assert(errors.Is(err, io.EOF), qt.IsFalse)
+				c.Assert(errors.Is(err, NewTokenizerError(tc.wantErr)), qt.IsTrue)
+			}
 			// The scanner emits the failed token before reporting the error on
 			// the following call, so only the leading tokens are pinned.
 			got := make([]string, 0, len(toks))
@@ -807,6 +819,42 @@ func TestReplacementCharacterInDatumPositionIsNotEOF(t *testing.T) {
 				got = append(got, tok.String())
 			}
 			c.Check(got, qt.DeepEquals, tc.wantTokens)
+		})
+	}
+}
+
+// TestSymbolEndsAtEndOfInput pins the other side of U+FFFD's admission:
+// readNextRune reports end of input as the same utf8.RuneError, so an
+// identifier test on the rune alone would take end of input into the symbol
+// and read past it forever. The identifier predicates consult the scanner's
+// error instead; a symbol, a peculiar identifier, or a marker at end of input
+// ends there, with no U+FFFD appended.
+func TestSymbolEndsAtEndOfInput(t *testing.T) {
+	tcs := []struct {
+		input string
+		want  string
+		typ   TokenizerState
+	}{
+		{input: "a", want: "a", typ: TokenizerStateSymbol},
+		{input: "abc", want: "abc", typ: TokenizerStateSymbol},
+		{input: "+", want: "+", typ: TokenizerStateSymbol},
+		{input: "-", want: "-", typ: TokenizerStateSymbol},
+		{input: "+a", want: "+a", typ: TokenizerStateSymbol},
+		{input: "...", want: "...", typ: TokenizerStateSymbol},
+		{input: ".a", want: ".a", typ: TokenizerStateSymbol},
+		{input: "a\xff", want: "a\uFFFD", typ: TokenizerStateSymbol},
+		{input: "\xff", want: "\uFFFD", typ: TokenizerStateSymbol},
+		{input: "#foo", want: "#foo", typ: TokenizerStateMarker},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			toks, err := Tokenize(tc.input, false)
+			c.Assert(err, qt.Equals, io.EOF)
+			c.Assert(len(toks), qt.Equals, 1)
+			c.Check(toks[0].Type(), qt.Equals, tc.typ)
+			c.Check(toks[0].String(), qt.Equals, tc.want)
+			c.Check(toks[0].End().Index(), qt.Equals, len(tc.input))
 		})
 	}
 }

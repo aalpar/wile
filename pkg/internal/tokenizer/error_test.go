@@ -219,8 +219,10 @@ func TestFaultPastACompleteTokenIsIntertoken(t *testing.T) {
 func TestTokenizerErrorDistinguishesEOFFromLiteralReplacementChar(t *testing.T) {
 	c := qt.New(t)
 
-	// A literal U+FFFD starts no token: a real character the scanner rejected.
-	_, err := Tokenize("�", false)
+	// A literal U+FFFD cannot end a radix-prefixed numeral: a real character
+	// the scanner rejected. (It is an identifier character, so a context that
+	// rejects it is needed to raise on it at all.)
+	_, err := Tokenize("#b1�", false)
 	var terr *TokenizerError
 	c.Assert(errors.As(err, &terr), qt.IsTrue)
 	r, isChar := terr.Rune()
@@ -231,7 +233,7 @@ func TestTokenizerErrorDistinguishesEOFFromLiteralReplacementChar(t *testing.T) 
 
 	// An invalid byte reads as U+FFFD, so it is that same character, not end
 	// of input, even as the last byte of the source.
-	_, err = Tokenize("\xff", false)
+	_, err = Tokenize("#b1\xff", false)
 	c.Assert(errors.As(err, &terr), qt.IsTrue)
 	r, isChar = terr.Rune()
 	c.Check(isChar, qt.IsTrue)
