@@ -333,3 +333,16 @@ func TestReadComplexLongPrecisionMarker(t *testing.T) {
 		}
 	}
 }
+
+// TestInexactPrefixLeavesAnInexactBigComplex pins that #i is the identity on
+// an inexact BigComplex, as it is on a BigFloat: #i1.5l0+2i keeps its BigFloat
+// parts rather than narrowing to a float64 Complex.
+func TestInexactPrefixLeavesAnInexactBigComplex(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewNamespace().Runtime()
+	syn, err := NewParser(env, true, strings.NewReader("#i1.5l0+2i")).ReadSyntax(context.TODO())
+	c.Assert(err, qt.IsNil)
+	got := syn.Unwrap()
+	_, ok := got.(*values.BigComplex)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("#i1.5l0+2i read as %T", got))
+}

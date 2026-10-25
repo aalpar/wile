@@ -492,6 +492,11 @@ func MakeInexactNumber(n values.Number) values.Number {
 	case *values.Rational:
 		return values.NewFloat(v.Float64Truncated())
 	case *values.BigComplex:
+		// An inexact BigComplex (BigFloat parts, from an l-marked literal) is
+		// already inexact: #i leaves it, as it leaves a BigFloat.
+		if !v.IsExact() {
+			return v
+		}
 		reFloat := v.RealAsBigFloat().Float64Truncated()
 		imFloat := v.ImagAsBigFloat().Float64Truncated()
 		return values.NewComplexFromParts(reFloat, imFloat)

@@ -220,7 +220,7 @@ map the four size specifications onto what it has. Wile has two:
 so it is the only one that changes the type. It is symmetric on output: a
 `BigFloat` writes with `l` (`1e1000` renders as `1l+1000`), because writing `e`
 would claim default precision and the value would read back as a `Float`.
-A complex literal with an `l`-marked part reads as the `BigComplex`
+A rectangular complex literal with an `l`-marked part reads as the `BigComplex`
 `make-rectangular` builds from the parts read standing alone (`1.5l0+2i` has two
 BigFloat parts). The writer omits the marker inside a complex, so a `BigComplex`
 does not yet round-trip (`componentString` in `pkg/values/big_complex.go` says

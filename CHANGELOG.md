@@ -866,7 +866,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **A complex literal with an `l`-marked part reads as a `BigComplex`.** Each
+- **A rectangular complex literal with an `l`-marked part reads as a `BigComplex`.** Each
   part is read by its own spelling and the pair built as `make-rectangular`
   builds it: `0.0+1.5l0i` and `1.5l0+2i` have two BigFloat parts (were float64
   complexes), `+1.5l0i` is `0.0+1.5i` with BigFloat parts, `1.5l0+0i` is the
