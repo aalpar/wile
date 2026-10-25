@@ -109,7 +109,10 @@ import (
 // This is the shared implementation used by both the expander
 // (ExpandBodyWithDefineSyntax) and the compiler (predeclareDefineBinding,
 // predeclareDefineFromValidatedRecursive).
-func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, scopes syntax.Scopes, source *syntax.SourceContext) {
+//
+// A global slot it creates is noted in mints, the unit's log (nil-safe), so the
+// placeholder does not outlive a unit that fails.
+func predeclareBinding(mints *unitMints, env *environment.EnvironmentFrame, name *values.Symbol, scopes syntax.Scopes, source *syntax.SourceContext) {
 	if env.LocalEnvironment() != nil {
 		_, _ = env.MaybeCreateLocalBinding(name, environment.BindingTypeVariable, scopes, source)
 		return
@@ -126,6 +129,7 @@ func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, s
 	// own coordinates, so the source stamp below cannot land on another slot of the
 	// same name — one belonging to another expansion, or to the sealed startup set.
 	ownIndex, created := env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable, scopes)
+	mints.note(ownIndex, created)
 	binding := env.GlobalEnvironment().GetOwnGlobalBinding(ownIndex)
 	if binding == nil {
 		return

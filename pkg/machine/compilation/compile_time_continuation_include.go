@@ -385,7 +385,7 @@ func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) 
 		return
 	}
 	name := nameSym.Unwrap().(*values.Symbol)
-	predeclareBinding(p.env, name, nameSym.Scopes(), nameSym.SourceContext())
+	predeclareBinding(p.mints, p.env, name, nameSym.Scopes(), nameSym.SourceContext())
 }
 
 // CompileIncludeCi compiles an include-ci expression (R7RS §4.1.7 / §5.6).

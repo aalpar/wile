@@ -16,6 +16,7 @@ package compilation
 
 import (
 	"context"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
@@ -99,11 +100,30 @@ func ExpandAndCompileOptimized(ctx context.Context, env *environment.Environment
 // the package defaults, without touching env's namespace, which a library env
 // shares with the running engine. A nil resolver leaves the compiler on
 // env.FileResolver(); every other caller passes the namespace readers.
-func expandAndCompileScoped(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int, maxExpandDepth int, libraryScope *syntax.Scope) (*machine.NativeTemplate, error) {
+//
+// It is also the unit boundary for top-level slots. Everything the unit mints
+// for a name it defines (the expander's predeclaration, the define's own
+// declaration) is logged in one unitMints, and a unit that does not return its
+// template retracts them, so a failed define leaves the name unbound rather
+// than bound to #<void>. The unit is registered with the store for its whole
+// span (BeginUnit/EndUnit), which is what lets a failing unit tell whether
+// anyone else can hold its slots. The deferred call covers a panic unwinding
+// through here as well as an error return, and retracts before EndUnit so the
+// failing unit still counts itself in flight.
+func expandAndCompileScoped(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int, maxExpandDepth int, libraryScope *syntax.Scope) (q *machine.NativeTemplate, rerr error) {
 	evaluator := machine.NewVMMacroEvaluator()
+	mints := &unitMints{store: env.GlobalEnvironment(), phase: env.PhaseLevel()}
+	mints.store.BeginUnit(mints.phase)
+	defer func() {
+		if q == nil {
+			mints.retract()
+		}
+		mints.store.EndUnit(mints.phase, q != nil)
+	}()
 
 	expander := NewExpanderTimeContinuation(ctx, env, evaluator)
 	expander.libraryScope = libraryScope
+	expander.mints = mints
 	expander.SetMaxDepth(maxExpandDepth)
 	expanded, err := expander.ExpandTopLevelExpression(stx)
 	if err != nil {
@@ -114,6 +134,7 @@ func expandAndCompileScoped(ctx context.Context, env *environment.EnvironmentFra
 	cctx := NewCompileTimeCallContext(ctx, false)
 	compiler := NewCompileTimeContinuation(tpl, env, evaluator)
 	compiler.libraryScope = libraryScope
+	compiler.mints = mints
 	if resolver != nil {
 		compiler.fileResolver = resolver
 	}
@@ -124,4 +145,64 @@ func expandAndCompileScoped(ctx context.Context, env *environment.EnvironmentFra
 	}
 
 	return tpl, nil
+}
+
+// unitMints is one expand+compile unit's log of the top-level slots it
+// created, kept so that a unit which fails can retract them.
+//
+// Which slots it may retract is decided by structure, not by inspecting
+// compiled code. A slot belongs here only if this unit's own create answered
+// created == true in the unit's own store at the unit's own phase, so it did
+// not exist before the unit began; a redefinition reuses the old slot and is
+// never logged, which is what keeps a failed redefine's old value. Code that
+// loads such a slot can only have been compiled after it was minted. Code
+// compiled by this unit lives in the template the failing unit never returns,
+// so it never runs. Code compiled by ANOTHER unit at the same phase can hold
+// it: one that committed in the window (a transformer that evaluates into the
+// same environment commits while this unit is still expanding), or one still
+// in flight on another SRFI-18 thread. Each entry records the store's commit
+// count when it was minted, and RetractGlobalBinding removes the slot only if
+// that count is unchanged and this unit is the only one in flight, checked
+// under the same lock hold as the removal; otherwise it keeps the slot as a
+// placeholder. Phases are hermetic for resolution, so a unit at another phase
+// (every define-syntax right-hand side is one, at phase+1) cannot hold it and
+// does not block.
+//
+// nil is a valid log that records nothing: every compiler and expander outside
+// a unit (library bodies, compile-time halves) carries one.
+type unitMints struct {
+	store *environment.GlobalEnvironmentFrame
+	phase environment.Phase
+	slots []mintedSlot
+}
+
+// mintedSlot is one unitMints entry: the pin and binding the create returned,
+// and the store's commit count at the unit's phase at that moment.
+type mintedSlot struct {
+	gi      *environment.GlobalIndex
+	binding *environment.Binding
+	commits uint64
+}
+
+// note logs gi when created reports that the call creating it minted it here.
+// A slot in another store (a library body's own) or at another phase is not
+// this unit's: the in-flight and commit counts that guard it are kept per
+// phase, and this unit is counted only at its own.
+func (p *unitMints) note(gi *environment.GlobalIndex, created bool) {
+	if p == nil || !created || gi == nil || gi.Env != p.store || gi.Phase() != p.phase {
+		return
+	}
+	b := p.store.GetOwnGlobalBinding(gi)
+	if b == nil {
+		return
+	}
+	p.slots = append(p.slots, mintedSlot{gi: gi, binding: b, commits: p.store.UnitCommits(p.phase)})
+}
+
+// retract removes every logged slot no other unit can be holding, and reverts
+// the rest to placeholders, newest first.
+func (p *unitMints) retract() {
+	for _, s := range slices.Backward(p.slots) {
+		p.store.RetractGlobalBinding(s.gi, s.binding, s.commits)
+	}
 }

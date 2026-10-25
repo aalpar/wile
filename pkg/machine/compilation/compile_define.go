@@ -68,6 +68,9 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// does a reference see", and a coordinate-blind scoped one takes the first-seen
 	// of two equally unscoped candidates — for (define car …) the SEALED car, whose
 	// Stable stamp would then refuse the shadow as a redefine.
+	// created is never true here for a define a unit compiles: the unit's
+	// expander already minted the slot (noteDefineExpanded, which every
+	// expanded define reaches) and logged it, so there is nothing to note.
 	ownIndex, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, symbolScopes)
 
 	// Top-level immutability (WithImmutableTopLevel, the engine default): when enabled, a

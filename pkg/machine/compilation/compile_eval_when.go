@@ -201,8 +201,10 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 		return nil
 	}
 
-	// Create expander for macro expansion
+	// Create expander for macro expansion. The body compiles into this unit's
+	// template, so what its expansion mints is this unit's to retract.
 	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator)
+	expander.mints = p.mints
 
 	// Collect all expressions
 	var exprs []syntax.SyntaxValue

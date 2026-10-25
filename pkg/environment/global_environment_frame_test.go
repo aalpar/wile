@@ -909,3 +909,70 @@ func TestExactBindingAtReportsAnExactTie(t *testing.T) {
 	c.Assert(errors.Is(err, werr.ErrAmbiguousBinding), qt.IsTrue,
 		qt.Commentf("panic must carry ErrAmbiguousBinding, got %v", r))
 }
+
+// TestGlobalFrame_RetractGlobalBinding pins the inverse of a create. The
+// caller is a unit in flight at phase 0 that minted x. The slot is removed
+// only while it still holds the minted, still-Void binding, no other unit is
+// in flight at that phase and none has committed since the mint; a slot kept
+// for the last two reasons is reverted to a placeholder (Stable cleared,
+// Predeclared restored) so a later define can bind it.
+func TestGlobalFrame_RetractGlobalBinding(t *testing.T) {
+	sym := values.NewSymbol("x")
+	rows := []struct {
+		name string
+		// between runs after the mint and before the retract.
+		between     func(ge *GlobalEnvironmentFrame, gi *GlobalIndex)
+		wantRemoved bool
+		// wantReverted: the kept slot reads as a placeholder again.
+		wantReverted bool
+	}{
+		{"private placeholder", func(*GlobalEnvironmentFrame, *GlobalIndex) {
+		}, true, false},
+		{"value written", func(ge *GlobalEnvironmentFrame, gi *GlobalIndex) {
+			qt.Assert(t, ge.SetOwnGlobalValue(gi, values.NewInteger(1)), qt.IsNil)
+		}, false, false},
+		{"another unit in flight", func(ge *GlobalEnvironmentFrame, _ *GlobalIndex) {
+			ge.BeginUnit(PhaseRuntime)
+		}, false, true},
+		{"another unit committed", func(ge *GlobalEnvironmentFrame, _ *GlobalIndex) {
+			ge.BeginUnit(PhaseRuntime)
+			ge.EndUnit(PhaseRuntime, true)
+		}, false, true},
+		{"another unit failed", func(ge *GlobalEnvironmentFrame, _ *GlobalIndex) {
+			ge.BeginUnit(PhaseRuntime)
+			ge.EndUnit(PhaseRuntime, false)
+		}, true, false},
+		{"a commit at another phase", func(ge *GlobalEnvironmentFrame, _ *GlobalIndex) {
+			ge.BeginUnit(PhaseRuntime + 1)
+			ge.EndUnit(PhaseRuntime+1, true)
+		}, true, false},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			c := qt.New(t)
+			env := NewNamespace().Runtime()
+			ge := env.GlobalEnvironment()
+			ge.BeginUnit(PhaseRuntime)
+			mintCommits := ge.UnitCommits(PhaseRuntime)
+			gi, created := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, syntax.Scopes{})
+			c.Assert(created, qt.IsTrue)
+			b := ge.GetOwnGlobalBinding(gi)
+			c.Assert(b, qt.IsNotNil)
+			// What a failed define under the immutable top level leaves.
+			b.UpdateMeta(func(m *BindingMeta) bool {
+				m.Stable = true
+				m.Predeclared = false
+				return true
+			})
+			row.between(ge, gi)
+			c.Assert(ge.RetractGlobalBinding(gi, b, mintCommits), qt.Equals, row.wantRemoved)
+			c.Assert(env.GetGlobalIndexWithScopes(sym, values.EmptyScopes()) == nil, qt.Equals, row.wantRemoved)
+			if row.wantRemoved {
+				return
+			}
+			m := b.Meta()
+			c.Assert(m.Stable, qt.Equals, !row.wantReverted)
+			c.Assert(m.Predeclared, qt.Equals, row.wantReverted)
+		})
+	}
+}
