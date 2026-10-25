@@ -223,6 +223,7 @@ func PrimLoad(cc machine.CallContext) error {
 	// Create parser with file tracking for source locations
 	rdr := bufio.NewReader(f)
 	p := parser.NewParserWithFile(env, true, rdr, resolvedPath)
+	p.SetFileIsPath(true)
 
 	// Read and evaluate each expression
 	var lastValue = values.Void

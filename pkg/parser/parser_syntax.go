@@ -24,7 +24,9 @@ import (
 
 // newSourceContext creates a SourceContext from a token.
 func (p *Parser) newSourceContext(t tokenizer.Token) *syntax.SourceContext {
-	return syntax.NewSourceContext(t.String(), p.file, t.Start(), t.End())
+	q := syntax.NewSourceContext(t.String(), p.file, t.Start(), t.End())
+	q.FileIsPath = p.fileIsPath
+	return q
 }
 
 func (p *Parser) wrapSyntax(o values.Value, t tokenizer.Token) *syntax.SyntaxObject {

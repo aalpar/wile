@@ -127,8 +127,9 @@ func TestReadErrorFromFilePortNamesTheFile(t *testing.T) {
 }
 
 // Every way of opening a file port names it with the engine-resolved absolute
-// path, whatever spelling the program wrote: the reader stamps the name into
-// SourceContext.File, which include resolution treats as a real path.
+// path, whatever spelling the program wrote, and marks the name as a path: the
+// reader stamps it into SourceContext.File with FileIsPath set, which is what
+// lets include resolution steer by it.
 func TestEveryFileFactoryNamesItsPort(t *testing.T) {
 	tests := []struct {
 		name string
@@ -151,6 +152,9 @@ func TestEveryFileFactoryNamesItsPort(t *testing.T) {
 			// The name is cleaned and symlink-resolved: ".." and "." do not
 			// survive into a name a program can read back.
 			qt.New(t).Assert(p.PortName(), qt.Equals, filepath.Join(f.dir, tc.file))
+			// ...and is marked as the path it is, so what is read from the port
+			// may steer an include (SourceContext.FileIsPath).
+			qt.New(t).Assert(p.PortNameIsPath(), qt.IsTrue)
 		})
 	}
 }
@@ -169,10 +173,13 @@ func TestStringPortStaysUnnamed(t *testing.T) {
 		   (write (syntax-source (read-syntax (open-input-string "(a b)"))) o)
 		   (get-output-string o))`)
 	qt.New(t).Assert(got, qt.Equals, "#f")
+	p, ok := f.eval(`(open-input-string "(a b)")`).(*values.PortObject)
+	qt.New(t).Assert(ok, qt.IsTrue)
+	qt.New(t).Assert(p.PortNameIsPath(), qt.IsFalse)
 }
 
 // The port name feeds include resolution (lexicalIncludeContext reads
-// SourceContext.File as a path). These pin that a form read from a port
+// SourceContext.File as a path when the port marked it so). These pin that a form read from a port
 // includes relative to where its file really is, and that a port that is not
 // a file never steers an include.
 func TestPortNameSteersIncludeConsistently(t *testing.T) {

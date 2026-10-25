@@ -904,7 +904,10 @@ func (p *Engine) EvalMultipleWithSource(ctx context.Context, code string, source
 // unit so all top-level defines are mutually visible — a (define (f) (g)) may
 // precede (define (g) ...). This is the forward-reference behavior of loading a
 // file, and the recommended entry point for evaluating a whole program or script.
-// source labels the code in diagnostics; pass "" if none.
+// source labels the code in diagnostics; pass "" if none. It is a label, not a
+// location, whatever its shape: a relative include resolves against the load
+// stack ctx carries ([Engine.ContextWithLoadPath]), and against source's
+// directory only when ctx carries none.
 //
 // It contrasts with [Engine.EvalMultiple], which compiles and runs each top-level
 // form independently. The (begin ...) wrapper is built structurally rather than by

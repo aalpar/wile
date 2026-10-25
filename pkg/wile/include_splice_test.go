@@ -548,12 +548,14 @@ func TestIncludeWithoutASourceFileFallsBack(t *testing.T) {
 }
 
 // TestIncludeLabelDoesNotOverrideTheLoadStack pins the guard in
-// lexicalIncludeContext. A relative SourceContext.File is a caller's diagnostic
-// label (EvalProgram's name argument, which the CLI sets to the path as typed),
-// not a location on disk. With a live load stack (Engine.ContextWithLoadPath,
+// lexicalIncludeContext. EvalProgram's name argument is a caller's diagnostic
+// label (the CLI sets it to the path as typed), not a location the reader
+// opened, whatever its shape. With a live load stack (Engine.ContextWithLoadPath,
 // which the CLI installs, and whose entry the CLI computes AFTER a prior file's
 // set-current-directory!), the stack names the real file and the label must not
-// override it: here the label points at a decoy directory.
+// override it: here the label points at a decoy directory. The absolute row is
+// the shape rule's blind spot: an absolute label steered the include until the
+// rule keyed on SourceContext.FileIsPath.
 func TestIncludeLabelDoesNotOverrideTheLoadStack(t *testing.T) {
 	tmp := t.TempDir()
 	write := func(rel, data string) {
@@ -565,19 +567,29 @@ func TestIncludeLabelDoesNotOverrideTheLoadStack(t *testing.T) {
 	write("lbl/inc.scm", `(define v 'decoy)`)
 	t.Chdir(tmp)
 
-	ctx := context.Background()
-	engine, err := wile.NewEngine(ctx,
-		wile.WithProfile(wile.KitchenSink),
-		wile.WithAuthorizer(nil),
-		wile.WithSourceOS(),
-	)
-	qt.Assert(t, err, qt.IsNil)
-	loadCtx, err := engine.ContextWithLoadPath(ctx, filepath.Join(tmp, "real", "main.scm"))
-	qt.Assert(t, err, qt.IsNil)
-
-	result, err := engine.EvalProgram(loadCtx, `(include "inc.scm") v`, "lbl/x.scm")
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result.SchemeString(), qt.Equals, "real")
+	labels := []struct {
+		name  string
+		label string
+	}{
+		{name: "relative label", label: "lbl/x.scm"},
+		{name: "absolute label", label: filepath.Join(tmp, "lbl", "x.scm")},
+	}
+	for _, tc := range labels {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			engine, err := wile.NewEngine(ctx,
+				wile.WithProfile(wile.KitchenSink),
+				wile.WithAuthorizer(nil),
+				wile.WithSourceOS(),
+			)
+			qt.Assert(t, err, qt.IsNil)
+			loadCtx, err := engine.ContextWithLoadPath(ctx, filepath.Join(tmp, "real", "main.scm"))
+			qt.Assert(t, err, qt.IsNil)
+			result, err := engine.EvalProgram(loadCtx, `(include "inc.scm") v`, tc.label)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, "real")
+		})
+	}
 }
 
 // deferredIncludeEngine returns an engine over fsys with the load path set to
@@ -615,15 +627,14 @@ func TestCondExpandIncludeUnderALiveStackWithRelativePaths(t *testing.T) {
 	qt.Assert(t, result.SchemeString(), qt.Equals, "9")
 }
 
-// TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths documents,
-// as current behaviour, what lexicalIncludeContext cannot yet do: with a virtual
-// FS and a live load stack, a relative include nested under a form compiled
-// after its file was popped (eval-when; cond-expand no longer, it splices at
-// expand time) resolves against the stack's top, as it did before the lexical
-// rule. The guard cannot tell a real relative path from a caller's label.
-// Filed in todo/tier1-security-correctness.md ("Filed by the P5.7 crosscheck").
-// When that row is fixed this test should flip to want "9".
-func TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths(t *testing.T) {
+// TestDeferredIncludeUnderALiveStackWithRelativePaths pins the lexical rule for
+// a form compiled after its file was popped (eval-when; cond-expand splices at
+// expand time) under a virtual FS and a live load stack: the include resolves
+// against the directory of the file holding the form, not the stack's top. A
+// virtual-FS path is relative, so the rule cannot key on shape; it keys on
+// SourceContext.FileIsPath, which the include reader sets and a caller's label
+// does not (TestIncludeLabelDoesNotOverrideTheLoadStack is the other side).
+func TestDeferredIncludeUnderALiveStackWithRelativePaths(t *testing.T) {
 	fsys := fstest.MapFS{
 		"sub/b.scm": &fstest.MapFile{Data: []byte(`(eval-when (load eval) (include "c.scm"))`)},
 		"sub/c.scm": &fstest.MapFile{Data: []byte(`(define cv 9)`)},
@@ -633,7 +644,53 @@ func TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths(t *testi
 
 	result, err := engine.EvalProgram(loadCtx, `(include "sub/b.scm") cv`, "includer.scm")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result.SchemeString(), qt.Equals, `"decoy"`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "9")
+}
+
+// TestQuotedIncludeResolvesAgainstItsOwnFile pins that every reader of a real
+// file marks its forms as coming from a path, not only the include reader. A
+// quote-syntax'd include keeps its file's source and is compiled (by eval) after
+// that file was popped, under a load stack that names the includer. Under a
+// virtual FS (relative paths are real) the producer's mark is the only thing
+// that tells the form's file from a caller's label; each row's producer is a
+// different reader. Setup and use run as separate programs so the file is off
+// the stack when the include compiles.
+func TestQuotedIncludeResolvesAgainstItsOwnFile(t *testing.T) {
+	def := `(define stx (quote-syntax (include "c.scm")))`
+	fsys := fstest.MapFS{
+		"sub/m.scm":   &fstest.MapFile{Data: []byte(def)},
+		"sub/lib.sld": &fstest.MapFile{Data: []byte(`(define-library (sub lib) (export stx) (import (scheme base)) (begin ` + def + `))`)},
+		"sub/c.scm":   &fstest.MapFile{Data: []byte(`9`)},
+		"c.scm":       &fstest.MapFile{Data: []byte(`"decoy"`)},
+	}
+	tcs := []struct {
+		name  string
+		setup string
+	}{
+		{name: "include reader", setup: `(include "sub/m.scm")`},
+		{name: "load reader", setup: `(load "sub/m.scm")`},
+		{name: "library reader", setup: `(import (sub lib))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			engine, err := wile.NewEngine(ctx,
+				wile.WithProfile(wile.KitchenSink),
+				wile.WithAuthorizer(nil),
+				wile.WithSourceFS(wile.StdLibFS),
+				wile.WithSourceFS(fsys),
+				wile.WithLibraryPaths(".", "lib"),
+			)
+			qt.Assert(t, err, qt.IsNil)
+			loadCtx, err := engine.ContextWithLoadPath(ctx, "main.scm")
+			qt.Assert(t, err, qt.IsNil)
+			_, err = engine.EvalProgram(loadCtx, tc.setup, "includer.scm")
+			qt.Assert(t, err, qt.IsNil)
+			result, err := engine.EvalProgram(loadCtx, `(eval stx (interaction-environment))`, "includer.scm")
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, "9")
+		})
+	}
 }
 
 // libraryIncludeEngine is evalIncludeProgram's engine with "lib" as the library
