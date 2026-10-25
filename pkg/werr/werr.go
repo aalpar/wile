@@ -108,6 +108,10 @@ var (
 	ErrFileStat             = NewStaticError("file stat failed")
 	ErrCircularDependency   = NewStaticError("circular library dependency")
 	ErrUnexportedIdentifier = NewStaticError("identifier not exported")
+	// ErrIncludeCycle marks an include of a file that is already being included,
+	// directly or through other files. It is not ErrCircularDependency, whose text
+	// names a library.
+	ErrIncludeCycle = NewStaticError("include cycle")
 
 	// Threading errors
 

@@ -26,6 +26,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -564,4 +565,109 @@ func TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths(t *testi
 	result, err := engine.EvalProgram(loadCtx, `(include "sub/b.scm") cv`, "includer.scm")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, `"decoy"`)
+}
+
+// libraryIncludeEngine is evalIncludeProgram's engine with "lib" as the library
+// search path, for includes reached from a library declaration.
+func libraryIncludeEngine(t *testing.T, fsys fstest.MapFS) *wile.Engine {
+	t.Helper()
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithAuthorizer(nil), // the test exercises include resolution, not the sandbox
+		wile.WithSourceFS(fsys),
+		wile.WithLibraryPaths("lib"),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	return engine
+}
+
+// TestIncludeCycleIsRefused pins A10: a file included from inside itself,
+// directly or through other files, is refused with ErrIncludeCycle naming the
+// files of the cycle, once, at the first revisit. Before, the splice recursed
+// until the expansion depth guard fired (~1 min, a ~5.5 MB error of one wrapped
+// layer per level). Racket and Chez do not detect it either (both loop until
+// killed), so this is a robustness choice, not conformance.
+//
+// The exact chain is what pins each push site: without the declaration-level
+// include's own check, the expander's would catch the same cycle one hop late
+// and print the file three times.
+func TestIncludeCycleIsRefused(t *testing.T) {
+	fsys := fstest.MapFS{
+		"self.scm":           &fstest.MapFile{Data: []byte(`(define s 1) (include "self.scm")`)},
+		"cyca.scm":           &fstest.MapFile{Data: []byte(`(define a 1) (include "cycb.scm")`)},
+		"cycb.scm":           &fstest.MapFile{Data: []byte(`(define b 2) (include "cyca.scm")`)},
+		"dot.scm":            &fstest.MapFile{Data: []byte(`(include "./dot.scm")`)},
+		"ci.scm":             &fstest.MapFile{Data: []byte(`(include-ci "ci.scm")`)},
+		"top.scm":            &fstest.MapFile{Data: []byte(`(include "sub/back.scm")`)},
+		"sub/back.scm":       &fstest.MapFile{Data: []byte(`(include "../top.scm")`)},
+		"lib/declinc.sld":    &fstest.MapFile{Data: []byte(`(define-library (declinc) (include-library-declarations "declinc-d.scm"))`)},
+		"lib/declinc-d.scm":  &fstest.MapFile{Data: []byte(`(include "declinc-d.scm")`)},
+		"lib/declself.sld":   &fstest.MapFile{Data: []byte(`(define-library (declself) (include-library-declarations "declself-d.scm"))`)},
+		"lib/declself-d.scm": &fstest.MapFile{Data: []byte(`(include-library-declarations "declself-d.scm")`)},
+	}
+	tcs := []struct {
+		name  string
+		code  string
+		chain string
+	}{
+		{name: "self include", code: `(include "self.scm")`, chain: "include: self.scm -> self.scm: include cycle"},
+		{name: "two-file cycle", code: `(include "cyca.scm")`, chain: "include: cyca.scm -> cycb.scm -> cyca.scm: include cycle"},
+		{name: "operand spelled with ./", code: `(include "dot.scm")`, chain: "include: dot.scm -> dot.scm: include cycle"},
+		{name: "include-ci", code: `(include-ci "ci.scm")`, chain: "include-ci: ci.scm -> ci.scm: include cycle"},
+		{name: "cycle through a subdirectory", code: `(include "top.scm")`, chain: "include: top.scm -> sub/back.scm -> top.scm: include cycle"},
+		{name: "declaration-level include", code: `(import (declinc))`, chain: "include: lib/declinc-d.scm -> lib/declinc-d.scm: include cycle"},
+		{name: "include-library-declarations", code: `(import (declself))`, chain: "include-library-declarations: lib/declself-d.scm -> lib/declself-d.scm: include cycle"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := libraryIncludeEngine(t, fsys)
+			_, err := engine.EvalProgram(context.Background(), tc.code, "includer.scm")
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, werr.ErrIncludeCycle), qt.IsTrue, qt.Commentf("%v", err))
+			qt.Assert(t, strings.Count(err.Error(), tc.chain), qt.Equals, 1, qt.Commentf("%v", err))
+		})
+	}
+}
+
+// TestIncludeOfAFileTwiceIsNotACycle is the control for TestIncludeCycleIsRefused:
+// a file included again after its first include returned, or reached by two
+// paths of a diamond, is not on the load stack the second time.
+func TestIncludeOfAFileTwiceIsNotACycle(t *testing.T) {
+	fsys := fstest.MapFS{
+		"bump.scm":  &fstest.MapFile{Data: []byte(`(set! n (+ n 1))`)},
+		"left.scm":  &fstest.MapFile{Data: []byte(`(include "bump.scm")`)},
+		"right.scm": &fstest.MapFile{Data: []byte(`(include "bump.scm")`)},
+	}
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{name: "sequential", code: `(define n 0) (include "bump.scm" "bump.scm") (include "bump.scm") n`, want: "3"},
+		{name: "diamond", code: `(define n 0) (include "left.scm" "right.scm") n`, want: "2"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fsys, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestLibraryDeclarationIncludeResolvesAgainstTheSldDirectory pins a
+// declaration-level (include ...) in a .sld: it resolves against the .sld's own
+// directory, not the library search path or the includer's directory, both of
+// which hold a decoy.
+func TestLibraryDeclarationIncludeResolvesAgainstTheSldDirectory(t *testing.T) {
+	fsys := fstest.MapFS{
+		"lib/sub/dm.sld":   &fstest.MapFile{Data: []byte(`(define-library (sub dm) (export v) (include "impl.scm"))`)},
+		"lib/sub/impl.scm": &fstest.MapFile{Data: []byte(`(define v 'sub)`)},
+		"lib/impl.scm":     &fstest.MapFile{Data: []byte(`(define v 'lib)`)},
+		"impl.scm":         &fstest.MapFile{Data: []byte(`(define v 'root)`)},
+	}
+	engine := libraryIncludeEngine(t, fsys)
+	result, err := engine.EvalProgram(context.Background(), `(import (sub dm)) v`, "includer.scm")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "sub")
 }

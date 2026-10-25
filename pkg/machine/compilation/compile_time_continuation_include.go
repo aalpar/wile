@@ -21,6 +21,7 @@ import (
 	"io"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
@@ -152,6 +153,30 @@ func readIncludedForms(ctx context.Context, env *environment.EnvironmentFrame, r
 	return forms, filePath, nil
 }
 
+// pushIncludedFile pushes filePath, the file the including form (named by form)
+// has just read, on stack for the extent of its processing, or refuses with
+// ErrIncludeCycle when the file is already on it: it is being included from
+// inside itself, directly or through other files, and would be spliced into
+// itself until the expansion depth guard fired (or, for
+// include-library-declarations, until the Go stack overflowed). The error names
+// the files of the cycle, outermost first.
+//
+// stack must be the live one on ctx, not lexicalIncludeContext's resolution
+// copy, whose top can be a caller's label. Entries compare cleaned, as a
+// ContextWithLoadPath argument need not be; resolver output already is.
+func pushIncludedFile(stack *sourceload.LoadStack, form, filePath string) error {
+	paths := stack.Paths()
+	for i, pth := range paths {
+		if filepath.Clean(pth) != filepath.Clean(filePath) {
+			continue
+		}
+		chain := strings.Join(append(paths[i:], filePath), " -> ")
+		return werr.WrapForeignErrorf(werr.ErrIncludeCycle, "%s: %s", form, chain)
+	}
+	stack.Push(filePath)
+	return nil
+}
+
 // CompileInclude compiles an include expression.
 // It reads and compiles all forms from the specified files in order.
 // Each form is expanded and compiled in the current environment.
@@ -210,7 +235,10 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			stack = sourceload.NewLoadStack()
 			inner.ctx = sourceload.WithLoadStack(inner.ctx, stack)
 		}
-		stack.Push(filePath)
+		err = pushIncludedFile(stack, "include", filePath)
+		if err != nil {
+			return err
+		}
 		defer stack.Pop()
 
 		// Process forms with letrec* semantics: pre-declare all bindings first

@@ -57,7 +57,8 @@ func (p *ExpanderTimeContinuation) expandIncludeCiForm(sym *syntax.SyntaxSymbol,
 //
 //   - The load stack is pushed AFTER the read and popped after the forms are
 //     expanded, on a child expander's ctx, so a relative include nested in the
-//     file resolves against the file's directory. The child exists because ctx is
+//     file resolves against the file's directory, and a file already on the stack
+//     is refused as a cycle (pushIncludedFile). The child exists because ctx is
 //     a field copied by value (newChildExpander): there is nowhere else for the
 //     derived ctx to live.
 //
@@ -132,12 +133,14 @@ func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, 
 		stack = sourceload.NewLoadStack()
 		ctx = sourceload.WithLoadStack(ctx, stack)
 	}
-	stack.Push(filePath)
+	err = pushIncludedFile(stack, sym.Key(), filePath)
+	if err != nil {
+		return nil, err
+	}
 	defer stack.Pop()
 
 	child := p.newChildExpander(p.env)
 	child.ctx = ctx
-	child.libraryScope = p.libraryScope
 	expanded, err := child.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "include: failed to expand %s", name)

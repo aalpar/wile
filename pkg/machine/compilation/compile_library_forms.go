@@ -456,7 +456,10 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ctctx Compil
 			stack = sourceload.NewLoadStack()
 			inner.ctx = sourceload.WithLoadStack(inner.ctx, stack)
 		}
-		stack.Push(filePath)
+		err = pushIncludedFile(stack, "include-library-declarations", filePath)
+		if err != nil {
+			return p.wrapCompilationError(err)
+		}
 		defer stack.Pop()
 		for _, stx := range forms {
 			err := p.processLibraryDeclaration(inner, lib, stx)
