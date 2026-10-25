@@ -170,7 +170,7 @@ func PrimContinuationMarkSetFirst(mc machine.CallContext) error {
 //
 // Racket §10.5: continuation-mark-set->list*
 func PrimContinuationMarkSetToListStar(mc machine.CallContext) error {
-	v, ok, tag, err := optionalValueAndPromptTag(mc.Arg(2), "continuation-mark-set->list*")
+	v, noneGiven, tag, err := optionalValueAndPromptTag(mc.Arg(2), "continuation-mark-set->list*")
 	if err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func PrimContinuationMarkSetToListStar(mc machine.CallContext) error {
 	}
 
 	noneVal := values.Value(values.FalseValue)
-	if ok {
+	if noneGiven {
 		noneVal = v
 	}
 
