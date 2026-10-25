@@ -16,6 +16,7 @@ package parser
 
 import (
 	"errors"
+	"io"
 	"math"
 	"math/big"
 	"strconv"
@@ -356,7 +357,17 @@ func (p *Parser) parseRadixNumeral(base int) (syntax.SyntaxValue, tokenizer.Toke
 // parse (#x1+2i): the rule is about the operand being a numeral, and a numeral
 // that fails is reported by its own parser.
 func (p *Parser) requireRadixNumeral() error {
-	switch p.cur.Type() {
+	if isNumeralState(p.cur.Type()) {
+		return nil
+	}
+	return NewParserErrorWithWrapf(werr.ErrNotANumber, p.cur,
+		"radix prefix requires a numeral, not %q", p.cur.String())
+}
+
+// isNumeralState reports whether t is the state of a numeral token, the operand
+// a radix prefix requires.
+func isNumeralState(t tokenizer.TokenizerState) bool {
+	switch t {
 	case tokenizer.TokenizerStateUnsignedInteger, tokenizer.TokenizerStateSignedInteger,
 		tokenizer.TokenizerStateUnsignedDecimalFraction, tokenizer.TokenizerStateSignedDecimalFraction,
 		tokenizer.TokenizerStateUnsignedRationalFraction, tokenizer.TokenizerStateSignedRationalFraction,
@@ -367,10 +378,35 @@ func (p *Parser) requireRadixNumeral() error {
 		tokenizer.TokenizerStateUnsignedImaginaryNan, tokenizer.TokenizerStateSignedImaginaryNan,
 		tokenizer.TokenizerStateUnsignedComplex, tokenizer.TokenizerStateSignedComplex,
 		tokenizer.TokenizerStateUnsignedComplexPolar, tokenizer.TokenizerStateSignedComplexPolar:
-		return nil
+		return true
 	}
-	return NewParserErrorWithWrapf(werr.ErrNotANumber, p.cur,
-		"radix prefix requires a numeral, not %q", p.cur.String())
+	return false
+}
+
+// IsNumeral reports whether text is one whole numeral as the reader's tokenizer
+// scans it after prefix: a radix prefix ("#b", "#o", "#d", "#x"), which scans
+// text as the radix's numeral, or "#z"/"#m", which scans text as the digits
+// attached to that marker. It is the lexical half of the reader's number
+// syntax, for string->number, which has no tokenizer in front of it: the
+// conversions it shares with the reader are built on strconv and math/big,
+// which also accept Go spellings (0x1p3, 1_0, nan, 1/-2) that the tokenizer
+// never forms.
+//
+// The prefix is what makes "whole" checkable: a numeral after an explicit radix
+// prefix, or attached to #z/#m, must end at a delimiter, so a trailing fault
+// surfaces as a tokenizer error instead of a second token. The text comparison
+// rejects intertoken space and comments the token boundary would hide.
+func IsNumeral(prefix, text string) bool {
+	toks, err := tokenizer.Tokenize(prefix+text, false)
+	if !errors.Is(err, io.EOF) || len(toks) == 0 {
+		return false
+	}
+	last := toks[len(toks)-1]
+	switch last.Type() {
+	case tokenizer.TokenizerStateBigInteger, tokenizer.TokenizerStateBigFloat:
+		return len(toks) == 1 && text != "" && last.String() == prefix+text
+	}
+	return len(toks) == 2 && isNumeralState(last.Type()) && last.String() == text
 }
 
 // parseRational parses a rational number string like "3/4" or "-1/2".
@@ -401,36 +437,14 @@ func (p *Parser) parseImaginary(s string) (values.Number, error) {
 	return q, nil
 }
 
-// parsePolarComplex parses a polar complex number string like "1@1.5708", "+2@0.5", "-3@1.0"
-// and converts it to rectangular form using: real = r*cos(θ), imag = r*sin(θ)
+// parsePolarComplex parses a polar complex number token's text, wrapping
+// ParsePolarStringNumber's reject with the token's location.
 func (p *Parser) parsePolarComplex(s string) (*values.Complex, error) {
-	// Find the @ separator
-	before, after, ok := strings.Cut(s, "@")
-	if !ok {
-		return nil, NewParserErrorf(p.cur, "invalid polar complex number: %s (no @ separator found)", s)
-	}
-
-	// Split into magnitude and angle parts
-	magPart := before
-	anglePart := after
-
-	// Parse magnitude
-	mag, err := parseFloatOrInfnan(magPart)
+	q, err := ParsePolarStringNumber(s)
 	if err != nil {
-		return nil, NewParserErrorf(p.cur, "invalid magnitude in polar complex: %s", magPart)
+		return nil, NewParserErrorWithWrapf(err, p.cur, "invalid polar complex number: %s", s)
 	}
-
-	// Parse angle
-	angle, err := parseFloatOrInfnan(anglePart)
-	if err != nil {
-		return nil, NewParserErrorf(p.cur, "invalid angle in polar complex: %s", anglePart)
-	}
-
-	// Convert polar to rectangular: real = r*cos(θ), imag = r*sin(θ)
-	rel := mag * math.Cos(angle)
-	iam := mag * math.Sin(angle)
-
-	return values.NewComplexFromParts(rel, iam), nil
+	return q, nil
 }
 
 // isRationalString reports whether s has the coarse shape of a rational literal:
@@ -657,7 +671,7 @@ func (p *Parser) parseDecimalFractionWithBase(base int) (syntax.SyntaxValue, tok
 func (p *Parser) parseBigFloat() (syntax.SyntaxValue, tokenizer.Token, error) {
 	q1, err := ParseBigFloatLiteral(schemeutil.TrimPrefixCI(p.cur.String(), "#m"))
 	if err != nil {
-		return nil, p.cur, NewParserErrorWithWrapf(err, p.cur, "invalid big float: %s", p.cur.String())
+		return nil, p.cur, NewParserErrorWithWrap(err, p.cur, "invalid big float")
 	}
 	q := p.wrapSyntax(q1, p.cur)
 	return q, p.cur, nil

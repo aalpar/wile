@@ -682,6 +682,23 @@ func TestStringToNumberPrefixes(t *testing.T) {
 		{`(string->number "#x-.8")`, "*values.Float -0.5"},
 		{`(string->number "#o1e2")`, "#f"},
 		{`(string->number "#x.")`, "#f"},
+		// Go float and integer syntax the conversions underneath accept, and a
+		// signed denominator: the reader, racket and petite refuse all of them.
+		{`(string->number "nan")`, "#f"},
+		{`(string->number "0x1p3")`, "#f"},
+		{`(string->number "0x1.8p1")`, "#f"},
+		{`(string->number "1_0.5")`, "#f"},
+		{`(string->number "1e1_0")`, "#f"},
+		{`(string->number "#z#e1_0")`, "#f"},
+		{`(string->number "1/-2")`, "#f"},
+		{`(string->number "1/+2")`, "#f"},
+		{`(string->number "#z#d4/-2")`, "#f"},
+		{`(string->number "#m#d1/-2")`, "#f"},
+		{`(string->number "ff" 16)`, "*values.Integer 255"},
+		{`(string->number "1/-2" 16)`, "#f"},
+		// Polar, as the reader reads it (racket and petite read it too).
+		{`(string->number "1@0")`, "*values.Complex 1.0+0.0i"},
+		{`(string->number "1e1@0")`, "*values.Complex 10.0+0.0i"},
 		// Reader-defect rows TestStringToNumberAgreesWithReader leaves out.
 		{`(string->number "#x+inf.0")`, "*values.Float +inf.0"},
 		{`(string->number "#e#m#d0.1")`, "*values.Rational 3602879701896397/36028797018963968"},
@@ -739,6 +756,9 @@ func TestStringToNumberAgreesWithReader(t *testing.T) {
 		"", "42", "+5", "-7", "007", "101", "1f", "1.5", "0.1", "-.5", "1.", "1/3", "10/2",
 		"1e3", "1d3", "1s2", "1l0", "1p3", "+inf.0", "-nan.0", "1+2i", "+i", "inf",
 		"1.2345678901234567890123456789", "99999999999999999999999",
+		// Polar, and Go spellings strconv and math/big take that the reader does not.
+		"1@0", "1e1@0", "-2@1.5", "nan", "NaN", "Inf", "+inf", "1_0", "1_0.5", "1e1_0",
+		"0x1p3", "0x1.8p1", "0X10", "1/-2", "1/+2", "4/-2", "1E3", "1D3", "+INF.0", "-NAN.0",
 	}
 	for _, pf := range prefixes {
 		for _, num := range numerals {
@@ -757,11 +777,12 @@ func TestStringToNumberAgreesWithReader(t *testing.T) {
 	}
 }
 
-// readerDefectRow reports whether (prefix, numeral) falls in one of the two
+// readerDefectRow reports whether (prefix, numeral) falls in one of the three
 // classes TestStringToNumberAgreesWithReader leaves out.
 func readerDefectRow(prefix, numeral string) bool {
 	lower := strings.ToLower(prefix)
-	if strings.Contains(numeral, "inf.0") || strings.Contains(numeral, "nan.0") {
+	infnan := strings.ToLower(numeral)
+	if strings.Contains(infnan, "inf.0") || strings.Contains(infnan, "nan.0") {
 		if strings.Contains(lower, "#b") || strings.Contains(lower, "#o") || strings.Contains(lower, "#x") {
 			return true
 		}
@@ -771,9 +792,7 @@ func readerDefectRow(prefix, numeral string) bool {
 		return true
 	}
 	// A run is the prefixes between introducers; #z and #m start a new one.
-	for _, run := range strings.FieldsFunc(lower, func(r rune) bool {
-		return r == 'z' || r == 'm'
-	}) {
+	for run := range strings.SplitSeq(strings.ReplaceAll(lower, "#z", "#m"), "#m") {
 		if strings.Count(run, "#e")+strings.Count(run, "#i") > 1 {
 			return true
 		}

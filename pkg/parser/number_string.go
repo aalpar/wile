@@ -503,23 +503,36 @@ func WidenToBigFloat(v values.Value) (values.Number, error) {
 // The tokenizer admits two spellings big.ParseFloat does not: an <infnan>
 // (#m+inf.0), converted through float64, whose NaN NewBigFloatFromFloat64 maps
 // to the BigFloat NaN flag; and the short exponent markers s/f/d/l, which mean
-// e (R7RS §7.1.1) and are folded to it. It also refuses one spelling
-// big.ParseFloat accepts and the tokenizer never forms, the binary exponent
-// (1p3), so string->number, which has no tokenizer in front of it, cannot read
-// what the reader cannot.
+// e (R7RS §7.1.1) and are folded to it. It trusts its input to be the
+// tokenizer's; string->number checks that first with IsNumeral.
 func ParseBigFloatLiteral(s string) (values.Number, error) {
 	special, ok := ParseSpecialFloat(s)
 	if ok {
 		return values.NewBigFloatFromFloat64(special.Value), nil
 	}
-	if strings.ContainsAny(s, "pP") {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-			"ParseBigFloatLiteral: binary exponents are not Scheme notation: %s", s)
-	}
 	q := values.NewBigFloatFromString(schemeutil.NormalizeExponentMarker(s))
 	if q == nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-			"ParseBigFloatLiteral: malformed, or past the %d-bit precision limit: %s", values.MaxBigFloatLiteralPrecision, s)
+			"big float literal: malformed, or past the %d-bit precision limit: %s", values.MaxBigFloatLiteralPrecision, s)
 	}
 	return q, nil
+}
+
+// ParsePolarStringNumber parses a polar complex numeral ("1@1.5708", "-3@1.0")
+// and converts it to rectangular form, real = r*cos(θ) and imag = r*sin(θ).
+// Shared by the reader (Parser.parsePolarComplex) and string->number.
+func ParsePolarStringNumber(s string) (*values.Complex, error) {
+	magPart, anglePart, ok := strings.Cut(s, "@")
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "polar complex: no @ separator: %s", s)
+	}
+	mag, err := parseFloatOrInfnan(magPart)
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "polar complex: invalid magnitude: %s", magPart)
+	}
+	angle, err := parseFloatOrInfnan(anglePart)
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "polar complex: invalid angle: %s", anglePart)
+	}
+	return values.NewComplexFromParts(mag*math.Cos(angle), mag*math.Sin(angle)), nil
 }

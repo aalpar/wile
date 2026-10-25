@@ -212,6 +212,8 @@ func parseIntroduced(marker byte, operand string, radix int) values.Number {
 		return nil
 	case radix != 10:
 		return widenOrNil(widen, parseStringToNumber(operand, radix))
+	case !parser.IsNumeral("#"+string(marker), operand):
+		return nil
 	case marker == 'z':
 		q := values.NewBigIntegerFromString(operand, 10)
 		if q == nil {
@@ -274,7 +276,10 @@ func makeExact(n values.Number, text string, radix int) (values.Number, error) {
 // Returns nil if the string is not a valid number.
 // R7RS §6.2.7: handles integers, rationals, floats, complex, and special values.
 func parseStringToNumber(input string, radix int) values.Number {
-	if len(input) == 0 {
+	// The conversions below sit on strconv and math/big, which also take Go
+	// spellings (0x1p3, 1_0, nan, 1/-2); the reader's tokenizer decides what is
+	// a numeral, so they only ever convert one.
+	if !parser.IsNumeral(radixPrefix[radix], input) {
 		return nil
 	}
 
@@ -298,6 +303,14 @@ func parseStringToNumber(input string, radix int) values.Number {
 		if err == nil {
 			return n
 		}
+	}
+
+	if radix == 10 && strings.Contains(input, "@") {
+		n, err := parser.ParsePolarStringNumber(input)
+		if err != nil {
+			return nil //nolint:nilerr // §6.2.7 has no error channel: a malformed numeral answers #f
+		}
+		return n
 	}
 
 	// Try integer first.
@@ -345,34 +358,16 @@ func parseStringToNumber(input string, radix int) values.Number {
 	}
 
 	// A non-decimal radix still reads a decimal point (#x1.8 is 1.5), as the
-	// reader's parseDecimalFractionWithBase does. The shape is checked first
-	// because big.ParseFloat, underneath, also takes an exponent and "inf",
-	// neither of which the reader scans under a radix prefix.
-	if isRadixFraction(input, radix) {
-		n, err := parser.ParseRealFloatStringWithBase(input, radix)
-		if err == nil {
-			return n
-		}
+	// reader's parseDecimalFractionWithBase does.
+	n, err := parser.ParseRealFloatStringWithBase(input, radix)
+	if err != nil {
+		return nil //nolint:nilerr // §6.2.7 has no error channel: a malformed numeral answers #f
 	}
-	return nil
+	return n
 }
 
-// isRadixFraction reports whether s is an optionally signed run of radix digits
-// with exactly one '.', and at least one digit.
-func isRadixFraction(s string, radix int) bool {
-	if s != "" && (s[0] == '+' || s[0] == '-') {
-		s = s[1:]
-	}
-	whole, frac, ok := strings.Cut(s, ".")
-	digits := whole + frac
-	if !ok || digits == "" || strings.ContainsAny(digits, "+-") {
-		return false
-	}
-	// SetString with an explicit base admits only that base's digits (and a
-	// leading sign, excluded above); a second '.' fails it too.
-	_, ok = new(big.Int).SetString(digits, radix)
-	return ok
-}
+// radixPrefix maps a radix to the prefix the reader scans its numerals under.
+var radixPrefix = map[int]string{2: "#b", 8: "#o", 10: "#d", 16: "#x"}
 
 // --- Loss-signal primitives ---
 //

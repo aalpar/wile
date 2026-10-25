@@ -768,7 +768,8 @@ Chez, and MIT:
 
 The radix governs the fractional digits too, so `#b1.9` and `#o1.8` are errors.
 As R7RS §6.2.4 requires, a literal written with a decimal point is inexact
-whatever its radix.
+whatever its radix. `string->number` reads them the same way, under a radix
+argument as under a prefix: `(string->number "1.8" 16)` is 1.5.
 
 A related consequence: **a numeral carrying an explicit radix prefix must end at
 a delimiter.** `#b19` is an error rather than the number 1 followed by the number
