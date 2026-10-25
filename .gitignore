@@ -6,8 +6,9 @@ private/
 # covered by a personal global gitignore on the maintainer's machine, but the
 # repo must protect itself for fresh clones, CI, and other contributors.
 #
-# /plans/ and /memory/ are restored here after being dropped in b5c0e18b. Both
-# paths are currently TRACKED SYMLINKS into ../wile-memoplans/, so these two
+# /plans/ and /memory/ are restored here after being dropped in b5c0e18b; /todo/
+# joined them 2026-10-24 when the work rows moved beside the plans. All three
+# paths are currently TRACKED SYMLINKS into ../wile-memoplans/, so these
 # patterns are inert today — a tracked path ignores .gitignore. They exist for
 # the case the symlinks are ever replaced by real directories, which is measured
 # to make 422 of the 430 files in that archive stageable by a bare `git add -A`.
@@ -25,6 +26,7 @@ private/
 # confidential material. Going forward is the only direction that works.
 /plans/
 /memory/
+/todo/
 
 # Claude Code plugin state: skills scaffolding and the Remember plugin's rolling
 # session history. Agent working memory, not a build input, and .remember/ holds
