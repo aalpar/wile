@@ -1170,42 +1170,6 @@ func TestEscapeFromATimerEndsIt(t *testing.T) {
 	}
 }
 
-// TestEscapeFromATimerCancelsWhatDerivesFromIt pins that an escape ends the timer's
-// context as a normal return does: a thread started inside the with-timeout, whose
-// context derives from the timer's, is cancelled either way, so its wait ends
-// before the join's timeout. An escape that only restored the context outside the
-// timer, without cancelling it, left the thread waiting.
-func TestEscapeFromATimerCancelsWhatDerivesFromIt(t *testing.T) {
-	tcs := []struct {
-		name  string
-		leave string
-		want  string
-	}{
-		{"escape", `(raise 'x)`, "(caught thread-ended)"},
-		{"normal return", `'ret`, "(ret thread-ended)"},
-	}
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			c := qt.New(t)
-			engine := newEngine(t)
-			defer func() {
-				_ = engine.Close()
-			}()
-			result, err := evalWithWatchdog(t, engine, `
-(define m (make-mutex))
-(mutex-lock! m)
-(define th (vector #f))
-(list (guard (e (#t 'caught))
-        (with-timeout 5000 (lambda (k) 'h)
-          (lambda () (vector-set! th 0 (thread-start! (make-thread (lambda () (mutex-lock! m) 'got)))) `+tc.leave+`)))
-      (guard (e (#t 'thread-ended))
-        (thread-join! (vector-ref th 0) 1 'still-waiting)))`, 5*time.Second)
-			c.Assert(err, qt.IsNil)
-			c.Assert(result.SchemeString(), qt.Equals, tc.want)
-		})
-	}
-}
-
 // TestTimerExpiryNamesTheTimerThatFired pins that an expiry is answered by the
 // with-timeout whose timer fired, not by the innermost one armed. An outer timer's
 // expiry ran an armed inner with-timeout's handler first, early (the outer handler
@@ -2033,67 +1997,25 @@ func TestTimerSupersedesFailureButNotDenial(t *testing.T) {
 	}
 }
 
-// TestJoinReportsJoineeCancellationAsUncaught pins that a JOINEE dying of a
-// cancelled wait is the joinee's outcome, not the joiner's cancellation. Join wraps
-// every joinee error in UncaughtThreadException, whose Unwrap lets errors.Is see
-// the ErrOperationCancelled inside; reading that as the joiner's own cancellation
-// raised "thread-join!: cancelled before the wait completed" from a joiner nobody
-// cancelled. The thread-sleep! row is the one that fails on HEAD for that reason:
-// there a cancelled sleep already raised, while a cancelled mutex-lock! answered #f.
-// The thread here is started inside a with-timeout thunk that returns normally,
-// which cancels the thread's ctx (with plain context.Canceled) on the way out. The
-// thunk returns only once the thread has signalled that it is at its wait, so the
-// cancellation reaches the wait rather than the thread's first VM poll.
-func TestJoinReportsJoineeCancellationAsUncaught(t *testing.T) {
-	waits := []struct {
-		site string
-		wait string
-	}{
-		{"mutex-lock!", `(mutex-lock! m)`},
-		{"thread-sleep!", `(thread-sleep! 10)`},
-	}
-	for _, w := range waits {
-		t.Run(w.site, func(t *testing.T) {
-			c := qt.New(t)
-			engine := newEngine(t)
-			defer func() {
-				_ = engine.Close()
-			}()
-			result, err := evalWithWatchdog(t, engine, `
-(define m (make-mutex))
-(mutex-lock! m)
+// startJoineeThenCancelHost starts a thread running body in a run under a ctx
+// the host then cancels, once the thread has signalled that it is past its
+// rendezvous: body dies of that cancellation, at the VM poll if it is busy and in
+// its wait if it is parked. The thread is bound to t for the caller's next run.
+// (A with-timeout thunk's normal return no longer ends a thread it started; the
+// expiry path is pinned in pkg/machine, whose injected clock this package cannot
+// reach.)
+func startJoineeThenCancelHost(t *testing.T, engine *wile.Engine, body string) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	_, err := evalWithWatchdogCtx(ctx, t, engine, `
 (define rm (make-mutex))
 (define rcv (make-condition-variable))
 (define t (make-thread (lambda ()
   (mutex-lock! rm) (condition-variable-signal! rcv) (mutex-unlock! rm)
-  `+w.wait+`)))
-(define h (with-timeout 5000 (lambda (k) 'timed-out)
-  (lambda () (mutex-lock! rm) (thread-start! t) (mutex-unlock! rm rcv) 'thunk-returned)))
-(list h (guard (e ((uncaught-exception? e) (error-object-message (uncaught-exception-reason e)))
-                  ((error-object? e) (list 'error-object (error-object-message e))))
-          (thread-join! t)))`, 5*time.Second)
-			c.Assert(err, qt.IsNil)
-			c.Assert(result.SchemeString(), qt.Equals,
-				`(thunk-returned "`+w.site+`: cancelled before the wait completed: context canceled")`)
-		})
-	}
-}
-
-// joineeCancelledByThunkReturn starts a thread inside a with-timeout thunk, waits
-// until the thread has signalled that it is past its rendezvous, and returns, which
-// ends the thread's ctx: body then dies of that cancellation, at the VM poll if it
-// is busy and in its wait if it is parked. The program then evaluates join, with
-// the thread bound to t.
-func joineeCancelledByThunkReturn(body, join string) string {
-	return `
-(define rm (make-mutex))
-(define rcv (make-condition-variable))
-(define t (make-thread (lambda ()
-  (mutex-lock! rm) (condition-variable-signal! rcv) (mutex-unlock! rm)
-  ` + body + `)))
-(with-timeout 5000 (lambda (k) 'timed-out)
-  (lambda () (mutex-lock! rm) (thread-start! t) (mutex-unlock! rm rcv) 'thunk-returned))
-` + join
+  `+body+`)))
+(mutex-lock! rm) (thread-start! t) (mutex-unlock! rm rcv)`, 5*time.Second)
+	qt.New(t).Assert(err, qt.IsNil)
+	cancel()
 }
 
 // TestJoinClassifiesACancelledJoineeAlikeWhereverItDied pins that a joinee killed
@@ -2116,10 +2038,11 @@ func TestJoinClassifiesACancelledJoineeAlikeWhereverItDied(t *testing.T) {
 			defer func() {
 				_ = engine.Close()
 			}()
-			result, err := evalWithWatchdog(t, engine, joineeCancelledByThunkReturn(b.body, `
+			startJoineeThenCancelHost(t, engine, b.body)
+			result, err := evalWithWatchdog(t, engine, `
 (guard (e ((uncaught-exception? e) 'uncaught-exception)
           ((error-object? e) 'error-object))
-  (thread-join! t))`), 5*time.Second)
+  (thread-join! t))`, 5*time.Second)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.SchemeString(), qt.Equals, "uncaught-exception")
 		})
@@ -2147,7 +2070,8 @@ func TestUncaughtJoinOfACancelledJoineeKeepsTheCause(t *testing.T) {
 			defer func() {
 				_ = engine.Close()
 			}()
-			_, err := evalWithWatchdog(t, engine, joineeCancelledByThunkReturn(b.body, `(thread-join! t)`), 5*time.Second)
+			startJoineeThenCancelHost(t, engine, b.body)
+			_, err := evalWithWatchdog(t, engine, `(thread-join! t)`, 5*time.Second)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
 			c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("got %v", err))
@@ -3394,6 +3318,53 @@ func TestWithTimeoutInterruptsParkedThreadSleep(t *testing.T) {
 			c.Assert(result.Internal().SchemeString(), qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestThreadStartedInATimedThunkStillEndsWithItsEngine pins the two ends that
+// still reach a thread a with-timeout thunk started after the thunk returned (its
+// timer's expiry being the third, pinned in pkg/machine): the host cancelling the
+// ctx below the timer, and Engine.Close. The thread parks on a mutex the main
+// thread never releases, so nothing else ends it. The timer's 60 s never elapses
+// before its thunk returns, and if it did the thread would be cancelled anyway.
+func TestThreadStartedInATimedThunkStillEndsWithItsEngine(t *testing.T) {
+	const start = `
+(define m (make-mutex))
+(mutex-lock! m)
+(define rm (make-mutex))
+(define rcv (make-condition-variable))
+(define t (make-thread (lambda ()
+  (mutex-lock! rm) (condition-variable-signal! rcv) (mutex-unlock! rm)
+  (mutex-lock! m))))
+(with-timeout 60000 (lambda (k) 'timed-out)
+  (lambda () (mutex-lock! rm) (thread-start! t) (mutex-unlock! rm rcv) 'thunk-returned))
+t`
+	t.Run("the host cancels the ctx below the timer", func(t *testing.T) {
+		c := qt.New(t)
+		engine := newEngine(t)
+		defer func() {
+			_ = engine.Close()
+		}()
+		ctx, cancel := context.WithCancel(context.Background())
+		_, err := evalWithWatchdogCtx(ctx, t, engine, start, 5*time.Second)
+		c.Assert(err, qt.IsNil)
+		cancel()
+		result, err := evalWithWatchdog(t, engine, `
+(guard (e ((uncaught-exception? e) 'uncaught-exception)
+          ((error-object? e) 'error-object))
+  (thread-join! t))`, 5*time.Second)
+		c.Assert(err, qt.IsNil)
+		c.Assert(result.SchemeString(), qt.Equals, "uncaught-exception")
+	})
+	t.Run("Engine.Close", func(t *testing.T) {
+		c := qt.New(t)
+		engine := newEngine(t)
+		result, err := evalWithWatchdog(t, engine, start, 5*time.Second)
+		c.Assert(err, qt.IsNil)
+		th, ok := result.Internal().(*values.Thread)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("the program answered %T", result.Internal()))
+		c.Assert(engine.Close(), qt.IsNil)
+		c.Assert(th.State(), qt.Equals, values.ThreadTerminated)
+	})
 }
 
 // TestEngineCloseTerminatesLiveThreads pins the closer registered by addThreads:

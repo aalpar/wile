@@ -8,7 +8,7 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-21 known differences exist:
+22 known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Correct for string, bytevector and regular-file ports; on a port that can block (stdin, a pipe) the `#t` is a promise the next read may break.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes an **engine-scoped** current directory, not the process's working directory: the host and every other engine are unaffected, and relative paths the engine resolves (file primitives, `load`/`include`, a spawned process's start directory) resolve against it. Until it is first called, the engine follows the host's working directory live. Host-side resolution (a relative target handed straight to `pkg/security`'s containment check, the CLI's script argument) still uses the process directory.
@@ -149,6 +149,12 @@ This document catalogs differences between the current implementation and the R7
     capture. Inside a library the same shapes do read the shadow. Pinned by
     `TestHeadShadowStillDivergentThroughScopes` (`pkg/wile`); closing it is
     P6.6's arc.
+22. `exit` ends the **process** at once, from whichever SRFI-18 thread calls
+    it: the other threads stop where they are, and no `dynamic-wind` after
+    thunk runs, in the calling thread or any other. R7RS §6.14 says `exit` "runs
+    all outstanding dynamic-wind *after* procedures" (it has one thread); Racket
+    agrees with Wile on both counts, Petite Chez runs the calling thread's after
+    thunks. See *`exit` Ends the Process From Any Thread* below.
 
 ---
 
@@ -553,6 +559,37 @@ runtimes (including Go's `time` package) expose Unix time, not TAI.
 (the offset cancels). Programs that need a true atomic timescale, or that compare
 `current-second` against an external TAI source, will see the fixed offset. For
 monotonic elapsed time prefer `current-jiffy` / `jiffies-per-second`.
+
+## `exit` Ends the Process From Any Thread
+
+**Primitives:** `exit`, `emergency-exit`
+
+Both end the process through `os.Exit` (after the host's exit hook,
+`system.SetExitHook`), on the goroutine of the thread that called them. So
+`exit` in a thread started with `thread-start!` ends the program with that
+thread's status, the main thread does not continue past whatever it was doing,
+and nothing unwinds: no `dynamic-wind` after thunk runs, neither the calling
+thread's nor the main thread's.
+
+```scheme
+(dynamic-wind
+  (lambda () #f)
+  (lambda ()
+    (thread-start! (make-thread (lambda () (exit 3))))
+    (thread-sleep! 1)
+    (display "main still running"))
+  (lambda () (display "main after thunk")))
+;; process status 3, prints nothing
+```
+
+**Why.** It matches Racket, where `exit` in any thread runs the exit handler,
+which ends the process without unwinding. R7RS §6.14 has one thread, and asks
+`exit` to run the outstanding after thunks first; Wile runs none, even on the
+main thread (Petite Chez runs them). `emergency-exit` is the procedure R7RS lets
+skip them.
+
+**Impact.** Cleanup a program needs at exit belongs before the `exit` call, not
+in an after thunk. Pinned by `TestCLI_ExitInAThreadEndsTheProgram` (`cmd/wile`).
 
 ## `(library X)` Asks Whether X Is Available, Not What X Does
 

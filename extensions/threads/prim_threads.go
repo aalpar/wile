@@ -168,7 +168,7 @@ func PrimThreadStart(mc machine.CallContext) error {
 		return err
 	}
 
-	err = thread.Start(mc.Context())
+	err = thread.Start(machine.ThreadParentContext(mc.Context()))
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "thread-start!")
 	}

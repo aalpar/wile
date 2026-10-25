@@ -224,6 +224,7 @@ type timerState struct {
 	tag      *PromptTag      // identifies this with-timeout's finalizer frame on the chain
 	parent   *timerState     // enclosing timer (nesting); restored on teardown
 	savedCtx context.Context // ctx active before this with-timeout; restored on teardown
+	ctx      context.Context // this timer's ctx, the one its expiry cancels (ThreadParentContext)
 }
 
 // expansionState clusters the two MachineContext fields that are nil at

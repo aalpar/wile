@@ -131,8 +131,10 @@ which owns the timers, decides it (`supersedingTimerInterrupt`,
   runs the handler. Not converted: a control transfer already in flight, and a
   security denial, which must reach the embedder however the program is written.
 - **Anything else**: an embedder cancel or deadline, `thread-terminate!`, or the
-  end of the `with-timeout` thunk a thread was started in, whether the thunk
-  returned or its timer fired. A started thread's root has no synchronous parent,
+  expiry of a `with-timeout` timer armed around a thread's start. A thread
+  outlives its starting thunk's normal return, and any escape from it: its ctx is
+  the one below every timer armed at the start, cancelled by an expiry of any of
+  them, with that expiry as the cause (`machine.ThreadParentContext`). A started thread's root has no synchronous parent,
   so with no `with-timeout` of its own no context on its chain owns a timer. The
   failure is an ordinary condition: a `guard` around the wait can catch it, and a
   program that catches it and finishes returns normally even though its context is
@@ -191,6 +193,11 @@ plain `false`; the primitive reads the ctx and decides. A timed acquire that tim
 out while its ctx is also cancelled reports the cancellation. A cv signal claimed
 at the cancellation boundary still answers `#t`: `blockOnWaiter` deregisters the
 waiter on the ctx arm unless `Signal`/`Broadcast` already claimed it.
+
+`exit` is not a cancellation. Called in any thread, it ends the process at once
+(`os.Exit`, after the host's exit hook): the other threads stop wherever they are,
+and no `dynamic-wind` after thunk runs, in the calling thread or any other, as in
+Racket (`docs/reference/r7rs-differences.md`).
 
 ## Who cancels the ctx: three sources, three safety arguments
 
@@ -422,9 +429,16 @@ this pins unchanged behaviour and passes on the code before the fix). `TestMutex
   held. The thread signals just before its wait, and the thunk waits for that
   signal before sleeping into the timer, so the cancellation reaches the wait and
   not the thread's first VM poll, whose reason would name the poll instead.
-- `TestJoinReportsJoineeCancellationAsUncaught`: a joinee that died of its own
-  cancelled wait is reported as an uncaught exception, not as the joiner's
-  cancellation. Same handshake.
+- `TestJoinReportsJoineeCancellationAsUncaught` (`pkg/machine`, on an injected
+  expiry): a joinee that died of its own cancelled wait is reported as an
+  uncaught exception, not as the joiner's cancellation. Same handshake.
+- `TestThreadStartedInATimedThunkEndsOnlyByExpiry` (`pkg/machine`): a thread a
+  `with-timeout` thunk started, at top level or inside `eval`, survives the
+  thunk's normal return and an escape from it, and is cancelled by the timer's
+  expiry, and by an outer timer's expiry after an inner thunk returned.
+  `TestThreadStartedInATimedThunkStillEndsWithItsEngine`: such a thread still
+  ends with the host's ctx and with `Engine.Close`. `TestLeavingATimerEndsItsContext`
+  (`pkg/machine`): a normal return or an escape still cancels the timer's own ctx.
 - `TestTerminateUnparksUntimedThreadJoin` — terminating the thread that is
   **parked in** the join unparks it. Its `joinee` arm is a labelled control that
   cannot fail: terminating the thread being **joined** always worked, and is the

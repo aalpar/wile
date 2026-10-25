@@ -29,6 +29,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A thread started inside a `with-timeout` thunk outlives the thunk.** The
+  thunk's normal return, or an escape from it, cancelled the thread, which then
+  died with "context canceled" wherever it was. Only the timer's expiry (or an
+  enclosing timer's) cancels it now, with the expiry as the cause; the host's
+  ctx, `thread-terminate!` and `Engine.Close` still end it.
+
+- **`exit` in a thread is documented: it ends the process.** The other threads
+  stop, and no `dynamic-wind` after thunk runs in any thread, as in Racket
+  (`docs/reference/r7rs-differences.md` item 22; behaviour unchanged).
+
 - **BREAKING (behavior): `char-ready?` requires a textual input port.** It
   answered `#t` without looking at its argument, so `(char-ready? 5)`, a binary
   input port and an output port all answered `#t`; each is now an error, as

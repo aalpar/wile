@@ -78,3 +78,26 @@ func WithTimerFiringOnCue(ctx context.Context) (context.Context, func()) {
 	}
 	return context.WithValue(ctx, timerClockKey{}, clock), fire
 }
+
+// WithTimersFiringOnCue is WithTimerFiringOnCue for a run that arms several
+// with-timeouts: fire(i) expires the i-th timer armed in the run, counting from 0,
+// whatever its duration. Firing a timer not yet armed, or one already over, does
+// nothing.
+func WithTimersFiringOnCue(ctx context.Context) (context.Context, func(i int)) {
+	var expires []func()
+	clock := timerClock(func(_ *MachineContext, parent context.Context, _ time.Duration, cause error) (context.Context, context.CancelFunc) {
+		inner, cancel := context.WithCancelCause(parent)
+		expires = append(expires, func() {
+			cancel(cause)
+		})
+		return inner, func() {
+			cancel(context.Canceled)
+		}
+	})
+	fire := func(i int) {
+		if i < len(expires) {
+			expires[i]()
+		}
+	}
+	return context.WithValue(ctx, timerClockKey{}, clock), fire
+}
