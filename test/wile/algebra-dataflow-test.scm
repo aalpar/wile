@@ -540,6 +540,32 @@
                       '((0 () ()) (8 (8) (8 9)) (9 (8) ())) test-protocol
                       (init-state '(0 . 0)) (widen interval-widen))))
 
+;; Every block here reaches an exit, so the seeds are the exit blocks alone.
+;; Seeding every block let loop 3-6 run ahead of the exit data and widen on
+;; its own value: block 1's out came back (neg-inf . 7) instead of (-4 . 7).
+(test-group "run-analysis — backward seeds only exits when every block reaches one"
+  (let* ((cfg '((0 (0 5) (7 0 1)) (1 (0) (4 5 2)) (2 (1 4) ()) (3 (3 6) (3 6))
+                (4 (1 6) (5 2 6)) (5 (1 4) (6 0)) (6 (3 4 5) (3 4)) (7 (0) ())))
+         (ks '((1 . -2) (0 . 3) (2 . -3) (3 . 2) (0 . -2) (3 . 1) (1 . -2) (2 . 1)))
+         (L (interval-lattice))
+         (xfer (lambda (blk in)
+                 (let ((k (list-ref ks (car blk))))
+                   (if (and (eq? in 'interval-bot) (< (car k) 3))
+                       in
+                       (case (car k)
+                         ((3) (lattice-join L
+                                (if (eq? in 'interval-bot)
+                                    'interval-bot
+                                    (interval-add in '(1 . 1)))
+                                (cons (cdr k) (cdr k))))
+                         ((0) (interval-add in (cons (cdr k) (cdr k))))
+                         ((1) (lattice-meet L in (cons -5 (+ 5 (cdr k)))))
+                         (else (lattice-join L in (cons (cdr k) (cdr k)))))))))
+         (r (run-analysis 'backward L xfer cfg test-protocol
+                          (init-state '(0 . 0)) (widen interval-widen))))
+    (test '((-4 . 3) (-4 . 7) (-3 . 0) (-4 . pos-inf) (-7 . 2) (-4 . 4) (-5 . 3) (0 . 1))
+          (map (lambda (i) (analysis-out r i)) '(0 1 2 3 4 5 6 7)))))
+
 ;; Orphans rank AHEAD of the reachable blocks in forward order. Ranked after
 ;; them, orphan 9 would make block 1 a forward widening point (its predecessor
 ;; 9 would sit later in flow order) and be one itself backward. The widen

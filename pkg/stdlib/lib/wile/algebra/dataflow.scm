@@ -297,9 +297,9 @@ Terminates when no block's out-state changes across a worklist pass.
 Forward, the worklist starts from the entry, and every block reachable
 from it is visited at least once; a block the entry cannot reach is
 never transferred and reports bottom for both states. Backward, the
-worklist starts from every block, so a block with no path to an exit
-(a loop that never leaves, or a CFG with no exit at all) is still
-transferred; `initial-state` lands on the exit blocks only.
+worklist starts from the exits plus every block with no path to an
+exit (a loop that never leaves, or a CFG with no exit at all), so those
+are still transferred; `initial-state` lands on the exit blocks only.
 Worklist is rank-ordered by reverse postorder (forward) or reverse
 of reverse postorder (backward) for efficient propagation. Blocks the
 entry cannot reach are ranked too, by a DFS from each in turn, ahead
@@ -483,11 +483,26 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
       ;; only the cap): the convergence test below never suppresses vc = 1.
       (define max-revisits 100000)
       (define visits (make-equal-hashtable))
-      ;; Backward starts from every block: seeding only the exits leaves a
-      ;; block with no path to an exit untransferred, so a liveness-style
-      ;; analysis would call it all-bottom (dead) when it is not. Forward keeps
-      ;; the entry seed: seeding every block there may cost precision, unmeasured.
-      (let loop ((wl (worklist-insert-all '() (if forward? seed-idxs order))))
+      ;; Backward starts from the exits plus every block with no path to an
+      ;; exit. Seeding only the exits leaves those blocks untransferred, so a
+      ;; liveness-style analysis would call them all-bottom (dead) when they
+      ;; are not. Seeding every block costs precision under (widen OP): a loop
+      ;; dequeued ahead of the exit data widens on its own value. Filtering
+      ;; `order` keeps the worklist rank-sorted and duplicate-free, so it needs
+      ;; no insertion pass. Forward keeps the entry seed.
+      (define (reaches-an-exit)
+        (let walk ((todo exit-idxs) (seen '()))
+          (cond ((null? todo) seen)
+                ((memv (car todo) seen) (walk (cdr todo) seen))
+                (else (walk (append (flow-succs (block-ref (car todo))) (cdr todo))
+                            (cons (car todo) seen))))))
+      (let loop ((wl (if forward?
+                         (worklist-insert-all '() seed-idxs)
+                         (let ((coreach (reaches-an-exit)))
+                           (filter (lambda (idx)
+                                     (or (memv idx exit-idxs)
+                                         (not (memv idx coreach))))
+                                   order)))))
         (if (null? wl)
             states
             (let* ((idx (car wl))
