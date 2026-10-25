@@ -1986,9 +1986,9 @@ func TestCompileIncludeErrorAdditional(t *testing.T) {
 	qt.Assert(t, err.Error(), qt.Contains, "empty filename")
 }
 
-// TestFindFileCWDFallback verifies that findFile falls back to CWD when
-// the LoadPathStack is empty and SCHEME_INCLUDE_PATH is unset.
-func TestFindFileCWDFallback(t *testing.T) {
+// TestReadIncludedFormsCWDFallback verifies that the include reader falls
+// back to CWD when the LoadPathStack is empty and SCHEME_INCLUDE_PATH is unset.
+func TestReadIncludedFormsCWDFallback(t *testing.T) {
 	// Create a temp file in a temp dir, then chdir there
 	dir := t.TempDir()
 	err := os.WriteFile(filepath.Join(dir, "cwd-test.scm"), []byte("42"), 0o644)
@@ -2014,29 +2014,27 @@ func TestFindFileCWDFallback(t *testing.T) {
 	os.Unsetenv(SchemeIncludePathEnv) //nolint:errcheck
 
 	env := newNamespace(environment.NewNamespace().Runtime())
-	ctctx := NewCompileTimeCallContext(context.Background(), false)
 	cont := NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
 
-	// findFile should resolve "cwd-test.scm" via CWD fallback.
+	// "cwd-test.scm" should resolve via CWD fallback.
 	// Use filepath.EvalSymlinks on dir to normalize: on macOS, t.TempDir()
-	// returns /tmp/... but os.Getwd() (inside findFile) returns /private/tmp/...
+	// returns /tmp/... but os.Getwd() (inside the resolver) returns /private/tmp/...
 	// because /tmp is a symlink.
 	realDir, err := filepath.EvalSymlinks(dir)
 	qt.Assert(t, err, qt.IsNil)
 
-	f, absPath, err := findFile(cont, ctctx, "cwd-test.scm")
+	forms, absPath, err := readIncludedForms(context.Background(), env, cont.fileResolver, "cwd-test.scm", nil, false)
 	qt.Assert(t, err, qt.IsNil)
-	defer f.Close()
+	qt.Assert(t, forms, qt.HasLen, 1)
 	qt.Assert(t, absPath, qt.Equals, filepath.Join(realDir, "cwd-test.scm"))
 }
 
-// TestFindFileEmptyPath verifies that findFile rejects empty paths.
-func TestFindFileEmptyPath(t *testing.T) {
+// TestReadIncludedFormsEmptyPath verifies that the include reader rejects empty paths.
+func TestReadIncludedFormsEmptyPath(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
-	ctctx := NewCompileTimeCallContext(context.Background(), false)
 	cont := NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
 
-	_, _, err := findFile(cont, ctctx, "")
+	_, _, err := readIncludedForms(context.Background(), env, cont.fileResolver, "", nil, false)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "empty filename")
 }

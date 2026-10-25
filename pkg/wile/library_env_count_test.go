@@ -206,3 +206,32 @@ func TestNestedDefineLibraryIsRefused(t *testing.T) {
 		})
 	}
 }
+
+// TestIncludeLibraryDeclarationsResolvesBesideTheLibrary is a green pin for the
+// declaration-position include (untested before): a relative
+// include-library-declarations resolves beside the .sld, so lib/sub/decls.scm
+// is found for lib/sub/inner.sld. It held on the old findFile path too (the
+// load stack carries the library's directory); it now goes through
+// readIncludedForms, the reader include uses.
+func TestIncludeLibraryDeclarationsResolvesBesideTheLibrary(t *testing.T) {
+	t.Parallel()
+
+	c := qt.New(t)
+	ctx := context.Background()
+	fsys := fstest.MapFS{
+		"lib/sub/inner.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (sub inner)
+  (import (scheme base))
+  (include-library-declarations "decls.scm"))`),
+		},
+		"lib/sub/decls.scm": &fstest.MapFile{
+			Data: []byte(`(export answer)
+(begin (define answer 42))`),
+		},
+	}
+	engine, err := newLibraryCountEngine(ctx, fsys)
+	c.Assert(err, qt.IsNil)
+	result, err := engine.EvalMultiple(ctx, `(import (sub inner)) answer`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "42")
+}
