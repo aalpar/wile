@@ -299,7 +299,7 @@ const (
 // The definition-site pin is read first, as headFormName reads it: a marker
 // renamed where its template was written is unbound where the template is used.
 func markerName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) string {
-	denoted, _ := resolveHead(env, sym)
+	denoted, _, _ := resolveHead(env, sym)
 	if denoted != "" {
 		return denoted
 	}
@@ -307,19 +307,19 @@ func markerName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) str
 }
 
 // resolveHead is the one resolution markerName and headKey share: the form sym
-// DENOTES in env ("" when it denotes none) and the binding it resolved to (nil
-// when it resolved to none, and also on an ambiguous scope-set tie). The
-// definition-site pin is read first.
-func resolveHead(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) (string, *environment.Binding) {
+// DENOTES in env ("" when it denotes none), the binding it resolved to (nil when
+// it resolved to none, and also on an ambiguous scope-set tie), and whether it
+// tied. The definition-site pin is read first.
+func resolveHead(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) (string, *environment.Binding, bool) {
 	if env == nil {
-		return "", nil
+		return "", nil, false
 	}
 	denoted := environment.DenotedForm(environment.PinnedBinding(sym))
 	if denoted != "" {
-		return denoted, nil
+		return denoted, nil, false
 	}
-	bnd, _ := env.TryGetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes()))
-	return environment.DenotedForm(bnd), bnd
+	bnd, ambiguous := env.TryGetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes()))
+	return environment.DenotedForm(bnd), bnd, ambiguous
 }
 
 // headKey is markerName for a head met during the walk, and reports whether the
@@ -337,16 +337,19 @@ func resolveHead(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) (s
 // see forEachRawSymbolPair. A demoted quote is safe as an ordinary call, because
 // the code-depth walk reports everything its barrier would have hidden.
 //
-// An ambiguous scope-set tie makes TryGetBinding answer nil, so the head keeps its
-// spelling and is read as a marker. That is the safe side: the compiler's own
-// resolution (GetBinding) raises on the same tie, so no program reaches codegen
-// with the head read the other way.
+// An ambiguous scope-set tie at code depth demotes too. Demotion only ever adds
+// to what the walk reports (a demoted quote walks its operands, a demoted opener
+// is read both ways), so it is the conservative answer for every consumer here.
+// Reading the tie as the marker was safe only while every frame the walk resolved
+// in was one the compiler also resolves in, where GetBinding raises on the same
+// tie; the binder frames forEachRawBinderForm mints from raw syntax are not, so a
+// tie among them proves nothing about what the compiler will see.
 func headKey(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol, quasi int) (string, bool) {
-	denoted, bnd := resolveHead(env, sym)
+	denoted, bnd, ambiguous := resolveHead(env, sym)
 	if denoted != "" {
 		return denoted, false
 	}
-	if quasi == quasiDepthCode && bnd != nil {
+	if quasi == quasiDepthCode && (bnd != nil || ambiguous) {
 		return "", true
 	}
 	return sym.Key(), false
@@ -444,7 +447,8 @@ func quasiHeadDepth(key string, quasi int, mk quasiMarkers) (argDepth int, argMa
 //   - Dotted unquote. `(a . ,x) parses as (a unquote x): a BARE unquote symbol in
 //     the spine followed by exactly one element, not a sub-pair head (R7RS §7.1.4).
 //     The compiler handles it in dottedTailCell; a spine walk that only inspects
-//     pair heads misses it and under-marks x.
+//     pair heads misses it and under-marks x. `(a . `x) is the same shape one
+//     level deeper (dottedTailMarker).
 //   - Nested depth. `(a `(b ,,(set! x 1))) brings the inner form back to depth 0
 //     through two unquotes; one unquote leaves it at depth 1, still data.
 //
@@ -497,6 +501,9 @@ func forEachRawSymbolPair(env *environment.EnvironmentFrame, p *syntax.SyntaxPai
 			forEachDemotedOpener(env, p, head, quasi, mk, mode, fn)
 			return
 		}
+		if quasi == quasiDepthCode && forEachRawBinderForm(env, p, head, key, mk, mode, fn) {
+			return
+		}
 		argDepth, argMarkers, barrier := quasiHeadDepth(key, quasi, mk)
 		if barrier {
 			return
@@ -511,10 +518,11 @@ func forEachRawSymbolPair(env *environment.EnvironmentFrame, p *syntax.SyntaxPai
 	}
 	var end syntax.SpineEnd
 	for cur, e := range syntax.Spine(p) {
-		tail, isDotted := dottedUnquoteTail(env, cur, quasi, mk)
+		marker, tail, isDotted := dottedTailMarker(env, cur, quasi, mk)
 		if isDotted {
-			// `(a . ,x): the tail is evaluated, and it is the end of the spine.
-			argDepth, argMarkers, barrier := quasiHeadDepth(mk.unquote, quasi, mk)
+			// `(a . ,x) or `(a . `x): the marker governs the tail's depth, and the
+			// tail is the end of the spine.
+			argDepth, argMarkers, barrier := quasiHeadDepth(marker, quasi, mk)
 			if !barrier {
 				forEachRawSymbol(env, tail, argDepth, argMarkers, mode, fn)
 			}
@@ -559,33 +567,276 @@ func forEachDemotedOpener(env *environment.EnvironmentFrame, p *syntax.SyntaxPai
 	}
 }
 
-// dottedUnquoteTail reports whether cur is the (unquote x) tail that `(a . ,x)
-// parses into — a bare unquote symbol in the SPINE followed by exactly one element
-// (R7RS §4.2.8) — and returns the element that unquote evaluates.
+// forEachRawBinderForm walks a core binding form met at code depth, resolving
+// the heads in each part in the frame the compiler will resolve them in, and
+// reports whether it took the form. False means key names no binding form, the
+// node carries no environment, or the shape is not one it parses; the caller then
+// walks the form the ordinary way, which is what it did before binders were read.
+//
+// The frames are why. A head resolves in the walk's env, and the node's env holds
+// none of the binders the raw subtree itself introduces, so in
+// ((lambda (quote) (quote (begin (set! f ...) 1))) list) the inner quote resolved
+// to the special form and its barrier hid the set!. The compiler binds the
+// parameter first and compiles that quote as a call. Each binder's frame is
+// minted from the binder's own scope sets, as createLambdaValidationEnv and
+// extendEnvWithSymbols mint them for validated code, so the inner quote reaches
+// that binding by subset and headKey demotes it. A same-spelled identifier the
+// binder's scopes do not cover still reaches the outer form.
+//
+// Each frame covers exactly the region the form's binders scope over: a lambda
+// clause's parameters and a let's names cover the body only; let* adds one frame
+// per binding, so each init sees the names before it; letrec and letrec* cover
+// their inits as well; a named let's tag and names cover the body, its inits stay
+// outside. A frame that leaked to a sibling or an outer init would demote a real
+// quote and cost the names under it their Stable stamp.
+//
+// The head and every binder are still reported, as the ordinary walk reported
+// them. Only the frame the parts are walked in changes, and fn's consumers resolve
+// what they are handed in their own env, so a binder that shadows an outer name
+// is over-reported against that name, never under-reported.
+//
+// A body's internal defines are binders too (walkRawBody). A derived binding form
+// (do, let-values, a user macro) needs nothing here: the expander expands every
+// operand a template fires before validation runs (compilation's
+// expandQuasiOperands), so the walk meets the core forms it expands to. What the
+// walk still cannot see into is a body that is not expanded before validation,
+// such as a let-syntax body.
+func forEachRawBinderForm(env *environment.EnvironmentFrame, p *syntax.SyntaxPair, head *syntax.SyntaxSymbol, key string, mk quasiMarkers, mode walkMode, fn func(*syntax.SyntaxSymbol)) bool {
+	if env == nil {
+		return false
+	}
+	elems, improper := collectList(p)
+	if improper || len(elems) < 2 {
+		return false
+	}
+	switch key {
+	case "lambda":
+		if len(elems) < 3 {
+			return false
+		}
+		params := validateParams(elems[1], &ValidationResult{})
+		if params == nil {
+			return false
+		}
+		fn(head)
+		walkRawClause(createLambdaValidationEnv(env, params), params, elems[2:], mk, mode, fn)
+		return true
+
+	case "case-lambda":
+		return forEachRawCaseLambda(env, head, elems[1:], mk, mode, fn)
+
+	case "let", "let*", "letrec", "letrec*":
+		return forEachRawLet(env, head, key, elems, mk, mode, fn)
+	}
+	return false
+}
+
+// forEachRawCaseLambda is forEachRawBinderForm's case-lambda arm. Every clause is
+// parsed before anything is reported, so a malformed clause falls back to the
+// ordinary walk without having reported half the form.
+func forEachRawCaseLambda(env *environment.EnvironmentFrame, head *syntax.SyntaxSymbol, clauses []syntax.SyntaxValue, mk quasiMarkers, mode walkMode, fn func(*syntax.SyntaxSymbol)) bool {
+	type clause struct {
+		params *ValidatedParams
+		body   []syntax.SyntaxValue
+	}
+	parsed := make([]clause, 0, len(clauses))
+	for _, c := range clauses {
+		pair, ok := c.(*syntax.SyntaxPair)
+		if !ok {
+			return false
+		}
+		elems, improper := collectList(pair)
+		if improper || len(elems) < 2 {
+			return false
+		}
+		params := validateParams(elems[0], &ValidationResult{})
+		if params == nil {
+			return false
+		}
+		parsed = append(parsed, clause{params: params, body: elems[1:]})
+	}
+	fn(head)
+	for _, c := range parsed {
+		walkRawClause(createLambdaValidationEnv(env, c.params), c.params, c.body, mk, mode, fn)
+	}
+	return true
+}
+
+// walkRawClause reports a lambda clause's parameters and walks its body in
+// bodyEnv, the frame that binds them.
+func walkRawClause(bodyEnv *environment.EnvironmentFrame, params *ValidatedParams, body []syntax.SyntaxValue, mk quasiMarkers, mode walkMode, fn func(*syntax.SyntaxSymbol)) {
+	for _, sym := range params.Required {
+		fn(sym)
+	}
+	if params.Rest != nil {
+		fn(params.Rest)
+	}
+	walkRawBody(bodyEnv, body, mk, mode, fn)
+}
+
+// walkRawBody walks each form of a body at code depth, in env extended by the
+// body's internal defines. Those scope over the whole body, their own values
+// included (R7RS §5.3.2, letrec* semantics), so one frame covers every form.
+func walkRawBody(env *environment.EnvironmentFrame, body []syntax.SyntaxValue, mk quasiMarkers, mode walkMode, fn func(*syntax.SyntaxSymbol)) {
+	bodyEnv := extendEnvWithSymbols(env, rawBodyDefines(env, body, nil))
+	for _, form := range body {
+		forEachRawSymbol(bodyEnv, form, quasiDepthCode, mk, mode, fn)
+	}
+}
+
+// rawBodyDefines appends to q the names a body's internal defines bind: each
+// (define name ...) or (define (name . formals) ...) at the body's top level or
+// spliced through a begin, its head resolved in env. A shape it does not read
+// binds nothing here, which leaves its heads resolving outside, as before.
+func rawBodyDefines(env *environment.EnvironmentFrame, body []syntax.SyntaxValue, q []*syntax.SyntaxSymbol) []*syntax.SyntaxSymbol {
+	for _, form := range body {
+		pair, ok := form.(*syntax.SyntaxPair)
+		if !ok {
+			continue
+		}
+		head, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+		if !ok {
+			continue
+		}
+		elems, improper := collectList(pair)
+		if improper || len(elems) < 2 {
+			continue
+		}
+		key, _ := headKey(env, head, quasiDepthCode)
+		switch key {
+		case "begin":
+			q = rawBodyDefines(env, elems[1:], q)
+		case "define":
+			target := elems[1]
+			sig, isSig := target.(*syntax.SyntaxPair)
+			if isSig {
+				target = sig.SyntaxCar()
+			}
+			name, ok := target.(*syntax.SyntaxSymbol)
+			if ok {
+				q = append(q, name)
+			}
+		}
+	}
+	return q
+}
+
+// forEachRawLet is forEachRawBinderForm's let-family arm; elems is the whole
+// form, head first. The bindings are parsed with the validator's own
+// parseLetBindingPairs, so a shape the validator would refuse falls back too.
+func forEachRawLet(env *environment.EnvironmentFrame, head *syntax.SyntaxSymbol, key string, elems []syntax.SyntaxValue, mk quasiMarkers, mode walkMode, fn func(*syntax.SyntaxSymbol)) bool {
+	tag, named := elems[1].(*syntax.SyntaxSymbol)
+	if named && key != "let" {
+		return false
+	}
+	bindingsAt := 1
+	if named {
+		bindingsAt = 2
+	}
+	if len(elems) < bindingsAt+2 {
+		return false
+	}
+	bindings, ok := parseRawLetBindings(elems[bindingsAt], key)
+	if !ok {
+		return false
+	}
+	body := elems[bindingsAt+1:]
+	names := make([]*syntax.SyntaxSymbol, len(bindings))
+	for i, b := range bindings {
+		names[i] = b.name
+	}
+
+	fn(head)
+	if named {
+		fn(tag)
+	}
+	for _, name := range names {
+		fn(name)
+	}
+	switch key {
+	case "let*":
+		cur := env
+		for _, b := range bindings {
+			forEachRawSymbol(cur, b.initStx, quasiDepthCode, mk, mode, fn)
+			cur = extendEnvWithSymbols(cur, []*syntax.SyntaxSymbol{b.name})
+		}
+		walkRawBody(cur, body, mk, mode, fn)
+
+	case "letrec", "letrec*":
+		full := extendEnvWithSymbols(env, names)
+		for _, b := range bindings {
+			forEachRawSymbol(full, b.initStx, quasiDepthCode, mk, mode, fn)
+		}
+		walkRawBody(full, body, mk, mode, fn)
+
+	default:
+		for _, b := range bindings {
+			forEachRawSymbol(env, b.initStx, quasiDepthCode, mk, mode, fn)
+		}
+		bodyEnv := env
+		if named {
+			// The validator's two frames (validateNamedLet): the tag, then the
+			// names over it, so a name that repeats the tag shadows it.
+			bodyEnv = extendEnvWithSymbols(bodyEnv, []*syntax.SyntaxSymbol{tag})
+		}
+		walkRawBody(extendEnvWithSymbols(bodyEnv, names), body, mk, mode, fn)
+	}
+	return true
+}
+
+// parseRawLetBindings parses a let-family bindings list, the empty list
+// included, with the validator's parser. Its errors are discarded: a refusal here
+// only sends the form back to the ordinary walk.
+func parseRawLetBindings(stx syntax.SyntaxValue, key string) ([]rawLetBinding, bool) {
+	if syntax.IsSyntaxEmptyList(stx) {
+		return nil, true
+	}
+	pair, ok := stx.(*syntax.SyntaxPair)
+	if !ok {
+		return nil, false
+	}
+	list, improper := collectList(pair)
+	if improper {
+		return nil, false
+	}
+	return parseLetBindingPairs(list, key, &ValidationResult{})
+}
+
+// dottedTailMarker reports whether cur is a dotted-tail marker cell, and if so
+// which marker and the element it governs. `(a . ,x) parses into (a unquote x)
+// and `(a . `x) into (a quasiquote x): a bare marker symbol in the SPINE followed
+// by exactly one element (R7RS §4.2.8). The unquote reading takes the tail one
+// level shallower, the nesting reading one level deeper; quasiHeadDepth applies
+// either once the caller hands it the marker.
 //
 // It is a spine shape, not a head shape: reached as a cdr, it never passes through
 // the keyword dispatch in forEachRawSymbolPair. The compiler detects it the same
 // way and in the same place (compilation.dottedTailCell, consulted from both
-// quasiNeedsRuntimeList and expandQuasiList). Only meaningful inside a template;
-// at quasiDepthCode a bare unquote is an ordinary symbol and the ordinary spine
-// walk already marks the tail.
+// quasiNeedsRuntimeList and expandQuasiList), and accepts the same two markers.
+// Splicing is absent on both sides: a splice is an element, never a tail. Only
+// meaningful inside a template; at quasiDepthCode a bare marker is an ordinary
+// symbol and the ordinary spine walk already marks the tail.
 //
-// The compiler's version accepts a bare `quasiquote` in the same position too,
-// which this one does not. That gap is NOT safe in general: a nested quasiquote in
-// dotted-tail position is read element-wise here, and the compiler takes it one level
-// deeper (filed as a P6.6 crosscheck row).
+// The nesting arm is not the conservative side to leave out. Read element-wise, a
+// dotted `(a . `(b ,'(,x))) puts the unquote at depth 0 and its quote is a
+// barrier; the compiler reads it one level deeper, where the quote is data and
+// the inner unquote fires.
 //
-// The unquote is identified the way every other marker head here is — by what it
-// denotes, spelling as the fallback (markerName) — because the compiler's
+// The marker is identified the way every other marker head here is, by what it
+// denotes with spelling as the fallback (markerName), because the compiler's
 // dottedTailCell reads this same cell through kw.headName. A spelling-only test
 // would miss `(a . ,x) written with a renamed unquote and under-mark x.
-func dottedUnquoteTail(env *environment.EnvironmentFrame, cur *syntax.SyntaxPair, quasi int, mk quasiMarkers) (syntax.SyntaxValue, bool) {
+func dottedTailMarker(env *environment.EnvironmentFrame, cur *syntax.SyntaxPair, quasi int, mk quasiMarkers) (string, syntax.SyntaxValue, bool) {
 	if quasi == quasiDepthCode {
-		return nil, false
+		return "", nil, false
 	}
 	sym, ok := cur.SyntaxCar().(*syntax.SyntaxSymbol)
-	if !ok || markerName(env, sym) != mk.unquote {
-		return nil, false
+	if !ok {
+		return "", nil, false
+	}
+	marker := markerName(env, sym)
+	if marker != mk.unquote && marker != mk.nesting {
+		return "", nil, false
 	}
 	cdrPair, ok := cur.SyntaxCdr().(*syntax.SyntaxPair)
 	// Exactly one proper element: cdrPair is a pair whose cdr is the empty list.
@@ -593,9 +844,9 @@ func dottedUnquoteTail(env *environment.EnvironmentFrame, cur *syntax.SyntaxPair
 	// like the tail of `(a unquote x . y) — a malformed template must reach a
 	// clean validation path, not an internal-error crash.
 	if !ok || !syntax.IsSyntaxEmptyList(cdrPair.SyntaxCdr()) {
-		return nil, false
+		return "", nil, false
 	}
-	return cdrPair.SyntaxCar(), true
+	return marker, cdrPair.SyntaxCar(), true
 }
 
 // markOpaqueCode marks an opaque subtree that is ordinary CODE — a passthrough

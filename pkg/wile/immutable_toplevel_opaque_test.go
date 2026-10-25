@@ -128,6 +128,33 @@ func TestImmutableTopLevel_OpaqueSubtreeOverMark(t *testing.T) {
 			setRejected: false,
 			why:         "the unsyntax is code, and the quasiquote inside it opens a quasiquote template",
 		},
+		// A binder the raw subtree introduces covers its own body and nothing else
+		// (validate.forEachRawBinderForm). Each row puts x under a real quote that
+		// a leaked frame would demote to a call.
+		{
+			name:        "a lambda parameter named quote does not reach its sibling",
+			unit:        "(begin (define x 1) `(a ,(begin ((lambda (quote) quote) 1) (quote x))))",
+			setRejected: true,
+			why:         "the parameter covers the lambda body only; the sibling quote is the real one",
+		},
+		{
+			name:        "a let name does not reach its inits",
+			unit:        "(begin (define x 1) `(a ,(let ((quote list) (y (quote x))) y)))",
+			setRejected: true,
+			why:         "let inits are evaluated outside the let's names",
+		},
+		{
+			name:        "a let* name reaches the inits after it",
+			unit:        "(begin (define x 1) `(a ,(let* ((quote list) (y (quote x))) y)))",
+			setRejected: false,
+			why:         "the second init sees the first name, so (quote x) is a call that evaluates x",
+		},
+		{
+			name:        "dotted quasiquote tail keeps a single unquote as data",
+			unit:        "(begin (define x 1) `(a . `(b ,(set! x 9))))",
+			setRejected: true,
+			why:         "(a quasiquote ...) nests one level deeper, so the unquote lands at depth 1: data",
+		},
 		{
 			name:        "quote does not over-mark",
 			unit:        `(begin (define x 1) '(x))`,
