@@ -106,8 +106,11 @@ var PrimErrorContextStackTrace = helpers.MakeUnaryAccessor(werr.ErrNotAnErrorCon
 })
 
 // PrimErrorContextMarks implements (error-context-marks ctx).
-// Returns the continuation mark set snapshot from the raise site, or #f
-// if marks were not captured.
+// Returns the continuation mark set snapshot from the raise site, or the empty
+// set if marks were not captured (only a Go caller's NewErrorContext with nil
+// marks; the raise path always snapshots). Not #f: the accessors read #f as the
+// current continuation's marks, so (continuation-mark-set-first
+// (error-context-marks ctx) key) would silently answer from the handler site.
 //
 // The nil check stays inside the projection: Marks() returns a
 // *ContinuationMarkSet, and returning a typed nil through the values.Value
@@ -115,7 +118,7 @@ var PrimErrorContextStackTrace = helpers.MakeUnaryAccessor(werr.ErrNotAnErrorCon
 var PrimErrorContextMarks = helpers.MakeUnaryAccessor(werr.ErrNotAnErrorContext, "error-context-marks", func(ctx *machine.ErrorContext) values.Value {
 	marks := ctx.Marks()
 	if marks == nil {
-		return values.FalseValue
+		return &machine.ContinuationMarkSet{}
 	}
 	return marks
 })

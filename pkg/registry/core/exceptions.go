@@ -79,7 +79,7 @@ func addExceptions(r *registry.PrimitiveRegistry) error {
 			Doc: "Returns the stack trace from CTX as a list of alists.\nEach alist always has key name; keys file, line, column are present only when the frame has a source position, and file is #f when that position has no filename.\n\nExamples:\n  ;; (error-context-stack-trace ctx)  =>  (((name . \"f\") (file . \"test.scm\") ...))", ParamNames: []string{"ctx"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeList},
 		{Name: "error-context-marks", ParamCount: 1, Impl: PrimErrorContextMarks,
-			Doc: "Returns the continuation mark set captured at the raise site, or #f if unavailable.\nThe snapshot is bounded to the default continuation prompt tag.\n\nExamples:\n  ;; (continuation-mark-set-first (error-context-marks ctx) key)  =>  value-at-raise", ParamNames: []string{"ctx"}, Category: "exceptions",
+			Doc: "Returns the continuation mark set captured at the raise site, or the empty mark set if none was captured.\nThe snapshot is bounded to the default continuation prompt tag.\n\nExamples:\n  ;; (continuation-mark-set-first (error-context-marks ctx) key)  =>  value-at-raise", ParamNames: []string{"ctx"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "error-object-source", ParamCount: 1, Impl: PrimErrorObjectSource,
 			Doc: "Returns the source location string from ERROR-OBJ, or #f if unavailable.\nThe source location is populated when the error is raised via (error ...) or (raise ...).\n\nExamples:\n  (guard (e (#t (error-object-source e))) (error \"oops\"))  => \"eval:1:41\"", ParamNames: []string{"error-obj"}, Category: "exceptions",

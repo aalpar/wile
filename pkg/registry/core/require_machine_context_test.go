@@ -35,14 +35,18 @@ import (
 // gets called by these primitives — the context check runs first — but it returns
 // a safe value so the stub cannot panic incidentally.
 type foreignCallContext struct {
-	// arg, when non-nil, is returned for every Arg index; the mark-set accessors
-	// look at their argument before they ask for the machine context.
+	// arg, when non-nil, is returned for Arg 0 and 1 (Arg 2 and beyond, the
+	// accessors' optional rest list, is empty); the mark-set accessors look at
+	// their argument before they ask for the machine context.
 	arg values.Value
 }
 
-func (p *foreignCallContext) Arg(int) values.Value {
+func (p *foreignCallContext) Arg(i int) values.Value {
 	if p.arg == nil {
 		return values.Void
+	}
+	if i > 1 {
+		return values.EmptyList // the accessors' optional rest list, absent
 	}
 	return p.arg
 }

@@ -765,10 +765,10 @@ Not provided: `%`/`fcontrol`, `abort`, `abort/cc`, `call/prompt`, `call/comp`, `
 |-----------|---------|------|
 | `with-continuation-mark` | Attach key-value mark to current frame (syntax) | Yes |
 | `current-continuation-marks` | Snapshot all marks on current continuation | Yes |
-| `continuation-marks` | Extract marks from a captured continuation or exn | Yes, for `call/cc` continuations only |
-| `continuation-mark-set->list` | All values for a key, ordered innermost-first | Yes |
-| `continuation-mark-set->list*` | Multi-key variant (returns vectors) | Yes |
-| `continuation-mark-set-first` | Nearest value for a key (amortized O(1)) | Yes |
+| `continuation-marks` | Extract marks from a captured continuation or exn | Yes, for `call/cc` continuations only; `#f` gives the empty set |
+| `continuation-mark-set->list` | All values for a key, ordered innermost-first | Yes; the optional prompt tag works with `#f` only |
+| `continuation-mark-set->list*` | Multi-key variant (returns vectors) | Yes; the optional prompt tag works with `#f` only |
+| `continuation-mark-set-first` | Nearest value for a key (amortized O(1)) | Yes; the optional prompt tag works with `#f` only |
 | `continuation-mark-set->iterator` | Iterator over marks: each call answers a frame vector (or `#f`) and the next iterator | `(wile control)` |
 | `continuation-mark-set?` | Predicate | Yes |
 | `continuation-mark-set->context` | Extract stack-trace-style context from marks | `(wile control)` |

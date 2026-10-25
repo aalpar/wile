@@ -40,6 +40,12 @@ func PrimCurrentContinuationMarks(cc machine.CallContext) error {
 		if err != nil {
 			return err
 		}
+		cms, err := collectMarksUpToPrompt(mc, tag, "current-continuation-marks")
+		if err != nil {
+			return err
+		}
+		mc.SetValue(cms)
+		return nil
 	}
 	mc.SetValue(mc.CollectContinuationMarks(tag))
 	return nil
@@ -47,10 +53,15 @@ func PrimCurrentContinuationMarks(cc machine.CallContext) error {
 
 // requireMarkSetOrCurrent returns the continuation mark set in argument 0 of the
 // primitive called name. Racket lets #f stand for the current continuation's marks
-// there, so #f yields the set (current-continuation-marks) would; any other value
-// that is not a mark set is a type error. Only the #f arm needs the machine
+// there, so #f yields the set (current-continuation-marks tag) would; any other
+// value that is not a mark set is a type error. Only the #f arm needs the machine
 // context, so a real mark set still works under a foreign CallContext.
-func requireMarkSetOrCurrent(cc machine.CallContext, name string) (*machine.ContinuationMarkSet, error) {
+//
+// tag is the accessor's optional trailing prompt tag (nil when absent). Racket
+// also truncates an explicit mark set at that tag's prompt; a Wile mark set
+// records no prompt boundaries, so that combination is refused rather than
+// answered from the whole set.
+func requireMarkSetOrCurrent(cc machine.CallContext, name string, tag *machine.PromptTag) (*machine.ContinuationMarkSet, error) {
 	arg := cc.Arg(0)
 	if arg != values.FalseValue {
 		cms, ok := arg.(*machine.ContinuationMarkSet)
@@ -58,13 +69,65 @@ func requireMarkSetOrCurrent(cc machine.CallContext, name string) (*machine.Cont
 			return nil, werr.WrapForeignErrorf(werr.ErrNotAContinuationMarkSet,
 				"%s: expected a continuation mark set or #f but got %T", name, arg)
 		}
+		if tag != nil {
+			return nil, werr.WrapForeignErrorf(werr.ErrNotImplemented,
+				"%s: prompt tag with an explicit mark set is not implemented (the set records no prompt boundaries; pass #f)", name)
+		}
 		return cms, nil
 	}
 	mc, err := machine.RequireMachineContext(cc, name)
 	if err != nil {
 		return nil, err
 	}
-	return mc.CollectContinuationMarks(machine.DefaultPromptTag), nil
+	if tag == nil {
+		return mc.CollectContinuationMarks(machine.DefaultPromptTag), nil
+	}
+	return collectMarksUpToPrompt(mc, tag, name)
+}
+
+// collectMarksUpToPrompt collects the current marks up to the prompt tagged
+// tag, which a caller named explicitly: with no such prompt on the
+// continuation Racket raises, where the collector alone would silently walk the
+// whole chain. Same refusal and sentinel as call-with-composable-continuation's.
+// The default tag is exempt: Racket gives every continuation a default prompt
+// at its root, and an eval or load sub-context has no prompt frame for
+// FindPrompt to see.
+func collectMarksUpToPrompt(mc *machine.MachineContext, tag *machine.PromptTag, name string) (*machine.ContinuationMarkSet, error) {
+	_, found := mc.FindPrompt(tag)
+	if !found && tag != machine.DefaultPromptTag {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPromptTag, "%s: no prompt found for tag %s", name, tag.SchemeString())
+	}
+	return mc.CollectContinuationMarks(tag), nil
+}
+
+// optionalPromptTag parses an accessor's trailing optional prompt tag from rest,
+// which holds nothing else; nil when absent.
+func optionalPromptTag(rest values.Value, name string) (*machine.PromptTag, error) {
+	v, ok, err := helpers.ParseOptionalArg(rest, name)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+	return helpers.RequireType[*machine.PromptTag](v, werr.ErrNotAPromptTag, name)
+}
+
+// optionalValueAndPromptTag parses an accessor's trailing (value [prompt-tag])
+// from rest: the value, whether it was given, and the tag (nil when absent).
+func optionalValueAndPromptTag(rest values.Value, name string) (values.Value, bool, *machine.PromptTag, error) {
+	if values.IsEmptyList(rest) {
+		return nil, false, nil, nil
+	}
+	v, tail, err := helpers.Uncons(rest, name, "optional argument")
+	if err != nil {
+		return nil, false, nil, err
+	}
+	tag, err := optionalPromptTag(tail, name)
+	if err != nil {
+		return nil, false, nil, err
+	}
+	return v, true, tag, nil
 }
 
 // PrimRequireContinuationMarkSet returns its argument if it is a continuation mark
@@ -85,7 +148,11 @@ func PrimRequireContinuationMarkSet(mc machine.CallContext) error {
 // Extracts a list of values for key across all frames in the mark set; #f for
 // mark-set means the current continuation's marks.
 func PrimContinuationMarkSetToList(mc machine.CallContext) error {
-	cms, err := requireMarkSetOrCurrent(mc, "continuation-mark-set->list")
+	tag, err := optionalPromptTag(mc.Arg(2), "continuation-mark-set->list")
+	if err != nil {
+		return err
+	}
+	cms, err := requireMarkSetOrCurrent(mc, "continuation-mark-set->list", tag)
 	if err != nil {
 		return err
 	}
@@ -97,16 +164,16 @@ func PrimContinuationMarkSetToList(mc machine.CallContext) error {
 // Returns the value for key from the nearest frame, or default (#f if omitted);
 // #f for mark-set means the current continuation's marks.
 func PrimContinuationMarkSetFirst(mc machine.CallContext) error {
-	cms, err := requireMarkSetOrCurrent(mc, "continuation-mark-set-first")
+	v, ok, tag, err := optionalValueAndPromptTag(mc.Arg(2), "continuation-mark-set-first")
+	if err != nil {
+		return err
+	}
+	cms, err := requireMarkSetOrCurrent(mc, "continuation-mark-set-first", tag)
 	if err != nil {
 		return err
 	}
 	key := mc.Arg(1)
 	defaultVal := values.Value(values.FalseValue)
-	v, ok, err := helpers.ParseOptionalArg(mc.Arg(2), "continuation-mark-set-first")
-	if err != nil {
-		return err
-	}
 	if ok {
 		defaultVal = v
 	}
@@ -124,7 +191,11 @@ func PrimContinuationMarkSetFirst(mc machine.CallContext) error {
 //
 // Racket §10.5: continuation-mark-set->list*
 func PrimContinuationMarkSetToListStar(mc machine.CallContext) error {
-	cms, err := requireMarkSetOrCurrent(mc, "continuation-mark-set->list*")
+	v, noneGiven, tag, err := optionalValueAndPromptTag(mc.Arg(2), "continuation-mark-set->list*")
+	if err != nil {
+		return err
+	}
+	cms, err := requireMarkSetOrCurrent(mc, "continuation-mark-set->list*", tag)
 	if err != nil {
 		return err
 	}
@@ -151,11 +222,7 @@ func PrimContinuationMarkSetToListStar(mc machine.CallContext) error {
 	}
 
 	noneVal := values.Value(values.FalseValue)
-	v, ok, err := helpers.ParseOptionalArg(mc.Arg(2), "continuation-mark-set->list*")
-	if err != nil {
-		return err
-	}
-	if ok {
+	if noneGiven {
 		noneVal = v
 	}
 
@@ -173,10 +240,6 @@ var PrimContinuationMarkSetQ = helpers.MakeTypePredicate(func(o values.Value) bo
 // Extracts a ContinuationMarkSet from a captured continuation (the result of
 // call/cc), optionally stopping at prompt-tag.
 func PrimContinuationMarks(mc machine.CallContext) error {
-	capt, err := helpers.RequireType[*machine.CapturedContinuation](mc.Arg(0), werr.ErrNotAContinuation, "continuation-marks")
-	if err != nil {
-		return err
-	}
 	tag := machine.DefaultPromptTag
 	v, ok, err := helpers.ParseOptionalArg(mc.Arg(1), "continuation-marks")
 	if err != nil {
@@ -187,6 +250,16 @@ func PrimContinuationMarks(mc machine.CallContext) error {
 		if err != nil {
 			return err
 		}
+	}
+	// Racket's (continuation-marks #f) is the EMPTY set, not the current marks
+	// that #f means to the accessors. The tag is checked first, as Racket does.
+	if mc.Arg(0) == values.FalseValue {
+		mc.SetValue(&machine.ContinuationMarkSet{})
+		return nil
+	}
+	capt, err := helpers.RequireType[*machine.CapturedContinuation](mc.Arg(0), werr.ErrNotAContinuation, "continuation-marks")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(machine.CollectMarksFromCapture(capt.ComposableContinuation(), tag))
 	return nil
