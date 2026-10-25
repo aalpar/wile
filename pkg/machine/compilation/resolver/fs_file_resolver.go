@@ -133,7 +133,7 @@ func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 	searched := p.buildSearchedList(ctx, registryDirs)
 	return nil, "", werr.WrapForeignErrorf(
 		werr.ErrFileNotFound,
-		"file %q not found in virtual filesystem; searched: %s",
+		"%q in virtual filesystem (searched: %s)",
 		path,
 		strings.Join(searched, ", "),
 	)
