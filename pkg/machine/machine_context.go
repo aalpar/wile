@@ -2580,6 +2580,17 @@ func (p *MachineContext) completeOwnRun() error {
 // a prompt frame the values must flow THROUGH it, so the frame is restored and
 // the driver keeps looping.
 func (p *MachineContext) resolveResume(resumeErr *ErrResumeContinuation, prompt *MachineContinuation) (done bool, err error) {
+	// Thread confinement, checked again where the segment would run: the (k v)
+	// site's check (applyCapturedContinuation) compares the invoking context's
+	// thread, and a host call's context, built outside any thread, carries thread
+	// 0 whichever goroutine runs it. Passed up, the main thread's continuation
+	// reached a thread root's driver and ran on that thread.
+	seg := resumeErr.Segment
+	if seg != nil && seg.threadID != p.threadID {
+		return false, werr.WrapForeignErrorf(werr.ErrCrossThreadContinuation,
+			"call/cc: continuation captured in thread %d, resumed by thread %d",
+			seg.threadID, p.threadID)
+	}
 	// isolate=true: this signal is emitted only for call/cc resume, which restores
 	// the captured mark snapshot (composable resume composes marks and bypasses
 	// this signal — it calls reinstallSegment directly).

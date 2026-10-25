@@ -135,10 +135,10 @@ Two control signals, both declared in `pkg/machine/prompt_abort.go`, ride the VM
         (prompt frame on its chain,      (the DefaultPromptTag driver;
          or its own boundary token;       RunWithEscapeHandling
          an expansion-time root also      delegates to it; a root
-         what an ended expansion-time     resolves anything)
-         root captured, never a
-         runtime root's;
-         otherwise re-raises)
+         what an ended expansion-time     resolves anything, except
+         root captured, never a           that a host call's root
+         runtime root's;                  passes up what a live
+         otherwise re-raises)             driver elsewhere owns)
 ```
 
 The order in `applyCallableError` matters: `isControlSignal` recognizes `ErrPromptAbort`, `ErrExceptionEscape`, `ErrTimerInterrupt`, `ErrBreakInterrupt`, and `ErrResumeContinuation` *before* the fallthrough (an authorizer denial also bypasses it, returned as an uncatchable `*SchemeError`). Without those checks, an abort or a resume would be converted into a catchable Scheme condition and its driver would never see it.

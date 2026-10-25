@@ -143,7 +143,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   host as `call-with-continuation-barrier`). A continuation captured inside one
   `Engine.Call` and invoked from a later one is still resumed by the later call,
   from top-level Go or from a host inside a running program (a host-driven
-  generator), where Racket's per-callback barrier refuses it.
+  generator), where Racket's per-callback barrier refuses it. A host on an
+  SRFI-18 thread could run the main thread's continuation this way (the call's
+  context carries thread 0); the driver now refuses a segment captured in
+  another thread with `ErrCrossThreadContinuation`, as a direct `(k v)` from the
+  thread is refused. (Go API: `MachineContext.RunHostCall` added.)
 - **A use-site identifier inside a box loses a macro's intro scope.**
   `AddScope` descended into a syntax box but `FlipScope` and the expander's
   stamp walk did not, and `AddScopeToSyntax` skipped a top-level box, so an

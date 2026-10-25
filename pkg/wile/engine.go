@@ -1117,10 +1117,12 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 //
 // The call is not a prompt for the program a host function was called from: a
 // continuation that program captured, invoked inside proc, returns as Call's
-// error, and a host function that returns that error forwards the jump to the
-// program, which runs the rest of its continuation once. A continuation
-// captured inside one Call and invoked from a later one is resumed by the later
-// Call (a host-driven generator).
+// error (errors.As finds a *machine.ErrResumeContinuation in it), and a host
+// function that returns that error, as is or wrapped with %w, forwards the jump
+// to the program, which runs the rest of its continuation once. A host that
+// drops the error loses the jump silently. A continuation captured inside one
+// Call and invoked from a later one is resumed by the later Call (a host-driven
+// generator).
 //
 // A run whose ctx ended while it ran returns the cancellation
 // (werr.ErrOperationCancelled), even one that finished just before the ctx
