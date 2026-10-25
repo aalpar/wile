@@ -141,13 +141,17 @@ func (p *portBase) setCloser(v any) {
 	}
 }
 
-// guardClosed returns werr.ErrPortClosed if the port is closed.
-// I/O methods call this at the top to reject operations on closed ports.
+// guardClosed returns werr.ErrPortClosed, wrapped to name the port, if the
+// port is closed. I/O methods call this at the top to reject operations on
+// closed ports; naming the operation is their wrap, not this one.
 func (p *portBase) guardClosed() error {
-	if p.closed {
-		return werr.ErrPortClosed
+	if !p.closed {
+		return nil
 	}
-	return nil
+	if p.srcName == "" {
+		return werr.WrapForeignErrorf(werr.ErrPortClosed, "%s is closed", p.kind)
+	}
+	return werr.WrapForeignErrorf(werr.ErrPortClosed, "%s %s is closed", p.kind, DisplayFileName(p.srcName))
 }
 
 // portDatumProvider is implemented by all port types via portBase embedding.

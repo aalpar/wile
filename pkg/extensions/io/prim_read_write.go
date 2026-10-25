@@ -18,6 +18,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/aalpar/wile/pkg/internal/tokenizer"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/registry/helpers"
@@ -212,6 +213,18 @@ func newPortParser(mc machine.CallContext, rr io.RuneReader, port *values.PortOb
 	return q
 }
 
+// wrapReadFault wraps a failed read with msg. A fault in the data or in the
+// stream is a read error (read-error? answers #t, R7RS §6.11); a closed port is
+// not, since nothing was read: it is a plain error, as racket raises a plain
+// exn:fail rather than exn:fail:read. Every read primitive goes through here so
+// the answer does not depend on which one met the closed port.
+func wrapReadFault(err error, msg string) error {
+	if errors.Is(err, werr.ErrPortClosed) {
+		return werr.WrapForeignErrorf(err, "%s", msg)
+	}
+	return werr.WrapForeignReadErrorf(err, "%s", msg)
+}
+
 // PrimRead implements the (read) primitive.
 // Reads a Scheme datum from port.
 // Reads from the current input port if no port is specified.
@@ -237,7 +250,13 @@ func PrimRead(mc machine.CallContext) error {
 			mc.SetValue(values.EOFObject)
 			return nil
 		}
-		return werr.WrapForeignReadErrorf(err, "error reading from input port")
+		if errors.Is(err, tokenizer.NewTokenizerError(tokenizer.MessageReaderFailed)) {
+			// The parser dies on any error, which is right for malformed
+			// input but makes a transient stream fault permanent. Evict it so
+			// the next read starts on whatever the stream yields next.
+			evictPortCache(st, port)
+		}
+		return wrapReadFault(err, "error reading from input port")
 	}
 	// Use UnwrapAllShared to preserve object identity for datum labels (R7RS §2.4)
 	// and handle circular structures
@@ -271,7 +290,13 @@ func PrimReadSyntax(mc machine.CallContext) error {
 			mc.SetValue(values.EOFObject)
 			return nil
 		}
-		return werr.WrapForeignReadErrorf(err, "error reading syntax from input port")
+		if errors.Is(err, tokenizer.NewTokenizerError(tokenizer.MessageReaderFailed)) {
+			// The parser dies on any error, which is right for malformed
+			// input but makes a transient stream fault permanent. Evict it so
+			// the next read starts on whatever the stream yields next.
+			evictPortCache(st, port)
+		}
+		return wrapReadFault(err, "error reading syntax from input port")
 	}
 	mc.SetValue(q)
 	return nil
@@ -292,7 +317,7 @@ func PrimReadChar(mc machine.CallContext) error {
 		return nil
 	}
 	if err != nil {
-		return werr.WrapForeignReadErrorf(err, "read-char: error reading character")
+		return wrapReadFault(err, "read-char: error reading character")
 	}
 	mc.SetValue(values.NewCharacter(r))
 	return nil
@@ -313,7 +338,7 @@ func PrimPeekChar(mc machine.CallContext) error {
 		return nil
 	}
 	if err != nil {
-		return werr.WrapForeignReadErrorf(err, "peek-char: error reading character")
+		return wrapReadFault(err, "peek-char: error reading character")
 	}
 	// Unread the character so it can be read again. Every textual
 	// input port carries a RuneUnreader slot — port_constructors.go
@@ -321,7 +346,7 @@ func PrimPeekChar(mc machine.CallContext) error {
 	urr, _ := port.AsRuneUnreader()
 	err = urr.UnreadRune()
 	if err != nil {
-		return werr.WrapForeignReadErrorf(err, "peek-char: error unreading character")
+		return wrapReadFault(err, "peek-char: error unreading character")
 	}
 	mc.SetValue(values.NewCharacter(r))
 	return nil
@@ -348,7 +373,7 @@ func PrimReadLine(mc machine.CallContext) error {
 			break
 		}
 		if err != nil {
-			return werr.WrapForeignReadErrorf(err, "read-line: error reading line")
+			return wrapReadFault(err, "read-line: error reading line")
 		}
 		if r == '\n' {
 			break
@@ -362,12 +387,12 @@ func PrimReadLine(mc machine.CallContext) error {
 		if r == '\r' {
 			nextR, _, err := rr.ReadRune()
 			if err != nil && !errors.Is(err, io.EOF) {
-				return werr.WrapForeignReadErrorf(err, "read-line: error reading after carriage return")
+				return wrapReadFault(err, "read-line: error reading after carriage return")
 			}
 			if err == nil && nextR != '\n' {
 				err = urr.UnreadRune()
 				if err != nil {
-					return werr.WrapForeignReadErrorf(err, "read-line: error unreading character after carriage return")
+					return wrapReadFault(err, "read-line: error unreading character after carriage return")
 				}
 			}
 			break
@@ -435,7 +460,7 @@ func PrimReadString(mc machine.CallContext) error {
 			break
 		}
 		if err != nil {
-			return werr.WrapForeignReadErrorf(err, "read-string: error reading string")
+			return wrapReadFault(err, "read-string: error reading string")
 		}
 		chars = append(chars, r)
 	}

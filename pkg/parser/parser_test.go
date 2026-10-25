@@ -2761,6 +2761,65 @@ func TestParser_ReadSyntaxEOFHandling(t *testing.T) {
 	c.Assert(err, qt.Equals, io.EOF)
 }
 
+// faultAfterReader yields src's runes, then fails every later read with
+// fault, as a closed port or a broken pipe does mid-stream.
+type faultAfterReader struct {
+	rdr   *strings.Reader
+	after int
+	fault error
+}
+
+func (p *faultAfterReader) ReadRune() (rune, int, error) {
+	if p.after <= 0 {
+		return 0, 0, p.fault
+	}
+	p.after--
+	return p.rdr.ReadRune()
+}
+
+// TestParser_ReadSyntaxReaderFaultIsNotEOF pins that a fault from the reader
+// is reported as that fault. It used to read as end of input: a closed port
+// returned io.EOF (so read answered #<eof>), a fault one rune into "abc"
+// returned the symbol a, and a fault inside a list reported an unterminated
+// list with the fault lost.
+func TestParser_ReadSyntaxReaderFaultIsNotEOF(t *testing.T) {
+	closed := werr.WrapForeignErrorf(werr.ErrPortClosed, "string-input-port is closed")
+	tcs := []struct {
+		name  string
+		src   string
+		after int
+	}{
+		{name: "fault before the first rune", src: "abc", after: 0},
+		{name: "fault inside a symbol", src: "abc", after: 1},
+		{name: "fault inside a list", src: "(a b c)", after: 4},
+		{name: "fault inside a string", src: `"abc"`, after: 2},
+		{name: "fault inside a block comment", src: "#| x |# 1", after: 3},
+		{name: "fault inside an exponent", src: "1e5", after: 2},
+		{name: "fault inside a ratio", src: "1/2", after: 2},
+		{name: "fault inside a decimal", src: "1.5", after: 2},
+		{name: "fault inside a radix numeral", src: "#x1f", after: 3},
+		{name: "fault inside a complex", src: "1+2i", after: 3},
+		{name: "fault inside a hex character", src: `#\x41`, after: 3},
+		{name: "fault after a hash", src: "#t", after: 1},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			rdr := &faultAfterReader{rdr: strings.NewReader(tc.src), after: tc.after, fault: closed}
+			p := NewParser(env, true, rdr)
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNotNil, qt.Commentf("read returned %v", syn))
+			c.Check(errors.Is(err, io.EOF), qt.IsFalse, qt.Commentf("got: %v", err))
+			c.Check(errors.Is(err, io.ErrUnexpectedEOF), qt.IsFalse, qt.Commentf("got: %v", err))
+			c.Check(errors.Is(err, werr.ErrPortClosed), qt.IsTrue, qt.Commentf("got: %v", err))
+			c.Check(errors.Is(err, werr.ErrIncompleteInput), qt.IsFalse, qt.Commentf("got: %v", err))
+			c.Check(strings.Contains(err.Error(), "U+FFFD"), qt.IsFalse, qt.Commentf("got: %v", err))
+			c.Check(strings.Contains(err.Error(), "is closed"), qt.IsTrue, qt.Commentf("got: %v", err))
+		})
+	}
+}
+
 // TestParser_VectorLoop tests the vector parsing loop
 func TestParser_VectorLoop(t *testing.T) {
 	c := qt.New(t)

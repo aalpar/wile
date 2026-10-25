@@ -21,6 +21,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/werr"
+
 	qt "github.com/frankban/quicktest"
 )
 
@@ -214,4 +216,97 @@ func TestTokenizerErrorIsMatchesThroughWrap(t *testing.T) {
 	if errors.Is(wrapped, NewTokenizerError(MessageExpectingNumber)) {
 		t.Errorf("wrapped error should not match a different-message sentinel")
 	}
+}
+
+// faultingRuneReader yields src's runes, then fails every later read with
+// fault, the way a closed port or a broken pipe does mid-stream.
+type faultingRuneReader struct {
+	rdr   *strings.Reader
+	after int
+	fault error
+}
+
+func (p *faultingRuneReader) ReadRune() (rune, int, error) {
+	if p.after <= 0 {
+		return 0, 0, p.fault
+	}
+	p.after--
+	return p.rdr.ReadRune()
+}
+
+// drainTokens reads tokens until the scanner reports an error, and returns it.
+func drainTokens(tok *Tokenizer) error {
+	for {
+		_, err := tok.Next()
+		if err != nil {
+			return err
+		}
+	}
+}
+
+// TestReaderFaultIsNotEndOfInput pins that a failing reader is reported as
+// that failure, not as end of input. readNextRune used to replace any error
+// from a zero-byte ReadRune with io.EOF, so a closed port read as #<eof> and a
+// fault mid-datum truncated it silently.
+func TestReaderFaultIsNotEndOfInput(t *testing.T) {
+	closed := werr.WrapForeignErrorf(werr.ErrPortClosed, "string-input-port is closed")
+	tcs := []struct {
+		name      string
+		src       string
+		after     int
+		wantIndex int
+		wantState TokenizerState
+	}{
+		{name: "fault before the first rune", src: "abc", after: 0, wantIndex: 0, wantState: TokenizerStateFailed},
+		{name: "fault inside a symbol", src: "abc", after: 1, wantIndex: 1, wantState: TokenizerStateSymbol},
+		{name: "fault inside a list", src: "(a b c)", after: 4, wantIndex: 4, wantState: TokenizerStateSymbol},
+		// Between datums no token is being scanned, so the previous token's
+		// state is not the one the fault happened in.
+		{name: "fault between datums", src: "x y", after: 2, wantIndex: 2, wantState: TokenizerStateFailed},
+		{name: "fault after a line comment", src: "; hi\nx", after: 5, wantIndex: 5, wantState: TokenizerStateFailed},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			rdr := &faultingRuneReader{rdr: strings.NewReader(tc.src), after: tc.after, fault: closed}
+			err := drainTokens(NewTokenizer(rdr, false))
+			c.Assert(errors.Is(err, io.EOF), qt.IsFalse, qt.Commentf("fault reported as end of input: %v", err))
+			c.Check(errors.Is(err, werr.ErrPortClosed), qt.IsTrue, qt.Commentf("got: %v", err))
+			c.Check(errors.Is(err, NewTokenizerError(MessageReaderFailed)), qt.IsTrue, qt.Commentf("got: %v", err))
+			var terr *TokenizerError
+			c.Assert(errors.As(err, &terr), qt.IsTrue)
+			at, located := terr.At()
+			c.Check(located, qt.IsTrue)
+			c.Check(at.Index(), qt.Equals, tc.wantIndex)
+			c.Check(terr.State(), qt.Equals, tc.wantState)
+			// No rune was read, so none may be reported: neither the U+FFFD
+			// placeholder nor end of input.
+			_, isChar := terr.Rune()
+			c.Check(isChar, qt.IsFalse)
+			c.Check(strings.Contains(err.Error(), "U+FFFD"), qt.IsFalse, qt.Commentf("got: %v", err))
+			c.Check(strings.Contains(err.Error(), "<end of input>"), qt.IsFalse, qt.Commentf("got: %v", err))
+			// The generic message is rendered with the cause that explains it.
+			c.Check(strings.Contains(err.Error(), "string-input-port is closed"), qt.IsTrue, qt.Commentf("got: %v", err))
+			// A named input renders through ErrorInFile, which must keep it too.
+			inFile := terr.ErrorInFile("f.scm")
+			c.Check(strings.Contains(inFile, "string-input-port is closed"), qt.IsTrue, qt.Commentf("got: %v", inFile))
+		})
+	}
+}
+
+// TestReaderWrappedEOFIsEndOfInput is the control for the above: a reader
+// that wraps io.EOF has reached end of input, and is reported as the bare
+// io.EOF the parser compares against.
+func TestReaderWrappedEOFIsEndOfInput(t *testing.T) {
+	c := qt.New(t)
+	rdr := &faultingRuneReader{
+		rdr:   strings.NewReader("ab"),
+		after: 2,
+		fault: werr.WrapForeignErrorf(io.EOF, "source exhausted"),
+	}
+	tok := NewTokenizer(rdr, false)
+	_, err := tok.Next()
+	c.Assert(err, qt.IsNil)
+	_, err = tok.Next()
+	c.Check(err, qt.Equals, io.EOF)
 }

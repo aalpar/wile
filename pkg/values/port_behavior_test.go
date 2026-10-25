@@ -334,6 +334,35 @@ func TestPortObject_OperationsAfterClose_ReturnPortClosed(t *testing.T) {
 	c.Assert(errors.Is(flsh.Flush(), werr.ErrPortClosed), qt.IsTrue)
 }
 
+// TestPortObject_ClosedErrorNamesThePort pins that a closed-port rejection
+// says which port it is, while staying errors.Is-matchable. guardClosed used to
+// return the bare sentinel, so Scheme saw only "read-char: error reading
+// character" with no port and no cause.
+func TestPortObject_ClosedErrorNamesThePort(t *testing.T) {
+	tcs := []struct {
+		name string
+		port *values.PortObject
+		want string
+	}{
+		{"named file port", values.NewCharacterInputPortFromReaderWithName(strings.NewReader("abc"), "/tmp/ok.scm"),
+			"character-input-port /tmp/ok.scm is closed"},
+		{"unnamed string port", values.NewStringInputPortWithBuffer(bytes.NewBufferString("abc")),
+			"string-input-port is closed"},
+		{"name needing escapes", values.NewCharacterInputPortFromReaderWithName(strings.NewReader("abc"), "a\nb.scm"),
+			`character-input-port "a\nb.scm" is closed`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			rr, _ := tc.port.AsRuneReader()
+			c.Assert(tc.port.Close(), qt.IsNil)
+			_, _, err := rr.ReadRune()
+			c.Assert(errors.Is(err, werr.ErrPortClosed), qt.IsTrue)
+			c.Check(werr.FailureMessage(err), qt.Equals, tc.want)
+		})
+	}
+}
+
 // TestPortObject_OperationsAfterClose_TextualReadSide covers character
 // input + string input — the rune-read side of closed-port semantics.
 func TestPortObject_OperationsAfterClose_TextualReadSide(t *testing.T) {

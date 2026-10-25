@@ -339,7 +339,7 @@ func releaseLookahead(port *values.PortObject, rdr *parser.Parser) error {
 	urr, _ := port.AsRuneUnreader()
 	err := rdr.ReleaseLookahead(urr)
 	if err != nil {
-		return werr.WrapForeignReadErrorf(err, "error returning lookahead character to port")
+		return wrapReadFault(err, "error returning lookahead character to port")
 	}
 	return nil
 }

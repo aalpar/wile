@@ -15,11 +15,13 @@
 package core_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -93,16 +95,15 @@ func TestReadSyntaxEOFOnExhaustedPort(t *testing.T) {
 func TestClosePortThenRead(t *testing.T) {
 	t.Parallel()
 
-	// After close-port, reading returns eof-object (the cached parser
-	// was evicted by close-port, and a fresh read on the closed port
-	// yields EOF immediately).
-	result, err := testhelpers.RunSchemeCode(t, `
+	// After close-port, read raises the closed-port refusal, as read-char
+	// does. It used to answer #<eof>: the tokenizer reported the closed
+	// guard's error as end of input.
+	_, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "42")))
 			(close-port p)
-			(eof-object? (read p)))
+			(read p))
 	`)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
+	qt.Assert(t, errors.Is(err, werr.ErrPortClosed), qt.IsTrue, qt.Commentf("got: %v", err))
 }
 
 func TestCallWithPortClosesOnReturn(t *testing.T) {
