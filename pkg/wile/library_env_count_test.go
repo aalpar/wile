@@ -136,9 +136,16 @@ func TestDefineLibraryInAProgramProcedureBodyIsRefused(t *testing.T) {
 	ctx := context.Background()
 	engine, err := newLibraryCountEngine(ctx, fstest.MapFS{})
 	c.Assert(err, qt.IsNil)
-	_, err = engine.EvalMultiple(ctx, `(define (g) (define-library (q) (import (scheme base)) (export)) 1)`)
-	c.Assert(errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue, qt.Commentf("err: %v", err))
-	c.Assert(err.Error(), qt.Contains, "define-library: not permitted inside a procedure body")
+	for _, src := range []string{
+		`(define (g) (define-library (q) (import (scheme base)) (export)) 1)`,
+		`(let () (define-library (q) (import (scheme base)) (export)) 1)`,
+		`(letrec ((x 1)) (define-library (q) (import (scheme base)) (export)) x)`,
+		`(define-syntax m (lambda (stx) (syntax-case stx () (_ #'1)))) (define (h x) (syntax-case x () (_ (define-library (q) (import (scheme base)) (export)))))`,
+	} {
+		_, err = engine.EvalMultiple(ctx, src)
+		c.Assert(errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue, qt.Commentf("%s\nerr: %v", src, err))
+		c.Assert(err.Error(), qt.Contains, "define-library: not permitted inside a procedure body", qt.Commentf("%s", src))
+	}
 	_, err = engine.EvalMultiple(ctx, `(define-library (top) (import (scheme base)) (export z) (begin (define z 5)))`)
 	c.Assert(err, qt.IsNil)
 }

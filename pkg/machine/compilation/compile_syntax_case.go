@@ -262,6 +262,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// separate field on CompileTimeContinuation), so propagate it explicitly for
 	// cross-library free-id resolution.
 	bodyCompiler.libraryScope = p.libraryScope
+	bodyCompiler.inProcedureBody = p.inProcedureBody
 	bodyCompiler.patternVarSyntax = patternVarSyntax
 	// The merge maps are shared so a reference from this clause body out into an
 	// enclosing merged `let` translates.
