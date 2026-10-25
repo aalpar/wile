@@ -73,11 +73,12 @@ func PrimMakeRectangular(mc machine.CallContext) error {
 	_, iIsBigFloat := i.(*values.BigFloat)
 
 	if rIsBigFloat || iIsBigFloat {
-		realPart, err := toBigComplexPart(r, "make-rectangular")
+		prec := values.OperandPrecision(r, i)
+		realPart, err := toBigComplexPart(r, prec, "make-rectangular")
 		if err != nil {
 			return err
 		}
-		imagPart, err := toBigComplexPart(i, "make-rectangular")
+		imagPart, err := toBigComplexPart(i, prec, "make-rectangular")
 		if err != nil {
 			return err
 		}
@@ -158,7 +159,9 @@ func isRealNumber(v values.Value) bool {
 	}
 }
 
-func toBigComplexPart(v values.Value, name string) (values.Number, error) {
+// toBigComplexPart converts a real to a part of an inexact BigComplex whose
+// other part is a BigFloat; a Rational rounds at prec, that part's precision.
+func toBigComplexPart(v values.Value, prec uint, name string) (values.Number, error) {
 	switch n := v.(type) {
 	case *values.BigInteger:
 		return n, nil
@@ -169,7 +172,7 @@ func toBigComplexPart(v values.Value, name string) (values.Number, error) {
 	case *values.Float:
 		return values.NewBigFloatFromFloat64(n.Value), nil
 	case *values.Rational:
-		return values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetRat(n.Rat())), nil
+		return values.NewBigFloat(new(big.Float).SetPrec(prec).SetRat(n.Rat())), nil
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: expected a real number but got %T", name, v)
 	}
@@ -322,7 +325,26 @@ func angleOfReal(v values.RealNumber) (values.Value, error) {
 		return values.NewFloat(math.NaN()), nil
 	}
 	if v.SignBit() {
+		if beyondFloat64Tier(v) {
+			return values.NewBigFloat(values.BigPi(values.KernelPrecision(v))), nil
+		}
 		return values.NewFloat(math.Pi), nil
 	}
 	return values.NewInteger(0), nil
+}
+
+// beyondFloat64Tier reports whether a negative real's π belongs in the big
+// tier: a BigFloat, whose precision the π carries, or a BigInteger or Rational
+// that float64 cannot hold (it converts to an infinity or a zero). An exact
+// operand float64 holds keeps the float64 π.
+func beyondFloat64Tier(v values.RealNumber) bool {
+	switch v.(type) {
+	case *values.BigFloat:
+		return true
+	case *values.BigInteger, *values.Rational:
+		f := values.NumberToFloat64(v)
+		return math.IsInf(f, 0) || f == 0
+	default:
+		return false
+	}
 }

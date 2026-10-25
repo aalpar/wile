@@ -162,6 +162,91 @@ func (p *BigFloat) BigFloatValue() *big.Float {
 	return p.value
 }
 
+// MaxBigFloatKernelPrecision caps the working precision of the transcendental
+// kernels (exp, log, the trigonometric family, atan, expt's exp/log path,
+// angle). They cannot be interrupted, so neither with-timeout nor a host's
+// context can stop one mid-call, and their cost grows superlinearly: measured
+// per call, about 0.1 s at 16384 bits against 1-2.5 s at 65536.
+const MaxBigFloatKernelPrecision = 1 << 14
+
+// OperandPrecision is the precision of a big-precision operation on vs, the
+// operand-max rule: the widest precision among the BigFloat operands and the
+// BigFloat parts of BigComplex operands, or DefaultBigFloatPrecision when none
+// carries one. A NaN carries no precision. Arithmetic, sqrt and conversions
+// use it as it is; a transcendental kernel uses KernelPrecision.
+func OperandPrecision(vs ...Value) uint {
+	var q uint
+	for _, n := range vs {
+		switch v := n.(type) {
+		case *BigFloat:
+			q = max(q, v.precision())
+		case *BigComplex:
+			q = max(q, partPrecision(v.real), partPrecision(v.imag))
+		}
+	}
+	if q == 0 {
+		return DefaultBigFloatPrecision
+	}
+	return q
+}
+
+// KernelPrecision is OperandPrecision capped at MaxBigFloatKernelPrecision:
+// the working, and so the result, precision of a transcendental kernel.
+func KernelPrecision(vs ...Value) uint {
+	return min(OperandPrecision(vs...), MaxBigFloatKernelPrecision)
+}
+
+// partPrecision is a BigComplex part's precision: a BigFloat's own, 0 for an
+// exact part.
+func partPrecision(n Number) uint {
+	bf, ok := n.(*BigFloat)
+	if !ok {
+		return 0
+	}
+	return bf.precision()
+}
+
+// precision is the precision p's value rounds at, 0 for a NaN, whose value is a
+// zero placeholder.
+func (p *BigFloat) precision() uint {
+	if p.nan {
+		return 0
+	}
+	return p.value.Prec()
+}
+
+// Sqrt returns the square root of p at p's own precision: a BigFloat, or for a
+// negative p the branch-cut value 0+sqrt(|p|)i (BigSqrt).
+//
+// A NaN BigFloat carries a nan flag over a zero value, so Sign reports 0 for it
+// and a sign test run first would answer as if it were zero; NaN therefore goes
+// first. There is no separate infinity test: -Inf is negative, so it takes the
+// branch cut to 0.0+inf.0i, as (sqrt -inf.0) does on the Float arm and in
+// Racket and Chez, and big.Float.Sqrt maps +Inf to +Inf.
+func (p *BigFloat) Sqrt() Number {
+	if p.nan {
+		return p
+	}
+	return BigSqrt(p.value, p.value.Prec())
+}
+
+// BigSqrt returns the square root of x rounded to prec bits: a BigFloat, or for
+// a negative x the branch-cut value 0+sqrt(|x|)i as a BigComplex with BigFloat
+// parts. It is the kernel the BigFloat, BigInteger and Rational arms of sqrt
+// share, so sqrt(-n) and sqrt(n) carry the same digits. The negative arm is
+// built here rather than through (*BigComplex).Sqrt, whose working precision is
+// its parts' and so would differ from the positive arm's for an exact x.
+func BigSqrt(x *big.Float, prec uint) Number {
+	if x.Sign() < 0 {
+		root := new(big.Float).SetPrec(prec).Sqrt(new(big.Float).Abs(x))
+		return NewBigComplexFromBigFloats(
+			NewBigFloat(new(big.Float).SetPrec(prec)),
+			NewBigFloat(root),
+		)
+	}
+	return NewBigFloat(new(big.Float).SetPrec(prec).Sqrt(x))
+}
+
 // Float64Truncated returns the value as float64, silently rounding when the
 // magnitude exceeds float64 precision. Use only when downstream code inherently
 // cannot use the accuracy bit (math.Sin/Cos inputs, FNV hash seeds,

@@ -84,42 +84,30 @@ func (p *BigComplex) Imag() Number {
 }
 
 // RealAsBigFloat returns the real part converted to BigFloat for calculations.
+// An exact part rounds at the complex's OperandPrecision, the BigFloat part's
+// precision when the other part is one.
 //
 // The result ALIASES the component when it is already a *BigFloat: no copy is made.
 // Callers that intend to mutate must copy: new(big.Float).Set(x.BigFloatValue()).
 func (p *BigComplex) RealAsBigFloat() *BigFloat {
-	return toBigFloat(p.real)
+	return toBigFloatAt(p.real, OperandPrecision(p))
 }
 
-// ImagAsBigFloat returns the imaginary part converted to BigFloat for calculations.
+// ImagAsBigFloat returns the imaginary part converted to BigFloat for calculations,
+// at the precision RealAsBigFloat uses.
 //
 // The result ALIASES the component when it is already a *BigFloat: no copy is made.
 // Callers that intend to mutate must copy: new(big.Float).Set(x.BigFloatValue()).
 func (p *BigComplex) ImagAsBigFloat() *BigFloat {
-	return toBigFloat(p.imag)
+	return toBigFloatAt(p.imag, OperandPrecision(p))
 }
 
-// toBigFloat converts a BigComplex part to a BigFloat.
-//
-// The three cases below are exactly the part types validateBigComplexPart admits,
-// and every caller passes a part (p.real or p.imag), so the switch is total. It
-// previously also carried *Integer and *Float arms for "intermediate arithmetic
-// results" — the general divide path used to funnel its unpromoted numerators
-// through here — but that call site now divides the parts directly, and those two
-// arms became unreachable. They are dropped rather than left as unpinned dead code;
-// the panic below still catches a part type that escapes validation.
+// toBigFloat converts a BigComplex part to a BigFloat, an exact part at
+// DefaultBigFloatPrecision. Its callers round further, to float64, or ask only
+// about an infinite part; a computation on the parts converts them at the
+// complex's OperandPrecision instead (RealAsBigFloat, Magnitude, Sqrt).
 func toBigFloat(n Number) *BigFloat {
-	switch v := n.(type) {
-	case *BigFloat:
-		return v
-	case *BigInteger:
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetInt(v.value)
-		return &BigFloat{value: bf}
-	case *Rational:
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(v.Rat())
-		return &BigFloat{value: bf}
-	}
-	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "toBigFloat: unsupported type %T", n))
+	return toBigFloatAt(n, DefaultBigFloatPrecision)
 }
 
 // maybeSimplify demotes a complex to its real part when the imaginary part is an
@@ -240,7 +228,7 @@ func init() {
 	})
 
 	bigComplexLessThan = makeLessThanDispatch(KindBigComplex, func(p *BigComplex, o Number) bool {
-		return toBigFloat(p.real).LessThan(toBigFloat(o.(*BigComplex).real))
+		return p.real.LessThan(o.(*BigComplex).real)
 	})
 
 	bigComplexMultiply = makeMultiplyDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
@@ -438,8 +426,11 @@ func (p *BigComplex) IsZero() bool {
 // (complex.go). This is an internal total order, not mathematical ordering, and
 // nothing may read it as such.
 //
+// The parts compare as Numbers, so two exact parts compare exactly; rounding
+// both to 256 bits first ordered parts that differ past bit 256 as equal.
+//
 // The NaN answer is owned by the real-part comparison, not by a guard here. A
-// real-part NaN reaches BigFloat.LessThan (directly on the same-type path, or
+// real-part NaN reaches the parts' LessThan (directly on the same-type path, or
 // after promotion on the cross-kind path), which yields #f in both directions,
 // exactly as Float gets #f free from IEEE <. An imaginary-part NaN is irrelevant
 // to a real-parts-only ordering, so it is ignored, again matching Complex. An
@@ -448,7 +439,7 @@ func (p *BigComplex) IsZero() bool {
 func (p *BigComplex) LessThan(o Number) bool {
 	v, ok := o.(*BigComplex)
 	if ok {
-		return toBigFloat(p.real).LessThan(toBigFloat(v.real))
+		return p.real.LessThan(v.real)
 	}
 	return bigComplexLessThan[o.Kind()](p, o)
 }
@@ -619,8 +610,8 @@ func (p *BigComplex) ImagPart() Number {
 	return p.imag
 }
 
-// Magnitude returns the absolute value (modulus) of the complex number.
-// |a+bi| = sqrt(a² + b²)
+// Magnitude returns the absolute value (modulus) of the complex number,
+// |a+bi| = sqrt(a² + b²), at the parts' OperandPrecision.
 //
 // A NaN part reads as a zero under the nan flag, so it is answered up front: NaN,
 // except beside an infinite part, where the magnitude is +Inf as IEEE hypot has it.
@@ -628,12 +619,13 @@ func (p *BigComplex) Magnitude() *BigFloat {
 	if p.IsNaN() && !isInfinitePart(p.real) && !isInfinitePart(p.imag) {
 		return NewBigFloatNaN()
 	}
-	a := toBigFloat(p.real)
-	b := toBigFloat(p.imag)
-	aa := new(big.Float).Mul(a.value, a.value)
-	bb := new(big.Float).Mul(b.value, b.value)
-	sum := new(big.Float).Add(aa, bb)
-	result := new(big.Float).SetPrec(DefaultBigFloatPrecision).Sqrt(sum)
+	prec := OperandPrecision(p)
+	a := toBigFloatAt(p.real, prec)
+	b := toBigFloatAt(p.imag, prec)
+	aa := new(big.Float).SetPrec(prec).Mul(a.value, a.value)
+	bb := new(big.Float).SetPrec(prec).Mul(b.value, b.value)
+	sum := new(big.Float).SetPrec(prec).Add(aa, bb)
+	result := new(big.Float).SetPrec(prec).Sqrt(sum)
 	return &BigFloat{value: result}
 }
 
@@ -660,19 +652,20 @@ func isInfinitePart(n Number) bool {
 }
 
 // Phase returns the phase (argument) of the complex number in radians.
-// Uses atan2(imag, real) at big.Float precision, so components beyond the
+// Uses atan2(imag, real) at the parts' KernelPrecision, so components beyond the
 // float64 range (~1.8e308) with a finite ratio keep their true angle instead of
 // both saturating to +Inf and collapsing to atan2(+Inf,+Inf)=π/4.
 func (p *BigComplex) Phase() *BigFloat {
 	if p.IsNaN() {
 		return NewBigFloatNaN()
 	}
-	r := toBigFloat(p.real).value
-	i := toBigFloat(p.imag).value
-	return &BigFloat{value: BigAtan2(i, r, DefaultBigFloatPrecision)}
+	prec := KernelPrecision(p)
+	r := toBigFloatAt(p.real, prec).value
+	i := toBigFloatAt(p.imag, prec).value
+	return &BigFloat{value: BigAtan2(i, r, prec)}
 }
 
-// Sqrt returns the principal square root at big.Float precision, honoring the
+// Sqrt returns the principal square root at the parts' OperandPrecision, honoring the
 // R7RS §6.2.6 branch cut along the negative real axis (continuous with
 // quadrant II: the negative real axis maps to the positive imaginary axis).
 // It uses the numerically stable formulation that derives the smaller component
@@ -683,9 +676,9 @@ func (p *BigComplex) Sqrt() *BigComplex {
 	if p.IsNaN() {
 		return nanPartSqrt(p.real, p.imag)
 	}
-	prec := uint(DefaultBigFloatPrecision)
-	a := new(big.Float).SetPrec(prec).Set(toBigFloat(p.real).value)
-	b := new(big.Float).SetPrec(prec).Set(toBigFloat(p.imag).value)
+	prec := OperandPrecision(p)
+	a := new(big.Float).SetPrec(prec).Set(toBigFloatAt(p.real, prec).value)
+	b := new(big.Float).SetPrec(prec).Set(toBigFloatAt(p.imag, prec).value)
 	two := new(big.Float).SetPrec(prec).SetInt64(2)
 
 	// Zero imaginary part: the result stays on an axis. The negative real axis

@@ -293,7 +293,9 @@ func initPromoters() {
 		return NewRationalFromRat(new(big.Rat).SetInt64(p.Value))
 	}
 
-	// Integer → BigFloat
+	// Integer → BigFloat. The four →BigFloat promoters serve Promote only, at
+	// DefaultBigFloatPrecision: arithmetic converts at the BigFloat partner's
+	// precision instead (promoteToBigFloatPair).
 	promoter[KindInteger][KindBigFloat] = func(n Number) Number {
 		p := n.(*Integer)
 		return &BigFloat{value: new(big.Float).SetPrec(DefaultBigFloatPrecision).SetInt64(p.Value)}
@@ -437,6 +439,50 @@ func Promote(n Number, target NumericKind) Number {
 	return fn(n)
 }
 
+// promoteToBigFloatPair lifts the operand of p, o that is not a BigFloat to a
+// BigFloat at its partner's precision: exactly when it fits, rounded otherwise.
+// That is operand-max for the pair, since the BigFloat operation then rounds at
+// the wider of two equal precisions. The unary BigFloat promoters round at
+// DefaultBigFloatPrecision whatever the partner, which loses a wide exact
+// operand's bits beside a wide BigFloat and keeps 256 beside a narrow one.
+func promoteToBigFloatPair(p, o Number) (Number, Number) {
+	bf, ok := p.(*BigFloat)
+	if ok {
+		return p, toBigFloatAt(o, OperandPrecision(bf))
+	}
+	return toBigFloatAt(p, OperandPrecision(o)), o
+}
+
+// toBigFloatAt converts a real Number to a BigFloat rounded to prec bits. A
+// BigFloat is returned as it is, at its own precision.
+func toBigFloatAt(n Number, prec uint) *BigFloat {
+	switch v := n.(type) {
+	case *BigFloat:
+		return v
+	case *Integer:
+		return &BigFloat{value: new(big.Float).SetPrec(prec).SetInt64(v.Value)}
+	case *BigInteger:
+		return &BigFloat{value: new(big.Float).SetPrec(prec).SetInt(v.value)}
+	case *Rational:
+		return &BigFloat{value: new(big.Float).SetPrec(prec).SetRat(v.value)}
+	case *Float:
+		if math.IsNaN(v.Value) {
+			return NewBigFloatNaN()
+		}
+		return &BigFloat{value: new(big.Float).SetPrec(prec).SetFloat64(v.Value)}
+	}
+	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "toBigFloatAt: unsupported type %T", n))
+}
+
+// eitherSpecialFloat reports whether p or o is a Float holding Inf or NaN.
+func eitherSpecialFloat(p, o Number) bool {
+	f, ok := p.(*Float)
+	if !ok {
+		f, ok = o.(*Float)
+	}
+	return ok && isSpecialFloat(f)
+}
+
 // isSpecialFloat reports whether a Float holds IEEE 754 Inf or NaN.
 // Used by the arithmetic dispatches (makeArithmeticDispatch, makeDivideDispatch)
 // to compute in clamped float64 for the kind pairs specialFloatNeedsGuard names,
@@ -550,6 +596,17 @@ func makeArithmeticDispatch[T Number](
 			// realPartsOf inside Complex's own methods, and never reaches a table.
 			table[dstKind] = func(p T, o Number) Number {
 				return NewComplex(realComplexOp(NumberToFloat64(p), o.(*Complex).Value))
+			}
+		case lubKind == KindBigFloat:
+			// A BigFloat meets an exact or Float operand, which rounds at the
+			// BigFloat's precision (operand-max): a unary promoter cannot see the
+			// partner. A Float Inf/NaN decides the answer, as in the guarded cases.
+			floatSide := srcKind == KindFloat || dstKind == KindFloat
+			table[dstKind] = func(p T, o Number) Number {
+				if floatSide && eitherSpecialFloat(p, o) {
+					return NewFloat(float64Op(finiteClampedFloat64(p), finiteClampedFloat64(o)))
+				}
+				return applyOp(promoteToBigFloatPair(p, o))
 			}
 		case srcKind == KindFloat && guarded:
 			// Receiver is Float, might have Inf/NaN.
@@ -782,6 +839,16 @@ func makeDivideDispatch[T Number](
 			// component dies. realDivideComplex keeps the dividend real.
 			table[dstKind] = func(p T, o Number) (Number, error) {
 				return NewComplex(realDivideComplex(NumberToFloat64(p), o.(*Complex).Value)), nil
+			}
+		case lubKind == KindBigFloat:
+			// See the twin case in makeArithmeticDispatch.
+			floatSide := srcKind == KindFloat || dstKind == KindFloat
+			table[dstKind] = func(p T, o Number) (Number, error) {
+				if floatSide && eitherSpecialFloat(p, o) {
+					return NewFloat(finiteClampedFloat64(p) / finiteClampedFloat64(o)), nil
+				}
+				x, y := promoteToBigFloatPair(p, o)
+				return x.Divide(y)
 			}
 		case srcKind == KindFloat && guarded:
 			// Receiver is Float, might have Inf/NaN.
