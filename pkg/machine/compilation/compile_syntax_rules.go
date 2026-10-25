@@ -245,6 +245,7 @@ func resolveLiteralDefinitions(env *environment.EnvironmentFrame, literalSyntax 
 	if env == nil || len(literalSyntax) == 0 {
 		return nil
 	}
+	store := env.GlobalEnvironment()
 	q := make(map[string]match.LiteralPin, len(literalSyntax))
 	for k, ls := range literalSyntax {
 		binding, ok := lookupLiteralBinding(env, k, ls.Scopes(), definitionFallbackPhases(env))
@@ -252,7 +253,8 @@ func resolveLiteralDefinitions(env *environment.EnvironmentFrame, literalSyntax 
 			q[k] = match.LiteralPin{Ambiguous: true}
 			continue
 		}
-		q[k] = match.LiteralPin{Binding: binding}
+		startup := store != nil && store.IsStartupBinding(values.NewSymbol(k), binding)
+		q[k] = match.LiteralPin{Binding: binding, Startup: startup}
 	}
 	return q
 }

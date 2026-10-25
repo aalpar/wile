@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -46,6 +47,18 @@ func newDenotingLiteralTestBinding(form string, bt environment.BindingType, impo
 			return true
 		})
 	}
+	return q
+}
+
+// newPrivateLiteralTestBinding builds the shape a library-private define has
+// when a pin resolves it: a variable carrying the library's scope, no
+// provenance root (nothing exported it) and not imported.
+func newPrivateLiteralTestBinding(name string) *environment.Binding {
+	q := newLiteralTestBinding(name, environment.BindingTypeVariable, false)
+	q.UpdateMeta(func(m *environment.BindingMeta) bool {
+		m.Scopes = syntax.Scopes{}.Add(syntax.NewScopeWithLabel("w16lib"))
+		return true
+	})
 	return q
 }
 
@@ -173,6 +186,7 @@ func TestLiteralNotShadowed(t *testing.T) {
 	cases := []struct {
 		name         string
 		defB         *environment.Binding
+		defStartup   bool
 		useB         *environment.Binding
 		sameSpelling bool
 		want         bool
@@ -182,7 +196,9 @@ func TestLiteralNotShadowed(t *testing.T) {
 		{
 			// An import mints a fresh *Binding for a re-exported name, so a
 			// legitimately imported literal can never be pointer-equal.
-			name:         "any imported binding of the same name is accepted",
+			// No production import site makes this shape (importOrigin always
+			// returns a root), so the row is the only thing pinning the arm.
+			name:         "an unrooted import of the same name is accepted by spelling",
 			defB:         pinned,
 			useB:         importedShadow,
 			sameSpelling: true,
@@ -241,7 +257,7 @@ func TestLiteralNotShadowed(t *testing.T) {
 			// The RESIDUAL close, at unit level: an unrooted defB was never
 			// exported, so an import rooted at a library is another definition.
 			name:         "an unrooted literal is not another library's import",
-			defB:         pinned,
+			defB:         newPrivateLiteralTestBinding("lit"),
 			useB:         newRootedLiteralTestBinding("lit", "w16other", "lit", true),
 			sameSpelling: true,
 			want:         false,
@@ -250,8 +266,19 @@ func TestLiteralNotShadowed(t *testing.T) {
 			// The #%base exception: an unrooted defB can be a library's own copy
 			// of a base binding, which a base-rooted import denotes too.
 			name:         "an unrooted literal still matches a base-rooted import by spelling",
-			defB:         pinned,
+			defB:         newPrivateLiteralTestBinding("lit"),
 			useB:         newRootedLiteralTestBinding("lit", environment.BaseOriginLib, "lit", true),
+			sameSpelling: true,
+			want:         true,
+		},
+		{
+			// The startup-pin exception (P2D end to end): the pin is the
+			// startup set's own binding, which carries no root, and a library's
+			// export of the name may be that same base definition.
+			name:         "a startup pin matches a library-rooted import by spelling",
+			defB:         newLiteralTestBinding("car", environment.BindingTypeVariable, false),
+			defStartup:   true,
+			useB:         newRootedLiteralTestBinding("car", "w16lib", "car", true),
 			sameSpelling: true,
 			want:         true,
 		},
@@ -281,7 +308,7 @@ func TestLiteralNotShadowed(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := literalNotShadowed(tc.defB, tc.useB, tc.sameSpelling)
+			got := literalNotShadowed(tc.defB, tc.defStartup, tc.useB, tc.sameSpelling)
 			if got != tc.want {
 				t.Errorf("literalNotShadowed = %v, want %v", got, tc.want)
 			}

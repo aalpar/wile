@@ -658,21 +658,24 @@ func w16LibEngine(t *testing.T, libs map[string]string) *wile.Engine {
 // import mints a fresh *Binding and the private literal carries no provenance
 // root to compare. It now answers OTHER, R7RS §4.3.2's fallback, by binding
 // identity: export roots a define at its own library at finalization, so an
-// unrooted literal was never exported, and an import rooted at a library is
-// some other definition. INSIDE is the ratchet against refusing every private
-// literal (the library's own use still matches); "importing the literal too",
-// BOUNDARY and the unit row TestLiteralNotShadowed/any_imported_binding_of_the_
-// same_name_is_accepted are the ones a refusal of every import turns red. BASE
-// pins the #%base exception: an unrooted literal can be a library's copy of a
-// base binding, so a base-rooted import still decides by spelling, and
-// RESIDUAL-BASE is what that exception still over-accepts.
+// unrooted literal defined before the macro was never exported, and an import
+// rooted at a library is some other definition. INSIDE is the ratchet against
+// refusing every private literal (the library's own direct use still matches);
+// "importing the literal too", BOUNDARY and the unit row
+// TestLiteralNotShadowed/an_unrooted_import_of_the_same_name_is_accepted_by_spelling
+// are the ones a refusal of every import turns red.
+//
+// Two exceptions keep master's spelling answer, and their rows say what each
+// still over-accepts. A pin that is the startup set's own binding (BASE, P2D,
+// P2D-FULL, R5RS) has no root, yet a library export of the name may be the same
+// base definition; MYCAR is the cost. A use site rooted at #%base keeps
+// spelling too. RESIDUAL-BASE meets both. The TEMPLATE and LATE rows are
+// adjacent residuals with other causes.
 //
 // The BOUNDARY row records the opposite direction: a legitimate re-export of
-// the SAME `lit` binding, reached through a prefix rename, is refused rather
-// than accepted, because spelling is the only signal literalNotShadowed has
-// left for a variable literal (DenotedForm is "" on both sides) and the
-// prefix changes the spelling. Under-acceptance, not over-acceptance — the
-// safer direction, but still not the R7RS answer.
+// the SAME `lit` binding, reached through a prefix rename, matches because both
+// sides carry the same provenance root, where spelling alone ("p:lit" !=
+// "lit") would refuse it.
 //
 // The FLIP row is the third edge of the same rider, and the only one whose
 // ANSWER moved: with defB denoting a form, an imported useB denoting none is now
@@ -760,6 +763,67 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
         ((_ x) 'OTHER)))))
 `
 
+	const libExportsBaseNamedLit = `(define-library (w16lib)
+  (export mc car)
+  (import (only (scheme base) define define-syntax syntax-rules quote))
+  (begin
+    (define car 42)
+    (define-syntax mc
+      (syntax-rules (car)
+        ((_ car) 'MATCHED-LITERAL)
+        ((_ x) 'OTHER)))))
+`
+	const libExportsBaseNamedLitFull = `(define-library (w16lib)
+  (export mc car)
+  (import (scheme base))
+  (begin
+    (define car 42)
+    (define-syntax mc
+      (syntax-rules (car)
+        ((_ car) 'MATCHED-LITERAL)
+        ((_ x) 'OTHER)))))
+`
+	const libMyCar = `(define-library (w16mycar)
+  (export car)
+  (import (only (scheme base) define))
+  (begin
+    (define car 7)))
+`
+	const libRulesWrap = `(define-library (w16lib)
+  (export mg wrap)
+  (import (scheme base))
+  (begin
+    (define lit 42)
+    (define-syntax mg
+      (syntax-rules (lit)
+        ((_ lit) 'MATCHED-LITERAL)
+        ((_ x) 'OTHER)))
+    (define-syntax wrap
+      (syntax-rules ()
+        ((_) (mg lit))))))
+`
+	const libRulesLateLit = `(define-library (w16lib)
+  (export mg)
+  (import (scheme base))
+  (begin
+    (define-syntax mg
+      (syntax-rules (lit)
+        ((_ lit) 'MATCHED-LITERAL)
+        ((_ x) 'OTHER))))
+  (begin
+    (define lit 42)))
+`
+	const libCaseBaseLiteral = `(define-library (w16lib)
+  (export mc)
+  (import (scheme base))
+  (begin
+    (define-syntax mc
+      (lambda (stx)
+        (syntax-case stx (car)
+          ((_ car) #''MATCHED-LITERAL)
+          ((_ x) #''OTHER))))))
+`
+
 	const libUnrelatedLit = `(define-library (w16other)
   (export lit)
   (import (scheme base))
@@ -814,17 +878,18 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 			want: "OTHER",
 		},
 		{
-			// The ratchet against a refusal of every private literal: inside
-			// w16lib the use site resolves the private `lit` itself.
+			// The ratchet against a refusal of every private literal placed ahead
+			// of pointer identity: inside w16lib the use site resolves the
+			// private `lit` itself. A refusal of every import does not reach it.
 			name: "INSIDE: the library's own use of its private literal matches",
 			libs: map[string]string{"w16lib.scm": libRulesProbeInside},
 			src:  "(import (w16lib))\nprobe",
 			want: "MATCHED-LITERAL",
 		},
 		{
-			// The #%base exception. Refusing every import against an unrooted
-			// literal turns this OTHER: the library's `car` and the program's
-			// both come from the base, and the import is rooted there.
+			// The pin is the startup set's own `car` and the use site's import
+			// is rooted at #%base: both exceptions apply, spelling decides.
+			// petite agrees.
 			name: "BASE: a literal naming a base procedure matches its import",
 			libs: map[string]string{"w16lib.scm": libRulesBaseLiteral},
 			src:  "(import (scheme base) (w16lib))\n(mc car)",
@@ -834,39 +899,115 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 			// A literal the macro's library IMPORTS is rooted at its source, so
 			// the program's import of the same source is the same binding.
 			// petite agrees.
-			name: "a literal imported into the macro's library matches the same import",
+			name: "IMPORTED: a literal imported into the macro's library matches the same import",
 			libs: map[string]string{"w16lit.scm": libLitOnly, "w16mac.scm": libRulesOverImportedLit},
 			src:  "(import (w16mac) (w16lit))\n(mg lit)",
 			want: "MATCHED-LITERAL",
 		},
 		{
-			// RESIDUAL of the #%base exception, today's answer and not the
-			// R7RS one. w16lib's car is a private define, the program's is the
-			// base's, so §4.3.2 wants OTHER (petite answers OTHER). Both sides
-			// look alike to literalNotShadowed: defB unrooted and not imported,
-			// useB rooted at #%base, exactly as in BASE, so spelling decides.
-			// Closing it needs the definition-side binding's library identity
-			// at pin time.
+			// RESIDUAL of the base exceptions, today's answer and not the R7RS
+			// one. w16lib's car is a private define, the program's is the
+			// base's, so §4.3.2 wants OTHER (petite answers OTHER). The pin
+			// never sees the private define: resolveLiteralDefinitions probes
+			// the transformer env's own phase (1) first and finds the startup
+			// set's phase-1 `car` before descending to the phase-0 define. So
+			// this is BASE's shape exactly, and spelling decides.
 			name: "RESIDUAL-BASE: a private define over a base name still matches the base import",
 			libs: map[string]string{"w16lib.scm": libRulesPrivateCar},
 			src:  "(import (scheme base) (w16lib))\n(mc car)",
 			want: "MATCHED-LITERAL",
 		},
 		{
-			// BOUNDARY, the under-acceptance twin of the RESIDUAL row above,
-			// not the R7RS-correct answer. `lit` is BindingTypeVariable, so
-			// DenotedForm(defB) == "" and literalNotShadowed's IsImported
-			// rider falls back to sameSpelling — but the prefix import
-			// renames the use site's `lit` to `p:lit`, so sameSpelling
-			// ("p:lit" != "lit") is false even though p:lit is a legitimate
-			// re-export of the SAME literal binding. R7RS §4.3.2 wants
-			// MATCHED-LITERAL; this answers OTHER. NOT a regression: the
-			// pre-task base (match.go's spelling gate, before any binding
-			// check ran at all) refused every renamed or prefixed literal the
-			// same way, auxiliary keyword or not — measured unchanged against
-			// commit 90c4f2c2. Flip this want only together with a widening
-			// of the sameSpelling fallback (e.g. comparing resolved bindings
-			// across the rename instead of names).
+			// An exported literal whose name the base also binds. The pin is
+			// the startup set's `car` (as in RESIDUAL-BASE), not the library's
+			// define, and the use site's import is rooted at w16lib, so only
+			// the startup-pin exception keeps master's answer. petite agrees.
+			name: "P2D: an exported base-named literal matches its own export",
+			libs: map[string]string{"w16lib.scm": libExportsBaseNamedLit},
+			src:  "(import (w16lib))\n(mc car)",
+			want: "MATCHED-LITERAL",
+		},
+		{
+			name: "P2D-FULL: the same with all of (scheme base) imported",
+			libs: map[string]string{"w16lib.scm": libExportsBaseNamedLitFull},
+			src:  "(import (w16lib))\n(mc car)",
+			want: "MATCHED-LITERAL",
+		},
+		{
+			// RESIDUAL of the startup-pin exception, today's answer (= master)
+			// and not the R7RS one: petite answers OTHER. The use-site `car`
+			// is w16mycar's define and the pin is the base's, but P2D has the
+			// same (unrooted startup pin, library-rooted import) shape, and
+			// telling them apart needs either the macro's library identity at
+			// pin time or a pin that sees P2D's own define.
+			name: "MYCAR: another library's car still matches a base-named literal",
+			libs: map[string]string{"w16lib.scm": libRulesBaseLiteral, "w16mycar.scm": libMyCar},
+			src:  "(import (except (scheme base) car) (w16mycar) (w16lib))\n(mc car)",
+			want: "MATCHED-LITERAL",
+		},
+		{
+			// A re-export keeps its #%base root: (scheme r5rs) exports the
+			// base's car.
+			name: "R5RS: a base literal matches a re-exported base binding",
+			libs: map[string]string{"w16lib.scm": libRulesBaseLiteral},
+			src:  "(import (scheme r5rs) (w16lib))\n(mc car)",
+			want: "MATCHED-LITERAL",
+		},
+		{
+			name: "syntax-case takes the RESIDUAL path",
+			libs: map[string]string{"w16lib.scm": libCase, "w16other.scm": libUnrelatedLit},
+			src:  "(import (w16lib) (w16other))\n(mg lit)",
+			want: "OTHER",
+		},
+		{
+			name: "syntax-case takes the BASE path",
+			libs: map[string]string{"w16lib.scm": libCaseBaseLiteral},
+			src:  "(import (scheme base) (w16lib))\n(mc car)",
+			want: "MATCHED-LITERAL",
+		},
+		{
+			// RESIDUAL, today's answer: petite answers MATCHED-LITERAL in
+			// both TEMPLATE rows. The `lit` that wrap's template introduces
+			// is the library's own, but the use-site lookup
+			// (GetLiteralBinding) runs in the importing program's env, where
+			// it resolves w16other's import here (refused against the private
+			// pin; master accepted it by spelling) and nothing in the row
+			// below (refused on master too).
+			name: "TEMPLATE: a template-introduced private literal with an unrelated import",
+			libs: map[string]string{"w16lib.scm": libRulesWrap, "w16other.scm": libUnrelatedLit},
+			src:  "(import (w16lib) (w16other))\n(wrap)",
+			want: "OTHER",
+		},
+		{
+			name: "TEMPLATE: a template-introduced private literal alone",
+			libs: map[string]string{"w16lib.scm": libRulesWrap},
+			src:  "(import (w16lib))\n(wrap)",
+			want: "OTHER",
+		},
+		{
+			// RESIDUAL, today's answer (= master): petite answers OTHER. A
+			// literal defined in a LATER begin than the macro is unbound when
+			// the pin is taken, so the unpinned arm compares the use-site
+			// resolutions, and with both unbound there spelling matches.
+			name: "LATE: a private literal defined after the macro",
+			libs: map[string]string{"w16lib.scm": libRulesLateLit},
+			src:  "(import (w16lib))\n(mg lit)",
+			want: "MATCHED-LITERAL",
+		},
+		{
+			name: "LATE: the same with an unrelated library's lit imported",
+			libs: map[string]string{"w16lib.scm": libRulesLateLit, "w16other.scm": libUnrelatedLit},
+			src:  "(import (w16lib) (w16other))\n(mg lit)",
+			want: "MATCHED-LITERAL",
+		},
+		{
+			// BOUNDARY, closed by the origin comparison. `lit` is
+			// BindingTypeVariable, so DenotedForm(defB) == "", and the prefix
+			// import renames the use site's `lit` to `p:lit`, so sameSpelling
+			// is false; both sides carry w16lib's root for `lit`, so
+			// SameBinding answers instead and R7RS §4.3.2's MATCHED-LITERAL
+			// follows. The pre-task base (match.go's spelling gate) refused
+			// every renamed or prefixed literal, measured against 90c4f2c2.
 			name: "BOUNDARY: a prefixed re-export of a variable literal matches",
 			libs: map[string]string{"w16lib.scm": libRulesExportingLit},
 			src:  "(import (prefix (w16lib) p:))\n(p:mg p:lit)",

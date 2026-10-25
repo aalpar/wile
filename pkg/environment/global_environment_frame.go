@@ -1683,6 +1683,26 @@ func (p *GlobalEnvironmentFrame) IsImportedBindingAt(key *values.Symbol, q synta
 	return ok && tier == tierExactImported
 }
 
+// IsStartupBinding reports whether b is itself the binding of one of this
+// store's startup-set slots of key: a sealed slot that no import created. It is
+// pointer identity over the slots, not a resolution, so it neither ranks nor
+// raises; the R7RS §4.3.2 literal pin (compilation.resolveLiteralDefinitions)
+// asks it of the binding its own lookup already returned.
+// Thread-safe: uses RLock for read-only access.
+func (p *GlobalEnvironmentFrame) IsStartupBinding(key *values.Symbol, b *Binding) bool {
+	if b == nil || b.IsImported() {
+		return false
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, s := range p.keys[*key] {
+		if s.sealed && s.slot < len(p.bindings) && p.bindings[s.slot] == b {
+			return true
+		}
+	}
+	return false
+}
+
 // IsSealedBindingAt reports whether a read of key under q at phase resolves to a
 // SEALED-tier slot — "the binding this name denotes here is part of the startup
 // set", which is what refusing to undefine a primitive asks. False covers both

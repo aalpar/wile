@@ -31,14 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **BREAKING (behavior): a library-private pattern literal does not match
   another library's import of the same name (R7RS §4.3.2).** With `(w16lib)`
-  exporting only a `syntax-rules` macro `mg` over its private `lit`, and
-  `(w16other)` exporting its own `lit`, `(import (w16lib) (w16other)) (mg lit)`
-  took the literal clause; it now takes the fallback, as petite does. The
-  library's own uses still match, as does an import of a literal the macro's
-  library exported or imported. A use-site name imported from the base (a
-  `(scheme base)` procedure) still decides by spelling, so a library's private
-  `(define car 42)` listed as a literal still matches `car` from
-  `(scheme base)`, where petite falls back.
+  exporting only a `syntax-rules` macro `mg` over its private `lit`, defined
+  before the macro, and `(w16other)` exporting its own `lit`,
+  `(import (w16lib) (w16other)) (mg lit)` took the literal clause; it now takes
+  the fallback, as petite does. The library's own direct uses still match, as
+  does an import of a literal the macro's library exported or imported. A use
+  introduced by another of the library's macros, `(mg lit)` in a template, now
+  also takes the fallback when an unrelated `lit` is imported (petite matches;
+  without the import it already fell back). A literal whose name the base also
+  binds (`car`) still decides by spelling, so it still matches another
+  library's `car`, where petite falls back.
 
 - **BREAKING (behavior): `char-ready?` requires a textual input port.** It
   answered `#t` without looking at its argument, so `(char-ready? 5)`, a binary
