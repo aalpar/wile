@@ -58,3 +58,15 @@ func BenchmarkPairForEach_1000(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkNthCons_1000 walks to the last cell of a 1000-element proper list,
+// the depth list-ref and list-set! pay at index 999. ns/op divided by 999 is
+// the per-step cost the *Pair fast path in NthCons is measured by.
+func BenchmarkNthCons_1000(b *testing.B) {
+	lst := makeList(1000)
+	ctx := context.Background()
+	b.ReportAllocs()
+	for b.Loop() {
+		_, _ = values.NthCons(ctx, lst, 999, "bench")
+	}
+}

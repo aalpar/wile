@@ -16,6 +16,7 @@ package helpers
 
 import (
 	"errors"
+	"math/big"
 	"strings"
 	"testing"
 
@@ -402,5 +403,47 @@ func TestRequireType_Failure_SentinelPreserved(t *testing.T) {
 		_, err := RequireType[*values.Vector](v, sentinel, "test")
 		c.Assert(err, qt.IsNotNil)
 		c.Assert(errors.Is(err, sentinel), qt.IsTrue, qt.Commentf("sentinel: %v", sentinel))
+	}
+}
+
+// TestParseOptionalStartEndClassifiesBounds pins that start and end follow the
+// single-index rule (values.ExactIndex): an integer-valued *Rational is
+// accepted, a bignum is out of range, and neither text names a Go type.
+func TestParseOptionalStartEndClassifiesBounds(t *testing.T) {
+	huge, ok := new(big.Int).SetString("100000000000000000000", 10)
+	qt.Assert(t, ok, qt.IsTrue)
+	tcs := []struct {
+		name      string
+		rest      values.Value
+		wantStart int64
+		wantEnd   int64
+		sentinel  error
+		text      string
+	}{
+		{name: "integral rational start", rest: values.List(values.NewRational(4, 2)),
+			wantStart: 2, wantEnd: 10},
+		{name: "integral rational end", rest: values.List(values.NewInteger(1), values.NewRational(6, 2)),
+			wantStart: 1, wantEnd: 3},
+		{name: "bignum start", rest: values.List(values.NewBigInteger(huge)),
+			sentinel: werr.ErrIndexOutOfRange, text: "test: start: index 100000000000000000000 out of range"},
+		{name: "bignum end", rest: values.List(values.NewInteger(0), values.NewBigInteger(huge)),
+			sentinel: werr.ErrIndexOutOfRange, text: "test: end: index 100000000000000000000 out of range"},
+		{name: "negative start", rest: values.List(values.NewInteger(-1)),
+			sentinel: werr.ErrIndexOutOfRange, text: "test: start: index -1 must be non-negative"},
+		{name: "string end", rest: values.List(values.NewInteger(0), values.NewString("x")),
+			sentinel: werr.ErrNotAnInteger, text: `test: end: expected an exact integer index but got "x"`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			start, end, err := ParseOptionalStartEnd(tc.rest, 10, "test")
+			if tc.sentinel != nil {
+				qt.Assert(t, errors.Is(err, tc.sentinel), qt.IsTrue, qt.Commentf("%v", err))
+				qt.Assert(t, err.Error(), qt.Contains, tc.text)
+				return
+			}
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, start, qt.Equals, tc.wantStart)
+			qt.Assert(t, end, qt.Equals, tc.wantEnd)
+		})
 	}
 }

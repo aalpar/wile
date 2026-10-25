@@ -16,7 +16,11 @@ package values_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
+	"math/big"
+	"slices"
 	"strings"
 	"testing"
 
@@ -24,6 +28,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 func TestPair_SchemeString(t *testing.T) {
@@ -851,4 +856,260 @@ func Test_IsList(t *testing.T) {
 			qt.Assert(t, values.IsList(tc.in), qt.Equals, tc.out)
 		})
 	}
+}
+
+// TestNthCons pins the walk behind list-ref, list-tail and list-set!: where it
+// stops, which depth it names when it runs out, and that a circular list is
+// answered by reducing the index modulo the cycle (R7RS §6.4 allows a circular
+// list-ref argument; Chez gives the same answers).
+func TestNthCons(t *testing.T) {
+	t.Parallel()
+	one, two, three := values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)
+	circ := func(lead ...values.Value) values.Value {
+		cycle := values.List(one, two, three).(*values.Pair)
+		cycle.Cdr().(*values.Pair).Cdr().(*values.Pair).SetCdr(cycle)
+		var q values.Value = cycle
+		for _, v := range slices.Backward(lead) {
+			q = values.NewCons(v, q)
+		}
+		return q
+	}
+	improper := values.NewCons(one, values.NewCons(two, three))
+	tcs := []struct {
+		name string
+		lst  values.Value
+		n    int64
+		car  string // car of the result; "" means the result itself is wantRes
+		res  string
+		err  string
+	}{
+		{name: "zero returns the input", lst: values.List(one, two), n: 0, res: "(1 2)"},
+		{name: "zero on a non-list returns it", lst: one, n: 0, res: "1"},
+		{name: "zero on the empty list", lst: values.EmptyList, n: 0, res: "()"},
+		{name: "mid-list", lst: values.List(one, two, three), n: 2, res: "(3)"},
+		{name: "exactly the length is the terminal cdr", lst: values.List(one, two), n: 2, res: "()"},
+		{name: "an improper tail is returned at its depth", lst: improper, n: 2, res: "3"},
+		{name: "past the end names the depth", lst: values.List(one, two), n: 5,
+			err: "t: index 5 out of bounds at depth 2"},
+		{name: "past an improper tail names it", lst: improper, n: 3,
+			err: "t: index 3 out of bounds: improper tail at depth 2"},
+		{name: "a non-list at depth 0", lst: one, n: 1,
+			err: "t: index 1 out of bounds: improper tail at depth 0"},
+		{name: "negative", lst: values.List(one), n: -1, err: "t: index -1 must be non-negative"},
+		{name: "cycle, small index", lst: circ(), n: 4, car: "2"},
+		{name: "cycle, index on the detecting cell", lst: circ(), n: 8, car: "3"},
+		{name: "cycle, huge index", lst: circ(), n: 1 << 62, car: "2"},
+		{name: "cycle, max index", lst: circ(), n: math.MaxInt64, car: "2"},
+		{name: "cycle after a lead-in", lst: circ(values.NewSymbol("a"), values.NewSymbol("b")), n: 1 << 62, car: "3"},
+		{name: "index inside the lead-in", lst: circ(values.NewSymbol("a"), values.NewSymbol("b")), n: 1, car: "b"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := values.NthCons(context.Background(), tc.lst, tc.n, "t")
+			if tc.err != "" {
+				qt.Assert(t, errors.Is(err, werr.ErrIndexOutOfRange), qt.IsTrue, qt.Commentf("%v", err))
+				qt.Assert(t, err.Error(), qt.Contains, tc.err)
+				return
+			}
+			qt.Assert(t, err, qt.IsNil)
+			if tc.car != "" {
+				qt.Assert(t, got.(values.Tuple).Car().SchemeString(), qt.Equals, tc.car)
+				return
+			}
+			qt.Assert(t, got.SchemeString(), qt.Equals, tc.res)
+		})
+	}
+}
+
+// wrappedCell is a Tuple that is not a *values.Pair, so NthCons walks it on
+// its generic arm, which the cycle detector cannot see.
+type wrappedCell struct {
+	*values.Pair
+}
+
+// TestNthConsMixedCycle pins that a cycle through a cell the detector cannot
+// see is walked, not reduced: a period counted across that cell is wrong, and
+// the reduction would land on the wrong cell. Every cycle length up to 9 with
+// the generic cell at every position, against a step-by-step walk.
+func TestNthConsMixedCycle(t *testing.T) {
+	t.Parallel()
+	for size := 2; size <= 9; size++ {
+		for at := range size {
+			cells := make([]*values.Pair, size)
+			for i := range cells {
+				cells[i] = values.NewCons(values.NewInteger(int64(i)), nil)
+			}
+			link := func(i int) values.Value {
+				if i == at {
+					return wrappedCell{cells[i]}
+				}
+				return cells[i]
+			}
+			for i := range cells {
+				cells[i].SetCdr(link((i + 1) % size))
+			}
+			head := link(0)
+			for n := range int64(200) {
+				want := head
+				for range n {
+					want = want.(values.Tuple).Cdr()
+				}
+				got, err := values.NthCons(context.Background(), head, n, "t")
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got, qt.Equals, want, qt.Commentf("size=%d at=%d n=%d", size, at, n))
+			}
+		}
+	}
+}
+
+// TestNthConsHonorsContext pins the ctx poll: a long finite walk stops on a
+// cancelled context instead of running to the end.
+func TestNthConsHonorsContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	long := values.List(make([]values.Value, 5000)...)
+	_, err := values.NthCons(ctx, long, 4000, "t")
+	qt.Assert(t, errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("%v", err))
+}
+
+// TestExactIndex pins the index classification the list and vector families
+// share.
+func TestExactIndex(t *testing.T) {
+	t.Parallel()
+	huge, ok := new(big.Int).SetString("100000000000000000000", 10)
+	qt.Assert(t, ok, qt.IsTrue)
+	tcs := []struct {
+		name     string
+		v        values.Value
+		want     int64
+		sentinel error
+		text     string
+	}{
+		{name: "fixnum", v: values.NewInteger(3), want: 3},
+		{name: "zero", v: values.NewInteger(0), want: 0},
+		{name: "integral rational", v: values.NewRational(4, 2), want: 2},
+		{name: "negative", v: values.NewInteger(-1), sentinel: werr.ErrIndexOutOfRange,
+			text: "t: index -1 must be non-negative"},
+		{name: "bignum", v: values.NewBigInteger(huge), sentinel: werr.ErrIndexOutOfRange,
+			text: "t: index 100000000000000000000 out of range"},
+		{name: "integral rational past int64", v: values.NewRationalFromBigInt(huge, big.NewInt(1)),
+			sentinel: werr.ErrIndexOutOfRange, text: "t: index 100000000000000000000 out of range"},
+		{name: "non-integral rational", v: values.NewRational(1, 2), sentinel: werr.ErrNotAnInteger,
+			text: "t: expected an exact integer index but got 1/2"},
+		{name: "inexact", v: values.NewFloat(1), sentinel: werr.ErrNotAnInteger,
+			text: "t: expected an exact integer index but got 1.0"},
+		{name: "symbol", v: values.NewSymbol("x"), sentinel: werr.ErrNotAnInteger,
+			text: "t: expected an exact integer index but got x"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := values.ExactIndex(tc.v, "t")
+			if tc.sentinel != nil {
+				qt.Assert(t, errors.Is(err, tc.sentinel), qt.IsTrue, qt.Commentf("%v", err))
+				qt.Assert(t, err.Error(), qt.Contains, tc.text)
+				return
+			}
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestSingle pins the one-element-list projection.
+func TestSingle(t *testing.T) {
+	t.Parallel()
+	one := values.NewInteger(1)
+	tcs := []struct {
+		name string
+		in   values.Tuple
+		ok   bool
+	}{
+		{"empty list", values.EmptyList, false},
+		{"one element", values.List(one), true},
+		{"two elements", values.List(one, one), false},
+		{"dotted pair", values.NewCons(one, one), false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			v, ok := values.Single(tc.in)
+			qt.Assert(t, ok, qt.Equals, tc.ok)
+			if tc.ok {
+				qt.Assert(t, v, qt.Equals, values.Value(one))
+				return
+			}
+			qt.Assert(t, v, qt.IsNil)
+		})
+	}
+}
+
+// TestUnconsFamily pins Uncons, UnconsTyped and CarAs by sentinel and
+// projection. Message texts carry %T and are left to the type-name rule.
+func TestUnconsFamily(t *testing.T) {
+	t.Parallel()
+	one, two := values.NewInteger(1), values.NewInteger(2)
+	pair := values.NewCons(one, two)
+
+	car, cdr, err := values.Uncons(pair, "t", "r")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, car, qt.Equals, values.Value(one))
+	qt.Assert(t, cdr, qt.Equals, values.Value(two))
+	_, _, err = values.Uncons(values.EmptyList, "t", "r")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, err.Error(), qt.Contains, "t: r: expected a non-empty list")
+	_, _, err = values.Uncons(one, "t", "r")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue, qt.Commentf("%v", err))
+
+	head, tail, err := values.UnconsTyped[*values.Integer](pair, werr.ErrNotAnInteger, "t", "r")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, head, qt.Equals, one)
+	qt.Assert(t, tail, qt.Equals, values.Value(two))
+	_, _, err = values.UnconsTyped[*values.Symbol](pair, werr.ErrNotASymbol, "t", "r")
+	qt.Assert(t, errors.Is(err, werr.ErrNotASymbol), qt.IsTrue, qt.Commentf("%v", err))
+	_, _, err = values.UnconsTyped[*values.Integer](values.EmptyList, werr.ErrNotAnInteger, "t", "r")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue, qt.Commentf("%v", err))
+
+	got, err := values.CarAs[*values.Integer](pair, werr.ErrNotAnInteger, "t", "r")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, got, qt.Equals, one)
+	_, err = values.CarAs[*values.Symbol](pair, werr.ErrNotASymbol, "t", "r")
+	qt.Assert(t, errors.Is(err, werr.ErrNotASymbol), qt.IsTrue, qt.Commentf("%v", err))
+}
+
+// TestCollectList pins the list-to-slice unfold: order, the empty list as nil,
+// and ErrNotAList for a non-list, an improper tail, and a cycle.
+func TestCollectList(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	one, two := values.NewInteger(1), values.NewInteger(2)
+
+	got, err := values.CollectList(ctx, values.List(one, two), "t")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, got, qt.DeepEquals, []values.Value{one, two})
+
+	got, err = values.CollectList(ctx, values.EmptyList, "t")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, got, qt.IsNil)
+
+	cyc := values.NewCons(one, nil)
+	cyc.SetCdr(cyc)
+	for name, in := range map[string]values.Value{
+		"non-list": one,
+		"improper": values.NewCons(one, two),
+		"circular": cyc,
+	} {
+		_, err = values.CollectList(ctx, in, "t")
+		qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue, qt.Commentf("%s: %v", name, err))
+	}
+}
+
+// TestEqIdentitySymbols pins the symbol arm: Wile does not intern symbols, so
+// two *Symbol values are identical when their keys are, not their pointers.
+func TestEqIdentitySymbols(t *testing.T) {
+	t.Parallel()
+	a1, a2, b := values.NewSymbol("a"), values.NewSymbol("a"), values.NewSymbol("b")
+	qt.Assert(t, values.EqIdentity(a1, a2), qt.IsTrue)
+	qt.Assert(t, values.EqIdentity(a1, b), qt.IsFalse)
+	qt.Assert(t, values.EqIdentity(a1, values.NewString("a")), qt.IsFalse)
+	qt.Assert(t, values.EqIdentity(values.NewString("a"), a1), qt.IsFalse)
 }

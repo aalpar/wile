@@ -53,8 +53,8 @@ func CarAs[T any](t values.Tuple, headSentinel error, name, role string) (T, err
 }
 
 // NthCons is the helper-package alias for values.NthCons.
-func NthCons(lst values.Value, n int64, name string) (values.Value, error) {
-	return values.NthCons(lst, n, name)
+func NthCons(ctx context.Context, lst values.Value, n int64, name string) (values.Value, error) {
+	return values.NthCons(ctx, lst, n, name)
 }
 
 // ListToVector is a helper that converts a list argument to a vector.

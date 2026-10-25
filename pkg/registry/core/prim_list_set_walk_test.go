@@ -67,16 +67,17 @@ func TestListSetReportsWhereTheWalkRanOut(t *testing.T) {
 			want:     "list-set!: index 5 out of bounds: improper tail at depth 2",
 		},
 		{
-			name:     "negative index keeps its message",
+			name:     "negative index names the index",
 			code:     `(list-set! (list 1 2) -1 0)`,
 			sentinel: werr.ErrIndexOutOfRange,
-			want:     "list-set!: index must be non-negative",
+			want:     "list-set!: index -1 must be non-negative",
 		},
 		{
-			// Message deliberately unpinned: it leaks a Go type name (filed).
-			name:     "the empty list is rejected as a non-pair before any walk",
+			// '() is a list; it runs out at once, as (list-ref '() 0) does.
+			name:     "the empty list is a list that runs out",
 			code:     `(list-set! '() 0 'x)`,
-			sentinel: werr.ErrNotAList,
+			sentinel: werr.ErrIndexOutOfRange,
+			want:     "list-set!: index 0 points past the last element",
 		},
 		{
 			name:     "a non-integer index renders as a Scheme value",

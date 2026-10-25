@@ -697,7 +697,7 @@ func TestNthCons(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := NthCons(tc.input, tc.n, "test")
+			got, err := NthCons(context.Background(), tc.input, tc.n, "test")
 			if tc.wantErr != nil {
 				qt.Assert(t, err, qt.IsNotNil)
 				qt.Assert(t, errors.Is(err, tc.wantErr), qt.IsTrue,

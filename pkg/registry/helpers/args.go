@@ -120,14 +120,12 @@ func RequireTuple(mc machine.CallContext, index int, name string) (values.Tuple,
 // Shape errors here (improper argument list, too many arguments) carry literal
 // phrases rather than routing through typeNameFromSentinel: they are proper-list
 // and arity violations, not type mismatches, so there is no expected-type noun to
-// plumb. Only the per-argument type checks (start/end must be an integer) draw
-// their noun from a *TypeSentinel. This is deliberate, not an oversight.
+// plumb. The start and end values themselves are classified by subrangeBound.
 func ParseOptionalStartEnd(rest values.Value, defaultEnd int64, name string) (int64, int64, error) {
-	start := int64(0)
 	end := defaultEnd
 
 	if values.IsEmptyList(rest) {
-		return start, end, nil
+		return 0, end, nil
 	}
 
 	tuple, ok := rest.(values.Tuple)
@@ -135,11 +133,10 @@ func ParseOptionalStartEnd(rest values.Value, defaultEnd int64, name string) (in
 		return 0, 0, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: improper argument list", name)
 	}
 
-	startVal, ok := tuple.Car().(*values.Integer)
-	if !ok {
-		return 0, 0, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: start must be an integer but got %T", name, tuple.Car())
+	start, err := subrangeBound(tuple.Car(), name, "start")
+	if err != nil {
+		return 0, 0, err
 	}
-	start = startVal.Value
 
 	cdr := tuple.Cdr()
 	if !values.IsEmptyList(cdr) {
@@ -147,11 +144,10 @@ func ParseOptionalStartEnd(rest values.Value, defaultEnd int64, name string) (in
 		if !ok {
 			return 0, 0, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: improper argument list", name)
 		}
-		endVal, ok := tuple2.Car().(*values.Integer)
-		if !ok {
-			return 0, 0, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: end must be an integer but got %T", name, tuple2.Car())
+		end, err = subrangeBound(tuple2.Car(), name, "end")
+		if err != nil {
+			return 0, 0, err
 		}
-		end = endVal.Value
 		tail := tuple2.Cdr()
 		if !values.IsEmptyList(tail) {
 			_, ok := tail.(values.Tuple)
@@ -167,28 +163,43 @@ func ParseOptionalStartEnd(rest values.Value, defaultEnd int64, name string) (in
 	return start, end, nil
 }
 
+// subrangeBound reads a start or end argument by the single-index rule
+// (values.ExactIndex), so a bignum is out of range and an integer-valued
+// rational is accepted here as it is by vector-ref. The role joins the name
+// only on the error path, keeping the common case free of a concatenation.
+func subrangeBound(v values.Value, name, role string) (int64, error) {
+	idx, ok := values.ExactInteger(v)
+	if ok && idx >= 0 {
+		return idx, nil
+	}
+	return values.ExactIndex(v, name+": "+role)
+}
+
 // CheckIndexBounds validates that idx is in range [0, length).
-// Returns a wrapped ErrIndexOutOfRange error if the index is out of bounds.
+// Returns a wrapped ErrIndexOutOfRange error if the index is out of bounds;
+// a negative index reads as values.CheckIndexNonNegative says, the same text
+// the list primitives give.
 func CheckIndexBounds(idx int64, length int, name string) error {
-	if idx < 0 || idx >= int64(length) {
+	err := values.CheckIndexNonNegative(idx, name)
+	if err != nil {
+		return err
+	}
+	if idx >= int64(length) {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
 			"%s: index %d out of bounds for length %d", name, idx, length)
 	}
 	return nil
 }
 
-// RequireIndex extracts an exact integer index from mc.Arg(argIdx) and validates
-// it is in range [0, length). Accepts *Integer, *BigInteger, and integer-valued
-// *Rational via values.ExactInteger, which is more R7RS-correct than requiring
-// *Integer alone (R7RS §6.1: indices are exact non-negative integers).
+// RequireIndex extracts an index from mc.Arg(argIdx), classified by
+// values.ExactIndex (the rule the list primitives share), and validates it is
+// in range [0, length).
 func RequireIndex(mc machine.CallContext, argIdx int, length int, name string) (int, error) {
-	k := mc.Arg(argIdx)
-	idx, ok := values.ExactInteger(k)
-	if !ok {
-		return 0, werr.WrapForeignErrorf(werr.ErrNotAnInteger,
-			"%s: expected an exact integer index but got %s", name, k.SchemeString())
+	idx, err := values.ExactIndex(mc.Arg(argIdx), name)
+	if err != nil {
+		return 0, err
 	}
-	err := CheckIndexBounds(idx, length, name)
+	err = CheckIndexBounds(idx, length, name)
 	if err != nil {
 		return 0, err
 	}

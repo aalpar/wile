@@ -243,12 +243,13 @@ func inlineVectorRef(mc *MachineContext, name string) error {
 		return werr.WrapForeignErrorf(
 			werr.ErrNotAVector, "%s: expected vector, got %s", name, vec.SchemeString())
 	}
-	i, ok := values.ExactInteger(idx)
-	if !ok {
-		return werr.WrapForeignErrorf(
-			werr.ErrNotAnInteger, "%s: expected exact integer index, got %s", name, idx.SchemeString())
+	// The same classification helpers.RequireIndex applies, so a promoted call
+	// and an unpromoted one report a bad index identically.
+	i, err := values.ExactIndex(idx, name)
+	if err != nil {
+		return err
 	}
-	if i < 0 || i >= int64(v.Length()) {
+	if i >= int64(v.Length()) {
 		return werr.WrapForeignErrorf(
 			werr.ErrIndexOutOfRange, "%s: index %d out of bounds for length %d", name, i, v.Length())
 	}
