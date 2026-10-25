@@ -2073,7 +2073,7 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			// call-with-continuation-prompt frame receives the delimited segment's result
 			// and the chain above it is discarded.
 			//
-			p.rebaseResumeWinding(resumeErr)
+			p.rebasePassedUpResume(resumeErr)
 			// Always this driver's to resolve: it is a root (its promptTag is the
 			// signal's tag), and a root resolves whatever reaches it.
 			prompt, _ := p.resumePrompt(resumeErr)
@@ -2251,7 +2251,7 @@ func (p *MachineContext) RunWithinBoundary() error {
 			// running an after thunk for is abandoned with it.
 			var resumeErr *ErrResumeContinuation
 			if errors.As(err, &resumeErr) {
-				p.rebaseResumeWinding(resumeErr)
+				p.rebasePassedUpResume(resumeErr)
 				prompt, ok := p.resumePrompt(resumeErr)
 				if !ok {
 					unwindErr := p.passUpResume(resumeErr)
@@ -2499,17 +2499,23 @@ func (p *MachineContext) passUpResume(resumeErr *ErrResumeContinuation) error {
 	return nil
 }
 
-// rebaseResumeWinding is passUpResume's other half, run by the first driver
+// rebasePassedUpResume is passUpResume's other half, run by the first driver
 // above the expansion-time root that passed the resume up: the winding at the
 // (k v) site, for the reconcile, is this driver's, not that root's. The driver
 // may itself be an expansion-time root (a transformer that ran eval on its own
 // context): then its winding is right for leaving its own extents, and if it
 // passes the resume on, passUpResume marks it again for the driver above.
-func (p *MachineContext) rebaseResumeWinding(resumeErr *ErrResumeContinuation) {
+//
+// The escalator revivals are filtered again here for the same reason: the root
+// has no parentMC, so a handler that reached the transformer through eval keeps
+// its finalizer frame on a chain the (k v) site could not see, and this driver's
+// walk can. Filtering only removes arms, so a set already right stays right.
+func (p *MachineContext) rebasePassedUpResume(resumeErr *ErrResumeContinuation) {
 	if !resumeErr.rebaseWinding {
 		return
 	}
 	resumeErr.SourceWinding = p.windingStack.Copy()
+	resumeErr.escalatorRevivals = pendingEscalatorRevivals(resumeErr.escalatorRevivals, p)
 	resumeErr.rebaseWinding = false
 }
 
