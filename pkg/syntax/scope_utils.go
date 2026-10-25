@@ -97,7 +97,90 @@ func FlipScopeInSet(scopes Scopes, target *Scope) Scopes {
 // It recurses into pairs, vectors and boxes, so a box's content is reached by
 // every scope operation built on it: FlipScope has to take off whatever
 // AddScope put into a box, or the two are not duals.
+//
+// Syntax can be a graph: a datum label reached past its wrapper (`#1#` in
+// `#0=(#1=(x . #0#))`) is a raw cyclic pair. Once a walk is deeper than
+// treeMapMemoDepth, each compound is visited once, so a cycle comes back as a
+// cycle of rebuilt nodes (unrolled down to where the memo began) instead of
+// overflowing the Go stack. A depth bound alone would refuse legal deep data,
+// and there is no error return to refuse through.
 func MapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValue {
+	p := &treeMap{fn: fn}
+	return p.walk(stx)
+}
+
+// treeMapMemoDepth is the walk depth (pairs, vectors and boxes, cdrs included)
+// past which MapSyntaxTree starts memoising compounds. Every cycle gets past it;
+// most macro input and output does not. Measured on --check of expander-heavy
+// files: an eager memo (one map per walk) cost 14% CPU on 1500 small defines,
+// where this one is within noise; on a 300-form body with 150-element macro
+// operands, where walks do get deep, this one costs about 6%.
+const treeMapMemoDepth = 64
+
+// treeMap is one MapSyntaxTree walk.
+//
+// done maps each finished compound to its result. A compound on the current
+// path maps to nil; meeting it again closes a cycle, and the walk hands out a
+// placeholder for it (back) and fills that placeholder in once the node's
+// children are known. An acyclic walk never allocates a placeholder, and a walk
+// that stays shallower than treeMapMemoDepth allocates neither map.
+type treeMap struct {
+	fn    func(SyntaxValue) SyntaxValue
+	depth int
+	done  map[SyntaxValue]SyntaxValue
+	back  map[SyntaxValue]SyntaxValue
+}
+
+// deep reports whether the walk memoises: once it is past treeMapMemoDepth,
+// and from then on. A walk that never gets deep pays this test per compound.
+func (p *treeMap) deep() bool {
+	return p.done != nil || p.depth > treeMapMemoDepth
+}
+
+// enter reports a compound's memoised result, or registers it as in progress.
+// ok is true when the caller must return q instead of walking stx.
+func (p *treeMap) enter(stx SyntaxValue, placeholder func() SyntaxValue) (q SyntaxValue, ok bool) {
+	if p.done == nil {
+		p.done = make(map[SyntaxValue]SyntaxValue)
+	}
+	q, seen := p.done[stx]
+	if !seen {
+		p.done[stx] = nil
+		return nil, false
+	}
+	if q != nil {
+		return q, true
+	}
+	q = p.back[stx]
+	if q != nil {
+		return q, true
+	}
+	if p.back == nil {
+		p.back = make(map[SyntaxValue]SyntaxValue)
+	}
+	q = placeholder()
+	p.back[stx] = q
+	return q, true
+}
+
+// leave records q as stx's result and pops one level of depth.
+func (p *treeMap) leave(stx, q SyntaxValue) SyntaxValue {
+	p.depth--
+	if p.done != nil {
+		p.done[stx] = q
+	}
+	return q
+}
+
+// pending returns the placeholder handed out for stx, or nil.
+func (p *treeMap) pending(stx SyntaxValue) SyntaxValue {
+	if p.back == nil {
+		return nil
+	}
+	return p.back[stx]
+}
+
+func (p *treeMap) walk(stx SyntaxValue) SyntaxValue {
 	if stx == nil {
 		return nil
 	}
@@ -107,33 +190,62 @@ func MapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValu
 		if IsSyntaxEmptyList(s) {
 			return s
 		}
+		p.depth++
+		if p.deep() {
+			q, ok := p.enter(s, func() SyntaxValue {
+				return NewSyntaxCons(nil, nil, s.SourceContext())
+			})
+			if ok {
+				p.depth--
+				return q
+			}
+		}
 
 		// Recursively transform car and cdr
 		var newCar, newCdr SyntaxValue
 		if s.Values[0] != nil {
-			newCar = MapSyntaxTree(s.Values[0], fn)
+			newCar = p.walk(s.Values[0])
 		}
 		if s.Values[1] != nil {
-			newCdr = MapSyntaxTree(s.Values[1], fn)
+			newCdr = p.walk(s.Values[1])
 		}
 
 		// Structural sharing: when a tree transformation leaves children unchanged,
 		// the original node is returned instead of allocating a new one. This is
 		// the core idea behind persistent data structures (Okasaki, 1998). Most
 		// syntax tree nodes are not symbols, so most pairs pass the identity check.
-		// See BIBLIOGRAPHY.md "Structural Sharing".
-		if newCar == s.Values[0] && newCdr == s.Values[1] {
-			return s
+		// See BIBLIOGRAPHY.md "Structural Sharing". A placeholder handed out for
+		// this node means a child closed a cycle through it, so a child changed.
+		var q SyntaxValue
+		ph, _ := p.pending(s).(*SyntaxPair)
+		switch {
+		case ph != nil:
+			ph.Values = [2]SyntaxValue{newCar, newCdr}
+			q = ph
+		case newCar == s.Values[0] && newCdr == s.Values[1]:
+			q = s
+		default:
+			q = NewSyntaxCons(newCar, newCdr, s.SourceContext())
 		}
-		return NewSyntaxCons(newCar, newCdr, s.SourceContext())
+		return p.leave(s, q)
 
 	case *SyntaxSymbol:
 		// Apply transformation to symbols
-		return fn(s)
+		return p.fn(s)
 
 	case *SyntaxVector:
 		if s == nil || len(s.Values) == 0 {
 			return s
+		}
+		p.depth++
+		if p.deep() {
+			q, ok := p.enter(s, func() SyntaxValue {
+				return NewSyntaxVector(s.SourceContext())
+			})
+			if ok {
+				p.depth--
+				return q
+			}
 		}
 
 		// Recursively transform each element
@@ -141,7 +253,7 @@ func MapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValu
 		changed := false
 		for i, elem := range s.Values {
 			if elem != nil {
-				newValues[i] = MapSyntaxTree(elem, fn)
+				newValues[i] = p.walk(elem)
 				if newValues[i] != elem {
 					changed = true
 				}
@@ -150,28 +262,51 @@ func MapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValu
 			}
 		}
 
-		// Return original if nothing changed (optimization)
-		if !changed {
-			return s
+		var q SyntaxValue
+		ph, _ := p.pending(s).(*SyntaxVector)
+		switch {
+		case ph != nil:
+			ph.Values = newValues
+			q = ph
+		case !changed:
+			q = s
+		default:
+			q = NewSyntaxVector(s.SourceContext(), newValues...)
 		}
-
-		// Return new vector with transformed elements
-		return NewSyntaxVector(s.SourceContext(), newValues...)
+		return p.leave(s, q)
 
 	case *SyntaxBox:
 		if s == nil || s.Value == nil {
 			return s
 		}
-		inner := MapSyntaxTree(s.Value, fn)
-		if inner == s.Value {
-			return s
+		p.depth++
+		if p.deep() {
+			q, ok := p.enter(s, func() SyntaxValue {
+				return NewSyntaxBox(nil, s.SourceContext())
+			})
+			if ok {
+				p.depth--
+				return q
+			}
 		}
-		return NewSyntaxBox(inner, s.SourceContext())
+		inner := p.walk(s.Value)
+		var q SyntaxValue
+		ph, _ := p.pending(s).(*SyntaxBox)
+		switch {
+		case ph != nil:
+			ph.Value = inner
+			q = ph
+		case inner == s.Value:
+			q = s
+		default:
+			q = NewSyntaxBox(inner, s.SourceContext())
+		}
+		return p.leave(s, q)
 
 	default:
 		// Other types (SyntaxObject, etc.) - check if they support the transformation
 		// This handles types that might implement the transformation interface
-		return fn(stx)
+		return p.fn(stx)
 	}
 }
 
