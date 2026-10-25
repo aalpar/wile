@@ -30,20 +30,29 @@
 ;; This chapter uses ordinary list-style s-expressions like (+ x 0).
 ;; ----------------------------------------------------------------
 
+(define (written t)
+  (call-with-port (open-output-string)
+    (lambda (p) (write t p) (get-output-string p))))
+
+(define (kind-rank t)
+  (cond ((real? t) 0) ((symbol? t) 1) ((string? t) 2)
+        ((char? t) 3) ((pair? t) 4) (else 5)))
+
 (define (sexp-before? a b)
-  ;; A total order on terms: numbers before symbols before pairs.
-  ;; Within each kind, use the natural order.
-  (cond
-    ((and (number? a) (number? b)) (< a b))
-    ((and (symbol? a) (symbol? b)) (string<? (symbol->string a) (symbol->string b)))
-    ((and (pair? a) (pair? b))     (string<? (call-with-port (open-output-string)
-                                                (lambda (p) (write a p) (get-output-string p)))
-                                              (call-with-port (open-output-string)
-                                                (lambda (p) (write b p) (get-output-string p)))))
-    ((number? a) #t)                 ; numbers before everything else
-    ((number? b) #f)
-    ((symbol? a) #t)                 ; symbols before pairs
-    (else #f)))
+  ;; A strict total order on the terms this chapter builds: reals, symbols,
+  ;; strings, chars, pairs, then anything else. Reals by value, exact before
+  ;; inexact on a tie (so 1 and 1.0 are distinct); strings and chars by their
+  ;; own order; pairs and the rest by their written form. Not ordered: NaN,
+  ;; -0.0 against 0.0, and distinct values that print alike (two procedures).
+  (let ((ra (kind-rank a)) (rb (kind-rank b)))
+    (cond
+      ((< ra rb) #t)
+      ((> ra rb) #f)
+      ((real? a)   (or (< a b) (and (= a b) (exact? a) (inexact? b))))
+      ((symbol? a) (string<? (symbol->string a) (symbol->string b)))
+      ((string? a) (string<? a b))
+      ((char? a)   (char<? a b))
+      (else        (string<? (written a) (written b))))))
 
 (define sexp-proto
   (make-term-protocol
@@ -53,6 +62,11 @@
     (lambda (t new) (cons (car t) new))           ; rebuild
     sexp-before?))                                ; compare
 
+(check-true (sexp-before? "s" "t")                "strings ordered")
+(check-false (sexp-before? "t" "s")               "strings ordered, strictly")
+(check-true (sexp-before? #\a #\b)                "chars ordered")
+(check-true (sexp-before? 1 1.0)                  "1 and 1.0 are distinct: exact first")
+(check-false (sexp-before? 1.0 1)                 "1.0 does not precede 1")
 (check-true (term-protocol? sexp-proto)           "term protocol built")
 (check-true (term-compound? sexp-proto '(+ 1 2))  "(+ 1 2) is compound")
 (check-false (term-compound? sexp-proto 42)       "42 is not compound")
