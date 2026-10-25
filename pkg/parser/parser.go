@@ -287,22 +287,29 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 	}
 }
 
-// PendingFault returns the fault a successful ReadSyntax left pending: one the
-// tokenizer hit on the rune past the datum it returned, which the next
-// ReadSyntax reports. It is nil when there is none, and on a closed or failed
-// parser (die and Close drop the tokenizer), whose death ReadSyntax already
-// reported. A consumer that reads the same reader without this parser
-// (read-char on a shared port) owes the fault to the input before anything
-// past it.
+// PendingFault returns the fault a successful ReadSyntax left pending, located
+// as the next ReadSyntax would report it: one the tokenizer hit on the rune
+// past the datum it returned. It is nil when there is none, and on a closed or
+// failed parser (die and Close drop the tokenizer), whose death ReadSyntax
+// already reported.
+//
+// Deferring the fault is right only for a caller that keeps this parser, so a
+// later read reports it (a port's cached parser). A caller that reads one
+// datum and drops the parser must check this and fail the read, or the fault
+// is lost: a reader hands an error out once. A consumer that reads the same
+// reader without this parser (read-char on a shared port) owes the fault to
+// the input before anything past it.
 func (p *Parser) PendingFault() error {
 	if p.toks == nil {
 		return nil
 	}
 	var terr *tokenizer.TokenizerError
-	if errors.As(p.toks.Err(), &terr) {
-		return terr
+	if !errors.As(p.toks.Err(), &terr) {
+		return nil
 	}
-	return nil
+	q := NewParserErrorWithWrap(terr, nil, messageReadFailed)
+	q.file = p.file
+	return q
 }
 
 // pastCompleteToken reports whether err is a fault the tokenizer stamped on a

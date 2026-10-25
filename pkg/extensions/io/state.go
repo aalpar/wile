@@ -20,6 +20,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/parser"
@@ -50,6 +51,15 @@ type State struct {
 	// evictPortCache() on port close or EOF. Ports abandoned without close or EOF
 	// retain their entries until the engine is collected.
 	parsers map[values.Value]*parserEntry
+	// deferred counts the entries whose parser holds a reader fault deferred
+	// past the datum it returned (parserEntry.deferred), so the character
+	// readers skip the cache when it is zero, the common case, without taking
+	// mu. It changes only under mu, together with an entry's deferred flag.
+	// A stale read is harmless in both directions: a nonzero count from
+	// another port costs one cache lookup, and a deferral on THIS port was
+	// counted under the port's read lock, which the reader checking it now
+	// holds, so the lock orders the increment before the load.
+	deferred atomic.Int64
 }
 
 // parserEntry is a port's cached parser and the state that decides whether it
@@ -70,6 +80,11 @@ type parserEntry struct {
 	// replaced.
 	held   bool
 	heldAt values.SourceIndexes
+
+	// deferred says the parser holds a fault past its last datum and is
+	// counted in State.deferred. Guarded by State.mu, not the port's lock:
+	// eviction (close-port) clears it without the read lock.
+	deferred bool
 }
 
 // NewState builds a fresh per-engine State: three port parameters over the
@@ -314,6 +329,14 @@ func (p *State) readSyntaxCached(ctx context.Context, port *values.PortObject, m
 		entry.heldAt, _ = port.ReadPosition()
 		return nil, err
 	}
+	if entry.parser.PendingFault() != nil {
+		p.mu.Lock()
+		if !entry.deferred {
+			entry.deferred = true
+			p.deferred.Add(1)
+		}
+		p.mu.Unlock()
+	}
 	return q, nil
 }
 
@@ -324,16 +347,17 @@ func (p *State) readSyntaxCached(ctx context.Context, port *values.PortObject, m
 // lock. A character reader calls it before reading: the fault came before any
 // character past it, so racket's read-char reports it there too.
 func (p *State) takeDeferredFault(port *values.PortObject) error {
+	if p.deferred.Load() == 0 {
+		return nil
+	}
 	p.mu.Lock()
 	entry := p.parsers[port]
+	held := entry != nil && entry.deferred
 	p.mu.Unlock()
-	if entry == nil || entry.parser == nil {
+	if !held {
 		return nil
 	}
 	err := entry.parser.PendingFault()
-	if err == nil {
-		return nil
-	}
 	evictPortCache(p, port)
 	return err
 }

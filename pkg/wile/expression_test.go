@@ -15,13 +15,13 @@
 package wile_test
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"io"
 	"os"
 	"strings"
 	"testing"
-	"testing/iotest"
 
 	"github.com/aalpar/wile/pkg/wile"
 
@@ -136,19 +136,39 @@ func TestReadExpressions(t *testing.T) {
 	}
 }
 
+// onceFailingReader yields its chunks in order; a nil chunk is one read failing
+// with a deadline timeout, after which the stream continues.
+type onceFailingReader struct {
+	chunks []*string
+}
+
+func (p *onceFailingReader) Read(b []byte) (int, error) {
+	if len(p.chunks) == 0 {
+		return 0, io.EOF
+	}
+	chunk := p.chunks[0]
+	p.chunks = p.chunks[1:]
+	if chunk == nil {
+		return 0, os.ErrDeadlineExceeded
+	}
+	return copy(b, *chunk), nil
+}
+
 // TestReadExpressionsReportAFaultPastTheLastDatum pins both entries on a
-// reader that fails right after a complete datum. The read that completes it
-// returns it (racket's model), so the one-datum entry returns '(x) and never
-// sees the fault; the multi-form entry reads on and reports the fault after
-// the datum, rather than failing the read that returned it.
+// reader that fails once right after a complete datum. Neither keeps a parser
+// past the call, so neither may defer the fault: the reader hands it out once,
+// and a later call would never see it. ReadExpression fails the call that read
+// the datum (then reads on: y, then end of input); ReadExpressions reports the
+// fault with the datum read before it.
 func TestReadExpressionsReportAFaultPastTheLastDatum(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
-	failing := func() io.Reader {
-		return io.MultiReader(strings.NewReader("'(x)"), iotest.ErrReader(os.ErrDeadlineExceeded))
+	failing := func() *bufio.Reader {
+		datum, rest := "'(x)", " 'y"
+		return bufio.NewReader(&onceFailingReader{chunks: []*string{&datum, nil, &rest}})
 	}
 	value := func(expr *wile.Expression) string {
 		cc, err := eng.Compile(ctx, expr)
@@ -158,9 +178,16 @@ func TestReadExpressionsReportAFaultPastTheLastDatum(t *testing.T) {
 		return val.SchemeString()
 	}
 
-	expr, err := eng.ReadExpression(ctx, failing())
+	rdr := failing()
+	_, err = eng.ReadExpression(ctx, rdr)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Check(t, errors.Is(err, os.ErrDeadlineExceeded), qt.IsTrue, qt.Commentf("got: %v", err))
+	qt.Check(t, wile.IsIncompleteInput(err), qt.IsFalse)
+	expr, err := eng.ReadExpression(ctx, rdr)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Check(t, value(expr), qt.Equals, "(x)")
+	qt.Check(t, value(expr), qt.Equals, "y")
+	_, err = eng.ReadExpression(ctx, rdr)
+	qt.Check(t, errors.Is(err, io.EOF), qt.IsTrue, qt.Commentf("got: %v", err))
 
 	exprs, err := eng.ReadExpressions(ctx, failing())
 	qt.Assert(t, err, qt.IsNotNil)

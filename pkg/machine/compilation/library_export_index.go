@@ -82,6 +82,12 @@ func ParseLibrarySummary(ctx context.Context, r io.Reader, filePath string, name
 		}
 		return nil, werr.WrapForeignErrorf(err, "define-library: could not parse: %s", filePath)
 	}
+	// One datum and the parser is dropped: a fault deferred past it would be
+	// lost (Parser.PendingFault).
+	err = p.PendingFault()
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(err, "define-library: could not parse: %s", filePath)
+	}
 
 	pair, ok := stx.(*syntax.SyntaxPair)
 	if !ok {

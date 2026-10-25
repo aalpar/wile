@@ -999,6 +999,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   skipped. A bare `a<FF>b` reads as the symbol `a<U+FFFD>b`, as a written
   U+FFFD does (next entry).
 
+- **BREAKING (behavior): `char-ready?` requires a textual input port.** It
+  answered `#t` without looking at its argument, so `(char-ready? 5)`, a binary
+  input port and an output port all answered `#t`; each is now an error, as
+  R7RS §6.13.2's textual-input-port argument implies. petite refuses all three;
+  racket, whose ports are not split into textual and binary, refuses all but
+  the byte port. It still answers `#t` for every textual input port.
+
 - **U+FFFD is an identifier character.** `a<U+FFFD>b`, `(<U+FFFD>)` and
   `#;a<U+FFFD> 42` (written, or with an invalid byte) read as racket and petite
   read them: the symbol `a<U+FFFD>b`, a one-symbol list, and 42. Wile read `a`

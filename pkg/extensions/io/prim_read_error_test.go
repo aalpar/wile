@@ -437,3 +437,26 @@ func TestReplacementCharacterIsAnIdentifierCharacter(t *testing.T) {
 		})
 	}
 }
+
+// TestCharReadyRequiresATextualInputPort pins that char-ready? checks its
+// argument: it answered #t for anything, a number, a binary port and an output
+// port included (petite refuses all three).
+func TestCharReadyRequiresATextualInputPort(t *testing.T) {
+	tcs := []struct {
+		arg, want string
+	}{
+		{arg: "5", want: "err"},
+		{arg: "(open-input-bytevector (bytevector 1))", want: "err"},
+		{arg: "(open-output-string)", want: "err"},
+		{arg: `(open-input-string "a")`, want: "#t"},
+		{arg: "", want: "#t"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.arg, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngineWithIOTest(t)
+			got := eval(t, engine, `(guard (e (#t 'err)) (char-ready? `+tc.arg+`))`)
+			c.Check(got.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}

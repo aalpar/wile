@@ -17,10 +17,12 @@ package compilation
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"testing/iotest"
 
 	qt "github.com/frankban/quicktest"
 
@@ -346,4 +348,17 @@ func TestBuildExportIndex_NoEnumerator(t *testing.T) {
 	idx, err := BuildExportIndex(ctx, resolver, nil)
 	c.Assert(err, qt.IsNil)
 	c.Assert(idx.Entries(), qt.HasLen, 0)
+}
+
+// TestParseSummaryFailsOnAFaultPastTheLibraryForm pins that a reader fault
+// just past the define-library form fails the parse. ParseLibrarySummary reads
+// one datum and drops its parser, so a fault the parser deferred to a later
+// read would be lost.
+func TestParseSummaryFailsOnAFaultPastTheLibraryForm(t *testing.T) {
+	c := qt.New(t)
+	src := "(define-library (a) (export x))"
+	r := io.MultiReader(strings.NewReader(src), iotest.ErrReader(os.ErrDeadlineExceeded))
+	_, err := ParseLibrarySummary(context.Background(), r, "a.sld", NewLibraryName("a"))
+	c.Assert(err, qt.IsNotNil)
+	c.Check(errors.Is(err, os.ErrDeadlineExceeded), qt.IsTrue, qt.Commentf("got: %v", err))
 }

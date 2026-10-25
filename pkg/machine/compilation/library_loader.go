@@ -298,6 +298,12 @@ func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, ex
 		}
 		return nil, werr.WrapForeignErrorf(err, "could not parse library file")
 	}
+	// One datum and the parser is dropped: a fault deferred past it would be
+	// lost (Parser.PendingFault).
+	err = p.PendingFault()
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(err, "could not parse library file")
+	}
 
 	if !isSyntaxFormWithKeyword(stx, "define-library") &&
 		!isSyntaxFormWithKeyword(stx, "library") {

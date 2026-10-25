@@ -229,10 +229,13 @@ func wrapReadFault(err error, msg string) error {
 // deferredReadFault reports, as who's read error, a reader fault that read or
 // read-syntax deferred past the datum it returned (State.takeDeferredFault).
 // The caller holds port's read lock.
+//
+// A context with no I/O state has no cached parser, so nothing is deferred:
+// read-char needs no State and must not start failing for want of one.
 func deferredReadFault(mc machine.CallContext, port *values.PortObject, who string) error {
 	st, err := stateFrom(mc)
 	if err != nil {
-		return err
+		return nil //nolint:nilerr // no State, no cache, nothing deferred
 	}
 	err = st.takeDeferredFault(port)
 	if err != nil {
