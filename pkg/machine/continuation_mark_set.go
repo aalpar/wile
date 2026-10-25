@@ -143,19 +143,23 @@ func CollectMarksFromCapture(comp *ComposableContinuation, tag *PromptTag) *Cont
 	return &ContinuationMarkSet{frames: appendChainMarks(frames, comp.cont, comp.bottom, tag)}
 }
 
-// CollectContinuationMarks builds a ContinuationMarkSet snapshot from the
-// current frame's marks followed by the continuation chain.
-//
-// The MachineContext's own promptTag is NOT checked — it represents the
-// execution boundary established by call-with-continuation-prompt on a
-// sub-context, and collection is always called from within that boundary.
-// Contrast with FindPrompt, which checks p.promptTag for escape detection;
-// that check is not needed here because current-continuation-marks is only
-// callable from code already inside the prompt scope.
+// CollectContinuationMarks builds a ContinuationMarkSet snapshot of the marks
+// on p's dynamic continuation up to the nearest prompt tagged tag: each
+// context's live marks, then its chain, hopping parentMC so code an eval or load
+// runs in a sub-context sees its caller's marks, as in Racket. It stops at the
+// context PromptOwner names (after that context's frames inside the prompt) and,
+// with no such prompt, where PromptOwner's walk stops.
 func (p *MachineContext) CollectContinuationMarks(tag *PromptTag) *ContinuationMarkSet {
 	var frames [][]markEntry
-	if len(p.marks) > 0 {
-		frames = append(frames, cloneMarks(p.marks))
+	for mc := p; mc != nil; mc = mc.parentMC {
+		if len(mc.marks) > 0 {
+			frames = append(frames, cloneMarks(mc.marks))
+		}
+		frames = appendChainMarks(frames, mc.cont, nil, tag)
+		_, found := mc.FindPrompt(tag)
+		if found || mc.isolatedMarks {
+			break
+		}
 	}
-	return &ContinuationMarkSet{frames: appendChainMarks(frames, p.cont, nil, tag)}
+	return &ContinuationMarkSet{frames: frames}
 }

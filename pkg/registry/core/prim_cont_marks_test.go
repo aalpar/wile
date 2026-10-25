@@ -1065,3 +1065,50 @@ func TestDefaultPromptTagAcceptedInsideEval(t *testing.T) {
 		c.Assert(result.SchemeString(), qt.Equals, "(1)")
 	}
 }
+
+// TestCallerMarksVisibleInsideEval: eval's sub-context collects its caller's
+// marks, the live ones of the activation that called eval included, and a tag's
+// collection still ends at that tag's prompt beyond the boundary. Racket agrees
+// on every row; master answered () for the first three and refused the next
+// two. The last row pins the walk's stop at an isolated context.
+func TestCallerMarksVisibleInsideEval(t *testing.T) {
+	t.Parallel()
+
+	c := qt.New(t)
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"current-continuation-marks", `(with-continuation-mark 'a 1 (eval '(continuation-mark-set->list (current-continuation-marks) 'a) (interaction-environment)))`, "(1)"},
+		{"#f for the current marks", `(with-continuation-mark 'a 1 (eval '(continuation-mark-set->list #f 'a) (interaction-environment)))`, "(1)"},
+		{"inner and outer marks, nearest first", `(with-continuation-mark 'a 1 (list (eval '(with-continuation-mark 'a 2 (continuation-mark-set->list #f 'a)) (interaction-environment))))`, "((2 1))"},
+		{"a tag's prompt beyond the boundary bounds the walk", `(define t (make-continuation-prompt-tag 'u))
+			(with-continuation-mark 'a 0
+			  (call-with-continuation-prompt
+			    (lambda () (with-continuation-mark 'a 1 (eval '(continuation-mark-set->list (current-continuation-marks t) 'a) (interaction-environment))))
+			    t (lambda a 'h)))`, "(1)"},
+		{"the accessor's tag argument", `(define t (make-continuation-prompt-tag 'u))
+			(call-with-continuation-prompt
+			  (lambda () (with-continuation-mark 'a 1 (eval '(continuation-mark-set->list #f 'a t) (interaction-environment))))
+			  t (lambda a 'h))`, "(1)"},
+		// The walk stops at a dynamic-wind thunk's isolated sub-context, whose
+		// parentMC is the escape's origin: crossing it reports a mark inside the
+		// extent being left.
+		{"an after thunk does not see a mark inside its extent", `(define r 'unset)
+			(call/cc (lambda (out)
+			  (dynamic-wind (lambda () #f)
+			    (lambda () (with-continuation-mark 'a 1 (car (list (out 1)))))
+			    (lambda () (set! r (continuation-mark-set->list (current-continuation-marks) 'a))))))
+			r`, "()"},
+	}
+	for _, tc := range tcs {
+		c.Run(tc.name, func(c *qt.C) {
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink), wile.WithMutableTopLevel())
+			c.Assert(err, qt.IsNil)
+			result, err := engine.EvalMultiple(context.Background(), tc.code)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}

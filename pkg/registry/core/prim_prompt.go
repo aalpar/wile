@@ -147,8 +147,8 @@ func PrimAbortCurrentContinuation(mc machine.CallContext) error {
 //
 // (continuation-prompt-available? tag) -> boolean
 //
-// Walks the continuation chain using FindPrompt, which checks both
-// continuation frames and the context-level prompt.
+// Looks past an eval or load sub-context's boundary to its caller's prompts
+// (PromptOwner), as Racket does.
 //
 // Racket §10.4: continuation-prompt-available?
 func PrimContinuationPromptAvailableQ(cc machine.CallContext) error {
@@ -160,8 +160,7 @@ func PrimContinuationPromptAvailableQ(cc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	_, found := mc.FindPrompt(tag)
-	mc.SetValue(values.BoolToBoolean(found))
+	mc.SetValue(values.BoolToBoolean(mc.PromptOwner(tag) != nil))
 	return nil
 }
 
@@ -198,7 +197,7 @@ func PrimCallWithComposableContinuation(cc machine.CallContext) error {
 	// Find the prompt in the continuation chain or on the context itself.
 	prompt, found := mc.FindPrompt(tag)
 	if !found {
-		return werr.WrapForeignErrorf(werr.ErrNotAPromptTag, "call-with-composable-continuation: no prompt found for tag %s", tag.SchemeString())
+		return composablePromptMissing(mc, tag)
 	}
 
 	// Slice the continuation chain from mc.cont to the prompt.
@@ -229,4 +228,31 @@ func PrimCallWithComposableContinuation(cc machine.CallContext) error {
 	// inside proc is resolved by the context's own driver.
 	_, err = mc.ApplyCallable(procCls, comp)
 	return err
+}
+
+// composablePromptMissing is call-with-composable-continuation's refusal when tag
+// has no prompt on mc's own chain. A prompt beyond mc's sub-context boundary (an
+// eval or load inside the prompt) is visible to continuation-prompt-available?
+// but not capturable: SliceContinuationAt cannot copy frames that belong to
+// another context, whose driver also owns the Go residual between them, so the
+// segment would have two owners. That case names the boundary's call site.
+func composablePromptMissing(mc *machine.MachineContext, tag *machine.PromptTag) error {
+	owner := mc.PromptOwner(tag)
+	if owner == nil {
+		return werr.WrapForeignErrorf(werr.ErrNotAPromptTag, "call-with-composable-continuation: no prompt found for tag %s", tag.SchemeString())
+	}
+	return werr.WrapForeignErrorf(werr.ErrNotImplemented,
+		"call-with-composable-continuation: the prompt for tag %s is outside the sub-context entered at %s; capturing across that boundary is not implemented",
+		tag.SchemeString(), boundarySite(mc))
+}
+
+// boundarySite renders the call site that entered mc's sub-context (the eval or
+// load call in its parent), or "an unlocated call" when that code carries no
+// source. Called only when a prompt lies beyond mc, so mc has a parent.
+func boundarySite(mc *machine.MachineContext) string {
+	loc := mc.ParentMC().CurrentSource().Location()
+	if loc == "" {
+		return "an unlocated call"
+	}
+	return loc
 }

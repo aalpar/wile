@@ -15,10 +15,14 @@
 package core_test
 
 import (
+	"context"
+	"regexp"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
+	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -343,4 +347,97 @@ func TestPrompt_AvailableQErrors(t *testing.T) {
 			c.Assert(err, qt.IsNotNil)
 		})
 	}
+}
+
+// TestPrompt_AvailableQSeesPastEval: code eval runs in a sub-context sees the
+// prompts of the code that called eval, as in Racket (every row agrees with
+// racket -e). Master answered #f for the first two. A thread root has no parent,
+// so a thread does not see its starter's prompts (Racket: #f too). The last two
+// rows pin the walk's stop at an isolated context; removing it flips both.
+func TestPrompt_AvailableQSeesPastEval(t *testing.T) {
+	t.Parallel()
+
+	c := qt.New(t)
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"default tag inside eval", `(eval '(continuation-prompt-available? (default-continuation-prompt-tag)) (interaction-environment))`, "#t"},
+		{"user tag whose prompt encloses the eval", `(define t (make-continuation-prompt-tag 'u))
+			(call-with-continuation-prompt (lambda () (eval '(continuation-prompt-available? t) (interaction-environment))) t (lambda a 'h))`, "#t"},
+		{"user tag with no prompt", `(define t (make-continuation-prompt-tag 'u))
+			(eval '(continuation-prompt-available? t) (interaction-environment))`, "#f"},
+		{"abort through eval still reaches the prompt", `(define t (make-continuation-prompt-tag 'u))
+			(call-with-continuation-prompt (lambda () (eval '(abort-current-continuation t 5) (interaction-environment))) t (lambda (v) (list 'h v)))`, "(h 5)"},
+		{"a thread does not see its starter's prompt", `(define t (make-continuation-prompt-tag 'u))
+			(call-with-continuation-prompt
+			  (lambda () (thread-join! (thread-start! (make-thread (lambda () (continuation-prompt-available? t))))))
+			  t (lambda a 'h))`, "#f"},
+		// A dynamic-wind thunk's sub-context is isolated: its parentMC is the
+		// context doing the unwind or rewind, whose chain is not the thunk's
+		// continuation. Walking past it reports the jump's origin (a prompt inside
+		// the extent) or its target (a prompt around the re-entry) as #t.
+		{"an after thunk does not see a prompt inside its extent", `(define t (make-continuation-prompt-tag 'u))
+			(define r 'unset)
+			(call/cc (lambda (out)
+			  (dynamic-wind (lambda () #f)
+			    (lambda () (call-with-continuation-prompt (lambda () (out 1)) t (lambda a 'h)))
+			    (lambda () (set! r (continuation-prompt-available? t))))))
+			r`, "#f"},
+		{"a re-entry's before thunk does not see a prompt around the re-entry", `(define t (make-continuation-prompt-tag 'u))
+			(define r '())
+			(define kk #f)
+			(define n 0)
+			(dynamic-wind (lambda () (set! r (cons (continuation-prompt-available? t) r)))
+			  (lambda () (call/cc (lambda (k) (set! kk k))) 1)
+			  (lambda () #f))
+			(set! n (+ n 1))
+			(if (< n 2) (call-with-continuation-prompt (lambda () (kk 2)) t (lambda a 'h)))
+			r`, "(#f #f)"},
+	}
+	for _, tc := range tcs {
+		c.Run(tc.name, func(c *qt.C) {
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink), wile.WithMutableTopLevel())
+			c.Assert(err, qt.IsNil)
+			result, err := engine.EvalMultiple(context.Background(), tc.code)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestPrompt_ComposableCaptureAcrossEvalRefused: a prompt beyond an eval
+// boundary is visible but not capturable (Racket captures; the segment would
+// have two owners here). The refusal is ErrNotImplemented, names the eval call
+// that entered the sub-context, and is catchable inside and outside the eval.
+// Master refused with "no prompt found", as if the prompt were absent.
+func TestPrompt_ComposableCaptureAcrossEvalRefused(t *testing.T) {
+	t.Parallel()
+
+	c := qt.New(t)
+	run := func(code string) (wile.Value, error) {
+		engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+		c.Assert(err, qt.IsNil)
+		return engine.EvalMultiple(context.Background(), `(define t (make-continuation-prompt-tag 'u)) `+code)
+	}
+	refusal := regexp.MustCompile(`^"call-with-composable-continuation: the prompt for tag #<continuation-prompt-tag:u> is outside the sub-context entered at \S*:1:\d+; capturing across that boundary is not implemented"$`)
+
+	_, err := run(`(call-with-continuation-prompt (lambda () (+ 1 (eval '(call-with-composable-continuation (lambda (k) (k 10)) t) (interaction-environment)))) t (lambda a 'h))`)
+	c.Assert(err, qt.ErrorIs, werr.ErrNotImplemented)
+	c.Assert(err, qt.ErrorMatches, `(?s).*the prompt for tag #<continuation-prompt-tag:u> is outside the sub-context entered at \S*:1:\d+;.*`)
+
+	for _, code := range []string{
+		`(call-with-continuation-prompt (lambda () (guard (e (#t (error-object-message e))) (eval '(call-with-composable-continuation (lambda (k) (k 10)) t) (interaction-environment)))) t (lambda a 'h))`,
+		`(call-with-continuation-prompt (lambda () (eval '(guard (e (#t (error-object-message e))) (call-with-composable-continuation (lambda (k) (k 10)) t)) (interaction-environment))) t (lambda a 'h))`,
+	} {
+		result, err := run(code)
+		c.Assert(err, qt.IsNil, qt.Commentf("%s", code))
+		c.Assert(refusal.MatchString(result.SchemeString()), qt.IsTrue, qt.Commentf("%s => %s", code, result.SchemeString()))
+	}
+
+	// With no prompt anywhere the refusal is unchanged.
+	_, err = run(`(eval '(call-with-composable-continuation (lambda (k) (k 10)) t) (interaction-environment))`)
+	c.Assert(err, qt.ErrorIs, werr.ErrNotAPromptTag)
+	c.Assert(err, qt.ErrorMatches, `(?s).*no prompt found for tag.*`)
 }
