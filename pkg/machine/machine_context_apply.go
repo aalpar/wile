@@ -154,6 +154,12 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 
 	err = fcls.fn(p)
 	if err != nil {
+		if !p.reconfigured && p.template == savedTemplate && p.cont == savedCont {
+			interrupt := p.interruptFailedCall(fcls, vs, err)
+			if interrupt != nil {
+				return nil, interrupt
+			}
+		}
 		// applyCallableError propagates prompt aborts, exception escapes, and
 		// timer interrupts as-is; everything else becomes a Scheme exception.
 		return bridgeForeignError(p, err)

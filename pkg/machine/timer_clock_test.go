@@ -122,3 +122,39 @@ func TestResumedTimerThunkAnswersAsUninterrupted(t *testing.T) {
 		})
 	}
 }
+
+// TestResumedTimerThunkReentersItsWindingExtent pins the one way a resumed thunk
+// does not answer as if uninterrupted: the timer's hard suspension leaves a
+// dynamic-wind extent without running its after thunk, and the resume re-enters
+// it, running its before thunk again. So a timer that fires inside the extent
+// answers (x 2 1 #t), and one that fires before the before thunk ran answers
+// (x 1 1 #t). This is the current design, filed for review, not an endorsement:
+// the sweep asserts that each point answers one of the two, and that every point
+// after the first inside the extent answers the second.
+func TestResumedTimerThunkReentersItsWindingExtent(t *testing.T) {
+	const sweep = 160
+	code := `(let ((before 0) (after 0) (fired #f))
+  (let ((r (with-timeout 1000 (lambda (k) (set! fired #t) (k))
+             (lambda ()
+               (dynamic-wind
+                 (lambda () (set! before (+ before 1)))
+                 (lambda () (let loop ((i 0)) (if (< i 100) (loop (+ i 1)) 'x)))
+                 (lambda () (set! after (+ after 1))))))))
+    (list r before after fired)))`
+	outside := values.List(values.NewSymbol("x"), values.NewInteger(1), values.NewInteger(1), values.TrueValue)
+	inside := values.List(values.NewSymbol("x"), values.NewInteger(2), values.NewInteger(1), values.TrueValue)
+	env := testhelpers.NewFullRuntimeEnv(t)
+	entered := false
+	for k := range uint64(sweep) {
+		ctx := machine.WithTimerFiringAfter(context.Background(), k)
+		result, err := testhelpers.RunSchemeCodeWithEnvAndContext(ctx, t, env, code)
+		qt.Assert(t, err, qt.IsNil, qt.Commentf("fired after %d instructions", k))
+		if values.EqualTo(result, inside) {
+			entered = true
+			continue
+		}
+		qt.Assert(t, entered, qt.IsFalse, qt.Commentf("fired after %d instructions, after the extent was entered", k))
+		qt.Assert(t, result, valuestest.SchemeEquals, outside, qt.Commentf("fired after %d instructions", k))
+	}
+	qt.Assert(t, entered, qt.IsTrue)
+}

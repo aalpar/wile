@@ -29,10 +29,13 @@ import (
 // completes normally, returns its result. If the timer fires before the
 // thunk finishes, the thunk is suspended and handler is called with a
 // composable continuation that can resume the computation. Resuming continues
-// the thunk exactly where the timer stopped it, so it answers what it would have
+// the thunk where the timer stopped it, so it answers what it would have
 // answered uninterrupted; the values the continuation is applied to are
 // discarded, since the thunk was stopped between two instructions, not at a call
-// awaiting a value.
+// awaiting a value. A primitive the timer stopped mid-way (a woken wait, an eval)
+// is re-issued whole. The exception is winding: the timer leaves a dynamic-wind
+// extent inside the thunk without running its after thunk, and the resume
+// re-enters it, running its before thunk again.
 //
 // The thunk runs inline on the live continuation chain under a finalizer prompt
 // frame (RunBodyUnderTimer), mirroring call-with-continuation-barrier

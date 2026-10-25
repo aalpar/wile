@@ -119,6 +119,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A resumed `with-timeout` continuation answers as if the thunk had not been
+  interrupted.** Resuming after the timer stopped the thunk between two
+  instructions cleared or replaced the operand the next instruction consumes
+  (`single-value context: expected 1 value, got 0`, a wrong accumulator), and
+  resuming after it stopped a foreign call re-ran the call on its drained
+  operands (`expected 2 arguments, got 0`, a `Stack.PullDrain` underflow inside
+  `eval`). The values `k` is applied to are now ignored. A call the timer
+  stopped mid-way (a woken wait, an `eval`) is re-issued whole on resume. One
+  exception remains: a `dynamic-wind` extent the timer stopped inside is left
+  without its after thunk and re-entered by the resume, so its before thunk runs
+  again.
 - **`--cover` excludes exactly the embedded stdlib (I179).** The default exclusion
   was three prefixes (`scheme/`, `wile/`, `srfi/`), so `(import (chibi test))`
   put 268 `chibi/test.sld` rows in the default report while `wile/goast/` (from

@@ -193,7 +193,9 @@ func (p *MachineContext) SetBreakHandler(handler values.Callable) {
 // resumable continuation to in order to resume unchanged: the value register
 // frozen at the break point. Resuming with no arguments instead clears the
 // register, because reinstallSegment ends with SetValues(args...) and Restore
-// does not carry a register of its own.
+// does not carry a register of its own. A timer's continuation is the exception:
+// it is marked interrupted, and reinstallSegment restores its frozen register
+// instead, since its handler is Scheme code that cannot be handed these values.
 func (p *MachineContext) BreakResumeValues() []values.Value {
 	return p.breakResumeValues
 }

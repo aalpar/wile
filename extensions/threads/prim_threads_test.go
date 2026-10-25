@@ -983,6 +983,42 @@ func TestTimerClaimsAHandlerFailure(t *testing.T) {
 	}
 }
 
+// TestResumedTimerReissuesTheInterruptedCall pins that a with-timeout handler's
+// continuation, resumed after the timer interrupted a foreign call that then failed
+// with the timeout (a wait the cancellation woke, an eval it stopped), re-issues
+// the call: the interrupt is taken with the call ready to run again, not on its
+// call instruction with the operands drained, which a resume re-ran ("expected 1
+// arguments, got 0", or a Stack.PullDrain underflow inside eval). The eval'd body
+// runs again from its start, as the answer's 0 shows. These rows use the wall
+// clock (WithTimerFiringAfter cannot fire inside a wait or a sub-context), but the
+// answer does not depend on when the 10 ms timer fires: the sleep outlasts it, and
+// the eval'd loop spins until the handler has run.
+func TestResumedTimerReissuesTheInterruptedCall(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"a woken wait", `(let ((fired #f))
+  (list (with-timeout 10 (lambda (k) (set! fired #t) (k)) (lambda () (list 1 (thread-sleep! 0.5) 'woke))) fired))`,
+			"((1 #<void> woke) #t)"},
+		{"a stopped eval", `(define fired (vector #f))
+(with-timeout 10 (lambda (k) (vector-set! fired 0 #t) (list 'h (k)))
+  (lambda () (eval '(let loop ((i 0)) (if (vector-ref fired 0) (list 'done i) (loop (+ i 1)))) (interaction-environment))))`,
+			"(h (done 0))"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+			c.Assert(err, qt.IsNil)
+			result, err := evalWithWatchdog(t, engine, tc.code, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
 // TestEscapeFromATimerEndsIt pins that leaving a with-timeout's extent by an escape
 // ends its timer, as a normal return does: the escape exits the timer's winding
 // frame, which cancels the timer and restores the context outside it. Left armed,
@@ -1747,33 +1783,40 @@ func TestEscapedTimerDoesNotHideALiveOne(t *testing.T) {
 // TestEscapedTimerLeavesTheHandlersContinuation pins what the outer timer's
 // handler receives when an inner with-timeout inside it was left by an escape: the
 // same continuation as without one, so resuming it behaves the same in both shapes.
-// Resuming k after a wait's interrupt is itself defective (filed in TODO.md), so
-// the two shapes are compared rather than either asserted. While the escape left
-// the inner timer armed, tearing down only that one applied the handler under the
-// fired outer timer; the recheck after its first foreign call interrupted it and
-// applied it again, with a k that captured that first application, and resuming it
-// underflowed the eval stack (an internal error). The outer timer is 500 ms so that
-// both shapes are at the wait when it fires.
+// While the escape left the inner timer armed, tearing down only that one applied
+// the handler under the fired outer timer; the recheck after its first foreign call
+// interrupted it and applied it again, with a k that captured that first
+// application, and resuming it underflowed the eval stack (an internal error). The
+// outer timer is 500 ms so that both shapes are at the wait when it fires. The
+// resume re-issues the woken wait (TestResumedTimerReissuesTheInterruptedCall), so
+// the handler frees the mutex first, and both shapes answer the uninterrupted
+// thunk's value with the handler run once.
 func TestEscapedTimerLeavesTheHandlersContinuation(t *testing.T) {
-	run := func(stale string) error {
-		engine := newEngine(t)
-		defer func() {
-			_ = engine.Close()
-		}()
-		_, err := evalWithWatchdog(t, engine, `
+	tcs := []struct {
+		name  string
+		stale string
+	}{
+		{"plain", `#f`},
+		{"after an escaped inner with-timeout", `(guard (e (#t 'inner-caught)) (with-timeout 100000 (lambda (k) 'inner) (lambda () (raise 'x))))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			defer func() {
+				_ = engine.Close()
+			}()
+			result, err := evalWithWatchdog(t, engine, `
 (define m (make-mutex))
 (mutex-lock! m)
 (define ran (vector 0))
-(with-timeout 500 (lambda (k) (vector-set! ran 0 (+ 1 (vector-ref ran 0))) (k 'resumed))
-  (lambda () `+stale+` (list 'thunk (mutex-lock! m))))`, 5*time.Second)
-		return err
+(list (with-timeout 500 (lambda (k) (vector-set! ran 0 (+ 1 (vector-ref ran 0))) (mutex-unlock! m) (k 'resumed))
+        (lambda () `+tc.stale+` (list 'thunk (mutex-lock! m))))
+      (vector-ref ran 0))`, 5*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, "((thunk #t) 1)")
+		})
 	}
-	c := qt.New(t)
-	plain := run(`#f`)
-	stale := run(`(guard (e (#t 'inner-caught)) (with-timeout 100000 (lambda (k) 'inner) (lambda () (raise 'x))))`)
-	c.Assert(stale == nil, qt.Equals, plain == nil, qt.Commentf("plain: %v; stale: %v", plain, stale))
-	c.Assert(errors.Is(stale, werr.ErrInternal), qt.Equals, errors.Is(plain, werr.ErrInternal),
-		qt.Commentf("plain: %v; stale: %v", plain, stale))
 }
 
 // TestTimerClaimsAnApplySpreadFailureBelowIt pins the two failures apply raises

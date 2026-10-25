@@ -81,6 +81,12 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	mc.reconfigured = false
 	err = fcls.fn(mc)
 	if err != nil {
+		if !mc.reconfigured && mc.template == savedTemplate && mc.cont == savedCont {
+			interrupt := mc.interruptFailedCall(fcls, vs, err)
+			if interrupt != nil {
+				return nil, interrupt
+			}
+		}
 		return bridgeForeignError(mc, err)
 	}
 

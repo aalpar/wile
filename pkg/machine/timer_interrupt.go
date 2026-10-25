@@ -17,6 +17,7 @@ package machine
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/values"
@@ -113,7 +114,33 @@ func (p *MachineContext) interruptPendingReturn() error {
 		return nil
 	}
 	p.template = returnTemplate
+	p.free = nil
 	p.pc = 0
+	return q
+}
+
+// interruptFailedCall is the eager recheck for a foreign call fcls, applied to vs,
+// that failed after a timer fired: the failure is the timeout's
+// (supersedingTimerInterrupt), typically a wait the cancellation woke or a
+// sub-context it stopped. It leaves p about to re-issue the call, fcls applied
+// again to its operands with the result returned to p.cont (applyToValuesCode),
+// and answers the interrupt, so a resume answers what the uninterrupted call would
+// have. Left on the call instruction, a resume re-ran the call on the operands it
+// had drained. The call is re-issued whole: what a sub-context it ran had done
+// (an eval'd body's side effects) is done again. Nil when the timer does not
+// claim err, which bridgeForeignError then handles.
+func (p *MachineContext) interruptFailedCall(fcls *ForeignClosure, vs []values.Value, err error) error {
+	q := p.supersedingTimerInterrupt(err)
+	if q == nil {
+		return nil
+	}
+	p.template = &NativeTemplate{code: applyToValuesCode, literals: MultipleValues{fcls}}
+	p.free = nil
+	p.pc = 0
+	// vs can be a drained eval stack's view (Stack.Drain), valid until the stack
+	// is next pushed. A call that left p where it found it has not pushed it, so
+	// vs still holds the operands; cloned, since the stack is pushed next.
+	p.SetValues(slices.Clone(vs)...)
 	return q
 }
 
