@@ -55,6 +55,8 @@ passed=0
 failed=0
 skipped=0
 failures=()
+out="$(mktemp)"
+trap 'rm -f "$out"' EXIT
 
 while IFS= read -r -d '' scm; do
     rel="${scm#"$REPO_ROOT/"}"
@@ -64,11 +66,15 @@ while IFS= read -r -d '' scm; do
         continue
     fi
 
-    if "${TIMEOUT_CMD[@]}" "$SCHEME" --quiet -f "$scm" >/dev/null 2>&1; then
+    if "${TIMEOUT_CMD[@]}" "$SCHEME" --quiet -f "$scm" >"$out" 2>&1; then
         passed=$((passed + 1))
     else
+        status=$?
         failed=$((failed + 1))
-        failures+=("$rel")
+        # 124 is the timeout's own status: the example ran past $TIMEOUT.
+        failures+=("$rel (exit $status)")
+        echo "--- $rel (exit $status), last 20 lines:"
+        tail -n 20 "$out"
     fi
 done < <(find "$EXAMPLES_DIR" \
     -name '*.scm' \
