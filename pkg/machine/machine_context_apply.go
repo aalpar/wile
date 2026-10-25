@@ -576,7 +576,10 @@ func (p *MachineContext) reinstallSegment(
 	// stack as an absolute target unwound the invoker's own extents, and a
 	// with-timeout's among them, on every re-entry.
 	target := composeWinding(outside, comp.windingStack, shared)
+	outer := p.rewinding
+	p.rewinding = &rewindTarget{segment: segment, prompt: prompt}
 	err := p.RestoreWithWindingFrom(nil, srcWinding, target)
+	p.rewinding = outer
 	if err != nil {
 		return false, err
 	}

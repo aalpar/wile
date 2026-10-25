@@ -82,7 +82,7 @@ var returnTemplate = &NativeTemplate{
 //   - make-parameter (via RunBodyUnderConsumer): literal = a finalizer that wraps the
 //     converted value in a Parameter; no prompt tag.
 //   - call-with-exit (via RunBodyUnderExitFrame): literal = a finalizer closure that
-//     clears the one-shot and forwards the value(s); a prompt tag so an (exit v) abort
+//     marks the frame left and forwards the value(s); a prompt tag so an (exit v) abort
 //     routes here.
 //   - with-timeout (via RunBodyUnderTimer): literal = the idempotent teardown finalizer;
 //     a prompt tag so a fired timer routes here.
@@ -311,11 +311,11 @@ func (p *MachineContext) RunBodyUnderConsumer(producer values.Value, consumer va
 
 // RunBodyUnderExitFrame reifies call-with-exit. It pushes a prompt apply-frame
 // carrying tag whose literal is `finalizer`, then inline-applies body (proc) with
-// exitArg (the one-shot exit closure). On proc's normal return the frame applies
-// finalizer to proc's value(s) — clearing the one-shot and forwarding the value(s);
-// an (exit v) abort to tag routes via the driver's FindPrompt to this frame (no
+// exitArg (the exit closure). On proc's normal return the frame applies finalizer
+// to proc's value(s), marking the frame left and forwarding the value(s); an
+// (exit v) abort to tag routes via the driver's FindPrompt to this frame (no
 // handler), which delivers v and re-enters the same finalizer template (idempotent).
-// The frame is NOT transparent (returnTemplate): the one-shot must be cleared on the
+// The frame is NOT transparent (returnTemplate): the left mark must be set on the
 // normal-return path, which RunBodyUnderPrompt's returnTemplate cannot do.
 func (p *MachineContext) RunBodyUnderExitFrame(body values.Value, tag *PromptTag, finalizer values.Value, exitArg values.Value) (*MachineContext, error) {
 	return p.runBodyUnderApplyFrame(body, finalizer, tag, exitArg)

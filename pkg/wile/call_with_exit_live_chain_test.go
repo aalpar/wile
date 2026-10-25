@@ -151,6 +151,18 @@ func TestCallWithExitValidWhileExtentLive(t *testing.T) {
 			        (guard (x (#t (list 'caught (error-object? x)))) (saved 2)))`,
 			want: "(caught #t)",
 		},
+		{
+			// The resume is taken inside the extent, so the before thunk its
+			// rewind runs continues it on both chains. racket call/ec: x.
+			name: "control: a before thunk a re-entry inside the extent runs escapes to it",
+			src: `(let ((k #f) (n 0))
+			        (call-with-exit (lambda (e)
+			          (dynamic-wind (lambda () (set! n (+ n 1)) (if (= n 2) (e 'x) #f))
+			                        (lambda () (call/cc (lambda (c) (set! k c))))
+			                        (lambda () #f))
+			          (if (= n 1) (k #f) 'done))))`,
+			want: "x",
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -165,9 +177,13 @@ func TestCallWithExitValidWhileExtentLive(t *testing.T) {
 
 // TestCallWithExitExpiredOffTheLiveChain pins the other half: an exit procedure
 // whose frame is not on the chain its escape would travel raises the catchable
-// expired-escape error, wherever it is called from. A thread cannot read the
-// capturing thread's chain, so it is refused as before: cross-thread while the
-// extent has not been left, expired once it has.
+// expired-escape error, wherever it is called from. A dynamic-wind thunk a jump
+// runs continues only the dynamic-wind call's continuation: an after thunk the
+// chain being left, outside its dynamic-wind; a before thunk the chain being
+// entered. The thunk rows escaped silently into an extent being left before
+// (the jump was dropped); racket: "attempt to jump into an escape continuation"
+// on each. A thread cannot read the capturing thread's chain, so another
+// thread's call is refused as cross-thread, live extent or not.
 func TestCallWithExitExpiredOffTheLiveChain(t *testing.T) {
 	t.Parallel()
 
@@ -224,8 +240,91 @@ func TestCallWithExitExpiredOffTheLiveChain(t *testing.T) {
 			want: werr.ErrCrossThreadContinuation,
 		},
 		{
+			// It was ErrExpiredEscape: another thread is refused as cross-thread.
 			name: "from another thread after the extent",
 			src:  stale + `(let ((th (make-thread (lambda () (saved 99))))) (thread-start! th) (thread-join! th))`,
+			want: werr.ErrCrossThreadContinuation,
+		},
+		{
+			// The inner extent is inside the dynamic-wind the outer escape leaves.
+			// It escaped into the inner extent (master too).
+			name: "an after thunk an outer escape runs, into an extent being left",
+			src: `(let ()
+			        (define saved #f)
+			        (define n 0)
+			        (call-with-exit (lambda (outer)
+			          (dynamic-wind (lambda () #f)
+			            (lambda () (call-with-exit (lambda (inner) (set! saved inner) (outer 1) 'x)) 'body-done)
+			            (lambda () (set! n (+ n 1)) (if (= n 1) (saved 2) #f))))))`,
+			want: werr.ErrExpiredEscape,
+		},
+		{
+			// The same after re-entering the inner extent (master: expired).
+			name: "an after thunk an outer escape runs, into a re-entered extent being left",
+			src: `(let ((saved #f) (k #f) (pass 0) (fired 0))
+			        (call-with-exit (lambda (outer)
+			          (dynamic-wind (lambda () #f)
+			            (lambda ()
+			              (call-with-exit (lambda (inner)
+			                (set! saved inner)
+			                (call/cc (lambda (c) (set! k c)))
+			                (set! pass (+ pass 1))
+			                (if (= pass 2) (outer 'outer-escaped) 'first)))
+			              (if (= pass 1) (k #f) 'body-done))
+			            (lambda ()
+			              (if (= pass 2) (begin (set! fired (+ fired 1)) (if (= fired 1) (saved 'into-inner) #f)) #f))))))`,
+			want: werr.ErrExpiredEscape,
+		},
+		{
+			// A resume leaves the exit's extent for a dynamic-wind outside it; the
+			// rewind's before thunk escaped into the extent being left (master too).
+			name: "a before thunk a resume runs, into the extent it leaves",
+			src: `(let ()
+			        (define k #f)
+			        (define n 0)
+			        (define saved #f)
+			        (dynamic-wind
+			          (lambda () (set! n (+ n 1)) (if (and (= n 2) saved) (saved 'from-before) #f))
+			          (lambda () (call/cc (lambda (c) (set! k c))) 'dest)
+			          (lambda () #f))
+			        (if (= n 1) (call-with-exit (lambda (e) (set! saved e) (k #f) 'no)) #f))`,
+			want: werr.ErrExpiredEscape,
+		},
+		{
+			// The same with the extent re-entered first (it printed
+			// (result escaped-into-left-frame); master: expired).
+			name: "a before thunk a resume runs, into a re-entered extent it leaves",
+			src: `(let ((cell (vector #f #f 0 #f)) (n 0))
+			        (dynamic-wind
+			          (lambda () (set! n (+ n 1)) (if (= n 2) ((vector-ref cell 0) 'escaped-into-left-frame) #f))
+			          (lambda () (call/cc (lambda (k) (vector-set! cell 3 k))) 'body)
+			          (lambda () #f))
+			        (if (= n 1)
+			          (begin
+			            (call-with-exit (lambda (esc)
+			              (vector-set! cell 0 esc)
+			              (call/cc (lambda (c) (vector-set! cell 1 c)))
+			              (vector-set! cell 2 (+ 1 (vector-ref cell 2)))
+			              (if (= (vector-ref cell 2) 2) ((vector-ref cell 3) #f) 'first-normal)))
+			            (if (= (vector-ref cell 2) 1) ((vector-ref cell 1) #f) #f))
+			          #f))`,
+			want: werr.ErrExpiredEscape,
+		},
+		{
+			// RESIDUAL: racket escapes ((r escaped-from-before 2)). The before
+			// thunk continues the re-entered extent, but the abort is routed on
+			// the driver's chain, which does not hold it until the rewind ends;
+			// the walk reports it expired rather than let the abort fail
+			// uncatchably with "no prompt found".
+			name: "a before thunk a re-entry runs, into the extent it re-enters",
+			src: `(let ((k #f) (n 0) (log '()))
+			        (let ((r (call-with-exit (lambda (e)
+			                   (dynamic-wind
+			                     (lambda () (set! n (+ n 1)) (if (= n 2) (e 'escaped-from-before) #f))
+			                     (lambda () (call/cc (lambda (c) (set! k c))) 'body)
+			                     (lambda () #f))))))
+			          (set! log (cons r log))
+			          (if (= n 1) (k #f) log)))`,
 			want: werr.ErrExpiredEscape,
 		},
 	}
@@ -240,18 +339,51 @@ func TestCallWithExitExpiredOffTheLiveChain(t *testing.T) {
 	}
 }
 
-// TestCallWithExitPastEngineCallKeepsTheOldRule pins that the chain walk does
-// not decide an escape from an Engine.Call callback: the call's root has no link
-// to the host's caller, so a live outer extent is not expired there. The escape
-// itself still fails, with "no prompt found", as before: Engine.Call does not
-// pass an abort up (todo N29, "Engine.Call is still a default prompt for
-// aborts"). This row pins the walk's answer, not that failure.
-func TestCallWithExitPastEngineCallKeepsTheOldRule(t *testing.T) {
+// TestCallWithExitPastAnUnlinkedRootKeepsTheOldRule pins that the chain walk
+// does not decide an escape from code run past a root with no link to its
+// caller: an Engine.Call callback, and a host primitive's nested Eval (the
+// outermost run's root is not one). A live outer extent is not expired there;
+// the escape still fails with "no prompt found", as before, because neither
+// root passes an abort up (todo N29, "Engine.Call is still a default prompt for
+// aborts", and "Engine.EvalMultiple called from a host is a prompt too"). The
+// rows pin the walk's answer, not that failure.
+func TestCallWithExitPastAnUnlinkedRootKeepsTheOldRule(t *testing.T) {
 	t.Parallel()
 
-	engine := newCallWithExitEngine(t)
-	_, err := engine.EvalMultiple(context.Background(),
-		`(call-with-exit (lambda (esc) (host-call (lambda (_) (esc 4))) 'no))`)
-	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, errors.Is(err, werr.ErrExpiredEscape), qt.IsFalse, qt.Commentf("got: %v", err))
+	tcs := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "Engine.Call",
+			src:  `(call-with-exit (lambda (esc) (host-call (lambda (_) (esc 4))) 'no))`,
+		},
+		{
+			name: "nested EvalMultiple",
+			src:  `(call-with-exit (lambda (esc) (vector-set! gc 0 esc) (host-eval) 'no))`,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			engine := newCallWithExitEngine(t)
+			err := engine.RegisterPrimitive(wile.PrimitiveSpec{
+				Name:       "host-eval",
+				ParamCount: 0,
+				Impl: func(mc wile.CallContext) error {
+					v, evalErr := engine.EvalMultiple(mc.Context(), "((vector-ref gc 0) 5)")
+					if evalErr != nil {
+						return evalErr
+					}
+					mc.SetValue(v.Internal())
+					return nil
+				},
+			})
+			qt.Assert(t, err, qt.IsNil)
+			_, err = engine.EvalMultiple(context.Background(), "(define gc (vector #f))\n"+tc.src)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue, qt.Commentf("got: %v", err))
+			qt.Assert(t, strings.Contains(err.Error(), "no prompt found"), qt.IsTrue, qt.Commentf("got: %v", err))
+		})
+	}
 }

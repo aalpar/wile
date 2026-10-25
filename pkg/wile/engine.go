@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/aalpar/wile/coverage"
 	"github.com/aalpar/wile/pkg/debug"
@@ -74,6 +75,11 @@ type Engine struct {
 	maxStackSize            uint64
 	lossyConversionsAllowed bool // captured into FFI closures at RegisterFunc time
 	coverageCollector       *coverage.Collector
+	// runs counts the runCompiled calls in progress: one started while another
+	// is live (a host primitive calling Eval) has a nested root
+	// (machine.MarkNestedRoot). Atomic because a SRFI-18 thread's host call may
+	// start one too.
+	runs atomic.Int32
 
 	exportIndexMu    sync.Mutex
 	exportIndexBuilt bool
@@ -1590,6 +1596,10 @@ func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*Comp
 func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, error) {
 	mc := machine.AcquireTopLevelContext(ctx, cc.template, cc.env)
 	defer machine.ReleaseTopLevelContext(mc)
+	if p.runs.Add(1) > 1 {
+		mc.MarkNestedRoot()
+	}
+	defer p.runs.Add(-1)
 	mc.SetMaxCallDepth(p.maxCallDepth)
 	mc.SetMaxStackSize(p.maxStackSize)
 	if p.debugger != nil {

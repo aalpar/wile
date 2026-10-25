@@ -33,8 +33,11 @@ import (
 // Unlike call/cc, call-with-exit does NOT capture a reified continuation: the
 // escape procedure is a lightweight upward escape, valid while its extent is
 // live, that is, while call-with-exit's frame is on the continuation of the
-// call (Racket's call/ec). Calling it after the extent was left signals an
-// error; a continuation that re-enters the extent makes it valid again.
+// call. Calling it after the extent was left signals an error; a continuation
+// that re-enters the extent makes it valid again. This is Racket's call/ec,
+// except that a dynamic-wind before thunk a re-entry runs cannot escape to an
+// extent only that re-entry enters, and past an expansion-time, Engine.Call or
+// nested-Eval root a re-entered extent stays expired (PromptOnAbortPath).
 //
 // Inspired by S7 Scheme's call-with-exit and Guile's call-with-escape-continuation.
 func PrimCallWithExit(cc machine.CallContext) error {
@@ -57,9 +60,10 @@ func PrimCallWithExit(cc machine.CallContext) error {
 
 	tag := machine.NewPromptTag("exit")
 	// left records that this call's own frame was left (normal return or its
-	// escape). It is the answer only where the live chain cannot be read: past an
-	// expansion-time root (PromptOnAbortPath's opaque) and from another thread.
-	// There a continuation re-entering the extent does not clear it.
+	// escape). It is the answer only where the live chain cannot be read, past a
+	// root with no link to its caller (PromptOnAbortPath's opaque: an
+	// expansion-time root, an Engine.Call root, a nested Eval's root). There a
+	// continuation re-entering the extent does not clear it.
 	left := &atomic.Bool{}
 	capturingThreadID := mc.ThreadID()
 
@@ -71,13 +75,9 @@ func PrimCallWithExit(cc machine.CallContext) error {
 		if err != nil {
 			return err
 		}
-		// Another thread cannot read this thread's chain. An expired exit procedure
-		// still reports "outside dynamic extent" there, which is more informative.
+		// Another thread cannot read this thread's chain, and no escape crosses
+		// threads: refused whether or not the extent is live.
 		if innerMC.ThreadID() != capturingThreadID {
-			if left.Load() {
-				return werr.WrapForeignErrorf(werr.ErrExpiredEscape,
-					"call-with-exit: exit procedure called outside dynamic extent")
-			}
 			return werr.WrapForeignErrorf(werr.ErrCrossThreadContinuation,
 				"call-with-exit: exit procedure called from different thread")
 		}
@@ -89,8 +89,8 @@ func PrimCallWithExit(cc machine.CallContext) error {
 		val := innerMC.Arg(0)
 		// Marked left BEFORE the abort, for the opaque fallback: an after thunk that
 		// re-invokes it from a transformer body is rejected. On the readable chain an
-		// after thunk run by this abort still sees the frame, so (as Racket) it may
-		// escape to it again. No UnwindTo here: the driver's abort arm
+		// after thunk run by this abort still continues the frame, so (as Racket) it
+		// may escape to it again. No UnwindTo here: the driver's abort arm
 		// (RunResumable / RunWithinBoundary) runs the dynamic-wind after thunks ONCE,
 		// against SourceWinding — the winding live HERE at the escape point, which may
 		// be a deeper sub-context than the driver holding the exit frame. Unwinding

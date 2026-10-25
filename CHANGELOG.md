@@ -33,13 +33,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   It is valid exactly when its `call-with-exit` frame is on the continuation of
   the call, as Racket's `call/ec`: a continuation that re-enters the extent makes
   it valid again (it stayed expired), and a `dynamic-wind` after thunk its own
-  escape runs may escape to it again (`7`, was an expired-escape error). An
+  escape runs may escape to it again (`7`, was an expired-escape error). A
+  `dynamic-wind` thunk a jump runs continues only its `dynamic-wind`'s
+  continuation, so an escape from it into an extent the jump is leaving is now
+  the expired-escape error, as in racket; it escaped and dropped the jump. An
   escape whose extent an outer jump left now raises the catchable expired-escape
   error instead of an uncatchable "no prompt found". `guard` escapes through
   `call-with-exit`, so a handler re-entered after its `guard` exited now raises
-  the R7RS 6.11 secondary into that guard, as petite does. Past a macro
-  transformer's expansion-time root or an `Engine.Call` callback, where the chain
-  cannot be read, the escape keeps the old rule.
+  the R7RS 6.11 secondary into that guard, as petite does. A call from another
+  SRFI-18 thread is always the cross-thread error. Two differences from Racket
+  remain: a before thunk a re-entry runs cannot escape to an extent only that
+  re-entry enters (expired, as before), and past a macro transformer's
+  expansion-time root, an `Engine.Call` callback or a host's nested `Eval`, where
+  the chain cannot be read, a re-entered extent stays expired.
 
 - **BREAKING (behavior): `char-ready?` requires a textual input port.** It
   answered `#t` without looking at its argument, so `(char-ready? 5)`, a binary
