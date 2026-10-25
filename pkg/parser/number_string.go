@@ -444,9 +444,10 @@ func MakeInexactNumber(n values.Number) values.Number {
 // WidenToBigInteger is the value half of the reader's #z introducer
 // (Parser.widenToBigInteger), shared with string->number so the two cannot
 // disagree on what #z accepts: an exact integer, widened to BigInteger. Anything
-// else, including an inexact integer (#z#i1), is an ErrNotANumber.
-func WidenToBigInteger(n values.Number) (values.Number, error) {
-	switch v := n.(type) {
+// else, including an inexact integer (#z#i1) and a non-number, is an
+// ErrNotANumber naming the type.
+func WidenToBigInteger(v values.Value) (values.Number, error) {
+	switch v := v.(type) {
 	case *values.BigInteger:
 		return v, nil
 	case *values.Integer:
@@ -460,10 +461,10 @@ func WidenToBigInteger(n values.Number) (values.Number, error) {
 // WidenToBigFloat is the value half of the reader's #m introducer
 // (Parser.widenToBigFloat, which documents the precision rule), shared with
 // string->number. A complex number has no BigFloat image and is an
-// ErrNotANumber; an exact operand too wide for MaxBigFloatLiteralPrecision is
-// an ErrInvalidFormat.
-func WidenToBigFloat(n values.Number) (values.Number, error) {
-	switch v := n.(type) {
+// ErrNotANumber, as is a non-number; an exact operand too wide for
+// MaxBigFloatLiteralPrecision is an ErrInvalidFormat.
+func WidenToBigFloat(v values.Value) (values.Number, error) {
+	switch v := v.(type) {
 	case *values.BigFloat:
 		return v, nil
 	case *values.Float:

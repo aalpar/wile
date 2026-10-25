@@ -228,7 +228,7 @@ func parseIntroduced(marker byte, operand string, radix int) values.Number {
 
 // widenOrNil applies widen to n, mapping a missing operand or a refused
 // widening to nil.
-func widenOrNil(widen func(values.Number) (values.Number, error), n values.Number) values.Number {
+func widenOrNil(widen func(values.Value) (values.Number, error), n values.Number) values.Number {
 	if n == nil {
 		return nil
 	}

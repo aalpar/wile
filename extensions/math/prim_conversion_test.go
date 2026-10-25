@@ -701,12 +701,16 @@ func TestStringToNumberPrefixes(t *testing.T) {
 // prefix sequence up to three long with a set of numeral shapes, so it covers
 // orders and repetitions no hand-picked list does.
 //
-// Three classes are left out, each a reader defect filed as its own row;
-// TestStringToNumberPrefixes pins string->number's answer for each:
+// The corpus has no '#' hash digits: string->number does not read them (a
+// separate divergence: "1#" is #f, the reader's 10.0), so it claims nothing
+// there. Three classes are left out as reader
+// defects; TestStringToNumberPrefixes pins string->number's answer for each:
 //   - a second exactness prefix in one run (#e#i1): the reader accepts it,
-//     racket and petite answer #f;
+//     racket and petite answer #f (TODO row "A second exactness prefix is
+//     accepted");
 //   - an infinity or NaN under a non-decimal radix (#x+inf.0): the reader
-//     refuses it, racket and petite read it;
+//     refuses it, racket and petite read it (TODO row "Radix complex, polar,
+//     infinite and imaginary numerals do not parse");
 //   - #e over a bare #m (#e#m#d0.1): the reader converts the innermost
 //     numeral's digits, through the #m and any #i between, so #e#m#d0.1 is
 //     1/10 where #e#m0.1 is the 256-bit value's exact image. string->number

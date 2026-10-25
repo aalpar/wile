@@ -188,7 +188,7 @@ func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenize
 // container introducer #& gives #&#&5 two boxes deep. That falls out of the
 // BigInteger arm being the identity.
 func (p *Parser) widenToBigInteger(stx syntax.SyntaxValue, _ tokenizer.Token) (syntax.SyntaxValue, error) {
-	return p.convertWrappedNumber(stx, "widenToBigInteger", WidenToBigInteger)
+	return p.widenWrappedNumber(stx, WidenToBigInteger)
 }
 
 // widenToBigFloat implements #m as a datum introducer, the inexact counterpart
@@ -207,7 +207,18 @@ func (p *Parser) widenToBigInteger(stx syntax.SyntaxValue, _ tokenizer.Token) (s
 // notation. Precision beyond float64 is available through the unprefixed decimal
 // spelling or the l marker.
 func (p *Parser) widenToBigFloat(stx syntax.SyntaxValue, _ tokenizer.Token) (syntax.SyntaxValue, error) {
-	return p.convertWrappedNumber(stx, "widenToBigFloat", WidenToBigFloat)
+	return p.widenWrappedNumber(stx, WidenToBigFloat)
+}
+
+// widenWrappedNumber applies a #z/#m widening to a syntax-wrapped datum. Unlike
+// convertWrappedNumber it hands over a non-number too, so the widening's
+// diagnostic names the operand's type (#z"a").
+func (p *Parser) widenWrappedNumber(stx syntax.SyntaxValue, widen func(values.Value) (values.Number, error)) (syntax.SyntaxValue, error) {
+	q, err := widen(stx.Unwrap())
+	if err != nil {
+		return nil, err
+	}
+	return p.rewrapSyntax(stx, q), nil
 }
 
 // parseScientificNotation parses a number in scientific notation (e.g., "1e10", "+2e-5").
