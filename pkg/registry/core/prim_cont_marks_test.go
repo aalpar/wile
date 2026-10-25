@@ -681,6 +681,7 @@ func TestContinuationMarksRacketArguments(t *testing.T) {
 		{"first with a tag", tagged(`(at-inner (lambda () (continuation-mark-set-first #f 'a #f tag)))`), "2"},
 		{"->list with a tag stops at the prompt", tagged(`(at-inner (lambda () (continuation-mark-set->list #f 'a tag)))`), "(2)"},
 		{"->list* with a tag", tagged(`(at-inner (lambda () (continuation-mark-set->list* #f '(a) #f tag)))`), "(#(2))"},
+		{"first with a tag stops at the prompt", tagged(`(with-continuation-mark 'a 1 (call-with-continuation-prompt (lambda () (continuation-mark-set-first #f 'a 'none tag)) tag (lambda a a)))`), "none"},
 		{"control: ->list without a tag sees past the prompt", tagged(`(at-inner (lambda () (continuation-mark-set->list #f 'a)))`), "(2 1)"},
 	}
 	for name, run := range markShapeRunners() {
@@ -709,6 +710,9 @@ func TestContinuationMarksRacketArgumentRefusals(t *testing.T) {
 		{"continuation-marks of a number", `(continuation-marks 5)`, werr.ErrNotAContinuation},
 		{"bad tag", `(continuation-mark-set->list #f 'a 5)`, werr.ErrNotAPromptTag},
 		{"tag with an explicit mark set", `(continuation-mark-set->list (current-continuation-marks) 'a (make-continuation-prompt-tag 'x))`, werr.ErrNotImplemented},
+		{"continuation-marks of #f still checks its tag", `(continuation-marks #f 5)`, werr.ErrNotAPromptTag},
+		{"a tag with no prompt on the continuation", `(continuation-mark-set->list #f 'a (make-continuation-prompt-tag 'x))`, werr.ErrNotAPromptTag},
+		{"current-continuation-marks with a tag and no prompt", `(current-continuation-marks (make-continuation-prompt-tag 'x))`, werr.ErrNotAPromptTag},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
