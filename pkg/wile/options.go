@@ -366,11 +366,11 @@ func WithMaxParseDepth(n int) EngineOnlyOption {
 // transformer right-hand sides, library bodies, quasiquote, and (eval ...),
 // (load ...), (compile ...), (expand ...) issued from running Scheme.
 //
-// The bound belongs to the namespace, and every engine on it shares it. NewEngine
-// sets it on the namespace it creates. NewEngineWithNamespace without this option
-// inherits the namespace's bound and writes nothing; with it, a namespace no
-// engine has configured takes the value, and one already holding a different
-// value fails construction with ErrEngineInit (wrapping ErrInvalidArgument).
+// The bound belongs to the namespace, and every engine on it shares it. The first
+// engine to create or join a namespace fixes it: at this option's value, or at
+// DefaultMaxExpandDepth without it. A later NewEngineWithNamespace without the
+// option inherits it; with a different value it fails construction with
+// ErrEngineInit (wrapping ErrInvalidArgument).
 func WithMaxExpandDepth(n int) EngineOnlyOption {
 	return engineOnlyOption(func(cfg *engineConfig) {
 		if n < 0 {
@@ -397,9 +397,9 @@ func WithMaxStackSize(n uint64) EngineOnlyOption {
 // the engine uses compilation.DefaultInlineThreshold (5).
 //
 // The threshold belongs to the namespace on the same terms as WithMaxExpandDepth:
-// NewEngine sets it; NewEngineWithNamespace inherits it without the option, sets
-// it on an unconfigured namespace, and fails with ErrEngineInit (wrapping
-// ErrInvalidArgument) when the namespace holds a different value.
+// the first engine to create or join the namespace fixes it (at the default
+// without this option); a later engine inherits it, or fails with ErrEngineInit
+// (wrapping ErrInvalidArgument) when it asks for a different value.
 func WithInlineThreshold(n int) EngineOnlyOption {
 	return engineOnlyOption(func(cfg *engineConfig) {
 		if n < 0 {

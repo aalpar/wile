@@ -57,10 +57,10 @@ func compileBounds() []compileBound {
 	}
 }
 
-// Pin: a compile bound belongs to the namespace. The engine that creates the
-// namespace sets it; an engine joining one inherits it without the option, sets
-// it on a namespace no engine configured, and is refused when the namespace
-// holds a different value, since every engine on the namespace compiles at it.
+// Pin: a compile bound belongs to the namespace. The first engine to create or
+// join it fixes the bound (its explicit value, else the default); a later engine
+// inherits it without the option and is refused when it asks for a different
+// value, since every engine on the namespace compiles at it.
 func TestCompileBoundsBelongToTheNamespace(t *testing.T) {
 	ctx := context.Background()
 	newConfigured := func(t *testing.T, b compileBound, n int) *environment.Namespace {
@@ -70,6 +70,12 @@ func TestCompileBoundsBelongToTheNamespace(t *testing.T) {
 	}
 	newUnconfigured := func(t *testing.T, _ compileBound, _ int) *environment.Namespace {
 		ns, err := wile.NewNamespace(ctx)
+		qt.Assert(t, err, qt.IsNil)
+		return ns
+	}
+	newJoinedAtDefault := func(t *testing.T, _ compileBound, _ int) *environment.Namespace {
+		ns := newUnconfigured(t, compileBound{}, 0)
+		_, err := wile.NewEngineWithNamespace(ctx, ns)
 		qt.Assert(t, err, qt.IsNil)
 		return ns
 	}
@@ -109,23 +115,34 @@ func TestCompileBoundsBelongToTheNamespace(t *testing.T) {
 			},
 		},
 		{
-			name: "join without the option leaves an unconfigured namespace unset",
+			name: "the first join without the option fixes the default",
 			ns:   newUnconfigured,
 			join: func(compileBound) []wile.EngineOnlyOption {
 				return []wile.EngineOnlyOption{}
 			},
-			want: func(compileBound) (int, bool) {
-				return 0, false
+			want: func(b compileBound) (int, bool) {
+				return b.def, true
 			},
 		},
 		{
-			name: "join with the option configures an unconfigured namespace",
+			name: "the first join with the option fixes its value",
 			ns:   newUnconfigured,
 			join: func(b compileBound) []wile.EngineOnlyOption {
 				return []wile.EngineOnlyOption{b.opt(7)}
 			},
 			want: func(compileBound) (int, bool) {
 				return 7, true
+			},
+		},
+		{
+			name: "join with 0 after a first join at the default is refused",
+			ns:   newJoinedAtDefault,
+			join: func(b compileBound) []wile.EngineOnlyOption {
+				return []wile.EngineOnlyOption{b.opt(0)}
+			},
+			wantErr: true,
+			want: func(b compileBound) (int, bool) {
+				return b.def, true
 			},
 		},
 		{

@@ -771,14 +771,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `wile-extension-example`.
 
 - **`WithMaxExpandDepth` and `WithInlineThreshold` configure the namespace, and
-  every engine on it shares them.** `NewEngine` sets both on the namespace it
-  creates. `NewEngineWithNamespace` without the option inherits the namespace's
-  value and writes nothing (it used to write the default, moving every other
-  engine on the namespace); with it, a namespace no engine configured takes the
-  value, and one holding a different value fails construction with
-  `ErrEngineInit` wrapping `ErrInvalidArgument`. A second engine can therefore
-  no longer lift the first one's expansion bound by joining with
-  `WithMaxExpandDepth(0)`.
+  every engine on it shares them.** The first engine to create or join a
+  namespace fixes both, at its explicit values or else the defaults (a namespace
+  from `NewNamespace` has none until then). A later `NewEngineWithNamespace`
+  without the option inherits the namespace's value and writes nothing (it used
+  to write the default, moving every other engine on the namespace); with a
+  different value it fails construction with `ErrEngineInit` wrapping
+  `ErrInvalidArgument`. A second engine can therefore no longer lift the first
+  one's expansion bound by joining with `WithMaxExpandDepth(0)`.
 
 - **CI runs the standalone lint passes.** `make -C tools lint`
   (singlelinefunclint, typeswitchlint, nestinglint) was reachable only through

@@ -522,11 +522,11 @@ func NewEngineWithNamespace(ctx context.Context, ns *environment.Namespace, opts
 		return nil, err
 	}
 
-	err = joinCompileBound("WithInlineThreshold", cfg.inlineThresholdSet, cfg.inlineThreshold, ns.InlineThreshold, ns.SetInlineThreshold)
+	err = joinCompileBound("WithInlineThreshold", cfg.inlineThresholdSet, cfg.inlineThreshold, compilation.DefaultInlineThreshold, ns.InlineThreshold, ns.SetInlineThreshold)
 	if err != nil {
 		return nil, err
 	}
-	err = joinCompileBound("WithMaxExpandDepth", cfg.expandDepthSet, cfg.maxExpandDepth, ns.MaxExpandDepth, ns.SetMaxExpandDepth)
+	err = joinCompileBound("WithMaxExpandDepth", cfg.expandDepthSet, cfg.maxExpandDepth, compilation.DefaultMaxExpandDepth, ns.MaxExpandDepth, ns.SetMaxExpandDepth)
 	if err != nil {
 		return nil, err
 	}
@@ -538,23 +538,23 @@ func NewEngineWithNamespace(ctx context.Context, ns *environment.Namespace, opts
 	return finishEngine(ctx, cfg, ns, reg, nil, nil)
 }
 
-// joinCompileBound applies an engine's explicit compile bound to a namespace it
-// joins. The bound belongs to the namespace, not the engine: every compile, the
+// joinCompileBound applies an engine's compile bound to a namespace it joins.
+// The bound belongs to the namespace, not the engine: every compile, the
 // engine's top level included, reads it from the shared EngineServices, so an
 // engine that rewrote it would move every other engine on the namespace (a 0
-// would lift their expansion bound outright). Without the option the engine
-// inherits and writes nothing; with it, an unset namespace takes the value and a
-// set one must already hold it.
-func joinCompileBound(option string, set bool, want int, current func() (int, bool), store func(int)) error {
-	if !set {
-		return nil
-	}
+// would lift their expansion bound outright). The first engine to create or
+// join the namespace fixes it, at the explicit value or else def. After that an
+// engine without the option inherits, and one with a different value is refused.
+func joinCompileBound(option string, set bool, want int, def int, current func() (int, bool), store func(int)) error {
 	have, ok := current()
 	if !ok {
+		if !set {
+			want = def
+		}
 		store(want)
 		return nil
 	}
-	if have == want {
+	if !set || have == want {
 		return nil
 	}
 	return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, werr.ErrInvalidArgument,
