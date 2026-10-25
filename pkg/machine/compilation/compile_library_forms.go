@@ -21,6 +21,8 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
+	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
@@ -438,16 +440,26 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ctctx Compil
 			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAString, "include-library-declarations: expected string filename"))
 		}
 
-		// The include path's reader: resolved against the including file's
-		// directory (lexicalIncludeContext), read whole before any declaration is
+		// The include path's reader, read whole before any declaration is
 		// processed. A mid-file read error aborts the library either way, so
 		// reading first changes nothing observable.
-		forms, _, err := readIncludedForms(ctx, p.env, p.fileResolver, fn.Value, v.SourceContext(), false)
+		forms, filePath, err := readIncludedForms(ctx, p.env, p.fileResolver, fn.Value, v.SourceContext(), false)
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "include-library-declarations: %q", fn.Value))
 		}
+		// The included file's own directory is the base for a relative include
+		// inside it, as compileIncludeImpl arranges for include: push its path
+		// on the load stack (creating one when there is none) for its extent.
+		inner := ctctx
+		stack := resolver.SelectLoadStack(inner.ctx)
+		if stack == nil {
+			stack = sourceload.NewLoadStack()
+			inner.ctx = sourceload.WithLoadStack(inner.ctx, stack)
+		}
+		stack.Push(filePath)
+		defer stack.Pop()
 		for _, stx := range forms {
-			err := p.processLibraryDeclaration(ctctx, lib, stx)
+			err := p.processLibraryDeclaration(inner, lib, stx)
 			if err != nil {
 				return p.wrapCompilationError(werr.WrapForeignErrorf(err, "include-library-declarations: error processing declaration from %q", fn.Value))
 			}
