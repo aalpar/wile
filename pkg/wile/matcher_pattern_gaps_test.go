@@ -903,7 +903,8 @@ func TestSyntaxCaseTemplateElementAfterEllipsis(t *testing.T) {
 		name, template, want string
 	}{
 		{"element after the ellipsis", `#'(list b ... 9)`, "(1 2 9)"},
-		{"two ellipses in one spine", `#'(list b ... b ...)`, "(1 2 1 2)"},
+		{"control: two ellipses in one spine", `#'(list b ... b ...)`, "(1 2 1 2)"},
+		{"control: escape then a further element", `#'(list '(... ...) 9)`, "(... 9)"},
 		{"control: element before the ellipsis", `#'(list 0 b ...)`, "(0 1 2)"},
 		{"control: escape beside an ellipsis", `#'(list '(... ...) b ...)`, "(... 1 2)"},
 	}
