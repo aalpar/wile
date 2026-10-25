@@ -54,8 +54,8 @@ type boundaryToken struct {
 	// its phase, the bootstrap), true on every other context's (the top level, a
 	// thread root, an Engine.Call). Copied from expansionRoot at the first mint,
 	// which every driven root reaches after its driver's entry; a Go transformer
-	// (the ForeignClosure arm of invokeTransformerClosure) enters no driver, so a
-	// capture it ran in a sub-context would read as a runtime one.
+	// (the ForeignClosure arm of invokeTransformerClosure) enters no driver, and
+	// that arm sets the flag itself.
 	runtime bool
 }
 

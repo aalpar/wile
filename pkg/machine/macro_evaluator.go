@@ -115,6 +115,10 @@ func invokeTransformerClosure(ctx context.Context, cls Closure, expanderCtx Expa
 		mc = acquireSubContext()
 		mc.ctx = ctx
 		mc.evals = acquireStack()
+		// No driver enters this context, so the flag RunWithinBoundary sets on the
+		// other roots is set here: a capture on it, or on a sub-context the
+		// primitive opens, names an expansion-time root (boundaryToken.runtime).
+		mc.expansionRoot = true
 		if expanderCtx != nil {
 			mc.SetExpanderContext(expanderCtx)
 		}
