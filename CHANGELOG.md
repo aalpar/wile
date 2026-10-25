@@ -125,6 +125,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A use-site identifier inside a box loses a macro's intro scope.**
+  `AddScope` descended into a syntax box but `FlipScope` and the expander's
+  stamp walk did not, and `AddScopeToSyntax` skipped a top-level box, so an
+  identifier passed through `#&` kept the intro scope and missed its binder:
+  `(outer y (+ y 1))` with `inner` binding the boxed `y` answered the global
+  (`2`, or "no such binding") instead of `6` (Racket and Chez agree).
+  `MapSyntaxTree` now descends into boxes, so every scope operation does.
+- **Expanding a cyclic datum reached past its label no longer overflows the Go
+  stack.** `(m #0=(#1=(x . #0#)) #1#)` was a fatal error (no `recover`) for a
+  `syntax-rules` macro on both syntax-forms layers and for any macro on the
+  Scheme layer; `MapSyntaxTree` now terminates on cyclic syntax.
 - **A BigFloat result carries its operands' precision, not a fixed 256 bits.**
   `exp`, `log`, the trigonometric family, `atan` (both forms), `angle`,
   `magnitude` and a complex `sqrt` computed at 256 bits whatever their BigFloat
@@ -753,6 +764,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `let` — are affected and all five now report the structural error.
 
 ### Changed
+
+- **`syntax.MapSyntaxTree` on cyclic syntax returns new nodes.** A cycle comes
+  back as a cycle of new nodes, unrolled down to `treeMapMemoDepth`, even when
+  nothing in it changed. A changed acyclic subterm reached twice is rebuilt twice in
+  a shallow walk and once past `treeMapMemoDepth`, so whether the result shares
+  it depends on depth.
 
 - **BREAKING (Go API, behavior): the `er-macro-transformer` contract is one
   contract on both syntax-forms layers.** `compilation.NewERMacroTransformer`,

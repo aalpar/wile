@@ -101,9 +101,16 @@ func FlipScopeInSet(scopes Scopes, target *Scope) Scopes {
 // Syntax can be a graph: a datum label reached past its wrapper (`#1#` in
 // `#0=(#1=(x . #0#))`) is a raw cyclic pair. Once a walk is deeper than
 // treeMapMemoDepth, each compound is visited once, so a cycle comes back as a
-// cycle of rebuilt nodes (unrolled down to where the memo began) instead of
-// overflowing the Go stack. A depth bound alone would refuse legal deep data,
-// and there is no error return to refuse through.
+// cycle of new nodes (unrolled down to where the memo began) instead of
+// overflowing the Go stack. That holds even when nothing in the cycle changes:
+// unchanged cyclic data comes back as a copy, not the input (an unchanged
+// acyclic subtree hanging off it is still returned by identity). A depth bound
+// alone would refuse legal deep data, and there is no error return to refuse
+// through.
+//
+// Sharing is not preserved. A changed subterm reached twice is rebuilt twice in
+// a shallow walk and once past treeMapMemoDepth, so whether two references in
+// the result are the same node depends on depth.
 func MapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValue {
 	p := &treeMap{fn: fn}
 	return p.walk(stx)
@@ -122,8 +129,10 @@ const treeMapMemoDepth = 64
 // done maps each finished compound to its result. A compound on the current
 // path maps to nil; meeting it again closes a cycle, and the walk hands out a
 // placeholder for it (back) and fills that placeholder in once the node's
-// children are known. An acyclic walk never allocates a placeholder, and a walk
-// that stays shallower than treeMapMemoDepth allocates neither map.
+// children are known. A revisited node is rebuilt this way whether or not its
+// children change, which is why an unchanged cycle comes back as a copy. An
+// acyclic walk never allocates a placeholder, and a walk that stays shallower
+// than treeMapMemoDepth allocates neither map.
 type treeMap struct {
 	fn    func(SyntaxValue) SyntaxValue
 	depth int
@@ -215,7 +224,8 @@ func (p *treeMap) walk(stx SyntaxValue) SyntaxValue {
 		// the core idea behind persistent data structures (Okasaki, 1998). Most
 		// syntax tree nodes are not symbols, so most pairs pass the identity check.
 		// See BIBLIOGRAPHY.md "Structural Sharing". A placeholder handed out for
-		// this node means a child closed a cycle through it, so a child changed.
+		// this node means a child closed a cycle through it; the placeholder is
+		// the result even if nothing in the cycle changed.
 		var q SyntaxValue
 		ph, _ := p.pending(s).(*SyntaxPair)
 		switch {

@@ -182,25 +182,25 @@ func FlipScopeStampOrigin(stx SyntaxValue, scope *Scope, origin *OriginInfo, pas
 		pass = NewPassThrough(nil)
 	}
 	p := &originStamp{scope: scope, origin: origin, pass: pass}
-	return p.walk(stx, true)
+	return p.walk(stx)
 }
 
 // walk rebuilds stx.
-func (p *originStamp) walk(stx SyntaxValue, flip bool) SyntaxValue {
+func (p *originStamp) walk(stx SyntaxValue) SyntaxValue {
 	switch s := stx.(type) {
 	case *SyntaxPair:
 		if IsSyntaxEmptyList(s) {
 			return s
 		}
 		if p.pass.pairs.has(s) {
-			return p.flipOnly(s, flip)
+			return FlipScope(s, p.scope)
 		}
 		var car, cdr SyntaxValue
 		if s.Values[0] != nil {
-			car = p.walk(s.Values[0], flip)
+			car = p.walk(s.Values[0])
 		}
 		if s.Values[1] != nil {
-			cdr = p.walk(s.Values[1], flip)
+			cdr = p.walk(s.Values[1])
 		}
 		return NewSyntaxCons(car, cdr, p.stamp(s.SourceContext()))
 
@@ -219,7 +219,7 @@ func (p *originStamp) walk(stx SyntaxValue, flip bool) SyntaxValue {
 		if !user {
 			c.Origin = p.origin
 		}
-		if flip && p.scope != nil {
+		if p.scope != nil {
 			c.Scopes = FlipScopeInSet(c.Scopes, p.scope)
 		}
 		return &SyntaxSymbol{
@@ -239,31 +239,23 @@ func (p *originStamp) walk(stx SyntaxValue, flip bool) SyntaxValue {
 
 	case *SyntaxVector:
 		if p.pass.other.has(s) {
-			return p.flipOnly(s, flip)
+			return FlipScope(s, p.scope)
 		}
 		elems := make([]SyntaxValue, len(s.Values))
 		for i, elem := range s.Values {
 			if elem != nil {
-				elems[i] = p.walk(elem, flip)
+				elems[i] = p.walk(elem)
 			}
 		}
 		return NewSyntaxVector(p.stamp(s.SourceContext()), elems...)
 
 	case *SyntaxBox:
 		if p.pass.other.has(s) {
-			return p.flipOnly(s, flip)
+			return FlipScope(s, p.scope)
 		}
-		return NewSyntaxBox(p.walk(s.Value, flip), p.stamp(s.SourceContext()))
+		return NewSyntaxBox(p.walk(s.Value), p.stamp(s.SourceContext()))
 
 	default:
 		return stx
 	}
-}
-
-// flipOnly returns a pass-through node with the scope flipped and no stamp.
-func (p *originStamp) flipOnly(stx SyntaxValue, flip bool) SyntaxValue {
-	if !flip {
-		return stx
-	}
-	return FlipScope(stx, p.scope)
 }
