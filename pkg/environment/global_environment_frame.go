@@ -114,6 +114,11 @@ func (p *GlobalIndex) Sealed() bool {
 	return p.sealed
 }
 
+// Phase reports the phase coordinate of the slot the pin was minted at.
+func (p *GlobalIndex) Phase() Phase {
+	return p.phase
+}
+
 // SchemeString returns a string representation of this global index.
 func (p *GlobalIndex) SchemeString() string {
 	return fmt.Sprintf("<global-index %q>", p.Index.SchemeString())
@@ -294,6 +299,13 @@ type GlobalEnvironmentFrame struct {
 	// Atomic because it is incremented under the store's READ lock, where a plain
 	// field write would race two concurrent compiles.
 	bulkResolutions atomic.Int64
+	// unitCommits counts, per phase, the expand+compile units that finished
+	// compiling against this store (NoteUnitCommit). A unit that fails reads it
+	// to decide whether a slot it minted is still private to it: see
+	// RetractGlobalBinding. Guarded by mu; nil until the first commit. A Copy
+	// starts at zero, which is right: the count answers "did anything commit
+	// here since I minted", and nothing has committed against a new store.
+	unitCommits map[Phase]uint64
 }
 
 // NewGlobalEnvironmentFrame creates a new, empty owner store.
@@ -2047,6 +2059,69 @@ func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes synt
 	}
 	p.removeSlotLocked(*sym, i)
 	return true
+}
+
+// RetractGlobalBinding is the inverse of a CreateGlobalBindingAt that answered
+// created == true: it removes the slot gi pins, provided the slot still holds b,
+// the binding that create minted, and b still holds the Void it was minted with.
+// It reports whether it removed anything.
+//
+// Both conditions make it refuse rather than guess. A slot that holds another
+// binding was deleted and re-created by someone else; a binding that holds a
+// value was written by code that ran, so it is a definition, not a placeholder.
+// Neither is the caller's to undo.
+//
+// It does not, and cannot, answer whether compiled code holds b. A cached load
+// (OpLoadCachedBinding) keeps the *Binding itself, so after a retraction it
+// reads the orphan's Void and never sees a later definition of the name on a
+// fresh slot. A by-index load is safe either way: it misses with
+// ErrBindingNotFound, or heals onto the re-created slot. Whether any cached
+// load can exist is the caller's question; UnitCommits is the store's half of
+// the answer.
+//
+// Thread-safe: uses full Lock for write access.
+func (p *GlobalEnvironmentFrame) RetractGlobalBinding(gi *GlobalIndex, b *Binding) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	i, ok := p.pinnedSlotLocked(gi)
+	if !ok {
+		return false
+	}
+	if p.bindings[i] != b {
+		return false
+	}
+	if !values.IsVoid(b.Value()) {
+		return false
+	}
+	p.removeSlotLocked(*gi.Index, i)
+	return true
+}
+
+// NoteUnitCommit records that one expand+compile unit at phase finished
+// compiling against this store, so its template may now run and hold any
+// binding it resolved.
+//
+// Thread-safe: uses full Lock for write access.
+func (p *GlobalEnvironmentFrame) NoteUnitCommit(phase Phase) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.unitCommits == nil {
+		p.unitCommits = map[Phase]uint64{}
+	}
+	p.unitCommits[phase]++
+}
+
+// UnitCommits reports how many units at phase have committed against this
+// store (NoteUnitCommit). Only differences between two reads mean anything.
+//
+// Thread-safe: uses RLock for read-only access.
+func (p *GlobalEnvironmentFrame) UnitCommits(phase Phase) uint64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	return p.unitCommits[phase]
 }
 
 // DeleteImportedBindingAt removes the binding AN IMPORT installed for key under q

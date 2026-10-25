@@ -131,6 +131,10 @@ type ExpanderTimeContinuation struct {
 	// defines records the predeclared top-level slots whose define this run has
 	// expanded. Shared by pointer with child expanders. See expandedDefineLog.
 	defines *expandedDefineLog
+	// mints is the unit's log of the top-level slots it created. Shared by
+	// pointer with child expanders and with the unit's compiler; nil outside a
+	// unit (see unitMints).
+	mints *unitMints
 }
 
 // NewExpanderTimeContinuation creates a new ExpanderTimeContinuation. The
@@ -173,6 +177,7 @@ func (p *ExpanderTimeContinuation) newChildExpander(env *environment.Environment
 		depthGuard:    p.depthGuard,
 		useSiteScopes: p.useSiteScopes,
 		defines:       p.defines,
+		mints:         p.mints,
 	}
 	return q
 }

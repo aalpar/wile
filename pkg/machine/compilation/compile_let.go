@@ -468,7 +468,7 @@ func (p *CompileTimeContinuation) predeclareDefineFromValidatedRecursive(
 ) {
 	switch v := expr.(type) {
 	case *validate.ValidatedDefine:
-		predeclareBinding(p.env, v.Name().Sym, v.Name().Scopes(), v.Name().SourceContext())
+		predeclareBinding(p.mints, p.env, v.Name().Sym, v.Name().Scopes(), v.Name().SourceContext())
 	case *validate.ValidatedBegin:
 		for _, sub := range v.Body() {
 			p.predeclareDefineFromValidatedRecursive(sub)

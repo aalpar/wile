@@ -350,6 +350,9 @@ func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileT
 	// Pass 1: Expand all forms, compiling define-syntax as encountered
 	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator)
 	expander.libraryScope = p.libraryScope
+	// The included forms compile into this unit's template, so what their
+	// expansion mints is this unit's to retract.
+	expander.mints = p.mints
 	expandedForms, err := expander.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "%s: error expanding forms", errContext)
@@ -385,7 +388,7 @@ func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) 
 		return
 	}
 	name := nameSym.Unwrap().(*values.Symbol)
-	predeclareBinding(p.env, name, nameSym.Scopes(), nameSym.SourceContext())
+	predeclareBinding(p.mints, p.env, name, nameSym.Scopes(), nameSym.SourceContext())
 }
 
 // CompileIncludeCi compiles an include-ci expression (R7RS §4.1.7 / §5.6).

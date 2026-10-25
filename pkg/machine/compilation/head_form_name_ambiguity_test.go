@@ -99,7 +99,7 @@ func TestHeadFormNameFollowsTheShadowRule(t *testing.T) {
 	sym := values.NewSymbol("begin")
 	stx := syntax.NewSyntaxSymbol("begin", &syntax.SourceContext{})
 
-	predeclareBinding(env, sym, syntax.Scopes{}, nil)
+	predeclareBinding(nil, env, sym, syntax.Scopes{}, nil)
 	p := NewExpanderTimeContinuation(context.Background(), env, nil)
 	qt.Assert(t, headFormName(env, p.defines, stx), qt.Equals, "begin",
 		qt.Commentf("a predeclared slot whose define is ahead still means the form"))

@@ -50,6 +50,12 @@ type CompileTimeContinuation struct {
 	// Threaded to CompileSyntaxRules so free identifiers in macro templates
 	// can carry the library scope for cross-library hygiene.
 	libraryScope *syntax.Scope
+	// mints is the unit's log of the top-level slots it created, shared with the
+	// unit's expander, so a unit that fails can retract them. nil for every
+	// compiler whose code commits apart from the unit (library bodies,
+	// compile-time halves, transformer bodies): their mints are not the unit's
+	// to undo. See unitMints.
+	mints *unitMints
 
 	// inProcedureBody is set on every compiler compileBody builds, so a
 	// define-library reached inside a lambda body (at any depth, in a program or

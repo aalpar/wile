@@ -132,7 +132,7 @@ func (p *ExpanderTimeContinuation) noteDefineExpanded(name *syntax.SyntaxSymbol)
 		return
 	}
 	if !p.env.HasLocalVariableBinding(sym, syntax.ScopesOf(name.Scopes())) {
-		predeclareBinding(p.env, sym, name.Scopes(), name.SourceContext())
+		predeclareBinding(p.mints, p.env, sym, name.Scopes(), name.SourceContext())
 	}
 	if p.env.LocalEnvironment() != nil {
 		return
@@ -177,7 +177,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 		nameSym := extractDefineName(p.env, p.defines, form)
 		if nameSym != nil {
 			name := nameSym.Unwrap().(*values.Symbol)
-			predeclareBinding(p.env, name, nameSym.Scopes(), nameSym.SourceContext())
+			predeclareBinding(p.mints, p.env, name, nameSym.Scopes(), nameSym.SourceContext())
 		}
 	}
 

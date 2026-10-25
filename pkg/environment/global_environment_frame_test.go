@@ -909,3 +909,56 @@ func TestExactBindingAtReportsAnExactTie(t *testing.T) {
 	c.Assert(errors.Is(err, werr.ErrAmbiguousBinding), qt.IsTrue,
 		qt.Commentf("panic must carry ErrAmbiguousBinding, got %v", r))
 }
+
+// TestGlobalFrame_RetractGlobalBinding pins the inverse of a create: it removes
+// the slot a pin names only while that slot still holds the minted binding and
+// the binding still holds its minted Void. The two refusals are what keep a
+// failed unit from undoing a definition someone else made in the meantime.
+func TestGlobalFrame_RetractGlobalBinding(t *testing.T) {
+	sym := values.NewSymbol("x")
+	rows := []struct {
+		name string
+		// between runs after the create and before the retract.
+		between func(env *EnvironmentFrame, gi *GlobalIndex)
+		want    bool
+	}{
+		{"untouched placeholder", func(*EnvironmentFrame, *GlobalIndex) {
+		}, true},
+		{"value written", func(env *EnvironmentFrame, gi *GlobalIndex) {
+			qt.Assert(t, env.GlobalEnvironment().SetOwnGlobalValue(gi, values.NewInteger(1)), qt.IsNil)
+		}, false},
+		{"deleted and re-created", func(env *EnvironmentFrame, _ *GlobalIndex) {
+			qt.Assert(t, env.DeleteOwnGlobal(sym, syntax.Scopes{}), qt.IsTrue)
+			_, created := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, syntax.Scopes{})
+			qt.Assert(t, created, qt.IsTrue)
+		}, false},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			c := qt.New(t)
+			env := NewNamespace().Runtime()
+			ge := env.GlobalEnvironment()
+			gi, created := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, syntax.Scopes{})
+			c.Assert(created, qt.IsTrue)
+			b := ge.GetOwnGlobalBinding(gi)
+			c.Assert(b, qt.IsNotNil)
+			row.between(env, gi)
+			c.Assert(ge.RetractGlobalBinding(gi, b), qt.Equals, row.want)
+			c.Assert(env.GetGlobalIndexWithScopes(sym, values.EmptyScopes()) == nil, qt.Equals, row.want)
+		})
+	}
+}
+
+// TestGlobalFrame_UnitCommitsArePerPhase pins that a commit at one phase does
+// not move another phase's count: a define-syntax right-hand side commits at
+// phase+1 and must not block a phase-0 unit's retraction.
+func TestGlobalFrame_UnitCommitsArePerPhase(t *testing.T) {
+	c := qt.New(t)
+	ge := NewNamespace().Store()
+	c.Assert(ge.UnitCommits(PhaseRuntime), qt.Equals, uint64(0))
+	ge.NoteUnitCommit(PhaseRuntime + 1)
+	c.Assert(ge.UnitCommits(PhaseRuntime), qt.Equals, uint64(0))
+	ge.NoteUnitCommit(PhaseRuntime)
+	c.Assert(ge.UnitCommits(PhaseRuntime), qt.Equals, uint64(1))
+	c.Assert(ge.UnitCommits(PhaseRuntime+1), qt.Equals, uint64(1))
+}

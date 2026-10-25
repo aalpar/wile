@@ -69,6 +69,7 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// of two equally unscoped candidates — for (define car …) the SEALED car, whose
 	// Stable stamp would then refuse the shadow as a redefine.
 	ownIndex, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, symbolScopes)
+	p.mints.note(ownIndex, created)
 
 	// Top-level immutability (WithImmutableTopLevel, the engine default): when enabled, a
 	// defined-once, never-set!-in-unit top-level define is rebind-stable, and a
