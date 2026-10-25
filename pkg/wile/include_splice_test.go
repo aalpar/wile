@@ -33,14 +33,15 @@ import (
 // semantics) against an in-memory source tree. Whole-unit evaluation is the
 // point: the include splice is an expand-time rewrite, so everything it fixes
 // shows only when the includer and the included file are expanded together.
-func evalIncludeProgram(t *testing.T, fsys fstest.MapFS, code string) (string, error) {
+func evalIncludeProgram(t *testing.T, fsys fstest.MapFS, code string, opts ...wile.EngineOption) (string, error) {
 	t.Helper()
 	ctx := context.Background()
-	engine, err := wile.NewEngine(ctx,
+	opts = append([]wile.EngineOption{
 		wile.WithProfile(wile.KitchenSink),
 		wile.WithAuthorizer(nil), // the test exercises include resolution, not the sandbox
 		wile.WithSourceFS(fsys),
-	)
+	}, opts...)
+	engine, err := wile.NewEngine(ctx, opts...)
 	qt.Assert(t, err, qt.IsNil)
 	result, err := engine.EvalProgram(ctx, code, "includer.scm")
 	if err != nil {
@@ -226,19 +227,86 @@ func TestIncludePassedThroughAMacro(t *testing.T) {
 	fsys := fstest.MapFS{
 		"x.scm": &fstest.MapFile{Data: []byte(`(define (inside) 7)`)},
 	}
+	fsys["y.scm"] = &fstest.MapFile{Data: []byte(`(define (other) 8)`)}
+	fsys["xu.scm"] = &fstest.MapFile{Data: []byte(`(DEFINE (INSIDE) 7)`)}
+	fsys["chain.scm"] = &fstest.MapFile{Data: []byte(`(include "x.scm")`)}
 	pass := `(define-syntax pass (syntax-rules () ((_ e) e))) `
+	// The rows after the first two are the routes by which an include reaches a
+	// splice position of the macro's output (X21): each marks the head, and a
+	// lost mark leaves inside unbound.
 	tcs := []struct {
 		name string
 		code string
 	}{
 		{name: "body position", code: pass + `(define (f) (pass (include "x.scm")) (inside)) (f)`},
 		{name: "top level", code: pass + `(pass (include "x.scm")) (inside)`},
+		{name: "inside a begin", code: pass + `(pass (begin (include "x.scm"))) (inside)`},
+		{name: "inside a cond-expand clause", code: pass + `(pass (cond-expand (else (include "x.scm")))) (inside)`},
+		{name: "include-ci", code: pass + `(pass (include-ci "xu.scm")) (inside)`},
+		{name: "second of two files", code: pass + `(pass (include "y.scm" "x.scm")) (inside)`},
+		{name: "through two macros", code: pass + `(pass (pass (include "x.scm"))) (inside)`},
+		{name: "nested include", code: pass + `(pass (include "chain.scm")) (inside)`},
+		{name: "body, inside a begin", code: pass + `(define (f) (pass (begin (include "x.scm"))) (inside)) (f)`},
+		{name: "body, second of two files", code: pass + `(define (f) (pass (include "y.scm" "x.scm")) (inside)) (f)`},
+		{name: "body, nested include", code: pass + `(define (f) (pass (include "chain.scm")) (inside)) (f)`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := evalIncludeProgram(t, fsys, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, got, qt.Equals, "7")
+		})
+	}
+}
+
+// TestIncludePassedToAMacroDoesNotCaptureTheMacrosBinder is the include half of
+// TestCondExpandPassedToAMacroDoesNotCaptureTheMacrosBinder (X21): an include a
+// macro receives DIRECTLY as an argument and places in its own body keeps its
+// use-site scope, so a define in the file cannot capture the macro's binder.
+// One macro layer between them defeats it; see the known-gap row. Chez and
+// Racket (racket/include) answer top and macro. The macro-local row used to
+// raise ErrAmbiguousBinding: the pruned define tied with the macro's let binder.
+// The last row splices one include twice, once in the macro's body; Racket, with
+// syntax-case for the ER macro, answers macro user.
+func TestIncludePassedToAMacroDoesNotCaptureTheMacrosBinder(t *testing.T) {
+	fsys := fstest.MapFS{
+		"u.scm": &fstest.MapFile{Data: []byte(`(define a 'user)`)},
+	}
+	const prelude = `(define a 'top)
+(define-syntax m (syntax-rules () ((_ f) (let () f a))))
+`
+	tcs := []struct {
+		name string
+		code string
+		want string
+		opts []wile.EngineOption
+	}{
+		{name: "include argument", code: prelude + `(m (include "u.scm"))`, want: "top"},
+		{name: "begin argument (control)", code: prelude + `(m (begin (define a 'user)))`, want: "top"},
+		{name: "macro-local binder", code: `(define-syntax m2 (syntax-rules () ((_ f) (let ((a 'macro)) (let () f a)))))
+(m2 (include "u.scm"))`, want: "macro"},
+		{name: "one include spliced twice", code: `(import (for-syntax (scheme base)))
+(define-syntax pass (syntax-rules () ((_ e) e)))
+(define-syntax twice
+  (er-macro-transformer
+    (lambda (f r c)
+      (list (r 'begin) (cadr f)
+            (list (r 'let) (list (list (r 'a) ''macro))
+                  (list (r 'let) '() (cadr f) (r 'a)))))))
+(list (pass (twice (include "u.scm"))) a)`, want: "(macro user)", opts: withStdlibResolver()},
+		// KNOWN GAP, pinned at today's answer: racket and petite answer top. pass's
+		// output is the include at a splice position, so it is marked, and the
+		// boundary prune strips every use-site scope the run minted, m's included.
+		// (m (pass (define a 'user))) answers user too, without an include. Filed
+		// from the X21 crosscheck; flip this row when that row is fixed.
+		{name: "one macro layer between (known gap)", code: prelude + `(define-syntax pass (syntax-rules () ((_ e) e)))
+(m (pass (include "u.scm")))`, want: "user"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fsys, tc.code, tc.opts...)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, tc.want)
 		})
 	}
 }

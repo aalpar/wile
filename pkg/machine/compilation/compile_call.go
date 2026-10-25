@@ -89,7 +89,8 @@ func (p *CompileTimeContinuation) tryEmitSelfTailCall(ctctx CompileTimeCallConte
 	// systematic refusal. op != self covers both "same spelling, different binding"
 	// and "does not resolve at all".
 	self := p.env.GetBinding(ctctx.frameReuse.selfSym.Sym, syntax.ScopesOf(ctctx.frameReuse.selfSym.Scopes()))
-	op := p.env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
+	// A tied operator is no self call (op is nil); CompileSymbol refuses it.
+	op, _ := p.env.TryGetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
 	args := v.Body()
 	if self == nil || op != self || len(args) != ctctx.frameReuse.arity {
 		return false, nil
@@ -226,8 +227,10 @@ func (p *CompileTimeContinuation) tryInlineCall(
 		return false, nil
 	}
 
-	bid, resolved := p.env.ResolveBindingID(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
-	if !resolved {
+	// A tie is no inline candidate; CompileSymbol refuses the operator.
+	// On a tie bid names one of the tied binders, so resolved alone is not enough.
+	bid, resolved, ambiguous := p.env.TryResolveBindingID(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
+	if !resolved || ambiguous {
 		return false, nil
 	}
 
@@ -318,7 +321,8 @@ func (p *CompileTimeContinuation) tryInlineHOFCall(
 		return false, nil
 	}
 
-	b := p.env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
+	// A tie is no inlining: CompileSymbol refuses the operator, located.
+	b, _ := p.env.TryGetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
 	if b == nil {
 		return false, nil
 	}

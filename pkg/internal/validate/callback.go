@@ -46,7 +46,8 @@ func CallbackIsCaptureSafe(arg ValidatedExpr, env *environment.EnvironmentFrame)
 	}
 	switch a := arg.(type) {
 	case *ValidatedSymbol:
-		b := env.GetBinding(a.Symbol.Sym, syntax.ScopesOf(a.Symbol.Scopes()))
+		// A tie is not capture-safe: the compiler refuses the reference.
+		b, _ := env.TryGetBinding(a.Symbol.Sym, syntax.ScopesOf(a.Symbol.Scopes()))
 		return b != nil && b.IsCaptureSafe() && b.IsStable()
 	case *ValidatedLambda:
 		return ProcedureBodyIsCaptureSafe(a, nil, env)

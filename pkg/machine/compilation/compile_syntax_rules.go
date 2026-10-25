@@ -403,7 +403,15 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 				// intro scope, so the name owns two slots. Passing nil here meant
 				// MATCH ANY (the former resolveLocal), which took the first live slot and
 				// hands both generated macros the first expansion's binder.
-				li := env.GetLocalIndex(symVal, syntax.ScopesOf(t.Scopes()))
+				//
+				// A tie, local or global, is recorded as an unbound free identifier:
+				// no pin, so the expansion resolves the identifier at its use, where
+				// CompileSymbol refuses the tie with its location.
+				li, tied := env.TryGetLocalIndex(symVal, syntax.ScopesOf(t.Scopes()))
+				if tied {
+					freeIds[match.FreeIdKey(symVal.Key, t.Scopes())] = &FreeIdResolution{LibScope: libraryScope}
+					return
+				}
 				if li != nil {
 					binding := env.GetLocalBinding(li)
 					if binding != nil {
@@ -427,7 +435,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 				// expansion's intro scope, and so does the binder it means, so a second
 				// expansion of the same outer macro resolves to its own binder rather
 				// than to the first expansion's.
-				gi := env.GetGlobalIndexAcrossPhases(symVal, t.Scopes())
+				gi, _ := env.TryGetGlobalIndexAcrossPhases(symVal, t.Scopes())
 				// Store the resolved GlobalIndex (may be nil if unbound, which is ok -
 				// unbound free identifiers like special forms will be handled normally)
 				freeIds[match.FreeIdKey(symVal.Key, t.Scopes())] = &FreeIdResolution{

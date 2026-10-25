@@ -156,7 +156,9 @@ func (p *freeVarCollector) visit(sym *syntax.SyntaxSymbol) {
 	if p.boundInside(sym) {
 		return
 	}
-	li := p.enclosing.GetLocalIndex(sym.Sym, syntax.ScopesOf(sym.Scopes()))
+	// A tie is recorded as no free variable: the reference itself is refused,
+	// located, when the lambda body compiles.
+	li, _ := p.enclosing.TryGetLocalIndex(sym.Sym, syntax.ScopesOf(sym.Scopes()))
 	if li == nil {
 		return
 	}

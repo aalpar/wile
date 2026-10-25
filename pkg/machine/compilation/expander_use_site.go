@@ -49,6 +49,11 @@ import (
 // label is diagnostics. Do not add a kind and branch on it.
 type useSiteScopeLog struct {
 	scopes values.MapSet[*syntax.Scope]
+
+	// includes holds the include and include-ci heads pruneUseSiteScopes met at a
+	// splice position of a transformer's output. expandIncludedFile prunes a
+	// file's forms only for these; see markSplicedInclude.
+	includes values.MapSet[*syntax.SyntaxSymbol]
 }
 
 // newUseSiteScope mints the scope one macro invocation stamps on its input, and
@@ -86,8 +91,9 @@ func (p *ExpanderTimeContinuation) isUseSiteScope(scope *syntax.Scope) bool {
 }
 
 // pruneUseSiteScopes strips this run's use-site scopes from the binder position
-// of every definition in a macro's output, recursing through begin and
-// begin-for-syntax.
+// of every definition in a macro's output, recursing through begin,
+// begin-for-syntax and cond-expand, and marks an include there for
+// expandIncludedFile to prune (markSplicedInclude).
 //
 // **Why definitions and nothing else.** A use-site scope must be stripped
 // exactly where a binding created inside a macro use is visible OUTSIDE it. A
@@ -123,21 +129,71 @@ func (p *ExpanderTimeContinuation) pruneUseSiteScopes(stx syntax.SyntaxValue) sy
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
 		return stx
 	}
-	// Both splicing heads recurse into their forms. begin-for-syntax is here and
-	// not in pruneDefinitionBinder's list because it binds nothing itself — it is
-	// a route to definitions one phase up, and those definitions are what need
-	// their binders pruned.
-	for _, splice := range []string{"begin", "begin-for-syntax"} {
-		_, isSplice := asFormDenoting(p.env, pair, splice)
-		if isSplice {
-			return p.pruneUseSiteScopesInBegin(pair)
-		}
+	head, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return stx
 	}
-	_, isCondExpand := asFormDenoting(p.env, pair, "cond-expand")
-	if isCondExpand {
+	switch headFormName(p.env, head) {
+	case "begin", "begin-for-syntax":
+		// Both splicing heads recurse into their forms. begin-for-syntax is here
+		// and not in pruneDefinitionBinder's list because it binds nothing itself:
+		// it is a route to definitions one phase up, and those definitions are
+		// what need their binders pruned.
+		return p.pruneUseSiteScopesInBegin(pair)
+	case "cond-expand":
 		return p.pruneUseSiteScopesInCondExpand(pair)
+	case "include", "include-ci":
+		return p.markSplicedInclude(pair, head)
 	}
 	return p.pruneDefinitionBinder(pair)
+}
+
+// markSplicedInclude records an include met at a splice position, so the file's
+// forms are pruned as this boundary would have pruned them had they been
+// written in place. The forms are not visible here: the file is read only when
+// the include expands.
+//
+// **Splice position only.** An include a macro merely receives as an argument
+// and places inside its own body, (let () f a) for f = (include "u.scm"), is in
+// a definition context the macro created. Its forms keep the use-site scope, as
+// a cond-expand or begin in that position does, so a define in the file cannot
+// capture the macro's binder a. Pruning every included form, as expandIncludedFile
+// did before, stripped the scope there too. This holds for an include the macro
+// receives directly: under (m (pass (include ...))) pass's boundary marks it, and
+// the prune strips every use-site scope the run minted, m's included, as it does
+// for a plain (m (pass (define ...))). That is the pruner's rule, not the mark's.
+//
+// **The mark is the head's identity, not a scope.** The two fail in opposite
+// directions. A lost mark leaves the forms unpruned, so a definition the include
+// should expose is unbound: loud, and what TestIncludePassedThroughAMacro checks.
+// A scope travels with the syntax wherever a later transformer moves it, so a
+// mark that reached a non-splice position would prune there: the silent capture
+// this exists to prevent. A scope would also be stamped onto every included form
+// with the head's other scopes. The window the identity must survive is short:
+// a marked include is the next form expanded, before any transformer sees it.
+//
+// The head is recorded as it stands, not cloned. A transformer can return one
+// identifier in two places (an ER macro hands back the spine's identifiers
+// unchanged), but a copy in a position that can hold a definition is inside a
+// binding form, whose scope is added to its body before the include is reached,
+// and adding a scope clones the head. Measured: an ER macro splicing one include
+// at top level and again inside (let ((a 'macro)) (let () e a)) answers macro
+// with a clone and without one.
+func (p *ExpanderTimeContinuation) markSplicedInclude(pair *syntax.SyntaxPair, head *syntax.SyntaxSymbol) syntax.SyntaxValue {
+	if p.useSiteScopes.includes == nil {
+		p.useSiteScopes.includes = values.NewMapSet[*syntax.SyntaxSymbol](1)
+	}
+	p.useSiteScopes.includes.Set(head)
+	return pair
+}
+
+// isSplicedInclude reports whether head is an include markSplicedInclude
+// recorded.
+func (p *ExpanderTimeContinuation) isSplicedInclude(head *syntax.SyntaxSymbol) bool {
+	if p.useSiteScopes == nil {
+		return false
+	}
+	return p.useSiteScopes.includes.ContainsOne(head)
 }
 
 // pruneUseSiteScopesInCondExpand prunes every clause body as a begin body.

@@ -184,7 +184,8 @@ func calleeCaptureSafe(
 	// CaptureSafe), an unresolved name, or a set!-able primitive. A same-unit
 	// define callee is rejected here (interprocedural mutual recursion is the
 	// classifier's job, not the per-body predicate's).
-	b := env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
+	// A tie is an unknown callee; the compiler refuses the reference.
+	b, _ := env.TryGetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
 	if self != nil && b == self {
 		return true // the genuine self call: safe by the co-inductive assumption
 	}

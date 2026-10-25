@@ -73,9 +73,11 @@ func (p *ExpanderTimeContinuation) expandIncludeImpl(sym *syntax.SyntaxSymbol, e
 		return formUnchanged(sym, expr)
 	}
 
+	// Read once for every file: each name's forms stand where the include stood.
+	prune := p.isSplicedInclude(sym)
 	var spliced []syntax.SyntaxValue
 	for _, name := range names {
-		expanded, err := p.expandIncludedFile(sym, r, name, expr.SourceContext(), foldCase)
+		expanded, err := p.expandIncludedFile(sym, r, name, expr.SourceContext(), foldCase, prune)
 		if err != nil {
 			return nil, wrapSourcedError(expr.SourceContext(), err)
 		}
@@ -107,7 +109,12 @@ func spliceBegin(sym *syntax.SyntaxSymbol, label string, forms []syntax.SyntaxVa
 
 // expandIncludedFile reads one file and expands its forms on a child expander
 // whose ctx carries the load stack with the file pushed.
-func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, r FileResolver, name string, src *syntax.SourceContext, foldCase bool) ([]syntax.SyntaxValue, error) {
+//
+// prune is whether a transformer boundary met the include at a splice position
+// (markSplicedInclude). Only then are the forms' use-site scopes pruned, and only
+// then can an include nested in the file be marked in turn, since marking is
+// part of the prune.
+func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, r FileResolver, name string, src *syntax.SourceContext, foldCase bool, prune bool) ([]syntax.SyntaxValue, error) {
 	forms, filePath, err := readIncludedForms(p.ctx, p.env, r, name, src, foldCase)
 	if err != nil {
 		return nil, err
@@ -123,7 +130,10 @@ func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, 
 		for s := range sym.Scopes().All() {
 			form = syntax.AddScopeToSyntax(form, s)
 		}
-		forms[i] = p.pruneUseSiteScopes(form)
+		if prune {
+			form = p.pruneUseSiteScopes(form)
+		}
+		forms[i] = form
 	}
 
 	ctx := p.ctx

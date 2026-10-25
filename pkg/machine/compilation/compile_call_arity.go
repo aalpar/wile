@@ -43,9 +43,10 @@ func (p *CompileTimeContinuation) checkCallArity(v *validate.ValidatedCall) erro
 		return nil
 	}
 
-	// GetBinding searches locals before globals, so it is the authority on what
-	// this operator denotes. It allocates nothing.
-	denoted := p.env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
+	// GetBinding's resolution searches locals before globals, so it is the
+	// authority on what this operator denotes. It allocates nothing. A tie is not
+	// checked: CompileSymbol refuses the operator, located.
+	denoted, _ := p.env.TryGetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
 	if denoted == nil {
 		return nil
 	}
@@ -126,7 +127,8 @@ func arityError(v *validate.ValidatedCall, sym *validate.ValidatedSymbol, want s
 // that table with an operator that does not denote the top-level define would
 // apply a stranger's arity to it.
 func (p *CompileTimeContinuation) denotesGlobal(sym *syntax.SyntaxSymbol, denoted *environment.Binding) bool {
-	gi := p.env.GetGlobalIndexWithScopes(sym.Sym, syntax.ScopesOf(sym.Scopes()))
+	// A global tie behind a resolved local denotes no global.
+	gi, _ := p.env.TryGetGlobalIndexWithScopes(sym.Sym, syntax.ScopesOf(sym.Scopes()))
 	if gi == nil {
 		return false
 	}

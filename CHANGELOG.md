@@ -141,6 +141,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `WidenToBigInteger`, `WidenToBigFloat`, `ParseBigFloatLiteral` and
   `ParsePolarStringNumber`.
 
+- **An ambiguous reference is a located `ErrAmbiguousBinding`.** An identifier
+  whose scope set ties among incomparable binders (Flatt's `def-m` program, in
+  plain `syntax-rules`) panicked in the resolver and was reported as an internal
+  error with no location. It now raises `identifier "x" resolves ambiguously
+  among incomparable hygienic scope sets` at the identifier, whether it is a
+  reference, an operator, a callback argument, a captured variable, a `set!`
+  target, or a form head spelled as a special form (a tied `if` is refused, not
+  compiled as the core `if`). `(quote-syntax x)` and a `syntax` template of such an
+  identifier return the syntax object, as Racket does.
+- **An `include` a macro receives directly as an argument keeps its use-site
+  scope unless the macro splices it.** `(m (include "u.scm"))`, with `m`
+  expanding to `(let () f a)`, let a `define` in the file capture the macro's
+  own `a`. Only an include at a splice position of the macro's output (top
+  level, or inside `begin`, `begin-for-syntax` or a `cond-expand` clause) has
+  its forms' use-site scopes pruned, as a `begin` or `cond-expand` argument
+  already did. One macro layer between them, `(m (pass (include ...)))`, still
+  captures, as `(m (pass (define ...)))` does.
+
 - **A resumed `with-timeout` continuation answers as if the thunk had not been
   interrupted.** Resuming after the timer stopped the thunk between two
   instructions cleared or replaced the operand the next instruction consumes

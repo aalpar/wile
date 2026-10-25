@@ -781,13 +781,15 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, q syntax.ScopeSet) *Bi
 // raised: (nil, true) is "ambiguous", (nil, false) is "unbound", and a resolved
 // binding always comes with false.
 //
-// It exists for the readers whose question is a DATUM's, not a reference's: a
-// quasiquote marker (validate.markerName), a special-form head
-// (compilation.headFormName), a completion listing. For those, an ambiguous tie
-// is not an error in the program — nothing was referenced — so the answer is
-// "denotes no form" and the consumer falls back to the spelling. GetBinding is
-// still the form every reader resolving an actual reference wants, because
-// there the tie IS the program's error.
+// Two kinds of reader use it. One asks what a DATUM denotes: a quasiquote
+// marker (validate.markerName), a special-form head (compilation.headFormName),
+// a completion listing. There an ambiguous tie is not an error in the program,
+// since nothing was referenced, so the answer is "denotes no form" and the
+// consumer falls back to the spelling. The other resolves a reference and must
+// report the tie as the program's error, located at the identifier: the
+// compiler's set! and the analyses ahead of CompileSymbol, which take the
+// conservative answer on a tie so the compiler's located refusal is the one
+// reported. GetBinding is for a caller that has no location to give the tie.
 //
 // Not to be confused with ExactBinding, whose doc says bulk rows are not
 // candidates: this one is all-tier, exactly as GetBinding is.
@@ -882,16 +884,10 @@ func (p *EnvironmentFrame) MaybeCreateLocalBinding(
 //
 // Panics with a wrapped werr.ErrAmbiguousBinding when two incomparable scope
 // sets tie for the maximal match (Racket's "ambiguous binding"); the tie is
-// refused, never broken by order.
+// refused, never broken by order. TryGetLocalIndex reports that tie instead.
 func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) *LocalIndex {
-	if p == nil || !p.hasLocal() {
-		return nil
-	}
-
-	li, _, tied := resolveLocalMaximal(p, key, q, func(_ *Binding, slot int, depth int) *LocalIndex {
-		return NewLocalIndex(slot, depth)
-	})
-	if tied {
+	li, ambiguous := p.TryGetLocalIndex(key, q)
+	if ambiguous {
 		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
 			"GetLocalIndex: identifier %q resolves ambiguously among incomparable hygienic scope sets",
 			key.Key))
@@ -910,6 +906,23 @@ func (p *EnvironmentFrame) HasLocalBinding(sym *values.Symbol, q syntax.ScopeSet
 	return walkLocal(p, sym, q, func(*Binding, int, int) bool {
 		return true
 	})
+}
+
+// TryGetLocalIndex is GetLocalIndex with the incomparable tie REPORTED rather
+// than raised: (nil, true) is "ambiguous", and a resolved index always comes
+// with false. It exists for the compiler resolving a reference, which reports
+// the tie as a located diagnostic of the program instead of a panic.
+func (p *EnvironmentFrame) TryGetLocalIndex(key *values.Symbol, q syntax.ScopeSet) (*LocalIndex, bool) {
+	if p == nil || !p.hasLocal() {
+		return nil, false
+	}
+	li, _, tied := resolveLocalMaximal(p, key, q, func(_ *Binding, slot int, depth int) *LocalIndex {
+		return NewLocalIndex(slot, depth)
+	})
+	if tied {
+		return nil, true
+	}
+	return li, false
 }
 
 // HasLocalVariableBinding reports whether sym has a local variable binding
@@ -1290,7 +1303,25 @@ func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 // (EmptyScopes) resolves under the empty scope set, not "any" — pass AllScopes
 // for wildcard resolution.
 func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, q syntax.ScopeSet) *GlobalIndex {
-	return resolveGlobalWith(p, *key, q, func(g *GlobalEnvironmentFrame, ref slotRef) *GlobalIndex {
+	gi, ambiguity := p.tryGetGlobalIndexWithScopes(key, q)
+	if ambiguity != nil {
+		panic(ambiguity)
+	}
+	return gi
+}
+
+// TryGetGlobalIndexWithScopes is GetGlobalIndexWithScopes with the incomparable
+// tie REPORTED rather than raised: (nil, true) is "ambiguous", and a resolved
+// index always comes with false. See TryGetLocalIndex.
+func (p *EnvironmentFrame) TryGetGlobalIndexWithScopes(key *values.Symbol, q syntax.ScopeSet) (*GlobalIndex, bool) {
+	gi, ambiguity := p.tryGetGlobalIndexWithScopes(key, q)
+	return gi, ambiguity != nil
+}
+
+// tryGetGlobalIndexWithScopes is the one body GetGlobalIndexWithScopes and
+// TryGetGlobalIndexWithScopes share.
+func (p *EnvironmentFrame) tryGetGlobalIndexWithScopes(key *values.Symbol, q syntax.ScopeSet) (*GlobalIndex, error) {
+	return tryResolveGlobalWith(p, *key, q, func(g *GlobalEnvironmentFrame, ref slotRef) *GlobalIndex {
 		return newScopeKeyedGlobalIndex(key, g, ref, q)
 	})
 }
@@ -1344,9 +1375,28 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 // compilation/machine/wile suites but fails the integration R7RS conformance
 // suite here. Investigated as a possible "second hermeticity hole"; it is not.)
 func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes syntax.Scopes) *GlobalIndex {
+	gi, ambiguity := p.tryGetGlobalIndexAcrossPhases(key, scopes)
+	if ambiguity != nil {
+		panic(ambiguity)
+	}
+	return gi
+}
+
+// TryGetGlobalIndexAcrossPhases is GetGlobalIndexAcrossPhases with an
+// incomparable tie at the first phase that resolves REPORTED rather than raised:
+// (nil, true) is "ambiguous". See TryGetLocalIndex.
+func (p *EnvironmentFrame) TryGetGlobalIndexAcrossPhases(key *values.Symbol, scopes syntax.Scopes) (*GlobalIndex, bool) {
+	gi, ambiguity := p.tryGetGlobalIndexAcrossPhases(key, scopes)
+	return gi, ambiguity != nil
+}
+
+// tryGetGlobalIndexAcrossPhases is the one body GetGlobalIndexAcrossPhases and
+// TryGetGlobalIndexAcrossPhases share. A tie stops the search: the phase it
+// occurs at would have answered, so a higher phase must not answer instead.
+func (p *EnvironmentFrame) tryGetGlobalIndexAcrossPhases(key *values.Symbol, scopes syntax.Scopes) (*GlobalIndex, error) {
 	if p.phases == nil {
 		// No phase registry — try runtime only
-		return p.GetGlobalIndexWithScopes(key, syntax.ScopesOf(scopes))
+		return p.tryGetGlobalIndexWithScopes(key, syntax.ScopesOf(scopes))
 	}
 
 	// Non-negative phases present, ascending. Ascending is what makes the first
@@ -1364,25 +1414,25 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes
 	// view as a side effect of a search.
 	q := syntax.ScopesOf(scopes)
 	for _, phase := range p.PresentPhases() {
-		gi := p.globalIndexAtPhase(key, q, phase)
-		if gi != nil {
-			return gi
+		gi, ambiguity := p.globalIndexAtPhase(key, q, phase)
+		if ambiguity != nil || gi != nil {
+			return gi, ambiguity
 		}
 	}
-	return nil
+	return nil, nil
 }
 
-// globalIndexAtPhase is GetGlobalIndexWithScopes with the probe phase supplied
+// globalIndexAtPhase is TryGetGlobalIndexWithScopes with the probe phase supplied
 // rather than taken from the receiver's own level.
-func (p *EnvironmentFrame) globalIndexAtPhase(key *values.Symbol, q syntax.ScopeSet, phase Phase) *GlobalIndex {
+func (p *EnvironmentFrame) globalIndexAtPhase(key *values.Symbol, q syntax.ScopeSet, phase Phase) (*GlobalIndex, error) {
 	p.global.mu.RLock()
 	defer p.global.mu.RUnlock()
 
-	ref, ok := p.global.resolveRankedLocked(*key, q, phase)
-	if !ok {
-		return nil
+	ref, ok, ambiguity := p.global.tryResolveRankedLocked(*key, q, phase)
+	if ambiguity != nil || !ok {
+		return nil, ambiguity
 	}
-	return newScopeKeyedGlobalIndex(key, p.global, ref, q)
+	return newScopeKeyedGlobalIndex(key, p.global, ref, q), nil
 }
 
 // BoundPhases returns the phases at which key resolves under scopes, ascending.
@@ -1529,8 +1579,26 @@ func (p *EnvironmentFrame) PresentPhases() []Phase {
 // it carries the R7RS §4.3 free-template-identifier carve-out, and the
 // jabberwocky/march-hare case reaches it through that caller, not this one.
 func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, scopes syntax.Scopes) *GlobalIndex {
+	gi, ambiguity := p.tryGetGlobalIndexFromLibraryScopes(key, scopes)
+	if ambiguity != nil {
+		panic(ambiguity)
+	}
+	return gi
+}
+
+// TryGetGlobalIndexFromLibraryScopes is GetGlobalIndexFromLibraryScopes with an
+// incomparable tie in a library's store REPORTED rather than raised: (nil, true)
+// is "ambiguous". See TryGetLocalIndex.
+func (p *EnvironmentFrame) TryGetGlobalIndexFromLibraryScopes(key *values.Symbol, scopes syntax.Scopes) (*GlobalIndex, bool) {
+	gi, ambiguity := p.tryGetGlobalIndexFromLibraryScopes(key, scopes)
+	return gi, ambiguity != nil
+}
+
+// tryGetGlobalIndexFromLibraryScopes is the one body of the two above. A tie
+// stops the search, as a hit does: that library would have answered.
+func (p *EnvironmentFrame) tryGetGlobalIndexFromLibraryScopes(key *values.Symbol, scopes syntax.Scopes) (*GlobalIndex, error) {
 	if p.namespace == nil || scopes.IsEmpty() {
-		return nil
+		return nil, nil
 	}
 	// All() rather than ForEach: this loop both `continue`s and returns from the
 	// enclosing function, neither of which a callback can express.
@@ -1540,12 +1608,12 @@ func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, s
 			continue
 		}
 		phaseEnv := libEnv.AtPhase(p.phaseLevel)
-		gi := phaseEnv.GetGlobalIndexWithScopes(key, syntax.ScopesOf(scopes))
-		if gi != nil {
-			return gi
+		gi, ambiguity := phaseEnv.tryGetGlobalIndexWithScopes(key, syntax.ScopesOf(scopes))
+		if ambiguity != nil || gi != nil {
+			return gi, ambiguity
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // SetOwnGlobalValue sets the value of the binding for the given GlobalIndex.
