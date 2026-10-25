@@ -503,7 +503,10 @@ func multiplyParts(a, b, c, d Number) (Number, Number) {
 //
 // A real divisor (an exact zero d) divides each part, as Chez does for a flonum
 // divisor: Smith's ratio d/c would be 0/c, and with c = +nan.0 the other branch's
-// c/d divides by the exact zero.
+// c/d divides by the exact zero. Only a direct call of the BigComplex / Float
+// table entry gets here (BigComplex.Divide divides by a real first); the branch
+// makes that call agree with the method, as the entry's Inf/NaN arm does
+// (TestSpecialFloatBigComplex_DivideTableAgreesWithMethod).
 func smithDivideParts(a, b, c, d Number) (Number, Number, error) {
 	if isExactZero(d) {
 		return divideBoth(a, b, c)

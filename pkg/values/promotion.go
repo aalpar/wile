@@ -567,6 +567,9 @@ func specialFloatNeedsGuard(srcKind, dstKind, lubKind NumericKind) bool {
 //
 // An EXACT BigComplex meeting a Float or Complex is decided ahead of all of it,
 // part-wise through partsOp, and gives a Complex (meetsFloat64, big_complex.go).
+//
+// zeroAbsorbs says whether a zero Float decides the answer beside an out-of-range
+// exact operand, as it does for * and not for + and -.
 func makeArithmeticDispatch[T Number](
 	srcKind NumericKind,
 	sameTypeOp func(T, Number) Number,
@@ -575,6 +578,7 @@ func makeArithmeticDispatch[T Number](
 	realComplexOp func(float64, complex128) complex128,
 	bigComplexSpecialOp func(p, o Number) Number,
 	partsOp func(a, b, c, d Number) (Number, Number),
+	zeroAbsorbs bool,
 ) [numKinds]func(T, Number) Number {
 	ensurePromotionInit()
 	var table [numKinds]func(T, Number) Number
@@ -641,6 +645,24 @@ func makeArithmeticDispatch[T Number](
 		default:
 			table[dstKind] = func(p T, o Number) Number {
 				return applyOp(promSrc(p), promDst(o))
+			}
+		}
+		if guarded && lubKind == KindFloat {
+			// A finite Float and an exact operand outside float64's range compute
+			// exactly (finiteFloatBesideOutOfRange). A zero Float is the IEEE
+			// answer: for * (zeroAbsorbs) a zero signed as the clamped operands
+			// sign it, for + and - the in-range route, which adds the rounded
+			// operand to the zero as IEEE does.
+			inRange := table[dstKind]
+			table[dstKind] = func(p T, o Number) Number {
+				f, ok := finiteFloatBesideOutOfRange(p, o)
+				if !ok || (f.Value == 0 && !zeroAbsorbs) {
+					return inRange(p, o)
+				}
+				if f.Value == 0 {
+					return NewFloat(float64Op(finiteClampedFloat64(p), finiteClampedFloat64(o)))
+				}
+				return applyOp(exactOperand(p), exactOperand(o)).ToInexact()
 			}
 		}
 		if float64BigComplexKinds(srcKind, dstKind) {
@@ -801,6 +823,56 @@ func specialOperands(p, o Number) (*Float, *BigComplex) {
 	return p.(*Float), o.(*BigComplex)
 }
 
+// finiteFloatBesideOutOfRange reports whether p, o are a finite Float and an
+// exact operand outside float64's normal range, and returns the Float.
+//
+// Rounding such an operand to float64 first, as the contagion promoter does, loses
+// it to +-Inf or to zero before the operation sees it: (* 1e-300 (expt 10 400))
+// was +inf.0 and (* (expt 10 400) 0.0) +nan.0, where Chez and Racket give 1e100
+// and 0.0. The dispatch tables then compute exactly and round once, the
+// construction Chez uses (s/5_3.ss: exact-inexact* and its siblings take the
+// exact route when the operand is not floatable?). An Inf/NaN Float is the
+// guarded cases' own (specialFloatNeedsGuard). An operand in range takes the
+// promoter, so the common case costs one bit-length test.
+func finiteFloatBesideOutOfRange(p, o Number) (*Float, bool) {
+	f, ok := p.(*Float)
+	x := o
+	if !ok {
+		f, ok = o.(*Float)
+		x = p
+	}
+	if !ok || isSpecialFloat(f) {
+		return nil, false
+	}
+	return f, outOfFloat64Range(x)
+}
+
+// outOfFloat64Range reports whether an exact BigInteger or Rational may round
+// outside float64's normal range: overflow to +-Inf, or underflow into the
+// subnormals, where it keeps fewer than 53 bits. The bound is by bit length, so
+// a value at the edge can take the exact route needlessly, never the reverse.
+func outOfFloat64Range(n Number) bool {
+	switch v := n.(type) {
+	case *BigInteger:
+		return v.value.BitLen() > 1023
+	case *Rational:
+		// The value lies in (2^(e-1), 2^(e+1)).
+		e := v.value.Num().BitLen() - v.value.Denom().BitLen()
+		return e > 1023 || e < -1021
+	}
+	return false
+}
+
+// exactOperand is n as an exact number: a finite Float's exact value, any
+// other operand as it is.
+func exactOperand(n Number) Number {
+	f, ok := n.(*Float)
+	if !ok {
+		return n
+	}
+	return NewRationalFromRat(new(big.Rat).SetFloat64(f.Value))
+}
+
 // makeAddDispatch generates a dispatch table for the Add operation.
 func makeAddDispatch[T Number](srcKind NumericKind, sameTypeAdd func(T, Number) Number) [numKinds]func(T, Number) Number {
 	return makeArithmeticDispatch(srcKind, sameTypeAdd,
@@ -813,6 +885,7 @@ func makeAddDispatch[T Number](srcKind NumericKind, sameTypeAdd func(T, Number) 
 		realAddComplex,
 		bigComplexSpecialAdd,
 		addParts,
+		false,
 	)
 }
 
@@ -828,6 +901,7 @@ func makeSubtractDispatch[T Number](srcKind NumericKind, sameTypeSub func(T, Num
 		realSubtractComplex,
 		bigComplexSpecialSubtract,
 		subtractParts,
+		false,
 	)
 }
 
@@ -843,6 +917,7 @@ func makeMultiplyDispatch[T Number](srcKind NumericKind, sameTypeMul func(T, Num
 		realMultiplyComplex,
 		bigComplexSpecialMultiply,
 		multiplyParts,
+		true,
 	)
 }
 
@@ -916,6 +991,26 @@ func makeDivideDispatch[T Number](
 		default:
 			table[dstKind] = func(p T, o Number) (Number, error) {
 				return promSrc(p).Divide(promDst(o))
+			}
+		}
+		if guarded && lubKind == KindFloat {
+			// See the twin case in makeArithmeticDispatch. A zero Float is
+			// absorbing on both sides: 0.0 / x is a zero and x / 0.0 an infinity,
+			// signed as the clamped operands sign them.
+			inRange := table[dstKind]
+			table[dstKind] = func(p T, o Number) (Number, error) {
+				f, ok := finiteFloatBesideOutOfRange(p, o)
+				if !ok {
+					return inRange(p, o)
+				}
+				if f.Value == 0 {
+					return NewFloat(finiteClampedFloat64(p) / finiteClampedFloat64(o)), nil
+				}
+				q, err := exactOperand(p).Divide(exactOperand(o))
+				if err != nil {
+					return nil, err
+				}
+				return q.ToInexact(), nil
 			}
 		}
 		if float64BigComplexKinds(srcKind, dstKind) {
